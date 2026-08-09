@@ -364,6 +364,8 @@ import type { InvocationIO } from "@crustjs/core";
 run(argv: readonly string[], io?: Partial<InvocationIO>): Promise<void>
 ```
 
+The [`InvocationIO`](/docs/api/types#invocationio) type is exported from `@crustjs/core`.
+
 Invokes an application programmatically. `argv` is required and does not include the executable name.
 
 ```ts
@@ -379,8 +381,6 @@ await app.run(["Ada"], {
 ## `.execute(options?)`
 
 ```ts
-import type { InvocationIO } from "@crustjs/core";
-
 execute(options?: {
   argv?: string[];
   io?: Partial<InvocationIO>;
