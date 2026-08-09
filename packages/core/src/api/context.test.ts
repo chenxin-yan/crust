@@ -95,9 +95,12 @@ describe("Crust .provide()", () => {
 		const a = defineContext("db", () => 1);
 		const b = defineContext("db", () => 2);
 
+		// @ts-expect-error -- name already provided in an earlier call (FIX_DUPLICATE_CONTEXT)
 		expect(() => new Crust("cli").provide(a()).provide(b())).toThrow(CrustError);
+		// @ts-expect-error -- name repeated within one call (FIX_DUPLICATE_CONTEXT)
 		expect(() => new Crust("cli").provide(a(), b())).toThrow(/Context "db" is already provided/);
 		try {
+			// @ts-expect-error -- name already provided in an earlier call (FIX_DUPLICATE_CONTEXT)
 			new Crust("cli").provide(a()).provide(b());
 		} catch (error) {
 			expect((error as CrustError).is("DEFINITION")).toBe(true);

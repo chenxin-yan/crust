@@ -39,6 +39,7 @@ import type {
 	ContextDeps,
 	MergeContextDeps,
 	ValidateContextCycles,
+	ValidateContextNames,
 } from "../validation/contexts.ts";
 import {
 	type ProvideChecks,
@@ -318,7 +319,9 @@ export interface CommandDefinitionBuilder<
 	): CommandDefinitionBuilder<Local, Owned, AppendedArgs<A, NewA>, Eff, Ctx, Sibs, Deps>;
 
 	provide<const Cs extends readonly ContextInstance[]>(
-		...instances: ProvideChecks<Eff, Cs> & ValidateContextCycles<Deps, Cs>
+		...instances: ProvideChecks<Eff, Cs> &
+			ValidateContextCycles<Deps, Cs> &
+			ValidateContextNames<Ctx, Cs>
 	): CommandDefinitionBuilder<
 		Local,
 		MergeFlags<Owned, ContextsOwnedFlags<Cs>>,
@@ -622,7 +625,9 @@ export class Crust<
 	 *                      this command path
 	 */
 	provide<const Cs extends readonly ContextInstance[]>(
-		...instances: ProvideChecks<Eff, Cs> & ValidateContextCycles<Deps, Cs>
+		...instances: ProvideChecks<Eff, Cs> &
+			ValidateContextCycles<Deps, Cs> &
+			ValidateContextNames<Ctx, Cs>
 	): Crust<
 		Local,
 		MergeFlags<Owned, ContextsOwnedFlags<Cs>>,

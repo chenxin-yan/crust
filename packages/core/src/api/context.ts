@@ -14,7 +14,8 @@ export type ContextMap = Record<string, unknown>;
 export type Awaitable<T> = T | Promise<T>;
 export type Simplify<T> = { [K in keyof T]: T[K] };
 // Flat intersection — same rationale as MergeFlags: duplicate context names
-// throw at .provide() time, so operands never overlap in valid programs, and
+// are branded at compile time (FIX_DUPLICATE_CONTEXT) and throw at .provide()
+// time, so operands never overlap in valid programs, and
 // the intersection keeps chained .provide() calls at constant instantiation
 // depth (Simplify<A & B> and mapped merges nested a layer per call).
 export type MergeContext<A, B> = A & B;

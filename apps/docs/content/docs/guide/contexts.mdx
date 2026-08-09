@@ -179,7 +179,7 @@ Call `.provide()` before `.add()`: a missing requirement name is a `DEFINITION` 
 
 ## Name and flag collisions
 
-Providing two Context values with the same name on one command path is a `DEFINITION` error at the `.provide()` call. This includes a descendant re-providing a name it inherited.
+Providing two Context values with the same name on one command path is a `DEFINITION` error at the `.provide()` call. This includes a descendant re-providing a name it inherited. For TypeScript consumers, statically known duplicates — a name repeated within one `.provide()` call, provided again in a later call on the same builder, or re-provided by a definition that also declares it in `requires` — fail typecheck with `FIX_DUPLICATE_CONTEXT`. Re-providing an inherited name the definition does not require, and dynamically built instances, remain runtime-only.
 
 Added definitions use the same rule. Because materialization starts with the parent's Context path, a definition or nested descendant that provides the same name is rejected during `.add()`.
 

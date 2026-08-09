@@ -164,6 +164,18 @@ describe("command definitions", () => {
 		);
 	});
 
+	it("rejects re-providing a Context declared in requires", () => {
+		const db = defineContext("db", () => "database");
+		const definition = defineCommand("users", { requires: [db] }, (command) =>
+			// @ts-expect-error -- name declared in requires (FIX_DUPLICATE_CONTEXT)
+			command.provide(db()),
+		);
+
+		expect(() => new Crust("cli").provide(db()).add(definition)).toThrow(
+			/Context "db" is already provided/,
+		);
+	});
+
 	it("excludes parent local flags from added commands", async () => {
 		const definition = defineCommand("users", (command) => command.action(() => {}));
 		const app = new Crust("cli").flags({ name: "secret", type: "string" }).add(definition);
