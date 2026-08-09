@@ -49,8 +49,9 @@ type DuplicateNameBrand<F, Dups extends string> =
  * so collisions, `no-` prefixes, and async parsers error on the offending argument.
  *
  * Bounded-generic wrappers (e.g. `<E extends FlagsDef>(app: Crust<L, O, A, E, C>)`)
- * keep `SpellingsOf<E>` deferred and will not typecheck against `Existing`;
- * type wrapper parameters as `Crust<any, ...>` instead (see tests/helpers.ts).
+ * keep the default `Sp = SpellingsOf<E>` deferred and will not typecheck against
+ * `Existing`; type wrapper parameters as `Crust<any, ...>` instead, whose default
+ * `SpellingsOf<any>` is `never` (see tests/helpers.ts).
  */
 export type ValidateNamedFlagDefs<
 	Defs extends readonly NamedFlagDef[],
@@ -220,14 +221,14 @@ type ContextFlagCollisionBrand<C, Existing extends string> =
 		: never;
 
 /**
- * Validate Context-owned flags against existing flags.
+ * Validate Context-owned flags against accumulated existing spellings.
  *
- * Only compares each instance against `Eff`: collisions between two instances
+ * Only compares each instance against `Sp`: collisions between two instances
  * in the same `.provide(a(), b())` call stay runtime-only — a type-level
  * pairwise check cost ~9k extra instantiations for a rare misuse.
  */
-export type ProvideChecks<Eff extends FlagsDef, Cs extends readonly unknown[]> = {
-	[I in keyof Cs]: Cs[I] & ContextFlagCollisionBrand<Cs[I], SpellingsOf<Eff>>;
+export type ProvideChecks<Sp extends string, Cs extends readonly unknown[]> = {
+	[I in keyof Cs]: Cs[I] & ContextFlagCollisionBrand<Cs[I], Sp>;
 };
 
 // ────────────────────────────────────────────────────────────────────────────

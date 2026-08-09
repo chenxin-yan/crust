@@ -148,8 +148,9 @@ describe("ValidateNamedFlagDefs", () => {
 		expect(true).toBe(true);
 	});
 
-	it("opts widened definitions out of compile-time checks", () => {
-		// Widened records have no statically knowable spellings.
+	it("opts widened definitions themselves out of compile-time checks", () => {
+		// Widened records have no statically knowable spellings. A fluent builder
+		// still retains spellings accumulated before a widened .flags() call.
 		type _widenedRecord = Expect<Equal<SpellingsOf<FlagsDef>, never>>;
 
 		// Widened names/aliases fall back to runtime validation instead of
@@ -160,7 +161,7 @@ describe("ValidateNamedFlagDefs", () => {
 
 		// Context instances with widened owned flags opt out of provide-site checks.
 		type Provided = ProvideChecks<
-			{ verbose: { type: "boolean"; short: "v" } },
+			"verbose" | "v",
 			readonly [{ readonly _requires?: { ownedFlags: FlagsDef } }]
 		>;
 		type _noProvideBrand = Expect<Equal<Extract<keyof Provided[0], `FIX_${string}`>, never>>;

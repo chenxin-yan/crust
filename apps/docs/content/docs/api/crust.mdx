@@ -41,7 +41,16 @@ type ContextRequirements = readonly AnyContextFactory[];
 ### `CommandDefinitionBuilder`
 
 ```ts
-interface CommandDefinitionBuilder<Local, Owned, A, Eff, Ctx, Sibs, Deps> {
+interface CommandDefinitionBuilder<
+  Local,
+  Owned,
+  A,
+  Eff,
+  Ctx,
+  Deps,
+  Sibs,
+  Sp extends string = SpellingsOf<Eff>,
+> {
   flags(...defs: readonly NamedFlagDef[]): CommandDefinitionBuilder;
   args(...defs: ArgsDef): CommandDefinitionBuilder;
   provide(...instances: readonly ContextInstance[]): CommandDefinitionBuilder;
@@ -52,7 +61,7 @@ interface CommandDefinitionBuilder<Local, Owned, A, Eff, Ctx, Sibs, Deps> {
 }
 ```
 
-This is the configure-only builder passed to a `defineCommand()` recipe. Its fluent methods preserve and refine local argument, flag, and Context types; required capabilities seed `Ctx`. `Sibs` accumulates the sibling command names and aliases registered through `.add()`, and `Deps` accumulates the Context dependency edges declared through `.provide()`; both power the compile-time collision and cycle checks and default to empty, so existing annotations keep working. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
+This is the configure-only builder passed to a `defineCommand()` recipe. Its fluent methods preserve and refine local argument, flag, and Context types; required capabilities seed `Ctx`. `Deps` accumulates the Context dependency edges declared through `.provide()`, `Sibs` accumulates the sibling command names and aliases registered through `.add()`, and `Sp` caches the known flag spellings accumulated through `.flags()` and `.provide()`. All three are trailing defaulted parameters, so annotations with up to five generic arguments keep working. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
 
 ### `CommandDefinition`
 
@@ -114,6 +123,17 @@ The recipe does not execute when the definition is created. It executes once for
 ```ts
 type RootCommandMeta = Pick<CommandMeta, "description" | "usage">;
 
+class Crust<
+  Local,
+  Owned,
+  A,
+  Eff,
+  Ctx,
+  Deps,
+  Sibs,
+  Sp extends string = SpellingsOf<Eff>,
+>
+
 new Crust(name: string, meta?: RootCommandMeta)
 ```
 
@@ -159,7 +179,7 @@ const app = new Crust("serve").args({ name: "port", schema: z.coerce.number().in
 
 ```ts
 flags<const Defs extends readonly NamedFlagDef[]>(
-  ...defs: ValidateNamedFlagDefs<Defs, SpellingsOf<Eff>>,
+  ...defs: ValidateNamedFlagDefs<Defs, Sp>,
 ): Crust
 ```
 
@@ -173,7 +193,7 @@ const app = new Crust("serve").flags(
 );
 ```
 
-Repeated `.flags()` calls accumulate local flags. For TypeScript consumers, statically known spelling collisions fail typecheck with `FIX_ALIAS_COLLISION`; runtime validation throws `DEFINITION` for collisions from plain-JS consumers or dynamically built definitions. Generic wrapper functions that keep the flag parameter bounded (e.g. `<E extends FlagsDef>(app: Crust<Local, Owned, A, E, Ctx>)`) defer the collision check and will not typecheck further `.flags()` calls; type wrapper parameters as `Crust<any, any, any, any, any>` instead — runtime validation still applies. A spelling typed as a union of literals (e.g. `short: cond ? "a" : "b"`) is conservatively rejected when any member collides, even though the runtime value might not; widen it to `string` to defer the check to runtime. Promise-returning custom `parse` functions similarly fail with `FIX_ASYNC_PARSE` because parsing consumes their result synchronously; runtime validation rejects declared `async` functions for plain-JS consumers.
+Repeated `.flags()` calls accumulate local flags and cache their statically known spellings — the union of flag names and aliases that `SpellingsOf` computes — in the trailing defaulted `Sp` parameter. Because `Sp` accumulates per call, spellings registered before a widened (dynamically typed) `.flags()` call stay collision-checked at compile time; previously any widened call deferred all subsequent collision checks to runtime. For TypeScript consumers, statically known spelling collisions fail typecheck with `FIX_ALIAS_COLLISION`; runtime validation throws `DEFINITION` for collisions from plain-JS consumers or dynamically built definitions. Generic wrapper functions that keep the flag parameter bounded (e.g. `<E extends FlagsDef>(app: Crust<Local, Owned, A, E, Ctx>)`) defer the default `Sp = SpellingsOf<E>` and will not typecheck further `.flags()` calls; type wrapper parameters as `Crust<any, any, any, any, any>` instead, whose default `SpellingsOf<any>` is `never` — runtime validation still applies. A spelling typed as a union of literals (e.g. `short: cond ? "a" : "b"`) is conservatively rejected when any member collides, even though the runtime value might not; widen it to `string` to defer the check to runtime. Promise-returning custom `parse` functions similarly fail with `FIX_ASYNC_PARSE` because parsing consumes their result synchronously; runtime validation rejects declared `async` functions for plain-JS consumers.
 
 Flags declared here are local to this command. Context-owned flags are the propagation mechanism for descendant parsers; downstream code receives their derived Context capability. Boolean flags support generated `--no-<spelling>` negation for the canonical name and every long alias; `noNegate: true` rejects negation with a `PARSE` error and hides the generated label from help, completion, and man output. Names and aliases beginning with `no-` are reserved.
 
@@ -191,15 +211,16 @@ const app = new Crust("serve").flags({
 
 ```ts
 provide<const Cs extends readonly ContextInstance[]>(
-  ...instances: ProvideChecks<Eff, Cs> & ValidateContextCycles<Deps, Cs>,
+  ...instances: ProvideChecks<Sp, Cs> & ValidateContextCycles<Deps, Cs>,
 ): Crust<
   Local,
   MergeFlags<Owned, ContextsOwnedFlags<Cs>>,
   A,
   EffectiveFlags<Local, MergeFlags<Owned, ContextsOwnedFlags<Cs>>>,
   MergeContext<Ctx, ContextsOutput<Cs>>,
+  MergeContextDeps<Deps, Cs>,
   Sibs,
-  MergeContextDeps<Deps, Cs>
+  Sp | SpellingsOf<ContextsOwnedFlags<Cs>>
 >
 ```
 
@@ -277,8 +298,9 @@ add<const Ds extends readonly CommandDefinition<any>[]>(
   A,
   Eff,
   Ctx,
+  Deps,
   Sibs | CommandDefinitionSpellings<Ds[number]>,
-  Deps
+  Sp
 >
 ```
 

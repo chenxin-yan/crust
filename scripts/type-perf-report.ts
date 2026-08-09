@@ -205,6 +205,7 @@ export function generateConsumerFixture(
 					target: "esnext",
 					strict: true,
 					noEmit: true,
+					skipLibCheck: true,
 				},
 				include: ["consumer.ts"],
 			},

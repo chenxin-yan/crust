@@ -231,6 +231,64 @@ describe("Crust .flags()", () => {
 		);
 	});
 
+	it("retains known spellings across widened definitions and other fluent calls", () => {
+		const dynamicDefs: { name: string; type: "boolean" }[] = [{ name: "dynamic", type: "boolean" }];
+		const app = new Crust("test")
+			.flags({ name: "verbose", type: "boolean", short: "v" })
+			.flags(...dynamicDefs)
+			.args({ name: "file", type: "string" })
+			.extend(defineExtension("noop"));
+
+		type _Spellings = Expect<
+			Equal<Parameters<(typeof app)["_types"]["spellings"]>[0], "verbose" | "v">
+		>;
+		const legacy: Crust<
+			(typeof app)["_types"]["local"],
+			(typeof app)["_types"]["owned"],
+			(typeof app)["_types"]["args"],
+			(typeof app)["_types"]["effective"],
+			(typeof app)["_types"]["ctx"],
+			{},
+			// oxlint-disable-next-line typescript/no-unnecessary-type-arguments -- pins the new 7-argument order
+			never
+		> = app;
+		void legacy;
+
+		expect(() =>
+			app.flags(
+				// @ts-expect-error -- the accumulator retains "v" from before the widened call
+				{ name: "version", type: "boolean", short: "v" },
+			),
+		).toThrow(/spelling "v" collides with flag "--verbose"/);
+
+		const colliding = defineContext(
+			"colliding",
+			{ flags: [defineFlag("vv", { type: "boolean", short: "v" })] },
+			() => ({}),
+		);
+		expect(() =>
+			app.provide(
+				// @ts-expect-error -- Context-owned short "v" collides with the retained spelling
+				colliding(),
+			),
+		).toThrow(/spelling "v" collides with flag "--verbose"/);
+	});
+
+	it("accumulates Context-owned spellings for later .flags() collision checks", () => {
+		const owner = defineContext(
+			"owner",
+			{ flags: [defineFlag("vv", { type: "boolean", short: "v" })] },
+			() => ({}),
+		);
+		const app = new Crust("test").provide(owner());
+		expect(() =>
+			app.flags(
+				// @ts-expect-error -- short "v" collides with the Context-owned flag provided earlier
+				{ name: "version", type: "boolean", short: "v" },
+			),
+		).toThrow(/spelling "v" collides with flag "--vv"/);
+	});
+
 	it("rejects Promise-returning custom flag parsers at compile time", () => {
 		new Crust("test").flags(
 			// @ts-expect-error -- flag parsers must be synchronous
