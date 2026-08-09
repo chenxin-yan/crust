@@ -231,6 +231,49 @@ describe("Crust .flags()", () => {
 		);
 	});
 
+	it("retains known spellings across widened definitions and other fluent calls", () => {
+		const dynamicDefs: { name: string; type: "boolean" }[] = [{ name: "dynamic", type: "boolean" }];
+		const app = new Crust("test")
+			.flags({ name: "verbose", type: "boolean", short: "v" })
+			.flags(...dynamicDefs)
+			.args({ name: "file", type: "string" })
+			.extend(defineExtension("noop"));
+
+		type _Spellings = Expect<
+			Equal<Parameters<(typeof app)["_types"]["spellings"]>[0], "verbose" | "v">
+		>;
+		const legacy: Crust<
+			(typeof app)["_types"]["local"],
+			(typeof app)["_types"]["owned"],
+			(typeof app)["_types"]["args"],
+			(typeof app)["_types"]["effective"],
+			(typeof app)["_types"]["ctx"],
+			never,
+			// oxlint-disable-next-line typescript/no-unnecessary-type-arguments -- pins legacy 7-argument annotations
+			{}
+		> = app;
+		void legacy;
+
+		expect(() =>
+			app.flags(
+				// @ts-expect-error -- the accumulator retains "v" from before the widened call
+				{ name: "version", type: "boolean", short: "v" },
+			),
+		).toThrow(/spelling "v" collides with flag "--verbose"/);
+
+		const colliding = defineContext(
+			"colliding",
+			{ flags: [defineFlag("vv", { type: "boolean", short: "v" })] },
+			() => ({}),
+		);
+		expect(() =>
+			app.provide(
+				// @ts-expect-error -- Context-owned short "v" collides with the retained spelling
+				colliding(),
+			),
+		).toThrow(/spelling "v" collides with flag "--verbose"/);
+	});
+
 	it("rejects Promise-returning custom flag parsers at compile time", () => {
 		new Crust("test").flags(
 			// @ts-expect-error -- flag parsers must be synchronous

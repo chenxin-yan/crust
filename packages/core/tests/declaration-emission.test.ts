@@ -28,6 +28,9 @@ export const flags = [
 	defineFlag("quiet", { type: "boolean", short: "q", description: "Quiet mode" }),
 ];
 
+// Inferred builder type exposes the accumulated spelling-literal union
+export const flagged = new Crust("flagged").flags(...flags);
+
 export const apiKey = defineFlag("api-key", { type: "string", short: "k" });
 export const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => ({
 	apiKey: flags["api-key"],

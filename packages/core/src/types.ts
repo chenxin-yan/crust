@@ -617,7 +617,10 @@ type InferFlagValue<F extends FlagDef> = F extends {
 	: F extends { multiple: true }
 		? F extends { required: true }
 			? ResolveBaseType<F>[]
-			: F extends { default: readonly unknown[] }
+			: // See InferArgValue: narrow on default presence. With `parse`,
+				// the raw default is `string[]` while ResolveBaseType<F> is the
+				// parsed element type.
+				F extends { default: readonly unknown[] }
 				? ResolveBaseType<F>[]
 				: ResolveBaseType<F>[] | undefined
 		: F extends { required: true }

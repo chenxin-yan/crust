@@ -56,6 +56,24 @@ describe("command definitions", () => {
 		});
 	});
 
+	it("accumulates flag spellings across builder calls for compile-time collision checks", () => {
+		// The CommandDefinitionBuilder interface mirrors Crust's Sp accumulator
+		// type-only; this pins the recipe path so the mirror cannot drift.
+		const definition = defineCommand("serve", (command) =>
+			command
+				.flags({ name: "verbose", type: "boolean", short: "v" })
+				.args({ name: "file", type: "string" })
+				.flags(
+					// @ts-expect-error -- "v" collides with the earlier .flags() call
+					{ name: "version", type: "boolean", short: "v" },
+				)
+				.action(() => {}),
+		);
+		expect(() => new Crust("cli").add(definition)).toThrow(
+			/spelling "v" collides with flag "--verbose"/,
+		);
+	});
+
 	it("rejects a second action on the definition builder", () => {
 		const definition = defineCommand("duplicate", (command) =>
 			command.action(() => {}).action(() => {}),
