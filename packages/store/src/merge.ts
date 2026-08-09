@@ -23,7 +23,7 @@ import type { FieldsDef, InferStoreConfig } from "./types.ts";
  * @returns A new object with field defaults applied.
  */
 export function applyFieldDefaults<F extends FieldsDef>(
-	persisted: Record<string, unknown> | undefined,
+	persisted: Readonly<Record<string, unknown>> | undefined,
 	fields: F,
 	pruneUnknown = true,
 ): InferStoreConfig<F> {

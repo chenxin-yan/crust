@@ -307,6 +307,25 @@ describe("store.read", () => {
 		}
 	});
 
+	it("should throw PARSE error when persisted JSON is not an object", async () => {
+		const filePath = join(tempDir, "config.json");
+		await writeFile(filePath, JSON.stringify("invalid root"));
+
+		const store = createStore({
+			dirPath: tempDir,
+			fields: BASIC_FIELDS,
+		});
+
+		try {
+			await store.read();
+			expect.unreachable("should have thrown");
+		} catch (__err) {
+			const e = __err as CrustStoreError;
+			expect(e).toBeInstanceOf(CrustStoreError);
+			expect(e.is("PARSE")).toBe(true);
+		}
+	});
+
 	it("should run field validators on read", async () => {
 		const filePath = join(tempDir, "config.json");
 		await writeFile(filePath, JSON.stringify({ port: 0, host: "localhost" }));
