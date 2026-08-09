@@ -552,9 +552,7 @@ type InferArgValue<A extends ArgDef> = A extends {
 	schema: infer S extends StandardSchema;
 }
 	? InferOutput<S>
-	: A extends {
-				type: infer _T extends ValueType;
-		  }
+	: A extends { type: ValueType }
 		? A extends { variadic: true }
 			? ResolveBaseType<A>[]
 			: A extends { required: true }
@@ -616,24 +614,17 @@ type InferFlagValue<F extends FlagDef> = F extends {
 	schema: infer S extends StandardSchema;
 }
 	? InferOutput<S>
-	: F extends {
-				type: infer _T extends ValueType;
-		  }
-		? F extends { multiple: true }
-			? F extends { required: true }
+	: F extends { multiple: true }
+		? F extends { required: true }
+			? ResolveBaseType<F>[]
+			: F extends { default: readonly unknown[] }
 				? ResolveBaseType<F>[]
-				: // See InferArgValue: narrow on default presence. With `parse`,
-					// the raw default is `string[]` while ResolveBaseType<F> is the
-					// parsed element type.
-					F extends { default: readonly unknown[] }
-					? ResolveBaseType<F>[]
-					: ResolveBaseType<F>[] | undefined
-			: F extends { required: true }
+				: ResolveBaseType<F>[] | undefined
+		: F extends { required: true }
+			? ResolveBaseType<F>
+			: F extends { default: unknown }
 				? ResolveBaseType<F>
-				: F extends { default: unknown }
-					? ResolveBaseType<F>
-					: ResolveBaseType<F> | undefined
-		: never;
+				: ResolveBaseType<F> | undefined;
 
 /**
  * Maps a full FlagsDef record to resolved flag types.
