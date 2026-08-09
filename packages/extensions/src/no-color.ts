@@ -1,13 +1,5 @@
 import { type Extension, type ExtensionContext, defineExtension } from "@crustjs/core";
 
-function setEnv(name: string, value: string | undefined): void {
-	if (value === undefined) {
-		delete process.env[name];
-	} else {
-		process.env[name] = value;
-	}
-}
-
 /**
  * Adds a recursive `--color` / `--no-color` flag pair that scopes the
  * standard color environment variables around command execution:
@@ -71,8 +63,10 @@ export function noColorExtension(): Extension {
 				// ponytail: last-writer-wins while runs overlap; only the ambient
 				// env is guaranteed restored once all runs finish.
 				if (activeRuns === 0) {
-					setEnv("FORCE_COLOR", baseForceColor);
-					setEnv("NO_COLOR", baseNoColor);
+					if (baseForceColor === undefined) delete process.env.FORCE_COLOR;
+					else process.env.FORCE_COLOR = baseForceColor;
+					if (baseNoColor === undefined) delete process.env.NO_COLOR;
+					else process.env.NO_COLOR = baseNoColor;
 				}
 			},
 		},

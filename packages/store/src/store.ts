@@ -20,6 +20,12 @@ import type {
 } from "./types.ts";
 
 type FieldValidator = (value: unknown) => ReturnType<NonNullable<FieldDef["validate"]>>;
+type Mutable<T> = { -readonly [K in keyof T]: T[K] };
+
+function asJsonObject(value: unknown): Readonly<Record<string, unknown>> | undefined {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+	return value as Readonly<Record<string, unknown>>;
+}
 
 function makeSchemaValidator(schema: StandardSchema): FieldValidator {
 	return async (value) => {
@@ -40,13 +46,6 @@ function isFieldValueResult(r: unknown): r is { value: unknown } {
 	return (
 		typeof r === "object" && r !== null && Object.hasOwn(r, "value") && Object.keys(r).length === 1
 	);
-}
-
-function resolveWriteOptions(access: CreateStoreOptions<FieldsDef>["access"]): WriteJsonOptions {
-	if (access === "private") return { fileMode: 0o600, directoryMode: 0o700 };
-	if (access === undefined || access === "default") return {};
-
-	return { fileMode: access.file, directoryMode: access.directory };
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -91,7 +90,17 @@ export function createStore<const F extends FieldsDef>(
 	options: CreateStoreOptions<F>,
 ): Store<InferStoreConfig<F>> {
 	const { dirPath, name, fields, pruneUnknown, access } = options;
+	type Config = InferStoreConfig<F>;
+	type MutableConfig = Mutable<Config>;
 	const validators = new Map<string, FieldValidator>();
+
+	function assignConfigValue<K extends keyof Config>(
+		state: MutableConfig,
+		key: K,
+		value: unknown,
+	): void {
+		state[key] = value as Config[K];
+	}
 
 	for (const [key, def] of Object.entries(fields)) {
 		if (def.schema !== undefined) {
@@ -117,7 +126,12 @@ export function createStore<const F extends FieldsDef>(
 	const shouldPrune = pruneUnknown ?? true;
 
 	// Permission bits forwarded to every write (default → platform behavior).
-	const writeOptions = resolveWriteOptions(access);
+	const writeOptions: WriteJsonOptions =
+		access === "private"
+			? { fileMode: 0o600, directoryMode: 0o700 }
+			: access === undefined || access === "default"
+				? {}
+				: { fileMode: access.file, directoryMode: access.directory };
 
 	// ──────────────────────────────────────────────────────────────────────
 	// normalizeStateTypes — Coerce values by field `type`
@@ -136,24 +150,29 @@ export function createStore<const F extends FieldsDef>(
 		return value;
 	}
 
-	function normalizeStateTypes(state: InferStoreConfig<F>): InferStoreConfig<F> {
-		const record = state as Record<string, unknown>;
-		const normalized: Record<string, unknown> = { ...record };
+	// Returns the mutable working copy so validators can write transforms without lying about readonly.
+	function normalizeStateTypes(state: Config): MutableConfig {
+		const normalized: MutableConfig = { ...state };
 
 		for (const [key, def] of Object.entries(fields)) {
-			if (!(key in normalized) || def.schema !== undefined) continue;
+			const configKey = key as keyof Config;
+			if (!(configKey in normalized) || def.schema !== undefined) continue;
 
-			const value = normalized[key];
+			const value = normalized[configKey];
 
 			if (def.array === true && Array.isArray(value)) {
-				normalized[key] = value.map((item) => coerceByType(item, def.type));
+				assignConfigValue(
+					normalized,
+					configKey,
+					value.map((item) => coerceByType(item, def.type)),
+				);
 				continue;
 			}
 
-			normalized[key] = coerceByType(value, def.type);
+			assignConfigValue(normalized, configKey, coerceByType(value, def.type));
 		}
 
-		return normalized as InferStoreConfig<F>;
+		return normalized;
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
@@ -161,17 +180,17 @@ export function createStore<const F extends FieldsDef>(
 	// ──────────────────────────────────────────────────────────────────────
 
 	async function runFieldValidators(
-		state: InferStoreConfig<F>,
+		mutableState: MutableConfig,
 		operation: "read" | "write" | "update" | "patch",
 	): Promise<void> {
 		const issues: StoreValidatorIssue[] = [];
-		const record = state as Record<string, unknown>;
 
 		for (const [key, def] of Object.entries(fields)) {
 			const validator = validators.get(key);
 			if (!validator) continue;
 
-			const value = record[key];
+			const configKey = key as keyof Config;
+			const value = mutableState[configKey];
 
 			if (value === undefined && def.schema === undefined) continue;
 
@@ -194,7 +213,7 @@ export function createStore<const F extends FieldsDef>(
 				// On read, preserve persisted values verbatim, but allow schemas to
 				// materialize missing values by validating `undefined` (e.g. defaults).
 				if (operation === "read") {
-					if (value === undefined) record[key] = transformed;
+					if (value === undefined) assignConfigValue(mutableState, configKey, transformed);
 					continue;
 				}
 
@@ -233,7 +252,7 @@ export function createStore<const F extends FieldsDef>(
 						continue;
 					}
 
-					record[key] = transformed;
+					assignConfigValue(mutableState, configKey, transformed);
 				}
 			}
 		}
@@ -253,13 +272,16 @@ export function createStore<const F extends FieldsDef>(
 	// readRaw — Load persisted config, apply field defaults (no validation)
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function readRaw(): Promise<InferStoreConfig<F>> {
+	async function readRaw(): Promise<MutableConfig> {
 		const persisted = await readJson(filePath);
-		const merged = applyFieldDefaults(
-			persisted as Record<string, unknown> | undefined,
-			fields,
-			shouldPrune,
-		);
+		const persistedObject = asJsonObject(persisted);
+		if (persisted !== undefined && persistedObject === undefined) {
+			// A syntactically valid non-object root is still corrupt store data; do not silently reset it.
+			throw new CrustStoreError("PARSE", `Expected a JSON object in config file: ${filePath}`, {
+				path: filePath,
+			});
+		}
+		const merged = applyFieldDefaults(persistedObject, fields, shouldPrune);
 		return normalizeStateTypes(merged);
 	}
 

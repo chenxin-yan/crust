@@ -21,6 +21,10 @@ export const CRUST_MANIFEST = "crust.json";
 // Public API
 // ────────────────────────────────────────────────────────────────────────────
 
+function isStringKeyedObject(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * Manifest record extracted from a skill directory's `crust.json`.
  *
@@ -90,17 +94,16 @@ export async function inspectInstalledManifest(dir: string): Promise<InstalledMa
 		return { status: "malformed", reason: "parse-error" };
 	}
 
-	if (typeof parsed !== "object" || parsed === null) {
+	if (!isStringKeyedObject(parsed)) {
 		return { status: "malformed", reason: "not-an-object" };
 	}
 
-	const record = parsed as Record<string, unknown>;
-	if (typeof record.version !== "string") {
+	if (typeof parsed.version !== "string") {
 		return { status: "malformed", reason: "missing-version" };
 	}
 
-	const version = record.version;
-	const rawKind = record.kind;
+	const version = parsed.version;
+	const rawKind = parsed.kind;
 
 	if (rawKind === undefined) {
 		return { status: "malformed", reason: "missing-kind" };

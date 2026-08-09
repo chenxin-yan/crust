@@ -33,6 +33,11 @@ interface BundleFrontmatter {
 	description: string | null;
 }
 
+type FrontmatterProbe = {
+	readonly name?: unknown;
+	readonly description?: unknown;
+};
+
 /** Reads top-level `name` and `description` from leading YAML frontmatter. */
 function probeFrontmatter(content: string): BundleFrontmatter {
 	const result: BundleFrontmatter = { name: null, description: null };
@@ -49,7 +54,7 @@ function probeFrontmatter(content: string): BundleFrontmatter {
 	try {
 		const parsed = Bun.YAML.parse(lines.slice(opening + 1, closing).join("\n"));
 		if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return result;
-		const frontmatter = parsed as Record<string, unknown>;
+		const frontmatter = parsed as FrontmatterProbe;
 		return {
 			name: frontmatter.name == null ? null : String(frontmatter.name),
 			description: frontmatter.description == null ? null : String(frontmatter.description),

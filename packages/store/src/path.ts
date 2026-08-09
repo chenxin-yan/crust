@@ -56,7 +56,7 @@ function getRuntimeEnv(): PlatformEnv {
  * @throws {CrustStoreError} `PATH` if `appName` is empty or contains path separators.
  */
 function validateAppName(appName: string): void {
-	if (!appName || appName.trim().length === 0) {
+	if (!appName?.trim()) {
 		throw new CrustStoreError("PATH", "appName must be a non-empty string", {
 			path: appName ?? "",
 		});
@@ -76,7 +76,7 @@ function validateAppName(appName: string): void {
  * @throws {CrustStoreError} `PATH` if `name` is empty, contains path separators, or ends with `.json`.
  */
 function validateName(name: string): void {
-	if (!name || name.trim().length === 0) {
+	if (!name?.trim()) {
 		throw new CrustStoreError("PATH", "name must be a non-empty string", {
 			path: name ?? "",
 		});
@@ -103,7 +103,7 @@ function validateName(name: string): void {
  * @throws {CrustStoreError} `PATH` if the path is empty, not absolute, or ends in `.json`.
  */
 function validateDirPath(dirPath: string): void {
-	if (!dirPath || dirPath.trim().length === 0) {
+	if (!dirPath?.trim()) {
 		throw new CrustStoreError("PATH", "dirPath must be a non-empty string", {
 			path: dirPath ?? "",
 		});

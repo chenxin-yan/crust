@@ -4,7 +4,16 @@ import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils/primitive";
 
 import type { CommandNode } from "../command/node.ts";
 import { CrustError } from "../errors.ts";
-import type { ArgDef, ArgsDef, FlagDef, FlagsDef, ParseResult, ValueType } from "../types.ts";
+import type {
+	ArgDef,
+	ArgsDef,
+	FlagDef,
+	FlagsDef,
+	InferArgs,
+	InferFlags,
+	ParseResult,
+	ValueType,
+} from "../types.ts";
 import { coerceJson, coercePath, coerceUrl } from "./coercers.ts";
 import { flagSpellings, type FlagSpelling } from "./spellings.ts";
 
@@ -293,42 +302,50 @@ function resolveAliases(
  * Resolve all flag definitions against the canonical parsed values.
  * Handles coercion and default values.
  */
-function resolveFlags(
-	flagsDef: FlagsDef | undefined,
+function resolveFlags<F extends FlagsDef>(
+	flagsDef: F | undefined,
 	tokens: ParseArgsToken[],
 	aliasToName: Record<string, string>,
-) {
-	if (!flagsDef) return {};
+): InferFlags<F> {
+	const resolved: Partial<InferFlags<F>> = {};
 
-	const canonical = resolveAliases(tokens, aliasToName, flagsDef);
-	const resolved: Record<string, unknown> = {};
+	if (flagsDef) {
+		const canonical = resolveAliases(tokens, aliasToName, flagsDef);
 
-	for (const [name, def] of Object.entries(flagsDef)) {
-		const parsedValue = canonical[name];
+		for (const [name, def] of Object.entries(flagsDef)) {
+			const parsedValue = canonical[name];
 
-		if (parsedValue !== undefined) {
-			resolved[name] = coerceFlagValue(name, def, parsedValue);
-			continue;
+			if (parsedValue !== undefined) {
+				Reflect.set(resolved, name, coerceFlagValue(name, def, parsedValue));
+				continue;
+			}
+
+			Reflect.set(
+				resolved,
+				name,
+				resolveDefault(def as Parameters<typeof resolveDefault>[0], `--${name}`),
+			);
 		}
-
-		resolved[name] = resolveDefault(def as Parameters<typeof resolveDefault>[0], `--${name}`);
 	}
 
-	return resolved;
+	// Definitions are runtime keys, so TypeScript cannot correlate each write with InferFlags<F>.
+	// The asserted type is also ahead of runtime here: required-without-default flags may still be
+	// `undefined` until validateParsed, and schema-backed flags hold raw tokens until applySchemas.
+	return resolved as InferFlags<F>;
 }
 
 /**
  * Validate required flags against already-resolved flag values.
  */
-function validateRequiredFlags(
-	flagsDef: FlagsDef | undefined,
-	resolvedFlags: Record<string, unknown>,
+function validateRequiredFlags<F extends FlagsDef>(
+	flagsDef: F | undefined,
+	resolvedFlags: InferFlags<F>,
 ): void {
 	if (!flagsDef) return;
 
 	for (const [name, def] of Object.entries(flagsDef)) {
 		if (def.required === true && def.default === undefined) {
-			if (resolvedFlags[name] === undefined) {
+			if (resolvedFlags[name as keyof InferFlags<F>] === undefined) {
 				throw new CrustError("VALIDATION", `Missing required flag "--${name}"`);
 			}
 		}
@@ -342,13 +359,14 @@ function validateRequiredFlags(
  * This is a pure parse+coerce function — it never throws for missing required
  * values. Use {@link validateParsed} to enforce required constraints.
  */
-function resolveArgs(argsDef: ArgsDef | undefined, positionals: string[]): Record<string, unknown> {
-	if (!argsDef) return {};
-
-	const resolved: Record<string, unknown> = {};
+function resolveArgs<A extends ArgsDef>(
+	argsDef: A | undefined,
+	positionals: string[],
+): InferArgs<A> {
+	const resolved: Partial<InferArgs<A>> = {};
 	let index = 0;
 
-	for (const def of argsDef) {
+	for (const def of argsDef ?? []) {
 		const { name } = def as ArgDef;
 		const label = `<${name}>`;
 		const choices = (def as { choices?: readonly string[] }).choices;
@@ -362,17 +380,28 @@ function resolveArgs(argsDef: ArgsDef | undefined, positionals: string[]): Recor
 
 		if (def.variadic) {
 			const remaining = positionals.slice(index);
-			resolved[name] = remaining.map((v, i) => coerceOne(v, i));
+			Reflect.set(
+				resolved,
+				name,
+				remaining.map((v, i) => coerceOne(v, i)),
+			);
 			index = positionals.length;
 		} else if (index < positionals.length) {
-			resolved[name] = coerceOne(positionals[index] as string);
+			Reflect.set(resolved, name, coerceOne(positionals[index] as string));
 			index++;
 		} else {
-			resolved[name] = resolveDefault(def as Parameters<typeof resolveDefault>[0], label);
+			Reflect.set(
+				resolved,
+				name,
+				resolveDefault(def as Parameters<typeof resolveDefault>[0], label),
+			);
 		}
 	}
 
-	return resolved;
+	// Definitions are runtime keys, so TypeScript cannot correlate each write with InferArgs<A>.
+	// The asserted type is also ahead of runtime here: required-without-default args may still be
+	// `undefined` until validateParsed, and schema-backed args hold raw tokens until applySchemas.
+	return resolved as InferArgs<A>;
 }
 
 /**
@@ -424,11 +453,11 @@ function validateNoNegateUsage(argv: string[], spellings: ReadonlyMap<string, Fl
  * @throws {CrustError} On unknown flags, type coercion failure, or alias collisions
  */
 export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
-	command: CommandNode,
+	command: CommandNode & { args: A | undefined; effectiveFlags: F },
 	argv: string[],
-) {
-	const argsDef = command.args as ArgsDef | undefined;
-	const flagsDef = command.effectiveFlags as FlagsDef | undefined;
+): ParseResult<A, F> {
+	const argsDef = command.args;
+	const flagsDef = command.effectiveFlags;
 
 	// CONFIG-class validation: reject async parse fns up-front so the parser
 	// never sees a Promise where a value was expected.
@@ -481,14 +510,11 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 	const resolvedFlags = resolveFlags(flagsDef, parsed.tokens ?? [], aliasToName);
 	const resolvedArgs = resolveArgs(argsDef, preSeparatorPositionals);
 
-	// The runtime logic correctly builds args/flags matching InferArgs<A> and
-	// InferFlags<F>, but TypeScript can't verify this statically since values
-	// are assembled dynamically from definitions. The assertion is safe here.
 	return {
 		args: resolvedArgs,
 		flags: resolvedFlags,
 		rawArgs,
-	} as ParseResult<A, F>;
+	};
 }
 
 /**
@@ -501,19 +527,22 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
  * @param parsed - The parse result from {@link parseArgs}
  * @throws {CrustError} On missing required args or flags
  */
-export function validateParsed(command: CommandNode, parsed: ParseResult): void {
-	const argsDef = command.args as ArgsDef | undefined;
-	const flagsDef = command.effectiveFlags as FlagsDef | undefined;
+export function validateParsed<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
+	command: CommandNode & { args: A | undefined; effectiveFlags: F },
+	parsed: ParseResult<A, F>,
+): void {
+	const argsDef = command.args;
+	const flagsDef = command.effectiveFlags;
 
-	const args = parsed.args as Record<string, unknown>;
-	const flags = parsed.flags as Record<string, unknown>;
+	const args = parsed.args;
+	const flags = parsed.flags;
 
 	// Re-validate args: check for required args that are undefined
 	if (argsDef) {
 		for (const def of argsDef) {
 			const { name } = def as ArgDef;
 			const label = `argument "<${name}>"`;
-			const value = args[name];
+			const value = args[name as keyof InferArgs<A>];
 
 			if (def.required === true && def.default === undefined) {
 				if (def.variadic) {

@@ -6,6 +6,11 @@ import { writeManPage, type WriteManPageOptions } from "@crustjs/man";
 
 import { resolveBaseName } from "./binary-name.ts";
 
+type EntryModule = {
+	app?: unknown;
+	default?: unknown;
+};
+
 export interface GenerateManPageFromEntryOptions {
 	cwd: string;
 	/** Path to the CLI entry file, relative to `cwd` or absolute */
@@ -28,8 +33,8 @@ export async function generateManPageFromEntry(
 	}
 
 	const href = pathToFileURL(entryPath).href;
-	const mod = await import(href);
-	const raw = (mod as Record<string, unknown>).app ?? (mod as Record<string, unknown>).default;
+	const mod = (await import(href)) as EntryModule;
+	const raw = mod.app ?? mod.default;
 
 	if (
 		typeof raw !== "object" ||

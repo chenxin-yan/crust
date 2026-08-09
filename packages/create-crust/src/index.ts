@@ -4,11 +4,21 @@ import { existsSync, readdirSync } from "node:fs";
 import { basename, resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
-import { isInGitRepo, runSteps } from "@crustjs/create";
+import { isInGitRepo, runSteps, scaffold } from "@crustjs/create";
 import { spinner } from "@crustjs/progress";
 import { confirm, input, select } from "@crustjs/prompts";
 
-import { type DistributionMode, scaffoldCrustProject } from "./create-project.ts";
+import corePackage from "../../core/package.json";
+import crustPackage from "../../crust/package.json";
+import extensionsPackage from "../../extensions/package.json";
+
+type DistributionMode = "binary" | "runtime";
+
+const CRUST_TEMPLATE_VERSION_CONTEXT = {
+	crustCoreVersion: corePackage.version,
+	crustExtensionsVersion: extensionsPackage.version,
+	crustCliVersion: crustPackage.version,
+} satisfies Record<string, string>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Validation
@@ -148,15 +158,30 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 		// Infer package name from directory
 		const name = dirName;
 
+		// Scaffolding produces no console output, so it is safe inside a spinner.
+		const context = { name, ...CRUST_TEMPLATE_VERSION_CONTEXT };
 		await spinner({
 			message: "Scaffolding project...",
-			task: () =>
-				scaffoldCrustProject({
-					resolvedDir,
-					name,
-					distributionMode,
-					overwrite,
-				}),
+			task: async () => {
+				await scaffold({
+					template: "templates/base",
+					dest: resolvedDir,
+					context,
+					...(overwrite ? { conflict: "overwrite" } : {}),
+				});
+				await scaffold({
+					template: "templates/minimal",
+					dest: resolvedDir,
+					context,
+					conflict: "overwrite",
+				});
+				await scaffold({
+					template: `templates/distribution/${distributionMode}`,
+					dest: resolvedDir,
+					context,
+					conflict: "overwrite",
+				});
+			},
 		});
 
 		if (installDeps) {

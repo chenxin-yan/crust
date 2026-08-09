@@ -1,5 +1,5 @@
 import { CrustError } from "../errors.ts";
-import type { ArgsDef } from "../types.ts";
+import type { ArgDef, ArgsDef, FlagDef } from "../types.ts";
 import type { AsyncParseBrand, DefName, Overlap } from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -83,7 +83,7 @@ export type AppendArgsChecks<A extends ArgsDef, NewA extends ArgsDef> = A extend
 export function validateSchemaExclusivity(
 	subject: "arg" | "flag",
 	name: string,
-	def: Record<string, unknown>,
+	def: ArgDef | FlagDef,
 ): void {
 	if (def.schema === undefined) return;
 	for (const key of ["default", "required", "choices", "parse"] as const) {

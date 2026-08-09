@@ -4,7 +4,7 @@
 
 import { posix } from "node:path";
 
-import { normalizeInstructionList, normalizeMarkdownBlock } from "./instructions.ts";
+import { normalizeInstructionList } from "./instructions.ts";
 import type { ManifestArg, ManifestFlag, ManifestNode, RenderedFile, SkillMeta } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -478,7 +478,9 @@ function renderInstructionList(instructions: string[]): string[] {
 
 function renderTopLevelInstructions(instructions: string | string[] | undefined): string[] {
 	if (typeof instructions === "string") {
-		return normalizeMarkdownBlock(instructions);
+		// Raw markdown block: preserve internal structure, just trim and split.
+		const block = instructions.trim();
+		return block ? block.split(/\r?\n/) : [];
 	}
 
 	return renderInstructionList(normalizeInstructionList(instructions));

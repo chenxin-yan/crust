@@ -133,7 +133,7 @@ export type SpellingsOf<F extends FlagsDef> = string extends keyof F
  * Collects aliases from every flag *except* flag K.
  * Used to detect alias→alias duplicates across different flags.
  */
-type AliasesExcluding<F extends Record<string, unknown>, K extends keyof F & string> = {
+type AliasesExcluding<F extends FlagsDef, K extends keyof F & string> = {
 	[J in Exclude<keyof F & string, K>]: ExtractAllAliases<F[J]>;
 }[Exclude<keyof F & string, K>];
 
@@ -142,7 +142,7 @@ type AliasesExcluding<F extends Record<string, unknown>, K extends keyof F & str
  * that collide with a flag name (including K's own) or another flag's alias,
  * or `never` when K's aliases are all unique.
  */
-type CollidingAliases<F extends Record<string, unknown>, K extends keyof F & string> =
+type CollidingAliases<F extends FlagsDef, K extends keyof F & string> =
 	| (ExtractAllAliases<F[K]> & (keyof F & string)) // alias→name (self included)
 	| (ExtractAllAliases<F[K]> & AliasesExcluding<F, K>); // alias→alias
 
@@ -157,7 +157,7 @@ type CollidingAliases<F extends Record<string, unknown>, K extends keyof F & str
  *     '{ readonly FIX_ALIAS_COLLISION: "Alias \"m\" collides with another flag name or alias" }'.
  * ```
  */
-type ValidateFlagAliases<F extends Record<string, unknown>> = {
+type ValidateFlagAliases<F extends FlagsDef> = {
 	[K in keyof F & string]: CollidingAliases<F, K> extends never
 		? F[K]
 		: F[K] & {
@@ -198,7 +198,7 @@ type NoPrefixedAliases<F> =
  *     '{ readonly FIX_NO_PREFIX: "Flag name \"no-cache\" must not start with \"no-\"; define \"cache\" instead and use \"--no-cache\" at runtime" }'.
  * ```
  */
-type ValidateNoPrefixedFlags<F extends Record<string, unknown>> = {
+type ValidateNoPrefixedFlags<F extends FlagsDef> = {
 	[K in keyof F & string]: K extends `no-${infer Base}`
 		? F[K] & {
 				readonly FIX_NO_PREFIX: `Flag name "${K}" must not start with "no-"; define "${Base}" instead and use "--no-${Base}" at runtime`;

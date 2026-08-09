@@ -33,7 +33,9 @@ Two consequences of the root-only model:
 
 ## Owned flags and commands
 
-Extension flags default to `recursive: true`, which contributes them to every command. Set `recursive: false` for a root-only flag. Ordinary command flags are always local; Context-owned flags are the application-level propagation mechanism.
+Extension flags default to `recursive: true`, which contributes them to every command. Set `recursive: false` for a root-only flag. `defineExtension()` infers owned flags in its hooks, so `ctx.flags.trace` in the example above is `boolean | undefined`; a root-only flag also includes `undefined` because a subcommand does not receive it. Other, command-specific flag names remain accessible as `unknown`. Hook contexts retain syntax-parsed values; schema validation produces separate values for Contexts and the Command Action.
+
+Ordinary command flags are always local; Context-owned flags are the application-level propagation mechanism.
 
 Extension commands are `defineCommand()` definitions attached at the root. `new Crust()` creates only the application root; every contributed command is a definition. Definitions may declare Context capabilities under `requires`; a missing capability is a `DEFINITION` error when the application prepares. Their `.action()` callbacks receive the same typed action context as application commands, including `rootCommand`.
 
@@ -71,6 +73,8 @@ Use a module-level `WeakMap<ExtensionContext, State>` for state shared by a hook
 <include lang="ts">../../../examples/extensions/hooks.ts#service-errors</include>
 
 Rendering never turns a failure into success, and programmatic `run()` throws the original error instead of invoking `onError` — see [Error flow](/docs/guide/lifecycle#error-flow).
+
+Unlike `preRun`/`postRun`, `onError` does not infer owned flags: routing and syntax-parse failures render with a fallback context whose `flags` are empty, so its `ctx.flags` stays `Record<string, unknown>`.
 
 ## Extension context
 

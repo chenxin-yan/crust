@@ -38,15 +38,6 @@ async function readJson(path) {
 	return JSON.parse(await readFile(path, "utf8"));
 }
 
-async function pathExists(path) {
-	try {
-		await access(path);
-		return true;
-	} catch {
-		return false;
-	}
-}
-
 async function loadWorkspacePackages() {
 	const entries = await readdir(PACKAGES_DIR, { withFileTypes: true });
 	const packages = [];
@@ -59,7 +50,12 @@ async function loadWorkspacePackages() {
 		const relativeDir = `packages/${entry.name}`;
 		const dir = join(ROOT_DIR, relativeDir);
 		const packageJsonPath = join(dir, "package.json");
-		if (!(await pathExists(packageJsonPath))) {
+		if (
+			!(await access(packageJsonPath).then(
+				() => true,
+				() => false,
+			))
+		) {
 			continue;
 		}
 

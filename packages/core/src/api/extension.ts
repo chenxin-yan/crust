@@ -1,7 +1,7 @@
 import type { CommandDefinition } from "../command/crust.ts";
 import type { CommandSnapshot } from "../command/snapshot.ts";
 import { CrustError } from "../errors.ts";
-import type { FlagDef, InvocationIO } from "../types.ts";
+import type { FlagDef, InferFlags, InvocationIO } from "../types.ts";
 import type { Awaitable } from "./context.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -33,7 +33,9 @@ export type InvocationOutcome =
  * Commands cross this boundary as readonly, serializable
  * {@link CommandSnapshot}s — never as internal command nodes.
  */
-export interface ExtensionContext extends Readonly<InvocationIO> {
+export interface ExtensionContext<
+	F extends Record<string, ExtensionFlagDef> = {},
+> extends Readonly<InvocationIO> {
 	readonly argv: readonly string[];
 	/** Snapshot of the application root, including Extension-contributed flags/commands */
 	readonly rootCommand: CommandSnapshot;
@@ -42,28 +44,31 @@ export interface ExtensionContext extends Readonly<InvocationIO> {
 	readonly commandPath: readonly string[];
 	/** Syntax-parsed positional values for the resolved command */
 	readonly args: Readonly<Record<string, unknown>>;
-	/** Syntax-parsed flag values for the resolved command */
-	readonly flags: Readonly<Record<string, unknown>>;
+	/** Syntax-parsed own flags plus unknown flags from the resolved command */
+	readonly flags: Readonly<InferExtensionFlags<F> & Record<string, unknown>>;
 	readonly rawArgs: readonly string[];
 	/** End the invocation successfully before validation, Context construction, and the action. */
 	readonly finish: () => Finished;
 }
 
-export interface ExtensionHooks {
+export interface ExtensionHooks<F extends Record<string, ExtensionFlagDef> = {}> {
 	/**
 	 * Runs after routing and syntax parsing, before validation, in `.extend()` order.
 	 * Return `ctx.finish()` to end the invocation successfully; later pre-run hooks,
 	 * validation, schemas, Contexts, and the Command Action do not run.
 	 */
-	readonly preRun?: (ctx: ExtensionContext) => Awaitable<void | Finished>;
+	readonly preRun?: (ctx: ExtensionContext<F>) => Awaitable<void | Finished>;
 	/**
 	 * Runs after the invocation settles, in reverse `.extend()` order. This is the
 	 * `finally` slot for cleanup and post-run side effects.
 	 */
-	readonly postRun?: (ctx: ExtensionContext, outcome: InvocationOutcome) => Awaitable<void>;
+	readonly postRun?: (ctx: ExtensionContext<F>, outcome: InvocationOutcome) => Awaitable<void>;
 	/**
 	 * Renders a failure in `execute()` only. Return true when rendered to stop the
 	 * chain; falsy values delegate to the next Extension and then Core's renderer.
+	 *
+	 * Receives the base context: routing or syntax-parse failures render with a
+	 * fallback context whose `flags` are empty, so owned-flag inference would lie here.
 	 */
 	readonly onError?: (error: unknown, ctx: ExtensionContext) => Awaitable<boolean | void>;
 }
@@ -74,20 +79,45 @@ export interface ExtensionHooks {
  */
 export type ExtensionFlagDef = FlagDef & { readonly recursive?: boolean };
 
-export interface ExtensionConfig {
+type InferPreSchemaExtensionFlag<F extends ExtensionFlagDef> = F extends { schema: unknown }
+	? F extends { multiple: true }
+		? F extends { type: "boolean" }
+			? boolean[] | undefined
+			: string[] | undefined
+		: F extends { type: "boolean" }
+			? boolean | undefined
+			: string | undefined
+	: F extends { required: true }
+		? F extends { default: unknown }
+			? InferFlags<{ value: F }>["value"]
+			: // Hooks run before validation enforces `required`, so the value may be absent.
+					InferFlags<{ value: F }>["value"] | undefined
+		: InferFlags<{ value: F }>["value"];
+
+/** Infer the syntax-parsed values visible to an Extension's hooks. */
+export type InferExtensionFlags<F extends Record<string, ExtensionFlagDef>> = {
+	[K in keyof F]: F[K] extends { recursive: false }
+		? InferPreSchemaExtensionFlag<F[K]> | undefined
+		: InferPreSchemaExtensionFlag<F[K]>;
+};
+
+export interface ExtensionConfig<F extends Record<string, ExtensionFlagDef> = {}> {
 	/** Flags this Extension owns and contributes to the application */
-	readonly flags?: Readonly<Record<string, ExtensionFlagDef>>;
+	readonly flags?: Readonly<F>;
 	/** Root command definitions this Extension owns and contributes to the application */
 	readonly commands?: readonly CommandDefinition<any>[];
-	readonly hooks?: ExtensionHooks;
+	readonly hooks?: ExtensionHooks<F>;
 }
 
 /**
  * An application-wide reusable capability. A plain frozen structural value —
  * see {@link defineExtension}.
  */
-export interface Extension extends ExtensionConfig {
+export interface Extension {
 	readonly name: string;
+	readonly flags?: Readonly<Record<string, ExtensionFlagDef>>;
+	readonly commands?: readonly CommandDefinition<any>[];
+	readonly hooks?: ExtensionHooks;
 }
 
 /**
@@ -98,12 +128,16 @@ export interface Extension extends ExtensionConfig {
  * other Extension definitions (collisions are definition errors, surfaced
  * when the application runs).
  */
-export function defineExtension(name: string, config: ExtensionConfig = {}): Extension {
+export function defineExtension<const F extends Record<string, ExtensionFlagDef> = {}>(
+	name: string,
+	config: ExtensionConfig<F> = {},
+): Extension {
 	if (!name.trim()) {
 		throw new CrustError("DEFINITION", "Extension name must be a non-empty string", {
 			subject: "extension",
 			reason: "empty-name",
 		});
 	}
-	return Object.freeze({ ...config, name });
+	// The runtime registry erases F after defineExtension contextually types its own hooks.
+	return Object.freeze({ ...config, name }) as Extension;
 }
