@@ -63,6 +63,9 @@ export type ValidateNamedFlagDefs<
 	// the validation pipeline until `Defs` is concrete instead of speculatively
 	// re-instantiating it during inference (measured −52k instantiations on core;
 	// the non-distributive `[Defs] extends [Defs]` form recovers only −18k).
+	// Do not simplify or box this conditional — it looks like dead code but is
+	// load-bearing. It distributes over union `Defs`, which is unreachable via
+	// `.flags(...defs)` tuple inference.
 	Validated = Defs extends Defs
 		? ValidateNoPrefixedFlags<ValidateFlagAliases<NamedFlagsRecord<Defs>>>
 		: never,

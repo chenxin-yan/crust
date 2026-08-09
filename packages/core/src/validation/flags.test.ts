@@ -186,6 +186,9 @@ describe("ValidateNamedFlagDefs", () => {
 		expect(true).toBe(true);
 	});
 
+	// Tripwire: this alias-free def is branded via the `Validated` slot, so it
+	// proves the validation pipeline still fires through the always-true deferral
+	// conditional in ValidateNamedFlagDefs (flags.ts). Do not remove or reroute.
 	it('brands a flag name starting with "no-"', () => {
 		type Defs = readonly [{ name: "no-cache"; type: "boolean" }];
 		type Result = ValidateNamedFlagDefs<Defs>;
