@@ -3,7 +3,12 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { loadPackagedSkills, resolveSkillSource, SkillSourceUnavailableError } from "./source.ts";
+import {
+	loadPackagedSkills,
+	resolveSkillSource,
+	resolveSkillSourceSync,
+	SkillSourceUnavailableError,
+} from "./source.ts";
 
 let tempRoot: string;
 
@@ -27,6 +32,7 @@ describe("packaged skill sources", () => {
 		});
 		try {
 			expect(await resolveSkillSource(name)).toBe(source);
+			expect(resolveSkillSourceSync(name)).toBe(source);
 		} finally {
 			Object.defineProperty(process, "execPath", descriptor);
 		}

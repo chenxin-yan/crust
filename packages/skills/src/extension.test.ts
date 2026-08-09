@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust } from "@crustjs/core";
+import { renderHelp } from "@crustjs/extensions";
 
 import { skill } from "./extension.ts";
 import { installSkill } from "./generate.ts";
@@ -29,15 +30,15 @@ async function withCwd<T>(dir: string, run: () => Promise<T>): Promise<T> {
 	}
 }
 
-async function writeSource(name: string, version: string): Promise<string> {
+async function writeSource(name: string, version: string, description = name): Promise<string> {
 	const root = join(tempRoot, "skills");
 	const dir = join(root, name);
 	await mkdir(dir, { recursive: true });
-	await writeFile(join(dir, "SKILL.md"), `---\nname: ${name}\ndescription: ${name}\n---\n`);
+	await writeFile(join(dir, "SKILL.md"), `---\nname: ${name}\ndescription: ${description}\n---\n`);
 	await writeFile(join(dir, "content.md"), `${version}\n`);
 	await writeFile(
 		join(dir, "crust.json"),
-		JSON.stringify({ name, description: name, version, kind: "generated" }),
+		JSON.stringify({ name, description, version, kind: "generated" }),
 	);
 	return root;
 }
@@ -49,6 +50,38 @@ function createApp(source: string | URL) {
 }
 
 describe("skill extension package sources", () => {
+	it("advertises every packaged skill in help with its resolved source path", async () => {
+		const source = await writeSource("demo", "1.0.0", "Run demo workflows");
+		await writeSource("guide", "1.0.0", "Explain deployment choices");
+		const snapshot = await createApp(source).snapshot();
+
+		const output = renderHelp(snapshot);
+		expect(output).toContain("Agent skills:");
+		expect(output).toContain(`demo — Run demo workflows\n    Source: ${join(source, "demo")}`);
+		expect(output).toContain(
+			`guide — Explain deployment choices\n    Source: ${join(source, "guide")}`,
+		);
+		expect(snapshot.extensions).toContainEqual({
+			name: "skills",
+			metadata: { version: "1.0.0", command: "skill", source },
+		});
+	});
+
+	it("keeps help usable when the packaged skill source cannot be resolved", async () => {
+		const source = join(tempRoot, "missing-skills");
+		const snapshot = await createApp(source).snapshot();
+		const output = renderHelp(snapshot);
+
+		expect(output).toContain("Agent skills:");
+		expect(output).toContain("The skill source path is unavailable.");
+		expect(output).toContain("Run `demo skill`");
+		expect(output).not.toContain(source);
+		expect(snapshot.extensions).toContainEqual({
+			name: "skills",
+			metadata: { version: null, command: "skill", source: null },
+		});
+	});
+
 	it("installs every packaged skill by copy", async () => {
 		const source = await writeSource("demo", "1.0.0");
 		await writeSource("guide", "1.0.0");

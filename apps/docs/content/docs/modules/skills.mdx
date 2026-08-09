@@ -62,7 +62,9 @@ export const app = new Crust("my-cli", { description: "My CLI" })
   .action(() => {});
 ```
 
-The extension registers `my-cli skill` and `my-cli skill update`. The management command reads every skill in the source and installs clean copies into selected agent directories. `--scope project|global` selects project or user locations; `--all` installs for universal and detected agents without prompting.
+The extension registers `my-cli skill` and `my-cli skill update`. It also contributes an **Agent skills** section to root help and generated man pages. Each shipped skill is listed by name and description with its resolved absolute source path, so agents can discover and load skills without installing them first.
+
+The management command reads every skill in the source and installs clean copies into selected agent directories. `--scope project|global` selects project or user locations; `--all` installs for universal and detected agents without prompting.
 
 ```sh
 my-cli skill
@@ -70,7 +72,7 @@ my-cli skill --all --scope project
 my-cli skill update
 ```
 
-If the package-relative source cannot be found, Crust also checks for the same source directory next to `process.execPath`, which supports compiled distributions staged with their skills. An unresolved source makes the explicit `skill` command fail with a descriptive error, but does not prevent unrelated CLI commands from running.
+If the package-relative source cannot be found, Crust also checks for the same source directory next to `process.execPath`, which supports compiled distributions staged with their skills. When neither path resolves, the Agent skills section omits a source path and points to the `skill` command instead. The explicit `skill` command fails with a descriptive error, but unrelated CLI commands and help remain available.
 
 <auto-type-table path="../../../../../packages/skills/src/types.ts" name="SkillOptions" />
 

@@ -1,3 +1,5 @@
+import { dirname } from "node:path";
+
 import { type Extension, defineCommand, defineExtension } from "@crustjs/core";
 import { spinner } from "@crustjs/progress";
 import { confirm, multiselect, select } from "@crustjs/prompts";
@@ -12,7 +14,12 @@ import {
 } from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";
 import { getSkillStatus, installSkill, uninstallSkill } from "./generate.ts";
-import { SkillSourceUnavailableError, loadPackagedSkills, type PackagedSkill } from "./source.ts";
+import {
+	SkillSourceUnavailableError,
+	loadPackagedSkills,
+	loadPackagedSkillsSync,
+	type PackagedSkill,
+} from "./source.ts";
 import type { AgentTarget, InstallSkillResult, Scope, SkillOptions } from "./types.ts";
 
 const DEFAULT_SKILL_COMMAND_NAME = "skill";
@@ -119,10 +126,45 @@ async function autoUpdateSkills(options: SkillOptions): Promise<void> {
 	}
 }
 
+function formatSkillDocumentation(
+	skills: readonly PackagedSkill[],
+	commandName: string,
+	appName: string,
+): string {
+	if (skills.length === 0) {
+		return `The skill source path is unavailable. Run \`${appName} ${commandName}\` to install packaged skills into an agent directory.`;
+	}
+	return skills
+		.map(
+			(packagedSkill) =>
+				`${packagedSkill.name} — ${packagedSkill.description}\n  Source: ${packagedSkill.sourceDir}`,
+		)
+		.join("\n\n");
+}
+
 export function skill(options: SkillOptions): Extension {
 	const commandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
+	let packagedSkills: readonly PackagedSkill[] = [];
+	try {
+		packagedSkills = loadPackagedSkillsSync(options.source);
+	} catch (error) {
+		if (!(error instanceof SkillSourceUnavailableError)) throw error;
+	}
+	const source = packagedSkills[0] ? dirname(packagedSkills[0].sourceDir) : null;
 	return defineExtension("skills", {
 		commands: [buildSkillCommand(commandName, options)],
+		documentation: (snapshot) => [
+			{
+				command: [],
+				section: "Agent skills",
+				body: formatSkillDocumentation(packagedSkills, commandName, snapshot.meta.name),
+			},
+		],
+		metadata: {
+			version: packagedSkills[0]?.version ?? null,
+			command: commandName,
+			source,
+		},
 		hooks: {
 			async preRun(context) {
 				if (context.commandPath[1] === commandName || options.autoUpdate === false) return;

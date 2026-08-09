@@ -41,6 +41,8 @@ export const app = new Crust("my-cli", { description: "My CLI" })
 	.action(() => {});
 ```
 
+Root help and generated man pages include an **Agent skills** section with each shipped skill's name, description, and resolved source path. If the path is unavailable, help remains usable and points to the `skill` command instead.
+
 The contributed `skill` command copies every shipped skill into selected agent directories. Installed copies auto-update when the package source version changes. Update and uninstall operations leave directories without the matching ownership marker untouched. No separate mutable skill store or link-based install mode is used.
 
 ## Documentation

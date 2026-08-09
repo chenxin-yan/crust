@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -35,14 +36,7 @@ export type InstalledManifestStatus =
 			readonly rawKind?: string;
 	  };
 
-export async function inspectInstalledManifest(dir: string): Promise<InstalledManifestStatus> {
-	let raw: string;
-	try {
-		raw = await readFile(join(dir, CRUST_MANIFEST), "utf-8");
-	} catch {
-		return { status: "absent" };
-	}
-
+function parseInstalledManifest(raw: string): InstalledManifestStatus {
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(raw);
@@ -85,7 +79,28 @@ export async function inspectInstalledManifest(dir: string): Promise<InstalledMa
 	};
 }
 
+export async function inspectInstalledManifest(dir: string): Promise<InstalledManifestStatus> {
+	let raw: string;
+	try {
+		raw = await readFile(join(dir, CRUST_MANIFEST), "utf-8");
+	} catch {
+		return { status: "absent" };
+	}
+	return parseInstalledManifest(raw);
+}
+
 export async function readInstalledManifest(dir: string): Promise<InstalledSkillManifest | null> {
 	const result = await inspectInstalledManifest(dir);
+	return result.status === "ok" ? result.manifest : null;
+}
+
+export function readInstalledManifestSync(dir: string): InstalledSkillManifest | null {
+	let raw: string;
+	try {
+		raw = readFileSync(join(dir, CRUST_MANIFEST), "utf-8");
+	} catch {
+		return null;
+	}
+	const result = parseInstalledManifest(raw);
 	return result.status === "ok" ? result.manifest : null;
 }
