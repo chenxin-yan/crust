@@ -9,7 +9,7 @@ import type { AsyncParseBrand, DefName, Overlap } from "./shared.ts";
 
 /** Extract only the branded error properties from a validated record value. */
 type FlagDefBrand<Name, V> = Name extends keyof V
-	? Pick<V[Name], Extract<keyof V[Name], "FIX_ALIAS_COLLISION" | "FIX_NO_PREFIX">>
+	? Pick<V[Name], Extract<keyof V[Name], `FIX_${string}`>>
 	: {};
 
 /** Brand an incoming definition when one of its spellings is already claimed. */
