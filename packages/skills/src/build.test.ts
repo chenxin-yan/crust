@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { Crust, defineCommand } from "@crustjs/core";
 
 import { writeSkills } from "./build.ts";
+import { SkillSourceConflictError } from "./errors.ts";
 
 let tempRoot: string;
 
@@ -73,8 +74,9 @@ describe("writeSkills", () => {
 		});
 	});
 
-	it("supports generated skill name and description overrides", async () => {
+	it("supports overrides and replaces stale output", async () => {
 		const outDir = join(tempRoot, "output");
+		await mkdir(join(outDir, "removed-skill"), { recursive: true });
 
 		await writeSkills(createApp(), {
 			outDir,
@@ -83,6 +85,7 @@ describe("writeSkills", () => {
 			description: "Complete demo reference",
 		});
 
+		expect(await readdir(outDir)).toEqual(["demo-reference"]);
 		const metadata = JSON.parse(
 			await readFile(join(outDir, "demo-reference", "crust.json"), "utf8"),
 		);
@@ -97,9 +100,13 @@ describe("writeSkills", () => {
 		const bundleDir = await createBundle("demo", "Authored demo guidance");
 		const outDir = join(tempRoot, "output");
 
-		await expect(
-			writeSkills(createApp(), { outDir, version: "1.0.0", bundles: [bundleDir] }),
-		).rejects.toThrow('Skill source name conflict: "demo"');
+		const result = writeSkills(createApp(), {
+			outDir,
+			version: "1.0.0",
+			bundles: [bundleDir],
+		});
+		await expect(result).rejects.toBeInstanceOf(SkillSourceConflictError);
+		await expect(result).rejects.toMatchObject({ skillName: "demo" });
 		await expect(readdir(outDir)).rejects.toThrow();
 	});
 });

@@ -20,7 +20,7 @@ export { annotate } from "./annotations.ts";
 export { installSkillBundle } from "./bundle.ts";
 export type { SkillConflictDetails, SkillKindMismatch, SkillManifestMalformed } from "./errors.ts";
 // Errors
-export { SkillConflictError } from "./errors.ts";
+export { SkillConflictError, SkillSourceConflictError } from "./errors.ts";
 
 // Primitives
 export { generateSkill, isValidSkillName, getSkillStatus, uninstallSkill } from "./generate.ts";

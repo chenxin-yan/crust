@@ -4,6 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import type { CommandSnapshot } from "@crustjs/core";
 
 import { loadBundleFiles } from "./bundle.ts";
+import { SkillSourceConflictError } from "./errors.ts";
 import { isValidSkillName } from "./generate.ts";
 import { buildManifest } from "./manifest.ts";
 import { renderDistributionMetadata } from "./metadata.ts";
@@ -70,17 +71,15 @@ export async function writeSkills(
 	const names = new Set<string>();
 	for (const skill of skills) {
 		if (names.has(skill.meta.name)) {
-			throw new Error(
-				`Skill source name conflict: "${skill.meta.name}" is declared more than once.`,
-			);
+			throw new SkillSourceConflictError(skill.meta.name);
 		}
 		names.add(skill.meta.name);
 	}
 
 	const outDir = resolve(options.outDir);
+	await rm(outDir, { recursive: true, force: true });
 	for (const skill of skills) {
 		const skillDir = join(outDir, skill.meta.name);
-		await rm(skillDir, { recursive: true, force: true });
 		await writeFiles(skillDir, [
 			...skill.files,
 			renderDistributionMetadata(skill.meta, skill.kind),

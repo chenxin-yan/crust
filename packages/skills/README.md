@@ -35,7 +35,7 @@ await writeSkills(app, {
 });
 ```
 
-Each skill is written to its own directory under `outDir` with a self-describing `crust.json`. `writeSkills()` does not touch the canonical store or agent directories.
+Each skill is written to its own directory under `outDir` with a self-describing `crust.json`. The dedicated output directory is replaced on every build so removed skills cannot ship as stale files. `writeSkills()` does not touch the canonical store or agent directories.
 
 ## Documentation
 
