@@ -70,6 +70,42 @@ describe("ValidateNamedFlagDefs", () => {
 		expect(true).toBe(true);
 	});
 
+	it("keeps alias-free and aliased duplicate-name validation in parity", () => {
+		type AliasFree = ValidateNamedFlagDefs<
+			readonly [{ name: "mode"; type: "string" }, { name: "mode"; type: "number" }]
+		>;
+		type Aliased = ValidateNamedFlagDefs<
+			readonly [
+				{ name: "mode"; type: "string"; aliases: ["text-mode"] },
+				{ name: "mode"; type: "number"; aliases: ["number-mode"] },
+			]
+		>;
+		type _sameFirstBrand = Expect<
+			Equal<AliasFree[0]["FIX_ALIAS_COLLISION"], Aliased[0]["FIX_ALIAS_COLLISION"]>
+		>;
+		type _sameSecondBrand = Expect<
+			Equal<AliasFree[1]["FIX_ALIAS_COLLISION"], Aliased[1]["FIX_ALIAS_COLLISION"]>
+		>;
+		type _sameBrands = Expect<
+			Equal<
+				Extract<keyof AliasFree[0], `FIX_${string}`>,
+				Extract<keyof Aliased[0], `FIX_${string}`>
+			>
+		>;
+		type CleanAliasFree = ValidateNamedFlagDefs<readonly [{ name: "output"; type: "string" }]>;
+		type CleanAliased = ValidateNamedFlagDefs<
+			readonly [{ name: "output"; type: "string"; aliases: ["out"] }]
+		>;
+		type _aliasFreeRemainsUnbranded = Expect<
+			Equal<Extract<keyof CleanAliasFree[0], `FIX_${string}`>, never>
+		>;
+		type _aliasedRemainsUnbranded = Expect<
+			Equal<Extract<keyof CleanAliased[0], `FIX_${string}`>, never>
+		>;
+
+		expect(true).toBe(true);
+	});
+
 	it("brands a short alias equal to its own flag name", () => {
 		type Defs = readonly [{ name: "m"; type: "string"; short: "m" }];
 		type Result = ValidateNamedFlagDefs<Defs>;
@@ -97,6 +133,21 @@ describe("ValidateNamedFlagDefs", () => {
 		type Result = ValidateNamedFlagDefs<Defs, "verbose" | "v">;
 		type _check = Expect<
 			Equal<Result[0]["FIX_ALIAS_COLLISION"], 'Flag spelling "v" collides with an existing flag'>
+		>;
+
+		expect(true).toBe(true);
+	});
+
+	it("brands an alias-free name that collides with an existing spelling", () => {
+		type Result = ValidateNamedFlagDefs<
+			readonly [{ name: "verbose"; type: "boolean" }],
+			"verbose" | "v"
+		>;
+		type _check = Expect<
+			Equal<
+				Result[0]["FIX_ALIAS_COLLISION"],
+				'Flag spelling "verbose" collides with an existing flag'
+			>
 		>;
 
 		expect(true).toBe(true);
@@ -135,6 +186,9 @@ describe("ValidateNamedFlagDefs", () => {
 		expect(true).toBe(true);
 	});
 
+	// Tripwire: this alias-free def is branded via the `Validated` slot, so it
+	// proves the validation pipeline still fires through the always-true deferral
+	// conditional in ValidateNamedFlagDefs (flags.ts). Do not remove or reroute.
 	it('brands a flag name starting with "no-"', () => {
 		type Defs = readonly [{ name: "no-cache"; type: "boolean" }];
 		type Result = ValidateNamedFlagDefs<Defs>;
