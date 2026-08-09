@@ -14,6 +14,7 @@ import type {
 	ParseResult,
 	ValueType,
 } from "../types.ts";
+import { validateVariadicArgPosition } from "../validation/args.ts";
 import { coerceJson, coercePath, coerceUrl } from "./coercers.ts";
 import { flagSpellings, type FlagSpelling } from "./spellings.ts";
 
@@ -433,6 +434,38 @@ function validateNoNegateUsage(argv: string[], spellings: ReadonlyMap<string, Fl
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// validateDefinition — Definition-class validation
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Validate a command's arg/flag *definitions* — checks that are pure
+ * functions of the definitions and involve no argv:
+ *
+ * - Flag alias collisions (across `effectiveFlags`, so Context-owned and
+ *   local flags share one namespace)
+ * - Reserved `no-` prefix violations and invalid flag types
+ * - Async `parse` functions
+ * - Variadic arg position (only the last positional may be variadic)
+ *
+ * Called at the top of {@link parseArgs} so runtime parsing fails fast on
+ * misconfigured commands, and directly by `validateCommandTree` so build
+ * validation exercises the exact same rules. Definition rules live only
+ * here — add new ones to this function, never to the tree walk.
+ *
+ * @throws {CrustError} `DEFINITION` on violation
+ */
+export function validateDefinition(command: CommandNode): void {
+	const argsDef = command.args;
+	const flagsDef = command.effectiveFlags;
+
+	validateAsyncParse(flagsDef, argsDef);
+	// Building the spelling table throws on collisions / no- prefix / bad types.
+	flagSpellings(flagsDef);
+
+	argsDef?.forEach((def, index) => validateVariadicArgPosition(def, index, argsDef.length));
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // parseArgs — Main parsing function
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -459,9 +492,9 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 	const argsDef = command.args;
 	const flagsDef = command.effectiveFlags;
 
-	// CONFIG-class validation: reject async parse fns up-front so the parser
-	// never sees a Promise where a value was expected.
-	validateAsyncParse(flagsDef, argsDef);
+	// Definition-class validation up-front so misconfigured commands fail
+	// fast, through the same gate build validation uses.
+	validateDefinition(command);
 
 	const spellings = flagSpellings(flagsDef);
 	const { options: parseOptions, aliasToName } = buildParseArgsOptionDescriptor(spellings);

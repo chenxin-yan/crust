@@ -128,7 +128,7 @@ describe("validateCommandTree — CommandNode tree", () => {
 		node.localFlags = localFlags;
 		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
 
-		// Should pass because createValidationArgv generates --token sample
+		// Required flags are a runtime input concern, not a definition error.
 		expect(() => validateCommandTree(node)).not.toThrow();
 	});
 
@@ -234,7 +234,7 @@ describe("validateCommandTree — CommandNode tree", () => {
 		);
 	});
 
-	it("required ancestor-owned flag included in validation argv", () => {
+	it("required ancestor-owned flag does not fail build validation", () => {
 		// The ancestor-owned flags include a required string flag
 		const ancestorOwnedFlags = {
 			token: {
@@ -249,7 +249,7 @@ describe("validateCommandTree — CommandNode tree", () => {
 		node.localFlags = localFlags;
 		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
 
-		// Should NOT throw — createValidationArgv includes --token sample
+		// Should NOT throw — required flags are an input error, not a definition error
 		expect(() => validateCommandTree(node)).not.toThrow();
 	});
 
