@@ -20,15 +20,16 @@ export function version(
 	const { format } = options;
 
 	return defineExtension("version", {
-		flags: {
-			version: {
+		flags: [
+			{
+				name: "version",
 				type: "boolean",
 				short: "v",
 				noNegate: true,
 				description: "Show version number",
 				recursive: false,
 			},
-		},
+		],
 		hooks: {
 			preRun(context) {
 				// Root invocation with --version only

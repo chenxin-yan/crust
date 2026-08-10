@@ -65,9 +65,7 @@ describe("public beta API", () => {
 	it("loads extensions separately from command context", async () => {
 		let wrapperCalled = false;
 		const version = defineExtension("version", {
-			flags: {
-				version: { type: "boolean" },
-			},
+			flags: [{ name: "version", type: "boolean" }],
 			hooks: {
 				preRun() {
 					wrapperCalled = true;
@@ -88,9 +86,7 @@ describe("public beta API", () => {
 	it("can execute repeatedly without freezing or accumulating extension setup on the source builder", async () => {
 		let runCount = 0;
 		const debug = defineExtension("debug", {
-			flags: {
-				debug: { type: "boolean" },
-			},
+			flags: [{ name: "debug", type: "boolean" }],
 		});
 		const app = new Crust("repeat").extend(debug).action(({ flags }) => {
 			if ((flags as Record<string, unknown>).debug) {

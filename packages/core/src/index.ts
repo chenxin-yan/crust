@@ -19,6 +19,7 @@ export type {
 	Finished,
 	InferExtensionFlags,
 	InvocationOutcome,
+	NamedExtensionFlagDef,
 } from "./api/extension.ts";
 export { defineExtension } from "./api/extension.ts";
 export { defineArg, defineFlag } from "./api/flags.ts";

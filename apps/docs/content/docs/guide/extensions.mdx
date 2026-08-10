@@ -33,7 +33,15 @@ Two consequences of the root-only model:
 
 ## Owned flags and commands
 
-Extension flags default to `recursive: true`, which contributes them to every command. Set `recursive: false` for a root-only flag. `defineExtension()` infers owned flags in its hooks, so `ctx.flags.trace` in the example above is `boolean | undefined`; a root-only flag also includes `undefined` because a subcommand does not receive it. Other, command-specific flag names remain accessible as `unknown`. Hook contexts retain syntax-parsed values; schema validation produces separate values for Contexts and the Command Action.
+Extension flags are a readonly array of named definitions. Use `defineFlag()` values for ordinary recursive flags, or write a named definition inline. Extension flags default to `recursive: true`, which contributes them to every command. The documented way to set the Extension-only `recursive` option for a root-only flag is an inline definition:
+
+```ts
+const rootOnlyVersion = defineExtension("version", {
+  flags: [{ name: "version", type: "boolean", recursive: false }],
+});
+```
+
+`defineExtension()` infers owned flags in its hooks, so `ctx.flags.trace` in the example above is `boolean | undefined`; a root-only flag also includes `undefined` because a subcommand does not receive it. Other, command-specific flag names remain accessible as `unknown`. Hook contexts retain syntax-parsed values; schema validation produces separate values for Contexts and the Command Action.
 
 Ordinary command flags are always local; Context-owned flags are the application-level propagation mechanism.
 

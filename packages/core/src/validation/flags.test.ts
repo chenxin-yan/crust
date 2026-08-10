@@ -275,6 +275,32 @@ describe("validateIncomingFlag", () => {
 		).toThrow(/spelling "loud"/);
 	});
 
+	it('rejects "__proto__" as a flag name or alias', () => {
+		expect(() =>
+			validateIncomingFlag({ name: "__proto__", def: { type: "boolean" } }, {}, 'Extension "evil"'),
+		).toThrow(/reserved spelling "__proto__"/);
+		expect(() =>
+			validateIncomingFlag(
+				{ name: "proto", def: { type: "boolean", aliases: ["__proto__"] } },
+				{},
+				'Extension "evil"',
+			),
+		).toThrow(/reserved spelling "__proto__"/);
+	});
+
+	it("rejects a definition without a non-empty name", () => {
+		expect(() =>
+			validateIncomingFlag(
+				{ name: undefined as never, def: { type: "boolean" } },
+				{},
+				'Extension "nameless"',
+			),
+		).toThrow(/must carry a non-empty name/);
+		expect(() =>
+			validateIncomingFlag({ name: "", def: { type: "boolean" } }, {}, 'Context "nameless"'),
+		).toThrow(/must carry a non-empty name/);
+	});
+
 	it("rejects duplicate spellings within the incoming definition", () => {
 		expect(() =>
 			validateIncomingFlag(

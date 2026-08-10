@@ -224,9 +224,17 @@ type ExtensionFlagDef = FlagDef & { readonly recursive?: boolean };
 
 An Extension owns contributed flags. `recursive` defaults to `true`; `false` contributes the flag only to the root.
 
-### `InferExtensionFlags<F>`
+### `NamedExtensionFlagDef`
 
-Infers the syntax-parsed values of the flags contributed by an Extension and exposed to its hooks. A flag with `recursive: false` may be `undefined` when a descendant command is invoked because that flag is contributed only to the root.
+```ts
+type NamedExtensionFlagDef = NamedFlagDef & { readonly recursive?: boolean };
+```
+
+The public authoring shape accepted by `ExtensionConfig.flags`: an Extension flag definition carrying its name and optional recursive scope.
+
+### `InferExtensionFlags<Defs>`
+
+Infers the syntax-parsed values from an Extension's named-definition array and exposes them to its hooks. A flag with `recursive: false` may be `undefined` when a descendant command is invoked because that flag is contributed only to the root.
 
 ### `ExtensionContext`
 

@@ -411,7 +411,7 @@ describe("Context-owned flags", () => {
 	it("rejects Extension collisions regardless of fluent registration order", async () => {
 		const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
 		const extension = defineExtension("auth-extension", {
-			flags: { other: { type: "string", aliases: ["api-key"] } },
+			flags: [{ name: "other", type: "string", aliases: ["api-key"] }],
 		});
 
 		await expect(new Crust("cli").extend(extension).provide(auth()).run([])).rejects.toThrow(
