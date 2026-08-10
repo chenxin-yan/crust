@@ -251,6 +251,15 @@ export function validateIncomingFlag(
 	ownerLabel: string,
 ): void {
 	const incomingSpellings = flagDefinitionSpellings(incoming.name, incoming.def);
+	// Flag defs and parse results live in plain-object records; a "__proto__" key
+	// hits the Object.prototype setter and the flag silently vanishes. Fail loud.
+	if (incomingSpellings.includes("__proto__")) {
+		throw new CrustError(
+			"DEFINITION",
+			`${ownerLabel} flag "--${incoming.name}" uses reserved spelling "__proto__"`,
+			{ subject: "flag", name: incoming.name, reason: "reserved-name" },
+		);
+	}
 	const duplicate = incomingSpellings.find(
 		(spelling, index) => incomingSpellings.indexOf(spelling) !== index,
 	);
