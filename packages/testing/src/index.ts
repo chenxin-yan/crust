@@ -1,6 +1,6 @@
 import type { InvocationIO } from "@crustjs/core";
 import { withPromptIO } from "@crustjs/prompts";
-import { createPromptIO } from "@crustjs/prompts/testing";
+import { createPromptIO, type Key } from "@crustjs/prompts/testing";
 
 /** Structural io shape shared by `run()` and `execute()` captures. */
 export type CaptureIO = Partial<InvocationIO>;
@@ -114,7 +114,7 @@ async function captureExecuteExclusive(
 export interface InteractiveRun {
 	waitFor(pattern: RegExp, timeoutMs?: number): Promise<void>;
 	type(text: string): void;
-	keys(...namedKeys: string[]): void;
+	keys(...namedKeys: Key[]): void;
 	screen(): string;
 	readonly done: Promise<void>;
 }

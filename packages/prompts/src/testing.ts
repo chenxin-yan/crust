@@ -3,7 +3,7 @@ import { stripVTControlCharacters } from "node:util";
 
 import type { PromptIO } from "./core/renderer.ts";
 
-const namedKeys: Record<string, string> = {
+const namedKeys = {
 	return: "\r",
 	enter: "\r",
 	backspace: "\x7f",
@@ -17,7 +17,15 @@ const namedKeys: Record<string, string> = {
 	tab: "\t",
 	space: " ",
 	escape: "\x1B",
-};
+} as const;
+
+export type NamedKey = keyof typeof namedKeys;
+
+/**
+ * Key argument for `keys()` / {@link encodeKey}: named keys get editor
+ * autocomplete; `ctrl+<letter>` and single printable characters stay legal.
+ */
+export type Key = NamedKey | `ctrl+${string}` | (string & {});
 
 /**
  * Encode a named terminal key as its raw input sequence.
@@ -26,8 +34,8 @@ const namedKeys: Record<string, string> = {
  * printable characters. Anything else throws — silently typing a misspelled
  * key name (e.g. `"pageup"`) into the prompt would corrupt the test input.
  */
-export function encodeKey(key: string): string {
-	if (key in namedKeys) return namedKeys[key] ?? "";
+export function encodeKey(key: Key): string {
+	if (key in namedKeys) return namedKeys[key as NamedKey];
 
 	const ctrl = /^ctrl\+([a-z])$/i.exec(key);
 	if (ctrl?.[1]) return String.fromCharCode(ctrl[1].toUpperCase().charCodeAt(0) & 0x1f);
@@ -109,7 +117,7 @@ class FakeTerminal {
 export interface PromptTestIO {
 	readonly io: Required<PromptIO>;
 	type(text: string): void;
-	keys(...namedKeys: string[]): void;
+	keys(...namedKeys: Key[]): void;
 	screen(): string;
 	output(): string;
 }
@@ -153,7 +161,7 @@ export function createPromptIO({ isTTY = true }: { isTTY?: boolean } = {}): Prom
 
 export interface RenderedPrompt<Answer> {
 	type(text: string): void;
-	keys(...namedKeys: string[]): void;
+	keys(...namedKeys: Key[]): void;
 	screen(): string;
 	readonly answer: Promise<Answer>;
 }
