@@ -310,4 +310,30 @@ describe("validateIncomingFlag", () => {
 			),
 		).toThrow(/repeats spelling "o"/);
 	});
+
+	it('rejects "no-" prefixes and missing parser types at the entry gate', () => {
+		expect(() =>
+			validateIncomingFlag(
+				{ name: "no-cache", def: { type: "boolean" } },
+				{},
+				'Extension "cache" on "root"',
+			),
+		).toThrow(/flag "--no-cache" must not use "no-" prefix/);
+		expect(() =>
+			validateIncomingFlag({ name: "verbose", def: {} as never }, {}, 'Context "logger"'),
+		).toThrow(/must declare a parser type/);
+	});
+
+	it("rejects mixing a schema with core options at the entry gate", () => {
+		expect(() =>
+			validateIncomingFlag(
+				{
+					name: "port",
+					def: { type: "string", schema: {}, default: "3000" } as never,
+				},
+				{},
+				'Command "cli"',
+			),
+		).toThrow(/mixes core option "default" with a schema/);
+	});
 });

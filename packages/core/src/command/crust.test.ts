@@ -151,33 +151,33 @@ describe("Crust .flags()", () => {
 		expect(snapshot.meta.description).toBe("desc");
 	});
 
-	it("throws CrustError DEFINITION at parse time on flag name starting with no-", async () => {
-		const app = new Crust("test").flags({
-			name: "no-cache",
-			type: "boolean",
-		} as never);
-
-		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
+	it("throws CrustError DEFINITION at definition time on flag name starting with no-", () => {
+		expect(() =>
+			new Crust("test").flags({
+				name: "no-cache",
+				type: "boolean",
+			} as never),
+		).toThrow(/flag "--no-cache" must not use "no-" prefix/);
 	});
 
-	it("throws CrustError DEFINITION at parse time on aliases starting with no-", async () => {
-		const app = new Crust("test").flags({
-			name: "cache",
-			type: "boolean",
-			aliases: ["no-store"],
-		} as never);
-
-		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
+	it("throws CrustError DEFINITION at definition time on aliases starting with no-", () => {
+		expect(() =>
+			new Crust("test").flags({
+				name: "cache",
+				type: "boolean",
+				aliases: ["no-store"],
+			} as never),
+		).toThrow(/Alias "--no-store" on "--cache" must not use "no-" prefix/);
 	});
 
-	it("throws CrustError DEFINITION at parse time on short aliases starting with no-", async () => {
-		const app = new Crust("test").flags({
-			name: "cache",
-			type: "boolean",
-			short: "no-c",
-		} as never);
-
-		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
+	it("throws CrustError DEFINITION at definition time on short aliases starting with no-", () => {
+		expect(() =>
+			new Crust("test").flags({
+				name: "cache",
+				type: "boolean",
+				short: "no-c",
+			} as never),
+		).toThrow(/Short alias "-no-c" on "--cache" must not use "no-" prefix/);
 	});
 
 	it("repeated .flags() calls accumulate runtime and action types", async () => {

@@ -8,7 +8,6 @@ import type {
 	NamedFlagDef,
 	NamedFlagsRecord,
 } from "../types.ts";
-import { validateSchemaExclusivity } from "../validation/args.ts";
 import { validateIncomingFlag, type ValidateNamedFlagDefs } from "../validation/flags.ts";
 
 export type ContextMap = Record<string, unknown>;
@@ -205,7 +204,6 @@ export function defineContext(
 	const ownedFlags: FlagsDef = {};
 	for (const def of config.flags ?? []) {
 		const { name: flagName, ...rest } = def;
-		validateSchemaExclusivity("flag", flagName, rest as FlagDef);
 		validateIncomingFlag({ name: flagName, def: rest as FlagDef }, ownedFlags, `Context "${name}"`);
 		ownedFlags[flagName] = rest as FlagDef;
 	}
