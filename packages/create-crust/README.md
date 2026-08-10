@@ -1,4 +1,4 @@
-# @crustjs/create-crust
+# create-crust
 
 Scaffold a new [Crust](https://crustjs.com) CLI project in seconds.
 

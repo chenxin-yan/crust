@@ -108,6 +108,7 @@ bar.stop("success", "All files translated");
 
 ```ts
 const handle = spinner({ message: "Working...", sigint: false });
+handle.start();
 process.once("SIGINT", () => {
   handle.stop("error", "Cancelled");
   flushLogs();

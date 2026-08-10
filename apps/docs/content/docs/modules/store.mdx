@@ -302,7 +302,7 @@ const state = await store.read();
 - Persisted values override defaults.
 - Missing keys fall back to defaults.
 - Unknown persisted keys are dropped by default (`pruneUnknown: true`). Set `pruneUnknown: false` to preserve them.
-- All values are deep-cloned to prevent shared-reference mutation from defaults.
+- Array defaults are shallow-copied to prevent shared mutation from defaults.
 - Falsy values (`null`, `0`, `""`, `false`) in the persisted file are preserved — only truly missing keys trigger defaults.
 
 <Callout>
