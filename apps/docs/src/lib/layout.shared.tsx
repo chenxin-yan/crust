@@ -18,64 +18,62 @@ function DiscordIcon() {
   );
 }
 
-export function baseOptions(): BaseLayoutProps {
-  return {
-    nav: {
-      title: (
+export const baseOptions: BaseLayoutProps = {
+  nav: {
+    title: (
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+          paddingLeft: 4,
+        }}
+      >
+        <img
+          src="/favicon-96x96.png"
+          alt="Crust logo"
+          style={{
+            width: 24,
+            height: 24,
+            flexShrink: 0,
+          }}
+        />
         <span
           style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-            paddingLeft: 4,
+            fontFamily: "'Saira Condensed', sans-serif",
+            fontWeight: 700,
+            fontSize: 16,
+            letterSpacing: 4,
+            textTransform: "uppercase" as const,
           }}
         >
-          <img
-            src="/favicon-96x96.png"
-            alt="Crust logo"
-            style={{
-              width: 24,
-              height: 24,
-              flexShrink: 0,
-            }}
-          />
-          <span
-            style={{
-              fontFamily: "'Saira Condensed', sans-serif",
-              fontWeight: 700,
-              fontSize: 16,
-              letterSpacing: 4,
-              textTransform: "uppercase" as const,
-            }}
-          >
-            Crust
-          </span>
+          Crust
         </span>
-      ),
+      </span>
+    ),
+  },
+  links: [
+    {
+      text: "Docs",
+      url: "/docs",
+      active: "nested-url",
+      on: "nav",
     },
-    links: [
-      {
-        text: "Docs",
-        url: "/docs",
-        active: "nested-url",
-        on: "nav",
-      },
-      {
-        text: "Roadmap",
-        url: "https://github.com/users/chenxin-yan/projects/10",
-        active: "url",
-        on: "nav",
-        external: true,
-      },
-      {
-        type: "icon",
-        label: "Discord",
-        icon: <DiscordIcon />,
-        text: "Discord",
-        url: siteConfig.discordUrl,
-        external: true,
-      },
-    ],
-    githubUrl: `https://github.com/${gitConfig.user}/${gitConfig.repo}`,
-  };
-}
+    {
+      text: "Roadmap",
+      url: "https://github.com/users/chenxin-yan/projects/10",
+      active: "url",
+      on: "nav",
+      external: true,
+    },
+    {
+      type: "icon",
+      label: "Discord",
+      icon: <DiscordIcon />,
+      text: "Discord",
+      url: siteConfig.discordUrl,
+      external: true,
+    },
+  ],
+  githubUrl: `https://github.com/${gitConfig.user}/${gitConfig.repo}`,
+};

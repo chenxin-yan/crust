@@ -10,12 +10,18 @@ import {
 	CURSOR_INDICATOR,
 	PREFIX_SUBMITTED,
 	PREFIX_SYMBOL,
-	SCROLL_INDICATOR,
 } from "../core/symbols.ts";
 import { resolveTheme } from "../core/theme.ts";
 import type { Choice, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
-import { formatSubmitted, moveCursor, normalizeChoices, validateSelection } from "../core/utils.ts";
+import {
+	DEFAULT_MAX_VISIBLE,
+	formatSubmitted,
+	moveCursor,
+	normalizeChoices,
+	renderChoiceList,
+	validateSelection,
+} from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -79,7 +85,6 @@ export interface MultiselectOptions<T> {
 // Constants
 // ────────────────────────────────────────────────────────────────────────────
 
-const DEFAULT_MAX_VISIBLE = 10;
 const HINT_LINE = "(Space to toggle, a to toggle all, i to invert, Enter to confirm)";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -187,45 +192,24 @@ function renderMultiselect<T>(
 ): string {
 	const prefix = theme.prefix(PREFIX_SYMBOL);
 	const msg = theme.message(message ?? "Pick one or more");
-	const totalItems = state.choices.length;
-	const visibleCount = Math.min(totalItems, maxVisible);
-
-	const lines: string[] = [`${prefix} ${msg}`];
-
-	// Show hint line with keybinding instructions
-	lines.push(theme.hint(HINT_LINE));
-
-	// Show scroll-up indicator if items are hidden above
-	const hasScrollUp = state.scrollOffset > 0;
-	if (hasScrollUp) {
-		lines.push(theme.hint(SCROLL_INDICATOR));
-	}
-
-	// Render visible choices
-	for (let i = 0; i < visibleCount; i++) {
-		const choiceIndex = state.scrollOffset + i;
-		const choice = state.choices[choiceIndex];
-		if (!choice) break;
-
-		const isActive = choiceIndex === state.cursor;
-		const isChecked = state.selected.has(choiceIndex);
-		const checkbox = isChecked ? theme.success(CHECKBOX_CHECKED) : CHECKBOX_UNCHECKED;
-		const hintText = choice.hint ? ` ${theme.hint(choice.hint)}` : "";
-
-		if (isActive) {
-			lines.push(
-				`${theme.cursor(CURSOR_INDICATOR)} ${checkbox} ${theme.selected(choice.label)}${hintText}`,
-			);
-		} else {
-			lines.push(`  ${checkbox} ${theme.unselected(choice.label)}${hintText}`);
-		}
-	}
-
-	// Show scroll-down indicator if items are hidden below
-	const hasScrollDown = state.scrollOffset + visibleCount < totalItems;
-	if (hasScrollDown) {
-		lines.push(theme.hint(SCROLL_INDICATOR));
-	}
+	const lines: string[] = [`${prefix} ${msg}`, theme.hint(HINT_LINE)];
+	lines.push(
+		...renderChoiceList(
+			state.choices,
+			state.scrollOffset,
+			maxVisible,
+			(choice, choiceIndex) => {
+				const checkbox = state.selected.has(choiceIndex)
+					? theme.success(CHECKBOX_CHECKED)
+					: CHECKBOX_UNCHECKED;
+				const hintText = choice.hint ? ` ${theme.hint(choice.hint)}` : "";
+				return choiceIndex === state.cursor
+					? `${theme.cursor(CURSOR_INDICATOR)} ${checkbox} ${theme.selected(choice.label)}${hintText}`
+					: `  ${checkbox} ${theme.unselected(choice.label)}${hintText}`;
+			},
+			theme.hint,
+		),
+	);
 
 	// Show error message if validation failed
 	if (state.error) {
@@ -236,17 +220,15 @@ function renderMultiselect<T>(
 }
 
 function renderSubmitted<T>(
-	_state: MultiselectState<T>,
+	state: MultiselectState<T>,
 	_value: T[],
 	theme: PromptTheme,
 	message: string | undefined,
-	choices: readonly NormalizedChoice<T>[],
-	selected: ReadonlySet<number>,
 ): string {
 	const prefix = theme.success(PREFIX_SUBMITTED);
 	const msg = theme.message(message ?? "Pick one or more");
-	const selectedLabels = choices
-		.filter((_, i) => selected.has(i))
+	const selectedLabels = state.choices
+		.filter((_, i) => state.selected.has(i))
 		.map((c) => c.label)
 		.join(", ");
 	return formatSubmitted(prefix, msg, theme.success(selectedLabels));
@@ -348,8 +330,7 @@ export async function multiselect<T>(options: MultiselectOptions<T>, io?: Prompt
 			theme,
 			render: (state, t) => renderMultiselect(state, t, options.message, maxVisible),
 			handleKey: createHandleKey<T>(maxVisible, options.required, options.min, options.max),
-			renderSubmitted: (state, value, t) =>
-				renderSubmitted(state, value, t, options.message, choices, state.selected),
+			renderSubmitted: (state, value, t) => renderSubmitted(state, value, t, options.message),
 		},
 		promptIO,
 	);

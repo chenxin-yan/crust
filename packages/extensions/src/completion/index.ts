@@ -82,7 +82,7 @@ function renderForShell(
  * **Strategy: pure-static.** The action walks the final root snapshot, so
  * registration order is irrelevant — any commands or recursive flags added
  * by other Extensions are visible by the time we generate the script. The
- * walker projects the root snapshot to a small `CompletionSpec`; per-shell
+ * walker projects the root snapshot to a small completion model; per-shell
  * renderers turn that into a self-contained shell script with no runtime
  * callbacks.
  *
@@ -150,22 +150,7 @@ export function completion(options: CompletionOptions = {}): Extension {
 					for (const shell of shells) {
 						const filename = filenameForShell(shell, binName);
 						const script = renderForShell(shell, spec, binName, safeVersion);
-						const targetPath = resolvePath(targetDir, filename);
-						// Defence-in-depth: even though `binName` is validated
-						// upstream (rejects path separators / `..`), verify the
-						// resolved path stays inside `targetDir`. This catches
-						// future regressions in the validator and platform-
-						// specific edge cases (e.g. Windows drive letters).
-						if (
-							targetPath !== targetDir &&
-							!targetPath.startsWith(`${targetDir}/`) &&
-							!targetPath.startsWith(`${targetDir}\\`)
-						) {
-							throw new Error(
-								`completion extension: refusing to write outside output dir (${targetPath})`,
-							);
-						}
-						await writeFile(targetPath, script, "utf8");
+						await writeFile(resolvePath(targetDir, filename), script, "utf8");
 					}
 				}),
 	);

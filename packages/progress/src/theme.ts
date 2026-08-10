@@ -3,8 +3,21 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { bold, green, magenta, red } from "@crustjs/style";
+import type { StyleFn } from "@crustjs/style";
 
-import type { PartialProgressTheme, ProgressTheme } from "./types.ts";
+export interface ProgressTheme {
+	/** Spinner frame characters while the task is running. */
+	readonly spinner: StyleFn;
+	/** The status message displayed beside the spinner or final symbol. */
+	readonly message: StyleFn;
+	/** Final success symbol styling. */
+	readonly success: StyleFn;
+	/** Final error symbol styling. */
+	readonly error: StyleFn;
+}
+
+/** Partial version of `ProgressTheme` for user overrides. */
+export type PartialProgressTheme = Partial<ProgressTheme>;
 
 export const defaultTheme: ProgressTheme = {
 	spinner: magenta,
@@ -15,8 +28,7 @@ export const defaultTheme: ProgressTheme = {
 
 /**
  * Resolve a complete theme by merging partial overrides onto
- * {@link defaultTheme}. Instance themes from `createProgress` are
- * pre-merged into the per-call overrides before this runs.
+ * {@link defaultTheme}.
  *
  * @internal — Indicator implementations call this; users do not need to.
  */

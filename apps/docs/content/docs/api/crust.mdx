@@ -224,7 +224,6 @@ provide<const Cs extends readonly ContextInstance[]>(
   A,
   EffectiveFlags<Local, MergeFlags<Owned, ContextsOwnedFlags<Cs>>>,
   MergeContext<Ctx, ContextsOutput<Cs>>,
-  MergeContextDeps<Deps, Cs>,
   Sibs,
   Sp | SpellingsOf<ContextsOwnedFlags<Cs>>
 >

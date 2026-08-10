@@ -115,7 +115,7 @@ process.once("SIGINT", () => {
 });
 ```
 
-### `SpinnerController`
+### Updating the message
 
 Passed into the task callback so you can update the current message while the task runs.
 
@@ -153,7 +153,7 @@ const custom = { frames: ["⊶", "⊷"], interval: 150 };
 - `success`
 - `error`
 
-<auto-type-table path="../../../../../packages/progress/src/types.ts" name="ProgressTheme" />
+<auto-type-table path="../../../../../packages/progress/src/theme.ts" name="ProgressTheme" />
 
 `PartialProgressTheme` is `Partial<ProgressTheme>` and is accepted for theme overrides.
 
@@ -164,22 +164,20 @@ The default theme uses these styles:
 - `success`: `green`
 - `error`: `red`
 
-There is no global theme state. Create a themed instance with `createProgress`, or pass per-call `theme` overrides:
+There is no global theme state. Pass per-call `theme` overrides:
 
 ```ts
-import { createProgress } from "@crustjs/progress";
+import { spinner } from "@crustjs/progress";
 import { cyan, green } from "@crustjs/style";
 
-// Partial overrides; unspecified slots keep their defaults
-const p = createProgress({ theme: { spinner: cyan, success: green } });
-
-await p.spinner({
+await spinner({
   message: "Working...",
+  theme: { spinner: cyan, success: green },
   task: async () => doWork(),
 });
 ```
 
-The bare `progress`/`spinner` exports use `defaultTheme`. Resolution order: `defaultTheme` ← instance theme ← per-call `theme` option. The public theme exports are `defaultTheme` and `createProgress`, with types `CreateProgressOptions` (factory options) and `ProgressInstance` (the returned themed `progress`/`spinner` pair plus its resolved `theme`).
+The bare `progress`/`spinner` exports use `defaultTheme`. Resolution order: `defaultTheme` ← per-call `theme` option. The public theme exports are `defaultTheme`, `ProgressTheme`, and `PartialProgressTheme`.
 
 ## Non-interactive behavior
 

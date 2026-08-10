@@ -1,14 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
 import type { FlagsDef } from "../types.ts";
-import { schemaExclusivity } from "./args.rules.ts";
-import {
-	aliasCollision,
-	noPrefix,
-	nonEmptyName,
-	parserType,
-	reservedSpelling,
-} from "./flags.rules.ts";
+import { nonEmptyName, schemaExclusivity } from "./args.rules.ts";
+import { aliasCollision, noPrefix, parserType, reservedSpelling } from "./flags.rules.ts";
 import { normalizeFlag } from "./normalize.ts";
 
 describe("aliasCollision", () => {
@@ -59,8 +53,8 @@ describe("aliasCollision", () => {
 	});
 
 	it("rejects a definition without a non-empty name", () => {
-		expect(() => nonEmptyName(undefined as never)).toThrow(/must carry a non-empty name/);
-		expect(() => nonEmptyName("")).toThrow(/must carry a non-empty name/);
+		expect(() => nonEmptyName(undefined as never, "flag")).toThrow(/must carry a non-empty name/);
+		expect(() => nonEmptyName("", "flag")).toThrow(/must carry a non-empty name/);
 	});
 
 	it("rejects duplicate spellings within the incoming definition", () => {

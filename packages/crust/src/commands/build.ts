@@ -43,27 +43,6 @@ export function resolveOutfile(
 	return resolve(cwd, outdir, baseName);
 }
 
-/**
- * Resolve the output file path for a multi-target build.
- *
- * Produces `<outdir>/<name>-<target>` (e.g. `dist/my-cli-bun-linux-x64-baseline`).
- * Windows targets automatically get a `.exe` extension.
- *
- * @param baseName - The resolved base binary name
- * @param target - The Bun compile target
- * @param cwd - Current working directory
- * @param outdir - Output directory
- * @returns The resolved output file path with target suffix
- */
-export function resolveTargetOutfile(
-	baseName: string,
-	target: BunTarget,
-	cwd: string,
-	outdir: string,
-): string {
-	return resolve(cwd, outdir, getBinaryFilename(baseName, target));
-}
-
 // ────────────────────────────────────────────────────────────────────────────
 // Shell resolver generator (Unix + Windows)
 // ────────────────────────────────────────────────────────────────────────────
@@ -387,7 +366,6 @@ export const buildCommand = defineCommand(
 						target: flags.target,
 						stageDir: flags["stage-dir"],
 						envFiles,
-						validate: false,
 						root,
 						man: flags.man,
 						outdir: flags.outdir,
@@ -438,7 +416,7 @@ export const buildCommand = defineCommand(
 
 					const results: string[] = [];
 					for (const target of targets) {
-						const targetOutfile = resolveTargetOutfile(baseName, target, cwd, flags.outdir);
+						const targetOutfile = resolve(cwd, flags.outdir, getBinaryFilename(baseName, target));
 
 						console.log(`  ${cyan("→")} ${bold(target)}: ${dim(targetOutfile)}`);
 						await execBuild(entryPath, targetOutfile, flags.minify, target, envFiles);

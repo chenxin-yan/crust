@@ -4,7 +4,7 @@
 
 import { posix } from "node:path";
 
-import { normalizeInstructionList } from "./instructions.ts";
+import { normalizeInstructionList } from "./annotations.ts";
 import type { ManifestArg, ManifestFlag, ManifestNode, RenderedFile, SkillMeta } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────

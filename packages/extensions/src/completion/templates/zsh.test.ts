@@ -3,62 +3,60 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { CompletionSpec } from "../spec.ts";
+import type { CompletionCommand } from "../spec.ts";
 import { renderZsh } from "./zsh.ts";
 
 /**
  * Same fixture shape as the bash tests so the snapshots line up.
  */
-const fixture: CompletionSpec = {
-	root: {
-		name: "mycli",
-		description: "Test CLI",
-		flags: [
-			{ name: "help", short: "h", type: "boolean", takesValue: false },
-			{ name: "version", short: "v", type: "boolean", takesValue: false },
-		],
-		args: [],
-		subCommands: [
-			{
-				name: "build",
-				description: "Build artifact",
-				flags: [
-					{ name: "release", type: "boolean", takesValue: false },
-					{
-						name: "target",
-						type: "string",
-						takesValue: true,
-						choices: ["browser", "bun", "node"],
-					},
-				],
-				args: [],
-				subCommands: [],
-			},
-			{
-				name: "deploy",
-				aliases: ["dep"],
-				description: "Deploy",
-				flags: [],
-				args: [],
-				subCommands: [
-					{
-						name: "prod",
-						description: "Production deploy",
-						flags: [
-							{
-								name: "env",
-								type: "string",
-								takesValue: true,
-								choices: ["dev", "staging", "prod"],
-							},
-						],
-						args: [],
-						subCommands: [],
-					},
-				],
-			},
-		],
-	},
+const fixture: CompletionCommand = {
+	name: "mycli",
+	description: "Test CLI",
+	flags: [
+		{ name: "help", short: "h", type: "boolean", takesValue: false },
+		{ name: "version", short: "v", type: "boolean", takesValue: false },
+	],
+	args: [],
+	subCommands: [
+		{
+			name: "build",
+			description: "Build artifact",
+			flags: [
+				{ name: "release", type: "boolean", takesValue: false },
+				{
+					name: "target",
+					type: "string",
+					takesValue: true,
+					choices: ["browser", "bun", "node"],
+				},
+			],
+			args: [],
+			subCommands: [],
+		},
+		{
+			name: "deploy",
+			aliases: ["dep"],
+			description: "Deploy",
+			flags: [],
+			args: [],
+			subCommands: [
+				{
+					name: "prod",
+					description: "Production deploy",
+					flags: [
+						{
+							name: "env",
+							type: "string",
+							takesValue: true,
+							choices: ["dev", "staging", "prod"],
+						},
+					],
+					args: [],
+					subCommands: [],
+				},
+			],
+		},
+	],
 };
 
 describe("renderZsh", () => {
@@ -120,20 +118,18 @@ describe("renderZsh", () => {
 	});
 
 	it("escapes special characters in descriptions", () => {
-		const spec: CompletionSpec = {
-			root: {
-				name: "x",
-				flags: [
-					{
-						name: "fancy",
-						type: "string",
-						takesValue: true,
-						description: "value: do [thing] now",
-					},
-				],
-				args: [],
-				subCommands: [],
-			},
+		const spec: CompletionCommand = {
+			name: "x",
+			flags: [
+				{
+					name: "fancy",
+					type: "string",
+					takesValue: true,
+					description: "value: do [thing] now",
+				},
+			],
+			args: [],
+			subCommands: [],
 		};
 		const script = renderZsh(spec, "x", "1.0.0");
 		// `[`, `]`, and `:` in descriptions are backslash-escaped so the
@@ -238,33 +234,31 @@ function shQuoteForZsh(value: string): string {
 }
 
 describe("renderZsh — url/path/json value-flag handling", () => {
-	const valueTypeFixture: CompletionSpec = {
-		root: {
-			name: "mycli",
-			flags: [
-				{
-					name: "out",
-					type: "string",
-					takesValue: true,
-					valueCompletion: "files",
-				},
-				{
-					name: "endpoint",
-					type: "string",
-					takesValue: true,
-					valueCompletion: "none",
-				},
-				{
-					name: "config",
-					type: "string",
-					takesValue: true,
-					valueCompletion: "none",
-				},
-				{ name: "name", type: "string", takesValue: true },
-			],
-			args: [],
-			subCommands: [],
-		},
+	const valueTypeFixture: CompletionCommand = {
+		name: "mycli",
+		flags: [
+			{
+				name: "out",
+				type: "string",
+				takesValue: true,
+				valueCompletion: "files",
+			},
+			{
+				name: "endpoint",
+				type: "string",
+				takesValue: true,
+				valueCompletion: "none",
+			},
+			{
+				name: "config",
+				type: "string",
+				takesValue: true,
+				valueCompletion: "none",
+			},
+			{ name: "name", type: "string", takesValue: true },
+		],
+		args: [],
+		subCommands: [],
 	};
 
 	it("emits _files action for path flags", () => {
@@ -289,35 +283,33 @@ describe("renderZsh — url/path/json value-flag handling", () => {
 	});
 
 	it("applies the same path/url/json branches to positional args", () => {
-		const posFixture: CompletionSpec = {
-			root: {
-				name: "mycli",
-				flags: [],
-				args: [
-					{
-						name: "src",
-						type: "string",
-						required: true,
-						variadic: false,
-						valueCompletion: "files",
-					},
-					{
-						name: "endpoint",
-						type: "string",
-						required: true,
-						variadic: false,
-						valueCompletion: "none",
-					},
-					{
-						name: "payload",
-						type: "string",
-						required: true,
-						variadic: false,
-						valueCompletion: "none",
-					},
-				],
-				subCommands: [],
-			},
+		const posFixture: CompletionCommand = {
+			name: "mycli",
+			flags: [],
+			args: [
+				{
+					name: "src",
+					type: "string",
+					required: true,
+					variadic: false,
+					valueCompletion: "files",
+				},
+				{
+					name: "endpoint",
+					type: "string",
+					required: true,
+					variadic: false,
+					valueCompletion: "none",
+				},
+				{
+					name: "payload",
+					type: "string",
+					required: true,
+					variadic: false,
+					valueCompletion: "none",
+				},
+			],
+			subCommands: [],
 		};
 		const script = renderZsh(posFixture, "mycli", "1.0.0");
 		expect(script).toContain(":src:_files");

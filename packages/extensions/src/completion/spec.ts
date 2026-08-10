@@ -143,14 +143,3 @@ export interface CompletionCommand {
 	 */
 	subCommands: readonly CompletionCommand[];
 }
-
-/**
- * The full spec produced for a single CLI tree.
- *
- * Per-shell template renderers receive this plus `(binName, version)` and
- * emit a self-contained completion script.
- */
-export interface CompletionSpec {
-	/** The root command (`rootCommand` from the extension context). */
-	root: CompletionCommand;
-}

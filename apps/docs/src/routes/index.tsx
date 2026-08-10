@@ -44,20 +44,15 @@ function createFallbackHighlightedCode(code: string) {
 }
 
 const getHighlightedCode = createServerFn({ method: "GET" }).handler(async () => {
-  try {
-    const highlighter = await getHighlighter();
-    return highlighter.codeToHtml(CODE_EXAMPLE, {
-      lang: "typescript",
-      themes: {
-        light: "gruvbox-light-hard",
-        dark: "gruvbox-dark-hard",
-      },
-      defaultColor: false,
-    });
-  } catch (error) {
-    console.error("[docs] Failed to render highlighted code", error);
-    return FALLBACK_HIGHLIGHTED_CODE;
-  }
+  const highlighter = await getHighlighter();
+  return highlighter.codeToHtml(CODE_EXAMPLE, {
+    lang: "typescript",
+    themes: {
+      light: "gruvbox-light-hard",
+      dark: "gruvbox-dark-hard",
+    },
+    defaultColor: false,
+  });
 });
 
 const { meta: homeMeta, links: homeLinks } = buildPageMeta({
@@ -703,7 +698,7 @@ function FurnaceHome() {
         }
       `}</style>
 
-      <HomeLayout {...baseOptions()}>
+      <HomeLayout {...baseOptions}>
         <div className="furnace-home">
           {/* Hero */}
           <section className="fn-hero-section">

@@ -229,13 +229,10 @@ export async function fetchLatestVersion(
 // Cache state — notifier persistence fields
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Key used in extension state for process-level dedupe. */
-const EMPTY_NOTIFIER_STATE: UpdateNotifierState = { lastCheckedAt: 0 };
-
 function normalizeNotifierState(
 	input: UpdateNotifierState | null | undefined,
 ): UpdateNotifierState {
-	if (!input || typeof input !== "object") return { ...EMPTY_NOTIFIER_STATE };
+	if (!input || typeof input !== "object") return { lastCheckedAt: 0 };
 
 	const lastCheckedAt =
 		typeof input.lastCheckedAt === "number" && Number.isFinite(input.lastCheckedAt)

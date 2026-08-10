@@ -1,5 +1,5 @@
 import { fishSingleQuote } from "../escape.ts";
-import type { CompletionCommand, CompletionSpec } from "../spec.ts";
+import type { CompletionCommand } from "../spec.ts";
 
 /**
  * Pure-static fish completion script renderer.
@@ -370,7 +370,7 @@ function emitPosHelper(ident: string): string[] {
  * @param binName  User-facing binary name; validated upstream.
  * @param version  Free-form version string for the header comment.
  */
-export function renderFish(spec: CompletionSpec, binName: string, version: string): string {
+export function renderFish(spec: CompletionCommand, binName: string, version: string): string {
 	const ident = toShellIdent(binName);
 	const lines: string[] = [];
 
@@ -390,7 +390,7 @@ export function renderFish(spec: CompletionSpec, binName: string, version: strin
 	lines.push("");
 
 	const rules: string[] = [];
-	emitRules(binName, ident, [], spec.root, rules);
+	emitRules(binName, ident, [], spec, rules);
 	lines.push(...rules);
 
 	return `${lines.join("\n")}\n`;

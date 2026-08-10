@@ -2,6 +2,7 @@
 // Utils — Shared utilities for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
+import { SCROLL_INDICATOR } from "./symbols.ts";
 import type { Choice } from "./types.ts";
 
 /**
@@ -63,6 +64,28 @@ export function formatPromptLine(
 // ────────────────────────────────────────────────────────────────────────────
 // Viewport scrolling
 // ────────────────────────────────────────────────────────────────────────────
+
+export const DEFAULT_MAX_VISIBLE = 10;
+
+/** @internal Render a scrollable list with viewport indicators. */
+export function renderChoiceList<T>(
+	items: readonly T[],
+	scrollOffset: number,
+	maxVisible: number,
+	renderItem: (item: T, index: number) => string,
+	hint: (text: string) => string,
+): string[] {
+	const visibleCount = Math.min(items.length, maxVisible);
+	const lines: string[] = [];
+	if (scrollOffset > 0) lines.push(hint(SCROLL_INDICATOR));
+	for (let index = scrollOffset; index < scrollOffset + visibleCount; index++) {
+		const item = items[index];
+		if (item === undefined) break;
+		lines.push(renderItem(item, index));
+	}
+	if (scrollOffset + visibleCount < items.length) lines.push(hint(SCROLL_INDICATOR));
+	return lines;
+}
 
 /**
  * Calculate the scroll offset to keep the cursor within the visible viewport.

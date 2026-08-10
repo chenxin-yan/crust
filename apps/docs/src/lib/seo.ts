@@ -26,7 +26,7 @@ export const siteConfig = {
 
 /** Build absolute URL from a path */
 export function absoluteUrl(path: string): string {
-  return `${siteConfig.siteUrl}${path.startsWith("/") ? path : `/${path}`}`;
+  return new URL(path, siteConfig.siteUrl).href;
 }
 
 /** Generate standard meta tags for a page */

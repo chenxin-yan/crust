@@ -109,7 +109,6 @@ export function createStore<const F extends FieldsDef>(
 					throw new CrustStoreError(
 						"DEFINITION",
 						`field "${key}" mixes "schema" with "${option}" — the schema exclusively owns validation, transformation, defaults, and optionality`,
-						{},
 					);
 				}
 			}

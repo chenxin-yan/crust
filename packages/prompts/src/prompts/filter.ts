@@ -6,22 +6,19 @@ import type { FuzzyFilterResult } from "../core/fuzzy.ts";
 import { fuzzyFilter, highlightMatches, refilter } from "../core/fuzzy.ts";
 import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
 import { isTTY, resolvePromptIO, runPrompt, submit } from "../core/renderer.ts";
-import {
-	CURSOR_INDICATOR,
-	PREFIX_SUBMITTED,
-	PREFIX_SYMBOL,
-	SCROLL_INDICATOR,
-} from "../core/symbols.ts";
+import { CURSOR_INDICATOR, PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import { handleTextEdit, renderTextWithCursor } from "../core/textEdit.ts";
 import { resolveTheme } from "../core/theme.ts";
 import type { Choice, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
 import {
 	calculateScrollOffset,
+	DEFAULT_MAX_VISIBLE,
 	formatPromptLine,
 	formatSubmitted,
 	moveCursor,
 	normalizeChoices,
+	renderChoiceList,
 } from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -49,12 +46,6 @@ export interface FilterOptions<T> {
 	/** Per-prompt theme overrides */
 	readonly theme?: PartialPromptTheme;
 }
-
-// ────────────────────────────────────────────────────────────────────────────
-// Constants
-// ────────────────────────────────────────────────────────────────────────────
-
-const DEFAULT_MAX_VISIBLE = 10;
 
 // ────────────────────────────────────────────────────────────────────────────
 // State
@@ -151,50 +142,33 @@ function renderFilter<T>(
 		return lines.join("\n");
 	}
 
-	const visibleCount = Math.min(totalResults, maxVisible);
-
-	// Scroll-up indicator
-	const hasScrollUp = state.scrollOffset > 0;
-	if (hasScrollUp) {
-		lines.push(theme.hint(SCROLL_INDICATOR));
-	}
-
-	// Render visible results
-	for (let i = 0; i < visibleCount; i++) {
-		const resultIndex = state.scrollOffset + i;
-		const result = state.results[resultIndex];
-		if (!result) break;
-
-		const isActive = resultIndex === state.listCursor;
-		const label = highlightMatches(result.item.label, result.indices, theme);
-
-		if (isActive) {
-			lines.push(`${theme.cursor(CURSOR_INDICATOR)} ${theme.selected(label)}`);
-		} else {
-			lines.push(`  ${theme.unselected(label)}`);
-		}
-	}
-
-	// Scroll-down indicator
-	const hasScrollDown = state.scrollOffset + visibleCount < totalResults;
-	if (hasScrollDown) {
-		lines.push(theme.hint(SCROLL_INDICATOR));
-	}
+	lines.push(
+		...renderChoiceList(
+			state.results,
+			state.scrollOffset,
+			maxVisible,
+			(result, resultIndex) => {
+				const label = highlightMatches(result.item.label, result.indices, theme);
+				return resultIndex === state.listCursor
+					? `${theme.cursor(CURSOR_INDICATOR)} ${theme.selected(label)}`
+					: `  ${theme.unselected(label)}`;
+			},
+			theme.hint,
+		),
+	);
 
 	return lines.join("\n");
 }
 
 function renderSubmitted<T>(
-	_state: FilterState<T>,
+	state: FilterState<T>,
 	_value: T,
 	theme: PromptTheme,
 	message: string | undefined,
-	results: readonly FuzzyFilterResult<T>[],
-	listCursor: number,
 ): string {
 	const prefix = theme.success(PREFIX_SUBMITTED);
 	const msg = theme.message(message ?? "Search and select");
-	const selected = results[listCursor];
+	const selected = state.results[state.listCursor];
 	const label = selected ? selected.item.label : "";
 	return formatSubmitted(prefix, msg, theme.success(label));
 }
@@ -304,14 +278,7 @@ export async function filter<T>(options: FilterOptions<T>, io?: PromptIO): Promi
 				renderFilter(state, resolvedTheme, options.message, options.placeholder, maxVisible),
 			handleKey: createHandleKey<T>(maxVisible),
 			renderSubmitted: (state, value, resolvedTheme) =>
-				renderSubmitted(
-					state,
-					value,
-					resolvedTheme,
-					options.message,
-					state.results,
-					state.listCursor,
-				),
+				renderSubmitted(state, value, resolvedTheme, options.message),
 		},
 		promptIO,
 	);

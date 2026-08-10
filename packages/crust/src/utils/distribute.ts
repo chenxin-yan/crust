@@ -482,7 +482,6 @@ export async function runDistributeBuild(options: {
 	target?: string[];
 	stageDir: string;
 	envFiles?: readonly string[];
-	validate: boolean;
 	/** Snapshot already prepared by the outer build command. */
 	root?: CommandSnapshot;
 	/** Write `root/man/<name>.1` in the staged meta-package and set npm `man` / `files`; also mirrors to `<outdir>/man/` */
@@ -500,7 +499,7 @@ export async function runDistributeBuild(options: {
 	}
 
 	let root = options.root;
-	if (!root && (options.validate || options.man)) {
+	if (!root && options.man) {
 		root = await snapshotEntrypoint(entryPath, options.envFiles);
 	}
 

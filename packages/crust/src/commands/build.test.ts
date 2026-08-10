@@ -10,7 +10,6 @@ import {
 	generateResolver,
 	resolveEnvFilePaths,
 	resolveOutfile,
-	resolveTargetOutfile,
 } from "../../src/commands/build.ts";
 import { resolveBaseName } from "../../src/utils/binary-name.ts";
 import type { BunTarget } from "../../src/utils/build-helpers.ts";
@@ -357,47 +356,6 @@ describe("resolveOutfile", () => {
 	it("ignores outdir when --outfile is provided", () => {
 		const result = resolveOutfile("./custom", undefined, entry, cwd, "out");
 		expect(result).toBe(resolve(cwd, "./custom"));
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Unit tests for resolveTargetOutfile
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("resolveTargetOutfile", () => {
-	const cwd = "/test/project";
-
-	it("produces dist/<name>-<target> for non-Windows targets", () => {
-		expect(resolveTargetOutfile("my-cli", "bun-linux-x64-baseline", cwd, "dist")).toBe(
-			resolve(cwd, "dist", "my-cli-bun-linux-x64-baseline"),
-		);
-	});
-
-	it("produces dist/<name>-<target> for darwin targets", () => {
-		expect(resolveTargetOutfile("my-cli", "bun-darwin-arm64", cwd, "dist")).toBe(
-			resolve(cwd, "dist", "my-cli-bun-darwin-arm64"),
-		);
-	});
-
-	it("appends .exe for Windows targets", () => {
-		expect(resolveTargetOutfile("my-cli", "bun-windows-x64-baseline", cwd, "dist")).toBe(
-			resolve(cwd, "dist", "my-cli-bun-windows-x64-baseline.exe"),
-		);
-		expect(resolveTargetOutfile("my-cli", "bun-windows-arm64", cwd, "dist")).toBe(
-			resolve(cwd, "dist", "my-cli-bun-windows-arm64.exe"),
-		);
-	});
-
-	it("works with scoped-stripped names", () => {
-		expect(resolveTargetOutfile("my-tool", "bun-linux-arm64", cwd, "dist")).toBe(
-			resolve(cwd, "dist", "my-tool-bun-linux-arm64"),
-		);
-	});
-
-	it("uses custom outdir when provided", () => {
-		expect(resolveTargetOutfile("my-cli", "bun-linux-x64-baseline", cwd, "out")).toBe(
-			resolve(cwd, "out", "my-cli-bun-linux-x64-baseline"),
-		);
 	});
 });
 

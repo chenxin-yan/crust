@@ -1,11 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import {
-	type SpinnerController,
-	type SpinnerSink,
-	createSpinnerHandle,
-	spinner,
-} from "./spinner.ts";
+import { type SpinnerHandle, type SpinnerSink, createSpinnerHandle, spinner } from "./spinner.ts";
 
 const originalStderrWrite = process.stderr.write;
 const originalStderrIsTTY = process.stderr.isTTY;
@@ -638,7 +633,7 @@ describe("spinner — non-interactive", () => {
 	});
 
 	it("ignores updateMessage calls after task completes", async () => {
-		let savedController: SpinnerController | undefined;
+		let savedController: Pick<SpinnerHandle, "updateMessage"> | undefined;
 
 		await spinner({
 			message: "Running...",

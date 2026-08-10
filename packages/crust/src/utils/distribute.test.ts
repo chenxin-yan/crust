@@ -213,7 +213,6 @@ describe("runDistributeBuild", () => {
 			minify: true,
 			target: ["bun-darwin-arm64"],
 			stageDir: ".stage",
-			validate: false,
 		});
 
 		const manifest = JSON.parse(readFileSync(join(tmpDir, ".stage", "manifest.json"), "utf-8")) as {
@@ -273,7 +272,6 @@ await app.execute();
 			minify: true,
 			target: ["bun-darwin-arm64"],
 			stageDir: ".stage-man",
-			validate: false,
 			man: true,
 			outdir: ".dist-man",
 		});

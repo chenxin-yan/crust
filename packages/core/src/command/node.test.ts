@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import type { FlagsDef } from "../types.ts";
-import { computeEffectiveFlags, createCommandNode } from "./node.ts";
+import { createCommandNode } from "./node.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // createCommandNode
@@ -40,25 +39,5 @@ describe("createCommandNode", () => {
 
 		node1.localFlags.verbose = { type: "boolean" };
 		expect(node2.localFlags).toEqual({});
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// computeEffectiveFlags
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("computeEffectiveFlags", () => {
-	it("merges Context-owned flags with local flags", () => {
-		const owned: FlagsDef = { apiKey: { type: "string" } };
-		const local: FlagsDef = { output: { type: "string" } };
-
-		expect(computeEffectiveFlags(owned, local)).toEqual({
-			apiKey: { type: "string" },
-			output: { type: "string" },
-		});
-	});
-
-	it("returns fresh output for empty inputs", () => {
-		expect(computeEffectiveFlags({}, {})).toEqual({});
 	});
 });

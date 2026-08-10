@@ -3,7 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 // Errors
-export type { DefinitionErrorDetails, StoreErrorCode, ValidationErrorDetails } from "./errors.ts";
+export type { StoreErrorCode, ValidationErrorDetails } from "./errors.ts";
 export { CrustStoreError } from "./errors.ts";
 export type { PlatformEnv } from "./path.ts";
 // Path

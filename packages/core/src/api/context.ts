@@ -51,7 +51,6 @@ interface ContextSetupInput<
  * resolved command path executes.
  *
  * Generic parameter `RC` carries the declared Context requirements.
- * Reserved for future attach-site checking; no call site consumes it yet.
  */
 export interface ContextInstance<
 	Name extends string = string,

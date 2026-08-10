@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { CompletionSpec } from "../spec.ts";
+import type { CompletionCommand } from "../spec.ts";
 import { renderBash } from "./bash.ts";
 
 // Single-quote a value for bash, escaping embedded single quotes.
@@ -56,56 +56,54 @@ for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
  * but representative tree: a flat subcommand (`build`), a nested
  * subcommand (`deploy prod`), and a flag with choices on `build --target`.
  */
-const fixture: CompletionSpec = {
-	root: {
-		name: "mycli",
-		description: "Test CLI",
-		flags: [
-			{ name: "help", short: "h", type: "boolean", takesValue: false },
-			{ name: "version", short: "v", type: "boolean", takesValue: false },
-		],
-		args: [],
-		subCommands: [
-			{
-				name: "build",
-				description: "Build artifact",
-				flags: [
-					{ name: "release", type: "boolean", takesValue: false },
-					{
-						name: "target",
-						type: "string",
-						takesValue: true,
-						choices: ["browser", "bun", "node"],
-					},
-				],
-				args: [],
-				subCommands: [],
-			},
-			{
-				name: "deploy",
-				aliases: ["dep"],
-				description: "Deploy",
-				flags: [],
-				args: [],
-				subCommands: [
-					{
-						name: "prod",
-						description: "Production deploy",
-						flags: [
-							{
-								name: "env",
-								type: "string",
-								takesValue: true,
-								choices: ["dev", "staging", "prod"],
-							},
-						],
-						args: [],
-						subCommands: [],
-					},
-				],
-			},
-		],
-	},
+const fixture: CompletionCommand = {
+	name: "mycli",
+	description: "Test CLI",
+	flags: [
+		{ name: "help", short: "h", type: "boolean", takesValue: false },
+		{ name: "version", short: "v", type: "boolean", takesValue: false },
+	],
+	args: [],
+	subCommands: [
+		{
+			name: "build",
+			description: "Build artifact",
+			flags: [
+				{ name: "release", type: "boolean", takesValue: false },
+				{
+					name: "target",
+					type: "string",
+					takesValue: true,
+					choices: ["browser", "bun", "node"],
+				},
+			],
+			args: [],
+			subCommands: [],
+		},
+		{
+			name: "deploy",
+			aliases: ["dep"],
+			description: "Deploy",
+			flags: [],
+			args: [],
+			subCommands: [
+				{
+					name: "prod",
+					description: "Production deploy",
+					flags: [
+						{
+							name: "env",
+							type: "string",
+							takesValue: true,
+							choices: ["dev", "staging", "prod"],
+						},
+					],
+					args: [],
+					subCommands: [],
+				},
+			],
+		},
+	],
 };
 
 describe("renderBash", () => {
@@ -240,58 +238,56 @@ describe("renderBash · behavioural subprocess tests", () => {
  * audit.
  */
 describe("renderBash · multi-positional choices", () => {
-	const multiPosFixture: CompletionSpec = {
-		root: {
-			name: "mp",
-			flags: [],
-			args: [],
-			subCommands: [
-				{
-					name: "two",
-					description: "two fixed positional slots",
-					flags: [],
-					args: [
-						{
-							name: "first",
-							type: "string",
-							required: true,
-							variadic: false,
-							choices: ["alpha", "beta"],
-						},
-						{
-							name: "second",
-							type: "string",
-							required: true,
-							variadic: false,
-							choices: ["gamma", "delta"],
-						},
-					],
-					subCommands: [],
-				},
-				{
-					name: "vary",
-					description: "variadic with choices from slot 1",
-					flags: [],
-					args: [
-						{
-							name: "mode",
-							type: "string",
-							required: true,
-							variadic: false,
-							choices: ["start", "stop"],
-						},
-						{
-							name: "items",
-							type: "string",
-							required: false,
-							variadic: true,
-							choices: ["a", "b", "c"],
-						},
-					],
-					subCommands: [],
-				},
-			],
-		},
+	const multiPosFixture: CompletionCommand = {
+		name: "mp",
+		flags: [],
+		args: [],
+		subCommands: [
+			{
+				name: "two",
+				description: "two fixed positional slots",
+				flags: [],
+				args: [
+					{
+						name: "first",
+						type: "string",
+						required: true,
+						variadic: false,
+						choices: ["alpha", "beta"],
+					},
+					{
+						name: "second",
+						type: "string",
+						required: true,
+						variadic: false,
+						choices: ["gamma", "delta"],
+					},
+				],
+				subCommands: [],
+			},
+			{
+				name: "vary",
+				description: "variadic with choices from slot 1",
+				flags: [],
+				args: [
+					{
+						name: "mode",
+						type: "string",
+						required: true,
+						variadic: false,
+						choices: ["start", "stop"],
+					},
+					{
+						name: "items",
+						type: "string",
+						required: false,
+						variadic: true,
+						choices: ["a", "b", "c"],
+					},
+				],
+				subCommands: [],
+			},
+		],
 	};
 
 	let scriptPath: string;
@@ -351,34 +347,32 @@ describe("renderBash · multi-positional choices", () => {
 });
 
 describe("renderBash — url/path/json value-flag handling", () => {
-	const valueTypeFixture: CompletionSpec = {
-		root: {
-			name: "mycli",
-			flags: [
-				{
-					name: "out",
-					type: "string",
-					takesValue: true,
-					valueCompletion: "files",
-				},
-				{
-					name: "endpoint",
-					type: "string",
-					takesValue: true,
-					valueCompletion: "none",
-				},
-				{
-					name: "config",
-					type: "string",
-					takesValue: true,
-					valueCompletion: "none",
-				},
-				// Plain string flag — must not regress to a typed branch.
-				{ name: "name", type: "string", takesValue: true },
-			],
-			args: [],
-			subCommands: [],
-		},
+	const valueTypeFixture: CompletionCommand = {
+		name: "mycli",
+		flags: [
+			{
+				name: "out",
+				type: "string",
+				takesValue: true,
+				valueCompletion: "files",
+			},
+			{
+				name: "endpoint",
+				type: "string",
+				takesValue: true,
+				valueCompletion: "none",
+			},
+			{
+				name: "config",
+				type: "string",
+				takesValue: true,
+				valueCompletion: "none",
+			},
+			// Plain string flag — must not regress to a typed branch.
+			{ name: "name", type: "string", takesValue: true },
+		],
+		args: [],
+		subCommands: [],
 	};
 
 	it("emits explicit file completion (compgen -f) for path flags", () => {
@@ -402,35 +396,33 @@ describe("renderBash — url/path/json value-flag handling", () => {
 	});
 
 	it("suppresses `complete -o default` for url/json positional slots; path positionals rely on the fallback", () => {
-		const posFixture: CompletionSpec = {
-			root: {
-				name: "mycli",
-				flags: [],
-				args: [
-					{
-						name: "src",
-						type: "string",
-						required: true,
-						variadic: false,
-						valueCompletion: "files",
-					},
-					{
-						name: "endpoint",
-						type: "string",
-						required: true,
-						variadic: false,
-						valueCompletion: "none",
-					},
-					{
-						name: "payload",
-						type: "string",
-						required: true,
-						variadic: false,
-						valueCompletion: "none",
-					},
-				],
-				subCommands: [],
-			},
+		const posFixture: CompletionCommand = {
+			name: "mycli",
+			flags: [],
+			args: [
+				{
+					name: "src",
+					type: "string",
+					required: true,
+					variadic: false,
+					valueCompletion: "files",
+				},
+				{
+					name: "endpoint",
+					type: "string",
+					required: true,
+					variadic: false,
+					valueCompletion: "none",
+				},
+				{
+					name: "payload",
+					type: "string",
+					required: true,
+					variadic: false,
+					valueCompletion: "none",
+				},
+			],
+			subCommands: [],
 		};
 		const script = renderBash(posFixture, "mycli", "1.0.0");
 		// Suppression case is emitted for the two non-path slots (1, 2).

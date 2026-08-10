@@ -63,17 +63,3 @@ export function createCommandNode(name: string): CommandNode {
 		run: undefined,
 	};
 }
-
-// ────────────────────────────────────────────────────────────────────────────
-// computeEffectiveFlags — Runtime effective flag merge
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Merges the accumulated Context-owned flag carrier with a command's local
- * flags. Collisions are rejected before this merge.
- *
- * This is the runtime counterpart of the `EffectiveFlags` utility type.
- */
-export function computeEffectiveFlags(ownedFlags: FlagsDef, localFlags: FlagsDef): FlagsDef {
-	return { ...localFlags, ...ownedFlags };
-}

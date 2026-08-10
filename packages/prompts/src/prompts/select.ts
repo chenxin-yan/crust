@@ -4,20 +4,17 @@
 
 import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
 import { isTTY, resolvePromptIO, runPrompt, submit } from "../core/renderer.ts";
-import {
-	CURSOR_INDICATOR,
-	PREFIX_SUBMITTED,
-	PREFIX_SYMBOL,
-	SCROLL_INDICATOR,
-} from "../core/symbols.ts";
+import { CURSOR_INDICATOR, PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import { resolveTheme } from "../core/theme.ts";
 import type { Choice, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
 import {
 	calculateScrollOffset,
+	DEFAULT_MAX_VISIBLE,
 	formatSubmitted,
 	moveCursor,
 	normalizeChoices,
+	renderChoiceList,
 } from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -65,12 +62,6 @@ export interface SelectOptions<T> {
 	/** Per-prompt theme overrides */
 	readonly theme?: PartialPromptTheme;
 }
-
-// ────────────────────────────────────────────────────────────────────────────
-// Constants
-// ────────────────────────────────────────────────────────────────────────────
-
-const DEFAULT_MAX_VISIBLE = 10;
 
 // ────────────────────────────────────────────────────────────────────────────
 // State
@@ -126,53 +117,34 @@ function renderSelect<T>(
 ): string {
 	const prefix = theme.prefix(PREFIX_SYMBOL);
 	const msg = theme.message(message ?? "Pick an option");
-	const totalItems = state.choices.length;
-	const visibleCount = Math.min(totalItems, maxVisible);
-
 	const lines: string[] = [`${prefix} ${msg}`];
-
-	// Show scroll-up indicator if items are hidden above
-	const hasScrollUp = state.scrollOffset > 0;
-	if (hasScrollUp) {
-		lines.push(theme.hint(SCROLL_INDICATOR));
-	}
-
-	// Render visible choices
-	for (let i = 0; i < visibleCount; i++) {
-		const choiceIndex = state.scrollOffset + i;
-		const choice = state.choices[choiceIndex];
-		if (!choice) break;
-
-		const isActive = choiceIndex === state.cursor;
-		const hintText = choice.hint ? ` ${theme.hint(choice.hint)}` : "";
-
-		if (isActive) {
-			lines.push(`${theme.cursor(CURSOR_INDICATOR)} ${theme.selected(choice.label)}${hintText}`);
-		} else {
-			lines.push(`  ${theme.unselected(choice.label)}${hintText}`);
-		}
-	}
-
-	// Show scroll-down indicator if items are hidden below
-	const hasScrollDown = state.scrollOffset + visibleCount < totalItems;
-	if (hasScrollDown) {
-		lines.push(theme.hint(SCROLL_INDICATOR));
-	}
+	lines.push(
+		...renderChoiceList(
+			state.choices,
+			state.scrollOffset,
+			maxVisible,
+			(choice, choiceIndex) => {
+				const hintText = choice.hint ? ` ${theme.hint(choice.hint)}` : "";
+				return choiceIndex === state.cursor
+					? `${theme.cursor(CURSOR_INDICATOR)} ${theme.selected(choice.label)}${hintText}`
+					: `  ${theme.unselected(choice.label)}${hintText}`;
+			},
+			theme.hint,
+		),
+	);
 
 	return lines.join("\n");
 }
 
 function renderSubmitted<T>(
-	_state: SelectState<T>,
+	state: SelectState<T>,
 	_value: T,
 	theme: PromptTheme,
 	message: string | undefined,
-	choices: readonly NormalizedChoice<T>[],
-	cursor: number,
 ): string {
 	const prefix = theme.success(PREFIX_SUBMITTED);
 	const msg = theme.message(message ?? "Pick an option");
-	const selected = choices[cursor];
+	const selected = state.choices[state.cursor];
 	const label = selected ? selected.label : "";
 	return formatSubmitted(prefix, msg, theme.success(label));
 }
@@ -269,8 +241,7 @@ export async function select<T>(options: SelectOptions<T>, io?: PromptIO): Promi
 			theme,
 			render: (state, t) => renderSelect(state, t, options.message, maxVisible),
 			handleKey: createHandleKey<T>(maxVisible),
-			renderSubmitted: (state, value, t) =>
-				renderSubmitted(state, value, t, options.message, choices, state.cursor),
+			renderSubmitted: (state, value, t) => renderSubmitted(state, value, t, options.message),
 		},
 		promptIO,
 	);
