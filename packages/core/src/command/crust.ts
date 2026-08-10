@@ -161,9 +161,13 @@ function materializeCommandDefinition(
 	const owner = extensionName
 		? `Extension "${extensionName}" command "${name}"`
 		: `Command "${name}"`;
-	const providedNames = new Set(parent.contexts.map((context) => context.name));
+	const definitionDetails = (reason: string) => ({
+		subject: extensionName ? ("extension" as const) : ("command" as const),
+		name: extensionName ?? name,
+		reason,
+	});
 	for (const ctxName of internal.requiredCtxNames) {
-		if (!providedNames.has(ctxName)) {
+		if (!parent.contexts.some((context) => context.name === ctxName)) {
 			throw new CrustError(
 				"DEFINITION",
 				`${owner} requires Context "${ctxName}", which is not provided on parent command "${parent.meta.name}"`,
@@ -185,7 +189,7 @@ function materializeCommandDefinition(
 	const child = new Crust(name);
 	(child as { _ancestorOwnedFlags: FlagsDef })._ancestorOwnedFlags = parent.ownedFlags;
 	child._node.ownedFlags = { ...parent.ownedFlags };
-	child._node.effectiveFlags = { ...child._node.ownedFlags };
+	child._node.effectiveFlags = { ...parent.ownedFlags };
 	child._node.flagSpellings = cloneFlagSpellings(parent.flagSpellings, child._node.effectiveFlags);
 	(child._node as { contexts: ContextInstance[] }).contexts = [...parent.contexts];
 
@@ -196,22 +200,14 @@ function materializeCommandDefinition(
 		throw new CrustError(
 			"DEFINITION",
 			`${owner} definition must return the same command builder it received`,
-			{
-				subject: extensionName ? "extension" : "command",
-				name: extensionName ?? name,
-				reason: "foreign-command-builder",
-			},
+			definitionDetails("foreign-command-builder"),
 		);
 	}
 	if (configured._node.extensions.length > 0) {
 		throw new CrustError(
 			"DEFINITION",
 			`${owner} cannot register Extensions inside command definitions`,
-			{
-				subject: extensionName ? "extension" : "command",
-				name: extensionName ?? name,
-				reason: "nested-command-extension",
-			},
+			definitionDetails("nested-command-extension"),
 		);
 	}
 
