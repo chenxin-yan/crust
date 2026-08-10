@@ -11,6 +11,7 @@ import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import type { FlagsDef } from "../types.ts";
 import {
+	type CommandDefinition,
 	type CommandDefinitionBuilder,
 	Crust,
 	defineCommand,
@@ -813,6 +814,30 @@ describe("Crust .add() type-level tests", () => {
 			defineCommand("issue", { aliases: ["issue"] }, (command) => command);
 		};
 		void typecheckAliasShapes;
+
+		expect(true).toBe(true);
+	});
+
+	it("accumulates argv hints from flags and nested command definitions", () => {
+		const login = defineCommand("login", (command) =>
+			command.flags({ name: "token", type: "string", short: "t" }).action(() => {}),
+		);
+		const auth = defineCommand("auth", (command) => command.add(login));
+		const app = new Crust("cli").flags({ name: "verbose", type: "boolean", short: "v" }).add(auth);
+
+		type Hints = Parameters<(typeof app)["_types"]["hints"]>[0];
+		type _Hints = Expect<Equal<Hints, "auth" | "--verbose" | "-v" | "login" | "--token" | "-t">>;
+
+		// .as() renames the definition but keeps its nested hints
+		const renamed = new Crust("cli").add(auth.as("account"));
+		type RenamedHints = Parameters<(typeof renamed)["_types"]["hints"]>[0];
+		type _RenamedHints = Expect<Equal<RenamedHints, "account" | "login" | "--token" | "-t">>;
+
+		// widened definitions opt out of hints without collapsing the union
+		const widened: CommandDefinition = defineCommand("static", (command) => command);
+		const mixed = new Crust("cli").add(login).add(widened);
+		type MixedHints = Parameters<(typeof mixed)["_types"]["hints"]>[0];
+		type _MixedHints = Expect<Equal<MixedHints, "login" | "--token" | "-t">>;
 
 		expect(true).toBe(true);
 	});
