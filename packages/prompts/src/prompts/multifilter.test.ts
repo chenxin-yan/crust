@@ -74,7 +74,9 @@ describe("multifilter — initial / default", () => {
 
 describe("multifilter — non-TTY", () => {
 	function nonTTY<T>(options: MultifilterOptions<T>): Promise<T[]> {
-		return multifilter<T>(options, nonTTYIO());
+		// No explicit type arg: pins that generic pass-through wrappers still
+		// resolve to the generic overload and return Promise<T[]>.
+		return multifilter(options, nonTTYIO());
 	}
 
 	it("returns default array in non-TTY environment", async () => {
@@ -207,5 +209,18 @@ type Expect<T extends true> = T;
 async function _multifilterTypeInferenceTests() {
 	const picks = await multifilter({ message: "?", choices: ["a", "b"] });
 	type _PicksNarrow = Expect<Equal<typeof picks, ("a" | "b")[]>>;
+
+	const ports = await multifilter({
+		message: "?",
+		choices: [
+			{ label: "HTTP", value: 80 },
+			{ label: "HTTPS", value: 443 },
+		],
+	});
+	type _PortsNarrow = Expect<Equal<typeof ports, (80 | 443)[]>>;
+
+	const widened: string[] = ["a", "b"];
+	const loose = await multifilter({ message: "?", choices: widened });
+	type _LooseIsStrings = Expect<Equal<typeof loose, string[]>>;
 }
 void _multifilterTypeInferenceTests;

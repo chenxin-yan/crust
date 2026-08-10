@@ -200,13 +200,19 @@ function renderSubmitted<T>(
  * });
  * ```
  */
-// Narrowing overload: a literal choices tuple narrows the result to the
-// union of its values. The generic overload below keeps explicit-type-arg
-// and wrapper call sites (`select<T>(...)`) on the old contract.
-export function select<const C extends readonly Choice<unknown>[]>(
+// Narrowing overloads: a literal non-empty choices tuple narrows the result
+// to the union of its values, and widened `readonly string[]` choices keep
+// `string`. Non-tuple `readonly Choice<T>[]` (e.g. generic wrappers over
+// SelectOptions<T>) matches neither and falls through to the generic
+// overload, so `select(options)` inside a wrapper stays `Promise<T>`.
+export function select<const C extends readonly [Choice<unknown>, ...Choice<unknown>[]]>(
 	options: SelectOptions<ChoiceValue<C>> & { readonly choices: C },
 	io?: PromptIO,
 ): Promise<ChoiceValue<C>>;
+export function select(
+	options: SelectOptions<string> & { readonly choices: readonly string[] },
+	io?: PromptIO,
+): Promise<string>;
 export function select<T>(options: SelectOptions<T>, io?: PromptIO): Promise<T>;
 export async function select<T>(options: SelectOptions<T>, io?: PromptIO): Promise<T> {
 	// Short-circuit: return initial value immediately without rendering

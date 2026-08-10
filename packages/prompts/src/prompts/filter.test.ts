@@ -606,7 +606,9 @@ describe("filter — no message", () => {
 
 describe("filter — non-TTY", () => {
 	function nonTTY<T>(options: FilterOptions<T>): Promise<T> {
-		return filter<T>(options, nonTTYIO());
+		// No explicit type arg: pins that generic pass-through wrappers still
+		// resolve to the generic overload and return Promise<T>.
+		return filter(options, nonTTYIO());
 	}
 
 	it("throws NonInteractiveError when stdin is not a TTY", async () => {
@@ -670,5 +672,18 @@ type Expect<T extends true> = T;
 async function _filterTypeInferenceTests() {
 	const pick = await filter({ message: "?", choices: ["prettier", "eslint"] });
 	type _PickNarrows = Expect<Equal<typeof pick, "prettier" | "eslint">>;
+
+	const port = await filter({
+		message: "?",
+		choices: [
+			{ label: "HTTP", value: 80 },
+			{ label: "HTTPS", value: 443 },
+		],
+	});
+	type _PortNarrows = Expect<Equal<typeof port, 80 | 443>>;
+
+	const widened: string[] = ["a", "b"];
+	const loose = await filter({ message: "?", choices: widened });
+	type _LooseIsString = Expect<Equal<typeof loose, string>>;
 }
 void _filterTypeInferenceTests;

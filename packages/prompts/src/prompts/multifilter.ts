@@ -263,11 +263,15 @@ function renderSubmitted<T>(
  * In non-interactive environments (no TTY), the `default` values are returned
  * automatically if provided.
  */
-// Narrowing overload — see `select` for the pattern rationale.
-export function multifilter<const C extends readonly Choice<unknown>[]>(
+// Narrowing overloads — see `select` for the pattern rationale.
+export function multifilter<const C extends readonly [Choice<unknown>, ...Choice<unknown>[]]>(
 	options: MultifilterOptions<ChoiceValue<C>> & { readonly choices: C },
 	io?: PromptIO,
 ): Promise<ChoiceValue<C>[]>;
+export function multifilter(
+	options: MultifilterOptions<string> & { readonly choices: readonly string[] },
+	io?: PromptIO,
+): Promise<string[]>;
 export function multifilter<T>(options: MultifilterOptions<T>, io?: PromptIO): Promise<T[]>;
 export async function multifilter<T>(options: MultifilterOptions<T>, io?: PromptIO): Promise<T[]> {
 	if (options.initial !== undefined) {

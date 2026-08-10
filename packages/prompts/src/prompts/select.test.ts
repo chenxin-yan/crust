@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
+import { createPrompts } from "../create-prompts.ts";
 import { createPromptIO, renderPrompt, type RenderedPrompt } from "../testing.ts";
 import { select, type SelectOptions } from "./select.ts";
 
@@ -504,7 +505,9 @@ describe("select — no message", () => {
 
 describe("select — non-TTY", () => {
 	function nonTTY<T>(options: SelectOptions<T>): Promise<T> {
-		return select<T>(options, nonTTYIO());
+		// No explicit type arg: pins that generic pass-through wrappers still
+		// resolve to the generic overload and return Promise<T>.
+		return select(options, nonTTYIO());
 	}
 
 	it("throws NonInteractiveError when stdin is not a TTY", async () => {
@@ -584,5 +587,17 @@ async function _selectTypeInferenceTests() {
 	const widened: string[] = ["a", "b"];
 	const loose = await select({ message: "?", choices: widened });
 	type _LooseIsString = Expect<Equal<typeof loose, string>>;
+
+	// An explicit type argument still resolves to the generic overload.
+	const explicit = await select<number>({
+		message: "?",
+		choices: [{ label: "HTTP", value: 80 }],
+	});
+	type _ExplicitWins = Expect<Equal<typeof explicit, number>>;
+
+	// createPrompts instances pass narrowing through (`typeof select`).
+	const p = createPrompts();
+	const themed = await p.select({ message: "?", choices: ["a", "b"] });
+	type _ThemedNarrows = Expect<Equal<typeof themed, "a" | "b">>;
 }
 void _selectTypeInferenceTests;

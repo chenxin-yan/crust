@@ -224,11 +224,15 @@ function renderSubmitted<T>(
  * });
  * ```
  */
-// Narrowing overload — see `select` for the pattern rationale.
-export function filter<const C extends readonly Choice<unknown>[]>(
+// Narrowing overloads — see `select` for the pattern rationale.
+export function filter<const C extends readonly [Choice<unknown>, ...Choice<unknown>[]]>(
 	options: FilterOptions<ChoiceValue<C>> & { readonly choices: C },
 	io?: PromptIO,
 ): Promise<ChoiceValue<C>>;
+export function filter(
+	options: FilterOptions<string> & { readonly choices: readonly string[] },
+	io?: PromptIO,
+): Promise<string>;
 export function filter<T>(options: FilterOptions<T>, io?: PromptIO): Promise<T>;
 export async function filter<T>(options: FilterOptions<T>, io?: PromptIO): Promise<T> {
 	// Short-circuit: return initial value immediately without rendering

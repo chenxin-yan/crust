@@ -288,11 +288,15 @@ function renderSubmitted<T>(
  * });
  * ```
  */
-// Narrowing overload — see `select` for the pattern rationale.
-export function multiselect<const C extends readonly Choice<unknown>[]>(
+// Narrowing overloads — see `select` for the pattern rationale.
+export function multiselect<const C extends readonly [Choice<unknown>, ...Choice<unknown>[]]>(
 	options: MultiselectOptions<ChoiceValue<C>> & { readonly choices: C },
 	io?: PromptIO,
 ): Promise<ChoiceValue<C>[]>;
+export function multiselect(
+	options: MultiselectOptions<string> & { readonly choices: readonly string[] },
+	io?: PromptIO,
+): Promise<string[]>;
 export function multiselect<T>(options: MultiselectOptions<T>, io?: PromptIO): Promise<T[]>;
 export async function multiselect<T>(options: MultiselectOptions<T>, io?: PromptIO): Promise<T[]> {
 	// Short-circuit: return initial value immediately without rendering
