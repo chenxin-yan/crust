@@ -8,8 +8,6 @@ import {
 	defineCommand,
 	defineExtension,
 } from "@crustjs/core";
-import { spinner } from "@crustjs/progress";
-import { confirm, multiselect, select } from "@crustjs/prompts";
 import { bold, dim, yellow } from "@crustjs/style";
 
 import {
@@ -20,9 +18,8 @@ import {
 	resolveAgentPath,
 	resolveEffectiveScope,
 } from "./agents.ts";
-import { installSkillBundle } from "./bundle.ts";
 import { SkillConflictError } from "./errors.ts";
-import { generateSkill, isValidSkillName, getSkillStatus, uninstallSkill } from "./generate.ts";
+import { isValidSkillName } from "./skill-name.ts";
 import type {
 	AgentTarget,
 	CustomSkillConfig,
@@ -73,6 +70,7 @@ async function resolveScopeForCommand(
 		return options.defaultScope;
 	}
 
+	const { select } = await import("@crustjs/prompts");
 	return select<Scope>({
 		message: "Select scope",
 		choices: [
@@ -207,6 +205,11 @@ async function autoUpdateCustomSkill(
 		onConflict?: (error: SkillConflictError, scope: Scope) => void;
 	} = {},
 ): Promise<void> {
+	const [{ getSkillStatus }, { installSkillBundle }, { spinner }] = await Promise.all([
+		import("./generate.ts"),
+		import("./bundle.ts"),
+		import("@crustjs/progress"),
+	]);
 	const scopes = hooks.scopes ?? resolveCustomSkillScopes(entry, options);
 	const installMode = entry.installMode ?? options.installMode;
 	const effectiveVersion = entry.version ?? options.version;
@@ -289,6 +292,10 @@ async function updateGeneratedSkill(
 		onConflict?: (error: SkillConflictError, scope: Scope) => void;
 	} = {},
 ): Promise<void> {
+	const [{ generateSkill, getSkillStatus }, { spinner }] = await Promise.all([
+		import("./generate.ts"),
+		import("@crustjs/progress"),
+	]);
 	const effectiveScope = resolveEffectiveScope(scope);
 	const meta = deriveSkillMeta(rootCmd, options);
 	const status = await getSkillStatus({ name: meta.name, scope });
@@ -475,6 +482,12 @@ async function reconcileSkillInteractively(opts: {
 	installNoun: "skill" | "bundle";
 	install: (agents: AgentTarget[], force?: boolean) => Promise<GenerateSkillResult>;
 }): Promise<void> {
+	const [{ confirm, multiselect }, { spinner }, { getSkillStatus, uninstallSkill }] =
+		await Promise.all([
+			import("@crustjs/prompts"),
+			import("@crustjs/progress"),
+			import("./generate.ts"),
+		]);
 	const { name, version, scope, installAll, isInteractive, labelSuffix, installNoun, install } =
 		opts;
 	const detectedAgents = await detectInstalledAgents();
@@ -705,6 +718,10 @@ async function runSkillInstallFlow(
 	customSkills: readonly CustomSkillConfig[],
 	flags: SkillInstallFlags,
 ): Promise<void> {
+	const [{ generateSkill }, { installSkillBundle }] = await Promise.all([
+		import("./generate.ts"),
+		import("./bundle.ts"),
+	]);
 	const meta = deriveSkillMeta(rootCmd, options);
 	const installAll = flags.all === true;
 	const isInteractive = process.stdin.isTTY;

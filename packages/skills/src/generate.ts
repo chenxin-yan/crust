@@ -16,6 +16,7 @@ import type { SkillManifestMalformed } from "./errors.ts";
 import { SkillConflictError } from "./errors.ts";
 import { buildManifest } from "./manifest.ts";
 import { renderSkill } from "./render.ts";
+import { SKILL_NAME_PATTERN, isValidSkillName } from "./skill-name.ts";
 import type {
 	AgentResult,
 	AgentTarget,
@@ -50,21 +51,7 @@ function groupAgentsByOutputDir(
 	return Map.groupBy(agents, (agent) => resolveAgentPath(agent, scope, name));
 }
 
-/**
- * Agent Skills spec name pattern: 1–64 lowercase alphanumeric characters and
- * hyphens. Must not start or end with `-`, and must not contain consecutive `--`.
- */
-const SKILL_NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-
-/**
- * Validates a resolved skill name against the Agent Skills specification.
- *
- * @param name - The resolved skill name to validate
- * @returns `true` if valid, `false` otherwise
- */
-export function isValidSkillName(name: string): boolean {
-	return name.length >= 1 && name.length <= 64 && SKILL_NAME_PATTERN.test(name);
-}
+export { isValidSkillName } from "./skill-name.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Public API — generateSkill

@@ -31,6 +31,30 @@
 		".": {
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
+		},
+		"./completion": {
+			"types": "./dist/completion/index.d.ts",
+			"import": "./dist/completion/index.js"
+		},
+		"./did-you-mean": {
+			"types": "./dist/did-you-mean.d.ts",
+			"import": "./dist/did-you-mean.js"
+		},
+		"./help": {
+			"types": "./dist/help.d.ts",
+			"import": "./dist/help.js"
+		},
+		"./no-color": {
+			"types": "./dist/no-color.d.ts",
+			"import": "./dist/no-color.js"
+		},
+		"./update-notifier": {
+			"types": "./dist/update-notifier.d.ts",
+			"import": "./dist/update-notifier.js"
+		},
+		"./version": {
+			"types": "./dist/version.d.ts",
+			"import": "./dist/version.js"
 		}
 	},
 	"publishConfig": {

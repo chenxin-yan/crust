@@ -139,11 +139,16 @@ function freezeTree(node: CommandNode): void {
 	Object.freeze(node.subCommands);
 }
 
-/** Shared prepare step: clone, apply Extensions, freeze. */
+const preparedInvocations = new WeakMap<CommandNode, PreparedInvocation>();
+
+/** Shared prepare step: clone, apply Extensions, freeze once per immutable builder node. */
 function prepareInvocation(
 	node: CommandNode,
 	materializeCommandDefinition: MaterializeCommandDefinition,
 ): PreparedInvocation {
+	const cached = preparedInvocations.get(node);
+	if (cached) return cached;
+
 	const rootNode = cloneCommandNode(node);
 	const extensions = node.extensions;
 
@@ -153,7 +158,9 @@ function prepareInvocation(
 	for (const extension of extensions) applyExtensionFlags(rootNode, extension);
 
 	freezeTree(rootNode);
-	return { rootNode, extensions };
+	const prepared = { rootNode, extensions };
+	preparedInvocations.set(node, prepared);
+	return prepared;
 }
 
 /** Resolve, parse, and run one invocation without rendering failures. */
