@@ -1,5 +1,5 @@
 import { CrustError } from "../errors.ts";
-import { flagSpellings, type FlagSpelling } from "../parsing/spellings.ts";
+import type { FlagSpelling } from "../parsing/spellings.ts";
 import type { CommandNode } from "./node.ts";
 import { snapshotCommand } from "./snapshot.ts";
 
@@ -143,7 +143,7 @@ export function resolveCommand(command: CommandNode, argv: string[]): CommandRou
 	// makes a positional spelled like a subcommand name unreachable anyway.
 	const assertFlagsForwardable = (child: CommandNode, candidate: string): void => {
 		if (skippedFlagChecks.length === 0) return;
-		const childSpellings = flagSpellings(child.effectiveFlags);
+		const childSpellings = child.flagSpellings;
 		for (const { token, consumesValue } of skippedFlagChecks) {
 			const match = matchKnownFlagToken(childSpellings, token);
 			if (match !== null && match.consumesValue === consumesValue) continue;
@@ -171,7 +171,7 @@ export function resolveCommand(command: CommandNode, argv: string[]): CommandRou
 		// `app --quiet translate` must run `translate`, not silently resolve the
 		// root. Unknown flags and `--` stop routing (parser reports them).
 		if (candidate.startsWith("-")) {
-			const match = matchKnownFlagToken(flagSpellings(current.effectiveFlags), candidate);
+			const match = matchKnownFlagToken(current.flagSpellings, candidate);
 			if (!match) break;
 			skippedFlagTokens.push(candidate);
 			skippedFlagChecks.push({ token: candidate, consumesValue: match.consumesValue });

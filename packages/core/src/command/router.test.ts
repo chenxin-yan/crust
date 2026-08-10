@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { CrustError } from "../errors.ts";
+import { addFlagSpellingEntries } from "../parsing/spellings.ts";
 import type { ArgsDef, CommandMeta, FlagsDef } from "../types.ts";
 import type { CommandNode } from "./node.ts";
 import { createCommandNode } from "./node.ts";
@@ -24,6 +25,7 @@ function makeNode(config: {
 	if (config.flags) {
 		node.localFlags = { ...config.flags };
 		node.effectiveFlags = { ...config.flags };
+		cacheFlagSpellings(node);
 	}
 	if (config.args) {
 		node.args = [...config.args];
@@ -35,6 +37,13 @@ function makeNode(config: {
 		node.run = config.run;
 	}
 	return node;
+}
+
+function cacheFlagSpellings(node: CommandNode): void {
+	node.flagSpellings.clear();
+	for (const [name, def] of Object.entries(node.effectiveFlags)) {
+		addFlagSpellingEntries(node.flagSpellings, name, def);
+	}
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -63,6 +72,7 @@ function createRootWithSubcommands(hasRun = false): CommandNode {
 		},
 	};
 	buildNode.effectiveFlags = { ...buildNode.localFlags };
+	cacheFlagSpellings(buildNode);
 	buildNode.run = () => {
 		/* noop */
 	};
@@ -73,6 +83,7 @@ function createRootWithSubcommands(hasRun = false): CommandNode {
 		port: { type: "number", description: "Port number", default: 3000 },
 	};
 	devNode.effectiveFlags = { ...devNode.localFlags };
+	cacheFlagSpellings(devNode);
 	devNode.run = () => {
 		/* noop */
 	};
@@ -685,8 +696,10 @@ describe("resolveCommand — known-flag skipping", () => {
 		// add a second short boolean for bundling (on both levels, like propagation)
 		const force: FlagsDef[string] = { type: "boolean", short: "f", description: "force" };
 		root.effectiveFlags = { ...root.effectiveFlags, force };
+		cacheFlagSpellings(root);
 		const translate = root.subCommands.translate as CommandNode;
 		translate.effectiveFlags = { ...translate.effectiveFlags, force };
+		cacheFlagSpellings(translate);
 		const result = resolveCommand(root, ["-qf", "translate"]);
 		expect(result.commandPath).toEqual(["app", "translate"]);
 		expect(result.argv).toEqual(["-qf"]);

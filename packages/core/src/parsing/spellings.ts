@@ -1,5 +1,5 @@
 import { CrustError } from "../errors.ts";
-import type { FlagDef, ValueType } from "../types.ts";
+import type { FlagDef, FlagsDef, ValueType } from "../types.ts";
 
 interface FlagDefinition {
 	readonly type: ValueType;
@@ -39,14 +39,13 @@ export function flagDefinitionSpellings(name: string, def: FlagDefinition): stri
 /**
  * Shape rules for one flag definition — the single runtime rulebook shared by
  * every entry gate (`validateIncomingFlag`) and the spelling table
- * (`flagSpellings`): non-empty name, reserved `no-` prefixes, parser type,
- * the reserved `"__proto__"` spelling, and self-duplicate spellings.
+ * (`addFlagSpellingEntries` callers): non-empty name, reserved `no-`
+ * prefixes, parser type, the reserved `"__proto__"` spelling, and
+ * self-duplicate spellings.
  *
  * These mirror the compile-time brands in `validation/flags.ts` —
  * defense-in-depth against type erasure (dynamic construction, `as any`
- * casts, widened generics). `flagSpellings` re-runs it so internal callers
- * that build flag records directly, bypassing the entry gates, are still
- * caught.
+ * casts, widened generics).
  *
  * `ownerLabel` (e.g. `Command "cli"`, `Extension "docs" on "root"`) attributes
  * owner-specific messages at entry gates; the table path omits it.
@@ -122,53 +121,34 @@ export function validateFlagDefinitionShape(
 	return spellings;
 }
 
-/** Build the canonical flag-spelling table shared by parsing and routing. */
-export function flagSpellings<T extends FlagDefinition = FlagDef>(
-	flagsDef: Readonly<Record<string, T>> | undefined,
-): Map<string, FlagSpelling<T>> {
-	const spellings = new Map<string, FlagSpelling<T>>();
-	if (!flagsDef) return spellings;
-
-	// Shape rules live in the shared rulebook; this loop only detects
-	// cross-flag collisions. Reserve canonical names before aliases so
-	// collisions report the canonical owner regardless of definition order.
-	const owners = new Map<string, string>();
-	for (const name of Object.keys(flagsDef)) owners.set(name, name);
-
-	for (const [canonicalName, def] of Object.entries(flagsDef)) {
-		validateFlagDefinitionShape(canonicalName, def);
-
-		const entry = {
-			canonicalName,
-			def,
-			negatable: def.type === "boolean" && def.noNegate !== true,
-		} as const;
-		spellings.set(canonicalName, { ...entry, spelling: canonicalName, kind: "canonical" });
-
-		if (def.short) {
-			const existing = owners.get(def.short);
-			if (existing) {
-				throw new CrustError(
-					"DEFINITION",
-					`Alias collision: "-${def.short}" is used by both "--${existing}" and "--${canonicalName}"`,
-				);
-			}
-			owners.set(def.short, canonicalName);
-			spellings.set(def.short, { ...entry, spelling: def.short, kind: "short" });
-		}
-
-		for (const alias of def.aliases ?? []) {
-			const existing = owners.get(alias);
-			if (existing) {
-				throw new CrustError(
-					"DEFINITION",
-					`Alias collision: "${alias.length === 1 ? "-" : "--"}${alias}" is used by both "--${existing}" and "--${canonicalName}"`,
-				);
-			}
-			owners.set(alias, canonicalName);
-			spellings.set(alias, { ...entry, spelling: alias, kind: "alias" });
-		}
+/** Add one normalized flag to a command's cached spelling table. */
+export function addFlagSpellingEntries<T extends FlagDefinition = FlagDef>(
+	spellings: Map<string, FlagSpelling<T>>,
+	canonicalName: string,
+	def: T,
+): void {
+	const entry = {
+		canonicalName,
+		def,
+		negatable: def.type === "boolean" && def.noNegate !== true,
+	} as const;
+	spellings.set(canonicalName, { ...entry, spelling: canonicalName, kind: "canonical" });
+	if (def.short) {
+		spellings.set(def.short, { ...entry, spelling: def.short, kind: "short" });
 	}
+	for (const alias of def.aliases ?? []) {
+		spellings.set(alias, { ...entry, spelling: alias, kind: "alias" });
+	}
+}
 
-	return spellings;
+/** Clone a cached table while rebinding entries to cloned flag definitions. */
+export function cloneFlagSpellings(
+	spellings: ReadonlyMap<string, FlagSpelling>,
+	flags: FlagsDef,
+): Map<string, FlagSpelling> {
+	return new Map(
+		[...spellings]
+			.filter(([, entry]) => Object.hasOwn(flags, entry.canonicalName))
+			.map(([spelling, entry]) => [spelling, { ...entry, def: flags[entry.canonicalName]! }]),
+	);
 }

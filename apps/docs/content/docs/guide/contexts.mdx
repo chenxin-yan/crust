@@ -112,7 +112,7 @@ Contexts receive the exact callbacks passed to the Command Action, so capabiliti
 
 ### Requirements and construction order
 
-Provide order is free: dependencies may be provided after their dependents. At invocation time, the Contexts on the resolved command path are constructed **topologically** by their declared `requires` dependencies; independent Contexts keep registration order.
+Within one `.provide()` call, order is free: dependencies may appear after their dependents. Normalization immediately caches the Context path in **topological** `requires` order; independent Contexts keep registration order. Invocation constructs that trusted order without sorting it again.
 
 ```ts
 // Equivalent — construction order is config, then database, either way:
@@ -120,7 +120,7 @@ new Crust("app").provide(config(), database());
 new Crust("app").provide(database(), config());
 ```
 
-A ctx dependency that is not provided on the path is a `CrustError` with code `DEFINITION`, raised at dispatch and also caught by [`crust build`](/docs/guide/build)'s command-tree validation. For TypeScript consumers, a dependency cycle whose members are provided with literal types fails typecheck with `FIX_CONTEXT_CYCLE`; cycles through inherited parent Contexts and dynamically built graphs remain runtime-only. Runtime validation reports every cycle as `DEFINITION`.
+A missing dependency or dependency cycle is a `CrustError` with code `DEFINITION`, raised by `.provide()` during runtime normalization (or at materialization, when a definition's recipe provides Contexts). Cycles are enforced only at runtime; TypeScript brands do not attempt recursive cycle detection.
 
 ## Test doubles with `.of()`
 

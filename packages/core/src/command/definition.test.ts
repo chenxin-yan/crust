@@ -296,7 +296,7 @@ describe("command definitions", () => {
 			(command) => (command as unknown as Crust).extend(defineExtension("nested")) as never,
 		);
 		expect(() => new Crust("cli").add(nestedExtension)).toThrow(
-			/Extensions cannot be registered inside command definitions/,
+			/Command "bad" cannot register Extensions inside command definitions/,
 		);
 	});
 

@@ -248,18 +248,16 @@ export type ProvideChecks<Sp extends string, Cs extends readonly unknown[]> = {
 /**
  * Validate one flag against the complete canonical/short/alias namespace.
  *
- * The shared entry gate for every path a flag can join a command's parse
- * surface (`.flags()`, `.provide()`, `defineContext`, `defineExtension`,
- * Extension flag injection): schema exclusivity, definition shape (the
- * shared rulebook in `spellings.ts`), then spelling collisions against
- * `existing`.
+ * Shape and exclusivity rules always run, even for Context/Extension flags
+ * that passed them at creation: those carriers are public structural types,
+ * so a hand-written object can reach attachment without ever being created
+ * by `defineExtension`/`defineContext`.
  */
 export function validateIncomingFlag(
 	incoming: { name: string; def: FlagDef },
 	existing: FlagsDef,
 	ownerLabel: string,
 ): void {
-	// Shape first so a nameless def reports missing-name, not "undefined" text.
 	const incomingSpellings = validateFlagDefinitionShape(incoming.name, incoming.def, ownerLabel);
 	validateSchemaExclusivity("flag", incoming.name, incoming.def);
 

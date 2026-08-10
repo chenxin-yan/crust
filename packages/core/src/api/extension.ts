@@ -9,7 +9,8 @@ import type {
 	NamedFlagDef,
 	NamedFlagsRecord,
 } from "../types.ts";
-import { validateIncomingFlag, type ValidateNamedFlagDefs } from "../validation/flags.ts";
+import type { ValidateNamedFlagDefs } from "../validation/flags.ts";
+import { normalizeFlag } from "../validation/normalize.ts";
 import type { Awaitable } from "./context.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -215,11 +216,13 @@ export function defineExtension<const Defs extends readonly NamedExtensionFlagDe
 	}
 
 	const ownedFlags: FlagsDef = {};
+	const spellings = new Map();
 	for (const def of config.flags ?? []) {
 		const { name: flagName, ...rest } = def;
-		validateIncomingFlag(
+		normalizeFlag(
 			{ name: flagName, def: rest as FlagDef },
 			ownedFlags,
+			spellings,
 			`Extension "${name}"`,
 		);
 		ownedFlags[flagName] = rest as ExtensionFlagDef;

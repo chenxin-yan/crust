@@ -28,6 +28,15 @@ try {
 
 A `CrustError` exposes `code`, `message`, `details`, optional `cause`, `.is(code)`, and `toJSON()`.
 
+## Two trust boundaries
+
+Crust checks developer-authored definitions and user-authored argv at separate boundaries:
+
+1. **Definition normalization** turns raw flags, arguments, aliases, Contexts, commands, and Extension contributions into trusted Command Nodes. Invalid definitions throw `DEFINITION` while the builder call or command materialization runs. `snapshot()` materializes every Extension command, so a broken nested definition fails even when no user invokes that command.
+2. **Invocation parsing** accepts argv against an already-normalized Command Node. Invalid tokens and conversions throw `PARSE`; missing values and Standard Schema issues throw `VALIDATION`.
+
+Definition Errors do not wait for `run()` or argv parsing. Conversely, an invalid user value is never reported as a Definition Error.
+
 `COMMAND_NOT_FOUND` details contain `input`, `available`, `commandPath`, and `parentCommand`, a readonly serializable Command Snapshot.
 
 ## Application errors pass through

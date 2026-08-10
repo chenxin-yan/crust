@@ -7,9 +7,9 @@ import {
 } from "../api/extension.ts";
 import { parseArgs, validateParsed } from "../parsing/parser.ts";
 import { applySchemas } from "../parsing/schema.ts";
+import { cloneFlagSpellings } from "../parsing/spellings.ts";
 import type { FlagDef, FlagsDef, InvocationIO } from "../types.ts";
-import { validateIncomingFlag } from "../validation/flags.ts";
-import { validateCommandTree } from "../validation/tree.ts";
+import { normalizeFlag } from "../validation/normalize.ts";
 import type { CommandDefinition } from "./crust.ts";
 import type { CommandNode } from "./node.ts";
 import { resolveCommand } from "./router.ts";
@@ -56,9 +56,10 @@ function injectExtensionFlag(
 	recursive: boolean,
 	extensionName: string,
 ): void {
-	validateIncomingFlag(
+	normalizeFlag(
 		{ name, def },
 		node.effectiveFlags,
+		node.flagSpellings,
 		`Extension "${extensionName}" on "${node.meta.name}"`,
 	);
 	node.effectiveFlags[name] = def;
@@ -106,6 +107,7 @@ export function cloneCommandNode(node: CommandNode): CommandNode {
 		subCommands[name] = cloneCommandNode(sub);
 	}
 
+	const effectiveFlags = cloneFlags(node.effectiveFlags);
 	// Spread first so enumerable symbol-keyed annotations (e.g. skills'
 	// command annotations) survive the clone; then override every structural
 	// field with a decoupled copy.
@@ -114,7 +116,8 @@ export function cloneCommandNode(node: CommandNode): CommandNode {
 		meta: { ...node.meta },
 		localFlags: cloneFlags(node.localFlags),
 		ownedFlags: cloneFlags(node.ownedFlags),
-		effectiveFlags: cloneFlags(node.effectiveFlags),
+		effectiveFlags,
+		flagSpellings: cloneFlagSpellings(node.flagSpellings, effectiveFlags),
 		args: node.args ? node.args.map((def) => ({ ...def })) : undefined,
 		subCommands,
 		contexts: [...node.contexts],
@@ -204,7 +207,6 @@ async function dispatch(
 				validated.flags as Record<string, unknown>,
 				io,
 				disposal,
-				`"${resolved.commandPath.join(" ")}"`,
 			),
 			rawArgs: parsed.rawArgs,
 			command: extensionContext.command,
@@ -379,6 +381,5 @@ export async function prepareInvocationSnapshot(
 	materializeCommandDefinition: MaterializeCommandDefinition,
 ): Promise<CommandSnapshot> {
 	const prepared = prepareInvocation(node, materializeCommandDefinition);
-	validateCommandTree(prepared.rootNode);
 	return snapshotCommand(prepared.rootNode);
 }

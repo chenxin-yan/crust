@@ -3,8 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { Crust, defineCommand } from "../command/crust.ts";
 import { CrustError } from "../errors.ts";
 import type { NamedFlagDef } from "../types.ts";
-import type { ContextDeps } from "../validation/contexts.ts";
-import { defineContext, type ContextInstance } from "./context.ts";
+import { defineContext } from "./context.ts";
 import { defineExtension } from "./extension.ts";
 import { defineFlag } from "./flags.ts";
 
@@ -423,61 +422,6 @@ describe("Context-owned flags", () => {
 	});
 });
 
-describe("compile-time Context dependency cycles", () => {
-	it("rejects direct, self, and cross-call cycles without rejecting incomplete or acyclic graphs", () => {
-		const typecheckCycles = () => {
-			const a = null as unknown as ContextInstance<"a", unknown, { b: unknown }>;
-			const b = null as unknown as ContextInstance<"b", unknown, { a: unknown }>;
-			new Crust("cli").provide(
-				// @ts-expect-error -- both instances participate in the dependency cycle
-				a,
-				b,
-			);
-
-			const self = null as unknown as ContextInstance<"self", unknown, { self: unknown }>;
-			new Crust("cli").provide(
-				// @ts-expect-error -- a Context cannot require itself
-				self,
-			);
-
-			const first = null as unknown as ContextInstance<"first", unknown, { second: unknown }>;
-			const second = null as unknown as ContextInstance<"second", unknown, { third: unknown }>;
-			const third = null as unknown as ContextInstance<"third", unknown, { first: unknown }>;
-			new Crust("cli").provide(first).provide(second).provide(
-				// @ts-expect-error -- third closes the cycle across prior provide calls
-				third,
-			);
-
-			const base = null as unknown as ContextInstance<"base">;
-			const left = null as unknown as ContextInstance<"left", unknown, { base: unknown }>;
-			const right = null as unknown as ContextInstance<"right", unknown, { base: unknown }>;
-			const top = null as unknown as ContextInstance<
-				"top",
-				unknown,
-				{ left: unknown; right: unknown }
-			>;
-			// Order-free valid diamond: dependencies may follow their dependents.
-			new Crust("cli").provide(top, left, right, base);
-
-			const missing = null as unknown as ContextInstance<"client", unknown, { config: unknown }>;
-			// Missing dependencies remain a runtime concern so provide order stays free.
-			new Crust("cli").provide(missing);
-
-			const widened = null as unknown as ContextInstance<string, unknown, Record<string, unknown>>;
-			new Crust("cli").provide(widened);
-
-			const provideThroughGenericGraph = <Deps extends ContextDeps>(
-				app: Crust<any, any, any, any, any, Deps, any>,
-				instance: ContextInstance<"dynamic">,
-			) => app.provide(instance);
-			void provideThroughGenericGraph;
-		};
-
-		void typecheckCycles;
-		expect(true).toBe(true);
-	});
-});
-
 describe("Context capability requirements (topological construction)", () => {
 	it("constructs dependencies before dependents in registration order among independents", async () => {
 		const order: string[] = [];
@@ -509,7 +453,7 @@ describe("Context capability requirements (topological construction)", () => {
 		]);
 	});
 
-	it("provide order is free — dependents may be provided before dependencies", async () => {
+	it("provide order is free within one normalized batch", async () => {
 		const order: string[] = [];
 		const config = defineContext("config", () => {
 			order.push("config");
@@ -521,8 +465,7 @@ describe("Context capability requirements (topological construction)", () => {
 		});
 
 		await new Crust("cli")
-			.provide(client())
-			.provide(config())
+			.provide(client(), config())
 			.action(() => {
 				order.push("action");
 			})
@@ -541,19 +484,21 @@ describe("Context capability requirements (topological construction)", () => {
 		});
 	});
 
-	it("throws DEFINITION at dispatch when a dependency is missing from the path", async () => {
+	it("throws DEFINITION at normalization when a dependency is missing from the path", () => {
 		const config = defineContext("config", () => ({}));
 		const client = defineContext("client", { requires: [config] }, () => ({}));
 
-		const app = new Crust("cli").provide(client()).action(() => {});
-
-		await expect(app.run([])).rejects.toMatchObject({
-			code: "DEFINITION",
-			message: expect.stringMatching(/Context "client" requires Context "config"/),
-		});
+		try {
+			new Crust("cli").provide(client());
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toMatch(/Context "client" requires Context "config"/);
+		}
 	});
 
-	it("throws DEFINITION at dispatch on a dependency cycle", async () => {
+	it("throws DEFINITION at normalization on a dependency cycle", () => {
 		// Cycles cannot be authored with real factory references (a factory
 		// must exist to be depended on), so simulate two instances whose
 		// declared requirements point at each other.
@@ -562,29 +507,70 @@ describe("Context capability requirements (topological construction)", () => {
 		(a as { requiredCtx: readonly string[] }).requiredCtx = ["b"];
 		(b as { requiredCtx: readonly string[] }).requiredCtx = ["a"];
 
-		const app = new Crust("cli").provide(a, b).action(() => {});
-
-		await expect(app.run([])).rejects.toMatchObject({
-			code: "DEFINITION",
-			message: expect.stringMatching(/dependency cycle/),
-		});
+		try {
+			new Crust("cli").provide(a, b);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toMatch(/dependency cycle/);
+		}
 	});
 
-	it("throws DEFINITION at dispatch on a cycle split across parent and child provide sites", async () => {
-		// Deliberately runtime-only: the child recipe's Deps graph does not see
-		// Contexts inherited from the parent path, so this cycle compiles clean.
+	it("normalizes flags of a hand-written ContextInstance at provide time", () => {
+		// ContextInstance is a public structural type, so a plain object that
+		// never went through defineContext() typechecks; its owned flags must
+		// still hit the normalization boundary at .provide().
+		const rogue = {
+			kind: "context",
+			name: "rogue",
+			requiredCtx: [],
+			ownedFlags: { mode: { type: "string", choices: ["a", "b"], default: "z" } },
+			setup: () => ({}),
+		} as unknown as Parameters<Crust["provide"]>[0];
+
+		try {
+			new Crust("cli").provide(rogue);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toBe(
+				'Invalid default value "z" for --mode. Expected one of: a, b',
+			);
+		}
+	});
+
+	it("accepts cross-call provide order when dependencies come first", async () => {
+		const order: string[] = [];
+		const config = defineContext("config", () => {
+			order.push("config");
+			return { url: "u" };
+		});
+		const client = defineContext("client", { requires: [config] }, ({ ctx }) => {
+			order.push("client");
+			return { url: ctx.config.url };
+		});
+
+		await new Crust("cli")
+			.provide(config())
+			.provide(client())
+			.action(() => {
+				order.push("action");
+			})
+			.run([]);
+
+		expect(order).toEqual(["config", "client", "action"]);
+	});
+
+	it("rejects an incomplete cross-site Context graph at its first normalization site", () => {
 		const a = defineContext("a", () => "a")();
 		const b = defineContext("b", () => "b")();
 		(a as { requiredCtx: readonly string[] }).requiredCtx = ["b"];
 		(b as { requiredCtx: readonly string[] }).requiredCtx = ["a"];
 
-		const child = defineCommand("child", (command) => command.provide(b).action(() => {}));
-		const app = new Crust("cli").provide(a).add(child);
-
-		await expect(app.run(["child"])).rejects.toMatchObject({
-			code: "DEFINITION",
-			message: expect.stringMatching(/dependency cycle/),
-		});
+		void b;
+		expect(() => new Crust("cli").provide(a)).toThrow(/requires Context "b"/);
 	});
 
 	it("satisfies an added definition's Context requirement before its dependents construct", async () => {

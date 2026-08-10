@@ -17,8 +17,6 @@ import {
 	type CrustCommandContext,
 	SNAPSHOT_PATH_ENV,
 } from "./crust.ts";
-import { executeInvocation } from "./invocation.ts";
-import { createCommandNode } from "./node.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Type-level test utilities
@@ -310,11 +308,13 @@ describe("Crust .flags()", () => {
 		).toThrow(/spelling "v" collides with flag "--vv"/);
 	});
 
-	it("rejects Promise-returning custom flag parsers at compile time", () => {
-		new Crust("test").flags(
-			// @ts-expect-error -- flag parsers must be synchronous
-			{ name: "file", type: "string", parse: async (raw) => raw },
-		);
+	it("rejects Promise-returning custom flag parsers at normalization", () => {
+		expect(() =>
+			new Crust("test").flags(
+				// @ts-expect-error -- flag parsers must be synchronous
+				{ name: "file", type: "string", parse: async (raw) => raw },
+			),
+		).toThrow(/Async parse not supported/);
 		new Crust("test").flags({
 			name: "url",
 			type: "string",
@@ -327,7 +327,7 @@ describe("Crust .flags()", () => {
 	it("throws CrustError DEFINITION on short/alias collisions within one .flags() call", () => {
 		// Typed callers are caught by ValidateFlagAliases at compile time; the
 		// expect-error markers simulate dynamic/untyped construction, which must
-		// fail at registration rather than at first run() via validateCommandTree.
+		// fail at normalization rather than at first invocation.
 		expect(() =>
 			new Crust("test").flags(
 				// @ts-expect-error -- short "v" claimed twice in one call
@@ -440,11 +440,13 @@ describe("Crust .args()", () => {
 		);
 	});
 
-	it("rejects Promise-returning custom arg parsers at compile time", () => {
-		new Crust("test").args(
-			// @ts-expect-error -- positional argument parsers must be synchronous
-			{ name: "file", type: "string", parse: async (raw) => raw },
-		);
+	it("rejects Promise-returning custom arg parsers at normalization", () => {
+		expect(() =>
+			new Crust("test").args(
+				// @ts-expect-error -- positional argument parsers must be synchronous
+				{ name: "file", type: "string", parse: async (raw) => raw },
+			),
+		).toThrow(/Async parse not supported/);
 		new Crust("test").args({ name: "count", type: "string", parse: Number });
 
 		expect(true).toBe(true);
@@ -1335,7 +1337,7 @@ describe("Extension application at prepare time", () => {
 
 		await expect(new Crust("cli").extend(invalid).run([])).rejects.toMatchObject({
 			code: "DEFINITION",
-			message: 'Extension "invalid" commands must be created by defineCommand()',
+			message: 'Extension "invalid" requires a command definition created by defineCommand()',
 		});
 	});
 
@@ -2409,17 +2411,15 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 	it("prints validation errors and exits one without writing a snapshot", async () => {
 		const path = await snapshotPath();
 		process.env[SNAPSHOT_PATH_ENV] = path;
-		const node = createCommandNode("cli");
-		node.effectiveFlags["no-verbose"] = { type: "boolean" };
+		const extension = defineExtension("collision", {
+			flags: [{ name: "verbose", type: "boolean" }],
+		});
+		const app = new Crust("cli").flags({ name: "verbose", type: "boolean" }).extend(extension);
 
-		await expect(
-			executeInvocation(node, { argv: [] }, () => {
-				throw new Error("no command definitions");
-			}),
-		).rejects.toThrow("process.exit(1) was called");
+		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
 
 		expect(exitCalls).toEqual([1]);
-		expect(errorCalls.join("\n")).toContain("failed definition validation");
+		expect(errorCalls.join("\n")).toContain("collides with flag");
 		await expect(readFile(path, "utf8")).rejects.toThrow();
 	});
 });
@@ -2621,5 +2621,159 @@ describe("Crust .add() aliases", () => {
 			.add(defineCommand("issue", { aliases: ["i"] }, (cmd) => cmd.action(() => {})));
 
 		await expect(app.run(["i"])).rejects.toMatchObject({ code: "DEFINITION" });
+	});
+
+	it("normalizes flags of a hand-written Extension object at prepare time", async () => {
+		// Extension is a public structural type, so a plain object that never
+		// went through defineExtension() typechecks; its flags must still hit
+		// the normalization boundary instead of being trusted as pre-validated.
+		const rogue = {
+			name: "rogue",
+			flags: { mode: { type: "string", choices: ["a", "b"], default: "z" } },
+		} as unknown as Parameters<Crust["extend"]>[0];
+
+		await expect(
+			new Crust("cli")
+				.action(() => {})
+				.extend(rogue)
+				.run([]),
+		).rejects.toMatchObject({
+			code: "DEFINITION",
+			message: 'Invalid default value "z" for --mode. Expected one of: a, b',
+		});
+
+		const asyncRogue = {
+			name: "rogue",
+			flags: { val: { type: "string", parse: async (raw: string) => raw } },
+		} as unknown as Parameters<Crust["extend"]>[0];
+
+		await expect(
+			new Crust("cli")
+				.action(() => {})
+				.extend(asyncRogue)
+				.run([]),
+		).rejects.toMatchObject({
+			code: "DEFINITION",
+			message:
+				"Async parse not supported for flag --val. Use a sync parser; do async work in run().",
+		});
+	});
+});
+
+describe("definition normalization timing", () => {
+	it("rejects defaults outside choices when flags and args are defined", () => {
+		try {
+			new Crust("cli").flags({
+				name: "mode",
+				type: "string",
+				choices: ["a", "b"],
+				default: "z",
+			});
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toBe(
+				'Invalid default value "z" for --mode. Expected one of: a, b',
+			);
+		}
+		try {
+			new Crust("cli").args({
+				name: "mode",
+				type: "string",
+				choices: ["a", "b"],
+				default: "z",
+			});
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toBe(
+				'Invalid default value "z" for <mode>. Expected one of: a, b',
+			);
+		}
+	});
+
+	it("rejects array defaults outside choices for multiple flags", () => {
+		try {
+			new Crust("cli").flags({
+				name: "mode",
+				type: "string",
+				multiple: true,
+				choices: ["a", "b"],
+				default: ["a", "z"],
+			} as never);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toBe(
+				'Invalid default value "z" for --mode. Expected one of: a, b',
+			);
+		}
+	});
+
+	it("rejects async parsers when flags and args are defined", () => {
+		expect(() =>
+			new Crust("cli").flags({
+				name: "mode",
+				type: "string",
+				parse: async (raw: string) => raw,
+			} as never),
+		).toThrow(/Async parse not supported for flag --mode/);
+		expect(() =>
+			new Crust("cli").args({
+				name: "mode",
+				type: "string",
+				parse: async (raw: string) => raw,
+			} as never),
+		).toThrow(/Async parse not supported for argument <mode>/);
+	});
+
+	it("rejects missing and cyclic Context dependencies at provide time", () => {
+		const base = defineContext("base", () => ({}));
+		const dependent = defineContext("dependent", { requires: [base] }, () => ({}));
+		try {
+			new Crust("cli").provide(dependent());
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toMatch(/requires Context "base"/);
+		}
+
+		const a = defineContext("a", () => ({}))();
+		const b = defineContext("b", () => ({}))();
+		(a as { requiredCtx: readonly string[] }).requiredCtx = ["b"];
+		(b as { requiredCtx: readonly string[] }).requiredCtx = ["a"];
+		try {
+			new Crust("cli").provide(a, b);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toMatch(/dependency cycle/);
+		}
+	});
+
+	it("materializes and normalizes invalid definitions two levels behind an Extension", async () => {
+		const invalidLeaf = defineCommand("leaf", (command) =>
+			command.flags({
+				name: "mode",
+				type: "string",
+				choices: ["a", "b"],
+				default: "z",
+			}),
+		);
+		const middle = defineCommand("middle", (command) => command.add(invalidLeaf));
+		const extension = defineExtension("deep", { commands: [middle] });
+
+		try {
+			await new Crust("cli").extend(extension).snapshot();
+			expect.unreachable("snapshot should reject the invalid nested definition");
+		} catch (error) {
+			expect(error).toBeInstanceOf(CrustError);
+			expect((error as CrustError).code).toBe("DEFINITION");
+		}
 	});
 });
