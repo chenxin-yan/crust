@@ -325,7 +325,7 @@ export const buildCommand = defineCommand(
 					name: "validate",
 					type: "boolean",
 					description:
-						"Validate command runtime rules before compiling (disable with --no-validate)",
+						"Materialize command definitions before compiling (disable with --no-validate)",
 					default: true,
 				},
 				{

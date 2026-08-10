@@ -32,20 +32,20 @@ crust build --env-file .env.production
 
 ## Flags
 
-| Flag          | Alias | Type                    | Default       | Description                                                |
-| ------------- | ----- | ----------------------- | ------------- | ---------------------------------------------------------- |
-| `--entry`     | `-e`  | `"string"`              | `src/cli.ts`  | Entry file path                                            |
-| `--outfile`   | `-o`  | `"string"`              | —             | Output file path (single-target only)                      |
-| `--name`      | `-n`  | `"string"`              | auto-detected | Binary name                                                |
-| `--minify`    | —     | `"boolean"`             | `true`        | Minify the output                                          |
-| `--target`    | `-t`  | `"string"` (repeatable) | all platforms | Canonical Bun target(s), e.g. `bun-darwin-arm64`           |
-| `--outdir`    | `-d`  | `"string"`              | `dist`        | Output directory for compiled binaries                     |
-| `--resolver`  | `-r`  | `"string"`              | `cli`         | Resolver script filename (multi-target only, no extension) |
-| `--env-file`  | —     | `"string"` (repeatable) | —             | Explicit env file(s) used for build-time constants         |
-| `--validate`  | —     | `"boolean"`             | `true`        | Pre-compile validation of command definitions              |
-| `--package`   | —     | `"boolean"`             | `false`       | Stage npm packages in `dist/npm` instead of raw binaries   |
-| `--stage-dir` | —     | `"string"`              | `dist/npm`    | Package staging directory; only used with `--package`      |
-| `--man`       | —     | `"boolean"`             | `false`       | Write an mdoc(7) page from the prepared Command Snapshot   |
+| Flag                           | Alias | Type                    | Default       | Description                                                |
+| ------------------------------ | ----- | ----------------------- | ------------- | ---------------------------------------------------------- |
+| `--entry`                      | `-e`  | `"string"`              | `src/cli.ts`  | Entry file path                                            |
+| `--outfile`                    | `-o`  | `"string"`              | —             | Output file path (single-target only)                      |
+| `--name`                       | `-n`  | `"string"`              | auto-detected | Binary name                                                |
+| `--minify`                     | —     | `"boolean"`             | `true`        | Minify the output                                          |
+| `--target`                     | `-t`  | `"string"` (repeatable) | all platforms | Canonical Bun target(s), e.g. `bun-darwin-arm64`           |
+| `--outdir`                     | `-d`  | `"string"`              | `dist`        | Output directory for compiled binaries                     |
+| `--resolver`                   | `-r`  | `"string"`              | `cli`         | Resolver script filename (multi-target only, no extension) |
+| `--env-file`                   | —     | `"string"` (repeatable) | —             | Explicit env file(s) used for build-time constants         |
+| `--validate` / `--no-validate` | —     | `"boolean"`             | `true`        | Materialize command definitions before compiling           |
+| `--package`                    | —     | `"boolean"`             | `false`       | Stage npm packages in `dist/npm` instead of raw binaries   |
+| `--stage-dir`                  | —     | `"string"`              | `dist/npm`    | Package staging directory; only used with `--package`      |
+| `--man`                        | —     | `"boolean"`             | `false`       | Write an mdoc(7) page from the prepared Command Snapshot   |
 
 ## Supported Targets
 
@@ -167,9 +167,15 @@ See [Environment Variables](/docs/guide/environment) for the full env model, inc
 
 ## Pre-compile Validation
 
-Before compiling, `crust build` prepares your CLI's Command Snapshot by running the entry file in a subprocess. This catches definition errors — such as flag alias collisions, reserved `no-` prefix misuse, and other structural issues — **before** the binary is compiled, rather than at runtime when users invoke it.
+By default, `crust build` materializes your full command tree before compiling. It runs the entry file in a subprocess to prepare a Command Snapshot, forcing all command recipes and Extensions. This catches definition errors — such as flag alias collisions, reserved `no-` prefix misuse, and other structural issues — **before** the binary is compiled, rather than at runtime when users invoke it.
 
 `crust build` sets `CRUST_INTERNAL_SNAPSHOT_PATH` in the subprocess environment, pointing at a temporary file. `.execute()` prepares and validates the full command graph, including subcommands and Extension-owned flags and commands, writes its JSON snapshot to that file, and exits without executing Command Actions or code after `await app.execute()`.
+
+<Callout type="warn">
+  Materialization imports your entry module, so its top-level side effects run before compilation.
+  Keep entry modules side-effect-free when possible. Use `--no-validate` when import-time side
+  effects are unavoidable.
+</Callout>
 
 When `--man` is enabled, the same subprocess supplies both validation and man generation; the entry point does not need to export its `Crust` builder. `--man --no-validate` still prepares a snapshot because the manual renderer requires it.
 
@@ -196,7 +202,7 @@ Validation is enabled by default. To skip it:
 crust build --no-validate
 ```
 
-This can be useful if the snapshot subprocess cannot resolve your project's dependencies in a particular environment (e.g., non-standard module resolution setups), or if the entry never calls `await app.execute()` — such entries fail validation with a missing-snapshot error. It does not skip snapshot preparation when `--man` is enabled.
+Use this escape hatch for entries with unavoidable import-time side effects. It can also help when the snapshot subprocess cannot resolve your project's dependencies in a particular environment (for example, a non-standard module resolution setup), or when the entry never calls `await app.execute()` — such entries fail validation with a missing-snapshot error. It does not skip snapshot preparation when `--man` is enabled.
 
 ## Per-OS Distribution with `--package`
 
