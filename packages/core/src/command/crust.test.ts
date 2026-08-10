@@ -1426,6 +1426,70 @@ describe("Extension application at prepare time", () => {
 
 		expect(calls).toEqual(["root", "extra", "root"]);
 	});
+
+	it("materializes Extension command recipes once per builder across runs", async () => {
+		let materialized = 0;
+		const calls: string[] = [];
+		const tools = defineExtension("tools", {
+			commands: [
+				defineCommand("sub", (command) => {
+					materialized++;
+					return command.action(() => {
+						calls.push("sub");
+					});
+				}),
+			],
+		});
+		const app = new Crust("cli").extend(tools).action(() => {});
+
+		await app.run(["sub"]);
+		await app.run(["sub"]);
+
+		// The action still runs per dispatch, but the recipe that builds the
+		// command tree runs once per builder instance (prepared tree is cached).
+		expect(calls).toEqual(["sub", "sub"]);
+		expect(materialized).toBe(1);
+	});
+
+	it("does not cache a failed preparation: a throwing recipe is retried", async () => {
+		let attempts = 0;
+		const flaky = defineExtension("flaky", {
+			commands: [
+				defineCommand("sub", (command) => {
+					attempts++;
+					if (attempts === 1) throw new Error("recipe boom");
+					return command.action(() => {});
+				}),
+			],
+		});
+		const app = new Crust("cli").extend(flaky).action(() => {});
+
+		await expect(app.run(["sub"])).rejects.toThrow("recipe boom");
+		await app.run(["sub"]);
+
+		expect(attempts).toBe(2);
+	});
+
+	it("extending a builder after a cached run affects only the derived builder", async () => {
+		const calls: string[] = [];
+		const audit = defineExtension("audit", {
+			hooks: {
+				preRun: () => {
+					calls.push("audit");
+				},
+			},
+		});
+		const app = new Crust("cli").action(() => {
+			calls.push("root");
+		});
+
+		await app.run([]);
+		const derived = app.extend(audit);
+		await derived.run([]);
+		await app.run([]);
+
+		expect(calls).toEqual(["root", "audit", "root", "root"]);
+	});
 });
 
 describe("Extension named hooks", () => {
