@@ -16,7 +16,7 @@ bun create crust@latest my-cli
 deno run -A npm:create-crust@latest my-cli
 ```
 
-This prompts for the project directory, distribution mode (standalone binaries recommended, or Bun runtime package), whether to install dependencies, and optionally whether to initialize a git repository. The package name is inferred from the directory name.
+The CLI prompts for the project directory, distribution mode, dependency installation, and Git initialization. The package name is inferred from the directory name.
 
 ## Options
 
@@ -25,42 +25,47 @@ create-crust [directory] [--distribution binary|runtime] [--install|--no-install
 ```
 
 - `directory` sets the destination; omit it to be prompted.
-- `--distribution` preselects standalone binaries or a Bun runtime package in the interactive prompt (default: `binary`).
-- `--install` / `--no-install` sets the initial answer to the dependency installation prompt (default: install).
-- `--git` / `--no-git` sets the initial answer to the repository initialization prompt (default: initialize) when the destination is not already inside a Git repository.
-- `--overwrite` / `--no-overwrite` set the initial answer when confirming an existing destination; confirmation is still required (default: do not overwrite).
+- `--distribution` selects standalone binaries (the default) or a Bun runtime package.
+- `--install` / `--no-install` answers the dependency installation prompt.
+- `--git` / `--no-git` answers the repository initialization prompt. Git initialization is skipped inside an existing repository.
+- `--overwrite` / `--no-overwrite` answers the existing-destination confirmation.
 
-Generated projects use the single-file starter (`src/cli.ts`).
+All prompts are resolved before files are written.
 
-Every generated project includes:
+## Generated project
 
-- `src/cli.ts` — entry point with a sample command
-- `package.json` — configured for the selected distribution mode
-- `tsconfig.json` — strict TypeScript config
-- `README.md` — getting started instructions
-- `.gitignore` — sensible defaults for Node/Bun projects
+Both distribution modes share the same todo application:
 
-Generated templates can be configured for either standalone binary distribution or Bun runtime package distribution during scaffolding.
+```text
+src/
+├── app.ts
+├── app.test.ts
+├── cli.ts
+├── shared.ts
+└── commands/
+    ├── add.ts
+    ├── done.ts
+    ├── list.ts
+    └── remove.ts
+```
 
-For standalone binary projects, the intended workflow is:
+The starter demonstrates split command definitions, typed positional arguments and flags, a lazy Context with an owned `--data-file` flag and native cleanup, help/version/color/suggestion/completion Extensions, and testing with `captureRun()` plus a Context double.
 
-1. `bun run build` — raw binaries (`crust build`)
-2. `bun run package` — npm-ready staged packages in `dist/npm` (`crust build --package`)
-3. `bun run publish` — publish the staged packages (`crust publish`)
+### Standalone binaries
 
-The binary templates intentionally keep `build` and `package` as separate scripts because they do different jobs:
+The recommended mode compiles self-contained executables that do not require Bun on the end user's machine:
 
-- `build` is for raw binary artifacts.
-- `package` is for npm packaging (alias for `crust build --package`).
-- `publish` is for registry upload.
+1. `bun run build` — build raw binaries.
+2. `bun run package` — stage npm-ready platform packages in `dist/npm`.
+3. `bun run publish` — publish the staged packages in dependency order.
 
-If you need public build-time constants, `crust build` can use Bun's cwd env by default or explicit `--env-file` inputs.
+### Bun runtime package
 
-> **Note:** Binary projects use a top-level `bin` entry at `dist/cli` for local development. `crust build --package` generates staged packages in `dist/npm/`, each with its own platform-appropriate `files` and `bin` entries; those staged manifests are used for binary npm distribution. Runtime projects instead publish `dist/cli.js` directly.
+The runtime mode builds `dist/cli.js`, keeps Core and Extensions as runtime dependencies, and requires Bun on the end user's machine. `bun publish` runs the `prepack` build automatically.
 
 ## Documentation
 
-See the full docs at [crustjs.com](https://crustjs.com).
+See [crustjs.com](https://crustjs.com).
 
 ## License
 

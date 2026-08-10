@@ -3,7 +3,7 @@ title: "create-crust"
 description: Scaffold a new Crust CLI project interactively.
 ---
 
-`create-crust` generates a minimal Crust application and configures it for standalone binary or Bun runtime distribution.
+`create-crust` generates a teaching-oriented todo CLI and configures it for standalone binary or Bun runtime distribution.
 
 ## Usage
 
@@ -34,8 +34,27 @@ create-crust [directory] [--distribution binary|runtime] [--install|--no-install
 | `--distribution binary\|runtime` | Preselect the distribution prompt. The default is `binary` (standalone executables); `runtime` produces a package that runs with Bun.              |
 | `--install` / `--no-install`     | Set the initial answer to the dependency-installation prompt. The default is to install dependencies.                                              |
 | `--git` / `--no-git`             | Set the initial answer to the Git initialization prompt. The default is to initialize; no repository is created when the destination is in a repo. |
-| `--overwrite` / `--no-overwrite` | Set the initial answer when confirming an existing destination. The default is not to overwrite. Confirmation is still required.                   |
+| `--overwrite` / `--no-overwrite` | Set the answer when confirming an existing destination. The default is not to overwrite.                                                           |
 
 The CLI collects every prompt before writing files, then scaffolds the project and optionally installs dependencies and initializes Git. The package name is inferred from the destination directory.
 
-Generated projects use the single-file `src/cli.ts` starter. See [Build and distribution](/docs/guide/build) for standalone and runtime packaging workflows.
+## Generated application
+
+Both distribution modes use the same split-file application:
+
+```text
+src/
+├── app.ts                  # Root builder, Context, and Extensions
+├── app.test.ts             # captureRun() with a Context double
+├── cli.ts                  # Composition and execution
+├── shared.ts               # Todo Context and owned --data-file flag
+└── commands/
+    ├── add.ts
+    ├── done.ts
+    ├── list.ts
+    └── remove.ts
+```
+
+The todo commands demonstrate typed required and variadic arguments, string choices, boolean flags and negation, split command definitions with declared Context requirements, lazy file persistence with native disposal, and the help, version, no-color, typo-suggestion, and completion Extensions.
+
+The binary distribution uses `crust build` for standalone executables and provides local scripts to stage and publish platform-specific npm packages. The runtime distribution bundles `dist/cli.js` with Bun and keeps Core and Extensions as runtime dependencies. See [Build and distribution](/docs/guide/build) for both workflows.
