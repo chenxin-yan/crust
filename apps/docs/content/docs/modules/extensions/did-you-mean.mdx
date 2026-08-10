@@ -36,6 +36,6 @@ function didYouMean(options?: DidYouMeanOptions): Extension;
 
 Suggestions compare the unknown token with visible sibling command names and aliases. Alias matches are reported as canonical command names. Hidden commands are omitted.
 
-`didYouMean()` is a presentation-only `onError` Extension. It handles only `CrustError` values with code `COMMAND_NOT_FOUND`, returns `true` when it renders a suggestion, and delegates every other failure to the next presenter. Core sets and preserves the nonzero terminal exit code independently of the selected mode.
+`didYouMean()` is a presentation-only `onError` Extension. It handles only `CrustError` values with code `COMMAND_NOT_FOUND`, returns `true` after rendering, and delegates every other failure to the next presenter. Core sets and preserves the nonzero terminal exit code independently of the selected mode.
 
 `app.run(argv)` does not run presentation hooks; it throws the original `COMMAND_NOT_FOUND` error instead.

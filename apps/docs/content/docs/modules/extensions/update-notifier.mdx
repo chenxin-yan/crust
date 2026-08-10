@@ -74,7 +74,12 @@ const store = createStore({
 
 const adapter: UpdateNotifierCacheAdapter = {
   read: () => store.read(),
-  write: (state) => store.write(state),
+  write: (state) =>
+    store.write({
+      lastCheckedAt: state.lastCheckedAt,
+      latestVersion: state.latestVersion,
+      lastNotifiedVersion: state.lastNotifiedVersion,
+    }),
 };
 
 const notifier = updateNotifier({

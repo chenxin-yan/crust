@@ -50,7 +50,7 @@ Scope resolution for the interactive command and `skill update`:
 
 1. If `--scope` flag is passed, that scope is used.
 2. If `defaultScope` is set, that scope is used (no prompt).
-3. Otherwise, an interactive prompt asks the user to choose `project` or `global`.
+3. Otherwise, an interactive prompt asks the user to choose `project` or `global`; in non-interactive mode this falls back to `global`.
 
 When the current working directory is the home directory, `project` scope is normalized to `global`. In that case, installs, updates, and status checks all use the global skill locations and update output reports `(global)`.
 
@@ -307,7 +307,7 @@ import { generateSkill, getSkillStatus, uninstallSkill } from "@crustjs/skills";
 
 // Install — universal + agents whose CLI is on PATH.
 const result = await generateSkill({
-  command: rootCommand,
+  command: await rootCommand.snapshot(),
   meta: { name: "my-cli", description: "My CLI", version: "1.0.0" },
   scope: "global", // or "project"
 });
@@ -343,7 +343,7 @@ const universal = getUniversalAgents();
 const additional = await detectInstalledAgents();
 
 await generateSkill({
-  command: rootCommand,
+  command: await rootCommand.snapshot(),
   meta: { name: "my-cli", description: "My CLI", version: "1.0.0" },
   agents: [...universal, ...additional], // explicit form
   scope: "global",

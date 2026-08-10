@@ -345,12 +345,12 @@ snapshot(): Promise<CommandSnapshot>
 Prepares a frozen, validated Command Snapshot for tooling such as man-page, skill, and build generators. It materializes Extension contributions and command definitions, then validates the resulting command tree. It does not call Command Actions. Rejects with a [`CrustError`](/docs/api/errors) of code `DEFINITION` when materialization or validation fails.
 
 ```ts
-import type { CommandSnapshot } from "@crustjs/core/tooling";
+import type { CommandSnapshot } from "@crustjs/core";
 
 const snapshot: CommandSnapshot = await app.snapshot();
 ```
 
-The `CommandSnapshot` type is exported from `@crustjs/core/tooling`; see the [core module reference](/docs/modules/core) for the tooling subpath.
+The `CommandSnapshot` type is exported from `@crustjs/core` and re-exported from the `@crustjs/core/tooling` subpath; see the [core module reference](/docs/modules/core).
 
 ## `.run(argv, io?)`
 
