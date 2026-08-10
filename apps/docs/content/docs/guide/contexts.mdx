@@ -57,9 +57,11 @@ The child requires `ctx.api`, not the raw flag. If an action also needs the raw 
 
 ## Lazy construction and inheritance
 
-Context values are constructed only after a command is routed, parsed, processed by `preRun` hooks, and validated — and only for the resolved command path. An Extension that returns `ctx.finish()` does not construct them.
+Context values are constructed only after a command is routed, parsed, processed by `preRun` hooks, and validated — and only the Contexts the resolved command actually uses. For a command added with `defineCommand`, that means the Contexts it provides itself plus the transitive `requires` closure of its declared requirements; inherited Contexts it does not require are never constructed. The root command's own action constructs everything provided on it. An Extension that returns `ctx.finish()` does not construct them.
 
-Contexts are inherited by descendant commands. An added command lists the factories it depends on in `requires`, which types `ctx` in its action:
+This makes the provide site agnostic: provide every Context once at the root and each command pays only for what it declares.
+
+Contexts are inherited by descendant commands. An added command lists the factories it depends on in `requires`, which types `ctx` in its action and scopes construction:
 
 ```ts
 import { defineCommand } from "@crustjs/core";

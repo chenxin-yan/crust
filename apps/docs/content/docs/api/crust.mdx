@@ -227,7 +227,7 @@ provide<const Cs extends readonly ContextInstance[]>(
 >
 ```
 
-Attaches Contexts produced by invoking `defineContext()` factories. Contexts are inherited by descendants, constructed only for the resolved command path, and available through `ctx` in the Command Action. The return type merges every instance's owned `flags` into the builder's owned and effective flag types.
+Attaches Contexts produced by invoking `defineContext()` factories. Contexts are inherited by descendants, constructed only when the resolved command requires them (self-provided Contexts plus the transitive `requires` closure of a defined command; the root action constructs everything provided on it), and available through `ctx` in the Command Action. The return type merges every instance's owned `flags` into the builder's owned and effective flag types.
 
 ```ts
 import { defineContext, Crust } from "@crustjs/core";

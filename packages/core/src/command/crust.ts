@@ -138,6 +138,32 @@ export interface CommandDefinition<
 	readonly _aliases?: Aliases;
 }
 
+/**
+ * Scope a materialized definition's Contexts to what its recipe can see:
+ * Contexts provided inside the recipe plus the transitive `requires`
+ * closure over inherited ones. Inherited Contexts outside that closure are
+ * never constructed for this command, matching the recipe's `ctx` typing.
+ */
+function scopeContexts(
+	contexts: readonly ContextInstance[],
+	inherited: ReadonlySet<string>,
+	required: readonly string[],
+): ContextInstance[] {
+	const keep = new Set(required);
+	for (const context of contexts) {
+		if (!inherited.has(context.name)) keep.add(context.name);
+	}
+	// Topological order (dependencies first) lets one reverse pass collect
+	// the transitive closure of Context `requires` chains.
+	for (let i = contexts.length - 1; i >= 0; i--) {
+		const context = contexts[i] as ContextInstance;
+		if (keep.has(context.name)) {
+			for (const dep of context.requiredCtx) keep.add(dep);
+		}
+	}
+	return contexts.filter((context) => keep.has(context.name));
+}
+
 function materializeCommandDefinition(
 	definition: CommandDefinition,
 	parent: CommandNode,
@@ -213,6 +239,12 @@ function materializeCommandDefinition(
 
 	const childNode = cloneCommandNode(configured._node);
 	childNode.meta = { name, ...internal.meta };
+	const inheritedCtxNames = new Set(parent.contexts.map((context) => context.name));
+	childNode.contexts = scopeContexts(
+		childNode.contexts,
+		inheritedCtxNames,
+		internal.requiredCtxNames,
+	);
 	return childNode;
 }
 
@@ -550,8 +582,9 @@ export class Crust<
 	 * Attach Contexts — named command dependencies — to this command.
 	 *
 	 * Contexts are inherited by descendant commands, constructed
-	 * topologically (by declared capability requirements) only for the resolved
-	 * command path, and exposed to the Command Action as `ctx`. Within one
+	 * topologically (by declared capability requirements) only when the
+	 * resolved command requires them, and exposed to the Command Action as
+	 * `ctx`. Within one
 	 * `.provide()` call, dependencies may appear after their dependents.
 	 * Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are
 	 * disposed in reverse construction order after success or failure.

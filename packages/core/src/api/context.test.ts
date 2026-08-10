@@ -152,7 +152,7 @@ describe("Crust .provide()", () => {
 		expect(seen).toEqual(["root-db"]);
 	});
 
-	it("does not construct Contexts for commands off the resolved path", async () => {
+	it("does not construct inherited Contexts a command does not require", async () => {
 		let built = 0;
 		const lazy = defineContext("lazy", () => {
 			built++;
@@ -162,11 +162,45 @@ describe("Crust .provide()", () => {
 		const app = new Crust("cli")
 			.provide(lazy())
 			.add(defineCommand("a", (cmd) => cmd.action(() => {})))
-			.add(defineCommand("b", (cmd) => cmd.action(() => {})));
+			.add(defineCommand("b", { requires: [lazy] }, (cmd) => cmd.action(() => {})));
 
-		// Resolving "a" builds the inherited context once; "b" not executed
+		// "a" declares no requirements, so the inherited context never builds.
 		await app.run(["a"]);
+		expect(built).toBe(0);
+
+		// "b" requires it, so resolving "b" builds it once.
+		await app.run(["b"]);
 		expect(built).toBe(1);
+	});
+
+	it("constructs the transitive requires closure for a required Context", async () => {
+		const builtNames: string[] = [];
+		const base = defineContext("base", () => {
+			builtNames.push("base");
+			return "base";
+		});
+		const db = defineContext("db", { requires: [base] }, ({ ctx }) => {
+			builtNames.push("db");
+			return `db(${ctx.base})`;
+		});
+		const unrelated = defineContext("unrelated", () => {
+			builtNames.push("unrelated");
+			return "unrelated";
+		});
+
+		const seen: string[] = [];
+		const app = new Crust("cli").provide(base(), db(), unrelated()).add(
+			defineCommand("query", { requires: [db] }, (cmd) =>
+				cmd.action(({ ctx }) => {
+					seen.push(ctx.db);
+				}),
+			),
+		);
+
+		await app.run(["query"]);
+
+		expect(builtNames).toEqual(["base", "db"]);
+		expect(seen).toEqual(["db(base)"]);
 	});
 
 	it("does not backfill added children with later parent provides", async () => {
