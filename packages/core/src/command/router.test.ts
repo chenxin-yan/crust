@@ -568,13 +568,16 @@ describe("resolveCommand — aliases", () => {
 
 describe("resolveCommand — known-flag skipping", () => {
 	function makeContextOwnedRoot(): CommandNode {
-		const service = makeNode({ meta: "service", run: () => {} });
-		const deploy = makeNode({ meta: "deploy", subCommands: { service } });
+		// Context-owned flags propagate into every descendant's effectiveFlags;
+		// the fixture mirrors that so routing's forwardability gate passes.
+		const owned: FlagsDef = {
+			"api-key": { type: "string", short: "k", aliases: ["token"] },
+		};
+		const service = makeNode({ meta: "service", flags: owned, run: () => {} });
+		const deploy = makeNode({ meta: "deploy", flags: owned, subCommands: { service } });
 		return makeNode({
 			meta: "app",
-			flags: {
-				"api-key": { type: "string", short: "k", aliases: ["token"] },
-			},
+			flags: owned,
 			subCommands: { deploy },
 		});
 	}
@@ -602,19 +605,23 @@ describe("resolveCommand — known-flag skipping", () => {
 	});
 
 	function makeRoot(): CommandNode {
+		// Propagating flags exist on the child too — routing only forwards
+		// flags the resolved command can actually parse.
+		const shared: FlagsDef = {
+			quiet: { type: "boolean", short: "q", description: "quiet" },
+			verbose: { type: "boolean", noNegate: true, description: "verbose" },
+			config: { type: "string", short: "c", aliases: ["conf"], description: "config file" },
+		};
 		const translate = makeNode({
 			meta: "translate",
+			flags: shared,
 			run() {
 				/* noop */
 			},
 		});
 		return makeNode({
 			meta: "app",
-			flags: {
-				quiet: { type: "boolean", short: "q", description: "quiet" },
-				verbose: { type: "boolean", noNegate: true, description: "verbose" },
-				config: { type: "string", short: "c", aliases: ["conf"], description: "config file" },
-			},
+			flags: shared,
 			subCommands: { translate },
 		});
 	}
@@ -675,11 +682,11 @@ describe("resolveCommand — known-flag skipping", () => {
 
 	it("routes past bundled known short booleans", () => {
 		const root = makeRoot();
-		// add a second short boolean for bundling
-		root.effectiveFlags = {
-			...root.effectiveFlags,
-			force: { type: "boolean", short: "f", description: "force" },
-		};
+		// add a second short boolean for bundling (on both levels, like propagation)
+		const force: FlagsDef[string] = { type: "boolean", short: "f", description: "force" };
+		root.effectiveFlags = { ...root.effectiveFlags, force };
+		const translate = root.subCommands.translate as CommandNode;
+		translate.effectiveFlags = { ...translate.effectiveFlags, force };
 		const result = resolveCommand(root, ["-qf", "translate"]);
 		expect(result.commandPath).toEqual(["app", "translate"]);
 		expect(result.argv).toEqual(["-qf"]);
@@ -698,24 +705,93 @@ describe("resolveCommand — known-flag skipping", () => {
 	});
 
 	it("skips flags at multiple routing levels and preserves token order", () => {
+		const quiet: FlagsDef[string] = { type: "boolean", description: "quiet" };
+		const deep: FlagsDef[string] = { type: "boolean", description: "deep" };
 		const leaf = makeNode({
 			meta: "leaf",
+			flags: { quiet, deep },
 			run() {
 				/* noop */
 			},
 		});
 		const mid = makeNode({
 			meta: "mid",
-			flags: { deep: { type: "boolean", description: "deep" } },
+			flags: { quiet, deep },
 			subCommands: { leaf },
 		});
 		const root = makeNode({
 			meta: "app",
-			flags: { quiet: { type: "boolean", description: "quiet" } },
+			flags: { quiet },
 			subCommands: { mid },
 		});
 		const result = resolveCommand(root, ["--quiet", "mid", "--deep", "leaf", "rest"]);
 		expect(result.commandPath).toEqual(["app", "mid", "leaf"]);
 		expect(result.argv).toEqual(["--quiet", "--deep", "rest"]);
+	});
+
+	it("keeps a skipped flag ahead of the -- terminator", () => {
+		const result = resolveCommand(makeRoot(), ["--quiet", "--", "translate"]);
+		expect(result.commandPath).toEqual(["app"]);
+		expect(result.argv).toEqual(["--quiet", "--", "translate"]);
+	});
+
+	it("rejects a parent-local flag before a subcommand that cannot parse it", () => {
+		const translate = makeNode({ meta: "translate", run() {} });
+		const root = makeNode({
+			meta: "app",
+			flags: { quiet: { type: "boolean", description: "quiet" } },
+			subCommands: { translate },
+		});
+		expect(() => resolveCommand(root, ["--quiet", "translate"])).toThrow(
+			'Flag "--quiet" cannot be used before subcommand "translate"',
+		);
+		try {
+			resolveCommand(root, ["--quiet", "translate"]);
+		} catch (error) {
+			expect(error).toBeInstanceOf(CrustError);
+			expect((error as CrustError).code).toBe("PARSE");
+		}
+	});
+
+	it("rejects a forwarded flag whose child spelling has a different token shape", () => {
+		// Parent: --config <value>; child: --config as boolean. The value token
+		// was already consumed under the parent's shape, so forwarding would
+		// misparse — routing must reject instead.
+		const translate = makeNode({
+			meta: "translate",
+			flags: { config: { type: "boolean", description: "config toggle" } },
+			run() {},
+		});
+		const root = makeNode({
+			meta: "app",
+			flags: { config: { type: "string", description: "config file" } },
+			subCommands: { translate },
+		});
+		expect(() => resolveCommand(root, ["--config", "a.json", "translate"])).toThrow(
+			'Flag "--config" cannot be used before subcommand "translate"',
+		);
+	});
+
+	it("rejects a flag committed at one level when a deeper descend cannot parse it", () => {
+		const quiet: FlagsDef[string] = { type: "boolean", description: "quiet" };
+		const leaf = makeNode({ meta: "leaf", run() {} });
+		const mid = makeNode({ meta: "mid", flags: { quiet }, subCommands: { leaf } });
+		const root = makeNode({ meta: "app", flags: { quiet }, subCommands: { mid } });
+		expect(() => resolveCommand(root, ["--quiet", "mid", "leaf"])).toThrow(
+			'Flag "--quiet" cannot be used before subcommand "leaf"',
+		);
+	});
+
+	it("validates forwarded flags when descending through an alias", () => {
+		const translate = makeNode({ meta: "translate", run() {} });
+		translate.meta.aliases = ["tr"];
+		const root = makeNode({
+			meta: "app",
+			flags: { quiet: { type: "boolean", description: "quiet" } },
+			subCommands: { translate },
+		});
+		expect(() => resolveCommand(root, ["--quiet", "tr"])).toThrow(
+			'Flag "--quiet" cannot be used before subcommand "tr"',
+		);
 	});
 });

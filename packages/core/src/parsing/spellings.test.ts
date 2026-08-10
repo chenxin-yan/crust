@@ -34,7 +34,11 @@ describe("flagSpellings", () => {
 		const root = createCommandNode("app");
 		root.localFlags = flags;
 		root.effectiveFlags = flags;
-		root.subCommands.run = createCommandNode("run");
+		// Routing only forwards pre-subcommand flags the child can parse, so the
+		// child carries the same flags (as Context propagation would).
+		const run = createCommandNode("run");
+		run.effectiveFlags = flags;
+		root.subCommands.run = run;
 
 		expect(resolveCommand(root, ["--config=app.json", "run"])).toMatchObject({
 			commandPath: ["app", "run"],
