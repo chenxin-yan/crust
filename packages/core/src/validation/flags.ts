@@ -259,8 +259,9 @@ export function validateIncomingFlag(
 	existing: FlagsDef,
 	ownerLabel: string,
 ): void {
-	validateSchemaExclusivity("flag", incoming.name, incoming.def);
+	// Shape first so a nameless def reports missing-name, not "undefined" text.
 	const incomingSpellings = validateFlagDefinitionShape(incoming.name, incoming.def, ownerLabel);
+	validateSchemaExclusivity("flag", incoming.name, incoming.def);
 
 	for (const [existingName, existingDef] of Object.entries(existing)) {
 		const existingSpellings = new Set(flagDefinitionSpellings(existingName, existingDef));

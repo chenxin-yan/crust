@@ -152,32 +152,42 @@ describe("Crust .flags()", () => {
 	});
 
 	it("throws CrustError DEFINITION at definition time on flag name starting with no-", () => {
-		expect(() =>
-			new Crust("test").flags({
-				name: "no-cache",
-				type: "boolean",
-			} as never),
-		).toThrow(/flag "--no-cache" must not use "no-" prefix/);
+		try {
+			new Crust("test").flags({ name: "no-cache", type: "boolean" } as never);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toMatch(
+				/Command "test" flag "--no-cache" must not use "no-" prefix/,
+			);
+		}
 	});
 
 	it("throws CrustError DEFINITION at definition time on aliases starting with no-", () => {
-		expect(() =>
-			new Crust("test").flags({
-				name: "cache",
-				type: "boolean",
-				aliases: ["no-store"],
-			} as never),
-		).toThrow(/Alias "--no-store" on "--cache" must not use "no-" prefix/);
+		try {
+			new Crust("test").flags({ name: "cache", type: "boolean", aliases: ["no-store"] } as never);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toMatch(
+				/Command "test" alias "--no-store" on "--cache" must not use "no-" prefix/,
+			);
+		}
 	});
 
 	it("throws CrustError DEFINITION at definition time on short aliases starting with no-", () => {
-		expect(() =>
-			new Crust("test").flags({
-				name: "cache",
-				type: "boolean",
-				short: "no-c",
-			} as never),
-		).toThrow(/Short alias "-no-c" on "--cache" must not use "no-" prefix/);
+		try {
+			new Crust("test").flags({ name: "cache", type: "boolean", short: "no-c" } as never);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toMatch(
+				/Command "test" short alias "-no-c" on "--cache" must not use "no-" prefix/,
+			);
+		}
 	});
 
 	it("repeated .flags() calls accumulate runtime and action types", async () => {

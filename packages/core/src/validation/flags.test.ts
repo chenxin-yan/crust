@@ -318,7 +318,7 @@ describe("validateIncomingFlag", () => {
 				{},
 				'Extension "cache" on "root"',
 			),
-		).toThrow(/flag "--no-cache" must not use "no-" prefix/);
+		).toThrow(/Extension "cache" on "root" flag "--no-cache" must not use "no-" prefix/);
 		expect(() =>
 			validateIncomingFlag({ name: "verbose", def: {} as never }, {}, 'Context "logger"'),
 		).toThrow(/must declare a parser type/);
