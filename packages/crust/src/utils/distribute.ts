@@ -2,6 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSyn
 import { join, relative, resolve } from "node:path";
 
 import type { CommandSnapshot } from "@crustjs/core/tooling";
+import { writeManPage } from "@crustjs/man";
 import { bold, cyan, dim, green } from "@crustjs/style";
 
 import { resolveBaseName } from "./binary-name.ts";
@@ -14,7 +15,6 @@ import {
 	type TargetInfo,
 	snapshotEntrypoint,
 } from "./build-helpers.ts";
-import { generateManPage } from "./generate-man.ts";
 
 const MAX_PACKAGE_NAME_LENGTH = 214;
 const METADATA_KEYS = [
@@ -522,11 +522,9 @@ export async function runDistributeBuild(options: {
 	if (options.man) {
 		const stagedManPath = join(rootDir, "man", `${metadata.baseName}.1`);
 		console.log(`Writing man page ${dim(stagedManPath)}...`);
-		await generateManPage({
-			cwd,
+		await writeManPage({
 			root: root!,
-			entry: options.entry,
-			name: options.name,
+			name: metadata.baseName,
 			outfile: stagedManPath,
 		});
 		const mirrorDir = resolve(cwd, options.outdir ?? "dist", "man");

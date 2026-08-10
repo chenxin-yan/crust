@@ -2,6 +2,7 @@ import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { defineCommand } from "@crustjs/core";
+import { writeManPage } from "@crustjs/man";
 import { bold, cyan, dim, green } from "@crustjs/style";
 
 import { resolveBaseName } from "../utils/binary-name.ts";
@@ -13,7 +14,6 @@ import {
 	TARGET_INFO,
 	snapshotEntrypoint,
 } from "../utils/build-helpers.ts";
-import { generateManPage } from "../utils/generate-man.ts";
 
 /**
  * Resolve the output file path for a single-target build.
@@ -399,11 +399,9 @@ export const buildCommand = defineCommand(
 					const baseName = resolveBaseName(flags.name, entryPath, cwd);
 					const manPath = resolve(cwd, flags.outdir, "man", `${baseName}.1`);
 					console.log(`Writing man page ${dim(manPath)}...`);
-					await generateManPage({
-						cwd,
+					await writeManPage({
 						root: root!,
-						entry: flags.entry,
-						name: flags.name,
+						name: baseName,
 						outfile: manPath,
 					});
 					console.log(`${green("✓")} Man page: ${manPath}`);

@@ -18,7 +18,7 @@ bun add -d @crustjs/crust
 | [`crust build`](/docs/guide/build)                                 | Validate and compile a CLI to standalone executables           |
 | [`crust publish`](/docs/guide/build#publishing-with-crust-publish) | Publish staged npm packages created by `crust build --package` |
 
-`crust build` runs the entry point in a snapshot subprocess before compiling it. The subprocess sets the `SNAPSHOT_PATH_ENV` lockstep tooling constant (`CRUST_INTERNAL_SNAPSHOT_PATH`) to a temporary file; `.execute()` writes the validated Command Snapshot there and exits before dispatch. Application code should not set this internal environment variable.
+`crust build` runs the entry point in a snapshot subprocess before compiling it. `crust build` sets the `SNAPSHOT_PATH_ENV` lockstep tooling constant (`CRUST_INTERNAL_SNAPSHOT_PATH`) in the subprocess environment, pointing at a temporary file; `.execute()` writes the validated Command Snapshot there and exits before dispatch. Application code should not set this internal environment variable.
 
 The build command can embed `PUBLIC_*` constants from Bun's current-directory environment or explicit `--env-file` inputs. See [Environment variables](/docs/guide/environment).
 

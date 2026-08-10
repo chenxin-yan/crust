@@ -243,7 +243,7 @@ export async function execBuild(
  * compiled standalone executables can run arbitrary `.ts` files without a
  * separate `bun` install on PATH.
  */
-const VALIDATE_TIMEOUT_MS = 30_000;
+const SNAPSHOT_TIMEOUT_MS = 30_000;
 
 export async function snapshotEntrypoint(
 	entryPath: string,
@@ -277,10 +277,10 @@ export async function snapshotEntrypoint(
 					proc.kill();
 					reject(
 						new Error(
-							`Command Snapshot preparation timed out after ${VALIDATE_TIMEOUT_MS / 1_000}s.\n  An extension setup() hook may be hanging. Use --no-validate to skip unless --man is enabled.`,
+							`Command Snapshot preparation timed out after ${SNAPSHOT_TIMEOUT_MS / 1_000}s.\n  An extension setup() hook may be hanging. Use --no-validate to skip unless --man is enabled.`,
 						),
 					);
-				}, VALIDATE_TIMEOUT_MS);
+				}, SNAPSHOT_TIMEOUT_MS);
 			}),
 		]).finally(() => {
 			clearTimeout(timer);
@@ -292,7 +292,7 @@ export async function snapshotEntrypoint(
 
 		if (exitCode !== 0) {
 			// stderr contains the raw error message from the snapshot subprocess
-			throw new Error(stderr || "Pre-compile validation failed");
+			throw new Error(stderr || "Command Snapshot preparation failed");
 		}
 
 		if (stderr) {
@@ -320,7 +320,14 @@ export async function snapshotEntrypoint(
 			}
 			throw error;
 		}
-		return JSON.parse(serialized) as CommandSnapshot;
+		try {
+			return JSON.parse(serialized) as CommandSnapshot;
+		} catch (error) {
+			throw new Error(
+				`Entry produced an invalid Command Snapshot.\n  Ensure ${absoluteEntry} uses a compatible @crustjs/core version.`,
+				{ cause: error },
+			);
+		}
 	} finally {
 		await rm(snapshotDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 	}

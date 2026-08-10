@@ -2333,14 +2333,25 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		const path = await snapshotPath();
 		process.env[SNAPSHOT_PATH_ENV] = path;
 		let actionRan = false;
-		const app = new Crust("build-subprocess", { description: "Snapshot test" }).action(() => {
-			actionRan = true;
+		let preRunRan = false;
+		const spy = defineExtension("spy", {
+			hooks: {
+				preRun: () => {
+					preRunRan = true;
+				},
+			},
 		});
+		const app = new Crust("build-subprocess", { description: "Snapshot test" })
+			.extend(spy)
+			.action(() => {
+				actionRan = true;
+			});
 
 		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
 
 		expect(exitCalls).toEqual([0]);
 		expect(actionRan).toBe(false);
+		expect(preRunRan).toBe(false);
 		expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({
 			meta: { name: "build-subprocess", description: "Snapshot test" },
 			hasAction: true,

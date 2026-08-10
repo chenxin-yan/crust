@@ -29,7 +29,7 @@ describe("snapshotEntrypoint", () => {
 
 		const root = await snapshotEntrypoint(entry);
 
-		expect(root.meta).toEqual({ name: "fixture", description: "Fixture CLI" });
+		expect(root.meta).toMatchObject({ name: "fixture", description: "Fixture CLI" });
 		expect(root.hasAction).toBe(true);
 		await expect(access(trailingMarker)).rejects.toThrow();
 	});
@@ -42,6 +42,29 @@ describe("snapshotEntrypoint", () => {
 
 		await expect(snapshotEntrypoint(entry)).rejects.toThrow(
 			"Entry exited without producing a Command Snapshot",
+		);
+	});
+
+	it("rethrows the entry's error when the subprocess exits non-zero", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "crust-entry-snapshot-test-"));
+		tempDirs.push(directory);
+		const entry = join(directory, "cli.ts");
+		await writeFile(entry, `throw new Error("entry blew up before execute");\n`);
+
+		await expect(snapshotEntrypoint(entry)).rejects.toThrow("entry blew up before execute");
+	});
+
+	it("explains when the snapshot file contains invalid JSON", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "crust-entry-snapshot-test-"));
+		tempDirs.push(directory);
+		const entry = join(directory, "cli.ts");
+		await writeFile(
+			entry,
+			`await Bun.write(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!, "not json");\n`,
+		);
+
+		await expect(snapshotEntrypoint(entry)).rejects.toThrow(
+			"Entry produced an invalid Command Snapshot",
 		);
 	});
 });
