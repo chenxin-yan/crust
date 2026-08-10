@@ -41,19 +41,24 @@ function validateDefaultChoices(
 	}
 }
 
-/** Normalize one raw flag before adding it to a trusted flag namespace. */
+/**
+ * Normalize one raw flag before adding it to a trusted flag namespace.
+ *
+ * Per-definition rules re-run even for Context/Extension-owned flags:
+ * `Extension` and `ContextInstance` are public structural types, so a
+ * hand-written object (never passed through `defineExtension`/`defineContext`)
+ * typechecks and would otherwise inject unvalidated definitions. Attachment
+ * runs once per prepare/provide, so the re-check is off the parse hot path.
+ */
 export function normalizeFlag(
 	incoming: { name: string; def: FlagDef },
 	existing: FlagsDef,
 	spellings: Map<string, FlagSpelling>,
 	ownerLabel: string,
-	alreadyNormalized = false,
 ): void {
-	validateIncomingFlag(incoming, existing, ownerLabel, alreadyNormalized);
-	if (!alreadyNormalized) {
-		validateSyncParse(incoming.def.parse, "flag", incoming.name);
-		validateDefaultChoices(incoming.def, `--${incoming.name}`, "flag", incoming.name);
-	}
+	validateIncomingFlag(incoming, existing, ownerLabel);
+	validateSyncParse(incoming.def.parse, "flag", incoming.name);
+	validateDefaultChoices(incoming.def, `--${incoming.name}`, "flag", incoming.name);
 	addFlagSpellingEntries(spellings, incoming.name, incoming.def);
 }
 
@@ -64,6 +69,8 @@ export function normalizeArgs(existing: ArgsDef | undefined, incoming: ArgsDef):
 	const args = [...prior, ...added] as ArgsDef;
 	const names = new Set(prior.map((def) => def.name));
 
+	// Appending can invalidate the previous tail: only the last arg may be
+	// variadic, so re-check just that one prior def alongside the new ones.
 	const firstAffected = added.length > 0 && prior.length > 0 ? prior.length - 1 : prior.length;
 	for (let index = firstAffected; index < args.length; index++) {
 		const def = args[index]!;
@@ -103,11 +110,11 @@ export function normalizeChild(
 	subjectLabel: string,
 ): void {
 	if (Object.hasOwn(existing, incoming.canonicalName)) {
-		throw new CrustError(
-			"DEFINITION",
-			`Subcommand "${incoming.canonicalName}" is already registered`,
-			{ subject: "command", name: incoming.canonicalName, reason: "duplicate-command" },
-		);
+		throw new CrustError("DEFINITION", `${subjectLabel} is already registered`, {
+			subject: "command",
+			name: incoming.canonicalName,
+			reason: "duplicate-command",
+		});
 	}
 	validateIncomingAliases(incoming, existing, subjectLabel);
 }
@@ -124,7 +131,7 @@ export function normalizeContext(
 	for (const instance of incoming) {
 		validateIncomingContext(instance, contexts);
 		for (const [name, def] of Object.entries(instance.ownedFlags)) {
-			normalizeFlag({ name, def }, effectiveFlags, spellings, `Context "${instance.name}"`, true);
+			normalizeFlag({ name, def }, effectiveFlags, spellings, `Context "${instance.name}"`);
 			effectiveFlags[name] = def;
 		}
 		contexts.push(instance);

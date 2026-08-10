@@ -61,7 +61,6 @@ function injectExtensionFlag(
 		node.effectiveFlags,
 		node.flagSpellings,
 		`Extension "${extensionName}" on "${node.meta.name}"`,
-		true,
 	);
 	node.effectiveFlags[name] = def;
 	if (!recursive) return;

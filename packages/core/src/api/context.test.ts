@@ -488,9 +488,14 @@ describe("Context capability requirements (topological construction)", () => {
 		const config = defineContext("config", () => ({}));
 		const client = defineContext("client", { requires: [config] }, () => ({}));
 
-		expect(() => new Crust("cli").provide(client())).toThrow(
-			/Context "client" requires Context "config"/,
-		);
+		try {
+			new Crust("cli").provide(client());
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toMatch(/Context "client" requires Context "config"/);
+		}
 	});
 
 	it("throws DEFINITION at normalization on a dependency cycle", () => {
@@ -502,7 +507,60 @@ describe("Context capability requirements (topological construction)", () => {
 		(a as { requiredCtx: readonly string[] }).requiredCtx = ["b"];
 		(b as { requiredCtx: readonly string[] }).requiredCtx = ["a"];
 
-		expect(() => new Crust("cli").provide(a, b)).toThrow(/dependency cycle/);
+		try {
+			new Crust("cli").provide(a, b);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toMatch(/dependency cycle/);
+		}
+	});
+
+	it("normalizes flags of a hand-written ContextInstance at provide time", () => {
+		// ContextInstance is a public structural type, so a plain object that
+		// never went through defineContext() typechecks; its owned flags must
+		// still hit the normalization boundary at .provide().
+		const rogue = {
+			kind: "context",
+			name: "rogue",
+			requiredCtx: [],
+			ownedFlags: { mode: { type: "string", choices: ["a", "b"], default: "z" } },
+			setup: () => ({}),
+		} as unknown as Parameters<Crust["provide"]>[0];
+
+		try {
+			new Crust("cli").provide(rogue);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toBe(
+				'Invalid default value "z" for --mode. Expected one of: a, b',
+			);
+		}
+	});
+
+	it("accepts cross-call provide order when dependencies come first", async () => {
+		const order: string[] = [];
+		const config = defineContext("config", () => {
+			order.push("config");
+			return { url: "u" };
+		});
+		const client = defineContext("client", { requires: [config] }, ({ ctx }) => {
+			order.push("client");
+			return { url: ctx.config.url };
+		});
+
+		await new Crust("cli")
+			.provide(config())
+			.provide(client())
+			.action(() => {
+				order.push("action");
+			})
+			.run([]);
+
+		expect(order).toEqual(["config", "client", "action"]);
 	});
 
 	it("rejects an incomplete cross-site Context graph at its first normalization site", () => {

@@ -2622,26 +2622,95 @@ describe("Crust .add() aliases", () => {
 
 		await expect(app.run(["i"])).rejects.toMatchObject({ code: "DEFINITION" });
 	});
+
+	it("normalizes flags of a hand-written Extension object at prepare time", async () => {
+		// Extension is a public structural type, so a plain object that never
+		// went through defineExtension() typechecks; its flags must still hit
+		// the normalization boundary instead of being trusted as pre-validated.
+		const rogue = {
+			name: "rogue",
+			flags: { mode: { type: "string", choices: ["a", "b"], default: "z" } },
+		} as unknown as Parameters<Crust["extend"]>[0];
+
+		await expect(
+			new Crust("cli")
+				.action(() => {})
+				.extend(rogue)
+				.run([]),
+		).rejects.toMatchObject({
+			code: "DEFINITION",
+			message: 'Invalid default value "z" for --mode. Expected one of: a, b',
+		});
+
+		const asyncRogue = {
+			name: "rogue",
+			flags: { val: { type: "string", parse: async (raw: string) => raw } },
+		} as unknown as Parameters<Crust["extend"]>[0];
+
+		await expect(
+			new Crust("cli")
+				.action(() => {})
+				.extend(asyncRogue)
+				.run([]),
+		).rejects.toMatchObject({
+			code: "DEFINITION",
+			message:
+				"Async parse not supported for flag --val. Use a sync parser; do async work in run().",
+		});
+	});
 });
 
 describe("definition normalization timing", () => {
 	it("rejects defaults outside choices when flags and args are defined", () => {
-		expect(() =>
+		try {
 			new Crust("cli").flags({
 				name: "mode",
 				type: "string",
 				choices: ["a", "b"],
 				default: "z",
-			}),
-		).toThrow(CrustError);
-		expect(() =>
+			});
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toBe(
+				'Invalid default value "z" for --mode. Expected one of: a, b',
+			);
+		}
+		try {
 			new Crust("cli").args({
 				name: "mode",
 				type: "string",
 				choices: ["a", "b"],
 				default: "z",
-			}),
-		).toThrow(CrustError);
+			});
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toBe(
+				'Invalid default value "z" for <mode>. Expected one of: a, b',
+			);
+		}
+	});
+
+	it("rejects array defaults outside choices for multiple flags", () => {
+		try {
+			new Crust("cli").flags({
+				name: "mode",
+				type: "string",
+				multiple: true,
+				choices: ["a", "b"],
+				default: ["a", "z"],
+			} as never);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toBe(
+				'Invalid default value "z" for --mode. Expected one of: a, b',
+			);
+		}
 	});
 
 	it("rejects async parsers when flags and args are defined", () => {
@@ -2651,26 +2720,40 @@ describe("definition normalization timing", () => {
 				type: "string",
 				parse: async (raw: string) => raw,
 			} as never),
-		).toThrow(/Async parse not supported/);
+		).toThrow(/Async parse not supported for flag --mode/);
 		expect(() =>
 			new Crust("cli").args({
 				name: "mode",
 				type: "string",
 				parse: async (raw: string) => raw,
 			} as never),
-		).toThrow(/Async parse not supported/);
+		).toThrow(/Async parse not supported for argument <mode>/);
 	});
 
 	it("rejects missing and cyclic Context dependencies at provide time", () => {
 		const base = defineContext("base", () => ({}));
 		const dependent = defineContext("dependent", { requires: [base] }, () => ({}));
-		expect(() => new Crust("cli").provide(dependent())).toThrow(/requires Context "base"/);
+		try {
+			new Crust("cli").provide(dependent());
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toMatch(/requires Context "base"/);
+		}
 
 		const a = defineContext("a", () => ({}))();
 		const b = defineContext("b", () => ({}))();
 		(a as { requiredCtx: readonly string[] }).requiredCtx = ["b"];
 		(b as { requiredCtx: readonly string[] }).requiredCtx = ["a"];
-		expect(() => new Crust("cli").provide(a, b)).toThrow(/dependency cycle/);
+		try {
+			new Crust("cli").provide(a, b);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("DEFINITION");
+			expect((err as CrustError).message).toMatch(/dependency cycle/);
+		}
 	});
 
 	it("materializes and normalizes invalid definitions two levels behind an Extension", async () => {

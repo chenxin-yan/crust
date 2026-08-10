@@ -120,7 +120,7 @@ new Crust("app").provide(config(), database());
 new Crust("app").provide(database(), config());
 ```
 
-A missing dependency or dependency cycle is a `CrustError` with code `DEFINITION`, raised by `.provide()` during runtime normalization. Cycles are enforced only at runtime; TypeScript brands do not attempt recursive cycle detection.
+A missing dependency or dependency cycle is a `CrustError` with code `DEFINITION`, raised by `.provide()` during runtime normalization (or at materialization, when a definition's recipe provides Contexts). Cycles are enforced only at runtime; TypeScript brands do not attempt recursive cycle detection.
 
 ## Test doubles with `.of()`
 
