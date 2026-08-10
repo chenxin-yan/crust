@@ -48,7 +48,7 @@ interface ContextSetupInput<
 /**
  * A named command dependency produced by invoking a Context factory.
  * Attach with `.provide()`; the value is constructed only when the
- * resolved command path executes.
+ * resolved command requires it.
  *
  * Generic parameter `RC` carries the declared Context requirements.
  */
@@ -164,7 +164,7 @@ export type RequirementCtxOf<R extends { readonly requires?: ContextRequirements
  * `.provide()`, while `requires` declares Context capabilities from the command
  * path. Setup receives the validated owned flags, declared Context values (`ctx`),
  * and the invocation's injectable output callbacks. Dependencies drive construction
- * order: Contexts on the resolved command path are constructed topologically, regardless of
+ * order: Contexts the resolved command requires are constructed topologically, regardless of
  * `.provide()` order.
  *
  * Cleanup belongs to the value itself: implement `Symbol.dispose` or

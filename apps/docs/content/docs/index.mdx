@@ -37,7 +37,7 @@ $ greet --help
 - **Plain values, immutable builders.** Definitions and Extensions are frozen data; every fluent call returns a new builder.
 - **Fail loud at definition time.** Collisions and malformed definitions are `DEFINITION` errors at startup and in `crust build` — never warn-and-skip.
 - **Standards over lock-in.** Standard Schema for validation, `NO_COLOR`/`FORCE_COLOR` and OSC 8 conventions, native `Symbol.dispose` cleanup.
-- **Pay only for what you use.** Zero-dependency core, composable modules, Contexts constructed lazily for the resolved path only.
+- **Pay only for what you use.** Zero-dependency core, composable modules, Contexts constructed lazily, only when the resolved command requires them.
 
 ## Feature highlight
 
@@ -46,7 +46,7 @@ $ greet --help
 - **Schema-first validation** — Place any Standard Schema on an argument or flag definition; the action receives its output type
 - **Composable, not monolithic** — Every capability ships as its own module with zero runtime dependencies in core. Install only what you need — `@crustjs/core` for the framework, `@crustjs/extensions` for official extensions, `@crustjs/crust` for build tooling.
 - **Extensions** — App-wide capabilities like help, version, completion, and update notices, attached once at the root
-- **Contexts** — Named command dependencies created lazily for the resolved command path
+- **Contexts** — Named command dependencies constructed lazily, only when the resolved command requires them
 - **Subcommands** — Nested command trees with automatic resolution and Context-owned flag propagation
 - **Built for Bun** — Targets the Bun runtime from the ground up. No Node compatibility layers, no legacy baggage.
 

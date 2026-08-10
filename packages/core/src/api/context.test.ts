@@ -152,7 +152,7 @@ describe("Crust .provide()", () => {
 		expect(seen).toEqual(["root-db"]);
 	});
 
-	it("does not construct Contexts for commands off the resolved path", async () => {
+	it("does not construct inherited Contexts a command does not require", async () => {
 		let built = 0;
 		const lazy = defineContext("lazy", () => {
 			built++;
@@ -162,11 +162,110 @@ describe("Crust .provide()", () => {
 		const app = new Crust("cli")
 			.provide(lazy())
 			.add(defineCommand("a", (cmd) => cmd.action(() => {})))
-			.add(defineCommand("b", (cmd) => cmd.action(() => {})));
+			.add(defineCommand("b", { requires: [lazy] }, (cmd) => cmd.action(() => {})));
 
-		// Resolving "a" builds the inherited context once; "b" not executed
+		// "a" declares no requirements, so the inherited context never builds.
 		await app.run(["a"]);
+		expect(built).toBe(0);
+
+		// "b" requires it, so resolving "b" builds it once.
+		await app.run(["b"]);
 		expect(built).toBe(1);
+	});
+
+	it("constructs the transitive requires closure for a required Context", async () => {
+		const builtNames: string[] = [];
+		const base = defineContext("base", () => {
+			builtNames.push("base");
+			return "base";
+		});
+		const mid = defineContext("mid", { requires: [base] }, ({ ctx }) => {
+			builtNames.push("mid");
+			return `mid(${ctx.base})`;
+		});
+		const db = defineContext("db", { requires: [mid] }, ({ ctx }) => {
+			builtNames.push("db");
+			return `db(${ctx.mid})`;
+		});
+		const unrelated = defineContext("unrelated", () => {
+			builtNames.push("unrelated");
+			return "unrelated";
+		});
+
+		const seen: string[] = [];
+		const app = new Crust("cli").provide(base(), mid(), db(), unrelated()).add(
+			defineCommand("query", { requires: [db] }, (cmd) =>
+				cmd.action(({ ctx }) => {
+					seen.push(ctx.db);
+				}),
+			),
+		);
+
+		await app.run(["query"]);
+
+		// A ≥3-node chain distinguishes true transitivity from a one-hop keep.
+		expect(builtNames).toEqual(["base", "mid", "db"]);
+		expect(seen).toEqual(["db(mid(base))"]);
+	});
+
+	it("constructs each Context in a diamond requires closure exactly once", async () => {
+		const builtNames: string[] = [];
+		const a = defineContext("a", () => {
+			builtNames.push("a");
+			return "a";
+		});
+		const b = defineContext("b", { requires: [a] }, () => {
+			builtNames.push("b");
+			return "b";
+		});
+		const c = defineContext("c", { requires: [a] }, () => {
+			builtNames.push("c");
+			return "c";
+		});
+		const d = defineContext("d", { requires: [b, c] }, () => {
+			builtNames.push("d");
+			return "d";
+		});
+
+		const app = new Crust("cli")
+			.provide(a(), b(), c(), d())
+			.add(defineCommand("go", { requires: [d] }, (cmd) => cmd.action(() => {})));
+
+		await app.run(["go"]);
+
+		expect(builtNames.slice().sort()).toEqual(["a", "b", "c", "d"]);
+		expect(builtNames[0]).toBe("a");
+		expect(builtNames[3]).toBe("d");
+	});
+
+	it("constructs an inherited dependency of a self-provided Context without declared requires", async () => {
+		const builtNames: string[] = [];
+		const session = defineContext("session", () => {
+			builtNames.push("session");
+			return "session";
+		});
+		const unrelated = defineContext("unrelated", () => {
+			builtNames.push("unrelated");
+			return "unrelated";
+		});
+		const user = defineContext("user", { requires: [session] }, ({ ctx }) => {
+			builtNames.push("user");
+			return `user(${ctx.session})`;
+		});
+
+		const seen: string[] = [];
+		const app = new Crust("cli").provide(session(), unrelated()).add(
+			defineCommand("account", (cmd) =>
+				cmd.provide(user()).action(({ ctx }) => {
+					seen.push(ctx.user);
+				}),
+			),
+		);
+
+		await app.run(["account"]);
+
+		expect(builtNames).toEqual(["session", "user"]);
+		expect(seen).toEqual(["user(session)"]);
 	});
 
 	it("does not backfill added children with later parent provides", async () => {

@@ -232,6 +232,27 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 		expect(result.stdout).toContain("output=json");
 		expect(result.exitCode).toBe(0);
 	});
+
+	it("accepts an owned flag of an unrequired Context without constructing it", async () => {
+		let built = 0;
+		const token = defineFlag("token", { type: "string" });
+		const auth = defineContext("auth", { flags: [token] }, ({ flags }) => {
+			built++;
+			return flags;
+		});
+		const app = new Crust("cli").provide(auth()).add(
+			defineCommand("deploy", (command) =>
+				command.action(({ flags }) => {
+					console.log(`token=${String((flags as { token?: string }).token)}`);
+				}),
+			),
+		);
+
+		const result = await executeCrust(app, ["deploy", "--token", "secret"]);
+		expect(result.stdout).toContain("token=secret");
+		expect(result.exitCode).toBe(0);
+		expect(built).toBe(0);
+	});
 });
 
 describe("integration: Extension adds flag visible to subcommand action", () => {
@@ -316,6 +337,31 @@ describe("integration: nested added definitions end-to-end", () => {
 		]);
 		expect(result.stdout).toContain("add remote=origin verbose=true timeout=60");
 		expect(result.exitCode).toBe(0);
+	});
+
+	it("a descendant constructs a root Context its parent command does not require", async () => {
+		const builtNames: string[] = [];
+		const db = defineContext("db", () => {
+			builtNames.push("db");
+			return "root-db";
+		});
+		const app = new Crust("cli").provide(db()).add(
+			defineCommand("sub", (cmd) =>
+				cmd.add(
+					// @ts-expect-error -- typed API brands this shape (`sub` must redeclare
+					// db); runtime scoping is per-node, so untyped consumers can require a
+					// root Context their parent command never declares.
+					defineCommand("g", { requires: [db] }, (child) =>
+						child.action(({ ctx }) => console.log(`db=${ctx.db}`)),
+					),
+				),
+			),
+		);
+
+		const result = await executeCrust(app, ["sub", "g"]);
+		expect(result.stdout).toContain("db=root-db");
+		expect(result.exitCode).toBe(0);
+		expect(builtNames).toEqual(["db"]);
 	});
 
 	it("parent with an action falls back when unknown subcommand given as positional", async () => {
