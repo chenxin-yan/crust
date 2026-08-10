@@ -27,6 +27,7 @@ coverage
 out/
 build
 dist
+*.bun-build
 
 
 # Debug
