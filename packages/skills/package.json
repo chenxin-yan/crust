@@ -30,6 +30,26 @@
 		".": {
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
+		},
+		"./agents": {
+			"types": "./dist/agents.d.ts",
+			"import": "./dist/agents.js"
+		},
+		"./annotations": {
+			"types": "./dist/annotations.d.ts",
+			"import": "./dist/annotations.js"
+		},
+		"./bundle": {
+			"types": "./dist/bundle.d.ts",
+			"import": "./dist/bundle.js"
+		},
+		"./extension": {
+			"types": "./dist/extension.d.ts",
+			"import": "./dist/extension.js"
+		},
+		"./generate": {
+			"types": "./dist/generate.d.ts",
+			"import": "./dist/generate.js"
 		}
 	},
 	"publishConfig": {

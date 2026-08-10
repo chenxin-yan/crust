@@ -1380,19 +1380,27 @@ describe("Extension application at prepare time", () => {
 		});
 	});
 
-	it("does not mutate the source builder across executions", async () => {
-		let runCount = 0;
+	it("reuses one application across executions while running hooks each time", async () => {
+		const calls: string[] = [];
 		const debug = defineExtension("debug", {
 			flags: [{ name: "debug", type: "boolean" }],
+			hooks: {
+				preRun: () => {
+					calls.push("pre");
+				},
+				postRun: () => {
+					calls.push("post");
+				},
+			},
 		});
 		const app = new Crust("repeat").extend(debug).action(({ flags }) => {
-			if ((flags as Record<string, unknown>).debug) runCount++;
+			if ((flags as Record<string, unknown>).debug) calls.push("action");
 		});
 
-		await app.execute({ argv: ["--debug"] });
-		await app.execute({ argv: ["--debug"] });
+		await app.run(["--debug"]);
+		await app.run(["--debug"]);
 
-		expect(runCount).toBe(2);
+		expect(calls).toEqual(["pre", "action", "post", "pre", "action", "post"]);
 	});
 });
 

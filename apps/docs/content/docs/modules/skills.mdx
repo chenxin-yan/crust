@@ -13,6 +13,8 @@ bun add @crustjs/skills
 
 ## Quick Start
 
+Import from `@crustjs/skills` for the full public surface, or use the focused `agents`, `annotations`, `bundle`, `extension`, and `generate` subpaths to avoid loading unrelated modules. For example, `skill` is also exported from `@crustjs/skills/extension` and `generateSkill` from `@crustjs/skills/generate`.
+
 Add the `skill()` extension to your CLI. It reads `name` and `description` from your root command's `meta` — you only need to supply `version`:
 
 ```ts

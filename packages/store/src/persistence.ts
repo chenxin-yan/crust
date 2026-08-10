@@ -2,7 +2,6 @@
 // @crustjs/store — JSON persistence primitives
 // ────────────────────────────────────────────────────────────────────────────
 
-import { randomUUID } from "node:crypto";
 import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
@@ -122,6 +121,7 @@ export async function writeJson(
 	const fileMode = isWindows ? undefined : options.fileMode;
 	const directoryMode = isWindows ? undefined : options.directoryMode;
 	const dir = dirname(filePath);
+	const { randomUUID } = await import("node:crypto");
 	const tempPath = join(dir, `.config-${randomUUID()}.tmp`);
 
 	let createdDir: string | undefined;

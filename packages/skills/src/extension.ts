@@ -8,8 +8,6 @@ import {
 	defineCommand,
 	defineExtension,
 } from "@crustjs/core";
-import { spinner } from "@crustjs/progress";
-import { confirm, multiselect, select } from "@crustjs/prompts";
 import { bold, dim, yellow } from "@crustjs/style";
 
 import {
@@ -20,9 +18,7 @@ import {
 	resolveAgentPath,
 	resolveEffectiveScope,
 } from "./agents.ts";
-import { installSkillBundle } from "./bundle.ts";
 import { SkillConflictError } from "./errors.ts";
-import { generateSkill, isValidSkillName, getSkillStatus, uninstallSkill } from "./generate.ts";
 import type {
 	AgentTarget,
 	CustomSkillConfig,
@@ -73,6 +69,7 @@ async function resolveScopeForCommand(
 		return options.defaultScope;
 	}
 
+	const { select } = await import("@crustjs/prompts");
 	return select<Scope>({
 		message: "Select scope",
 		choices: [
@@ -134,12 +131,13 @@ function deriveSkillMeta(command: CommandSnapshot, options: SkillOptions): Skill
 }
 
 /** Validates custom skill config invariants that TypeScript cannot constrain. */
-function validateCustomSkillsConfig(
+async function validateCustomSkillsConfig(
 	mainName: string,
 	customSkills: readonly CustomSkillConfig[] | undefined,
-): readonly CustomSkillConfig[] {
+): Promise<readonly CustomSkillConfig[]> {
 	if (!customSkills?.length) return [];
 
+	const { isValidSkillName } = await import("./generate.ts");
 	const seen = new Set<string>();
 	for (const [index, entry] of customSkills.entries()) {
 		if (!isValidSkillName(entry.name)) {
@@ -207,6 +205,11 @@ async function autoUpdateCustomSkill(
 		onConflict?: (error: SkillConflictError, scope: Scope) => void;
 	} = {},
 ): Promise<void> {
+	const [{ getSkillStatus }, { installSkillBundle }, { spinner }] = await Promise.all([
+		import("./generate.ts"),
+		import("./bundle.ts"),
+		import("@crustjs/progress"),
+	]);
 	const scopes = hooks.scopes ?? resolveCustomSkillScopes(entry, options);
 	const installMode = entry.installMode ?? options.installMode;
 	const effectiveVersion = entry.version ?? options.version;
@@ -289,6 +292,10 @@ async function updateGeneratedSkill(
 		onConflict?: (error: SkillConflictError, scope: Scope) => void;
 	} = {},
 ): Promise<void> {
+	const [{ generateSkill, getSkillStatus }, { spinner }] = await Promise.all([
+		import("./generate.ts"),
+		import("@crustjs/progress"),
+	]);
 	const effectiveScope = resolveEffectiveScope(scope);
 	const meta = deriveSkillMeta(rootCmd, options);
 	const status = await getSkillStatus({ name: meta.name, scope });
@@ -444,14 +451,14 @@ async function autoUpdateCustomSkillsLoop(
 export function skill(options: SkillOptions): Extension {
 	const skillCommandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
 	let customSkills: readonly CustomSkillConfig[] | undefined;
-	const getCustomSkills = (mainName: string) =>
-		(customSkills ??= validateCustomSkillsConfig(mainName, options.customSkills));
+	const getCustomSkills = async (mainName: string) =>
+		(customSkills ??= await validateCustomSkillsConfig(mainName, options.customSkills));
 
 	return defineExtension("skills", {
 		commands: [buildSkillCommandGrammar(skillCommandName, options, getCustomSkills)],
 		hooks: {
 			async preRun(context) {
-				const resolvedCustomSkills = getCustomSkills(context.rootCommand.meta.name);
+				const resolvedCustomSkills = await getCustomSkills(context.rootCommand.meta.name);
 				if (context.commandPath[1] === skillCommandName || options.autoUpdate === false) return;
 
 				await autoUpdateSkills(context.rootCommand, options, resolvedCustomSkills);
@@ -475,6 +482,12 @@ async function reconcileSkillInteractively(opts: {
 	installNoun: "skill" | "bundle";
 	install: (agents: AgentTarget[], force?: boolean) => Promise<GenerateSkillResult>;
 }): Promise<void> {
+	const [{ confirm, multiselect }, { spinner }, { getSkillStatus, uninstallSkill }] =
+		await Promise.all([
+			import("@crustjs/prompts"),
+			import("@crustjs/progress"),
+			import("./generate.ts"),
+		]);
 	const { name, version, scope, installAll, isInteractive, labelSuffix, installNoun, install } =
 		opts;
 	const detectedAgents = await detectInstalledAgents();
@@ -648,7 +661,7 @@ async function reconcileSkillInteractively(opts: {
 function buildSkillCommandGrammar(
 	commandName: string,
 	options: SkillOptions,
-	getCustomSkills: (mainName: string) => readonly CustomSkillConfig[],
+	getCustomSkills: (mainName: string) => Promise<readonly CustomSkillConfig[]>,
 ) {
 	return defineCommand(
 		commandName,
@@ -682,7 +695,7 @@ function buildSkillCommandGrammar(
 									await runSkillUpdateFlow(
 										context.rootCommand,
 										options,
-										getCustomSkills(context.rootCommand.meta.name),
+										await getCustomSkills(context.rootCommand.meta.name),
 										context.flags,
 									);
 								}),
@@ -692,7 +705,7 @@ function buildSkillCommandGrammar(
 					await runSkillInstallFlow(
 						context.rootCommand,
 						options,
-						getCustomSkills(context.rootCommand.meta.name),
+						await getCustomSkills(context.rootCommand.meta.name),
 						context.flags,
 					);
 				}),
@@ -705,6 +718,10 @@ async function runSkillInstallFlow(
 	customSkills: readonly CustomSkillConfig[],
 	flags: SkillInstallFlags,
 ): Promise<void> {
+	const [{ generateSkill }, { installSkillBundle }] = await Promise.all([
+		import("./generate.ts"),
+		import("./bundle.ts"),
+	]);
 	const meta = deriveSkillMeta(rootCmd, options);
 	const installAll = flags.all === true;
 	const isInteractive = process.stdin.isTTY;
