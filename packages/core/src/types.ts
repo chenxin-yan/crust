@@ -570,17 +570,18 @@ type InferArgValue<A extends ArgDef> = A extends {
 					: ResolveBaseType<A> | undefined
 		: // Raw args (no `type`, no `schema`) still enforce `choices` at parse
 			// time, so a literal tuple narrows the raw string token the same way.
-			A extends { choices: readonly (infer C extends string)[] }
-			? A extends { variadic: true }
-				? C[]
-				: A extends { required: true }
-					? C
-					: A extends { default: unknown }
-						? C
-						: C | undefined
-			: A extends { variadic: true }
-				? unknown[]
-				: unknown;
+			// One ladder serves both raw variants: without choices the base is
+			// `unknown`, and `unknown | undefined` collapses back to `unknown`.
+			A extends { variadic: true }
+			? RawArgBase<A>[]
+			: A extends { required: true }
+				? RawArgBase<A>
+				: A extends { default: unknown }
+					? RawArgBase<A>
+					: RawArgBase<A> | undefined;
+
+/** Base type of a raw arg: the literal `choices` union when present, else `unknown`. */
+type RawArgBase<A> = A extends { choices: readonly (infer C extends string)[] } ? C : unknown;
 
 /**
  * Recursively converts an ArgsDef tuple into a named object type.
