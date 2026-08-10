@@ -52,8 +52,10 @@ describe("defineFlag", () => {
 				{ name: "format", type: "string", short: "f" },
 			),
 		).toThrow(/spelling "f" collides/);
-		// @ts-expect-error -- "no-" prefixed names are reserved for boolean negation
-		new Crust("cli").flags({ name: "no-color", type: "boolean" });
+		expect(() =>
+			// @ts-expect-error -- "no-" prefixed names are reserved for boolean negation
+			new Crust("cli").flags({ name: "no-color", type: "boolean" }),
+		).toThrow(/must not use "no-" prefix/);
 	});
 });
 

@@ -547,7 +547,6 @@ export class Crust<
 					reason: "duplicate-flag",
 				});
 			}
-			validateSchemaExclusivity("flag", name, rest as FlagDef);
 			// Include flags from earlier calls and same-call siblings so spelling
 			// collisions fail at the definition site, not at first run().
 			validateIncomingFlag(

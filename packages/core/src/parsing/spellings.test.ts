@@ -64,4 +64,13 @@ describe("flagSpellings", () => {
 			}),
 		).toThrow('Alias collision: "-q" is used by both "--quiet" and "--query"');
 	});
+
+	it("enforces the shared shape rulebook on hand-built flag records", () => {
+		expect(() => flagSpellings({ proto: { type: "boolean", aliases: ["__proto__"] } })).toThrow(
+			/reserved spelling "__proto__"/,
+		);
+		expect(() => flagSpellings({ output: { type: "string", short: "o", aliases: ["o"] } })).toThrow(
+			/repeats spelling "o"/,
+		);
+	});
 });

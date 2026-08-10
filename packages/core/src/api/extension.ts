@@ -9,7 +9,6 @@ import type {
 	NamedFlagDef,
 	NamedFlagsRecord,
 } from "../types.ts";
-import { validateSchemaExclusivity } from "../validation/args.ts";
 import { validateIncomingFlag, type ValidateNamedFlagDefs } from "../validation/flags.ts";
 import type { Awaitable } from "./context.ts";
 
@@ -218,7 +217,6 @@ export function defineExtension<const Defs extends readonly NamedExtensionFlagDe
 	const ownedFlags: FlagsDef = {};
 	for (const def of config.flags ?? []) {
 		const { name: flagName, ...rest } = def;
-		validateSchemaExclusivity("flag", flagName, rest as FlagDef);
 		validateIncomingFlag(
 			{ name: flagName, def: rest as FlagDef },
 			ownedFlags,

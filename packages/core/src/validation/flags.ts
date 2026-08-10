@@ -1,6 +1,7 @@
 import { CrustError } from "../errors.ts";
-import { flagDefinitionSpellings } from "../parsing/spellings.ts";
+import { flagDefinitionSpellings, validateFlagDefinitionShape } from "../parsing/spellings.ts";
 import type { FlagDef, FlagsDef, NamedFlagDef, NamedFlagsRecord } from "../types.ts";
+import { validateSchemaExclusivity } from "./args.ts";
 import type { AsyncParseBrand, DefName, Overlap } from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -244,41 +245,23 @@ export type ProvideChecks<Sp extends string, Cs extends readonly unknown[]> = {
 // Runtime validation
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Validate one flag against the complete canonical/short/alias namespace. */
+/**
+ * Validate one flag against the complete canonical/short/alias namespace.
+ *
+ * The shared entry gate for every path a flag can join a command's parse
+ * surface (`.flags()`, `.provide()`, `defineContext`, `defineExtension`,
+ * Extension flag injection): schema exclusivity, definition shape (the
+ * shared rulebook in `spellings.ts`), then spelling collisions against
+ * `existing`.
+ */
 export function validateIncomingFlag(
 	incoming: { name: string; def: FlagDef },
 	existing: FlagsDef,
 	ownerLabel: string,
 ): void {
-	// Shared guard for plain-JS callers of `.flags()`, `defineContext`, and
-	// `defineExtension`: a nameless def would otherwise register under the
-	// literal key "undefined" and surface as `--undefined` in help.
-	if (typeof incoming.name !== "string" || incoming.name.length === 0) {
-		throw new CrustError("DEFINITION", "Every flag definition must carry a non-empty name", {
-			subject: "flag",
-			reason: "missing-name",
-		});
-	}
-	const incomingSpellings = flagDefinitionSpellings(incoming.name, incoming.def);
-	// Flag defs and parse results live in plain-object records; a "__proto__" key
-	// hits the Object.prototype setter and the flag silently vanishes. Fail loud.
-	if (incomingSpellings.includes("__proto__")) {
-		throw new CrustError(
-			"DEFINITION",
-			`${ownerLabel} flag "--${incoming.name}" uses reserved spelling "__proto__"`,
-			{ subject: "flag", name: incoming.name, reason: "reserved-name" },
-		);
-	}
-	const duplicate = incomingSpellings.find(
-		(spelling, index) => incomingSpellings.indexOf(spelling) !== index,
-	);
-	if (duplicate !== undefined) {
-		throw new CrustError(
-			"DEFINITION",
-			`${ownerLabel} flag "--${incoming.name}" repeats spelling "${duplicate}"`,
-			{ subject: "flag", name: incoming.name, reason: "flag-collision" },
-		);
-	}
+	// Shape first so a nameless def reports missing-name, not "undefined" text.
+	const incomingSpellings = validateFlagDefinitionShape(incoming.name, incoming.def, ownerLabel);
+	validateSchemaExclusivity("flag", incoming.name, incoming.def);
 
 	for (const [existingName, existingDef] of Object.entries(existing)) {
 		const existingSpellings = new Set(flagDefinitionSpellings(existingName, existingDef));
