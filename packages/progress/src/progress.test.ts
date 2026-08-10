@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import { createProgressHandle, progress as createProgressBar } from "./progress.ts";
-import type { SpinnerSink } from "./spinner.ts";
+import { type SpinnerSink, withProgressSink } from "./spinner.ts";
 
 const originalStderrWrite = process.stderr.write;
 const originalStderrIsTTY = process.stderr.isTTY;
@@ -84,5 +84,36 @@ describe("progress — determinate", () => {
 
 		expect(stderrOutput).toContain("✗");
 		expect(stderrOutput).toContain("Upload failed (2/5)");
+	});
+});
+
+describe("progress — sink resolution", () => {
+	it("honors sink from options and the ambient withProgressSink sink", () => {
+		const optionWrites: string[] = [];
+		const ambientWrites: string[] = [];
+		const makeSink = (writes: string[]): SpinnerSink => ({
+			isTTY: false,
+			write: (text) => writes.push(text),
+			exit: (code): never => {
+				throw new Error(`exit:${code}`);
+			},
+		});
+
+		const viaOption = createProgressBar({
+			message: "Upload",
+			total: 2,
+			sink: makeSink(optionWrites),
+		});
+		viaOption.start();
+		viaOption.stop();
+
+		withProgressSink(makeSink(ambientWrites), () => {
+			const viaAmbient = createProgressBar({ message: "Sync", total: 2 });
+			viaAmbient.start();
+			viaAmbient.stop();
+		});
+
+		expect(optionWrites[0]).toContain("✓ Upload (0/2)");
+		expect(ambientWrites[0]).toContain("✓ Sync (0/2)");
 	});
 });

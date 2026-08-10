@@ -1,4 +1,5 @@
 import type { InvocationIO } from "@crustjs/core";
+import { type SpinnerSink, withProgressSink } from "@crustjs/progress";
 import { withPromptIO } from "@crustjs/prompts";
 import { createPromptIO, type Key } from "@crustjs/prompts/testing";
 
@@ -145,14 +146,27 @@ export interface InteractiveRun {
 export function runInteractive<App extends RunnableApp>(app: App, argv: Argv<App>): InteractiveRun {
 	const harness = createPromptIO();
 	const output = harness.io.output!;
-	const done = withPromptIO(harness.io, () =>
-		app.run(argv, {
-			stdout: () => {},
-			stderr: (text) => {
-				// Line-oriented like core's console.error default.
-				output.write(`${text}\n`);
-			},
-		}),
+	// Spinners and progress indicators render onto the same fake terminal as
+	// prompts, so waitFor()/screen() observe them too.
+	const sink: SpinnerSink = {
+		isTTY: true,
+		write: (text) => {
+			output.write(text);
+		},
+		exit: (code): never => {
+			throw new Error(`process.exit(${code}) requested during runInteractive`);
+		},
+	};
+	const done = withProgressSink(sink, () =>
+		withPromptIO(harness.io, () =>
+			app.run(argv, {
+				stdout: () => {},
+				stderr: (text) => {
+					// Line-oriented like core's console.error default.
+					output.write(`${text}\n`);
+				},
+			}),
+		),
 	);
 
 	// Observe settlement so waitFor can stop polling; the action also keeps an

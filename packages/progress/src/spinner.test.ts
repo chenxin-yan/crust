@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { type SpinnerHandle, type SpinnerSink, createSpinnerHandle, spinner } from "./spinner.ts";
+import {
+	type SpinnerHandle,
+	type SpinnerSink,
+	createSpinnerHandle,
+	spinner,
+	withProgressSink,
+} from "./spinner.ts";
 
 const originalStderrWrite = process.stderr.write;
 const originalStderrIsTTY = process.stderr.isTTY;
@@ -124,6 +130,61 @@ describe("createSpinnerHandle — terminal sink", () => {
 		handle.start();
 		expect(process.listeners("SIGINT")).toEqual(previousHandlers);
 		handle.stop();
+	});
+});
+
+describe("spinner — sink resolution", () => {
+	it("routes output to the per-call sink option", () => {
+		const { sink, writes } = createFakeSink(false);
+		const handle = spinner({ message: "Working", sink });
+
+		handle.start();
+		handle.stop();
+
+		expect(writes).toHaveLength(1);
+		expect(writes[0]).toContain("✓ Working\n");
+	});
+
+	it("routes output to the ambient withProgressSink sink", () => {
+		const { sink, writes } = createFakeSink(false);
+
+		withProgressSink(sink, () => {
+			const handle = spinner({ message: "Ambient" });
+			handle.start();
+			handle.stop();
+		});
+
+		expect(writes[0]).toContain("✓ Ambient\n");
+	});
+
+	it("per-call sink option wins over the ambient sink", () => {
+		const ambient = createFakeSink(false);
+		const explicit = createFakeSink(false);
+
+		withProgressSink(ambient.sink, () => {
+			const handle = spinner({ message: "Explicit", sink: explicit.sink });
+			handle.start();
+			handle.stop();
+		});
+
+		expect(ambient.writes).toHaveLength(0);
+		expect(explicit.writes[0]).toContain("✓ Explicit\n");
+	});
+
+	it("the ambient sink survives async boundaries", async () => {
+		const { sink, writes } = createFakeSink(false);
+
+		await withProgressSink(sink, () =>
+			spinner({
+				message: "Async",
+				task: async () => {
+					await tick(10);
+					return "ok";
+				},
+			}),
+		);
+
+		expect(writes[0]).toContain("✓ Async\n");
 	});
 });
 

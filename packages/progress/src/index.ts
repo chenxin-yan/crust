@@ -10,8 +10,9 @@ export type {
 	SpinnerOptions,
 	SpinnerOutcome,
 	SpinnerSigintPolicy,
+	SpinnerSink,
 	SpinnerType,
 } from "./spinner.ts";
-export { spinner } from "./spinner.ts";
+export { spinner, withProgressSink } from "./spinner.ts";
 export { defaultTheme } from "./theme.ts";
 export type { PartialProgressTheme, ProgressTheme } from "./theme.ts";

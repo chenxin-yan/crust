@@ -2,6 +2,8 @@
 // Spinner — Animated progress spinner for @crustjs/progress
 // ────────────────────────────────────────────────────────────────────────────
 
+import { AsyncLocalStorage } from "node:async_hooks";
+
 import { resolveTheme } from "./theme.ts";
 import type { PartialProgressTheme, ProgressTheme } from "./theme.ts";
 
@@ -75,6 +77,11 @@ export interface SpinnerHandleOptions {
 	 * @default "exit"
 	 */
 	readonly sigint?: SpinnerSigintPolicy;
+	/**
+	 * Terminal sink receiving the rendered output. Resolution order:
+	 * this option → ambient {@link withProgressSink} sink → `process.stderr`.
+	 */
+	readonly sink?: SpinnerSink;
 }
 
 export interface SpinnerHandle {
@@ -123,11 +130,24 @@ function renderFinal(
 	return erase ? ERASE_LINE + CURSOR_TO_START + line : line;
 }
 
-/** Terminal operations used by the internal spinner lifecycle. */
+/** Terminal operations driven by spinners and progress indicators. */
 export interface SpinnerSink {
 	readonly isTTY: boolean;
 	write: (text: string) => void;
 	exit: (code: number) => never;
+}
+
+const sinkStorage = new AsyncLocalStorage<SpinnerSink>();
+
+/**
+ * Run a function with a sink ambiently available to every spinner or
+ * progress indicator created in its async scope (unless a per-call
+ * `sink` option overrides it). Mirrors `withPromptIO` in
+ * `@crustjs/prompts` — test harnesses and embedders redirect indicator
+ * output without touching process globals.
+ */
+export function withProgressSink<T>(sink: SpinnerSink, fn: () => T): T {
+	return sinkStorage.run(sink, fn);
 }
 
 const processSpinnerSink: SpinnerSink = {
@@ -145,8 +165,9 @@ const processSpinnerSink: SpinnerSink = {
 /** Internal handle constructor shared by both `spinner()` modes and `progress()`. */
 export function createSpinnerHandle(
 	options: SpinnerHandleOptions,
-	sink: SpinnerSink = processSpinnerSink,
+	explicitSink?: SpinnerSink,
 ): SpinnerHandle {
+	const sink = explicitSink ?? options.sink ?? sinkStorage.getStore() ?? processSpinnerSink;
 	const theme = resolveTheme(options.theme);
 	const isInteractive = sink.isTTY;
 	const { frames, interval } = resolveSpinner(options.spinner);
