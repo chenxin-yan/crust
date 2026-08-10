@@ -5,7 +5,6 @@
 		"build": "turbo run build",
 		"build:docs": "turbo run build --filter='./apps/docs'",
 		"build:pkgs": "turbo run build --filter='./packages/*'",
-		"bench:routing": "bun scripts/bench-routing.ts",
 		"dev:docs": "turbo run dev --filter='./apps/docs'",
 		"lint": "oxlint",
 		"lint:fix": "oxlint --fix",
