@@ -144,8 +144,6 @@ function prepareInvocation(
 	const rootNode = cloneCommandNode(node);
 	const extensions = node.extensions;
 
-	// Commands first, then flags, so recursive Extension flags also reach
-	// Extension-contributed commands (e.g. --help on "completion").
 	for (const extension of extensions) {
 		applyExtensionCommands(rootNode, extension, materializeCommandDefinition);
 	}
@@ -171,12 +169,12 @@ async function dispatch(
 
 	const rootSnapshot = snapshotCommand(rootNode);
 	const extensionContext: ExtensionContext = Object.freeze({
-		argv: [...argv] as readonly string[],
+		argv: [...argv],
 		rootCommand: rootSnapshot,
 		command: resolvedNode === rootNode ? rootSnapshot : snapshotCommand(resolvedNode),
 		commandPath: Object.freeze([...resolved.commandPath]),
-		args: parsed.args as Readonly<Record<string, unknown>>,
-		flags: parsed.flags as Readonly<Record<string, unknown>>,
+		args: parsed.args,
+		flags: parsed.flags,
 		rawArgs: parsed.rawArgs,
 		finish: finishInvocation,
 		stdout: io.stdout,

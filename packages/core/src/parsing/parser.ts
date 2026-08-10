@@ -601,7 +601,7 @@ export function validateParsed<A extends ArgsDef = ArgsDef, F extends FlagsDef =
 	// Re-validate args: check for required args that are undefined
 	if (argsDef) {
 		for (const def of argsDef) {
-			const { name } = def as ArgDef;
+			const { name } = def;
 			const label = `argument "<${name}>"`;
 			const value = args[name as keyof InferArgs<A>];
 

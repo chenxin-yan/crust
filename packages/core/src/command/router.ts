@@ -98,6 +98,11 @@ function matchKnownFlagToken(
  * 2. If `argv[0]` matches a sibling's `meta.aliases` entry, recurse into
  *    that sibling and record the **canonical** name in `commandPath`
  * 3. If no match and the current command has `run()`, return it (args passed to parser)
+ * 3a. Known flags encountered before a subcommand name are set aside and
+ *     re-prepended for the resolved command's parser — but only if every
+ *     command routing descends into recognizes them with the same token
+ *     shape. A flag the subcommand cannot parse (e.g. a parent-local flag)
+ *     is a PARSE error at the descend, never a silent forward-then-fail.
  * 4. If no match and the current command has NO `run()`, it signals the caller
  *    should show help (the `showHelp` flag is set in the result)
  * 5. Unknown subcommands produce a structured COMMAND_NOT_FOUND error whose
@@ -113,6 +118,7 @@ function matchKnownFlagToken(
  * @param argv - The argv array to resolve against
  * @returns The resolved command, argv, and the command path
  * @throws {CrustError} COMMAND_NOT_FOUND when an unknown subcommand is given and the parent has no run()
+ * @throws {CrustError} PARSE when a flag set aside during routing is not parseable by the subcommand being descended into
  */
 export function resolveCommand(command: CommandNode, argv: string[]): CommandRoute {
 	const path = [command.meta.name];
@@ -123,6 +129,31 @@ export function resolveCommand(command: CommandNode, argv: string[]): CommandRou
 	// set aside during routing and re-prepended for the resolved command's
 	// parser, preserving token order.
 	const skippedFlagTokens: string[] = [];
+	// Flag tokens (values excluded) among skippedFlagTokens, with the token
+	// shape the parent's definition implied. Re-validated against every
+	// command routing descends into so the resolved command is guaranteed to
+	// parse the re-prepended tokens.
+	const skippedFlagChecks: { token: string; consumesValue: boolean }[] = [];
+
+	// Every skipped flag must be recognized by the child with the same token
+	// shape — a same-spelling flag that is boolean here and value-taking there
+	// would mis-consume the already-split tokens. On violation this throws
+	// rather than falling back to the parent: `app --quiet sub` with a
+	// root-local `--quiet` almost certainly meant to run `sub`, and rule 3
+	// makes a positional spelled like a subcommand name unreachable anyway.
+	const assertFlagsForwardable = (child: CommandNode, candidate: string): void => {
+		if (skippedFlagChecks.length === 0) return;
+		const childSpellings = flagSpellings(child.effectiveFlags);
+		for (const { token, consumesValue } of skippedFlagChecks) {
+			const match = matchKnownFlagToken(childSpellings, token);
+			if (match !== null && match.consumesValue === consumesValue) continue;
+			throw new CrustError(
+				"PARSE",
+				`Flag "${token}" cannot be used before subcommand "${candidate}" because "${candidate}" does not accept it.`,
+				{ flag: token, reason: "flag-not-forwardable" },
+			);
+		}
+	};
 
 	while (routedArgv.length > 0) {
 		const subCommands = current.subCommands;
@@ -143,6 +174,7 @@ export function resolveCommand(command: CommandNode, argv: string[]): CommandRou
 			const match = matchKnownFlagToken(flagSpellings(current.effectiveFlags), candidate);
 			if (!match) break;
 			skippedFlagTokens.push(candidate);
+			skippedFlagChecks.push({ token: candidate, consumesValue: match.consumesValue });
 			routedArgv = routedArgv.slice(1);
 			const value = routedArgv[0];
 			if (match.consumesValue && value !== undefined) {
@@ -154,6 +186,7 @@ export function resolveCommand(command: CommandNode, argv: string[]): CommandRou
 
 		// Check if it matches a known subcommand by canonical name
 		if (candidate in subCommands && subCommands[candidate]) {
+			assertFlagsForwardable(subCommands[candidate], candidate);
 			current = subCommands[candidate];
 			path.push(candidate);
 			routedArgv = routedArgv.slice(1);
@@ -165,6 +198,7 @@ export function resolveCommand(command: CommandNode, argv: string[]): CommandRou
 		// help/extensions assume `commandPath` only ever contains canonical names.
 		const aliasMatch = findAliasMatch(subCommands, candidate);
 		if (aliasMatch) {
+			assertFlagsForwardable(aliasMatch.node, candidate);
 			current = aliasMatch.node;
 			path.push(aliasMatch.canonicalName);
 			routedArgv = routedArgv.slice(1);

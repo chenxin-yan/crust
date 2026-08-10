@@ -1865,6 +1865,44 @@ describe("Crust .execute()", () => {
 		expect(subFlags.port).toBeUndefined();
 	});
 
+	it("dispatches a Context-owned flag written before the subcommand", async () => {
+		let subFlags: Record<string, unknown> = {};
+		const verbose = defineFlag("verbose", { type: "boolean" });
+		const logging = defineContext("logging", { flags: [verbose] }, () => ({}));
+
+		const app = new Crust("cli").provide(logging()).add(
+			defineCommand("sub", (cmd) =>
+				cmd.action((ctx) => {
+					subFlags = ctx.flags;
+				}),
+			),
+		);
+
+		await app.execute({ argv: ["--verbose", "sub"] });
+
+		expect(subFlags.verbose).toBe(true);
+	});
+
+	it("rejects a parent-local flag written before the subcommand", async () => {
+		let subRan = false;
+
+		const app = new Crust("cli").flags({ name: "quiet", type: "boolean" }).add(
+			defineCommand("sub", (cmd) =>
+				cmd.action(() => {
+					subRan = true;
+				}),
+			),
+		);
+
+		await app.execute({ argv: ["--quiet", "sub"] });
+
+		expect(subRan).toBe(false);
+		expect(process.exitCode).toBe(1);
+		expect(stderrChunks.join("\n")).toContain(
+			'Flag "--quiet" cannot be used before subcommand "sub"',
+		);
+	});
+
 	it("argv override works", async () => {
 		let receivedDir = "";
 
