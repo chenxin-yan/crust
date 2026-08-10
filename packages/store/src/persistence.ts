@@ -121,8 +121,7 @@ export async function writeJson(
 	const fileMode = isWindows ? undefined : options.fileMode;
 	const directoryMode = isWindows ? undefined : options.directoryMode;
 	const dir = dirname(filePath);
-	const { randomUUID } = await import("node:crypto");
-	const tempPath = join(dir, `.config-${randomUUID()}.tmp`);
+	const tempPath = join(dir, `.config-${crypto.randomUUID()}.tmp`);
 
 	let createdDir: string | undefined;
 	try {

@@ -19,6 +19,7 @@ import {
 	resolveEffectiveScope,
 } from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";
+import { isValidSkillName } from "./skill-name.ts";
 import type {
 	AgentTarget,
 	CustomSkillConfig,
@@ -131,13 +132,12 @@ function deriveSkillMeta(command: CommandSnapshot, options: SkillOptions): Skill
 }
 
 /** Validates custom skill config invariants that TypeScript cannot constrain. */
-async function validateCustomSkillsConfig(
+function validateCustomSkillsConfig(
 	mainName: string,
 	customSkills: readonly CustomSkillConfig[] | undefined,
-): Promise<readonly CustomSkillConfig[]> {
+): readonly CustomSkillConfig[] {
 	if (!customSkills?.length) return [];
 
-	const { isValidSkillName } = await import("./generate.ts");
 	const seen = new Set<string>();
 	for (const [index, entry] of customSkills.entries()) {
 		if (!isValidSkillName(entry.name)) {
@@ -451,14 +451,14 @@ async function autoUpdateCustomSkillsLoop(
 export function skill(options: SkillOptions): Extension {
 	const skillCommandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
 	let customSkills: readonly CustomSkillConfig[] | undefined;
-	const getCustomSkills = async (mainName: string) =>
-		(customSkills ??= await validateCustomSkillsConfig(mainName, options.customSkills));
+	const getCustomSkills = (mainName: string) =>
+		(customSkills ??= validateCustomSkillsConfig(mainName, options.customSkills));
 
 	return defineExtension("skills", {
 		commands: [buildSkillCommandGrammar(skillCommandName, options, getCustomSkills)],
 		hooks: {
 			async preRun(context) {
-				const resolvedCustomSkills = await getCustomSkills(context.rootCommand.meta.name);
+				const resolvedCustomSkills = getCustomSkills(context.rootCommand.meta.name);
 				if (context.commandPath[1] === skillCommandName || options.autoUpdate === false) return;
 
 				await autoUpdateSkills(context.rootCommand, options, resolvedCustomSkills);
@@ -661,7 +661,7 @@ async function reconcileSkillInteractively(opts: {
 function buildSkillCommandGrammar(
 	commandName: string,
 	options: SkillOptions,
-	getCustomSkills: (mainName: string) => Promise<readonly CustomSkillConfig[]>,
+	getCustomSkills: (mainName: string) => readonly CustomSkillConfig[],
 ) {
 	return defineCommand(
 		commandName,
@@ -695,7 +695,7 @@ function buildSkillCommandGrammar(
 									await runSkillUpdateFlow(
 										context.rootCommand,
 										options,
-										await getCustomSkills(context.rootCommand.meta.name),
+										getCustomSkills(context.rootCommand.meta.name),
 										context.flags,
 									);
 								}),
@@ -705,7 +705,7 @@ function buildSkillCommandGrammar(
 					await runSkillInstallFlow(
 						context.rootCommand,
 						options,
-						await getCustomSkills(context.rootCommand.meta.name),
+						getCustomSkills(context.rootCommand.meta.name),
 						context.flags,
 					);
 				}),
