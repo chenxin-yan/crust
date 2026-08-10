@@ -57,7 +57,7 @@ The child requires `ctx.api`, not the raw flag. If an action also needs the raw 
 
 ## Lazy construction and inheritance
 
-Context values are constructed only after a command is routed, parsed, processed by `preRun` hooks, and validated — and only the Contexts the resolved command actually uses. For a command added with `defineCommand`, that means the Contexts it provides itself plus the transitive `requires` closure of its declared requirements; inherited Contexts it does not require are never constructed. The root command's own action constructs everything provided on it. An Extension that returns `ctx.finish()` does not construct them.
+Context values are constructed only after a command is routed, parsed, processed by `preRun` hooks, and validated — and only the Contexts the resolved command actually uses. For a command added with `defineCommand`, that means the Contexts it provides itself plus the transitive `requires` closure of its declared requirements and of those self-provided Contexts; inherited Contexts outside that closure are never constructed. Their owned flags still parse and appear in help, but are accepted without constructing the owning Context. The root command's own action constructs everything provided on it. An Extension that returns `ctx.finish()` does not construct them.
 
 This makes the provide site agnostic: provide every Context once at the root and each command pays only for what it declares.
 

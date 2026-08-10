@@ -155,8 +155,7 @@ function scopeContexts(
 	}
 	// Topological order (dependencies first) lets one reverse pass collect
 	// the transitive closure of Context `requires` chains.
-	for (let i = contexts.length - 1; i >= 0; i--) {
-		const context = contexts[i] as ContextInstance;
+	for (const context of contexts.toReversed()) {
 		if (keep.has(context.name)) {
 			for (const dep of context.requiredCtx) keep.add(dep);
 		}

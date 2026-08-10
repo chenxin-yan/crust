@@ -37,7 +37,7 @@ $ greet --help
 - **Plain values, immutable builders.** Definitions and Extensions are frozen data; every fluent call returns a new builder.
 - **Fail loud at definition time.** Collisions and malformed definitions are `DEFINITION` errors at startup and in `crust build` — never warn-and-skip.
 - **Standards over lock-in.** Standard Schema for validation, `NO_COLOR`/`FORCE_COLOR` and OSC 8 conventions, native `Symbol.dispose` cleanup.
-- **Pay only for what you use.** Zero-dependency core, composable modules, Contexts constructed lazily for the resolved path only.
+- **Pay only for what you use.** Zero-dependency core, composable modules, Contexts constructed lazily, only when the resolved command requires them.
 
 ## Feature highlight
 

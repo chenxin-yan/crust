@@ -193,7 +193,7 @@ interface ContextSetup<Options, RC, OF> extends InvocationIO {
   name="ContextInstance"
 />
 
-Attach an instance with `.provide()`. Core constructs it lazily on the resolved path, topologically ordered by declared capability requirements.
+Attach an instance with `.provide()`. Core constructs it lazily, only when the resolved command requires it, topologically ordered by declared capability requirements.
 
 ### `ContextMap`
 

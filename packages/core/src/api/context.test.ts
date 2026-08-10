@@ -179,9 +179,13 @@ describe("Crust .provide()", () => {
 			builtNames.push("base");
 			return "base";
 		});
-		const db = defineContext("db", { requires: [base] }, ({ ctx }) => {
+		const mid = defineContext("mid", { requires: [base] }, ({ ctx }) => {
+			builtNames.push("mid");
+			return `mid(${ctx.base})`;
+		});
+		const db = defineContext("db", { requires: [mid] }, ({ ctx }) => {
 			builtNames.push("db");
-			return `db(${ctx.base})`;
+			return `db(${ctx.mid})`;
 		});
 		const unrelated = defineContext("unrelated", () => {
 			builtNames.push("unrelated");
@@ -189,7 +193,7 @@ describe("Crust .provide()", () => {
 		});
 
 		const seen: string[] = [];
-		const app = new Crust("cli").provide(base(), db(), unrelated()).add(
+		const app = new Crust("cli").provide(base(), mid(), db(), unrelated()).add(
 			defineCommand("query", { requires: [db] }, (cmd) =>
 				cmd.action(({ ctx }) => {
 					seen.push(ctx.db);
@@ -199,8 +203,69 @@ describe("Crust .provide()", () => {
 
 		await app.run(["query"]);
 
-		expect(builtNames).toEqual(["base", "db"]);
-		expect(seen).toEqual(["db(base)"]);
+		// A ≥3-node chain distinguishes true transitivity from a one-hop keep.
+		expect(builtNames).toEqual(["base", "mid", "db"]);
+		expect(seen).toEqual(["db(mid(base))"]);
+	});
+
+	it("constructs each Context in a diamond requires closure exactly once", async () => {
+		const builtNames: string[] = [];
+		const a = defineContext("a", () => {
+			builtNames.push("a");
+			return "a";
+		});
+		const b = defineContext("b", { requires: [a] }, () => {
+			builtNames.push("b");
+			return "b";
+		});
+		const c = defineContext("c", { requires: [a] }, () => {
+			builtNames.push("c");
+			return "c";
+		});
+		const d = defineContext("d", { requires: [b, c] }, () => {
+			builtNames.push("d");
+			return "d";
+		});
+
+		const app = new Crust("cli")
+			.provide(a(), b(), c(), d())
+			.add(defineCommand("go", { requires: [d] }, (cmd) => cmd.action(() => {})));
+
+		await app.run(["go"]);
+
+		expect(builtNames.slice().sort()).toEqual(["a", "b", "c", "d"]);
+		expect(builtNames[0]).toBe("a");
+		expect(builtNames[3]).toBe("d");
+	});
+
+	it("constructs an inherited dependency of a self-provided Context without declared requires", async () => {
+		const builtNames: string[] = [];
+		const session = defineContext("session", () => {
+			builtNames.push("session");
+			return "session";
+		});
+		const unrelated = defineContext("unrelated", () => {
+			builtNames.push("unrelated");
+			return "unrelated";
+		});
+		const user = defineContext("user", { requires: [session] }, ({ ctx }) => {
+			builtNames.push("user");
+			return `user(${ctx.session})`;
+		});
+
+		const seen: string[] = [];
+		const app = new Crust("cli").provide(session(), unrelated()).add(
+			defineCommand("account", (cmd) =>
+				cmd.provide(user()).action(({ ctx }) => {
+					seen.push(ctx.user);
+				}),
+			),
+		);
+
+		await app.run(["account"]);
+
+		expect(builtNames).toEqual(["session", "user"]);
+		expect(seen).toEqual(["user(session)"]);
 	});
 
 	it("does not backfill added children with later parent provides", async () => {
