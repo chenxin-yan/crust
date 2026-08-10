@@ -699,7 +699,7 @@ describe("multiselect — no message", () => {
 
 describe("multiselect — non-TTY", () => {
 	function nonTTY<T>(options: MultiselectOptions<T>): Promise<T[]> {
-		return multiselect(options, nonTTYIO());
+		return multiselect<T>(options, nonTTYIO());
 	}
 
 	it("throws NonInteractiveError when stdin is not a TTY", async () => {
@@ -751,3 +751,17 @@ describe("multiselect — non-TTY", () => {
 		expect(result).toEqual(["a"]);
 	});
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// Type-level inference (compile-time only — never executed at runtime)
+// ────────────────────────────────────────────────────────────────────────────
+
+type Equal<A, B> =
+	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+type Expect<T extends true> = T;
+
+async function _multiselectTypeInferenceTests() {
+	const tags = await multiselect({ message: "?", choices: ["a", "b"] });
+	type _TagsNarrow = Expect<Equal<typeof tags, ("a" | "b")[]>>;
+}
+void _multiselectTypeInferenceTests;

@@ -6,7 +6,7 @@ import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts"
 import { isTTY, resolvePromptIO, runPrompt, submit } from "../core/renderer.ts";
 import { CURSOR_INDICATOR, PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import { resolveTheme } from "../core/theme.ts";
-import type { Choice, PartialPromptTheme, PromptTheme } from "../core/types.ts";
+import type { Choice, ChoiceValue, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
 import {
 	calculateScrollOffset,
@@ -200,6 +200,14 @@ function renderSubmitted<T>(
  * });
  * ```
  */
+// Narrowing overload: a literal choices tuple narrows the result to the
+// union of its values. The generic overload below keeps explicit-type-arg
+// and wrapper call sites (`select<T>(...)`) on the old contract.
+export function select<const C extends readonly Choice<unknown>[]>(
+	options: SelectOptions<ChoiceValue<C>> & { readonly choices: C },
+	io?: PromptIO,
+): Promise<ChoiceValue<C>>;
+export function select<T>(options: SelectOptions<T>, io?: PromptIO): Promise<T>;
 export async function select<T>(options: SelectOptions<T>, io?: PromptIO): Promise<T> {
 	// Short-circuit: return initial value immediately without rendering
 	if (options.initial !== undefined) {

@@ -7,7 +7,13 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 export type { FuzzyFilterResult, FuzzyMatchResult } from "./core/fuzzy.ts";
-export type { Choice, PartialPromptTheme, PromptTheme, ValidateFn } from "./core/types.ts";
+export type {
+	Choice,
+	ChoiceValue,
+	PartialPromptTheme,
+	PromptTheme,
+	ValidateFn,
+} from "./core/types.ts";
 export type { NormalizedChoice } from "./core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────

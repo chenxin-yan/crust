@@ -196,6 +196,8 @@ const port = await select({
 });
 ```
 
+When the choices list is written inline (or declared `as const`), the result narrows to the union of the choice values — `80 | 443` above, or `"react" | "vue" | "svelte"` for string choices. A widened `string[]` keeps `string`. The same applies to `multiselect`, `filter`, and `multifilter` (element type of the returned array).
+
 <auto-type-table
   path="../../../../../packages/prompts/src/prompts/select.ts"
   name="SelectOptions"

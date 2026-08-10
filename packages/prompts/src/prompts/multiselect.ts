@@ -12,7 +12,7 @@ import {
 	PREFIX_SYMBOL,
 } from "../core/symbols.ts";
 import { resolveTheme } from "../core/theme.ts";
-import type { Choice, PartialPromptTheme, PromptTheme } from "../core/types.ts";
+import type { Choice, ChoiceValue, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
 import {
 	DEFAULT_MAX_VISIBLE,
@@ -288,6 +288,12 @@ function renderSubmitted<T>(
  * });
  * ```
  */
+// Narrowing overload — see `select` for the pattern rationale.
+export function multiselect<const C extends readonly Choice<unknown>[]>(
+	options: MultiselectOptions<ChoiceValue<C>> & { readonly choices: C },
+	io?: PromptIO,
+): Promise<ChoiceValue<C>[]>;
+export function multiselect<T>(options: MultiselectOptions<T>, io?: PromptIO): Promise<T[]>;
 export async function multiselect<T>(options: MultiselectOptions<T>, io?: PromptIO): Promise<T[]> {
 	// Short-circuit: return initial value immediately without rendering
 	if (options.initial !== undefined) {

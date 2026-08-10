@@ -504,7 +504,7 @@ describe("select — no message", () => {
 
 describe("select — non-TTY", () => {
 	function nonTTY<T>(options: SelectOptions<T>): Promise<T> {
-		return select(options, nonTTYIO());
+		return select<T>(options, nonTTYIO());
 	}
 
 	it("throws NonInteractiveError when stdin is not a TTY", async () => {
@@ -556,3 +556,33 @@ describe("select — non-TTY", () => {
 		expect(result).toBe("a");
 	});
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// Type-level inference (compile-time only — never executed at runtime)
+// ────────────────────────────────────────────────────────────────────────────
+
+type Equal<A, B> =
+	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+type Expect<T extends true> = T;
+
+async function _selectTypeInferenceTests() {
+	// Literal string choices narrow to the literal union via `const T`.
+	const env = await select({ message: "?", choices: ["dev", "staging", "prod"] });
+	type _EnvNarrows = Expect<Equal<typeof env, "dev" | "staging" | "prod">>;
+
+	// Object choices narrow on their literal `value`s.
+	const port = await select({
+		message: "?",
+		choices: [
+			{ label: "HTTP", value: 80 },
+			{ label: "HTTPS", value: 443 },
+		],
+	});
+	type _PortNarrows = Expect<Equal<typeof port, 80 | 443>>;
+
+	// A widened string[] variable keeps plain string.
+	const widened: string[] = ["a", "b"];
+	const loose = await select({ message: "?", choices: widened });
+	type _LooseIsString = Expect<Equal<typeof loose, string>>;
+}
+void _selectTypeInferenceTests;

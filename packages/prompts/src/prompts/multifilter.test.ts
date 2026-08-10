@@ -74,7 +74,7 @@ describe("multifilter — initial / default", () => {
 
 describe("multifilter — non-TTY", () => {
 	function nonTTY<T>(options: MultifilterOptions<T>): Promise<T[]> {
-		return multifilter(options, nonTTYIO());
+		return multifilter<T>(options, nonTTYIO());
 	}
 
 	it("returns default array in non-TTY environment", async () => {
@@ -195,3 +195,17 @@ describe("multifilter — interactive", () => {
 		expect(result).toEqual(["gamma"]);
 	});
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// Type-level inference (compile-time only — never executed at runtime)
+// ────────────────────────────────────────────────────────────────────────────
+
+type Equal<A, B> =
+	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+type Expect<T extends true> = T;
+
+async function _multifilterTypeInferenceTests() {
+	const picks = await multifilter({ message: "?", choices: ["a", "b"] });
+	type _PicksNarrow = Expect<Equal<typeof picks, ("a" | "b")[]>>;
+}
+void _multifilterTypeInferenceTests;

@@ -15,7 +15,7 @@ import {
 } from "../core/symbols.ts";
 import { handleTextEdit, renderTextWithCursor } from "../core/textEdit.ts";
 import { resolveTheme } from "../core/theme.ts";
-import type { Choice, PartialPromptTheme, PromptTheme } from "../core/types.ts";
+import type { Choice, ChoiceValue, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
 import {
 	calculateScrollOffset,
@@ -263,6 +263,12 @@ function renderSubmitted<T>(
  * In non-interactive environments (no TTY), the `default` values are returned
  * automatically if provided.
  */
+// Narrowing overload — see `select` for the pattern rationale.
+export function multifilter<const C extends readonly Choice<unknown>[]>(
+	options: MultifilterOptions<ChoiceValue<C>> & { readonly choices: C },
+	io?: PromptIO,
+): Promise<ChoiceValue<C>[]>;
+export function multifilter<T>(options: MultifilterOptions<T>, io?: PromptIO): Promise<T[]>;
 export async function multifilter<T>(options: MultifilterOptions<T>, io?: PromptIO): Promise<T[]> {
 	if (options.initial !== undefined) {
 		return [...options.initial];

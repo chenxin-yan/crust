@@ -606,7 +606,7 @@ describe("filter — no message", () => {
 
 describe("filter — non-TTY", () => {
 	function nonTTY<T>(options: FilterOptions<T>): Promise<T> {
-		return filter(options, nonTTYIO());
+		return filter<T>(options, nonTTYIO());
 	}
 
 	it("throws NonInteractiveError when stdin is not a TTY", async () => {
@@ -658,3 +658,17 @@ describe("filter — non-TTY", () => {
 		expect(result).toBe("a");
 	});
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// Type-level inference (compile-time only — never executed at runtime)
+// ────────────────────────────────────────────────────────────────────────────
+
+type Equal<A, B> =
+	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+type Expect<T extends true> = T;
+
+async function _filterTypeInferenceTests() {
+	const pick = await filter({ message: "?", choices: ["prettier", "eslint"] });
+	type _PickNarrows = Expect<Equal<typeof pick, "prettier" | "eslint">>;
+}
+void _filterTypeInferenceTests;
