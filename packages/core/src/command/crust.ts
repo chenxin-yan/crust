@@ -540,12 +540,6 @@ export class Crust<
 		for (const def of defs) {
 			// Destructuring also decouples the stored def from the caller's object
 			const { name, ...rest } = def as NamedFlagDef;
-			if (typeof name !== "string" || name.length === 0) {
-				throw new CrustError("DEFINITION", "Every flag definition must carry a non-empty name", {
-					subject: "flag",
-					reason: "missing-name",
-				});
-			}
 			if (Object.hasOwn(copiedFlags, name)) {
 				throw new CrustError("DEFINITION", `Flag "--${name}" is already defined`, {
 					subject: "flag",

@@ -9,6 +9,7 @@ import type {
 	NamedFlagDef,
 	NamedFlagsRecord,
 } from "../types.ts";
+import { validateSchemaExclusivity } from "../validation/args.ts";
 import { validateIncomingFlag, type ValidateNamedFlagDefs } from "../validation/flags.ts";
 import type { Awaitable } from "./context.ts";
 
@@ -170,11 +171,18 @@ export interface ExtensionConfig<
 	Defs extends readonly NamedExtensionFlagDef[] = readonly NamedExtensionFlagDef[],
 > {
 	/** Flags this Extension owns and contributes to the application */
-	readonly flags?: ValidateNamedFlagDefs<Defs>;
+	readonly flags?: Defs;
 	/** Root command definitions this Extension owns and contributes to the application */
 	readonly commands?: readonly CommandDefinition<any>[];
 	readonly hooks?: ExtensionHooks<Defs>;
 }
+
+// Branding lives on the defineExtension signature, not on ExtensionConfig
+// itself, so docs render the readable array type while duplicate/alias
+// collisions still fail at the call site — mirrors defineContext.
+type ValidateExtensionConfig<Defs extends readonly NamedExtensionFlagDef[]> = {
+	readonly flags?: ValidateNamedFlagDefs<Defs>;
+};
 
 /**
  * An application-wide reusable capability. A plain frozen structural value —
@@ -192,12 +200,13 @@ export interface Extension {
  *
  * Extensions apply to the whole application and own the flags and commands
  * they contribute; contributed names must not collide with application or
- * other Extension definitions (collisions are definition errors, surfaced
- * when the application runs).
+ * other Extension definitions. Collisions within one Extension throw here at
+ * define time; collisions with application or other Extension definitions
+ * surface when the application prepares.
  */
 export function defineExtension<const Defs extends readonly NamedExtensionFlagDef[] = []>(
 	name: string,
-	config: ExtensionConfig<Defs> = {},
+	config: ExtensionConfig<Defs> & ValidateExtensionConfig<Defs> = {},
 ): Extension {
 	if (!name.trim()) {
 		throw new CrustError("DEFINITION", "Extension name must be a non-empty string", {
@@ -209,13 +218,7 @@ export function defineExtension<const Defs extends readonly NamedExtensionFlagDe
 	const ownedFlags: FlagsDef = {};
 	for (const def of config.flags ?? []) {
 		const { name: flagName, ...rest } = def;
-		if (Object.hasOwn(ownedFlags, flagName)) {
-			throw new CrustError(
-				"DEFINITION",
-				`Extension "${name}" flag "--${flagName}" is already defined`,
-				{ subject: "flag", name: flagName, reason: "flag-collision" },
-			);
-		}
+		validateSchemaExclusivity("flag", flagName, rest as FlagDef);
 		validateIncomingFlag(
 			{ name: flagName, def: rest as FlagDef },
 			ownedFlags,

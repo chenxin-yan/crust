@@ -250,6 +250,15 @@ export function validateIncomingFlag(
 	existing: FlagsDef,
 	ownerLabel: string,
 ): void {
+	// Shared guard for plain-JS callers of `.flags()`, `defineContext`, and
+	// `defineExtension`: a nameless def would otherwise register under the
+	// literal key "undefined" and surface as `--undefined` in help.
+	if (typeof incoming.name !== "string" || incoming.name.length === 0) {
+		throw new CrustError("DEFINITION", "Every flag definition must carry a non-empty name", {
+			subject: "flag",
+			reason: "missing-name",
+		});
+	}
 	const incomingSpellings = flagDefinitionSpellings(incoming.name, incoming.def);
 	// Flag defs and parse results live in plain-object records; a "__proto__" key
 	// hits the Object.prototype setter and the flag silently vanishes. Fail loud.

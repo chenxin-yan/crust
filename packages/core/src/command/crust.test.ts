@@ -127,7 +127,11 @@ describe("Crust .flags()", () => {
 	});
 
 	it("deep copies flag definitions (decoupled from caller)", async () => {
-		const flagDef = { name: "verbose" as const, type: "boolean" as const, short: "v" };
+		const flagDef = {
+			name: "verbose" as const,
+			type: "boolean" as const,
+			short: "v",
+		};
 
 		const app = new Crust("test").flags(flagDef);
 
@@ -146,7 +150,10 @@ describe("Crust .flags()", () => {
 	});
 
 	it("throws CrustError DEFINITION at parse time on flag name starting with no-", async () => {
-		const app = new Crust("test").flags({ name: "no-cache", type: "boolean" } as never);
+		const app = new Crust("test").flags({
+			name: "no-cache",
+			type: "boolean",
+		} as never);
 
 		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
 	});
@@ -296,7 +303,11 @@ describe("Crust .flags()", () => {
 			// @ts-expect-error -- flag parsers must be synchronous
 			{ name: "file", type: "string", parse: async (raw) => raw },
 		);
-		new Crust("test").flags({ name: "url", type: "string", parse: (raw) => new URL(raw) });
+		new Crust("test").flags({
+			name: "url",
+			type: "string",
+			parse: (raw) => new URL(raw),
+		});
 
 		expect(true).toBe(true);
 	});
@@ -428,7 +439,11 @@ describe("Crust .args()", () => {
 	});
 
 	it("throws CrustError DEFINITION when an arg follows a variadic from an earlier call", () => {
-		const app = new Crust("test").args({ name: "files", type: "string", variadic: true });
+		const app = new Crust("test").args({
+			name: "files",
+			type: "string",
+			variadic: true,
+		});
 		expect(() =>
 			app.args(
 				// @ts-expect-error -- the variadic position is also guarded at runtime
@@ -497,7 +512,11 @@ describe("command metadata", () => {
 			.args({ name: "file", type: "string" });
 
 		expect(await app.snapshot()).toMatchObject({
-			meta: { name: "test", description: "A test command", usage: "test [options]" },
+			meta: {
+				name: "test",
+				description: "A test command",
+				usage: "test [options]",
+			},
 			flags: { verbose: { type: "boolean" } },
 			args: [{ name: "file", type: "string" }],
 		});
@@ -1000,7 +1019,9 @@ describe("Crust .extend()", () => {
 	});
 
 	it("defineExtension() returns a frozen plain config", () => {
-		const ext = defineExtension("frozen", { flags: [{ name: "x", type: "boolean" }] });
+		const ext = defineExtension("frozen", {
+			flags: [{ name: "x", type: "boolean" }],
+		});
 
 		expect(Object.isFrozen(ext)).toBe(true);
 		expect(ext.name).toBe("frozen");
@@ -1067,14 +1088,55 @@ describe("Crust .extend()", () => {
 		expect(true).toBe(true);
 	});
 
-	it("defineExtension() rejects duplicate owned flag names", () => {
+	it("defineExtension() rejects duplicate owned flag names at define time", () => {
 		const flags = [
 			{ name: "mode", type: "string" },
 			{ name: "mode", type: "number" },
 		] as const;
+		const define = () => defineExtension("duplicate-flags", { flags: flags as never });
 
-		expect(() => defineExtension("duplicate-flags", { flags: flags as never })).toThrow(
-			'Extension "duplicate-flags" flag "--mode" is already defined',
+		expect(define).toThrow(CrustError);
+		try {
+			define();
+			expect.unreachable();
+		} catch (error) {
+			expect(error).toMatchObject({
+				code: "DEFINITION",
+				message:
+					'Extension "duplicate-flags" flag "--mode" spelling "mode" collides with flag "--mode"',
+			});
+		}
+	});
+
+	it("defineExtension() surfaces intra-extension spelling collisions at define time", () => {
+		const flags = [
+			{ name: "loud", type: "boolean", short: "v" },
+			{ name: "verbose", type: "boolean", short: "v" },
+		] as const;
+
+		expect(() => defineExtension("short-clash", { flags: flags as never })).toThrow(
+			'Extension "short-clash" flag "--verbose" spelling "v" collides with flag "--loud"',
+		);
+	});
+
+	it("defineExtension() rejects a flag definition without a name", () => {
+		expect(() => defineExtension("nameless", { flags: [{ type: "boolean" }] as never })).toThrow(
+			"Every flag definition must carry a non-empty name",
+		);
+	});
+
+	it("defineExtension() rejects mixing a schema with core options", () => {
+		const flags = [
+			{
+				name: "endpoint",
+				type: "string",
+				schema: {} as StandardSchema<string | undefined, URL>,
+				default: "http://localhost",
+			},
+		] as const;
+
+		expect(() => defineExtension("schema-mix", { flags: flags as never })).toThrow(
+			/schema exclusively owns/,
 		);
 	});
 
@@ -1149,7 +1211,9 @@ describe("Extension application at prepare time", () => {
 			.add(defineCommand("sub", (cmd) => cmd.action(() => {})));
 
 		// --version is unknown on the subcommand → PARSE error
-		await expect(app.run(["sub", "--version"])).rejects.toMatchObject({ code: "PARSE" });
+		await expect(app.run(["sub", "--version"])).rejects.toMatchObject({
+			code: "PARSE",
+		});
 	});
 
 	it("Extension flag colliding with an application flag is a DEFINITION error", async () => {
@@ -1177,8 +1241,12 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("Extension flag colliding with another Extension's flag is a DEFINITION error", async () => {
-		const a = defineExtension("a", { flags: [{ name: "shared", type: "boolean" }] });
-		const b = defineExtension("b", { flags: [{ name: "shared", type: "boolean" }] });
+		const a = defineExtension("a", {
+			flags: [{ name: "shared", type: "boolean" }],
+		});
+		const b = defineExtension("b", {
+			flags: [{ name: "shared", type: "boolean" }],
+		});
 		const app = new Crust("cli").extend(a, b).action(() => {});
 
 		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
@@ -1190,7 +1258,12 @@ describe("Extension application at prepare time", () => {
 			commands: [
 				defineCommand("completion", (command) =>
 					command
-						.args({ name: "shell", type: "string", required: true, choices: ["bash", "zsh"] })
+						.args({
+							name: "shell",
+							type: "string",
+							required: true,
+							choices: ["bash", "zsh"],
+						})
 						.action(({ args, flags, rootCommand }) => {
 							lines.push(
 								`completion:${args.shell}:${(flags as Record<string, unknown>).verbose}:${rootCommand.meta.name}`,
@@ -1207,8 +1280,12 @@ describe("Extension application at prepare time", () => {
 
 		await app.run(["completion", "bash", "--verbose"]);
 		expect(lines).toEqual(["completion:bash:true:cli"]);
-		await expect(app.run(["completion", "fish"])).rejects.toMatchObject({ code: "PARSE" });
-		await expect(app.run(["completion"])).rejects.toMatchObject({ code: "VALIDATION" });
+		await expect(app.run(["completion", "fish"])).rejects.toMatchObject({
+			code: "PARSE",
+		});
+		await expect(app.run(["completion"])).rejects.toMatchObject({
+			code: "VALIDATION",
+		});
 	});
 
 	it("Extension command requirements name the Extension and missing Context", async () => {
@@ -1236,7 +1313,9 @@ describe("Extension application at prepare time", () => {
 			.add(defineCommand("sub", (cmd) => cmd.action(() => {})))
 			.extend(clash);
 
-		await expect(app.run(["sub"])).rejects.toMatchObject({ code: "DEFINITION" });
+		await expect(app.run(["sub"])).rejects.toMatchObject({
+			code: "DEFINITION",
+		});
 	});
 
 	it("rejects non-definition Extension commands", async () => {
@@ -1375,7 +1454,9 @@ describe("Extension named hooks", () => {
 		expect(outcomes).toEqual(["second:failed", "first:failed"]);
 
 		outcomes.length = 0;
-		const gate = defineExtension("gate", { hooks: { preRun: (ctx) => ctx.finish() } });
+		const gate = defineExtension("gate", {
+			hooks: { preRun: (ctx) => ctx.finish() },
+		});
 		await new Crust("cli")
 			.extend(first, gate, second)
 			.action(() => {})
@@ -1428,7 +1509,9 @@ describe("Extension named hooks", () => {
 		await app.run(["known"], { stdout: (line) => lines.push(line) });
 		expect(lines).toEqual(["probe:known"]);
 		preRunCalled = false;
-		await expect(app.run(["unknown"])).rejects.toMatchObject({ code: "COMMAND_NOT_FOUND" });
+		await expect(app.run(["unknown"])).rejects.toMatchObject({
+			code: "COMMAND_NOT_FOUND",
+		});
 		expect(preRunCalled).toBe(false);
 	});
 
@@ -1628,7 +1711,10 @@ describe("Crust .run()", () => {
 			ctx.stderr("to err");
 		});
 
-		await app.run([], { stdout: (t) => out.push(t), stderr: (t) => err.push(t) });
+		await app.run([], {
+			stdout: (t) => out.push(t),
+			stderr: (t) => err.push(t),
+		});
 
 		expect(out).toEqual(["to out"]);
 		expect(err).toEqual(["to err"]);
@@ -1645,7 +1731,10 @@ describe("Crust .run()", () => {
 
 		await app.run(["a.txt", "--verbose"]);
 
-		expect(received).toEqual({ args: { file: "a.txt" }, flags: { verbose: true } });
+		expect(received).toEqual({
+			args: { file: "a.txt" },
+			flags: { verbose: true },
+		});
 	});
 });
 
