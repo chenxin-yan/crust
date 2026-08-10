@@ -188,6 +188,55 @@ describe("InferFlags type inference", () => {
 		expect(val.port).toBe(8080);
 	});
 
+	it("narrows a string flag with literal choices to the literal union", () => {
+		type Flags = {
+			env: { type: "string"; choices: readonly ["staging", "production"]; default: "staging" };
+			mode: { type: "string"; choices: readonly ["a", "b"] };
+			tags: { type: "string"; multiple: true; choices: readonly ["x", "y"] };
+		};
+		type Result = InferFlags<Flags>;
+		type _check = Expect<
+			Equal<
+				Result,
+				{
+					env: "staging" | "production";
+					mode: "a" | "b" | undefined;
+					tags: ("x" | "y")[] | undefined;
+				}
+			>
+		>;
+
+		const val: Result = { env: "staging", mode: undefined, tags: undefined };
+		expect(val.env).toBe("staging");
+	});
+
+	it("keeps plain string for choices widened to readonly string[]", () => {
+		type Flags = { env: { type: "string"; choices: readonly string[] } };
+		type Result = InferFlags<Flags>;
+		type _check = Expect<Equal<Result, { env: string | undefined }>>;
+		expect(true).toBe(true);
+	});
+
+	it("narrows raw args (no type/schema) with literal choices", () => {
+		type Args = readonly [
+			{ name: "mode"; choices: readonly ["dev", "prod"] },
+			{ name: "env"; choices: readonly ["a", "b"]; default: "a" },
+			{ name: "tags"; choices: readonly ["x", "y"]; variadic: true },
+		];
+		type Result = InferArgs<Args>;
+		type _check = Expect<
+			Equal<
+				Result,
+				{
+					mode: "dev" | "prod" | undefined;
+					env: "a" | "b";
+					tags: ("x" | "y")[];
+				}
+			>
+		>;
+		expect(true).toBe(true);
+	});
+
 	it("maps multiple flags together", () => {
 		type Flags = {
 			verbose: { type: "boolean" };

@@ -59,6 +59,8 @@ Both values are non-optional in the Command Action. Other flags include `undefin
 
 Choices are supported on string flags. A declared default outside this set is a `DEFINITION` error when `.flags()` runs; an argv value outside it is a `PARSE` error during invocation.
 
+When the choices list is a literal tuple (an inline array as above, or a variable declared `as const`), the flag's inferred type narrows to the union of those literals — `"bun" | "node"` here instead of `string`. A widened `string[]` variable keeps the type as plain `string`.
+
 ## Reusing flag definitions
 
 Flags declared with `.flags()` belong only to that command. Define a descriptor once and attach it to each command that parses the value directly:
