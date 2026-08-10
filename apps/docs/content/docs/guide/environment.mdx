@@ -37,4 +37,4 @@ Later files override earlier files, and the shell environment wins. Only `PUBLIC
 | API keys, tokens, private deployment config | Runtime environment             |
 | Public API origins, public build labels     | `PUBLIC_*` build-time constants |
 
-If Extension configuration reads environment values while definitions are prepared, pass the same `--env-file` values to `crust build` so its validation subprocess sees them. See [Building and Distribution](/docs/guide/build).
+If Extension configuration reads environment values while definitions are prepared, pass the same `--env-file` values to `crust build` so its snapshot subprocess sees them. See [Building and Distribution](/docs/guide/build).

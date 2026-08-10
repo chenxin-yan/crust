@@ -1,6 +1,8 @@
-import { resolve } from "node:path";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
-import { VALIDATION_FORCE_EXIT_ENV, VALIDATION_MODE_ENV } from "@crustjs/core/tooling";
+import { type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
 import { yellow } from "@crustjs/style";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -231,78 +233,95 @@ export async function execBuild(
 }
 
 /**
- * Validate CLI entry by spawning the entry file as a subprocess with
- * `CRUST_INTERNAL_VALIDATE_ONLY=1` and `CRUST_INTERNAL_VALIDATE_FORCE_EXIT=1`.
- * The first triggers `.execute()`'s validation pipeline; the second makes it
- * `process.exit()` after validation so any user code after `await app.execute()`
- * is skipped during the build check. Spawning as a subprocess (rather than
- * running validation in-process) ensures module resolution uses the user's
- * project context, not the compiled `crust` binary's bundle.
+ * Prepare a CLI entry's Command Snapshot in the user's project context.
+ *
+ * The entry runs as a subprocess with `CRUST_INTERNAL_SNAPSHOT_PATH` pointing
+ * to a temporary file. `.execute()` validates and writes the command graph,
+ * then exits before any following entrypoint code can run.
  *
  * Uses `process.execPath` (the current binary) with `BUN_BE_BUN=1` so
- * that compiled standalone executables act as the full Bun runtime and
- * can run arbitrary `.ts` files — no separate `bun` install on PATH needed.
+ * compiled standalone executables can run arbitrary `.ts` files without a
+ * separate `bun` install on PATH.
  */
 const VALIDATE_TIMEOUT_MS = 30_000;
 
-export async function validateEntrypoint(
+export async function snapshotEntrypoint(
 	entryPath: string,
 	envFiles: readonly string[] = [],
-): Promise<void> {
+): Promise<CommandSnapshot> {
 	const absoluteEntry = resolve(entryPath);
-	const proc = Bun.spawn([process.execPath, ...toBunEnvFileArgs(envFiles), absoluteEntry], {
-		env: {
-			...process.env,
-			[VALIDATION_MODE_ENV]: "1",
-			// Stop after validation; entrypoint code after `execute()` must not run.
-			[VALIDATION_FORCE_EXIT_ENV]: "1",
-			BUN_BE_BUN: "1",
-		},
-		cwd: process.cwd(),
-		stdout: "ignore",
-		stderr: "pipe",
-	});
+	const snapshotDir = await mkdtemp(join(tmpdir(), "crust-snapshot-"));
+	const snapshotPath = join(snapshotDir, "command.json");
 
-	const stderrPromise = new Response(proc.stderr).text();
+	try {
+		const proc = Bun.spawn([process.execPath, ...toBunEnvFileArgs(envFiles), absoluteEntry], {
+			env: {
+				...process.env,
+				[SNAPSHOT_PATH_ENV]: snapshotPath,
+				BUN_BE_BUN: "1",
+			},
+			cwd: process.cwd(),
+			stdout: "ignore",
+			stderr: "pipe",
+		});
 
-	let timer: ReturnType<typeof setTimeout> | undefined;
-	let timedOut = false;
-	const exitCode = await Promise.race([
-		proc.exited,
-		new Promise<never>((_, reject) => {
-			timer = setTimeout(() => {
-				timedOut = true;
-				proc.kill();
-				reject(
-					new Error(
-						`Pre-compile validation timed out after ${VALIDATE_TIMEOUT_MS / 1_000}s.\n  An extension setup() hook may be hanging. Use --no-validate to skip.`,
-					),
+		const stderrPromise = new Response(proc.stderr).text();
+
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		let timedOut = false;
+		const exitCode = await Promise.race([
+			proc.exited,
+			new Promise<never>((_, reject) => {
+				timer = setTimeout(() => {
+					timedOut = true;
+					proc.kill();
+					reject(
+						new Error(
+							`Command Snapshot preparation timed out after ${VALIDATE_TIMEOUT_MS / 1_000}s.\n  An extension setup() hook may be hanging. Use --no-validate to skip unless --man is enabled.`,
+						),
+					);
+				}, VALIDATE_TIMEOUT_MS);
+			}),
+		]).finally(() => {
+			clearTimeout(timer);
+			// Always consume stderr to avoid resource leaks on the stream
+			if (timedOut) stderrPromise.catch(() => {});
+		});
+
+		const stderr = (await stderrPromise).trim();
+
+		if (exitCode !== 0) {
+			// stderr contains the raw error message from the snapshot subprocess
+			throw new Error(stderr || "Pre-compile validation failed");
+		}
+
+		if (stderr) {
+			// Style Warning: prefixed lines from snapshot preparation
+			const styled = stderr
+				.split("\n")
+				.map((line) =>
+					line.startsWith("Warning:")
+						? `${yellow("Warning:")}${line.slice("Warning:".length)}`
+						: line,
+				)
+				.join("\n");
+			process.stderr.write(`${styled}\n`);
+		}
+
+		let serialized: string;
+		try {
+			serialized = await readFile(snapshotPath, "utf8");
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+				throw new Error(
+					`Entry exited without producing a Command Snapshot.\n  Ensure ${absoluteEntry} calls await app.execute() and uses a compatible @crustjs/core version.`,
+					{ cause: error },
 				);
-			}, VALIDATE_TIMEOUT_MS);
-		}),
-	]).finally(() => {
-		clearTimeout(timer);
-		// Always consume stderr to avoid resource leaks on the stream
-		if (timedOut) stderrPromise.catch(() => {});
-	});
-
-	const stderr = (await stderrPromise).trim();
-
-	if (exitCode !== 0) {
-		// stderr contains the raw error message from the validation subprocess
-		throw new Error(stderr || "Pre-compile validation failed");
-	}
-
-	if (stderr) {
-		// Style Warning: prefixed lines from validation subprocess
-		const styled = stderr
-			.split("\n")
-			.map((line) =>
-				line.startsWith("Warning:")
-					? `${yellow("Warning:")}${line.slice("Warning:".length)}`
-					: line,
-			)
-			.join("\n");
-		process.stderr.write(`${styled}\n`);
+			}
+			throw error;
+		}
+		return JSON.parse(serialized) as CommandSnapshot;
+	} finally {
+		await rm(snapshotDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 	}
 }

@@ -612,7 +612,7 @@ describe("buildCommand error handling", () => {
 			const app = new Crust("test").add(buildCommand);
 
 			await app.execute({
-				argv: ["build", "--outfile", "./out"],
+				argv: ["build", "--outfile", "./out", "--no-validate"],
 			});
 
 			expect(process.exitCode).toBe(1);

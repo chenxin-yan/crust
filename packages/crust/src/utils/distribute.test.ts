@@ -252,7 +252,8 @@ describe("runDistributeBuild with --man", () => {
 		writeFileSync(
 			join(tmpDir, "src", "cli.ts"),
 			`import { Crust } from "@crustjs/core";
-export const app = new Crust("x").action(() => {});
+const app = new Crust("x").action(() => {});
+await app.execute();
 `,
 		);
 		writeFileSync(
