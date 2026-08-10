@@ -9,7 +9,7 @@ import { z } from "zod";
 
 import { CrustStoreError } from "./errors.ts";
 import { createStore } from "./store.ts";
-import type { FieldsDef } from "./types.ts";
+import type { CreateStoreOptions, FieldsDef } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
@@ -66,6 +66,7 @@ describe("createStore", () => {
 	it("should return a store with read, write, update, patch, and reset methods", () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: BASIC_FIELDS,
 		});
 
@@ -80,6 +81,7 @@ describe("createStore", () => {
 		expect(() =>
 			createStore({
 				dirPath: "relative/path",
+				name: "config",
 				fields: BASIC_FIELDS,
 			}),
 		).toThrow(CrustStoreError);
@@ -89,6 +91,7 @@ describe("createStore", () => {
 		expect(() =>
 			createStore({
 				dirPath: "/tmp/config.json",
+				name: "config",
 				fields: BASIC_FIELDS,
 			}),
 		).toThrow(CrustStoreError);
@@ -129,16 +132,13 @@ describe("createStore", () => {
 		expect(JSON.parse(raw)).toEqual({ theme: "dark", verbose: true });
 	});
 
-	it("should default to config.json when name is not provided", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			fields: BASIC_FIELDS,
-		});
-
-		await store.write({ theme: "dark", verbose: true });
-
-		const configPath = join(tempDir, "config.json");
-		expect(existsSync(configPath)).toBe(true);
+	it("should throw when name is not provided at runtime", () => {
+		expect(() =>
+			createStore({
+				dirPath: tempDir,
+				fields: BASIC_FIELDS,
+			} as unknown as CreateStoreOptions<typeof BASIC_FIELDS>),
+		).toThrow(CrustStoreError);
 	});
 
 	// POSIX-only: Windows ignores Unix permission bits (it uses ACLs).
@@ -186,6 +186,7 @@ describe("store.read", () => {
 	it("should return defaults when no persisted file exists", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: BASIC_FIELDS,
 		});
 
@@ -198,6 +199,7 @@ describe("store.read", () => {
 	it("should omit optional fields (no default) when no persisted file exists", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: MIXED_FIELDS,
 		});
 
@@ -211,6 +213,7 @@ describe("store.read", () => {
 	it("should return persisted values overriding defaults", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: BASIC_FIELDS,
 		});
 
@@ -227,6 +230,7 @@ describe("store.read", () => {
 
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: BASIC_FIELDS,
 		});
 
@@ -242,6 +246,7 @@ describe("store.read", () => {
 
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: MIXED_FIELDS,
 		});
 
@@ -255,6 +260,7 @@ describe("store.read", () => {
 	it("should not auto-persist merged defaults back to disk", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: BASIC_FIELDS,
 		});
 
@@ -278,6 +284,7 @@ describe("store.read", () => {
 
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: BASIC_FIELDS,
 		});
 
@@ -294,6 +301,7 @@ describe("store.read", () => {
 
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: BASIC_FIELDS,
 		});
 
@@ -318,6 +326,7 @@ describe("store.read", () => {
 
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: BASIC_FIELDS,
 		});
 
@@ -337,6 +346,7 @@ describe("store.read", () => {
 
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: VALIDATED_FIELDS,
 		});
 
@@ -367,6 +377,7 @@ describe("store.read", () => {
 
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields,
 		});
 
@@ -386,6 +397,7 @@ describe("store.read", () => {
 
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields,
 		});
 
@@ -404,6 +416,7 @@ describe("store.read", () => {
 
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields,
 		});
 
@@ -431,6 +444,7 @@ describe("store.write", () => {
 	it("should persist config to disk", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: BASIC_FIELDS,
 		});
 
@@ -445,6 +459,7 @@ describe("store.write", () => {
 		const nestedDir = join(tempDir, "deep", "nested");
 		const store = createStore({
 			dirPath: nestedDir,
+			name: "config",
 			fields: BASIC_FIELDS,
 		});
 
@@ -459,6 +474,7 @@ describe("store.write", () => {
 	it("should overwrite existing config", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: BASIC_FIELDS,
 		});
 
@@ -473,6 +489,7 @@ describe("store.write", () => {
 	it("should persist optional fields when provided", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: MIXED_FIELDS,
 		});
 
@@ -494,6 +511,7 @@ describe("store.write", () => {
 	it("should run field validators on write", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: VALIDATED_FIELDS,
 		});
 
@@ -514,6 +532,7 @@ describe("store.write", () => {
 	it("should not persist when validation fails", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: VALIDATED_FIELDS,
 		});
 
@@ -541,6 +560,7 @@ describe("store.write", () => {
 
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields,
 		});
 
@@ -570,6 +590,7 @@ describe("store.update", () => {
 	it("should read, apply updater, and persist", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: BASIC_FIELDS,
 		});
 
@@ -584,6 +605,7 @@ describe("store.update", () => {
 	it("should use field defaults as current when no persisted file", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: BASIC_FIELDS,
 		});
 
@@ -600,6 +622,7 @@ describe("store.update", () => {
 
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: BASIC_FIELDS,
 		});
 
@@ -616,6 +639,7 @@ describe("store.update", () => {
 	it("should work with optional fields", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: MIXED_FIELDS,
 		});
 
@@ -635,6 +659,7 @@ describe("store.update", () => {
 	it("should run field validators on update", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: VALIDATED_FIELDS,
 		});
 
@@ -671,6 +696,7 @@ describe("store.patch", () => {
 	it("should apply partial update to current config", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: BASIC_FIELDS,
 		});
 
@@ -685,6 +711,7 @@ describe("store.patch", () => {
 	it("should preserve existing keys not in the partial", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: BASIC_FIELDS,
 		});
 
@@ -699,6 +726,7 @@ describe("store.patch", () => {
 	it("should run field validators on patch", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: VALIDATED_FIELDS,
 		});
 
@@ -718,6 +746,7 @@ describe("store.patch", () => {
 	it("should work when no persisted file exists (patches defaults)", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: BASIC_FIELDS,
 		});
 
@@ -748,6 +777,7 @@ describe("store.reset", () => {
 	it("should delete persisted config file", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: BASIC_FIELDS,
 		});
 
@@ -762,6 +792,7 @@ describe("store.reset", () => {
 	it("should not throw when no persisted file exists", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: BASIC_FIELDS,
 		});
 
@@ -772,6 +803,7 @@ describe("store.reset", () => {
 	it("should return to defaults-on-read behavior after reset", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: BASIC_FIELDS,
 		});
 
@@ -790,6 +822,7 @@ describe("store.reset", () => {
 	it("should return field defaults after reset (optional fields undefined)", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: MIXED_FIELDS,
 		});
 
@@ -826,6 +859,7 @@ describe("store lifecycle", () => {
 	it("should support full read → write → update → patch → reset cycle", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: BASIC_FIELDS,
 		});
 
@@ -864,6 +898,7 @@ describe("store lifecycle", () => {
 	it("should support multiple write → read cycles", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: BASIC_FIELDS,
 		});
 
@@ -878,6 +913,7 @@ describe("store lifecycle", () => {
 	it("should handle array fields across lifecycle", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: ARRAY_FIELDS,
 		});
 
@@ -918,6 +954,7 @@ describe("multiple stores with name option", () => {
 	it("should support multiple independent stores under the same directory", async () => {
 		const configStore = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: BASIC_FIELDS,
 		});
 
@@ -956,6 +993,7 @@ describe("multiple stores with name option", () => {
 	it("should write to different JSON files based on name", async () => {
 		const defaultStore = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: BASIC_FIELDS,
 		});
 		await defaultStore.write({ theme: "dark", verbose: true });
@@ -993,6 +1031,7 @@ describe("field validation", () => {
 	it("should pass when all field validators succeed", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: VALIDATED_FIELDS,
 		});
 
@@ -1021,6 +1060,7 @@ describe("field validation", () => {
 
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields,
 		});
 
@@ -1054,6 +1094,7 @@ describe("field validation", () => {
 
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields,
 		});
 
@@ -1070,6 +1111,7 @@ describe("field validation", () => {
 	it("should include field path in validation error details", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: VALIDATED_FIELDS,
 		});
 
@@ -1088,6 +1130,7 @@ describe("field validation", () => {
 	it("should include operation in validation error details", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: VALIDATED_FIELDS,
 		});
 
@@ -1151,7 +1194,7 @@ describe("FieldDef.validate contract", () => {
 			},
 		} as const satisfies FieldsDef;
 
-		const store = createStore({ dirPath: tempDir, fields });
+		const store = createStore({ dirPath: tempDir, name: "config", fields });
 
 		try {
 			await store.write({ name: "bad" });
@@ -1195,6 +1238,7 @@ describe("schema transform persistence", () => {
 	it("materializes schema defaults from missing persisted values", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: { name: { schema: z.string().default("x") } },
 		});
 
@@ -1204,6 +1248,7 @@ describe("schema transform persistence", () => {
 	it("preserves optional schema output for missing persisted values", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: { name: { schema: z.string().optional() } },
 		});
 
@@ -1213,6 +1258,7 @@ describe("schema transform persistence", () => {
 	it("rejects missing values when the schema requires a value", async () => {
 		const store = createStore({
 			dirPath: tempDir,
+			name: "config",
 			fields: { name: { schema: z.string() } },
 		});
 
@@ -1226,7 +1272,11 @@ describe("schema transform persistence", () => {
 		]) {
 			let caught: unknown;
 			try {
-				createStore({ dirPath: tempDir, fields: { name: field } as unknown as FieldsDef });
+				createStore({
+					dirPath: tempDir,
+					name: "config",
+					fields: { name: field } as unknown as FieldsDef,
+				});
 			} catch (error) {
 				caught = error;
 			}
@@ -1240,7 +1290,7 @@ describe("schema transform persistence", () => {
 			name: { schema: z.string().transform((s) => s.trim()) },
 		} as const satisfies FieldsDef;
 
-		const store = createStore({ dirPath: tempDir, fields });
+		const store = createStore({ dirPath: tempDir, name: "config", fields });
 
 		await store.write({ name: "  hi  " });
 
@@ -1254,7 +1304,7 @@ describe("schema transform persistence", () => {
 			name: { schema: z.string().transform((s) => s.trim()) },
 		} as const satisfies FieldsDef;
 
-		const store = createStore({ dirPath: tempDir, fields });
+		const store = createStore({ dirPath: tempDir, name: "config", fields });
 
 		await store.update(() => ({ name: "  spaced  " }));
 
@@ -1268,7 +1318,7 @@ describe("schema transform persistence", () => {
 			name: { schema: z.string().transform((s) => s.trim()) },
 		} as const satisfies FieldsDef;
 
-		const store = createStore({ dirPath: tempDir, fields });
+		const store = createStore({ dirPath: tempDir, name: "config", fields });
 
 		await store.patch({ name: "  patched  " });
 
@@ -1288,7 +1338,7 @@ describe("schema transform persistence", () => {
 			name: { schema: z.string().transform((s) => s.trim()) },
 		} as const satisfies FieldsDef;
 
-		const store = createStore({ dirPath: tempDir, fields });
+		const store = createStore({ dirPath: tempDir, name: "config", fields });
 
 		const result = await store.read();
 		expect(result.name).toBe("  hi  ");
@@ -1306,7 +1356,7 @@ describe("schema transform persistence", () => {
 			x: { schema: z.string().transform((s) => s.length) },
 		} as const satisfies FieldsDef;
 
-		const store = createStore({ dirPath: tempDir, fields });
+		const store = createStore({ dirPath: tempDir, name: "config", fields });
 
 		let caught: unknown;
 		try {
@@ -1343,7 +1393,7 @@ describe("schema transform persistence", () => {
 			tags: { schema: z.array(z.string()) },
 		} as const satisfies FieldsDef;
 
-		const store = createStore({ dirPath: tempDir, fields });
+		const store = createStore({ dirPath: tempDir, name: "config", fields });
 
 		await store.write({ tags: ["a", "b"] });
 
@@ -1361,7 +1411,7 @@ describe("schema transform persistence", () => {
 			tags: { schema: z.array(z.string().transform((s) => s.trim())) },
 		} as const satisfies FieldsDef;
 
-		const store = createStore({ dirPath: tempDir, fields });
+		const store = createStore({ dirPath: tempDir, name: "config", fields });
 
 		await store.write({ tags: ["  a  ", "b "] });
 
@@ -1375,7 +1425,7 @@ describe("schema transform persistence", () => {
 			theme: { type: "string", default: "x" },
 		} as const satisfies FieldsDef;
 
-		const store = createStore({ dirPath: tempDir, fields });
+		const store = createStore({ dirPath: tempDir, name: "config", fields });
 
 		await store.write({ theme: "dark" });
 
@@ -1399,7 +1449,7 @@ describe("schema transform persistence", () => {
 			},
 		} as const satisfies FieldsDef;
 
-		const store = createStore({ dirPath: tempDir, fields });
+		const store = createStore({ dirPath: tempDir, name: "config", fields });
 
 		// Accept on no-throw: writes 8080 successfully.
 		await store.write({ port: 8080 });

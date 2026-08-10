@@ -255,6 +255,7 @@ export type StoreAccess = "default" | "private" | StorePermissionBits;
  * ```ts
  * const store = createStore({
  *   dirPath: configDir("my-cli"),
+ *   name: "config",
  *   fields: {
  *     theme: { type: "string", default: "light" },
  *     verbose: { type: "boolean", default: false },
@@ -275,13 +276,10 @@ export interface CreateStoreOptions<F extends FieldsDef> {
 	/**
 	 * Store name used as the JSON filename in the directory.
 	 *
-	 * Defaults to `"config"`, producing `config.json`. Set to a different value
-	 * to create multiple stores under the same directory
-	 * (e.g. `name: "auth"` → `auth.json`).
-	 *
-	 * Must not contain path separators or the `.json` extension.
+	 * For example, `name: "auth"` produces `auth.json`. Must not contain path
+	 * separators or the `.json` extension.
 	 */
-	name?: string;
+	name: string;
 
 	/**
 	 * Field definitions that declare the store's config schema.
@@ -356,6 +354,7 @@ export type StoreUpdater<TConfig> = (current: TConfig) => NoInfer<TConfig>;
  * ```ts
  * const store = createStore({
  *   dirPath: configDir("my-cli"),
+ *   name: "config",
  *   fields: {
  *     theme: { type: "string", default: "light" },
  *     verbose: { type: "boolean", default: false },

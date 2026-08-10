@@ -508,7 +508,7 @@ describe("resolveStorePath", () => {
 	describe("dirPath validation", () => {
 		it("should reject empty dirPath", () => {
 			try {
-				resolveStorePath("");
+				resolveStorePath("", "config");
 				expect.unreachable("should have thrown");
 			} catch (err) {
 				expect(err).toBeInstanceOf(CrustStoreError);
@@ -519,7 +519,7 @@ describe("resolveStorePath", () => {
 
 		it("should reject relative dirPath", () => {
 			try {
-				resolveStorePath("relative/path");
+				resolveStorePath("relative/path", "config");
 				expect.unreachable("should have thrown");
 			} catch (err) {
 				expect(err).toBeInstanceOf(CrustStoreError);
@@ -530,7 +530,7 @@ describe("resolveStorePath", () => {
 
 		it("should reject dirPath ending in .json", () => {
 			try {
-				resolveStorePath("/absolute/path/config.json");
+				resolveStorePath("/absolute/path/config.json", "config");
 				expect.unreachable("should have thrown");
 			} catch (err) {
 				expect(err).toBeInstanceOf(CrustStoreError);
@@ -540,20 +540,20 @@ describe("resolveStorePath", () => {
 		});
 
 		it("should accept valid absolute dirPath", () => {
-			const result = resolveStorePath("/home/user/.config/my-cli");
+			const result = resolveStorePath("/home/user/.config/my-cli", "config");
 			expect(result).toBe(join("/home/user/.config/my-cli", "config.json"));
 		});
 
 		it("should accept Windows-style absolute dirPath", () => {
-			const result = resolveStorePath("C:\\Users\\test\\config-dir");
+			const result = resolveStorePath("C:\\Users\\test\\config-dir", "config");
 			expect(result).toBe(join("C:\\Users\\test\\config-dir", "config.json"));
 		});
 	});
 
 	describe("name parameter", () => {
-		it("should default to config.json when name is not provided", () => {
-			const result = resolveStorePath("/home/user/.config/my-cli");
-			expect(result).toEndWith("config.json");
+		it("should reject a missing name at runtime", () => {
+			const resolveWithoutName = resolveStorePath as (dirPath: string) => string;
+			expect(() => resolveWithoutName("/home/user/.config/my-cli")).toThrow(CrustStoreError);
 		});
 
 		it("should use custom name as filename", () => {
@@ -608,7 +608,7 @@ describe("resolveStorePath", () => {
 
 		it("should compose dataDir + resolveStorePath", () => {
 			const dir = dataDir("my-cli", linuxEnv());
-			const path = resolveStorePath(dir);
+			const path = resolveStorePath(dir, "config");
 			expect(path).toBe(join("/home/testuser", ".local", "share", "my-cli", "config.json"));
 		});
 

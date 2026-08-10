@@ -5,7 +5,7 @@ description: DX-first, typed persistence for CLI apps with config/data/state/cac
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-`@crustjs/store` gives your CLI production-ready local persistence with near-zero setup. Provide a `fields` definition, pick a storage intent, and get a typed store with read/write/update/patch/reset — no manual type annotations needed.
+`@crustjs/store` gives your CLI production-ready local persistence with near-zero setup. Provide a directory, store name, and `fields` definition to get a typed store with read/write/update/patch/reset — no manual type annotations needed.
 
 ## Install
 
@@ -20,6 +20,7 @@ import { createStore, configDir } from "@crustjs/store";
 
 const store = createStore({
   dirPath: configDir("my-cli"),
+  name: "config",
   fields: {
     theme: { type: "string", default: "light" },
     fontSize: { type: "number", default: 14 },
@@ -73,6 +74,7 @@ import { createStore, configDir, dataDir, stateDir, cacheDir } from "@crustjs/st
 // User preferences → ~/.config/my-cli/config.json
 const config = createStore({
   dirPath: configDir("my-cli"),
+  name: "config",
   fields: {
     theme: { type: "string", default: "light" },
     verbose: { type: "boolean", default: false },
@@ -82,6 +84,7 @@ const config = createStore({
 // App data → ~/.local/share/my-cli/config.json
 const data = createStore({
   dirPath: dataDir("my-cli"),
+  name: "config",
   fields: {
     bookmarks: { type: "string", array: true, default: [] },
   },
@@ -90,6 +93,7 @@ const data = createStore({
 // Runtime state → ~/.local/state/my-cli/config.json
 const state = createStore({
   dirPath: stateDir("my-cli"),
+  name: "config",
   fields: {
     lastOpened: { type: "string", default: "" },
     scrollY: { type: "number", default: 0 },
@@ -99,6 +103,7 @@ const state = createStore({
 // Cache → ~/.cache/my-cli/config.json
 const cache = createStore({
   dirPath: cacheDir("my-cli"),
+  name: "config",
   fields: {
     etag: { type: "string", default: "" },
     payload: { type: "string", default: "" },
@@ -126,16 +131,17 @@ The optional `env` parameter on each helper accepts a `PlatformEnv` object for d
 
 ### Multiple Stores
 
-Use the `name` option to maintain separate JSON files under the same directory:
+Give each store a `name` to maintain separate JSON files under the same directory:
 
 ```ts
 import { createStore, configDir } from "@crustjs/store";
 
 const dir = configDir("my-cli");
 
-// ~/.config/my-cli/config.json (default)
+// ~/.config/my-cli/config.json
 const settingsStore = createStore({
   dirPath: dir,
+  name: "config",
   fields: {
     theme: { type: "string", default: "light" },
     fontSize: { type: "number", default: 14 },
@@ -155,13 +161,13 @@ const authStore = createStore({
 
 Each store is fully independent — reading, writing, updating, and resetting one does not affect the others.
 
-`name` defaults to `"config"` (producing `config.json`). It must not contain path separators or the `.json` extension.
+`name` is required and becomes the JSON filename. It must not contain path separators or the `.json` extension.
 
 ## API
 
 ### `createStore(options)`
 
-Creates a typed async store backed by a local JSON file. The file path is resolved once at creation time from `dirPath` and optional `name`.
+Creates a typed async store backed by a local JSON file. The file path is resolved once at creation time from the required `dirPath` and `name`.
 
 ```ts
 const store = createStore(options);
@@ -285,6 +291,7 @@ When a persisted file exists, `read()` fills missing keys from field `defaults`:
 ```ts
 const store = createStore({
   dirPath: configDir("my-cli"),
+  name: "config",
   fields: {
     theme: { type: "string", default: "light" },
     fontSize: { type: "number", default: 14 },
@@ -317,6 +324,7 @@ Add a `validate` function to individual field definitions to validate values dur
 ```ts
 const store = createStore({
   dirPath: configDir("my-cli"),
+  name: "config",
   fields: {
     port: {
       type: "number",
@@ -345,6 +353,7 @@ import { z } from "zod";
 
 const store = createStore({
   dirPath: configDir("my-cli"),
+  name: "config",
   fields: {
     theme: { schema: z.enum(["light", "dark"]).default("light") },
     verbose: { type: "boolean", default: false },
@@ -360,6 +369,7 @@ import { configDir, createStore } from "@crustjs/store";
 
 const store = createStore({
   dirPath: configDir("my-cli"),
+  name: "config",
   fields: {
     theme: { schema: Schema.standardSchemaV1(Schema.Literal("light", "dark")) },
   },
