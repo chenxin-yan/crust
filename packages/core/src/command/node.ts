@@ -1,5 +1,6 @@
 import type { ContextInstance } from "../api/context.ts";
 import type { Extension } from "../api/extension.ts";
+import type { FlagSpelling } from "../parsing/spellings.ts";
 import type { ArgsDef, CommandMeta, FlagsDef } from "../types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -23,11 +24,13 @@ export interface CommandNode {
 	ownedFlags: FlagsDef;
 	/** Context-owned and local flags merged for parsing */
 	effectiveFlags: FlagsDef;
+	/** Cached canonical/short/alias table for the normalized effective flags. */
+	flagSpellings: Map<string, FlagSpelling>;
 	/** Positional argument definitions */
 	args: ArgsDef | undefined;
 	/** Named subcommands keyed by name */
 	subCommands: Record<string, CommandNode>;
-	/** Context instances available to this command (constructed topologically) */
+	/** Context instances available to this command in cached topological order. */
 	contexts: ContextInstance[];
 	/** Extensions registered via `.extend()` (root builder only) */
 	extensions: Extension[];
@@ -52,6 +55,7 @@ export function createCommandNode(name: string): CommandNode {
 		localFlags: {},
 		ownedFlags: {},
 		effectiveFlags: {},
+		flagSpellings: new Map(),
 		args: undefined,
 		subCommands: {},
 		contexts: [],

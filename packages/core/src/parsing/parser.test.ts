@@ -5,6 +5,7 @@ import { computeEffectiveFlags, createCommandNode } from "../command/node.ts";
 import { CrustError } from "../errors.ts";
 import type { ArgsDef, CommandMeta, FlagsDef } from "../types.ts";
 import { parseArgs, validateParsed } from "./parser.ts";
+import { addFlagSpellingEntries } from "./spellings.ts";
 
 /**
  * Test helper: creates a CommandNode from a config object for test fixtures.
@@ -23,6 +24,9 @@ function makeNode<const A extends ArgsDef = ArgsDef, const F extends FlagsDef = 
 	if (config.flags) {
 		node.localFlags = { ...config.flags };
 		node.effectiveFlags = { ...config.flags };
+		for (const [name, def] of Object.entries(node.effectiveFlags)) {
+			addFlagSpellingEntries(node.flagSpellings, name, def);
+		}
 	}
 	if (config.args) {
 		node.args = [...config.args];
@@ -34,6 +38,14 @@ function makeNode<const A extends ArgsDef = ArgsDef, const F extends FlagsDef = 
 		node.run = config.run;
 	}
 	return node as CommandNode & { args: A | undefined; effectiveFlags: F };
+}
+
+function setEffectiveFlags(node: CommandNode, flags: FlagsDef): void {
+	node.effectiveFlags = flags;
+	node.flagSpellings.clear();
+	for (const [name, def] of Object.entries(flags)) {
+		addFlagSpellingEntries(node.flagSpellings, name, def);
+	}
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -197,46 +209,6 @@ describe("parseArgs — aliases", () => {
 		// Long alias
 		const result2 = parseArgs(cmd, ["--out", "./build"]);
 		expect(result2.flags.output).toBe("./build");
-	});
-
-	it("throws CrustError with DEFINITION code on alias collision", () => {
-		const cmd = makeNode({
-			meta: "alias-collision",
-			flags: {
-				verbose: { type: "boolean" as const, short: "v" },
-				version: { type: "boolean" as const, short: "v" },
-			},
-		});
-		try {
-			parseArgs(cmd, []);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("DEFINITION");
-			expect((err as CrustError).message).toBe(
-				'Alias collision: "-v" is used by both "--verbose" and "--version"',
-			);
-		}
-	});
-
-	it("throws CrustError with DEFINITION code on long alias shadowing flag name", () => {
-		const cmd = makeNode({
-			meta: "alias-shadow",
-			flags: {
-				out: { type: "string" as const, description: "Output format" },
-				output: { type: "string" as const, short: "o", aliases: ["out"] },
-			},
-		});
-		try {
-			parseArgs(cmd, []);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("DEFINITION");
-			expect((err as CrustError).message).toBe(
-				'Alias collision: "--out" is used by both "--out" and "--output"',
-			);
-		}
 	});
 });
 
@@ -596,21 +568,6 @@ describe("parseArgs — variadic args", () => {
 		});
 		const result = parseArgs(cmd, ["a.ts"]);
 		expect(result.args.files).toEqual(["a.ts"]);
-	});
-
-	it("rejects a variadic arg that is not the last positional (DEFINITION)", () => {
-		// Externally-installed nodes bypass the builder's position check;
-		// parseArgs must fail fast instead of silently mis-parsing.
-		const cmd = makeNode({
-			meta: { name: "test" },
-			args: [
-				{ name: "files", type: "string", variadic: true },
-				{ name: "dest", type: "string" },
-			],
-		});
-		expect(() => parseArgs(cmd, [])).toThrow(
-			'Argument "files" is variadic, but only the last positional argument can be variadic',
-		);
 	});
 });
 
@@ -999,44 +956,6 @@ describe("parseArgs — boolean negation", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Defense-in-depth: "no-" prefixed flag names in parser
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("parseArgs — no- prefix defense-in-depth", () => {
-	it("throws CrustError with DEFINITION code on no- prefixed flag name", () => {
-		const cmd = makeNode({
-			meta: "no-prefix",
-			flags: { "no-cache": { type: "boolean" as const } },
-		});
-		try {
-			parseArgs(cmd, []);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("DEFINITION");
-			expect((err as CrustError).message).toContain('Flag "--no-cache" must not use "no-" prefix');
-		}
-	});
-
-	it("throws CrustError with DEFINITION code on no- prefixed alias", () => {
-		const cmd = makeNode({
-			meta: "no-prefix-alias",
-			flags: { cache: { type: "boolean" as const, aliases: ["no-store"] } },
-		});
-		try {
-			parseArgs(cmd, []);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("DEFINITION");
-			expect((err as CrustError).message).toContain(
-				'Alias "--no-store" on "--cache" must not use "no-" prefix',
-			);
-		}
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // CommandNode — parsing with effective (merged) flags
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -1052,6 +971,7 @@ describe("parseArgs — CommandNode with effective flags", () => {
 		const node = createCommandNode("child");
 		node.localFlags = localFlags;
 		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
+		setEffectiveFlags(node, node.effectiveFlags);
 
 		const result = parseArgs(node, ["--verbose", "--output", "./dist"]);
 		expect(result.flags.verbose).toBe(true);
@@ -1070,6 +990,7 @@ describe("parseArgs — CommandNode with effective flags", () => {
 		const node = createCommandNode("child");
 		node.localFlags = localFlags;
 		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
+		setEffectiveFlags(node, node.effectiveFlags);
 
 		// parseArgs does not throw — validation is separate
 		const parsed = parseArgs(node, []);
@@ -1098,6 +1019,7 @@ describe("parseArgs — CommandNode with effective flags", () => {
 		const node = createCommandNode("child");
 		node.localFlags = localFlags;
 		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
+		setEffectiveFlags(node, node.effectiveFlags);
 
 		const result = parseArgs(node, ["-v"]);
 		expect(result.flags.verbose).toBe(true);
@@ -1106,6 +1028,7 @@ describe("parseArgs — CommandNode with effective flags", () => {
 	it("rejects parent-local flags omitted from a child's effective flags", () => {
 		const node = createCommandNode("child");
 		node.effectiveFlags = computeEffectiveFlags({}, {});
+		setEffectiveFlags(node, node.effectiveFlags);
 
 		expect(() => parseArgs(node, ["--debug"])).toThrow(/Unknown flag/);
 	});
@@ -1122,6 +1045,7 @@ describe("parseArgs — CommandNode with effective flags", () => {
 		const node = createCommandNode("child");
 		node.localFlags = localFlags;
 		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
+		setEffectiveFlags(node, node.effectiveFlags);
 
 		// Default should apply when not provided
 		const result1 = parseArgs(node, []);
@@ -1144,6 +1068,7 @@ describe("parseArgs — CommandNode with effective flags", () => {
 			args: [{ name: "file", type: "string", required: true }] as const,
 		});
 		node.effectiveFlags = computeEffectiveFlags({ verbose: { type: "boolean" as const } }, {});
+		setEffectiveFlags(node, node.effectiveFlags);
 
 		const result = parseArgs(node, ["--verbose", "input.ts"]);
 		expect(result.flags.verbose).toBe(true);
@@ -1162,6 +1087,7 @@ describe("parseArgs — CommandNode with effective flags", () => {
 		const node = createCommandNode("child");
 		node.localFlags = localFlags;
 		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
+		setEffectiveFlags(node, node.effectiveFlags);
 
 		const result = parseArgs(node, ["--no-minify"]);
 		expect(result.flags.minify).toBe(false);
@@ -1179,6 +1105,7 @@ describe("parseArgs — CommandNode with effective flags", () => {
 		const node = createCommandNode("child");
 		node.localFlags = localFlags;
 		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
+		setEffectiveFlags(node, node.effectiveFlags);
 
 		const result = parseArgs(node, ["--include", "src", "--include", "lib"]);
 		expect(result.flags.include).toEqual(["src", "lib"]);
@@ -1263,16 +1190,6 @@ describe("validateParsed", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — raw schema-backed args", () => {
-	it("throws DEFINITION when dynamic flag definitions omit parser type", () => {
-		const cmd = makeNode({
-			meta: { name: "invalid-flag" },
-			flags: { verbose: {} as never },
-		});
-		expect(() => parseArgs(cmd, [])).toThrow(
-			'Flag "--verbose" must declare a parser type ("string", "number", "boolean", "url", "path", or "json")',
-		);
-	});
-
 	it("keeps untyped positional args as raw strings", () => {
 		const cmd = makeNode({
 			meta: { name: "raw-arg" },
@@ -1405,25 +1322,6 @@ describe("parseArgs — parse escape hatch", () => {
 		});
 		const result = parseArgs(cmd, ["--port", "8080"]);
 		expect(result.flags.port).toBe(8080);
-	});
-
-	it("rejects async parse at setup with CrustError(DEFINITION)", () => {
-		const cmd = makeNode({
-			meta: "test",
-			flags: {
-				endpoint: { type: "string", parse: async (s: string) => s },
-			},
-		});
-		try {
-			parseArgs(cmd, []);
-			expect.unreachable("parseArgs should have rejected async parse");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			const e = err as CrustError;
-			expect(e.code).toBe("DEFINITION");
-			expect(e.message).toMatch(/Async parse not supported/);
-			expect(e.message).toContain("--endpoint");
-		}
 	});
 
 	it("wraps parse errors as CrustError(PARSE) with the flag name", () => {
@@ -1567,47 +1465,6 @@ describe("parseArgs \u2014 default coercion symmetry", () => {
 		});
 		const result = parseArgs(cmd, []);
 		expect(result.args.out).toBe(`${process.cwd()}/dist`);
-	});
-
-	it("validates a non-parse `default` against `choices` when present", () => {
-		const cmd = makeNode({
-			meta: "test",
-			flags: {
-				mode: {
-					type: "string",
-					choices: ["a", "b"] as const,
-					default: "z",
-				},
-			},
-		});
-		let err: unknown;
-		try {
-			parseArgs(cmd, []);
-		} catch (e) {
-			err = e;
-		}
-		expect(err).toBeInstanceOf(CrustError);
-		expect((err as Error).message).toMatch(/Invalid value "z" for --mode/);
-	});
-
-	it("validates a parse `default` against `choices` before running parse", () => {
-		let parseCalled = false;
-		const cmd = makeNode({
-			meta: "test",
-			flags: {
-				n: {
-					type: "string",
-					choices: ["1", "2"] as const,
-					parse: (s) => {
-						parseCalled = true;
-						return Number(s);
-					},
-					default: "3",
-				},
-			},
-		});
-		expect(() => parseArgs(cmd, [])).toThrow(CrustError);
-		expect(parseCalled).toBe(false);
 	});
 
 	it("accepts a default that is in the choices list (no false positive)", () => {

@@ -18,7 +18,7 @@ const command = new Crust("serve")
 
 See [`FlagDef`](/docs/api/types#flagdef) for the complete definition.
 
-Repeated `.flags()` calls accumulate: `.flags(a).flags(b)` defines both flags. For TypeScript consumers, a statically known name, short form, or alias collision with an earlier call or an existing Context-owned flag fails typecheck with `FIX_ALIAS_COLLISION` at the call that introduces it. Runtime validation throws a `DEFINITION` error for plain-JS consumers, dynamically built definitions, and collisions hidden from the type system.
+Repeated `.flags()` calls accumulate: `.flags(a).flags(b)` defines both flags. For TypeScript consumers, a statically known name, short form, or alias collision with an earlier call or an existing Context-owned flag fails typecheck with `FIX_ALIAS_COLLISION` at the call that introduces it. Runtime normalization throws a `DEFINITION` error at the same builder call for plain-JS consumers, dynamically built definitions, and collisions hidden from the type system.
 
 Builder chaining follows the same rule for every variadic method: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` accumulate and reject duplicates. `.action()` is set once and throws if called again.
 
@@ -57,7 +57,7 @@ Both values are non-optional in the Command Action. Other flags include `undefin
 .flags({ name: "target", type: "string", choices: ["bun", "node"] })
 ```
 
-Choices are supported on string flags and invalid values produce `PARSE` errors.
+Choices are supported on string flags. A declared default outside this set is a `DEFINITION` error when `.flags()` runs; an argv value outside it is a `PARSE` error during invocation.
 
 ## Reusing flag definitions
 

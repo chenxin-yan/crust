@@ -14,9 +14,8 @@ import type {
 	ParseResult,
 	ValueType,
 } from "../types.ts";
-import { validateVariadicArgPosition } from "../validation/args.ts";
 import { coerceJson, coercePath, coerceUrl } from "./coercers.ts";
-import { flagSpellings, type FlagSpelling } from "./spellings.ts";
+import type { FlagSpelling } from "./spellings.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Internal types
@@ -124,8 +123,8 @@ function invokeParse(
  *
  * Without this, `{ type: "path", default: "./dist" }` returns the raw
  * relative string while `--out ./dist` returns an absolute path. Defaults
- * violating `choices` are a definition error, rejected up front by
- * {@link validateDefinition} before any resolution runs.
+ * violating `choices` are a Definition Error, rejected during normalization
+ * before any invocation runs.
  *
  * `parse` is preferred when present (matches the escape-hatch contract).
  * `type: "path"` defaults are coerced through `coercePath` because their
@@ -159,37 +158,6 @@ function resolveDefault(
 	}
 
 	return defaultValue;
-}
-
-/**
- * Walk every flag/arg def with a `parse` field and reject async parsers
- * up-front. Async parse would return a Promise that the parser would treat
- * as the resolved value — almost certainly a bug. Throws
- * `CrustError("DEFINITION", …)` for each offender. Called at the top of
- * {@link parseArgs} so misconfigured commands fail fast.
- */
-function assertSyncParse(
-	parse: ((raw: string) => unknown) | undefined,
-	subject: "flag" | "arg",
-	name: string,
-): void {
-	if (parse?.constructor.name !== "AsyncFunction") return;
-
-	const label = subject === "flag" ? `flag --${name}` : `argument <${name}>`;
-	throw new CrustError(
-		"DEFINITION",
-		`Async parse not supported for ${label}. Use a sync parser; do async work in run().`,
-		{ subject, name, reason: "async-parse" },
-	);
-}
-
-function validateAsyncParse(flagsDef: FlagsDef | undefined, argsDef: ArgsDef | undefined): void {
-	for (const [name, def] of Object.entries(flagsDef ?? {})) {
-		assertSyncParse((def as { parse?: (raw: string) => unknown }).parse, "flag", name);
-	}
-	for (const def of argsDef ?? []) {
-		assertSyncParse(def.parse, "arg", def.name);
-	}
 }
 
 /**
@@ -426,75 +394,6 @@ function validateNoNegateUsage(argv: string[], spellings: ReadonlyMap<string, Fl
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// validateDefinition — Definition-class validation
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Validate a flag/arg `default` against its own `choices` list. A default
- * outside its choices can never resolve to a valid value, so this is a
- * definition error; `resolveDefault` trusts it and skips re-checking.
- */
-function validateDefaultChoices(
-	def: { default?: unknown; choices?: readonly string[] },
-	label: string,
-): void {
-	const { default: defaultValue, choices } = def;
-	if (defaultValue === undefined || choices === undefined) return;
-	if (Array.isArray(defaultValue)) {
-		for (const v of defaultValue) validateChoice(String(v), choices, label);
-	} else {
-		validateChoice(String(defaultValue), choices, label);
-	}
-}
-
-/**
- * Validate a command's arg/flag *definitions* — checks that are pure
- * functions of the definitions and involve no argv:
- *
- * - Flag alias collisions (across `effectiveFlags`, so Context-owned and
- *   local flags share one namespace)
- * - Reserved `no-` prefix violations and invalid flag types
- * - Async `parse` functions
- * - Variadic arg position (only the last positional may be variadic)
- * - Defaults that violate their own `choices` list
- *
- * Called at the top of {@link parseArgs} so runtime parsing fails fast on
- * misconfigured commands, and directly by `validateCommandTree` so build
- * validation exercises the exact same rules. Argv-free rules shared by the
- * parser and the tree walk live only here — add new ones to this function,
- * never to the tree walk. (Builder-only checks, e.g. schema exclusivity and
- * duplicate names, run at `.args()`/`.flags()` time in the builder.)
- *
- * Returns the flag spelling table built along the way so {@link parseArgs}
- * doesn't rebuild it.
- *
- * @throws {CrustError} `DEFINITION` on violation (`PARSE` for a default
- *   outside its `choices`, matching the argv-side choices error)
- */
-export function validateDefinition(command: CommandNode): Map<string, FlagSpelling> {
-	const argsDef = command.args;
-	const flagsDef = command.effectiveFlags;
-
-	validateAsyncParse(flagsDef, argsDef);
-	// Building the spelling table throws on collisions / no- prefix / bad types.
-	const spellings = flagSpellings(flagsDef);
-
-	for (const [name, def] of Object.entries(flagsDef ?? {})) {
-		validateDefaultChoices(def as { default?: unknown; choices?: readonly string[] }, `--${name}`);
-	}
-
-	argsDef?.forEach((def, index) => {
-		validateVariadicArgPosition(def, index, argsDef.length);
-		validateDefaultChoices(
-			def as { default?: unknown; choices?: readonly string[] },
-			`<${def.name}>`,
-		);
-	});
-
-	return spellings;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
 // parseArgs — Main parsing function
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -521,10 +420,7 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 	const argsDef = command.args;
 	const flagsDef = command.effectiveFlags;
 
-	// Definition-class validation up-front so misconfigured commands fail
-	// fast, through the same gate build validation uses. Also yields the
-	// spelling table so we don't build it twice.
-	const spellings = validateDefinition(command);
+	const spellings = command.flagSpellings;
 	const { options: parseOptions, aliasToName } = buildParseArgsOptionDescriptor(spellings);
 
 	validateNoNegateUsage(argv, spellings);

@@ -666,9 +666,9 @@ export interface CommandMeta {
 	 *
 	 * **Conflict policy.** Alias strings must not collide with this command's
 	 * own canonical `name`, with any sibling's `name`, or with any sibling's
-	 * own alias. Collisions throw a `CrustError("DEFINITION", …)` at
-	 * registration time (or during `validateCommandTree` for extension-installed
-	 * subcommands). Each alias must also be a non-empty string with no
+	 * own alias. Collisions throw a `CrustError("DEFINITION", …)` during
+	 * normalization, including for Extension-installed subcommands. Each alias
+	 * must also be a non-empty string with no
 	 * whitespace and must not start with `-`.
 	 *
 	 * **Display contract.** Help output renders the canonical name with

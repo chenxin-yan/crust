@@ -83,11 +83,9 @@ export type ValidateCommandDefinitions<
 // Alias collision policy: aliases share a namespace with canonical names,
 // so a value collides with any sibling's canonical name or alias.
 //
-// Both registration time (`crust.ts`) and tree-walk validation
-// (`validateCommandTree`) reuse these helpers so the policy lives in one
-// place and surfaces as the same `DEFINITION` error shape regardless of
-// how a subcommand was installed (`.add()` vs. extension-installed via
-// the `addCommand` action / direct `node.subCommands` mutation).
+// Every child registration path reuses this helper through normalization,
+// so the policy surfaces as the same `DEFINITION` error shape for `.add()`
+// and Extension-installed commands.
 
 /**
  * Validate the shape of an alias string.

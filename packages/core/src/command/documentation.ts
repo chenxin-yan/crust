@@ -1,4 +1,3 @@
-import { flagSpellings } from "../parsing/spellings.ts";
 import type { CommandSnapshot, FlagSnapshot } from "./snapshot.ts";
 
 /**
@@ -125,21 +124,19 @@ function argToken(arg: CommandSnapshot["args"][number]): string {
 }
 
 function documentationFlags(flags: CommandSnapshot["flags"]): readonly DocumentationFlag[] {
-	const table = flagSpellings(flags);
 	return Object.entries(flags).map(([name, def]) => {
-		const entries = [...table.values()].filter((entry) => entry.canonicalName === name);
-		const short = entries.filter((entry) => entry.kind === "short");
-		const long = entries.filter((entry) => entry.kind !== "short");
+		const long = [name, ...(def.aliases ?? [])];
+		const negatable = def.type === "boolean" && def.noNegate !== true;
 		return Object.freeze({
 			name,
 			spellings: Object.freeze([
-				...short.map((entry) => `-${entry.spelling}`),
-				...long.map((entry) => `--${entry.spelling}`),
-				...long.filter((entry) => entry.negatable).map((entry) => `--no-${entry.spelling}`),
+				...(def.short ? [`-${def.short}`] : []),
+				...long.map((spelling) => `--${spelling}`),
+				...(negatable ? long.map((spelling) => `--no-${spelling}`) : []),
 			]),
 			short: def.short,
 			aliases: Object.freeze([...(def.aliases ?? [])]),
-			negatable: def.type === "boolean" && def.noNegate !== true,
+			negatable,
 			type: def.type,
 			description: def.description,
 			required: def.required === true,

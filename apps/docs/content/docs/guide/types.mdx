@@ -31,7 +31,7 @@ Use `parse` for a small synchronous transformation when a full schema is unneces
 })
 ```
 
-The Command Action receives the return type. A parser must be synchronous: TypeScript rejects Promise-returning parsers with `FIX_ASYNC_PARSE`, and runtime validation rejects declared `async` functions for plain-JS consumers.
+The Command Action receives the return type. A parser must be synchronous: TypeScript rejects Promise-returning parsers with `FIX_ASYNC_PARSE`, and runtime normalization rejects declared `async` functions at definition or materialization time for plain-JS consumers.
 
 ## Schema-backed definitions
 

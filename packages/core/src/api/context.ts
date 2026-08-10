@@ -8,7 +8,8 @@ import type {
 	NamedFlagDef,
 	NamedFlagsRecord,
 } from "../types.ts";
-import { validateIncomingFlag, type ValidateNamedFlagDefs } from "../validation/flags.ts";
+import type { ValidateNamedFlagDefs } from "../validation/flags.ts";
+import { normalizeFlag } from "../validation/normalize.ts";
 
 export type ContextMap = Record<string, unknown>;
 export type Awaitable<T> = T | Promise<T>;
@@ -202,9 +203,15 @@ export function defineContext(
 	}
 
 	const ownedFlags: FlagsDef = {};
+	const spellings = new Map();
 	for (const def of config.flags ?? []) {
 		const { name: flagName, ...rest } = def;
-		validateIncomingFlag({ name: flagName, def: rest as FlagDef }, ownedFlags, `Context "${name}"`);
+		normalizeFlag(
+			{ name: flagName, def: rest as FlagDef },
+			ownedFlags,
+			spellings,
+			`Context "${name}"`,
+		);
 		ownedFlags[flagName] = rest as FlagDef;
 	}
 	const requiredCtx = (config.requires ?? []).map((dep) => dep.contextName);
@@ -244,57 +251,6 @@ function registerDisposable(value: unknown, disposal: AsyncDisposableStack): voi
 }
 
 /**
- * Order Context instances topologically by their declared capability
- * requirements, preserving registration order among independent Contexts.
- *
- * @param where - Attach-site label used in error messages (e.g. the command path)
- * @throws {CrustError} `DEFINITION` on a missing dependency or a dependency cycle
- */
-export function sortContexts(
-	contexts: readonly ContextInstance[],
-	where: string,
-): ContextInstance[] {
-	const provided = new Set(contexts.map((context) => context.name));
-	for (const context of contexts) {
-		for (const dep of context.requiredCtx) {
-			if (!provided.has(dep)) {
-				throw new CrustError(
-					"DEFINITION",
-					`Context "${context.name}" requires Context "${dep}", which is not provided on ${where}`,
-					{
-						subject: "context",
-						name: context.name,
-						reason: "missing-context-dependency",
-					},
-				);
-			}
-		}
-	}
-
-	const sorted: ContextInstance[] = [];
-	const constructed = new Set<string>();
-	let remaining = [...contexts];
-	while (remaining.length > 0) {
-		const ready = remaining.filter((context) =>
-			context.requiredCtx.every((dep) => constructed.has(dep)),
-		);
-		if (ready.length === 0) {
-			const names = remaining.map((context) => `"${context.name}"`).join(", ");
-			throw new CrustError("DEFINITION", `Contexts ${names} form a dependency cycle on ${where}`, {
-				subject: "context",
-				reason: "context-cycle",
-			});
-		}
-		for (const context of ready) {
-			sorted.push(context);
-			constructed.add(context.name);
-		}
-		remaining = remaining.filter((context) => !constructed.has(context.name));
-	}
-	return sorted;
-}
-
-/**
  * Construct Context values in topological order, registering disposable
  * values on `disposal` so they are torn down in reverse construction order.
  *
@@ -306,10 +262,9 @@ export async function buildContexts(
 	flags: Record<string, unknown>,
 	io: InvocationIO,
 	disposal: AsyncDisposableStack,
-	where: string,
 ): Promise<ContextMap> {
 	const values: ContextMap = {};
-	for (const item of sortContexts(contexts, where)) {
+	for (const item of contexts) {
 		const ownedFlags = Object.fromEntries(
 			Object.keys(item.ownedFlags).map((name) => [name, flags[name]]),
 		);

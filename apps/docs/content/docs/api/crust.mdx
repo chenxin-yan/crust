@@ -152,11 +152,11 @@ const app = new Crust("my-cli", {
 });
 ```
 
-Definition aliases must be non-empty, contain no whitespace, not start with `-`, differ from their command's canonical name, and not collide with sibling names or aliases. For TypeScript consumers, known empty, space- or tab-containing, dash-prefixed, and self-equal aliases fail at `defineCommand()` with `FIX_ALIAS_SHAPE`, while sibling collisions fail at `.add()` with `FIX_COMMAND_COLLISION`. Runtime validation throws `DEFINITION` for plain-JS consumers and cases hidden from the type system, including other whitespace, duplicate aliases within one definition, widened definitions, and `.as()` renaming a definition to one of its own aliases.
+Definition aliases must be non-empty, contain no whitespace, not start with `-`, differ from their command's canonical name, and not collide with sibling names or aliases. For TypeScript consumers, known empty, space- or tab-containing, dash-prefixed, and self-equal aliases fail at `defineCommand()` with `FIX_ALIAS_SHAPE`, while sibling collisions fail at `.add()` with `FIX_COMMAND_COLLISION`. Runtime normalization throws `DEFINITION` at definition or materialization time for plain-JS consumers and cases hidden from the type system, including other whitespace, duplicate aliases within one definition, widened definitions, and `.as()` renaming a definition to one of its own aliases.
 
 ## Chaining semantics
 
-Variadic builder methods accumulate across calls: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` preserve earlier registrations and reject duplicate names or spellings. TypeScript reports the statically known flag, argument, and sibling-command collisions described below; runtime validation throws `DEFINITION` for plain-JS consumers, dynamically built definitions, and runtime-only cases. `.action()` is set once and throws `DEFINITION` if called again.
+Variadic builder methods accumulate across calls: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` preserve earlier registrations and reject duplicate names or spellings. TypeScript reports the statically known flag, argument, and sibling-command collisions described below; runtime normalization throws `DEFINITION` immediately for plain-JS consumers, dynamically built definitions, and runtime-only cases. `.action()` is set once and throws `DEFINITION` if called again.
 
 ## `.args(...defs)`
 
@@ -166,7 +166,7 @@ args<const NewA extends ArgsDef>(
 ): Crust
 ```
 
-Defines positional arguments; repeated calls append in call order. Pass values from `defineArg(name, def)` or inline literals. For TypeScript consumers, duplicate names fail typecheck with `FIX_DUPLICATE_ARG`; runtime validation throws `DEFINITION` for duplicates from plain-JS consumers or dynamically built definitions. A Promise-returning custom `parse` fails typecheck with `FIX_ASYNC_PARSE`, while runtime validation rejects declared `async` functions for plain-JS consumers. Only the final argument across all calls may be variadic.
+Defines positional arguments; repeated calls append in call order. Pass values from `defineArg(name, def)` or inline literals. For TypeScript consumers, duplicate names fail typecheck with `FIX_DUPLICATE_ARG`; runtime normalization throws `DEFINITION` for duplicates from plain-JS consumers or dynamically built definitions. A Promise-returning custom `parse` fails typecheck with `FIX_ASYNC_PARSE`, while runtime normalization rejects declared `async` functions for plain-JS consumers. Only the final argument across all calls may be variadic. A declared default outside its own `choices` also throws during this call.
 
 ```ts
 const app = new Crust("copy").args(
@@ -217,7 +217,7 @@ const app = new Crust("serve").flags({
 
 ```ts
 provide<const Cs extends readonly ContextInstance[]>(
-  ...instances: ProvideChecks<Sp, Cs> & ValidateContextCycles<Deps, Cs>,
+  ...instances: ProvideChecks<Sp, Cs> & ValidateContextNames<Ctx, Cs>,
 ): Crust<
   Local,
   MergeFlags<Owned, ContextsOwnedFlags<Cs>>,
@@ -247,9 +247,9 @@ const app = new Crust("my-cli")
   });
 ```
 
-Provide order is free: at invocation time, the instances on the resolved path are constructed topologically by their declared capability requirements, with registration order preserved among independent Contexts. A missing capability dependency throws `DEFINITION` at dispatch (and during `crust build` validation). For TypeScript consumers, dependency cycles whose members are provided with literal types fail with `FIX_CONTEXT_CYCLE`; cycles through inherited parent Contexts and dynamically built graphs remain runtime-only. Runtime validation reports every cycle as `DEFINITION`.
+Within one `.provide()` call, order is free: dependencies may appear after their dependents. Runtime normalization sorts the complete Context path immediately, preserving registration order among independent Contexts. A missing capability dependency or cycle throws `DEFINITION` from `.provide()`. Cycles are enforced only at runtime; TypeScript brands do not attempt recursive cycle detection.
 
-A Context's top-level `flags` are installed as propagating flags on this builder and later-added descendants, without mutating the original definitions. Its `requires` capabilities are resolved topologically at invocation.
+A Context's top-level `flags` are installed as propagating flags on this builder and later-added descendants, without mutating the original definitions. Invocation constructs the cached topological order.
 
 Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in reverse construction order after success or failure. Context-owned flag collisions with existing effective flags fail typecheck with `FIX_ALIAS_COLLISION` for TypeScript consumers; collisions between instances in the same `.provide()` call remain runtime-only. A duplicate Context name, passing a factory instead of an instance, or any runtime-detected flag collision throws `DEFINITION`.
 

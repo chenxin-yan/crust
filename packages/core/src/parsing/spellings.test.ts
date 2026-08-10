@@ -4,7 +4,7 @@ import { createCommandNode } from "../command/node.ts";
 import { resolveCommand } from "../command/router.ts";
 import type { FlagsDef } from "../types.ts";
 import { parseArgs } from "./parser.ts";
-import { flagSpellings } from "./spellings.ts";
+import { addFlagSpellingEntries, flagSpellings } from "./spellings.ts";
 
 const flags = {
 	quiet: { type: "boolean", short: "q", aliases: ["silent"] },
@@ -34,10 +34,16 @@ describe("flagSpellings", () => {
 		const root = createCommandNode("app");
 		root.localFlags = flags;
 		root.effectiveFlags = flags;
+		for (const [name, def] of Object.entries(flags)) {
+			addFlagSpellingEntries(root.flagSpellings, name, def);
+		}
 		// Routing only forwards pre-subcommand flags the child can parse, so the
 		// child carries the same flags (as Context propagation would).
 		const run = createCommandNode("run");
 		run.effectiveFlags = flags;
+		for (const [name, def] of Object.entries(flags)) {
+			addFlagSpellingEntries(run.flagSpellings, name, def);
+		}
 		root.subCommands.run = run;
 
 		expect(resolveCommand(root, ["--config=app.json", "run"])).toMatchObject({
