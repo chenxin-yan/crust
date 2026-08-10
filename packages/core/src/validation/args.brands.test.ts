@@ -1,58 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
-import { CrustError } from "../errors.ts";
-import type { ArgDef } from "../types.ts";
-import {
-	type AppendArgsChecks,
-	type ValidateVariadicArgs,
-	validateSchemaExclusivity,
-	validateVariadicArgPosition,
-} from "./args.ts";
+import type { AppendArgsChecks, ValidateVariadicArgs } from "./args.brands.ts";
 
 type Expect<T extends true> = T;
 type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
-
-function thrownBy(run: () => void): CrustError {
-	try {
-		run();
-	} catch (error) {
-		expect(error).toBeInstanceOf(CrustError);
-		return error as CrustError;
-	}
-	throw new Error("Expected validation to throw");
-}
-
-describe("argument runtime validation", () => {
-	it("rejects combining an argument schema with a parser type", () => {
-		const error = thrownBy(() =>
-			validateSchemaExclusivity("arg", "input", {
-				schema: {},
-				type: "string",
-			} as unknown as ArgDef),
-		);
-
-		expect(error.toJSON()).toEqual({
-			code: "DEFINITION",
-			message:
-				'arg "input" mixes core option "type" with a schema — schema args receive the raw string token',
-			details: { subject: "arg", name: "input", reason: "schema-exclusive" },
-		});
-	});
-
-	it("rejects a variadic argument before the final position", () => {
-		const error = thrownBy(() =>
-			validateVariadicArgPosition({ name: "files", variadic: true }, 0, 2),
-		);
-
-		expect(error.toJSON()).toEqual({
-			code: "DEFINITION",
-			message:
-				'Argument "files" is variadic, but only the last positional argument can be variadic',
-			details: { subject: "arg", name: "files", reason: "variadic-position" },
-		});
-	});
-});
 
 describe("ValidateVariadicArgs type inference", () => {
 	it("resolves to identity when variadic is the last arg", () => {

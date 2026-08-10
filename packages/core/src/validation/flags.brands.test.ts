@@ -1,12 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { FlagsDef } from "../types.ts";
-import {
-	type ProvideChecks,
-	type SpellingsOf,
-	validateIncomingFlag,
-	type ValidateNamedFlagDefs,
-} from "./flags.ts";
+import type { ProvideChecks, SpellingsOf, ValidateNamedFlagDefs } from "./flags.brands.ts";
 
 type Expect<T extends true> = T;
 type Equal<A, B> =
@@ -188,7 +183,7 @@ describe("ValidateNamedFlagDefs", () => {
 
 	// Tripwire: this alias-free def is branded via the `Validated` slot, so it
 	// proves the validation pipeline still fires through the always-true deferral
-	// conditional in ValidateNamedFlagDefs (flags.ts). Do not remove or reroute.
+	// conditional in ValidateNamedFlagDefs (flags.brands.ts). Do not remove or reroute.
 	it('brands a flag name starting with "no-"', () => {
 		type Defs = readonly [{ name: "no-cache"; type: "boolean" }];
 		type Result = ValidateNamedFlagDefs<Defs>;
@@ -234,106 +229,5 @@ describe("ValidateNamedFlagDefs", () => {
 		>;
 
 		expect(true).toBe(true);
-	});
-});
-
-describe("validateIncomingFlag", () => {
-	it("rejects canonical names that collide with an existing short or alias", () => {
-		expect(() =>
-			validateIncomingFlag(
-				{ name: "v", def: { type: "boolean" } },
-				{ verbose: { type: "boolean", short: "v" } },
-				'Context "logger"',
-			),
-		).toThrow(/collides with flag "--verbose"/);
-		expect(() =>
-			validateIncomingFlag(
-				{ name: "out", def: { type: "string" } },
-				{ output: { type: "string", aliases: ["out"] } },
-				'Context "writer"',
-			),
-		).toThrow(/collides with flag "--output"/);
-	});
-
-	it("rejects incoming short and aliases that collide with existing spellings", () => {
-		const existing = {
-			verbose: { type: "boolean", short: "v", aliases: ["loud"] },
-		} satisfies FlagsDef;
-		expect(() =>
-			validateIncomingFlag(
-				{ name: "version", def: { type: "boolean", short: "v" } },
-				existing,
-				'Context "release"',
-			),
-		).toThrow(/spelling "v"/);
-		expect(() =>
-			validateIncomingFlag(
-				{ name: "log", def: { type: "string", aliases: ["loud"] } },
-				existing,
-				'Context "logger"',
-			),
-		).toThrow(/spelling "loud"/);
-	});
-
-	it('rejects "__proto__" as a flag name or alias', () => {
-		expect(() =>
-			validateIncomingFlag({ name: "__proto__", def: { type: "boolean" } }, {}, 'Extension "evil"'),
-		).toThrow(/reserved spelling "__proto__"/);
-		expect(() =>
-			validateIncomingFlag(
-				{ name: "proto", def: { type: "boolean", aliases: ["__proto__"] } },
-				{},
-				'Extension "evil"',
-			),
-		).toThrow(/reserved spelling "__proto__"/);
-	});
-
-	it("rejects a definition without a non-empty name", () => {
-		expect(() =>
-			validateIncomingFlag(
-				{ name: undefined as never, def: { type: "boolean" } },
-				{},
-				'Extension "nameless"',
-			),
-		).toThrow(/must carry a non-empty name/);
-		expect(() =>
-			validateIncomingFlag({ name: "", def: { type: "boolean" } }, {}, 'Context "nameless"'),
-		).toThrow(/must carry a non-empty name/);
-	});
-
-	it("rejects duplicate spellings within the incoming definition", () => {
-		expect(() =>
-			validateIncomingFlag(
-				{ name: "output", def: { type: "string", short: "o", aliases: ["o"] } },
-				{},
-				'Context "writer"',
-			),
-		).toThrow(/repeats spelling "o"/);
-	});
-
-	it('rejects "no-" prefixes and missing parser types at the entry gate', () => {
-		expect(() =>
-			validateIncomingFlag(
-				{ name: "no-cache", def: { type: "boolean" } },
-				{},
-				'Extension "cache" on "root"',
-			),
-		).toThrow(/Extension "cache" on "root" flag "--no-cache" must not use "no-" prefix/);
-		expect(() =>
-			validateIncomingFlag({ name: "verbose", def: {} as never }, {}, 'Context "logger"'),
-		).toThrow(/must declare a parser type/);
-	});
-
-	it("rejects mixing a schema with core options at the entry gate", () => {
-		expect(() =>
-			validateIncomingFlag(
-				{
-					name: "port",
-					def: { type: "string", schema: {}, default: "3000" } as never,
-				},
-				{},
-				'Command "cli"',
-			),
-		).toThrow(/mixes core option "default" with a schema/);
 	});
 });
