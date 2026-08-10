@@ -1402,6 +1402,30 @@ describe("Extension application at prepare time", () => {
 
 		expect(calls).toEqual(["pre", "action", "post", "pre", "action", "post"]);
 	});
+
+	it("builders derived after a run see their own commands without affecting the original", async () => {
+		const calls: string[] = [];
+		const app = new Crust("derive").action(() => {
+			calls.push("root");
+		});
+
+		await app.run([]);
+
+		const derived = app.add(
+			defineCommand("extra", (command) =>
+				command.action(() => {
+					calls.push("extra");
+				}),
+			),
+		);
+
+		await derived.run(["extra"]);
+		// the original builder must not see the derived command: "extra" falls
+		// through to the root action instead of routing to the added subcommand
+		await app.run(["extra"]);
+
+		expect(calls).toEqual(["root", "extra", "root"]);
+	});
 });
 
 describe("Extension named hooks", () => {
