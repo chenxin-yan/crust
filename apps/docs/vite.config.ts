@@ -13,7 +13,7 @@ export default defineConfig({
     tsconfigPaths: true,
   },
   plugins: [
-    mdx(await import("./source.config")),
+    mdx(await import("./source.config.ts")),
     tailwindcss(),
     cloudflare({ viteEnvironment: { name: "ssr" } }),
     tanstackStart({
