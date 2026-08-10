@@ -7,7 +7,7 @@ import { Crust, defineCommand } from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
 
 import { completion } from "./index.ts";
-import type { CompletionSpec } from "./spec.ts";
+import type { CompletionCommand } from "./spec.ts";
 import { renderBash } from "./templates/bash.ts";
 import { renderFish } from "./templates/fish.ts";
 import { renderZsh } from "./templates/zsh.ts";
@@ -62,31 +62,29 @@ describe("walker · validation", () => {
 		}).action(() => {});
 		const spec = walkCommandNode(snapshotCommand(cli._node));
 		// Newlines and CR collapse to spaces during normalisation.
-		expect(spec.root.description).toBe("first line second line still same line");
+		expect(spec.description).toBe("first line second line still same line");
 		// And the value never contains a raw newline that could break
 		// out of an emitted comment line.
-		expect(spec.root.description).not.toMatch(/[\r\n]/);
+		expect(spec.description).not.toMatch(/[\r\n]/);
 	});
 });
 
 // ── --no- negation ───────────────────────────────────────────────────────
 
 describe("--no- negation", () => {
-	const spec: CompletionSpec = {
-		root: {
-			name: "mycli",
-			flags: [
-				{ name: "force", type: "boolean", takesValue: false },
-				{
-					name: "color",
-					type: "boolean",
-					takesValue: false,
-					noNegate: true,
-				},
-			],
-			args: [],
-			subCommands: [],
-		},
+	const spec: CompletionCommand = {
+		name: "mycli",
+		flags: [
+			{ name: "force", type: "boolean", takesValue: false },
+			{
+				name: "color",
+				type: "boolean",
+				takesValue: false,
+				noNegate: true,
+			},
+		],
+		args: [],
+		subCommands: [],
 	};
 
 	it("bash: emits --no-<name> for negatable boolean flags", () => {
@@ -112,28 +110,26 @@ describe("--no- negation", () => {
 // ── bash behaviour: -- terminator + --name=value + value-flag context ────
 
 describe("renderBash · behavioural · -- and --name=value", () => {
-	const spec: CompletionSpec = {
-		root: {
-			name: "mycli",
-			flags: [],
-			args: [],
-			subCommands: [
-				{
-					name: "build",
-					flags: [
-						{
-							name: "target",
-							type: "string",
-							takesValue: true,
-							choices: ["browser", "node"],
-						},
-						{ name: "out", type: "string", takesValue: true },
-					],
-					args: [],
-					subCommands: [],
-				},
-			],
-		},
+	const spec: CompletionCommand = {
+		name: "mycli",
+		flags: [],
+		args: [],
+		subCommands: [
+			{
+				name: "build",
+				flags: [
+					{
+						name: "target",
+						type: "string",
+						takesValue: true,
+						choices: ["browser", "node"],
+					},
+					{ name: "out", type: "string", takesValue: true },
+				],
+				args: [],
+				subCommands: [],
+			},
+		],
 	};
 
 	let scriptPath: string;
@@ -259,10 +255,10 @@ describe("completion · --output-dir traversal", () => {
 	});
 
 	it("does not write outside --output-dir", async () => {
-		// Even if validation were bypassed, the extension's resolved-path
-		// check would refuse to write outside `targetDir`. We test the
-		// happy path here: a normal binName lands inside the target dir
-		// and nothing escapes.
+		// `assertSafeBinName` rejects separators, `..`, and unsafe characters
+		// before any write (see "rejects a binName containing path separators").
+		// We test the happy path here: a normal binName lands inside the
+		// target dir and nothing escapes.
 		const tmp = await mkdtemp(join(tmpdir(), "tp010-traversal-"));
 		try {
 			const cli = new Crust("good").extend(completion({ version: "1" })).action(() => {});
@@ -284,33 +280,31 @@ describe("completion · --output-dir traversal", () => {
 // ── fish · ordered path predicate behaviour ───────────────────────────────
 
 describe("renderFish · ordered subcommand predicate", () => {
-	const spec: CompletionSpec = {
-		root: {
-			name: "mycli",
-			flags: [],
-			args: [],
-			subCommands: [
-				{
-					name: "build",
-					flags: [],
-					args: [],
-					subCommands: [
-						{
-							name: "deploy", // same word at depth 2 and depth 1 below
-							flags: [{ name: "fast", type: "boolean", takesValue: false }],
-							args: [],
-							subCommands: [],
-						},
-					],
-				},
-				{
-					name: "deploy", // depth-1 deploy
-					flags: [{ name: "slow", type: "boolean", takesValue: false }],
-					args: [],
-					subCommands: [],
-				},
-			],
-		},
+	const spec: CompletionCommand = {
+		name: "mycli",
+		flags: [],
+		args: [],
+		subCommands: [
+			{
+				name: "build",
+				flags: [],
+				args: [],
+				subCommands: [
+					{
+						name: "deploy", // same word at depth 2 and depth 1 below
+						flags: [{ name: "fast", type: "boolean", takesValue: false }],
+						args: [],
+						subCommands: [],
+					},
+				],
+			},
+			{
+				name: "deploy", // depth-1 deploy
+				flags: [{ name: "slow", type: "boolean", takesValue: false }],
+				args: [],
+				subCommands: [],
+			},
+		],
 	};
 
 	it("emits a path-walking helper that only matches the in-order canonical path", () => {

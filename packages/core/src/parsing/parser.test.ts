@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { CommandNode } from "../command/node.ts";
-import { computeEffectiveFlags, createCommandNode } from "../command/node.ts";
+import { createCommandNode } from "../command/node.ts";
 import { CrustError } from "../errors.ts";
 import type { ArgsDef, CommandMeta, FlagsDef } from "../types.ts";
 import { parseArgs, validateParsed } from "./parser.ts";
@@ -970,7 +970,7 @@ describe("parseArgs — CommandNode with effective flags", () => {
 
 		const node = createCommandNode("child");
 		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
+		node.effectiveFlags = { ...localFlags, ...ancestorOwnedFlags };
 		setEffectiveFlags(node, node.effectiveFlags);
 
 		const result = parseArgs(node, ["--verbose", "--output", "./dist"]);
@@ -989,7 +989,7 @@ describe("parseArgs — CommandNode with effective flags", () => {
 
 		const node = createCommandNode("child");
 		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
+		node.effectiveFlags = { ...localFlags, ...ancestorOwnedFlags };
 		setEffectiveFlags(node, node.effectiveFlags);
 
 		// parseArgs does not throw — validation is separate
@@ -1018,7 +1018,7 @@ describe("parseArgs — CommandNode with effective flags", () => {
 
 		const node = createCommandNode("child");
 		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
+		node.effectiveFlags = { ...localFlags, ...ancestorOwnedFlags };
 		setEffectiveFlags(node, node.effectiveFlags);
 
 		const result = parseArgs(node, ["-v"]);
@@ -1027,7 +1027,7 @@ describe("parseArgs — CommandNode with effective flags", () => {
 
 	it("rejects parent-local flags omitted from a child's effective flags", () => {
 		const node = createCommandNode("child");
-		node.effectiveFlags = computeEffectiveFlags({}, {});
+		node.effectiveFlags = {};
 		setEffectiveFlags(node, node.effectiveFlags);
 
 		expect(() => parseArgs(node, ["--debug"])).toThrow(/Unknown flag/);
@@ -1044,7 +1044,7 @@ describe("parseArgs — CommandNode with effective flags", () => {
 
 		const node = createCommandNode("child");
 		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
+		node.effectiveFlags = { ...localFlags, ...ancestorOwnedFlags };
 		setEffectiveFlags(node, node.effectiveFlags);
 
 		// Default should apply when not provided
@@ -1067,7 +1067,7 @@ describe("parseArgs — CommandNode with effective flags", () => {
 		const node = Object.assign(createCommandNode("child"), {
 			args: [{ name: "file", type: "string", required: true }] as const,
 		});
-		node.effectiveFlags = computeEffectiveFlags({ verbose: { type: "boolean" as const } }, {});
+		node.effectiveFlags = { verbose: { type: "boolean" as const } };
 		setEffectiveFlags(node, node.effectiveFlags);
 
 		const result = parseArgs(node, ["--verbose", "input.ts"]);
@@ -1086,7 +1086,7 @@ describe("parseArgs — CommandNode with effective flags", () => {
 
 		const node = createCommandNode("child");
 		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
+		node.effectiveFlags = { ...localFlags, ...ancestorOwnedFlags };
 		setEffectiveFlags(node, node.effectiveFlags);
 
 		const result = parseArgs(node, ["--no-minify"]);
@@ -1104,7 +1104,7 @@ describe("parseArgs — CommandNode with effective flags", () => {
 
 		const node = createCommandNode("child");
 		node.localFlags = localFlags;
-		node.effectiveFlags = computeEffectiveFlags(ancestorOwnedFlags, localFlags);
+		node.effectiveFlags = { ...localFlags, ...ancestorOwnedFlags };
 		setEffectiveFlags(node, node.effectiveFlags);
 
 		const result = parseArgs(node, ["--include", "src", "--include", "lib"]);

@@ -2,27 +2,13 @@
 
 import { access, readdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { parseArgs } from "node:util";
 
 const ROOT_DIR = resolve(import.meta.dir, "..");
 const PACKAGES_DIR = join(ROOT_DIR, "packages");
 const DEFAULT_REGISTRY = "https://registry.npmjs.org";
 
 const byCodepoint = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
-
-function parseArgs(argv) {
-	let dryRun = false;
-
-	for (const arg of argv) {
-		if (arg === "--dry-run") {
-			dryRun = true;
-			continue;
-		}
-
-		throw new Error(`Unknown argument: ${arg}`);
-	}
-
-	return { dryRun };
-}
 
 function normalizeRegistry(registry) {
 	return registry.replace(/\/+$/, "");
@@ -198,7 +184,12 @@ async function createTag(tag) {
 }
 
 async function main() {
-	const { dryRun } = parseArgs(process.argv.slice(2));
+	const {
+		values: { "dry-run": dryRun },
+	} = parseArgs({
+		args: process.argv.slice(2),
+		options: { "dry-run": { type: "boolean", default: false } },
+	});
 	const registryUrl = getRegistryUrl();
 	const packages = sortPackagesForPublish(await loadWorkspacePackages());
 	const packagesToPublish = await findPackagesToPublish(packages, registryUrl);

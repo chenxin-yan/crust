@@ -44,20 +44,15 @@ function createFallbackHighlightedCode(code: string) {
 }
 
 const getHighlightedCode = createServerFn({ method: "GET" }).handler(async () => {
-  try {
-    const highlighter = await getHighlighter();
-    return highlighter.codeToHtml(CODE_EXAMPLE, {
-      lang: "typescript",
-      themes: {
-        light: "gruvbox-light-hard",
-        dark: "gruvbox-dark-hard",
-      },
-      defaultColor: false,
-    });
-  } catch (error) {
-    console.error("[docs] Failed to render highlighted code", error);
-    return FALLBACK_HIGHLIGHTED_CODE;
-  }
+  const highlighter = await getHighlighter();
+  return highlighter.codeToHtml(CODE_EXAMPLE, {
+    lang: "typescript",
+    themes: {
+      light: "gruvbox-light-hard",
+      dark: "gruvbox-dark-hard",
+    },
+    defaultColor: false,
+  });
 });
 
 const { meta: homeMeta, links: homeLinks } = buildPageMeta({
@@ -72,16 +67,24 @@ export const Route = createFileRoute("/")({
     links: homeLinks,
   }),
   loader: async () => {
-    let highlightedCode = FALLBACK_HIGHLIGHTED_CODE;
-    let npmVersions: Record<string, string | null> = {};
+    // allSettled so a shiki failure doesn't also degrade npm versions (and vice versa)
+    const [codeResult, versionsResult] = await Promise.allSettled([
+      getHighlightedCode(),
+      getNpmVersions(),
+    ]);
 
-    try {
-      [highlightedCode, npmVersions] = await Promise.all([getHighlightedCode(), getNpmVersions()]);
-    } catch (error) {
-      console.error("[docs] Failed to load loader data", error);
+    if (codeResult.status === "rejected") {
+      console.error("[docs] Failed to highlight code example", codeResult.reason);
+    }
+    if (versionsResult.status === "rejected") {
+      console.error("[docs] Failed to load npm versions", versionsResult.reason);
     }
 
-    return { highlightedCode, npmVersions };
+    return {
+      highlightedCode:
+        codeResult.status === "fulfilled" ? codeResult.value : FALLBACK_HIGHLIGHTED_CODE,
+      npmVersions: versionsResult.status === "fulfilled" ? versionsResult.value : {},
+    };
   },
 });
 
@@ -703,7 +706,7 @@ function FurnaceHome() {
         }
       `}</style>
 
-      <HomeLayout {...baseOptions()}>
+      <HomeLayout {...baseOptions}>
         <div className="furnace-home">
           {/* Hero */}
           <section className="fn-hero-section">

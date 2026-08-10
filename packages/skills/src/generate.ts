@@ -47,17 +47,7 @@ function groupAgentsByOutputDir(
 	scope: Scope,
 	name: string,
 ): Map<string, AgentTarget[]> {
-	const groups = new Map<string, AgentTarget[]>();
-	for (const agent of agents) {
-		const outputDir = resolveAgentPath(agent, scope, name);
-		const existing = groups.get(outputDir);
-		if (existing) {
-			existing.push(agent);
-		} else {
-			groups.set(outputDir, [agent]);
-		}
-	}
-	return groups;
+	return Map.groupBy(agents, (agent) => resolveAgentPath(agent, scope, name));
 }
 
 /**
@@ -248,7 +238,7 @@ async function installRenderedSkill(
 	const canonicalChanged = force || canonicalVersion !== meta.version || canonicalKindChanged;
 	if (canonicalChanged) {
 		if (clean) {
-			await cleanDirectory(canonicalOutputDir);
+			await rm(canonicalOutputDir, { recursive: true, force: true });
 		}
 
 		await writeFiles(canonicalOutputDir, allFiles);
@@ -581,7 +571,7 @@ async function ensureCopyInstallPath(options: EnsureCopyInstallPathOptions): Pro
 	}
 
 	if (inspection.isSymlink || clean) {
-		await cleanDirectory(outputDir);
+		await rm(outputDir, { recursive: true, force: true });
 	}
 
 	await writeFiles(outputDir, allFiles);
@@ -604,7 +594,7 @@ async function ensureSymlinkInstallPath(
 	}
 
 	if (inspection.exists) {
-		await cleanDirectory(outputDir);
+		await rm(outputDir, { recursive: true, force: true });
 	}
 
 	await createDirectorySymlink(canonicalOutputDir, outputDir);
@@ -776,14 +766,6 @@ function renderDistributionMetadata(meta: SkillMeta, kind: SkillKind): RenderedF
 // ────────────────────────────────────────────────────────────────────────────
 // File system operations
 // ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Removes a directory and all its contents if it exists.
- * Silently succeeds if the directory does not exist.
- */
-async function cleanDirectory(dir: string): Promise<void> {
-	await rm(dir, { recursive: true, force: true });
-}
 
 /**
  * Writes an array of rendered files to disk under the given base directory.

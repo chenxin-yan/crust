@@ -3,7 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { resolveTheme } from "./theme.ts";
-import type { PartialProgressTheme, ProgressTheme } from "./types.ts";
+import type { PartialProgressTheme, ProgressTheme } from "./theme.ts";
 
 const ESC = "\x1B[";
 const HIDE_CURSOR = `${ESC}?25l`;
@@ -58,11 +58,6 @@ export type SpinnerOutcome = "success" | "error";
  */
 export type SpinnerSigintPolicy = "exit" | false;
 
-export interface SpinnerController {
-	/** Update the message displayed alongside the spinner. */
-	updateMessage: (message: string) => void;
-}
-
 export interface SpinnerHandleOptions {
 	/** The message displayed alongside the spinner. */
 	readonly message: string;
@@ -99,7 +94,7 @@ export interface SpinnerHandle {
 
 export interface SpinnerOptions<T> extends SpinnerHandleOptions {
 	/** The async task to run while the spinner is displayed. */
-	readonly task: (controller: SpinnerController) => Promise<T>;
+	readonly task: (controller: Pick<SpinnerHandle, "updateMessage">) => Promise<T>;
 }
 
 function resolveSpinner(spinnerType: SpinnerType | undefined): SpinnerFrameSet {

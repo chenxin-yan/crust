@@ -41,11 +41,11 @@ describe("walkCommandNode", () => {
 
 		const spec = walkCommandNode(snapshotCommand(root));
 
-		expect(spec.root.name).toBe("mycli");
-		expect(spec.root.description).toBe("Top-level CLI");
-		expect(spec.root.flags).toEqual([]);
-		expect(spec.root.args).toEqual([]);
-		expect(spec.root.subCommands).toEqual([]);
+		expect(spec.name).toBe("mycli");
+		expect(spec.description).toBe("Top-level CLI");
+		expect(spec.flags).toEqual([]);
+		expect(spec.args).toEqual([]);
+		expect(spec.subCommands).toEqual([]);
 	});
 
 	it("captures flat flags with type, short, aliases, description, multiple, and takesValue", () => {
@@ -67,7 +67,7 @@ describe("walkCommandNode", () => {
 		});
 
 		const spec = walkCommandNode(snapshotCommand(root));
-		const byName = Object.fromEntries(spec.root.flags.map((f) => [f.name, f]));
+		const byName = Object.fromEntries(spec.flags.map((f) => [f.name, f]));
 
 		expect(byName.verbose).toEqual({
 			name: "verbose",
@@ -99,8 +99,8 @@ describe("walkCommandNode", () => {
 			.add(defineCommand("deploy", (command) => command.action(() => {})));
 
 		const spec = walkCommandNode(snapshotCommand(app._node));
-		expect(spec.root.flags.map((flag) => flag.name)).toContain("api-key");
-		expect(spec.root.subCommands[0]?.flags.map((flag) => flag.name)).toContain("api-key");
+		expect(spec.flags.map((flag) => flag.name)).toContain("api-key");
+		expect(spec.subCommands[0]?.flags.map((flag) => flag.name)).toContain("api-key");
 	});
 
 	it("captures positional args with required, variadic, type, and description", () => {
@@ -119,7 +119,7 @@ describe("walkCommandNode", () => {
 
 		const spec = walkCommandNode(snapshotCommand(root));
 
-		expect(spec.root.args).toEqual([
+		expect(spec.args).toEqual([
 			{
 				name: "input",
 				type: "string",
@@ -153,9 +153,9 @@ describe("walkCommandNode", () => {
 		});
 
 		const spec = walkCommandNode(snapshotCommand(root));
-		const targetFlag = spec.root.flags.find((f) => f.name === "target");
+		const targetFlag = spec.flags.find((f) => f.name === "target");
 		expect(targetFlag?.choices).toEqual(["browser", "bun", "node"]);
-		expect(spec.root.args[0]?.choices).toEqual(["bash", "zsh", "fish"]);
+		expect(spec.args[0]?.choices).toEqual(["bash", "zsh", "fish"]);
 	});
 
 	it("walks nested subcommands recursively, surfacing Context-owned flags via effectiveFlags", () => {
@@ -182,8 +182,8 @@ describe("walkCommandNode", () => {
 
 		const spec = walkCommandNode(snapshotCommand(root));
 
-		expect(spec.root.subCommands).toHaveLength(1);
-		const childSpec = spec.root.subCommands[0];
+		expect(spec.subCommands).toHaveLength(1);
+		const childSpec = spec.subCommands[0];
 		if (!childSpec) throw new Error("missing child");
 		expect(childSpec.name).toBe("child");
 		expect(childSpec.description).toBe("Child command");
@@ -208,7 +208,7 @@ describe("walkCommandNode", () => {
 
 		const spec = walkCommandNode(snapshotCommand(root));
 
-		const subNames = spec.root.subCommands.map((s) => s.name);
+		const subNames = spec.subCommands.map((s) => s.name);
 		expect(subNames).toEqual(["build"]);
 	});
 
@@ -223,7 +223,7 @@ describe("walkCommandNode", () => {
 		});
 
 		const spec = walkCommandNode(snapshotCommand(root));
-		expect(spec.root.subCommands[0]?.aliases).toEqual(["issues", "i"]);
+		expect(spec.subCommands[0]?.aliases).toEqual(["issues", "i"]);
 	});
 
 	it("strips ANSI escape sequences from descriptions", () => {
@@ -254,10 +254,10 @@ describe("walkCommandNode", () => {
 
 		const spec = walkCommandNode(snapshotCommand(root));
 
-		expect(spec.root.description).toBe("colored desc");
-		expect(spec.root.flags[0]?.description).toBe("verbose");
-		expect(spec.root.args[0]?.description).toBe("input desc");
-		expect(spec.root.subCommands[0]?.description).toBe("red kid");
+		expect(spec.description).toBe("colored desc");
+		expect(spec.flags[0]?.description).toBe("verbose");
+		expect(spec.args[0]?.description).toBe("input desc");
+		expect(spec.subCommands[0]?.description).toBe("red kid");
 	});
 
 	it("drops empty descriptions instead of emitting empty strings", () => {
@@ -268,8 +268,8 @@ describe("walkCommandNode", () => {
 		});
 
 		const spec = walkCommandNode(snapshotCommand(root));
-		expect(spec.root.description).toBeUndefined();
-		expect(spec.root.flags[0]?.description).toBeUndefined();
+		expect(spec.description).toBeUndefined();
+		expect(spec.flags[0]?.description).toBeUndefined();
 	});
 
 	it("does not emit choices on number/boolean flags or args", () => {
@@ -286,10 +286,10 @@ describe("walkCommandNode", () => {
 		});
 
 		const spec = walkCommandNode(snapshotCommand(root));
-		for (const flag of spec.root.flags) {
+		for (const flag of spec.flags) {
 			expect(flag.choices).toBeUndefined();
 		}
-		expect(spec.root.args[0]?.choices).toBeUndefined();
+		expect(spec.args[0]?.choices).toBeUndefined();
 	});
 });
 
@@ -304,7 +304,7 @@ describe("walkCommandNode — url/path/json valueCompletion", () => {
 			},
 		});
 		const spec = walkCommandNode(snapshotCommand(root));
-		const by = Object.fromEntries(spec.root.flags.map((f) => [f.name, f]));
+		const by = Object.fromEntries(spec.flags.map((f) => [f.name, f]));
 
 		expect(by.endpoint?.type).toBe("string");
 		expect(by.endpoint?.takesValue).toBe(true);
@@ -329,7 +329,7 @@ describe("walkCommandNode — url/path/json valueCompletion", () => {
 			],
 		});
 		const spec = walkCommandNode(snapshotCommand(root));
-		const [src, dst, cfg] = spec.root.args;
+		const [src, dst, cfg] = spec.args;
 		expect(src?.type).toBe("string");
 		expect(src?.valueCompletion).toBe("files");
 		expect(dst?.valueCompletion).toBe("none");
@@ -346,7 +346,7 @@ describe("walkCommandNode — url/path/json valueCompletion", () => {
 			},
 		});
 		const spec = walkCommandNode(snapshotCommand(root));
-		for (const flag of spec.root.flags) {
+		for (const flag of spec.flags) {
 			expect(flag.valueCompletion).toBeUndefined();
 		}
 	});

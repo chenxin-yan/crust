@@ -49,9 +49,6 @@ export interface ValidationErrorDetails {
 	issues: readonly StoreValidatorIssue[];
 }
 
-/** Contextual details attached to an invalid field definition. */
-export interface DefinitionErrorDetails {}
-
 /**
  * Maps each {@link StoreErrorCode} to its structured details type.
  *
@@ -62,7 +59,7 @@ export interface StoreErrorDetailsMap {
 	PARSE: ParseErrorDetails;
 	IO: IOErrorDetails;
 	VALIDATION: ValidationErrorDetails;
-	DEFINITION: DefinitionErrorDetails;
+	DEFINITION: undefined;
 }
 
 /**
@@ -112,8 +109,8 @@ export type StoreErrorDetails<C extends StoreErrorCode> = StoreErrorDetailsMap[C
  * A typed error thrown by `@crustjs/store` for path, parse, IO, and validation failures.
  *
  * Every `CrustStoreError` carries a {@link StoreErrorCode} that identifies the failure
- * category, along with structured {@link StoreErrorDetails} for programmatic handling
- * without fragile message parsing.
+ * category. Codes other than `DEFINITION` include structured {@link StoreErrorDetails}
+ * for programmatic handling without fragile message parsing.
  *
  * @example
  * ```ts
@@ -135,14 +132,17 @@ export class CrustStoreError<C extends StoreErrorCode = StoreErrorCode> extends 
 	/** Structured payload with context about the failure. */
 	readonly details: StoreErrorDetails<C>;
 
-	/** Optional wrapped original error or value. */
-	override cause?: unknown;
-
-	constructor(code: C, message: string, details: StoreErrorDetails<C>) {
-		super(message);
+	constructor(
+		code: C,
+		message: string,
+		...[details, cause]: StoreErrorDetails<C> extends undefined
+			? [details?: undefined, cause?: unknown]
+			: [details: StoreErrorDetails<C>, cause?: unknown]
+	) {
+		super(message, { cause });
 		this.name = "CrustStoreError";
 		this.code = code;
-		this.details = details;
+		this.details = details as StoreErrorDetails<C>;
 	}
 
 	/**
@@ -161,23 +161,5 @@ export class CrustStoreError<C extends StoreErrorCode = StoreErrorCode> extends 
 	 */
 	is<T extends StoreErrorCode>(code: T): this is CrustStoreError<T> {
 		return (this.code as StoreErrorCode) === code;
-	}
-
-	/**
-	 * Attaches a cause to this error for stack-trace chaining.
-	 *
-	 * Returns `this` for fluent usage.
-	 *
-	 * @example
-	 * ```ts
-	 * throw new CrustStoreError("IO", "write failed", {
-	 *   path: "/path/to/config.json",
-	 *   operation: "write",
-	 * }).withCause(originalError);
-	 * ```
-	 */
-	withCause(cause: unknown): this {
-		this.cause = cause;
-		return this;
 	}
 }

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { accessSync, chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
@@ -115,30 +115,29 @@ describe("agent registry", () => {
 });
 
 describe("detectInstalledAgents", () => {
+	afterEach(() => mock.restore());
+
 	it("returns empty array when no commands are available", async () => {
-		const result = await detectInstalledAgents({
-			commandChecker: async () => false,
-		});
-		expect(result).toEqual([]);
+		spyOn(Bun, "which").mockReturnValue(null);
+		expect(await detectInstalledAgents()).toEqual([]);
 	});
 
 	it("detects additional agents by command availability", async () => {
-		const result = await detectInstalledAgents({
-			commandChecker: async (command) => command === "claude" || command === "windsurf",
-		});
+		spyOn(Bun, "which").mockImplementation((command) =>
+			command === "claude" || command === "windsurf" ? command : null,
+		);
+		const result = await detectInstalledAgents();
 		expect(result).toContain("claude-code");
 		expect(result).toContain("windsurf");
 	});
 
 	it("does not include universal agents in detection output", async () => {
-		const result = await detectInstalledAgents({
-			commandChecker: async (command) => command === "opencode",
-		});
-		expect(result).not.toContain("opencode");
+		spyOn(Bun, "which").mockImplementation((command) => (command === "opencode" ? command : null));
+		expect(await detectInstalledAgents()).not.toContain("opencode");
 	});
 });
 
-describe("PATH-based detection (default commandChecker)", () => {
+describe("PATH-based detection", () => {
 	let tmpDir: string;
 	let originalPath: string | undefined;
 	let originalPathExt: string | undefined;

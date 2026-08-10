@@ -6,7 +6,14 @@ import type { CommandSnapshot, Crust } from "@crustjs/core";
  */
 type CommandNode = object;
 
-import { normalizeInstructionList } from "./instructions.ts";
+/** Normalizes instruction input by trimming lines and dropping empties. */
+export function normalizeInstructionList(input: string | string[] | undefined): string[] {
+	if (input === undefined) return [];
+	return (Array.isArray(input) ? input : [input])
+		.flatMap((value) => value.split(/\r?\n/))
+		.map((value) => value.trim())
+		.filter((value) => value.length > 0);
+}
 
 /**
  * Agent-oriented instructions attached to a command for skills rendering.

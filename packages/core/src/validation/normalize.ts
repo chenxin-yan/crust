@@ -1,29 +1,21 @@
 import type { ContextInstance } from "../api/context.ts";
-import type { CommandNode } from "../command/node.ts";
 import { addFlagSpellingEntries, type FlagSpelling } from "../parsing/spellings.ts";
 import type { ArgDef, ArgsDef, FlagDef, FlagsDef } from "../types.ts";
 import {
 	asyncParse,
 	defaultWithinChoices,
 	duplicateArg,
-	nonEmptyName as nonEmptyArgName,
+	nonEmptyName,
 	schemaExclusivity,
 	variadicPosition,
 } from "./args.rules.ts";
-import { commandCollision } from "./commands.rules.ts";
 import {
 	contextCycle,
 	definitionProvenance,
 	duplicateContext,
 	missingContextDependency,
 } from "./contexts.rules.ts";
-import {
-	aliasCollision,
-	noPrefix,
-	nonEmptyName as nonEmptyFlagName,
-	parserType,
-	reservedSpelling,
-} from "./flags.rules.ts";
+import { aliasCollision, noPrefix, parserType, reservedSpelling } from "./flags.rules.ts";
 
 /**
  * Normalize one raw flag before adding it to a trusted flag namespace.
@@ -40,7 +32,7 @@ export function normalizeFlag(
 	spellings: Map<string, FlagSpelling>,
 	ownerLabel: string,
 ): void {
-	nonEmptyFlagName(incoming.name);
+	nonEmptyName(incoming.name, "flag");
 	noPrefix(incoming.name, incoming.def, ownerLabel, "name");
 	parserType(incoming.name, incoming.def, ownerLabel);
 	noPrefix(incoming.name, incoming.def, ownerLabel, "spellings");
@@ -65,7 +57,7 @@ export function normalizeArgs(existing: ArgsDef | undefined, incoming: ArgsDef):
 		const def = args[index]!;
 		if (index >= prior.length) {
 			const name = def.name;
-			nonEmptyArgName(name);
+			nonEmptyName(name, "arg");
 			duplicateArg(name, names);
 			names.add(name);
 			schemaExclusivity("arg", name, def as ArgDef);
@@ -75,15 +67,6 @@ export function normalizeArgs(existing: ArgsDef | undefined, incoming: ArgsDef):
 		variadicPosition(def, index, args.length);
 	}
 	return args;
-}
-
-/** Normalize one child spelling set against its siblings. */
-export function normalizeChild(
-	incoming: { canonicalName: string; aliases?: readonly string[] },
-	existing: Record<string, CommandNode>,
-	subjectLabel: string,
-): void {
-	commandCollision(incoming, existing, subjectLabel);
 }
 
 /** Normalize one Context batch and return its cached topological order. */

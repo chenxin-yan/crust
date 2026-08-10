@@ -47,7 +47,6 @@ interface CommandDefinitionBuilder<
   A,
   Eff,
   Ctx,
-  Deps,
   Sibs,
   Sp extends string = SpellingsOf<Eff>,
 > {
@@ -67,7 +66,7 @@ interface CommandDefinitionBuilder<
   for the exact signatures.
 </Callout>
 
-This is the configure-only builder passed to a `defineCommand()` recipe. Its fluent methods preserve and refine local argument, flag, and Context types; required capabilities seed `Ctx`. `Deps` accumulates the Context dependency edges declared through `.provide()`, `Sibs` accumulates the sibling command names and aliases registered through `.add()`, and `Sp` caches the known flag spellings accumulated through `.flags()` and `.provide()`. All three are trailing defaulted parameters, so annotations with up to five generic arguments keep working. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
+This is the configure-only builder passed to a `defineCommand()` recipe. Its fluent methods preserve and refine local argument, flag, and Context types; required capabilities seed `Ctx`. `Sibs` accumulates the sibling command names and aliases registered through `.add()`, and `Sp` caches the known flag spellings accumulated through `.flags()` and `.provide()`. Both are trailing defaulted parameters, so annotations with up to five generic arguments keep working. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
 
 ### `CommandDefinition`
 
@@ -135,7 +134,6 @@ class Crust<
   A,
   Eff,
   Ctx,
-  Deps,
   Sibs,
   Sp extends string = SpellingsOf<Eff>,
 >
@@ -224,7 +222,6 @@ provide<const Cs extends readonly ContextInstance[]>(
   A,
   EffectiveFlags<Local, MergeFlags<Owned, ContextsOwnedFlags<Cs>>>,
   MergeContext<Ctx, ContextsOutput<Cs>>,
-  MergeContextDeps<Deps, Cs>,
   Sibs,
   Sp | SpellingsOf<ContextsOwnedFlags<Cs>>
 >
@@ -304,7 +301,6 @@ add<const Ds extends readonly CommandDefinition<any>[]>(
   A,
   Eff,
   Ctx,
-  Deps,
   Sibs | CommandDefinitionSpellings<Ds[number]>,
   Sp
 >

@@ -1,5 +1,5 @@
 import { bashDoubleQuoteInner, bashSingleQuote } from "../escape.ts";
-import type { CompletionArg, CompletionCommand, CompletionFlag, CompletionSpec } from "../spec.ts";
+import type { CompletionArg, CompletionCommand, CompletionFlag } from "../spec.ts";
 
 /**
  * Pure-static bash completion script renderer.
@@ -356,29 +356,29 @@ function valueFlagWordlist(node: CompletionCommand): string {
  * @param version  Free-form version string for the header comment;
  *                 control characters are stripped before emission.
  */
-export function renderBash(spec: CompletionSpec, binName: string, version: string): string {
+export function renderBash(spec: CompletionCommand, binName: string, version: string): string {
 	const ident = toShellIdent(binName);
 	const fnName = `_${ident}`;
 	const initFn = `__${ident}_init_completion`;
 
-	const rootSubcmds = subcmdWordlist(spec.root);
-	const rootFlags = flagWordlist(spec.root);
-	const rootValueFlags = valueFlagWordlist(spec.root);
+	const rootSubcmds = subcmdWordlist(spec);
+	const rootFlags = flagWordlist(spec);
+	const rootValueFlags = valueFlagWordlist(spec);
 
 	const pathCases: BashCase[] = [];
-	collectPathCases("", spec.root, pathCases);
+	collectPathCases("", spec, pathCases);
 
 	const choiceCases: ChoiceCase[] = [];
-	collectChoiceCases("", spec.root, choiceCases);
+	collectChoiceCases("", spec, choiceCases);
 
 	const valueTypeCases: ValueTypeCase[] = [];
-	collectValueTypeCases("", spec.root, valueTypeCases);
+	collectValueTypeCases("", spec, valueTypeCases);
 
 	const argChoiceEntries: ArgChoiceEntry[] = [];
-	collectArgChoiceCases("", spec.root, argChoiceEntries);
+	collectArgChoiceCases("", spec, argChoiceEntries);
 
 	const argSuppressEntries: ArgSuppressEntry[] = [];
-	collectArgSuppressCases("", spec.root, argSuppressEntries);
+	collectArgSuppressCases("", spec, argSuppressEntries);
 
 	const lines: string[] = [];
 

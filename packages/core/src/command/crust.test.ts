@@ -267,8 +267,7 @@ describe("Crust .flags()", () => {
 			(typeof app)["_types"]["args"],
 			(typeof app)["_types"]["effective"],
 			(typeof app)["_types"]["ctx"],
-			{},
-			// oxlint-disable-next-line typescript/no-unnecessary-type-arguments -- pins the new 7-argument order
+			// oxlint-disable-next-line typescript/no-unnecessary-type-arguments -- pins the new 6-argument order
 			never
 		> = app;
 		void legacy;

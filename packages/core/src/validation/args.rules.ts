@@ -41,13 +41,14 @@ export function asyncParse(
 	);
 }
 
-/** An argument definition must carry a non-empty name. */
-export function nonEmptyName(name: string): void {
+/** Every argument and flag definition must carry a non-empty name. */
+export function nonEmptyName(name: string, subject: "arg" | "flag"): void {
 	if (typeof name === "string" && name.length > 0) return;
-	throw new CrustError("DEFINITION", "Every argument definition must carry a non-empty name", {
-		subject: "arg",
-		reason: "missing-name",
-	});
+	throw new CrustError(
+		"DEFINITION",
+		`Every ${subject === "arg" ? "argument" : "flag"} definition must carry a non-empty name`,
+		{ subject, reason: "missing-name" },
+	);
 }
 
 /** Argument names are unique across appended argument definitions. */

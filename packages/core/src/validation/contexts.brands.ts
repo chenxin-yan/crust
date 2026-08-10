@@ -1,41 +1,6 @@
 import type { ContextInstance, ContextMap } from "../api/context.ts";
 import type { DefName, Overlap } from "./shared.ts";
 
-// ────────────────────────────────────────────────────────────────────────────
-// Compile-time Context dependency cycle detection
-// ────────────────────────────────────────────────────────────────────────────
-
-/** Context name → directly required Context names. */
-export type ContextDeps = Record<string, string>;
-
-type RequiredNames<C> = C extends {
-	readonly _requires?: { ctx: infer RC extends ContextMap };
-}
-	? string extends keyof RC
-		? never
-		: keyof RC & string
-	: never;
-
-type InstanceDeps<C> =
-	DefName<C> extends infer Name extends string
-		? [Name] extends [never]
-			? {}
-			: { [K in Name]: RequiredNames<C> }
-		: {};
-
-type ContextsDeps<Cs extends readonly ContextInstance[]> = Cs extends readonly [
-	infer Head,
-	...infer Tail extends readonly ContextInstance[],
-]
-	? InstanceDeps<Head> & ContextsDeps<Tail>
-	: {};
-
-/** Add the dependency edges carried by a `.provide()` tuple to the accumulated graph. */
-export type MergeContextDeps<
-	Deps extends ContextDeps,
-	Cs extends readonly ContextInstance[],
-> = Deps & ContextsDeps<Cs>;
-
 /** Canonical names claimed by more than one instance in the same `.provide()` call. */
 type DuplicateContextNames<
 	Cs extends readonly ContextInstance[],
@@ -57,8 +22,8 @@ type DuplicateContextBrand<C, Existing extends string> =
  * Brand instances whose name is already provided on this builder chain or
  * repeated within the same `.provide()` call. The accumulated Context value
  * map doubles as the name registry (its keys are the provided names), so no
- * separate accumulator is needed — and unlike the `Deps` graph, wrappers
- * generic over the builder type it as `any`, which opts out via the
+ * separate accumulator is needed. Wrappers generic over the builder type
+ * use `any`, which opts out via the
  * `string extends keyof Ctx` guard instead of deferring. Widened names opt
  * out via `DefName`; a parent-provided Context that the definition does not
  * `requires` stays runtime-only because it is not in `Ctx`.

@@ -167,34 +167,29 @@ describe("CrustStoreError", () => {
 	});
 
 	// ──────────────────────────────────────────────────────────────────────
-	// Cause chaining via .withCause()
+	// Error cause
 	// ──────────────────────────────────────────────────────────────────────
 
-	it("should attach cause with .withCause()", () => {
+	it("should attach a cause", () => {
 		const original = new TypeError("unexpected type");
-		const err = new CrustStoreError("PARSE", "invalid config", {
-			path: "/tmp/config.json",
-		}).withCause(original);
+		const err = new CrustStoreError(
+			"PARSE",
+			"invalid config",
+			{ path: "/tmp/config.json" },
+			original,
+		);
 
 		expect(err.cause).toBe(original);
 		expect(err.cause).toBeInstanceOf(TypeError);
 	});
 
-	it("should return this for fluent chaining", () => {
-		const err = new CrustStoreError("IO", "write failed", {
-			path: "/tmp/config.json",
-			operation: "write",
-		});
-		const result = err.withCause(new Error("original"));
-
-		// withCause returns the same instance
-		expect(result).toBe(err);
-	});
-
 	it("should accept non-Error causes", () => {
-		const err = new CrustStoreError("PARSE", "bad json", {
-			path: "/tmp/config.json",
-		}).withCause("string cause");
+		const err = new CrustStoreError(
+			"PARSE",
+			"bad json",
+			{ path: "/tmp/config.json" },
+			"string cause",
+		);
 
 		expect(err.cause).toBe("string cause");
 	});

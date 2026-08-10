@@ -12,7 +12,6 @@ import {
 	CURSOR_INDICATOR,
 	PREFIX_SUBMITTED,
 	PREFIX_SYMBOL,
-	SCROLL_INDICATOR,
 } from "../core/symbols.ts";
 import { handleTextEdit, renderTextWithCursor } from "../core/textEdit.ts";
 import { resolveTheme } from "../core/theme.ts";
@@ -20,10 +19,12 @@ import type { Choice, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
 import {
 	calculateScrollOffset,
+	DEFAULT_MAX_VISIBLE,
 	formatPromptLine,
 	formatSubmitted,
 	moveCursor,
 	normalizeChoices,
+	renderChoiceList,
 	validateSelection,
 } from "../core/utils.ts";
 
@@ -69,7 +70,6 @@ export interface MultifilterOptions<T> {
 // Constants
 // ────────────────────────────────────────────────────────────────────────────
 
-const DEFAULT_MAX_VISIBLE = 10;
 const HINT_LINE = "(Type to filter, Space to toggle, Enter to confirm)";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -201,36 +201,27 @@ function renderMultifilter<T>(
 		return lines.join("\n");
 	}
 
-	const visibleCount = Math.min(totalResults, maxVisible);
-	if (state.scrollOffset > 0) {
-		lines.push(theme.hint(SCROLL_INDICATOR));
-	}
-
-	for (let i = 0; i < visibleCount; i++) {
-		const resultIndex = state.scrollOffset + i;
-		const result = state.results[resultIndex];
-		if (!result) break;
-
-		const choiceIdx = choiceIndex(state.choices, result.item);
-		const choice = choiceIdx === -1 ? undefined : state.choices[choiceIdx];
-		const isActive = resultIndex === state.listCursor;
-		const isChecked = choiceIdx !== -1 ? state.selected.has(choiceIdx) : false;
-		const checkbox = isChecked ? theme.success(CHECKBOX_CHECKED) : CHECKBOX_UNCHECKED;
-		const label = highlightMatches(result.item.label, result.indices, theme);
-		const hintText = choice?.hint ? ` ${theme.hint(choice.hint)}` : "";
-
-		if (isActive) {
-			lines.push(
-				`${theme.cursor(CURSOR_INDICATOR)} ${checkbox} ${theme.selected(label)}${hintText}`,
-			);
-		} else {
-			lines.push(`  ${checkbox} ${theme.unselected(label)}${hintText}`);
-		}
-	}
-
-	if (state.scrollOffset + visibleCount < totalResults) {
-		lines.push(theme.hint(SCROLL_INDICATOR));
-	}
+	lines.push(
+		...renderChoiceList(
+			state.results,
+			state.scrollOffset,
+			maxVisible,
+			(result, resultIndex) => {
+				const choiceIdx = choiceIndex(state.choices, result.item);
+				const choice = choiceIdx === -1 ? undefined : state.choices[choiceIdx];
+				const checkbox =
+					choiceIdx !== -1 && state.selected.has(choiceIdx)
+						? theme.success(CHECKBOX_CHECKED)
+						: CHECKBOX_UNCHECKED;
+				const label = highlightMatches(result.item.label, result.indices, theme);
+				const hintText = choice?.hint ? ` ${theme.hint(choice.hint)}` : "";
+				return resultIndex === state.listCursor
+					? `${theme.cursor(CURSOR_INDICATOR)} ${checkbox} ${theme.selected(label)}${hintText}`
+					: `  ${checkbox} ${theme.unselected(label)}${hintText}`;
+			},
+			theme.hint,
+		),
+	);
 
 	if (state.error) {
 		lines.push(theme.error(state.error));
@@ -240,17 +231,15 @@ function renderMultifilter<T>(
 }
 
 function renderSubmitted<T>(
-	_state: MultifilterState<T>,
+	state: MultifilterState<T>,
 	_value: T[],
 	theme: PromptTheme,
 	message: string | undefined,
-	choices: readonly NormalizedChoice<T>[],
-	selected: ReadonlySet<number>,
 ): string {
 	const prefix = theme.success(PREFIX_SUBMITTED);
 	const msg = theme.message(message ?? "Search and select");
-	const selectedLabels = choices
-		.filter((_, i) => selected.has(i))
+	const selectedLabels = state.choices
+		.filter((_, i) => state.selected.has(i))
 		.map((choice) => choice.label)
 		.join(", ");
 
@@ -329,7 +318,7 @@ export async function multifilter<T>(options: MultifilterOptions<T>, io?: Prompt
 				renderMultifilter(state, resolvedTheme, options.message, options.placeholder, maxVisible),
 			handleKey: createHandleKey<T>(maxVisible, options.required, options.min, options.max),
 			renderSubmitted: (state, value, resolvedTheme) =>
-				renderSubmitted(state, value, resolvedTheme, options.message, choices, state.selected),
+				renderSubmitted(state, value, resolvedTheme, options.message),
 		},
 		promptIO,
 	);

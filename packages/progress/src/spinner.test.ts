@@ -1,11 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import {
-	type SpinnerController,
-	type SpinnerSink,
-	createSpinnerHandle,
-	spinner,
-} from "./spinner.ts";
+import { type SpinnerHandle, type SpinnerSink, createSpinnerHandle, spinner } from "./spinner.ts";
 
 const originalStderrWrite = process.stderr.write;
 const originalStderrIsTTY = process.stderr.isTTY;
@@ -94,6 +89,19 @@ describe("createSpinnerHandle — terminal sink", () => {
 		expect(writes).toHaveLength(1);
 		expect(writes[0]).toContain("✓ Working\n");
 		expect(writes[0]).not.toContain("\x1B[");
+	});
+
+	it("applies per-call theme overrides to rendered output", () => {
+		const { sink, writes } = createFakeSink(false);
+		const handle = createSpinnerHandle(
+			{ message: "Working", theme: { success: (t) => `<OK ${t}>` } },
+			sink,
+		);
+
+		handle.start();
+		handle.stop("success");
+
+		expect(writes[0]).toContain("<OK ✓> Working\n");
 	});
 
 	it("finalizes once", () => {
@@ -638,7 +646,7 @@ describe("spinner — non-interactive", () => {
 	});
 
 	it("ignores updateMessage calls after task completes", async () => {
-		let savedController: SpinnerController | undefined;
+		let savedController: Pick<SpinnerHandle, "updateMessage"> | undefined;
 
 		await spinner({
 			message: "Running...",

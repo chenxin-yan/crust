@@ -3,59 +3,57 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { CompletionSpec } from "../spec.ts";
+import type { CompletionCommand } from "../spec.ts";
 import { renderFish } from "./fish.ts";
 
-const fixture: CompletionSpec = {
-	root: {
-		name: "mycli",
-		description: "Test CLI",
-		flags: [
-			{ name: "help", short: "h", type: "boolean", takesValue: false },
-			{ name: "version", short: "v", type: "boolean", takesValue: false },
-		],
-		args: [],
-		subCommands: [
-			{
-				name: "build",
-				description: "Build artifact",
-				flags: [
-					{ name: "release", type: "boolean", takesValue: false },
-					{
-						name: "target",
-						type: "string",
-						takesValue: true,
-						choices: ["browser", "bun", "node"],
-					},
-				],
-				args: [],
-				subCommands: [],
-			},
-			{
-				name: "deploy",
-				aliases: ["dep"],
-				description: "Deploy",
-				flags: [],
-				args: [],
-				subCommands: [
-					{
-						name: "prod",
-						description: "Production deploy",
-						flags: [
-							{
-								name: "env",
-								type: "string",
-								takesValue: true,
-								choices: ["dev", "staging", "prod"],
-							},
-						],
-						args: [],
-						subCommands: [],
-					},
-				],
-			},
-		],
-	},
+const fixture: CompletionCommand = {
+	name: "mycli",
+	description: "Test CLI",
+	flags: [
+		{ name: "help", short: "h", type: "boolean", takesValue: false },
+		{ name: "version", short: "v", type: "boolean", takesValue: false },
+	],
+	args: [],
+	subCommands: [
+		{
+			name: "build",
+			description: "Build artifact",
+			flags: [
+				{ name: "release", type: "boolean", takesValue: false },
+				{
+					name: "target",
+					type: "string",
+					takesValue: true,
+					choices: ["browser", "bun", "node"],
+				},
+			],
+			args: [],
+			subCommands: [],
+		},
+		{
+			name: "deploy",
+			aliases: ["dep"],
+			description: "Deploy",
+			flags: [],
+			args: [],
+			subCommands: [
+				{
+					name: "prod",
+					description: "Production deploy",
+					flags: [
+						{
+							name: "env",
+							type: "string",
+							takesValue: true,
+							choices: ["dev", "staging", "prod"],
+						},
+					],
+					args: [],
+					subCommands: [],
+				},
+			],
+		},
+	],
 };
 
 describe("renderFish", () => {
@@ -138,49 +136,47 @@ describe("renderFish", () => {
 		// Each fixed-slot positional choice should produce one rule per
 		// candidate value, conditioned on the new per-arg-index helper.
 		// Variadic-with-choices positionals use the `*<N>` spec.
-		const spec: CompletionSpec = {
-			root: {
-				name: "mp",
-				flags: [],
-				args: [],
-				subCommands: [
-					{
-						name: "two",
-						flags: [],
-						args: [
-							{
-								name: "first",
-								type: "string",
-								required: true,
-								variadic: false,
-								choices: ["alpha", "beta"],
-							},
-							{
-								name: "second",
-								type: "string",
-								required: true,
-								variadic: false,
-								choices: ["gamma", "delta"],
-							},
-						],
-						subCommands: [],
-					},
-					{
-						name: "vary",
-						flags: [],
-						args: [
-							{
-								name: "items",
-								type: "string",
-								required: false,
-								variadic: true,
-								choices: ["a", "b"],
-							},
-						],
-						subCommands: [],
-					},
-				],
-			},
+		const spec: CompletionCommand = {
+			name: "mp",
+			flags: [],
+			args: [],
+			subCommands: [
+				{
+					name: "two",
+					flags: [],
+					args: [
+						{
+							name: "first",
+							type: "string",
+							required: true,
+							variadic: false,
+							choices: ["alpha", "beta"],
+						},
+						{
+							name: "second",
+							type: "string",
+							required: true,
+							variadic: false,
+							choices: ["gamma", "delta"],
+						},
+					],
+					subCommands: [],
+				},
+				{
+					name: "vary",
+					flags: [],
+					args: [
+						{
+							name: "items",
+							type: "string",
+							required: false,
+							variadic: true,
+							choices: ["a", "b"],
+						},
+					],
+					subCommands: [],
+				},
+			],
 		};
 		const script = renderFish(spec, "mp", "1.0.0");
 
@@ -206,20 +202,18 @@ describe("renderFish", () => {
 	});
 
 	it("escapes single quotes in descriptions", () => {
-		const spec: CompletionSpec = {
-			root: {
-				name: "x",
-				flags: [
-					{
-						name: "fancy",
-						type: "string",
-						takesValue: true,
-						description: "it's complicated",
-					},
-				],
-				args: [],
-				subCommands: [],
-			},
+		const spec: CompletionCommand = {
+			name: "x",
+			flags: [
+				{
+					name: "fancy",
+					type: "string",
+					takesValue: true,
+					description: "it's complicated",
+				},
+			],
+			args: [],
+			subCommands: [],
 		};
 		const script = renderFish(spec, "x", "1.0.0");
 		// Description goes through `fishSingleQuote`, which produces
@@ -307,33 +301,31 @@ function shQuoteForFish(value: string): string {
 }
 
 describe("renderFish — url/path/json value-flag handling", () => {
-	const valueTypeFixture: CompletionSpec = {
-		root: {
-			name: "mycli",
-			flags: [
-				{
-					name: "out",
-					type: "string",
-					takesValue: true,
-					valueCompletion: "files",
-				},
-				{
-					name: "endpoint",
-					type: "string",
-					takesValue: true,
-					valueCompletion: "none",
-				},
-				{
-					name: "config",
-					type: "string",
-					takesValue: true,
-					valueCompletion: "none",
-				},
-				{ name: "name", type: "string", takesValue: true },
-			],
-			args: [],
-			subCommands: [],
-		},
+	const valueTypeFixture: CompletionCommand = {
+		name: "mycli",
+		flags: [
+			{
+				name: "out",
+				type: "string",
+				takesValue: true,
+				valueCompletion: "files",
+			},
+			{
+				name: "endpoint",
+				type: "string",
+				takesValue: true,
+				valueCompletion: "none",
+			},
+			{
+				name: "config",
+				type: "string",
+				takesValue: true,
+				valueCompletion: "none",
+			},
+			{ name: "name", type: "string", takesValue: true },
+		],
+		args: [],
+		subCommands: [],
 	};
 
 	it("emits __fish_complete_path for path flags", () => {
@@ -363,35 +355,33 @@ describe("renderFish — url/path/json value-flag handling", () => {
 	});
 
 	it("emits a positional rule for path args; url/json positionals rely on the global -f suppression", () => {
-		const posFixture: CompletionSpec = {
-			root: {
-				name: "mycli",
-				flags: [],
-				args: [
-					{
-						name: "src",
-						type: "string",
-						required: true,
-						variadic: false,
-						valueCompletion: "files",
-					},
-					{
-						name: "endpoint",
-						type: "string",
-						required: true,
-						variadic: false,
-						valueCompletion: "none",
-					},
-					{
-						name: "payload",
-						type: "string",
-						required: true,
-						variadic: false,
-						valueCompletion: "none",
-					},
-				],
-				subCommands: [],
-			},
+		const posFixture: CompletionCommand = {
+			name: "mycli",
+			flags: [],
+			args: [
+				{
+					name: "src",
+					type: "string",
+					required: true,
+					variadic: false,
+					valueCompletion: "files",
+				},
+				{
+					name: "endpoint",
+					type: "string",
+					required: true,
+					variadic: false,
+					valueCompletion: "none",
+				},
+				{
+					name: "payload",
+					type: "string",
+					required: true,
+					variadic: false,
+					valueCompletion: "none",
+				},
+			],
+			subCommands: [],
 		};
 		const script = renderFish(posFixture, "mycli", "1.0.0");
 		// Path positional gets an explicit `(__fish_complete_path)` rule.

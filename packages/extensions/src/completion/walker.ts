@@ -1,7 +1,7 @@
 import type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "@crustjs/core";
 
 import { assertSafeChoiceValue, assertSafeIdentifier, sanitizeFreeText } from "./escape.ts";
-import type { CompletionArg, CompletionCommand, CompletionFlag, CompletionSpec } from "./spec.ts";
+import type { CompletionArg, CompletionCommand, CompletionFlag } from "./spec.ts";
 
 /**
  * Normalise an optional description: strip ANSI, then drop empty results.
@@ -174,7 +174,7 @@ function walkCommand(node: CommandSnapshot): CompletionCommand {
 }
 
 /**
- * Build a `CompletionSpec` from a root `CommandSnapshot`.
+ * Build a completion command from a root `CommandSnapshot`.
  *
  * This is the single entry point used by the extension's `run()` action. It
  * walks lazily — never at `setup()` time — so extension order is irrelevant
@@ -182,6 +182,6 @@ function walkCommand(node: CommandSnapshot): CompletionCommand {
  * registers; we only see the final tree when the user actually invokes the
  * `completion` subcommand).
  */
-export function walkCommandNode(root: CommandSnapshot): CompletionSpec {
-	return { root: walkCommand(root) };
+export function walkCommandNode(root: CommandSnapshot): CompletionCommand {
+	return walkCommand(root);
 }

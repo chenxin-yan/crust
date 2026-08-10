@@ -1,26 +1,18 @@
-import type { FlagDef, FlagsDef, ValueType } from "../types.ts";
+import type { FlagDef, FlagsDef } from "../types.ts";
 
-interface FlagDefinition {
-	readonly type: ValueType;
-	readonly short?: string;
-	readonly aliases?: readonly string[];
-	readonly noNegate?: boolean;
-	readonly multiple?: boolean;
-}
-
-export interface FlagSpelling<T extends FlagDefinition = FlagDef> {
+export interface FlagSpelling {
 	canonicalName: string;
 	spelling: string;
-	def: T;
+	def: FlagDef;
 	kind: "canonical" | "short" | "alias";
 	negatable: boolean;
 }
 
 /** Add one normalized flag to a command's cached spelling table. */
-export function addFlagSpellingEntries<T extends FlagDefinition = FlagDef>(
-	spellings: Map<string, FlagSpelling<T>>,
+export function addFlagSpellingEntries(
+	spellings: Map<string, FlagSpelling>,
 	canonicalName: string,
-	def: T,
+	def: FlagDef,
 ): void {
 	const entry = {
 		canonicalName,

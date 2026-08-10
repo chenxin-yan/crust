@@ -2,12 +2,6 @@ import { CrustError } from "../errors.ts";
 import type { FlagDef, FlagsDef, ValueType } from "../types.ts";
 import { schemaExclusivity } from "./args.rules.ts";
 
-interface FlagDefinition {
-	readonly type: ValueType;
-	readonly short?: string;
-	readonly aliases?: readonly string[];
-}
-
 const ALLOWED_FLAG_TYPES: ReadonlySet<ValueType> = new Set([
 	"string",
 	"number",
@@ -21,17 +15,8 @@ const ALLOWED_FLAG_TYPES_TEXT = [...ALLOWED_FLAG_TYPES]
 	.join(", ")
 	.replace(/, (?="[^"]+"$)/, ", or ");
 
-export function flagDefinitionSpellings(name: string, def: FlagDefinition): string[] {
+export function flagDefinitionSpellings(name: string, def: FlagDef): string[] {
 	return [name, ...(def.short ? [def.short] : []), ...(def.aliases ?? [])];
-}
-
-/** A flag definition must carry a non-empty name. */
-export function nonEmptyName(name: string): void {
-	if (typeof name === "string" && name.length > 0) return;
-	throw new CrustError("DEFINITION", "Every flag definition must carry a non-empty name", {
-		subject: "flag",
-		reason: "missing-name",
-	});
 }
 
 /**
@@ -43,7 +28,7 @@ export function nonEmptyName(name: string): void {
  */
 export function noPrefix(
 	name: string,
-	def: FlagDefinition,
+	def: FlagDef,
 	ownerLabel?: string,
 	scope: "all" | "name" | "spellings" = "all",
 ): void {
@@ -73,7 +58,7 @@ export function noPrefix(
 }
 
 /** A flag must declare one of the parser's supported token types. */
-export function parserType(name: string, def: FlagDefinition, ownerLabel?: string): void {
+export function parserType(name: string, def: FlagDef, ownerLabel?: string): void {
 	if (ALLOWED_FLAG_TYPES.has(def.type)) return;
 	const subject = ownerLabel ? `${ownerLabel} flag "--${name}"` : `Flag "--${name}"`;
 	throw new CrustError(
@@ -83,7 +68,7 @@ export function parserType(name: string, def: FlagDefinition, ownerLabel?: strin
 }
 
 /** `__proto__` cannot safely be stored in plain-object flag records. */
-export function reservedSpelling(name: string, def: FlagDefinition, ownerLabel?: string): void {
+export function reservedSpelling(name: string, def: FlagDef, ownerLabel?: string): void {
 	if (!flagDefinitionSpellings(name, def).includes("__proto__")) return;
 	const subject = ownerLabel ? `${ownerLabel} flag "--${name}"` : `Flag "--${name}"`;
 	throw new CrustError("DEFINITION", `${subject} uses reserved spelling "__proto__"`, {

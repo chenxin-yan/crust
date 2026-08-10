@@ -1,5 +1,5 @@
 import { zshArgsDescription, zshDescribeField, zshSingleQuote } from "../escape.ts";
-import type { CompletionCommand, CompletionFlag, CompletionSpec } from "../spec.ts";
+import type { CompletionCommand, CompletionFlag } from "../spec.ts";
 
 /**
  * Pure-static zsh completion script renderer.
@@ -291,7 +291,7 @@ function renderHelper(
  *                 {@link assertSafeBinName}.
  * @param version  Free-form version string for the header comment.
  */
-export function renderZsh(spec: CompletionSpec, binName: string, version: string): string {
+export function renderZsh(spec: CompletionCommand, binName: string, version: string): string {
 	const ident = toShellIdent(binName);
 	const lines: string[] = [];
 
@@ -306,7 +306,7 @@ export function renderZsh(spec: CompletionSpec, binName: string, version: string
 	lines.push("");
 
 	const helpers: string[] = [];
-	renderHelper(ident, [], spec.root, helpers);
+	renderHelper(ident, [], spec, helpers);
 	lines.push(...helpers);
 
 	// Bootstrap line. When zsh's autoload machinery sources the file via
