@@ -201,6 +201,20 @@ describe("FieldDef", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("CreateStoreOptions", () => {
+	it("should require a store name", () => {
+		const fields = {
+			theme: { type: "string", default: "light" },
+		} as const satisfies FieldsDef;
+
+		// @ts-expect-error — stores must have an explicit name
+		const options: CreateStoreOptions<typeof fields> = {
+			dirPath: "/tmp/test",
+			fields,
+		};
+
+		expect(options).toBeDefined();
+	});
+
 	it("should accept valid options with fields", () => {
 		const fields = {
 			theme: { type: "string", default: "light" },
@@ -209,6 +223,7 @@ describe("CreateStoreOptions", () => {
 
 		const options: CreateStoreOptions<typeof fields> = {
 			dirPath: "/tmp/test",
+			name: "config",
 			fields,
 		};
 
@@ -216,7 +231,7 @@ describe("CreateStoreOptions", () => {
 		expect(options.fields.theme.default).toBe("light");
 	});
 
-	it("should accept optional name", () => {
+	it("should accept a name", () => {
 		const fields = {
 			theme: { type: "string", default: "light" },
 		} as const satisfies FieldsDef;
@@ -243,6 +258,7 @@ describe("CreateStoreOptions", () => {
 
 		const options: CreateStoreOptions<typeof fields> = {
 			dirPath: "/tmp/test",
+			name: "config",
 			fields,
 		};
 
@@ -256,6 +272,7 @@ describe("CreateStoreOptions", () => {
 
 		const options: CreateStoreOptions<typeof fields> = {
 			dirPath: "/tmp/test",
+			name: "config",
 			fields,
 			pruneUnknown: false,
 		};
@@ -270,11 +287,13 @@ describe("CreateStoreOptions", () => {
 
 		const privateOptions: CreateStoreOptions<typeof fields> = {
 			dirPath: "/tmp/test",
+			name: "config",
 			fields,
 			access: "private",
 		};
 		const explicitOptions: CreateStoreOptions<typeof fields> = {
 			dirPath: "/tmp/test",
+			name: "config",
 			fields,
 			access: { file: 0o600, directory: 0o700 },
 		};
@@ -291,6 +310,7 @@ describe("CreateStoreOptions", () => {
 
 		const result = acceptOptions({
 			dirPath: "/tmp/test",
+			name: "config",
 			fields: {
 				theme: { type: "string", default: "light" },
 				verbose: { type: "boolean", default: false },

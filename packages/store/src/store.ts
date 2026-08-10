@@ -56,7 +56,7 @@ function isFieldValueResult(r: unknown): r is { value: unknown } {
  * Creates a typed async config store backed by a local JSON file.
  *
  * The store resolves its file path once at creation time from `dirPath` and
- * optional `name`. Core field definitions infer from `type` and `default`;
+ * `name`. Core field definitions infer from `type` and `default`;
  * schema-backed fields use the Standard Schema's exact output type.
  *
  * @typeParam F - Field definitions record (inferred via `const` generic).
@@ -70,6 +70,7 @@ function isFieldValueResult(r: unknown): r is { value: unknown } {
  *
  * const store = createStore({
  *   dirPath: configDir("my-cli"),
+ *   name: "config",
  *   fields: {
  *     theme: { type: "string", default: "light" },
  *     verbose: { type: "boolean", default: false },

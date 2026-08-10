@@ -114,6 +114,7 @@ new Crust("serve").flags({ name: "port", type: "string", schema: Port }).action(
 
 const store = createStore({
   dirPath: configDir("my-cli"),
+  name: "config",
   fields: { port: { schema: Port.default(3000) } },
 });
 const config = await store.read();

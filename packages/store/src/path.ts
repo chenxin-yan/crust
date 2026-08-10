@@ -7,12 +7,6 @@ import { join, win32 } from "node:path";
 
 import { CrustStoreError } from "./errors.ts";
 
-/**
- * Default store name used when no explicit `name` is provided.
- * Produces `config.json` as the filename.
- */
-const DEFAULT_STORE_NAME = "config";
-
 // ────────────────────────────────────────────────────────────────────────────
 // Platform environment — injectable for testing
 // ────────────────────────────────────────────────────────────────────────────
@@ -329,18 +323,12 @@ export function cacheDir(appName: string, env?: PlatformEnv): string {
  * `<dirPath>/<name>.json`.
  *
  * @param dirPath - Absolute directory path.
- * @param name - Optional store name (defaults to `"config"`).
+ * @param name - Store name used as the JSON filename.
  * @returns Absolute path to the store file.
  * @throws {CrustStoreError} `PATH` if `dirPath` or `name` is invalid.
  */
-export function resolveStorePath(dirPath: string, name?: string): string {
+export function resolveStorePath(dirPath: string, name: string): string {
 	validateDirPath(dirPath);
-
-	// Resolve store name (validate only when explicitly provided)
-	const storeName = name ?? DEFAULT_STORE_NAME;
-	if (name !== undefined) {
-		validateName(name);
-	}
-
-	return join(dirPath, `${storeName}.json`);
+	validateName(name);
+	return join(dirPath, `${name}.json`);
 }
