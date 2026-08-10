@@ -1,7 +1,4 @@
-import { CrustError } from "../errors.ts";
-import { flagDefinitionSpellings, validateFlagDefinitionShape } from "../parsing/spellings.ts";
-import type { FlagDef, FlagsDef, NamedFlagDef, NamedFlagsRecord } from "../types.ts";
-import { validateSchemaExclusivity } from "./args.ts";
+import type { FlagsDef, NamedFlagDef, NamedFlagsRecord } from "../types.ts";
 import type { AsyncParseBrand, DefName, Overlap } from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -57,16 +54,6 @@ type DuplicateNameBrand<F, Dups extends string> =
 export type ValidateNamedFlagDefs<
 	Defs extends readonly NamedFlagDef[],
 	Existing extends string = never,
-	// Hoisted out of the per-element map below: both are invariant w.r.t. `I`,
-	// so computing them once as defaulted params avoids re-instantiating them
-	// for every definition in the call. The always-true distributive conditional
-	// on the naked `Defs` param exists purely for perf: it defers instantiating
-	// the validation pipeline until `Defs` is concrete instead of speculatively
-	// re-instantiating it during inference (measured −52k instantiations on core;
-	// the non-distributive `[Defs] extends [Defs]` form recovers only −18k).
-	// Do not simplify or box this conditional — it looks like dead code but is
-	// load-bearing. It distributes over union `Defs`, which is unreachable via
-	// `.flags(...defs)` tuple inference.
 	Validated = Defs extends Defs
 		? ValidateNoPrefixedFlags<ValidateFlagAliases<NamedFlagsRecord<Defs>>>
 		: never,
@@ -242,34 +229,3 @@ export type ProvideChecks<Sp extends string, Cs extends readonly unknown[]> = {
 };
 
 // ────────────────────────────────────────────────────────────────────────────
-// Runtime validation
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Validate one flag against the complete canonical/short/alias namespace.
- *
- * Shape and exclusivity rules always run, even for Context/Extension flags
- * that passed them at creation: those carriers are public structural types,
- * so a hand-written object can reach attachment without ever being created
- * by `defineExtension`/`defineContext`.
- */
-export function validateIncomingFlag(
-	incoming: { name: string; def: FlagDef },
-	existing: FlagsDef,
-	ownerLabel: string,
-): void {
-	const incomingSpellings = validateFlagDefinitionShape(incoming.name, incoming.def, ownerLabel);
-	validateSchemaExclusivity("flag", incoming.name, incoming.def);
-
-	for (const [existingName, existingDef] of Object.entries(existing)) {
-		const existingSpellings = new Set(flagDefinitionSpellings(existingName, existingDef));
-		const collision = incomingSpellings.find((spelling) => existingSpellings.has(spelling));
-		if (collision !== undefined) {
-			throw new CrustError(
-				"DEFINITION",
-				`${ownerLabel} flag "--${incoming.name}" spelling "${collision}" collides with flag "--${existingName}"`,
-				{ subject: "flag", name: incoming.name, reason: "flag-collision" },
-			);
-		}
-	}
-}

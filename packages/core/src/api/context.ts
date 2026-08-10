@@ -8,7 +8,7 @@ import type {
 	NamedFlagDef,
 	NamedFlagsRecord,
 } from "../types.ts";
-import type { ValidateNamedFlagDefs } from "../validation/flags.ts";
+import type { ValidateNamedFlagDefs } from "../validation/flags.brands.ts";
 import { normalizeFlag } from "../validation/normalize.ts";
 
 export type ContextMap = Record<string, unknown>;

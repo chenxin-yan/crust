@@ -1,45 +1,29 @@
 import type { ContextInstance } from "../api/context.ts";
 import type { CommandNode } from "../command/node.ts";
-import { CrustError } from "../errors.ts";
 import { addFlagSpellingEntries, type FlagSpelling } from "../parsing/spellings.ts";
 import type { ArgDef, ArgsDef, FlagDef, FlagsDef } from "../types.ts";
-import { validateSchemaExclusivity, validateVariadicArgPosition } from "./args.ts";
-import { validateIncomingAliases } from "./commands.ts";
-import { sortContexts, validateIncomingContext } from "./contexts.ts";
-import { validateIncomingFlag } from "./flags.ts";
-
-function validateSyncParse(
-	parse: ((raw: string) => unknown) | undefined,
-	subject: "flag" | "arg",
-	name: string,
-): void {
-	if (parse?.constructor.name !== "AsyncFunction") return;
-	const label = subject === "flag" ? `flag --${name}` : `argument <${name}>`;
-	throw new CrustError(
-		"DEFINITION",
-		`Async parse not supported for ${label}. Use a sync parser; do async work in run().`,
-		{ subject, name, reason: "async-parse" },
-	);
-}
-
-function validateDefaultChoices(
-	def: { default?: unknown; choices?: readonly string[] },
-	label: string,
-	subject: "flag" | "arg",
-	name: string,
-): void {
-	const { default: value, choices } = def;
-	if (value === undefined || choices === undefined) return;
-	const values = Array.isArray(value) ? value : [value];
-	for (const item of values) {
-		if (choices.includes(String(item))) continue;
-		throw new CrustError(
-			"DEFINITION",
-			`Invalid default value "${String(item)}" for ${label}. Expected one of: ${choices.join(", ")}`,
-			{ subject, name, reason: "default-choice" },
-		);
-	}
-}
+import {
+	asyncParse,
+	defaultWithinChoices,
+	duplicateArg,
+	nonEmptyName as nonEmptyArgName,
+	schemaExclusivity,
+	variadicPosition,
+} from "./args.rules.ts";
+import { commandCollision } from "./commands.rules.ts";
+import {
+	contextCycle,
+	definitionProvenance,
+	duplicateContext,
+	missingContextDependency,
+} from "./contexts.rules.ts";
+import {
+	aliasCollision,
+	noPrefix,
+	nonEmptyName as nonEmptyFlagName,
+	parserType,
+	reservedSpelling,
+} from "./flags.rules.ts";
 
 /**
  * Normalize one raw flag before adding it to a trusted flag namespace.
@@ -56,9 +40,14 @@ export function normalizeFlag(
 	spellings: Map<string, FlagSpelling>,
 	ownerLabel: string,
 ): void {
-	validateIncomingFlag(incoming, existing, ownerLabel);
-	validateSyncParse(incoming.def.parse, "flag", incoming.name);
-	validateDefaultChoices(incoming.def, `--${incoming.name}`, "flag", incoming.name);
+	nonEmptyFlagName(incoming.name);
+	noPrefix(incoming.name, incoming.def, ownerLabel, "name");
+	parserType(incoming.name, incoming.def, ownerLabel);
+	noPrefix(incoming.name, incoming.def, ownerLabel, "spellings");
+	reservedSpelling(incoming.name, incoming.def, ownerLabel);
+	aliasCollision(incoming, existing, ownerLabel);
+	asyncParse(incoming.def.parse, "flag", incoming.name);
+	defaultWithinChoices(incoming.def, `--${incoming.name}`, "flag", incoming.name);
 	addFlagSpellingEntries(spellings, incoming.name, incoming.def);
 }
 
@@ -76,29 +65,14 @@ export function normalizeArgs(existing: ArgsDef | undefined, incoming: ArgsDef):
 		const def = args[index]!;
 		if (index >= prior.length) {
 			const name = def.name;
-			if (typeof name !== "string" || name.length === 0) {
-				throw new CrustError(
-					"DEFINITION",
-					"Every argument definition must carry a non-empty name",
-					{
-						subject: "arg",
-						reason: "missing-name",
-					},
-				);
-			}
-			if (names.has(name)) {
-				throw new CrustError("DEFINITION", `Argument "${name}" is already defined`, {
-					subject: "arg",
-					name,
-					reason: "duplicate-arg",
-				});
-			}
+			nonEmptyArgName(name);
+			duplicateArg(name, names);
 			names.add(name);
-			validateSchemaExclusivity("arg", name, def as ArgDef);
-			validateSyncParse(def.parse, "arg", name);
-			validateDefaultChoices(def, `<${name}>`, "arg", name);
+			schemaExclusivity("arg", name, def as ArgDef);
+			asyncParse(def.parse, "arg", name);
+			defaultWithinChoices(def, `<${name}>`, "arg", name);
 		}
-		validateVariadicArgPosition(def, index, args.length);
+		variadicPosition(def, index, args.length);
 	}
 	return args;
 }
@@ -109,14 +83,7 @@ export function normalizeChild(
 	existing: Record<string, CommandNode>,
 	subjectLabel: string,
 ): void {
-	if (Object.hasOwn(existing, incoming.canonicalName)) {
-		throw new CrustError("DEFINITION", `${subjectLabel} is already registered`, {
-			subject: "command",
-			name: incoming.canonicalName,
-			reason: "duplicate-command",
-		});
-	}
-	validateIncomingAliases(incoming, existing, subjectLabel);
+	commandCollision(incoming, existing, subjectLabel);
 }
 
 /** Normalize one Context batch and return its cached topological order. */
@@ -129,12 +96,14 @@ export function normalizeContext(
 ): ContextInstance[] {
 	const contexts = [...existing];
 	for (const instance of incoming) {
-		validateIncomingContext(instance, contexts);
+		definitionProvenance(instance);
+		duplicateContext(instance, contexts);
 		for (const [name, def] of Object.entries(instance.ownedFlags)) {
 			normalizeFlag({ name, def }, effectiveFlags, spellings, `Context "${instance.name}"`);
 			effectiveFlags[name] = def;
 		}
 		contexts.push(instance);
 	}
-	return sortContexts(contexts, where);
+	missingContextDependency(contexts, where);
+	return contextCycle(contexts, where);
 }

@@ -23,19 +23,23 @@ import type {
 	NamedFlagDef,
 	NamedFlagsRecord,
 } from "../types.ts";
-import type { AppendArgsChecks } from "../validation/args.ts";
+import type { AppendArgsChecks } from "../validation/args.brands.ts";
 import type {
 	AliasesOf,
 	CommandDefinitionSpellings,
 	ValidateCommandConfig,
 	ValidateCommandDefinitions,
-} from "../validation/commands.ts";
+} from "../validation/commands.brands.ts";
 import type {
 	ContextDeps,
 	MergeContextDeps,
 	ValidateContextNames,
-} from "../validation/contexts.ts";
-import type { ProvideChecks, SpellingsOf, ValidateNamedFlagDefs } from "../validation/flags.ts";
+} from "../validation/contexts.brands.ts";
+import type {
+	ProvideChecks,
+	SpellingsOf,
+	ValidateNamedFlagDefs,
+} from "../validation/flags.brands.ts";
 import {
 	normalizeArgs,
 	normalizeChild,

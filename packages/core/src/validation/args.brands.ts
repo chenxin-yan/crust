@@ -1,5 +1,4 @@
-import { CrustError } from "../errors.ts";
-import type { ArgDef, ArgsDef, FlagDef } from "../types.ts";
+import type { ArgsDef } from "../types.ts";
 import type { AsyncParseBrand, DefName, Overlap } from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -71,50 +70,3 @@ export type AppendArgsChecks<A extends ArgsDef, NewA extends ArgsDef> = A extend
 	: ValidateVariadicArgs<NewA>;
 
 // ────────────────────────────────────────────────────────────────────────────
-// Runtime validation
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Runtime guard shared by `.flags()` and `.args()` for untyped callers:
- * schema mode is exclusive — the schema owns coercion, defaults, requiredness,
- * choices, and validation. The type system already rejects mixing; this catches
- * plain-JS misuse.
- */
-export function validateSchemaExclusivity(
-	subject: "arg" | "flag",
-	name: string,
-	def: ArgDef | FlagDef,
-): void {
-	if (def.schema === undefined) return;
-	for (const key of ["default", "required", "choices", "parse"] as const) {
-		if (def[key] !== undefined) {
-			throw new CrustError(
-				"DEFINITION",
-				`${subject} "${name}" mixes core option "${key}" with a schema — the schema exclusively owns coercion, defaults, requiredness, choices, and validation`,
-				{ subject, name, reason: "schema-exclusive" },
-			);
-		}
-	}
-	if (subject === "arg" && def.type !== undefined) {
-		throw new CrustError(
-			"DEFINITION",
-			`arg "${name}" mixes core option "type" with a schema — schema args receive the raw string token`,
-			{ subject, name, reason: "schema-exclusive" },
-		);
-	}
-}
-
-/** Validate that a variadic argument is the final positional argument. */
-export function validateVariadicArgPosition(
-	def: ArgsDef[number],
-	index: number,
-	count: number,
-): void {
-	if (def.variadic === true && index !== count - 1) {
-		throw new CrustError(
-			"DEFINITION",
-			`Argument "${def.name}" is variadic, but only the last positional argument can be variadic`,
-			{ subject: "arg", name: def.name, reason: "variadic-position" },
-		);
-	}
-}

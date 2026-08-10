@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { ContextInstance } from "../api/context.ts";
-import type { ValidateContextNames } from "./contexts.ts";
+import type { ValidateContextNames } from "./contexts.brands.ts";
 
 type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
