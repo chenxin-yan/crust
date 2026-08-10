@@ -11,13 +11,22 @@ bun create crust my-cli
 cd my-cli
 ```
 
-The scaffolder offers to install dependencies and initialize git. The generated project uses the single supported starter pattern:
+The scaffolder offers to install dependencies and initialize git. The generated project is a split-file todo CLI that demonstrates commands, shared Contexts, and Extensions.
+
+Run it in development:
+
+```sh
+bun run dev add "buy milk"
+bun run dev list
+```
+
+## Build a command by hand
+
+For a smaller command, start in one file:
 
 <include lang="ts" meta='title="src/cli.ts"'>
   ../../examples/quick-start/starter.ts
 </include>
-
-Run it directly:
 
 ```sh
 bun run src/cli.ts Ada --greet Welcome

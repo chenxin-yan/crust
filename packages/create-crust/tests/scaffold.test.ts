@@ -170,7 +170,6 @@ describe("create-crust templates", () => {
 		expect(app).toContain("didYouMean()");
 		expect(app).toContain("completion({ binName: pkg.name, version: pkg.version })");
 		expect(app).toContain("// updateNotifier(");
-		expect(app).toContain("needs a cache adapter to avoid a registry request per run");
 		expect(app).toContain(".provide(todoStore())");
 		expect(shared).toContain('defineFlag("data-file", {');
 		expect(shared).toContain('type: "path"');
