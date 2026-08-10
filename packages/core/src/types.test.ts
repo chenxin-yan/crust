@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
+import type { StandardSchema } from "@crustjs/utils/schema";
+
 import type { Simplify } from "./api/context.ts";
 import type {
 	ArgDef,
@@ -55,6 +57,33 @@ describe("InferArgs type inference", () => {
 
 		const val: Result = { flag: undefined };
 		expect(val).toBeDefined();
+	});
+
+	it("narrows raw args (no type/schema) with literal choices", () => {
+		type Args = readonly [
+			{ name: "mode"; choices: readonly ["dev", "prod"] },
+			{ name: "env"; choices: readonly ["a", "b"]; default: "a" },
+			{ name: "tags"; choices: readonly ["x", "y"]; variadic: true },
+		];
+		type Result = InferArgs<Args>;
+		type _check = Expect<
+			Equal<
+				Result,
+				{
+					mode: "dev" | "prod" | undefined;
+					env: "a" | "b";
+					tags: ("x" | "y")[];
+				}
+			>
+		>;
+		expect(true).toBe(true);
+	});
+
+	it("schema args infer the schema output, untouched by choices narrowing", () => {
+		type Args = readonly [{ name: "url"; schema: StandardSchema<string | undefined, URL> }];
+		type Result = InferArgs<Args>;
+		type _check = Expect<Equal<Result, { url: URL }>>;
+		expect(true).toBe(true);
 	});
 
 	it("maps required arg to non-optional type", () => {
@@ -186,6 +215,35 @@ describe("InferFlags type inference", () => {
 
 		const val: Result = { port: 8080 };
 		expect(val.port).toBe(8080);
+	});
+
+	it("narrows a string flag with literal choices to the literal union", () => {
+		type Flags = {
+			env: { type: "string"; choices: readonly ["staging", "production"]; default: "staging" };
+			mode: { type: "string"; choices: readonly ["a", "b"] };
+			tags: { type: "string"; multiple: true; choices: readonly ["x", "y"] };
+		};
+		type Result = InferFlags<Flags>;
+		type _check = Expect<
+			Equal<
+				Result,
+				{
+					env: "staging" | "production";
+					mode: "a" | "b" | undefined;
+					tags: ("x" | "y")[] | undefined;
+				}
+			>
+		>;
+
+		const val: Result = { env: "staging", mode: undefined, tags: undefined };
+		expect(val.env).toBe("staging");
+	});
+
+	it("keeps plain string for choices widened to readonly string[]", () => {
+		type Flags = { env: { type: "string"; choices: readonly string[] } };
+		type Result = InferFlags<Flags>;
+		type _check = Expect<Equal<Result, { env: string | undefined }>>;
+		expect(true).toBe(true);
 	});
 
 	it("maps multiple flags together", () => {
@@ -727,6 +785,15 @@ describe("InferFlags — parse field inference", () => {
 		type _check = Expect<Equal<Result, { x: number }>>;
 		const val: Result = { x: 42 };
 		expect(val.x).toBe(42);
+	});
+
+	it("parse wins over literal choices (parse owns the output type)", () => {
+		type Flags = {
+			x: { type: "string"; choices: readonly ["1", "2"]; parse: (s: string) => number };
+		};
+		type Result = InferFlags<Flags>;
+		type _check = Expect<Equal<Result, { x: number | undefined }>>;
+		expect(true).toBe(true);
 	});
 
 	it("narrows inference when parse + raw default are both present", () => {

@@ -55,6 +55,8 @@ Use `choices` for a static string set:
 
 A declared default outside the choices is a `DEFINITION` error when `.args()` runs. An argv value outside the choices is a `PARSE` error during invocation.
 
+As with flags, a literal choices tuple narrows the argument's inferred type to the union of those literals (`"bun" | "node"` above); a widened `string[]` keeps it as `string`.
+
 ## Standard Schemas
 
 A `schema` receives the raw positional token (`string | undefined`, or `string[]` for a variadic argument) and determines the Command Action's output type:

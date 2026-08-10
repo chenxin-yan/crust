@@ -606,6 +606,8 @@ describe("filter — no message", () => {
 
 describe("filter — non-TTY", () => {
 	function nonTTY<T>(options: FilterOptions<T>): Promise<T> {
+		// No explicit type arg: pins that generic pass-through wrappers still
+		// resolve to the generic overload and return Promise<T>.
 		return filter(options, nonTTYIO());
 	}
 
@@ -658,3 +660,30 @@ describe("filter — non-TTY", () => {
 		expect(result).toBe("a");
 	});
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// Type-level inference (compile-time only — never executed at runtime)
+// ────────────────────────────────────────────────────────────────────────────
+
+type Equal<A, B> =
+	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+type Expect<T extends true> = T;
+
+async function _filterTypeInferenceTests() {
+	const pick = await filter({ message: "?", choices: ["prettier", "eslint"] });
+	type _PickNarrows = Expect<Equal<typeof pick, "prettier" | "eslint">>;
+
+	const port = await filter({
+		message: "?",
+		choices: [
+			{ label: "HTTP", value: 80 },
+			{ label: "HTTPS", value: 443 },
+		],
+	});
+	type _PortNarrows = Expect<Equal<typeof port, 80 | 443>>;
+
+	const widened: string[] = ["a", "b"];
+	const loose = await filter({ message: "?", choices: widened });
+	type _LooseIsString = Expect<Equal<typeof loose, string>>;
+}
+void _filterTypeInferenceTests;

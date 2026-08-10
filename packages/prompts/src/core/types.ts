@@ -81,6 +81,20 @@ export type Choice<T> =
 	| string
 	| { readonly label: string; readonly value: T; readonly hint?: string };
 
+/**
+ * Extract the value union from a choices tuple: a plain string choice is its
+ * own value (see `normalizeChoices`), an object choice contributes its
+ * `value`. With the prompts' `const C` generics, a literal choices tuple
+ * narrows the prompt's return type to the union of its values
+ * (e.g. `["dev", "prod"]` → `"dev" | "prod"`); a widened
+ * `readonly string[]` stays `string`.
+ */
+export type ChoiceValue<C extends readonly Choice<unknown>[]> = C[number] extends infer E
+	? E extends { readonly value: infer V }
+		? V
+		: E
+	: never;
+
 // ────────────────────────────────────────────────────────────────────────────
 // Validation
 // ────────────────────────────────────────────────────────────────────────────

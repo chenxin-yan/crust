@@ -9,7 +9,7 @@ import { isTTY, resolvePromptIO, runPrompt, submit } from "../core/renderer.ts";
 import { CURSOR_INDICATOR, PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import { handleTextEdit, renderTextWithCursor } from "../core/textEdit.ts";
 import { resolveTheme } from "../core/theme.ts";
-import type { Choice, PartialPromptTheme, PromptTheme } from "../core/types.ts";
+import type { Choice, ChoiceValue, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
 import {
 	calculateScrollOffset,
@@ -224,6 +224,16 @@ function renderSubmitted<T>(
  * });
  * ```
  */
+// Narrowing overloads — see `select` for the pattern rationale.
+export function filter<const C extends readonly [Choice<unknown>, ...Choice<unknown>[]]>(
+	options: FilterOptions<ChoiceValue<C>> & { readonly choices: C },
+	io?: PromptIO,
+): Promise<ChoiceValue<C>>;
+export function filter(
+	options: FilterOptions<string> & { readonly choices: readonly string[] },
+	io?: PromptIO,
+): Promise<string>;
+export function filter<T>(options: FilterOptions<T>, io?: PromptIO): Promise<T>;
 export async function filter<T>(options: FilterOptions<T>, io?: PromptIO): Promise<T> {
 	// Short-circuit: return initial value immediately without rendering
 	if (options.initial !== undefined) {

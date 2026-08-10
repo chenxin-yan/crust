@@ -196,6 +196,8 @@ const port = await select({
 });
 ```
 
+When the choices list is written inline (or declared `as const`), the result narrows to the union of the choice values — `80 | 443` above, or `"react" | "vue" | "svelte"` for string choices. A widened `string[]` keeps `string`. The same applies to `multiselect`, `filter`, and `multifilter` (element type of the returned array).
+
 <auto-type-table
   path="../../../../../packages/prompts/src/prompts/select.ts"
   name="SelectOptions"
@@ -453,6 +455,7 @@ Ctrl+C cancellation rejects with a standard `DOMException` named `"AbortError"` 
 | `CreatePromptsOptions`    | Options for `createPrompts()`                                                       |
 | `PromptsInstance`         | Themed prompt functions returned by `createPrompts()`                               |
 | `Choice<T>`               | Choice item: string or `{ label, value, hint? }`                                    |
+| `ChoiceValue<C>`          | Union of the values in a choices tuple (drives literal narrowing)                   |
 | `ValidateFn<T>`           | Validation function type — `(value: T) => void \| Promise<void>`, throws on failure |
 | `KeypressEvent`           | Structured keypress event                                                           |
 | `PromptConfig<S,T>`       | Configuration for `runPrompt()`                                                     |

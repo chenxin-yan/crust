@@ -42,16 +42,19 @@ type Resolve<T extends ValueType> = {
  * Resolve the inferred runtime type for a flag/arg definition.
  *
  * When the def declares a `parse` escape hatch (only allowed on `"string"`
- * variants), the inferred type is `ReturnType<typeof parse>`. Otherwise it
- * delegates to {@link Resolve} on the declared `type`.
+ * variants), the inferred type is `ReturnType<typeof parse>`. String defs
+ * with a literal `choices` tuple narrow to the union of those literals.
+ * Otherwise it delegates to {@link Resolve} on the declared `type`.
  */
 type ResolveBaseType<F> = F extends {
 	parse: (raw: string) => infer R;
 }
 	? R
-	: F extends { type: infer T extends ValueType }
-		? Resolve<T>
-		: never;
+	: F extends { type: "string"; choices: readonly (infer C extends string)[] }
+		? C
+		: F extends { type: infer T extends ValueType }
+			? Resolve<T>
+			: never;
 
 // ────────────────────────────────────────────────────────────────────────────
 // ArgDef — Positional argument definition (discriminated by `type`)
@@ -565,9 +568,20 @@ type InferArgValue<A extends ArgDef> = A extends {
 					A extends { default: unknown }
 					? ResolveBaseType<A>
 					: ResolveBaseType<A> | undefined
-		: A extends { variadic: true }
-			? unknown[]
-			: unknown;
+		: // Raw args (no `type`, no `schema`) still enforce `choices` at parse
+			// time, so a literal tuple narrows the raw string token the same way.
+			// One ladder serves both raw variants: without choices the base is
+			// `unknown`, and `unknown | undefined` collapses back to `unknown`.
+			A extends { variadic: true }
+			? RawArgBase<A>[]
+			: A extends { required: true }
+				? RawArgBase<A>
+				: A extends { default: unknown }
+					? RawArgBase<A>
+					: RawArgBase<A> | undefined;
+
+/** Base type of a raw arg: the literal `choices` union when present, else `unknown`. */
+type RawArgBase<A> = A extends { choices: readonly (infer C extends string)[] } ? C : unknown;
 
 /**
  * Recursively converts an ArgsDef tuple into a named object type.
