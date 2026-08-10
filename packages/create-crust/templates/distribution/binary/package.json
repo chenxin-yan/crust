@@ -2,7 +2,7 @@
 	"name": "{{name}}",
 	"version": "0.0.0",
 	"type": "module",
-	"description": "A CLI built with Crust",
+	"description": "A todo CLI built with Crust",
 	"files": [
 		"dist/cli",
 		"dist/cli.cmd",
@@ -17,12 +17,14 @@
 		"package": "crust build --package",
 		"publish": "crust publish --stage-dir dist/npm",
 		"start": "./dist/cli",
-		"check:types": "tsc --noEmit"
+		"check:types": "tsc --noEmit",
+		"test": "bun test"
 	},
 	"devDependencies": {
 		"@crustjs/core": "^{{crustCoreVersion}}",
 		"@crustjs/crust": "^{{crustCliVersion}}",
 		"@crustjs/extensions": "^{{crustExtensionsVersion}}",
+		"@crustjs/testing": "^{{crustTestingVersion}}",
 		"@types/bun": "latest",
 		"typescript": "^7.0.2"
 	}

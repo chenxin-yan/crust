@@ -38,7 +38,7 @@
 		"build": "tsdown",
 		"dev": "tsdown --watch",
 		"check:types": "tsc --noEmit",
-		"test": "bun test",
+		"test": "bun test tests",
 		"test:smoke": "bun test tests/cli.smoke.test.ts",
 		"publish": "bun publish --no-git-checks",
 		"prepack": "cp ../../LICENSE LICENSE",

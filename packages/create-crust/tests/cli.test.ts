@@ -73,9 +73,32 @@ describe("create-crust CLI", () => {
 		expect(existsSync(join(projectDir, "package.json"))).toBe(true);
 		expect(existsSync(join(projectDir, "tsconfig.json"))).toBe(true);
 		expect(existsSync(join(projectDir, "src", "cli.ts"))).toBe(true);
+		expect(existsSync(join(projectDir, "src", "app.ts"))).toBe(true);
+		expect(existsSync(join(projectDir, "src", "shared.ts"))).toBe(true);
+		expect(existsSync(join(projectDir, "src", "commands", "add.ts"))).toBe(true);
+		expect(existsSync(join(projectDir, "src", "app.test.ts"))).toBe(true);
 		expect(existsSync(join(projectDir, "README.md"))).toBe(true);
 		expect(existsSync(join(projectDir, "node_modules"))).toBe(false);
 		expect(existsSync(join(projectDir, ".git"))).toBe(false);
+	}, 30_000);
+
+	it("rejects the removed --template flag", async () => {
+		const tempRoot = makeTempRoot("create-crust-invalid-template");
+		const projectDir = join(tempRoot, "bad-template");
+
+		const result = await runCreateCrust([
+			projectDir,
+			"--template",
+			"modular",
+			"--distribution",
+			"binary",
+			"--no-install",
+			"--no-git",
+		]);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain('Unknown flag "--template"');
+		expect(existsSync(projectDir)).toBe(false);
 	}, 30_000);
 
 	it("fails with a clear error for an invalid distribution", async () => {

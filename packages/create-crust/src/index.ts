@@ -11,44 +11,34 @@ import { confirm, input, select } from "@crustjs/prompts";
 import corePackage from "../../core/package.json";
 import crustPackage from "../../crust/package.json";
 import extensionsPackage from "../../extensions/package.json";
+import testingPackage from "../../testing/package.json";
 
 type DistributionMode = "binary" | "runtime";
 
-const CRUST_TEMPLATE_VERSION_CONTEXT = {
+const TEMPLATE_VERSION_CONTEXT = {
 	crustCoreVersion: corePackage.version,
 	crustExtensionsVersion: extensionsPackage.version,
 	crustCliVersion: crustPackage.version,
+	crustTestingVersion: testingPackage.version,
 } satisfies Record<string, string>;
 
-// ────────────────────────────────────────────────────────────────────────────
-// Validation
-// ────────────────────────────────────────────────────────────────────────────
-
 const INVALID_NAME_CHARS = /[<>:"|?*\\]/;
+
 function validateProjectName(name: string): void {
-	if (!name) {
-		throw new Error("Project name cannot be empty");
-	}
+	if (!name) throw new Error("Project name cannot be empty");
 	if (INVALID_NAME_CHARS.test(name)) {
 		throw new Error(`Project name contains invalid characters: ${name}`);
 	}
 }
 
-function parseDistributionMode(value: string | undefined): DistributionMode | undefined {
-	if (value === undefined) {
-		return undefined;
-	}
-	if (value === "binary" || value === "runtime") {
-		return value;
-	}
+function parseDistribution(value: string | undefined): DistributionMode | undefined {
+	if (value === undefined) return undefined;
+	if (value === "binary" || value === "runtime") return value;
 	throw new Error(`Invalid distribution "${value}". Expected "binary" or "runtime".`);
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Command definition
-// ────────────────────────────────────────────────────────────────────────────
-
 const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI project" })
+	.args({ name: "directory", type: "string", description: "Project directory to scaffold into" })
 	.flags(
 		{
 			name: "distribution",
@@ -71,16 +61,8 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 			description: "Overwrite the destination directory if it already exists",
 		},
 	)
-	.args({
-		name: "directory",
-		type: "string",
-		description: "Project directory to scaffold into",
-	})
 	.action(async ({ args, flags }) => {
-		// ── Collect all prompts before any file operations ──────────────
-		// This ensures a mid-prompt Ctrl+C won't leave partially scaffolded files.
-
-		// Determine project directory from positional arg or prompt
+		// Resolve every decision before writing so cancellation cannot leave a partial project.
 		const targetDir =
 			args.directory ??
 			(await input({
@@ -88,26 +70,21 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 				default: "my-cli",
 				validate: validateProjectName,
 			}));
-
 		const resolvedDir = resolve(process.cwd(), targetDir);
-		const dirName = basename(resolvedDir);
-		const distributionInitial = parseDistributionMode(flags.distribution);
-
-		// Ask before writing into an existing destination. The cwd (".") always
-		// exists, so it only needs confirmation when non-empty; a named directory
-		// prompts whenever it already exists.
-		const needsOverwriteConfirm =
+		const name = basename(resolvedDir);
+		const selectedDistribution = parseDistribution(flags.distribution);
+		const needsOverwrite =
 			targetDir === "." ? readdirSync(resolvedDir).length > 0 : existsSync(resolvedDir);
-		let overwrite = false;
-		if (needsOverwriteConfirm) {
+
+		if (needsOverwrite) {
 			if (flags.overwrite === true) {
-				console.log(`Directory "${dirName}" already exists; overwriting (--overwrite).`);
+				console.log(`Directory "${name}" already exists; overwriting (--overwrite).`);
 			}
-			overwrite = await confirm({
+			const overwrite = await confirm({
 				message:
 					targetDir === "."
 						? "Current directory is not empty. Overwrite conflicting files?"
-						: `Directory "${dirName}" already exists. Overwrite?`,
+						: `Directory "${name}" already exists. Overwrite?`,
 				default: false,
 				...(flags.overwrite !== undefined ? { initial: flags.overwrite } : {}),
 			});
@@ -117,7 +94,7 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 			}
 		}
 
-		const distributionMode = await select<DistributionMode>({
+		const distribution = await select<DistributionMode>({
 			message: "Distribution mode",
 			choices: [
 				{
@@ -132,20 +109,15 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 				},
 			],
 			default: "binary",
-			...(distributionInitial !== undefined ? { initial: distributionInitial } : {}),
+			...(selectedDistribution ? { initial: selectedDistribution } : {}),
 		});
-		const installDeps = await confirm({
+		const install = await confirm({
 			message: "Install dependencies?",
 			default: true,
 			...(flags.install !== undefined ? { initial: flags.install } : {}),
 		});
-
-		// Skip git init prompt if already inside a git repository.
-		// Check resolvedDir itself when it exists (e.g. "." or overwrite),
-		// otherwise check the parent (directory will be created by scaffold).
 		const gitCheckDir = existsSync(resolvedDir) ? resolvedDir : resolve(resolvedDir, "..");
-		const alreadyInRepo = isInGitRepo(gitCheckDir);
-		const initGit = alreadyInRepo
+		const initializeGit = isInGitRepo(gitCheckDir)
 			? false
 			: await confirm({
 					message: "Initialize a git repository?",
@@ -153,13 +125,7 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 					...(flags.git !== undefined ? { initial: flags.git } : {}),
 				});
 
-		// ── Execute all file operations after prompts are done ──────────
-
-		// Infer package name from directory
-		const name = dirName;
-
-		// Scaffolding produces no console output, so it is safe inside a spinner.
-		const context = { name, ...CRUST_TEMPLATE_VERSION_CONTEXT };
+		const context = { name, ...TEMPLATE_VERSION_CONTEXT };
 		await spinner({
 			message: "Scaffolding project...",
 			task: async () => {
@@ -167,40 +133,26 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 					template: "templates/base",
 					dest: resolvedDir,
 					context,
-					...(overwrite ? { conflict: "overwrite" } : {}),
+					...(needsOverwrite ? { conflict: "overwrite" as const } : {}),
 				});
-				await scaffold({
-					template: "templates/minimal",
-					dest: resolvedDir,
-					context,
-					conflict: "overwrite",
-				});
-				await scaffold({
-					template: `templates/distribution/${distributionMode}`,
-					dest: resolvedDir,
-					context,
-					conflict: "overwrite",
-				});
+				for (const template of ["templates/app", `templates/distribution/${distribution}`]) {
+					await scaffold({ template, dest: resolvedDir, context, conflict: "overwrite" });
+				}
 			},
 		});
 
-		if (installDeps) {
-			await runSteps([{ type: "install" }], resolvedDir);
-		}
-
-		if (initGit) {
+		if (install) await runSteps([{ type: "install" }], resolvedDir);
+		if (initializeGit) {
 			await spinner({
 				message: "Initializing git repository...",
 				task: () => runSteps([{ type: "git-init", commit: "chore: initial commit" }], resolvedDir),
 			});
 		}
 
-		// Print success message
 		console.log(`\nCreated ${name}!\n`);
 		console.log("Next steps:");
 		if (targetDir !== ".") {
-			const relativeDir = targetDir.startsWith("/") ? targetDir : `./${targetDir}`;
-			console.log(`  cd ${relativeDir}`);
+			console.log(`  cd ${targetDir.startsWith("/") ? targetDir : `./${targetDir}`}`);
 		}
 		console.log("  bun run dev");
 		console.log("  bun run build");
