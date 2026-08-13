@@ -1,9 +1,47 @@
 import { describe, expect, it } from "bun:test";
 
-import { Crust, defineExtension } from "@crustjs/core";
+import { Crust, defineCommand, defineExtension } from "@crustjs/core";
 import { input } from "@crustjs/prompts";
 
-import { captureExecute, captureRun, runInteractive, type RunnableApp } from "./index.ts";
+import {
+	type ArgvHints,
+	captureExecute,
+	captureRun,
+	runInteractive,
+	type RunnableApp,
+} from "./index.ts";
+
+type Expect<T extends true> = T;
+type Equal<A, B> =
+	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+
+describe("argv hints", () => {
+	it("derives command and flag spellings from the app type while accepting any string", async () => {
+		const login = defineCommand("login", (command) =>
+			command.flags({ name: "token", type: "string", short: "t" }).action(() => {}),
+		);
+		const app = new Crust("cli").flags({ name: "verbose", type: "boolean", short: "v" }).add(login);
+
+		type _Hints = Expect<
+			Equal<ArgvHints<typeof app>, "login" | "--verbose" | "-v" | "--token" | "-t">
+		>;
+		// structural apps without the phantom fall back to no hints
+		type _None = Expect<Equal<ArgvHints<RunnableApp>, never>>;
+
+		// arbitrary strings (positionals, flag values) remain accepted by every helper,
+		// including widened string[] arrays — the common consumer pattern
+		const typecheckLooseArgv = () => {
+			const widened: string[] = ["login", "free-text"];
+			void captureRun(app, widened);
+			void captureExecute(app, ["login", "free-text"]);
+			void runInteractive(app, ["login", "free-text"]);
+		};
+		void typecheckLooseArgv;
+
+		const result = await captureRun(app, ["login", "--token", "abc"]);
+		expect(result.error).toBeUndefined();
+	});
+});
 
 describe("captureRun", () => {
 	it("captures output from a structural runnable as lines", async () => {

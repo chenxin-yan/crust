@@ -49,6 +49,7 @@ interface CommandDefinitionBuilder<
   Ctx,
   Sibs,
   Sp extends string = SpellingsOf<Eff>,
+  H extends string = never,
 > {
   flags(...defs: readonly NamedFlagDef[]): CommandDefinitionBuilder;
   args(...defs: ArgsDef): CommandDefinitionBuilder;
@@ -66,7 +67,7 @@ interface CommandDefinitionBuilder<
   for the exact signatures.
 </Callout>
 
-This is the configure-only builder passed to a `defineCommand()` recipe. Its fluent methods preserve and refine local argument, flag, and Context types; required capabilities seed `Ctx`. `Sibs` accumulates the sibling command names and aliases registered through `.add()`, and `Sp` caches the known flag spellings accumulated through `.flags()` and `.provide()`. Both are trailing defaulted parameters, so annotations with up to five generic arguments keep working. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
+This is the configure-only builder passed to a `defineCommand()` recipe. Its fluent methods preserve and refine local argument, flag, and Context types; required capabilities seed `Ctx`. `Sibs` accumulates the sibling command names and aliases registered through `.add()`, `Sp` caches the known flag spellings accumulated through `.flags()` and `.provide()`, and `H` accumulates argv hint literals carried by added definitions (consumed by [`@crustjs/testing` argv autocomplete](/docs/modules/testing#argv-autocomplete)). All are trailing defaulted parameters, so annotations with up to five generic arguments keep working. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
 
 ### `CommandDefinition`
 
@@ -75,30 +76,40 @@ interface CommandDefinition<
   R extends CommandRequirements = {},
   Name extends string = string,
   Aliases extends readonly string[] = readonly string[],
+  Hints extends string = string,
 > {
   readonly name: Name;
-  as<const N extends string>(name: N): CommandDefinition<R, N, Aliases>;
+  as<const N extends string>(name: N): CommandDefinition<R, N, Aliases, Hints>;
 }
 ```
 
-A `CommandDefinition<R>` is a frozen value carrying its name, static config, and configure recipe. `.as(name)` returns the same definition under a different name, so one definition can be added twice. Configured aliases travel with the renamed definition and must remain unique among siblings. It has no command node or execution methods.
+A `CommandDefinition<R>` is a frozen value carrying its name, static config, and configure recipe. `.as(name)` returns the same definition under a different name, so one definition can be added twice. Configured aliases travel with the renamed definition and must remain unique among siblings. It has no command node or execution methods. `Hints` carries the recipe's statically known nested command and flag spellings; `.add()` folds them into the parent's `H` parameter for tooling autocomplete.
 
 ### `defineCommand(name, config?, recipe)`
 
 ```ts
-defineCommand<const Name extends string>(
+defineCommand<
+  const Name extends string,
+  B extends AnyCommandDefinitionBuilder = AnyCommandDefinitionBuilder,
+>(
   name: Name,
-  recipe: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
-): CommandDefinition<{}, Name>;
+  recipe: (command: CommandDefinitionBuilder) => B,
+): CommandDefinition<{}, Name, readonly string[], BuilderHints<B>>;
 
 interface CommandConfig extends Omit<CommandMeta, "name">, CommandRequirements {}
 
-defineCommand<const Name extends string, const C extends CommandConfig>(
+defineCommand<
+  const Name extends string,
+  const C extends CommandConfig,
+  B extends AnyCommandDefinitionBuilder = AnyCommandDefinitionBuilder,
+>(
   name: Name,
   config: C & ValidateCommandConfig<Name, C>,
-  recipe: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
-): CommandDefinition<ConfigRequirements<C>, Name, AliasesOf<C>>;
+  recipe: (command: CommandDefinitionBuilder) => B,
+): CommandDefinition<ConfigRequirements<C>, Name, AliasesOf<C>, BuilderHints<B>>;
 ```
+
+`B` captures the recipe's returned builder, so the nested command and flag spellings it accumulated feed the definition's `Hints` parameter.
 
 Creates an inert reusable definition under a required name. Static `description`, `usage`, `aliases`, `hidden`, and Context `requires` belong in `config`. The recipe builder is typed from the requirement values:
 
@@ -136,6 +147,7 @@ class Crust<
   Ctx,
   Sibs,
   Sp extends string = SpellingsOf<Eff>,
+  H extends string = never,
 >
 
 new Crust(name: string, meta?: RootCommandMeta)
@@ -302,7 +314,8 @@ add<const Ds extends readonly CommandDefinition<any>[]>(
   Eff,
   Ctx,
   Sibs | CommandDefinitionSpellings<Ds[number]>,
-  Sp
+  Sp,
+  H | DefinitionHints<Ds[number]>
 >
 ```
 
