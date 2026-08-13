@@ -39,18 +39,13 @@ function tick(ms = 10): Promise<void> {
 
 function createFakeSink(isTTY: boolean) {
 	const writes: string[] = [];
-	const exits: number[] = [];
 	const sink: ProgressSink = {
 		isTTY,
 		write(text) {
 			writes.push(text);
 		},
-		exit(code): never {
-			exits.push(code);
-			throw new Error(`exit:${code}`);
-		},
 	};
-	return { sink, writes, exits };
+	return { sink, writes };
 }
 
 describe("spinner — terminal sink", () => {
@@ -65,17 +60,28 @@ describe("spinner — terminal sink", () => {
 		expect(writes).toContain("\x1B[?25h");
 	});
 
-	it("restores the cursor and exits with 130 on SIGINT", () => {
-		const { sink, writes, exits } = createFakeSink(true);
+	it("restores the cursor and re-raises SIGINT", () => {
+		const { sink, writes } = createFakeSink(true);
 		const previousHandlers = new Set(process.listeners("SIGINT"));
 		const handle = spinner({ message: "Working", sink });
 		handle.start();
 		const handler = process.listeners("SIGINT").find((listener) => !previousHandlers.has(listener));
 
 		expect(handler).toBeDefined();
-		expect(() => handler?.("SIGINT")).toThrow("exit:130");
+		// Stub the re-raise — a real one would terminate the test run.
+		const realKill = process.kill;
+		const kills: (string | number | undefined)[] = [];
+		process.kill = ((pid: number, signal?: string | number) => {
+			kills.push(signal);
+			return true;
+		}) as typeof process.kill;
+		try {
+			handler?.("SIGINT");
+		} finally {
+			process.kill = realKill;
+		}
+		expect(kills).toEqual(["SIGINT"]);
 		expect(writes.at(-1)).toBe("\x1B[?25h");
-		expect(exits).toEqual([130]);
 		expect(process.listeners("SIGINT")).not.toContain(handler);
 	});
 

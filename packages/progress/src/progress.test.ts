@@ -75,9 +75,6 @@ describe("progress — sink resolution", () => {
 		const makeSink = (writes: string[]): ProgressSink => ({
 			isTTY: false,
 			write: (text) => writes.push(text),
-			exit: (code): never => {
-				throw new Error(`exit:${code}`);
-			},
 		});
 
 		const viaOption = createProgressBar({

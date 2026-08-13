@@ -54,7 +54,8 @@ export type SpinnerOutcome = "success" | "error";
  * SIGINT policy for interactive spinners.
  *
  * - `"exit"` (default): install a `SIGINT` handler that restores the cursor
- *   and exits with code 130.
+ *   and re-raises `SIGINT`, so the process terminates with normal signal
+ *   semantics (shells observe exit status 130).
  * - `false`: install no handler — the application owns SIGINT and should
  *   `stop()` the spinner (restoring the cursor) in its own cleanup.
  *
@@ -137,7 +138,6 @@ function renderFinal(
 export interface ProgressSink {
 	readonly isTTY: boolean;
 	write: (text: string) => void;
-	exit: (code: number) => never;
 }
 
 const sinkStorage = new AsyncLocalStorage<ProgressSink>();
@@ -159,9 +159,6 @@ const processSink: ProgressSink = {
 	},
 	write(text) {
 		process.stderr.write(text);
-	},
-	exit(code): never {
-		process.exit(code);
 	},
 };
 
@@ -208,11 +205,12 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 			if (sigint === "exit") {
 				sigintHandler = () => {
 					cleanup();
-					// Mark done before exit: a sink whose `exit` throws (test harnesses)
-					// must not leave a live handle behind the thrown signal handler.
 					finished = true;
 					sink.write(SHOW_CURSOR);
-					sink.exit(130);
+					// Re-raise: `once` already removed this listener, so the default
+					// disposition (or the host's own handler) terminates the process
+					// with real signal semantics — shells observe exit status 130.
+					process.kill(process.pid, "SIGINT");
 				};
 				process.once("SIGINT", sigintHandler);
 			}

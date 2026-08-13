@@ -153,9 +153,6 @@ export function runInteractive<App extends RunnableApp>(app: App, argv: Argv<App
 		write: (text) => {
 			output.write(text);
 		},
-		exit: (code): never => {
-			throw new Error(`process.exit(${code}) requested during runInteractive`);
-		},
 	};
 	const done = withProgressSink(sink, () =>
 		withPromptIO(harness.io, () =>
