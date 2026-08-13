@@ -57,6 +57,9 @@ export type SpinnerOutcome = "success" | "error";
  *   and exits with code 130.
  * - `false`: install no handler — the application owns SIGINT and should
  *   `stop()` the spinner (restoring the cursor) in its own cleanup.
+ *
+ * The handler is a real `process` signal listener even when output goes to
+ * an injected sink, so prefer `false` under test harnesses.
  */
 export type SpinnerSigintPolicy = "exit" | false;
 
@@ -81,7 +84,7 @@ export interface SpinnerHandleOptions {
 	 * Terminal sink receiving the rendered output. Resolution order:
 	 * this option → ambient {@link withProgressSink} sink → `process.stderr`.
 	 */
-	readonly sink?: SpinnerSink;
+	readonly sink?: ProgressSink;
 }
 
 export interface SpinnerHandle {
@@ -131,13 +134,13 @@ function renderFinal(
 }
 
 /** Terminal operations driven by spinners and progress indicators. */
-export interface SpinnerSink {
+export interface ProgressSink {
 	readonly isTTY: boolean;
 	write: (text: string) => void;
 	exit: (code: number) => never;
 }
 
-const sinkStorage = new AsyncLocalStorage<SpinnerSink>();
+const sinkStorage = new AsyncLocalStorage<ProgressSink>();
 
 /**
  * Run a function with a sink ambiently available to every spinner or
@@ -146,11 +149,11 @@ const sinkStorage = new AsyncLocalStorage<SpinnerSink>();
  * `@crustjs/prompts` — test harnesses and embedders redirect indicator
  * output without touching process globals.
  */
-export function withProgressSink<T>(sink: SpinnerSink, fn: () => T): T {
+export function withProgressSink<T>(sink: ProgressSink, fn: () => T): T {
 	return sinkStorage.run(sink, fn);
 }
 
-const processSpinnerSink: SpinnerSink = {
+const processSink: ProgressSink = {
 	get isTTY() {
 		return process.stderr.isTTY ?? false;
 	},
@@ -163,11 +166,8 @@ const processSpinnerSink: SpinnerSink = {
 };
 
 /** Internal handle constructor shared by both `spinner()` modes and `progress()`. */
-export function createSpinnerHandle(
-	options: SpinnerHandleOptions,
-	explicitSink?: SpinnerSink,
-): SpinnerHandle {
-	const sink = explicitSink ?? options.sink ?? sinkStorage.getStore() ?? processSpinnerSink;
+export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandle {
+	const sink = options.sink ?? sinkStorage.getStore() ?? processSink;
 	const theme = resolveTheme(options.theme);
 	const isInteractive = sink.isTTY;
 	const { frames, interval } = resolveSpinner(options.spinner);
@@ -208,6 +208,9 @@ export function createSpinnerHandle(
 			if (sigint === "exit") {
 				sigintHandler = () => {
 					cleanup();
+					// Mark done before exit: a sink whose `exit` throws (test harnesses)
+					// must not leave a live handle behind the thrown signal handler.
+					finished = true;
 					sink.write(SHOW_CURSOR);
 					sink.exit(130);
 				};
@@ -257,14 +260,18 @@ export function spinner<T>(
 	if (!task) return handle;
 
 	handle.start();
-	return task(handle).then(
-		(result) => {
-			handle.stop("success");
-			return result;
-		},
-		(error) => {
-			handle.stop("error");
-			throw error;
-		},
-	);
+	// Route sync throws from `task` into the rejection path so the interval,
+	// cursor, and SIGINT listener are still cleaned up.
+	return Promise.resolve()
+		.then(() => task(handle))
+		.then(
+			(result) => {
+				handle.stop("success");
+				return result;
+			},
+			(error) => {
+				handle.stop("error");
+				throw error;
+			},
+		);
 }

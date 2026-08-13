@@ -182,18 +182,18 @@ The bare `progress`/`spinner` exports use `defaultTheme`. Resolution order: `def
 
 ## Output sinks
 
-Indicators write to `process.stderr` by default so piped `stdout` stays clean. Both `spinner()` and `progress()` accept a `sink` option — a `SpinnerSink` (`{ isTTY, write, exit }`) receiving the rendered output — and `withProgressSink(sink, fn)` makes a sink ambiently available to every indicator created in `fn`'s async scope, mirroring `withPromptIO` in `@crustjs/prompts`. Resolution order: per-call `sink` option → ambient sink → `process.stderr`.
+Indicators write to `process.stderr` by default so piped `stdout` stays clean. Both `spinner()` and `progress()` accept a `sink` option — a `ProgressSink` (`{ isTTY, write, exit }`) receiving the rendered output — and `withProgressSink(sink, fn)` makes a sink ambiently available to every indicator created in `fn`'s async scope, mirroring `withPromptIO` in `@crustjs/prompts`. Resolution order: per-call `sink` option → ambient sink → `process.stderr`.
 
 ```ts
-import { type SpinnerSink, spinner, withProgressSink } from "@crustjs/progress";
+import { type ProgressSink, spinner, withProgressSink } from "@crustjs/progress";
 
-const sink: SpinnerSink = {
+const sink: ProgressSink = {
   isTTY: false,
   write: (text) => transcript.push(text),
   exit: (code) => process.exit(code),
 };
 
-await withProgressSink(sink, () => deploy()); // every spinner inside renders to `sink`
+await withProgressSink(sink, () => deploy()); // spinners inside write their final lines to `sink` (no frames: isTTY is false)
 ```
 
 The default `"exit"` SIGINT policy calls `sink.exit(130)`, so custom sinks own exit behavior too. `runInteractive()` in [`@crustjs/testing`](/docs/modules/testing) uses this ambient sink to render spinners onto its fake terminal screen.

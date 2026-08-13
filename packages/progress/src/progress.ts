@@ -3,11 +3,10 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import {
+	createSpinnerHandle,
 	type SpinnerHandle,
 	type SpinnerHandleOptions,
 	type SpinnerOutcome,
-	type SpinnerSink,
-	createSpinnerHandle,
 } from "./spinner.ts";
 
 export interface ProgressOptions extends SpinnerHandleOptions {
@@ -29,21 +28,21 @@ export interface ProgressHandle {
 	stop: (outcome?: SpinnerOutcome, message?: string) => void;
 }
 
-/** Internal progress constructor that threads the spinner terminal sink through. */
-export function createProgressHandle(options: ProgressOptions, sink?: SpinnerSink): ProgressHandle {
+/**
+ * Create a determinate progress indicator rendered as
+ * `⠋ <message> (<current>/<total>)` on the spinner line.
+ */
+export function progress(options: ProgressOptions): ProgressHandle {
 	const { total } = options;
 	let current = 0;
 	let message = options.message;
 
 	const format = (msg: string): string => `${msg} (${current}/${total})`;
 
-	const handle: SpinnerHandle = createSpinnerHandle(
-		{
-			...options,
-			message: format(message),
-		},
-		sink,
-	);
+	const handle: SpinnerHandle = createSpinnerHandle({
+		...options,
+		message: format(message),
+	});
 
 	return {
 		start: handle.start,
@@ -56,12 +55,4 @@ export function createProgressHandle(options: ProgressOptions, sink?: SpinnerSin
 			handle.stop(outcome, format(finalMessage ?? message));
 		},
 	};
-}
-
-/**
- * Create a determinate progress indicator rendered as
- * `⠋ <message> (<current>/<total>)` on the spinner line.
- */
-export function progress(options: ProgressOptions): ProgressHandle {
-	return createProgressHandle(options);
 }

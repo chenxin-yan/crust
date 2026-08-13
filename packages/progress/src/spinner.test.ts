@@ -1,12 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import {
-	type SpinnerHandle,
-	type SpinnerSink,
-	createSpinnerHandle,
-	spinner,
-	withProgressSink,
-} from "./spinner.ts";
+import { type ProgressSink, type SpinnerHandle, spinner, withProgressSink } from "./spinner.ts";
 
 const originalStderrWrite = process.stderr.write;
 const originalStderrIsTTY = process.stderr.isTTY;
@@ -46,7 +40,7 @@ function tick(ms = 10): Promise<void> {
 function createFakeSink(isTTY: boolean) {
 	const writes: string[] = [];
 	const exits: number[] = [];
-	const sink: SpinnerSink = {
+	const sink: ProgressSink = {
 		isTTY,
 		write(text) {
 			writes.push(text);
@@ -59,10 +53,10 @@ function createFakeSink(isTTY: boolean) {
 	return { sink, writes, exits };
 }
 
-describe("createSpinnerHandle — terminal sink", () => {
+describe("spinner — terminal sink", () => {
 	it("hides and restores the cursor in TTY mode", () => {
 		const { sink, writes } = createFakeSink(true);
-		const handle = createSpinnerHandle({ message: "Working" }, sink);
+		const handle = spinner({ message: "Working", sink });
 
 		handle.start();
 		handle.stop();
@@ -74,7 +68,7 @@ describe("createSpinnerHandle — terminal sink", () => {
 	it("restores the cursor and exits with 130 on SIGINT", () => {
 		const { sink, writes, exits } = createFakeSink(true);
 		const previousHandlers = new Set(process.listeners("SIGINT"));
-		const handle = createSpinnerHandle({ message: "Working" }, sink);
+		const handle = spinner({ message: "Working", sink });
 		handle.start();
 		const handler = process.listeners("SIGINT").find((listener) => !previousHandlers.has(listener));
 
@@ -87,7 +81,7 @@ describe("createSpinnerHandle — terminal sink", () => {
 
 	it("writes only the final line in non-TTY mode", () => {
 		const { sink, writes } = createFakeSink(false);
-		const handle = createSpinnerHandle({ message: "Working" }, sink);
+		const handle = spinner({ message: "Working", sink });
 
 		handle.start();
 		handle.stop();
@@ -99,10 +93,11 @@ describe("createSpinnerHandle — terminal sink", () => {
 
 	it("applies per-call theme overrides to rendered output", () => {
 		const { sink, writes } = createFakeSink(false);
-		const handle = createSpinnerHandle(
-			{ message: "Working", theme: { success: (t) => `<OK ${t}>` } },
+		const handle = spinner({
+			message: "Working",
+			theme: { success: (t) => `<OK ${t}>` },
 			sink,
-		);
+		});
 
 		handle.start();
 		handle.stop("success");
@@ -112,7 +107,7 @@ describe("createSpinnerHandle — terminal sink", () => {
 
 	it("finalizes once", () => {
 		const { sink, writes } = createFakeSink(false);
-		const handle = createSpinnerHandle({ message: "Working" }, sink);
+		const handle = spinner({ message: "Working", sink });
 
 		handle.start();
 		handle.stop("success");
@@ -125,7 +120,7 @@ describe("createSpinnerHandle — terminal sink", () => {
 	it("leaves SIGINT to the application when disabled", () => {
 		const { sink } = createFakeSink(true);
 		const previousHandlers = process.listeners("SIGINT");
-		const handle = createSpinnerHandle({ message: "Working", sigint: false }, sink);
+		const handle = spinner({ message: "Working", sigint: false, sink });
 
 		handle.start();
 		expect(process.listeners("SIGINT")).toEqual(previousHandlers);
@@ -169,6 +164,32 @@ describe("spinner — sink resolution", () => {
 
 		expect(ambient.writes).toHaveLength(0);
 		expect(explicit.writes[0]).toContain("✓ Explicit\n");
+	});
+
+	it("the nearest ambient sink wins when scopes nest", () => {
+		const outer = createFakeSink(false);
+		const inner = createFakeSink(false);
+
+		withProgressSink(outer.sink, () => {
+			withProgressSink(inner.sink, () => {
+				const handle = spinner({ message: "Nested" });
+				handle.start();
+				handle.stop();
+			});
+		});
+
+		expect(outer.writes).toHaveLength(0);
+		expect(inner.writes[0]).toContain("✓ Nested\n");
+	});
+
+	it("a handle created inside the scope keeps its sink when stopped outside", () => {
+		const { sink, writes } = createFakeSink(false);
+
+		const handle = withProgressSink(sink, () => spinner({ message: "Escaped" }));
+		handle.start();
+		handle.stop();
+
+		expect(writes[0]).toContain("✓ Escaped\n");
 	});
 
 	it("the ambient sink survives async boundaries", async () => {
@@ -246,6 +267,24 @@ describe("spinner — task error", () => {
 				},
 			}),
 		).rejects.toThrow("task failed");
+	});
+
+	it("cleans up when the task throws synchronously", async () => {
+		await expect(
+			spinner({
+				message: "Sync boom",
+				// Non-async task throwing before it returns a promise.
+				task: () => {
+					throw new Error("sync boom");
+				},
+			}),
+		).rejects.toThrow("sync boom");
+
+		expect(stderrOutput).toContain("✗");
+		expect(stderrOutput).toContain("\x1B[?25h");
+		const outputAfterError = stderrOutput;
+		await tick(200);
+		expect(stderrOutput).toBe(outputAfterError);
 	});
 
 	it("re-throws the original error object", async () => {
