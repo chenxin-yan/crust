@@ -65,7 +65,7 @@ interface CommandDefinitionBuilder<
   for the exact signatures.
 </Callout>
 
-This is the configure-only builder passed to a `defineCommand()` recipe. Its fluent methods preserve and refine argument, accumulated flag, and Context types; required capabilities seed `Ctx`. `Sibs` accumulates the sibling command names and aliases registered through `.add()`, `Sp` caches the known flag spellings accumulated through `.flags()` and `.provide()`, and `H` accumulates argv hint literals carried by added definitions (consumed by [`@crustjs/testing` argv autocomplete](/docs/modules/testing#argv-autocomplete)). All three are trailing defaulted parameters. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
+This is the configure-only builder passed to a `defineCommand()` recipe. Its fluent methods preserve and refine argument, accumulated flag, and Context types; required capabilities seed `Ctx`. `Sibs` accumulates the sibling command names and aliases registered through `.add()`, `Sp` caches the known flag spellings accumulated through `.flags()` and `.provide()`, and `H` accumulates argv hint literals carried by added definitions (consumed by [`@crustjs/testing` typed argv](/docs/modules/testing#typed-argv)). All three are trailing defaulted parameters. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
 
 ### `CommandDefinition`
 

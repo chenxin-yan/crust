@@ -17,29 +17,49 @@ type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 describe("argv hints", () => {
-	it("derives command and flag spellings from the app type while accepting any string", async () => {
-		const login = defineCommand("login", (command) =>
+	it("derives and validates statically known command and flag spellings", async () => {
+		const deploy = defineCommand("deploy", (command) =>
 			command.flags({ name: "token", type: "string", short: "t" }).action(() => {}),
 		);
-		const app = new Crust("cli").flags({ name: "verbose", type: "boolean", short: "v" }).add(login);
+		const app = new Crust("cli")
+			.flags({ name: "verbose", type: "boolean", short: "v" }, { name: "port", type: "string" })
+			.add(deploy);
 
 		type _Hints = Expect<
-			Equal<ArgvHints<typeof app>, "login" | "--verbose" | "-v" | "--token" | "-t">
+			Equal<ArgvHints<typeof app>, "deploy" | "--verbose" | "-v" | "--port" | "--token" | "-t">
 		>;
-		// structural apps without the phantom fall back to no hints
+		// structural apps without the phantom fall back to no validation
 		type _None = Expect<Equal<ArgvHints<RunnableApp>, never>>;
 
-		// arbitrary strings (positionals, flag values) remain accepted by every helper,
-		// including widened string[] arrays — the common consumer pattern
-		const typecheckLooseArgv = () => {
-			const widened: string[] = ["login", "free-text"];
-			void captureRun(app, widened);
-			void captureExecute(app, ["login", "free-text"]);
-			void runInteractive(app, ["login", "free-text"]);
-		};
-		void typecheckLooseArgv;
+		const typecheckArgv = () => {
+			// @ts-expect-error -- statically unknown command
+			void captureRun(app, ["deply"]);
+			// @ts-expect-error -- statically unknown flag
+			void captureExecute(app, ["deploy", "--tokn"]);
+			// @ts-expect-error -- all helpers validate literal argv
+			void runInteractive(app, ["deploy", "--tokn"]);
 
-		const result = await captureRun(app, ["login", "--token", "abc"]);
+			void captureRun(app, ["deploy", "anything-free-text"]);
+			void captureRun(app, ["--verbose", "deploy"]);
+			void captureRun(app, ["--port=123"]);
+			void captureRun(app, ["-vt", "-tsecret"]);
+			void captureRun(app, ["--help"]);
+			void captureRun(app, ["-h"]);
+			void captureRun(app, ["--version"]);
+			void captureRun(app, ["--", "whatever", "--unknown"]);
+
+			// Widened argv is the escape hatch for dynamic and Extension-contributed tokens.
+			const widened: string[] = ["deploy", "--extension-flag"];
+			void captureRun(app, widened);
+			void captureExecute(app, widened);
+			void runInteractive(app, widened);
+
+			const structural: RunnableApp = { async run() {} };
+			void captureRun(structural, ["anything", "--unknown"]);
+		};
+		void typecheckArgv;
+
+		const result = await captureRun(app, ["deploy", "--token", "abc"]);
 		expect(result.error).toBeUndefined();
 	});
 });

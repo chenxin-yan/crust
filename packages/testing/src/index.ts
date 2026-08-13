@@ -23,12 +23,51 @@ export type ArgvHints<App> = App extends {
 	? H
 	: never;
 
-/**
- * argv for the testing helpers: any strings are accepted (positionals and
- * flag values are free text), while known command and flag spellings
- * autocomplete in the editor.
- */
-type Argv<App> = readonly (ArgvHints<App> | (string & {}))[];
+type FlagHints<H extends string> = Extract<H, `-${string}`>;
+type LongFlags<H extends string> = Extract<H, `--${string}`>;
+type ShortFlags<H extends string> = Exclude<FlagHints<H>, `--${string}`>;
+type CommandHints<H extends string> = Exclude<H, `-${string}`>;
+
+type LegalDashToken<H extends string> =
+	| "-"
+	| FlagHints<H>
+	| `${LongFlags<H>}=${string}`
+	| (LongFlags<H> extends `--${infer Name}` ? `--no-${Name}` : never)
+	| `${ShortFlags<H>}${string}`
+	| "--help"
+	| "-h"
+	| "--version";
+
+type ValidateToken<T extends string, H extends string> = string extends T
+	? T
+	: T extends `-${string}`
+		? T extends LegalDashToken<H>
+			? T
+			: `Unknown flag "${T}"`
+		: T;
+
+type ValidateArgv<A extends readonly string[], H extends string, First extends boolean = true> = [
+	H,
+] extends [never]
+	? A
+	: number extends A["length"]
+		? A
+		: A extends readonly [infer Token extends string, ...infer Rest extends readonly string[]]
+			? Token extends "--"
+				? A
+				: readonly [
+						First extends true
+							? Token extends `-${string}`
+								? ValidateToken<Token, H>
+								: [CommandHints<H>] extends [never]
+									? Token
+									: Token extends CommandHints<H>
+										? Token
+										: `Unknown command "${Token}"`
+							: ValidateToken<Token, H>,
+						...ValidateArgv<Rest, H, false>,
+					]
+			: A;
 
 export interface CapturedRun {
 	readonly stdout: string;
@@ -37,9 +76,9 @@ export interface CapturedRun {
 }
 
 /** Run an application and capture its text output without throwing invocation errors. */
-export async function captureRun<App extends RunnableApp>(
+export async function captureRun<App extends RunnableApp, const A extends readonly string[]>(
 	app: App,
-	argv: Argv<App>,
+	argv: A & ValidateArgv<A, ArgvHints<App>>,
 ): Promise<CapturedRun> {
 	// Each io callback invocation is one line in a real terminal (core's
 	// defaults are console.log/console.error), so join captured calls with "\n".
@@ -92,9 +131,9 @@ let captureExecuteChain: Promise<unknown> = Promise.resolve();
  * Concurrent calls are serialized because the exit-code protocol is
  * process-global.
  */
-export function captureExecute<App extends ExecutableApp>(
+export function captureExecute<App extends ExecutableApp, const A extends readonly string[]>(
 	app: App,
-	argv: Argv<App>,
+	argv: A & ValidateArgv<A, ArgvHints<App>>,
 ): Promise<CapturedExecute> {
 	const run = captureExecuteChain.then(() => captureExecuteExclusive(app, argv));
 	// A rejected capture (e.g. `throwOnError`) must not poison later captures.
@@ -143,7 +182,10 @@ export interface InteractiveRun {
 }
 
 /** Run an application with fake terminal streams for its prompts and stderr output. */
-export function runInteractive<App extends RunnableApp>(app: App, argv: Argv<App>): InteractiveRun {
+export function runInteractive<App extends RunnableApp, const A extends readonly string[]>(
+	app: App,
+	argv: A & ValidateArgv<A, ArgvHints<App>>,
+): InteractiveRun {
 	const harness = createPromptIO();
 	const output = harness.io.output;
 	// Spinners and progress indicators render onto the same fake terminal as
