@@ -272,6 +272,7 @@ export async function snapshotEntrypoint(
 	const snapshotPath = join(snapshotDir, "command.json");
 
 	try {
+		const spawnedAt = Date.now();
 		const proc = Bun.spawn([process.execPath, ...toBunEnvFileArgs(envFiles), absoluteEntry], {
 			env: {
 				...process.env,
@@ -289,8 +290,15 @@ export async function snapshotEntrypoint(
 		const stderr = (await stderrPromise).trim();
 
 		if (proc.signalCode !== null) {
+			// Bun's async Subprocess does not expose exitedDueToTimeout, so use
+			// elapsed time to tell our timeout kill apart from external signals.
+			if (Date.now() - spawnedAt >= SNAPSHOT_TIMEOUT_MS) {
+				throw new Error(
+					`Command Snapshot preparation timed out after ${SNAPSHOT_TIMEOUT_MS / 1_000}s.\n  An extension setup() hook may be hanging. Use --no-validate to skip unless --man is enabled.`,
+				);
+			}
 			throw new Error(
-				`Command Snapshot preparation timed out after ${SNAPSHOT_TIMEOUT_MS / 1_000}s.\n  An extension setup() hook may be hanging. Use --no-validate to skip unless --man is enabled.`,
+				`Command Snapshot preparation was killed by ${proc.signalCode}.${stderr ? `\n${stderr}` : ""}`,
 			);
 		}
 

@@ -272,6 +272,9 @@ function detectPackageManager(): UpdateNotifierPackageManager {
 }
 
 function detectInstallScope(): UpdateNotifierInstallScope {
+	// ponytail: a global CLI launched from inside a package-manager script
+	// inherits npm_config_user_agent and is misread as local; documented
+	// tradeoff — set installScope explicitly to override.
 	return process.env.npm_config_user_agent ? "local" : "global";
 }
 
