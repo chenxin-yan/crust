@@ -33,10 +33,10 @@ describe("defineFlag", () => {
 		const verbose = defineFlag("verbose", { type: "boolean" });
 		const app = new Crust("cli").flags(verbose, { name: "output", type: "string", short: "o" });
 
-		type Local = (typeof app)["_types"]["local"];
-		type _Verbose = Assert<IsEqual<Local["verbose"], { readonly type: "boolean" }>>;
+		type Flags = (typeof app)["_types"]["flags"];
+		type _Verbose = Assert<IsEqual<Flags["verbose"], { readonly type: "boolean" }>>;
 		type _Output = Assert<
-			IsEqual<Local["output"], { readonly type: "string"; readonly short: "o" }>
+			IsEqual<Flags["output"], { readonly type: "string"; readonly short: "o" }>
 		>;
 		expect((await app.snapshot()).flags).toEqual({
 			verbose: { type: "boolean" },

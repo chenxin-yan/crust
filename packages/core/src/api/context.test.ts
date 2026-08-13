@@ -400,13 +400,9 @@ describe("Context-owned flags", () => {
 		const output = defineContext("output", { flags: [format] }, () => ({}));
 		const app = new Crust("cli").provide(auth(), output());
 
-		type _OwnedKeys = Assert<IsEqual<keyof (typeof app)["_types"]["owned"], "api-key" | "format">>;
-		type _EffectiveApiKey = Assert<
-			IsEqual<(typeof app)["_types"]["effective"]["api-key"]["type"], "string">
-		>;
-		type _EffectiveFormat = Assert<
-			IsEqual<(typeof app)["_types"]["effective"]["format"]["type"], "string">
-		>;
+		type _FlagKeys = Assert<IsEqual<keyof (typeof app)["_types"]["flags"], "api-key" | "format">>;
+		type _ApiKey = Assert<IsEqual<(typeof app)["_types"]["flags"]["api-key"]["type"], "string">>;
+		type _Format = Assert<IsEqual<(typeof app)["_types"]["flags"]["format"]["type"], "string">>;
 	});
 
 	it("keeps owned flags when later .flags() calls accumulate local flags", async () => {
