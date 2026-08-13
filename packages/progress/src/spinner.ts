@@ -207,10 +207,14 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 					cleanup();
 					finished = true;
 					sink.write(SHOW_CURSOR);
-					// Re-raise: `once` already removed this listener, so the default
-					// disposition (or the host's own handler) terminates the process
-					// with real signal semantics — shells observe exit status 130.
-					process.kill(process.pid, "SIGINT");
+					// `once` already removed this listener. With no listeners left the
+					// re-raise hits the default disposition and terminates with real
+					// signal semantics — shells observe exit status 130. A host that
+					// kept its own persistent listener already ran it for this signal;
+					// re-raising would invoke it twice, so leave termination to it.
+					if (process.listenerCount("SIGINT") === 0) {
+						process.kill(process.pid, "SIGINT");
+					}
 				};
 				process.once("SIGINT", sigintHandler);
 			}

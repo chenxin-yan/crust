@@ -85,6 +85,31 @@ describe("spinner — terminal sink", () => {
 		expect(process.listeners("SIGINT")).not.toContain(handler);
 	});
 
+	it("does not re-raise SIGINT when the host keeps its own listener", () => {
+		const { sink, writes } = createFakeSink(true);
+		const hostListener = () => {};
+		process.on("SIGINT", hostListener);
+		const previousHandlers = new Set(process.listeners("SIGINT"));
+		const handle = spinner({ message: "Working", sink });
+		handle.start();
+		const handler = process.listeners("SIGINT").find((listener) => !previousHandlers.has(listener));
+
+		const realKill = process.kill;
+		const kills: (string | number | undefined)[] = [];
+		process.kill = ((pid: number, signal?: string | number) => {
+			kills.push(signal);
+			return true;
+		}) as typeof process.kill;
+		try {
+			handler?.("SIGINT");
+		} finally {
+			process.kill = realKill;
+			process.removeListener("SIGINT", hostListener);
+		}
+		expect(kills).toEqual([]);
+		expect(writes.at(-1)).toBe("\x1B[?25h");
+	});
+
 	it("writes only the final line in non-TTY mode", () => {
 		const { sink, writes } = createFakeSink(false);
 		const handle = spinner({ message: "Working", sink });
