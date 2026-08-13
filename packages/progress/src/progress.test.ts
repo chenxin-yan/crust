@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { createProgressHandle, progress as createProgressBar } from "./progress.ts";
-import type { SpinnerSink } from "./spinner.ts";
+import { progress as createProgressBar } from "./progress.ts";
+import { type ProgressSink, withProgressSink } from "./spinner.ts";
 
 const originalStderrWrite = process.stderr.write;
 const originalStderrIsTTY = process.stderr.isTTY;
@@ -31,25 +31,6 @@ afterEach(() => {
 });
 
 describe("progress — determinate", () => {
-	it("threads the internal terminal sink through the spinner handle", () => {
-		const writes: string[] = [];
-		const sink: SpinnerSink = {
-			isTTY: false,
-			write: (text) => writes.push(text),
-			exit: (code): never => {
-				throw new Error(`exit:${code}`);
-			},
-		};
-		const progress = createProgressHandle({ total: 2, message: "Files" }, sink);
-
-		progress.start();
-		progress.advance();
-		progress.stop();
-
-		expect(writes).toHaveLength(1);
-		expect(writes[0]).toContain("Files (1/2)");
-	});
-
 	it("renders current/total alongside the message", () => {
 		const progress = createProgressBar({ total: 10, message: "Translating" });
 
@@ -84,5 +65,34 @@ describe("progress — determinate", () => {
 
 		expect(stderrOutput).toContain("✗");
 		expect(stderrOutput).toContain("Upload failed (2/5)");
+	});
+});
+
+describe("progress — sink resolution", () => {
+	it("honors sink from options and the ambient withProgressSink sink", () => {
+		const optionWrites: string[] = [];
+		const ambientWrites: string[] = [];
+		const makeSink = (writes: string[]): ProgressSink => ({
+			isTTY: false,
+			write: (text) => writes.push(text),
+		});
+
+		const viaOption = createProgressBar({
+			message: "Upload",
+			total: 2,
+			sink: makeSink(optionWrites),
+		});
+		viaOption.start();
+		viaOption.advance();
+		viaOption.stop();
+
+		withProgressSink(makeSink(ambientWrites), () => {
+			const viaAmbient = createProgressBar({ message: "Sync", total: 2 });
+			viaAmbient.start();
+			viaAmbient.stop();
+		});
+
+		expect(optionWrites[0]).toContain("✓ Upload (1/2)");
+		expect(ambientWrites[0]).toContain("✓ Sync (0/2)");
 	});
 });

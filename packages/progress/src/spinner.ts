@@ -2,6 +2,8 @@
 // Spinner — Animated progress spinner for @crustjs/progress
 // ────────────────────────────────────────────────────────────────────────────
 
+import { AsyncLocalStorage } from "node:async_hooks";
+
 import { resolveTheme } from "./theme.ts";
 import type { PartialProgressTheme, ProgressTheme } from "./theme.ts";
 
@@ -52,9 +54,13 @@ export type SpinnerOutcome = "success" | "error";
  * SIGINT policy for interactive spinners.
  *
  * - `"exit"` (default): install a `SIGINT` handler that restores the cursor
- *   and exits with code 130.
+ *   and re-raises `SIGINT`, so the process terminates with normal signal
+ *   semantics (shells observe exit status 130).
  * - `false`: install no handler — the application owns SIGINT and should
  *   `stop()` the spinner (restoring the cursor) in its own cleanup.
+ *
+ * The handler is a real `process` signal listener even when output goes to
+ * an injected sink, so prefer `false` under test harnesses.
  */
 export type SpinnerSigintPolicy = "exit" | false;
 
@@ -75,6 +81,11 @@ export interface SpinnerHandleOptions {
 	 * @default "exit"
 	 */
 	readonly sigint?: SpinnerSigintPolicy;
+	/**
+	 * Terminal sink receiving the rendered output. Resolution order:
+	 * this option → ambient {@link withProgressSink} sink → `process.stderr`.
+	 */
+	readonly sink?: ProgressSink;
 }
 
 export interface SpinnerHandle {
@@ -123,30 +134,37 @@ function renderFinal(
 	return erase ? ERASE_LINE + CURSOR_TO_START + line : line;
 }
 
-/** Terminal operations used by the internal spinner lifecycle. */
-export interface SpinnerSink {
+/** Terminal operations driven by spinners and progress indicators. */
+export interface ProgressSink {
 	readonly isTTY: boolean;
 	write: (text: string) => void;
-	exit: (code: number) => never;
 }
 
-const processSpinnerSink: SpinnerSink = {
+const sinkStorage = new AsyncLocalStorage<ProgressSink>();
+
+/**
+ * Run a function with a sink ambiently available to every spinner or
+ * progress indicator created in its async scope (unless a per-call
+ * `sink` option overrides it). Mirrors `withPromptIO` in
+ * `@crustjs/prompts` — test harnesses and embedders redirect indicator
+ * output without touching process globals.
+ */
+export function withProgressSink<T>(sink: ProgressSink, fn: () => T): T {
+	return sinkStorage.run(sink, fn);
+}
+
+const processSink: ProgressSink = {
 	get isTTY() {
 		return process.stderr.isTTY ?? false;
 	},
 	write(text) {
 		process.stderr.write(text);
 	},
-	exit(code): never {
-		process.exit(code);
-	},
 };
 
 /** Internal handle constructor shared by both `spinner()` modes and `progress()`. */
-export function createSpinnerHandle(
-	options: SpinnerHandleOptions,
-	sink: SpinnerSink = processSpinnerSink,
-): SpinnerHandle {
+export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandle {
+	const sink = options.sink ?? sinkStorage.getStore() ?? processSink;
 	const theme = resolveTheme(options.theme);
 	const isInteractive = sink.isTTY;
 	const { frames, interval } = resolveSpinner(options.spinner);
@@ -187,8 +205,16 @@ export function createSpinnerHandle(
 			if (sigint === "exit") {
 				sigintHandler = () => {
 					cleanup();
+					finished = true;
 					sink.write(SHOW_CURSOR);
-					sink.exit(130);
+					// `once` already removed this listener. With no listeners left the
+					// re-raise hits the default disposition and terminates with real
+					// signal semantics — shells observe exit status 130. A host that
+					// kept its own persistent listener already ran it for this signal;
+					// re-raising would invoke it twice, so leave termination to it.
+					if (process.listenerCount("SIGINT") === 0) {
+						process.kill(process.pid, "SIGINT");
+					}
 				};
 				process.once("SIGINT", sigintHandler);
 			}
@@ -236,14 +262,18 @@ export function spinner<T>(
 	if (!task) return handle;
 
 	handle.start();
-	return task(handle).then(
-		(result) => {
-			handle.stop("success");
-			return result;
-		},
-		(error) => {
-			handle.stop("error");
-			throw error;
-		},
-	);
+	// Route sync throws from `task` into the rejection path so the interval,
+	// cursor, and SIGINT listener are still cleaned up.
+	return Promise.resolve()
+		.then(() => task(handle))
+		.then(
+			(result) => {
+				handle.stop("success");
+				return result;
+			},
+			(error) => {
+				handle.stop("error");
+				throw error;
+			},
+		);
 }

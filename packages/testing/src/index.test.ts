@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { Crust, defineCommand, defineExtension } from "@crustjs/core";
+import { progress, spinner } from "@crustjs/progress";
 import { input } from "@crustjs/prompts";
 
 import {
@@ -94,6 +95,36 @@ describe("runInteractive", () => {
 
 		expect(run.screen()).toContain("Starting");
 		expect(run.screen()).toContain("Hello, Ada!");
+	});
+
+	it("captures spinner output on the fake terminal screen", async () => {
+		const app: RunnableApp = {
+			async run() {
+				await spinner({ message: "Deploying", task: async () => "ok" });
+			},
+		};
+
+		const run = runInteractive(app, []);
+		await run.waitFor(/Deploying/);
+		await run.done;
+
+		expect(run.screen()).toContain("✓ Deploying");
+	});
+
+	it("captures progress indicator output on the fake terminal screen", async () => {
+		const app: RunnableApp = {
+			async run() {
+				const bar = progress({ message: "Copying", total: 2 });
+				bar.start();
+				bar.advance();
+				bar.stop();
+			},
+		};
+
+		const run = runInteractive(app, []);
+		await run.done;
+
+		expect(run.screen()).toContain("✓ Copying (1/2)");
 	});
 
 	it("waitFor rethrows the application error instead of hanging", async () => {
