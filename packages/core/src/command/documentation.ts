@@ -1,5 +1,26 @@
 import type { CommandSnapshot, FlagSnapshot } from "./snapshot.ts";
 
+/** Format a definition's description and optional default/choice annotations. */
+export function formatDescription(
+	description: string | undefined,
+	defaultValue: unknown,
+	choices: readonly string[] | undefined,
+	formatAnnotation: (annotation: string) => string = (annotation) => annotation,
+): string {
+	const parts = description ? [description] : [];
+	if (defaultValue !== undefined) {
+		const value =
+			typeof defaultValue === "number" && !Number.isFinite(defaultValue)
+				? String(defaultValue)
+				: Array.isArray(defaultValue)
+					? defaultValue.map(String).join(", ")
+					: JSON.stringify(defaultValue);
+		parts.push(formatAnnotation(`[default: ${value}]`));
+	}
+	if (choices?.length) parts.push(formatAnnotation(`[choices: ${choices.join(", ")}]`));
+	return parts.join(" ");
+}
+
 /**
  * Presentation-ready view of one positional argument.
  *

@@ -2,8 +2,12 @@
 // Text Edit — Shared text-editing logic for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { KeypressEvent } from "./renderer.ts";
-import type { PromptTheme } from "./types.ts";
+import type { StandardSchema } from "@crustjs/utils/schema";
+
+import type { KeypressEvent, SubmitResult } from "./renderer.ts";
+import { submit } from "./renderer.ts";
+import type { PromptTheme, ValidateFn } from "./types.ts";
+import { validateSubmitValue } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -35,6 +39,12 @@ export function renderTextWithCursor(
 export interface TextEditState {
 	readonly text: string;
 	readonly cursorPos: number;
+}
+
+export interface TextSubmitState {
+	readonly value: string;
+	readonly cursorPos: number;
+	readonly error: string | null;
 }
 
 /**
@@ -107,4 +117,25 @@ export function handleTextEdit(
 
 	// Not a text-editing key
 	return null;
+}
+
+export function createTextSubmitHandler<Output>(
+	schema: StandardSchema<unknown, Output> | undefined,
+	validate: ValidateFn<string> | undefined,
+	defaultValue?: string,
+): (
+	key: KeypressEvent,
+	state: TextSubmitState,
+) => Promise<TextSubmitState | SubmitResult<Output | string>> {
+	return async (key, state) => {
+		if (key.name === "return") {
+			const submitValue =
+				state.value === "" && defaultValue !== undefined ? defaultValue : state.value;
+			const result = await validateSubmitValue(submitValue, schema, validate);
+			return result.ok ? submit(result.value) : { ...state, error: result.error };
+		}
+
+		const edit = handleTextEdit(key, state.value, state.cursorPos);
+		return edit ? { value: edit.text, cursorPos: edit.cursorPos, error: null } : state;
+	};
 }

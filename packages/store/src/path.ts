@@ -43,79 +43,31 @@ function getRuntimeEnv(): PlatformEnv {
 // Path validation helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-/**
- * Validates that `appName` is a non-empty string without path separators.
- *
- * @param appName - Application name to validate.
- * @throws {CrustStoreError} `PATH` if `appName` is empty or contains path separators.
- */
-function validateAppName(appName: string): void {
-	if (!appName?.trim()) {
-		throw new CrustStoreError("PATH", "appName must be a non-empty string", {
-			path: appName ?? "",
+/** Validates a path input according to its role. */
+function validatePath(value: string, field: "appName" | "name" | "dirPath"): void {
+	if (typeof value !== "string" || !value.trim()) {
+		throw new CrustStoreError("PATH", `${field} must be a non-empty string`, {
+			path: typeof value === "string" ? value : "",
 		});
 	}
 
-	if (appName.includes("/") || appName.includes("\\")) {
-		throw new CrustStoreError("PATH", "appName must not contain path separators", {
-			path: appName,
-		});
-	}
-}
-
-/**
- * Validates that `name` is a non-empty string without path separators or `.json` extension.
- *
- * @param name - Store name to validate.
- * @throws {CrustStoreError} `PATH` if `name` is empty, contains path separators, or ends with `.json`.
- */
-function validateName(name: string): void {
-	if (!name?.trim()) {
-		throw new CrustStoreError("PATH", "name must be a non-empty string", {
-			path: name ?? "",
-		});
+	if (field !== "dirPath" && (value.includes("/") || value.includes("\\"))) {
+		throw new CrustStoreError("PATH", `${field} must not contain path separators`, { path: value });
 	}
 
-	if (name.includes("/") || name.includes("\\")) {
-		throw new CrustStoreError("PATH", "name must not contain path separators", {
-			path: name,
-		});
+	if (field === "dirPath" && !win32.isAbsolute(value)) {
+		throw new CrustStoreError("PATH", "dirPath must be an absolute path", { path: value });
 	}
 
-	if (name.endsWith(".json")) {
-		throw new CrustStoreError("PATH", "name must not include the .json extension", {
-			path: name,
-		});
-	}
-}
-
-/**
- * Validates that a directory path is an absolute, non-empty string that
- * does not end with `.json`.
- *
- * @param dirPath - The directory path to validate.
- * @throws {CrustStoreError} `PATH` if the path is empty, not absolute, or ends in `.json`.
- */
-function validateDirPath(dirPath: string): void {
-	if (!dirPath?.trim()) {
-		throw new CrustStoreError("PATH", "dirPath must be a non-empty string", {
-			path: dirPath ?? "",
-		});
+	if (field === "name" && value.endsWith(".json")) {
+		throw new CrustStoreError("PATH", "name must not include the .json extension", { path: value });
 	}
 
-	if (!win32.isAbsolute(dirPath)) {
-		throw new CrustStoreError("PATH", "dirPath must be an absolute path", {
-			path: dirPath,
-		});
-	}
-
-	if (dirPath.endsWith(".json")) {
+	if (field === "dirPath" && value.endsWith(".json")) {
 		throw new CrustStoreError(
 			"PATH",
 			"dirPath must be a directory path, not a file path (should not end with .json)",
-			{
-				path: dirPath,
-			},
+			{ path: value },
 		);
 	}
 }
@@ -160,7 +112,7 @@ function resolvePlatformDir(
 	appName: string,
 	env = getRuntimeEnv(),
 ): string {
-	validateAppName(appName);
+	validatePath(appName, "appName");
 	const config = DIRECTORY_CONFIG[kind];
 
 	if (env.platform === "linux" || env.platform === "darwin") {
@@ -328,7 +280,7 @@ export function cacheDir(appName: string, env?: PlatformEnv): string {
  * @throws {CrustStoreError} `PATH` if `dirPath` or `name` is invalid.
  */
 export function resolveStorePath(dirPath: string, name: string): string {
-	validateDirPath(dirPath);
-	validateName(name);
+	validatePath(dirPath, "dirPath");
+	validatePath(name, "name");
 	return join(dirPath, `${name}.json`);
 }

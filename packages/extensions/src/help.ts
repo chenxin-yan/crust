@@ -1,6 +1,7 @@
 import { type CommandSnapshot, type Extension, defineExtension } from "@crustjs/core";
 import {
 	buildCommandDocumentation,
+	formatDescription,
 	type CommandDocumentation,
 	type DocumentationArg,
 	type DocumentationFlag,
@@ -29,32 +30,13 @@ function formatUsageSegment(segment: UsageSegment): string {
 	}
 }
 
-function formatDescription(
-	description: string | undefined,
-	defaultValue: unknown,
-	choices: readonly string[] | undefined,
-): string {
-	const parts = description ? [description] : [];
-	if (defaultValue !== undefined) {
-		const value =
-			typeof defaultValue === "number" && !Number.isFinite(defaultValue)
-				? String(defaultValue)
-				: Array.isArray(defaultValue)
-					? defaultValue.map(String).join(", ")
-					: JSON.stringify(defaultValue);
-		parts.push(dim(`[default: ${value}]`));
-	}
-	if (choices?.length) parts.push(dim(`[choices: ${choices.join(", ")}]`));
-	return parts.join(" ");
-}
-
 function formatFlagsSection(flags: readonly DocumentationFlag[]): string[] {
 	if (flags.length === 0) return [];
 	const lines = [bold(cyan("Options:"))];
 	for (const flag of flags) {
 		const rendered = `${padEnd(cyan(flag.spellings.join(", ")), FLAG_COLUMN_WIDTH, " ")} `;
 		lines.push(
-			`  ${rendered}${formatDescription(flag.description, flag.default, flag.choices)}`.trimEnd(),
+			`  ${rendered}${formatDescription(flag.description, flag.default, flag.choices, dim)}`.trimEnd(),
 		);
 	}
 	return lines;
@@ -66,7 +48,7 @@ function formatArgsSection(command: CommandDocumentation): string[] {
 	for (const arg of command.args) {
 		const rendered = `${padEnd(formatArgToken(arg), ARG_COLUMN_WIDTH, " ")} `;
 		lines.push(
-			`  ${rendered}${formatDescription(arg.description, arg.default, arg.choices)}`.trimEnd(),
+			`  ${rendered}${formatDescription(arg.description, arg.default, arg.choices, dim)}`.trimEnd(),
 		);
 	}
 	return lines;

@@ -1,27 +1,13 @@
 import type { CommandSnapshot } from "@crustjs/core";
 import {
 	buildCommandDocumentation,
+	formatDescription,
 	type CommandDocumentation,
 	type DocumentationFlag,
 } from "@crustjs/core/tooling";
 
 function escapeMdocBodyLine(line: string): string {
 	return line.startsWith(".") ? `\\&${line}` : line;
-}
-function formatDefaultValue(value: unknown): string {
-	if (typeof value === "number" && !Number.isFinite(value)) return String(value);
-	if (Array.isArray(value)) return value.map(String).join(", ");
-	return JSON.stringify(value);
-}
-function formatDescription(
-	description: string | undefined,
-	defaultValue: unknown,
-	choices: readonly string[] | undefined,
-): string {
-	const parts = description ? [description] : [];
-	if (defaultValue !== undefined) parts.push(`[default: ${formatDefaultValue(defaultValue)}]`);
-	if (choices?.length) parts.push(`[choices: ${choices.join(", ")}]`);
-	return parts.join(" ");
 }
 function dtTitle(name: string): string {
 	const upper = name.toUpperCase().replace(/[^A-Z0-9]+/g, "_");

@@ -15,31 +15,11 @@ function readJson<T>(path: string): T {
 }
 
 function getHostTarget(): string | null {
-	if (process.platform === "darwin" && process.arch === "arm64") {
-		return "darwin-arm64";
-	}
-
-	if (process.platform === "darwin" && process.arch === "x64") {
-		return "darwin-x64";
-	}
-
-	if (process.platform === "linux" && process.arch === "arm64") {
-		return "linux-arm64";
-	}
-
-	if (process.platform === "linux" && process.arch === "x64") {
-		return "linux-x64";
-	}
-
-	if (process.platform === "win32" && process.arch === "arm64") {
-		return "windows-arm64";
-	}
-
-	if (process.platform === "win32" && process.arch === "x64") {
-		return "windows-x64";
-	}
-
-	return null;
+	const platformKey = `${process.platform}-${process.arch}`;
+	const target = SUPPORTED_TARGETS.find(
+		(candidate) => TARGET_INFO[candidate].platformKey === platformKey,
+	);
+	return target ? TARGET_INFO[target].alias : null;
 }
 
 async function runBuild(argv: string[]) {

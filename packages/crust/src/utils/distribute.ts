@@ -5,11 +5,11 @@ import type { CommandSnapshot } from "@crustjs/core/tooling";
 import { writeManPage } from "@crustjs/man";
 import { bold, cyan, dim, green } from "@crustjs/style";
 
-import { resolveBaseName } from "./binary-name.ts";
 import {
 	type BunTarget,
 	execBuild,
 	getBinaryFilename,
+	resolveBaseName,
 	resolveTargets,
 	TARGET_INFO,
 	type TargetInfo,

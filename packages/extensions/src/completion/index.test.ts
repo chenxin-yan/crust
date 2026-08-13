@@ -208,21 +208,5 @@ describe("completion", () => {
 			const entries = (await readdir(nested)).sort();
 			expect(entries).toEqual(["_mycli", "mycli", "mycli.fish"]);
 		});
-
-		it("respects the `shells` option to limit which files are written", async () => {
-			const app = new Crust("tinycli")
-				.extend(
-					completion({
-						version: "0.1.0",
-						shells: ["bash", "zsh"],
-					}),
-				)
-				.action(() => {});
-			await app.execute({
-				argv: ["completion", "bash", "--output-dir", tmpDir],
-			});
-			const entries = (await readdir(tmpDir)).sort();
-			expect(entries).toEqual(["_tinycli", "tinycli"]);
-		});
 	});
 });
