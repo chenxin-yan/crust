@@ -60,7 +60,7 @@ describe("command definitions", () => {
 		// The CommandDefinitionBuilder interface mirrors Crust's Sp accumulator
 		// type-only; this pins the recipe path so the mirror cannot drift. The
 		// widened call in between proves Sp retains earlier literals instead of
-		// recomputing from the (now-widened) Eff.
+		// recomputing from the (now-widened) Flags.
 		const dynamicDefs: { name: string; type: "boolean" }[] = [{ name: "dynamic", type: "boolean" }];
 		const definition = defineCommand("serve", (command) =>
 			command

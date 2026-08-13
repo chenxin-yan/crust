@@ -46,8 +46,8 @@ type DuplicateNameBrand<F, Dups extends string> =
  * each branded record value back onto the tuple element that declared it —
  * so collisions, `no-` prefixes, and async parsers error on the offending argument.
  *
- * Bounded-generic wrappers (e.g. `<E extends FlagsDef>(app: Crust<L, O, A, E, C>)`)
- * keep the default `Sp = SpellingsOf<E>` deferred and will not typecheck against
+ * Bounded-generic wrappers (e.g. `<F extends FlagsDef>(app: Crust<F, A, C>)`)
+ * keep the default `Sp = SpellingsOf<F>` deferred and will not typecheck against
  * `Existing`; type wrapper parameters as `Crust<any, ...>` instead, whose default
  * `SpellingsOf<any>` is `never` (see tests/helpers.ts).
  */

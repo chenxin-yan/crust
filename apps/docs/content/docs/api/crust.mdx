@@ -42,13 +42,11 @@ type ContextRequirements = readonly AnyContextFactory[];
 
 ```ts
 interface CommandDefinitionBuilder<
-  Local,
-  Owned,
+  Flags,
   A,
-  Eff,
   Ctx,
-  Sibs,
-  Sp extends string = SpellingsOf<Eff>,
+  Sibs extends string = never,
+  Sp extends string = SpellingsOf<Flags>,
   H extends string = never,
 > {
   flags(...defs: readonly NamedFlagDef[]): CommandDefinitionBuilder;
@@ -56,7 +54,7 @@ interface CommandDefinitionBuilder<
   provide(...instances: readonly ContextInstance[]): CommandDefinitionBuilder;
   add(...definitions: readonly CommandDefinition[]): CommandDefinitionBuilder;
   action(
-    action: (ctx: CrustCommandContext<A, Eff, Ctx>) => void | Promise<void>,
+    action: (ctx: CrustCommandContext<A, Flags, Ctx>) => void | Promise<void>,
   ): CommandDefinitionBuilder;
 }
 ```
@@ -67,7 +65,7 @@ interface CommandDefinitionBuilder<
   for the exact signatures.
 </Callout>
 
-This is the configure-only builder passed to a `defineCommand()` recipe. Its fluent methods preserve and refine local argument, flag, and Context types; required capabilities seed `Ctx`. `Sibs` accumulates the sibling command names and aliases registered through `.add()`, `Sp` caches the known flag spellings accumulated through `.flags()` and `.provide()`, and `H` accumulates argv hint literals carried by added definitions (consumed by [`@crustjs/testing` argv autocomplete](/docs/modules/testing#argv-autocomplete)). All are trailing defaulted parameters, so annotations with up to five generic arguments keep working. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
+This is the configure-only builder passed to a `defineCommand()` recipe. Its fluent methods preserve and refine argument, accumulated flag, and Context types; required capabilities seed `Ctx`. `Sibs` accumulates the sibling command names and aliases registered through `.add()`, `Sp` caches the known flag spellings accumulated through `.flags()` and `.provide()`, and `H` accumulates argv hint literals carried by added definitions (consumed by [`@crustjs/testing` argv autocomplete](/docs/modules/testing#argv-autocomplete)). All three are trailing defaulted parameters. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
 
 ### `CommandDefinition`
 
@@ -140,13 +138,11 @@ The recipe does not execute when the definition is created. It executes once for
 type RootCommandMeta = Pick<CommandMeta, "description" | "usage">;
 
 class Crust<
-  Local,
-  Owned,
+  Flags,
   A,
-  Eff,
   Ctx,
-  Sibs,
-  Sp extends string = SpellingsOf<Eff>,
+  Sibs extends string = never,
+  Sp extends string = SpellingsOf<Flags>,
   H extends string = never,
 >
 
@@ -209,7 +205,7 @@ const app = new Crust("serve").flags(
 );
 ```
 
-Repeated `.flags()` calls accumulate local flags and cache their statically known spellings — the union of flag names and aliases that `SpellingsOf` computes — in the trailing defaulted `Sp` parameter. Because `Sp` accumulates per call, spellings registered before a widened (dynamically typed) `.flags()` call stay collision-checked at compile time; previously any widened call deferred all subsequent collision checks to runtime. For TypeScript consumers, statically known spelling collisions fail typecheck with `FIX_ALIAS_COLLISION`; runtime validation throws `DEFINITION` for collisions from plain-JS consumers or dynamically built definitions. Generic wrapper functions that keep the flag parameter bounded (e.g. `<E extends FlagsDef>(app: Crust<Local, Owned, A, E, Ctx>)`) defer the default `Sp = SpellingsOf<E>` and will not typecheck further `.flags()` calls; type wrapper parameters as `Crust<any, any, any, any, any>` instead, whose default `SpellingsOf<any>` is `never` — runtime validation still applies. A spelling typed as a union of literals (e.g. `short: cond ? "a" : "b"`) is conservatively rejected when any member collides, even though the runtime value might not; widen it to `string` to defer the check to runtime. Promise-returning custom `parse` functions similarly fail with `FIX_ASYNC_PARSE` because parsing consumes their result synchronously; runtime validation rejects declared `async` functions for plain-JS consumers.
+Repeated `.flags()` calls accumulate local flags and cache their statically known spellings — the union of flag names and aliases that `SpellingsOf` computes — in the `Sp` parameter. Because `Sp` accumulates per call, spellings registered before a widened (dynamically typed) `.flags()` call stay collision-checked at compile time; previously any widened call deferred all subsequent collision checks to runtime. For TypeScript consumers, statically known spelling collisions fail typecheck with `FIX_ALIAS_COLLISION`; runtime validation throws `DEFINITION` for collisions from plain-JS consumers or dynamically built definitions. Generic wrapper functions that keep the flag parameter bounded (e.g. `<F extends FlagsDef>(app: Crust<F, A, Ctx>)`) defer the default `Sp = SpellingsOf<F>` and will not typecheck further `.flags()` calls; type wrapper parameters as `Crust<any, any, any, any, any, any>` instead — runtime validation still applies. A spelling typed as a union of literals (e.g. `short: cond ? "a" : "b"`) is conservatively rejected when any member collides, even though the runtime value might not; widen it to `string` to defer the check to runtime. Promise-returning custom `parse` functions similarly fail with `FIX_ASYNC_PARSE` because parsing consumes their result synchronously; runtime validation rejects declared `async` functions for plain-JS consumers.
 
 Flags declared here are local to this command. Context-owned flags are the propagation mechanism for descendant parsers; downstream code receives their derived Context capability. Boolean flags support generated `--no-<spelling>` negation for the canonical name and every long alias; `noNegate: true` rejects negation with a `PARSE` error and hides the generated label from help, completion, and man output. Names and aliases beginning with `no-` are reserved.
 
@@ -229,17 +225,16 @@ const app = new Crust("serve").flags({
 provide<const Cs extends readonly ContextInstance[]>(
   ...instances: ProvideChecks<Sp, Cs> & ValidateContextNames<Ctx, Cs>,
 ): Crust<
-  Local,
-  MergeFlags<Owned, ContextsOwnedFlags<Cs>>,
+  MergeFlags<Flags, ContextsOwnedFlags<Cs>>,
   A,
-  EffectiveFlags<Local, MergeFlags<Owned, ContextsOwnedFlags<Cs>>>,
   MergeContext<Ctx, ContextsOutput<Cs>>,
   Sibs,
-  Sp | SpellingsOf<ContextsOwnedFlags<Cs>>
+  Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
+  H
 >
 ```
 
-Attaches Contexts produced by invoking `defineContext()` factories. Contexts are inherited by descendants, constructed only when the resolved command requires them (a defined command's self-provided Contexts plus the transitive `requires` closure of its declared requirements and of those self-provides; the root action constructs everything provided on it), and available through `ctx` in the Command Action. The return type merges every instance's owned `flags` into the builder's owned and effective flag types.
+Attaches Contexts produced by invoking `defineContext()` factories. Contexts are inherited by descendants, constructed only when the resolved command requires them (a defined command's self-provided Contexts plus the transitive `requires` closure of its declared requirements and of those self-provides; the root action constructs everything provided on it), and available through `ctx` in the Command Action. The return type merges every instance's owned `flags` into the builder's accumulated flag type.
 
 ```ts
 import { defineContext, Crust } from "@crustjs/core";
@@ -286,7 +281,7 @@ See [Extensions](/docs/guide/extensions) for authoring custom Extensions.
 
 ```ts
 action(
-  action: (ctx: CrustCommandContext<A, Eff, Ctx>) => void | Promise<void>,
+  action: (ctx: CrustCommandContext<A, Flags, Ctx>) => void | Promise<void>,
 ): Crust
 ```
 
@@ -308,10 +303,8 @@ The context contains typed `args`, typed effective `flags`, typed Context values
 add<const Ds extends readonly CommandDefinition<any>[]>(
   ...definitions: Ds & AddChecks<Ctx, Sibs, Ds>,
 ): Crust<
-  Local,
-  Owned,
+  Flags,
   A,
-  Eff,
   Ctx,
   Sibs | CommandDefinitionSpellings<Ds[number]>,
   Sp,

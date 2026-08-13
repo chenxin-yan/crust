@@ -43,7 +43,7 @@ export const deploy = defineCommand("deploy", { requires: [auth] }, (cmd) =>
 	}),
 );
 
-// Inferred builder type references EffectiveFlags / Context-owned flag shapes
+// Inferred builder type references accumulated Context-owned flag shapes
 export const app = new Crust("consumer-cli")
 	.flags(...flags)
 	.provide(auth())

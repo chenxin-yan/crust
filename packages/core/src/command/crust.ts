@@ -13,7 +13,6 @@ import { cloneFlagSpellings } from "../parsing/spellings.ts";
 import type {
 	ArgsDef,
 	CommandMeta,
-	EffectiveFlags,
 	FlagDef,
 	FlagsDef,
 	InferArgs,
@@ -60,6 +59,7 @@ export { SNAPSHOT_PATH_ENV } from "./invocation.ts";
  * Generic parameters:
  * - `A` — positional argument definitions tuple
  * - `F` — the effective (Context-owned + local merged) flag definitions
+ * - `Ctx` — provided Context values, keyed by Context name
  */
 export interface CrustCommandContext<
 	A extends ArgsDef = ArgsDef,
@@ -105,11 +105,11 @@ type ConfigRequirements<C extends CommandConfig> = C extends {
 
 type AnyCommandDefinitionBuilder = CommandDefinitionBuilder<any, any, any, any, any, any>;
 
-// Child builders start at `Eff = {}`: collisions with ancestor-owned flags
-// are runtime-only, caught while the definition materializes against its
+// Child builders start without inherited flags: collisions with ancestor-owned
+// flags are runtime-only, caught while the definition materializes against its
 // parent's normalized flags.
 type CommandRecipe<R extends CommandRequirements, B extends AnyCommandDefinitionBuilder> = (
-	command: CommandDefinitionBuilder<{}, {}, [], EffectiveFlags<{}>, RequirementContext<R>>,
+	command: CommandDefinitionBuilder<{}, [], RequirementContext<R>>,
 ) => B;
 
 const commandDefinitionInternal: unique symbol = Symbol.for("crust.commandDefinition");
@@ -334,13 +334,11 @@ type AddChecks<
  * accumulated by `.flags()` and `.provide()` for compile-time collision checks.
  */
 export interface CommandDefinitionBuilder<
-	Local extends FlagsDef = {},
-	Owned extends FlagsDef = {},
+	Flags extends FlagsDef = {},
 	A extends ArgsDef = ArgsDef,
-	Eff extends FlagsDef = EffectiveFlags<Local, Owned>,
 	Ctx extends ContextMap = {},
 	Sibs extends string = never,
-	Sp extends string = SpellingsOf<Eff>,
+	Sp extends string = SpellingsOf<Flags>,
 	H extends string = never,
 > {
 	/** @internal — phantom exposing accumulated argv hints for tooling autocomplete */
@@ -349,10 +347,8 @@ export interface CommandDefinitionBuilder<
 	flags<const Defs extends readonly NamedFlagDef[]>(
 		...defs: ValidateNamedFlagDefs<Defs, Sp>
 	): CommandDefinitionBuilder<
-		MergeFlags<Local, NamedFlagsRecord<Defs>>,
-		Owned,
+		MergeFlags<Flags, NamedFlagsRecord<Defs>>,
 		A,
-		EffectiveFlags<MergeFlags<Local, NamedFlagsRecord<Defs>>, Owned>,
 		Ctx,
 		Sibs,
 		Sp | SpellingsOf<NamedFlagsRecord<Defs>>,
@@ -361,15 +357,13 @@ export interface CommandDefinitionBuilder<
 
 	args<const NewA extends ArgsDef>(
 		...defs: NewA & AppendArgsChecks<A, NewA>
-	): CommandDefinitionBuilder<Local, Owned, AppendedArgs<A, NewA>, Eff, Ctx, Sibs, Sp, H>;
+	): CommandDefinitionBuilder<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, H>;
 
 	provide<const Cs extends readonly ContextInstance[]>(
 		...instances: ProvideChecks<Sp, Cs> & ValidateContextNames<Ctx, Cs>
 	): CommandDefinitionBuilder<
-		Local,
-		MergeFlags<Owned, ContextsOwnedFlags<Cs>>,
+		MergeFlags<Flags, ContextsOwnedFlags<Cs>>,
 		A,
-		EffectiveFlags<Local, MergeFlags<Owned, ContextsOwnedFlags<Cs>>>,
 		MergeContext<Ctx, ContextsOutput<Cs>>,
 		Sibs,
 		Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
@@ -379,10 +373,8 @@ export interface CommandDefinitionBuilder<
 	add<const Ds extends readonly CommandDefinition<any>[]>(
 		...definitions: Ds & AddChecks<Ctx, Sibs, Ds>
 	): CommandDefinitionBuilder<
-		Local,
-		Owned,
+		Flags,
 		A,
-		Eff,
 		Ctx,
 		Sibs | CommandDefinitionSpellings<Ds[number]>,
 		Sp,
@@ -390,8 +382,8 @@ export interface CommandDefinitionBuilder<
 	>;
 
 	action(
-		action: (ctx: NoInfer<CrustCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
-	): CommandDefinitionBuilder<Local, Owned, A, Eff, Ctx, Sibs, Sp, H>;
+		action: (ctx: NoInfer<CrustCommandContext<A, Flags, Ctx>>) => void | Promise<void>,
+	): CommandDefinitionBuilder<Flags, A, Ctx, Sibs, Sp, H>;
 }
 
 /**
@@ -466,10 +458,8 @@ export function defineCommand(
  * Chainable builder for defining CLI commands with full type inference.
  *
  * Generic parameters:
- * - `Local` — flags defined on this command via `.flags()`
- * - `Owned` — flags installed by Contexts provided on this command path
+ * - `Flags` — flags defined locally or installed by provided Contexts
  * - `A` — positional argument definitions
- * - `Eff` — effective flags (merged local + owned flags)
  * - `Ctx` — provided Context values
  * - `Sibs` — sibling command names and aliases already registered
  * - `Sp` — accumulated flag spellings used for collision checks
@@ -486,21 +476,17 @@ export function defineCommand(
  * ```
  */
 export class Crust<
-	Local extends FlagsDef = {},
-	Owned extends FlagsDef = {},
+	Flags extends FlagsDef = {},
 	A extends ArgsDef = ArgsDef,
-	Eff extends FlagsDef = EffectiveFlags<Local, Owned>,
 	Ctx extends ContextMap = {},
 	Sibs extends string = never,
-	Sp extends string = SpellingsOf<Eff>,
+	Sp extends string = SpellingsOf<Flags>,
 	H extends string = never,
 > {
 	/** @internal — Phantom property exposing generic parameters for type-level testing */
 	declare readonly _types: {
-		local: Local;
-		owned: Owned;
+		flags: Flags;
 		args: A;
-		effective: Eff;
 		ctx: Ctx;
 		// Method syntax keeps broad/legacy Crust annotations assignable while
 		// exposing Sp to type-level tests through Parameters<>.
@@ -573,10 +559,8 @@ export class Crust<
 	flags<const Defs extends readonly NamedFlagDef[]>(
 		...defs: ValidateNamedFlagDefs<Defs, Sp>
 	): Crust<
-		MergeFlags<Local, NamedFlagsRecord<Defs>>,
-		Owned,
+		MergeFlags<Flags, NamedFlagsRecord<Defs>>,
 		A,
-		EffectiveFlags<MergeFlags<Local, NamedFlagsRecord<Defs>>, Owned>,
 		Ctx,
 		Sibs,
 		Sp | SpellingsOf<NamedFlagsRecord<Defs>>,
@@ -606,10 +590,8 @@ export class Crust<
 		}
 
 		return this._clone({ localFlags, effectiveFlags, flagSpellings }) as unknown as Crust<
-			MergeFlags<Local, NamedFlagsRecord<Defs>>,
-			Owned,
+			MergeFlags<Flags, NamedFlagsRecord<Defs>>,
 			A,
-			EffectiveFlags<MergeFlags<Local, NamedFlagsRecord<Defs>>, Owned>,
 			Ctx,
 			Sibs,
 			Sp | SpellingsOf<NamedFlagsRecord<Defs>>,
@@ -631,10 +613,10 @@ export class Crust<
 	 */
 	args<const NewA extends ArgsDef>(
 		...defs: NewA & AppendArgsChecks<A, NewA>
-	): Crust<Local, Owned, AppendedArgs<A, NewA>, Eff, Ctx, Sibs, Sp, H> {
+	): Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, H> {
 		return this._clone({
 			args: normalizeArgs(this._node.args, defs as ArgsDef),
-		}) as unknown as Crust<Local, Owned, AppendedArgs<A, NewA>, Eff, Ctx, Sibs, Sp, H>;
+		}) as unknown as Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, H>;
 	}
 
 	/**
@@ -654,10 +636,8 @@ export class Crust<
 	provide<const Cs extends readonly ContextInstance[]>(
 		...instances: ProvideChecks<Sp, Cs> & ValidateContextNames<Ctx, Cs>
 	): Crust<
-		Local,
-		MergeFlags<Owned, ContextsOwnedFlags<Cs>>,
+		MergeFlags<Flags, ContextsOwnedFlags<Cs>>,
 		A,
-		EffectiveFlags<Local, MergeFlags<Owned, ContextsOwnedFlags<Cs>>>,
 		MergeContext<Ctx, ContextsOutput<Cs>>,
 		Sibs,
 		Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
@@ -675,10 +655,8 @@ export class Crust<
 		);
 		for (const instance of instances) Object.assign(ownedFlags, instance.ownedFlags);
 		return this._clone({ contexts, ownedFlags, effectiveFlags, flagSpellings }) as unknown as Crust<
-			Local,
-			MergeFlags<Owned, ContextsOwnedFlags<Cs>>,
+			MergeFlags<Flags, ContextsOwnedFlags<Cs>>,
 			A,
-			EffectiveFlags<Local, MergeFlags<Owned, ContextsOwnedFlags<Cs>>>,
 			MergeContext<Ctx, ContextsOutput<Cs>>,
 			Sibs,
 			Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
@@ -691,7 +669,7 @@ export class Crust<
 	 * command's behavior after its inputs and Contexts are ready.
 	 *
 	 * The action receives a {@link CrustCommandContext} with `args` typed from
-	 * `.args()` and `flags` typed as `EffectiveFlags<Local, Owned>`.
+	 * `.args()` and `flags` typed from the accumulated `Flags`.
 	 *
 	 * An action is set once; calling `.action()` again throws rather than
 	 * silently replacing command behavior. The original builder is not mutated.
@@ -701,8 +679,8 @@ export class Crust<
 	 * @throws {CrustError} `DEFINITION` when this command already has an action
 	 */
 	action(
-		action: (ctx: NoInfer<CrustCommandContext<A, Eff, Ctx>>) => void | Promise<void>,
-	): Crust<Local, Owned, A, Eff, Ctx, Sibs, Sp, H> {
+		action: (ctx: NoInfer<CrustCommandContext<A, Flags, Ctx>>) => void | Promise<void>,
+	): Crust<Flags, A, Ctx, Sibs, Sp, H> {
 		if (this._node.run) {
 			throw new CrustError(
 				"DEFINITION",
@@ -712,7 +690,7 @@ export class Crust<
 		}
 		return this._clone({
 			run: action as (ctx: unknown) => void | Promise<void>,
-		}) as Crust<Local, Owned, A, Eff, Ctx, Sibs, Sp, H>;
+		}) as Crust<Flags, A, Ctx, Sibs, Sp, H>;
 	}
 
 	/**
@@ -724,7 +702,7 @@ export class Crust<
 	 *
 	 * @throws {CrustError} `DEFINITION` when an Extension name is already registered
 	 */
-	extend(...extensions: readonly Extension[]): Crust<Local, Owned, A, Eff, Ctx, Sibs, Sp, H> {
+	extend(...extensions: readonly Extension[]): Crust<Flags, A, Ctx, Sibs, Sp, H> {
 		const names = new Set(this._node.extensions.map((extension) => extension.name));
 		for (const extension of extensions) {
 			if (names.has(extension.name)) {
@@ -738,7 +716,7 @@ export class Crust<
 		}
 		return this._clone({
 			extensions: [...this._node.extensions, ...extensions],
-		}) as Crust<Local, Owned, A, Eff, Ctx, Sibs, Sp, H>;
+		}) as Crust<Flags, A, Ctx, Sibs, Sp, H>;
 	}
 
 	/**
@@ -751,24 +729,20 @@ export class Crust<
 	add<const Ds extends readonly CommandDefinition<any>[]>(
 		...definitions: Ds & AddChecks<Ctx, Sibs, Ds>
 	): Crust<
-		Local,
-		Owned,
+		Flags,
 		A,
-		Eff,
 		Ctx,
 		Sibs | CommandDefinitionSpellings<Ds[number]>,
 		Sp,
 		H | DefinitionHints<Ds[number]>
 	> {
-		let result = this as Crust<Local, Owned, A, Eff, Ctx, Sibs, Sp, H>;
+		let result = this as Crust<Flags, A, Ctx, Sibs, Sp, H>;
 		for (const definition of definitions) {
 			result = result._addDefinition(definition as CommandDefinition);
 		}
 		return result as Crust<
-			Local,
-			Owned,
+			Flags,
 			A,
-			Eff,
 			Ctx,
 			Sibs | CommandDefinitionSpellings<Ds[number]>,
 			Sp,
@@ -776,14 +750,12 @@ export class Crust<
 		>;
 	}
 
-	private _addDefinition(
-		definition: CommandDefinition,
-	): Crust<Local, Owned, A, Eff, Ctx, Sibs, Sp, H> {
+	private _addDefinition(definition: CommandDefinition): Crust<Flags, A, Ctx, Sibs, Sp, H> {
 		const childNode = materializeCommandDefinition(definition, this._node);
 
 		return this._clone({
 			subCommands: { ...this._node.subCommands, [definition.name]: childNode },
-		}) as Crust<Local, Owned, A, Eff, Ctx, Sibs, Sp, H>;
+		}) as Crust<Flags, A, Ctx, Sibs, Sp, H>;
 	}
 
 	/**

@@ -2,12 +2,10 @@ import { describe, expect, it } from "bun:test";
 
 import type { StandardSchema } from "@crustjs/utils/schema";
 
-import type { Simplify } from "./api/context.ts";
 import type {
 	ArgDef,
 	ArgsDef,
 	CommandMeta,
-	EffectiveFlags,
 	FlagDef,
 	FlagsDef,
 	InferArgs,
@@ -692,37 +690,6 @@ describe("CommandMeta interface", () => {
 // been removed as part of the old API cleanup. Tests for the new builder API
 // live in crust.test.ts. CrustCommandContext (the replacement for
 // CommandContext) is tested there as well.
-
-// ────────────────────────────────────────────────────────────────────────────
-// EffectiveFlags type-level tests
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("EffectiveFlags type inference", () => {
-	it("merges local and current Context-owned flags", () => {
-		type Result = EffectiveFlags<
-			{ output: { type: "string" } },
-			{ apiKey: { type: "string"; short: "k" } }
-		>;
-		// Simplify flattens the intersection: assert the merged keys and value
-		// types, not the representation.
-		type _check = Expect<
-			Equal<
-				Simplify<Result>,
-				{
-					output: { type: "string" };
-					apiKey: { type: "string"; short: "k" };
-				}
-			>
-		>;
-		expect(true).toBe(true);
-	});
-
-	it("returns empty when all inputs are empty", () => {
-		type Result = EffectiveFlags<{}>;
-		type _check = Expect<Equal<Result, {}>>;
-		expect(true).toBe(true);
-	});
-});
 
 // ────────────────────────────────────────────────────────────────────────────
 // InferFlags — url/path/json types

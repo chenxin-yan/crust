@@ -262,16 +262,16 @@ describe("Crust .flags()", () => {
 		type _Spellings = Expect<
 			Equal<Parameters<(typeof app)["_types"]["spellings"]>[0], "verbose" | "v">
 		>;
-		const legacy: Crust<
-			(typeof app)["_types"]["local"],
-			(typeof app)["_types"]["owned"],
+		const explicit: Crust<
+			(typeof app)["_types"]["flags"],
 			(typeof app)["_types"]["args"],
-			(typeof app)["_types"]["effective"],
 			(typeof app)["_types"]["ctx"],
-			// oxlint-disable-next-line typescript/no-unnecessary-type-arguments -- pins the new 6-argument order
+			never,
+			"verbose" | "v",
+			// oxlint-disable-next-line typescript/no-unnecessary-type-arguments -- pins all six parameters
 			never
 		> = app;
-		void legacy;
+		void explicit;
 
 		expect(() =>
 			app.flags(
@@ -558,20 +558,20 @@ describe("command metadata", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("Crust type-level tests", () => {
-	it(".flags() updates Local generic", () => {
+	it(".flags() updates Flags generic", () => {
 		const app = new Crust("test").flags(
 			{ name: "verbose", type: "boolean", short: "v" },
 			{ name: "port", type: "number", default: 3000 },
 		);
 
-		// Extract the Local type from the phantom _types property
-		type AppLocal = (typeof app)["_types"]["local"];
+		// Extract the Flags type from the phantom _types property
+		type AppFlags = (typeof app)["_types"]["flags"];
 
 		type _checkVerbose = Expect<
-			Equal<AppLocal["verbose"], { readonly type: "boolean"; readonly short: "v" }>
+			Equal<AppFlags["verbose"], { readonly type: "boolean"; readonly short: "v" }>
 		>;
 		type _checkPort = Expect<
-			Equal<AppLocal["port"], { readonly type: "number"; readonly default: 3000 }>
+			Equal<AppFlags["port"], { readonly type: "number"; readonly default: 3000 }>
 		>;
 	});
 
@@ -610,10 +610,10 @@ describe("Crust type-level tests", () => {
 			)
 			.args({ name: "file", type: "string", required: true });
 
-		// Verify flags Local generic is preserved
-		type AppLocal = (typeof app)["_types"]["local"];
+		// Verify the Flags generic is preserved
+		type AppFlags = (typeof app)["_types"]["flags"];
 		type _checkVerbose = Expect<
-			Equal<AppLocal["verbose"], { readonly type: "boolean"; readonly short: "v" }>
+			Equal<AppFlags["verbose"], { readonly type: "boolean"; readonly short: "v" }>
 		>;
 
 		// Verify args A generic is preserved

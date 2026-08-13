@@ -516,7 +516,7 @@ export type NamedFlagsRecord<Defs extends readonly NamedFlagDef[]> = {
 	: never;
 
 // ────────────────────────────────────────────────────────────────────────────
-// Effective flag utility types
+// Flag merge utility type
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -531,9 +531,6 @@ export type NamedFlagsRecord<Defs extends readonly NamedFlagDef[]> = {
  * `Simplify<Omit & …>`) nested and hit TS2589 at ~47 / ~31 chained calls.
  */
 export type MergeFlags<Base extends FlagsDef, Override extends FlagsDef> = Base & Override;
-
-/** Computes a command's action-visible flags from local and Context-owned definitions. */
-export type EffectiveFlags<Local extends FlagsDef, Owned extends FlagsDef = {}> = Local & Owned;
 
 // ────────────────────────────────────────────────────────────────────────────
 // InferArgs / InferFlags — Type inference utilities
