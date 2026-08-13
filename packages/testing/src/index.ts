@@ -38,12 +38,21 @@ type LegalDashToken<H extends string> =
 	| "-h"
 	| "--version";
 
+/**
+ * Compile-time-only brand carrying an argv validation message. An invalid
+ * token's expected type is `Token & ArgvError<...>`: intersecting the string
+ * literal with an object (rather than another string literal) keeps the
+ * intersection from collapsing to `never`, so tsc prints the message instead
+ * of `Type 'string' is not assignable to type 'never'`.
+ */
+type ArgvError<Message extends string> = { readonly [Brand in Message]: never };
+
 type ValidateToken<T extends string, H extends string> = string extends T
 	? T
 	: T extends `-${string}`
 		? T extends LegalDashToken<H>
 			? T
-			: `Unknown flag "${T}"`
+			: ArgvError<`Unknown flag "${T}"`>
 		: T;
 
 /**
@@ -89,7 +98,7 @@ type ValidateArgv<
 										? Token
 										: RootPositional extends true
 											? Token
-											: `Unknown command "${Token}"`
+											: ArgvError<`Unknown command "${Token}"`>
 							: ValidateToken<Token, H>,
 						...ValidateArgv<Rest, H, RootPositional, false>,
 					]
