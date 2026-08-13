@@ -44,7 +44,7 @@ function completion(options?: CompletionOptions): Extension;
   name="CompletionOptions"
 />
 
-The positional `<shell>` accepts `bash`, `zsh`, or `fish`. With no `--output-dir`, the selected script is written through the invocation's stdout callback, so programmatic `run()` calls honor injected output. With `--output-dir <path>`, the Extension writes every configured shell using canonical filenames: `<bin>` for bash, `_<bin>` for zsh, and `<bin>.fish` for fish.
+The positional `<shell>` accepts `bash`, `zsh`, or `fish`. With no `--output-dir`, the selected script is written through the invocation's stdout callback, so programmatic `run()` calls honor injected output. With `--output-dir <path>`, the Extension writes every supported shell using canonical filenames: `<bin>` for bash, `_<bin>` for zsh, and `<bin>.fish` for fish.
 
 ```sh
 my-cli completion bash --output-dir completions/

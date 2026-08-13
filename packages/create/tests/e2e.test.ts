@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { scaffold } from "../src/scaffold.ts";
 import { runSteps } from "../src/steps.ts";
@@ -15,7 +16,7 @@ describe("end-to-end scaffold + runSteps", () => {
 	let destDir: string;
 
 	beforeEach(() => {
-		tempDir = resolve(`.tmp-test-e2e-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = mkdtempSync(join(tmpdir(), "crust-create-e2e-"));
 		templateDir = join(tempDir, "template");
 		destDir = join(tempDir, "output");
 

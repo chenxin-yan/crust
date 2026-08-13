@@ -3,11 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { AnsiPair } from "./ansiCodes.ts";
-import {
-	resolveColorDepth,
-	resolveHyperlinkCapability,
-	resolveModifierCapability,
-} from "./capability.ts";
+import { resolveColorDepth, resolveModifierCapability } from "./capability.ts";
 import { bg as bgDirect, bgPairAtDepth, fg as fgDirect, fgPairAtDepth } from "./color.ts";
 import { linkCode, link as linkDirect } from "./hyperlinks.ts";
 import { applyStyle } from "./styleEngine.ts";
@@ -284,32 +280,14 @@ function resolveStyleCapabilities(options?: StyleOptions): ResolvedStyleCapabili
 		colorDepth,
 		colorsEnabled: colorDepth !== "none",
 		trueColorEnabled: colorDepth === "truecolor",
-		hyperlinksEnabled: resolveHyperlinkCapability(mode, options?.overrides),
+		hyperlinksEnabled: resolveModifierCapability(mode, options?.overrides),
 	};
-}
-
-// The cache key includes every environment input used by capability resolution.
-const runtimeCapabilitiesCache = new Map<string, ResolvedStyleCapabilities>();
-
-function resolveRuntimeCapabilities(): ResolvedStyleCapabilities {
-	const key = [
-		process.stdout?.isTTY ?? false,
-		process.env.NO_COLOR ?? "",
-		process.env.FORCE_COLOR ?? "\u0000",
-		process.env.COLORTERM ?? "",
-		process.env.TERM ?? "",
-	].join("|");
-	const cached = runtimeCapabilitiesCache.get(key);
-	if (cached) return cached;
-	const resolved = resolveStyleCapabilities();
-	runtimeCapabilitiesCache.set(key, resolved);
-	return resolved;
 }
 
 function createStyleInstance(options: StyleOptions | undefined, runtime: boolean): StyleInstance {
 	const fixedCapabilities = runtime ? undefined : resolveStyleCapabilities(options);
 	const resolveCapabilities = runtime
-		? resolveRuntimeCapabilities
+		? resolveStyleCapabilities
 		: () => fixedCapabilities as ResolvedStyleCapabilities;
 	const createChainableStyle = buildChainableStyleFactory(resolveCapabilities, runtime);
 	const methods = buildStyleMethods(createChainableStyle);

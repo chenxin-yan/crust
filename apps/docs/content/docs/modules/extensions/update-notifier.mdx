@@ -35,7 +35,7 @@ function updateNotifier(options: UpdateNotifierOptions): Extension;
 
 The `postRun` hook checks for an update only after a Command Action completes successfully. Network, registry, cache, and response failures are swallowed so the notifier does not fail a successful command. It does not check after `ctx.finish()` short-circuits such as `--help`. The notice is written through the invocation's stderr callback (process stderr under `execute()`). Version comparison follows SemVer precedence, so a stable release is considered newer than its prerelease.
 
-Without `cache`, the check occurs once per process execution. With `cache`, a fresh cached result is reused for `intervalMs` and duplicate notices for the same version are suppressed.
+Without `cache`, the check occurs once per process execution. With `cache`, a fresh cached result is reused for `intervalMs` and duplicate notices for the same version are suppressed. Automatic package-manager detection uses `npm_config_user_agent` when available. Automatic install scope treats package-manager invocations with that user agent as local and otherwise defaults to `"global"`; set `installScope` explicitly to override it.
 
 ## Cache adapter
 

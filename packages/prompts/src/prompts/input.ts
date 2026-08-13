@@ -4,15 +4,14 @@
 
 import type { StandardSchema } from "@crustjs/utils/schema";
 
-import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
-import { isTTY, resolvePromptIO, runPrompt, submit } from "../core/renderer.ts";
+import type { PromptIO } from "../core/renderer.ts";
+import { isTTY, resolvePromptIO, runPrompt } from "../core/renderer.ts";
 import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
-import { handleTextEdit, renderTextWithCursor } from "../core/textEdit.ts";
+import { createTextSubmitHandler, renderTextWithCursor } from "../core/textEdit.ts";
 import { resolveTheme } from "../core/theme.ts";
 import {
 	parseShortCircuit,
 	type PartialPromptTheme,
-	validateSubmitValue,
 	type PromptTheme,
 	type ValidateFn,
 } from "../core/types.ts";
@@ -77,41 +76,6 @@ interface InputState {
 	readonly value: string;
 	readonly cursorPos: number;
 	readonly error: string | null;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Keypress handler
-// ────────────────────────────────────────────────────────────────────────────
-
-function createHandleKey<Output>(
-	schema: StandardSchema<unknown, Output> | undefined,
-	validate: ValidateFn<string> | undefined,
-	defaultValue: string | undefined,
-): (
-	key: KeypressEvent,
-	state: InputState,
-) =>
-	| InputState
-	| SubmitResult<Output | string>
-	| Promise<InputState | SubmitResult<Output | string>> {
-	return async (key, state) => {
-		// Enter — submit
-		if (key.name === "return") {
-			const submitValue =
-				state.value === "" && defaultValue !== undefined ? defaultValue : state.value;
-
-			const result = await validateSubmitValue(submitValue, schema, validate);
-			return result.ok ? submit(result.value) : { ...state, error: result.error };
-		}
-
-		// Delegate to shared text-editing handler
-		const edit = handleTextEdit(key, state.value, state.cursorPos);
-		if (edit) {
-			return { value: edit.text, cursorPos: edit.cursorPos, error: null };
-		}
-
-		return state;
-	};
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -252,7 +216,7 @@ export async function input<Output>(
 			theme,
 			render: (state, t) =>
 				renderInput(state, t, options.message, options.placeholder, options.default),
-			handleKey: createHandleKey<Output>(options.schema, options.validate, options.default),
+			handleKey: createTextSubmitHandler<Output>(options.schema, options.validate, options.default),
 			renderSubmitted: (state, value, t) => renderSubmitted(state, value, t, options.message),
 		},
 		promptIO,

@@ -157,7 +157,7 @@ export function resolveCommand(command: CommandNode, argv: string[]): CommandRou
 
 	while (routedArgv.length > 0) {
 		const subCommands = current.subCommands;
-		if (!subCommands || Object.keys(subCommands).length === 0) {
+		if (Object.keys(subCommands).length === 0) {
 			// No subcommands defined — argv goes to the parser
 			break;
 		}

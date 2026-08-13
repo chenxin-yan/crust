@@ -6,7 +6,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 export { SNAPSHOT_PATH_ENV } from "./command/crust.ts";
-export { buildCommandDocumentation } from "./command/documentation.ts";
+export { buildCommandDocumentation, formatDescription } from "./command/documentation.ts";
 export type {
 	CommandDocumentation,
 	DocumentationArg,

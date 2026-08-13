@@ -244,14 +244,8 @@ describe("fetchLatestVersion", () => {
 
 describe("updateNotifier post-run hook", () => {
 	const originalFetch = globalThis.fetch;
-	const originalProcessArgv = [...process.argv];
 	const originalUserAgent = process.env.npm_config_user_agent;
 	const originalNpmExecpath = process.env.npm_execpath;
-	const originalNpmConfigGlobal = process.env.npm_config_global;
-	const originalBunInstall = process.env.BUN_INSTALL;
-	const originalPrefix = process.env.PREFIX;
-	const originalNpmConfigPrefix = process.env.npm_config_prefix;
-	const originalPnpmHome = process.env.PNPM_HOME;
 	let originalStderrWrite: typeof process.stderr.write;
 	let originalConsoleError: typeof console.error;
 	let processStderrChunks: string[];
@@ -287,14 +281,8 @@ describe("updateNotifier post-run hook", () => {
 		globalThis.fetch = originalFetch;
 		process.stderr.write = originalStderrWrite;
 		console.error = originalConsoleError;
-		process.argv = [...originalProcessArgv];
 		restoreEnv("npm_config_user_agent", originalUserAgent);
 		restoreEnv("npm_execpath", originalNpmExecpath);
-		restoreEnv("npm_config_global", originalNpmConfigGlobal);
-		restoreEnv("BUN_INSTALL", originalBunInstall);
-		restoreEnv("PREFIX", originalPrefix);
-		restoreEnv("npm_config_prefix", originalNpmConfigPrefix);
-		restoreEnv("PNPM_HOME", originalPnpmHome);
 		process.exitCode = 0;
 	});
 
@@ -772,29 +760,9 @@ describe("updateNotifier post-run hook", () => {
 			expect(getOutput()).toContain(`npm install ${pkgName}@latest`);
 		});
 
-		it("infers global npm installs from npm_config_global", async () => {
-			const pkgName = uniquePackageName("npm-global-env");
-			delete process.env.npm_config_user_agent;
-			process.env.npm_execpath = "/usr/local/bin/npm";
-			process.env.npm_config_global = "true";
-			mockRegistryResponse("2.0.0");
-
-			await runExtensionMiddleware({
-				currentVersion: "1.0.0",
-				packageName: pkgName,
-			});
-
-			expect(getOutput()).toContain(`npm install -g ${pkgName}@latest`);
-		});
-
 		it("infers bun from npm_execpath when user agent is missing", async () => {
 			const pkgName = uniquePackageName("npm-execpath-bun");
 			delete process.env.npm_config_user_agent;
-			delete process.env.BUN_INSTALL;
-			delete process.env.PREFIX;
-			delete process.env.npm_config_prefix;
-			delete process.env.PNPM_HOME;
-			delete process.env.npm_config_global;
 			process.env.npm_execpath = "/opt/homebrew/bin/bun";
 			mockRegistryResponse("2.0.0");
 
@@ -807,53 +775,9 @@ describe("updateNotifier post-run hook", () => {
 			expect(getOutput()).toContain(`bun add -g ${pkgName}@latest`);
 		});
 
-		it("infers global bun installs from BUN_INSTALL-owned paths when user agent is missing", async () => {
-			const pkgName = uniquePackageName("bun-install-global");
-			delete process.env.npm_config_user_agent;
-			delete process.env.npm_execpath;
-			process.env.BUN_INSTALL = "/tmp/.bun";
-			process.argv = [
-				"/tmp/.bun/bin/test-cli",
-				"/tmp/.bun/install/global/node_modules/test-cli/bin.js",
-			];
-			mockRegistryResponse("2.0.0");
-
-			await runExtensionMiddleware({
-				currentVersion: "1.0.0",
-				packageName: pkgName,
-			});
-
-			expect(getOutput()).toContain(`bun add -g ${pkgName}@latest`);
-		});
-
-		it("infers local installs from node_modules paths", async () => {
-			const pkgName = uniquePackageName("local-node-modules");
-			delete process.env.npm_config_user_agent;
-			delete process.env.npm_execpath;
-			delete process.env.BUN_INSTALL;
-			delete process.env.PREFIX;
-			delete process.env.npm_config_prefix;
-			delete process.env.npm_config_global;
-			delete process.env.PNPM_HOME;
-			const cwd = process.cwd();
-			process.argv = [
-				`${cwd}/node_modules/.bin/test-cli`,
-				`${cwd}/node_modules/test-cli/dist/index.js`,
-			];
-			mockRegistryResponse("2.0.0");
-
-			await runExtensionMiddleware({
-				currentVersion: "1.0.0",
-				packageName: pkgName,
-				packageManager: "bun",
-			});
-
-			expect(getOutput()).toContain(`bun add ${pkgName}@latest`);
-		});
-
-		it("passes inferred installScope to updateCommand callback", async () => {
+		it("passes the user-agent-derived installScope to updateCommand callback", async () => {
 			const pkgName = uniquePackageName("update-command-callback");
-			process.env.npm_config_global = "true";
+			process.env.npm_config_user_agent = "npm/10.0.0 node/v22";
 			mockRegistryResponse("2.0.0");
 
 			await runExtensionMiddleware({
@@ -863,7 +787,7 @@ describe("updateNotifier post-run hook", () => {
 				updateCommand: (_name, packageManager, installScope) => `${packageManager}:${installScope}`,
 			});
 
-			expect(getOutput()).toContain("npm:global");
+			expect(getOutput()).toContain("npm:local");
 		});
 
 		it("does not persist cache by default when adapter is omitted", async () => {

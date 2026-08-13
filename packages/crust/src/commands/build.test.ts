@@ -11,10 +11,10 @@ import {
 	resolveEnvFilePaths,
 	resolveOutfile,
 } from "../../src/commands/build.ts";
-import { resolveBaseName } from "../../src/utils/binary-name.ts";
 import type { BunTarget } from "../../src/utils/build-helpers.ts";
 import {
 	getBinaryFilename,
+	resolveBaseName,
 	resolveBunBuildRunner,
 	resolveTarget,
 	SUPPORTED_TARGETS,

@@ -367,10 +367,8 @@ export async function executeInvocation(
 		});
 	} catch (error) {
 		if (isAbortError(error)) {
-			// Cancellation keeps its dedicated exit code, but Extension
-			// onError hooks may observe it to render a message (e.g.
-			// "Operation cancelled"). Core's default stays silent.
-			process.exitCode = EXIT_CODE_CANCELLED;
+			// Cancellation keeps its dedicated exit code while allowing Extension
+			// onError hooks to render a message. Core's default stays silent.
 			await renderFailure(error, argv, prepared, io, extensionContext, true);
 			process.exitCode = EXIT_CODE_CANCELLED;
 			return;

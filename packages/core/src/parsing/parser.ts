@@ -425,7 +425,7 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 
 	validateNoNegateUsage(argv, spellings);
 
-	let parsed: ReturnType<typeof nodeParseArgs>;
+	let parsed: ReturnType<typeof nodeParseArgs> & { tokens: ParseArgsToken[] };
 
 	try {
 		parsed = nodeParseArgs({
@@ -435,7 +435,7 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 			allowPositionals: true,
 			allowNegative: true,
 			tokens: true,
-		});
+		}) as typeof parsed;
 	} catch (error) {
 		if (error instanceof Error) {
 			const unknownMatch = error.message.match(/Unknown option '(.+?)'/);
@@ -448,23 +448,18 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 
 	const rawArgs: string[] = [];
 	const preSeparatorPositionals: string[] = [];
-
-	if (parsed.tokens) {
-		let afterSeparator = false;
-		for (const token of parsed.tokens) {
-			if (token.kind === "option-terminator") {
-				afterSeparator = true;
-				continue;
-			}
-			if (token.kind === "positional") {
-				(afterSeparator ? rawArgs : preSeparatorPositionals).push(token.value ?? "");
-			}
+	let afterSeparator = false;
+	for (const token of parsed.tokens) {
+		if (token.kind === "option-terminator") {
+			afterSeparator = true;
+			continue;
 		}
-	} else {
-		preSeparatorPositionals.push(...parsed.positionals);
+		if (token.kind === "positional") {
+			(afterSeparator ? rawArgs : preSeparatorPositionals).push(token.value ?? "");
+		}
 	}
 
-	const resolvedFlags = resolveFlags(flagsDef, parsed.tokens ?? [], aliasToName);
+	const resolvedFlags = resolveFlags(flagsDef, parsed.tokens, aliasToName);
 	const resolvedArgs = resolveArgs(argsDef, preSeparatorPositionals);
 
 	return {

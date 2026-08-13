@@ -27,14 +27,6 @@ export interface CompletionOptions {
 	 */
 	binName?: string;
 	/**
-	 * Shells to emit when running `<bin> completion <shell> --output-dir`.
-	 * The positional `<shell>` argument is always the union of these values
-	 * regardless of any narrower setting.
-	 *
-	 * @default All supported shells (`bash`, `zsh`, and `fish`)
-	 */
-	shells?: readonly CompletionShell[];
-	/**
 	 * Free-form version string embedded in generated script headers. The
 	 * walker does not parse it. Pass your `package.json` version when wiring
 	 * the extension.
@@ -94,7 +86,7 @@ async function renderForShell(
  * - With no `--output-dir`: print the script for the requested `<shell>`
  *   to stdout (the install pattern is
  *   `mycli completion bash > ~/.local/share/...`).
- * - With `--output-dir <path>`: write **all** configured shells' files
+ * - With `--output-dir <path>`: write **all** supported shells' files
  *   into the directory using the canonical per-shell filename
  *   (`<bin>` for bash, `_<bin>` for zsh, `<bin>.fish` for fish). This
  *   is the artifact-generation path used by Homebrew, Nix, and similar
@@ -103,7 +95,6 @@ async function renderForShell(
  */
 export function completion(options: CompletionOptions = {}): Extension {
 	const subcommandName = options.command ?? "completion";
-	const shells = options.shells ?? SUPPORTED_SHELLS;
 	const version = options.version ?? "0.0.0";
 
 	const completionCommand = defineCommand(
@@ -122,7 +113,7 @@ export function completion(options: CompletionOptions = {}): Extension {
 					name: "output-dir",
 					type: "string",
 					description:
-						"Write all configured shells' scripts into this directory instead of printing to stdout",
+						"Write all supported shells' scripts into this directory instead of printing to stdout",
 				})
 				.action(async (context) => {
 					const rootCommand = context.rootCommand;
@@ -145,13 +136,13 @@ export function completion(options: CompletionOptions = {}): Extension {
 						return;
 					}
 
-					// File path: write **all** configured shells. This matches
+					// File path: write **all** supported shells. This matches
 					// the packaging-time use case — distributors generate every
 					// supported file in one invocation regardless of which
 					// shell they nominally requested.
 					const targetDir = resolvePath(outputDir);
 					await mkdir(targetDir, { recursive: true });
-					for (const shell of shells) {
+					for (const shell of SUPPORTED_SHELLS) {
 						const filename = filenameForShell(shell, binName);
 						const script = await renderForShell(shell, spec, binName, safeVersion);
 						await writeFile(resolvePath(targetDir, filename), script, "utf8");

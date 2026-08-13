@@ -2,11 +2,25 @@ import { describe, expect, it } from "bun:test";
 
 import { defineCommand } from "../index.ts";
 import { Crust } from "./crust.ts";
-import { buildCommandDocumentation } from "./documentation.ts";
+import { buildCommandDocumentation, formatDescription } from "./documentation.ts";
 
 async function docs(app: Crust) {
 	return buildCommandDocumentation(await app.snapshot());
 }
+
+describe("formatDescription", () => {
+	it("formats descriptions, defaults, and choices", () => {
+		expect(formatDescription("Output", ["json", "text"], ["pretty", "compact"])).toBe(
+			"Output [default: json, text] [choices: pretty, compact]",
+		);
+		expect(formatDescription(undefined, Number.POSITIVE_INFINITY, undefined)).toBe(
+			"[default: Infinity]",
+		);
+		expect(formatDescription("Output", "json", undefined, (text) => `<${text}>`)).toBe(
+			'Output <[default: "json"]>',
+		);
+	});
+});
 
 describe("buildCommandDocumentation", () => {
 	it("builds usage and arg tokens", async () => {

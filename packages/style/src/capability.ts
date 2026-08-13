@@ -189,16 +189,3 @@ export function resolveModifierCapability(
 
 	return readTTY(overrides);
 }
-
-/**
- * Resolve whether OSC 8 hyperlinks should be emitted.
- *
- * There is no reliable cross-terminal capability probe for hyperlinks today,
- * so `"auto"` mode uses a conservative TTY check similar to non-color
- * modifiers while still allowing explicit `"always"` / `"never"` overrides.
- *
- * @internal Exported for use by {@link createStyle}; not part of the stable
- * public surface of `@crustjs/style`.
- */
-export const resolveHyperlinkCapability: typeof resolveModifierCapability =
-	resolveModifierCapability;

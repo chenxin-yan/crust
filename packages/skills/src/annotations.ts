@@ -65,11 +65,7 @@ export function annotate<T extends SkillCommandTarget>(
 	const existing = getSkillCommandAnnotations(command)?.instructions ?? [];
 	const merged = [...new Set([...existing, ...nextInstructions])];
 
-	Object.defineProperty(command, SKILL_COMMAND_ANNOTATIONS, {
-		value: { instructions: merged },
-		enumerable: true,
-		configurable: true,
-	});
+	command[SKILL_COMMAND_ANNOTATIONS] = { instructions: merged };
 
 	return target;
 }

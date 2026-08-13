@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { Crust } from "@crustjs/core";
 
 import { buildCommand } from "../src/commands/build.ts";
+import { SUPPORTED_TARGETS, TARGET_INFO } from "../src/utils/build-helpers.ts";
 
 const packageManager = process.env.CRUST_SMOKE_PM;
 const testRoot = join(tmpdir(), `crust-smoke-${packageManager ?? "skip"}-${Date.now()}`);
@@ -15,26 +16,12 @@ const installDir = join(testRoot, `install-${packageManager ?? "skip"}`);
 const packDir = join(testRoot, "packs");
 
 function resolveHostTarget(): string {
-	if (process.platform === "darwin" && process.arch === "arm64") {
-		return "bun-darwin-arm64";
-	}
-	if (process.platform === "darwin" && process.arch === "x64") {
-		return "bun-darwin-x64";
-	}
-	if (process.platform === "linux" && process.arch === "arm64") {
-		return "bun-linux-arm64";
-	}
-	if (process.platform === "linux" && process.arch === "x64") {
-		return "bun-linux-x64-baseline";
-	}
-	if (process.platform === "win32" && process.arch === "arm64") {
-		return "bun-windows-arm64";
-	}
-	if (process.platform === "win32" && process.arch === "x64") {
-		return "bun-windows-x64-baseline";
-	}
-
-	throw new Error(`Unsupported smoke-test host: ${process.platform}-${process.arch}`);
+	const platformKey = `${process.platform}-${process.arch}`;
+	const target = SUPPORTED_TARGETS.find(
+		(candidate) => TARGET_INFO[candidate].platformKey === platformKey,
+	);
+	if (!target) throw new Error(`Unsupported smoke-test host: ${platformKey}`);
+	return target;
 }
 
 function hasCommand(command: string): boolean {

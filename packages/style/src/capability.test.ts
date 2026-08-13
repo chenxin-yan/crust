@@ -701,15 +701,10 @@ describe("runtime-aware default exports", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Runtime style cache — TERM / COLORTERM invalidation
+// Runtime style — TERM / COLORTERM changes
 // ────────────────────────────────────────────────────────────────────────────
-//
-// Regression: the runtime cache once keyed only on (mode, isTTY, NO_COLOR),
-// so changing `TERM` or `COLORTERM` between calls did not re-resolve
-// `style.colorDepth`. Docs promise per-call re-resolution — these tests
-// pin the contract.
 
-describe("runtime style cache — TERM/COLORTERM invalidation", () => {
+describe("runtime style — TERM/COLORTERM changes", () => {
 	const originalTerm = process.env.TERM;
 	const originalColorTerm = process.env.COLORTERM;
 

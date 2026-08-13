@@ -170,19 +170,6 @@ async function runCommand(args, cwd) {
 	}
 }
 
-async function tagExists(tag) {
-	const proc = Bun.spawn(["git", "rev-parse", "-q", "--verify", `refs/tags/${tag}`], {
-		cwd: ROOT_DIR,
-		stdout: "ignore",
-		stderr: "ignore",
-	});
-	return (await proc.exited) === 0;
-}
-
-async function createTag(tag) {
-	await runCommand(["git", "tag", tag], ROOT_DIR);
-}
-
 async function main() {
 	const {
 		values: { "dry-run": dryRun },
@@ -218,16 +205,7 @@ async function main() {
 
 	// Tag the whole cohort, not just this run's publishes: after a partial
 	// failure, a retry must still tag packages that the failed run published.
-	for (const pkg of packages) {
-		const tag = `${pkg.name}@${pkg.version}`;
-		if (await tagExists(tag)) {
-			console.log(`Tag already exists: ${tag}`);
-			continue;
-		}
-
-		console.log(`New tag: ${tag}`);
-		await createTag(tag);
-	}
+	await runCommand([process.execPath, "x", "changeset", "tag"], ROOT_DIR);
 }
 
 await main();

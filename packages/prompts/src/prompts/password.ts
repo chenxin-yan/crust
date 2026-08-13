@@ -4,15 +4,14 @@
 
 import type { StandardSchema } from "@crustjs/utils/schema";
 
-import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
-import { resolvePromptIO, runPrompt, submit } from "../core/renderer.ts";
+import type { PromptIO } from "../core/renderer.ts";
+import { resolvePromptIO, runPrompt } from "../core/renderer.ts";
 import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
-import { CURSOR_CHAR, handleTextEdit } from "../core/textEdit.ts";
+import { createTextSubmitHandler, CURSOR_CHAR } from "../core/textEdit.ts";
 import { resolveTheme } from "../core/theme.ts";
 import {
 	parseShortCircuit,
 	type PartialPromptTheme,
-	validateSubmitValue,
 	type PromptTheme,
 	type ValidateFn,
 } from "../core/types.ts";
@@ -65,37 +64,6 @@ interface PasswordState {
 	readonly value: string;
 	readonly cursorPos: number;
 	readonly error: string | null;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Keypress handler — reuses input's text-editing logic
-// ────────────────────────────────────────────────────────────────────────────
-
-function createHandleKey<Output>(
-	schema: StandardSchema<unknown, Output> | undefined,
-	validate: ValidateFn<string> | undefined,
-): (
-	key: KeypressEvent,
-	state: PasswordState,
-) =>
-	| PasswordState
-	| SubmitResult<Output | string>
-	| Promise<PasswordState | SubmitResult<Output | string>> {
-	return async (key, state) => {
-		// Enter — submit
-		if (key.name === "return") {
-			const result = await validateSubmitValue(state.value, schema, validate);
-			return result.ok ? submit(result.value) : { ...state, error: result.error };
-		}
-
-		// Delegate to shared text-editing handler
-		const edit = handleTextEdit(key, state.value, state.cursorPos);
-		if (edit) {
-			return { value: edit.text, cursorPos: edit.cursorPos, error: null };
-		}
-
-		return state;
-	};
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -233,7 +201,7 @@ export async function password<Output>(
 			initialState,
 			theme,
 			render: (state, t) => renderPassword(state, t, options.message, mask),
-			handleKey: createHandleKey<Output>(options.schema, options.validate),
+			handleKey: createTextSubmitHandler<Output>(options.schema, options.validate),
 			renderSubmitted: (state, value, t) => renderSubmitted(state, value, t, options.message, mask),
 		},
 		promptIO,

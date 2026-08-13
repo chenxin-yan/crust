@@ -119,12 +119,10 @@ function walkArg(def: ArgSnapshot): CompletionArg {
 }
 
 /**
- * Recursively walk a `CommandSnapshot`. Hidden subcommands are filtered out at
- * every level; the calling site (`walkCommandNode`) is responsible for
- * passing in a node that should itself be visible — the root is always
- * visible by construction.
+ * Build a completion command from a `CommandSnapshot`, recursively filtering
+ * hidden subcommands at every level.
  */
-function walkCommand(node: CommandSnapshot): CompletionCommand {
+export function walkCommandNode(node: CommandSnapshot): CompletionCommand {
 	assertSafeIdentifier(node.meta.name, "command name");
 	const nodeAliases = node.meta.aliases;
 	if (nodeAliases !== undefined) {
@@ -148,7 +146,7 @@ function walkCommand(node: CommandSnapshot): CompletionCommand {
 		// Routing in `packages/core/src/command/router.ts` still resolves them by
 		// direct name — they are only invisible to enumeration.
 		if (subNode.meta.hidden === true) continue;
-		subCommands.push(walkCommand(subNode));
+		subCommands.push(walkCommandNode(subNode));
 	}
 
 	const result: CompletionCommand = {
@@ -171,17 +169,4 @@ function walkCommand(node: CommandSnapshot): CompletionCommand {
 	}
 
 	return result;
-}
-
-/**
- * Build a completion command from a root `CommandSnapshot`.
- *
- * This is the single entry point used by the extension's `run()` action. It
- * walks lazily — never at `setup()` time — so extension order is irrelevant
- * (other extensions may add subcommands or inject flags after this extension
- * registers; we only see the final tree when the user actually invokes the
- * `completion` subcommand).
- */
-export function walkCommandNode(root: CommandSnapshot): CompletionCommand {
-	return walkCommand(root);
 }

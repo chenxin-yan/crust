@@ -1,6 +1,7 @@
+import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 
 import { type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
 import { yellow } from "@crustjs/style";
@@ -140,6 +141,23 @@ export function getBinaryFilename(baseName: string, target: BunTarget): string {
 	return `${baseName}-${target}${ext}`;
 }
 
+/** Resolve the base binary name from an explicit name, package name, or entry filename. */
+export function resolveBaseName(name: string | undefined, entry: string, cwd: string): string {
+	if (name) return name;
+
+	const pkgPath = join(cwd, "package.json");
+	if (existsSync(pkgPath)) {
+		try {
+			const pkgJson = JSON.parse(readFileSync(pkgPath, "utf-8")) as { name?: string };
+			if (typeof pkgJson.name === "string") return pkgJson.name.replace(/^@[^/]+\//, "");
+		} catch {
+			// Ignore parse errors, fall through to entry filename
+		}
+	}
+
+	return basename(entry).replace(/\.[^.]+$/, "");
+}
+
 function toBunEnvFileArgs(envFiles: readonly string[]): string[] {
 	return envFiles.flatMap((envFile) => ["--env-file", envFile]);
 }
@@ -254,6 +272,7 @@ export async function snapshotEntrypoint(
 	const snapshotPath = join(snapshotDir, "command.json");
 
 	try {
+		const spawnedAt = Date.now();
 		const proc = Bun.spawn([process.execPath, ...toBunEnvFileArgs(envFiles), absoluteEntry], {
 			env: {
 				...process.env,
@@ -263,32 +282,25 @@ export async function snapshotEntrypoint(
 			cwd: process.cwd(),
 			stdout: "ignore",
 			stderr: "pipe",
+			timeout: SNAPSHOT_TIMEOUT_MS,
 		});
 
 		const stderrPromise = new Response(proc.stderr).text();
-
-		let timer: ReturnType<typeof setTimeout> | undefined;
-		let timedOut = false;
-		const exitCode = await Promise.race([
-			proc.exited,
-			new Promise<never>((_, reject) => {
-				timer = setTimeout(() => {
-					timedOut = true;
-					proc.kill();
-					reject(
-						new Error(
-							`Command Snapshot preparation timed out after ${SNAPSHOT_TIMEOUT_MS / 1_000}s.\n  An extension setup() hook may be hanging. Use --no-validate to skip unless --man is enabled.`,
-						),
-					);
-				}, SNAPSHOT_TIMEOUT_MS);
-			}),
-		]).finally(() => {
-			clearTimeout(timer);
-			// Always consume stderr to avoid resource leaks on the stream
-			if (timedOut) stderrPromise.catch(() => {});
-		});
-
+		const exitCode = await proc.exited;
 		const stderr = (await stderrPromise).trim();
+
+		if (proc.signalCode !== null) {
+			// Bun's async Subprocess does not expose exitedDueToTimeout, so use
+			// elapsed time to tell our timeout kill apart from external signals.
+			if (Date.now() - spawnedAt >= SNAPSHOT_TIMEOUT_MS) {
+				throw new Error(
+					`Command Snapshot preparation timed out after ${SNAPSHOT_TIMEOUT_MS / 1_000}s.\n  An extension setup() hook may be hanging. Use --no-validate to skip unless --man is enabled.`,
+				);
+			}
+			throw new Error(
+				`Command Snapshot preparation was killed by ${proc.signalCode}.${stderr ? `\n${stderr}` : ""}`,
+			);
+		}
 
 		if (exitCode !== 0) {
 			// stderr contains the raw error message from the snapshot subprocess

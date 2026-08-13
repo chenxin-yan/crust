@@ -11,7 +11,7 @@
 		"format": "oxfmt --check",
 		"format:fix": "oxfmt",
 		"check": "turbo run build --filter='./packages/*' && turbo run //#lint //#format",
-		"check:fix": "turbo run build --filter='./packages/*' && turbo run //#lint:fix //#format:fix",
+		"check:fix": "turbo run build --filter='./packages/*' && oxlint --fix && oxfmt",
 		"check:types": "turbo run check:types",
 		"test": "turbo run test",
 		"changeset": "changeset",
