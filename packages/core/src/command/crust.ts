@@ -59,6 +59,7 @@ export { SNAPSHOT_PATH_ENV } from "./invocation.ts";
  * Generic parameters:
  * - `A` — positional argument definitions tuple
  * - `F` — the effective (Context-owned + local merged) flag definitions
+ * - `Ctx` — provided Context values, keyed by Context name
  */
 export interface CrustCommandContext<
 	A extends ArgsDef = ArgsDef,
