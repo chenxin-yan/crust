@@ -845,6 +845,16 @@ describe("Crust .add() type-level tests", () => {
 		type MixedHints = Parameters<(typeof mixed)["_types"]["hints"]>[0];
 		type _MixedHints = Expect<Equal<MixedHints, "login" | "l" | "--token" | "-t" | "--tok">>;
 
+		// aliases survive unions formed by a mixed single-batch add
+		const mixedBatch = new Crust("cli").add(
+			login,
+			defineCommand("plain", (command) => command),
+		);
+		type MixedBatchHints = Parameters<(typeof mixedBatch)["_types"]["hints"]>[0];
+		type _MixedBatchHints = Expect<
+			Equal<MixedBatchHints, "login" | "l" | "--token" | "-t" | "--tok" | "plain">
+		>;
+
 		// explicit type arguments still work — trailing builder param is defaulted
 		const explicit = defineCommand<"deploy">("deploy", (command) => command.action(() => {}));
 		type _ExplicitName = Expect<Equal<(typeof explicit)["name"], "deploy">>;

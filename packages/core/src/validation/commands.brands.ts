@@ -42,12 +42,13 @@ type DefinitionAliases<D> = D extends {
 	: readonly string[];
 
 /** All statically known canonical and alias spellings carried by a command definition. */
-export type CommandDefinitionSpellings<D> =
-	DefName<D> extends infer Name extends string
+export type CommandDefinitionSpellings<D> = D extends unknown
+	? DefName<D> extends infer Name extends string
 		? [Name] extends [never]
 			? never
 			: Name | NarrowAliases<DefinitionAliases<D>>
-		: never;
+		: never
+	: never;
 
 type CommandCollisionBrand<D, Existing extends string> =
 	Overlap<CommandDefinitionSpellings<D>, Existing> extends infer Collision extends string

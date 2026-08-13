@@ -23,6 +23,12 @@ describe("compile-time command validation", () => {
 			>
 		>;
 		type _widened = Expect<Equal<CommandDefinitionSpellings<Def<string, readonly ["i"]>>, never>>;
+		type _mixedUnion = Expect<
+			Equal<
+				CommandDefinitionSpellings<Def<"logs", readonly ["log"]> | Def<"init">>,
+				"logs" | "log" | "init"
+			>
+		>;
 
 		expect(true).toBe(true);
 	});
