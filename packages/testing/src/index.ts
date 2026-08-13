@@ -27,7 +27,7 @@ export type ArgvHints<App> = App extends {
  * flag values are free text), while known command and flag spellings
  * autocomplete in the editor.
  */
-export type Argv<App> = readonly (ArgvHints<App> | (string & {}))[];
+type Argv<App> = readonly (ArgvHints<App> | (string & {}))[];
 
 export interface CapturedRun {
 	readonly stdout: string;

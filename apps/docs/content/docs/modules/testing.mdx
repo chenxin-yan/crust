@@ -46,7 +46,7 @@ await captureRun(app, ["deploy", "api", "--env", "staging"]);
 //                     ^ "deploy" and "--env" autocomplete; "api" and "staging" are free text
 ```
 
-Hints cover statically known spellings only: commands added with widened (non-literal) names and Extension-contributed commands or flags (such as `--help`) do not appear. Structural apps that don't extend `Crust` get no hints. The hint union is exported as `ArgvHints<App>`.
+Hints cover statically known spellings only: commands added with widened (non-literal) names and Extension-contributed commands or flags (such as `--help`) do not appear, and `--no-<flag>` negation forms are not emitted. The union is also flat — every spelling is suggested at every position; parsing still validates ordering at runtime. Structural apps that don't extend `Crust` get no hints. The hint union is exported as `ArgvHints<App>`.
 
 ## `captureRun(app, argv)`
 

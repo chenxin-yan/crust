@@ -819,25 +819,50 @@ describe("Crust .add() type-level tests", () => {
 	});
 
 	it("accumulates argv hints from flags and nested command definitions", () => {
-		const login = defineCommand("login", (command) =>
-			command.flags({ name: "token", type: "string", short: "t" }).action(() => {}),
+		const login = defineCommand("login", { aliases: ["l"] }, (command) =>
+			command
+				.flags({ name: "token", type: "string", short: "t", aliases: ["tok"] })
+				.action(() => {}),
 		);
 		const auth = defineCommand("auth", (command) => command.add(login));
 		const app = new Crust("cli").flags({ name: "verbose", type: "boolean", short: "v" }).add(auth);
 
 		type Hints = Parameters<(typeof app)["_types"]["hints"]>[0];
-		type _Hints = Expect<Equal<Hints, "auth" | "--verbose" | "-v" | "login" | "--token" | "-t">>;
+		type _Hints = Expect<
+			Equal<Hints, "auth" | "--verbose" | "-v" | "login" | "l" | "--token" | "-t" | "--tok">
+		>;
 
 		// .as() renames the definition but keeps its nested hints
 		const renamed = new Crust("cli").add(auth.as("account"));
 		type RenamedHints = Parameters<(typeof renamed)["_types"]["hints"]>[0];
-		type _RenamedHints = Expect<Equal<RenamedHints, "account" | "login" | "--token" | "-t">>;
+		type _RenamedHints = Expect<
+			Equal<RenamedHints, "account" | "login" | "l" | "--token" | "-t" | "--tok">
+		>;
 
 		// widened definitions opt out of hints without collapsing the union
 		const widened: CommandDefinition = defineCommand("static", (command) => command);
 		const mixed = new Crust("cli").add(login).add(widened);
 		type MixedHints = Parameters<(typeof mixed)["_types"]["hints"]>[0];
-		type _MixedHints = Expect<Equal<MixedHints, "login" | "--token" | "-t">>;
+		type _MixedHints = Expect<Equal<MixedHints, "login" | "l" | "--token" | "-t" | "--tok">>;
+
+		// explicit type arguments still work — trailing builder param is defaulted
+		const explicit = defineCommand<"deploy">("deploy", (command) => command.action(() => {}));
+		type _ExplicitName = Expect<Equal<(typeof explicit)["name"], "deploy">>;
+
+		// hints flow through deep nesting and .provide()-owned flags
+		const leaf = defineCommand("leaf", (command) =>
+			command.flags({ name: "deep", type: "boolean" }).action(() => {}),
+		);
+		const mid = defineCommand("mid", (command) =>
+			command
+				.provide(
+					defineContext("log", { flags: [{ name: "trace", type: "boolean" }] }, () => ({}))(),
+				)
+				.add(leaf),
+		);
+		const deep = new Crust("cli").add(defineCommand("top", (command) => command.add(mid)));
+		type DeepHints = Parameters<(typeof deep)["_types"]["hints"]>[0];
+		type _DeepHints = Expect<Equal<DeepHints, "top" | "mid" | "leaf" | "--trace" | "--deep">>;
 
 		expect(true).toBe(true);
 	});

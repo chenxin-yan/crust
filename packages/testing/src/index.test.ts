@@ -28,7 +28,16 @@ describe("argv hints", () => {
 		// structural apps without the phantom fall back to no hints
 		type _None = Expect<Equal<ArgvHints<RunnableApp>, never>>;
 
-		// arbitrary strings (positionals, flag values) remain accepted
+		// arbitrary strings (positionals, flag values) remain accepted by every helper,
+		// including widened string[] arrays — the common consumer pattern
+		const typecheckLooseArgv = () => {
+			const widened: string[] = ["login", "free-text"];
+			void captureRun(app, widened);
+			void captureExecute(app, ["login", "free-text"]);
+			void runInteractive(app, ["login", "free-text"]);
+		};
+		void typecheckLooseArgv;
+
 		const result = await captureRun(app, ["login", "--token", "abc"]);
 		expect(result.error).toBeUndefined();
 	});

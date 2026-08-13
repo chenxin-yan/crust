@@ -138,7 +138,7 @@ type DashSpelling<S extends string> = S extends `${infer First}${infer Rest}`
  * Exposed through the `_types.hints` phantom so tooling (e.g.
  * `@crustjs/testing` argv autocomplete) can extract it structurally.
  */
-type ArgvHints<Sibs extends string, Sp extends string, H extends string> =
+type HintUnion<Sibs extends string, Sp extends string, H extends string> =
 	| Sibs
 	| DashSpelling<Sp>
 	| H;
@@ -344,7 +344,7 @@ export interface CommandDefinitionBuilder<
 	H extends string = never,
 > {
 	/** @internal — phantom exposing accumulated argv hints for tooling autocomplete */
-	readonly _types?: { hints(hint: ArgvHints<Sibs, Sp, H>): void };
+	readonly _types?: { hints(hint: HintUnion<Sibs, Sp, H>): void };
 
 	flags<const Defs extends readonly NamedFlagDef[]>(
 		...defs: ValidateNamedFlagDefs<Defs, Sp>
@@ -403,14 +403,17 @@ export interface CommandDefinitionBuilder<
  * Static metadata and Context requirements belong in `config`. Use `.as(name)`
  * to add one definition under a different name; configured aliases travel with it.
  */
-export function defineCommand<const Name extends string, B extends AnyCommandDefinitionBuilder>(
+export function defineCommand<
+	const Name extends string,
+	B extends AnyCommandDefinitionBuilder = AnyCommandDefinitionBuilder,
+>(
 	name: Name,
 	recipe: CommandRecipe<{}, B>,
 ): CommandDefinition<{}, Name, readonly string[], BuilderHints<B>>;
 export function defineCommand<
 	const Name extends string,
 	const C extends CommandConfig,
-	B extends AnyCommandDefinitionBuilder,
+	B extends AnyCommandDefinitionBuilder = AnyCommandDefinitionBuilder,
 >(
 	name: Name,
 	config: C & ValidateCommandConfig<Name, C>,
@@ -504,7 +507,7 @@ export class Crust<
 		spellings(spelling: Sp): void;
 		// Argv literals for tooling autocomplete (command spellings, dashed
 		// flag spellings, and hints from added definitions).
-		hints(hint: ArgvHints<Sibs, Sp, H>): void;
+		hints(hint: HintUnion<Sibs, Sp, H>): void;
 	};
 
 	/** @internal */

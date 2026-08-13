@@ -88,19 +88,28 @@ A `CommandDefinition<R>` is a frozen value carrying its name, static config, and
 ### `defineCommand(name, config?, recipe)`
 
 ```ts
-defineCommand<const Name extends string>(
+defineCommand<
+  const Name extends string,
+  B extends AnyCommandDefinitionBuilder = AnyCommandDefinitionBuilder,
+>(
   name: Name,
-  recipe: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
-): CommandDefinition<{}, Name>;
+  recipe: (command: CommandDefinitionBuilder) => B,
+): CommandDefinition<{}, Name, readonly string[], BuilderHints<B>>;
 
 interface CommandConfig extends Omit<CommandMeta, "name">, CommandRequirements {}
 
-defineCommand<const Name extends string, const C extends CommandConfig>(
+defineCommand<
+  const Name extends string,
+  const C extends CommandConfig,
+  B extends AnyCommandDefinitionBuilder = AnyCommandDefinitionBuilder,
+>(
   name: Name,
   config: C & ValidateCommandConfig<Name, C>,
-  recipe: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
-): CommandDefinition<ConfigRequirements<C>, Name, AliasesOf<C>>;
+  recipe: (command: CommandDefinitionBuilder) => B,
+): CommandDefinition<ConfigRequirements<C>, Name, AliasesOf<C>, BuilderHints<B>>;
 ```
+
+`B` captures the recipe's returned builder, so the nested command and flag spellings it accumulated feed the definition's `Hints` parameter.
 
 Creates an inert reusable definition under a required name. Static `description`, `usage`, `aliases`, `hidden`, and Context `requires` belong in `config`. The recipe builder is typed from the requirement values:
 
