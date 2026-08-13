@@ -46,9 +46,33 @@ type ValidateToken<T extends string, H extends string> = string extends T
 			: `Unknown flag "${T}"`
 		: T;
 
-type ValidateArgv<A extends readonly string[], H extends string, First extends boolean = true> = [
-	H,
-] extends [never]
+/**
+ * Whether the root command declares positional args (`.args()` narrows
+ * `_types.args` to a non-empty tuple). When it does, Core routes an unmatched
+ * first token to the root action as a positional, so it must not be rejected
+ * as an unknown command.
+ *
+ * This is a deliberate proxy for Core's actual routing rule ("root has
+ * `run()`"), which is invisible in types — `.action()` does not change
+ * `Crust`'s type parameters. The proxy is stricter than runtime in one case:
+ * a root action *without* declared args silently ignores extra positionals,
+ * and we still reject those — passing a positional such a root never reads
+ * is almost certainly a test bug.
+ */
+type RootHasPositionals<App> = App extends {
+	readonly _types: { args: infer RA extends readonly unknown[] };
+}
+	? RA extends readonly [unknown, ...unknown[]]
+		? true
+		: false
+	: false;
+
+type ValidateArgv<
+	A extends readonly string[],
+	H extends string,
+	RootPositional extends boolean,
+	First extends boolean = true,
+> = [H] extends [never]
 	? A
 	: number extends A["length"]
 		? A
@@ -63,9 +87,11 @@ type ValidateArgv<A extends readonly string[], H extends string, First extends b
 									? Token
 									: Token extends CommandHints<H>
 										? Token
-										: `Unknown command "${Token}"`
+										: RootPositional extends true
+											? Token
+											: `Unknown command "${Token}"`
 							: ValidateToken<Token, H>,
-						...ValidateArgv<Rest, H, false>,
+						...ValidateArgv<Rest, H, RootPositional, false>,
 					]
 			: A;
 
@@ -78,7 +104,7 @@ export interface CapturedRun {
 /** Run an application and capture its text output without throwing invocation errors. */
 export async function captureRun<App extends RunnableApp, const A extends readonly string[]>(
 	app: App,
-	argv: A & ValidateArgv<A, ArgvHints<App>>,
+	argv: A & ValidateArgv<A, ArgvHints<App>, RootHasPositionals<App>>,
 ): Promise<CapturedRun> {
 	// Each io callback invocation is one line in a real terminal (core's
 	// defaults are console.log/console.error), so join captured calls with "\n".
@@ -133,7 +159,7 @@ let captureExecuteChain: Promise<unknown> = Promise.resolve();
  */
 export function captureExecute<App extends ExecutableApp, const A extends readonly string[]>(
 	app: App,
-	argv: A & ValidateArgv<A, ArgvHints<App>>,
+	argv: A & ValidateArgv<A, ArgvHints<App>, RootHasPositionals<App>>,
 ): Promise<CapturedExecute> {
 	const run = captureExecuteChain.then(() => captureExecuteExclusive(app, argv));
 	// A rejected capture (e.g. `throwOnError`) must not poison later captures.
@@ -184,7 +210,7 @@ export interface InteractiveRun {
 /** Run an application with fake terminal streams for its prompts and stderr output. */
 export function runInteractive<App extends RunnableApp, const A extends readonly string[]>(
 	app: App,
-	argv: A & ValidateArgv<A, ArgvHints<App>>,
+	argv: A & ValidateArgv<A, ArgvHints<App>, RootHasPositionals<App>>,
 ): InteractiveRun {
 	const harness = createPromptIO();
 	const output = harness.io.output;

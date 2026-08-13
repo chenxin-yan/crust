@@ -54,6 +54,17 @@ describe("argv hints", () => {
 			void captureExecute(app, widened);
 			void runInteractive(app, widened);
 
+			// Root positionals: a first non-dash token routes to the root action
+			// when the root declares args, so it must not be an unknown command.
+			const withRootArgs = new Crust("cli")
+				.args({ name: "file", type: "string" })
+				.action(() => {})
+				.add(deploy);
+			void captureRun(withRootArgs, ["input.txt"]);
+			void captureRun(withRootArgs, ["deploy"]);
+			// @ts-expect-error -- flags are still validated when root args exist
+			void captureRun(withRootArgs, ["input.txt", "--tokn"]);
+
 			const structural: RunnableApp = { async run() {} };
 			void captureRun(structural, ["anything", "--unknown"]);
 		};

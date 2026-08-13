@@ -46,7 +46,7 @@ await captureRun(app, ["deploy", "api", "--env", "staging"]);
 //                     ^ "deploy" and "--env" are checked; "api" and "staging" are free text
 ```
 
-`--help`, `-h`, and `--version` are always accepted, as are negated long flags, long `--flag=value` forms, short bundles/inline values, and every token after `--`. Other Extension-contributed commands and flags are not visible in the static hints; use a widened array (`argv as string[]`) as an escape hatch for those dynamic tokens. Structural apps that don't extend `Crust` accept any argv. The hint union is exported as `ArgvHints<App>`.
+`--help`, `-h`, and `--version` are always accepted, as are negated long flags, long `--flag=value` forms, short bundles/inline values, and every token after `--`. When the root command declares positional args via `.args()`, a first non-command token is accepted as a root positional instead of being rejected as an unknown command. Other Extension-contributed commands and flags are not visible in the static hints; use a widened array (`argv as string[]`) as an escape hatch for those dynamic tokens. Structural apps that don't extend `Crust` accept any argv. The hint union is exported as `ArgvHints<App>`.
 
 ## `captureRun(app, argv)`
 
