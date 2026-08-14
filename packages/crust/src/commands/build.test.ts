@@ -120,7 +120,9 @@ describe("buildCommand definition", () => {
 	});
 
 	it("rejects removed --distribute flag", async () => {
-		await expect(parseBuildArgs({ distribute: true })).rejects.toThrow('Unknown flag "--distribute"');
+		await expect(parseBuildArgs({ distribute: true })).rejects.toThrow(
+			'Unknown flag "--distribute"',
+		);
 	});
 
 	it("defines --target/-t as repeatable string flag", async () => {

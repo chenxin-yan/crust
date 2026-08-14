@@ -256,9 +256,9 @@ describe("built-in extensions", () => {
 			.extend(rootOnly)
 			.add(defineCommand("build", (build) => build.action(() => {})));
 
-		await expect(
-			app.run(["build"], { flags: { root: true } } as never),
-		).rejects.toMatchObject({ code: "PARSE" });
+		await expect(app.run(["build"], { flags: { root: true } } as never)).rejects.toMatchObject({
+			code: "PARSE",
+		});
 	});
 
 	it("noColor injects --color and --no-color into help output", async () => {

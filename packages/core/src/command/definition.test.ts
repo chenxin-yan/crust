@@ -47,12 +47,10 @@ describe("command definitions", () => {
 				}),
 		);
 
-		await new Crust("cli")
-			.add(definition)
-			.run(["copy"], {
-				args: { source: "from", destination: "to" },
-				flags: { verbose: true, output: "dist" },
-			});
+		await new Crust("cli").add(definition).run(["copy"], {
+			args: { source: "from", destination: "to" },
+			flags: { verbose: true, output: "dist" },
+		});
 		expect(received).toEqual({
 			args: { source: "from", destination: "to" },
 			flags: { verbose: true, output: "dist" },
@@ -132,9 +130,9 @@ describe("command definitions", () => {
 		);
 		const app = new Crust("cli").add(outer);
 
-		await expect(
-			app.run(["outer", "nested"], { flags: { late: true } } as never),
-		).rejects.toThrow(/Unknown flag/);
+		await expect(app.run(["outer", "nested"], { flags: { late: true } } as never)).rejects.toThrow(
+			/Unknown flag/,
+		);
 	});
 
 	it("propagates Context-owned flags only to definitions added after provide()", async () => {
@@ -227,9 +225,9 @@ describe("command definitions", () => {
 		const definition = defineCommand("users", (command) => command.action(() => {}));
 		const app = new Crust("cli").flags({ name: "secret", type: "string" }).add(definition);
 
-		await expect(
-			app.run(["users"], { flags: { secret: "value" } } as never),
-		).rejects.toThrow(/Unknown flag/);
+		await expect(app.run(["users"], { flags: { secret: "value" } } as never)).rejects.toThrow(
+			/Unknown flag/,
+		);
 	});
 
 	it("runs added definitions through run and execute", async () => {
