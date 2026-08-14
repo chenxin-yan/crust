@@ -1,4 +1,5 @@
 import type {
+	AnyCrust,
 	CommandPath,
 	CommandShape,
 	CommandShapeAt,
@@ -13,13 +14,12 @@ import { createPromptIO, type Key } from "@crustjs/prompts/testing";
 /** Structural io shape shared by `run()` and `execute()` captures. */
 export type CaptureIO = Partial<InvocationIO>;
 
-type TypedApp = Crust<any, any, any, any, any, any>;
-type AppTypes<App extends TypedApp> =
+type AppTypes<App extends AnyCrust> =
 	App extends Crust<infer Flags, infer Args, any, any, any, infer Tree>
 		? { shape: CommandShape<Args, Flags, Tree>; tree: Tree }
 		: never;
-type AppTree<App extends TypedApp> = AppTypes<App>["tree"];
-type ShapeAtPath<App extends TypedApp, Path extends CommandPath<AppTree<App>>> = CommandShapeAt<
+type AppTree<App extends AnyCrust> = AppTypes<App>["tree"];
+type ShapeAtPath<App extends AnyCrust, Path extends CommandPath<AppTree<App>>> = CommandShapeAt<
 	AppTypes<App>["shape"],
 	Path
 >;
@@ -32,7 +32,7 @@ export interface CapturedRun {
 
 /** Run an application and capture its text output without throwing invocation errors. */
 export async function captureRun<
-	App extends TypedApp,
+	App extends AnyCrust,
 	const Path extends CommandPath<AppTree<App>>,
 >(app: App, path: Path, ...args: RunInputArguments<ShapeAtPath<App, Path>>): Promise<CapturedRun> {
 	// Each io callback invocation is one line in a real terminal (core's
@@ -138,7 +138,7 @@ export interface InteractiveRun {
 }
 
 /** Run an application with fake terminal streams for its prompts and stderr output. */
-export function runInteractive<App extends TypedApp, const Path extends CommandPath<AppTree<App>>>(
+export function runInteractive<App extends AnyCrust, const Path extends CommandPath<AppTree<App>>>(
 	app: App,
 	path: Path,
 	...args: RunInputArguments<ShapeAtPath<App, Path>>
