@@ -47,7 +47,6 @@ interface CommandDefinitionBuilder<
   Ctx,
   Sibs extends string = never,
   Sp extends string = SpellingsOf<Flags>,
-  H extends string = never,
 > {
   flags(...defs: readonly NamedFlagDef[]): CommandDefinitionBuilder;
   args(...defs: ArgsDef): CommandDefinitionBuilder;
@@ -133,7 +132,6 @@ class Crust<
   Ctx,
   Sibs extends string = never,
   Sp extends string = SpellingsOf<Flags>,
-  H extends string = never,
 >
 
 new Crust(name: string, meta?: RootCommandMeta)
@@ -219,8 +217,7 @@ provide<const Cs extends readonly ContextInstance[]>(
   A,
   MergeContext<Ctx, ContextsOutput<Cs>>,
   Sibs,
-  Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
-  H
+  Sp | SpellingsOf<ContextsOwnedFlags<Cs>>
 >
 ```
 

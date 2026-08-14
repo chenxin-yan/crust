@@ -404,7 +404,6 @@ export function defineCommand(
  * - `Ctx` — provided Context values
  * - `Sibs` — sibling command names and aliases already registered
  * - `Sp` — accumulated flag spellings used for collision checks
- * - `H` — argv hint literals accumulated from added command definitions
  *
  * @example
  * ```ts
