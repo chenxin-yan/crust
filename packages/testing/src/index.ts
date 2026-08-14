@@ -11,25 +11,6 @@ export interface RunnableApp {
 	run(argv: readonly string[], io?: CaptureIO): Promise<void>;
 }
 
-/**
- * Argv literals a Crust app's static type knows about — command spellings and
- * dashed flag spellings, including those defined inside `defineCommand`
- * recipes — extracted from the `_types.hints` phantom. Apps without the
- * phantom resolve to `never`.
- */
-export type ArgvHints<App> = App extends {
-	readonly _types: { hints(hint: infer H extends string): void };
-}
-	? H
-	: never;
-
-/**
- * argv for the testing helpers: any strings are accepted (positionals and
- * flag values are free text), while known command and flag spellings
- * autocomplete in the editor.
- */
-type Argv<App> = readonly (ArgvHints<App> | (string & {}))[];
-
 export interface CapturedRun {
 	readonly stdout: string;
 	readonly stderr: string;
@@ -37,10 +18,7 @@ export interface CapturedRun {
 }
 
 /** Run an application and capture its text output without throwing invocation errors. */
-export async function captureRun<App extends RunnableApp>(
-	app: App,
-	argv: Argv<App>,
-): Promise<CapturedRun> {
+export async function captureRun(app: RunnableApp, argv: readonly string[]): Promise<CapturedRun> {
 	// Each io callback invocation is one line in a real terminal (core's
 	// defaults are console.log/console.error), so join captured calls with "\n".
 	const stdoutLines: string[] = [];
@@ -92,9 +70,9 @@ let captureExecuteChain: Promise<unknown> = Promise.resolve();
  * Concurrent calls are serialized because the exit-code protocol is
  * process-global.
  */
-export function captureExecute<App extends ExecutableApp>(
-	app: App,
-	argv: Argv<App>,
+export function captureExecute(
+	app: ExecutableApp,
+	argv: readonly string[],
 ): Promise<CapturedExecute> {
 	const run = captureExecuteChain.then(() => captureExecuteExclusive(app, argv));
 	// A rejected capture (e.g. `throwOnError`) must not poison later captures.
@@ -143,7 +121,7 @@ export interface InteractiveRun {
 }
 
 /** Run an application with fake terminal streams for its prompts and stderr output. */
-export function runInteractive<App extends RunnableApp>(app: App, argv: Argv<App>): InteractiveRun {
+export function runInteractive(app: RunnableApp, argv: readonly string[]): InteractiveRun {
 	const harness = createPromptIO();
 	const output = harness.io.output;
 	// Spinners and progress indicators render onto the same fake terminal as
