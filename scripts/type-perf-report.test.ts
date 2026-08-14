@@ -33,6 +33,7 @@ const report = (instantiations: number, scaling: [number, number, number]): Type
 		50: metrics(scaling[1]),
 		100: metrics(scaling[2]),
 	},
+	editor: null,
 });
 
 const repoRoot = resolve(import.meta.dir, "..");
@@ -104,7 +105,7 @@ describe("type performance report", () => {
 		expect(output).toContain("TypeScript 7.0.2 · ⚠️ marks compiler-work increases above 10%.");
 	});
 
-	it("renders editor latency rows, with n/a for reports lacking them", () => {
+	it("renders editor latency rows, with n/a when measurement failed", () => {
 		const base = report(100_000, [10_000, 25_000, 50_000]);
 		const head = report(100_000, [10_000, 25_000, 50_000]);
 		head.editor = {

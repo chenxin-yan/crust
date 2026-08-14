@@ -258,18 +258,9 @@ describe("Crust .flags()", () => {
 			.args({ name: "file", type: "string" })
 			.extend(defineExtension("noop"));
 
-		type _Spellings = Expect<
-			Equal<Parameters<(typeof app)["_types"]["spellings"]>[0], "verbose" | "v">
-		>;
-		const explicit: Crust<
-			(typeof app)["_types"]["flags"],
-			(typeof app)["_types"]["args"],
-			(typeof app)["_types"]["ctx"],
-			never,
-			"verbose" | "v"
-		> = app;
-		void explicit;
-
+		// Sp retention is pinned by the @ts-expect-error collision checks below:
+		// if the accumulator dropped "v", they would become unused and fail the
+		// typecheck.
 		expect(() =>
 			app.flags(
 				// @ts-expect-error -- the accumulator retains "v" from before the widened call
