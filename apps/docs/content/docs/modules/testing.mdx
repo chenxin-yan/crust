@@ -37,16 +37,16 @@ interface ExecutableApp {
 
 Any application that implements the required shape is accepted; it does not need to extend `Crust`. An inert `CommandDefinition` implements neither contract and must first be added to an application.
 
-## Typed argv
+## Argv autocomplete
 
-When `app` is a `Crust` builder, every helper autocompletes the command and flag spellings the application declares — including flags and subcommands defined inside `defineCommand` recipes. Unknown command and flag literals are compile-time errors, while positionals and flag values remain free text:
+When `app` is a `Crust` builder, the `argv` parameter of every helper suggests the command and flag spellings the application declares — including flags and subcommands defined inside `defineCommand` recipes — while still accepting any string for positionals and flag values:
 
 ```ts
 await captureRun(app, ["deploy", "api", "--env", "staging"]);
-//                     ^ "deploy" and "--env" are checked; "api" and "staging" are free text
+//                     ^ "deploy" and "--env" autocomplete; "api" and "staging" are free text
 ```
 
-`--help`, `-h`, and `--version` are always accepted, as are negated long flags, long `--flag=value` forms, short bundles/inline values, and every token after `--`. When the root command declares positional args via `.args()`, a first non-command token is accepted as a root positional instead of being rejected as an unknown command. Other Extension-contributed commands and flags are not visible in the static hints; use a widened array (`argv as string[]`) as an escape hatch for those dynamic tokens. Structural apps that don't extend `Crust` accept any argv. The hint union is exported as `ArgvHints<App>`.
+Hints cover statically known spellings only: commands added with widened (non-literal) names and Extension-contributed commands or flags (such as `--help`) do not appear, and `--no-<flag>` negation forms are not emitted. The union is also flat — every spelling is suggested at every position; parsing still validates ordering at runtime. Structural apps that don't extend `Crust` get no hints. The hint union is exported as `ArgvHints<App>`.
 
 ## `captureRun(app, argv)`
 
@@ -72,8 +72,7 @@ Drive the terminal `execute()` path in-process. Unlike `captureRun()`, this exer
 ```ts
 import { captureExecute } from "@crustjs/testing";
 
-const argv: string[] = ["deploy", "--bad-flag"];
-const result = await captureExecute(app, argv);
+const result = await captureExecute(app, ["deploy", "--bad-flag"]);
 
 expect(result.exitCode).toBe(1);
 expect(result.stderr).toContain("Unknown flag");

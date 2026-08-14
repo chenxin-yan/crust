@@ -17,60 +17,29 @@ type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 describe("argv hints", () => {
-	it("derives and validates statically known command and flag spellings", async () => {
-		const deploy = defineCommand("deploy", (command) =>
+	it("derives command and flag spellings from the app type while accepting any string", async () => {
+		const login = defineCommand("login", (command) =>
 			command.flags({ name: "token", type: "string", short: "t" }).action(() => {}),
 		);
-		const app = new Crust("cli")
-			.flags({ name: "verbose", type: "boolean", short: "v" }, { name: "port", type: "string" })
-			.add(deploy);
+		const app = new Crust("cli").flags({ name: "verbose", type: "boolean", short: "v" }).add(login);
 
 		type _Hints = Expect<
-			Equal<ArgvHints<typeof app>, "deploy" | "--verbose" | "-v" | "--port" | "--token" | "-t">
+			Equal<ArgvHints<typeof app>, "login" | "--verbose" | "-v" | "--token" | "-t">
 		>;
-		// structural apps without the phantom fall back to no validation
+		// structural apps without the phantom fall back to no hints
 		type _None = Expect<Equal<ArgvHints<RunnableApp>, never>>;
 
-		const typecheckArgv = () => {
-			// @ts-expect-error -- statically unknown command
-			void captureRun(app, ["deply"]);
-			// @ts-expect-error -- statically unknown flag
-			void captureExecute(app, ["deploy", "--tokn"]);
-			// @ts-expect-error -- all helpers validate literal argv
-			void runInteractive(app, ["deploy", "--tokn"]);
-
-			void captureRun(app, ["deploy", "anything-free-text"]);
-			void captureRun(app, ["--verbose", "deploy"]);
-			void captureRun(app, ["--port=123"]);
-			void captureRun(app, ["-vt", "-tsecret"]);
-			void captureRun(app, ["--help"]);
-			void captureRun(app, ["-h"]);
-			void captureRun(app, ["--version"]);
-			void captureRun(app, ["--", "whatever", "--unknown"]);
-
-			// Widened argv is the escape hatch for dynamic and Extension-contributed tokens.
-			const widened: string[] = ["deploy", "--extension-flag"];
+		// arbitrary strings (positionals, flag values) remain accepted by every helper,
+		// including widened string[] arrays — the common consumer pattern
+		const typecheckLooseArgv = () => {
+			const widened: string[] = ["login", "free-text"];
 			void captureRun(app, widened);
-			void captureExecute(app, widened);
-			void runInteractive(app, widened);
-
-			// Root positionals: a first non-dash token routes to the root action
-			// when the root declares args, so it must not be an unknown command.
-			const withRootArgs = new Crust("cli")
-				.args({ name: "file", type: "string" })
-				.action(() => {})
-				.add(deploy);
-			void captureRun(withRootArgs, ["input.txt"]);
-			void captureRun(withRootArgs, ["deploy"]);
-			// @ts-expect-error -- flags are still validated when root args exist
-			void captureRun(withRootArgs, ["input.txt", "--tokn"]);
-
-			const structural: RunnableApp = { async run() {} };
-			void captureRun(structural, ["anything", "--unknown"]);
+			void captureExecute(app, ["login", "free-text"]);
+			void runInteractive(app, ["login", "free-text"]);
 		};
-		void typecheckArgv;
+		void typecheckLooseArgv;
 
-		const result = await captureRun(app, ["deploy", "--token", "abc"]);
+		const result = await captureRun(app, ["login", "--token", "abc"]);
 		expect(result.error).toBeUndefined();
 	});
 });
