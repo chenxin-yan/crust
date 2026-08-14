@@ -196,7 +196,7 @@ type AnyCommandDefinitionBuilder = CommandDefinitionBuilder<any, any, any, any, 
 type CommandRecipe<
 	R extends CommandRequirements,
 	Builder extends AnyCommandDefinitionBuilder = AnyCommandDefinitionBuilder,
-> = (command: CommandDefinitionBuilder<{}, [], RequirementContext<R>, never, never, {}>) => Builder;
+> = (command: CommandDefinitionBuilder<{}, [], RequirementContext<R>, never, never>) => Builder;
 
 const commandDefinitionInternal: unique symbol = Symbol.for("crust.commandDefinition");
 
