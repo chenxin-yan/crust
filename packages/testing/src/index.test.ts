@@ -4,17 +4,15 @@ import { Crust, defineExtension } from "@crustjs/core";
 import { progress, spinner } from "@crustjs/progress";
 import { input } from "@crustjs/prompts";
 
-import { captureExecute, captureRun, runInteractive, type RunnableApp } from "./index.ts";
+import { captureExecute, captureRun, runInteractive } from "./index.ts";
 
 describe("captureRun", () => {
 	it("captures output from a structural runnable as lines", async () => {
-		const app: RunnableApp = {
-			async run(_argv, io) {
-				io?.stdout?.("first");
-				io?.stdout?.("second");
-				io?.stderr?.("warning");
-			},
-		};
+		const app = new Crust("test-cli").action(({ stdout, stderr }) => {
+			stdout("first");
+			stdout("second");
+			stderr("warning");
+		});
 
 		expect(await captureRun(app, [])).toEqual({
 			stdout: "first\nsecond",
@@ -24,13 +22,11 @@ describe("captureRun", () => {
 
 	it("returns errors after preserving output", async () => {
 		const error = new Error("failed");
-		const app: RunnableApp = {
-			async run(_argv, io) {
-				io?.stdout?.("before");
-				io?.stderr?.("problem");
-				throw error;
-			},
-		};
+		const app = new Crust("test-cli").action(({ stdout, stderr }) => {
+			stdout("before");
+			stderr("problem");
+			throw error;
+		});
 
 		const result = await captureRun(app, []);
 		expect(result.stdout).toBe("before");
@@ -41,13 +37,11 @@ describe("captureRun", () => {
 
 describe("runInteractive", () => {
 	it("drives prompts from a structural runnable and merges stderr with prompt frames", async () => {
-		const app: RunnableApp = {
-			async run(_argv, io) {
-				io?.stderr?.("Starting");
-				const name = await input({ message: "Name?" });
-				io?.stderr?.(`Hello, ${name}!`);
-			},
-		};
+		const app = new Crust("test-cli").action(async ({ stderr }) => {
+			stderr("Starting");
+			const name = await input({ message: "Name?" });
+			stderr(`Hello, ${name}!`);
+		});
 
 		const run = runInteractive(app, []);
 		await run.waitFor(/Name\?/);
@@ -60,11 +54,9 @@ describe("runInteractive", () => {
 	});
 
 	it("captures spinner output on the fake terminal screen", async () => {
-		const app: RunnableApp = {
-			async run() {
-				await spinner({ message: "Deploying", task: async () => "ok" });
-			},
-		};
+		const app = new Crust("test-cli").action(async () => {
+			await spinner({ message: "Deploying", task: async () => "ok" });
+		});
 
 		const run = runInteractive(app, []);
 		await run.waitFor(/Deploying/);
@@ -74,14 +66,12 @@ describe("runInteractive", () => {
 	});
 
 	it("captures progress indicator output on the fake terminal screen", async () => {
-		const app: RunnableApp = {
-			async run() {
-				const bar = progress({ message: "Copying", total: 2 });
-				bar.start();
-				bar.advance();
-				bar.stop();
-			},
-		};
+		const app = new Crust("test-cli").action(() => {
+			const bar = progress({ message: "Copying", total: 2 });
+			bar.start();
+			bar.advance();
+			bar.stop();
+		});
 
 		const run = runInteractive(app, []);
 		await run.done;
@@ -91,22 +81,18 @@ describe("runInteractive", () => {
 
 	it("waitFor rethrows the application error instead of hanging", async () => {
 		const error = new Error("boom");
-		const app: RunnableApp = {
-			async run() {
-				throw error;
-			},
-		};
+		const app = new Crust("test-cli").action(() => {
+			throw error;
+		});
 
 		const run = runInteractive(app, []);
 		await expect(run.waitFor(/never rendered/)).rejects.toBe(error);
 	});
 
 	it("waitFor fails when the application completes without matching", async () => {
-		const app: RunnableApp = {
-			async run(_argv, io) {
-				io?.stderr?.("done");
-			},
-		};
+		const app = new Crust("test-cli").action(({ stderr }) => {
+			stderr("done");
+		});
 
 		const run = runInteractive(app, []);
 		await expect(run.waitFor(/never rendered/)).rejects.toThrow("already completed");

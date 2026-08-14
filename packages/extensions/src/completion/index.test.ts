@@ -116,7 +116,10 @@ describe("completion", () => {
 		const app = buildCli();
 		const output: string[] = [];
 
-		await app.run(["completion", "bash"], { stdout: (text) => output.push(text) });
+		await app.execute({
+			argv: ["completion", "bash"],
+			io: { stdout: (text) => output.push(text) },
+		});
 
 		expect(output.join("\n")).toStartWith("# completion script for mycli v1.2.3");
 		expect(getProcessStdout()).toBe("");

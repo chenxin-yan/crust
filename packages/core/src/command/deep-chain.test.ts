@@ -125,7 +125,7 @@ describe("deep builder chains", () => {
 				type _Last = Expect<Equal<typeof flags.f60, boolean | undefined>>;
 				seen.push(flags.f01, flags.f60);
 			});
-		await app.run(["--f01", "--f60"]);
+		await app.run([], { flags: { f01: true, f60: true } });
 		expect(seen).toEqual([true, true]);
 	});
 
@@ -167,7 +167,11 @@ describe("deep builder chains", () => {
 				type _Last = Expect<Equal<typeof args.a30, string>>;
 				seen.push(args.a01, args.a30);
 			});
-		await app.run(Array.from({ length: 30 }, (_, i) => `v${i + 1}`));
+		await app.run([], {
+			args: Object.fromEntries(
+				Array.from({ length: 30 }, (_, i) => [`a${String(i + 1).padStart(2, "0")}`, `v${i + 1}`]),
+			),
+		} as never);
 		expect(seen).toEqual(["v1", "v30"]);
 	});
 

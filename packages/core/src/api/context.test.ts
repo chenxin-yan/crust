@@ -309,7 +309,7 @@ describe("Context-owned flags", () => {
 			type _ActionApiKey = Assert<IsEqual<(typeof flags)["api-key"], string | undefined>>;
 			seen.push(ctx.auth.apiKey);
 		});
-		await app.run(["--api-key", "secret"]);
+		await app.run([], { flags: { "api-key": "secret" } });
 
 		expect(seen).toEqual(["secret", "secret"]);
 	});
@@ -326,7 +326,7 @@ describe("Context-owned flags", () => {
 		await new Crust("cli")
 			.provide(server())
 			.action(() => {})
-			.run(["--port", "8080"]);
+			.run([], { flags: { port: "8080" } });
 
 		expect(seen).toEqual([8080]);
 	});
@@ -346,7 +346,7 @@ describe("Context-owned flags", () => {
 		await new Crust("cli")
 			.provide(auth(), location())
 			.action(() => {})
-			.run(["--api-key", "secret", "--region", "us"]);
+			.run([], { flags: { "api-key": "secret", region: "us" } });
 
 		expect(seen).toEqual([["api-key"], ["region"]]);
 	});
@@ -375,7 +375,7 @@ describe("Context-owned flags", () => {
 			ctx.logging.debug("debug");
 		});
 
-		await app.run(["--verbose"], { stdout, stderr });
+		await app.run([], { flags: { verbose: true } }, { stdout, stderr });
 		expect(messages).toEqual(["debug"]);
 	});
 
@@ -390,7 +390,10 @@ describe("Context-owned flags", () => {
 			}),
 		);
 
-		await new Crust("cli").provide(auth()).add(deploy).run(["--api-key", "secret", "deploy"]);
+		await new Crust("cli")
+			.provide(auth())
+			.add(deploy)
+			.run(["deploy"], { flags: { "api-key": "secret" } });
 		expect(seen).toEqual(["secret"]);
 	});
 
@@ -415,7 +418,7 @@ describe("Context-owned flags", () => {
 				expect(flags.verbose).toBe(true);
 			});
 
-		await app.run(["--api-key", "secret", "--verbose"]);
+		await app.run([], { flags: { "api-key": "secret", verbose: true } });
 	});
 
 	it("allows one owning factory on sibling command branches", async () => {
@@ -423,7 +426,7 @@ describe("Context-owned flags", () => {
 		const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => ({
 			apiKey: flags["api-key"],
 		}));
-		const branch = (name: string) =>
+		const branch = <const Name extends string>(name: Name) =>
 			defineCommand(name, (command) =>
 				command.provide(auth()).action(({ ctx }) => {
 					seen.push(`${name}:${ctx.auth.apiKey}`);
@@ -431,8 +434,8 @@ describe("Context-owned flags", () => {
 			);
 		const app = new Crust("cli").add(branch("first"), branch("second"));
 
-		await app.run(["first", "--api-key", "one"]);
-		await app.run(["second", "--api-key", "two"]);
+		await app.run(["first"], { flags: { "api-key": "one" } });
+		await app.run(["second"], { flags: { "api-key": "two" } });
 
 		expect(seen).toEqual(["first:one", "second:two"]);
 	});
@@ -448,7 +451,7 @@ describe("Context-owned flags", () => {
 				expect(flags["api-key"]).toBe("fake-key");
 				expect(ctx.auth.real).toBe(false);
 			})
-			.run(["--api-key", "fake-key"]);
+			.run([], { flags: { "api-key": "fake-key" } });
 	});
 
 	it("rejects duplicate owned flag names at definition time", () => {

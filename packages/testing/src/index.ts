@@ -1,4 +1,12 @@
-import type { InvocationIO } from "@crustjs/core";
+import type {
+	CommandPath,
+	CommandShape,
+	CommandShapeAt,
+	CommandTree,
+	Crust,
+	InvocationIO,
+	RunInputArguments,
+} from "@crustjs/core";
 import { type ProgressSink, withProgressSink } from "@crustjs/progress";
 import { withPromptIO } from "@crustjs/prompts";
 import { createPromptIO, type Key } from "@crustjs/prompts/testing";
@@ -6,10 +14,13 @@ import { createPromptIO, type Key } from "@crustjs/prompts/testing";
 /** Structural io shape shared by `run()` and `execute()` captures. */
 export type CaptureIO = Partial<InvocationIO>;
 
-/** Minimal structural surface invoked by the testing helpers. */
-export interface RunnableApp {
-	run(argv: readonly string[], io?: CaptureIO): Promise<void>;
-}
+type TypedApp = Crust<any, any, any, any, any, any>;
+type AppShape<App extends TypedApp> = App["_types"]["shape"] & CommandShape;
+type AppTree<App extends TypedApp> = App["_types"]["tree"] & CommandTree;
+type ShapeAtPath<
+	App extends TypedApp,
+	Path extends CommandPath<AppTree<App>>,
+> = CommandShapeAt<AppShape<App>, Path>;
 
 export interface CapturedRun {
 	readonly stdout: string;
@@ -18,7 +29,14 @@ export interface CapturedRun {
 }
 
 /** Run an application and capture its text output without throwing invocation errors. */
-export async function captureRun(app: RunnableApp, argv: readonly string[]): Promise<CapturedRun> {
+export async function captureRun<
+	App extends TypedApp,
+	const Path extends CommandPath<AppTree<App>>,
+>(
+	app: App,
+	path: Path,
+	...args: RunInputArguments<ShapeAtPath<App, Path>>
+): Promise<CapturedRun> {
 	// Each io callback invocation is one line in a real terminal (core's
 	// defaults are console.log/console.error), so join captured calls with "\n".
 	const stdoutLines: string[] = [];
@@ -27,7 +45,8 @@ export async function captureRun(app: RunnableApp, argv: readonly string[]): Pro
 	let error: unknown;
 
 	try {
-		await app.run(argv, {
+		const [input] = args;
+		await app.run(path as never, input as never, {
 			stdout: (text) => {
 				stdoutLines.push(text);
 			},
@@ -121,7 +140,14 @@ export interface InteractiveRun {
 }
 
 /** Run an application with fake terminal streams for its prompts and stderr output. */
-export function runInteractive(app: RunnableApp, argv: readonly string[]): InteractiveRun {
+export function runInteractive<
+	App extends TypedApp,
+	const Path extends CommandPath<AppTree<App>>,
+>(
+	app: App,
+	path: Path,
+	...args: RunInputArguments<ShapeAtPath<App, Path>>
+): InteractiveRun {
 	const harness = createPromptIO();
 	const output = harness.io.output;
 	// Spinners and progress indicators render onto the same fake terminal as
@@ -132,9 +158,10 @@ export function runInteractive(app: RunnableApp, argv: readonly string[]): Inter
 			output.write(text);
 		},
 	};
+	const [input] = args;
 	const done = withProgressSink(sink, () =>
 		withPromptIO(harness.io, () =>
-			app.run(argv, {
+			app.run(path as never, input as never, {
 				stdout: () => {},
 				stderr: (text) => {
 					// Line-oriented like core's console.error default.

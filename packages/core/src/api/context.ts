@@ -129,6 +129,16 @@ export type FactoriesOutput<Fs extends readonly AnyContextFactory[]> = Fs extend
 	? FactoryOutput<H> & FactoriesOutput<T>
 	: {};
 
+/** Merged flags owned by a tuple of Context factories. */
+export type FactoriesOwnedFlags<Fs extends readonly AnyContextFactory[]> = Fs extends readonly [
+	infer H,
+	...infer T extends readonly AnyContextFactory[],
+]
+	? MergeFlags<FactoryOwnedFlags<H>, FactoriesOwnedFlags<T>>
+	: {};
+
+type FactoryOwnedFlags<F> = F extends ContextFactory<any, any, any, any, infer OF> ? OF : {};
+
 /** Merged flags owned by a tuple of Context instances. */
 export type ContextsOwnedFlags<Cs extends readonly ContextInstance[]> = Cs extends readonly [
 	infer H,

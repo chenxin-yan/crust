@@ -4,7 +4,7 @@ import { defineCommand } from "../index.ts";
 import { Crust } from "./crust.ts";
 import { buildCommandDocumentation, formatDescription } from "./documentation.ts";
 
-async function docs(app: Crust) {
+async function docs(app: Crust<any, any, any, any, any, any>) {
 	return buildCommandDocumentation(await app.snapshot());
 }
 

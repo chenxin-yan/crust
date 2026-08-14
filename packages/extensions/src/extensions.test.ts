@@ -256,7 +256,9 @@ describe("built-in extensions", () => {
 			.extend(rootOnly)
 			.add(defineCommand("build", (build) => build.action(() => {})));
 
-		await expect(app.run(["build", "--root"])).rejects.toMatchObject({ code: "PARSE" });
+		await expect(
+			app.run(["build"], { flags: { root: true } } as never),
+		).rejects.toMatchObject({ code: "PARSE" });
 	});
 
 	it("noColor injects --color and --no-color into help output", async () => {
@@ -470,12 +472,12 @@ describe("built-in extensions", () => {
 			.extend(help())
 			.add(defineCommand("deploy", (command) => command.action(() => {})));
 
-		await app.run(["--help"]);
+		await app.execute({ argv: ["--help"] });
 		const rootHelp = stripAnsi(getStdout());
 		expect(rootHelp).toContain("--api-key");
 
 		stdoutChunks = [];
-		await app.run(["deploy", "--help"]);
+		await app.execute({ argv: ["deploy", "--help"] });
 		const childHelp = stripAnsi(getStdout());
 		expect(childHelp).toContain("--api-key");
 		expect(childHelp).toContain("API credential");

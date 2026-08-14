@@ -657,6 +657,53 @@ export type InferFlags<F> = F extends FlagsDef
 	: Record<string, never>;
 
 // ────────────────────────────────────────────────────────────────────────────
+// Programmatic invocation input types
+// ────────────────────────────────────────────────────────────────────────────
+
+type InputBaseValue<D> = D extends { schema: StandardSchema }
+	? D extends { type: "boolean" }
+		? boolean
+		: string
+	: D extends { choices: readonly (infer Choice extends string)[] }
+		? Choice
+		: D extends { parse: (raw: string) => unknown }
+			? string
+			: D extends { type: infer T extends ValueType }
+				? Resolve<T>
+				: string;
+
+type InputArgValue<D> = D extends { variadic: true } ? InputBaseValue<D>[] : InputBaseValue<D>;
+type InputFlagValue<D> = D extends { multiple: true } ? InputBaseValue<D>[] : InputBaseValue<D>;
+
+type RequiredArgNames<A extends ArgsDef> = A[number] extends infer D
+	? D extends { name: infer N extends string; required: true }
+		? N
+		: never
+	: never;
+
+/** Values accepted by typed programmatic invocation before argv parsing. */
+export type InputArgs<A extends ArgsDef> = Simplify<
+	{
+		[D in A[number] as D["name"] extends RequiredArgNames<A> ? D["name"] : never]-?: InputArgValue<D>;
+	} & {
+		[D in A[number] as D["name"] extends RequiredArgNames<A> ? never : D["name"]]?: InputArgValue<D>;
+	}
+>;
+
+type RequiredFlagNames<F extends FlagsDef> = {
+	[K in keyof F]: F[K] extends { required: true } ? K : never;
+}[keyof F];
+
+/** Flag values accepted by typed programmatic invocation before argv parsing. */
+export type InputFlags<F extends FlagsDef> = Simplify<
+	{
+		[K in RequiredFlagNames<F>]-?: InputFlagValue<F[K]>;
+	} & {
+		[K in Exclude<keyof F, RequiredFlagNames<F>>]?: InputFlagValue<F[K]>;
+	}
+>;
+
+// ────────────────────────────────────────────────────────────────────────────
 // CommandMeta — Command metadata
 // ────────────────────────────────────────────────────────────────────────────
 

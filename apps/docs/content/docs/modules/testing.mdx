@@ -13,21 +13,9 @@ bun add -d @crustjs/testing
 
 ## Application contracts
 
-`captureRun()` and `runInteractive()` accept the exported `RunnableApp` structural contract:
+`captureRun()` and `runInteractive()` accept a `Crust` application and infer its command tree. Their command path, argument object, and flag object are checked from the definitions added to that application. Misspelled command, argument, or flag names fail TypeScript checking and editor completion suggests valid names.
 
-```ts
-import type { InvocationIO } from "@crustjs/core";
-
-type CaptureIO = Partial<InvocationIO>;
-
-interface RunnableApp {
-  run(argv: readonly string[], io?: CaptureIO): Promise<void>;
-}
-```
-
-See [`InvocationIO`](/docs/api/types#invocationio) for the underlying IO callback shape.
-
-`captureExecute()` instead accepts an `ExecutableApp`:
+`captureExecute()` instead accepts the structural `ExecutableApp` contract:
 
 ```ts
 interface ExecutableApp {
@@ -35,16 +23,19 @@ interface ExecutableApp {
 }
 ```
 
-Any application that implements the required shape is accepted; it does not need to extend `Crust`. An inert `CommandDefinition` implements neither contract and must first be added to an application.
+An inert `CommandDefinition` must first be added to a `Crust` application before using the typed helpers.
 
-## `captureRun(app, argv)`
+## `captureRun(app, path, input?)`
 
 Run an application with captured output. Each `ctx.stdout()`/`ctx.stderr()` call is one line (matching the terminal defaults), and the returned `stdout` and `stderr` fields join those lines with `"\n"`. If the application throws, `error` contains that value and output written before the failure is retained.
 
 ```ts
 import { captureRun } from "@crustjs/testing";
 
-const result = await captureRun(app, ["build"]);
+const result = await captureRun(app, ["build"], {
+  args: { entry: "src/cli.ts" },
+  flags: { minify: true },
+});
 
 if (result.error) throw result.error;
 console.log(result.stdout);
@@ -71,7 +62,7 @@ The return type is `CapturedExecute`:
 
 <auto-type-table path="../../../../../packages/testing/src/index.ts" name="CapturedExecute" />
 
-## `runInteractive(app, argv)`
+## `runInteractive(app, path, input?)`
 
 Run an application against a fake TTY. Use `waitFor()` before sending input with `type()` or `keys()`, then await `done`.
 

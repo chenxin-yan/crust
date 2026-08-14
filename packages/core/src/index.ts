@@ -33,8 +33,15 @@ export type {
 	CommandDefinition,
 	CommandDefinitionBuilder,
 	CommandRequirements,
+	CommandPath,
+	CommandShape,
+	CommandShapeAt,
+	CommandTree,
 	CrustCommandContext,
 	RootCommandMeta,
+	RunArguments,
+	RunInput,
+	RunInputArguments,
 } from "./command/crust.ts";
 export { Crust, defineCommand } from "./command/crust.ts";
 // Errors
@@ -55,6 +62,8 @@ export type {
 	CommandMeta,
 	FlagDef,
 	FlagsDef,
+	InputArgs,
+	InputFlags,
 	InvocationIO,
 	NamedFlagDef,
 	ValueType,

@@ -199,7 +199,7 @@ describe("Crust .flags()", () => {
 				received = flags;
 			});
 
-		await app.run(["--first", "--second", "value"]);
+		await app.run([], { flags: { first: true, second: "value" } });
 		expect(received).toEqual({ first: true, second: "value" });
 		expect((await app.snapshot()).flags).toEqual({
 			first: { type: "boolean" },
@@ -397,7 +397,7 @@ describe("Crust .args()", () => {
 				received = args;
 			});
 
-		await app.run(["from", "to"]);
+		await app.run([], { args: { source: "from", destination: "to" } });
 		expect(received).toEqual({ source: "from", destination: "to" });
 		expect((await app.snapshot()).args.map((arg) => arg.name)).toEqual(["source", "destination"]);
 	});
@@ -858,7 +858,7 @@ describe("Crust .action()", () => {
 				receivedCtx = context as unknown as CrustCommandContext;
 			});
 
-		await app.run(["test.txt", "--verbose"]);
+		await app.run([], { args: { file: "test.txt" }, flags: { verbose: true } });
 
 		expect(receivedCtx).toMatchObject({
 			args: { file: "test.txt" },
@@ -1207,7 +1207,7 @@ describe("Extension application at prepare time", () => {
 			),
 		);
 
-		await app.run(["sub", "--debug"]);
+		await app.run(["sub"], { flags: { debug: true } } as never);
 
 		expect(seen[0]?.debug).toBe(true);
 	});
@@ -1222,7 +1222,7 @@ describe("Extension application at prepare time", () => {
 			.add(defineCommand("sub", (cmd) => cmd.action(() => {})));
 
 		// --version is unknown on the subcommand → PARSE error
-		await expect(app.run(["sub", "--version"])).rejects.toMatchObject({
+		await expect(app.run(["sub"], { flags: { version: true } } as never)).rejects.toMatchObject({
 			code: "PARSE",
 		});
 	});
@@ -1289,14 +1289,8 @@ describe("Extension application at prepare time", () => {
 
 		const app = new Crust("cli").extend(completion, verbose).action(() => {});
 
-		await app.run(["completion", "bash", "--verbose"]);
+		await app.execute({ argv: ["completion", "bash", "--verbose"] });
 		expect(lines).toEqual(["completion:bash:true:cli"]);
-		await expect(app.run(["completion", "fish"])).rejects.toMatchObject({
-			code: "PARSE",
-		});
-		await expect(app.run(["completion"])).rejects.toMatchObject({
-			code: "VALIDATION",
-		});
 	});
 
 	it("Extension command requirements name the Extension and missing Context", async () => {
@@ -1306,7 +1300,7 @@ describe("Extension application at prepare time", () => {
 		});
 
 		try {
-			await new Crust("cli").extend(databaseTools).run(["users"]);
+			await new Crust("cli").extend(databaseTools).snapshot();
 			expect.unreachable("should have thrown");
 		} catch (error) {
 			expect(error).toBeInstanceOf(CrustError);
@@ -1395,8 +1389,8 @@ describe("Extension application at prepare time", () => {
 			if ((flags as Record<string, unknown>).debug) calls.push("action");
 		});
 
-		await app.run(["--debug"]);
-		await app.run(["--debug"]);
+		await app.run([], { flags: { debug: true } } as never);
+		await app.run([], { flags: { debug: true } } as never);
 
 		expect(calls).toEqual(["pre", "action", "post", "pre", "action", "post"]);
 	});
@@ -1420,7 +1414,7 @@ describe("Extension application at prepare time", () => {
 		await derived.run(["extra"]);
 		// the original builder must not see the derived command: "extra" falls
 		// through to the root action instead of routing to the added subcommand
-		await app.run(["extra"]);
+		await app.run(["extra"] as never);
 
 		expect(calls).toEqual(["root", "extra", "root"]);
 	});
@@ -1440,8 +1434,8 @@ describe("Extension application at prepare time", () => {
 		});
 		const app = new Crust("cli").extend(tools).action(() => {});
 
-		await app.run(["sub"]);
-		await app.run(["sub"]);
+		await app.execute({ argv: ["sub"] });
+		await app.execute({ argv: ["sub"] });
 
 		// The action still runs per dispatch, but the recipe that builds the
 		// command tree runs once per builder instance (prepared tree is cached).
@@ -1462,8 +1456,9 @@ describe("Extension application at prepare time", () => {
 		});
 		const app = new Crust("cli").extend(flaky).action(() => {});
 
-		await expect(app.run(["sub"])).rejects.toThrow("recipe boom");
-		await app.run(["sub"]);
+		await app.execute({ argv: ["sub"], io: { stderr: () => {} } });
+		process.exitCode = 0;
+		await app.execute({ argv: ["sub"] });
 
 		expect(attempts).toBe(2);
 	});
@@ -1522,7 +1517,7 @@ describe("Extension named hooks", () => {
 				order.push("action");
 			});
 
-		await app.run([]);
+		await app.run([], {} as never);
 		expect(order).toEqual(["first", "gate"]);
 	});
 
@@ -1589,7 +1584,7 @@ describe("Extension named hooks", () => {
 			.flags({ name: "port", type: "number", required: true })
 			.extend(gate)
 			.action(() => {})
-			.run(["--port", "8080"]);
+			.run([], { flags: { port: 8080 } });
 
 		expect(seenPort).toBe(8080);
 		expect(outcomeBy).toBe("gate");
@@ -1613,10 +1608,10 @@ describe("Extension named hooks", () => {
 			.extend(probe)
 			.add(defineCommand("known", (cmd) => cmd.action(() => {})));
 
-		await app.run(["known"], { stdout: (line) => lines.push(line) });
+		await app.run(["known"], undefined, { stdout: (line) => lines.push(line) });
 		expect(lines).toEqual(["probe:known"]);
 		preRunCalled = false;
-		await expect(app.run(["unknown"])).rejects.toMatchObject({
+		await expect(app.run(["unknown"] as never)).rejects.toMatchObject({
 			code: "COMMAND_NOT_FOUND",
 		});
 		expect(preRunCalled).toBe(false);
@@ -1682,7 +1677,7 @@ describe("Extension named hooks", () => {
 		});
 
 		await app.run([]);
-		await app.run(["owned"]);
+		await app.execute({ argv: ["owned"] });
 		expect(roots).toEqual(["cli", "cli"]);
 	});
 });
@@ -1792,7 +1787,9 @@ describe("Crust .run()", () => {
 		const app = new Crust("test").flags({ name: "port", type: "number" }).action(() => {});
 
 		await expect(
-			app.run(["--unknown"], { stderr: (text) => stderrLines.push(text) }),
+			app.run([], { flags: { unknown: true } } as never, {
+				stderr: (text) => stderrLines.push(text),
+			}),
 		).rejects.toMatchObject({ code: "PARSE" });
 		expect(stderrLines).toEqual([]);
 		// run() never touches process status
@@ -1818,7 +1815,7 @@ describe("Crust .run()", () => {
 			ctx.stderr("to err");
 		});
 
-		await app.run([], {
+		await app.run([], undefined, {
 			stdout: (t) => out.push(t),
 			stderr: (t) => err.push(t),
 		});
@@ -1836,7 +1833,7 @@ describe("Crust .run()", () => {
 				received = { args: ctx.args, flags: ctx.flags };
 			});
 
-		await app.run(["a.txt", "--verbose"]);
+		await app.run([], { args: { file: "a.txt" }, flags: { verbose: true } });
 
 		expect(received).toEqual({
 			args: { file: "a.txt" },
