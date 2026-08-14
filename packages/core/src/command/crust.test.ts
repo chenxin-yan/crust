@@ -1207,7 +1207,7 @@ describe("Extension application at prepare time", () => {
 			),
 		);
 
-		await app.run(["sub"], { flags: { debug: true } } as never);
+		await app.execute({ argv: ["sub", "--debug"] });
 
 		expect(seen[0]?.debug).toBe(true);
 	});
@@ -1265,6 +1265,7 @@ describe("Extension application at prepare time", () => {
 
 	it("Extension command definitions are routable, validated, and receive recursive flags", async () => {
 		const lines: string[] = [];
+		const errors: string[] = [];
 		const completion = defineExtension("completion", {
 			commands: [
 				defineCommand("completion", (command) =>
@@ -1282,6 +1283,12 @@ describe("Extension application at prepare time", () => {
 						}),
 				),
 			],
+			hooks: {
+				onError(error) {
+					errors.push((error as CrustError).code);
+					return true;
+				},
+			},
 		});
 		const verbose = defineExtension("verbose", {
 			flags: [{ name: "verbose", type: "boolean" }],
@@ -1289,8 +1296,16 @@ describe("Extension application at prepare time", () => {
 
 		const app = new Crust("cli").extend(completion, verbose).action(() => {});
 
-		await app.execute({ argv: ["completion", "bash", "--verbose"] });
+		const originalExitCode = process.exitCode;
+		try {
+			await app.execute({ argv: ["completion", "bash", "--verbose"] });
+			await app.execute({ argv: ["completion", "fish"] });
+			await app.execute({ argv: ["completion"] });
+		} finally {
+			process.exitCode = originalExitCode;
+		}
 		expect(lines).toEqual(["completion:bash:true:cli"]);
+		expect(errors).toEqual(["PARSE", "VALIDATION"]);
 	});
 
 	it("Extension command requirements name the Extension and missing Context", async () => {
@@ -1389,8 +1404,8 @@ describe("Extension application at prepare time", () => {
 			if ((flags as Record<string, unknown>).debug) calls.push("action");
 		});
 
-		await app.run([], { flags: { debug: true } } as never);
-		await app.run([], { flags: { debug: true } } as never);
+		await app.execute({ argv: ["--debug"] });
+		await app.execute({ argv: ["--debug"] });
 
 		expect(calls).toEqual(["pre", "action", "post", "pre", "action", "post"]);
 	});
@@ -1456,9 +1471,8 @@ describe("Extension application at prepare time", () => {
 		});
 		const app = new Crust("cli").extend(flaky).action(() => {});
 
-		await app.execute({ argv: ["sub"], io: { stderr: () => {} } });
-		process.exitCode = 0;
-		await app.execute({ argv: ["sub"] });
+		await expect(app.snapshot()).rejects.toThrow("recipe boom");
+		await app.snapshot();
 
 		expect(attempts).toBe(2);
 	});
@@ -1517,7 +1531,7 @@ describe("Extension named hooks", () => {
 				order.push("action");
 			});
 
-		await app.run([], {} as never);
+		await app.run([], { args: { file: "unused" } });
 		expect(order).toEqual(["first", "gate"]);
 	});
 

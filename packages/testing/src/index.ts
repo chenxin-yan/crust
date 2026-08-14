@@ -2,7 +2,6 @@ import type {
 	CommandPath,
 	CommandShape,
 	CommandShapeAt,
-	CommandTree,
 	Crust,
 	InvocationIO,
 	RunInputArguments,
@@ -15,12 +14,15 @@ import { createPromptIO, type Key } from "@crustjs/prompts/testing";
 export type CaptureIO = Partial<InvocationIO>;
 
 type TypedApp = Crust<any, any, any, any, any, any>;
-type AppShape<App extends TypedApp> = App["_types"]["shape"] & CommandShape;
-type AppTree<App extends TypedApp> = App["_types"]["tree"] & CommandTree;
-type ShapeAtPath<
-	App extends TypedApp,
-	Path extends CommandPath<AppTree<App>>,
-> = CommandShapeAt<AppShape<App>, Path>;
+type AppTypes<App extends TypedApp> =
+	App extends Crust<infer Flags, infer Args, any, any, any, infer Tree>
+		? { shape: CommandShape<Args, Flags, Tree>; tree: Tree }
+		: never;
+type AppTree<App extends TypedApp> = AppTypes<App>["tree"];
+type ShapeAtPath<App extends TypedApp, Path extends CommandPath<AppTree<App>>> = CommandShapeAt<
+	AppTypes<App>["shape"],
+	Path
+>;
 
 export interface CapturedRun {
 	readonly stdout: string;
@@ -32,11 +34,7 @@ export interface CapturedRun {
 export async function captureRun<
 	App extends TypedApp,
 	const Path extends CommandPath<AppTree<App>>,
->(
-	app: App,
-	path: Path,
-	...args: RunInputArguments<ShapeAtPath<App, Path>>
-): Promise<CapturedRun> {
+>(app: App, path: Path, ...args: RunInputArguments<ShapeAtPath<App, Path>>): Promise<CapturedRun> {
 	// Each io callback invocation is one line in a real terminal (core's
 	// defaults are console.log/console.error), so join captured calls with "\n".
 	const stdoutLines: string[] = [];
@@ -140,10 +138,7 @@ export interface InteractiveRun {
 }
 
 /** Run an application with fake terminal streams for its prompts and stderr output. */
-export function runInteractive<
-	App extends TypedApp,
-	const Path extends CommandPath<AppTree<App>>,
->(
+export function runInteractive<App extends TypedApp, const Path extends CommandPath<AppTree<App>>>(
 	app: App,
 	path: Path,
 	...args: RunInputArguments<ShapeAtPath<App, Path>>

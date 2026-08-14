@@ -660,17 +660,19 @@ export type InferFlags<F> = F extends FlagsDef
 // Programmatic invocation input types
 // ────────────────────────────────────────────────────────────────────────────
 
-type InputBaseValue<D> = D extends { schema: StandardSchema }
-	? D extends { type: "boolean" }
-		? boolean
-		: string
-	: D extends { choices: readonly (infer Choice extends string)[] }
-		? Choice
-		: D extends { parse: (raw: string) => unknown }
-			? string
-			: D extends { type: infer T extends ValueType }
-				? Resolve<T>
-				: string;
+type InputBaseValue<D> = D extends { type: "boolean"; noNegate: true }
+	? true
+	: D extends { schema: StandardSchema }
+		? D extends { type: "boolean" }
+			? boolean
+			: string
+		: D extends { choices: readonly (infer Choice extends string)[] }
+			? Choice
+			: D extends { parse: (raw: string) => unknown }
+				? string
+				: D extends { type: infer T extends ValueType }
+					? Resolve<T>
+					: string;
 
 type InputArgValue<D> = D extends { variadic: true } ? InputBaseValue<D>[] : InputBaseValue<D>;
 type InputFlagValue<D> = D extends { multiple: true } ? InputBaseValue<D>[] : InputBaseValue<D>;
@@ -684,9 +686,13 @@ type RequiredArgNames<A extends ArgsDef> = A[number] extends infer D
 /** Values accepted by typed programmatic invocation before argv parsing. */
 export type InputArgs<A extends ArgsDef> = Simplify<
 	{
-		[D in A[number] as D["name"] extends RequiredArgNames<A> ? D["name"] : never]-?: InputArgValue<D>;
+		[D in A[number] as D["name"] extends RequiredArgNames<A>
+			? D["name"]
+			: never]-?: InputArgValue<D>;
 	} & {
-		[D in A[number] as D["name"] extends RequiredArgNames<A> ? never : D["name"]]?: InputArgValue<D>;
+		[D in A[number] as D["name"] extends RequiredArgNames<A>
+			? never
+			: D["name"]]?: InputArgValue<D>;
 	}
 >;
 

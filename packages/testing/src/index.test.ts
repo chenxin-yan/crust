@@ -1,13 +1,36 @@
 import { describe, expect, it } from "bun:test";
 
-import { Crust, defineExtension } from "@crustjs/core";
+import { Crust, defineCommand, defineExtension } from "@crustjs/core";
 import { progress, spinner } from "@crustjs/progress";
 import { input } from "@crustjs/prompts";
 
 import { captureExecute, captureRun, runInteractive } from "./index.ts";
 
 describe("captureRun", () => {
-	it("captures output from a structural runnable as lines", async () => {
+	it("preserves command, argument, and flag types from the application", () => {
+		const deploy = defineCommand("deploy", (command) =>
+			command
+				.args({ name: "target", type: "string", required: true })
+				.flags({ name: "force", type: "boolean" })
+				.action(() => {}),
+		);
+		const app = new Crust("cli").add(deploy);
+
+		function typecheckHarness() {
+			void captureRun(app, ["deploy"], { args: { target: "prod" }, flags: { force: true } });
+			void runInteractive(app, ["deploy"], { args: { target: "prod" } });
+			// @ts-expect-error -- command paths come from the application tree
+			void captureRun(app, ["deply"], { args: { target: "prod" } });
+			// @ts-expect-error -- required arguments remain required through the harness
+			void captureRun(app, ["deploy"]);
+			// @ts-expect-error -- flags come from the selected command
+			void runInteractive(app, ["deploy"], { args: { target: "prod" }, flags: { froce: true } });
+		}
+		void typecheckHarness;
+		expect(true).toBe(true);
+	});
+
+	it("captures output as lines", async () => {
 		const app = new Crust("test-cli").action(({ stdout, stderr }) => {
 			stdout("first");
 			stdout("second");
@@ -36,7 +59,7 @@ describe("captureRun", () => {
 });
 
 describe("runInteractive", () => {
-	it("drives prompts from a structural runnable and merges stderr with prompt frames", async () => {
+	it("drives prompts and merges stderr with prompt frames", async () => {
 		const app = new Crust("test-cli").action(async ({ stderr }) => {
 			stderr("Starting");
 			const name = await input({ message: "Name?" });

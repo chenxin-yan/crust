@@ -107,6 +107,8 @@ export type CommandTree = Record<string, CommandShape>;
 export type CommandPath<
 	Tree extends object,
 	Depth extends readonly unknown[] = readonly [],
+	// TypeScript's instantiation limit is lower than the runtime tree limit; paths deeper than
+	// 15 remain callable as strings rather than making otherwise valid large applications fail TS2589.
 > = Depth["length"] extends 15
 	? readonly string[]
 	: string extends keyof Tree
@@ -147,9 +149,10 @@ export type RunInput<Shape extends CommandShape> = RunSection<"args", InputArgs<
 		readonly raw?: readonly string[];
 	};
 
-export type RunInputArguments<Shape extends CommandShape> = RequiredKeys<RunInput<Shape>> extends never
-	? readonly [input?: RunInput<Shape>]
-	: readonly [input: RunInput<Shape>];
+export type RunInputArguments<Shape extends CommandShape> =
+	RequiredKeys<RunInput<Shape>> extends never
+		? readonly [input?: RunInput<Shape>]
+		: readonly [input: RunInput<Shape>];
 
 export type RunArguments<Shape extends CommandShape> = readonly [
 	...RunInputArguments<Shape>,
@@ -435,27 +438,17 @@ type ShapeWithRequirementFlags<
 	R extends CommandRequirements,
 > = CommandShape<Shape["args"], Shape["flags"] & RequirementOwnedFlags<R>, Shape["children"]>;
 
-type ShapeOfBuilder<B> = B extends CommandDefinitionBuilder<
-	infer Flags,
-	infer A,
-	any,
-	any,
-	any,
-	infer Tree
->
-	? CommandShape<A, Flags, Tree>
-	: never;
+type ShapeOfBuilder<B> =
+	B extends CommandDefinitionBuilder<infer Flags, infer A, any, any, any, infer Tree>
+		? CommandShape<A, Flags, Tree>
+		: never;
 
-type DefinitionShapeForSpelling<D, Spelling extends string> = D extends CommandDefinition<
-	any,
-	infer Name,
-	infer Aliases,
-	infer Shape
->
-	? Spelling extends Name | (string extends Aliases[number] ? never : Aliases[number])
-		? Shape
-		: never
-	: never;
+type DefinitionShapeForSpelling<D, Spelling extends string> =
+	D extends CommandDefinition<any, infer Name, infer Aliases, infer Shape>
+		? Spelling extends Name | (string extends Aliases[number] ? never : Aliases[number])
+			? Shape
+			: never
+		: never;
 
 type DefinitionsTree<Ds extends readonly CommandDefinition<any, any, any, any>[]> = {
 	[K in CommandDefinitionSpellings<Ds[number]>]: DefinitionShapeForSpelling<Ds[number], K>;
@@ -473,7 +466,10 @@ type DefinitionsTree<Ds extends readonly CommandDefinition<any, any, any, any>[]
 export function defineCommand<
 	const Name extends string,
 	Builder extends AnyCommandDefinitionBuilder,
->(name: Name, recipe: CommandRecipe<{}, Builder>): CommandDefinition<{}, Name, readonly [], ShapeOfBuilder<Builder>>;
+>(
+	name: Name,
+	recipe: CommandRecipe<{}, Builder>,
+): CommandDefinition<{}, Name, readonly [], ShapeOfBuilder<Builder>>;
 export function defineCommand<
 	const Name extends string,
 	const C extends CommandConfig,
@@ -539,26 +535,54 @@ function serializeRunArgv(
 	path: readonly string[],
 	input: { readonly args?: object; readonly flags?: object; readonly raw?: readonly string[] },
 ): string[] {
+	// Typed paths deliberately exclude Extension commands because Extensions materialize later.
 	const command = resolveCommand(root, [...path]).command;
 	const argv = [...path];
 	const args = input.args as Record<string, unknown> | undefined;
+	let omittedArgument: string | undefined;
 	for (const definition of command.args ?? []) {
 		const value = args?.[definition.name];
-		if (value === undefined) continue;
+		if (value === undefined) {
+			omittedArgument = definition.name;
+			continue;
+		}
+		if (omittedArgument !== undefined) {
+			throw new CrustError(
+				"PARSE",
+				`Argument <${definition.name}> cannot be provided after omitted argument <${omittedArgument}>`,
+				{ argument: definition.name, reason: "positional-gap" },
+			);
+		}
 		const values = Array.isArray(value) ? value : [value];
-		for (const item of values) argv.push(serializeInputValue(definition, item));
+		for (const item of values) {
+			const serialized = serializeInputValue(definition, item);
+			if (serialized.startsWith("-")) {
+				throw new CrustError(
+					"PARSE",
+					`Argument <${definition.name}> cannot start with "-" in typed run()`,
+					{ argument: definition.name, value: serialized, reason: "option-like-positional" },
+				);
+			}
+			argv.push(serialized);
+		}
 	}
 
 	const flags = input.flags as Record<string, unknown> | undefined;
 	for (const [name, value] of Object.entries(flags ?? {})) {
 		if (value === undefined) continue;
 		const definition = command.effectiveFlags[name];
+		if (definition === undefined) {
+			throw new CrustError("PARSE", `Unknown flag: --${name}`, {
+				flag: name,
+				reason: "unknown-flag",
+			});
+		}
 		const values = Array.isArray(value) ? value : [value];
 		for (const item of values) {
-			if (definition?.type === "boolean" || definition === undefined) {
+			if (definition.type === "boolean") {
 				argv.push(item ? `--${name}` : `--no-${name}`);
 			} else {
-				argv.push(`--${name}`, serializeInputValue(definition, item));
+				argv.push(`--${name}=${serializeInputValue(definition, item)}`);
 			}
 		}
 	}
@@ -590,6 +614,9 @@ function serializeRunArgv(
  *   });
  * ```
  */
+/** Broad application type for APIs that accept any fully-built Crust application. */
+export type AnyCrust = Crust<any, any, any, any, any, any>;
+
 export class Crust<
 	Flags extends FlagsDef = {},
 	A extends ArgsDef = ArgsDef,
