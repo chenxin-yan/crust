@@ -63,7 +63,7 @@ const source = renderManPageMdoc({
 });
 ```
 
-The renderer uses semantic mdoc(7) flag and argument macros. It intentionally summarizes only the root command's immediate visible subcommands; nested commands remain available in the shared full-tree documentation model.
+The renderer uses semantic mdoc(7) flag and argument macros. It intentionally summarizes only the root command's immediate visible subcommands; nested commands remain available in the shared full-tree documentation model. The root command's `meta.sections` are appended after the built-in sections as mdoc `.Sh` sections.
 
 Prepare the command tree through the supported `app.snapshot()` method before calling either API. The package uses `buildCommandDocumentation()` from `@crustjs/core/tooling` internally for its lockstep first-party rendering model.
 
