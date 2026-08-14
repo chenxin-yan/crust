@@ -88,6 +88,41 @@ describe("typed programmatic invocation", () => {
 		expect(ran).toBe("root");
 	});
 
+	it("keeps arrays scalar for non-multiple json flags and non-variadic json args", async () => {
+		let received: unknown;
+		const app = new Crust("cli")
+			.args({ name: "payload", type: "json" })
+			.flags({ name: "config", type: "json" })
+			.action(({ args, flags }) => {
+				received = { args, flags };
+			});
+
+		await app.run([], { args: { payload: [1, 2] }, flags: { config: [3, 4] } });
+
+		expect(received).toEqual({ args: { payload: [1, 2] }, flags: { config: [3, 4] } });
+	});
+
+	it("rejects unserializable JSON input values", async () => {
+		const app = new Crust("cli").flags({ name: "config", type: "json" }).action(() => {});
+
+		await expect(app.run([], { flags: { config: undefined } })).resolves.toBeUndefined();
+		await expect(app.run([], { flags: { config: (() => {}) as never } })).rejects.toMatchObject({
+			code: "PARSE",
+			details: { reason: "unserializable-json" },
+		});
+		// JSON.stringify throws for these instead of returning undefined.
+		await expect(app.run([], { flags: { config: 1n as never } })).rejects.toMatchObject({
+			code: "PARSE",
+			details: { reason: "unserializable-json" },
+		});
+		const cyclic: Record<string, unknown> = {};
+		cyclic.self = cyclic;
+		await expect(app.run([], { flags: { config: cyclic } })).rejects.toMatchObject({
+			code: "PARSE",
+			details: { reason: "unserializable-json" },
+		});
+	});
+
 	it("rejects unknown structured arguments and flags", async () => {
 		const app = new Crust("cli").args({ name: "source", type: "string" }).action(() => {});
 
@@ -110,16 +145,6 @@ describe("typed programmatic invocation", () => {
 		});
 	});
 
-	it("rejects unserializable JSON input values", async () => {
-		const app = new Crust("cli").flags({ name: "config", type: "json" }).action(() => {});
-
-		await expect(app.run([], { flags: { config: undefined } })).resolves.toBeUndefined();
-		await expect(app.run([], { flags: { config: (() => {}) as never } })).rejects.toMatchObject({
-			code: "PARSE",
-			details: { reason: "unserializable-json" },
-		});
-	});
-
 	it("preserves command aliases and pre-parse input types", () => {
 		const rawNumber: StandardSchema<string | undefined, number> = {
 			"~standard": {
@@ -133,11 +158,13 @@ describe("typed programmatic invocation", () => {
 				.args(
 					{ name: "target", type: "string", required: true },
 					{ name: "port", schema: rawNumber },
+					{ name: "region", type: "string", required: true, default: "us" },
 				)
 				.flags(
 					{ name: "mode", type: "string", choices: ["dev", "prod"], required: true },
 					{ name: "retries", type: "string", parse: Number },
 					{ name: "color", type: "boolean", default: true },
+					{ name: "env", type: "string", required: true, default: "prod" },
 					{ name: "version", type: "boolean", noNegate: true },
 				)
 				.action(() => {}),
@@ -158,7 +185,8 @@ describe("typed programmatic invocation", () => {
 			args: { target: "prod", port: "8080" },
 			flags: { mode: "prod", retries: "2", version: true },
 		};
-		// Defaulted flags remain optional in pre-parse input.
+		// Defaulted flags/args remain optional in pre-parse input, even when
+		// declared `required: true` — the default satisfies requiredness at parse time.
 		const withoutDefault: DeployInput = { args: { target: "prod" }, flags: { mode: "dev" } };
 
 		// @ts-expect-error -- required positional argument is missing

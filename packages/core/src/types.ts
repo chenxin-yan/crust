@@ -679,7 +679,10 @@ type InputFlagValue<D> = D extends { multiple: true } ? InputBaseValue<D>[] : In
 
 type RequiredArgNames<A extends ArgsDef> = A[number] extends infer D
 	? D extends { name: infer N extends string; required: true }
-		? N
+		? // A default satisfies `required` at parse time, so the input stays optional.
+			D extends { default: unknown }
+			? never
+			: N
 		: never
 	: never;
 
@@ -697,7 +700,12 @@ export type InputArgs<A extends ArgsDef> = Simplify<
 >;
 
 type RequiredFlagNames<F extends FlagsDef> = {
-	[K in keyof F]: F[K] extends { required: true } ? K : never;
+	// A default satisfies `required` at parse time, so the input stays optional.
+	[K in keyof F]: F[K] extends { required: true }
+		? F[K] extends { default: unknown }
+			? never
+			: K
+		: never;
 }[keyof F];
 
 /** Flag values accepted by typed programmatic invocation before argv parsing. */

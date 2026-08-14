@@ -526,7 +526,14 @@ export function defineCommand(
 
 function serializeInputValue(definition: ArgDef | FlagDef, name: string, value: unknown): string {
 	if (definition.type !== "json") return String(value);
-	const serialized = JSON.stringify(value);
+	let serialized: string | undefined;
+	try {
+		serialized = JSON.stringify(value);
+	} catch {
+		// JSON.stringify throws for bigints and cyclic objects; both are the same
+		// user error as stringify-to-undefined, so fall through to the parse error.
+		serialized = undefined;
+	}
 	if (serialized === undefined) {
 		throw new CrustError("PARSE", `Value for "${name}" is not JSON-serializable`, {
 			value: String(value),
@@ -572,7 +579,9 @@ function serializeRunArgv(
 				{ argument: definition.name, reason: "positional-gap" },
 			);
 		}
-		const values = Array.isArray(value) ? value : [value];
+		// Arrays are repeated occurrences only for variadic args; a scalar json
+		// arg legitimately holds an array as its single value.
+		const values = definition.variadic && Array.isArray(value) ? value : [value];
 		for (const item of values) {
 			const serialized = serializeInputValue(definition, definition.name, item);
 			if (serialized.startsWith("-")) {
@@ -622,7 +631,8 @@ function serializeRunArgv(
 				reason: "unknown-flag",
 			});
 		}
-		const values = Array.isArray(value) ? value : [value];
+		// Same as args: only `multiple` flags treat an array as repeated occurrences.
+		const values = definition.multiple && Array.isArray(value) ? value : [value];
 		for (const item of values) {
 			if (definition.type === "boolean") {
 				argv.push(item ? `--${name}` : `--no-${name}`);
