@@ -37,17 +37,6 @@ interface ExecutableApp {
 
 Any application that implements the required shape is accepted; it does not need to extend `Crust`. An inert `CommandDefinition` implements neither contract and must first be added to an application.
 
-## Argv autocomplete
-
-When `app` is a `Crust` builder, the `argv` parameter of every helper suggests the command and flag spellings the application declares — including flags and subcommands defined inside `defineCommand` recipes — while still accepting any string for positionals and flag values:
-
-```ts
-await captureRun(app, ["deploy", "api", "--env", "staging"]);
-//                     ^ "deploy" and "--env" autocomplete; "api" and "staging" are free text
-```
-
-Hints cover statically known spellings only: commands added with widened (non-literal) names and Extension-contributed commands or flags (such as `--help`) do not appear, and `--no-<flag>` negation forms are not emitted. The union is also flat — every spelling is suggested at every position; parsing still validates ordering at runtime. Structural apps that don't extend `Crust` get no hints. The hint union is exported as `ArgvHints<App>`.
-
 ## `captureRun(app, argv)`
 
 Run an application with captured output. Each `ctx.stdout()`/`ctx.stderr()` call is one line (matching the terminal defaults), and the returned `stdout` and `stderr` fields join those lines with `"\n"`. If the application throws, `error` contains that value and output written before the failure is retained.

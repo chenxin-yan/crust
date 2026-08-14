@@ -65,7 +65,7 @@ interface CommandDefinitionBuilder<
   for the exact signatures.
 </Callout>
 
-This is the configure-only builder passed to a `defineCommand()` recipe. Its fluent methods preserve and refine argument, accumulated flag, and Context types; required capabilities seed `Ctx`. `Sibs` accumulates the sibling command names and aliases registered through `.add()`, `Sp` caches the known flag spellings accumulated through `.flags()` and `.provide()`, and `H` accumulates argv hint literals carried by added definitions (consumed by [`@crustjs/testing` argv autocomplete](/docs/modules/testing#argv-autocomplete)). All three are trailing defaulted parameters. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
+This is the configure-only builder passed to a `defineCommand()` recipe. Its fluent methods preserve and refine argument, accumulated flag, and Context types; required capabilities seed `Ctx`. `Sibs` accumulates the sibling command names and aliases registered through `.add()`, and `Sp` caches the known flag spellings accumulated through `.flags()` and `.provide()`. Both are trailing defaulted parameters. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
 
 ### `CommandDefinition`
 
@@ -74,40 +74,30 @@ interface CommandDefinition<
   R extends CommandRequirements = {},
   Name extends string = string,
   Aliases extends readonly string[] = readonly string[],
-  Hints extends string = string,
 > {
   readonly name: Name;
-  as<const N extends string>(name: N): CommandDefinition<R, N, Aliases, Hints>;
+  as<const N extends string>(name: N): CommandDefinition<R, N, Aliases>;
 }
 ```
 
-A `CommandDefinition<R>` is a frozen value carrying its name, static config, and configure recipe. `.as(name)` returns the same definition under a different name, so one definition can be added twice. Configured aliases travel with the renamed definition and must remain unique among siblings. It has no command node or execution methods. `Hints` carries the recipe's statically known nested command and flag spellings; `.add()` folds them into the parent's `H` parameter for tooling autocomplete.
+A `CommandDefinition<R>` is a frozen value carrying its name, static config, and configure recipe. `.as(name)` returns the same definition under a different name, so one definition can be added twice. Configured aliases travel with the renamed definition and must remain unique among siblings. It has no command node or execution methods.
 
 ### `defineCommand(name, config?, recipe)`
 
 ```ts
-defineCommand<
-  const Name extends string,
-  B extends AnyCommandDefinitionBuilder = AnyCommandDefinitionBuilder,
->(
+defineCommand<const Name extends string>(
   name: Name,
-  recipe: (command: CommandDefinitionBuilder) => B,
-): CommandDefinition<{}, Name, readonly string[], BuilderHints<B>>;
+  recipe: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
+): CommandDefinition<{}, Name>;
 
 interface CommandConfig extends Omit<CommandMeta, "name">, CommandRequirements {}
 
-defineCommand<
-  const Name extends string,
-  const C extends CommandConfig,
-  B extends AnyCommandDefinitionBuilder = AnyCommandDefinitionBuilder,
->(
+defineCommand<const Name extends string, const C extends CommandConfig>(
   name: Name,
   config: C & ValidateCommandConfig<Name, C>,
-  recipe: (command: CommandDefinitionBuilder) => B,
-): CommandDefinition<ConfigRequirements<C>, Name, AliasesOf<C>, BuilderHints<B>>;
+  recipe: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
+): CommandDefinition<ConfigRequirements<C>, Name, AliasesOf<C>>;
 ```
-
-`B` captures the recipe's returned builder, so the nested command and flag spellings it accumulated feed the definition's `Hints` parameter.
 
 Creates an inert reusable definition under a required name. Static `description`, `usage`, `aliases`, `hidden`, and Context `requires` belong in `config`. The recipe builder is typed from the requirement values:
 
@@ -205,7 +195,7 @@ const app = new Crust("serve").flags(
 );
 ```
 
-Repeated `.flags()` calls accumulate local flags and cache their statically known spellings — the union of flag names and aliases that `SpellingsOf` computes — in the `Sp` parameter. Because `Sp` accumulates per call, spellings registered before a widened (dynamically typed) `.flags()` call stay collision-checked at compile time; previously any widened call deferred all subsequent collision checks to runtime. For TypeScript consumers, statically known spelling collisions fail typecheck with `FIX_ALIAS_COLLISION`; runtime validation throws `DEFINITION` for collisions from plain-JS consumers or dynamically built definitions. Generic wrapper functions that keep the flag parameter bounded (e.g. `<F extends FlagsDef>(app: Crust<F, A, Ctx>)`) defer the default `Sp = SpellingsOf<F>` and will not typecheck further `.flags()` calls; type wrapper parameters as `Crust<any, any, any, any, any, any>` instead — runtime validation still applies. A spelling typed as a union of literals (e.g. `short: cond ? "a" : "b"`) is conservatively rejected when any member collides, even though the runtime value might not; widen it to `string` to defer the check to runtime. Promise-returning custom `parse` functions similarly fail with `FIX_ASYNC_PARSE` because parsing consumes their result synchronously; runtime validation rejects declared `async` functions for plain-JS consumers.
+Repeated `.flags()` calls accumulate local flags and cache their statically known spellings — the union of flag names and aliases that `SpellingsOf` computes — in the `Sp` parameter. Because `Sp` accumulates per call, spellings registered before a widened (dynamically typed) `.flags()` call stay collision-checked at compile time; previously any widened call deferred all subsequent collision checks to runtime. For TypeScript consumers, statically known spelling collisions fail typecheck with `FIX_ALIAS_COLLISION`; runtime validation throws `DEFINITION` for collisions from plain-JS consumers or dynamically built definitions. Generic wrapper functions that keep the flag parameter bounded (e.g. `<F extends FlagsDef>(app: Crust<F, A, Ctx>)`) defer the default `Sp = SpellingsOf<F>` and will not typecheck further `.flags()` calls; type wrapper parameters as `Crust<any, any, any, any, any>` instead — runtime validation still applies. A spelling typed as a union of literals (e.g. `short: cond ? "a" : "b"`) is conservatively rejected when any member collides, even though the runtime value might not; widen it to `string` to defer the check to runtime. Promise-returning custom `parse` functions similarly fail with `FIX_ASYNC_PARSE` because parsing consumes their result synchronously; runtime validation rejects declared `async` functions for plain-JS consumers.
 
 Flags declared here are local to this command. Context-owned flags are the propagation mechanism for descendant parsers; downstream code receives their derived Context capability. Boolean flags support generated `--no-<spelling>` negation for the canonical name and every long alias; `noNegate: true` rejects negation with a `PARSE` error and hides the generated label from help, completion, and man output. Names and aliases beginning with `no-` are reserved.
 
@@ -307,8 +297,7 @@ add<const Ds extends readonly CommandDefinition<any>[]>(
   A,
   Ctx,
   Sibs | CommandDefinitionSpellings<Ds[number]>,
-  Sp,
-  H | DefinitionHints<Ds[number]>
+  Sp
 >
 ```
 
