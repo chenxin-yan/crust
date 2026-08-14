@@ -102,16 +102,16 @@ describe("typed programmatic invocation", () => {
 
 		// @ts-expect-error -- required positional argument is missing
 		const missingArg: DeployInput = { flags: { mode: "dev" } };
-		// @ts-expect-error -- unknown argument name
 		const unknownArg: DeployInput = {
+			// @ts-expect-error -- unknown argument name
 			args: { target: "prod", host: "localhost" },
 			flags: { mode: "dev" },
 		};
 		// @ts-expect-error -- choices remain a literal union
 		const invalidChoice: DeployInput = { args: { target: "prod" }, flags: { mode: "staging" } };
-		// @ts-expect-error -- noNegate booleans accept only true
 		const invalidNegation: DeployInput = {
 			args: { target: "prod" },
+			// @ts-expect-error -- noNegate booleans accept only true
 			flags: { mode: "dev", version: false },
 		};
 		void [valid, withoutDefault, missingArg, unknownArg, invalidChoice, invalidNegation];
