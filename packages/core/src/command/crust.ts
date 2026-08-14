@@ -572,7 +572,7 @@ function serializeRunArgv(
 		if (value === undefined) continue;
 		const definition = command.effectiveFlags[name];
 		if (definition === undefined) {
-			throw new CrustError("PARSE", `Unknown flag: --${name}`, {
+			throw new CrustError("PARSE", `Unknown flag "--${name}"`, {
 				flag: name,
 				reason: "unknown-flag",
 			});
