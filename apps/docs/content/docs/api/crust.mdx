@@ -364,11 +364,17 @@ await app.run(
 );
 ```
 
-Structured values are serialized to argv and pass through the normal router, parser, schema, Context, and Command Action pipeline. Positional values beginning with `-` cannot be represented through `run()` and throw a `PARSE` error; use `execute({ argv })` when testing raw terminal syntax.
+Structured values are serialized to argv and pass through the normal router, parser, schema, Context, and Command Action pipeline. The optional `raw` array is appended after a `--` separator and reaches the Command Action unchanged as `rawArgs`:
+
+```ts
+await app.run(["exec"], { args: { command: "lint" }, raw: ["--fix", "src"] });
+```
+
+Positional values beginning with `-`, or equal to a subcommand name or alias of the selected command, cannot be represented through `run()` and throw a `PARSE` error; use `execute({ argv })` when testing raw terminal syntax.
 
 `run()` resolves after successful cleanup. It does not render errors, run Extension `onError` hooks, or change `process.exitCode`. Definition, parse, Context, Command Action, and cancellation failures are thrown unchanged.
 
-Extension-contributed commands are runtime-dynamic and therefore do not appear in the typed command path. Invoke those through `execute({ argv })`.
+Extension-contributed commands and flags are runtime-dynamic and therefore do not appear in the typed command path or input: an Extension flag passed to `run()` throws a `PARSE` error. Invoke those through `execute({ argv })`.
 
 ## `.execute(options?)`
 
