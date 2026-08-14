@@ -896,7 +896,7 @@ describe("updateNotifier post-run hook", () => {
 					executionOrder.push("command");
 				});
 
-			await app.run([], { stderr: () => executionOrder.push("notice") });
+			await app.run([], undefined, { stderr: () => executionOrder.push("notice") });
 
 			expect(executionOrder).toEqual(["command", "notice"]);
 		});
@@ -1012,7 +1012,7 @@ describe("updateNotifier post-run hook", () => {
 				)
 				.action(() => {});
 
-			await app.run([], { stderr: (text) => stderr.push(text) });
+			await app.run([], undefined, { stderr: (text) => stderr.push(text) });
 
 			expect(stderr.join("\n")).toContain("Update available");
 			expect(stderr.join("\n")).toContain("5.0.0");

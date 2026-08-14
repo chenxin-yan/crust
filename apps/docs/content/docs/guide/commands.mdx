@@ -72,10 +72,14 @@ await app.execute();
 Use `run()` from tests or another program:
 
 ```ts
-await app.run(["Ada"], {
-  stdout: (line) => output.push(line),
-  stderr: (line) => diagnostics.push(line),
-});
+await app.run(
+  [],
+  { args: { name: "Ada" } },
+  {
+    stdout: (line) => output.push(line),
+    stderr: (line) => diagnostics.push(line),
+  },
+);
 ```
 
 `run()` throws the original error. `execute()` presents errors through Extension `onError` hooks, sets `process.exitCode`, and resolves. See [Execution Model](/docs/guide/lifecycle).

@@ -31,7 +31,7 @@ function makeBuildNode() {
 }
 
 /** Parse argv against the added build command's grammar. */
-async function parseBuildArgs(argv: string[]) {
+async function parseBuildArgs(flags: Record<string, unknown> = {}) {
 	let captured: { args: Record<string, unknown>; flags: Record<string, unknown> } | undefined;
 	const app = new Crust("test").add(buildCommand);
 	const node = app._node.subCommands.build!;
@@ -42,7 +42,7 @@ async function parseBuildArgs(argv: string[]) {
 		};
 		captured = commandContext;
 	};
-	await app.run(["build", ...argv]);
+	await app.run(["build"], { flags } as never);
 	if (!captured) throw new Error("build action did not run");
 	return captured;
 }
@@ -59,7 +59,7 @@ describe("buildCommand definition", () => {
 	});
 
 	it("has correct default flag values", async () => {
-		const result = await parseBuildArgs([]);
+		const result = await parseBuildArgs();
 		expect(result.flags.entry).toBe("src/cli.ts");
 		expect(result.flags.minify).toBe(true);
 		expect(result.flags.validate).toBe(true);
@@ -74,67 +74,66 @@ describe("buildCommand definition", () => {
 	});
 
 	it("defines --entry/-e flag as string", async () => {
-		const result = await parseBuildArgs(["-e", "src/main.ts"]);
+		const result = await parseBuildArgs({ entry: "src/main.ts" });
 		expect(result.flags.entry).toBe("src/main.ts");
 	});
 
 	it("defines --outfile/-o flag as string", async () => {
-		const result = await parseBuildArgs(["-o", "./my-cli"]);
+		const result = await parseBuildArgs({ outfile: "./my-cli" });
 		expect(result.flags.outfile).toBe("./my-cli");
 	});
 
 	it("defines --outdir/-d flag as string with default 'dist'", async () => {
-		const result = await parseBuildArgs(["-d", "out"]);
+		const result = await parseBuildArgs({ outdir: "out" });
 		expect(result.flags.outdir).toBe("out");
 	});
 
 	it("defines --name/-n flag as string", async () => {
-		const result = await parseBuildArgs(["-n", "my-tool"]);
+		const result = await parseBuildArgs({ name: "my-tool" });
 		expect(result.flags.name).toBe("my-tool");
 	});
 
 	it("defines --minify flag as boolean with default true", async () => {
-		const result = await parseBuildArgs([]);
+		const result = await parseBuildArgs();
 		expect(result.flags.minify).toBe(true);
 	});
 
 	it("supports --no-minify to disable minification", async () => {
-		const result = await parseBuildArgs(["--no-minify"]);
+		const result = await parseBuildArgs({ minify: false });
 		expect(result.flags.minify).toBe(false);
 	});
 
 	it("supports --no-validate to skip pre-compile validation", async () => {
-		const result = await parseBuildArgs(["--no-validate"]);
+		const result = await parseBuildArgs({ validate: false });
 		expect(result.flags.validate).toBe(false);
 	});
 
 	it("defines --env-file as a repeatable string flag", async () => {
-		const result = await parseBuildArgs(["--env-file", ".env", "--env-file", ".env.local"]);
+		const result = await parseBuildArgs({ "env-file": [".env", ".env.local"] });
 		expect(result.flags["env-file"]).toEqual([".env", ".env.local"]);
 	});
 
 	it("supports --package with --stage-dir", async () => {
-		const result = await parseBuildArgs(["--package", "--stage-dir", ".stage"]);
+		const result = await parseBuildArgs({ package: true, "stage-dir": ".stage" });
 		expect(result.flags.package).toBe(true);
 		expect(result.flags["stage-dir"]).toBe(".stage");
 	});
 
 	it("rejects removed --distribute flag", async () => {
-		await expect(parseBuildArgs(["--distribute"])).rejects.toThrow('Unknown flag "--distribute"');
+		await expect(parseBuildArgs({ distribute: true })).rejects.toThrow(
+			'Unknown flag "--distribute"',
+		);
 	});
 
 	it("defines --target/-t as repeatable string flag", async () => {
-		const result = await parseBuildArgs([
-			"--target",
-			"bun-linux-x64-baseline",
-			"--target",
-			"bun-darwin-arm64",
-		]);
+		const result = await parseBuildArgs({
+			target: ["bun-linux-x64-baseline", "bun-darwin-arm64"],
+		});
 		expect(result.flags.target).toEqual(["bun-linux-x64-baseline", "bun-darwin-arm64"]);
 	});
 
 	it("supports -t alias for --target", async () => {
-		const result = await parseBuildArgs(["-t", "bun-linux-x64-baseline"]);
+		const result = await parseBuildArgs({ target: ["bun-linux-x64-baseline"] });
 		expect(result.flags.target).toEqual(["bun-linux-x64-baseline"]);
 	});
 

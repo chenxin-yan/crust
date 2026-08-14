@@ -35,7 +35,7 @@ Use `code` or `.is(code)` instead of matching messages. The constructor's detail
 
 ```ts
 try {
-  await app.run(argv);
+  await app.run(path, input);
 } catch (error) {
   if (error instanceof CrustError && error.is("VALIDATION")) {
     for (const issue of error.details?.issues ?? []) {
@@ -89,7 +89,7 @@ Standard Schema failures are aggregated into one `VALIDATION` error. Paths are n
 
 ## Propagation boundaries
 
-`.run(argv, io)` throws the original error without rendering it or changing process status. Context and Command Action failures are not wrapped in `CrustError`.
+`.run(path, input, io)` throws the original error without rendering it or changing process status. Context and Command Action failures are not wrapped in `CrustError`.
 
 ```ts
 const failure = new Error("database unavailable");
@@ -106,7 +106,7 @@ A prompt cancellation is a standard `DOMException` named `AbortError`. Programma
 
 ```ts
 try {
-  await app.run(argv);
+  await app.run(path, input);
 } catch (error) {
   if (error instanceof Error && error.name === "AbortError") {
     // cancellation

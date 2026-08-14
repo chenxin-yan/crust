@@ -84,7 +84,7 @@ All schema failures in an invocation are aggregated into one `CrustError` with c
 import { CrustError } from "@crustjs/core";
 
 try {
-  await command.run(argv);
+  await command.run(path, input);
 } catch (error) {
   if (error instanceof CrustError && error.is("VALIDATION")) {
     for (const issue of error.details?.issues ?? []) {

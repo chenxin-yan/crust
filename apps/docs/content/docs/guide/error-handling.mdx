@@ -18,7 +18,7 @@ Crust uses exactly four framework error codes:
 import { CrustError } from "@crustjs/core";
 
 try {
-  await app.run(argv);
+  await app.run(path, input);
 } catch (error) {
   if (error instanceof CrustError && error.is("VALIDATION")) {
     console.error(error.details?.issues);
@@ -74,7 +74,7 @@ Prompt cancellation and other cooperative cancellation use a `DOMException` name
 
 ```ts
 try {
-  await app.run(argv);
+  await app.run(path, input);
 } catch (error) {
   if (error instanceof DOMException && error.name === "AbortError") {
     return;

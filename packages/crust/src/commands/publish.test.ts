@@ -14,14 +14,14 @@ import {
 import type { DistributionManifest } from "../utils/distribute.ts";
 
 /** Parse argv against the added publish command's grammar. */
-async function parsePublishArgs(argv: string[]) {
+async function parsePublishArgs(flags: Record<string, unknown> = {}) {
 	let captured: { flags: Record<string, unknown> } | undefined;
 	const app = new Crust("test").add(publishCommand);
 	const node = app._node.subCommands.publish!;
 	node.run = (ctx) => {
 		captured = { flags: (ctx as { flags: Record<string, unknown> }).flags };
 	};
-	await app.run(["publish", ...argv]);
+	await app.run(["publish"], { flags } as never);
 	if (!captured) throw new Error("publish action did not run");
 	return captured;
 }
@@ -67,7 +67,7 @@ function writeStageFixture(tmpDir: string, manifest: DistributionManifest) {
 
 describe("publishCommand definition", () => {
 	it("has correct defaults", async () => {
-		const result = await parsePublishArgs([]);
+		const result = await parsePublishArgs();
 
 		expect(result.flags["stage-dir"]).toBe("dist/npm");
 		expect(result.flags.access).toBe("public");

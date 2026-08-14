@@ -47,9 +47,10 @@ describe("command definitions", () => {
 				}),
 		);
 
-		await new Crust("cli")
-			.add(definition)
-			.run(["copy", "from", "to", "--verbose", "--output", "dist"]);
+		await new Crust("cli").add(definition).run(["copy"], {
+			args: { source: "from", destination: "to" },
+			flags: { verbose: true, output: "dist" },
+		});
 		expect(received).toEqual({
 			args: { source: "from", destination: "to" },
 			flags: { verbose: true, output: "dist" },
@@ -129,7 +130,9 @@ describe("command definitions", () => {
 		);
 		const app = new Crust("cli").add(outer);
 
-		await expect(app.run(["outer", "nested", "--late"])).rejects.toThrow(/Unknown flag/);
+		await expect(app.run(["outer", "nested"], { flags: { late: true } } as never)).rejects.toThrow(
+			/Unknown flag/,
+		);
 	});
 
 	it("propagates Context-owned flags only to definitions added after provide()", async () => {
@@ -149,10 +152,10 @@ describe("command definitions", () => {
 		);
 		const app = new Crust("cli").add(outer);
 
-		await expect(app.run(["outer", "before", "--api-key", "secret"])).rejects.toThrow(
-			/Unknown flag/,
-		);
-		await app.run(["outer", "after", "--api-key", "secret"]);
+		await expect(
+			app.run(["outer", "before"], { flags: { "api-key": "secret" } } as never),
+		).rejects.toThrow(/Unknown flag/);
+		await app.run(["outer", "after"], { flags: { "api-key": "secret" } });
 		expect(calls).toEqual(["secret"]);
 	});
 
@@ -173,7 +176,7 @@ describe("command definitions", () => {
 		);
 		const app = new Crust("cli").provide(logging(), db()).add(deploy);
 
-		await app.run(["deploy", "status", "--verbose"]);
+		await app.run(["deploy", "status"], { flags: { verbose: true } });
 
 		expect(calls).toEqual(["database:true"]);
 	});
@@ -222,7 +225,9 @@ describe("command definitions", () => {
 		const definition = defineCommand("users", (command) => command.action(() => {}));
 		const app = new Crust("cli").flags({ name: "secret", type: "string" }).add(definition);
 
-		await expect(app.run(["users", "--secret", "value"])).rejects.toThrow(/Unknown flag/);
+		await expect(app.run(["users"], { flags: { secret: "value" } } as never)).rejects.toThrow(
+			/Unknown flag/,
+		);
 	});
 
 	it("runs added definitions through run and execute", async () => {

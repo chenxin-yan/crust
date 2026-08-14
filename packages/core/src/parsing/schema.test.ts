@@ -34,7 +34,7 @@ describe("Standard Schema on arg definitions", () => {
 			received = args.port;
 		});
 
-		await app.run(["8080"]);
+		await app.run([], { args: { port: "8080" } });
 		expect(received).toBe(8080);
 	});
 
@@ -59,7 +59,7 @@ describe("Standard Schema on arg definitions", () => {
 				received = args.files;
 			});
 
-		await app.run(["a.txt", "b.txt"]);
+		await app.run([], { args: { files: ["a.txt", "b.txt"] } });
 		expect(received).toEqual(["A.TXT", "B.TXT"]);
 	});
 
@@ -80,7 +80,7 @@ describe("Standard Schema on arg definitions", () => {
 			received = args.name;
 		});
 
-		await app.run(["chenxin"]);
+		await app.run([], { args: { name: "chenxin" } });
 		expect(received).toBe("CHENXIN");
 	});
 });
@@ -94,7 +94,7 @@ describe("Standard Schema on flag definitions", () => {
 				received = flags.port;
 			});
 
-		await app.run(["--port", "9090"]);
+		await app.run([], { flags: { port: "9090" } });
 		expect(received).toBe(9090);
 	});
 
@@ -109,7 +109,7 @@ describe("Standard Schema on flag definitions", () => {
 				received = flags.loud;
 			});
 
-		await app.run(["--loud"]);
+		await app.run([], { flags: { loud: true } });
 		expect(received).toBe("on");
 
 		await app.run([]);
@@ -123,7 +123,7 @@ describe("Standard Schema on flag definitions", () => {
 			.action(() => {});
 
 		try {
-			await app.run(["oops", "--port", "nope"]);
+			await app.run([], { args: { input: "oops" }, flags: { port: "nope" } });
 			expect.unreachable("should have thrown");
 		} catch (error) {
 			expect(error).toBeInstanceOf(CrustError);
@@ -145,7 +145,7 @@ describe("Standard Schema on flag definitions", () => {
 				received = flags.loud;
 			});
 
-		await app.run(["--no-loud"]);
+		await app.run([], { flags: { loud: false } });
 		expect(received).toBe("false");
 	});
 
@@ -160,7 +160,7 @@ describe("Standard Schema on flag definitions", () => {
 				received = flags.tag;
 			});
 
-		await app.run(["--tag", "a", "--tag", "b"]);
+		await app.run([], { flags: { tag: ["a", "b"] } });
 		expect(received).toBe("a,b");
 	});
 });
@@ -186,7 +186,7 @@ describe("schema interaction with Extensions", () => {
 				actionSaw = flags.port;
 			});
 
-		await app.run(["--port", "8080"]);
+		await app.run([], { flags: { port: "8080" } });
 
 		expect(preRunSaw).toBe("8080"); // raw, pre-validation
 		expect(actionSaw).toBe(8080); // schema output
@@ -206,7 +206,7 @@ describe("schema interaction with Extensions", () => {
 			.extend(gate)
 			.action(() => {});
 
-		await app.run(["--x", "whatever"]);
+		await app.run([], { flags: { x: "whatever" } });
 		expect(validated).toBe(false);
 	});
 });

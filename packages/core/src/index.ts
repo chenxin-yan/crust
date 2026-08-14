@@ -29,12 +29,20 @@ export type { UnnamedArgDef } from "./api/flags.ts";
 export type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "./command/snapshot.ts";
 // Command definitions and context
 export type {
+	AnyCrust,
 	CommandConfig,
 	CommandDefinition,
 	CommandDefinitionBuilder,
 	CommandRequirements,
+	CommandPath,
+	CommandShape,
+	CommandShapeAt,
+	CommandTree,
 	CrustCommandContext,
 	RootCommandMeta,
+	RunArguments,
+	RunInput,
+	RunInputArguments,
 } from "./command/crust.ts";
 export { Crust, defineCommand } from "./command/crust.ts";
 // Errors
@@ -55,6 +63,8 @@ export type {
 	CommandMeta,
 	FlagDef,
 	FlagsDef,
+	InputArgs,
+	InputFlags,
 	InvocationIO,
 	NamedFlagDef,
 	ValueType,

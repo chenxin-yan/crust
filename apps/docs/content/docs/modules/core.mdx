@@ -83,6 +83,23 @@ Downstream commands and Contexts list `api` in their `requires` array and consum
 
 See [Types](/docs/api/types) for field-level definitions.
 
+## Typed invocation types
+
+These types back [`run(path, input?, io?)`](/docs/api/crust) and the [`@crustjs/testing`](/docs/modules/testing) helpers.
+
+| Type                | Description                                                                   |
+| ------------------- | ----------------------------------------------------------------------------- |
+| `AnyCrust`          | Any fully-built application; parameter type for APIs accepting arbitrary apps |
+| `CommandTree`       | Compile-time command tree accumulated by `.add()`                             |
+| `CommandPath`       | Every valid typed path through a command tree, including the root path `[]`   |
+| `CommandShape`      | Argument, flag, and children shape of one command                             |
+| `CommandShapeAt`    | Resolve the command shape at a typed path                                     |
+| `RunInput`          | Structured `args`, `flags`, and `raw` values accepted by `run()`              |
+| `RunInputArguments` | Input tuple for a shape: optional when nothing is required                    |
+| `RunArguments`      | Full `run()` rest tuple: input plus optional invocation I/O                   |
+| `InputArgs`         | Pre-parse structured argument values for an argument definition list          |
+| `InputFlags`        | Pre-parse structured flag values for a flag definition record                 |
+
 ## Command boundary types
 
 | Type                  | Description                                                          |

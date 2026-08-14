@@ -38,4 +38,4 @@ Suggestions compare the unknown token with visible sibling command names and ali
 
 `didYouMean()` is a presentation-only `onError` Extension. It handles only `CrustError` values with code `COMMAND_NOT_FOUND`, returns `true` after rendering, and delegates every other failure to the next presenter. Core sets and preserves the nonzero terminal exit code independently of the selected mode.
 
-`app.run(argv)` does not run presentation hooks; it throws the original `COMMAND_NOT_FOUND` error instead.
+`app.run(path, input)` does not run presentation hooks; a command path forced past its static types throws the original `COMMAND_NOT_FOUND` error instead.
