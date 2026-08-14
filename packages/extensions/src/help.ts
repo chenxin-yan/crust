@@ -69,6 +69,13 @@ function formatCommandsSection(command: CommandDocumentation): string[] {
 	return lines;
 }
 
+function formatMetadataSection(section: {
+	readonly title: string;
+	readonly body: string;
+}): string[] {
+	return [bold(cyan(`${section.title}:`)), ...section.body.split("\n").map((line) => `  ${line}`)];
+}
+
 export function renderHelp(command: CommandSnapshot, path?: readonly string[]): string {
 	const model = buildCommandDocumentation(command, path);
 	const heading = model.path.join(" ");
@@ -84,6 +91,9 @@ export function renderHelp(command: CommandSnapshot, path?: readonly string[]): 
 		formatFlagsSection(model.flags),
 	]) {
 		if (section.length > 0) lines.push("", ...section);
+	}
+	for (const section of command.meta.sections ?? []) {
+		lines.push("", ...formatMetadataSection(section));
 	}
 	return lines.join("\n");
 }

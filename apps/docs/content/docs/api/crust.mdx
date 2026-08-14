@@ -124,7 +124,7 @@ The recipe does not execute when the definition is created. It executes once for
 ## Constructor
 
 ```ts
-type RootCommandMeta = Pick<CommandMeta, "description" | "usage">;
+type RootCommandMeta = Pick<CommandMeta, "description" | "usage" | "sections">;
 
 class Crust<
   Flags,
@@ -137,7 +137,7 @@ class Crust<
 new Crust(name: string, meta?: RootCommandMeta)
 ```
 
-Creates a root command builder. Root metadata is declared at construction because aliases and hidden state only apply to subcommands. An empty or whitespace-only name throws a `CrustError` with code `DEFINITION`.
+Creates a root command builder. Root metadata is declared at construction because aliases and hidden state only apply to subcommands. `sections` accepts the same ordered plain-text entries as subcommand metadata. An empty or whitespace-only name throws a `CrustError` with code `DEFINITION`.
 
 ```ts
 const app = new Crust("my-cli", {

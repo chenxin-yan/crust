@@ -174,6 +174,10 @@ export interface ExtensionConfig<
 	readonly flags?: Defs;
 	/** Root command definitions this Extension owns and contributes to the application */
 	readonly commands?: readonly CommandDefinition<any>[];
+	/** Plain-text sections contributed to commands when the application is prepared. */
+	readonly sections?: (
+		snapshot: CommandSnapshot,
+	) => readonly { command: readonly string[]; title: string; body: string }[];
 	readonly hooks?: ExtensionHooks<Defs>;
 }
 
@@ -192,6 +196,9 @@ export interface Extension {
 	readonly name: string;
 	readonly flags?: Readonly<Record<string, ExtensionFlagDef>>;
 	readonly commands?: readonly CommandDefinition<any>[];
+	readonly sections?: (
+		snapshot: CommandSnapshot,
+	) => readonly { command: readonly string[]; title: string; body: string }[];
 	readonly hooks?: ExtensionHooks;
 }
 

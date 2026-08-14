@@ -51,6 +51,35 @@ A contributed command name or alias cannot collide with the application or anoth
 
 Application and Context-owned collisions are rejected by `.flags()` or `.provide()` while building. Extensions join the graph during preparation, so collisions involving an Extension surface consistently from `run()`, `execute()`, or `crust build`, regardless of fluent registration order.
 
+## Command sections
+
+Commands can declare plain-text documentation sections in their metadata. Help renders them after Options, and man-page generation emits one mdoc section per entry:
+
+```ts
+const deploy = defineCommand(
+  "deploy",
+  {
+    sections: [{ title: "Examples", body: "deploy production\ndeploy staging" }],
+  },
+  (command) => command.action(() => {}),
+);
+```
+
+Extensions can append sections to any command after the application tree is prepared:
+
+```ts
+const guidance = defineExtension("guidance", {
+  sections: () => [
+    { command: [], title: "Environment", body: "Set DEPLOY_TOKEN before running." },
+    { command: ["deploy"], title: "Policy", body: "Production deploys require approval." },
+  ],
+});
+```
+
+`command` is a canonical path relative to the root; `[]` targets the root. Unknown paths and aliases are rejected with a `DEFINITION` error instead of being silently omitted. Contributions are appended after authored `meta.sections`, in `.extend()` order. The callback receives a frozen snapshot containing the fully materialized command tree and authored sections; renderers consume only each target command's merged `meta.sections`.
+
+Titles must be non-empty single lines, and bodies are non-empty plain text so the same content is safe for terminal help and mdoc output.
+
 ## Hooks
 
 Hooks run after routing and syntax parsing. Where each hook sits in the invocation, and how failures flow through them, is defined once in the [Execution Model](/docs/guide/lifecycle).

@@ -109,7 +109,7 @@ const target = defineArg("target", { type: "string", required: true });
 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="CommandMeta" />
 
-`hidden` removes a command from user-facing help, completion, man-page, typo-suggestion, and skill listings without disabling direct routing.
+`sections` is an ordered list of plain-text `{ title, body }` entries. Declare it in the metadata passed to `new Crust()` or `defineCommand()`; help and man render the entries after their built-in sections. `hidden` removes a command from user-facing help, completion, man-page, typo-suggestion, and skill listings without disabling direct routing.
 
 ## Command Snapshots
 
@@ -122,7 +122,7 @@ Command Snapshots are readonly, serializable descriptions. They contain no Comma
   name="CommandSnapshot"
 />
 
-`flags` contains effective local and Context-owned flags. Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details receive snapshots rather than mutable runtime internals.
+`flags` contains effective local and Context-owned flags. `meta.sections` contains frozen authored and Extension-contributed sections for that command. Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details receive snapshots rather than mutable runtime internals.
 
 ### `ArgSnapshot`
 
@@ -224,7 +224,7 @@ The map shape used for inferred `ctx` values.
   name="ExtensionConfig"
 />
 
-`commands` entries are `defineCommand()` definitions contributed at the application root — see [Extensions](/docs/guide/extensions).
+`commands` entries are `defineCommand()` definitions contributed at the application root. `sections(snapshot)` returns plain-text sections targeted by canonical command paths relative to that root; contributions append to each target's `meta.sections` in Extension registration order. See [Extensions](/docs/guide/extensions).
 
 ### `Extension`
 

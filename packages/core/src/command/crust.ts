@@ -173,7 +173,7 @@ export interface CommandRequirements {
 export interface CommandConfig extends Omit<CommandMeta, "name">, CommandRequirements {}
 
 /** Static metadata accepted by the root command constructor. */
-export type RootCommandMeta = Pick<CommandMeta, "description" | "usage">;
+export type RootCommandMeta = Pick<CommandMeta, "description" | "usage" | "sections">;
 
 type RequirementContext<R extends CommandRequirements> = RequirementCtxOf<R>;
 
@@ -503,7 +503,11 @@ export function defineCommand(
 	const { requires, ...meta } = config;
 	const internal: CommandDefinitionInternal = {
 		recipe: recipe as CommandDefinitionInternal["recipe"],
-		meta: meta.aliases ? { ...meta, aliases: [...meta.aliases] } : meta,
+		meta: {
+			...meta,
+			...(meta.aliases ? { aliases: [...meta.aliases] } : {}),
+			...(meta.sections ? { sections: meta.sections.map((section) => ({ ...section })) } : {}),
+		},
 		requiredCtxNames: (requires ?? []).map((dep) => dep.contextName),
 	};
 	const named = <const DefName extends string>(
@@ -699,7 +703,7 @@ export class Crust<
 	 * Create a new root command builder.
 	 *
 	 * @param name - The command name.
-	 * @param meta - Optional root description and usage.
+	 * @param meta - Optional root description, usage, and documentation sections.
 	 * @throws {CrustError} `DEFINITION` if name is empty or whitespace-only
 	 */
 	constructor(name: string, meta: RootCommandMeta = {}) {
@@ -709,6 +713,9 @@ export class Crust<
 		this._node = createCommandNode(name);
 		if (meta.description !== undefined) this._node.meta.description = meta.description;
 		if (meta.usage !== undefined) this._node.meta.usage = meta.usage;
+		if (meta.sections !== undefined) {
+			this._node.meta.sections = meta.sections.map((section) => ({ ...section }));
+		}
 		this._ancestorOwnedFlags = {};
 	}
 

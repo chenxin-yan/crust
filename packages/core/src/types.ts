@@ -729,6 +729,8 @@ export interface CommandMeta {
 	description?: string;
 	/** Custom usage string (overrides auto-generated usage) */
 	usage?: string;
+	/** Plain-text sections rendered after built-in command documentation. */
+	sections?: readonly { title: string; body: string }[];
 	/**
 	 * Alternative names that resolve to the same command.
 	 *

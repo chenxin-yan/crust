@@ -36,6 +36,20 @@ describe("renderManPageMdoc", () => {
 		expect(mdoc).toContain("\\&.config is read automatically.");
 	});
 
+	it("appends metadata sections after built-ins and escapes body lines", async () => {
+		const app = new Crust("demo", {
+			sections: [{ title: "Extra notes", body: ".config is supported.\nMore details." }],
+		})
+			.flags({ name: "verbose", type: "boolean" })
+			.action(() => {});
+
+		const root = await app.snapshot();
+		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
+
+		expect(mdoc).toContain(".Sh EXTRA NOTES\n\\&.config is supported.\nMore details.");
+		expect(mdoc.indexOf(".Sh EXTRA NOTES")).toBeGreaterThan(mdoc.indexOf(".Sh OPTIONS"));
+	});
+
 	it("uses explicit date for .Dd", async () => {
 		const app = new Crust("x").action(() => {});
 		const root = await app.snapshot();

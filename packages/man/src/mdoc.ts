@@ -105,6 +105,10 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		}
 		lines.push(".El");
 	}
+	for (const metadataSection of root.meta.sections ?? []) {
+		lines.push(`.Sh ${metadataSection.title.toUpperCase()}`);
+		for (const line of metadataSection.body.split("\n")) lines.push(escapeMdocBodyLine(line));
+	}
 	lines.push("");
 	return lines.join("\n");
 }
