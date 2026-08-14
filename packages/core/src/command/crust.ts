@@ -687,9 +687,6 @@ export class Crust<
 		ctx: Ctx;
 		tree: Tree;
 		shape: CommandShape<A, Flags, Tree>;
-		// Method syntax keeps broad/legacy Crust annotations assignable while
-		// exposing Sp to type-level tests through Parameters<>.
-		spellings(spelling: Sp): void;
 	};
 
 	/** @internal */

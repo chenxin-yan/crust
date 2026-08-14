@@ -18,9 +18,8 @@ export type ScalingSize = (typeof scalingSizes)[number];
 // dist (e.g. the PR changed the public API); rendered as "n/a" instead of failing.
 export interface TypePerfReport extends TypePerfMetrics {
 	scaling: Record<ScalingSize, TypePerfMetrics | null>;
-	// Optional so reports written by older script revisions still compare;
 	// null = the LSP session failed (rendered as "n/a").
-	editor?: EditorLatencyMetrics | null;
+	editor: EditorLatencyMetrics | null;
 }
 
 const metricPatterns = {
@@ -60,8 +59,8 @@ const editorLatencyLabels: Record<keyof EditorLatencyMetrics, string> = {
 };
 
 function editorLatencyRows(
-	base: EditorLatencyMetrics | null | undefined,
-	head: EditorLatencyMetrics | null | undefined,
+	base: EditorLatencyMetrics | null,
+	head: EditorLatencyMetrics | null,
 ): string[] {
 	return (Object.entries(editorLatencyLabels) as [keyof EditorLatencyMetrics, string][]).map(
 		([key, label]) =>
