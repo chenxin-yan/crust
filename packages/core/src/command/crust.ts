@@ -913,8 +913,8 @@ export class Crust<
 	}
 
 	/**
-	 * Invoke this application programmatically: resolve, parse, run the
-	 * Extension hooks and the Command Action for `argv`.
+	 * Invoke this application programmatically: serialize the typed input, resolve, parse,
+	 * run the Extension hooks, and execute the selected Command Action.
 	 *
 	 * Unlike {@link Crust.execute}, `run()` throws the original definition,
 	 * parse, Context, or action failure without rendering it (Extension
