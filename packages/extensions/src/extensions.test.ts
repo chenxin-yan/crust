@@ -252,13 +252,21 @@ describe("built-in extensions", () => {
 		const rootOnly = defineExtension("root-only", {
 			flags: [{ name: "root", type: "boolean", recursive: false }],
 		});
+		let rootSaw: unknown;
 		const app = new Crust("app")
 			.extend(rootOnly)
-			.add(defineCommand("build", (build) => build.action(() => {})));
+			.add(defineCommand("build", (build) => build.action(() => {})))
+			.action(({ flags }) => {
+				rootSaw = (flags as Record<string, unknown>).root;
+			});
 
-		await expect(app.run(["build"], { flags: { root: true } } as never)).rejects.toMatchObject({
-			code: "PARSE",
-		});
+		// Extension flags only exist on the prepared tree, so scoping must be
+		// exercised through execute(): parsed on the root, unknown on the child.
+		await app.execute({ argv: ["--root"] });
+		expect(rootSaw).toBe(true);
+
+		await app.execute({ argv: ["build", "--root"] });
+		expect(getStderr()).toContain("--root");
 	});
 
 	it("noColor injects --color and --no-color into help output", async () => {

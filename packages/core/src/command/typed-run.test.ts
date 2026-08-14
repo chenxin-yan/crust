@@ -59,6 +59,67 @@ describe("typed programmatic invocation", () => {
 		});
 	});
 
+	it("rejects positional values that collide with subcommand names or aliases", async () => {
+		let ran = "";
+		const app = new Crust("cli")
+			.args({ name: "target", type: "string" })
+			.action(() => {
+				ran = "root";
+			})
+			.add(
+				defineCommand("build", { aliases: ["compile"] }, (command) =>
+					command.action(() => {
+						ran = "build";
+					}),
+				),
+			);
+
+		await expect(app.run([], { args: { target: "build" } })).rejects.toMatchObject({
+			code: "PARSE",
+			details: { reason: "ambiguous-positional" },
+		});
+		await expect(app.run([], { args: { target: "compile" } })).rejects.toMatchObject({
+			code: "PARSE",
+			details: { reason: "ambiguous-positional" },
+		});
+		expect(ran).toBe("");
+
+		await app.run([], { args: { target: "other" } });
+		expect(ran).toBe("root");
+	});
+
+	it("rejects unknown structured arguments and flags", async () => {
+		const app = new Crust("cli").args({ name: "source", type: "string" }).action(() => {});
+
+		await expect(app.run([], { args: { bogus: "x" } } as never)).rejects.toMatchObject({
+			code: "PARSE",
+			details: { reason: "unknown-argument", argument: "bogus" },
+		});
+		await expect(app.run([], { flags: { bogus: true } } as never)).rejects.toMatchObject({
+			code: "PARSE",
+			details: { reason: "unknown-flag", flag: "bogus" },
+		});
+	});
+
+	it("throws COMMAND_NOT_FOUND for path elements the router cannot consume", async () => {
+		const app = new Crust("cli").args({ name: "source", type: "string" }).action(() => {});
+
+		await expect(app.run(["missing"] as never)).rejects.toMatchObject({
+			code: "COMMAND_NOT_FOUND",
+			details: { input: "missing" },
+		});
+	});
+
+	it("rejects unserializable JSON input values", async () => {
+		const app = new Crust("cli").flags({ name: "config", type: "json" }).action(() => {});
+
+		await expect(app.run([], { flags: { config: undefined } })).resolves.toBeUndefined();
+		await expect(app.run([], { flags: { config: (() => {}) as never } })).rejects.toMatchObject({
+			code: "PARSE",
+			details: { reason: "unserializable-json" },
+		});
+	});
+
 	it("preserves command aliases and pre-parse input types", () => {
 		const rawNumber: StandardSchema<string | undefined, number> = {
 			"~standard": {
@@ -156,6 +217,43 @@ describe("typed programmatic invocation", () => {
 		type _rejectsUnknown = Expect<
 			Equal<readonly ["command-31"] extends Paths ? true : false, false>
 		>;
+		expect(true).toBe(true);
+	});
+
+	it("widens paths past the 15-level depth cap instead of failing the checker", () => {
+		type Nest<
+			Depth extends number,
+			Acc extends readonly unknown[] = [],
+		> = Acc["length"] extends Depth
+			? { args: []; flags: {}; children: {} }
+			: { args: []; flags: {}; children: { next: Nest<Depth, readonly [...Acc, unknown]> } };
+		type DeepTree = { root: Nest<16> };
+		type Paths = CommandPath<DeepTree>;
+		// Below the cap, paths stay exact; at the cap the tail widens to strings
+		// so deep-but-valid applications keep compiling (TS2589 escape hatch).
+		type _exactShallow = Expect<readonly ["root", "next"] extends Paths ? true : false>;
+		type _rejectsShallowTypo = Expect<
+			Equal<readonly ["root", "nope"] extends Paths ? true : false, false>
+		>;
+		// Segment 16 sits past the cap, so any string is accepted there.
+		type Fifteen = readonly [
+			"root",
+			"next",
+			"next",
+			"next",
+			"next",
+			"next",
+			"next",
+			"next",
+			"next",
+			"next",
+			"next",
+			"next",
+			"next",
+			"next",
+			"next",
+		];
+		type _widenedDeep = Expect<readonly [...Fifteen, "not-a-command"] extends Paths ? true : false>;
 		expect(true).toBe(true);
 	});
 });

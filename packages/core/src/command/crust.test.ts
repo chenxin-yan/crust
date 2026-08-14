@@ -1217,14 +1217,29 @@ describe("Extension application at prepare time", () => {
 			flags: [{ name: "version", type: "boolean", recursive: false }],
 		});
 
+		let ran = false;
 		const app = new Crust("cli")
 			.extend(version)
-			.add(defineCommand("sub", (cmd) => cmd.action(() => {})));
+			.add(defineCommand("sub", (cmd) => cmd.action(() => {})))
+			.action(({ flags }) => {
+				ran = (flags as Record<string, unknown>).version === true;
+			});
 
-		// --version is unknown on the subcommand → PARSE error
-		await expect(app.run(["sub"], { flags: { version: true } } as never)).rejects.toMatchObject({
-			code: "PARSE",
-		});
+		// Extension flags only exist on the prepared tree, so this must go through
+		// execute(): --version parses on the root but is unknown on the subcommand.
+		const stderr: string[] = [];
+		const originalExitCode = process.exitCode;
+		try {
+			await app.execute({ argv: ["--version"], io: { stderr: (text) => stderr.push(text) } });
+			expect(ran).toBe(true);
+			await app.execute({
+				argv: ["sub", "--version"],
+				io: { stderr: (text) => stderr.push(text) },
+			});
+		} finally {
+			process.exitCode = originalExitCode;
+		}
+		expect(stderr.join("\n")).toContain("--version");
 	});
 
 	it("Extension flag colliding with an application flag is a DEFINITION error", async () => {
@@ -1427,11 +1442,14 @@ describe("Extension application at prepare time", () => {
 		);
 
 		await derived.run(["extra"]);
-		// the original builder must not see the derived command: "extra" falls
-		// through to the root action instead of routing to the added subcommand
-		await app.run(["extra"] as never);
+		// the original builder must not see the derived command: its typed tree
+		// has no "extra" path, so the forced path fails to resolve
+		await expect(app.run(["extra"] as never)).rejects.toMatchObject({
+			code: "COMMAND_NOT_FOUND",
+			details: { input: "extra" },
+		});
 
-		expect(calls).toEqual(["root", "extra", "root"]);
+		expect(calls).toEqual(["root", "extra"]);
 	});
 
 	it("materializes Extension command recipes once per builder across runs", async () => {

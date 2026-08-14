@@ -49,6 +49,7 @@ import {
 } from "./invocation.ts";
 import { type CommandNode, createCommandNode } from "./node.ts";
 import { resolveCommand } from "./router.ts";
+import { snapshotCommand } from "./snapshot.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
 
 export { SNAPSHOT_PATH_ENV } from "./invocation.ts";
@@ -523,10 +524,15 @@ export function defineCommand(
 	return named(name);
 }
 
-function serializeInputValue(definition: ArgDef | FlagDef, value: unknown): string {
+function serializeInputValue(definition: ArgDef | FlagDef, name: string, value: unknown): string {
 	if (definition.type !== "json") return String(value);
 	const serialized = JSON.stringify(value);
-	if (serialized === undefined) throw new TypeError("JSON invocation values must be serializable");
+	if (serialized === undefined) {
+		throw new CrustError("PARSE", `Value for "${name}" is not JSON-serializable`, {
+			value: String(value),
+			reason: "unserializable-json",
+		});
+	}
 	return serialized;
 }
 
@@ -536,10 +542,23 @@ function serializeRunArgv(
 	input: { readonly args?: object; readonly flags?: object; readonly raw?: readonly string[] },
 ): string[] {
 	// Typed paths deliberately exclude Extension commands because Extensions materialize later.
-	const command = resolveCommand(root, [...path]).command;
+	const route = resolveCommand(root, [...path]);
+	if (route.argv.length > 0) {
+		// A path element the router could not consume must fail here; letting it
+		// fall through would serialize it ahead of the real positionals.
+		const candidate = route.argv[0] as string;
+		throw new CrustError("COMMAND_NOT_FOUND", `Unknown command "${candidate}".`, {
+			input: candidate,
+			available: Object.keys(route.command.subCommands),
+			commandPath: route.commandPath,
+			parentCommand: snapshotCommand(route.command),
+		});
+	}
+	const command = route.command;
 	const argv = [...path];
 	const args = input.args as Record<string, unknown> | undefined;
 	let omittedArgument: string | undefined;
+	let firstPositional: string | undefined;
 	for (const definition of command.args ?? []) {
 		const value = args?.[definition.name];
 		if (value === undefined) {
@@ -555,7 +574,7 @@ function serializeRunArgv(
 		}
 		const values = Array.isArray(value) ? value : [value];
 		for (const item of values) {
-			const serialized = serializeInputValue(definition, item);
+			const serialized = serializeInputValue(definition, definition.name, item);
 			if (serialized.startsWith("-")) {
 				throw new CrustError(
 					"PARSE",
@@ -563,7 +582,33 @@ function serializeRunArgv(
 					{ argument: definition.name, value: serialized, reason: "option-like-positional" },
 				);
 			}
+			firstPositional ??= serialized;
 			argv.push(serialized);
+		}
+	}
+	for (const name of Object.keys(args ?? {})) {
+		if (args?.[name] === undefined) continue;
+		if (!(command.args ?? []).some((definition) => definition.name === name)) {
+			throw new CrustError("PARSE", `Unknown argument "${name}"`, {
+				argument: name,
+				reason: "unknown-argument",
+			});
+		}
+	}
+	// The router matches subcommand names/aliases before positionals, so a first
+	// positional spelled like a child would silently dispatch that child instead
+	// of the command the typed path selected.
+	if (firstPositional !== undefined) {
+		const value = firstPositional;
+		const collides =
+			value in command.subCommands ||
+			Object.values(command.subCommands).some((child) => child.meta.aliases?.includes(value));
+		if (collides) {
+			throw new CrustError(
+				"PARSE",
+				`Argument value "${value}" matches a subcommand of the selected command; typed run() cannot disambiguate it from a command path`,
+				{ value, reason: "ambiguous-positional" },
+			);
 		}
 	}
 
@@ -582,7 +627,7 @@ function serializeRunArgv(
 			if (definition.type === "boolean") {
 				argv.push(item ? `--${name}` : `--no-${name}`);
 			} else {
-				argv.push(`--${name}=${serializeInputValue(definition, item)}`);
+				argv.push(`--${name}=${serializeInputValue(definition, name, item)}`);
 			}
 		}
 	}
