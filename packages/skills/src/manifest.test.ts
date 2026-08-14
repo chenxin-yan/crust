@@ -5,7 +5,6 @@ import { Crust, defineCommand } from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
 type CommandNode = Parameters<typeof snapshotCommand>[0];
 
-import { annotate } from "./annotations.ts";
 import { buildManifest } from "./manifest.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -13,7 +12,13 @@ import { buildManifest } from "./manifest.ts";
 // ────────────────────────────────────────────────────────────────────────────
 
 function makeCommand(opts: {
-	meta: { name: string; description?: string; usage?: string; hidden?: boolean };
+	meta: {
+		name: string;
+		description?: string;
+		usage?: string;
+		hidden?: boolean;
+		sections?: readonly { title: string; body: string }[];
+	};
 	args?: readonly ArgDef[];
 	flags?: Record<string, FlagDef>;
 	run?: () => void;
@@ -116,23 +121,23 @@ describe("buildManifest", () => {
 			expect(node.children).toEqual([]);
 		});
 
-		it("includes skill-specific instructions when annotated", () => {
-			const cmd = annotate(
-				makeCommand({
-					meta: { name: "deploy" },
-					run() {},
-				}),
-				[
-					"Confirm destructive operations before execution.",
-					"Prefer dry-run flags when available.",
-				],
-			);
+		it("includes command metadata sections", () => {
+			const cmd = makeCommand({
+				meta: {
+					name: "deploy",
+					sections: [
+						{ title: "Safety", body: "Confirm destructive operations before execution." },
+						{ title: "Preview", body: "Prefer dry-run flags when available." },
+					],
+				},
+				run() {},
+			});
 
 			const node = buildManifest(snapshotCommand(cmd));
 
-			expect(node.instructions).toEqual([
-				"Confirm destructive operations before execution.",
-				"Prefer dry-run flags when available.",
+			expect(node.sections).toEqual([
+				{ title: "Safety", body: "Confirm destructive operations before execution." },
+				{ title: "Preview", body: "Prefer dry-run flags when available." },
 			]);
 		});
 	});
@@ -617,14 +622,16 @@ describe("buildManifest", () => {
 			expect(node.children).toEqual([]);
 		});
 
-		it("preserves annotated instructions on nested commands", () => {
-			const deploy = annotate(
-				makeCommand({
-					meta: { name: "deploy" },
-					run() {},
-				}),
-				"Ask for explicit confirmation before production deploys.",
-			);
+		it("preserves metadata sections on nested commands", () => {
+			const deploy = makeCommand({
+				meta: {
+					name: "deploy",
+					sections: [
+						{ title: "Safety", body: "Ask for explicit confirmation before production deploys." },
+					],
+				},
+				run() {},
+			});
 
 			const root = makeCommand({
 				meta: { name: "app" },
@@ -634,21 +641,30 @@ describe("buildManifest", () => {
 			const node = buildManifest(snapshotCommand(root));
 			const child = node.children[0];
 
-			expect(child?.instructions).toEqual([
-				"Ask for explicit confirmation before production deploys.",
+			expect(child?.sections).toEqual([
+				{ title: "Safety", body: "Ask for explicit confirmation before production deploys." },
 			]);
 		});
 
-		it("preserves instructions across Crust builder cloning", () => {
-			const deploy = defineCommand("deploy", { description: "Deploy command" }, (command) =>
-				annotate(command, "Read the environment carefully before execution.").action(() => {}),
+		it("preserves metadata sections across Crust builder cloning", () => {
+			const deploy = defineCommand(
+				"deploy",
+				{
+					description: "Deploy command",
+					sections: [
+						{ title: "Environment", body: "Read the environment carefully before execution." },
+					],
+				},
+				(command) => command.action(() => {}),
 			);
 			const root = new Crust("app").add(deploy);
 
 			const node = buildManifest(snapshotCommand(root._node));
 			const child = node.children[0];
 
-			expect(child?.instructions).toEqual(["Read the environment carefully before execution."]);
+			expect(child?.sections).toEqual([
+				{ title: "Environment", body: "Read the environment carefully before execution." },
+			]);
 		});
 	});
 

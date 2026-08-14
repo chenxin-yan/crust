@@ -261,27 +261,23 @@ const meta: SkillMeta = {
 
 The camelCase properties `allowedTools` and `disableModelInvocation` are emitted as the frontmatter keys `allowed-tools` and `disable-model-invocation`.
 
-## Command-Level Prompt Guidance
+## Command-Level Sections
 
-Use `annotate()` to attach agent-facing instructions to a specific
-command without extending the public `@crustjs/core` builder API.
-
-- `instructions: string` renders as a raw markdown block in `SKILL.md`.
-- `instructions: string[]` renders as bullet list items in `SKILL.md`.
-- Empty or whitespace-only instruction input is ignored.
-- `annotate()` renders command guidance as bullets in the command doc.
+Skills render each command's `meta.sections` after its description as `## Title` markdown sections. The same plain-text sections are also available to other documentation renderers such as help and man pages.
 
 ```ts
 import { Crust, defineCommand } from "@crustjs/core";
-import { annotate } from "@crustjs/skills";
 
-const deploy = defineCommand("deploy", { description: "Deploy the application" }, (command) =>
-  annotate(command, [
-    "Prefer preview modes before running destructive operations.",
-    "Ask for confirmation before production changes.",
-  ]).action(() => {
-    // ...
-  }),
+const deploy = defineCommand(
+  "deploy",
+  {
+    description: "Deploy the application",
+    sections: [{ title: "Safety", body: "Ask for confirmation before production changes." }],
+  },
+  (command) =>
+    command.action(() => {
+      // ...
+    }),
 );
 
 const app = new Crust("my-cli").add(deploy);

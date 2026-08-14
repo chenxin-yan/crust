@@ -6,20 +6,18 @@ import {
 	type DocumentationFlag,
 } from "@crustjs/core/tooling";
 
-import { getSkillCommandAnnotations } from "./annotations.ts";
 import type { ManifestArg, ManifestFlag, ManifestNode } from "./types.ts";
 
 export function buildManifest(command: CommandSnapshot): ManifestNode {
 	return buildNode(buildCommandDocumentation(command), command);
 }
 function buildNode(model: CommandDocumentation, source: CommandSnapshot): ManifestNode {
-	const annotations = getSkillCommandAnnotations(source);
 	return {
 		name: normalizeName(model.name),
 		path: model.path.map(normalizeName),
 		description: model.description,
 		usage: model.usage,
-		instructions: annotations?.instructions,
+		sections: source.meta.sections,
 		runnable: model.hasAction,
 		args: model.args.map(normalizeArg),
 		flags: [...model.flags].sort((a, b) => a.name.localeCompare(b.name)).map(normalizeFlag),

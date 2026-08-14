@@ -33,8 +33,13 @@ function createApp() {
 	return new Crust("demo", { description: "Demo CLI" })
 		.action(() => {})
 		.add(
-			defineCommand("serve", { description: "Start the server" }, (command) =>
-				command.action(() => {}),
+			defineCommand(
+				"serve",
+				{
+					description: "Start the server",
+					sections: [{ title: "Deployment", body: "Check the target environment first." }],
+				},
+				(command) => command.action(() => {}),
 			),
 		);
 }
@@ -52,9 +57,9 @@ describe("writeSkills", () => {
 
 		expect((await readdir(tempRoot)).sort()).toEqual(["deployment-guide", "output"]);
 		expect(await readFile(join(outDir, "demo", "SKILL.md"), "utf8")).toContain("name: demo");
-		expect(await readFile(join(outDir, "demo", "commands", "serve.md"), "utf8")).toContain(
-			"# `demo serve`",
-		);
+		const serve = await readFile(join(outDir, "demo", "commands", "serve.md"), "utf8");
+		expect(serve).toContain("# `demo serve`");
+		expect(serve).toContain("## Deployment\nCheck the target environment first.");
 		expect(JSON.parse(await readFile(join(outDir, "demo", "crust.json"), "utf8"))).toEqual({
 			name: "demo",
 			description: "Demo CLI",

@@ -286,7 +286,7 @@ function commandType(node: ManifestNode): string {
 function renderLeafCommand(node: ManifestNode, root: ManifestNode): string {
 	const lines: string[] = [];
 	lines.push(...renderCommandHeading(node));
-	lines.push(...renderAgentInstructions(node));
+	lines.push(...renderCommandSections(node));
 	lines.push(...renderRunnableCommandSections(node));
 
 	// Parent navigation
@@ -307,7 +307,7 @@ function renderGroupCommand(node: ManifestNode, root: ManifestNode): string {
 	const lines: string[] = [];
 	const filePath = commandFilePath(node);
 	lines.push(...renderCommandHeading(node));
-	lines.push(...renderAgentInstructions(node));
+	lines.push(...renderCommandSections(node));
 
 	// If the group is also runnable, show its own usage
 	if (node.runnable) {
@@ -337,14 +337,8 @@ function renderCommandHeading(node: ManifestNode): string[] {
 	return lines;
 }
 
-function renderAgentInstructions(node: ManifestNode): string[] {
-	const instructions = node.instructions ?? [];
-
-	if (instructions.length === 0) {
-		return [];
-	}
-
-	return ["## Command Instructions", "", ...renderInstructionList(instructions), ""];
+function renderCommandSections(node: ManifestNode): string[] {
+	return (node.sections ?? []).flatMap((section) => [`## ${section.title}`, section.body, ""]);
 }
 
 function renderRunnableCommandSections(node: ManifestNode): string[] {
