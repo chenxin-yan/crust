@@ -16,13 +16,17 @@ It reads `process.argv.slice(2)` by default, presents failures through Extension
 Use `run()` for programmatic invocation:
 
 ```ts
-await app.run(["deploy", "--dry-run"], {
-  stdout: (line) => output.push(line),
-  stderr: (line) => diagnostics.push(line),
-});
+await app.run(
+  ["deploy"],
+  { flags: { "dry-run": true } },
+  {
+    stdout: (line) => output.push(line),
+    stderr: (line) => diagnostics.push(line),
+  },
+);
 ```
 
-It requires explicit argv, honors injected writers, throws the original error, does not render it, and does not modify `process.exitCode`.
+It requires an explicit typed command path, serializes structured input through the normal parser, honors injected writers, throws the original error, does not render it, and does not modify `process.exitCode`. Runtime-dynamic Extension commands use `execute({ argv })` instead.
 
 ## Successful invocation order
 

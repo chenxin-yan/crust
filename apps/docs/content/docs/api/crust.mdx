@@ -344,27 +344,31 @@ const snapshot: CommandSnapshot = await app.snapshot();
 
 The `CommandSnapshot` type is exported from `@crustjs/core` and re-exported from the `@crustjs/core/tooling` subpath; see the [core module reference](/docs/modules/core).
 
-## `.run(argv, io?)`
+## `.run(path, input?, io?)`
 
 ```ts
-import type { InvocationIO } from "@crustjs/core";
-
-run(argv: readonly string[], io?: Partial<InvocationIO>): Promise<void>
+run(path, input?, io?): Promise<void>
 ```
 
-The [`InvocationIO`](/docs/api/types#invocationio) type is exported from `@crustjs/core`.
-
-Invokes an application programmatically. `argv` is required and does not include the executable name.
+Invokes an application programmatically with a command path and structured input inferred from the application. Editors complete command names at each path level plus the selected command's argument and flag names. Required inputs and value types are checked by TypeScript.
 
 ```ts
 const stdout: string[] = [];
-await app.run(["Ada"], {
-  stdout: (text) => stdout.push(text),
-  stderr: (text) => stdout.push(text),
-});
+await app.run(
+  ["greet"],
+  { args: { name: "Ada" }, flags: { loud: true } },
+  {
+    stdout: (text) => stdout.push(text),
+    stderr: (text) => stdout.push(text),
+  },
+);
 ```
 
+Structured values are serialized to argv and pass through the normal router, parser, schema, Context, and Command Action pipeline. Positional values beginning with `-` cannot be represented through `run()` and throw a `PARSE` error; use `execute({ argv })` when testing raw terminal syntax.
+
 `run()` resolves after successful cleanup. It does not render errors, run Extension `onError` hooks, or change `process.exitCode`. Definition, parse, Context, Command Action, and cancellation failures are thrown unchanged.
+
+Extension-contributed commands are runtime-dynamic and therefore do not appear in the typed command path. Invoke those through `execute({ argv })`.
 
 ## `.execute(options?)`
 
@@ -384,6 +388,6 @@ await app.execute();
 `execute()` renders a failure once through Extension `onError` hooks ending in Core's renderer, sets `process.exitCode` to `1`, and resolves. A standard `AbortError` cancellation sets exit code `130` and is offered to `onError` hooks; it renders nothing when no hook claims it.
 
 <Callout type="warn">
-  Use `.action(action)` to define behavior. `.run(argv, io)` is only programmatic invocation;
+  Use `.action(action)` to define behavior. `.run(path, input, io)` is only programmatic invocation;
   `.execute()` is the terminal entry point. Command definitions are inert and expose neither.
 </Callout>
