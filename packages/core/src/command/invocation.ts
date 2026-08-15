@@ -204,7 +204,10 @@ function contributionTarget(
 ): CommandNode {
 	let target = root;
 	for (const segment of command) {
-		const next = target.subCommands[segment];
+		// hasOwn: plain-object lookup would resolve inherited keys like "constructor"
+		const next = Object.hasOwn(target.subCommands, segment)
+			? target.subCommands[segment]
+			: undefined;
 		if (!next) {
 			throw new CrustError(
 				"DEFINITION",

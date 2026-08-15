@@ -143,7 +143,7 @@ describe("command metadata sections", () => {
 	});
 
 	it("rejects unknown and aliased contribution paths", async () => {
-		for (const command of [["missing"], ["b"]]) {
+		for (const command of [["missing"], ["b"], ["constructor"], ["__proto__"], ["toString"]]) {
 			const app = new Crust("cli")
 				.extend(
 					defineExtension("docs", {
