@@ -110,9 +110,7 @@ export function cloneCommandNode(node: CommandNode): CommandNode {
 	}
 
 	const effectiveFlags = cloneFlags(node.effectiveFlags);
-	// Spread first so enumerable symbol-keyed annotations (e.g. skills'
-	// command annotations) survive the clone; then override every structural
-	// field with a decoupled copy.
+	// Spread first, then override every structural field with a decoupled copy.
 	return {
 		...node,
 		// Section objects/arrays are never mutated in place (prepare replaces
