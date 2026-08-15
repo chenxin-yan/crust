@@ -52,7 +52,7 @@ export function resolveSkillSourceSync(source: string | URL): string {
 	);
 }
 
-/** Resolves a packaged skill-source root, including compiled executable staging. */
+/** Async wrapper for resolving a packaged skill-source root. */
 export async function resolveSkillSource(source: string | URL): Promise<string> {
 	return resolveSkillSourceSync(source);
 }
@@ -93,7 +93,7 @@ export function loadPackagedSkillsSync(source: string | URL): readonly PackagedS
 	return skills.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Reads every self-describing skill directory in a packaged skill source. */
+/** Async wrapper for reading every self-describing packaged skill directory. */
 export async function loadPackagedSkills(source: string | URL): Promise<readonly PackagedSkill[]> {
 	return loadPackagedSkillsSync(source);
 }

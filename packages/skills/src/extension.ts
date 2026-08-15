@@ -148,6 +148,7 @@ export function skill(options: SkillOptions): Extension {
 	try {
 		packagedSkills = loadPackagedSkillsSync(options.source);
 	} catch (error) {
+		// A missing packaged asset degrades the advertisement instead of failing startup.
 		if (!(error instanceof SkillSourceUnavailableError)) throw error;
 	}
 	const source = packagedSkills[0] ? dirname(packagedSkills[0].sourceDir) : null;
