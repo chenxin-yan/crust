@@ -15,8 +15,7 @@ import {
 import type { SkillManifestMalformed } from "./errors.ts";
 import { SkillConflictError } from "./errors.ts";
 import { buildManifest } from "./manifest.ts";
-import { renderDistributionMetadata } from "./metadata.ts";
-import { renderSkill } from "./render.ts";
+import { renderDistributionMetadata, renderSkill } from "./render.ts";
 import { SKILL_NAME_PATTERN, isValidSkillName } from "./skill-name.ts";
 import type {
 	AgentResult,

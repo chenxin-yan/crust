@@ -7,8 +7,7 @@ import { loadBundleFiles } from "./bundle.ts";
 import { SkillSourceConflictError } from "./errors.ts";
 import { isValidSkillName } from "./generate.ts";
 import { buildManifest } from "./manifest.ts";
-import { renderDistributionMetadata } from "./metadata.ts";
-import { renderSkill } from "./render.ts";
+import { renderDistributionMetadata, renderSkill } from "./render.ts";
 import type { RenderedFile, SkillKind, SkillMeta } from "./types.ts";
 
 /** Options for rendering an application's skill source. */
@@ -23,12 +22,6 @@ export interface WriteSkillsOptions {
 	readonly description?: string;
 	/** Hand-authored skill bundle directories to include. */
 	readonly bundles?: readonly string[];
-}
-
-interface PreparedSkill {
-	readonly meta: SkillMeta;
-	readonly kind: SkillKind;
-	readonly files: readonly RenderedFile[];
 }
 
 /**
@@ -46,7 +39,8 @@ export async function writeSkills(
 	};
 	validateSkillName(generatedMeta.name);
 
-	const skills: PreparedSkill[] = [
+	const names = new Set([generatedMeta.name]);
+	const skills: { meta: SkillMeta; kind: SkillKind; files: readonly RenderedFile[] }[] = [
 		{
 			meta: generatedMeta,
 			kind: "generated",
@@ -57,6 +51,10 @@ export async function writeSkills(
 	for (const sourceDir of options.bundles ?? []) {
 		const bundle = await loadBundleFiles(sourceDir);
 		validateSkillName(bundle.frontmatter.name);
+		if (names.has(bundle.frontmatter.name)) {
+			throw new SkillSourceConflictError(bundle.frontmatter.name);
+		}
+		names.add(bundle.frontmatter.name);
 		skills.push({
 			meta: {
 				name: bundle.frontmatter.name,
@@ -66,14 +64,6 @@ export async function writeSkills(
 			kind: "bundle",
 			files: bundle.files,
 		});
-	}
-
-	const names = new Set<string>();
-	for (const skill of skills) {
-		if (names.has(skill.meta.name)) {
-			throw new SkillSourceConflictError(skill.meta.name);
-		}
-		names.add(skill.meta.name);
 	}
 
 	const outDir = resolve(options.outDir);
@@ -96,7 +86,7 @@ function validateSkillName(name: string): void {
 }
 
 async function writeFiles(baseDir: string, files: readonly RenderedFile[]): Promise<void> {
-	for (const file of [...files].sort((a, b) => a.path.localeCompare(b.path))) {
+	for (const file of files) {
 		const filePath = join(baseDir, file.path);
 		await mkdir(dirname(filePath), { recursive: true });
 		await writeFile(filePath, file.content);
