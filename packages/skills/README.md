@@ -1,6 +1,6 @@
 # @crustjs/skills
 
-Agent skill generation from Crust command definitions
+Package and install agent skills for Crust CLIs.
 
 ## Install
 
@@ -8,20 +8,9 @@ Agent skill generation from Crust command definitions
 bun add @crustjs/skills
 ```
 
-## Focused imports
+## Build and ship a skill source
 
-The root export remains available. Applications that use one feature can avoid loading the root barrel:
-
-```ts
-import { skill } from "@crustjs/skills/extension";
-import { generateSkill } from "@crustjs/skills/generate";
-```
-
-Available subpaths are `agents`, `annotations`, `bundle`, `extension`, and `generate`.
-
-## Build API
-
-Render your CLI's generated skill and any authored skill bundles into a read-only skill source that can ship with your package:
+Render the generated command-reference skill and any authored bundles once during your package build:
 
 ```ts
 import { writeSkills } from "@crustjs/skills";
@@ -35,7 +24,21 @@ await writeSkills(app, {
 });
 ```
 
-Each skill is written to its own directory under `outDir` with a self-describing `crust.json`. Generated command docs render each command's `meta.sections` as Markdown sections. If a generated and authored skill have the same name, `writeSkills()` throws `SkillSourceConflictError` before replacing `outDir`. The dedicated output directory is replaced on every build so removed skills cannot ship as stale files. `writeSkills()` does not touch the canonical store or agent directories.
+Add `dist/skills` to the package's `files` array. Each skill directory is self-describing and includes a `crust.json` ownership and version marker.
+
+Enable opt-in installation from that read-only source:
+
+```ts
+import { skill } from "@crustjs/skills";
+
+app.extend(
+	skill({
+		source: new URL("../skills", import.meta.url),
+	}),
+);
+```
+
+The contributed `skill` command copies every shipped skill into selected agent directories. Installed copies auto-update when the package source version changes. Update and uninstall operations leave directories without the matching ownership marker untouched. No separate mutable skill store or link-based install mode is used.
 
 ## Documentation
 

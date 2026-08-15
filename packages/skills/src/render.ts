@@ -4,7 +4,6 @@
 
 import { posix } from "node:path";
 
-import { normalizeInstructionList } from "./annotations.ts";
 import type {
 	ManifestArg,
 	ManifestFlag,
@@ -486,7 +485,12 @@ function renderTopLevelInstructions(instructions: string | string[] | undefined)
 		return block ? block.split(/\r?\n/) : [];
 	}
 
-	return renderInstructionList(normalizeInstructionList(instructions));
+	return renderInstructionList(
+		(instructions ?? [])
+			.flatMap((instruction) => instruction.split(/\r?\n/))
+			.map((instruction) => instruction.trim())
+			.filter(Boolean),
+	);
 }
 
 /**

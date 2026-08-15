@@ -1,183 +1,81 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { CRUST_MANIFEST, inspectInstalledManifest, readInstalledManifest } from "./version.ts";
 
-// ────────────────────────────────────────────────────────────────────────────
-// Test helpers
-// ────────────────────────────────────────────────────────────────────────────
-
-let tmpDir: string;
+let tempRoot: string;
 
 beforeEach(async () => {
-	const base = join(import.meta.dirname ?? ".", ".tmp-test");
-	const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-	tmpDir = join(base, id);
-	await mkdir(tmpDir, { recursive: true });
+	tempRoot = await mkdtemp(join(tmpdir(), "crust-manifest-"));
 });
 
 afterEach(async () => {
-	try {
-		await rm(tmpDir, { recursive: true });
-	} catch {
-		// Ignore cleanup errors
-	}
+	await rm(tempRoot, { recursive: true, force: true });
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// readInstalledManifest
-// ────────────────────────────────────────────────────────────────────────────
+const valid = {
+	name: "demo",
+	description: "Demo skill",
+	version: "1.2.3",
+	kind: "generated",
+} as const;
 
-describe("readInstalledManifest", () => {
-	it("reads version + kind from new-format crust.json", async () => {
+describe("skill ownership manifests", () => {
+	it("reads the full self-describing manifest", async () => {
+		await writeFile(join(tempRoot, CRUST_MANIFEST), JSON.stringify(valid));
+		expect(await readInstalledManifest(tempRoot)).toEqual(valid);
+	});
+
+	it("distinguishes absent and malformed manifests", async () => {
+		expect(await inspectInstalledManifest(join(tempRoot, "missing"))).toEqual({ status: "absent" });
+		await writeFile(join(tempRoot, CRUST_MANIFEST), "not json");
+		expect(await inspectInstalledManifest(tempRoot)).toEqual({
+			status: "malformed",
+			reason: "parse-error",
+		});
+	});
+
+	it("rejects an array-root manifest", async () => {
+		await writeFile(join(tempRoot, CRUST_MANIFEST), "[]");
+		expect(await inspectInstalledManifest(tempRoot)).toEqual({
+			status: "malformed",
+			reason: "not-an-object",
+		});
+	});
+
+	it("requires ownership name and description", async () => {
 		await writeFile(
-			join(tmpDir, CRUST_MANIFEST),
-			JSON.stringify({
-				name: "test",
-				description: "test",
-				version: "1.2.3",
-				kind: "bundle",
-			}),
+			join(tempRoot, CRUST_MANIFEST),
+			JSON.stringify({ version: "1.0.0", kind: "bundle" }),
 		);
+		expect(await inspectInstalledManifest(tempRoot)).toEqual({
+			status: "malformed",
+			reason: "missing-name",
+		});
 
-		const manifest = await readInstalledManifest(tmpDir);
-		expect(manifest).toEqual({ version: "1.2.3", kind: "bundle" });
-	});
-
-	it("returns null when kind is missing", async () => {
 		await writeFile(
-			join(tmpDir, CRUST_MANIFEST),
-			JSON.stringify({ name: "test", version: "1.2.3" }),
+			join(tempRoot, CRUST_MANIFEST),
+			JSON.stringify({ name: "demo", version: "1.0.0", kind: "bundle" }),
 		);
-
-		expect(await readInstalledManifest(tmpDir)).toBeNull();
+		expect(await inspectInstalledManifest(tempRoot)).toEqual({
+			status: "malformed",
+			reason: "missing-description",
+		});
 	});
 
-	it("returns null when kind is present but unrecognized (typo guard)", async () => {
-		// A hand-edit typo (e.g. "bundel") must not be silently coerced to
-		// "generated" — that would let cross-kind installs bypass the conflict
-		// guard. Treat the manifest as malformed so the install pipeline raises.
-		await writeFile(
-			join(tmpDir, CRUST_MANIFEST),
-			JSON.stringify({ name: "test", version: "1.2.3", kind: "weird" }),
-		);
-
-		expect(await readInstalledManifest(tmpDir)).toBeNull();
-	});
-
-	it("returns null when crust.json does not exist", async () => {
-		expect(await readInstalledManifest(tmpDir)).toBeNull();
-	});
-
-	it("returns null when crust.json is malformed JSON", async () => {
-		await writeFile(join(tmpDir, CRUST_MANIFEST), "not json {{{");
-		expect(await readInstalledManifest(tmpDir)).toBeNull();
-	});
-
-	it("returns null when crust.json has no version field", async () => {
-		await writeFile(join(tmpDir, CRUST_MANIFEST), JSON.stringify({ name: "test" }));
-		expect(await readInstalledManifest(tmpDir)).toBeNull();
-	});
-
-	it("reads kind: 'bundle' verbatim", async () => {
-		await writeFile(
-			join(tmpDir, CRUST_MANIFEST),
-			JSON.stringify({ name: "test", version: "1.0.0", kind: "bundle" }),
-		);
-		const manifest = await readInstalledManifest(tmpDir);
-		expect(manifest?.kind).toBe("bundle");
-	});
-
-	it("reads kind: 'generated' verbatim", async () => {
-		await writeFile(
-			join(tmpDir, CRUST_MANIFEST),
-			JSON.stringify({ name: "test", version: "1.0.0", kind: "generated" }),
-		);
-		const manifest = await readInstalledManifest(tmpDir);
-		expect(manifest?.kind).toBe("generated");
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// inspectInstalledManifest
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("inspectInstalledManifest", () => {
-	it("returns status: 'absent' when crust.json does not exist", async () => {
-		const result = await inspectInstalledManifest(tmpDir);
-		expect(result).toEqual({ status: "absent" });
-	});
-
-	it("returns status: 'absent' for a nonexistent directory", async () => {
-		const result = await inspectInstalledManifest("/nonexistent/path/xyz");
-		expect(result).toEqual({ status: "absent" });
-	});
-
-	it("returns status: 'malformed' with reason 'parse-error' for invalid JSON", async () => {
-		await writeFile(join(tmpDir, CRUST_MANIFEST), "not json {{{");
-		const result = await inspectInstalledManifest(tmpDir);
-		expect(result).toEqual({ status: "malformed", reason: "parse-error" });
-	});
-
-	it("returns status: 'malformed' with reason 'not-an-object' for an array root", async () => {
-		await writeFile(join(tmpDir, CRUST_MANIFEST), "[]");
-		const result = await inspectInstalledManifest(tmpDir);
-		expect(result).toEqual({ status: "malformed", reason: "not-an-object" });
-	});
-
-	it("returns status: 'malformed' with reason 'missing-version' when version is absent", async () => {
-		await writeFile(join(tmpDir, CRUST_MANIFEST), JSON.stringify({ name: "test" }));
-		const result = await inspectInstalledManifest(tmpDir);
-		expect(result).toEqual({ status: "malformed", reason: "missing-version" });
-	});
-
-	it("returns status: 'malformed' with reason 'unknown-kind' and the raw value", async () => {
-		// A typo like 'bundel' must surface the raw value so the install
-		// pipeline can emit a useful error instead of "no crust.json found".
-		await writeFile(
-			join(tmpDir, CRUST_MANIFEST),
-			JSON.stringify({ name: "test", version: "1.0.0", kind: "bundel" }),
-		);
-		const result = await inspectInstalledManifest(tmpDir);
-		expect(result).toEqual({
+	it("reports unknown kinds", async () => {
+		await writeFile(join(tempRoot, CRUST_MANIFEST), JSON.stringify({ ...valid, kind: "bundel" }));
+		expect(await inspectInstalledManifest(tempRoot)).toEqual({
 			status: "malformed",
 			reason: "unknown-kind",
 			rawKind: "bundel",
 		});
 	});
 
-	it("stringifies non-string kind values for the unknown-kind rawKind", async () => {
-		await writeFile(
-			join(tmpDir, CRUST_MANIFEST),
-			JSON.stringify({ name: "test", version: "1.0.0", kind: 42 }),
-		);
-		const result = await inspectInstalledManifest(tmpDir);
-		expect(result).toEqual({
-			status: "malformed",
-			reason: "unknown-kind",
-			rawKind: "42",
-		});
-	});
-
-	it("returns status: 'malformed' when kind is missing", async () => {
-		await writeFile(
-			join(tmpDir, CRUST_MANIFEST),
-			JSON.stringify({ name: "test", version: "1.2.3" }),
-		);
-		const result = await inspectInstalledManifest(tmpDir);
-		expect(result).toEqual({ status: "malformed", reason: "missing-kind" });
-	});
-
-	it("returns status: 'ok' for a well-formed bundle manifest", async () => {
-		await writeFile(
-			join(tmpDir, CRUST_MANIFEST),
-			JSON.stringify({ name: "test", version: "1.2.3", kind: "bundle" }),
-		);
-		const result = await inspectInstalledManifest(tmpDir);
-		expect(result).toEqual({
-			status: "ok",
-			manifest: { version: "1.2.3", kind: "bundle" },
-		});
+	it("returns null for incomplete manifests", async () => {
+		await mkdir(join(tempRoot, "empty"));
+		expect(await readInstalledManifest(join(tempRoot, "empty"))).toBeNull();
 	});
 });

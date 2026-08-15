@@ -16,19 +16,18 @@ interface AgentConfig {
 }
 
 const PROJECT_UNIVERSAL_SKILLS_DIR = join(".agents", "skills");
-const PROJECT_CANONICAL_SKILLS_DIR = join(".crust", "skills");
 
 function configHome(home: string): string {
+	if (home !== homedir()) {
+		return join(home, ".config");
+	}
+
 	const xdg = process.env.XDG_CONFIG_HOME?.trim();
 	return xdg && xdg.length > 0 ? xdg : join(home, ".config");
 }
 
 function universalGlobalSkillsDir(home: string): string {
 	return join(home, ".agents", "skills");
-}
-
-function canonicalGlobalSkillsDir(home: string): string {
-	return join(home, ".crust", "skills");
 }
 
 export function resolveEffectiveScope(scope: Scope): Scope {
@@ -333,13 +332,23 @@ export function isUniversalAgent(agent: AgentTarget): boolean {
 	return AGENTS[agent].class === "universal";
 }
 
+export interface DetectInstalledAgentsOptions {
+	/** Test-only hook to override command detection. */
+	commandChecker?: (command: string) => Promise<boolean>;
+}
+
 /**
  * Detects installed additional agents by checking PATH for their CLI binaries.
  *
  * Universal agents are intentionally not detected here so callers can always
  * present them as a single optional "Universal" install target.
  */
-export async function detectInstalledAgents(): Promise<AgentTarget[]> {
+export async function detectInstalledAgents(
+	options: DetectInstalledAgentsOptions = {},
+): Promise<AgentTarget[]> {
+	const commandChecker =
+		options.commandChecker ??
+		((command: string) => Promise.resolve(Bun.which(command, { PATH: process.env.PATH }) !== null));
 	const detected: AgentTarget[] = [];
 
 	for (const agent of getAdditionalAgents()) {
@@ -347,7 +356,7 @@ export async function detectInstalledAgents(): Promise<AgentTarget[]> {
 		let installed = false;
 
 		for (const command of commands) {
-			if (Bun.which(command, { PATH: process.env.PATH }) !== null) {
+			if (await commandChecker(command)) {
 				installed = true;
 				break;
 			}
@@ -371,15 +380,4 @@ export function resolveAgentPath(agent: AgentTarget, scope: Scope, name: string)
 		return join(process.cwd(), cfg.projectSkillsDir, name);
 	}
 	return join(cfg.globalSkillsDir(homedir()), name);
-}
-
-/**
- * Resolves the canonical skill bundle path used by Crust.
- */
-export function resolveCanonicalSkillPath(scope: Scope, name: string): string {
-	if (resolveEffectiveScope(scope) === "project") {
-		return join(process.cwd(), PROJECT_CANONICAL_SKILLS_DIR, name);
-	}
-
-	return join(canonicalGlobalSkillsDir(homedir()), name);
 }
