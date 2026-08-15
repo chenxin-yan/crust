@@ -240,10 +240,9 @@ const AGENTS: Record<AgentTarget, AgentConfig> = {
 	},
 	pi: {
 		label: "Pi",
-		class: "additional",
-		projectSkillsDir: join(".pi", "skills"),
-		globalSkillsDir: (home) => join(home, ".pi", "agent", "skills"),
-		detectCommands: ["pi"],
+		class: "universal",
+		projectSkillsDir: PROJECT_UNIVERSAL_SKILLS_DIR,
+		globalSkillsDir: universalGlobalSkillsDir,
 	},
 	pochi: {
 		label: "Pochi",

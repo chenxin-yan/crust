@@ -83,8 +83,8 @@ describe("resolveAgentPath", () => {
 		}
 	});
 
-	it("resolves Warp and Zed to canonical universal dirs", () => {
-		for (const agent of ["warp", "zed"] as const) {
+	it("resolves Pi, Warp, and Zed to canonical universal dirs", () => {
+		for (const agent of ["pi", "warp", "zed"] as const) {
 			expect(resolveAgentPath(agent, "project", "my-cli")).toBe(
 				join(process.cwd(), ".agents", "skills", "my-cli"),
 			);
@@ -135,6 +135,7 @@ describe("agent registry", () => {
 
 		expect(universal).toContain("opencode");
 		expect(universal).toContain("codex");
+		expect(universal).toContain("pi");
 		expect(universal).toContain("warp");
 		expect(universal).toContain("zed");
 		expect(additional).toContain("antigravity");
