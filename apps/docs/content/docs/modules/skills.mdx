@@ -76,7 +76,7 @@ If the package-relative source cannot be found, Crust also checks for the same s
 
 ## Updates and ownership
 
-Every copied skill retains its `crust.json` ownership marker. Before ordinary commands run, the extension compares installed versions with the packaged source and refreshes stale copies. Set `autoUpdate: false` to disable this hook. Any version *difference* counts as stale — there is no ordering, so two CLI versions sharing a global scope will each rewrite the installed copy toward their own packaged version.
+Every copied skill retains its `crust.json` ownership marker. Before ordinary commands run, the extension compares installed versions with the packaged source and refreshes stale copies. Set `autoUpdate: false` to disable this hook. Any version _difference_ counts as stale — there is no ordering, so two CLI versions sharing a global scope will each rewrite the installed copy toward their own packaged version.
 
 Install, update, and uninstall refuse to clobber an agent directory without a valid marker for the requested skill. This protects manually authored and third-party directories. There is no mutable Crust store: the package skill source remains authoritative.
 
