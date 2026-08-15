@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { join } from "node:path";
 
 import type { StandardSchema } from "@crustjs/utils/schema";
 
@@ -1030,13 +1030,12 @@ describe("Crust .extend()", () => {
 		expect(ext.flags).toEqual({ x: { type: "boolean" } });
 	});
 
-	it("exposes an async build hook with a frozen snapshot and absolute outDir", async () => {
+	it("exposes an async build hook with a frozen snapshot and outDir", async () => {
 		const outDir = join(tmpdir(), "crust-build");
 		let completed = false;
 		const extension = defineExtension("builder", {
 			async build(ctx) {
 				expect(Object.isFrozen(ctx.snapshot)).toBe(true);
-				expect(isAbsolute(ctx.outDir)).toBe(true);
 				expect(ctx.outDir).toBe(outDir);
 				await Promise.resolve();
 				completed = true;
