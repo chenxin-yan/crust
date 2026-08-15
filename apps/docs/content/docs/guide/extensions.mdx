@@ -53,7 +53,7 @@ Application and Context-owned collisions are rejected by `.flags()` or `.provide
 
 ## Command sections
 
-Commands can declare plain-text documentation sections in their metadata. Help renders them after Options, and man-page generation emits one mdoc section per entry:
+Commands can declare plain-text documentation sections in their metadata. Help renders them after Options, and man-page generation emits one mdoc section per root-level entry (subcommand sections appear in help only):
 
 ```ts
 const deploy = defineCommand(
@@ -65,7 +65,7 @@ const deploy = defineCommand(
 );
 ```
 
-Extensions can append sections to any command after the application tree is prepared:
+Extensions can append sections to any command while the application prepares:
 
 ```ts
 const guidance = defineExtension("guidance", {

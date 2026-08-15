@@ -7,7 +7,12 @@ import {
 } from "@crustjs/core/tooling";
 
 function escapeMdocBodyLine(line: string): string {
-	return line.startsWith(".") ? `\\&${line}` : line;
+	// Both `.` and `'` start roff control lines.
+	return /^[.']/.test(line) ? `\\&${line}` : line;
+}
+function shTitle(title: string): string {
+	// Backslashes would otherwise start roff escape sequences inside `.Sh`.
+	return title.toUpperCase().replace(/\\/g, "\\e");
 }
 function dtTitle(name: string): string {
 	const upper = name.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
@@ -106,7 +111,7 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		lines.push(".El");
 	}
 	for (const metadataSection of root.meta.sections ?? []) {
-		lines.push(`.Sh ${metadataSection.title.toUpperCase()}`);
+		lines.push(`.Sh ${shTitle(metadataSection.title)}`);
 		for (const line of metadataSection.body.split("\n")) lines.push(escapeMdocBodyLine(line));
 	}
 	lines.push("");

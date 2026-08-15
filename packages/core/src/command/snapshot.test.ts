@@ -159,6 +159,44 @@ describe("command metadata sections", () => {
 		}
 	});
 
+	it("rejects malformed authored section data", async () => {
+		const badSections: unknown[] = [
+			[{ title: "", body: "Body" }],
+			[{ title: "   ", body: "Body" }],
+			[{ title: "Notes", body: "" }],
+			[{ title: 1, body: "Body" }],
+			[{ title: "Notes", body: null }],
+			[null],
+		];
+		for (const sections of badSections) {
+			const app = new Crust("cli", { sections: sections as never });
+			await expect(app.snapshot()).rejects.toMatchObject({
+				code: "DEFINITION",
+				details: { subject: "command", name: "cli", reason: "invalid-sections" },
+			});
+		}
+	});
+
+	it("rejects malformed Extension section contributions", async () => {
+		const badReturns: unknown[] = [
+			{ command: [], title: "Notes", body: "Body" }, // not an array
+			[{ title: "Notes", body: "Body" }], // missing command
+			[{ command: "build", title: "Notes", body: "Body" }],
+			[{ command: [1], title: "Notes", body: "Body" }],
+			[{ command: [], title: "", body: "Body" }],
+			[{ command: [], title: "Notes", body: "   " }],
+		];
+		for (const contributions of badReturns) {
+			const app = new Crust("cli").extend(
+				defineExtension("docs", { sections: () => contributions as never }),
+			);
+			await expect(app.snapshot()).rejects.toMatchObject({
+				code: "DEFINITION",
+				details: { subject: "extension", name: "docs", reason: "invalid-sections" },
+			});
+		}
+	});
+
 	it("rejects CR/LF in authored and contributed section titles", async () => {
 		const authored = new Crust("cli", {
 			sections: [{ title: "Injected\nheading", body: "Body" }],
