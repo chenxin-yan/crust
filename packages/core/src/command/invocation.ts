@@ -3,13 +3,14 @@ import {
 	finishInvocation,
 	type Extension,
 	type ExtensionContext,
+	type ExtensionSectionContribution,
 	type InvocationOutcome,
 } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import { parseArgs, validateParsed } from "../parsing/parser.ts";
 import { applySchemas } from "../parsing/schema.ts";
 import { cloneFlagSpellings } from "../parsing/spellings.ts";
-import type { FlagDef, FlagsDef, InvocationIO } from "../types.ts";
+import type { CommandSection, FlagDef, FlagsDef, InvocationIO } from "../types.ts";
 import { normalizeFlag } from "../validation/normalize.ts";
 import type { CommandDefinition } from "./crust.ts";
 import type { CommandNode } from "./node.ts";
@@ -114,10 +115,9 @@ export function cloneCommandNode(node: CommandNode): CommandNode {
 	// field with a decoupled copy.
 	return {
 		...node,
-		meta: {
-			...node.meta,
-			sections: node.meta.sections?.map((section) => ({ ...section })),
-		},
+		// Section objects/arrays are never mutated in place (prepare replaces
+		// them wholesale), so sharing them here is safe.
+		meta: { ...node.meta },
 		localFlags: cloneFlags(node.localFlags),
 		ownedFlags: cloneFlags(node.ownedFlags),
 		effectiveFlags,
@@ -135,10 +135,8 @@ function freezeTree(node: CommandNode): void {
 	Object.freeze(node.localFlags);
 	Object.freeze(node.ownedFlags);
 	Object.freeze(node.effectiveFlags);
-	if (node.meta.sections) {
-		for (const section of node.meta.sections) Object.freeze(section);
-		Object.freeze(node.meta.sections);
-	}
+	// Section objects are already frozen by validateSection.
+	if (node.meta.sections) Object.freeze(node.meta.sections);
 	Object.freeze(node.meta);
 	Object.freeze(node.contexts);
 	Object.freeze(node.extensions);
@@ -147,52 +145,34 @@ function freezeTree(node: CommandNode): void {
 	Object.freeze(node.subCommands);
 }
 
-type CommandSection = NonNullable<CommandNode["meta"]["sections"]>[number];
-type ExtensionSection = CommandSection & { readonly command: readonly string[] };
+/** Who authored the sections being validated; error labels derive from this. */
+type SectionOwner = { subject: "command" | "extension"; name: string };
 
-function invalidSections(
-	owner: string,
-	name: string,
-	subject: "command" | "extension",
-): CrustError {
-	return new CrustError("DEFINITION", `${owner} contains invalid documentation sections`, {
-		subject,
-		name,
-		reason: "invalid-sections",
-	});
+function invalidSections({ subject, name }: SectionOwner): CrustError {
+	const label = subject === "command" ? "Command" : "Extension";
+	return new CrustError(
+		"DEFINITION",
+		`${label} "${name}" contains invalid documentation sections`,
+		{ subject, name, reason: "invalid-sections" },
+	);
 }
 
-function validateSection(
-	section: unknown,
-	owner: string,
-	name: string,
-	subject: "command" | "extension",
-): CommandSection {
-	if (
-		section === null ||
-		typeof section !== "object" ||
-		typeof (section as CommandSection).title !== "string" ||
-		!(section as CommandSection).title.trim() ||
-		/[\r\n]/.test((section as CommandSection).title) ||
-		typeof (section as CommandSection).body !== "string" ||
-		!(section as CommandSection).body.trim()
-	) {
-		throw invalidSections(owner, name, subject);
+const isText = (value: unknown): value is string => typeof value === "string" && !!value.trim();
+
+function validateSection(section: unknown, owner: SectionOwner): CommandSection {
+	const { title, body } = (section ?? {}) as Partial<CommandSection>;
+	if (!isText(title) || /[\r\n]/.test(title) || !isText(body)) {
+		throw invalidSections(owner);
 	}
-	return Object.freeze({
-		title: (section as CommandSection).title,
-		body: (section as CommandSection).body,
-	});
+	return Object.freeze({ title, body });
 }
 
 function validateAuthoredSections(node: CommandNode): void {
-	if (node.meta.sections !== undefined) {
-		if (!Array.isArray(node.meta.sections)) {
-			throw invalidSections(`Command "${node.meta.name}"`, node.meta.name, "command");
-		}
-		node.meta.sections = node.meta.sections.map((section) =>
-			validateSection(section, `Command "${node.meta.name}"`, node.meta.name, "command"),
-		);
+	const sections = node.meta.sections;
+	if (sections !== undefined) {
+		const owner: SectionOwner = { subject: "command", name: node.meta.name };
+		if (!Array.isArray(sections)) throw invalidSections(owner);
+		node.meta.sections = sections.map((section) => validateSection(section, owner));
 	}
 	for (const sub of Object.values(node.subCommands)) validateAuthoredSections(sub);
 }
@@ -226,25 +206,19 @@ function applyExtensionSections(
 	snapshot: CommandSnapshot,
 ): void {
 	if (!extension.sections) return;
+	const owner: SectionOwner = { subject: "extension", name: extension.name };
 	const contributions = extension.sections(snapshot);
-	if (!Array.isArray(contributions)) {
-		throw invalidSections(`Extension "${extension.name}"`, extension.name, "extension");
-	}
-	for (const contribution of contributions as readonly ExtensionSection[]) {
+	if (!Array.isArray(contributions)) throw invalidSections(owner);
+	for (const contribution of contributions as readonly ExtensionSectionContribution[]) {
+		// validateSection rejects null/non-object contributions, so reading
+		// `.command` afterwards is safe.
+		const section = validateSection(contribution, owner);
 		if (
-			contribution === null ||
-			typeof contribution !== "object" ||
 			!Array.isArray(contribution.command) ||
 			!contribution.command.every((segment) => typeof segment === "string")
 		) {
-			throw invalidSections(`Extension "${extension.name}"`, extension.name, "extension");
+			throw invalidSections(owner);
 		}
-		const section = validateSection(
-			contribution,
-			`Extension "${extension.name}"`,
-			extension.name,
-			"extension",
-		);
 		const target = contributionTarget(root, contribution.command, extension);
 		target.meta.sections = [...(target.meta.sections ?? []), section];
 	}

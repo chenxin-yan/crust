@@ -2,6 +2,7 @@ import type { CommandDefinition } from "../command/crust.ts";
 import type { CommandSnapshot } from "../command/snapshot.ts";
 import { CrustError } from "../errors.ts";
 import type {
+	CommandSection,
 	FlagDef,
 	FlagsDef,
 	InferFlags,
@@ -167,6 +168,11 @@ export type InferExtensionFlags<Defs extends readonly NamedExtensionFlagDef[]> =
 	[K in keyof NamedFlagsRecord<Defs>]: InferExtensionFlag<NamedFlagsRecord<Defs>[K]>;
 };
 
+/** A documentation section an Extension contributes to one command path. */
+export type ExtensionSectionContribution = CommandSection & {
+	readonly command: readonly string[];
+};
+
 export interface ExtensionConfig<
 	Defs extends readonly NamedExtensionFlagDef[] = readonly NamedExtensionFlagDef[],
 > {
@@ -175,9 +181,7 @@ export interface ExtensionConfig<
 	/** Root command definitions this Extension owns and contributes to the application */
 	readonly commands?: readonly CommandDefinition<any>[];
 	/** Plain-text sections contributed to commands when the application is prepared. */
-	readonly sections?: (
-		snapshot: CommandSnapshot,
-	) => readonly { command: readonly string[]; title: string; body: string }[];
+	readonly sections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
 	readonly hooks?: ExtensionHooks<Defs>;
 }
 
@@ -196,9 +200,7 @@ export interface Extension {
 	readonly name: string;
 	readonly flags?: Readonly<Record<string, ExtensionFlagDef>>;
 	readonly commands?: readonly CommandDefinition<any>[];
-	readonly sections?: (
-		snapshot: CommandSnapshot,
-	) => readonly { command: readonly string[]; title: string; body: string }[];
+	readonly sections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
 	readonly hooks?: ExtensionHooks;
 }
 
