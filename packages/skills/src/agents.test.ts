@@ -69,6 +69,20 @@ describe("resolveAgentPath", () => {
 		}
 	});
 
+	it("falls back to ~/.vibe/skills when VIBE_HOME is unset", () => {
+		const original = process.env.VIBE_HOME;
+		delete process.env.VIBE_HOME;
+		try {
+			expect(resolveAgentPath("mistral-vibe", "global", "my-cli")).toBe(
+				join(homedir(), ".vibe", "skills", "my-cli"),
+			);
+		} finally {
+			if (original !== undefined) {
+				process.env.VIBE_HOME = original;
+			}
+		}
+	});
+
 	it("resolves Warp and Zed to canonical universal dirs", () => {
 		for (const agent of ["warp", "zed"] as const) {
 			expect(resolveAgentPath(agent, "project", "my-cli")).toBe(
