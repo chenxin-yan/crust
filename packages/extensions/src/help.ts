@@ -85,6 +85,13 @@ export function renderHelp(command: CommandSnapshot, path?: readonly string[]): 
 	]) {
 		if (section.length > 0) lines.push("", ...section);
 	}
+	for (const section of command.meta.sections ?? []) {
+		lines.push(
+			"",
+			bold(cyan(`${section.title}:`)),
+			...section.body.split("\n").map((l) => `  ${l}`),
+		);
+	}
 	return lines.join("\n");
 }
 

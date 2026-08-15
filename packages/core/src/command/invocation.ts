@@ -3,12 +3,14 @@ import {
 	finishInvocation,
 	type Extension,
 	type ExtensionContext,
+	type ExtensionSectionContribution,
 	type InvocationOutcome,
 } from "../api/extension.ts";
+import { CrustError } from "../errors.ts";
 import { parseArgs, validateParsed } from "../parsing/parser.ts";
 import { applySchemas } from "../parsing/schema.ts";
 import { cloneFlagSpellings } from "../parsing/spellings.ts";
-import type { FlagDef, FlagsDef, InvocationIO } from "../types.ts";
+import type { CommandSection, FlagDef, FlagsDef, InvocationIO } from "../types.ts";
 import { normalizeFlag } from "../validation/normalize.ts";
 import type { CommandDefinition } from "./crust.ts";
 import type { CommandNode } from "./node.ts";
@@ -113,6 +115,8 @@ export function cloneCommandNode(node: CommandNode): CommandNode {
 	// field with a decoupled copy.
 	return {
 		...node,
+		// Section objects/arrays are never mutated in place (prepare replaces
+		// them wholesale), so sharing them here is safe.
 		meta: { ...node.meta },
 		localFlags: cloneFlags(node.localFlags),
 		ownedFlags: cloneFlags(node.ownedFlags),
@@ -131,6 +135,8 @@ function freezeTree(node: CommandNode): void {
 	Object.freeze(node.localFlags);
 	Object.freeze(node.ownedFlags);
 	Object.freeze(node.effectiveFlags);
+	// Section objects are already frozen by validateSection.
+	if (node.meta.sections) Object.freeze(node.meta.sections);
 	Object.freeze(node.meta);
 	Object.freeze(node.contexts);
 	Object.freeze(node.extensions);
@@ -139,9 +145,88 @@ function freezeTree(node: CommandNode): void {
 	Object.freeze(node.subCommands);
 }
 
+/** Who authored the sections being validated; error labels derive from this. */
+type SectionOwner = { subject: "command" | "extension"; name: string };
+
+function invalidSections({ subject, name }: SectionOwner): CrustError {
+	const label = subject === "command" ? "Command" : "Extension";
+	return new CrustError(
+		"DEFINITION",
+		`${label} "${name}" contains invalid documentation sections`,
+		{ subject, name, reason: "invalid-sections" },
+	);
+}
+
+const isText = (value: unknown): value is string => typeof value === "string" && !!value.trim();
+
+function validateSection(section: unknown, owner: SectionOwner): CommandSection {
+	const { title, body } = (section ?? {}) as Partial<CommandSection>;
+	if (!isText(title) || /[\r\n]/.test(title) || !isText(body)) {
+		throw invalidSections(owner);
+	}
+	return Object.freeze({ title, body });
+}
+
+function validateAuthoredSections(node: CommandNode): void {
+	const sections = node.meta.sections;
+	if (sections !== undefined) {
+		const owner: SectionOwner = { subject: "command", name: node.meta.name };
+		if (!Array.isArray(sections)) throw invalidSections(owner);
+		node.meta.sections = sections.map((section) => validateSection(section, owner));
+	}
+	for (const sub of Object.values(node.subCommands)) validateAuthoredSections(sub);
+}
+
+function contributionTarget(
+	root: CommandNode,
+	command: readonly string[],
+	extension: Extension,
+): CommandNode {
+	let target = root;
+	for (const segment of command) {
+		// hasOwn: plain-object lookup would resolve inherited keys like "constructor"
+		const next = Object.hasOwn(target.subCommands, segment)
+			? target.subCommands[segment]
+			: undefined;
+		if (!next) {
+			throw new CrustError(
+				"DEFINITION",
+				`Extension "${extension.name}" section target "${command.join(" ")}" is not a canonical command path`,
+				{ subject: "extension", name: extension.name, reason: "invalid-section-path" },
+			);
+		}
+		target = next;
+	}
+	return target;
+}
+
+function applyExtensionSections(
+	root: CommandNode,
+	extension: Extension,
+	snapshot: CommandSnapshot,
+): void {
+	if (!extension.sections) return;
+	const owner: SectionOwner = { subject: "extension", name: extension.name };
+	const contributions = extension.sections(snapshot);
+	if (!Array.isArray(contributions)) throw invalidSections(owner);
+	for (const contribution of contributions as readonly ExtensionSectionContribution[]) {
+		// validateSection rejects null/non-object contributions, so reading
+		// `.command` afterwards is safe.
+		const section = validateSection(contribution, owner);
+		if (
+			!Array.isArray(contribution.command) ||
+			!contribution.command.every((segment) => typeof segment === "string")
+		) {
+			throw invalidSections(owner);
+		}
+		const target = contributionTarget(root, contribution.command, extension);
+		target.meta.sections = [...(target.meta.sections ?? []), section];
+	}
+}
+
 const preparedInvocations = new WeakMap<CommandNode, PreparedInvocation>();
 
-/** Shared prepare step: clone, apply Extensions, freeze once per immutable builder node. */
+/** Shared prepare step: clone, apply Extensions and sections, freeze once per immutable builder node. */
 function prepareInvocation(
 	node: CommandNode,
 	materializeCommandDefinition: MaterializeCommandDefinition,
@@ -156,6 +241,12 @@ function prepareInvocation(
 		applyExtensionCommands(rootNode, extension, materializeCommandDefinition);
 	}
 	for (const extension of extensions) applyExtensionFlags(rootNode, extension);
+
+	validateAuthoredSections(rootNode);
+	const authoredSnapshot = snapshotCommand(rootNode);
+	for (const extension of extensions) {
+		applyExtensionSections(rootNode, extension, authoredSnapshot);
+	}
 
 	freezeTree(rootNode);
 	const prepared = { rootNode, extensions };

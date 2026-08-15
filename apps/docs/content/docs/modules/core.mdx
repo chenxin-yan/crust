@@ -71,9 +71,9 @@ Downstream commands and Contexts list `api` in their `requires` array and consum
 | [`CommandDefinition`](/docs/api/crust)        | Opaque inert command recipe                                                      |
 | [`CommandDefinitionBuilder`](/docs/api/crust) | Configure-only builder used by command definitions                               |
 | [`CommandConfig`](/docs/api/crust)            | Static metadata and Context requirements for a reusable definition               |
-| `CommandMeta`                                 | Name, description, usage, aliases, and visibility                                |
+| `CommandMeta`                                 | Name, description, usage, sections, aliases, and visibility                      |
 | [`CommandRequirements`](/docs/api/crust)      | Context capability requirements checked at add time                              |
-| [`RootCommandMeta`](/docs/api/crust)          | Root description and usage accepted by the `Crust` constructor                   |
+| [`RootCommandMeta`](/docs/api/crust)          | Root description, usage, and sections accepted by the `Crust` constructor        |
 | `FlagDef`                                     | Core-value or Standard Schema flag definition                                    |
 | `FlagsDef`                                    | Flag-name-to-definition record                                                   |
 | `NamedFlagDef`                                | Flag definition carrying its `name` (the `.flags()` input shape)                 |
@@ -127,7 +127,7 @@ These types back [`run(path, input?, io?)`](/docs/api/crust) and the [`@crustjs/
 | Type                    | Description                                                                 |
 | ----------------------- | --------------------------------------------------------------------------- |
 | `Extension`             | Named frozen Extension value                                                |
-| `ExtensionConfig`       | Owned flags, `CommandDefinition` commands, and named hooks                  |
+| `ExtensionConfig`       | Owned flags, commands, per-command section contributions, and named hooks   |
 | `ExtensionFlagDef`      | Extension-owned flag with optional `recursive` scope                        |
 | `ExtensionContext`      | Readonly invocation view with inferred Extension-owned flags and `finish()` |
 | `ExtensionHooks`        | Typed `preRun`, `postRun`, and `onError` hook slots                         |
@@ -150,7 +150,7 @@ These types back [`run(path, input?, io?)`](/docs/api/crust) and the [`@crustjs/
 
 ## Tooling subpath
 
-Call `app.snapshot()` to prepare a frozen, validated Command Snapshot for man-page, skill, and build generators. It materializes Extension contributions and command definitions without calling Command Actions.
+Call `app.snapshot()` to prepare a frozen, validated Command Snapshot for man-page, skill, and build generators. It materializes Extension contributions and command definitions without calling Command Actions. Authored and Extension-contributed documentation is available on each command under `meta.sections`.
 
 `@crustjs/core/tooling` exports the `CommandSnapshot` type plus `snapshotCommand`, `buildCommandDocumentation`, `formatDescription`, its documentation model types, and `SNAPSHOT_PATH_ENV` for the lockstep first-party snapshot subprocess protocol. `buildCommandDocumentation()` turns a Command Snapshot into a full, presentation-neutral tree with resolved usage (plain and as colorable segments), visible children, argument tokens, and every accepted flag spelling. Except for the `CommandSnapshot` type consumed by `app.snapshot()`, helpers on this subpath are intended for first-party tooling that moves in lockstep with core.
 

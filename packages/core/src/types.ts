@@ -721,6 +721,12 @@ export type InputFlags<F extends FlagsDef> = Simplify<
 // CommandMeta — Command metadata
 // ────────────────────────────────────────────────────────────────────────────
 
+/** A plain-text documentation section rendered after built-in command documentation. */
+export interface CommandSection {
+	readonly title: string;
+	readonly body: string;
+}
+
 /** Metadata describing a CLI command */
 export interface CommandMeta {
 	/** The command name (used in help text and routing) */
@@ -729,6 +735,8 @@ export interface CommandMeta {
 	description?: string;
 	/** Custom usage string (overrides auto-generated usage) */
 	usage?: string;
+	/** Plain-text sections rendered after built-in command documentation. */
+	sections?: readonly CommandSection[];
 	/**
 	 * Alternative names that resolve to the same command.
 	 *

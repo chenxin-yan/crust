@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
 import { defineContext } from "../api/context.ts";
+import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
+import { CrustError } from "../errors.ts";
 import { Crust, defineCommand } from "./crust.ts";
 import { createCommandNode } from "./node.ts";
 import { snapshotCommand } from "./snapshot.ts";
@@ -87,5 +89,150 @@ describe("snapshotCommand", () => {
 		expect(Object.isFrozen(snapshot.flags.verbose)).toBe(true);
 		expect(Object.isFrozen(snapshot.subCommands)).toBe(true);
 		expect(Object.isFrozen(snapshot.subCommands.build)).toBe(true);
+	});
+});
+
+describe("command metadata sections", () => {
+	it("appends targeted Extension sections after authored sections in registration order", async () => {
+		const first = defineExtension("first", {
+			sections(snapshot) {
+				expect(snapshot.meta.sections).toEqual([{ title: "Root guide", body: "Root body" }]);
+				expect(snapshot.subCommands.build).toBeDefined();
+				expect(snapshot.subCommands.generated).toBeDefined();
+				return [
+					{ command: [], title: "First root", body: "First body" },
+					{ command: ["build"], title: "First build", body: "Build body" },
+					{ command: ["generated"], title: "Generated guide", body: "Generated body" },
+				];
+			},
+		});
+		const second = defineExtension("second", {
+			commands: [defineCommand("generated", (command) => command)],
+			sections: () => [{ command: [], title: "Second root", body: "Second body" }],
+		});
+		const app = new Crust("cli", {
+			sections: [{ title: "Root guide", body: "Root body" }],
+		})
+			.extend(first)
+			.extend(second)
+			.add(
+				defineCommand(
+					"build",
+					{ sections: [{ title: "Build guide", body: "Authored body" }] },
+					(command) => command.action(() => {}),
+				),
+			);
+
+		const snapshot = await app.snapshot();
+
+		expect(snapshot.meta.sections).toEqual([
+			{ title: "Root guide", body: "Root body" },
+			{ title: "First root", body: "First body" },
+			{ title: "Second root", body: "Second body" },
+		]);
+		expect(snapshot.subCommands.build?.meta.sections).toEqual([
+			{ title: "Build guide", body: "Authored body" },
+			{ title: "First build", body: "Build body" },
+		]);
+		expect(snapshot.subCommands.generated?.meta.sections).toEqual([
+			{ title: "Generated guide", body: "Generated body" },
+		]);
+		expect(Object.isFrozen(snapshot.meta.sections)).toBe(true);
+		expect(Object.isFrozen(snapshot.meta.sections?.[0])).toBe(true);
+		expect(() => structuredClone(snapshot)).not.toThrow();
+	});
+
+	it("rejects unknown and aliased contribution paths", async () => {
+		for (const command of [["missing"], ["b"], ["constructor"], ["__proto__"], ["toString"]]) {
+			const app = new Crust("cli")
+				.extend(
+					defineExtension("docs", {
+						sections: () => [{ command, title: "Notes", body: "Body" }],
+					}),
+				)
+				.add(defineCommand("build", { aliases: ["b"] }, (builder) => builder));
+
+			await expect(app.snapshot()).rejects.toMatchObject({
+				code: "DEFINITION",
+				details: { subject: "extension", name: "docs", reason: "invalid-section-path" },
+			});
+		}
+	});
+
+	it("rejects malformed authored section data", async () => {
+		const badSections: unknown[] = [
+			[{ title: "", body: "Body" }],
+			[{ title: "   ", body: "Body" }],
+			[{ title: "Notes", body: "" }],
+			[{ title: 1, body: "Body" }],
+			[{ title: "Notes", body: null }],
+			[null],
+		];
+		for (const sections of badSections) {
+			const app = new Crust("cli", { sections: sections as never });
+			await expect(app.snapshot()).rejects.toMatchObject({
+				code: "DEFINITION",
+				details: { subject: "command", name: "cli", reason: "invalid-sections" },
+			});
+		}
+	});
+
+	it("rejects malformed Extension section contributions", async () => {
+		const badReturns: unknown[] = [
+			{ command: [], title: "Notes", body: "Body" }, // not an array
+			[{ title: "Notes", body: "Body" }], // missing command
+			[{ command: "build", title: "Notes", body: "Body" }],
+			[{ command: [1], title: "Notes", body: "Body" }],
+			[{ command: [], title: "", body: "Body" }],
+			[{ command: [], title: "Notes", body: "   " }],
+		];
+		for (const contributions of badReturns) {
+			const app = new Crust("cli").extend(
+				defineExtension("docs", { sections: () => contributions as never }),
+			);
+			await expect(app.snapshot()).rejects.toMatchObject({
+				code: "DEFINITION",
+				details: { subject: "extension", name: "docs", reason: "invalid-sections" },
+			});
+		}
+	});
+
+	it("rejects CR/LF in authored and contributed section titles", async () => {
+		const authored = new Crust("cli", {
+			sections: [{ title: "Injected\nheading", body: "Body" }],
+		});
+		const contributed = new Crust("cli").extend(
+			defineExtension("docs", {
+				sections: () => [{ command: [], title: "Injected\rheading", body: "Body" }],
+			}),
+		);
+
+		await expect(authored.snapshot()).rejects.toBeInstanceOf(CrustError);
+		await expect(contributed.snapshot()).rejects.toMatchObject({
+			code: "DEFINITION",
+			details: { subject: "extension", name: "docs", reason: "invalid-sections" },
+		});
+	});
+
+	it("validates the complete Extension command tree before running section callbacks", async () => {
+		let called = false;
+		const app = new Crust("cli")
+			.extend(
+				defineExtension("docs", {
+					sections: () => {
+						called = true;
+						return [];
+					},
+				}),
+			)
+			.extend(
+				defineExtension("commands", {
+					commands: [defineCommand("build", (command) => command)],
+				}),
+			)
+			.add(defineCommand("build", (command) => command));
+
+		await expect(app.snapshot()).rejects.toBeInstanceOf(CrustError);
+		expect(called).toBe(false);
 	});
 });

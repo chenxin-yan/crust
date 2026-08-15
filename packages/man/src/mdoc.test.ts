@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { Crust, defineCommand } from "@crustjs/core";
+import { Crust, defineCommand, defineExtension } from "@crustjs/core";
 import { help } from "@crustjs/extensions";
 
 import { renderManPageMdoc } from "./mdoc.ts";
@@ -34,6 +34,28 @@ describe("renderManPageMdoc", () => {
 
 		expect(mdoc).toMatch(/\.Nd .*\\&\.config is read automatically\./);
 		expect(mdoc).toContain("\\&.config is read automatically.");
+	});
+
+	it("appends metadata sections after built-ins and escapes body lines", async () => {
+		const app = new Crust("demo", {
+			sections: [{ title: "Extra notes", body: ".config is supported.\nMore details." }],
+		})
+			.extend(
+				defineExtension("docs", {
+					sections: () => [{ command: [], title: "C:\\paths", body: "'quoted lines are escaped." }],
+				}),
+			)
+			.flags({ name: "verbose", type: "boolean" })
+			.action(() => {});
+
+		const root = await app.snapshot();
+		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
+
+		expect(mdoc).toContain(".Sh EXTRA NOTES\n\\&.config is supported.\nMore details.");
+		expect(mdoc.indexOf(".Sh EXTRA NOTES")).toBeGreaterThan(mdoc.indexOf(".Sh OPTIONS"));
+		// Extension-contributed section renders after authored ones, with roff escaping.
+		expect(mdoc).toContain(".Sh C:\\ePATHS\n\\&'quoted lines are escaped.");
+		expect(mdoc.indexOf(".Sh C:\\ePATHS")).toBeGreaterThan(mdoc.indexOf(".Sh EXTRA NOTES"));
 	});
 
 	it("uses explicit date for .Dd", async () => {

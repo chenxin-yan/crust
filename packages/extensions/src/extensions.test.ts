@@ -238,6 +238,34 @@ describe("built-in extensions", () => {
 		expect(output).toContain("-h, --help");
 	});
 
+	it("renders the current command's metadata sections after Options", async () => {
+		const app = new Crust("app", {
+			sections: [{ title: "Root notes", body: "Root body" }],
+		})
+			.extend(
+				defineExtension("docs", {
+					sections: () => [
+						{ command: ["build"], title: "Build notes", body: "Build body\nSecond line" },
+					],
+				}),
+			)
+			.extend(help())
+			.add(defineCommand("build", (build) => build.action(() => {})));
+
+		await app.run([]);
+		const rootOutput = stripAnsi(getStdout());
+		expect(rootOutput).toContain("Root notes:\n  Root body");
+		expect(rootOutput).not.toContain("Build notes:");
+		expect(rootOutput.indexOf("Root notes:")).toBeGreaterThan(rootOutput.indexOf("Options:"));
+
+		stdoutChunks = [];
+		await app.execute({ argv: ["build", "--help"] });
+		const buildOutput = stripAnsi(getStdout());
+		expect(buildOutput).toContain("Build notes:\n  Build body\n  Second line");
+		expect(buildOutput).not.toContain("Root notes:");
+		expect(buildOutput.indexOf("Build notes:")).toBeGreaterThan(buildOutput.indexOf("Options:"));
+	});
+
 	it("help reaches Extension-contributed commands regardless of registration order", async () => {
 		const app = new Crust("app").extend(help()).extend(lateSkillExtension());
 
