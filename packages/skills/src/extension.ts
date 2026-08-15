@@ -155,10 +155,10 @@ export function skill(options: SkillOptions): Extension {
 	const version = packagedSkills[0]?.version ?? null;
 	return defineExtension("skills", {
 		commands: [buildSkillCommand(commandName, options)],
-		documentation: (snapshot) => [
+		sections: (snapshot) => [
 			{
 				command: [],
-				section: "Agent skills",
+				title: "Agent skills",
 				body: formatSkillDocumentation(packagedSkills, commandName, snapshot.meta.name),
 			},
 		],

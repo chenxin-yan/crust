@@ -11,3 +11,4 @@ bun add @crustjs/core
 ## Documentation
 
 Full docs: [crustjs.com/docs/modules/core](https://crustjs.com/docs/modules/core)
+
