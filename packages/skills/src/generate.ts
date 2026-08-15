@@ -1,5 +1,5 @@
 import { lstat, mkdir, readlink, readdir, rm, stat, symlink, unlink } from "node:fs/promises";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { resolveSourceDir } from "@crustjs/utils/source";
 
@@ -8,9 +8,9 @@ import {
 	detectInstalledAgents,
 	getUniversalAgents,
 	resolveAgentPath,
-	resolveEffectiveScope,
 } from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";
+import { isOwnedSkillLink, skillLinkTarget } from "./link.ts";
 import { isValidSkillName } from "./skill-name.ts";
 import { readSkillFrontmatter } from "./source.ts";
 import type {
@@ -61,12 +61,6 @@ async function listFiles(dir: string, prefix = ""): Promise<string[]> {
 	return files.sort();
 }
 
-/** Returns whether a symlink target carries Crust's skill ownership signature. */
-export function isOwnedSkillLink(target: string, name: string): boolean {
-	const segments = target.replaceAll("\\", "/").split("/").filter(Boolean);
-	return segments.at(-2) === "skills" && segments.at(-1) === name;
-}
-
 type LinkInspection =
 	| { readonly status: "absent" }
 	| { readonly status: "conflict" }
@@ -106,19 +100,14 @@ async function removeEntry(outputDir: string): Promise<void> {
 	else await rm(outputDir, { recursive: true, force: true });
 }
 
-export function skillLinkTarget(sourceDir: string, outputDir: string, scope: Scope): string {
-	return resolveEffectiveScope(scope) === "project"
-		? relative(dirname(outputDir), sourceDir)
-		: sourceDir;
-}
-
 async function createSkillLink(target: string, outputDir: string): Promise<void> {
 	await mkdir(dirname(outputDir), { recursive: true });
 	try {
 		await symlink(target, outputDir, "dir");
 	} catch (error) {
+		const detail = error instanceof Error ? ` ${error.message}` : "";
 		throw new Error(
-			`Could not create skill symlink "${outputDir}" -> "${target}". Enable symlink permission for this environment and try again.`,
+			`Could not create skill symlink "${outputDir}" -> "${target}".${detail} If permission was denied, enable symlink permission for this environment and try again.`,
 			{ cause: error },
 		);
 	}
@@ -131,7 +120,7 @@ export async function installSkill(options: InstallSkillOptions): Promise<Instal
 	if (!isValidSkillName(source.name)) {
 		throw new Error(`Skill source "${sourceDir}" declares invalid name "${source.name}".`);
 	}
-	if (basename(sourceDir) !== source.name || !isOwnedSkillLink(sourceDir, source.name)) {
+	if (!isOwnedSkillLink(sourceDir, source.name)) {
 		throw new Error(
 			`Skill source directory "${sourceDir}" must be named "skills/${source.name}" to support ownership-safe links.`,
 		);

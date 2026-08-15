@@ -1,5 +1,5 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { dirname, join, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 
 import type { CommandSnapshot } from "@crustjs/core";
 
@@ -12,7 +12,7 @@ import type { RenderedFile, SkillMeta } from "./types.ts";
 
 /** Options for rendering an application's skill source. */
 export interface WriteSkillsOptions {
-	/** Directory that receives one subdirectory per skill. */
+	/** `skills` directory that receives one subdirectory per skill. */
 	readonly outDir: string;
 	/** Version recorded in the generated skill's SKILL.md metadata. */
 	readonly version: string;
@@ -44,6 +44,11 @@ export async function writeSkills(
 		);
 	}
 
+	const outDir = resolve(options.outDir);
+	if (basename(outDir) !== "skills") {
+		throw new Error(`Skill source outDir "${outDir}" must be named "skills".`);
+	}
+
 	const names = new Set([generatedMeta.name]);
 	const skills: { meta: SkillMeta; files: readonly RenderedFile[] }[] = [
 		{
@@ -69,7 +74,6 @@ export async function writeSkills(
 		});
 	}
 
-	const outDir = resolve(options.outDir);
 	const cwd = resolve(".");
 	// outDir is replaced wholesale below; refuse targets that would delete the caller's project.
 	if (outDir === dirname(outDir) || outDir === cwd || cwd.startsWith(outDir + sep)) {

@@ -47,7 +47,7 @@ function createApp() {
 describe("writeSkills", () => {
 	it("writes generated and authored skills with source metadata", async () => {
 		const bundleDir = await createBundle("deployment-guide", "Deployment guidance");
-		const outDir = join(tempRoot, "output");
+		const outDir = join(tempRoot, "skills");
 
 		await writeSkills(createApp(), {
 			outDir,
@@ -55,7 +55,7 @@ describe("writeSkills", () => {
 			bundles: [bundleDir],
 		});
 
-		expect((await readdir(tempRoot)).sort()).toEqual(["deployment-guide", "output"]);
+		expect((await readdir(tempRoot)).sort()).toEqual(["deployment-guide", "skills"]);
 		expect(await readFile(join(outDir, "demo", "SKILL.md"), "utf8")).toContain("name: demo");
 		const serve = await readFile(join(outDir, "demo", "commands", "serve.md"), "utf8");
 		expect(serve).toContain("# `demo serve`");
@@ -68,7 +68,7 @@ describe("writeSkills", () => {
 	});
 
 	it("supports overrides and replaces stale output", async () => {
-		const outDir = join(tempRoot, "output");
+		const outDir = join(tempRoot, "skills");
 		await mkdir(join(outDir, "removed-skill"), { recursive: true });
 
 		await writeSkills(createApp(), {
@@ -86,7 +86,7 @@ describe("writeSkills", () => {
 
 	it("rejects a generated and authored skill name collision before writing", async () => {
 		const bundleDir = await createBundle("demo", "Authored demo guidance");
-		const outDir = join(tempRoot, "output");
+		const outDir = join(tempRoot, "skills");
 
 		const result = writeSkills(createApp(), {
 			outDir,
@@ -99,7 +99,7 @@ describe("writeSkills", () => {
 	});
 
 	it("requires a generated skill description", async () => {
-		const outDir = join(tempRoot, "output");
+		const outDir = join(tempRoot, "skills");
 		const app = new Crust("demo").action(() => {});
 
 		await expect(writeSkills(app, { outDir, version: "1.0.0" })).rejects.toThrow(
@@ -108,8 +108,17 @@ describe("writeSkills", () => {
 		await expect(readdir(outDir)).rejects.toThrow();
 	});
 
+	it("requires the package skills directory layout", async () => {
+		const outDir = join(tempRoot, "agent-skills");
+
+		await expect(writeSkills(createApp(), { outDir, version: "1.0.0" })).rejects.toThrow(
+			'must be named "skills"',
+		);
+		await expect(readdir(outDir)).rejects.toThrow();
+	});
+
 	it("rejects an invalid skill name before writing", async () => {
-		const outDir = join(tempRoot, "output");
+		const outDir = join(tempRoot, "skills");
 
 		const result = writeSkills(createApp(), {
 			outDir,

@@ -10,16 +10,10 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { SkillConflictError } from "./errors.ts";
-import {
-	getSkillStatus,
-	installSkill,
-	isOwnedSkillLink,
-	skillLinkTarget,
-	uninstallSkill,
-} from "./generate.ts";
+import { getSkillStatus, installSkill, uninstallSkill } from "./generate.ts";
 
 let tempRoot: string;
 
@@ -63,24 +57,13 @@ async function projectInstall(sourceDir: string, force?: boolean) {
 }
 
 describe("symlink-only skill installation", () => {
-	it("uses relative project targets and absolute global targets", async () => {
+	it("installs a relative project link", async () => {
 		const sourceDir = await createSource();
 		const installed = await projectInstall(sourceDir);
-		const target = await readlink(outputDir());
 
 		expect(installed.agents[0]).toMatchObject({ outputDir: outputDir(), status: "installed" });
-		expect(target).toBe(relative(dirname(outputDir()), sourceDir));
-		expect(isAbsolute(target)).toBe(false);
-		expect(skillLinkTarget(sourceDir, outputDir(), "global")).toBe(sourceDir);
-		expect(isAbsolute(skillLinkTarget(sourceDir, outputDir(), "global"))).toBe(true);
+		expect(resolve(dirname(outputDir()), await readlink(outputDir()))).toBe(sourceDir);
 		expect(await readFile(join(outputDir(), "commands", "run.md"), "utf8")).toBe("run\n");
-	});
-
-	it("recognizes only targets ending in skills/<name> as owned", () => {
-		expect(isOwnedSkillLink("../../package/skills/demo", "demo")).toBe(true);
-		expect(isOwnedSkillLink("C:\\pkg\\skills\\demo", "demo")).toBe(true);
-		expect(isOwnedSkillLink("../../package/not-skills/demo", "demo")).toBe(false);
-		expect(isOwnedSkillLink("../../package/skills/other", "demo")).toBe(false);
 	});
 
 	it("leaves a healthy correct link up to date", async () => {

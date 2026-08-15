@@ -32,7 +32,7 @@ await writeSkills(app, {
 });
 ```
 
-Each skill gets its own `skills/<name>/` directory containing `SKILL.md` and any supporting files. `SKILL.md` follows the [Agent Skills specification](https://agentskills.io/specification) and declares required `name` and `description` frontmatter. `writeSkills()` replaces `outDir` on every build and never writes to an agent directory.
+`outDir` must be named `skills`. Each skill gets its own `skills/<name>/` directory containing `SKILL.md` and any supporting files. `SKILL.md` follows the [Agent Skills specification](https://agentskills.io/specification) and declares required `name` and `description` frontmatter. `writeSkills()` replaces `outDir` on every build and never writes to an agent directory.
 
 Include the source in the published package:
 
