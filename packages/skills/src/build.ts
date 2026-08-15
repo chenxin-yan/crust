@@ -1,13 +1,13 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 
 import type { CommandSnapshot } from "@crustjs/core";
 
 import { loadBundleFiles } from "./bundle.ts";
 import { SkillSourceConflictError } from "./errors.ts";
-import { isValidSkillName } from "./generate.ts";
 import { buildManifest } from "./manifest.ts";
 import { renderDistributionMetadata, renderSkill } from "./render.ts";
+import { isValidSkillName } from "./skill-name.ts";
 import type { RenderedFile, SkillKind, SkillMeta } from "./types.ts";
 
 /** Options for rendering an application's skill source. */
@@ -67,6 +67,13 @@ export async function writeSkills(
 	}
 
 	const outDir = resolve(options.outDir);
+	const cwd = resolve(".");
+	// outDir is replaced wholesale below; refuse targets that would delete the caller's project.
+	if (outDir === dirname(outDir) || outDir === cwd || cwd.startsWith(outDir + sep)) {
+		throw new Error(
+			`Refusing to replace "${outDir}": outDir must be a dedicated directory, not the filesystem root, the working directory, or an ancestor of it.`,
+		);
+	}
 	await rm(outDir, { recursive: true, force: true });
 	for (const skill of skills) {
 		const skillDir = join(outDir, skill.meta.name);

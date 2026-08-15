@@ -29,13 +29,16 @@ Add `dist/skills` to the package's `files` array. Each skill directory is self-d
 Enable opt-in installation from that read-only source:
 
 ```ts
+import { Crust } from "@crustjs/core";
 import { skill } from "@crustjs/skills";
 
-app.extend(
-	skill({
-		source: new URL("../skills", import.meta.url),
-	}),
-);
+export const app = new Crust("my-cli", { description: "My CLI" })
+	.extend(
+		skill({
+			source: new URL("../skills", import.meta.url),
+		}),
+	)
+	.action(() => {});
 ```
 
 The contributed `skill` command copies every shipped skill into selected agent directories. Installed copies auto-update when the package source version changes. Update and uninstall operations leave directories without the matching ownership marker untouched. No separate mutable skill store or link-based install mode is used.

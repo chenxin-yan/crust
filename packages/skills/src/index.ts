@@ -10,9 +10,11 @@ export {
 	getUniversalAgents,
 	isUniversalAgent,
 } from "./agents.ts";
+export type { DetectInstalledAgentsOptions } from "./agents.ts";
 export { SkillConflictError, SkillSourceConflictError } from "./errors.ts";
 export { skill } from "./extension.ts";
-export { getSkillStatus, installSkill, isValidSkillName, uninstallSkill } from "./generate.ts";
+export { getSkillStatus, installSkill, uninstallSkill } from "./generate.ts";
+export { isValidSkillName } from "./skill-name.ts";
 export { loadPackagedSkills, resolveSkillSource, SkillSourceUnavailableError } from "./source.ts";
 
 export type {
@@ -24,7 +26,6 @@ export type {
 	InstallStatus,
 	Scope,
 	SkillKind,
-	SkillMeta,
 	SkillOptions,
 	SkillStatusOptions,
 	SkillStatusResult,

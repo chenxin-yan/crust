@@ -5,22 +5,6 @@ export interface SkillMeta {
 	name: string;
 	description: string;
 	version: string;
-	license?: string;
-	compatibility?: string;
-	disableModelInvocation?: boolean;
-	allowedTools?: string;
-	/**
-	 * Additional top-level instructions rendered into `SKILL.md`.
-	 *
-	 * Use this for extension- or product-specific guidance that should be visible
-	 * before agents inspect individual command documentation files.
-	 *
-	 * **Note:** When a `string` value contains markdown headings (e.g. `## Foo`),
-	 * they are rendered at the same level as `## General Guidance`, not nested
-	 * under it. Use a `string[]` of plain instructions to avoid unintended
-	 * heading hierarchy.
-	 */
-	instructions?: string | string[];
 }
 
 /** Supported agent targets for skill installation. */

@@ -99,9 +99,16 @@ async function autoUpdateSkills(options: SkillOptions): Promise<void> {
 	try {
 		skills = await loadPackagedSkills(options.source);
 	} catch (error) {
-		// A missing packaged asset must not prevent unrelated CLI commands from running.
-		if (error instanceof SkillSourceUnavailableError) return;
-		throw error;
+		// A missing or invalid packaged asset must not prevent unrelated CLI commands
+		// from running; the explicit skill command surfaces the same failure loudly.
+		if (!(error instanceof SkillSourceUnavailableError)) {
+			console.warn(
+				yellow(
+					`Skipping skill auto-update: ${error instanceof Error ? error.message : String(error)}`,
+				),
+			);
+		}
+		return;
 	}
 	const configuredScopes: Scope[] = options.defaultScope
 		? [options.defaultScope]

@@ -111,6 +111,69 @@ describe("skill extension package sources", () => {
 		);
 	});
 
+	it("updates installed copies via the skill update command", async () => {
+		const source = await writeSource("demo", "1.0.0");
+		await withCwd(tempRoot, () =>
+			installSkill({
+				sourceDir: join(source, "demo"),
+				agents: ["claude-code"],
+				scope: "project",
+			}),
+		);
+		await writeSource("demo", "2.0.0");
+
+		await withCwd(tempRoot, () =>
+			createApp(source).execute({ argv: ["skill", "update", "--scope", "project"] }),
+		);
+		expect(await readFile(join(tempRoot, ".claude", "skills", "demo", "content.md"), "utf8")).toBe(
+			"2.0.0\n",
+		);
+	});
+
+	it("skips auto-update when autoUpdate is false", async () => {
+		const source = await writeSource("demo", "1.0.0");
+		await withCwd(tempRoot, () =>
+			installSkill({
+				sourceDir: join(source, "demo"),
+				agents: ["claude-code"],
+				scope: "project",
+			}),
+		);
+		await writeSource("demo", "2.0.0");
+
+		const app = new Crust("demo", { description: "Demo" })
+			.extend(skill({ source, defaultScope: "project", autoUpdate: false }))
+			.action(() => {});
+		await withCwd(tempRoot, () => app.execute({ argv: [] }));
+		expect(await readFile(join(tempRoot, ".claude", "skills", "demo", "content.md"), "utf8")).toBe(
+			"1.0.0\n",
+		);
+	});
+
+	it("rejects an invalid --scope value", async () => {
+		const source = await writeSource("demo", "1.0.0");
+		const previousExitCode = process.exitCode;
+		await withCwd(tempRoot, () =>
+			createApp(source).execute({ argv: ["skill", "update", "--scope", "bogus"] }),
+		);
+		expect(process.exitCode).toBe(1);
+		process.exitCode = previousExitCode;
+	});
+
+	it("does not break unrelated commands when the source contains an invalid skill directory", async () => {
+		const source = await writeSource("demo", "1.0.0");
+		await mkdir(join(source, "__MACOSX"), { recursive: true });
+
+		let ran = false;
+		const app = new Crust("demo", { description: "Demo" })
+			.extend(skill({ source, defaultScope: "project" }))
+			.action(() => {
+				ran = true;
+			});
+		await withCwd(tempRoot, () => app.execute({ argv: [] }));
+		expect(ran).toBe(true);
+	});
+
 	it("fails clearly when its source cannot be resolved", async () => {
 		await expect(loadPackagedSkills(join(tempRoot, "missing-skills"))).rejects.toBeInstanceOf(
 			SkillSourceUnavailableError,

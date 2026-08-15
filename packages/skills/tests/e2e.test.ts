@@ -7,6 +7,7 @@ import { Crust, defineCommand } from "@crustjs/core";
 
 import { writeSkills } from "../src/build.ts";
 import { installSkill } from "../src/generate.ts";
+import { loadPackagedSkills } from "../src/source.ts";
 
 let tempRoot: string | undefined;
 
@@ -34,6 +35,10 @@ describe("package-as-source pipeline", () => {
 			);
 		const source = join(tempRoot, "package", "skills");
 		await writeSkills(app, { outDir: source, version: "1.0.0" });
+
+		// The extension discovers skills through loadPackagedSkills, which requires each
+		// directory name to match its manifest name — pin that writeSkills upholds it.
+		expect(await loadPackagedSkills(source)).toMatchObject([{ name: "demo", version: "1.0.0" }]);
 
 		await withCwd(tempRoot, () =>
 			installSkill({

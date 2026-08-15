@@ -1,4 +1,4 @@
-import { cp, lstat, readdir, rm } from "node:fs/promises";
+import { cp, lstat, readdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 import { resolveSourceDir } from "@crustjs/utils/source";
@@ -120,8 +120,17 @@ export async function installSkill(options: InstallSkillOptions): Promise<Instal
 				? "up-to-date"
 				: "updated";
 		if (status !== "up-to-date") {
-			await rm(outputDir, { recursive: true, force: true });
-			await cp(sourceDir, outputDir, { recursive: true, force: true });
+			// Stage the copy next to the target so an interrupted install (this runs in the
+			// auto-update preRun hook) never leaves a partial skill directory behind.
+			const staging = `${outputDir}.staging`;
+			try {
+				await rm(staging, { recursive: true, force: true });
+				await cp(sourceDir, staging, { recursive: true });
+				await rm(outputDir, { recursive: true, force: true });
+				await rename(staging, outputDir);
+			} finally {
+				await rm(staging, { recursive: true, force: true });
+			}
 		}
 
 		for (const agent of groupedAgents) {
