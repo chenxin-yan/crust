@@ -148,8 +148,15 @@ export function skill(options: SkillOptions): Extension {
 	try {
 		packagedSkills = loadPackagedSkillsSync(options.source);
 	} catch (error) {
-		// A missing packaged asset degrades the advertisement instead of failing startup.
-		if (!(error instanceof SkillSourceUnavailableError)) throw error;
+		// A missing or invalid packaged asset degrades the advertisement instead of
+		// failing startup, matching the auto-update hook's recovery behavior.
+		if (!(error instanceof SkillSourceUnavailableError)) {
+			console.warn(
+				yellow(
+					`Skipping skill advertisement: ${error instanceof Error ? error.message : String(error)}`,
+				),
+			);
+		}
 	}
 	const source = packagedSkills[0] ? dirname(packagedSkills[0].sourceDir) : null;
 	// writeSkills emits every source entry with the package build version.
