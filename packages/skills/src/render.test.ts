@@ -5,7 +5,6 @@ import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
 type CommandNode = Parameters<typeof snapshotCommand>[0];
 
-import { annotate } from "./annotations.ts";
 import { buildManifest } from "./manifest.ts";
 import { renderSkill } from "./render.ts";
 import type { ManifestNode, RenderedFile, SkillMeta } from "./types.ts";
@@ -15,7 +14,12 @@ import type { ManifestNode, RenderedFile, SkillMeta } from "./types.ts";
 // ────────────────────────────────────────────────────────────────────────────
 
 function makeCommand(opts: {
-	meta: { name: string; description?: string; usage?: string };
+	meta: {
+		name: string;
+		description?: string;
+		usage?: string;
+		sections?: readonly { title: string; body: string }[];
+	};
 	args?: readonly ArgDef[];
 	flags?: Record<string, FlagDef>;
 	run?: () => void;
@@ -827,17 +831,17 @@ describe("renderSkill", () => {
 			expect(serve?.content).toContain("SKILL.md");
 		});
 
-		it("renders agent instructions for annotated leaf commands", () => {
-			const cmd = annotate(
-				makeCommand({
-					meta: { name: "deploy" },
-					run() {},
-				}),
-				[
-					"Prefer preview flags before executing changes.",
-					"Call out risky production operations explicitly.",
-				],
-			);
+		it("renders metadata sections for leaf commands", () => {
+			const cmd = makeCommand({
+				meta: {
+					name: "deploy",
+					sections: [
+						{ title: "Preview", body: "Prefer preview flags before executing changes." },
+						{ title: "Safety", body: "Call out risky production operations explicitly." },
+					],
+				},
+				run() {},
+			});
 
 			const manifest = buildManifest(snapshotCommand(cmd));
 			const files = renderSkill(manifest, {
@@ -847,9 +851,12 @@ describe("renderSkill", () => {
 			});
 			const deploy = findFile(files, "commands/deploy.md");
 
-			expect(deploy?.content).toContain("## Command Instructions");
-			expect(deploy?.content).toContain("- Prefer preview flags before executing changes.");
-			expect(deploy?.content).toContain("- Call out risky production operations explicitly.");
+			expect(deploy?.content).toContain(
+				"## Preview\nPrefer preview flags before executing changes.",
+			);
+			expect(deploy?.content).toContain(
+				"## Safety\nCall out risky production operations explicitly.",
+			);
 		});
 
 		it("includes command authority instructions in leaf command files", () => {
@@ -1076,18 +1083,24 @@ describe("renderSkill", () => {
 			expect(parentFile?.content).toContain("## Subcommands");
 		});
 
-		it("renders agent instructions for annotated group commands", () => {
+		it("renders metadata sections for group commands", () => {
 			const sub = makeCommand({
 				meta: { name: "sub" },
 				run() {},
 			});
-			const parent = annotate(
-				makeCommand({
-					meta: { name: "parent", description: "Parent command" },
-					subCommands: { sub },
-				}),
-				"Read a child command doc before recommending execution details.",
-			);
+			const parent = makeCommand({
+				meta: {
+					name: "parent",
+					description: "Parent command",
+					sections: [
+						{
+							title: "Workflow",
+							body: "Read a child command doc before recommending execution details.",
+						},
+					],
+				},
+				subCommands: { sub },
+			});
 
 			const manifest = buildManifest(snapshotCommand(parent));
 			const files = renderSkill(manifest, {
@@ -1097,9 +1110,8 @@ describe("renderSkill", () => {
 			});
 			const parentFile = findFile(files, "commands/parent.md");
 
-			expect(parentFile?.content).toContain("## Command Instructions");
 			expect(parentFile?.content).toContain(
-				"- Read a child command doc before recommending execution details.",
+				"## Workflow\nRead a child command doc before recommending execution details.",
 			);
 		});
 

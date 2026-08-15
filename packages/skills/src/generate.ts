@@ -15,7 +15,7 @@ import {
 import type { SkillManifestMalformed } from "./errors.ts";
 import { SkillConflictError } from "./errors.ts";
 import { buildManifest } from "./manifest.ts";
-import { renderSkill } from "./render.ts";
+import { renderDistributionMetadata, renderSkill } from "./render.ts";
 import { SKILL_NAME_PATTERN, isValidSkillName } from "./skill-name.ts";
 import type {
 	AgentResult,
@@ -34,7 +34,6 @@ import type {
 	UninstallSkillResult,
 } from "./types.ts";
 import {
-	CRUST_MANIFEST,
 	type InstalledManifestStatus,
 	type InstalledSkillManifest,
 	inspectInstalledManifest,
@@ -714,40 +713,6 @@ async function hasAnyInstalledAgentPath(name: string, scope: Scope): Promise<boo
 	}
 
 	return false;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Distribution metadata renderers
-// ────────────────────────────────────────────────────────────────────────────
-
-type DistributionMetadata = {
-	name: string;
-	description: string;
-	version: string;
-	kind: SkillKind;
-};
-
-/**
- * Renders the Crust-specific metadata file (`crust.json`) that stores
- * version information for subsequent version checks and serves as an
- * ownership marker for conflict detection.
- *
- * @param meta - Skill metadata
- * @param kind - The {@link SkillKind} that produced this bundle
- * @returns The crust.json rendered file
- */
-function renderDistributionMetadata(meta: SkillMeta, kind: SkillKind): RenderedFile {
-	const obj = {
-		name: meta.name,
-		description: meta.description,
-		version: meta.version,
-		kind,
-	} satisfies DistributionMetadata;
-
-	return {
-		path: CRUST_MANIFEST,
-		content: `${JSON.stringify(obj, null, "\t")}\n`,
-	};
 }
 
 // ────────────────────────────────────────────────────────────────────────────

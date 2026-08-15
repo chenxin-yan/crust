@@ -5,6 +5,17 @@
 import type { AgentTarget, SkillKind } from "./types.ts";
 import type { InstalledManifestMalformedReason } from "./version.ts";
 
+/** Thrown when multiple build inputs declare the same skill source name. */
+export class SkillSourceConflictError extends Error {
+	override readonly name = "SkillSourceConflictError";
+	readonly skillName: string;
+
+	constructor(skillName: string) {
+		super(`Skill source name conflict: "${skillName}" is declared more than once.`);
+		this.skillName = skillName;
+	}
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // SkillConflictError
 // ────────────────────────────────────────────────────────────────────────────

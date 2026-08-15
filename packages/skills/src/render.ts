@@ -5,7 +5,32 @@
 import { posix } from "node:path";
 
 import { normalizeInstructionList } from "./annotations.ts";
-import type { ManifestArg, ManifestFlag, ManifestNode, RenderedFile, SkillMeta } from "./types.ts";
+import type {
+	ManifestArg,
+	ManifestFlag,
+	ManifestNode,
+	RenderedFile,
+	SkillKind,
+	SkillMeta,
+} from "./types.ts";
+import { CRUST_MANIFEST } from "./version.ts";
+
+/** Renders the ownership and version metadata shipped with a skill. */
+export function renderDistributionMetadata(meta: SkillMeta, kind: SkillKind): RenderedFile {
+	return {
+		path: CRUST_MANIFEST,
+		content: `${JSON.stringify(
+			{
+				name: meta.name,
+				description: meta.description,
+				version: meta.version,
+				kind,
+			},
+			null,
+			"\t",
+		)}\n`,
+	};
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Text escaping helpers
@@ -286,7 +311,7 @@ function commandType(node: ManifestNode): string {
 function renderLeafCommand(node: ManifestNode, root: ManifestNode): string {
 	const lines: string[] = [];
 	lines.push(...renderCommandHeading(node));
-	lines.push(...renderAgentInstructions(node));
+	lines.push(...renderCommandSections(node));
 	lines.push(...renderRunnableCommandSections(node));
 
 	// Parent navigation
@@ -307,7 +332,7 @@ function renderGroupCommand(node: ManifestNode, root: ManifestNode): string {
 	const lines: string[] = [];
 	const filePath = commandFilePath(node);
 	lines.push(...renderCommandHeading(node));
-	lines.push(...renderAgentInstructions(node));
+	lines.push(...renderCommandSections(node));
 
 	// If the group is also runnable, show its own usage
 	if (node.runnable) {
@@ -337,14 +362,8 @@ function renderCommandHeading(node: ManifestNode): string[] {
 	return lines;
 }
 
-function renderAgentInstructions(node: ManifestNode): string[] {
-	const instructions = node.instructions ?? [];
-
-	if (instructions.length === 0) {
-		return [];
-	}
-
-	return ["## Command Instructions", "", ...renderInstructionList(instructions), ""];
+function renderCommandSections(node: ManifestNode): string[] {
+	return (node.sections ?? []).flatMap((section) => [`## ${section.title}`, section.body, ""]);
 }
 
 function renderRunnableCommandSections(node: ManifestNode): string[] {

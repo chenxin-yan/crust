@@ -239,8 +239,8 @@ export interface ManifestNode {
 	description?: string;
 	/** Resolved command usage from the core documentation model. */
 	usage: string;
-	/** Agent-facing instructions rendered into the command's markdown file */
-	instructions?: string[];
+	/** Plain-text command sections rendered into the command's markdown file. */
+	sections?: CommandSnapshot["meta"]["sections"];
 	/** Whether this command has a `run` action (leaf vs group) */
 	runnable: boolean;
 	/** Positional argument definitions */

@@ -20,7 +20,6 @@ import { Crust } from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
 type CommandNode = Parameters<typeof snapshotCommand>[0];
 
-import { annotate } from "../src/annotations.ts";
 import { generateSkill } from "../src/generate.ts";
 import type { AgentResult } from "../src/types.ts";
 import { CRUST_MANIFEST } from "../src/version.ts";
@@ -30,7 +29,12 @@ import { CRUST_MANIFEST } from "../src/version.ts";
 // ────────────────────────────────────────────────────────────────────────────
 
 function makeCommand(opts: {
-	meta: { name: string; description?: string; usage?: string };
+	meta: {
+		name: string;
+		description?: string;
+		usage?: string;
+		sections?: readonly { title: string; body: string }[];
+	};
 	args?: readonly ArgDef[];
 	flags?: Record<string, FlagDef>;
 	run?: () => void;
@@ -348,19 +352,17 @@ function buildFixtureCommand(): CommandNode {
 }
 
 function buildInstructionFixtureCommand(): CommandNode {
-	const deploy = annotate(
-		makeCommand({
-			meta: {
-				name: "deploy",
-				description: "Deploy the application",
-			},
-			run() {},
-		}),
-		[
-			"Prefer preview commands before applying changes.",
-			"Call out risky production operations explicitly.",
-		],
-	);
+	const deploy = makeCommand({
+		meta: {
+			name: "deploy",
+			description: "Deploy the application",
+			sections: [
+				{ title: "Preview", body: "Prefer preview commands before applying changes." },
+				{ title: "Safety", body: "Call out risky production operations explicitly." },
+			],
+		},
+		run() {},
+	});
 
 	return makeCommand({
 		meta: {
@@ -510,7 +512,7 @@ describe("E2E: skill generation", () => {
 			expect(content).toContain("commands/deploy.md");
 		});
 
-		it("renders top-level instructions and annotated command instructions on disk", async () => {
+		it("renders top-level instructions and command metadata sections on disk", async () => {
 			const agent = await generateForTest(tmpDir, buildInstructionFixtureCommand(), {
 				name: "ops-cli",
 				description: "Operations skill",
@@ -527,9 +529,12 @@ describe("E2E: skill generation", () => {
 			expect(skillContent).toContain("## General Guidance");
 			expect(skillContent).toContain("- Prefer readonly commands before mutating state.");
 			expect(skillContent).toContain("- Ask for confirmation before destructive actions.");
-			expect(commandContent).toContain("## Command Instructions");
-			expect(commandContent).toContain("- Prefer preview commands before applying changes.");
-			expect(commandContent).toContain("- Call out risky production operations explicitly.");
+			expect(commandContent).toContain(
+				"## Preview\nPrefer preview commands before applying changes.",
+			);
+			expect(commandContent).toContain(
+				"## Safety\nCall out risky production operations explicitly.",
+			);
 		});
 
 		it("all links in SKILL.md resolve to real files", async () => {
