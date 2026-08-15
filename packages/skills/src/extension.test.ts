@@ -1,7 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+	lstat,
+	mkdir,
+	mkdtemp,
+	readFile,
+	readlink,
+	rm,
+	symlink,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
 
@@ -29,139 +38,109 @@ async function withCwd<T>(dir: string, run: () => Promise<T>): Promise<T> {
 	}
 }
 
-async function writeSource(name: string, version: string): Promise<string> {
-	const root = join(tempRoot, "skills");
+async function writeSource(name: string, content = name): Promise<string> {
+	const root = join(tempRoot, "package", "skills");
 	const dir = join(root, name);
 	await mkdir(dir, { recursive: true });
 	await writeFile(join(dir, "SKILL.md"), `---\nname: ${name}\ndescription: ${name}\n---\n`);
-	await writeFile(join(dir, "content.md"), `${version}\n`);
-	await writeFile(
-		join(dir, "crust.json"),
-		JSON.stringify({ name, description: name, version, kind: "generated" }),
-	);
+	await writeFile(join(dir, "content.md"), `${content}\n`);
 	return root;
 }
 
-function createApp(source: string | URL) {
+function createApp(source: string | URL, autoUpdate = true) {
 	return new Crust("demo", { description: "Demo" })
-		.extend(skill({ source, defaultScope: "project" }))
+		.extend(skill({ source, defaultScope: "project", autoUpdate }))
 		.action(() => {});
 }
 
+function target(name = "demo") {
+	return join(tempRoot, ".agents", "skills", name);
+}
+
 describe("skill extension package sources", () => {
-	it("installs every packaged skill by copy", async () => {
-		const source = await writeSource("demo", "1.0.0");
-		await writeSource("guide", "1.0.0");
+	it("installs every packaged skill as a link", async () => {
+		const source = await writeSource("demo");
+		await writeSource("guide");
 		await withCwd(tempRoot, () => createApp(source).execute({ argv: ["skill", "--all"] }));
 
-		expect(await readFile(join(tempRoot, ".agents", "skills", "demo", "content.md"), "utf8")).toBe(
-			"1.0.0\n",
-		);
-		expect(await readFile(join(tempRoot, ".agents", "skills", "guide", "content.md"), "utf8")).toBe(
-			"1.0.0\n",
-		);
+		expect((await lstat(target("demo"))).isSymbolicLink()).toBe(true);
+		expect((await lstat(target("guide"))).isSymbolicLink()).toBe(true);
+		expect(await readFile(join(target("demo"), "content.md"), "utf8")).toBe("demo\n");
 	});
 
 	it("does not let --all overwrite an unowned agent directory", async () => {
-		const source = await writeSource("demo", "1.0.0");
-		const target = join(tempRoot, ".agents", "skills", "demo");
-		await mkdir(target, { recursive: true });
-		await writeFile(join(target, "manual.md"), "keep\n");
+		const source = await writeSource("demo");
+		await mkdir(target(), { recursive: true });
+		await writeFile(join(target(), "manual.md"), "keep\n");
 
 		await withCwd(tempRoot, () => createApp(source).execute({ argv: ["skill", "--all"] }));
-		expect(await readFile(join(target, "manual.md"), "utf8")).toBe("keep\n");
+		expect(await readFile(join(target(), "manual.md"), "utf8")).toBe("keep\n");
 	});
 
-	it("continues --all installs after an unowned agent directory", async () => {
-		const source = await writeSource("demo", "1.0.0");
-		await withCwd(tempRoot, () =>
-			installSkill({
-				sourceDir: join(source, "demo"),
-				agents: ["claude-code"],
-				scope: "project",
-			}),
-		);
-		await writeSource("demo", "2.0.0");
-		const conflict = join(tempRoot, ".agents", "skills", "demo");
-		await mkdir(conflict, { recursive: true });
-		await writeFile(join(conflict, "manual.md"), "keep\n");
-
-		await withCwd(tempRoot, () => createApp(source).execute({ argv: ["skill", "--all"] }));
-
-		expect(await readFile(join(conflict, "manual.md"), "utf8")).toBe("keep\n");
-		expect(await readFile(join(tempRoot, ".claude", "skills", "demo", "content.md"), "utf8")).toBe(
-			"2.0.0\n",
-		);
-	});
-
-	it("auto-updates installed copies from a newer skill source", async () => {
-		const source = await writeSource("demo", "1.0.0");
-		await withCwd(tempRoot, () =>
-			installSkill({
-				sourceDir: join(source, "demo"),
-				agents: ["claude-code"],
-				scope: "project",
-			}),
-		);
-		await writeSource("demo", "2.0.0");
+	it("repairs an owned stale-target link before ordinary commands", async () => {
+		const source = await writeSource("demo", "current");
+		const stale = join(tempRoot, "old", "skills", "demo");
+		await mkdir(stale, { recursive: true });
+		await writeFile(join(stale, "content.md"), "stale\n");
+		const installed = join(tempRoot, ".claude", "skills", "demo");
+		await mkdir(dirname(installed), { recursive: true });
+		await symlink(stale, installed);
 
 		await withCwd(tempRoot, () => createApp(source).execute({ argv: [] }));
-		expect(await readFile(join(tempRoot, ".claude", "skills", "demo", "content.md"), "utf8")).toBe(
-			"2.0.0\n",
-		);
+		expect(resolve(dirname(installed), await readlink(installed))).toBe(join(source, "demo"));
+		expect(await readFile(join(installed, "content.md"), "utf8")).toBe("current\n");
 	});
 
-	it("updates installed copies via the skill update command", async () => {
-		const source = await writeSource("demo", "1.0.0");
-		await withCwd(tempRoot, () =>
-			installSkill({
-				sourceDir: join(source, "demo"),
-				agents: ["claude-code"],
-				scope: "project",
-			}),
-		);
-		await writeSource("demo", "2.0.0");
+	it("never creates links that were not installed", async () => {
+		const source = await writeSource("demo");
+		await withCwd(tempRoot, () => createApp(source).execute({ argv: [] }));
+		await expect(lstat(target())).rejects.toThrow();
+	});
+
+	it("repairs links via the skill update command", async () => {
+		const source = await writeSource("demo");
+		const installed = join(tempRoot, ".claude", "skills", "demo");
+		await mkdir(dirname(installed), { recursive: true });
+		await symlink(join(tempRoot, "missing", "skills", "demo"), installed);
 
 		await withCwd(tempRoot, () =>
 			createApp(source).execute({ argv: ["skill", "update", "--scope", "project"] }),
 		);
-		expect(await readFile(join(tempRoot, ".claude", "skills", "demo", "content.md"), "utf8")).toBe(
-			"2.0.0\n",
-		);
+		expect(resolve(dirname(installed), await readlink(installed))).toBe(join(source, "demo"));
 	});
 
-	it("skips auto-update when autoUpdate is false", async () => {
-		const source = await writeSource("demo", "1.0.0");
-		await withCwd(tempRoot, () =>
-			installSkill({
-				sourceDir: join(source, "demo"),
-				agents: ["claude-code"],
-				scope: "project",
-			}),
-		);
-		await writeSource("demo", "2.0.0");
+	it("skips repair when autoUpdate is false", async () => {
+		const source = await writeSource("demo");
+		const installed = join(tempRoot, ".claude", "skills", "demo");
+		const stale = join(tempRoot, "missing", "skills", "demo");
+		await mkdir(dirname(installed), { recursive: true });
+		await symlink(stale, installed);
 
-		const app = new Crust("demo", { description: "Demo" })
-			.extend(skill({ source, defaultScope: "project", autoUpdate: false }))
-			.action(() => {});
-		await withCwd(tempRoot, () => app.execute({ argv: [] }));
-		expect(await readFile(join(tempRoot, ".claude", "skills", "demo", "content.md"), "utf8")).toBe(
-			"1.0.0\n",
-		);
+		await withCwd(tempRoot, () => createApp(source, false).execute({ argv: [] }));
+		expect(await readlink(installed)).toBe(stale);
+	});
+
+	it("leaves conflicts untouched during preRun repair", async () => {
+		const source = await writeSource("demo");
+		const installed = join(tempRoot, ".claude", "skills", "demo");
+		await mkdir(installed, { recursive: true });
+		await writeFile(join(installed, "manual.md"), "keep\n");
+
+		await withCwd(tempRoot, () => createApp(source).execute({ argv: [] }));
+		expect(await readFile(join(installed, "manual.md"), "utf8")).toBe("keep\n");
 	});
 
 	it("rejects an invalid --scope value", async () => {
-		const source = await writeSource("demo", "1.0.0");
+		const source = await writeSource("demo");
 		await withCwd(tempRoot, () =>
 			createApp(source).execute({ argv: ["skill", "update", "--scope", "bogus"] }),
 		);
 		expect(process.exitCode).toBe(1);
-		// Clear the failure code execute() set so the test process itself exits 0.
 		process.exitCode = 0;
 	});
 
 	it("does not break unrelated commands when the source contains an invalid skill directory", async () => {
-		const source = await writeSource("demo", "1.0.0");
+		const source = await writeSource("demo");
 		await mkdir(join(source, "__MACOSX"), { recursive: true });
 
 		let ran = false;
@@ -189,5 +168,19 @@ describe("skill extension package sources", () => {
 			});
 		await app.execute({ argv: [] });
 		expect(ran).toBe(true);
+	});
+
+	it("continues installs after a conflict in another agent directory", async () => {
+		const source = await writeSource("demo");
+		await withCwd(tempRoot, () =>
+			installSkill({
+				sourceDir: join(source, "demo"),
+				agents: ["claude-code"],
+				scope: "project",
+			}),
+		);
+		await mkdir(target(), { recursive: true });
+		await withCwd(tempRoot, () => createApp(source).execute({ argv: ["skill", "--all"] }));
+		expect((await lstat(join(tempRoot, ".claude", "skills", "demo"))).isSymbolicLink()).toBe(true);
 	});
 });

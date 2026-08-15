@@ -1,5 +1,5 @@
-import { cp, lstat, readdir, rename, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { lstat, mkdir, readlink, readdir, rm, stat, symlink, unlink } from "node:fs/promises";
+import { basename, dirname, join, relative, resolve } from "node:path";
 
 import { resolveSourceDir } from "@crustjs/utils/source";
 
@@ -8,9 +8,11 @@ import {
 	detectInstalledAgents,
 	getUniversalAgents,
 	resolveAgentPath,
+	resolveEffectiveScope,
 } from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";
 import { isValidSkillName } from "./skill-name.ts";
+import { readSkillFrontmatter } from "./source.ts";
 import type {
 	AgentResult,
 	AgentTarget,
@@ -22,11 +24,6 @@ import type {
 	UninstallSkillOptions,
 	UninstallSkillResult,
 } from "./types.ts";
-import {
-	type InstalledManifestStatus,
-	inspectInstalledManifest,
-	readInstalledManifest,
-} from "./version.ts";
 
 export { isValidSkillName } from "./skill-name.ts";
 
@@ -47,45 +44,97 @@ function groupAgentsByOutputDir(
 
 async function pathExists(path: string): Promise<boolean> {
 	try {
-		await lstat(path);
+		await stat(path);
 		return true;
 	} catch {
 		return false;
 	}
 }
 
-function malformedDetails(inspection: InstalledManifestStatus) {
-	if (inspection.status !== "malformed") return undefined;
-	return inspection.rawKind === undefined
-		? { reason: inspection.reason }
-		: { reason: inspection.reason, rawKind: inspection.rawKind };
-}
-
 async function listFiles(dir: string, prefix = ""): Promise<string[]> {
 	const files: string[] = [];
 	for (const entry of await readdir(dir, { withFileTypes: true })) {
-		const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
-		if (entry.isDirectory()) files.push(...(await listFiles(join(dir, entry.name), relative)));
-		else if (entry.isFile()) files.push(relative);
+		const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
+		if (entry.isDirectory()) files.push(...(await listFiles(join(dir, entry.name), relativePath)));
+		else if (entry.isFile()) files.push(relativePath);
 	}
 	return files.sort();
 }
 
-/** Copies one packaged skill source into the requested agent directories. */
-export async function installSkill(options: InstallSkillOptions): Promise<InstallSkillResult> {
-	const sourceDir = resolveSourceDir(options.sourceDir);
-	const sourceInspection = await inspectInstalledManifest(sourceDir);
-	if (sourceInspection.status !== "ok") {
+/** Returns whether a symlink target carries Crust's skill ownership signature. */
+export function isOwnedSkillLink(target: string, name: string): boolean {
+	const segments = target.replaceAll("\\", "/").split("/").filter(Boolean);
+	return segments.at(-2) === "skills" && segments.at(-1) === name;
+}
+
+type LinkInspection =
+	| { readonly status: "absent" }
+	| { readonly status: "conflict" }
+	| {
+			readonly status: "owned";
+			readonly resolves: boolean;
+			readonly correct: boolean;
+	  };
+
+async function inspectLink(
+	outputDir: string,
+	name: string,
+	expectedSourceDir?: string,
+): Promise<LinkInspection> {
+	let entry;
+	try {
+		entry = await lstat(outputDir);
+	} catch {
+		return { status: "absent" };
+	}
+	if (!entry.isSymbolicLink()) return { status: "conflict" };
+
+	const target = await readlink(outputDir);
+	if (!isOwnedSkillLink(target, name)) return { status: "conflict" };
+	return {
+		status: "owned",
+		resolves: await pathExists(resolve(dirname(outputDir), target)),
+		correct:
+			expectedSourceDir === undefined ||
+			resolve(dirname(outputDir), target) === resolve(expectedSourceDir),
+	};
+}
+
+async function removeEntry(outputDir: string): Promise<void> {
+	const entry = await lstat(outputDir);
+	if (entry.isSymbolicLink()) await unlink(outputDir);
+	else await rm(outputDir, { recursive: true, force: true });
+}
+
+export function skillLinkTarget(sourceDir: string, outputDir: string, scope: Scope): string {
+	return resolveEffectiveScope(scope) === "project"
+		? relative(dirname(outputDir), sourceDir)
+		: sourceDir;
+}
+
+async function createSkillLink(target: string, outputDir: string): Promise<void> {
+	await mkdir(dirname(outputDir), { recursive: true });
+	try {
+		await symlink(target, outputDir, "dir");
+	} catch (error) {
 		throw new Error(
-			`Skill source "${sourceDir}" has no valid crust.json (${sourceInspection.status === "absent" ? "missing" : sourceInspection.reason}).`,
+			`Could not create skill symlink "${outputDir}" -> "${target}". Enable symlink permission for this environment and try again.`,
+			{ cause: error },
 		);
 	}
-	const source = sourceInspection.manifest;
+}
+
+/** Links one packaged skill source into the requested agent directories. */
+export async function installSkill(options: InstallSkillOptions): Promise<InstallSkillResult> {
+	const sourceDir = resolveSourceDir(options.sourceDir);
+	const source = await readSkillFrontmatter(sourceDir);
 	if (!isValidSkillName(source.name)) {
 		throw new Error(`Skill source "${sourceDir}" declares invalid name "${source.name}".`);
 	}
-	if (!(await pathExists(join(sourceDir, "SKILL.md")))) {
-		throw new Error(`Skill source "${sourceDir}" is missing SKILL.md.`);
+	if (basename(sourceDir) !== source.name || !isOwnedSkillLink(sourceDir, source.name)) {
+		throw new Error(
+			`Skill source directory "${sourceDir}" must be named "skills/${source.name}" to support ownership-safe links.`,
+		);
 	}
 
 	const agents = options.agents ?? [...getUniversalAgents(), ...(await detectInstalledAgents())];
@@ -94,43 +143,25 @@ export async function installSkill(options: InstallSkillOptions): Promise<Instal
 	const results: AgentResult[] = [];
 
 	for (const [outputDir, groupedAgents] of groupAgentsByOutputDir(agents, scope, source.name)) {
-		const primaryAgent = groupedAgents[0]!;
-		const exists = await pathExists(outputDir);
-		const installedInspection = await inspectInstalledManifest(outputDir);
-		const installed = installedInspection.status === "ok" ? installedInspection.manifest : null;
-
-		if (
-			exists &&
-			(installed === null || installed.name !== source.name || installed.kind !== source.kind) &&
-			options.force !== true
-		) {
-			throw new SkillConflictError({
-				agent: primaryAgent,
-				outputDir,
-				manifestMalformed: malformedDetails(installedInspection),
-				...(installed?.kind !== undefined && installed.kind !== source.kind
-					? { kindMismatch: { existing: installed.kind, attempted: source.kind } }
-					: {}),
-			});
+		const inspection = await inspectLink(outputDir, source.name, sourceDir);
+		if (inspection.status === "conflict" && options.force !== true) {
+			throw new SkillConflictError({ agent: groupedAgents[0]!, outputDir });
 		}
 
-		const status = !exists
-			? "installed"
-			: installed?.version === source.version && options.force !== true
-				? "up-to-date"
-				: "updated";
-		if (status !== "up-to-date") {
-			// Stage the copy next to the target so an interrupted install (this runs in the
-			// auto-update preRun hook) never leaves a partial skill directory behind.
-			const staging = `${outputDir}.staging`;
-			try {
-				await rm(staging, { recursive: true, force: true });
-				await cp(sourceDir, staging, { recursive: true });
-				await rm(outputDir, { recursive: true, force: true });
-				await rename(staging, outputDir);
-			} finally {
-				await rm(staging, { recursive: true, force: true });
-			}
+		const upToDate =
+			inspection.status === "owned" &&
+			inspection.resolves &&
+			inspection.correct &&
+			options.force !== true;
+		const status = upToDate
+			? "up-to-date"
+			: inspection.status === "absent"
+				? "installed"
+				: "repaired";
+
+		if (!upToDate) {
+			if (inspection.status !== "absent") await removeEntry(outputDir);
+			await createSkillLink(skillLinkTarget(sourceDir, outputDir, scope), outputDir);
 		}
 
 		for (const agent of groupedAgents) {
@@ -139,7 +170,6 @@ export async function installSkill(options: InstallSkillOptions): Promise<Instal
 				outputDir,
 				files: status === "up-to-date" ? [] : files,
 				status,
-				previousVersion: status === "updated" ? installed?.version : undefined,
 			});
 		}
 	}
@@ -147,7 +177,7 @@ export async function installSkill(options: InstallSkillOptions): Promise<Instal
 	return { agents: results };
 }
 
-/** Removes only agent-directory copies owned by the named skill. */
+/** Unlinks only agent-directory entries carrying the requested skill's ownership signature. */
 export async function uninstallSkill(
 	options: UninstallSkillOptions,
 ): Promise<UninstallSkillResult> {
@@ -156,9 +186,9 @@ export async function uninstallSkill(
 	const results: UninstallSkillResult["agents"] = [];
 
 	for (const [outputDir, groupedAgents] of groupAgentsByOutputDir(agents, scope, options.name)) {
-		const manifest = await readInstalledManifest(outputDir);
-		const removed = manifest?.name === options.name;
-		if (removed) await rm(outputDir, { recursive: true, force: true });
+		const inspection = await inspectLink(outputDir, options.name);
+		const removed = inspection.status === "owned";
+		if (removed) await unlink(outputDir);
 		for (const agent of groupedAgents) {
 			results.push({ agent, outputDir, status: removed ? "removed" : "not-found" });
 		}
@@ -166,23 +196,22 @@ export async function uninstallSkill(
 	return { agents: results };
 }
 
-/** Reports agent-directory copies owned by the named skill. */
+/** Reports the ownership and health of each requested agent-directory entry. */
 export async function getSkillStatus(options: SkillStatusOptions): Promise<SkillStatusResult> {
 	const agents = options.agents ?? [...ALL_AGENTS];
 	const scope = options.scope ?? "global";
+	const expectedSourceDir = resolveSourceDir(options.sourceDir);
 	const results: SkillStatusResult["agents"] = [];
 
 	for (const [outputDir, groupedAgents] of groupAgentsByOutputDir(agents, scope, options.name)) {
-		const manifest = await readInstalledManifest(outputDir);
-		const installed = manifest?.name === options.name;
-		for (const agent of groupedAgents) {
-			results.push({
-				agent,
-				outputDir,
-				installed,
-				version: installed ? manifest.version : undefined,
-			});
-		}
+		const inspection = await inspectLink(outputDir, options.name, expectedSourceDir);
+		const status =
+			inspection.status === "owned"
+				? inspection.resolves && inspection.correct
+					? "linked"
+					: "dangling"
+				: inspection.status;
+		for (const agent of groupedAgents) results.push({ agent, outputDir, status });
 	}
 	return { agents: results };
 }

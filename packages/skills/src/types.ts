@@ -52,7 +52,6 @@ export type AgentTarget =
 
 export type AgentClass = "universal" | "additional";
 export type Scope = "global" | "project";
-export type SkillKind = "generated" | "bundle";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Command manifest — canonical intermediate representation
@@ -125,9 +124,9 @@ export interface RenderedFile {
 	content: string | Uint8Array;
 }
 
-/** Options for copying one packaged skill source into agent directories. */
+/** Options for linking one packaged skill source into agent directories. */
 export interface InstallSkillOptions {
-	/** Directory containing one skill's SKILL.md and crust.json. */
+	/** Package directory `skills/<name>` containing the skill's SKILL.md. */
 	sourceDir: string | URL;
 	/** Agent targets. Omit to use universal plus PATH-detected agents. */
 	agents?: AgentTarget[];
@@ -137,7 +136,7 @@ export interface InstallSkillOptions {
 	force?: boolean;
 }
 
-export type InstallStatus = "installed" | "updated" | "up-to-date";
+export type InstallStatus = "installed" | "repaired" | "up-to-date";
 export type UninstallStatus = "removed" | "not-found";
 
 export interface AgentResult {
@@ -145,7 +144,6 @@ export interface AgentResult {
 	outputDir: string;
 	files: string[];
 	status: InstallStatus;
-	previousVersion?: string;
 }
 
 export interface InstallSkillResult {
@@ -168,16 +166,19 @@ export interface UninstallSkillResult {
 
 export interface SkillStatusOptions {
 	name: string;
+	/** Expected source used to identify stale-target links. */
+	sourceDir: string | URL;
 	agents?: AgentTarget[];
 	scope?: Scope;
 }
+
+export type SkillLinkStatus = "linked" | "dangling" | "conflict" | "absent";
 
 export interface SkillStatusResult {
 	agents: Array<{
 		agent: AgentTarget;
 		outputDir: string;
-		installed: boolean;
-		version?: string;
+		status: SkillLinkStatus;
 	}>;
 }
 
@@ -187,7 +188,7 @@ export interface SkillOptions {
 	source: string | URL;
 	/** Default agent-directory scope. */
 	defaultScope?: Scope;
-	/** Refresh installed copies from the skill source before commands run. @default true */
+	/** Repair stale or dangling owned links before commands run. @default true */
 	autoUpdate?: boolean;
 	/** Name of the interactive management command. @default "skill" */
 	command?: string;

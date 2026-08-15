@@ -1,10 +1,10 @@
-import { readdir, realpath, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { resolveSourceDir } from "@crustjs/utils/source";
 
-import { readInstalledManifest } from "./version.ts";
+import { probeFrontmatter } from "./bundle.ts";
 
 export class SkillSourceUnavailableError extends Error {
 	override readonly name = "SkillSourceUnavailableError";
@@ -12,7 +12,7 @@ export class SkillSourceUnavailableError extends Error {
 
 async function directoryPath(path: string): Promise<string | null> {
 	try {
-		return (await stat(path)).isDirectory() ? await realpath(path) : null;
+		return (await stat(path)).isDirectory() ? path : null;
 	} catch {
 		return null;
 	}
@@ -56,7 +56,25 @@ export interface PackagedSkill {
 	readonly sourceDir: string;
 	readonly name: string;
 	readonly description: string;
-	readonly version: string;
+}
+
+export async function readSkillFrontmatter(sourceDir: string): Promise<{
+	readonly name: string;
+	readonly description: string;
+}> {
+	let content: string;
+	try {
+		content = await readFile(join(sourceDir, "SKILL.md"), "utf8");
+	} catch {
+		throw new Error(`Skill source directory "${sourceDir}" is missing SKILL.md.`);
+	}
+	const frontmatter = probeFrontmatter(content);
+	if (!frontmatter.name || !frontmatter.description) {
+		throw new Error(
+			`Skill source directory "${sourceDir}" requires name and description in SKILL.md frontmatter.`,
+		);
+	}
+	return { name: frontmatter.name, description: frontmatter.description };
 }
 
 /** Reads every self-describing skill directory in a packaged skill source. */
@@ -66,21 +84,13 @@ export async function loadPackagedSkills(source: string | URL): Promise<readonly
 	for (const entry of await readdir(root, { withFileTypes: true })) {
 		if (!entry.isDirectory()) continue;
 		const sourceDir = join(root, entry.name);
-		const manifest = await readInstalledManifest(sourceDir);
-		if (!manifest) {
-			throw new Error(`Skill source directory "${sourceDir}" has no valid crust.json.`);
-		}
-		if (manifest.name !== entry.name) {
+		const frontmatter = await readSkillFrontmatter(sourceDir);
+		if (frontmatter.name !== entry.name) {
 			throw new Error(
-				`Skill source directory "${sourceDir}" declares name "${manifest.name}" in crust.json.`,
+				`Skill source directory "${sourceDir}" declares name "${frontmatter.name}" in SKILL.md.`,
 			);
 		}
-		skills.push({
-			sourceDir,
-			name: manifest.name,
-			description: manifest.description,
-			version: manifest.version,
-		});
+		skills.push({ sourceDir, name: frontmatter.name, description: frontmatter.description });
 	}
 	if (skills.length === 0) {
 		throw new Error(`Skill source "${root}" does not contain any skill directories.`);

@@ -8,7 +8,6 @@ import { join, sep } from "node:path";
 import { resolveSourceDir } from "@crustjs/utils/source";
 
 import type { RenderedFile } from "./types.ts";
-import { CRUST_MANIFEST } from "./version.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -33,7 +32,7 @@ type FrontmatterProbe = {
 };
 
 /** Reads top-level `name` and `description` from leading YAML frontmatter. */
-function probeFrontmatter(content: string): BundleFrontmatter {
+export function probeFrontmatter(content: string): BundleFrontmatter {
 	const result: BundleFrontmatter = { name: null, description: null };
 	const normalized = content.startsWith("\uFEFF") ? content.slice(1) : content;
 	const lines = normalized.split(/\r?\n/);
@@ -90,9 +89,7 @@ interface CollectedFile {
  *
  * Bundle contents are copied as authored — no implicit name-based filtering.
  * Bundle authors are responsible for keeping `sourceDir` clean (no
- * `node_modules/`, `.git/`, editor cruft, etc.). The single reserved
- * filename is `crust.json` at the bundle root, enforced separately by
- * {@link loadBundleFiles}.
+ * `node_modules/`, `.git/`, editor cruft, etc.).
  *
  * Cycle protection: directories are tracked by their canonical realpath in
  * `visitedDirs` so symlinks like `loop -> .` or `a/back -> ..` (which all
@@ -158,12 +155,11 @@ export interface LoadedBundle {
  * 3. Recursively walk, applying a per-entry path-traversal guard against the
  *    canonical root and a directory-cycle guard.
  * 4. Verify `SKILL.md` exists at the bundle root.
- * 5. Reject a source-root `crust.json` (reserved — Crust regenerates it).
- * 6. Probe the frontmatter for `name:` and `description:` — both are required.
+ * 5. Probe the frontmatter for `name:` and `description:` — both are required.
  *
  * The returned `frontmatter` becomes the source of truth for the build
- * pipeline (written into `crust.json` and used to derive output paths). Crust
- * does not rewrite `SKILL.md`; the bundle author owns it.
+ * pipeline and output paths. Crust does not rewrite `SKILL.md`; the bundle
+ * author owns it.
  *
  * @internal Exported for unit testing.
  */
@@ -194,13 +190,6 @@ export async function loadBundleFiles(sourceDir: string | URL): Promise<LoadedBu
 		throw new Error(
 			`Bundle is missing SKILL.md at the bundle root "${canonicalRoot}". ` +
 				`Every skill bundle must contain a top-level SKILL.md file.`,
-		);
-	}
-
-	if (collected.some((f) => f.relPath === CRUST_MANIFEST)) {
-		throw new Error(
-			`Bundle source at "${canonicalRoot}" contains a reserved file "${CRUST_MANIFEST}" at the root. ` +
-				`Crust generates this file when building the skill source; remove it from your authored bundle.`,
 		);
 	}
 

@@ -6,15 +6,15 @@ import type { CommandSnapshot } from "@crustjs/core";
 import { loadBundleFiles } from "./bundle.ts";
 import { SkillSourceConflictError } from "./errors.ts";
 import { buildManifest } from "./manifest.ts";
-import { renderDistributionMetadata, renderSkill } from "./render.ts";
+import { renderSkill } from "./render.ts";
 import { isValidSkillName } from "./skill-name.ts";
-import type { RenderedFile, SkillKind, SkillMeta } from "./types.ts";
+import type { RenderedFile, SkillMeta } from "./types.ts";
 
 /** Options for rendering an application's skill source. */
 export interface WriteSkillsOptions {
 	/** Directory that receives one subdirectory per skill. */
 	readonly outDir: string;
-	/** Version recorded in every skill's `crust.json`. */
+	/** Version recorded in the generated skill's SKILL.md metadata. */
 	readonly version: string;
 	/** Generated skill name. Defaults to the root command name. */
 	readonly name?: string;
@@ -38,12 +38,16 @@ export async function writeSkills(
 		version: options.version,
 	};
 	validateSkillName(generatedMeta.name);
+	if (generatedMeta.description.trim() === "") {
+		throw new Error(
+			`Skill "${generatedMeta.name}" requires a description for SKILL.md frontmatter.`,
+		);
+	}
 
 	const names = new Set([generatedMeta.name]);
-	const skills: { meta: SkillMeta; kind: SkillKind; files: readonly RenderedFile[] }[] = [
+	const skills: { meta: SkillMeta; files: readonly RenderedFile[] }[] = [
 		{
 			meta: generatedMeta,
-			kind: "generated",
 			files: renderSkill(buildManifest(snapshot), generatedMeta),
 		},
 	];
@@ -61,7 +65,6 @@ export async function writeSkills(
 				description: bundle.frontmatter.description,
 				version: options.version,
 			},
-			kind: "bundle",
 			files: bundle.files,
 		});
 	}
@@ -77,10 +80,7 @@ export async function writeSkills(
 	await rm(outDir, { recursive: true, force: true });
 	for (const skill of skills) {
 		const skillDir = join(outDir, skill.meta.name);
-		await writeFiles(skillDir, [
-			...skill.files,
-			renderDistributionMetadata(skill.meta, skill.kind),
-		]);
+		await writeFiles(skillDir, skill.files);
 	}
 }
 

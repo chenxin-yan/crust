@@ -4,7 +4,6 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadBundleFiles } from "./bundle.ts";
-import { CRUST_MANIFEST } from "./version.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
@@ -53,8 +52,7 @@ describe("loadBundleFiles", () => {
 	it("copies root-level authored content as-is (dotfiles, node_modules, etc. are NOT filtered)", async () => {
 		// Bundle authors own `sourceDir` cleanliness. The walker copies what's
 		// there — including root dotfiles like `.env.example` or `.tool-versions`
-		// that may be intentional skill content. The only reserved root filename
-		// is `crust.json`, covered by its own test below.
+		// that may be intentional skill content.
 		const dir = join(tmpDir, "as-is");
 		await mkdir(join(dir, "node_modules", "left-pad"), { recursive: true });
 		await writeFile(
@@ -79,21 +77,6 @@ describe("loadBundleFiles", () => {
 		expect(paths).toContain(".tool-versions");
 		expect(paths).toContain(".DS_Store");
 		expect(paths).toContain(".git/HEAD");
-	});
-
-	it("throws when the bundle source contains a reserved `crust.json` at the root", async () => {
-		const dir = join(tmpDir, "with-source-crust-json");
-		await mkdir(dir, { recursive: true });
-		await writeFile(
-			join(dir, "SKILL.md"),
-			"---\nname: funnel-builder\ndescription: Build a sales funnel\n---\n",
-		);
-		await writeFile(
-			join(dir, CRUST_MANIFEST),
-			`${JSON.stringify({ name: "funnel-builder", version: "0.0.0" }, null, "\t")}\n`,
-		);
-
-		await expect(loadBundleFiles(dir)).rejects.toThrow(/reserved file "crust\.json"/);
 	});
 
 	it("survives an internal directory symlink cycle without unbounded recursion", async () => {

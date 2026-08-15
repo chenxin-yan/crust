@@ -50,51 +50,58 @@ function formatAgentLabels(agents: readonly AgentTarget[]): string[] {
 	return labels;
 }
 
-async function updateInstalledSkill(
+async function repairInstalledSkill(
 	packagedSkill: PackagedSkill,
 	scope: Scope,
 	hooks: {
-		onNoUpdate?: (scope: Scope) => void;
-		onUpdated?: (labels: string[], scope: Scope) => void;
+		onNoRepair?: (scope: Scope) => void;
+		onRepaired?: (labels: string[], scope: Scope) => void;
 		onConflict?: (error: SkillConflictError) => void;
 	} = {},
 ): Promise<void> {
 	const effectiveScope = resolveEffectiveScope(scope);
-	const status = await getSkillStatus({ name: packagedSkill.name, scope });
-	const outdated = status.agents.filter(
-		(entry) => entry.installed && entry.version !== packagedSkill.version,
-	);
-	if (outdated.length === 0) {
-		hooks.onNoUpdate?.(effectiveScope);
+	const status = await getSkillStatus({
+		name: packagedSkill.name,
+		sourceDir: packagedSkill.sourceDir,
+		scope,
+	});
+	for (const outputDir of new Set(
+		status.agents.filter((entry) => entry.status === "conflict").map((entry) => entry.outputDir),
+	)) {
+		console.warn(
+			yellow(
+				`Skill conflict [${packagedSkill.name}]: "${outputDir}" is not owned by this skill. Skipping link repair.`,
+			),
+		);
+	}
+	const stale = status.agents.filter((entry) => entry.status === "dangling");
+	if (stale.length === 0) {
+		hooks.onNoRepair?.(effectiveScope);
 		return;
 	}
 
 	try {
-		const result = await spinner({
-			message: `Updating ${effectiveScope} skills [${packagedSkill.name}]...`,
-			task: () =>
-				installSkill({
-					sourceDir: packagedSkill.sourceDir,
-					agents: outdated.map((entry) => entry.agent),
-					scope,
-				}),
+		const result = await installSkill({
+			sourceDir: packagedSkill.sourceDir,
+			agents: stale.map((entry) => entry.agent),
+			scope,
 		});
 		const labels = formatAgentLabels(result.agents.map((entry) => entry.agent));
-		if (labels.length > 0) hooks.onUpdated?.(labels, effectiveScope);
+		if (labels.length > 0) hooks.onRepaired?.(labels, effectiveScope);
 	} catch (error) {
 		if (!(error instanceof SkillConflictError)) throw error;
 		if (hooks.onConflict) hooks.onConflict(error);
 		else {
 			console.warn(
 				yellow(
-					`Skill conflict [${packagedSkill.name}]: "${error.details.outputDir}" is not owned by this skill. Skipping auto-update.`,
+					`Skill conflict [${packagedSkill.name}]: "${error.details.outputDir}" is not owned by this skill. Skipping link repair.`,
 				),
 			);
 		}
 	}
 }
 
-async function autoUpdateSkills(options: SkillOptions): Promise<void> {
+async function autoRepairSkills(options: SkillOptions): Promise<void> {
 	let skills: readonly PackagedSkill[];
 	try {
 		skills = await loadPackagedSkills(options.source);
@@ -104,7 +111,7 @@ async function autoUpdateSkills(options: SkillOptions): Promise<void> {
 		if (!(error instanceof SkillSourceUnavailableError)) {
 			console.warn(
 				yellow(
-					`Skipping skill auto-update: ${error instanceof Error ? error.message : String(error)}`,
+					`Skipping skill link repair: ${error instanceof Error ? error.message : String(error)}`,
 				),
 			);
 		}
@@ -115,7 +122,7 @@ async function autoUpdateSkills(options: SkillOptions): Promise<void> {
 		: ["project", "global"];
 	const scopes = [...new Set(configuredScopes.map(resolveEffectiveScope))];
 	for (const packagedSkill of skills) {
-		for (const scope of scopes) await updateInstalledSkill(packagedSkill, scope);
+		for (const scope of scopes) await repairInstalledSkill(packagedSkill, scope);
 	}
 }
 
@@ -126,7 +133,7 @@ export function skill(options: SkillOptions): Extension {
 		hooks: {
 			async preRun(context) {
 				if (context.commandPath[1] === commandName || options.autoUpdate === false) return;
-				await autoUpdateSkills(options);
+				await autoRepairSkills(options);
 			},
 		},
 	});
@@ -140,10 +147,16 @@ async function reconcileSkill(opts: {
 	const { packagedSkill, scope, installAll } = opts;
 	const detected = new Set(await detectInstalledAgents());
 	const universal = getUniversalAgents();
-	const status = await getSkillStatus({ name: packagedSkill.name, scope });
+	const status = await getSkillStatus({
+		name: packagedSkill.name,
+		sourceDir: packagedSkill.sourceDir,
+		scope,
+	});
 	const statusMap = new Map(status.agents.map((entry) => [entry.agent, entry]));
 	const installed = new Set(
-		status.agents.filter((entry) => entry.installed).map((entry) => entry.agent),
+		status.agents
+			.filter((entry) => entry.status === "linked" || entry.status === "dangling")
+			.map((entry) => entry.agent),
 	);
 	const additional = getAdditionalAgents().filter(
 		(agent) => detected.has(agent) || installed.has(agent),
@@ -187,10 +200,7 @@ async function reconcileSkill(opts: {
 		if (values.includes(UNIVERSAL_GROUP)) selected.push(...universal);
 	}
 
-	const toInstall = selected.filter((agent) => {
-		const entry = statusMap.get(agent);
-		return !entry?.installed || entry.version !== packagedSkill.version;
-	});
+	const toInstall = selected.filter((agent) => statusMap.get(agent)?.status !== "linked");
 	const toUninstall = [...installed].filter((agent) => !selected.includes(agent));
 
 	if (toInstall.length > 0) {
@@ -233,7 +243,7 @@ async function reconcileSkill(opts: {
 			}
 		}
 		if (installedAgents.length > 0) {
-			console.log(`\n${bold(`Installed "${packagedSkill.name}" v${packagedSkill.version}`)}`);
+			console.log(`\n${bold(`Installed "${packagedSkill.name}"`)}`);
 			for (const line of new Map(
 				installedAgents.map((entry) => [formatAgentLabels([entry.agent])[0]!, entry.outputDir]),
 			)) {
@@ -268,7 +278,7 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 					},
 				)
 				.add(
-					defineCommand("update", { description: "Update installed skills" }, (update) =>
+					defineCommand("update", { description: "Repair installed skill links" }, (update) =>
 						update
 							.flags({
 								name: "scope",
@@ -278,14 +288,14 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 							.action(async (context) => {
 								const scope = await resolveScope(context.flags.scope, options);
 								for (const packagedSkill of await loadPackagedSkills(options.source)) {
-									await updateInstalledSkill(packagedSkill, scope, {
-										onNoUpdate: (resolvedScope) =>
+									await repairInstalledSkill(packagedSkill, scope, {
+										onNoRepair: (resolvedScope) =>
 											console.log(
-												dim(`No updates needed [${packagedSkill.name}] (${resolvedScope}).`),
+												dim(`No repairs needed [${packagedSkill.name}] (${resolvedScope}).`),
 											),
-										onUpdated: (labels, resolvedScope) =>
+										onRepaired: (labels, resolvedScope) =>
 											console.log(
-												`\n${bold(`Updated "${packagedSkill.name}" to v${packagedSkill.version} for ${labels.join(", ")} (${resolvedScope})`)}`,
+												`\n${bold(`Repaired "${packagedSkill.name}" for ${labels.join(", ")} (${resolvedScope})`)}`,
 											),
 										onConflict: (error) =>
 											console.warn(

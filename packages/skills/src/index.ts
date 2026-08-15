@@ -25,7 +25,7 @@ export type {
 	InstallSkillResult,
 	InstallStatus,
 	Scope,
-	SkillKind,
+	SkillLinkStatus,
 	SkillOptions,
 	SkillStatusOptions,
 	SkillStatusResult,

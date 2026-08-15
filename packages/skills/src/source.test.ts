@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -15,7 +15,26 @@ afterEach(async () => {
 	await rm(tempRoot, { recursive: true, force: true });
 });
 
+async function writeSkill(root: string, dirName: string, declaredName = dirName): Promise<void> {
+	const dir = join(root, dirName);
+	await mkdir(dir, { recursive: true });
+	await writeFile(
+		join(dir, "SKILL.md"),
+		`---\nname: ${declaredName}\ndescription: ${declaredName} skill\n---\n`,
+	);
+}
+
 describe("packaged skill sources", () => {
+	it("returns a logical path without resolving its symlink", async () => {
+		const realSource = join(tempRoot, "store", "skills");
+		const logicalSource = join(tempRoot, "node_modules", "pkg", "skills");
+		await mkdir(realSource, { recursive: true });
+		await mkdir(join(tempRoot, "node_modules", "pkg"), { recursive: true });
+		await symlink(realSource, logicalSource);
+
+		expect(await resolveSkillSource(logicalSource)).toBe(logicalSource);
+	});
+
 	it("resolves an executable-relative fallback", async () => {
 		const name = `skills-${crypto.randomUUID()}`;
 		const source = join(tempRoot, "bin", name);
@@ -38,7 +57,15 @@ describe("packaged skill sources", () => {
 		);
 	});
 
-	it("rejects empty and invalid skill sources", async () => {
+	it("loads name and description from SKILL.md frontmatter", async () => {
+		const root = join(tempRoot, "skills");
+		await writeSkill(root, "demo");
+		expect(await loadPackagedSkills(root)).toMatchObject([
+			{ name: "demo", description: "demo skill", sourceDir: join(root, "demo") },
+		]);
+	});
+
+	it("rejects empty, invalid, and mismatched skill sources", async () => {
 		const empty = join(tempRoot, "empty");
 		await mkdir(empty);
 		await expect(loadPackagedSkills(empty)).rejects.toThrow(
@@ -47,12 +74,9 @@ describe("packaged skill sources", () => {
 
 		const invalid = join(tempRoot, "invalid");
 		await mkdir(join(invalid, "demo"), { recursive: true });
-		await expect(loadPackagedSkills(invalid)).rejects.toThrow("has no valid crust.json");
+		await expect(loadPackagedSkills(invalid)).rejects.toThrow("missing SKILL.md");
 
-		await writeFile(
-			join(invalid, "demo", "crust.json"),
-			JSON.stringify({ name: "other", description: "Other", version: "1.0.0", kind: "generated" }),
-		);
+		await writeSkill(invalid, "demo", "other");
 		await expect(loadPackagedSkills(invalid)).rejects.toThrow('declares name "other"');
 	});
 });

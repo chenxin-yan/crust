@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -26,7 +26,7 @@ async function withCwd<T>(dir: string, run: () => Promise<T>): Promise<T> {
 }
 
 describe("package-as-source pipeline", () => {
-	it("builds once and installs a copy without a mutable intermediate store", async () => {
+	it("builds once and links directly to the packaged source", async () => {
 		tempRoot = await mkdtemp(join(tmpdir(), "crust-skills-e2e-"));
 		const app = new Crust("demo", { description: "Demo CLI" })
 			.action(() => {})
@@ -36,9 +36,10 @@ describe("package-as-source pipeline", () => {
 		const source = join(tempRoot, "package", "skills");
 		await writeSkills(app, { outDir: source, version: "1.0.0" });
 
-		// The extension discovers skills through loadPackagedSkills, which requires each
-		// directory name to match its manifest name — pin that writeSkills upholds it.
-		expect(await loadPackagedSkills(source)).toMatchObject([{ name: "demo", version: "1.0.0" }]);
+		// Discovery reads required Agent Skills frontmatter and validates the directory name.
+		expect(await loadPackagedSkills(source)).toMatchObject([
+			{ name: "demo", description: "Demo CLI" },
+		]);
 
 		await withCwd(tempRoot, () =>
 			installSkill({
@@ -49,13 +50,10 @@ describe("package-as-source pipeline", () => {
 		);
 
 		const installed = join(tempRoot, ".claude", "skills", "demo");
+		expect((await lstat(installed)).isSymbolicLink()).toBe(true);
 		expect(await readFile(join(installed, "SKILL.md"), "utf8")).toContain("name: demo");
 		expect(await readFile(join(installed, "commands", "deploy.md"), "utf8")).toContain(
 			"# `demo deploy`",
 		);
-		expect(JSON.parse(await readFile(join(installed, "crust.json"), "utf8"))).toMatchObject({
-			name: "demo",
-			version: "1.0.0",
-		});
 	});
 });
