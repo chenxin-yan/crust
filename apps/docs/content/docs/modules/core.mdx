@@ -127,7 +127,8 @@ These types back [`run(path, input?, io?)`](/docs/api/crust) and the [`@crustjs/
 | Type                    | Description                                                                 |
 | ----------------------- | --------------------------------------------------------------------------- |
 | `Extension`             | Named frozen Extension value                                                |
-| `ExtensionConfig`       | Owned flags, commands, per-command section contributions, and named hooks   |
+| `ExtensionBuildContext` | Frozen root snapshot and resolved output directory for artifact generation  |
+| `ExtensionConfig`       | Owned flags, commands, section contributions, build generation, and hooks   |
 | `ExtensionFlagDef`      | Extension-owned flag with optional `recursive` scope                        |
 | `ExtensionContext`      | Readonly invocation view with inferred Extension-owned flags and `finish()` |
 | `ExtensionHooks`        | Typed `preRun`, `postRun`, and `onError` hook slots                         |

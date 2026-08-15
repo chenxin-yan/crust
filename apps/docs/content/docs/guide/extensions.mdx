@@ -25,7 +25,7 @@ Two consequences of the root-only model:
 
 ## Author an Extension
 
-`defineExtension(name, config)` returns a frozen plain value. The config can contain `flags`, `commands`, `commandSections`, and `hooks`:
+`defineExtension(name, config)` returns a frozen plain value. The config can contain `flags`, `commands`, `commandSections`, `build`, and `hooks`:
 
 <include lang="ts" meta='title="diagnostics.ts"'>
   ../../../examples/extensions/diagnostics.ts
@@ -79,6 +79,10 @@ const guidance = defineExtension("guidance", {
 `command` is a canonical path relative to the root; `[]` targets the root. Unknown paths and aliases are rejected with a `DEFINITION` error instead of being silently omitted. Contributions are appended after authored `meta.sections`, in `.extend()` order. The callback receives a frozen snapshot containing the fully materialized command tree and authored sections; renderers consume only each target command's merged `meta.sections`.
 
 Titles must be non-empty single lines, and bodies are non-empty plain text so the same content is safe for terminal help and mdoc output.
+
+## Build hooks
+
+`build(ctx)` generates artifacts when invoked by build tooling such as `crust build`; it does not run during `run()` or `execute()`. The context contains the frozen root Command Snapshot and a resolved absolute `outDir`. Build hooks may be async, and thrown or rejected errors propagate to the build tool.
 
 ## Hooks
 

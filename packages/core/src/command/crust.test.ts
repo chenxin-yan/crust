@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 
 import type { StandardSchema } from "@crustjs/utils/schema";
 
@@ -1028,6 +1028,39 @@ describe("Crust .extend()", () => {
 		expect(Object.isFrozen(ext)).toBe(true);
 		expect(ext.name).toBe("frozen");
 		expect(ext.flags).toEqual({ x: { type: "boolean" } });
+	});
+
+	it("exposes an async build hook with a frozen snapshot and absolute outDir", async () => {
+		const outDir = join(tmpdir(), "crust-build");
+		let completed = false;
+		const extension = defineExtension("builder", {
+			async build(ctx) {
+				expect(Object.isFrozen(ctx.snapshot)).toBe(true);
+				expect(isAbsolute(ctx.outDir)).toBe(true);
+				expect(ctx.outDir).toBe(outDir);
+				await Promise.resolve();
+				completed = true;
+			},
+		});
+		const snapshot = await new Crust("cli").extend(extension).snapshot();
+
+		await extension.build?.({ snapshot, outDir });
+
+		expect(completed).toBe(true);
+	});
+
+	it("propagates build hook errors", async () => {
+		const failure = new Error("build failed");
+		const extension = defineExtension("builder", {
+			build: async () => {
+				throw failure;
+			},
+		});
+		const snapshot = await new Crust("cli").extend(extension).snapshot();
+
+		await expect(
+			extension.build?.({ snapshot, outDir: join(tmpdir(), "crust-build") }),
+		).rejects.toBe(failure);
 	});
 
 	it("infers Extension-owned flags in hook contexts", () => {

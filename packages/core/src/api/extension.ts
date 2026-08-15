@@ -37,6 +37,14 @@ export type InvocationOutcome =
 	| { readonly status: "finished"; readonly by: string }
 	| { readonly status: "failed"; readonly error: unknown };
 
+/** Build-time context passed to an Extension's artifact generator. */
+export interface ExtensionBuildContext {
+	/** Frozen snapshot of the application root. */
+	readonly snapshot: CommandSnapshot;
+	/** Resolved absolute output directory. */
+	readonly outDir: string;
+}
+
 /**
  * Readonly invocation view passed to Extension hooks.
  *
@@ -186,6 +194,8 @@ export interface ExtensionConfig<
 	readonly commands?: readonly CommandDefinition<any>[];
 	/** Plain-text sections contributed to commands' `meta.sections` when the application is prepared. */
 	readonly commandSections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
+	/** Build-time artifact generation, invoked by build tooling (e.g. `crust build`). */
+	readonly build?: (ctx: ExtensionBuildContext) => void | Promise<void>;
 	readonly hooks?: ExtensionHooks<Defs>;
 }
 
@@ -205,6 +215,7 @@ export interface Extension {
 	readonly flags?: Readonly<Record<string, ExtensionFlagDef>>;
 	readonly commands?: readonly CommandDefinition<any>[];
 	readonly commandSections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
+	readonly build?: (ctx: ExtensionBuildContext) => void | Promise<void>;
 	readonly hooks?: ExtensionHooks;
 }
 
