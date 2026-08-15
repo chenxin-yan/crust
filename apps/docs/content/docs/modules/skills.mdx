@@ -89,14 +89,14 @@ Symlink creation requires operating-system permission. If creation fails, instal
 
 Universal agents share one directory and appear as a single prompt choice:
 
-- `amp`, `cline`, `codex`, `cursor`, `gemini-cli`, `github-copilot`, `kimi-cli`, `opencode`, `replit`
+- `amp`, `cline`, `codex`, `cursor`, `gemini-cli`, `github-copilot`, `kimi-cli`, `opencode`, `replit`, `warp`, `zed`
 
-Additional agents are detected through a non-executing `PATH` lookup. The exported `AgentTarget` union contains the full list.
+Additional agents are detected through a non-executing `PATH` lookup. The exported `AgentTarget` union contains the full list. Antigravity remains additional because only its project path is universal: `.agents/skills`; its global path is `~/.gemini/config/skills`. Mistral Vibe uses `$VIBE_HOME/skills` globally, falling back to `~/.vibe/skills`.
 
-| Group      | Global path                       | Project path            |
-| ---------- | --------------------------------- | ----------------------- |
-| Universal  | `~/.agents/skills/<name>`         | `.agents/skills/<name>` |
-| Additional | Agent-specific convention per CLI | Agent-specific path     |
+| Group      | Global path                       | Project path             |
+| ---------- | --------------------------------- | ------------------------ |
+| Universal  | `~/.agents/skills/<name>`         | `.agents/skills/<name>`  |
+| Additional | Agent-specific convention per CLI | Agent convention per CLI |
 
 When the working directory is the home directory, project scope resolves to global scope.
 

@@ -47,7 +47,9 @@ export type AgentTarget =
 	| "roo"
 	| "trae"
 	| "trae-cn"
+	| "warp"
 	| "windsurf"
+	| "zed"
 	| "zencoder";
 
 export type AgentClass = "universal" | "additional";
