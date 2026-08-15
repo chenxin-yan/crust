@@ -152,12 +152,12 @@ describe("skill extension package sources", () => {
 
 	it("rejects an invalid --scope value", async () => {
 		const source = await writeSource("demo", "1.0.0");
-		const previousExitCode = process.exitCode;
 		await withCwd(tempRoot, () =>
 			createApp(source).execute({ argv: ["skill", "update", "--scope", "bogus"] }),
 		);
 		expect(process.exitCode).toBe(1);
-		process.exitCode = previousExitCode;
+		// Clear the failure code execute() set so the test process itself exits 0.
+		process.exitCode = 0;
 	});
 
 	it("does not break unrelated commands when the source contains an invalid skill directory", async () => {
