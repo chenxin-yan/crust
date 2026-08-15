@@ -27,7 +27,7 @@ import type {
 
 export { isValidSkillName } from "./skill-name.ts";
 
-function groupAgentsByOutputDir(
+export function groupAgentsByOutputDir(
 	agents: readonly AgentTarget[],
 	scope: Scope,
 	name: string,

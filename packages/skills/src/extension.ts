@@ -20,7 +20,12 @@ import {
 } from "./agents.ts";
 import { writeSkillsFromSnapshot } from "./build.ts";
 import { SkillConflictError } from "./errors.ts";
-import { getSkillStatus, installSkill, uninstallSkill } from "./generate.ts";
+import {
+	getSkillStatus,
+	groupAgentsByOutputDir,
+	installSkill,
+	uninstallSkill,
+} from "./generate.ts";
 import {
 	SkillSourceUnavailableError,
 	loadPackagedSkills,
@@ -104,6 +109,7 @@ async function repairInstalledSkill(
 			);
 		}
 	} catch (error) {
+		// The entry may change hands between the status check and install (TOCTOU).
 		if (!(error instanceof SkillConflictError)) throw error;
 		console.warn(
 			yellow(
@@ -317,14 +323,7 @@ async function reconcileSkill(opts: {
 	const toUninstall = [...installed].filter((agent) => !selected.includes(agent));
 
 	if (toInstall.length > 0) {
-		const groups = new Map<string, AgentTarget[]>();
-		for (const agent of toInstall) {
-			const outputDir = statusMap.get(agent)!.outputDir;
-			const group = groups.get(outputDir);
-			if (group) group.push(agent);
-			else groups.set(outputDir, [agent]);
-		}
-
+		const groups = groupAgentsByOutputDir(toInstall, scope, packagedSkill.name);
 		const installedAgents: InstallSkillResult["agents"] = [];
 		for (const agents of groups.values()) {
 			const runInstall = (force?: boolean) =>
