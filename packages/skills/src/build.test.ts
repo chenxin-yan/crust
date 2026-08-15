@@ -114,4 +114,16 @@ describe("writeSkills", () => {
 		await expect(result).rejects.toMatchObject({ skillName: "demo" });
 		await expect(readdir(outDir)).rejects.toThrow();
 	});
+
+	it("rejects an invalid skill name before writing", async () => {
+		const outDir = join(tempRoot, "output");
+
+		const result = writeSkills(createApp(), {
+			outDir,
+			version: "1.0.0",
+			name: "Bad_Name",
+		});
+		await expect(result).rejects.toThrow('Invalid skill name "Bad_Name"');
+		await expect(readdir(outDir)).rejects.toThrow();
+	});
 });
