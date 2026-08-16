@@ -303,7 +303,7 @@ export const buildCommand = defineCommand(
 					name: "validate",
 					type: "boolean",
 					description:
-						"Materialize command definitions before compiling (disable with --no-validate)",
+						"Materialize command definitions before compiling; --no-validate also skips Extension build hooks",
 					default: true,
 				},
 				{

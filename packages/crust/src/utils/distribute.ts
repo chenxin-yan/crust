@@ -52,7 +52,7 @@ type PublishPackageJson = {
 	version: string;
 	type?: "module";
 	files?: string[];
-	/** npm man field: paths to section-1 pages, e.g. `./man/mycli.1` */
+	/** npm man field: paths to man pages, e.g. `./man/mycli.1` */
 	man?: string[];
 	bin?: Record<string, string>;
 	optionalDependencies?: Record<string, string>;

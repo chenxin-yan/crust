@@ -370,9 +370,29 @@ async function prepareEntrypoint(
 			);
 		}
 
-		const builtExtensions = buildOutDir
-			? (JSON.parse(await readFile(buildResultPath, "utf8")) as string[])
-			: [];
+		let builtExtensions: string[] = [];
+		if (buildOutDir) {
+			let serializedResult: string;
+			try {
+				serializedResult = await readFile(buildResultPath, "utf8");
+			} catch (error) {
+				if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+					throw new Error(
+						`Entry exited without producing Extension build results.\n  Ensure ${absoluteEntry} uses a @crustjs/core version that supports Extension build hooks, or pass --no-validate to skip them.`,
+						{ cause: error },
+					);
+				}
+				throw error;
+			}
+			try {
+				builtExtensions = JSON.parse(serializedResult) as string[];
+			} catch (error) {
+				throw new Error(
+					`Entry produced invalid Extension build results.\n  Ensure ${absoluteEntry} uses a compatible @crustjs/core version.`,
+					{ cause: error },
+				);
+			}
+		}
 		return { snapshot, builtExtensions };
 	} finally {
 		await rm(snapshotDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });

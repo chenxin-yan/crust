@@ -179,7 +179,7 @@ function isWithin(parent: string, child: string): boolean {
 }
 
 async function readPackageVersion(): Promise<string | undefined> {
-	const path = resolve("package.json");
+	const path = resolve(process.cwd(), "package.json");
 	let content: string;
 	try {
 		content = await readFile(path, "utf8");

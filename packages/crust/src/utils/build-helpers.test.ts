@@ -114,6 +114,24 @@ describe("snapshotEntrypoint", () => {
 		);
 	});
 
+	it("explains when an entry produces a snapshot but no Extension build results", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "crust-entry-snapshot-test-"));
+		tempDirs.push(directory);
+		const entry = join(directory, "cli.ts");
+		// Simulates an older @crustjs/core that honors the snapshot protocol but
+		// predates build hooks: it writes the snapshot and exits without build results.
+		await writeFile(
+			entry,
+			`const snapshot = { meta: { name: "fixture" }, args: [], flags: {}, subCommands: {} };\n` +
+				`await Bun.write(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!, JSON.stringify(snapshot));\n` +
+				`process.exit(0);\n`,
+		);
+
+		await expect(buildEntrypoint(entry, join(directory, "dist"))).rejects.toThrow(
+			"Entry exited without producing Extension build results",
+		);
+	});
+
 	it("rethrows the entry's error when the subprocess exits non-zero", async () => {
 		const directory = await mkdtemp(join(tmpdir(), "crust-entry-snapshot-test-"));
 		tempDirs.push(directory);
