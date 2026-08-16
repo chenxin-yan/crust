@@ -53,12 +53,7 @@ function formatAgentLabels(agents: readonly AgentTarget[]): string[] {
 async function repairInstalledSkill(
 	packagedSkill: PackagedSkill,
 	scope: Scope,
-	hooks: {
-		onNoRepair?: (scope: Scope) => void;
-		onRepaired?: (labels: string[], scope: Scope) => void;
-		onConflict?: (error: SkillConflictError) => void;
-		onConflictOutput?: (outputDir: string) => void;
-	} = {},
+	report = false,
 ): Promise<void> {
 	const effectiveScope = resolveEffectiveScope(scope);
 	const status = await getSkillStatus({
@@ -66,14 +61,18 @@ async function repairInstalledSkill(
 		sourceDir: packagedSkill.sourceDir,
 		scope,
 	});
-	for (const outputDir of new Set(
-		status.agents.filter((entry) => entry.status === "conflict").map((entry) => entry.outputDir),
-	)) {
-		hooks.onConflictOutput?.(outputDir);
+	if (report) {
+		for (const outputDir of new Set(
+			status.agents.filter((entry) => entry.status === "conflict").map((entry) => entry.outputDir),
+		)) {
+			console.warn(yellow(`Skipped "${outputDir}": not owned by this skill.`));
+		}
 	}
 	const stale = status.agents.filter((entry) => entry.status === "dangling");
 	if (stale.length === 0) {
-		hooks.onNoRepair?.(effectiveScope);
+		if (report) {
+			console.log(dim(`No repairs needed [${packagedSkill.name}] (${effectiveScope}).`));
+		}
 		return;
 	}
 
@@ -84,17 +83,20 @@ async function repairInstalledSkill(
 			scope,
 		});
 		const labels = formatAgentLabels(result.agents.map((entry) => entry.agent));
-		if (labels.length > 0) hooks.onRepaired?.(labels, effectiveScope);
-	} catch (error) {
-		if (!(error instanceof SkillConflictError)) throw error;
-		if (hooks.onConflict) hooks.onConflict(error);
-		else {
-			console.warn(
-				yellow(
-					`Skill conflict [${packagedSkill.name}]: "${error.details.outputDir}" is not owned by this skill. Skipping link repair.`,
-				),
+		if (report && labels.length > 0) {
+			console.log(
+				`\n${bold(`Repaired "${packagedSkill.name}" for ${labels.join(", ")} (${effectiveScope})`)}`,
 			);
 		}
+	} catch (error) {
+		if (!(error instanceof SkillConflictError)) throw error;
+		console.warn(
+			yellow(
+				report
+					? `Skipped "${error.details.outputDir}": not owned by this skill.`
+					: `Skill conflict [${packagedSkill.name}]: "${error.details.outputDir}" is not owned by this skill. Skipping link repair.`,
+			),
+		);
 	}
 }
 
@@ -305,22 +307,7 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 							.action(async (context) => {
 								const scope = await resolveScope(context.flags.scope, options);
 								for (const packagedSkill of await loadPackagedSkills(options.source)) {
-									await repairInstalledSkill(packagedSkill, scope, {
-										onNoRepair: (resolvedScope) =>
-											console.log(
-												dim(`No repairs needed [${packagedSkill.name}] (${resolvedScope}).`),
-											),
-										onRepaired: (labels, resolvedScope) =>
-											console.log(
-												`\n${bold(`Repaired "${packagedSkill.name}" for ${labels.join(", ")} (${resolvedScope})`)}`,
-											),
-										onConflict: (error) =>
-											console.warn(
-												yellow(`Skipped "${error.details.outputDir}": not owned by this skill.`),
-											),
-										onConflictOutput: (outputDir) =>
-											console.warn(yellow(`Skipped "${outputDir}": not owned by this skill.`)),
-									});
+									await repairInstalledSkill(packagedSkill, scope, true);
 								}
 							}),
 					),
