@@ -45,7 +45,6 @@ crust build --env-file .env.production
 | `--validate` / `--no-validate` | —     | `"boolean"`             | `true`        | Materialize command definitions before compiling           |
 | `--package`                    | —     | `"boolean"`             | `false`       | Stage npm packages in `dist/npm` instead of raw binaries   |
 | `--stage-dir`                  | —     | `"string"`              | `dist/npm`    | Package staging directory; only used with `--package`      |
-| `--man`                        | —     | `"boolean"`             | `false`       | Write an mdoc(7) page from the prepared Command Snapshot   |
 
 ## Supported Targets
 
@@ -177,7 +176,7 @@ By default, `crust build` materializes your full command tree before compiling. 
   effects are unavoidable.
 </Callout>
 
-When `--man` is enabled, the same subprocess supplies both validation and man generation; the entry point does not need to export its `Crust` builder. `--man --no-validate` still prepares a snapshot because the manual renderer requires it.
+After preparing the snapshot, the same subprocess runs every registered Extension `build` hook in registration order. Extension presence is the source of intent: for example, `man()` writes a manual and `skill()` writes packaged skills without Extension-specific build flags. Hook errors fail the build with the Extension name. Top-level artifact directories are retained under `<outdir>` and included in the staged root package when `--package` is used; this also works when `--stage-dir` contains `--outdir`.
 
 If you pass `--env-file`, the snapshot subprocess receives the same explicit env-file inputs as the build step. This keeps Extension configuration and command definitions aligned with the final compilation.
 
@@ -202,7 +201,7 @@ Validation is enabled by default. To skip it:
 crust build --no-validate
 ```
 
-Use this escape hatch for entries with unavoidable import-time side effects. It can also help when the snapshot subprocess cannot resolve your project's dependencies in a particular environment (for example, a non-standard module resolution setup), or when the entry never calls `await app.execute()` — such entries fail validation with a missing-snapshot error. It does not skip snapshot preparation when `--man` is enabled.
+Use this escape hatch for entries with unavoidable import-time side effects. It can also help when the snapshot subprocess cannot resolve your project's dependencies in a particular environment (for example, a non-standard module resolution setup), or when the entry never calls `await app.execute()` — such entries fail validation with a missing-snapshot error. Because build hooks run in that subprocess, `--no-validate` also skips every Extension build hook.
 
 ## Per-OS Distribution with `--package`
 

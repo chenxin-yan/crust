@@ -107,7 +107,6 @@
         "@crustjs/config": "workspace:*",
         "@crustjs/core": "workspace:*",
         "@crustjs/extensions": "workspace:*",
-        "@crustjs/man": "workspace:*",
         "@crustjs/style": "workspace:*",
       },
     },

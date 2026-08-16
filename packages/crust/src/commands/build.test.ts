@@ -119,10 +119,8 @@ describe("buildCommand definition", () => {
 		expect(result.flags["stage-dir"]).toBe(".stage");
 	});
 
-	it("rejects removed --distribute flag", async () => {
-		await expect(parseBuildArgs({ distribute: true })).rejects.toThrow(
-			'Unknown flag "--distribute"',
-		);
+	it.each(["distribute", "man", "skills"])("rejects removed --%s flag", async (name) => {
+		await expect(parseBuildArgs({ [name]: true })).rejects.toThrow(`Unknown flag "--${name}"`);
 	});
 
 	it("defines --target/-t as repeatable string flag", async () => {

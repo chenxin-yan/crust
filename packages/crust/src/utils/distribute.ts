@@ -1,8 +1,17 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import {
+	copyFileSync,
+	cpSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
-import type { CommandSnapshot } from "@crustjs/core/tooling";
-import { writeManPage } from "@crustjs/man";
 import { bold, cyan, dim, green } from "@crustjs/style";
 
 import {
@@ -13,7 +22,6 @@ import {
 	resolveTargets,
 	TARGET_INFO,
 	type TargetInfo,
-	snapshotEntrypoint,
 } from "./build-helpers.ts";
 
 const MAX_PACKAGE_NAME_LENGTH = 214;
@@ -164,16 +172,17 @@ export function inferCommandName(
 export function buildDistributionRootPackageJson(
 	metadata: DistributionMetadata,
 	targets: readonly DistributionTarget[],
-	options?: { includeMan?: boolean },
+	options?: { artifactDirs?: readonly string[]; manPages?: readonly string[] },
 ): PublishPackageJson {
-	const includeMan = options?.includeMan === true;
+	const artifactDirs = options?.artifactDirs ?? [];
+	const manPages = options?.manPages ?? [];
 	const rootPackageJson: PublishPackageJson = {
 		...metadata.rootPackageJson,
 		name: metadata.rootPackageName,
 		version: metadata.version,
 		type: "module",
-		files: includeMan ? ["bin", "man"] : ["bin"],
-		...(includeMan ? { man: [`./man/${metadata.baseName}.1`] } : {}),
+		files: ["bin", ...artifactDirs],
+		...(manPages.length > 0 ? { man: manPages.map((page) => `./man/${page}`) } : {}),
 		bin: {
 			[metadata.commandName]: `bin/${metadata.commandName}.js`,
 		},
@@ -439,7 +448,7 @@ function stageDistributionPackages(
 	stageDir: string,
 	metadata: DistributionMetadata,
 	targets: readonly DistributionTarget[],
-	options?: { includeMan?: boolean },
+	options?: { artifactDirs?: readonly string[]; manPages?: readonly string[] },
 ): void {
 	rmSync(stageDir, { recursive: true, force: true });
 	mkdirSync(stageDir, { recursive: true });
@@ -447,9 +456,6 @@ function stageDistributionPackages(
 	const rootDir = join(stageDir, "root");
 	const rootBinDir = join(rootDir, "bin");
 	mkdirSync(rootBinDir, { recursive: true });
-	if (options?.includeMan) {
-		mkdirSync(join(rootDir, "man"), { recursive: true });
-	}
 
 	writeJson(
 		join(rootDir, "package.json"),
@@ -482,12 +488,8 @@ export async function runDistributeBuild(options: {
 	target?: string[];
 	stageDir: string;
 	envFiles?: readonly string[];
-	/** Snapshot already prepared by the outer build command. */
-	root?: CommandSnapshot;
-	/** Write `root/man/<name>.1` in the staged meta-package and set npm `man` / `files`; also mirrors to `<outdir>/man/` */
-	man?: boolean;
-	/** Directory prefix for mirrored man output (default `dist`) */
-	outdir?: string;
+	/** Directory whose Extension-emitted artifact subdirectories are staged in the root package. */
+	artifactOutDir?: string;
 }): Promise<void> {
 	const cwd = options.cwd ?? process.cwd();
 	const entryPath = resolve(cwd, options.entry);
@@ -496,11 +498,6 @@ export async function runDistributeBuild(options: {
 		throw new Error(
 			`Entry file not found: ${entryPath}\n  Specify a valid entry file with --entry <path>`,
 		);
-	}
-
-	let root = options.root;
-	if (!root && options.man) {
-		root = await snapshotEntrypoint(entryPath, options.envFiles);
 	}
 
 	const stageDir = resolve(cwd, options.stageDir);
@@ -513,25 +510,20 @@ export async function runDistributeBuild(options: {
 
 	console.log(`Staging ${bold(`${targets.length}`)} distribution target(s) in ${dim(stageDir)}...`);
 
-	stageDistributionPackages(cwd, stageDir, metadata, distributionTargets, {
-		includeMan: options.man === true,
-	});
-
-	const rootDir = join(stageDir, "root");
-	if (options.man) {
-		const stagedManPath = join(rootDir, "man", `${metadata.baseName}.1`);
-		console.log(`Writing man page ${dim(stagedManPath)}...`);
-		await writeManPage({
-			root: root!,
-			name: metadata.baseName,
-			outfile: stagedManPath,
+	const artifacts = preserveArtifacts(options.artifactOutDir, stageDir);
+	try {
+		stageDistributionPackages(cwd, stageDir, metadata, distributionTargets, {
+			artifactDirs: artifacts.names,
+			manPages: artifacts.manPages,
 		});
-		const mirrorDir = resolve(cwd, options.outdir ?? "dist", "man");
-		mkdirSync(mirrorDir, { recursive: true });
-		const mirrorPath = join(mirrorDir, `${metadata.baseName}.1`);
-		copyFileSync(stagedManPath, mirrorPath);
-		console.log(`${green("✓")} Man page: ${stagedManPath}`);
-		console.log(`${dim("Mirror:")} ${mirrorPath}`);
+
+		const rootDir = join(stageDir, "root");
+		for (const name of artifacts.names) {
+			cpSync(join(artifacts.sourceDir, name), join(rootDir, name), { recursive: true });
+		}
+		artifacts.restore();
+	} finally {
+		artifacts.cleanup();
 	}
 
 	for (const targetPackage of distributionTargets) {
@@ -549,4 +541,60 @@ export async function runDistributeBuild(options: {
 		console.log(`  ${targetPackage.packageDir}`);
 	}
 	console.log(`\n${dim("Manifest:")} ${manifestPath}`);
+}
+
+function isWithin(parent: string, child: string): boolean {
+	const path = relative(parent, child);
+	return path === "" || (!isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`));
+}
+
+function preserveArtifacts(artifactOutDir: string | undefined, stageDir: string) {
+	if (!artifactOutDir || !existsSync(artifactOutDir)) {
+		return {
+			names: [] as string[],
+			manPages: [] as string[],
+			sourceDir: artifactOutDir ?? stageDir,
+			restore() {},
+			cleanup() {},
+		};
+	}
+
+	// ponytail: hooks own top-level artifact directories; add an artifact manifest if file-level outputs are needed.
+	const names = readdirSync(artifactOutDir, { withFileTypes: true })
+		.filter((entry) => entry.isDirectory() && !isWithin(join(artifactOutDir, entry.name), stageDir))
+		.map((entry) => entry.name)
+		.sort();
+	const mustPreserve = isWithin(stageDir, artifactOutDir);
+	const temporaryDir = mustPreserve ? mkdtempSync(join(tmpdir(), "crust-artifacts-")) : undefined;
+	const sourceDir = temporaryDir ?? artifactOutDir;
+	if (temporaryDir) {
+		for (const name of names) {
+			cpSync(join(artifactOutDir, name), join(temporaryDir, name), { recursive: true });
+		}
+	}
+	const manDir = join(sourceDir, "man");
+	const manPages = names.includes("man")
+		? readdirSync(manDir, { withFileTypes: true })
+				.filter((entry) => entry.isFile())
+				.map((entry) => entry.name)
+				.sort()
+		: [];
+
+	return {
+		names,
+		manPages,
+		sourceDir,
+		restore() {
+			if (!temporaryDir) return;
+			mkdirSync(artifactOutDir, { recursive: true });
+			for (const name of names) {
+				const destination = join(artifactOutDir, name);
+				rmSync(destination, { recursive: true, force: true });
+				cpSync(join(sourceDir, name), destination, { recursive: true });
+			}
+		},
+		cleanup() {
+			if (temporaryDir) rmSync(temporaryDir, { recursive: true, force: true });
+		},
+	};
 }

@@ -3,7 +3,12 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 
-import { type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
+import {
+	BUILD_OUT_DIR_ENV,
+	BUILD_RESULT_PATH_ENV,
+	type CommandSnapshot,
+	SNAPSHOT_PATH_ENV,
+} from "@crustjs/core/tooling";
 import { yellow } from "@crustjs/style";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -267,9 +272,26 @@ export async function snapshotEntrypoint(
 	entryPath: string,
 	envFiles: readonly string[] = [],
 ): Promise<CommandSnapshot> {
+	return (await prepareEntrypoint(entryPath, envFiles)).snapshot;
+}
+
+export async function buildEntrypoint(
+	entryPath: string,
+	outDir: string,
+	envFiles: readonly string[] = [],
+): Promise<{ readonly snapshot: CommandSnapshot; readonly builtExtensions: readonly string[] }> {
+	return prepareEntrypoint(entryPath, envFiles, resolve(outDir));
+}
+
+async function prepareEntrypoint(
+	entryPath: string,
+	envFiles: readonly string[],
+	buildOutDir?: string,
+): Promise<{ readonly snapshot: CommandSnapshot; readonly builtExtensions: readonly string[] }> {
 	const absoluteEntry = resolve(entryPath);
 	const snapshotDir = await mkdtemp(join(tmpdir(), "crust-snapshot-"));
 	const snapshotPath = join(snapshotDir, "command.json");
+	const buildResultPath = join(snapshotDir, "build.json");
 
 	try {
 		const spawnedAt = Date.now();
@@ -277,6 +299,12 @@ export async function snapshotEntrypoint(
 			env: {
 				...process.env,
 				[SNAPSHOT_PATH_ENV]: snapshotPath,
+				...(buildOutDir
+					? {
+							[BUILD_OUT_DIR_ENV]: buildOutDir,
+							[BUILD_RESULT_PATH_ENV]: buildResultPath,
+						}
+					: {}),
 				BUN_BE_BUN: "1",
 			},
 			cwd: process.cwd(),
@@ -294,7 +322,7 @@ export async function snapshotEntrypoint(
 			// elapsed time to tell our timeout kill apart from external signals.
 			if (Date.now() - spawnedAt >= SNAPSHOT_TIMEOUT_MS) {
 				throw new Error(
-					`Command Snapshot preparation timed out after ${SNAPSHOT_TIMEOUT_MS / 1_000}s.\n  An extension setup() hook may be hanging. Use --no-validate to skip unless --man is enabled.`,
+					`Command Snapshot preparation timed out after ${SNAPSHOT_TIMEOUT_MS / 1_000}s.\n  An Extension build hook may be hanging. Use --no-validate to skip entry preparation and build hooks.`,
 				);
 			}
 			throw new Error(
@@ -332,14 +360,20 @@ export async function snapshotEntrypoint(
 			}
 			throw error;
 		}
+		let snapshot: CommandSnapshot;
 		try {
-			return JSON.parse(serialized) as CommandSnapshot;
+			snapshot = JSON.parse(serialized) as CommandSnapshot;
 		} catch (error) {
 			throw new Error(
 				`Entry produced an invalid Command Snapshot.\n  Ensure ${absoluteEntry} uses a compatible @crustjs/core version.`,
 				{ cause: error },
 			);
 		}
+
+		const builtExtensions = buildOutDir
+			? (JSON.parse(await readFile(buildResultPath, "utf8")) as string[])
+			: [];
+		return { snapshot, builtExtensions };
 	} finally {
 		await rm(snapshotDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 	}

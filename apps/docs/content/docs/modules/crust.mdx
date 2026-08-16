@@ -18,7 +18,7 @@ bun add -d @crustjs/crust
 | [`crust build`](/docs/guide/build)                                 | Validate and compile a CLI to standalone executables           |
 | [`crust publish`](/docs/guide/build#publishing-with-crust-publish) | Publish staged npm packages created by `crust build --package` |
 
-`crust build` runs the entry point in a snapshot subprocess before compiling it. `crust build` sets the `SNAPSHOT_PATH_ENV` lockstep tooling constant (`CRUST_INTERNAL_SNAPSHOT_PATH`) in the subprocess environment, pointing at a temporary file; `.execute()` writes the validated Command Snapshot there and exits before dispatch. Application code should not set this internal environment variable.
+`crust build` runs the entry point in a snapshot subprocess before compiling it. It uses the lockstep `SNAPSHOT_PATH_ENV`, `BUILD_OUT_DIR_ENV`, and `BUILD_RESULT_PATH_ENV` tooling constants internally; `.execute()` writes the validated Command Snapshot, runs registered Extension build hooks in order, records which hooks ran, and exits before dispatch. Application code should not set these internal environment variables.
 
 The build command can embed `PUBLIC_*` constants from Bun's current-directory environment or explicit `--env-file` inputs. See [Environment variables](/docs/guide/environment).
 
@@ -32,8 +32,8 @@ The default `crust build` output is a raw binary and resolver script. Use it for
 
 `crust build --package` stages platform-specific binary packages and a root resolver package. Use [`crust publish`](/docs/guide/build#publishing-with-crust-publish) to publish the staged set.
 
-## Generated man pages
+## Extension artifacts
 
-`crust build --man` renders the Command Snapshot produced by the build subprocess and writes `<outdir>/man/<name>.1`. Validation and man generation share one subprocess, and the entry point does not need to export its root builder. See [`@crustjs/man`](/docs/modules/man).
+Registered Extensions own build artifacts. For example, [`man()`](/docs/modules/man) writes `<outdir>/man/<name>.1`, and [`skill()`](/docs/modules/skills) writes `<outdir>/skills`. No Extension-specific build flags are required. `--no-validate` skips snapshot preparation and all build hooks.
 
 Install this package only as a development dependency; generated applications do not need it at runtime.
