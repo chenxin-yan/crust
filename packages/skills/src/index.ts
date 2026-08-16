@@ -2,47 +2,30 @@
 // @crustjs/skills — Agent skill generation from Crust command definitions
 // ────────────────────────────────────────────────────────────────────────────
 
-// Build
 export { writeSkills } from "./build.ts";
 export type { WriteSkillsOptions } from "./build.ts";
-
-// Agent detection
 export {
 	detectInstalledAgents,
 	getAdditionalAgents,
 	getUniversalAgents,
 	isUniversalAgent,
-	resolveCanonicalSkillPath,
 } from "./agents.ts";
-export type { SkillCommandAnnotations } from "./annotations.ts";
-export { annotate } from "./annotations.ts";
-// Bundle install
-export { installSkillBundle } from "./bundle.ts";
-export type { SkillConflictDetails, SkillKindMismatch, SkillManifestMalformed } from "./errors.ts";
-// Errors
 export { SkillConflictError, SkillSourceConflictError } from "./errors.ts";
-
-// Primitives
-export { generateSkill, isValidSkillName, getSkillStatus, uninstallSkill } from "./generate.ts";
-
-// Extension
 export { skill } from "./extension.ts";
+export { getSkillStatus, installSkill, uninstallSkill } from "./generate.ts";
+export { isValidSkillName } from "./skill-name.ts";
+export { loadPackagedSkills, resolveSkillSource, SkillSourceUnavailableError } from "./source.ts";
+export type { PackagedSkill } from "./source.ts";
 
-// Types
 export type {
 	AgentClass,
 	AgentResult,
 	AgentTarget,
-	CustomSkillConfig,
-	GenerateSkillOptions,
-	GenerateSkillResult,
-	InstallSkillBundleOptions,
-	InstallSkillBundleResult,
+	InstallSkillOptions,
+	InstallSkillResult,
 	InstallStatus,
 	Scope,
-	SkillInstallMode,
-	SkillKind,
-	SkillMeta,
+	SkillLinkStatus,
 	SkillOptions,
 	SkillStatusOptions,
 	SkillStatusResult,

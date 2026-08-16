@@ -1,5 +1,5 @@
 // ────────────────────────────────────────────────────────────────────────────
-// Bundle install — installs a hand-authored skill directory as a Crust skill
+// Authored bundle loading for package skill-source builds
 // ────────────────────────────────────────────────────────────────────────────
 
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
@@ -7,14 +7,7 @@ import { join, sep } from "node:path";
 
 import { resolveSourceDir } from "@crustjs/utils/source";
 
-import { installRenderedSkill, isValidSkillName } from "./generate.ts";
-import type {
-	InstallSkillBundleOptions,
-	InstallSkillBundleResult,
-	RenderedFile,
-	SkillMeta,
-} from "./types.ts";
-import { CRUST_MANIFEST } from "./version.ts";
+import type { RenderedFile } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -27,7 +20,7 @@ const SKILL_MD = "SKILL.md";
 // Internal — frontmatter probe
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Top-level scalar fields the bundle install pipeline cares about. */
+/** Top-level scalar fields the skill-source build needs. */
 interface BundleFrontmatter {
 	name: string | null;
 	description: string | null;
@@ -39,7 +32,7 @@ type FrontmatterProbe = {
 };
 
 /** Reads top-level `name` and `description` from leading YAML frontmatter. */
-function probeFrontmatter(content: string): BundleFrontmatter {
+export function probeFrontmatter(content: string): BundleFrontmatter {
 	const result: BundleFrontmatter = { name: null, description: null };
 	const normalized = content.startsWith("\uFEFF") ? content.slice(1) : content;
 	const lines = normalized.split(/\r?\n/);
@@ -96,9 +89,7 @@ interface CollectedFile {
  *
  * Bundle contents are copied as authored — no implicit name-based filtering.
  * Bundle authors are responsible for keeping `sourceDir` clean (no
- * `node_modules/`, `.git/`, editor cruft, etc.). The single reserved
- * filename is `crust.json` at the bundle root, enforced separately by
- * {@link loadBundleFiles}.
+ * `node_modules/`, `.git/`, editor cruft, etc.).
  *
  * Cycle protection: directories are tracked by their canonical realpath in
  * `visitedDirs` so symlinks like `loop -> .` or `a/back -> ..` (which all
@@ -164,12 +155,11 @@ export interface LoadedBundle {
  * 3. Recursively walk, applying a per-entry path-traversal guard against the
  *    canonical root and a directory-cycle guard.
  * 4. Verify `SKILL.md` exists at the bundle root.
- * 5. Reject a source-root `crust.json` (reserved — Crust regenerates it).
- * 6. Probe the frontmatter for `name:` and `description:` — both are required.
+ * 5. Probe the frontmatter for `name:` and `description:` — both are required.
  *
- * The returned `frontmatter` becomes the source of truth for the install
- * pipeline (written into `crust.json` and used to derive output paths). Crust
- * does not rewrite `SKILL.md`; the bundle author owns it.
+ * The returned `frontmatter` becomes the source of truth for the build
+ * pipeline and output paths. Crust does not rewrite `SKILL.md`; the bundle
+ * author owns it.
  *
  * @internal Exported for unit testing.
  */
@@ -203,13 +193,6 @@ export async function loadBundleFiles(sourceDir: string | URL): Promise<LoadedBu
 		);
 	}
 
-	if (collected.some((f) => f.relPath === CRUST_MANIFEST)) {
-		throw new Error(
-			`Bundle source at "${canonicalRoot}" contains a reserved file "${CRUST_MANIFEST}" at the root. ` +
-				`Crust regenerates this file during installation; remove it from your bundle source.`,
-		);
-	}
-
 	const files = await Promise.all(
 		collected.map(async (entry) => ({
 			path: entry.relPath,
@@ -239,104 +222,4 @@ export async function loadBundleFiles(sourceDir: string | URL): Promise<LoadedBu
 		files,
 		frontmatter: { name: probed.name, description: probed.description },
 	};
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Public API — installSkillBundle
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Installs a hand-authored skill bundle through the same canonical-store and
- * agent-fan-out pipeline used by {@link generateSkill}.
- *
- * Unlike `generateSkill`, this entrypoint does not render any markdown — it
- * copies the directory at `sourceDir` as authored (subject to a
- * path-traversal guard against symlink escapes and a cycle guard) and
- * writes a fresh `crust.json` recording `kind: "bundle"`. Bundle authors
- * are responsible for keeping `sourceDir` clean — `crust.json` at the
- * bundle root is reserved and will throw if present in the source.
- *
- * The bundle's `SKILL.md` frontmatter is the source of truth for `name` and
- * `description`; both are required and read by Crust without rewriting the
- * file. The caller supplies `version` explicitly — typically wired to the
- * consuming package's `package.json` `version`.
- *
- * Bundles and generated skills cannot share a name unless the existing
- * install is removed first. `force: true` overwrites a conflicting install
- * (no `crust.json`, malformed `crust.json`, or kind mismatch) and also
- * rewrites a same-version bundle.
- *
- * @param options - Bundle install options (see {@link InstallSkillBundleOptions})
- * @returns Per-agent install results
- * @throws {SkillConflictError} If the canonical store exists with no
- *   `crust.json`, a malformed `crust.json`, or a different kind (and `force`
- *   is not set).
- * @throws {Error} If `SKILL.md` is missing, its frontmatter lacks `name:` or
- *   `description:`, the declared `name` is not a valid skill name, the
- *   declared `name` does not match `expectedName` when set, the source
- *   directory escapes itself via symlink, or `sourceDir` cannot be resolved.
- *
- * @example
- * ```ts
- * import { installSkillBundle } from "@crustjs/skills";
- * import pkg from "./package.json" with { type: "json" };
- *
- * await installSkillBundle({
- *   sourceDir: "skills/funnel-builder",
- *   agents: ["claude-code"],
- *   version: pkg.version,
- * });
- * ```
- */
-export async function installSkillBundle(
-	options: InstallSkillBundleOptions,
-): Promise<InstallSkillBundleResult> {
-	const {
-		sourceDir,
-		agents,
-		version,
-		scope = "global",
-		clean = true,
-		force = false,
-		installMode = "auto",
-		expectedName,
-	} = options;
-
-	const { files, frontmatter } = await loadBundleFiles(sourceDir);
-
-	const name = frontmatter.name;
-	if (!isValidSkillName(name)) {
-		throw new Error(
-			`Invalid skill name "${name}" in SKILL.md frontmatter: must be 1–64 lowercase ` +
-				`alphanumeric characters and hyphens, no leading/trailing/consecutive hyphens.`,
-		);
-	}
-
-	if (expectedName !== undefined && name !== expectedName) {
-		throw new Error(
-			`Bundle SKILL.md frontmatter name "${name}" does not match the expected name "${expectedName}". ` +
-				`Update the bundle's SKILL.md frontmatter \`name:\` field, or change the configured \`name\` to match.`,
-		);
-	}
-
-	if (agents.length === 0) {
-		return { agents: [] };
-	}
-
-	const meta: SkillMeta = {
-		name,
-		description: frontmatter.description,
-		version,
-	};
-
-	return installRenderedSkill({
-		files: [...files],
-		meta,
-		agents,
-		scope,
-		clean,
-		force,
-		installMode,
-		kind: "bundle",
-	});
 }

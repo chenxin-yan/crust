@@ -4,33 +4,7 @@
 
 import { posix } from "node:path";
 
-import { normalizeInstructionList } from "./annotations.ts";
-import type {
-	ManifestArg,
-	ManifestFlag,
-	ManifestNode,
-	RenderedFile,
-	SkillKind,
-	SkillMeta,
-} from "./types.ts";
-import { CRUST_MANIFEST } from "./version.ts";
-
-/** Renders the ownership and version metadata shipped with a skill. */
-export function renderDistributionMetadata(meta: SkillMeta, kind: SkillKind): RenderedFile {
-	return {
-		path: CRUST_MANIFEST,
-		content: `${JSON.stringify(
-			{
-				name: meta.name,
-				description: meta.description,
-				version: meta.version,
-				kind,
-			},
-			null,
-			"\t",
-		)}\n`,
-	};
-}
+import type { ManifestArg, ManifestFlag, ManifestNode, RenderedFile, SkillMeta } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Text escaping helpers
@@ -76,18 +50,6 @@ function escapeTableCell(value: string): string {
  * @param manifest - The canonical manifest tree from {@link buildManifest}
  * @param meta - Skill metadata for frontmatter and naming
  * @returns Array of rendered files ready for writing
- *
- * @example
- * ```ts
- * import { buildManifest, renderSkill } from "@crustjs/skills";
- *
- * const manifest = buildManifest(rootCommand);
- * const files = renderSkill(manifest, {
- *   name: "my-cli",
- *   description: "My CLI tool",
- * });
- * // files contains RenderedFile[] with paths like "SKILL.md", "commands/serve.md"
- * ```
  */
 export function renderSkill(manifest: ManifestNode, meta: SkillMeta): RenderedFile[] {
 	const files: RenderedFile[] = [];
@@ -180,18 +142,6 @@ function renderSkillMd(manifest: ManifestNode, meta: SkillMeta, allNodes: Manife
 	lines.push("---");
 	lines.push(`name: ${escapeYaml(meta.name)}`);
 	lines.push(`description: ${escapeYaml(meta.description)}`);
-	if (meta.license) {
-		lines.push(`license: ${escapeYaml(meta.license)}`);
-	}
-	if (meta.compatibility) {
-		lines.push(`compatibility: ${escapeYaml(meta.compatibility)}`);
-	}
-	if (meta.disableModelInvocation) {
-		lines.push("disable-model-invocation: true");
-	}
-	if (meta.allowedTools) {
-		lines.push(`allowed-tools: ${escapeYaml(meta.allowedTools)}`);
-	}
 	lines.push("metadata:");
 	lines.push(`  version: "${meta.version}"`);
 	lines.push("---");
@@ -210,8 +160,6 @@ function renderSkillMd(manifest: ManifestNode, meta: SkillMeta, allNodes: Manife
 		`You should use this skill when you need accurate help with \`${meta.name}\` commands, including command selection, syntax, arguments, flags, defaults, and subcommands.`,
 	);
 	lines.push("");
-
-	const topLevelInstructions = renderTopLevelInstructions(meta.instructions);
 
 	// Agent workflow for navigating command documentation
 	lines.push("## How to Use This Skill");
@@ -233,13 +181,6 @@ function renderSkillMd(manifest: ManifestNode, meta: SkillMeta, allNodes: Manife
 		"6. If a flag, argument, alias, or default is not documented there, you must say it is not documented instead of guessing.",
 	);
 	lines.push("");
-
-	if (topLevelInstructions.length > 0) {
-		lines.push("## General Guidance");
-		lines.push("");
-		lines.push(...topLevelInstructions);
-		lines.push("");
-	}
 
 	// Lazy-load table for command docs
 	lines.push("## Command Reference");
@@ -470,23 +411,6 @@ function formatFlagDescription(flag: ManifestFlag): string {
 		parts.push(`Default: \`${flag.default}\``);
 	}
 	return parts.join(". ") || "-";
-}
-
-/**
- * Renders a compact bullet list of instruction lines.
- */
-function renderInstructionList(instructions: string[]): string[] {
-	return instructions.map((instruction) => `- ${instruction}`);
-}
-
-function renderTopLevelInstructions(instructions: string | string[] | undefined): string[] {
-	if (typeof instructions === "string") {
-		// Raw markdown block: preserve internal structure, just trim and split.
-		const block = instructions.trim();
-		return block ? block.split(/\r?\n/) : [];
-	}
-
-	return renderInstructionList(normalizeInstructionList(instructions));
 }
 
 /**

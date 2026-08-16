@@ -47,7 +47,7 @@ function createApp() {
 describe("writeSkills", () => {
 	it("writes generated and authored skills with source metadata", async () => {
 		const bundleDir = await createBundle("deployment-guide", "Deployment guidance");
-		const outDir = join(tempRoot, "output");
+		const outDir = join(tempRoot, "skills");
 
 		await writeSkills(createApp(), {
 			outDir,
@@ -55,32 +55,20 @@ describe("writeSkills", () => {
 			bundles: [bundleDir],
 		});
 
-		expect((await readdir(tempRoot)).sort()).toEqual(["deployment-guide", "output"]);
+		expect((await readdir(tempRoot)).sort()).toEqual(["deployment-guide", "skills"]);
 		expect(await readFile(join(outDir, "demo", "SKILL.md"), "utf8")).toContain("name: demo");
 		const serve = await readFile(join(outDir, "demo", "commands", "serve.md"), "utf8");
 		expect(serve).toContain("# `demo serve`");
 		expect(serve).toContain("## Deployment\nCheck the target environment first.");
-		expect(JSON.parse(await readFile(join(outDir, "demo", "crust.json"), "utf8"))).toEqual({
-			name: "demo",
-			description: "Demo CLI",
-			version: "1.2.3",
-			kind: "generated",
-		});
+		expect(await readdir(join(outDir, "demo"))).toEqual(["SKILL.md", "commands"]);
 		expect(await readFile(join(outDir, "deployment-guide", "references", "guide.md"), "utf8")).toBe(
 			"# Guide\n",
 		);
-		expect(
-			JSON.parse(await readFile(join(outDir, "deployment-guide", "crust.json"), "utf8")),
-		).toEqual({
-			name: "deployment-guide",
-			description: "Deployment guidance",
-			version: "1.2.3",
-			kind: "bundle",
-		});
+		expect(await readdir(join(outDir, "deployment-guide"))).toEqual(["SKILL.md", "references"]);
 	});
 
 	it("supports overrides and replaces stale output", async () => {
-		const outDir = join(tempRoot, "output");
+		const outDir = join(tempRoot, "skills");
 		await mkdir(join(outDir, "removed-skill"), { recursive: true });
 
 		await writeSkills(createApp(), {
@@ -91,19 +79,14 @@ describe("writeSkills", () => {
 		});
 
 		expect(await readdir(outDir)).toEqual(["demo-reference"]);
-		const metadata = JSON.parse(
-			await readFile(join(outDir, "demo-reference", "crust.json"), "utf8"),
-		);
-		expect(metadata).toMatchObject({
-			name: "demo-reference",
-			description: "Complete demo reference",
-			kind: "generated",
-		});
+		const skillMd = await readFile(join(outDir, "demo-reference", "SKILL.md"), "utf8");
+		expect(skillMd).toContain("name: demo-reference");
+		expect(skillMd).toContain("description: Complete demo reference");
 	});
 
 	it("rejects a generated and authored skill name collision before writing", async () => {
 		const bundleDir = await createBundle("demo", "Authored demo guidance");
-		const outDir = join(tempRoot, "output");
+		const outDir = join(tempRoot, "skills");
 
 		const result = writeSkills(createApp(), {
 			outDir,
@@ -115,8 +98,27 @@ describe("writeSkills", () => {
 		await expect(readdir(outDir)).rejects.toThrow();
 	});
 
+	it("requires a generated skill description", async () => {
+		const outDir = join(tempRoot, "skills");
+		const app = new Crust("demo").action(() => {});
+
+		await expect(writeSkills(app, { outDir, version: "1.0.0" })).rejects.toThrow(
+			"requires a description",
+		);
+		await expect(readdir(outDir)).rejects.toThrow();
+	});
+
+	it("requires the package skills directory layout", async () => {
+		const outDir = join(tempRoot, "agent-skills");
+
+		await expect(writeSkills(createApp(), { outDir, version: "1.0.0" })).rejects.toThrow(
+			'must be named "skills"',
+		);
+		await expect(readdir(outDir)).rejects.toThrow();
+	});
+
 	it("rejects an invalid skill name before writing", async () => {
-		const outDir = join(tempRoot, "output");
+		const outDir = join(tempRoot, "skills");
 
 		const result = writeSkills(createApp(), {
 			outDir,

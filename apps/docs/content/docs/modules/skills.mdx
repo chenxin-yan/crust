@@ -1,9 +1,9 @@
 ---
 title: "Skills"
-description: Agent skill generation for AI coding assistants.
+description: Package and install agent skills for AI coding assistants.
 ---
 
-The `@crustjs/skills` package generates and installs agent skills from your CLI's readonly Command Snapshot. Skills provide structured documentation that AI coding assistants use to understand your CLI. Generated skills include the full visible command tree and omit commands marked `meta.hidden`. Snapshots are prepared through `app.snapshot()`, and documentation modeling uses the lockstep first-party helpers from `@crustjs/core/tooling` internally; application code registers only the `skill()` Extension.
+`@crustjs/skills` renders agent skills from a Crust command snapshot. Skills are built once, shipped inside the CLI package, and symlinked into an **agent directory** only when a user opts into passive discovery.
 
 ## Install
 
@@ -11,42 +11,14 @@ The `@crustjs/skills` package generates and installs agent skills from your CLI'
 bun add @crustjs/skills
 ```
 
-## Quick Start
+## Package-as-source workflow
 
-Import from `@crustjs/skills` for the full public surface, or use the focused `agents`, `annotations`, `bundle`, `extension`, and `generate` subpaths to avoid loading unrelated modules. For example, `skill` is also exported from `@crustjs/skills/extension` and `generateSkill` from `@crustjs/skills/generate`.
+A **skill source** is the `skills/` directory shipped in your npm package. It is the single source of truth and contains both:
 
-Add the `skill()` extension to your CLI. It reads `name` and `description` from your root command's `meta` — you only need to supply `version`:
+- A **generated skill**, rendered from the command tree and its `meta.sections`.
+- Any **authored skills**, included from hand-written bundle directories.
 
-```ts
-import { Crust } from "@crustjs/core";
-import { skill } from "@crustjs/skills";
-
-const app = new Crust("my-cli", { description: "My CLI tool" }).extend(
-  skill({
-    version: "1.0.0",
-    instructions: `
-Read command docs before suggesting exact flags.
-
-## Answer Style
-
-- Prefer exact syntax copied from the relevant command file.
-`,
-    // command defaults to "skill" and registers "my-cli skill"
-  }),
-);
-
-await app.execute();
-```
-
-This gives you:
-
-- **Auto-detection**: additional (non-universal) agents are detected with Bun's non-executing `PATH` lookup.
-- **Auto-update**: when a user runs any command, the extension silently updates installed skills if the version has changed.
-- **Interactive command**: `my-cli skill` presents a multiselect prompt for toggling installations. It includes a single **Universal** option plus additional agents. A `skill update` subcommand is also available for update-only flows.
-
-## Build API
-
-Use `writeSkills()` during your package build to create a read-only **skill source** that versions with your CLI. It snapshots the app, renders the generated command-reference skill, copies each **authored skill** bundle, and writes one self-describing directory per skill under `outDir`:
+Build the source alongside your other package artifacts:
 
 ```ts
 import { writeSkills } from "@crustjs/skills";
@@ -60,488 +32,122 @@ await writeSkills(app, {
 });
 ```
 
-The generated skill defaults to the root command's name and description; pass `name` or `description` to override them. If a generated and authored skill have the same name, `writeSkills()` throws `SkillSourceConflictError` before replacing `outDir`. Every output directory contains `SKILL.md`, its supporting files, and a `crust.json` recording its name, description, version, and kind (`"generated"` or `"bundle"`). The dedicated `outDir` is replaced on every build so removed skills cannot ship as stale files. The API does not install into the canonical store or any **agent directory**.
+`outDir` must be named `skills`. Each skill gets its own `skills/<name>/` directory containing `SKILL.md` and any supporting files. `SKILL.md` follows the [Agent Skills specification](https://agentskills.io/specification) and declares required `name` and `description` frontmatter. `writeSkills()` replaces `outDir` on every build and never writes to an agent directory.
+
+Include the source in the published package:
+
+```json
+{
+  "files": ["dist"]
+}
+```
 
 <auto-type-table path="../../../../../packages/skills/src/build.ts" name="WriteSkillsOptions" />
 
-## Extension Options
+## Enable discovery and installation
 
-<auto-type-table path="../../../../../packages/skills/src/types.ts" name="SkillOptions" />
-
-Scope resolution for the interactive command and `skill update`:
-
-1. If `--scope` flag is passed, that scope is used.
-2. If `defaultScope` is set, that scope is used (no prompt).
-3. Otherwise, an interactive prompt asks the user to choose `project` or `global`; in non-interactive mode this falls back to `global`.
-
-When the current working directory is the home directory, `project` scope is normalized to `global`. In that case, installs, updates, and status checks all use the global skill locations and update output reports `(global)`.
-
-### Supported Agents
-
-`@crustjs/skills` supports the same broad ecosystem as Vercel Skills.
-
-Universal group (single prompt option, shared path):
-
-- `amp`, `cline`, `codex`, `cursor`, `gemini-cli`, `github-copilot`, `kimi-cli`, `opencode`, `replit`
-
-Additional agents: 30+ agents detected with a non-executing `PATH` lookup
-(`claude-code`, `windsurf`, `pi`, `roo`, `goose`, `continue`, etc.). See
-the `AgentTarget` union exported from `@crustjs/skills` for the full list.
-
-Path model:
-
-| Group      | Global Path                       | Project Path             |
-| ---------- | --------------------------------- | ------------------------ |
-| Universal  | `~/.agents/skills/<name>/`        | `.agents/skills/<name>/` |
-| Additional | Agent-specific convention per CLI | Agent-specific path      |
-
-If `process.cwd()` is the home directory, project paths collapse to the same global paths shown above. For example, universal agents use `.agents/skills/<name>` while Claude Code uses `.claude/skills/<name>`; their default global paths use the corresponding directory under the user's home (Claude also honors `CLAUDE_CONFIG_DIR`). The canonical `.crust/skills/<name>` store is separate from these agent-facing paths.
-
-## Interactive Command
-
-By default, the extension registers a `skill` subcommand that presents a single multiselect prompt. A `skill update` subcommand is also registered for update-only flows (updates installed skills without prompting for agent selection).
-
-The prompt behavior is:
-
-- A single **Universal** option is shown (for all universal agents).
-- Additional agents are shown when detected, or when the skill is already installed for that agent.
-- Choice subtext shows the target installation directory.
-- Already-installed targets are pre-selected.
-
-The user toggles options on or off and the system reconciles the desired state:
-
-- **Newly selected** agents are installed
-- **Deselected** agents are uninstalled
-- **Already-correct** agents are skipped
-
-```sh
-my-cli skill
-my-cli skill --all
-my-cli skill update
-```
-
-`--scope project|global` applies to both commands. `--all` applies to `skill` and installs for all universal plus detected agents without prompting.
-
-### Hand-authored bundles via `customSkills`
-
-The extension can manage hand-authored skill bundles alongside the auto-
-generated command-reference skill. Each entry follows the same Extension behavior as the main skill — auto-update, interactive multiselect, and
-`skill update` — and gets its own multiselect prompt after the main one,
-in array order. The full bundle reference follows below.
+Point the extension at the packaged source with a package-relative file URL:
 
 ```ts
 import { Crust } from "@crustjs/core";
 import { skill } from "@crustjs/skills";
-import pkg from "./package.json" with { type: "json" };
 
-const app = new Crust("my-cli", { description: "My CLI" })
+export const app = new Crust("my-cli", { description: "My CLI" })
   .extend(
     skill({
-      version: pkg.version,
-      customSkills: [
-        // Inherits `version: pkg.version` from the Extension.
-        { name: "funnel-builder", sourceDir: "skills/funnel-builder" },
-        // Explicit override for an independently-versioned bundle.
-        {
-          name: "vendored-toolkit",
-          sourceDir: "skills/vendored-toolkit",
-          version: "0.3.0",
-        },
-      ],
+      source: new URL("./skills", import.meta.url),
     }),
   )
   .action(() => {});
 ```
 
-The `CustomSkillConfig` shape is generated from the exported type:
+The extension registers `my-cli skill` and `my-cli skill update`. The management command reads every skill in the source and creates links in selected agent directories. `--scope project|global` selects project or user locations; `--all` installs for universal and detected agents without prompting.
 
-<auto-type-table path="../../../../../packages/skills/src/types.ts" name="CustomSkillConfig" />
-
-`version` is optional: omit it to inherit the Extension's top-level
-`version` (the typical case when the bundle ships in the same package as
-the CLI), or pass an explicit value when a bundle's release cadence is
-independent of the consuming CLI. The bundle's `SKILL.md` frontmatter
-`version:` / `metadata.version`, if any, is intentionally not read — see
-the [`installSkillBundle()` callout](#installing-hand-authored-bundles)
-for the rationale.
-
-Resolution rules for `sourceDir` mirror
-[`installSkillBundle()`](#installing-hand-authored-bundles): URL with
-`file:` protocol, absolute path, or a bare relative string resolved from
-the nearest `package.json` walking up from `process.argv[1]`. Resolution
-errors surface at install time, not at Extension registration.
-
-Bundles share the canonical `.crust/skills` store with the main skill
-and inherit `defaultScope` / `installMode` resolution unless overridden
-per-entry. When `customSkills` is omitted or empty, only the generated
-main skill is managed.
-
-## Conflict Detection
-
-Each Crust-managed skill directory contains a `crust.json` file that serves
-as an ownership marker. The install entrypoints (`generateSkill()` and
-`installSkillBundle()`) refuse to overwrite a target directory in three
-cases:
-
-1. **No `crust.json`** — the directory exists but was not created by Crust
-   (e.g. manually authored or installed by another tool).
-2. **Kind mismatch** — `crust.json` records a different
-   [`kind`](#kind-field-on-crustjson) than the install attempt (e.g. an
-   existing `generated` skill collides with an incoming `bundle`).
-3. **Malformed manifest** — `crust.json` is present but cannot be
-   interpreted (invalid JSON, top-level non-object, missing `version`, missing
-   `kind`, or an unrecognized `kind` value such as a hand-edit typo).
-
-All three throw `SkillConflictError`. Pass `force: true` to overwrite, or
-uninstall the existing skill first.
-
-### Behavior by context
-
-| Context                         | Conflict behavior                                             |
-| ------------------------------- | ------------------------------------------------------------- |
-| **Auto-update hook**            | Logs a warning and skips — the CLI continues running normally |
-| **Interactive `skill` command** | Prompts the user to confirm overwriting the conflicting skill |
-| **`skill update` command**      | Logs a warning and skips the conflicting agent                |
-| **`generateSkill()` API**       | Throws `SkillConflictError`. Pass `force: true` to overwrite  |
-| **`installSkillBundle()` API**  | Throws `SkillConflictError`. Pass `force: true` to overwrite  |
-
-### Handling conflicts programmatically
-
-`SkillConflictError.details` carries the agent and output directory plus
-optional discriminators that describe which flavor fired:
-
-- `details.kindMismatch?: { existing, attempted }` — set on kind mismatch.
-- `details.manifestMalformed?: { reason, rawKind? }` — set on malformed
-  `crust.json`. `reason` is one of `"parse-error"`, `"not-an-object"`,
-  `"missing-version"`, `"missing-kind"`, or `"unknown-kind"`. `rawKind` is
-  populated only when `reason === "unknown-kind"` (the offending value found
-  in the file).
-- Neither field set — the target directory exists without `crust.json`.
-
-```ts
-import { generateSkill, SkillConflictError } from "@crustjs/skills";
-
-try {
-  await generateSkill({ command, meta, agents });
-} catch (err) {
-  if (!(err instanceof SkillConflictError)) throw err;
-  const { outputDir, kindMismatch, manifestMalformed } = err.details;
-
-  if (kindMismatch) {
-    console.error(
-      `${outputDir}: existing ${kindMismatch.existing} blocks ${kindMismatch.attempted} install`,
-    );
-  } else if (manifestMalformed) {
-    console.error(`${outputDir}: malformed crust.json (${manifestMalformed.reason})`);
-  } else {
-    console.error(`${outputDir}: not created by Crust`);
-  }
-
-  await generateSkill({ command, meta, agents, force: true });
-}
+```sh
+my-cli skill
+my-cli skill --all --scope project
+my-cli skill update
 ```
 
-## Skill Metadata
+If the package-relative source cannot be found, Crust also checks for the same source directory next to `process.execPath`, supporting compiled distributions staged with their skills. An unresolved source makes the explicit `skill` command fail with a descriptive error, but does not prevent unrelated CLI commands from running.
 
-The `SkillMeta` object controls the generated `SKILL.md` frontmatter. Beyond the required `name`, `description`, and `version` fields, several optional fields are supported:
+<auto-type-table path="../../../../../packages/skills/src/types.ts" name="SkillOptions" />
+
+## Link lifecycle and ownership
+
+Project installations use relative symlinks to the logical package path. Global installations use absolute symlinks. The target agent must discover skills through symlinks; agents that ignore linked directories cannot use this installation method.
+
+There is no fallback install mechanism, ownership manifest, or mutable Crust store. Package content is visible through installed links immediately. Before ordinary commands run, the extension repairs a dangling link whose textual target ends in `skills/<name>`; an exact current-source link is already healthy. It never creates a link that was not installed, and a resolving link to any other source is a conflict that automatic repair leaves unchanged. Automatic repair failures warn without preventing unrelated commands from running. `my-cli skill update` runs the same repair explicitly and reports failures. Set `autoUpdate: false` to disable the pre-run repair hook.
+
+Install conflicts with real directories and resolving wrong-target links unless `force: true` explicitly replaces them. Replacement stages the new symlink before moving the old entry, so a staging failure preserves existing data. Uninstall removes exact current-source links and dangling suffix-matching links. `uninstallSkill()` requires `sourceDir` so resolving links to another source are left unchanged.
+
+Symlink creation requires operating-system permission. If creation fails, installation reports a clear error suggesting that symlink permission be enabled.
+
+## Supported agents
+
+Universal agents share one directory and appear as a single prompt choice:
+
+- `amp`, `cline`, `codex`, `cursor`, `gemini-cli`, `github-copilot`, `kimi-cli`, `opencode`, `replit`
+
+Additional agents are detected through a non-executing `PATH` lookup. The exported `AgentTarget` union contains the full list.
+
+| Group      | Global path                       | Project path            |
+| ---------- | --------------------------------- | ----------------------- |
+| Universal  | `~/.agents/skills/<name>`         | `.agents/skills/<name>` |
+| Additional | Agent-specific convention per CLI | Agent-specific path     |
+
+When the working directory is the home directory, project scope resolves to global scope.
+
+## Low-level link operations
+
+`installSkill()` links one `skills/<name>` source directory. `getSkillStatus()` reports `linked`, `dangling`, `conflict`, or `absent` for each agent directory, using `sourceDir` to distinguish dangling links from resolving wrong-target conflicts. `uninstallSkill()` removes exact or dangling owned links and requires `sourceDir` to protect resolving links to a different source.
 
 ```ts
-const meta: SkillMeta = {
-  name: "my-cli",
-  description: "CLI tool for managing widgets",
-  version: "1.0.0",
-  allowedTools: "Bash(my-cli *) Read Grep",
-  license: "MIT",
-  compatibility: "Requires my-cli on PATH",
-  disableModelInvocation: false,
-};
+import { installSkill, getSkillStatus, uninstallSkill } from "@crustjs/skills";
+
+const sourceDir = new URL("../skills/my-cli", import.meta.url);
+
+await installSkill({
+  sourceDir,
+  agents: ["claude-code", "opencode"],
+  scope: "global",
+});
+
+await getSkillStatus({ name: "my-cli", sourceDir });
+await uninstallSkill({ name: "my-cli", sourceDir });
 ```
 
-<auto-type-table path="../../../../../packages/skills/src/types.ts" name="SkillMeta" />
+<auto-type-table path="../../../../../packages/skills/src/types.ts" name="InstallSkillOptions" />
 
-The camelCase properties `allowedTools` and `disableModelInvocation` are emitted as the frontmatter keys `allowed-tools` and `disable-model-invocation`.
+## Command sections
 
-## Command-Level Sections
-
-Skills render each command's `meta.sections` after its description as `## Title` markdown sections. The same plain-text sections are also available to other documentation renderers such as help and man pages.
+Add agent-facing guidance to a command's metadata. Each section is rendered as a Markdown heading and body in that command's generated documentation:
 
 ```ts
-import { Crust, defineCommand } from "@crustjs/core";
+import { defineCommand } from "@crustjs/core";
 
 const deploy = defineCommand(
   "deploy",
   {
-    description: "Deploy the application",
-    sections: [{ title: "Safety", body: "Ask for confirmation before production changes." }],
+    description: "Deploy",
+    sections: [{ title: "Safety", body: "Use preview mode first." }],
   },
-  (command) =>
-    command.action(() => {
-      // ...
-    }),
+  (command) => command.action(() => {}),
 );
-
-const app = new Crust("my-cli").add(deploy);
 ```
 
-## Name Validation
+## Name validation
 
-Skill names must conform to the [Agent Skills spec](https://agentskills.io/specification): 1–64 lowercase alphanumeric characters and hyphens, no leading/trailing/consecutive hyphens. Names are used directly without normalization; `generateSkill()` validates the supplied name and throws a descriptive error if invalid.
+Skill names follow the [Agent Skills specification](https://agentskills.io/specification): 1–64 lowercase alphanumeric characters and hyphens, with no leading, trailing, or consecutive hyphens. `writeSkills()` validates generated and authored names; `isValidSkillName()` is also exported for callers that need an early check.
 
-Use `isValidSkillName()` to check names before calling `generateSkill()`:
+## Source helpers and errors
 
-```ts
-import { isValidSkillName } from "@crustjs/skills";
+`resolveSkillSource()` resolves a packaged source root without canonicalizing its logical path and includes the executable-relative fallback. `loadPackagedSkills()` reads each `SKILL.md` frontmatter and validates that its declared name matches its directory.
 
-isValidSkillName("my-cli"); // true
-isValidSkillName("My_CLI"); // false
-```
+Agent helpers back the install prompts: `detectInstalledAgents()` performs the non-executing `PATH` lookup, `getUniversalAgents()` / `getAdditionalAgents()` split the registry by class, and `isUniversalAgent()` classifies a single target.
 
-## Low-Level Primitives
+Error classes:
 
-For custom workflows, the package also exports lower-level functions.
-
-### `generateSkill()` options
-
-<auto-type-table path="../../../../../packages/skills/src/types.ts" name="GenerateSkillOptions" />
-
-### Default targets — omit `agents` for the common case
-
-`generateSkill`, `uninstallSkill`, and `getSkillStatus` accept an optional
-`agents` field. The default differs by entrypoint so install behavior tracks
-what is actually on the current machine, while uninstall and status sweep
-every known path:
-
-| Entrypoint                         | Default when `agents` is omitted                            | `PATH` I/O? |
-| ---------------------------------- | ----------------------------------------------------------- | ----------- |
-| `generateSkill`                    | Universal agents + additional agents detected on `PATH`     | Yes         |
-| `uninstallSkill`, `getSkillStatus` | Every supported agent (exhaustive sweep of all known paths) | No          |
-
-In all three, passing `agents: []` is treated as a no-op (no install,
-uninstall, or status entries). An explicit array always overrides the
-default.
-
-```ts
-import { generateSkill, getSkillStatus, uninstallSkill } from "@crustjs/skills";
-
-// Install — universal + agents whose CLI is on PATH.
-const result = await generateSkill({
-  command: await rootCommand.snapshot(),
-  meta: { name: "my-cli", description: "My CLI", version: "1.0.0" },
-  scope: "global", // or "project"
-});
-
-// Status — reports an entry for every supported agent. Most read
-// `installed: false` on a typical machine; that is expected.
-const status = await getSkillStatus({ name: "my-cli" });
-
-// Uninstall — sweeps every known agent path and removes any Crust-managed
-// install regardless of whether its CLI is currently on PATH.
-const removed = await uninstallSkill({ name: "my-cli" });
-```
-
-### Explicit targets — override the default
-
-For full control, pass `agents` explicitly. `getUniversalAgents()`,
-`getAdditionalAgents()`, and `detectInstalledAgents()` remain exported so
-callers can compose any subset:
-
-```ts
-import {
-  detectInstalledAgents,
-  generateSkill,
-  getUniversalAgents,
-  isValidSkillName,
-} from "@crustjs/skills";
-
-// Validate a skill name.
-isValidSkillName("my-cli"); // true
-
-// Compose the same list `generateSkill` would build by default.
-const universal = getUniversalAgents();
-const additional = await detectInstalledAgents();
-
-await generateSkill({
-  command: await rootCommand.snapshot(),
-  meta: { name: "my-cli", description: "My CLI", version: "1.0.0" },
-  agents: [...universal, ...additional], // explicit form
-  scope: "global",
-});
-```
-
-### Agent and canonical-path helpers
-
-`isUniversalAgent(agent)` returns whether an `AgentTarget` belongs to the universal group. `resolveCanonicalSkillPath(scope, name)` returns the single source-of-truth bundle location (`.crust/skills/<name>` for project scope or `~/.crust/skills/<name>` for global scope). Project scope resolves to global when the current directory is the home directory.
-
-```ts
-import { isUniversalAgent, resolveCanonicalSkillPath } from "@crustjs/skills";
-
-isUniversalAgent("opencode"); // true
-resolveCanonicalSkillPath("project", "my-cli");
-// → "<cwd>/.crust/skills/my-cli"
-```
-
-### Uninstall cleanup
-
-After removing agent install paths, `uninstallSkill()` removes the canonical store entry when no remaining agent path references it.
-
-## Generated Output
-
-Generated skills are written once to the canonical store and installed into agent paths by symlink or copy:
-
-```text
-.crust/skills/my-cli/
-  SKILL.md
-  commands/
-    my-cli.md
-    serve.md
-    db/
-      migrate.md
-  crust.json
-```
-
-- `SKILL.md` is the agent entrypoint and links to the generated command reference.
-- `commands/*.md` mirrors the CLI hierarchy with usage, arguments, flags, defaults, aliases, and subcommand links.
-- `crust.json` records Crust ownership, name, description, version, and skill kind.
-
-The renderer escapes YAML-special characters in frontmatter and literal `|` characters in generated Markdown tables; callers pass raw values without manual escaping.
-
-### Import-safe command definitions
-
-Guard execution with `import.meta.main` when a command module may also be imported for snapshot generation:
-
-```ts
-import { Crust } from "@crustjs/core";
-
-export const rootCommand = new Crust("my-cli", { description: "My CLI tool" }).action(() =>
-  console.log("Hello from my-cli!"),
-);
-
-if (import.meta.main) await rootCommand.execute();
-```
-
-## Installing Hand-Authored Bundles
-
-`generateSkill()` produces a skill bundle from a Crust Command Snapshot.
-`installSkillBundle()` is the dual entrypoint for **hand-authored** bundles —
-use it when you have a directory containing `SKILL.md` and supporting files
-that should flow through the same canonical-store + agent fan-out plumbing.
-
-```ts
-import { installSkillBundle } from "@crustjs/skills";
-import pkg from "./package.json" with { type: "json" };
-
-await installSkillBundle({
-  // Resolved relative to the nearest package.json walking up from
-  // process.argv[1]. You may also pass an absolute path or a file: URL.
-  sourceDir: "skills/funnel-builder",
-  agents: ["claude-code", "opencode"],
-  version: pkg.version,
-});
-```
-
-The `sourceDir` input follows the same [path resolution rules as scaffold templates](/docs/modules/create#template-resolution).
-
-The bundle's `SKILL.md` frontmatter is the source of truth for `name` and
-`description`; Crust reads them but never rewrites the file. Both fields
-are required:
-
-```yaml
----
-name: funnel-builder
-description: Build a sales funnel
----
-```
-
-`version` is required and recorded in `crust.json`; identical-version
-reinstalls report `up-to-date` and skip the canonical-store rewrite
-(unless `force: true` is passed), so pass a fresh value whenever bundle
-contents change. Wiring it to the consuming package's `package.json`
-`version` is the typical pattern.
-
-<Callout type="info" title="`metadata.version` in SKILL.md is not read">
-  The Agent Skills spec lets bundle authors record a version under `metadata.version` in their
-  SKILL.md frontmatter. Crust intentionally does **not** read that field — the `version` option you
-  pass to `installSkillBundle()` is the sole source of truth for `crust.json` and update detection.
-  If you keep a `metadata.version` in your SKILL.md for spec compliance, keep it in sync with the
-  value you pass here.
-</Callout>
-
-### Options
-
-<auto-type-table
-  path="../../../../../packages/skills/src/types.ts"
-  name="InstallSkillBundleOptions"
-/>
-
-Crust copies bundle files as raw bytes, so supporting assets such as images,
-fonts, or scripts round-trip unchanged. `SKILL.md` is also parsed as UTF-8 to
-read its required frontmatter.
-
-`crust.json` at the bundle root is **reserved**: Crust regenerates it
-during installation. If a `crust.json` is found in the source bundle,
-`installSkillBundle()` throws so the conflict surfaces immediately
-instead of being silently overwritten.
-
-### Publishing a bundle to npm
-
-Two gotchas trip up bundle authors who publish to npm:
-
-1. **Include the bundle directory in the published tarball.** Add the path
-   to your `package.json` `files` array; verify with `npm pack --dry-run`
-   before publishing. Local installs work even when the directory would be
-   excluded from the tarball, but consumers will hit a missing-`SKILL.md`
-   error.
-
-   ```json
-   {
-     "name": "acme-skills",
-     "version": "1.0.0",
-     "files": ["dist", "skills"]
-   }
-   ```
-
-2. **Consumers point at the published path with `import.meta.resolve`.**
-   Relative `sourceDir` resolution walks up from the consumer's
-   `process.argv[1]`, so a relative path lands in the consumer's package —
-   not yours. Consumers should use a `file:` URL:
-
-   ```ts
-   import skillsPkg from "acme-skills/package.json" with { type: "json" };
-
-   await installSkillBundle({
-     sourceDir: new URL(import.meta.resolve("acme-skills/skills/funnel-builder")),
-     agents: ["claude-code"],
-     version: skillsPkg.version,
-   });
-   ```
-
-   For this to work, the bundle directory must be reachable from your
-   package's `exports` (or accessible as a subpath of the package root).
-
-### `kind` field on `crust.json`
-
-Every installed bundle records its origin in `crust.json` as a `kind`
-field — `"generated"` for `generateSkill()` output, `"bundle"` for
-`installSkillBundle()`. Crust uses this to detect cross-kind collisions:
-attempting to install a bundle on top of a generated skill (or vice versa)
-at the same name throws a `SkillConflictError` whose `details.kindMismatch`
-carries `{ existing, attempted }`. Uninstall the existing skill first or
-pass `force: true` to overwrite.
-
-A `crust.json` manifest must include `kind` with one of those two values.
-A missing or unrecognized `kind` makes the manifest malformed; installation
-throws `SkillConflictError` unless `force: true` is set.
-
-## Type Reference
-
-### Results
-
-<auto-type-table path="../../../../../packages/skills/src/types.ts" name="AgentResult" />
-
-<auto-type-table path="../../../../../packages/skills/src/types.ts" name="GenerateSkillResult" />
-
-### Status and uninstall options
-
-<auto-type-table path="../../../../../packages/skills/src/types.ts" name="SkillStatusOptions" />
-
-<auto-type-table path="../../../../../packages/skills/src/types.ts" name="UninstallSkillOptions" />
+- `SkillConflictError` — thrown when installation would replace a real directory or foreign link without `force: true`.
+- `SkillSourceConflictError` — thrown by `writeSkills()` when two skills in one source share a name.
+- `SkillSourceUnavailableError` — thrown when a packaged source cannot be resolved; the extension's repair hook treats it as "nothing shipped" and stays silent.

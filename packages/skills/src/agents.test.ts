@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { accessSync, chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
@@ -11,7 +11,6 @@ import {
 	getUniversalAgents,
 	isUniversalAgent,
 	resolveAgentPath,
-	resolveCanonicalSkillPath,
 } from "./agents.ts";
 
 async function withCwd<T>(dir: string, fn: () => Promise<T> | T): Promise<T> {
@@ -62,26 +61,6 @@ describe("resolveAgentPath", () => {
 	});
 });
 
-describe("resolveCanonicalSkillPath", () => {
-	it("resolves project canonical path", () => {
-		const result = resolveCanonicalSkillPath("project", "my-cli");
-		expect(result).toBe(join(process.cwd(), ".crust", "skills", "my-cli"));
-	});
-
-	it("resolves global canonical path", () => {
-		const result = resolveCanonicalSkillPath("global", "my-cli");
-		expect(result).toBe(join(homedir(), ".crust", "skills", "my-cli"));
-	});
-
-	it("treats home-directory project canonical path as global", async () => {
-		await withCwd(homedir(), () => {
-			expect(resolveCanonicalSkillPath("project", "my-cli")).toBe(
-				resolveCanonicalSkillPath("global", "my-cli"),
-			);
-		});
-	});
-});
-
 describe("agent registry", () => {
 	it("contains expected baseline agents", () => {
 		expect(ALL_AGENTS).toContain("claude-code");
@@ -115,29 +94,6 @@ describe("agent registry", () => {
 });
 
 describe("detectInstalledAgents", () => {
-	afterEach(() => mock.restore());
-
-	it("returns empty array when no commands are available", async () => {
-		spyOn(Bun, "which").mockReturnValue(null);
-		expect(await detectInstalledAgents()).toEqual([]);
-	});
-
-	it("detects additional agents by command availability", async () => {
-		spyOn(Bun, "which").mockImplementation((command) =>
-			command === "claude" || command === "windsurf" ? command : null,
-		);
-		const result = await detectInstalledAgents();
-		expect(result).toContain("claude-code");
-		expect(result).toContain("windsurf");
-	});
-
-	it("does not include universal agents in detection output", async () => {
-		spyOn(Bun, "which").mockImplementation((command) => (command === "opencode" ? command : null));
-		expect(await detectInstalledAgents()).not.toContain("opencode");
-	});
-});
-
-describe("PATH-based detection", () => {
 	let tmpDir: string;
 	let originalPath: string | undefined;
 	let originalPathExt: string | undefined;
@@ -164,17 +120,17 @@ describe("PATH-based detection", () => {
 		rmSync(tmpDir, { recursive: true, force: true });
 	});
 
-	it("detects a command present on PATH as executable", async () => {
-		// Create a fake executable in the temp dir
-		const fakeBin = join(tmpDir, "claude");
-		writeFileSync(fakeBin, "#!/bin/sh\necho fake");
-		chmodSync(fakeBin, 0o755);
-
-		// Prepend temp dir to PATH
+	it("detects additional but not universal commands on PATH", async () => {
+		for (const name of ["claude", "opencode"]) {
+			const fakeBin = join(tmpDir, name);
+			writeFileSync(fakeBin, "#!/bin/sh\necho fake");
+			chmodSync(fakeBin, 0o755);
+		}
 		process.env.PATH = `${tmpDir}${delimiter}${process.env.PATH}`;
 
 		const result = await detectInstalledAgents();
 		expect(result).toContain("claude-code");
+		expect(result).not.toContain("opencode");
 	});
 
 	it("does not detect a command that is not on PATH", async () => {

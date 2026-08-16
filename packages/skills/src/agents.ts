@@ -16,19 +16,18 @@ interface AgentConfig {
 }
 
 const PROJECT_UNIVERSAL_SKILLS_DIR = join(".agents", "skills");
-const PROJECT_CANONICAL_SKILLS_DIR = join(".crust", "skills");
 
 function configHome(home: string): string {
+	if (home !== homedir()) {
+		return join(home, ".config");
+	}
+
 	const xdg = process.env.XDG_CONFIG_HOME?.trim();
 	return xdg && xdg.length > 0 ? xdg : join(home, ".config");
 }
 
 function universalGlobalSkillsDir(home: string): string {
 	return join(home, ".agents", "skills");
-}
-
-function canonicalGlobalSkillsDir(home: string): string {
-	return join(home, ".crust", "skills");
 }
 
 export function resolveEffectiveScope(scope: Scope): Scope {
@@ -371,15 +370,4 @@ export function resolveAgentPath(agent: AgentTarget, scope: Scope, name: string)
 		return join(process.cwd(), cfg.projectSkillsDir, name);
 	}
 	return join(cfg.globalSkillsDir(homedir()), name);
-}
-
-/**
- * Resolves the canonical skill bundle path used by Crust.
- */
-export function resolveCanonicalSkillPath(scope: Scope, name: string): string {
-	if (resolveEffectiveScope(scope) === "project") {
-		return join(process.cwd(), PROJECT_CANONICAL_SKILLS_DIR, name);
-	}
-
-	return join(canonicalGlobalSkillsDir(homedir()), name);
 }

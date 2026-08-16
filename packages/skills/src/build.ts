@@ -1,20 +1,20 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 
 import type { CommandSnapshot } from "@crustjs/core";
 
 import { loadBundleFiles } from "./bundle.ts";
 import { SkillSourceConflictError } from "./errors.ts";
-import { isValidSkillName } from "./generate.ts";
 import { buildManifest } from "./manifest.ts";
-import { renderDistributionMetadata, renderSkill } from "./render.ts";
-import type { RenderedFile, SkillKind, SkillMeta } from "./types.ts";
+import { renderSkill } from "./render.ts";
+import { isValidSkillName } from "./skill-name.ts";
+import type { RenderedFile, SkillMeta } from "./types.ts";
 
 /** Options for rendering an application's skill source. */
 export interface WriteSkillsOptions {
-	/** Directory that receives one subdirectory per skill. */
+	/** `skills` directory that receives one subdirectory per skill. */
 	readonly outDir: string;
-	/** Version recorded in every skill's `crust.json`. */
+	/** Version recorded in the generated skill's SKILL.md metadata. */
 	readonly version: string;
 	/** Generated skill name. Defaults to the root command name. */
 	readonly name?: string;
@@ -38,42 +38,40 @@ export async function writeSkills(
 		version: options.version,
 	};
 	validateSkillName(generatedMeta.name);
+	if (generatedMeta.description.trim() === "") {
+		throw new Error(
+			`Skill "${generatedMeta.name}" requires a description for SKILL.md frontmatter.`,
+		);
+	}
 
-	const names = new Set([generatedMeta.name]);
-	const skills: { meta: SkillMeta; kind: SkillKind; files: readonly RenderedFile[] }[] = [
-		{
-			meta: generatedMeta,
-			kind: "generated",
-			files: renderSkill(buildManifest(snapshot), generatedMeta),
-		},
-	];
+	const outDir = resolve(options.outDir);
+	if (basename(outDir) !== "skills") {
+		throw new Error(`Skill source outDir "${outDir}" must be named "skills".`);
+	}
+
+	const skills = new Map<string, readonly RenderedFile[]>([
+		[generatedMeta.name, renderSkill(buildManifest(snapshot), generatedMeta)],
+	]);
 
 	for (const sourceDir of options.bundles ?? []) {
 		const bundle = await loadBundleFiles(sourceDir);
 		validateSkillName(bundle.frontmatter.name);
-		if (names.has(bundle.frontmatter.name)) {
+		if (skills.has(bundle.frontmatter.name)) {
 			throw new SkillSourceConflictError(bundle.frontmatter.name);
 		}
-		names.add(bundle.frontmatter.name);
-		skills.push({
-			meta: {
-				name: bundle.frontmatter.name,
-				description: bundle.frontmatter.description,
-				version: options.version,
-			},
-			kind: "bundle",
-			files: bundle.files,
-		});
+		skills.set(bundle.frontmatter.name, bundle.files);
 	}
 
-	const outDir = resolve(options.outDir);
+	const cwd = resolve(".");
+	// outDir is replaced wholesale below; refuse targets that would delete the caller's project.
+	if (outDir === dirname(outDir) || outDir === cwd || cwd.startsWith(outDir + sep)) {
+		throw new Error(
+			`Refusing to replace "${outDir}": outDir must be a dedicated directory, not the filesystem root, the working directory, or an ancestor of it.`,
+		);
+	}
 	await rm(outDir, { recursive: true, force: true });
-	for (const skill of skills) {
-		const skillDir = join(outDir, skill.meta.name);
-		await writeFiles(skillDir, [
-			...skill.files,
-			renderDistributionMetadata(skill.meta, skill.kind),
-		]);
+	for (const [name, files] of skills) {
+		await writeFiles(join(outDir, name), files);
 	}
 }
 
