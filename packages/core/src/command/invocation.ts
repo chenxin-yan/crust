@@ -39,10 +39,13 @@ type MaterializeCommandDefinition = (
  * Snapshot subprocess protocol used by first-party build tooling.
  *
  * When set to a non-empty file path, `.execute()` prepares and validates the
- * command tree, writes its JSON snapshot to that path, and exits without
- * dispatching a Command Action. In-process callers use `Crust.snapshot()`.
+ * command tree, writes its JSON snapshot to that path, optionally runs Extension
+ * build hooks when the paired build paths are set, and exits without dispatching
+ * a Command Action. In-process callers use `Crust.snapshot()`.
  */
 export const SNAPSHOT_PATH_ENV = "CRUST_INTERNAL_SNAPSHOT_PATH";
+export const BUILD_OUT_DIR_ENV = "CRUST_INTERNAL_BUILD_OUT_DIR";
+export const BUILD_RESULT_PATH_ENV = "CRUST_INTERNAL_BUILD_RESULT_PATH";
 const EXIT_CODE_CANCELLED = 130;
 
 function isAbortError(error: unknown): boolean {
@@ -429,6 +432,25 @@ export async function executeInvocation(
 		try {
 			const snapshot = await prepareInvocationSnapshot(node, materializeCommandDefinition);
 			await Bun.write(snapshotPath, JSON.stringify(snapshot));
+
+			const buildOutDir = process.env[BUILD_OUT_DIR_ENV];
+			const buildResultPath = process.env[BUILD_RESULT_PATH_ENV];
+			if (buildOutDir && buildResultPath) {
+				const builtExtensions: string[] = [];
+				for (const extension of node.extensions) {
+					if (!extension.build) continue;
+					try {
+						await extension.build({ snapshot, outDir: buildOutDir });
+					} catch (error) {
+						const message = error instanceof Error ? error.message : String(error);
+						throw new Error(`Extension "${extension.name}" build failed: ${message}`, {
+							cause: error,
+						});
+					}
+					builtExtensions.push(extension.name);
+				}
+				await Bun.write(buildResultPath, JSON.stringify(builtExtensions));
+			}
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			console.error(message);
