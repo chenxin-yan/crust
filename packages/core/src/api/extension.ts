@@ -182,8 +182,6 @@ export interface ExtensionConfig<
 	readonly commands?: readonly CommandDefinition<any>[];
 	/** Plain-text sections contributed to commands when the application is prepared. */
 	readonly sections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
-	/** JSON-serializable tooling metadata exposed on the application snapshot. */
-	readonly metadata?: unknown;
 	readonly hooks?: ExtensionHooks<Defs>;
 }
 
@@ -203,7 +201,6 @@ export interface Extension {
 	readonly flags?: Readonly<Record<string, ExtensionFlagDef>>;
 	readonly commands?: readonly CommandDefinition<any>[];
 	readonly sections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
-	readonly metadata?: unknown;
 	readonly hooks?: ExtensionHooks;
 }
 

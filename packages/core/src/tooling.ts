@@ -14,4 +14,4 @@ export type {
 	UsageSegment,
 } from "./command/documentation.ts";
 export { snapshotCommand } from "./command/snapshot.ts";
-export type { CommandSnapshot, ExtensionSnapshot } from "./command/snapshot.ts";
+export type { CommandSnapshot } from "./command/snapshot.ts";

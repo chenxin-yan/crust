@@ -92,47 +92,11 @@ describe("snapshotCommand", () => {
 	});
 });
 
-describe("application snapshot Extension metadata", () => {
-	it("exposes deeply frozen JSON metadata on the root snapshot", async () => {
-		const metadata = { format: "text", nested: { enabled: true } };
-		const docs = defineExtension("docs", { metadata });
-		const app = new Crust("cli").extend(docs).add(defineCommand("build", (command) => command));
-
-		const snapshot = await app.snapshot();
-		metadata.nested.enabled = false;
-
-		expect(snapshot.extensions).toEqual([
-			{ name: "docs", metadata: { format: "text", nested: { enabled: true } } },
-		]);
-		expect(snapshot.subCommands.build?.extensions).toBeUndefined();
-		expect(Object.isFrozen(snapshot.extensions)).toBe(true);
-		expect(Object.isFrozen(snapshot.extensions?.[0]?.metadata)).toBe(true);
-		expect(() => structuredClone(snapshot)).not.toThrow();
-	});
-
-	it("rejects non-JSON Extension metadata", async () => {
-		const app = new Crust("cli").extend(
-			defineExtension("bad-metadata", { metadata: { callback: () => {} } }),
-		);
-
-		await expect(app.snapshot()).rejects.toMatchObject({
-			code: "DEFINITION",
-			details: { subject: "extension", name: "bad-metadata", reason: "invalid-metadata" },
-		});
-	});
-});
-
 describe("command metadata sections", () => {
 	it("appends targeted Extension sections after authored sections in registration order", async () => {
-		const firstMetadata = { format: "text" };
 		const first = defineExtension("first", {
-			metadata: firstMetadata,
 			sections(snapshot) {
 				expect(snapshot.meta.sections).toEqual([{ title: "Root guide", body: "Root body" }]);
-				expect(snapshot.extensions).toEqual([
-					{ name: "first", metadata: firstMetadata },
-					{ name: "second" },
-				]);
 				expect(snapshot.subCommands.build).toBeDefined();
 				expect(snapshot.subCommands.generated).toBeDefined();
 				return [

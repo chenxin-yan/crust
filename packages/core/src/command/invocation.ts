@@ -27,7 +27,6 @@ const DEFAULT_IO: InvocationIO = {
 interface PreparedInvocation {
 	rootNode: CommandNode;
 	extensions: readonly Extension[];
-	rootSnapshot: CommandSnapshot;
 }
 
 type MaterializeCommandDefinition = (
@@ -147,58 +146,6 @@ function freezeTree(node: CommandNode): void {
 /** Who authored the sections being validated; error labels derive from this. */
 type SectionOwner = { subject: "command" | "extension"; name: string };
 
-function deepFreezeJson(value: unknown): unknown {
-	if (Array.isArray(value)) {
-		for (const item of value) deepFreezeJson(item);
-		return Object.freeze(value);
-	}
-	if (value !== null && typeof value === "object") {
-		for (const item of Object.values(value)) deepFreezeJson(item);
-		return Object.freeze(value);
-	}
-	return value;
-}
-
-function snapshotMetadata(extension: Extension): unknown {
-	try {
-		const serialized = JSON.stringify(extension.metadata, (_key, value: unknown) => {
-			if (
-				value === undefined ||
-				typeof value === "function" ||
-				typeof value === "symbol" ||
-				typeof value === "bigint" ||
-				(typeof value === "number" && !Number.isFinite(value))
-			) {
-				throw new TypeError("value is not JSON-serializable");
-			}
-			return value;
-		});
-		if (serialized === undefined) throw new TypeError("value is not JSON-serializable");
-		return deepFreezeJson(JSON.parse(serialized));
-	} catch (cause) {
-		throw new CrustError(
-			"DEFINITION",
-			`Extension "${extension.name}" metadata must be JSON-serializable`,
-			{ subject: "extension", name: extension.name, reason: "invalid-metadata" },
-		).withCause(cause);
-	}
-}
-
-function snapshotApplication(
-	rootNode: CommandNode,
-	extensions: readonly Extension[],
-): CommandSnapshot {
-	const extensionSnapshots = Object.freeze(
-		extensions.map((extension) =>
-			Object.freeze({
-				name: extension.name,
-				...(extension.metadata === undefined ? {} : { metadata: snapshotMetadata(extension) }),
-			}),
-		),
-	);
-	return Object.freeze({ ...snapshotCommand(rootNode), extensions: extensionSnapshots });
-}
-
 function invalidSections({ subject, name }: SectionOwner): CrustError {
 	const label = subject === "command" ? "Command" : "Extension";
 	return new CrustError(
@@ -294,17 +241,13 @@ function prepareInvocation(
 	for (const extension of extensions) applyExtensionFlags(rootNode, extension);
 
 	validateAuthoredSections(rootNode);
-	const authoredSnapshot = snapshotApplication(rootNode, extensions);
+	const authoredSnapshot = snapshotCommand(rootNode);
 	for (const extension of extensions) {
 		applyExtensionSections(rootNode, extension, authoredSnapshot);
 	}
 
 	freezeTree(rootNode);
-	const prepared = {
-		rootNode,
-		extensions,
-		rootSnapshot: snapshotApplication(rootNode, extensions),
-	};
+	const prepared = { rootNode, extensions };
 	preparedInvocations.set(node, prepared);
 	return prepared;
 }
@@ -323,7 +266,7 @@ async function dispatch(
 	const resolvedNode = resolved.command;
 	const parsed = parseArgs(resolvedNode, resolved.argv);
 
-	const rootSnapshot = prepared.rootSnapshot;
+	const rootSnapshot = snapshotCommand(rootNode);
 	const extensionContext: ExtensionContext = Object.freeze({
 		argv: [...argv],
 		rootCommand: rootSnapshot,
@@ -430,8 +373,8 @@ async function renderFailure(
 		extensionContext ??
 		Object.freeze({
 			argv: [...argv] as readonly string[],
-			rootCommand: prepared.rootSnapshot,
-			command: prepared.rootSnapshot,
+			rootCommand: snapshotCommand(prepared.rootNode),
+			command: snapshotCommand(prepared.rootNode),
 			commandPath: Object.freeze([prepared.rootNode.meta.name]),
 			args: Object.freeze({}),
 			flags: Object.freeze({}),
@@ -532,5 +475,5 @@ export async function prepareInvocationSnapshot(
 	materializeCommandDefinition: MaterializeCommandDefinition,
 ): Promise<CommandSnapshot> {
 	const prepared = prepareInvocation(node, materializeCommandDefinition);
-	return prepared.rootSnapshot;
+	return snapshotCommand(prepared.rootNode);
 }

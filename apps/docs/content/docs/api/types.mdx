@@ -122,14 +122,7 @@ Command Snapshots are readonly, serializable descriptions. They contain no Comma
   name="CommandSnapshot"
 />
 
-`flags` contains effective local and Context-owned flags. `meta.sections` contains frozen authored and Extension-contributed sections for that command. The application root also carries a frozen `extensions` list; nested snapshots omit this root-only field. Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details receive snapshots rather than mutable runtime internals.
-
-### `ExtensionSnapshot`
-
-<auto-type-table
-  path="../../../../../packages/core/src/command/snapshot.ts"
-  name="ExtensionSnapshot"
-/>
+`flags` contains effective local and Context-owned flags. `meta.sections` contains frozen authored and Extension-contributed sections for that command. Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details receive snapshots rather than mutable runtime internals.
 
 ### `ArgSnapshot`
 
@@ -231,7 +224,7 @@ The map shape used for inferred `ctx` values.
   name="ExtensionConfig"
 />
 
-`commands` entries are `defineCommand()` definitions contributed at the application root. `sections(snapshot)` returns plain-text sections targeted by canonical command paths relative to that root; contributions append to each target's `meta.sections` in Extension registration order. `metadata` supplies JSON-serializable data to tooling through the root snapshot's `extensions` list. See [Extensions](/docs/guide/extensions).
+`commands` entries are `defineCommand()` definitions contributed at the application root. `sections(snapshot)` returns plain-text sections targeted by canonical command paths relative to that root; contributions append to each target's `meta.sections` in Extension registration order. See [Extensions](/docs/guide/extensions).
 
 ### `Extension`
 

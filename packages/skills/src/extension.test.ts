@@ -70,10 +70,6 @@ describe("skill extension package sources", () => {
 		expect(output).toContain(
 			`guide — Explain deployment choices\n    Source: ${join(source, "guide")}`,
 		);
-		expect(snapshot.extensions).toContainEqual({
-			name: "skills",
-			metadata: { command: "skill", source },
-		});
 	});
 
 	it("keeps help usable when the packaged skill source cannot be resolved", async () => {
@@ -85,10 +81,6 @@ describe("skill extension package sources", () => {
 		expect(output).toContain("The skill source path is unavailable.");
 		expect(output).toContain("Run `demo skill`");
 		expect(output).not.toContain(source);
-		expect(snapshot.extensions).toContainEqual({
-			name: "skills",
-			metadata: { command: "skill", source: null },
-		});
 	});
 
 	it("installs every packaged skill as a link", async () => {

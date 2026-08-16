@@ -1,5 +1,3 @@
-import { dirname } from "node:path";
-
 import { type Extension, defineCommand, defineExtension } from "@crustjs/core";
 import { spinner } from "@crustjs/progress";
 import { confirm, multiselect, select } from "@crustjs/prompts";
@@ -165,7 +163,6 @@ export function skill(options: SkillOptions): Extension {
 			);
 		}
 	}
-	const source = packagedSkills[0] ? dirname(packagedSkills[0].sourceDir) : null;
 	return defineExtension("skills", {
 		commands: [buildSkillCommand(commandName, options)],
 		sections: (snapshot) => [
@@ -175,10 +172,6 @@ export function skill(options: SkillOptions): Extension {
 				body: formatSkillDocumentation(packagedSkills, commandName, snapshot.meta.name),
 			},
 		],
-		metadata: {
-			command: commandName,
-			source,
-		},
 		hooks: {
 			async preRun(context) {
 				if (context.commandPath[1] === commandName || options.autoUpdate === false) return;
