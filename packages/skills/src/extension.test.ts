@@ -10,7 +10,7 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
 import { renderHelp } from "@crustjs/extensions";
@@ -66,9 +66,11 @@ describe("skill extension package sources", () => {
 
 		const output = renderHelp(snapshot);
 		expect(output).toContain("Agent skills:");
-		expect(output).toContain(`demo — Run demo workflows\n    Source: ${join(source, "demo")}`);
 		expect(output).toContain(
-			`guide — Explain deployment choices\n    Source: ${join(source, "guide")}`,
+			`demo — Run demo workflows\n    Source: ${relative(process.cwd(), join(source, "demo"))}`,
+		);
+		expect(output).toContain(
+			`guide — Explain deployment choices\n    Source: ${relative(process.cwd(), join(source, "guide"))}`,
 		);
 	});
 
@@ -83,6 +85,34 @@ describe("skill extension package sources", () => {
 		expect(output).toContain("The skill source path is unavailable.");
 		expect(output).toContain("Run `demo agents`");
 		expect(output).not.toContain(source);
+	});
+
+	it("copies packaged sources from its build hook", async () => {
+		const source = await writeSource("demo", "packaged");
+		const extension = skill({ source });
+		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
+		const outDir = join(tempRoot, "dist");
+
+		await extension.build?.({ snapshot, outDir });
+
+		expect(await readFile(join(outDir, "skills", "demo", "content.md"), "utf8")).toBe("packaged\n");
+	});
+
+	it("renders from the snapshot without requiring a package version", async () => {
+		const source = join(tempRoot, "missing-skills");
+		const extension = skill({ source });
+		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
+		const outDir = join(tempRoot, "dist");
+		await writeFile(join(tempRoot, "package.json"), "{}");
+
+		await withCwd(tempRoot, async () => {
+			await extension.build!({ snapshot, outDir });
+		});
+
+		const generated = await readFile(join(outDir, "skills", "demo", "SKILL.md"), "utf8");
+		expect(generated).toContain("name: demo");
+		expect(generated).not.toContain("version:");
+		expect(generated).not.toContain(tempRoot);
 	});
 
 	it("installs every packaged skill as a link", async () => {

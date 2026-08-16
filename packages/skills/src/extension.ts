@@ -1,4 +1,12 @@
-import { type Extension, defineCommand, defineExtension } from "@crustjs/core";
+import { cp, mkdir, readFile, rm } from "node:fs/promises";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+
+import {
+	type Extension,
+	type ExtensionBuildContext,
+	defineCommand,
+	defineExtension,
+} from "@crustjs/core";
 import { spinner } from "@crustjs/progress";
 import { confirm, multiselect, select } from "@crustjs/prompts";
 import { bold, dim, yellow } from "@crustjs/style";
@@ -10,9 +18,15 @@ import {
 	getUniversalAgents,
 	resolveEffectiveScope,
 } from "./agents.ts";
+import { writeSkillsFromSnapshot } from "./build.ts";
 import { SkillConflictError } from "./errors.ts";
 import { getSkillStatus, installSkill, uninstallSkill } from "./generate.ts";
-import { SkillSourceUnavailableError, loadPackagedSkills, type PackagedSkill } from "./source.ts";
+import {
+	SkillSourceUnavailableError,
+	loadPackagedSkills,
+	resolveSkillSource,
+	type PackagedSkill,
+} from "./source.ts";
 import type { AgentTarget, InstallSkillResult, Scope, SkillOptions } from "./types.ts";
 
 const DEFAULT_SKILL_COMMAND_NAME = "skill";
@@ -142,10 +156,10 @@ function formatSkillDocumentation(
 ): string {
 	try {
 		return loadPackagedSkills(source)
-			.map(
-				(packagedSkill) =>
-					`${packagedSkill.name} — ${packagedSkill.description}\n  Source: ${packagedSkill.sourceDir}`,
-			)
+			.map((packagedSkill) => {
+				const sourcePath = relative(process.cwd(), packagedSkill.sourceDir) || ".";
+				return `${packagedSkill.name} — ${packagedSkill.description}\n  Source: ${sourcePath}`;
+			})
 			.join("\n\n");
 	} catch (error) {
 		// A missing or invalid packaged asset degrades the advertisement instead of
@@ -157,6 +171,49 @@ function formatSkillDocumentation(
 		// message once per invocation, and the explicit skill command fails loudly.
 		return `Packaged skills could not be read. Run \`${appName} ${commandName}\` for details.`;
 	}
+}
+
+function isWithin(parent: string, child: string): boolean {
+	const path = relative(parent, child);
+	return path === "" || (!isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`));
+}
+
+async function readPackageVersion(): Promise<string | undefined> {
+	const path = resolve("package.json");
+	let content: string;
+	try {
+		content = await readFile(path, "utf8");
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+		throw error;
+	}
+	const { version } = JSON.parse(content) as Record<string, unknown>;
+	return typeof version === "string" && version.length > 0 ? version : undefined;
+}
+
+async function buildSkills(options: SkillOptions, context: ExtensionBuildContext): Promise<void> {
+	const outDir = join(context.outDir, "skills");
+	let source: string;
+	try {
+		source = resolveSkillSource(options.source);
+	} catch (error) {
+		if (!(error instanceof SkillSourceUnavailableError)) throw error;
+		await writeSkillsFromSnapshot(context.snapshot, {
+			outDir,
+			version: await readPackageVersion(),
+		});
+		return;
+	}
+
+	if (source === outDir) return;
+	if (isWithin(outDir, source)) {
+		throw new Error(
+			`Skill source "${source}" cannot be nested inside output directory "${outDir}".`,
+		);
+	}
+	await rm(outDir, { recursive: true, force: true });
+	await mkdir(dirname(outDir), { recursive: true });
+	await cp(source, outDir, { recursive: true });
 }
 
 export function skill(options: SkillOptions): Extension {
@@ -172,6 +229,7 @@ export function skill(options: SkillOptions): Extension {
 				body: formatSkillDocumentation(options.source, commandName, snapshot.meta.name),
 			},
 		],
+		build: (context) => buildSkills(options, context),
 		hooks: {
 			async preRun(context) {
 				if (context.commandPath[1] === commandName || options.autoUpdate === false) return;
