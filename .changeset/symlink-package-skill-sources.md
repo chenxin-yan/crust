@@ -1,5 +1,5 @@
 ---
-"@crustjs/skills": major
+"@crustjs/skills": minor
 ---
 
 Install packaged skills through symlinks only. Project links use relative, logical package paths verified across npm, pnpm, and Bun; global links use absolute paths. Installation now fails clearly when the environment cannot create symlinks rather than falling back to another mechanism.
