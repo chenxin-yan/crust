@@ -142,7 +142,6 @@ export type UninstallStatus = "removed" | "not-found";
 export interface AgentResult {
 	agent: AgentTarget;
 	outputDir: string;
-	files: string[];
 	status: InstallStatus;
 }
 
@@ -152,6 +151,8 @@ export interface InstallSkillResult {
 
 export interface UninstallSkillOptions {
 	name: string;
+	/** Expected source. Resolving links to another source are not removed. */
+	sourceDir: string | URL;
 	agents?: AgentTarget[];
 	scope?: Scope;
 }

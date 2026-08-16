@@ -57,6 +57,7 @@ async function repairInstalledSkill(
 		onNoRepair?: (scope: Scope) => void;
 		onRepaired?: (labels: string[], scope: Scope) => void;
 		onConflict?: (error: SkillConflictError) => void;
+		onConflictOutput?: (outputDir: string) => void;
 	} = {},
 ): Promise<void> {
 	const effectiveScope = resolveEffectiveScope(scope);
@@ -68,11 +69,7 @@ async function repairInstalledSkill(
 	for (const outputDir of new Set(
 		status.agents.filter((entry) => entry.status === "conflict").map((entry) => entry.outputDir),
 	)) {
-		console.warn(
-			yellow(
-				`Skill conflict [${packagedSkill.name}]: "${outputDir}" is not owned by this skill. Skipping link repair.`,
-			),
-		);
+		hooks.onConflictOutput?.(outputDir);
 	}
 	const stale = status.agents.filter((entry) => entry.status === "dangling");
 	if (stale.length === 0) {
@@ -122,7 +119,17 @@ async function autoRepairSkills(options: SkillOptions): Promise<void> {
 		: ["project", "global"];
 	const scopes = [...new Set(configuredScopes.map(resolveEffectiveScope))];
 	for (const packagedSkill of skills) {
-		for (const scope of scopes) await repairInstalledSkill(packagedSkill, scope);
+		for (const scope of scopes) {
+			try {
+				await repairInstalledSkill(packagedSkill, scope);
+			} catch (error) {
+				console.warn(
+					yellow(
+						`Skipping skill link repair [${packagedSkill.name}]: ${error instanceof Error ? error.message : String(error)}`,
+					),
+				);
+			}
+		}
 	}
 }
 
@@ -201,7 +208,11 @@ async function reconcileSkill(opts: {
 	}
 
 	const toInstall = selected.filter((agent) => statusMap.get(agent)?.status !== "linked");
-	const toUninstall = [...installed].filter((agent) => !selected.includes(agent));
+	const selectedOutputDirs = new Set(selected.map((agent) => statusMap.get(agent)!.outputDir));
+	const toUninstall = [...installed].filter(
+		(agent) =>
+			!selected.includes(agent) && !selectedOutputDirs.has(statusMap.get(agent)!.outputDir),
+	);
 
 	if (toInstall.length > 0) {
 		const groups = new Map<string, AgentTarget[]>();
@@ -255,7 +266,13 @@ async function reconcileSkill(opts: {
 	if (toUninstall.length > 0) {
 		await spinner({
 			message: `Removing skill [${packagedSkill.name}]...`,
-			task: () => uninstallSkill({ name: packagedSkill.name, agents: toUninstall, scope }),
+			task: () =>
+				uninstallSkill({
+					name: packagedSkill.name,
+					sourceDir: packagedSkill.sourceDir,
+					agents: toUninstall,
+					scope,
+				}),
 		});
 	}
 	if (toInstall.length === 0 && toUninstall.length === 0) {
@@ -301,6 +318,8 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 											console.warn(
 												yellow(`Skipped "${error.details.outputDir}": not owned by this skill.`),
 											),
+										onConflictOutput: (outputDir) =>
+											console.warn(yellow(`Skipped "${outputDir}": not owned by this skill.`)),
 									});
 								}
 							}),

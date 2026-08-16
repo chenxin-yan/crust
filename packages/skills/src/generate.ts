@@ -1,5 +1,6 @@
-import { lstat, mkdir, readlink, readdir, rm, stat, symlink, unlink } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { randomUUID } from "node:crypto";
+import { lstat, mkdir, readlink, rename, rm, stat, symlink, unlink } from "node:fs/promises";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { resolveSourceDir } from "@crustjs/utils/source";
 
@@ -42,23 +43,18 @@ function groupAgentsByOutputDir(
 	return groups;
 }
 
+function isNotFound(error: unknown): boolean {
+	return (error as NodeJS.ErrnoException).code === "ENOENT";
+}
+
 async function pathExists(path: string): Promise<boolean> {
 	try {
 		await stat(path);
 		return true;
-	} catch {
-		return false;
+	} catch (error) {
+		if (isNotFound(error)) return false;
+		throw error;
 	}
-}
-
-async function listFiles(dir: string, prefix = ""): Promise<string[]> {
-	const files: string[] = [];
-	for (const entry of await readdir(dir, { withFileTypes: true })) {
-		const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
-		if (entry.isDirectory()) files.push(...(await listFiles(join(dir, entry.name), relativePath)));
-		else if (entry.isFile()) files.push(relativePath);
-	}
-	return files.sort();
 }
 
 type LinkInspection =
@@ -73,31 +69,30 @@ type LinkInspection =
 async function inspectLink(
 	outputDir: string,
 	name: string,
-	expectedSourceDir?: string,
+	expectedSourceDir: string,
 ): Promise<LinkInspection> {
 	let entry;
 	try {
 		entry = await lstat(outputDir);
-	} catch {
-		return { status: "absent" };
+	} catch (error) {
+		if (isNotFound(error)) return { status: "absent" };
+		throw error;
 	}
 	if (!entry.isSymbolicLink()) return { status: "conflict" };
 
-	const target = await readlink(outputDir);
+	let target: string;
+	try {
+		target = await readlink(outputDir);
+	} catch (error) {
+		if (isNotFound(error)) return { status: "absent" };
+		throw error;
+	}
 	if (!isOwnedSkillLink(target, name)) return { status: "conflict" };
-	return {
-		status: "owned",
-		resolves: await pathExists(resolve(dirname(outputDir), target)),
-		correct:
-			expectedSourceDir === undefined ||
-			resolve(dirname(outputDir), target) === resolve(expectedSourceDir),
-	};
-}
-
-async function removeEntry(outputDir: string): Promise<void> {
-	const entry = await lstat(outputDir);
-	if (entry.isSymbolicLink()) await unlink(outputDir);
-	else await rm(outputDir, { recursive: true, force: true });
+	const resolvedTarget = resolve(dirname(outputDir), target);
+	const resolves = await pathExists(resolvedTarget);
+	const correct = resolvedTarget === resolve(expectedSourceDir);
+	if (resolves && !correct) return { status: "conflict" };
+	return { status: "owned", resolves, correct };
 }
 
 async function createSkillLink(target: string, outputDir: string): Promise<void> {
@@ -111,6 +106,47 @@ async function createSkillLink(target: string, outputDir: string): Promise<void>
 			{ cause: error },
 		);
 	}
+}
+
+async function replaceWithSkillLink(target: string, outputDir: string): Promise<void> {
+	const parent = dirname(outputDir);
+	const staged = join(parent, `.crust-skill-${randomUUID()}`);
+	const backup = join(parent, `.crust-skill-backup-${randomUUID()}`);
+	await createSkillLink(target, staged);
+	let backedUp = false;
+	try {
+		try {
+			await rename(outputDir, backup);
+			backedUp = true;
+		} catch (error) {
+			if (!isNotFound(error)) throw error;
+		}
+		try {
+			await rename(staged, outputDir);
+		} catch (error) {
+			if (backedUp) {
+				try {
+					await rename(backup, outputDir);
+				} catch (rollbackError) {
+					const placementDetail = error instanceof Error ? ` ${error.message}` : "";
+					const rollbackDetail = rollbackError instanceof Error ? ` ${rollbackError.message}` : "";
+					throw new Error(
+						`Could not place skill symlink or restore the original entry. Backup path: "${backup}".${placementDetail}${rollbackDetail}`,
+						{ cause: rollbackError },
+					);
+				}
+			}
+			throw error;
+		}
+		if (backedUp) await rm(backup, { recursive: true, force: true });
+	} finally {
+		await rm(staged, { recursive: true, force: true });
+	}
+}
+
+function containsPath(parent: string, child: string): boolean {
+	const path = relative(parent, child);
+	return path === "" || (!isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`));
 }
 
 /** Links one packaged skill source into the requested agent directories. */
@@ -128,10 +164,17 @@ export async function installSkill(options: InstallSkillOptions): Promise<Instal
 
 	const agents = options.agents ?? [...getUniversalAgents(), ...(await detectInstalledAgents())];
 	const scope = options.scope ?? "global";
-	const files = await listFiles(sourceDir);
 	const results: AgentResult[] = [];
+	const groups = groupAgentsByOutputDir(agents, scope, source.name);
+	for (const outputDir of groups.keys()) {
+		if (containsPath(outputDir, sourceDir)) {
+			throw new Error(
+				`Skill output directory "${outputDir}" contains packaged source "${sourceDir}".`,
+			);
+		}
+	}
 
-	for (const [outputDir, groupedAgents] of groupAgentsByOutputDir(agents, scope, source.name)) {
+	for (const [outputDir, groupedAgents] of groups) {
 		const inspection = await inspectLink(outputDir, source.name, sourceDir);
 		if (inspection.status === "conflict" && options.force !== true) {
 			throw new SkillConflictError({ agent: groupedAgents[0]!, outputDir });
@@ -149,15 +192,15 @@ export async function installSkill(options: InstallSkillOptions): Promise<Instal
 				: "repaired";
 
 		if (!upToDate) {
-			if (inspection.status !== "absent") await removeEntry(outputDir);
-			await createSkillLink(skillLinkTarget(sourceDir, outputDir, scope), outputDir);
+			const target = skillLinkTarget(sourceDir, outputDir, scope);
+			if (inspection.status === "absent") await createSkillLink(target, outputDir);
+			else await replaceWithSkillLink(target, outputDir);
 		}
 
 		for (const agent of groupedAgents) {
 			results.push({
 				agent,
 				outputDir,
-				files: status === "up-to-date" ? [] : files,
 				status,
 			});
 		}
@@ -173,11 +216,19 @@ export async function uninstallSkill(
 	const agents = options.agents ?? [...ALL_AGENTS];
 	const scope = options.scope ?? "global";
 	const results: UninstallSkillResult["agents"] = [];
+	const expectedSourceDir = resolveSourceDir(options.sourceDir);
 
 	for (const [outputDir, groupedAgents] of groupAgentsByOutputDir(agents, scope, options.name)) {
-		const inspection = await inspectLink(outputDir, options.name);
-		const removed = inspection.status === "owned";
-		if (removed) await unlink(outputDir);
+		const inspection = await inspectLink(outputDir, options.name, expectedSourceDir);
+		let removed = inspection.status === "owned";
+		if (removed) {
+			try {
+				await unlink(outputDir);
+			} catch (error) {
+				if (isNotFound(error)) removed = false;
+				else throw error;
+			}
+		}
 		for (const agent of groupedAgents) {
 			results.push({ agent, outputDir, status: removed ? "removed" : "not-found" });
 		}

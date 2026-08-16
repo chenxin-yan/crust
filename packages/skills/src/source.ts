@@ -30,7 +30,7 @@ function fallbackName(source: string | URL): string {
 	return isAbsolute(source) ? basename(source) : source;
 }
 
-/** Resolves a packaged skill-source root, including compiled executable staging. */
+/** Resolves a packaged source root; compiled distributions must stage its basename beside the executable. */
 export async function resolveSkillSource(source: string | URL): Promise<string> {
 	let primary: string | undefined;
 	try {

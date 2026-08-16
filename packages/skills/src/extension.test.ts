@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import {
+	chmod,
 	lstat,
 	mkdir,
 	mkdtemp,
@@ -13,6 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
+import * as prompts from "@crustjs/prompts";
 
 import { skill } from "./extension.ts";
 import { installSkill } from "./generate.ts";
@@ -77,18 +79,18 @@ describe("skill extension package sources", () => {
 		expect(await readFile(join(target(), "manual.md"), "utf8")).toBe("keep\n");
 	});
 
-	it("repairs an owned stale-target link before ordinary commands", async () => {
+	it("does not rewrite a resolving wrong-target link before ordinary commands", async () => {
 		const source = await writeSource("demo", "current");
-		const stale = join(tempRoot, "old", "skills", "demo");
-		await mkdir(stale, { recursive: true });
-		await writeFile(join(stale, "content.md"), "stale\n");
+		const foreign = join(tempRoot, "other-package", "skills", "demo");
+		await mkdir(foreign, { recursive: true });
+		await writeFile(join(foreign, "content.md"), "foreign\n");
 		const installed = join(tempRoot, ".claude", "skills", "demo");
 		await mkdir(dirname(installed), { recursive: true });
-		await symlink(stale, installed);
+		await symlink(foreign, installed);
 
 		await withCwd(tempRoot, () => createApp(source).execute({ argv: [] }));
-		expect(resolve(dirname(installed), await readlink(installed))).toBe(join(source, "demo"));
-		expect(await readFile(join(installed, "content.md"), "utf8")).toBe("current\n");
+		expect(resolve(dirname(installed), await readlink(installed))).toBe(foreign);
+		expect(await readFile(join(installed, "content.md"), "utf8")).toBe("foreign\n");
 	});
 
 	it("never creates links that were not installed", async () => {
@@ -107,6 +109,36 @@ describe("skill extension package sources", () => {
 			createApp(source).execute({ argv: ["skill", "update", "--scope", "project"] }),
 		);
 		expect(resolve(dirname(installed), await readlink(installed))).toBe(join(source, "demo"));
+	});
+
+	it("warns and continues when automatic repair lacks filesystem permission", async () => {
+		if (process.platform === "win32") return;
+		const source = await writeSource("demo");
+		const installed = join(tempRoot, ".claude", "skills", "demo");
+		const parent = dirname(installed);
+		await mkdir(parent, { recursive: true });
+		await symlink(join(tempRoot, "missing", "skills", "demo"), installed);
+		await chmod(parent, 0o555);
+
+		let ran = false;
+		const app = new Crust("demo", { description: "Demo" })
+			.extend(skill({ source, defaultScope: "project" }))
+			.action(() => {
+				ran = true;
+			});
+		try {
+			await withCwd(tempRoot, () => app.execute({ argv: [] }));
+			expect(ran).toBe(true);
+			expect(await readlink(installed)).toContain("missing/skills/demo");
+
+			await withCwd(tempRoot, () =>
+				app.execute({ argv: ["skill", "update", "--scope", "project"] }),
+			);
+			expect(process.exitCode).toBe(1);
+		} finally {
+			process.exitCode = 0;
+			await chmod(parent, 0o755);
+		}
 	});
 
 	it("skips repair when autoUpdate is false", async () => {
@@ -168,6 +200,24 @@ describe("skill extension package sources", () => {
 			});
 		await app.execute({ argv: [] });
 		expect(ran).toBe(true);
+	});
+
+	it("keeps a shared output when one selected agent still needs it", async () => {
+		const source = await writeSource("demo");
+		await withCwd(tempRoot, () =>
+			installSkill({
+				sourceDir: join(source, "demo"),
+				agents: ["trae", "trae-cn"],
+				scope: "project",
+			}),
+		);
+		const multiselect = spyOn(prompts, "multiselect").mockResolvedValue(["trae-cn"]);
+		try {
+			await withCwd(tempRoot, () => createApp(source).execute({ argv: ["skill"] }));
+		} finally {
+			multiselect.mockRestore();
+		}
+		expect((await lstat(join(tempRoot, ".trae", "skills", "demo"))).isSymbolicLink()).toBe(true);
 	});
 
 	it("continues installs after a conflict in another agent directory", async () => {

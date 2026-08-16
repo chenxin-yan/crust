@@ -38,7 +38,7 @@ Include the source in the published package:
 
 ```json
 {
-  "files": ["dist", "dist/skills"]
+  "files": ["dist"]
 }
 ```
 
@@ -55,7 +55,7 @@ import { skill } from "@crustjs/skills";
 export const app = new Crust("my-cli", { description: "My CLI" })
   .extend(
     skill({
-      source: new URL("../skills", import.meta.url),
+      source: new URL("./skills", import.meta.url),
     }),
   )
   .action(() => {});
@@ -75,11 +75,11 @@ If the package-relative source cannot be found, Crust also checks for the same s
 
 ## Link lifecycle and ownership
 
-Project installations use relative symlinks to the logical package path. Name-based package paths were [empirically verified across npm, pnpm, and Bun](https://github.com/chenxin-yan/crust/blob/main/docs/research/skill-cleanup-lifecycle.md#7-round-4-empirical-symlink-verification-npm-1119--pnpm-1120--bun-1314-linux), including pnpm reinstalls and store pruning. Global installations use absolute symlinks.
+Project installations use relative symlinks to the logical package path. Global installations use absolute symlinks. The target agent must discover skills through symlinks; agents that ignore linked directories cannot use this installation method.
 
-There is no fallback install mechanism, ownership manifest, or mutable Crust store. Package content is visible through installed links immediately. Before ordinary commands run, the extension repairs an existing Crust-owned link when it is dangling or points at an old package source. It never creates a link that was not installed and never changes a real directory or foreign link. `my-cli skill update` runs the same repair explicitly. Set `autoUpdate: false` to disable the pre-run repair hook.
+There is no fallback install mechanism, ownership manifest, or mutable Crust store. Package content is visible through installed links immediately. Before ordinary commands run, the extension repairs a dangling link whose textual target ends in `skills/<name>`; an exact current-source link is already healthy. It never creates a link that was not installed, and a resolving link to any other source is a conflict that automatic repair leaves unchanged. Automatic repair failures warn without preventing unrelated commands from running. `my-cli skill update` runs the same repair explicitly and reports failures. Set `autoUpdate: false` to disable the pre-run repair hook.
 
-A link is Crust-owned only when its textual target ends in `skills/<name>`. Install conflicts with real directories and foreign links unless `force: true` explicitly replaces them. Uninstall uses `unlink` only for owned links, including dangling links.
+Install conflicts with real directories and resolving wrong-target links unless `force: true` explicitly replaces them. Replacement stages the new symlink before moving the old entry, so a staging failure preserves existing data. Uninstall removes exact current-source links and dangling suffix-matching links. `uninstallSkill()` requires `sourceDir` so resolving links to another source are left unchanged.
 
 Symlink creation requires operating-system permission. If creation fails, installation reports a clear error suggesting that symlink permission be enabled.
 
@@ -100,7 +100,7 @@ When the working directory is the home directory, project scope resolves to glob
 
 ## Low-level link operations
 
-`installSkill()` links one `skills/<name>` source directory. `getSkillStatus()` reports `linked`, `dangling`, `conflict`, or `absent` for each agent directory, using `sourceDir` to distinguish an old package target from the expected source. `uninstallSkill()` removes only owned links.
+`installSkill()` links one `skills/<name>` source directory. `getSkillStatus()` reports `linked`, `dangling`, `conflict`, or `absent` for each agent directory, using `sourceDir` to distinguish dangling links from resolving wrong-target conflicts. `uninstallSkill()` removes exact or dangling owned links and requires `sourceDir` to protect resolving links to a different source.
 
 ```ts
 import { installSkill, getSkillStatus, uninstallSkill } from "@crustjs/skills";
@@ -114,7 +114,7 @@ await installSkill({
 });
 
 await getSkillStatus({ name: "my-cli", sourceDir });
-await uninstallSkill({ name: "my-cli" });
+await uninstallSkill({ name: "my-cli", sourceDir });
 ```
 
 <auto-type-table path="../../../../../packages/skills/src/types.ts" name="InstallSkillOptions" />
