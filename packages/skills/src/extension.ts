@@ -1,3 +1,5 @@
+import { dirname } from "node:path";
+
 import { type Extension, defineCommand, defineExtension } from "@crustjs/core";
 import { spinner } from "@crustjs/progress";
 import { confirm, multiselect, select } from "@crustjs/prompts";
@@ -12,7 +14,12 @@ import {
 } from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";
 import { getSkillStatus, installSkill, uninstallSkill } from "./generate.ts";
-import { SkillSourceUnavailableError, loadPackagedSkills, type PackagedSkill } from "./source.ts";
+import {
+	SkillSourceUnavailableError,
+	loadPackagedSkills,
+	loadPackagedSkillsSync,
+	type PackagedSkill,
+} from "./source.ts";
 import type { AgentTarget, InstallSkillResult, Scope, SkillOptions } from "./types.ts";
 
 const DEFAULT_SKILL_COMMAND_NAME = "skill";
@@ -53,7 +60,11 @@ function formatAgentLabels(agents: readonly AgentTarget[]): string[] {
 async function repairInstalledSkill(
 	packagedSkill: PackagedSkill,
 	scope: Scope,
-	report = false,
+	hooks: {
+		onNoRepair?: (scope: Scope) => void;
+		onRepaired?: (labels: string[], scope: Scope) => void;
+		onConflict?: (error: SkillConflictError) => void;
+	} = {},
 ): Promise<void> {
 	const effectiveScope = resolveEffectiveScope(scope);
 	const status = await getSkillStatus({
@@ -61,18 +72,18 @@ async function repairInstalledSkill(
 		sourceDir: packagedSkill.sourceDir,
 		scope,
 	});
-	if (report) {
-		for (const outputDir of new Set(
-			status.agents.filter((entry) => entry.status === "conflict").map((entry) => entry.outputDir),
-		)) {
-			console.warn(yellow(`Skipped "${outputDir}": not owned by this skill.`));
-		}
+	for (const outputDir of new Set(
+		status.agents.filter((entry) => entry.status === "conflict").map((entry) => entry.outputDir),
+	)) {
+		console.warn(
+			yellow(
+				`Skill conflict [${packagedSkill.name}]: "${outputDir}" is not owned by this skill. Skipping link repair.`,
+			),
+		);
 	}
 	const stale = status.agents.filter((entry) => entry.status === "dangling");
 	if (stale.length === 0) {
-		if (report) {
-			console.log(dim(`No repairs needed [${packagedSkill.name}] (${effectiveScope}).`));
-		}
+		hooks.onNoRepair?.(effectiveScope);
 		return;
 	}
 
@@ -83,20 +94,17 @@ async function repairInstalledSkill(
 			scope,
 		});
 		const labels = formatAgentLabels(result.agents.map((entry) => entry.agent));
-		if (report && labels.length > 0) {
-			console.log(
-				`\n${bold(`Repaired "${packagedSkill.name}" for ${labels.join(", ")} (${effectiveScope})`)}`,
-			);
-		}
+		if (labels.length > 0) hooks.onRepaired?.(labels, effectiveScope);
 	} catch (error) {
 		if (!(error instanceof SkillConflictError)) throw error;
-		console.warn(
-			yellow(
-				report
-					? `Skipped "${error.details.outputDir}": not owned by this skill.`
-					: `Skill conflict [${packagedSkill.name}]: "${error.details.outputDir}" is not owned by this skill. Skipping link repair.`,
-			),
-		);
+		if (hooks.onConflict) hooks.onConflict(error);
+		else {
+			console.warn(
+				yellow(
+					`Skill conflict [${packagedSkill.name}]: "${error.details.outputDir}" is not owned by this skill. Skipping link repair.`,
+				),
+			);
+		}
 	}
 }
 
@@ -121,24 +129,56 @@ async function autoRepairSkills(options: SkillOptions): Promise<void> {
 		: ["project", "global"];
 	const scopes = [...new Set(configuredScopes.map(resolveEffectiveScope))];
 	for (const packagedSkill of skills) {
-		for (const scope of scopes) {
-			try {
-				await repairInstalledSkill(packagedSkill, scope);
-			} catch (error) {
-				console.warn(
-					yellow(
-						`Skipping skill link repair [${packagedSkill.name}]: ${error instanceof Error ? error.message : String(error)}`,
-					),
-				);
-			}
-		}
+		for (const scope of scopes) await repairInstalledSkill(packagedSkill, scope);
 	}
+}
+
+function formatSkillDocumentation(
+	skills: readonly PackagedSkill[],
+	commandName: string,
+	appName: string,
+): string {
+	if (skills.length === 0) {
+		return `The skill source path is unavailable. Run \`${appName} ${commandName}\` to link packaged skills into an agent directory.`;
+	}
+	return skills
+		.map(
+			(packagedSkill) =>
+				`${packagedSkill.name} — ${packagedSkill.description}\n  Source: ${packagedSkill.sourceDir}`,
+		)
+		.join("\n\n");
 }
 
 export function skill(options: SkillOptions): Extension {
 	const commandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
+	let packagedSkills: readonly PackagedSkill[] = [];
+	try {
+		packagedSkills = loadPackagedSkillsSync(options.source);
+	} catch (error) {
+		// A missing or invalid packaged asset degrades the advertisement instead of
+		// failing startup, matching the auto-update hook's recovery behavior.
+		if (!(error instanceof SkillSourceUnavailableError)) {
+			console.warn(
+				yellow(
+					`Skipping skill advertisement: ${error instanceof Error ? error.message : String(error)}`,
+				),
+			);
+		}
+	}
+	const source = packagedSkills[0] ? dirname(packagedSkills[0].sourceDir) : null;
 	return defineExtension("skills", {
 		commands: [buildSkillCommand(commandName, options)],
+		sections: (snapshot) => [
+			{
+				command: [],
+				title: "Agent skills",
+				body: formatSkillDocumentation(packagedSkills, commandName, snapshot.meta.name),
+			},
+		],
+		metadata: {
+			command: commandName,
+			source,
+		},
 		hooks: {
 			async preRun(context) {
 				if (context.commandPath[1] === commandName || options.autoUpdate === false) return;
@@ -210,11 +250,7 @@ async function reconcileSkill(opts: {
 	}
 
 	const toInstall = selected.filter((agent) => statusMap.get(agent)?.status !== "linked");
-	const selectedOutputDirs = new Set(selected.map((agent) => statusMap.get(agent)!.outputDir));
-	const toUninstall = [...installed].filter(
-		(agent) =>
-			!selected.includes(agent) && !selectedOutputDirs.has(statusMap.get(agent)!.outputDir),
-	);
+	const toUninstall = [...installed].filter((agent) => !selected.includes(agent));
 
 	if (toInstall.length > 0) {
 		const groups = new Map<string, AgentTarget[]>();
@@ -268,13 +304,7 @@ async function reconcileSkill(opts: {
 	if (toUninstall.length > 0) {
 		await spinner({
 			message: `Removing skill [${packagedSkill.name}]...`,
-			task: () =>
-				uninstallSkill({
-					name: packagedSkill.name,
-					sourceDir: packagedSkill.sourceDir,
-					agents: toUninstall,
-					scope,
-				}),
+			task: () => uninstallSkill({ name: packagedSkill.name, agents: toUninstall, scope }),
 		});
 	}
 	if (toInstall.length === 0 && toUninstall.length === 0) {
@@ -307,7 +337,20 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 							.action(async (context) => {
 								const scope = await resolveScope(context.flags.scope, options);
 								for (const packagedSkill of await loadPackagedSkills(options.source)) {
-									await repairInstalledSkill(packagedSkill, scope, true);
+									await repairInstalledSkill(packagedSkill, scope, {
+										onNoRepair: (resolvedScope) =>
+											console.log(
+												dim(`No repairs needed [${packagedSkill.name}] (${resolvedScope}).`),
+											),
+										onRepaired: (labels, resolvedScope) =>
+											console.log(
+												`\n${bold(`Repaired "${packagedSkill.name}" for ${labels.join(", ")} (${resolvedScope})`)}`,
+											),
+										onConflict: (error) =>
+											console.warn(
+												yellow(`Skipped "${error.details.outputDir}": not owned by this skill.`),
+											),
+									});
 								}
 							}),
 					),

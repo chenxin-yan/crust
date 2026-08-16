@@ -94,6 +94,30 @@ describe("agent registry", () => {
 });
 
 describe("detectInstalledAgents", () => {
+	it("returns empty array when no commands are available", async () => {
+		const result = await detectInstalledAgents({
+			commandChecker: async () => false,
+		});
+		expect(result).toEqual([]);
+	});
+
+	it("detects additional agents by command availability", async () => {
+		const result = await detectInstalledAgents({
+			commandChecker: async (command) => command === "claude" || command === "windsurf",
+		});
+		expect(result).toContain("claude-code");
+		expect(result).toContain("windsurf");
+	});
+
+	it("does not include universal agents in detection output", async () => {
+		const result = await detectInstalledAgents({
+			commandChecker: async (command) => command === "opencode",
+		});
+		expect(result).not.toContain("opencode");
+	});
+});
+
+describe("PATH-based detection (default commandChecker)", () => {
 	let tmpDir: string;
 	let originalPath: string | undefined;
 	let originalPathExt: string | undefined;
@@ -120,17 +144,17 @@ describe("detectInstalledAgents", () => {
 		rmSync(tmpDir, { recursive: true, force: true });
 	});
 
-	it("detects additional but not universal commands on PATH", async () => {
-		for (const name of ["claude", "opencode"]) {
-			const fakeBin = join(tmpDir, name);
-			writeFileSync(fakeBin, "#!/bin/sh\necho fake");
-			chmodSync(fakeBin, 0o755);
-		}
+	it("detects a command present on PATH as executable", async () => {
+		// Create a fake executable in the temp dir
+		const fakeBin = join(tmpDir, "claude");
+		writeFileSync(fakeBin, "#!/bin/sh\necho fake");
+		chmodSync(fakeBin, 0o755);
+
+		// Prepend temp dir to PATH
 		process.env.PATH = `${tmpDir}${delimiter}${process.env.PATH}`;
 
 		const result = await detectInstalledAgents();
 		expect(result).toContain("claude-code");
-		expect(result).not.toContain("opencode");
 	});
 
 	it("does not detect a command that is not on PATH", async () => {

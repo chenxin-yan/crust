@@ -49,17 +49,29 @@ export async function writeSkills(
 		throw new Error(`Skill source outDir "${outDir}" must be named "skills".`);
 	}
 
-	const skills = new Map<string, readonly RenderedFile[]>([
-		[generatedMeta.name, renderSkill(buildManifest(snapshot), generatedMeta)],
-	]);
+	const names = new Set([generatedMeta.name]);
+	const skills: { meta: SkillMeta; files: readonly RenderedFile[] }[] = [
+		{
+			meta: generatedMeta,
+			files: renderSkill(buildManifest(snapshot), generatedMeta),
+		},
+	];
 
 	for (const sourceDir of options.bundles ?? []) {
 		const bundle = await loadBundleFiles(sourceDir);
 		validateSkillName(bundle.frontmatter.name);
-		if (skills.has(bundle.frontmatter.name)) {
+		if (names.has(bundle.frontmatter.name)) {
 			throw new SkillSourceConflictError(bundle.frontmatter.name);
 		}
-		skills.set(bundle.frontmatter.name, bundle.files);
+		names.add(bundle.frontmatter.name);
+		skills.push({
+			meta: {
+				name: bundle.frontmatter.name,
+				description: bundle.frontmatter.description,
+				version: options.version,
+			},
+			files: bundle.files,
+		});
 	}
 
 	const cwd = resolve(".");
@@ -70,8 +82,9 @@ export async function writeSkills(
 		);
 	}
 	await rm(outDir, { recursive: true, force: true });
-	for (const [name, files] of skills) {
-		await writeFiles(join(outDir, name), files);
+	for (const skill of skills) {
+		const skillDir = join(outDir, skill.meta.name);
+		await writeFiles(skillDir, skill.files);
 	}
 }
 

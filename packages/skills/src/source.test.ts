@@ -3,7 +3,12 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { loadPackagedSkills, resolveSkillSource, SkillSourceUnavailableError } from "./source.ts";
+import {
+	loadPackagedSkills,
+	resolveSkillSource,
+	resolveSkillSourceSync,
+	SkillSourceUnavailableError,
+} from "./source.ts";
 
 let tempRoot: string;
 
@@ -33,6 +38,7 @@ describe("packaged skill sources", () => {
 		await symlink(realSource, logicalSource);
 
 		expect(await resolveSkillSource(logicalSource)).toBe(logicalSource);
+		expect(resolveSkillSourceSync(logicalSource)).toBe(logicalSource);
 	});
 
 	it("resolves an executable-relative fallback", async () => {
@@ -46,6 +52,7 @@ describe("packaged skill sources", () => {
 		});
 		try {
 			expect(await resolveSkillSource(name)).toBe(source);
+			expect(resolveSkillSourceSync(name)).toBe(source);
 		} finally {
 			Object.defineProperty(process, "execPath", descriptor);
 		}

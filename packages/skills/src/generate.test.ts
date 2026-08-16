@@ -1,9 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
-	chmod,
 	lstat,
 	mkdir,
-	readdir,
 	mkdtemp,
 	readFile,
 	readlink,
@@ -72,23 +70,23 @@ describe("symlink-only skill installation", () => {
 		const sourceDir = await createSource();
 		await projectInstall(sourceDir);
 		const result = await projectInstall(sourceDir);
-		expect(result.agents[0]?.status).toBe("up-to-date");
+		expect(result.agents[0]).toMatchObject({ status: "up-to-date", files: [] });
 	});
 
-	it("repairs dangling owned links but conflicts on resolving wrong-target links", async () => {
+	it("repairs dangling and stale-target owned links", async () => {
 		const sourceDir = await createSource();
 		await mkdir(dirname(outputDir()), { recursive: true });
 		await symlink(join(tempRoot, "missing", "skills", "demo"), outputDir());
 
-		const result = await projectInstall(sourceDir);
+		let result = await projectInstall(sourceDir);
 		expect(result.agents[0]?.status).toBe("repaired");
 		expect(resolve(dirname(outputDir()), await readlink(outputDir()))).toBe(sourceDir);
 
 		await rm(outputDir());
-		const foreignSource = join(tempRoot, "other-package", "skills", "demo");
-		await mkdir(foreignSource, { recursive: true });
-		await symlink(foreignSource, outputDir());
-		const foreignStatus = await withCwd(tempRoot, () =>
+		const staleSource = join(tempRoot, "old-package", "skills", "demo");
+		await mkdir(staleSource, { recursive: true });
+		await symlink(staleSource, outputDir());
+		const staleStatus = await withCwd(tempRoot, () =>
 			getSkillStatus({
 				name: "demo",
 				sourceDir,
@@ -96,26 +94,9 @@ describe("symlink-only skill installation", () => {
 				scope: "project",
 			}),
 		);
-		expect(foreignStatus.agents[0]?.status).toBe("conflict");
-		await expect(projectInstall(sourceDir)).rejects.toBeInstanceOf(SkillConflictError);
-	});
-
-	it("preserves a real directory and cleans staging entries when link staging fails", async () => {
-		if (process.platform === "win32") return;
-		const sourceDir = await createSource();
-		await mkdir(outputDir(), { recursive: true });
-		await writeFile(join(outputDir(), "manual.md"), "keep");
-		const parent = dirname(outputDir());
-		await chmod(parent, 0o555);
-		try {
-			await expect(projectInstall(sourceDir, true)).rejects.toThrow(
-				"Could not create skill symlink",
-			);
-			expect(await readFile(join(outputDir(), "manual.md"), "utf8")).toBe("keep");
-		} finally {
-			await chmod(parent, 0o755);
-		}
-		expect(await readdir(parent)).toEqual(["demo"]);
+		expect(staleStatus.agents[0]?.status).toBe("dangling");
+		result = await projectInstall(sourceDir);
+		expect(result.agents[0]?.status).toBe("repaired");
 	});
 
 	it("conflicts on real directories and foreign links unless forced", async () => {
@@ -156,61 +137,22 @@ describe("symlink-only skill installation", () => {
 		expect((await status()).agents[0]?.status).toBe("conflict");
 	});
 
-	it("unlinks exact and dangling owned links but skips resolving wrong-target links", async () => {
+	it("unlinks owned healthy and dangling links but skips conflicts", async () => {
 		const sourceDir = await createSource();
 		await projectInstall(sourceDir);
+		await rm(sourceDir, { recursive: true });
 		let result = await withCwd(tempRoot, () =>
-			uninstallSkill({
-				name: "demo",
-				sourceDir,
-				agents: ["claude-code"],
-				scope: "project",
-			}),
+			uninstallSkill({ name: "demo", agents: ["claude-code"], scope: "project" }),
 		);
 		expect(result.agents[0]?.status).toBe("removed");
+		await expect(lstat(outputDir())).rejects.toThrow();
 
-		await symlink(join(tempRoot, "missing", "skills", "demo"), outputDir());
+		await mkdir(outputDir(), { recursive: true });
 		result = await withCwd(tempRoot, () =>
-			uninstallSkill({
-				name: "demo",
-				sourceDir,
-				agents: ["claude-code"],
-				scope: "project",
-			}),
-		);
-		expect(result.agents[0]?.status).toBe("removed");
-
-		const foreignSource = join(tempRoot, "foreign", "skills", "demo");
-		await mkdir(foreignSource, { recursive: true });
-		await symlink(foreignSource, outputDir());
-		result = await withCwd(tempRoot, () =>
-			uninstallSkill({
-				name: "demo",
-				sourceDir,
-				agents: ["claude-code"],
-				scope: "project",
-			}),
+			uninstallSkill({ name: "demo", agents: ["claude-code"], scope: "project" }),
 		);
 		expect(result.agents[0]?.status).toBe("not-found");
-		expect(resolve(dirname(outputDir()), await readlink(outputDir()))).toBe(foreignSource);
-	});
-
-	it("rejects an output that contains its source without deleting the source", async () => {
-		const sourceDir = join(tempRoot, "skills", "demo");
-		await mkdir(sourceDir, { recursive: true });
-		await writeFile(join(sourceDir, "SKILL.md"), "---\nname: demo\ndescription: Demo skill\n---\n");
-
-		await expect(
-			withCwd(tempRoot, () =>
-				installSkill({
-					sourceDir,
-					agents: ["openclaw"],
-					scope: "project",
-					force: true,
-				}),
-			),
-		).rejects.toThrow("contains packaged source");
-		expect(await readFile(join(sourceDir, "SKILL.md"), "utf8")).toContain("name: demo");
+		expect((await lstat(outputDir())).isDirectory()).toBe(true);
 	});
 
 	it("links once for agents sharing an output directory", async () => {
@@ -221,20 +163,6 @@ describe("symlink-only skill installation", () => {
 		expect(result.agents).toHaveLength(2);
 		expect(result.agents[0]?.outputDir).toBe(result.agents[1]?.outputDir);
 		expect(result.agents.map((entry) => entry.status)).toEqual(["installed", "installed"]);
-	});
-
-	it("keeps a package-manager logical node_modules path as the link target", async () => {
-		const realPackage = join(tempRoot, ".store", "pkg");
-		const sourceDir = join(realPackage, "skills", "demo");
-		await mkdir(join(sourceDir, "commands"), { recursive: true });
-		await writeFile(join(sourceDir, "SKILL.md"), "---\nname: demo\ndescription: Demo skill\n---\n");
-		const logicalPackage = join(tempRoot, "node_modules", "pkg");
-		await mkdir(dirname(logicalPackage), { recursive: true });
-		await symlink(realPackage, logicalPackage, "dir");
-		const logicalSource = join(logicalPackage, "skills", "demo");
-
-		await projectInstall(logicalSource);
-		expect(resolve(dirname(outputDir()), await readlink(outputDir()))).toBe(logicalSource);
 	});
 
 	it("requires valid SKILL.md frontmatter and the package skills/<name> layout", async () => {

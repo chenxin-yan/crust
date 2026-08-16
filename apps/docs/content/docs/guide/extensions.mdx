@@ -25,7 +25,7 @@ Two consequences of the root-only model:
 
 ## Author an Extension
 
-`defineExtension(name, config)` returns a frozen plain value. The config can contain `flags`, `commands`, and `hooks`:
+`defineExtension(name, config)` returns a frozen plain value. The config can contain `flags`, `commands`, `sections`, `metadata`, and `hooks`:
 
 <include lang="ts" meta='title="diagnostics.ts"'>
   ../../../examples/extensions/diagnostics.ts
@@ -76,9 +76,13 @@ const guidance = defineExtension("guidance", {
 });
 ```
 
-`command` is a canonical path relative to the root; `[]` targets the root. Unknown paths and aliases are rejected with a `DEFINITION` error instead of being silently omitted. Contributions are appended after authored `meta.sections`, in `.extend()` order. The callback receives a frozen snapshot containing the fully materialized command tree and authored sections; renderers consume only each target command's merged `meta.sections`.
+`command` is a canonical path relative to the root; `[]` targets the root. Unknown paths and aliases are rejected with a `DEFINITION` error instead of being silently omitted. Contributions are appended after authored `meta.sections`, in `.extend()` order. The callback receives a frozen snapshot containing the fully materialized command tree, authored sections, and loaded Extension metadata; renderers consume only each target command's merged `meta.sections`.
 
 Titles must be non-empty single lines, and bodies are non-empty plain text so the same content is safe for terminal help and mdoc output.
+
+## Tooling metadata
+
+Optional `metadata` carries JSON-serializable Extension data for build and other tooling. The root Command Snapshot exposes every loaded Extension under `extensions`; metadata entries and the list are deeply frozen. Subcommand snapshots do not repeat this root-only field.
 
 ## Hooks
 

@@ -27,7 +27,12 @@ export { defineArg, defineFlag } from "./api/flags.ts";
 export type { UnnamedArgDef } from "./api/flags.ts";
 
 // Command snapshots
-export type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "./command/snapshot.ts";
+export type {
+	ArgSnapshot,
+	CommandSnapshot,
+	ExtensionSnapshot,
+	FlagSnapshot,
+} from "./command/snapshot.ts";
 // Command definitions and context
 export type {
 	AnyCrust,

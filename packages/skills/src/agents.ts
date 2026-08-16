@@ -332,13 +332,23 @@ export function isUniversalAgent(agent: AgentTarget): boolean {
 	return AGENTS[agent].class === "universal";
 }
 
+export interface DetectInstalledAgentsOptions {
+	/** Test-only hook to override command detection. */
+	commandChecker?: (command: string) => Promise<boolean>;
+}
+
 /**
  * Detects installed additional agents by checking PATH for their CLI binaries.
  *
  * Universal agents are intentionally not detected here so callers can always
  * present them as a single optional "Universal" install target.
  */
-export async function detectInstalledAgents(): Promise<AgentTarget[]> {
+export async function detectInstalledAgents(
+	options: DetectInstalledAgentsOptions = {},
+): Promise<AgentTarget[]> {
+	const commandChecker =
+		options.commandChecker ??
+		((command: string) => Promise.resolve(Bun.which(command, { PATH: process.env.PATH }) !== null));
 	const detected: AgentTarget[] = [];
 
 	for (const agent of getAdditionalAgents()) {
@@ -346,7 +356,7 @@ export async function detectInstalledAgents(): Promise<AgentTarget[]> {
 		let installed = false;
 
 		for (const command of commands) {
-			if (Bun.which(command, { PATH: process.env.PATH }) !== null) {
+			if (await commandChecker(command)) {
 				installed = true;
 				break;
 			}

@@ -96,6 +96,14 @@ export interface FlagSnapshot {
  * // }
  * ```
  */
+/** Serializable identity and optional tooling metadata for a loaded Extension. */
+export interface ExtensionSnapshot {
+	/** Extension name passed to `defineExtension`, e.g. `"help"`. */
+	readonly name: string;
+	/** JSON-serializable Extension-owned data for build tooling. */
+	readonly metadata?: unknown;
+}
+
 export interface CommandSnapshot {
 	/** Command metadata: `name`, `description`, `usage`, `sections`, `aliases`, `hidden`. */
 	readonly meta: Readonly<CommandMeta>;
@@ -107,6 +115,8 @@ export interface CommandSnapshot {
 	readonly flags: Readonly<Record<string, FlagSnapshot>>;
 	/** Direct subcommand snapshots keyed by canonical name (includes hidden ones). */
 	readonly subCommands: Readonly<Record<string, CommandSnapshot>>;
+	/** Loaded Extensions. Present on the application root snapshot only. */
+	readonly extensions?: readonly ExtensionSnapshot[];
 }
 
 /** Drop keys with `undefined` values so snapshots serialize cleanly, then freeze. */

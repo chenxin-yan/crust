@@ -1,4 +1,4 @@
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,9 +10,9 @@ export class SkillSourceUnavailableError extends Error {
 	override readonly name = "SkillSourceUnavailableError";
 }
 
-async function directoryPath(path: string): Promise<string | null> {
+function directoryPathSync(path: string): string | null {
 	try {
-		return (await stat(path)).isDirectory() ? path : null;
+		return statSync(path).isDirectory() ? path : null;
 	} catch {
 		return null;
 	}
@@ -30,8 +30,8 @@ function fallbackName(source: string | URL): string {
 	return isAbsolute(source) ? basename(source) : source;
 }
 
-/** Resolves a packaged source root; compiled distributions must stage its basename beside the executable. */
-export async function resolveSkillSource(source: string | URL): Promise<string> {
+/** Resolves a logical packaged skill-source root synchronously for snapshot-time documentation. */
+export function resolveSkillSourceSync(source: string | URL): string {
 	let primary: string | undefined;
 	try {
 		primary = resolveSourceDir(source);
@@ -39,17 +39,22 @@ export async function resolveSkillSource(source: string | URL): Promise<string> 
 		// Relative paths may not have a package entrypoint in compiled executables.
 	}
 	if (primary) {
-		const resolved = await directoryPath(primary);
+		const resolved = directoryPathSync(primary);
 		if (resolved) return resolved;
 	}
 
 	const fallback = join(dirname(process.execPath), fallbackName(source));
-	const resolvedFallback = await directoryPath(fallback);
+	const resolvedFallback = directoryPathSync(fallback);
 	if (resolvedFallback) return resolvedFallback;
 
 	throw new SkillSourceUnavailableError(
 		`Could not resolve skill source${primary ? ` at "${primary}"` : ""} or executable-relative fallback "${fallback}".`,
 	);
+}
+
+/** Async wrapper for resolving a logical packaged skill-source root. */
+export async function resolveSkillSource(source: string | URL): Promise<string> {
+	return resolveSkillSourceSync(source);
 }
 
 export interface PackagedSkill {
@@ -58,13 +63,13 @@ export interface PackagedSkill {
 	readonly description: string;
 }
 
-export async function readSkillFrontmatter(sourceDir: string): Promise<{
+function readSkillFrontmatterSync(sourceDir: string): {
 	readonly name: string;
 	readonly description: string;
-}> {
+} {
 	let content: string;
 	try {
-		content = await readFile(join(sourceDir, "SKILL.md"), "utf8");
+		content = readFileSync(join(sourceDir, "SKILL.md"), "utf8");
 	} catch {
 		throw new Error(`Skill source directory "${sourceDir}" is missing SKILL.md.`);
 	}
@@ -77,14 +82,21 @@ export async function readSkillFrontmatter(sourceDir: string): Promise<{
 	return { name: frontmatter.name, description: frontmatter.description };
 }
 
-/** Reads every self-describing skill directory in a packaged skill source. */
-export async function loadPackagedSkills(source: string | URL): Promise<readonly PackagedSkill[]> {
-	const root = await resolveSkillSource(source);
+export async function readSkillFrontmatter(sourceDir: string): Promise<{
+	readonly name: string;
+	readonly description: string;
+}> {
+	return readSkillFrontmatterSync(sourceDir);
+}
+
+/** Reads every self-describing skill directory synchronously for snapshot-time documentation. */
+export function loadPackagedSkillsSync(source: string | URL): readonly PackagedSkill[] {
+	const root = resolveSkillSourceSync(source);
 	const skills: PackagedSkill[] = [];
-	for (const entry of await readdir(root, { withFileTypes: true })) {
+	for (const entry of readdirSync(root, { withFileTypes: true })) {
 		if (!entry.isDirectory()) continue;
 		const sourceDir = join(root, entry.name);
-		const frontmatter = await readSkillFrontmatter(sourceDir);
+		const frontmatter = readSkillFrontmatterSync(sourceDir);
 		if (frontmatter.name !== entry.name) {
 			throw new Error(
 				`Skill source directory "${sourceDir}" declares name "${frontmatter.name}" in SKILL.md.`,
@@ -96,4 +108,9 @@ export async function loadPackagedSkills(source: string | URL): Promise<readonly
 		throw new Error(`Skill source "${root}" does not contain any skill directories.`);
 	}
 	return skills.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Async wrapper for reading every self-describing packaged skill directory. */
+export async function loadPackagedSkills(source: string | URL): Promise<readonly PackagedSkill[]> {
+	return loadPackagedSkillsSync(source);
 }
