@@ -57,6 +57,13 @@ const fixture: CompletionCommand = {
 };
 
 describe("renderFish", () => {
+	it("disables global file completion before emitting rules", () => {
+		const script = renderFish(fixture, "mycli", "1.0.0");
+		// Sole guard that url/json/non-path values don't fall back to
+		// filename completion. Bin name is single-quoted as defence-in-depth.
+		expect(script).toContain("complete -c 'mycli' -f");
+	});
+
 	it("emits subcommand rules gated on __<ident>_path_at_arg at the top level", () => {
 		const script = renderFish(fixture, "mycli", "1.0.0");
 		// Top-level rules use the variadic zero offset before the root's
