@@ -10,7 +10,7 @@ import { CrustError } from "../errors.ts";
 import { parseArgs, validateParsed } from "../parsing/parser.ts";
 import { applySchemas } from "../parsing/schema.ts";
 import { cloneFlagSpellings } from "../parsing/spellings.ts";
-import type { CommandSection, FlagDef, FlagsDef, InvocationIO } from "../types.ts";
+import type { CommandSection, FlagDef, FlagsDef, InvocationIO, SectionConsumer } from "../types.ts";
 import { normalizeFlag } from "../validation/normalize.ts";
 import type { CommandDefinition } from "./crust.ts";
 import type { CommandNode } from "./node.ts";
@@ -159,10 +159,48 @@ function invalidSections({ subject, name }: SectionOwner): CrustError {
 
 const isText = (value: unknown): value is string => typeof value === "string" && !!value.trim();
 
-function validateSection(section: unknown, owner: SectionOwner): CommandSection {
-	const { title, body } = (section ?? {}) as Partial<CommandSection>;
-	if (!isText(title) || /[\r\n]/.test(title) || !isText(body)) {
+function validateSectionConsumers(
+	consumers: unknown,
+	owner: SectionOwner,
+): readonly SectionConsumer[] {
+	if (
+		!Array.isArray(consumers) ||
+		!consumers.every(
+			(consumer) =>
+				typeof consumer === "object" &&
+				consumer !== null &&
+				typeof (consumer as { id?: unknown }).id === "string",
+		)
+	) {
 		throw invalidSections(owner);
+	}
+	return Object.freeze(
+		consumers.map(
+			(consumer) => Object.freeze({ id: (consumer as { id: string }).id }) as SectionConsumer,
+		),
+	);
+}
+
+function validateSection(section: unknown, owner: SectionOwner): CommandSection {
+	const { title, body, only, except } = (section ?? {}) as {
+		title?: unknown;
+		body?: unknown;
+		only?: unknown;
+		except?: unknown;
+	};
+	if (
+		!isText(title) ||
+		/[\r\n]/.test(title) ||
+		!isText(body) ||
+		(only !== undefined && except !== undefined)
+	) {
+		throw invalidSections(owner);
+	}
+	if (only !== undefined) {
+		return Object.freeze({ title, body, only: validateSectionConsumers(only, owner) });
+	}
+	if (except !== undefined) {
+		return Object.freeze({ title, body, except: validateSectionConsumers(except, owner) });
 	}
 	return Object.freeze({ title, body });
 }

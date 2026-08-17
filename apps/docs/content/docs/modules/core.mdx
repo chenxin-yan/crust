@@ -60,6 +60,8 @@ Downstream commands call `await ctx.use(api)`. Other Contexts can list `api` in 
 | `defineExtension(name, config)`       | Define a frozen, application-wide Extension value                                                                                                   |
 | `defineFlag(name, definition)`        | Define one named flag, preserving its literal definition                                                                                            |
 | `defineArg(name, definition)`         | Define one named positional argument, preserving its literal definition                                                                             |
+| `defineSectionConsumer(id)`           | Define a typed token for a renderer that consumes command sections                                                                                  |
+| `sectionsFor(sections, ...consumers)` | Select sections visible to any of the supplied consumer tokens                                                                                      |
 | [`CrustError`](/docs/api/errors)      | Framework error for definition, routing, parsing, and validation failures                                                                           |
 
 ## Definition types
@@ -72,6 +74,8 @@ Downstream commands call `await ctx.use(api)`. Other Contexts can list `api` in 
 | [`CommandDefinitionBuilder`](/docs/api/crust) | Configure-only builder used by command definitions                               |
 | [`CommandConfig`](/docs/api/crust)            | Static metadata for a reusable definition                                        |
 | `CommandMeta`                                 | Name, description, usage, sections, aliases, and visibility                      |
+| `CommandSection`                              | A titled documentation block with an optional consumer audience                  |
+| `SectionConsumer`                             | Branded renderer token returned by `defineSectionConsumer()`                     |
 | `ContextResolver` / `FactoryValueOf`          | Pull-based Context resolver and factory-value helper types                       |
 | [`RootCommandMeta`](/docs/api/crust)          | Root description, usage, and sections accepted by the `Crust` constructor        |
 | `FlagDef`                                     | Core-value or Standard Schema flag definition                                    |
@@ -148,6 +152,25 @@ These types back [`run(path, input?, io?)`](/docs/api/crust) and the [`@crustjs/
 | `ParseErrorDetails`           | Flag, argument, value, and reason                                        |
 | `ValidationErrorDetails`      | Aggregated `{ message, path }` issues                                    |
 | `CommandNotFoundErrorDetails` | Input, siblings, path, and parent Command Snapshot                       |
+
+## Section consumers
+
+A command section without an audience is available to every renderer. Use `only` or `except` with consumer tokens exported by renderer packages to narrow it; the two fields are mutually exclusive:
+
+```ts
+import { sectionsFor, defineSectionConsumer, type CommandSection } from "@crustjs/core";
+
+export const WEB_DOCS = defineSectionConsumer("acme:web-docs");
+
+const sections: readonly CommandSection[] = [
+  { title: "Overview", body: "Visible everywhere." },
+  { title: "Web example", body: "Visible in web docs.", only: [WEB_DOCS] },
+];
+
+const webSections = sectionsFor(sections, WEB_DOCS);
+```
+
+`sectionsFor(sections, HELP, WEB_DOCS)` includes a section when at least one requested consumer may see it. Consumers match by `id`, so targeting remains stable when snapshots are cloned or serialized. Consumer packages own and export their tokens; core has no built-in consumer registry. Namespace third-party IDs to avoid collisions.
 
 ## Tooling subpath
 

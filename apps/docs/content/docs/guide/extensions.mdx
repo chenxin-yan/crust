@@ -80,6 +80,28 @@ const guidance = defineExtension("guidance", {
 
 Titles must be non-empty single lines, and bodies are non-empty plain text so the same content is safe for terminal help and mdoc output.
 
+Sections are visible to every renderer by default. Renderer packages export consumer tokens that let authors narrow a section with mutually exclusive `only` or `except` fields:
+
+```ts
+import { defineCommand } from "@crustjs/core";
+import { HELP } from "@crustjs/extensions";
+import { SKILLS } from "@crustjs/skills";
+
+const deploy = defineCommand(
+  "deploy",
+  {
+    sections: [
+      { title: "Safety", body: "Use preview mode first." },
+      { title: "Agent notes", body: "Inspect the plan before deploying.", only: [SKILLS] },
+      { title: "Examples", body: "deploy production", only: [HELP, SKILLS] },
+    ],
+  },
+  (command) => command.action(() => {}),
+);
+```
+
+A renderer defines its own token with `defineSectionConsumer()` and selects its sections with `sectionsFor()`. Core does not maintain a fixed list of consumers. Passing several tokens to `sectionsFor()` uses any-of semantics.
+
 ## Build hooks
 
 `build(ctx)` generates artifacts when invoked by build tooling such as `crust build`; it does not run during ordinary `run()` or `execute()` dispatch. The snapshot subprocess invokes registered hooks in Extension registration order, so Extension presence is the source of intent. The context contains the frozen root Command Snapshot and a resolved absolute `outDir`. Build hooks may be async; errors propagate with the Extension name. `crust build --no-validate` skips entry preparation and all build hooks.

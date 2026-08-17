@@ -1,4 +1,11 @@
-import { type CommandSnapshot, type Extension, defineExtension } from "@crustjs/core";
+import {
+	type CommandSnapshot,
+	type Extension,
+	type SectionConsumer,
+	defineExtension,
+	defineSectionConsumer,
+	sectionsFor,
+} from "@crustjs/core";
 import {
 	buildCommandDocumentation,
 	formatDescription,
@@ -12,6 +19,8 @@ import { bold, cyan, dim, green, padEnd, yellow } from "@crustjs/style";
 const FLAG_COLUMN_WIDTH = 28;
 const ARG_COLUMN_WIDTH = 18;
 const COMMAND_COLUMN_WIDTH = 10;
+
+export const HELP: SectionConsumer = defineSectionConsumer("help");
 
 function formatArgToken(arg: DocumentationArg): string {
 	return arg.required ? yellow(arg.token) : dim(yellow(arg.token));
@@ -85,7 +94,7 @@ export function renderHelp(command: CommandSnapshot, path?: readonly string[]): 
 	]) {
 		if (section.length > 0) lines.push("", ...section);
 	}
-	for (const section of command.meta.sections ?? []) {
+	for (const section of sectionsFor(command.meta.sections, HELP)) {
 		lines.push(
 			"",
 			bold(cyan(`${section.title}:`)),

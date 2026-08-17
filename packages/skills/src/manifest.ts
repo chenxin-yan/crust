@@ -1,4 +1,9 @@
-import type { CommandSnapshot } from "@crustjs/core";
+import {
+	type CommandSnapshot,
+	type SectionConsumer,
+	defineSectionConsumer,
+	sectionsFor,
+} from "@crustjs/core";
 import {
 	buildCommandDocumentation,
 	type CommandDocumentation,
@@ -7,6 +12,8 @@ import {
 } from "@crustjs/core/tooling";
 
 import type { ManifestArg, ManifestFlag, ManifestNode } from "./types.ts";
+
+export const SKILLS: SectionConsumer = defineSectionConsumer("skills");
 
 export function buildManifest(command: CommandSnapshot): ManifestNode {
 	return buildNode(buildCommandDocumentation(command), command);
@@ -17,7 +24,10 @@ function buildNode(model: CommandDocumentation, source: CommandSnapshot): Manife
 		path: model.path.map(normalizeName),
 		description: model.description,
 		usage: model.usage,
-		sections: source.meta.sections,
+		sections: sectionsFor(source.meta.sections, SKILLS).map(({ title, body }) => ({
+			title,
+			body,
+		})),
 		runnable: model.hasAction,
 		args: model.args.map(normalizeArg),
 		flags: [...model.flags].sort((a, b) => a.name.localeCompare(b.name)).map(normalizeFlag),

@@ -721,11 +721,24 @@ export type InputFlags<F extends FlagsDef> = Simplify<
 // CommandMeta — Command metadata
 // ────────────────────────────────────────────────────────────────────────────
 
+declare const sectionConsumerBrand: unique symbol;
+
+/** A renderer that consumes command documentation sections. */
+export interface SectionConsumer {
+	readonly id: string;
+	readonly [sectionConsumerBrand]: true;
+}
+
+export type SectionAudience =
+	| { readonly only: readonly SectionConsumer[]; readonly except?: never }
+	| { readonly except: readonly SectionConsumer[]; readonly only?: never }
+	| { readonly only?: never; readonly except?: never };
+
 /** A plain-text documentation section rendered after built-in command documentation. */
-export interface CommandSection {
+export type CommandSection = {
 	readonly title: string;
 	readonly body: string;
-}
+} & SectionAudience;
 
 /** Metadata describing a CLI command */
 export interface CommandMeta {

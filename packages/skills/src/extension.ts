@@ -26,6 +26,7 @@ import {
 	installSkill,
 	uninstallSkill,
 } from "./generate.ts";
+import { SKILLS } from "./manifest.ts";
 import {
 	SkillSourceUnavailableError,
 	loadPackagedSkills,
@@ -213,17 +214,11 @@ async function buildSkills(options: SkillOptions, context: ExtensionBuildContext
 	}
 
 	if (source === undefined || (options.extras?.length ?? 0) > 0) {
-		// The Agent skills section describes the input source, not the output being generated here.
-		const meta = {
-			...context.snapshot.meta,
-			sections: context.snapshot.meta.sections?.filter(
-				(section) => section.title !== SKILLS_SECTION_TITLE,
-			),
-		};
-		await writeSkillsFromSnapshot(
-			{ ...context.snapshot, meta },
-			{ outDir, version: await readPackageVersion(), extras: options.extras },
-		);
+		await writeSkillsFromSnapshot(context.snapshot, {
+			outDir,
+			version: await readPackageVersion(),
+			extras: options.extras,
+		});
 		return;
 	}
 
@@ -249,6 +244,7 @@ export function skill(options: SkillOptions): Extension {
 				command: [],
 				title: SKILLS_SECTION_TITLE,
 				body: formatSkillDocumentation(options.source, commandName, snapshot.meta.name),
+				except: [SKILLS],
 			},
 		],
 		build: (context) => buildSkills(options, context),

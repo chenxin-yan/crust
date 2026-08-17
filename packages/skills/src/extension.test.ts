@@ -109,7 +109,12 @@ describe("skill extension package sources", () => {
 		);
 		await writeFile(join(authored, "content.md"), "authored\n");
 		const extension = skill({ source, extras: [authored] });
-		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
+		const snapshot = await new Crust("demo", {
+			description: "Demo",
+			sections: [{ title: "Agent skills", body: "Application-authored agent guidance." }],
+		})
+			.extend(extension)
+			.snapshot();
 		const outDir = join(tempRoot, "dist");
 		await writeFile(join(tempRoot, "package.json"), '{"version":"9.9.9"}');
 
@@ -125,8 +130,9 @@ describe("skill extension package sources", () => {
 			"utf8",
 		);
 		expect(rootReference).toContain("# `demo`");
-		// The Agent skills section advertises the input source path; it must not
-		// leak build-machine paths into the regenerated command reference.
+		expect(rootReference).toContain("## Agent skills\nApplication-authored agent guidance.");
+		// The extension's Agent skills section advertises the input source path; it
+		// must not leak build-machine paths into the regenerated command reference.
 		expect(rootReference).not.toContain(tempRoot);
 		expect(await readFile(join(outDir, "skills", "guide", "content.md"), "utf8")).toBe(
 			"authored\n",
