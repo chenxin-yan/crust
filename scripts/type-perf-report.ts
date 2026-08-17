@@ -105,9 +105,9 @@ export function formatComparison(base: TypePerfReport, head: TypePerfReport): st
 			const warn = headMetrics.instantiations > baseMetrics.instantiations * 1.1 ? " ⚠️" : "";
 			return `| ${size}${warn} | ${number.format(baseMetrics.instantiations)} | ${number.format(headMetrics.instantiations)} | ${delta(baseMetrics.instantiations, headMetrics.instantiations)} |`;
 		}),
-		baseRatio !== null && headRatio !== null
-			? `| 100/10 scaling ratio${ratioWarning} | ${baseRatio.toFixed(2)}× | ${headRatio.toFixed(2)}× | ${delta(baseRatio, headRatio, 2)} |`
-			: "| 100/10 scaling ratio | n/a | n/a | n/a |",
+		// One side can be n/a on its own — an API-breaking PR compiles head's fixture
+		// only against head's dist, and head's absolute ratio is still informative.
+		`| 100/10 scaling ratio${ratioWarning} | ${baseRatio === null ? "n/a" : `${baseRatio.toFixed(2)}×`} | ${headRatio === null ? "n/a" : `${headRatio.toFixed(2)}×`} | ${baseRatio !== null && headRatio !== null ? delta(baseRatio, headRatio, 2) : "n/a"} |`,
 		"",
 		"### Editor latency (informational — LSP round-trips on the 50-command fixture, wall time)",
 		"",

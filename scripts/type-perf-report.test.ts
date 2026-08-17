@@ -129,7 +129,7 @@ describe("type performance report", () => {
 		const output = formatComparison(base, head);
 
 		expect(output).toContain("| 100 | n/a | 50,000 | n/a |");
-		expect(output).toContain("| 100/10 scaling ratio | n/a | n/a | n/a |");
+		expect(output).toContain("| 100/10 scaling ratio | n/a | 5.00× | n/a |");
 	});
 
 	it("handles a zero base and flags a TypeScript version mismatch", () => {
