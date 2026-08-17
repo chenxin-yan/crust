@@ -46,7 +46,6 @@ function makeCommand(opts: {
 const baseMeta: SkillMeta = {
 	name: "test-cli",
 	description: "A test CLI tool",
-	version: "1.0.0",
 };
 
 /**
@@ -169,13 +168,13 @@ describe("renderSkill", () => {
 			expect(skill?.content).toContain('  version: "1.2.3"');
 		});
 
-		it("always includes metadata block with required version", () => {
+		it("omits the metadata block when no version is provided", () => {
 			const manifest = buildSimpleManifest();
 			const files = renderSkill(manifest, baseMeta);
 			const skill = findFile(files, "SKILL.md");
 
-			expect(skill?.content).toContain("metadata:");
-			expect(skill?.content).toContain('  version: "1.0.0"');
+			expect(skill?.content).not.toContain("metadata:");
+			expect(skill?.content).not.toContain("version:");
 		});
 
 		it("includes the manifest description in the body", () => {
@@ -697,8 +696,14 @@ describe("renderSkill", () => {
 				meta: {
 					name: "deploy",
 					sections: [
-						{ title: "Preview", body: "Prefer preview flags before executing changes." },
-						{ title: "Safety", body: "Call out risky production operations explicitly." },
+						{
+							title: "Preview",
+							body: "Prefer preview flags before executing changes.",
+						},
+						{
+							title: "Safety",
+							body: "Call out risky production operations explicitly.",
+						},
 					],
 				},
 				run() {},

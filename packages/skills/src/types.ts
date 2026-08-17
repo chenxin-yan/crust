@@ -4,7 +4,7 @@ import type { CommandSnapshot } from "@crustjs/core";
 export interface SkillMeta {
 	name: string;
 	description: string;
-	version: string;
+	version?: string;
 }
 
 /** Supported agent targets for skill installation. */

@@ -16,7 +16,7 @@ bun add @crustjs/skills
 A **skill source** is the `skills/` directory shipped in your npm package. It is the single source of truth and contains both:
 
 - A **generated skill**, rendered from the command tree and its `meta.sections`.
-- Any **authored skills**, included from hand-written bundle directories.
+- Any **authored skills**, included from hand-written skill directories via `extras`.
 
 Build the source alongside your other package artifacts:
 
@@ -27,8 +27,8 @@ import pkg from "./package.json" with { type: "json" };
 
 await writeSkills(app, {
   outDir: "dist/skills",
-  version: pkg.version,
-  bundles: ["skills/deployment-guide"],
+  version: pkg.version, // optional; recorded in the generated skill's metadata
+  extras: ["skills/deployment-guide"],
 });
 ```
 

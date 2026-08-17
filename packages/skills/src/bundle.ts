@@ -65,15 +65,15 @@ export function probeFrontmatter(content: string): BundleFrontmatter {
  * Asserts that `realPath` lies inside (or equals) `canonicalRoot`.
  *
  * The check is performed on canonicalized paths (after `realpath`) so
- * symlinks pointing outside the bundle root are reliably rejected. Includes
+ * symlinks pointing outside the skill directory root are reliably rejected. Includes
  * a `sep` boundary check to prevent `/canonical-foo` from matching `/canonical`.
  */
 function assertInsideRoot(realPath: string, canonicalRoot: string, originalPath: string): void {
 	const rootWithSep = canonicalRoot.endsWith(sep) ? canonicalRoot : canonicalRoot + sep;
 	if (realPath !== canonicalRoot && !realPath.startsWith(rootWithSep)) {
 		throw new Error(
-			`Bundle path traversal rejected: "${originalPath}" resolves to "${realPath}", ` +
-				`which is outside the bundle root "${canonicalRoot}".`,
+			`Extra skill path traversal rejected: "${originalPath}" resolves to "${realPath}", ` +
+				`which is outside the skill directory root "${canonicalRoot}".`,
 		);
 	}
 }
@@ -170,14 +170,14 @@ export async function loadBundleFiles(sourceDir: string | URL): Promise<LoadedBu
 	try {
 		canonicalRoot = await realpath(resolved);
 	} catch (err) {
-		throw new Error(`Bundle source directory "${resolved}" does not exist or is not accessible.`, {
+		throw new Error(`Extra skill directory "${resolved}" does not exist or is not accessible.`, {
 			cause: err,
 		});
 	}
 
 	const rootStat = await stat(canonicalRoot);
 	if (!rootStat.isDirectory()) {
-		throw new Error(`Bundle source path "${canonicalRoot}" is not a directory.`);
+		throw new Error(`Extra skill path "${canonicalRoot}" is not a directory.`);
 	}
 
 	// Seed the visited set with the canonical root itself so a child symlink
@@ -188,8 +188,8 @@ export async function loadBundleFiles(sourceDir: string | URL): Promise<LoadedBu
 	const skillMd = collected.find((f) => f.relPath === SKILL_MD);
 	if (!skillMd) {
 		throw new Error(
-			`Bundle is missing SKILL.md at the bundle root "${canonicalRoot}". ` +
-				`Every skill bundle must contain a top-level SKILL.md file.`,
+			`Extra skill directory is missing SKILL.md at its root "${canonicalRoot}". ` +
+				`Every extra skill directory must contain a top-level SKILL.md file.`,
 		);
 	}
 
@@ -205,14 +205,14 @@ export async function loadBundleFiles(sourceDir: string | URL): Promise<LoadedBu
 
 	if (probed.name === null || probed.name === "") {
 		throw new Error(
-			`Bundle SKILL.md is missing a top-level \`name:\` field in its YAML frontmatter ` +
+			`Extra skill SKILL.md is missing a top-level \`name:\` field in its YAML frontmatter ` +
 				`(at "${join(canonicalRoot, SKILL_MD)}"). ` +
 				`Add \`name: <skill-name>\` to the frontmatter block.`,
 		);
 	}
 	if (probed.description === null || probed.description === "") {
 		throw new Error(
-			`Bundle SKILL.md is missing a top-level \`description:\` field in its YAML frontmatter ` +
+			`Extra skill SKILL.md is missing a top-level \`description:\` field in its YAML frontmatter ` +
 				`(at "${join(canonicalRoot, SKILL_MD)}"). ` +
 				`Add \`description: <one-line summary>\` to the frontmatter block.`,
 		);
