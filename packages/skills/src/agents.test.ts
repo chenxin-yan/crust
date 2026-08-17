@@ -69,15 +69,21 @@ describe("resolveAgentPath", () => {
 		}
 	});
 
-	it("falls back to ~/.vibe/skills when VIBE_HOME is unset", () => {
+	it("falls back to ~/.vibe/skills when VIBE_HOME is unset or blank", () => {
 		const original = process.env.VIBE_HOME;
-		delete process.env.VIBE_HOME;
 		try {
+			delete process.env.VIBE_HOME;
+			expect(resolveAgentPath("mistral-vibe", "global", "my-cli")).toBe(
+				join(homedir(), ".vibe", "skills", "my-cli"),
+			);
+			process.env.VIBE_HOME = "  ";
 			expect(resolveAgentPath("mistral-vibe", "global", "my-cli")).toBe(
 				join(homedir(), ".vibe", "skills", "my-cli"),
 			);
 		} finally {
-			if (original !== undefined) {
+			if (original === undefined) {
+				delete process.env.VIBE_HOME;
+			} else {
 				process.env.VIBE_HOME = original;
 			}
 		}

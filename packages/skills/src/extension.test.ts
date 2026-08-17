@@ -275,6 +275,36 @@ describe("skill extension package sources", () => {
 		expect((await lstat(target())).isSymbolicLink()).toBe(true);
 	});
 
+	it("overwrites an unowned directory when the conflict confirm is accepted", async () => {
+		const source = await writeSource("demo");
+		await mkdir(target(), { recursive: true });
+		await writeFile(join(target(), "manual.md"), "unowned\n");
+
+		// Empty PATH keeps agent detection deterministic: Universal is the only
+		// choice, so the queued keys select it and then accept the overwrite.
+		const path = process.env.PATH;
+		process.env.PATH = "";
+		try {
+			const harness = createPromptIO();
+			const run = withCwd(tempRoot, () =>
+				withPromptIO(harness.io, () => createApp(source).execute({ argv: ["skill"] })),
+			);
+			harness.keys("space", "enter");
+			// The multiselect drains buffered input, so the confirm answer must
+			// wait until the confirm prompt is attached and rendering.
+			while (!harness.screen().includes("Overwrite?")) {
+				await new Promise((resolve) => setTimeout(resolve, 10));
+			}
+			harness.keys("y", "enter");
+			await run;
+		} finally {
+			process.env.PATH = path;
+		}
+
+		expect((await lstat(target())).isSymbolicLink()).toBe(true);
+		expect(await readFile(join(target(), "content.md"), "utf8")).toBe("demo\n");
+	});
+
 	it("continues installs after a conflict in another agent directory", async () => {
 		const source = await writeSource("demo");
 		await withCwd(tempRoot, () =>
