@@ -520,6 +520,15 @@ export async function runDistributeBuild(options: {
 		const rootDir = join(stageDir, "root");
 		for (const name of artifacts.names) {
 			cpSync(join(artifacts.sourceDir, name), join(rootDir, name), { recursive: true });
+			// Runtime source resolution (e.g. packaged skills) falls back to
+			// dirname(process.execPath), which is a platform package's bin dir — the
+			// root package is unreachable from there, so each platform package ships
+			// its own copy of the artifacts.
+			for (const targetPackage of distributionTargets) {
+				cpSync(join(artifacts.sourceDir, name), join(targetPackage.packageDir, "bin", name), {
+					recursive: true,
+				});
+			}
 		}
 		artifacts.restore();
 	} finally {

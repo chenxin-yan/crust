@@ -1,5 +1,5 @@
 import { existsSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 import { defineCommand } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
@@ -351,7 +351,13 @@ export const buildCommand = defineCommand(
 					);
 				}
 
-				const outDir = resolve(cwd, flags.outdir);
+				// An explicit --outfile relocates the binary, so hook artifacts must
+				// land beside it for executable-relative source resolution to work at
+				// runtime. The guards above make --outfile imply a single-target,
+				// non-package build.
+				const outDir = flags.outfile
+					? dirname(resolve(cwd, flags.outfile))
+					: resolve(cwd, flags.outdir);
 				const prepared = flags.validate
 					? await buildEntrypoint(entryPath, outDir, envFiles)
 					: undefined;

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
@@ -576,6 +576,47 @@ describe("buildCommand error handling", () => {
 			rmSync(tmpDir, { recursive: true, force: true });
 		}
 	});
+
+	it("writes Extension build artifacts beside an explicit --outfile", async () => {
+		const originalCwd = process.cwd;
+		const tmpDir = join(import.meta.dir, ".tmp-outfile-artifacts");
+		rmSync(tmpDir, { recursive: true, force: true });
+		mkdirSync(join(tmpDir, "src"), { recursive: true });
+		writeFileSync(
+			join(tmpDir, "src", "cli.ts"),
+			`import { Crust, defineExtension } from "@crustjs/core";\n` +
+				`const artifact = defineExtension("artifact", { build: ({ outDir }) => Bun.write(outDir + "/artifact.txt", "built") });\n` +
+				`await new Crust("fixture").extend(artifact).action(() => {}).execute();\n`,
+		);
+
+		process.cwd = () => tmpDir;
+		const originalLog = console.log;
+		console.log = () => {};
+
+		try {
+			process.exitCode = 0;
+			const app = new Crust("test").add(buildCommand);
+			await app.execute({
+				argv: [
+					"build",
+					"--entry",
+					"src/cli.ts",
+					"--target",
+					"bun-darwin-arm64",
+					"--outfile",
+					"./out/custom/cli",
+				],
+			});
+
+			expect(process.exitCode).toBe(0);
+			expect(readFileSync(join(tmpDir, "out", "custom", "artifact.txt"), "utf-8")).toBe("built");
+		} finally {
+			process.exitCode = 0;
+			process.cwd = originalCwd;
+			console.log = originalLog;
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	}, 30_000);
 });
 
 // ────────────────────────────────────────────────────────────────────────────

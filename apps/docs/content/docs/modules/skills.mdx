@@ -61,7 +61,7 @@ export const app = new Crust("my-cli", { description: "My CLI" })
   .action(() => {});
 ```
 
-The extension registers `my-cli skill` and `my-cli skill update`. It also contributes an **Agent skills** section to root help and generated man pages. Each shipped skill is listed by name and description with a working-directory-relative logical source path, so agents can discover and load skills without installing them first while generated artifacts do not leak absolute build-machine paths.
+The extension registers `my-cli skill` and `my-cli skill update`. It also contributes an **Agent skills** section to root help and generated man pages. Each shipped skill is listed by name and description with its logical source path — relative to the working directory when the source is inside it, absolute otherwise — so agents can discover and load skills without installing them first. Run builds from the project root containing the skill source to keep absolute build-machine paths out of generated artifacts.
 
 The management command reads every skill in the source and creates links in selected agent directories. `--scope project|global` selects project or user locations; `--all` installs for universal and detected agents without prompting.
 

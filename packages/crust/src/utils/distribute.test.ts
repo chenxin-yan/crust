@@ -292,6 +292,12 @@ await app.execute();
 		expect(readFileSync(join(tmpDir, ".stage", "root", "skills", "x", "SKILL.md"), "utf-8")).toBe(
 			"skill\n",
 		);
+		expect(
+			readFileSync(
+				join(tmpDir, ".stage", "darwin-arm64", "bin", "skills", "x", "SKILL.md"),
+				"utf-8",
+			),
+		).toBe("skill\n");
 		expect(readFileSync(join(artifactOutDir, "man", "x.1"), "utf-8")).toContain(".Dd");
 	});
 });
