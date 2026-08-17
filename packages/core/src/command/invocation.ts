@@ -10,6 +10,7 @@ import { CrustError } from "../errors.ts";
 import { parseArgs, validateParsed } from "../parsing/parser.ts";
 import { applySchemas } from "../parsing/schema.ts";
 import { cloneFlagSpellings } from "../parsing/spellings.ts";
+import { isText } from "../sections.ts";
 import type { CommandSection, FlagDef, FlagsDef, InvocationIO, SectionConsumer } from "../types.ts";
 import { normalizeFlag } from "../validation/normalize.ts";
 import type { CommandDefinition } from "./crust.ts";
@@ -157,19 +158,18 @@ function invalidSections({ subject, name }: SectionOwner): CrustError {
 	);
 }
 
-const isText = (value: unknown): value is string => typeof value === "string" && !!value.trim();
-
 function validateSectionConsumers(
 	consumers: unknown,
 	owner: SectionOwner,
 ): readonly SectionConsumer[] {
 	if (
 		!Array.isArray(consumers) ||
+		consumers.length === 0 ||
 		!consumers.every(
 			(consumer) =>
 				typeof consumer === "object" &&
 				consumer !== null &&
-				typeof (consumer as { id?: unknown }).id === "string",
+				isText((consumer as { id?: unknown }).id),
 		)
 	) {
 		throw invalidSections(owner);

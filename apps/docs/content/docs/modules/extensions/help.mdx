@@ -26,7 +26,20 @@ function help(): Extension;
 
 `help()` owns a recursive boolean `help` flag with short name `h`. Its `preRun` hook writes help through `ctx.stdout` and returns `ctx.finish()` when `--help` is present. A container command with no Command Action also displays help.
 
-The renderer includes usage, visible subcommands, positional arguments, effective flags, aliases, defaults, choices, and `meta.sections`. Commands with `meta.hidden: true` stay routable but are omitted from listings.
+The renderer includes usage, visible subcommands, positional arguments, effective flags, aliases, defaults, choices, and the `meta.sections` visible to its `HELP` consumer. Commands with `meta.hidden: true` stay routable but are omitted from listings.
+
+## Section consumer
+
+The package exports `HELP`, the consumer token used by the help renderer. Sections render everywhere by default; target help specifically with `only: [HELP]`, or omit a section from help with `except: [HELP]`:
+
+```ts
+import { Crust } from "@crustjs/core";
+import { HELP } from "@crustjs/extensions";
+
+const documentedApp = new Crust("my-cli", {
+  sections: [{ title: "Terminal example", body: "my-cli deploy", only: [HELP] }],
+});
+```
 
 ## `renderHelp`
 

@@ -1,5 +1,3 @@
-import type { CommandSnapshot } from "@crustjs/core";
-
 /** Metadata used to render a generated skill. */
 export interface SkillMeta {
 	name: string;
@@ -114,7 +112,7 @@ export interface ManifestNode {
 	description?: string;
 	usage: string;
 	/** Plain-text command sections rendered into the command's markdown file. */
-	sections?: CommandSnapshot["meta"]["sections"];
+	sections?: readonly { readonly title: string; readonly body: string }[];
 	runnable: boolean;
 	args: ManifestArg[];
 	flags: ManifestFlag[];

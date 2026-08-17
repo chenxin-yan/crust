@@ -9,6 +9,13 @@ const skills = defineSectionConsumer("skills");
 
 const universal = { title: "Universal", body: "Everywhere" } as const;
 
+describe("defineSectionConsumer", () => {
+	it("rejects empty consumer ids", () => {
+		expect(() => defineSectionConsumer("")).toThrow("non-empty id");
+		expect(() => defineSectionConsumer("   ")).toThrow("non-empty id");
+	});
+});
+
 describe("sectionsFor", () => {
 	it("includes untargeted sections for every consumer", () => {
 		expect(sectionsFor([universal], help)).toEqual([universal]);
