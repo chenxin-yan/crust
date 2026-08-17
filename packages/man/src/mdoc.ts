@@ -1,10 +1,12 @@
-import type { CommandSnapshot } from "@crustjs/core";
+import { type CommandSnapshot, type SectionConsumer, sectionsFor } from "@crustjs/core";
 import {
 	buildCommandDocumentation,
 	formatDescription,
 	type CommandDocumentation,
 	type DocumentationFlag,
 } from "@crustjs/core/tooling";
+
+export const MAN: SectionConsumer = "man";
 
 function escapeMdocBodyLine(line: string): string {
 	// Both `.` and `'` start roff control lines.
@@ -110,7 +112,7 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		}
 		lines.push(".El");
 	}
-	for (const metadataSection of root.meta.sections ?? []) {
+	for (const metadataSection of sectionsFor(root.meta.sections, MAN)) {
 		lines.push(`.Sh ${shTitle(metadataSection.title)}`);
 		for (const line of metadataSection.body.split("\n")) lines.push(escapeMdocBodyLine(line));
 	}

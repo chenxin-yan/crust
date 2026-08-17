@@ -151,6 +151,29 @@ describe("command metadata sections", () => {
 		expect(() => structuredClone(snapshot)).not.toThrow();
 	});
 
+	it("preserves authored and contributed section audiences", async () => {
+		const app = new Crust("cli", {
+			sections: [{ title: "Agent notes", body: "Agent body", only: ["skills"] }],
+		}).extend(
+			defineExtension("docs", {
+				sections: () => [
+					{ command: [], title: "Human notes", body: "Human body", except: ["skills", "help"] },
+				],
+			}),
+		);
+
+		const snapshot = await app.snapshot();
+
+		expect(snapshot.meta.sections).toEqual([
+			{ title: "Agent notes", body: "Agent body", only: ["skills"] },
+			{ title: "Human notes", body: "Human body", except: ["skills", "help"] },
+		]);
+		expect(Object.isFrozen(snapshot.meta.sections?.[0]?.only)).toBe(true);
+		const clonedSections = structuredClone(snapshot).meta.sections;
+		expect(clonedSections?.[0]?.only).toEqual(["skills"]);
+		expect(clonedSections?.[1]?.except).toEqual(["skills", "help"]);
+	});
+
 	it("rejects unknown and aliased contribution paths", async () => {
 		for (const command of [["missing"], ["b"], ["constructor"], ["__proto__"], ["toString"]]) {
 			const app = new Crust("cli")
@@ -179,6 +202,13 @@ describe("command metadata sections", () => {
 			[{ title: "Notes", body: "" }],
 			[{ title: 1, body: "Body" }],
 			[{ title: "Notes", body: null }],
+			[{ title: "Notes", body: "Body", only: [], except: ["help"] }],
+			[{ title: "Notes", body: "Body", only: "help" }],
+			[{ title: "Notes", body: "Body", only: [] }],
+			[{ title: "Notes", body: "Body", except: [] }],
+			[{ title: "Notes", body: "Body", only: [{ id: "help" }] }],
+			[{ title: "Notes", body: "Body", except: [1] }],
+			[{ title: "Notes", body: "Body", only: ["   "] }],
 			[null],
 		];
 		for (const sections of badSections) {
@@ -202,6 +232,10 @@ describe("command metadata sections", () => {
 			[{ command: [1], title: "Notes", body: "Body" }],
 			[{ command: [], title: "", body: "Body" }],
 			[{ command: [], title: "Notes", body: "   " }],
+			[{ command: [], title: "Notes", body: "Body", only: [], except: [] }],
+			[{ command: [], title: "Notes", body: "Body", only: "help" }],
+			[{ command: [], title: "Notes", body: "Body", only: [] }],
+			[{ command: [], title: "Notes", body: "Body", only: [null] }],
 		];
 		for (const contributions of badReturns) {
 			const app = new Crust("cli").extend(

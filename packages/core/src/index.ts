@@ -48,6 +48,8 @@ export type {
 	RunInputArguments,
 } from "./command/crust.ts";
 export { Crust, defineCommand } from "./command/crust.ts";
+// Documentation sections
+export { sectionsFor } from "./sections.ts";
 // Errors
 export type {
 	CommandNotFoundErrorDetails,
@@ -65,6 +67,8 @@ export type {
 	ArgsDef,
 	CommandMeta,
 	CommandSection,
+	SectionAudience,
+	SectionConsumer,
 	FlagDef,
 	FlagsDef,
 	InputArgs,
