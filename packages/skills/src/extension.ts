@@ -157,7 +157,11 @@ function formatSkillDocumentation(
 	try {
 		return loadPackagedSkills(source)
 			.map((packagedSkill) => {
-				const sourcePath = relative(process.cwd(), packagedSkill.sourceDir) || ".";
+				// Relativizing across unrelated roots yields ../ chains that still spell
+				// out the absolute path; keep the absolute form when outside the cwd.
+				const sourcePath = isWithin(process.cwd(), packagedSkill.sourceDir)
+					? relative(process.cwd(), packagedSkill.sourceDir) || "."
+					: packagedSkill.sourceDir;
 				return `${packagedSkill.name} — ${packagedSkill.description}\n  Source: ${sourcePath}`;
 			})
 			.join("\n\n");

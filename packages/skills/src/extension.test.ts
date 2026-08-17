@@ -10,7 +10,7 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
 import { renderHelp } from "@crustjs/extensions";
@@ -66,11 +66,11 @@ describe("skill extension package sources", () => {
 
 		const output = renderHelp(snapshot);
 		expect(output).toContain("Agent skills:");
+		// Sources outside the cwd advertise their absolute path; ../ chains would
+		// still spell out the absolute location while being harder to use.
+		expect(output).toContain(`demo — Run demo workflows\n    Source: ${join(source, "demo")}`);
 		expect(output).toContain(
-			`demo — Run demo workflows\n    Source: ${relative(process.cwd(), join(source, "demo"))}`,
-		);
-		expect(output).toContain(
-			`guide — Explain deployment choices\n    Source: ${relative(process.cwd(), join(source, "guide"))}`,
+			`guide — Explain deployment choices\n    Source: ${join(source, "guide")}`,
 		);
 	});
 
