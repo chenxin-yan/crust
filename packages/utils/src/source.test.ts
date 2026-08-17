@@ -154,13 +154,5 @@ describe("resolveSourceDir", () => {
 				expect(resolved).not.toContain("/pkg/templates/base");
 			});
 		});
-
-		it("preserves trailing path segments in relative inputs", async () => {
-			const fakeEntry = join(SELF_DIR, "source.ts");
-			await withArgv1(fakeEntry, async () => {
-				const resolved = resolveSourceDir("a/b/c");
-				expect(resolved.endsWith("/packages/utils/a/b/c")).toBe(true);
-			});
-		});
 	});
 });

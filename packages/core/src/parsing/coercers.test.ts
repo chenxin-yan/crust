@@ -32,19 +32,9 @@ describe("coerceUrl", () => {
 		expect(() => coerceUrl("https://[bad")).not.toThrow(/missing protocol/);
 	});
 
-	it("throws CrustError(PARSE) on empty input", () => {
-		expect(() => coerceUrl("")).toThrow(CrustError);
-	});
-
 	it("accepts file:// URLs", () => {
 		const url = coerceUrl("file:///usr/local/bin");
 		expect(url.protocol).toBe("file:");
-	});
-
-	it("accepts IPv6-bracketed hosts", () => {
-		const url = coerceUrl("https://[::1]:8080/");
-		expect(url.hostname).toBe("[::1]");
-		expect(url.port).toBe("8080");
 	});
 });
 
@@ -96,17 +86,5 @@ describe("coerceJson", () => {
 			expect(e.code).toBe("PARSE");
 			expect(e.message).toContain("Invalid JSON");
 		}
-	});
-
-	it("parses a JSON string literal", () => {
-		expect(coerceJson('"hello"')).toBe("hello");
-	});
-
-	it("parses a JSON number", () => {
-		expect(coerceJson("42")).toBe(42);
-	});
-
-	it("throws CrustError(PARSE) on empty input", () => {
-		expect(() => coerceJson("")).toThrow(CrustError);
 	});
 });

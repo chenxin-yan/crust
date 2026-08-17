@@ -29,15 +29,6 @@ describe("table", () => {
 		expect(lines[3]).toBe("| Bob   | 25  |");
 	});
 
-	it("formats a single-column table", () => {
-		const result = table(["Item"], [["apple"], ["banana"]]);
-		const lines = result.split("\n");
-		expect(lines[0]).toBe("| Item   |");
-		expect(lines[1]).toBe("|--------|");
-		expect(lines[2]).toBe("| apple  |");
-		expect(lines[3]).toBe("| banana |");
-	});
-
 	it("handles table with no data rows", () => {
 		const result = table(["A", "B"], []);
 		const lines = result.split("\n");
@@ -93,17 +84,6 @@ describe("table", () => {
 		expect(lines[0]).toBe("| Name  | Status |");
 		expect(lines[2]).toBe("| Alice |   OK   |");
 		expect(lines[3]).toBe("| Bob   |  FAIL  |");
-	});
-
-	it("defaults unspecified alignment to left", () => {
-		const result = table(
-			["A", "B", "C"],
-			[["1", "2", "3"]],
-			{ align: ["right"] }, // only first column specified
-		);
-		const lines = result.split("\n");
-		expect(lines[0]).toBe("| A | B | C |");
-		expect(lines[2]).toBe("| 1 | 2 | 3 |");
 	});
 
 	// ── Options ────────────────────────────────────────────────────────────

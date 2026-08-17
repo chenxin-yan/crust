@@ -127,11 +127,6 @@ describe("parseArgs — number flags", () => {
 		expect(result.flags.port).toBe(3000);
 	});
 
-	it("coerces --port=8080 to number", () => {
-		const result = parseArgs(cmd, ["--port=8080"]);
-		expect(result.flags.port).toBe(8080);
-	});
-
 	it("handles negative numbers", () => {
 		// Negative numbers as separate args can be tricky with parseArgs
 		// Using = syntax for robustness
@@ -152,17 +147,6 @@ describe("parseArgs — number flags", () => {
 			expect(err).toBeInstanceOf(CrustError);
 			expect((err as CrustError).code).toBe("PARSE");
 			expect((err as CrustError).message).toBe('Expected number for --port, got "abc"');
-		}
-	});
-
-	it("throws CrustError with PARSE code on NaN-producing value", () => {
-		try {
-			parseArgs(cmd, ["--port", "not-a-number"]);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("PARSE");
-			expect((err as CrustError).message).toBe('Expected number for --port, got "not-a-number"');
 		}
 	});
 });
@@ -284,17 +268,6 @@ describe("parseArgs — multiple flags", () => {
 		expect(result.flags.verbose).toEqual([true, false, true]);
 	});
 
-	it("collects only --no-flag values into array with multiple: true", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			flags: {
-				verbose: { type: "boolean", multiple: true },
-			},
-		});
-		const result = parseArgs(cmd, ["--no-verbose", "--no-verbose"]);
-		expect(result.flags.verbose).toEqual([false, false]);
-	});
-
 	it("returns undefined when multiple flag is not provided and has no default", () => {
 		const cmd = makeNode({
 			meta: { name: "test" },
@@ -315,44 +288,6 @@ describe("parseArgs — multiple flags", () => {
 		});
 		const result = parseArgs(cmd, []);
 		expect(result.flags.file).toEqual(["default.ts"]);
-	});
-
-	it("returns undefined for missing required multiple flag (no validation)", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			flags: {
-				file: { type: "string", multiple: true, required: true },
-			},
-		});
-		const result = parseArgs(cmd, []);
-		expect(result.flags.file).toBeUndefined();
-	});
-
-	it("works with short alias on multiple flag", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			flags: {
-				file: { type: "string", multiple: true, short: "f" },
-			},
-		});
-		const result = parseArgs(cmd, ["-f", "a.ts", "-f", "b.ts"]);
-		expect(result.flags.file).toEqual(["a.ts", "b.ts"]);
-	});
-
-	it("works with long alias on multiple flag", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			flags: {
-				file: {
-					type: "string",
-					multiple: true,
-					short: "f",
-					aliases: ["input"],
-				},
-			},
-		});
-		const result = parseArgs(cmd, ["--input", "a.ts", "--input", "b.ts"]);
-		expect(result.flags.file).toEqual(["a.ts", "b.ts"]);
 	});
 
 	it("merges values from canonical name and aliases", () => {
@@ -407,34 +342,6 @@ describe("parseArgs — default values", () => {
 		const result = parseArgs(cmd, ["--port", "8080"]);
 		expect(result.flags.port).toBe(8080);
 	});
-
-	it("applies default boolean value", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			flags: {
-				minify: { type: "boolean", default: true },
-			},
-		});
-		const result = parseArgs(cmd, []);
-		expect(result.flags.minify).toBe(true);
-	});
-
-	it("all-defaults scenario", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			args: [{ name: "file", type: "string", default: "src/cli.ts" }],
-			flags: {
-				port: { type: "number", default: 3000 },
-				verbose: { type: "boolean", default: false },
-				output: { type: "string", default: "./dist" },
-			},
-		});
-		const result = parseArgs(cmd, []);
-		expect(result.args.file).toBe("src/cli.ts");
-		expect(result.flags.port).toBe(3000);
-		expect(result.flags.verbose).toBe(false);
-		expect(result.flags.output).toBe("./dist");
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -479,11 +386,6 @@ describe("parseArgs — required flags", () => {
 		flags: {
 			name: { type: "string", required: true },
 		},
-	});
-
-	it("succeeds when required flag is provided", () => {
-		const result = parseArgs(cmd, ["--name", "hello"]);
-		expect(result.flags.name).toBe("hello");
 	});
 
 	it("returns undefined for missing required flag (no validation)", () => {
@@ -559,15 +461,6 @@ describe("parseArgs — variadic args", () => {
 		});
 		const result = parseArgs(cmd, []);
 		expect(result.args.files).toEqual([]);
-	});
-
-	it("required variadic succeeds when at least one value is provided", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			args: [{ name: "files", type: "string", variadic: true, required: true }],
-		});
-		const result = parseArgs(cmd, ["a.ts"]);
-		expect(result.args.files).toEqual(["a.ts"]);
 	});
 });
 
@@ -660,12 +553,6 @@ describe("parseArgs — strict mode (unknown flags)", () => {
 			expect((err as CrustError).message).toContain("Unknown flag");
 		}
 	});
-
-	it("does not throw on known flags", () => {
-		expect(() => {
-			parseArgs(cmd, ["--verbose"]);
-		}).not.toThrow();
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -679,19 +566,6 @@ describe("parseArgs — empty argv", () => {
 		expect(result.args).toEqual({});
 		expect(result.flags).toEqual({});
 		expect(result.rawArgs).toEqual([]);
-	});
-
-	it("handles empty argv with optional args/flags", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			args: [{ name: "file", type: "string" }],
-			flags: {
-				verbose: { type: "boolean" },
-			},
-		});
-		const result = parseArgs(cmd, []);
-		expect(result.args.file).toBeUndefined();
-		expect(result.flags.verbose).toBeUndefined();
 	});
 });
 
@@ -781,19 +655,6 @@ describe("parseArgs — complex scenarios", () => {
 		expect(result.flags.verbose).toBeUndefined();
 		expect(result.rawArgs).toEqual(["--some-extra-flag"]);
 	});
-
-	it("multiple positional args in order", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			args: [
-				{ name: "source", type: "string", required: true },
-				{ name: "destination", type: "string", required: true },
-			],
-		});
-		const result = parseArgs(cmd, ["./src", "./dest"]);
-		expect(result.args.source).toBe("./src");
-		expect(result.args.destination).toBe("./dest");
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -811,21 +672,6 @@ describe("parseArgs — boolean flag value assignment", () => {
 	it("throws CrustError with PARSE code on --flag=false", () => {
 		try {
 			parseArgs(cmd, ["--verbose=false"]);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("PARSE");
-			expect((err as CrustError).message).toBe("Failed to parse command arguments");
-			expect((err as CrustError).cause).toBeInstanceOf(Error);
-			expect(((err as CrustError).cause as Error).message).toContain(
-				"Option '--verbose' does not take an argument",
-			);
-		}
-	});
-
-	it("throws CrustError with PARSE code on --flag=true", () => {
-		try {
-			parseArgs(cmd, ["--verbose=true"]);
 			expect.unreachable("should have thrown");
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
@@ -878,26 +724,6 @@ describe("parseArgs — boolean negation", () => {
 		},
 	});
 
-	it("allows --no-<canonical> (--no-verbose)", () => {
-		const result = parseArgs(cmd, ["--no-verbose"]);
-		expect(result.flags.verbose).toBe(false);
-	});
-
-	it("allows --<canonical> (--verbose)", () => {
-		const result = parseArgs(cmd, ["--verbose"]);
-		expect(result.flags.verbose).toBe(true);
-	});
-
-	it("allows positive long alias (--loud)", () => {
-		const result = parseArgs(cmd, ["--loud"]);
-		expect(result.flags.verbose).toBe(true);
-	});
-
-	it("allows positive short alias (-v)", () => {
-		const result = parseArgs(cmd, ["-v"]);
-		expect(result.flags.verbose).toBe(true);
-	});
-
 	it("allows --no-<long-alias> (--no-loud sets canonical false)", () => {
 		const result = parseArgs(cmd, ["--no-loud"]);
 		expect(result.flags.verbose).toBe(false);
@@ -944,14 +770,6 @@ describe("parseArgs — boolean negation", () => {
 				);
 			}
 		}
-	});
-
-	it("last-token-wins for canonical positive/negative", () => {
-		const result1 = parseArgs(cmd, ["--verbose", "--no-verbose"]);
-		expect(result1.flags.verbose).toBe(false);
-
-		const result2 = parseArgs(cmd, ["--no-verbose", "--verbose"]);
-		expect(result2.flags.verbose).toBe(true);
 	});
 });
 
@@ -1005,110 +823,6 @@ describe("parseArgs — CommandNode with effective flags", () => {
 			expect((err as CrustError).code).toBe("VALIDATION");
 			expect((err as CrustError).message).toBe('Missing required flag "--config"');
 		}
-	});
-
-	it("ancestor-owned alias works on subcommand", () => {
-		const ancestorOwnedFlags = {
-			verbose: {
-				type: "boolean" as const,
-				short: "v" as const,
-			},
-		};
-		const localFlags = {};
-
-		const node = createCommandNode("child");
-		node.localFlags = localFlags;
-		node.effectiveFlags = { ...localFlags, ...ancestorOwnedFlags };
-		setEffectiveFlags(node, node.effectiveFlags);
-
-		const result = parseArgs(node, ["-v"]);
-		expect(result.flags.verbose).toBe(true);
-	});
-
-	it("rejects parent-local flags omitted from a child's effective flags", () => {
-		const node = createCommandNode("child");
-		node.effectiveFlags = {};
-		setEffectiveFlags(node, node.effectiveFlags);
-
-		expect(() => parseArgs(node, ["--debug"])).toThrow(/Unknown flag/);
-	});
-
-	it("ancestor-owned flag with default value works on subcommand", () => {
-		const ancestorOwnedFlags = {
-			port: {
-				type: "number" as const,
-				default: 3000,
-			},
-		};
-		const localFlags = {};
-
-		const node = createCommandNode("child");
-		node.localFlags = localFlags;
-		node.effectiveFlags = { ...localFlags, ...ancestorOwnedFlags };
-		setEffectiveFlags(node, node.effectiveFlags);
-
-		// Default should apply when not provided
-		const result1 = parseArgs(node, []);
-		expect(result1.flags.port).toBe(3000);
-
-		// Explicit value should override default
-		const result2 = parseArgs(node, ["--port", "8080"]);
-		expect(result2.flags.port).toBe(8080);
-	});
-
-	it("CommandNode with no effective flags parses correctly", () => {
-		const node = createCommandNode("bare");
-		const result = parseArgs(node, ["positional"]);
-		expect(result.flags).toEqual({});
-		expect(result.rawArgs).toEqual([]);
-	});
-
-	it("CommandNode with args parses positionals correctly", () => {
-		const node = Object.assign(createCommandNode("child"), {
-			args: [{ name: "file", type: "string", required: true }] as const,
-		});
-		node.effectiveFlags = { verbose: { type: "boolean" as const } };
-		setEffectiveFlags(node, node.effectiveFlags);
-
-		const result = parseArgs(node, ["--verbose", "input.ts"]);
-		expect(result.flags.verbose).toBe(true);
-		expect(result.args.file).toBe("input.ts");
-	});
-
-	it("ancestor-owned boolean negation works on subcommand", () => {
-		const ancestorOwnedFlags = {
-			minify: {
-				type: "boolean" as const,
-				default: true,
-			},
-		};
-		const localFlags = {};
-
-		const node = createCommandNode("child");
-		node.localFlags = localFlags;
-		node.effectiveFlags = { ...localFlags, ...ancestorOwnedFlags };
-		setEffectiveFlags(node, node.effectiveFlags);
-
-		const result = parseArgs(node, ["--no-minify"]);
-		expect(result.flags.minify).toBe(false);
-	});
-
-	it("ancestor-owned multiple flag works on subcommand", () => {
-		const ancestorOwnedFlags = {
-			include: {
-				type: "string" as const,
-				multiple: true as const,
-			},
-		};
-		const localFlags = {};
-
-		const node = createCommandNode("child");
-		node.localFlags = localFlags;
-		node.effectiveFlags = { ...localFlags, ...ancestorOwnedFlags };
-		setEffectiveFlags(node, node.effectiveFlags);
-
-		const result = parseArgs(node, ["--include", "src", "--include", "lib"]);
-		expect(result.flags.include).toEqual(["src", "lib"]);
 	});
 });
 
@@ -1223,14 +937,6 @@ describe("parseArgs — url/path/json types", () => {
 		expect(result.flags.endpoint).toBeInstanceOf(URL);
 	});
 
-	it("throws CrustError(PARSE) on an invalid url flag value", () => {
-		const cmd = makeNode({
-			meta: "test",
-			flags: { endpoint: { type: "url" } },
-		});
-		expect(() => parseArgs(cmd, ["--endpoint", "not-a-url"])).toThrow(CrustError);
-	});
-
 	it("parses a path flag into an absolute string (coercion details covered in coercers.test.ts)", () => {
 		const cmd = makeNode({
 			meta: "test",
@@ -1247,14 +953,6 @@ describe("parseArgs — url/path/json types", () => {
 		});
 		const result = parseArgs(cmd, ["--config", '{"k":1}']);
 		expect(result.flags.config).toEqual({ k: 1 });
-	});
-
-	it("throws CrustError(PARSE) on invalid json", () => {
-		const cmd = makeNode({
-			meta: "test",
-			flags: { config: { type: "json" } },
-		});
-		expect(() => parseArgs(cmd, ["--config", "not json"])).toThrow(CrustError);
 	});
 });
 

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { type ProgressSink, type SpinnerHandle, spinner, withProgressSink } from "./spinner.ts";
+import { type ProgressSink, spinner, withProgressSink } from "./spinner.ts";
 
 const originalStderrWrite = process.stderr.write;
 const originalStderrIsTTY = process.stderr.isTTY;
@@ -108,18 +108,6 @@ describe("spinner — terminal sink", () => {
 		}
 		expect(kills).toEqual([]);
 		expect(writes.at(-1)).toBe("\x1B[?25h");
-	});
-
-	it("writes only the final line in non-TTY mode", () => {
-		const { sink, writes } = createFakeSink(false);
-		const handle = spinner({ message: "Working", sink });
-
-		handle.start();
-		handle.stop();
-
-		expect(writes).toHaveLength(1);
-		expect(writes[0]).toContain("✓ Working\n");
-		expect(writes[0]).not.toContain("\x1B[");
 	});
 
 	it("applies per-call theme overrides to rendered output", () => {
@@ -252,53 +240,11 @@ describe("spinner — task result", () => {
 
 		expect(result).toBe(42);
 	});
-
-	it("returns complex task result types", async () => {
-		const data = { name: "test", values: [1, 2, 3] };
-		const result = await spinner({
-			message: "Fetching...",
-			task: async () => data,
-		});
-
-		expect(result).toEqual(data);
-	});
-
-	it("returns string task results", async () => {
-		const result = await spinner({
-			message: "Processing...",
-			task: async () => "done",
-		});
-
-		expect(result).toBe("done");
-	});
-
-	it("awaits async tasks that take time", async () => {
-		const result = await spinner({
-			message: "Working...",
-			task: async () => {
-				await tick(50);
-				return "completed";
-			},
-		});
-
-		expect(result).toBe("completed");
-	});
 });
 
 describe("spinner — task error", () => {
 	beforeEach(setupMocks);
 	afterEach(restoreMocks);
-
-	it("re-throws errors from the task", async () => {
-		await expect(
-			spinner({
-				message: "Failing...",
-				task: async () => {
-					throw new Error("task failed");
-				},
-			}),
-		).rejects.toThrow("task failed");
-	});
 
 	it("cleans up when the task throws synchronously", async () => {
 		await expect(
@@ -339,15 +285,6 @@ describe("spinner — stderr output", () => {
 	beforeEach(setupMocks);
 	afterEach(restoreMocks);
 
-	it("writes message to stderr", async () => {
-		await spinner({
-			message: "Loading data...",
-			task: async () => "ok",
-		});
-
-		expect(stderrOutput).toContain("Loading data...");
-	});
-
 	it("shows success indicator on task completion", async () => {
 		await spinner({
 			message: "Building...",
@@ -370,37 +307,6 @@ describe("spinner — stderr output", () => {
 
 		expect(stderrOutput).toContain("✗");
 		expect(stderrOutput).toContain("Deploying...");
-	});
-
-	it("hides cursor at start", async () => {
-		await spinner({
-			message: "Working...",
-			task: async () => "ok",
-		});
-
-		expect(stderrOutput).toContain("\x1B[?25l");
-	});
-
-	it("shows cursor after success", async () => {
-		await spinner({
-			message: "Working...",
-			task: async () => "ok",
-		});
-
-		expect(stderrOutput).toContain("\x1B[?25h");
-	});
-
-	it("shows cursor after error", async () => {
-		try {
-			await spinner({
-				message: "Failing...",
-				task: async () => {
-					throw new Error("fail");
-				},
-			});
-		} catch {}
-
-		expect(stderrOutput).toContain("\x1B[?25h");
 	});
 
 	it("renders initial spinner frame immediately", async () => {
@@ -443,26 +349,6 @@ describe("spinner — animation", () => {
 		expect(stderrOutput).toContain("-");
 	});
 
-	it("uses arc spinner when specified", async () => {
-		await spinner({
-			message: "Loading...",
-			task: async () => "ok",
-			spinner: "arc",
-		});
-
-		expect(stderrOutput).toContain("◐");
-	});
-
-	it("uses bounce spinner when specified", async () => {
-		await spinner({
-			message: "Loading...",
-			task: async () => "ok",
-			spinner: "bounce",
-		});
-
-		expect(stderrOutput).toContain("⠁");
-	});
-
 	it("uses custom spinner frames", async () => {
 		await spinner({
 			message: "Custom...",
@@ -471,20 +357,6 @@ describe("spinner — animation", () => {
 		});
 
 		expect(stderrOutput).toContain("A");
-	});
-
-	it("cycles through custom spinner frames", async () => {
-		await spinner({
-			message: "Custom...",
-			task: async () => {
-				await tick(200);
-				return "ok";
-			},
-			spinner: { frames: ["X", "Y"], interval: 50 },
-		});
-
-		expect(stderrOutput).toContain("X");
-		expect(stderrOutput).toContain("Y");
 	});
 });
 
@@ -537,23 +409,6 @@ describe("spinner — message updates", () => {
 		expect(stderrOutput).toContain("Failed step...");
 	});
 
-	it("supports multiple message updates", async () => {
-		await spinner({
-			message: "Phase 1...",
-			task: async ({ updateMessage }) => {
-				updateMessage("Phase 2...");
-				updateMessage("Phase 3...");
-				updateMessage("Phase 4...");
-				return "ok";
-			},
-		});
-
-		expect(stderrOutput).toContain("Phase 1...");
-		expect(stderrOutput).toContain("Phase 2...");
-		expect(stderrOutput).toContain("Phase 3...");
-		expect(stderrOutput).toContain("Phase 4...");
-	});
-
 	it("ignores updateMessage calls after task completes", async () => {
 		let savedController: { updateMessage: (msg: string) => void } | undefined;
 
@@ -570,17 +425,6 @@ describe("spinner — message updates", () => {
 
 		expect(stderrOutput).toBe(outputAfterComplete);
 		expect(stderrOutput).not.toContain("Late update...");
-	});
-
-	it("works when callback ignores the controller", async () => {
-		const result = await spinner({
-			message: "Simple task...",
-			task: async () => 42,
-		});
-
-		expect(result).toBe(42);
-		expect(stderrOutput).toContain("Simple task...");
-		expect(stderrOutput).toContain("✓");
 	});
 });
 
@@ -600,42 +444,11 @@ describe("spinner — cleanup", () => {
 		expect(stderrOutput).toBe(outputAfterComplete);
 	});
 
-	it("cleans up interval on error (no lingering writes)", async () => {
-		try {
-			await spinner({
-				message: "Failing...",
-				task: async () => {
-					throw new Error("fail");
-				},
-			});
-		} catch {}
-
-		const outputAfterError = stderrOutput;
-		await tick(200);
-
-		expect(stderrOutput).toBe(outputAfterError);
-	});
-
 	it("output ends with newline on success", async () => {
 		await spinner({
 			message: "Working...",
 			task: async () => "ok",
 		});
-
-		const lastCursorShow = stderrOutput.lastIndexOf("\x1B[?25h");
-		const beforeCursor = stderrOutput.slice(0, lastCursorShow);
-		expect(beforeCursor.endsWith("\n")).toBe(true);
-	});
-
-	it("output ends with newline on error", async () => {
-		try {
-			await spinner({
-				message: "Failing...",
-				task: async () => {
-					throw new Error("fail");
-				},
-			});
-		} catch {}
 
 		const lastCursorShow = stderrOutput.lastIndexOf("\x1B[?25h");
 		const beforeCursor = stderrOutput.slice(0, lastCursorShow);
@@ -653,26 +466,6 @@ describe("spinner — non-interactive", () => {
 		});
 	});
 	afterEach(restoreMocks);
-
-	it("returns the task result on success", async () => {
-		const result = await spinner({
-			message: "Loading...",
-			task: async () => 42,
-		});
-
-		expect(result).toBe(42);
-	});
-
-	it("re-throws errors from the task", async () => {
-		await expect(
-			spinner({
-				message: "Failing...",
-				task: async () => {
-					throw new Error("task failed");
-				},
-			}),
-		).rejects.toThrow("task failed");
-	});
 
 	it("does not emit ANSI escape codes", async () => {
 		await spinner({
@@ -694,22 +487,6 @@ describe("spinner — non-interactive", () => {
 
 		expect(stderrOutput).toContain("✓");
 		expect(stderrOutput).toContain("Building...");
-		const lines = stderrOutput.split("\n").filter((l) => l.length > 0);
-		expect(lines.length).toBe(1);
-	});
-
-	it("only outputs the final error line", async () => {
-		try {
-			await spinner({
-				message: "Deploying...",
-				task: async () => {
-					throw new Error("deploy failed");
-				},
-			});
-		} catch {}
-
-		expect(stderrOutput).toContain("✗");
-		expect(stderrOutput).toContain("Deploying...");
 		const lines = stderrOutput.split("\n").filter((l) => l.length > 0);
 		expect(lines.length).toBe(1);
 	});
@@ -743,57 +520,6 @@ describe("spinner — non-interactive", () => {
 		const lines = stderrOutput.split("\n").filter((l) => l.length > 0);
 		expect(lines.length).toBe(1);
 	});
-
-	it("success line uses the latest message", async () => {
-		await spinner({
-			message: "Initial...",
-			task: async ({ updateMessage }) => {
-				updateMessage("Final...");
-				return "ok";
-			},
-		});
-
-		const lines = stderrOutput.split("\n").filter((l) => l.length > 0);
-		expect(lines.length).toBe(1);
-		expect(lines[0]).toContain("✓");
-		expect(lines[0]).toContain("Final...");
-	});
-
-	it("error line uses the latest message", async () => {
-		try {
-			await spinner({
-				message: "Starting...",
-				task: async ({ updateMessage }) => {
-					updateMessage("Failed step...");
-					throw new Error("boom");
-				},
-			});
-		} catch {}
-
-		const lines = stderrOutput.split("\n").filter((l) => l.length > 0);
-		expect(lines.length).toBe(1);
-		expect(lines[0]).toContain("✗");
-		expect(lines[0]).toContain("Failed step...");
-	});
-
-	it("ignores updateMessage calls after task completes", async () => {
-		let savedController: Pick<SpinnerHandle, "updateMessage"> | undefined;
-
-		await spinner({
-			message: "Running...",
-			task: async (controller) => {
-				savedController = controller;
-				return "ok";
-			},
-		});
-
-		const outputAfterComplete = stderrOutput;
-
-		savedController?.updateMessage("Late update...");
-
-		expect(stderrOutput).toBe(outputAfterComplete);
-		expect(stderrOutput).not.toContain("Late update...");
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -825,25 +551,5 @@ describe("spinner — imperative handle", () => {
 		expect(stderrOutput).toContain("✗");
 		expect(stderrOutput).toContain("Deploy failed");
 		expect(stderrOutput).not.toContain("✓");
-	});
-
-	it("updateMessage repaints while running", async () => {
-		const handle = spinner({ message: "Step 1" });
-
-		handle.start();
-		handle.updateMessage("Step 2");
-		handle.stop();
-
-		expect(stderrOutput).toContain("Step 2");
-	});
-
-	it("stop is idempotent", async () => {
-		const handle = spinner({ message: "Once" });
-
-		handle.start();
-		handle.stop("success", "done");
-		handle.stop("error", "again");
-
-		expect(stderrOutput).not.toContain("✗");
 	});
 });

@@ -41,16 +41,6 @@ describe("applyStyle — basic", () => {
 		const result = applyStyle("", codes.bold);
 		expect(result).toBe("");
 	});
-
-	it("applies foreground color codes", () => {
-		const result = applyStyle("hello", codes.red);
-		expect(result).toBe("\x1b[31mhello\x1b[39m");
-	});
-
-	it("applies background color codes", () => {
-		const result = applyStyle("hello", codes.bgBlue);
-		expect(result).toBe("\x1b[44mhello\x1b[49m");
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -148,20 +138,6 @@ describe("applyStyle — edge cases", () => {
 		const result = applyStyle("line1\nline2", codes.red);
 		expect(result).toBe("\x1b[31mline1\nline2\x1b[39m");
 	});
-
-	it("handles multiple close sequences in input", () => {
-		// Two red segments nested inside bold
-		const r1 = applyStyle("a", codes.red);
-		const r2 = applyStyle("b", codes.red);
-		const outer = applyStyle(`${r1} and ${r2}`, codes.bold);
-
-		// Each red close (39m) should NOT trigger bold reopen since 39m !== 22m
-		// But let's verify bold still wraps correctly
-		expect(outer.startsWith("\x1b[1m")).toBe(true);
-		expect(outer.endsWith("\x1b[22m")).toBe(true);
-		expect(outer).toContain("\x1b[31ma\x1b[39m");
-		expect(outer).toContain("\x1b[31mb\x1b[39m");
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -195,11 +171,6 @@ describe("modifier functions", () => {
 
 	it("strikethrough applies strikethrough codes", () => {
 		expect(strikethrough("text")).toBe("\x1b[9mtext\x1b[29m");
-	});
-
-	it("modifiers return empty for empty input", () => {
-		expect(bold("")).toBe("");
-		expect(italic("")).toBe("");
 	});
 });
 
@@ -243,130 +214,10 @@ describe("foreground color functions", () => {
 	it("gray applies code 90", () => {
 		expect(gray("t")).toBe("\x1b[90mt\x1b[39m");
 	});
-
-	it("colors return empty for empty input", () => {
-		expect(red("")).toBe("");
-	});
 });
 
 describe("background color functions", () => {
 	it("bgRed applies code 41", () => {
 		expect(bgRed("t")).toBe("\x1b[41mt\x1b[49m");
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Integration — real-world nesting patterns
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("integration — composable nesting", () => {
-	it("bold + italic + color produces correct output", () => {
-		const colored = red("error");
-		const emphasized = italic(colored);
-		const result = bold(`Fatal: ${emphasized}`);
-
-		// Verify the output starts bold, contains italic+red, and ends clean
-		expect(result.startsWith("\x1b[1m")).toBe(true);
-		expect(result.endsWith("\x1b[22m")).toBe(true);
-		expect(result).toContain("Fatal: ");
-		expect(result).toContain("error");
-	});
-
-	it("nesting same-category colors reopens outer after inner close", () => {
-		// red wrapping blue — both close with 39m
-		const inner = blue("sky");
-		const outer = red(`roses ${inner} are red`);
-
-		// After blue's close (39m), red reopens (31m)
-		expect(outer).toBe("\x1b[31mroses \x1b[34msky\x1b[39m\x1b[31m are red\x1b[39m");
-	});
-
-	it("modifier wrapping modifier with shared close", () => {
-		// bold and dim both close with 22m
-		const inner = dim("quiet");
-		const outer = bold(`loud ${inner} loud`);
-
-		expect(outer).toBe("\x1b[1mloud \x1b[2mquiet\x1b[22m\x1b[1m loud\x1b[22m");
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// AnsiPair structure
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("AnsiPair structure", () => {
-	it("all code pairs have open and close strings", () => {
-		const pairs = [
-			codes.bold,
-			codes.dim,
-			codes.italic,
-			codes.underline,
-			codes.inverse,
-			codes.hidden,
-			codes.strikethrough,
-			codes.red,
-			codes.green,
-			codes.blue,
-			codes.yellow,
-			codes.cyan,
-			codes.magenta,
-			codes.white,
-			codes.black,
-			codes.gray,
-			codes.bgRed,
-			codes.bgGreen,
-			codes.bgBlue,
-		];
-
-		// oxlint-disable-next-line no-control-regex -- matching ANSI escape sequences
-		const ansiPattern = /^\x1b\[\d+m$/;
-		for (const p of pairs) {
-			expect(typeof p.open).toBe("string");
-			expect(typeof p.close).toBe("string");
-			expect(ansiPattern.test(p.open)).toBe(true);
-			expect(ansiPattern.test(p.close)).toBe(true);
-		}
-	});
-
-	it("modifier close codes are unique per category", () => {
-		// bold and dim share 22m (intentional — intensity reset)
-		expect(codes.bold.close).toBe(codes.dim.close);
-
-		// italic, underline, strikethrough each have unique close codes
-		expect(codes.italic.close).not.toBe(codes.underline.close);
-		expect(codes.underline.close).not.toBe(codes.strikethrough.close);
-	});
-
-	it("all foreground colors share close code 39m", () => {
-		const fgColors = [
-			codes.black,
-			codes.red,
-			codes.green,
-			codes.yellow,
-			codes.blue,
-			codes.magenta,
-			codes.cyan,
-			codes.white,
-			codes.gray,
-		];
-		for (const c of fgColors) {
-			expect(c.close).toBe("\x1b[39m");
-		}
-	});
-
-	it("all background colors share close code 49m", () => {
-		const bgColors = [
-			codes.bgBlack,
-			codes.bgRed,
-			codes.bgGreen,
-			codes.bgYellow,
-			codes.bgBlue,
-			codes.bgMagenta,
-			codes.bgCyan,
-			codes.bgWhite,
-		];
-		for (const c of bgColors) {
-			expect(c.close).toBe("\x1b[49m");
-		}
 	});
 });

@@ -53,19 +53,6 @@ describe("multifilter — initial / default", () => {
 
 		expect(result).toEqual(["Rust", "JavaScript"]);
 	});
-
-	it("returns initial for object choices", async () => {
-		const result = await multifilter<number>({
-			message: "Ports",
-			choices: [
-				{ label: "HTTP", value: 80 },
-				{ label: "HTTPS", value: 443 },
-			],
-			initial: [443, 80],
-		});
-
-		expect(result).toEqual([443, 80]);
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────

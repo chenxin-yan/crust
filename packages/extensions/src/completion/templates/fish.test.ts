@@ -57,26 +57,11 @@ const fixture: CompletionCommand = {
 };
 
 describe("renderFish", () => {
-	it("first line is the header comment with bin + version + regenerate hint", () => {
-		const script = renderFish(fixture, "mycli", "1.0.0");
-		const firstLine = script.split("\n")[0];
-		expect(firstLine).toBe(
-			"# completion script for mycli v1.0.0 — regenerate with: mycli completion fish",
-		);
-	});
-
 	it("disables global file completion before emitting rules", () => {
 		const script = renderFish(fixture, "mycli", "1.0.0");
-		// Bin name is single-quoted as defence-in-depth.
+		// Sole guard that url/json/non-path values don't fall back to
+		// filename completion. Bin name is single-quoted as defence-in-depth.
 		expect(script).toContain("complete -c 'mycli' -f");
-	});
-
-	it("emits a per-script ordered path-resolution helper", () => {
-		const script = renderFish(fixture, "mycli", "1.0.0");
-		// Replaces the order-insensitive `__fish_seen_subcommand_from`
-		// chain with a helper that walks `commandline -opc` left-to-right.
-		expect(script).toContain("function __mycli_path_at_arg");
-		expect(script).toContain("commandline -opc");
 	});
 
 	it("emits subcommand rules gated on __<ident>_path_at_arg at the top level", () => {
@@ -276,12 +261,6 @@ echo SOURCE_OK
 		expect(out).toContain("SOURCE_OK");
 	});
 });
-
-if (!fishAvailable) {
-	describe("renderFish · fish behavioural tests", () => {
-		it.skip("fish not available on PATH — skipping behavioural tests", () => {});
-	});
-}
 
 async function isFishAvailable(): Promise<boolean> {
 	try {

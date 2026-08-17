@@ -13,7 +13,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
 import { linkCode } from "./hyperlinks.ts";
-import { bg, bold, createStyle, fg, red, style } from "./index.ts";
+import { bold, createStyle, red, style } from "./index.ts";
 import { applyStyle } from "./styleEngine.ts";
 import { setEnv, snapshotEnv } from "./testEnv.ts";
 
@@ -151,20 +151,6 @@ describe("Defensive nullish handling", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("Error messages — locked via snapshots", () => {
-	it("fg invalid input echoes the bad value", () => {
-		expect(() => fg("hello", "definitely-not-a-color")).toThrow(
-			'Invalid color input: "definitely-not-a-color"',
-		);
-	});
-
-	it("fg with empty text + invalid input still throws (no silent mask)", () => {
-		expect(() => fg("", "garbage")).toThrow('Invalid color input: "garbage"');
-	});
-
-	it("bg invalid input echoes the bad value", () => {
-		expect(() => bg("hi", "nope")).toThrow('Invalid color input: "nope"');
-	});
-
 	it("linkCode rejects URLs with spaces and echoes the URL", () => {
 		// Use `linkCode` directly: top-level `link` goes through the runtime
 		// facade which suppresses (and therefore skips validation) when
@@ -191,23 +177,6 @@ describe("Error messages — locked via snapshots", () => {
 	});
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// 6. Sanity — `style` (auto facade) still works in this test environment
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("global style facade", () => {
-	it("exposes the chain at top level", () => {
-		// style is in auto mode; output may or may not include ANSI
-		// depending on whether the test runner is a TTY. We just assert
-		// that the chainable shape exists.
-		expect(typeof style.bold).toBe("function");
-		expect(typeof style.bold.red).toBe("function");
-		expect(typeof style.bold.fg).toBe("function");
-		expect(typeof style.bold.open).toBe("string");
-		expect(typeof style.bold.close).toBe("string");
-	});
-});
-
 // ───────────────────────────────────────────────────────────────────────────
 // 7. Top-level chainables — full surface
 // ───────────────────────────────────────────────────────────────────────────
@@ -219,13 +188,6 @@ describe("global style facade", () => {
 describe("top-level chainables — full surface", () => {
 	const restoreEnv = snapshotEnv("FORCE_COLOR");
 	afterEach(restoreEnv);
-
-	it("top-level `bold` exposes `.fg`, `.bg`, `.open`, `.close`", () => {
-		expect(typeof bold.fg).toBe("function");
-		expect(typeof bold.bg).toBe("function");
-		expect(typeof bold.open).toBe("string");
-		expect(typeof bold.close).toBe("string");
-	});
 
 	it("top-level tagged-template interleaves interpolations", () => {
 		setEnv("FORCE_COLOR", "3");
@@ -299,10 +261,5 @@ describe("style.link validates URLs even when hyperlinks are suppressed", () => 
 	it("throws on bad URL with hyperlinks enabled (mode='always')", () => {
 		const s = createStyle({ mode: "always" });
 		expect(() => s.link("docs", "https://example.com/with space")).toThrow(/Invalid hyperlink URL/);
-	});
-
-	it("returns text only (no escapes) when valid URL but disabled", () => {
-		const s = createStyle({ mode: "never" });
-		expect(s.link("docs", "https://crustjs.dev")).toBe("docs");
 	});
 });

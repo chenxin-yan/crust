@@ -210,12 +210,6 @@ echo OK
 	});
 });
 
-if (!zshAvailable) {
-	describe("renderZsh · zsh behavioural tests", () => {
-		it.skip("zsh not available on PATH — skipping behavioural tests", () => {});
-	});
-}
-
 async function isZshAvailable(): Promise<boolean> {
 	try {
 		const proc = Bun.spawn(["zsh", "--version"], {

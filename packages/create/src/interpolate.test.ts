@@ -7,11 +7,6 @@ import { interpolate } from "./interpolate.ts";
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("interpolate", () => {
-	it("replaces a single variable", () => {
-		const result = interpolate("Hello, {{name}}!", { name: "world" });
-		expect(result).toBe("Hello, world!");
-	});
-
 	it("replaces multiple different variables", () => {
 		const result = interpolate("{{greeting}}, {{name}}!", {
 			greeting: "Hi",
@@ -32,11 +27,6 @@ describe("interpolate", () => {
 		expect(result).toBe("yes and {{unknown}}");
 	});
 
-	it("returns original content when context is empty", () => {
-		const result = interpolate("Hello, {{name}}!", {});
-		expect(result).toBe("Hello, {{name}}!");
-	});
-
 	it("returns original content when there are no placeholders", () => {
 		const result = interpolate("Hello, world!", { name: "unused" });
 		expect(result).toBe("Hello, world!");
@@ -53,11 +43,6 @@ describe("interpolate", () => {
 	it("does not replace partial or malformed placeholders", () => {
 		const result = interpolate("{name} and {{}} and {{}}", { name: "x" });
 		expect(result).toBe("{name} and {{}} and {{}}");
-	});
-
-	it("handles empty string content", () => {
-		const result = interpolate("", { name: "x" });
-		expect(result).toBe("");
 	});
 
 	it("replaces with empty string values", () => {

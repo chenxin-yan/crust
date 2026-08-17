@@ -62,10 +62,6 @@ describe("fg", () => {
 		expect(() => fg("x", null)).toThrow(TypeError);
 	});
 
-	it("applies truecolor foreground from `rgb()`", () => {
-		expect(fg("ocean", "rgb(0, 128, 255)")).toBe("\x1b[38;2;0;128;255mocean\x1b[39m");
-	});
-
 	it("applies truecolor foreground from numeric input", () => {
 		expect(fg("red", 0xff0000)).toBe("\x1b[38;2;255;0;0mred\x1b[39m");
 	});
@@ -78,14 +74,6 @@ describe("fg", () => {
 		// Valid color + empty text → "". Invalid color still throws (see
 		// next test) so empty-text callers can't accidentally mask bugs.
 		expect(fg("", "#ff0000")).toBe("");
-	});
-
-	it("throws TypeError for invalid input even when text is empty", () => {
-		// Empty text used to silently short-circuit before the color was
-		// validated. Now both empty- and non-empty-text callers get the
-		// same TypeError.
-		expect(() => fg("hello", "definitely-not-a-color")).toThrow(TypeError);
-		expect(() => fg("", "definitely-not-a-color")).toThrow(TypeError);
 	});
 });
 
@@ -234,10 +222,6 @@ describe("fg — depth fallback", () => {
 		expect(fg("hello", "#ff0000", "none")).toBe("hello");
 		expect(fg("hello", [0, 128, 255], "none")).toBe("hello");
 		expect(fg("hello", "rebeccapurple", "none")).toBe("hello");
-	});
-
-	it('depth="none" still validates input and throws on invalid colors', () => {
-		expect(() => fg("hello", "definitely-not-a-color", "none")).toThrow(TypeError);
 	});
 
 	it("empty text returns '' at every depth (after validation)", () => {

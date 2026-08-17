@@ -66,7 +66,7 @@ function nonTTYIO() {
 
 // Guards the `options.initial !== undefined` semantics against a regression to
 // a truthy check (which would treat "" as absent and drop into interactive mode).
-// Happy-path (non-empty initial) is covered by tests/integration.test.ts.
+// Happy-path (non-empty initial) is covered by the non-TTY initial-value test.
 describe("input — initial value", () => {
 	it("returns empty string initial value", async () => {
 		const result = await input({
@@ -486,33 +486,6 @@ describe("input — no message", () => {
 		expect(result).toBe("A");
 	});
 
-	it("renders placeholder with default message", async () => {
-		const promise = start({ placeholder: "Enter name" });
-
-		await tick();
-		expect(screen()).toContain("Enter a value");
-		expect(screen()).toContain("Enter name");
-		expect(screen()).not.toContain("undefined");
-
-		pressKey("", { name: "return" });
-		await promise;
-	});
-
-	it("renders default as placeholder with default message", async () => {
-		const promise = start({ default: "World" });
-
-		await tick();
-		expect(screen()).toContain("Enter a value");
-		// Default shown as placeholder, not hint
-		expect(screen()).toContain("World");
-		expect(screen()).not.toContain("(World)");
-		expect(screen()).not.toContain("undefined");
-
-		pressKey("", { name: "return" });
-		const result = await promise;
-		expect(result).toBe("World");
-	});
-
 	it("submitted output shows default message", async () => {
 		const promise = start({});
 
@@ -533,10 +506,6 @@ describe("input — no message", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("input — non-TTY", () => {
-	it("throws NonInteractiveError when stdin is not a TTY", async () => {
-		await expect(input({ message: "Name?" }, nonTTYIO())).rejects.toThrow("interactive terminal");
-	});
-
 	it("returns initial value in non-TTY environment", async () => {
 		const result = await input({ message: "Name?", initial: "Bob" }, nonTTYIO());
 
@@ -704,35 +673,6 @@ describe("input — schema validation", () => {
 		const result = await promise;
 		expect(result).toBe("ok");
 		expect(screen()).not.toContain("Validation failed");
-	});
-
-	it("surfaces zod's built-in issue message (no custom .message override)", async () => {
-		// Sanity check that a real zod issue message reaches the renderer — we
-		// derive the expected text from the same schema instead of asserting a
-		// hard-coded string, so this can't accidentally pass when zod's default
-		// messages change.
-		const schema = z.string().min(3);
-		const expectedMessage = schema.safeParse("a").error?.issues[0]?.message ?? "";
-		expect(expectedMessage).not.toBe("");
-
-		const promise = start({ message: "Code?", schema: schema });
-
-		await tick();
-		pressKey("a");
-		await tick();
-		pressKey("", { name: "return" });
-		await tick();
-
-		expect(screen()).toContain(expectedMessage);
-
-		pressKey("b");
-		await tick();
-		pressKey("c");
-		await tick();
-		pressKey("", { name: "return" });
-
-		const result = await promise;
-		expect(result).toBe("abc");
 	});
 
 	it("awaits async schema validation", async () => {

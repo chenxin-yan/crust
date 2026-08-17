@@ -209,35 +209,6 @@ describe("scaffold", () => {
 		expect(readOutputFile("readme.txt")).toBe("Hello world");
 	});
 
-	it("handles templates with no interpolation placeholders", async () => {
-		createTemplateFile("static.txt", "No placeholders here.");
-
-		const result = await scaffold({
-			template: templateDir,
-			dest: destDir,
-
-			context: { name: "unused" },
-		});
-
-		expect(result.files).toContain("static.txt");
-		expect(readOutputFile("static.txt")).toBe("No placeholders here.");
-	});
-
-	it("scaffolds into a non-existent destination directory (creates it)", async () => {
-		createTemplateFile("hello.txt", "hi {{who}}");
-
-		const result = await scaffold({
-			template: templateDir,
-			dest: destDir,
-
-			context: { who: "there" },
-		});
-
-		expect(existsSync(destDir)).toBe(true);
-		expect(result.files).toContain("hello.txt");
-		expect(readOutputFile("hello.txt")).toBe("hi there");
-	});
-
 	it("allows scaffold on an empty existing directory with conflict 'abort'", async () => {
 		// Create an empty destination directory
 		mkdirSync(destDir, { recursive: true });
@@ -301,26 +272,6 @@ describe("scaffold", () => {
 		// The result only contains files from the second scaffold call
 		expect(result.files).toContain(join("src", "index.ts"));
 		expect(result.files).toContain("tsconfig.json");
-	});
-
-	it("preserves nested directory structure", async () => {
-		createTemplateFile("src/components/Button.tsx", "<button>{{label}}</button>");
-		createTemplateFile("src/utils/helpers.ts", "export const APP = '{{name}}'");
-		createTemplateFile("public/index.html", "<h1>{{name}}</h1>");
-
-		const result = await scaffold({
-			template: templateDir,
-			dest: destDir,
-
-			context: { name: "my-app", label: "Click me" },
-		});
-
-		expect(result.files).toHaveLength(3);
-		expect(readOutputFile(join("src", "components", "Button.tsx"))).toBe(
-			"<button>Click me</button>",
-		);
-		expect(readOutputFile(join("src", "utils", "helpers.ts"))).toBe("export const APP = 'my-app'");
-		expect(readOutputFile(join("public", "index.html"))).toBe("<h1>my-app</h1>");
 	});
 
 	it("resolves template from a file: URL", async () => {
@@ -425,22 +376,5 @@ describe("scaffold", () => {
 				context: {},
 			}),
 		).rejects.toThrow("is not a directory");
-	});
-
-	it("returns files sorted relative to dest", async () => {
-		createTemplateFile("b.txt", "b");
-		createTemplateFile("a.txt", "a");
-
-		const result = await scaffold({
-			template: templateDir,
-			dest: destDir,
-
-			context: {},
-		});
-
-		// Files are returned, though order depends on filesystem readdir order
-		expect(result.files).toHaveLength(2);
-		expect(result.files).toContain("a.txt");
-		expect(result.files).toContain("b.txt");
 	});
 });

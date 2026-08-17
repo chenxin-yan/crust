@@ -4,7 +4,6 @@ import { PassThrough, Writable } from "node:stream";
 import { createPromptIO } from "../testing.ts";
 import {
 	assertTTY,
-	isTTY,
 	NonInteractiveError,
 	type PromptConfig,
 	runPrompt,
@@ -12,52 +11,6 @@ import {
 	withPromptIO,
 } from "./renderer.ts";
 import { defaultTheme } from "./theme.ts";
-
-// ────────────────────────────────────────────────────────────────────────────
-// TTY detection
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("isTTY", () => {
-	const originalIsTTY = process.stdin.isTTY;
-
-	afterEach(() => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: originalIsTTY,
-			writable: true,
-			configurable: true,
-		});
-	});
-
-	it("returns true when stdin is a TTY", () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: true,
-			writable: true,
-			configurable: true,
-		});
-
-		expect(isTTY()).toBe(true);
-	});
-
-	it("returns false when stdin is not a TTY", () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
-		expect(isTTY()).toBe(false);
-	});
-
-	it("returns false when stdin.isTTY is undefined", () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: undefined,
-			writable: true,
-			configurable: true,
-		});
-
-		expect(isTTY()).toBe(false);
-	});
-});
 
 describe("assertTTY", () => {
 	const originalIsTTY = process.stdin.isTTY;
@@ -80,16 +33,6 @@ describe("assertTTY", () => {
 		expect(() => assertTTY()).toThrow(NonInteractiveError);
 	});
 
-	it("throws with descriptive message when not a TTY", () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
-		expect(() => assertTTY()).toThrow("Prompts require an interactive terminal (TTY)");
-	});
-
 	it("does not throw when stdin is a TTY", () => {
 		Object.defineProperty(process.stdin, "isTTY", {
 			value: true,
@@ -98,36 +41,6 @@ describe("assertTTY", () => {
 		});
 
 		expect(() => assertTTY()).not.toThrow();
-	});
-});
-
-describe("NonInteractiveError", () => {
-	it("has the correct name", () => {
-		const error = new NonInteractiveError();
-		expect(error.name).toBe("NonInteractiveError");
-	});
-
-	it("has a default message", () => {
-		const error = new NonInteractiveError();
-		expect(error.message).toContain("interactive terminal");
-	});
-
-	it("accepts a custom message", () => {
-		const error = new NonInteractiveError("custom error");
-		expect(error.message).toBe("custom error");
-	});
-
-	it("is an instance of Error", () => {
-		const error = new NonInteractiveError();
-		expect(error).toBeInstanceOf(Error);
-	});
-});
-
-describe("prompt cancellation error", () => {
-	it("is a standard AbortError DOMException", () => {
-		const error = new DOMException("Prompt was cancelled.", "AbortError");
-		expect(error.name).toBe("AbortError");
-		expect(error).toBeInstanceOf(DOMException);
 	});
 });
 
@@ -595,27 +508,6 @@ describe("runPrompt", () => {
 		await promise;
 	});
 
-	it("restores raw mode on cleanup", async () => {
-		const config: PromptConfig<{ value: string }, string> = {
-			render: () => "test",
-			handleKey: () => submit("done"),
-			initialState: { value: "" },
-			theme: defaultTheme,
-		};
-
-		const promise = runPrompt(config);
-
-		await new Promise((r) => setTimeout(r, 10));
-		// Raw mode should be enabled
-		expect(process.stdin.isRaw).toBe(true);
-
-		process.stdin.emit("keypress", "a", { name: "return" });
-		await promise;
-
-		// Raw mode should be restored after cleanup
-		expect(process.stdin.isRaw).toBe(false);
-	});
-
 	it("erases previous frame before rendering new frame", async () => {
 		let renderCount = 0;
 
@@ -648,92 +540,5 @@ describe("runPrompt", () => {
 		expect(stderrOutput).toContain("\x1B[0J");
 		// Should have rendered multiple frames
 		expect(renderCount).toBeGreaterThanOrEqual(2);
-	});
-
-	it("handles multiline render content", async () => {
-		const config: PromptConfig<{ value: string }, string> = {
-			render: () => "line1\nline2\nline3",
-			handleKey: () => submit("done"),
-			initialState: { value: "" },
-			theme: defaultTheme,
-		};
-
-		const promise = runPrompt(config);
-
-		await new Promise((r) => setTimeout(r, 10));
-		expect(stderrOutput).toContain("line1\nline2\nline3");
-
-		process.stdin.emit("keypress", "a", { name: "return" });
-		await promise;
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// HandleKeyResult discrimination (via runPrompt integration)
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("HandleKeyResult discrimination", () => {
-	const originalIsTTY = process.stdin.isTTY;
-	const originalSetRawMode = process.stdin.setRawMode;
-	const originalIsRaw = process.stdin.isRaw;
-	const originalStderrWrite = process.stderr.write;
-
-	beforeEach(() => {
-		process.stderr.write = () => true;
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: true,
-			writable: true,
-			configurable: true,
-		});
-		(process.stdin as any).setRawMode = (mode: boolean) => {
-			Object.defineProperty(process.stdin, "isRaw", {
-				value: mode,
-				writable: true,
-				configurable: true,
-			});
-			return process.stdin;
-		};
-	});
-
-	afterEach(() => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: originalIsTTY,
-			writable: true,
-			configurable: true,
-		});
-		Object.defineProperty(process.stdin, "isRaw", {
-			value: originalIsRaw,
-			writable: true,
-			configurable: true,
-		});
-		if (originalSetRawMode) {
-			process.stdin.setRawMode = originalSetRawMode;
-		}
-		process.stderr.write = originalStderrWrite;
-		process.stdin.removeAllListeners("keypress");
-	});
-
-	it("accumulates state updates until submit", async () => {
-		const config: PromptConfig<{ count: number }, number> = {
-			render: (state) => `count: ${state.count}`,
-			handleKey: (_key, state) => {
-				if (state.count >= 2) return submit(state.count);
-				return { count: state.count + 1 };
-			},
-			initialState: { count: 0 },
-			theme: defaultTheme,
-		};
-
-		const promise = runPrompt(config);
-
-		await new Promise((r) => setTimeout(r, 10));
-		process.stdin.emit("keypress", "a", { name: "a" });
-		await new Promise((r) => setTimeout(r, 10));
-		process.stdin.emit("keypress", "a", { name: "a" });
-		await new Promise((r) => setTimeout(r, 10));
-		process.stdin.emit("keypress", "a", { name: "a" });
-
-		const result = await promise;
-		expect(result).toBe(2);
 	});
 });

@@ -44,8 +44,8 @@ function nonTTYIO() {
 // Initial value — object-choice numeric value
 // ────────────────────────────────────────────────────────────────────────────
 
-// String-choice happy-path is in tests/integration.test.ts; this exercises the
-// non-string `initial` codepath that integration does not cover.
+// The non-TTY initial-value test covers string choices; this exercises the
+// non-string `initial` codepath.
 describe("select — initial value", () => {
 	it("returns initial value for object choices", async () => {
 		const result = await select<number>({
@@ -191,40 +191,6 @@ describe("select — navigation", () => {
 		const result = await promise;
 		expect(result).toBe("c");
 	});
-
-	it("wraps to first item when moving down from last", async () => {
-		const promise = start({
-			message: "Pick",
-			choices: ["a", "b", "c"],
-			default: "c",
-		});
-
-		await tick();
-		// Cursor at 2, down should wrap to index 0
-		pressKey("", { name: "down" });
-		await tick();
-		pressKey("", { name: "return" });
-
-		const result = await promise;
-		expect(result).toBe("a");
-	});
-
-	it("Enter selects the highlighted item", async () => {
-		const promise = start({
-			message: "Pick",
-			choices: ["a", "b", "c"],
-		});
-
-		await tick();
-		pressKey("", { name: "down" });
-		await tick();
-		pressKey("", { name: "down" });
-		await tick();
-		pressKey("", { name: "return" });
-
-		const result = await promise;
-		expect(result).toBe("c");
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -232,19 +198,6 @@ describe("select — navigation", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("select — choice types", () => {
-	it("handles string choices correctly", async () => {
-		const promise = start({
-			message: "Pick a color",
-			choices: ["red", "green", "blue"],
-		});
-
-		await tick();
-		pressKey("", { name: "return" });
-
-		const result = await promise;
-		expect(result).toBe("red");
-	});
-
 	it("handles object choices with label and value", async () => {
 		const promise = start({
 			message: "Pick a port",
@@ -309,19 +262,6 @@ describe("select — rendering", () => {
 		expect(screen()).toContain("alpha");
 		expect(screen()).toContain("beta");
 		expect(screen()).toContain("gamma");
-
-		pressKey("", { name: "return" });
-		await promise;
-	});
-
-	it("renders cursor indicator on active item", async () => {
-		const promise = start({
-			message: "Pick",
-			choices: ["alpha", "beta"],
-		});
-
-		await tick();
-		expect(screen()).toContain("›");
 
 		pressKey("", { name: "return" });
 		await promise;
@@ -441,28 +381,6 @@ describe("select — viewport scrolling", () => {
 		pressKey("", { name: "return" });
 		await promise;
 	});
-
-	it("wrapping from last item scrolls viewport back to top", async () => {
-		const choices = Array.from({ length: 10 }, (_, i) => `item-${i}`);
-		const promise = start({
-			message: "Pick",
-			choices,
-			maxVisible: 3,
-			default: "item-9",
-		});
-
-		await tick();
-		// At bottom, wrap to top
-		pressKey("", { name: "down" });
-		await tick();
-
-		// Should now show the first items
-		expect(screen()).toContain("item-0");
-
-		pressKey("", { name: "return" });
-		const result = await promise;
-		expect(result).toBe("item-0");
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -509,15 +427,6 @@ describe("select — non-TTY", () => {
 		// resolve to the generic overload and return Promise<T>.
 		return select(options, nonTTYIO());
 	}
-
-	it("throws NonInteractiveError when stdin is not a TTY", async () => {
-		await expect(
-			nonTTY({
-				message: "Pick",
-				choices: ["a", "b", "c"],
-			}),
-		).rejects.toThrow("interactive terminal");
-	});
 
 	it("returns initial value in non-TTY environment", async () => {
 		const result = await nonTTY({

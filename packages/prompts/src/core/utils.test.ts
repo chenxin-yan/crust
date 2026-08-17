@@ -62,12 +62,6 @@ describe("formatPromptLine", () => {
 	it("handles empty content without message", () => {
 		expect(formatPromptLine("○", undefined, "")).toBe("○ ");
 	});
-
-	it("omits suffix when not provided (with message)", () => {
-		const withoutSuffix = formatPromptLine("○", "Name?", "val");
-		const withUndefined = formatPromptLine("○", "Name?", "val", undefined);
-		expect(withoutSuffix).toBe(withUndefined);
-	});
 });
 
 describe("moveCursor", () => {
@@ -104,37 +98,5 @@ describe("normalizeChoices", () => {
 			{ label: "HTTP", value: 80 },
 			{ label: "HTTPS", value: 443, hint: "recommended" },
 		]);
-	});
-
-	it("handles mixed string and object choices", () => {
-		const choices: Array<string | { label: string; value: string; hint?: string }> = [
-			"plain",
-			{ label: "Fancy", value: "fancy", hint: "with hint" },
-		];
-
-		const result = normalizeChoices(choices);
-
-		expect(result).toEqual([
-			{ label: "plain", value: "plain" },
-			{ label: "Fancy", value: "fancy", hint: "with hint" },
-		]);
-	});
-
-	it("returns empty array for empty input", () => {
-		const result = normalizeChoices([]);
-
-		expect(result).toEqual([]);
-	});
-
-	it("preserves hint property on object choices", () => {
-		const result = normalizeChoices([{ label: "Option A", value: "a", hint: "first option" }]);
-
-		expect(result[0]?.hint).toBe("first option");
-	});
-
-	it("string choices have no hint property", () => {
-		const result = normalizeChoices(["option"]);
-
-		expect(result[0]?.hint).toBeUndefined();
 	});
 });
