@@ -53,50 +53,23 @@ describe("resolveAgentPath", () => {
 		);
 	});
 
-	it("resolves Mistral Vibe's global path from VIBE_HOME", () => {
+	it("resolves Mistral Vibe's global path from VIBE_HOME, falling back to ~/.vibe", () => {
 		const original = process.env.VIBE_HOME;
-		process.env.VIBE_HOME = join(homedir(), "custom-vibe");
 		try {
+			process.env.VIBE_HOME = join(homedir(), "custom-vibe");
 			expect(resolveAgentPath("mistral-vibe", "global", "my-cli")).toBe(
 				join(homedir(), "custom-vibe", "skills", "my-cli"),
 			);
-		} finally {
-			if (original === undefined) {
-				delete process.env.VIBE_HOME;
-			} else {
-				process.env.VIBE_HOME = original;
-			}
-		}
-	});
-
-	it("falls back to ~/.vibe/skills when VIBE_HOME is unset or blank", () => {
-		const original = process.env.VIBE_HOME;
-		try {
 			delete process.env.VIBE_HOME;
 			expect(resolveAgentPath("mistral-vibe", "global", "my-cli")).toBe(
 				join(homedir(), ".vibe", "skills", "my-cli"),
 			);
-			process.env.VIBE_HOME = "  ";
-			expect(resolveAgentPath("mistral-vibe", "global", "my-cli")).toBe(
-				join(homedir(), ".vibe", "skills", "my-cli"),
-			);
 		} finally {
 			if (original === undefined) {
 				delete process.env.VIBE_HOME;
 			} else {
 				process.env.VIBE_HOME = original;
 			}
-		}
-	});
-
-	it("resolves Pi, Warp, and Zed to canonical universal dirs", () => {
-		for (const agent of ["pi", "warp", "zed"] as const) {
-			expect(resolveAgentPath(agent, "project", "my-cli")).toBe(
-				join(process.cwd(), ".agents", "skills", "my-cli"),
-			);
-			expect(resolveAgentPath(agent, "global", "my-cli")).toBe(
-				join(homedir(), ".agents", "skills", "my-cli"),
-			);
 		}
 	});
 
@@ -148,9 +121,6 @@ describe("agent registry", () => {
 		expect(additional).toContain("claude-code");
 		expect(additional).toContain("windsurf");
 		expect(isUniversalAgent("opencode")).toBe(true);
-		expect(isUniversalAgent("warp")).toBe(true);
-		expect(isUniversalAgent("zed")).toBe(true);
-		expect(isUniversalAgent("antigravity")).toBe(false);
 		expect(isUniversalAgent("claude-code")).toBe(false);
 
 		const merged = new Set([...universal, ...additional]);

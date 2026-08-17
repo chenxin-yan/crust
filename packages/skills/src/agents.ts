@@ -201,7 +201,7 @@ const AGENTS: Record<AgentTarget, AgentConfig> = {
 		label: "Mistral Vibe",
 		class: "additional",
 		projectSkillsDir: join(".vibe", "skills"),
-		globalSkillsDir: (home) => join(process.env.VIBE_HOME?.trim() || join(home, ".vibe"), "skills"),
+		globalSkillsDir: (home) => join(process.env.VIBE_HOME || join(home, ".vibe"), "skills"),
 		detectCommands: ["mistral-vibe", "vibe"],
 	},
 	mux: {
