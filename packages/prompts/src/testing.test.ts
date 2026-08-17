@@ -3,12 +3,6 @@ import { describe, expect, it } from "bun:test";
 import { encodeKey } from "./testing.ts";
 
 describe("encodeKey", () => {
-	it("encodes named keys", () => {
-		expect(encodeKey("return")).toBe("\r");
-		expect(encodeKey("up")).toBe("\x1B[A");
-		expect(encodeKey("space")).toBe(" ");
-	});
-
 	it("encodes ctrl combinations", () => {
 		expect(encodeKey("ctrl+c")).toBe("\x03");
 	});

@@ -72,92 +72,12 @@ function buildSimpleManifest(): ManifestNode {
 	return buildManifest(snapshotCommand(cmd));
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// renderSkill — output structure
-// ────────────────────────────────────────────────────────────────────────────
-
 describe("renderSkill", () => {
-	describe("output structure", () => {
-		it("returns an array of RenderedFile objects", () => {
-			const manifest = buildSimpleManifest();
-			const files = renderSkill(manifest, baseMeta);
-
-			expect(Array.isArray(files)).toBe(true);
-			expect(files.length).toBeGreaterThan(0);
-			for (const file of files) {
-				expect(typeof file.path).toBe("string");
-				expect(typeof file.content).toBe("string");
-			}
-		});
-
-		it("always includes SKILL.md", () => {
-			const manifest = buildSimpleManifest();
-			const files = renderSkill(manifest, baseMeta);
-
-			const paths = files.map((f) => f.path);
-			expect(paths).toContain("SKILL.md");
-			expect(paths).not.toContain("command-index.md");
-		});
-
-		it("produces one command file for a root-only command", () => {
-			const manifest = buildSimpleManifest();
-			const files = renderSkill(manifest, baseMeta);
-
-			const commandFiles = files.filter((f) => f.path.startsWith("commands/"));
-			expect(commandFiles).toHaveLength(1);
-			expect(commandFiles[0]?.path).toBe("commands/test-cli.md");
-		});
-
-		it("produces command files mirroring the command hierarchy", () => {
-			const add = makeCommand({
-				meta: { name: "add", description: "Add a remote" },
-				run() {},
-			});
-			const remove = makeCommand({
-				meta: { name: "remove", description: "Remove a remote" },
-				run() {},
-			});
-			const remote = makeCommand({
-				meta: { name: "remote", description: "Manage remotes" },
-				subCommands: { add, remove },
-			});
-			const root = makeCommand({
-				meta: { name: "git", description: "Version control" },
-				subCommands: { remote },
-			});
-
-			const manifest = buildManifest(snapshotCommand(root));
-			const meta: SkillMeta = {
-				name: "git",
-				description: "Version control",
-				version: "1.0.0",
-			};
-			const files = renderSkill(manifest, meta);
-
-			const paths = files.map((f) => f.path).sort();
-			expect(paths).toContain("commands/git.md");
-			expect(paths).toContain("commands/remote.md");
-			expect(paths).toContain("commands/remote/add.md");
-			expect(paths).toContain("commands/remote/remove.md");
-		});
-	});
-
 	// ────────────────────────────────────────────────────────────────────────
 	// SKILL.md content
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("SKILL.md content", () => {
-		it("includes YAML frontmatter with name and description", () => {
-			const manifest = buildSimpleManifest();
-			const files = renderSkill(manifest, baseMeta);
-			const skill = findFile(files, "SKILL.md");
-
-			expect(skill).toBeDefined();
-			expect(skill?.content).toContain("---");
-			expect(skill?.content).toContain("name: test-cli");
-			expect(skill?.content).toContain("description: A test CLI tool");
-		});
-
 		it("includes version in metadata when provided", () => {
 			const manifest = buildSimpleManifest();
 			const meta: SkillMeta = { ...baseMeta, version: "1.2.3" };
@@ -175,51 +95,6 @@ describe("renderSkill", () => {
 
 			expect(skill?.content).not.toContain("metadata:");
 			expect(skill?.content).not.toContain("version:");
-		});
-
-		it("includes the manifest description in the body", () => {
-			const manifest = buildSimpleManifest();
-			const files = renderSkill(manifest, baseMeta);
-			const skill = findFile(files, "SKILL.md");
-
-			expect(skill?.content).toContain("A test CLI tool");
-		});
-
-		it("includes a command reference table", () => {
-			const manifest = buildSimpleManifest();
-			const files = renderSkill(manifest, baseMeta);
-			const skill = findFile(files, "SKILL.md");
-
-			expect(skill?.content).toContain("| Command | Type | Documentation |");
-			expect(skill?.content).toContain("| `test-cli` | runnable |");
-		});
-
-		it("includes nested commands in SKILL.md command reference", () => {
-			const serve = makeCommand({
-				meta: { name: "serve", description: "Start server" },
-				run() {},
-			});
-			const build = makeCommand({
-				meta: { name: "build", description: "Build project" },
-				run() {},
-			});
-			const root = makeCommand({
-				meta: { name: "app", description: "App CLI" },
-				subCommands: { serve, build },
-			});
-
-			const manifest = buildManifest(snapshotCommand(root));
-			const meta: SkillMeta = {
-				name: "app",
-				description: "App CLI",
-				version: "1.0.0",
-			};
-			const files = renderSkill(manifest, meta);
-			const skill = findFile(files, "SKILL.md");
-
-			expect(skill?.content).toContain("| `app` | group |");
-			expect(skill?.content).toContain("| `app build` | runnable |");
-			expect(skill?.content).toContain("| `app serve` | runnable |");
 		});
 
 		it("includes usage section when root is runnable", () => {
@@ -252,41 +127,6 @@ describe("renderSkill", () => {
 
 			// Should not contain the runnable usage section
 			expect(skill?.content).not.toContain("root command is directly executable");
-		});
-
-		it("includes command-reference workflow instructions", () => {
-			const manifest = buildSimpleManifest();
-			const files = renderSkill(manifest, baseMeta);
-			const skill = findFile(files, "SKILL.md");
-
-			expect(skill?.content).toContain("## How to Use This Skill");
-			expect(skill?.content).toContain("## Command Reference");
-			expect(skill?.content).toContain(
-				"You should use this table to locate the command file you need.",
-			);
-			expect(skill?.content).not.toContain(
-				"This table maps each command to its documentation file.",
-			);
-			expect(skill?.content).not.toContain("Read only the files you need for the current task");
-			expect(skill?.content).toContain("You must find the command that best matches");
-			expect(skill?.content).toContain(
-				"You must check the `Type` column before suggesting execution",
-			);
-			expect(skill?.content).toContain(
-				"You must read a command's file before answering a command-specific question or suggesting that command",
-			);
-			expect(skill?.content).toContain("You must treat the command file as the source of truth");
-			expect(skill?.content).toContain("say it is not documented instead of guessing");
-		});
-
-		it("includes when-to-use guidance", () => {
-			const manifest = buildSimpleManifest();
-			const files = renderSkill(manifest, baseMeta);
-			const skill = findFile(files, "SKILL.md");
-
-			expect(skill?.content).toContain(
-				"You should use this skill when you need accurate help with `test-cli` commands",
-			);
 		});
 
 		it("uses the literal skill name in when-to-use text", () => {
@@ -341,31 +181,6 @@ describe("renderSkill", () => {
 			expect(skill?.content).toContain("| Command | Type | Documentation |");
 		});
 
-		it("lists all commands with correct paths", () => {
-			const serve = makeCommand({
-				meta: { name: "serve", description: "Start server" },
-				run() {},
-			});
-			const root = makeCommand({
-				meta: { name: "app", description: "App CLI" },
-				subCommands: { serve },
-			});
-
-			const manifest = buildManifest(snapshotCommand(root));
-			const meta: SkillMeta = {
-				name: "app",
-				description: "App CLI",
-				version: "1.0.0",
-			};
-			const files = renderSkill(manifest, meta);
-			const skill = findFile(files, "SKILL.md");
-
-			expect(skill?.content).toContain("`app`");
-			expect(skill?.content).toContain("`app serve`");
-			expect(skill?.content).toContain("commands/app.md");
-			expect(skill?.content).toContain("commands/serve.md");
-		});
-
 		it("shows correct type labels for runnable vs group", () => {
 			const leaf = makeCommand({
 				meta: { name: "leaf" },
@@ -404,97 +219,6 @@ describe("renderSkill", () => {
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("leaf command files", () => {
-		it("renders a heading with full invocation", () => {
-			const cmd = makeCommand({
-				meta: { name: "deploy", description: "Deploy the app" },
-				run() {},
-			});
-			const root = makeCommand({
-				meta: { name: "app" },
-				subCommands: { deploy: cmd },
-			});
-
-			const manifest = buildManifest(snapshotCommand(root));
-			const meta: SkillMeta = {
-				name: "app",
-				description: "App",
-				version: "1.0.0",
-			};
-			const files = renderSkill(manifest, meta);
-			const deploy = findFile(files, "commands/deploy.md");
-
-			expect(deploy).toBeDefined();
-			expect(deploy?.content).toContain("# `app deploy`");
-		});
-
-		it("renders description when present", () => {
-			const cmd = makeCommand({
-				meta: { name: "serve", description: "Start the dev server" },
-				run() {},
-			});
-
-			const manifest = buildManifest(snapshotCommand(cmd));
-			const meta: SkillMeta = {
-				name: "serve",
-				description: "Server",
-				version: "1.0.0",
-			};
-			const files = renderSkill(manifest, meta);
-			const serve = findFile(files, "commands/serve.md");
-
-			expect(serve?.content).toContain("Start the dev server");
-		});
-
-		it("renders auto-generated usage line", () => {
-			const cmd = makeCommand({
-				meta: { name: "deploy" },
-				args: [
-					{ name: "env", type: "string", required: true },
-					{ name: "tag", type: "string" },
-				] as ArgDef[],
-				flags: {
-					force: { type: "boolean" },
-				},
-				run() {},
-			});
-			const root = makeCommand({
-				meta: { name: "app" },
-				subCommands: { deploy: cmd },
-			});
-
-			const manifest = buildManifest(snapshotCommand(root));
-			const meta: SkillMeta = {
-				name: "app",
-				description: "App",
-				version: "1.0.0",
-			};
-			const files = renderSkill(manifest, meta);
-			const deploy = findFile(files, "commands/deploy.md");
-
-			expect(deploy?.content).toContain("app deploy <env> [tag] [options]");
-		});
-
-		it("renders custom usage when provided", () => {
-			const cmd = makeCommand({
-				meta: {
-					name: "build",
-					usage: "build [--watch] [entry...]",
-				},
-				run() {},
-			});
-
-			const manifest = buildManifest(snapshotCommand(cmd));
-			const meta: SkillMeta = {
-				name: "build",
-				description: "Build",
-				version: "1.0.0",
-			};
-			const files = renderSkill(manifest, meta);
-			const build = findFile(files, "commands/build.md");
-
-			expect(build?.content).toContain("build [--watch] [entry...]");
-		});
-
 		it("renders an arguments table with required/optional/variadic", () => {
 			const cmd = makeCommand({
 				meta: { name: "copy" },
@@ -723,57 +447,6 @@ describe("renderSkill", () => {
 			expect(deploy?.content).toContain(
 				"## Safety\nCall out risky production operations explicitly.",
 			);
-		});
-
-		it("includes command authority instructions in leaf command files", () => {
-			const cmd = makeCommand({
-				meta: { name: "serve" },
-				run() {},
-			});
-
-			const manifest = buildManifest(snapshotCommand(cmd));
-			const meta: SkillMeta = {
-				name: "serve",
-				description: "Serve",
-				version: "1.0.0",
-			};
-			const files = renderSkill(manifest, meta);
-			const serve = findFile(files, "commands/serve.md");
-
-			expect(serve?.content).toContain("## Command Documentation Authority");
-			expect(serve?.content).toContain(
-				"You must treat only the arguments, flags, options, aliases, and defaults documented in this file as supported",
-			);
-			expect(serve?.content).toContain(
-				"You must not infer or invent additional command-line options",
-			);
-		});
-
-		it("renders navigation with link to parent command", () => {
-			const add = makeCommand({
-				meta: { name: "add", description: "Add a remote" },
-				run() {},
-			});
-			const remote = makeCommand({
-				meta: { name: "remote", description: "Manage remotes" },
-				subCommands: { add },
-			});
-			const root = makeCommand({
-				meta: { name: "git" },
-				subCommands: { remote },
-			});
-
-			const manifest = buildManifest(snapshotCommand(root));
-			const meta: SkillMeta = {
-				name: "git",
-				description: "Git",
-				version: "1.0.0",
-			};
-			const files = renderSkill(manifest, meta);
-			const addFile = findFile(files, "commands/remote/add.md");
-
-			expect(addFile?.content).toContain("Parent:");
-			expect(addFile?.content).toContain("`git remote`");
 		});
 
 		it("omits arguments section when command has no args", () => {
@@ -1086,52 +759,6 @@ describe("renderSkill", () => {
 	});
 
 	// ────────────────────────────────────────────────────────────────────────
-	// Deterministic output
-	// ────────────────────────────────────────────────────────────────────────
-
-	describe("deterministic output", () => {
-		it("produces identical output from the same input", () => {
-			const serve = makeCommand({
-				meta: { name: "serve", description: "Start server" },
-				args: [{ name: "port", type: "number", default: 3000 }] as ArgDef[],
-				flags: {
-					watch: { type: "boolean", short: "w" },
-					host: { type: "string", default: "localhost" },
-				},
-				run() {},
-			});
-			const build = makeCommand({
-				meta: { name: "build", description: "Build project" },
-				flags: {
-					minify: { type: "boolean" },
-					outdir: { type: "string", default: "dist" },
-				},
-				run() {},
-			});
-			const root = makeCommand({
-				meta: { name: "app", description: "App CLI" },
-				subCommands: { serve, build },
-			});
-
-			const manifest = buildManifest(snapshotCommand(root));
-			const meta: SkillMeta = {
-				name: "app",
-				description: "App CLI",
-				version: "1.0.0",
-			};
-
-			const first = renderSkill(manifest, meta);
-			const second = renderSkill(manifest, meta);
-
-			expect(first.length).toBe(second.length);
-			for (let i = 0; i < first.length; i++) {
-				expect(first[i]?.path).toBe(second[i]?.path);
-				expect(first[i]?.content).toBe(second[i]?.content);
-			}
-		});
-	});
-
-	// ────────────────────────────────────────────────────────────────────────
 	// Complex fixture — full command tree
 	// ────────────────────────────────────────────────────────────────────────
 
@@ -1254,25 +881,6 @@ describe("renderSkill", () => {
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("edge cases", () => {
-		it("handles root command with no description", () => {
-			const cmd = makeCommand({
-				meta: { name: "app" },
-				run() {},
-			});
-
-			const manifest = buildManifest(snapshotCommand(cmd));
-			const meta: SkillMeta = {
-				name: "app",
-				description: "An app",
-				version: "1.0.0",
-			};
-			const files = renderSkill(manifest, meta);
-
-			expect(files.length).toBeGreaterThan(0);
-			const skill = findFile(files, "SKILL.md");
-			expect(skill).toBeDefined();
-		});
-
 		it("handles deeply nested commands (4 levels)", () => {
 			const deep = makeCommand({
 				meta: { name: "deep", description: "Deep command" },

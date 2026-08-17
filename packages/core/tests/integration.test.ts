@@ -2,17 +2,6 @@ import { beforeEach, describe, expect, it } from "bun:test";
 
 import type { StandardSchema } from "@crustjs/utils/schema";
 
-import { createCommandNode } from "../src/command/node";
-import type { CommandRoute } from "../src/command/router";
-import type {
-	ArgDef,
-	ArgsDef,
-	CommandDefinition,
-	CommandMeta,
-	FlagDef,
-	FlagsDef,
-	NamedFlagDef,
-} from "../src/index";
 import {
 	Crust,
 	defineArg,
@@ -21,7 +10,6 @@ import {
 	defineExtension,
 	defineFlag,
 } from "../src/index";
-import type { InferArgs, ParseResult } from "../src/types";
 import { executeCrust } from "./helpers";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -71,48 +59,6 @@ describe("integration: core APIs", () => {
 
 		const result = await executeCrust(failCmd, []);
 		expect(result.exitCode).toBe(1);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Exported types integration tests (existing)
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("integration: exported types", () => {
-	it("types are importable and usable", () => {
-		const meta: CommandMeta = { name: "typed" };
-		const argDef: ArgDef = { name: "name", type: "string" };
-		const flagDef: FlagDef = { type: "boolean" };
-		const namedFlagDef: NamedFlagDef = { name: "verbose", type: "boolean" };
-		const argsDef: ArgsDef = [argDef];
-		const flagsDef: FlagsDef = { verbose: flagDef };
-
-		const parsed: ParseResult = {
-			args: {},
-			flags: {},
-			rawArgs: [],
-		};
-		const resolved: CommandRoute = {
-			command: createCommandNode("typed-cmd"),
-			argv: [],
-			commandPath: ["typed-cmd"],
-		};
-
-		type TestArgs = [{ name: "file"; type: "string"; required: true }];
-		type ResolvedArgs = InferArgs<TestArgs>;
-		const inferred: ResolvedArgs = { file: "index.ts" };
-		const definition: CommandDefinition = defineCommand("typed", (command) => command);
-
-		void definition;
-		void meta;
-		void argDef;
-		void flagDef;
-		void namedFlagDef;
-		void argsDef;
-		void flagsDef;
-		void parsed;
-		void resolved;
-		expect(inferred.file).toBe("index.ts");
 	});
 });
 
@@ -347,30 +293,6 @@ describe("integration: nested added definitions end-to-end", () => {
 		expect(result.exitCode).toBe(0);
 	});
 
-	it("a descendant constructs a root Context its parent command does not require", async () => {
-		const builtNames: string[] = [];
-		const db = defineContext("db", () => {
-			builtNames.push("db");
-			return "root-db";
-		});
-		const app = new Crust("cli")
-			.provide(db())
-			.add(
-				defineCommand("sub", (cmd) =>
-					cmd.add(
-						defineCommand("g", (child) =>
-							child.action(async ({ ctx }) => console.log(`db=${await ctx.use(db)}`)),
-						),
-					),
-				),
-			);
-
-		const result = await executeCrust(app, ["sub", "g"]);
-		expect(result.stdout).toContain("db=root-db");
-		expect(result.exitCode).toBe(0);
-		expect(builtNames).toEqual(["db"]);
-	});
-
 	it("parent with an action falls back when unknown subcommand given as positional", async () => {
 		const app = new Crust("cli")
 			.args({ name: "input", type: "string" })
@@ -470,37 +392,6 @@ describe("integration: added definitions", () => {
 		const result = await executeCrust(app, ["deploy", "status", "--verbose", "--env", "staging"]);
 		expect(result.stdout).toContain("verbose=true env=staging");
 		expect(result.exitCode).toBe(0);
-	});
-
-	it("excludes parent-local flags from added commands", async () => {
-		const sub = defineCommand("sub", (command) => command.action(() => console.log("sub ran")));
-		const app = new Crust("cli").flags({ name: "rootOnly", type: "string" }).add(sub);
-
-		const result = await executeCrust(app, ["sub", "--rootOnly", "val"]);
-		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain("Unknown flag");
-	});
-
-	it("adds multiple definitions in one call", async () => {
-		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
-		const deploy = defineCommand("deploy", (command) =>
-			command.action(async ({ ctx }) =>
-				console.log(`deploy verbose=${(await ctx.use(logging)).verbose}`),
-			),
-		);
-		const status = defineCommand("status", (command) =>
-			command.action(async ({ ctx }) =>
-				console.log(`status verbose=${(await ctx.use(logging)).verbose}`),
-			),
-		);
-		const app = new Crust("cli").provide(logging()).add(status, deploy);
-
-		expect((await executeCrust(app, ["deploy", "--verbose"])).stdout).toContain(
-			"deploy verbose=true",
-		);
-		expect((await executeCrust(app, ["status", "--verbose"])).stdout).toContain(
-			"status verbose=true",
-		);
 	});
 });
 

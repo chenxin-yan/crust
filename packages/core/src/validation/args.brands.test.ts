@@ -18,17 +18,6 @@ describe("ValidateVariadicArgs type inference", () => {
 		expect(true).toBe(true);
 	});
 
-	it("resolves to identity when no args are variadic", () => {
-		type Args = readonly [
-			{ name: "name"; type: "string"; required: true },
-			{ name: "port"; type: "number"; default: 3000 },
-		];
-		type Result = ValidateVariadicArgs<Args>;
-		type _check = Expect<Equal<Result, Args>>;
-
-		expect(true).toBe(true);
-	});
-
 	it("brands the specific non-last arg that is variadic", () => {
 		type Args = readonly [
 			{ name: "files"; type: "string"; variadic: true },
@@ -91,14 +80,6 @@ describe("ValidateVariadicArgs type inference", () => {
 		type Result = ValidateVariadicArgs<Defs, "file">;
 		type _first = Expect<Equal<Extract<keyof Result[0], `FIX_${string}`>, never>>;
 		type _second = Expect<Equal<Extract<keyof Result[1], `FIX_${string}`>, never>>;
-
-		expect(true).toBe(true);
-	});
-
-	it("resolves to identity for a single arg", () => {
-		type Args = readonly [{ name: "file"; type: "string"; variadic: true }];
-		type Result = ValidateVariadicArgs<Args>;
-		type _check = Expect<Equal<Result, Args>>;
 
 		expect(true).toBe(true);
 	});

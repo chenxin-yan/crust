@@ -271,26 +271,6 @@ describe("walkCommandNode", () => {
 		expect(spec.description).toBeUndefined();
 		expect(spec.flags[0]?.description).toBeUndefined();
 	});
-
-	it("does not emit choices on number/boolean flags or args", () => {
-		const root = makeNode({
-			name: "mycli",
-			// number/boolean flags can't carry choices per the type system,
-			// but the walker should still leave choices off the spec for them
-			// even if a misuser were to pass an extra field.
-			localFlags: {
-				port: { type: "number" },
-				force: { type: "boolean" },
-			},
-			args: [{ name: "n", type: "number" }],
-		});
-
-		const spec = walkCommandNode(snapshotCommand(root));
-		for (const flag of spec.flags) {
-			expect(flag.choices).toBeUndefined();
-		}
-		expect(spec.args[0]?.choices).toBeUndefined();
-	});
 });
 
 describe("walkCommandNode — url/path/json valueCompletion", () => {

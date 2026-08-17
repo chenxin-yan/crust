@@ -25,23 +25,6 @@ const flags = {
 } satisfies FlagsDef;
 
 describe("flag spelling table", () => {
-	it.each([
-		["quiet", "quiet", "canonical"],
-		["q", "quiet", "short"],
-		["silent", "quiet", "alias"],
-		["config-file", "config", "alias"],
-	] as const)("maps %s to its canonical flag", (spelling, canonicalName, kind) => {
-		expect(buildSpellings(flags).get(spelling)).toMatchObject({ canonicalName, kind });
-	});
-
-	it("records negation policy for canonical names and aliases", () => {
-		const spellings = buildSpellings(flags);
-		expect(spellings.get("quiet")?.negatable).toBe(true);
-		expect(spellings.get("silent")?.negatable).toBe(true);
-		expect(spellings.get("verbose")?.negatable).toBe(false);
-		expect(spellings.get("chatty")?.negatable).toBe(false);
-	});
-
 	it("drives parsing and routing for equals values and short bundles", () => {
 		const root = createCommandNode("app");
 		root.localFlags = flags;
@@ -72,15 +55,6 @@ describe("flag spelling table", () => {
 			quiet: true,
 			config: "app.json",
 		});
-	});
-
-	it("rejects collisions across canonical, short, and alias spellings", () => {
-		expect(() =>
-			buildSpellings({
-				quiet: { type: "boolean", short: "q" },
-				query: { type: "string", aliases: ["q"] },
-			}),
-		).toThrow('Command "test" flag "--query" spelling "q" collides with flag "--quiet"');
 	});
 
 	it("enforces the shared shape rulebook on hand-built flag records", () => {

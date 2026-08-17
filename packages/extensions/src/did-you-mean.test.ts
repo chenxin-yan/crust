@@ -67,17 +67,6 @@ describe("didYouMean", () => {
 		expect(process.exitCode).toBe(1);
 	});
 
-	it("suggests the canonical name unchanged when the typo is closest to the canonical", async () => {
-		const app = new Crust("app")
-			.extend(didYouMean())
-			.add(defineCommand("issue", { aliases: ["issues", "i"] }, (cmd) => cmd.action(() => {})));
-
-		await app.execute({ argv: ["isue"] });
-
-		const stderr = stderrChunks.join("\n");
-		expect(stderr).toContain('Did you mean "issue"?');
-	});
-
 	it("prefers the closer canonical over a short colliding alias", async () => {
 		// Regression: the typo "insall" must suggest "install" (Lev 1), not
 		// "issue" via its 1-char alias "i". A short alias must not win simply

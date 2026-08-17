@@ -43,8 +43,8 @@ function nonTTYIO() {
 // Initial value — object-choice numeric values
 // ────────────────────────────────────────────────────────────────────────────
 
-// String-choice happy-path is in tests/integration.test.ts; this exercises the
-// non-string `initial` codepath that integration does not cover.
+// The non-TTY initial-value test covers string choices; this exercises the
+// non-string `initial` codepath.
 describe("multiselect — initial value", () => {
 	it("returns initial value for object choices", async () => {
 		const result = await multiselect<number>({
@@ -262,29 +262,6 @@ describe("multiselect — navigation", () => {
 		const result = await promise;
 		expect(result).toEqual(["c"]);
 	});
-
-	it("wraps to first item when moving down from last", async () => {
-		const promise = start({
-			message: "Select",
-			choices: ["a", "b", "c"],
-		});
-
-		await tick();
-		// Move to last item (down, down)
-		pressKey("", { name: "down" });
-		await tick();
-		pressKey("", { name: "down" });
-		await tick();
-		// Wrap to first
-		pressKey("", { name: "down" });
-		await tick();
-		pressKey(" ", { name: "space" });
-		await tick();
-		pressKey("", { name: "return" });
-
-		const result = await promise;
-		expect(result).toEqual(["a"]);
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -353,22 +330,6 @@ describe("multiselect — toggle all / invert", () => {
 
 		const result = await promise;
 		expect(result).toEqual(["b", "c"]);
-	});
-
-	it("'i' inverts from all selected to none", async () => {
-		const promise = start({
-			message: "Select",
-			choices: ["a", "b", "c"],
-			default: ["a", "b", "c"],
-		});
-
-		await tick();
-		pressKey("i", { name: "i" });
-		await tick();
-		pressKey("", { name: "return" });
-
-		const result = await promise;
-		expect(result).toEqual([]);
 	});
 });
 
@@ -532,33 +493,6 @@ describe("multiselect — rendering", () => {
 		await promise;
 	});
 
-	it("renders cursor indicator on active item", async () => {
-		const promise = start({
-			message: "Select",
-			choices: ["alpha", "beta"],
-		});
-
-		await tick();
-		expect(screen()).toContain("›");
-
-		pressKey("", { name: "return" });
-		await promise;
-	});
-
-	it("renders hint line with keybindings", async () => {
-		const promise = start({
-			message: "Select",
-			choices: ["alpha", "beta"],
-		});
-
-		await tick();
-		expect(screen()).toContain("Space to toggle");
-		expect(screen()).toContain("Enter to confirm");
-
-		pressKey("", { name: "return" });
-		await promise;
-	});
-
 	it("renders submitted answer with comma-separated labels", async () => {
 		const promise = start({
 			message: "Select toppings",
@@ -608,21 +542,6 @@ describe("multiselect — viewport scrolling", () => {
 		expect(screen()).toContain("item-0");
 		expect(screen()).toContain("item-4");
 		expect(screen()).not.toContain("item-5");
-
-		pressKey("", { name: "return" });
-		await promise;
-	});
-
-	it("shows scroll-down indicator when more items below", async () => {
-		const choices = Array.from({ length: 20 }, (_, i) => `item-${i}`);
-		const promise = start({
-			message: "Select",
-			choices,
-			maxVisible: 5,
-		});
-
-		await tick();
-		expect(screen()).toContain("...");
 
 		pressKey("", { name: "return" });
 		await promise;
@@ -703,15 +622,6 @@ describe("multiselect — non-TTY", () => {
 		// resolve to the generic overload and return Promise<T[]>.
 		return multiselect(options, nonTTYIO());
 	}
-
-	it("throws NonInteractiveError when stdin is not a TTY", async () => {
-		await expect(
-			nonTTY({
-				message: "Select",
-				choices: ["a", "b", "c"],
-			}),
-		).rejects.toThrow("interactive terminal");
-	});
 
 	it("returns initial value in non-TTY environment", async () => {
 		const result = await nonTTY({

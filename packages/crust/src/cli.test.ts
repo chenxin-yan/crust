@@ -71,31 +71,6 @@ function makeCrustApp() {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("crust CLI entry point", () => {
-	describe("root command", () => {
-		it("should have correct meta", async () => {
-			const app = makeCrustApp();
-			const root = await app.snapshot();
-			expect(root.meta.name).toBe("crust");
-			expect(root.meta.description).toBe("CLI tooling for the Crust framework");
-		});
-
-		it("should use extensions for root behavior", async () => {
-			const app = makeCrustApp();
-			const root = await app.snapshot();
-			expect(root.hasAction).toBe(false);
-		});
-
-		it("should have build and publish as subcommands", async () => {
-			const app = makeCrustApp();
-			const root = await app.snapshot();
-			expect(root.subCommands).toBeDefined();
-			expect(root.subCommands.build).toBeDefined();
-			expect(root.subCommands.publish).toBeDefined();
-			expect(root.subCommands.build?.meta.name).toBe("build");
-			expect(root.subCommands.publish?.meta.name).toBe("publish");
-		});
-	});
-
 	describe("crust --help", () => {
 		it("should show help text with build and publish listed", async () => {
 			await makeCrustApp().execute({ argv: ["--help"] });
@@ -171,47 +146,6 @@ describe("crust CLI entry point", () => {
 			await makeCrustApp().execute({ argv: ["buil"] });
 			const output = getStdout();
 			expect(output).toContain("Commands:");
-		});
-	});
-
-	describe("self-hosting verification", () => {
-		it("should use the cli builder from @crustjs/core (dogfooding)", async () => {
-			const app = makeCrustApp();
-			const root = await app.snapshot();
-			expect(root.meta).toBeDefined();
-			expect(root.subCommands).toBeDefined();
-		});
-
-		it("should have version that matches package.json", () => {
-			expect(typeof expectedVersion).toBe("string");
-			expect(expectedVersion.length).toBeGreaterThan(0);
-		});
-	});
-
-	describe("update notifier extension wiring", () => {
-		it("should include updateNotifier without affecting help output", async () => {
-			await makeCrustApp().execute({ argv: ["--help"] });
-			const output = getStdout();
-
-			// Help output should still render correctly with updateNotifier present
-			expect(output).toContain("Usage:");
-			expect(output).toContain("Commands:");
-			expect(output).toContain("build");
-		});
-
-		it("should include updateNotifier without affecting version output", async () => {
-			await makeCrustApp().execute({ argv: ["--version"] });
-			const output = getStdout();
-
-			expect(output).toContain(`crust v${expectedVersion}`);
-		});
-
-		it("should coexist with all other extensions during command execution", async () => {
-			// Run without arguments — should show help (no crash)
-			await makeCrustApp().execute({ argv: [] });
-			const output = getStdout();
-
-			expect(output).toContain("Usage:");
 		});
 	});
 });

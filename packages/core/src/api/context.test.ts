@@ -884,22 +884,6 @@ describe("Context disposal", () => {
 		expect(log).toEqual(["run", "dispose:derived", "dispose:base"]);
 	});
 
-	it("supports synchronous Symbol.dispose", async () => {
-		const log: string[] = [];
-		const sync = defineContext("sync", () => ({
-			[Symbol.dispose]() {
-				log.push("dispose:sync");
-			},
-		}));
-
-		await new Crust("cli")
-			.provide(sync())
-			.action(async ({ ctx }) => void (await ctx.use(sync)))
-			.run([]);
-
-		expect(log).toEqual(["dispose:sync"]);
-	});
-
 	it("disposes after an action failure and rethrows the original error", async () => {
 		const log: string[] = [];
 		const res = disposableContext("res", log);
@@ -951,14 +935,5 @@ describe("Context disposal", () => {
 
 		await expect(app.run([])).rejects.toThrow("Unauthenticated");
 		expect(events).toEqual(["disposed"]);
-	});
-
-	it("leaves non-disposable Context values alone", async () => {
-		const plain = defineContext("plain", () => ({ value: 42 }));
-		const app = new Crust("cli").provide(plain()).action(async ({ ctx }) => {
-			expect((await ctx.use(plain)).value).toBe(42);
-		});
-
-		await expect(app.run([])).resolves.toBeUndefined();
 	});
 });

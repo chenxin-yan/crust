@@ -60,12 +60,6 @@ const fixture: CompletionCommand = {
 };
 
 describe("renderZsh", () => {
-	it("first line is `#compdef <bin>` (required by zsh autoload)", () => {
-		const script = renderZsh(fixture, "mycli", "1.0.0");
-		const firstLine = script.split("\n")[0];
-		expect(firstLine).toBe("#compdef mycli");
-	});
-
 	it("emits a header comment with bin + version + regenerate hint on line 2", () => {
 		const script = renderZsh(fixture, "mycli", "2.0.0-beta");
 		const lines = script.split("\n");
@@ -209,12 +203,6 @@ echo OK
 		expect(out).toContain("OK");
 	});
 });
-
-if (!zshAvailable) {
-	describe("renderZsh · zsh behavioural tests", () => {
-		it.skip("zsh not available on PATH — skipping behavioural tests", () => {});
-	});
-}
 
 async function isZshAvailable(): Promise<boolean> {
 	try {

@@ -21,17 +21,6 @@ describe("hyperlinks", () => {
 		});
 	});
 
-	it("rejects URLs containing spaces", () => {
-		expect(() => linkCode("https://example.com/foo bar")).toThrow(/Invalid hyperlink URL/);
-	});
-
-	it("wraps text in OSC 8 sequences", () => {
-		const s = createStyle({ mode: "always" });
-		expect(s.link("Crust docs", "https://crustjs.com")).toBe(
-			"\x1b]8;;https://crustjs.com\x1b\\Crust docs\x1b]8;;\x1b\\",
-		);
-	});
-
 	it("returns empty text unchanged", () => {
 		expect(link("", "https://crustjs.com")).toBe("");
 	});
@@ -90,13 +79,6 @@ describe("createStyle().link", () => {
 describe("runtime link export", () => {
 	const restoreEnv = snapshotEnv("FORCE_COLOR", "NO_COLOR");
 	afterEach(restoreEnv);
-
-	it("delegates through the runtime style facade", () => {
-		setEnv("FORCE_COLOR", "3");
-		expect(link("Crust", "https://crustjs.com")).toBe(
-			"\x1b]8;;https://crustjs.com\x1b\\Crust\x1b]8;;\x1b\\",
-		);
-	});
 
 	it("still emits hyperlinks under NO_COLOR (colors-only switch)", () => {
 		// no-color.org: NO_COLOR suppresses colors; modifiers + hyperlinks

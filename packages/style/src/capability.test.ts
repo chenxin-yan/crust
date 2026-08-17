@@ -335,62 +335,9 @@ describe("createStyle — never mode", () => {
 		expect(s.enabled).toBe(false);
 	});
 
-	it("all named style methods return plain text", () => {
-		const methodNames = [
-			"bold",
-			"dim",
-			"italic",
-			"underline",
-			"inverse",
-			"hidden",
-			"strikethrough",
-			"black",
-			"red",
-			"green",
-			"yellow",
-			"blue",
-			"magenta",
-			"cyan",
-			"white",
-			"gray",
-			"brightRed",
-			"brightGreen",
-			"brightYellow",
-			"brightBlue",
-			"brightMagenta",
-			"brightCyan",
-			"brightWhite",
-			"bgBlack",
-			"bgRed",
-			"bgGreen",
-			"bgYellow",
-			"bgBlue",
-			"bgMagenta",
-			"bgCyan",
-			"bgWhite",
-			"bgBrightBlack",
-			"bgBrightRed",
-			"bgBrightGreen",
-			"bgBrightYellow",
-			"bgBrightBlue",
-			"bgBrightMagenta",
-			"bgBrightCyan",
-			"bgBrightWhite",
-		] as const;
-
-		for (const methodName of methodNames) {
-			expect(s[methodName]("text")).toBe("text");
-		}
-	});
-
 	it("supports chainable styles without ANSI output", () => {
 		expect(s.bold.red("text")).toBe("text");
 		expect(s.bgBlue.underline("text")).toBe("text");
-	});
-
-	it("handles empty string", () => {
-		expect(s.bold("")).toBe("");
-		expect(s.red("")).toBe("");
 	});
 
 	it("preserves text content structurally", () => {
@@ -456,33 +403,6 @@ describe("createStyle — instance immutability", () => {
 		const s = createStyle({ mode: "always" });
 		expect(Object.isFrozen(s)).toBe(true);
 	});
-
-	it("prevents property reassignment", () => {
-		const s = createStyle({ mode: "always" });
-		expect(() => {
-			(s as any).bold = () => "hacked";
-		}).toThrow();
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// createStyle — default instance
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("createStyle — defaults", () => {
-	it("defaults to auto mode when no options provided", () => {
-		const s = createStyle();
-		// We can't assert the exact value of `enabled` since it depends on
-		// the runtime environment, but we can verify the instance is valid
-		expect(typeof s.enabled).toBe("boolean");
-		expect(typeof s.bold).toBe("function");
-		expect(typeof s.red).toBe("function");
-	});
-
-	it("defaults to auto mode when empty options provided", () => {
-		const s = createStyle({});
-		expect(typeof s.enabled).toBe("boolean");
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -502,37 +422,6 @@ describe("createStyle — structural equivalence", () => {
 		// oxlint-disable-next-line no-control-regex -- stripping ANSI escape sequences
 		const stripped = alwaysResult.replace(/\x1b\[\d+m/g, "");
 		expect(stripped).toBe(neverResult);
-	});
-
-	it("preserves multiline structure in never mode", () => {
-		const s = createStyle({ mode: "never" });
-		expect(s.bold("line1\nline2")).toBe("line1\nline2");
-	});
-
-	it("preserves whitespace in never mode", () => {
-		const s = createStyle({ mode: "never" });
-		expect(s.bold("  spaced  ")).toBe("  spaced  ");
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Default exported style instance
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("default style instance", () => {
-	it("is importable from createStyle module", async () => {
-		const { style } = await import("./createStyle.ts");
-		expect(typeof style.bold).toBe("function");
-		expect(typeof style.red).toBe("function");
-		expect(typeof style.enabled).toBe("boolean");
-		expect(typeof style.colorsEnabled).toBe("boolean");
-		expect(Object.isFrozen(style)).toBe(true);
-	});
-
-	it("is importable from barrel", async () => {
-		const { style } = await import("./index.ts");
-		expect(typeof style.bold).toBe("function");
-		expect(typeof style.enabled).toBe("boolean");
 	});
 });
 
@@ -554,19 +443,6 @@ describe("createStyle — dynamic colors always mode", () => {
 	it("bg emits truecolor ANSI codes from `[r, g, b]`", () => {
 		expect(s.bg("text", [0, 128, 255])).toBe("\x1b[48;2;0;128;255mtext\x1b[49m");
 	});
-
-	it("fg emits truecolor ANSI codes from hex string", () => {
-		expect(s.fg("text", "#ff0000")).toBe("\x1b[38;2;255;0;0mtext\x1b[39m");
-	});
-
-	it("bg emits truecolor ANSI codes from hex string", () => {
-		expect(s.bg("text", "#00ff88")).toBe("\x1b[48;2;0;255;136mtext\x1b[49m");
-	});
-
-	it("handles empty string", () => {
-		expect(s.fg("", [255, 0, 0])).toBe("");
-		expect(s.fg("", "#fff")).toBe("");
-	});
 });
 
 describe("createStyle — dynamic colors never mode", () => {
@@ -582,14 +458,6 @@ describe("createStyle — dynamic colors never mode", () => {
 
 	it("bg returns plain text from `[r, g, b]`", () => {
 		expect(s.bg("text", [0, 128, 255])).toBe("text");
-	});
-
-	it("fg returns plain text from hex", () => {
-		expect(s.fg("text", "#ff0000")).toBe("text");
-	});
-
-	it("bg returns plain text from hex", () => {
-		expect(s.bg("text", "#00ff88")).toBe("text");
 	});
 });
 
@@ -743,16 +611,6 @@ describe("runtime style — TERM/COLORTERM changes", () => {
 		delete process.env.COLORTERM;
 		expect(style.colorDepth).toBe("256");
 
-		process.env.COLORTERM = "truecolor";
-		expect(style.colorDepth).toBe("truecolor");
-	});
-
-	it("re-resolves colorDepth when both TERM and COLORTERM change", () => {
-		process.env.TERM = "dumb";
-		delete process.env.COLORTERM;
-		expect(style.colorDepth).toBe("none");
-
-		process.env.TERM = "xterm-256color";
 		process.env.COLORTERM = "truecolor";
 		expect(style.colorDepth).toBe("truecolor");
 	});

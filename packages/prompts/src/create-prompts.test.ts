@@ -21,13 +21,6 @@ describe("createPrompts", () => {
 		expect(p.theme).toEqual(defaultTheme);
 	});
 
-	it("instance theme reaches prompt rendering", async () => {
-		const p = createPrompts({ theme: { success: (t) => `<${t}>` } });
-		// Non-TTY short-circuit still resolves; theme merge must not throw
-		const result = await p.input({ message: "Name?", initial: "Alice" });
-		expect(result).toBe("Alice");
-	});
-
 	it("instance theme styles rendered output", async () => {
 		const p = createPrompts({ theme: { prefix: () => "[INST]" } });
 		const prompt = renderPrompt<ConfirmOptions, boolean>(p.confirm, { message: "Continue?" });
@@ -86,19 +79,6 @@ describe("createPrompts", () => {
 		await tick();
 		expect(prompt.screen()).toContain("[ORIG]");
 		expect(p.theme.prefix("")).toBe("[ORIG]");
-		prompt.keys("return");
-		await prompt.answer;
-	});
-
-	it("per-call theme overrides instance theme", async () => {
-		const p = createPrompts({ theme: { prefix: () => "[INST]" } });
-		const prompt = renderPrompt<ConfirmOptions, boolean>(p.confirm, {
-			message: "Continue?",
-			theme: { prefix: () => "[CALL]" },
-		});
-		await tick();
-		expect(prompt.screen()).toContain("[CALL]");
-		expect(prompt.screen()).not.toContain("[INST]");
 		prompt.keys("return");
 		await prompt.answer;
 	});

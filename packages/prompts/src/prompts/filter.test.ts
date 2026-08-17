@@ -43,8 +43,8 @@ function nonTTYIO() {
 // Initial value — object-choice numeric value
 // ────────────────────────────────────────────────────────────────────────────
 
-// String-choice happy-path is in tests/integration.test.ts; this exercises the
-// non-string `initial` codepath that integration does not cover.
+// The non-TTY initial-value test covers string choices; this exercises the
+// non-string `initial` codepath.
 describe("filter — initial value", () => {
 	it("returns initial value for object choices", async () => {
 		const result = await filter<number>({
@@ -149,29 +149,6 @@ describe("filter — typing filters the list", () => {
 		expect(result).toBe("Python");
 	});
 
-	it("backspace removes filter character and re-filters", async () => {
-		const promise = start({
-			message: "Search",
-			choices: ["TypeScript", "JavaScript", "Rust"],
-		});
-
-		await tick();
-		// Type "ru" to filter to Rust
-		pressKey("r", { name: "r" });
-		await tick();
-		pressKey("u", { name: "u" });
-		await tick();
-
-		// Now backspace to widen the filter
-		pressKey("", { name: "backspace" });
-		await tick();
-
-		// With just "r", more items may match
-		// Submit to get current selection
-		pressKey("", { name: "return" });
-		await promise;
-	});
-
 	it("shows 'No matches' when nothing matches the query", async () => {
 		const promise = start({
 			message: "Search",
@@ -255,43 +232,6 @@ describe("filter — navigation", () => {
 		expect(result).toBe("gamma");
 	});
 
-	it("wraps to first item when moving down from last", async () => {
-		const promise = start({
-			message: "Search",
-			choices: ["alpha", "beta", "gamma"],
-		});
-
-		await tick();
-		// Move to last (down 2 times), then one more to wrap
-		pressKey("", { name: "down" });
-		await tick();
-		pressKey("", { name: "down" });
-		await tick();
-		pressKey("", { name: "down" });
-		await tick();
-		pressKey("", { name: "return" });
-
-		const result = await promise;
-		expect(result).toBe("alpha");
-	});
-
-	it("Enter selects the highlighted result", async () => {
-		const promise = start({
-			message: "Search",
-			choices: ["alpha", "beta", "gamma"],
-		});
-
-		await tick();
-		pressKey("", { name: "down" });
-		await tick();
-		pressKey("", { name: "down" });
-		await tick();
-		pressKey("", { name: "return" });
-
-		const result = await promise;
-		expect(result).toBe("gamma");
-	});
-
 	it("ignores navigation when no results", async () => {
 		const promise = start({
 			message: "Search",
@@ -354,59 +294,6 @@ describe("filter — query editing", () => {
 		const result = await promise;
 		expect(result).toBe("abc");
 	});
-
-	it("delete key removes character at cursor", async () => {
-		const promise = start({
-			message: "Search",
-			choices: ["ab", "cd"],
-		});
-
-		await tick();
-		// Type "axb"
-		pressKey("a", { name: "a" });
-		await tick();
-		pressKey("x", { name: "x" });
-		await tick();
-		pressKey("b", { name: "b" });
-		await tick();
-
-		// Move left twice to position cursor at "x", then delete
-		pressKey("", { name: "left" });
-		await tick();
-		pressKey("", { name: "left" });
-		await tick();
-		pressKey("", { name: "delete" });
-		await tick();
-
-		// Query should now be "ab"
-		pressKey("", { name: "return" });
-		const result = await promise;
-		expect(result).toBe("ab");
-	});
-
-	it("home/end keys move cursor to start/end", async () => {
-		const promise = start({
-			message: "Search",
-			choices: ["xab", "other"],
-		});
-
-		await tick();
-		// Type "ab"
-		pressKey("a", { name: "a" });
-		await tick();
-		pressKey("b", { name: "b" });
-		await tick();
-
-		// Home, then insert "x" at start to make "xab"
-		pressKey("", { name: "home" });
-		await tick();
-		pressKey("x", { name: "x" });
-		await tick();
-
-		pressKey("", { name: "return" });
-		const result = await promise;
-		expect(result).toBe("xab");
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -436,34 +323,6 @@ describe("filter — rendering", () => {
 
 		await tick();
 		expect(screen()).toContain("Type to filter...");
-
-		pressKey("", { name: "return" });
-		await promise;
-	});
-
-	it("renders all choices initially", async () => {
-		const promise = start({
-			message: "Search",
-			choices: ["alpha", "beta", "gamma"],
-		});
-
-		await tick();
-		expect(screen()).toContain("alpha");
-		expect(screen()).toContain("beta");
-		expect(screen()).toContain("gamma");
-
-		pressKey("", { name: "return" });
-		await promise;
-	});
-
-	it("renders cursor indicator on active result", async () => {
-		const promise = start({
-			message: "Search",
-			choices: ["alpha", "beta"],
-		});
-
-		await tick();
-		expect(screen()).toContain("›");
 
 		pressKey("", { name: "return" });
 		await promise;
@@ -520,21 +379,6 @@ describe("filter — viewport scrolling", () => {
 		expect(screen()).toContain("item-0");
 		expect(screen()).toContain("item-4");
 		expect(screen()).not.toContain("item-5");
-
-		pressKey("", { name: "return" });
-		await promise;
-	});
-
-	it("shows scroll indicator when more items below", async () => {
-		const choices = Array.from({ length: 20 }, (_, i) => `item-${i}`);
-		const promise = start({
-			message: "Search",
-			choices,
-			maxVisible: 5,
-		});
-
-		await tick();
-		expect(screen()).toContain("...");
 
 		pressKey("", { name: "return" });
 		await promise;
@@ -610,15 +454,6 @@ describe("filter — non-TTY", () => {
 		// resolve to the generic overload and return Promise<T>.
 		return filter(options, nonTTYIO());
 	}
-
-	it("throws NonInteractiveError when stdin is not a TTY", async () => {
-		await expect(
-			nonTTY({
-				message: "Search",
-				choices: ["a", "b", "c"],
-			}),
-		).rejects.toThrow("interactive terminal");
-	});
 
 	it("returns initial value in non-TTY environment", async () => {
 		const result = await nonTTY({

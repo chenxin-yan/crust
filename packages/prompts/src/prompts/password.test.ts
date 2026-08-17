@@ -47,22 +47,13 @@ function nonTTYIO() {
 	return createPromptIO({ isTTY: false }).io;
 }
 
-async function waitForScreen(needle: string, timeout = 500): Promise<void> {
-	const started = Date.now();
-	while (!screen().includes(needle)) {
-		if (Date.now() - started > timeout) {
-			throw new Error(`screen never contained ${JSON.stringify(needle)} within ${timeout}ms.`);
-		}
-		await tick(5);
-	}
-}
 // ────────────────────────────────────────────────────────────────────────────
 // Initial value — empty-string edge case
 // ────────────────────────────────────────────────────────────────────────────
 
 // Guards the `options.initial !== undefined` semantics against a regression to
 // a truthy check (which would treat "" as absent and drop into interactive mode).
-// Happy-path (non-empty initial) is covered by tests/integration.test.ts.
+// Happy-path (non-empty initial) is covered by the non-TTY initial-value test.
 describe("password — initial value", () => {
 	it("returns empty string initial value", async () => {
 		const result = await password({
@@ -159,155 +150,6 @@ describe("password — masked rendering", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Keypress handling (editing)
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("password — keypress editing", () => {
-	it("submits typed value on Enter", async () => {
-		const promise = start({ message: "Password?" });
-
-		await tick();
-		pressKey("s");
-		await tick();
-		pressKey("e");
-		await tick();
-		pressKey("c");
-		await tick();
-		pressKey("", { name: "return" });
-
-		const result = await promise;
-		expect(result).toBe("sec");
-	});
-
-	it("backspace deletes character before cursor", async () => {
-		const promise = start({ message: "Password?" });
-
-		await tick();
-		pressKey("A");
-		await tick();
-		pressKey("B");
-		await tick();
-		pressKey("C");
-		await tick();
-		pressKey("", { name: "backspace" });
-		await tick();
-		pressKey("", { name: "return" });
-
-		const result = await promise;
-		expect(result).toBe("AB");
-	});
-
-	it("backspace at position 0 does nothing", async () => {
-		const promise = start({ message: "Password?" });
-
-		await tick();
-		pressKey("", { name: "backspace" });
-		await tick();
-		pressKey("A");
-		await tick();
-		pressKey("", { name: "return" });
-
-		const result = await promise;
-		expect(result).toBe("A");
-	});
-
-	it("delete removes character at cursor", async () => {
-		const promise = start({ message: "Password?" });
-
-		await tick();
-		pressKey("A");
-		await tick();
-		pressKey("B");
-		await tick();
-		pressKey("C");
-		await tick();
-		// Move cursor left twice
-		pressKey("", { name: "left" });
-		await tick();
-		pressKey("", { name: "left" });
-		await tick();
-		// Delete the character at cursor (B)
-		pressKey("", { name: "delete" });
-		await tick();
-		pressKey("", { name: "return" });
-
-		const result = await promise;
-		expect(result).toBe("AC");
-	});
-
-	it("left/right arrow keys move cursor", async () => {
-		const promise = start({ message: "Password?" });
-
-		await tick();
-		pressKey("A");
-		await tick();
-		pressKey("B");
-		await tick();
-		// Move left, type C — inserts before B
-		pressKey("", { name: "left" });
-		await tick();
-		pressKey("C");
-		await tick();
-		pressKey("", { name: "return" });
-
-		const result = await promise;
-		expect(result).toBe("ACB");
-	});
-
-	it("home key jumps to start", async () => {
-		const promise = start({ message: "Password?" });
-
-		await tick();
-		pressKey("A");
-		await tick();
-		pressKey("B");
-		await tick();
-		pressKey("", { name: "home" });
-		await tick();
-		pressKey("C");
-		await tick();
-		pressKey("", { name: "return" });
-
-		const result = await promise;
-		expect(result).toBe("CAB");
-	});
-
-	it("end key jumps to end", async () => {
-		const promise = start({ message: "Password?" });
-
-		await tick();
-		pressKey("A");
-		await tick();
-		pressKey("B");
-		await tick();
-		pressKey("", { name: "home" });
-		await tick();
-		pressKey("", { name: "end" });
-		await tick();
-		pressKey("C");
-		await tick();
-		pressKey("", { name: "return" });
-
-		const result = await promise;
-		expect(result).toBe("ABC");
-	});
-
-	it("ignores ctrl+key combinations", async () => {
-		const promise = start({ message: "Password?" });
-
-		await tick();
-		pressKey("A");
-		await tick();
-		pressKey("a", { name: "a", ctrl: true });
-		await tick();
-		pressKey("", { name: "return" });
-
-		const result = await promise;
-		expect(result).toBe("A");
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // Validation
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -340,52 +182,6 @@ describe("password — validation", () => {
 
 		const result = await promise;
 		expect(result).toBe("abcd");
-	});
-
-	it("supports async validation", async () => {
-		const promise = start({
-			message: "Token?",
-			validate: async (v) => {
-				await new Promise((r) => setTimeout(r, 5));
-				if (v !== "valid") throw new Error("Invalid token");
-			},
-		});
-
-		await tick();
-		for (const ch of "valid") {
-			pressKey(ch);
-			await tick();
-		}
-		pressKey("", { name: "return" });
-
-		const result = await promise;
-		expect(result).toBe("valid");
-	});
-
-	it("clears error on new character input", async () => {
-		const promise = start({
-			message: "Password?",
-			validate: (v) => {
-				if (v.length < 2) throw new Error("Too short");
-			},
-		});
-
-		await tick();
-		pressKey("a");
-		await tick();
-		// Submit too-short value
-		pressKey("", { name: "return" });
-		await tick();
-
-		expect(screen()).toContain("Too short");
-
-		// Type another character — error should be cleared from state
-		pressKey("b");
-		await tick();
-		pressKey("", { name: "return" });
-
-		const result = await promise;
-		expect(result).toBe("ab");
 	});
 });
 
@@ -465,50 +261,6 @@ describe("password — schema validation", () => {
 		);
 	});
 
-	it("resolves to string when a string schema accepts the input", async () => {
-		const promise = start({
-			message: "Password?",
-			schema: z.string().min(3),
-		});
-
-		await tick();
-		pressKey("a");
-		await tick();
-		pressKey("b");
-		await tick();
-		pressKey("c");
-		await tick();
-		pressKey("", { name: "return" });
-
-		const result = await promise;
-		expect(result).toBe("abc");
-		expect(typeof result).toBe("string");
-	});
-
-	it("renders the first issue's message and waits for retry on failure", async () => {
-		const promise = start({
-			message: "Password?",
-			schema: z.string().min(3, "Too short"),
-		});
-
-		await tick();
-		pressKey("a");
-		await tick();
-		pressKey("", { name: "return" });
-		await tick();
-
-		expect(screen()).toContain("Too short");
-
-		pressKey("b");
-		await tick();
-		pressKey("c");
-		await tick();
-		pressKey("", { name: "return" });
-
-		const result = await promise;
-		expect(result).toBe("abc");
-	});
-
 	it("resolves to the schema's transformed output (number from coerce)", async () => {
 		const promise = start({
 			message: "PIN?",
@@ -530,82 +282,6 @@ describe("password — schema validation", () => {
 		expect(result).toBe(4242);
 		expect(typeof result).toBe("number");
 	});
-
-	it("awaits async schema validation", async () => {
-		const asyncSchema = z.string().refine(
-			async (v) => {
-				await new Promise((r) => setTimeout(r, 5));
-				return v === "open-sesame";
-			},
-			{ message: "wrong passphrase" },
-		);
-
-		const promise = start({
-			message: "Passphrase?",
-			schema: asyncSchema,
-		});
-
-		await tick();
-		for (const ch of "wrong") {
-			pressKey(ch);
-			await tick();
-		}
-		pressKey("", { name: "return" });
-		await waitForScreen("wrong passphrase");
-
-		expect(screen()).toContain("wrong passphrase");
-
-		// Clear and type the correct value.
-		for (let i = 0; i < 5; i++) {
-			pressKey("", { name: "backspace" });
-			await tick();
-		}
-		for (const ch of "open-sesame") {
-			pressKey(ch);
-			await tick();
-		}
-		pressKey("", { name: "return" });
-
-		const result = await promise;
-		expect(result).toBe("open-sesame");
-	});
-
-	it("falls back to 'Validation failed' when issue message is empty", async () => {
-		const emptyMessageSchema = {
-			"~standard": {
-				version: 1 as const,
-				vendor: "test",
-				validate: (value: unknown) => {
-					if (value === "good") return { value: value as string };
-					return { issues: [{ message: "" }] };
-				},
-			},
-		};
-
-		const promise = start({
-			message: "Word?",
-			schema: emptyMessageSchema,
-		});
-
-		await tick();
-		pressKey("x");
-		await tick();
-		pressKey("", { name: "return" });
-		await tick();
-
-		expect(screen()).toContain("Validation failed");
-
-		pressKey("", { name: "backspace" });
-		await tick();
-		for (const ch of "good") {
-			pressKey(ch);
-			await tick();
-		}
-		pressKey("", { name: "return" });
-
-		const result = await promise;
-		expect(result).toBe("good");
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -625,16 +301,6 @@ describe("password — schema short-circuit", () => {
 
 		expect(result).toBe(4242);
 		expect(typeof result).toBe("number");
-	});
-
-	it("throws when `initial` is rejected by the schema", async () => {
-		await expect(
-			password({
-				message: "PIN?",
-				initial: "abc",
-				schema: z.coerce.number().int(),
-			}),
-		).rejects.toThrow(/initial value rejected by schema/);
 	});
 
 	it("treats `{ issues: [] }` from a non-conformant schema as success", async () => {

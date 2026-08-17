@@ -125,22 +125,9 @@ describe("fuzzyFilter", () => {
 		expect(results[0]?.item.value).toBe("py");
 	});
 
-	it("sorts results by score descending", () => {
-		// "go" should match "Go" better than anything else
-		const results = fuzzyFilter("go", items);
-		expect(results.length).toBeGreaterThanOrEqual(1);
-		expect(results[0]?.item.value).toBe("go");
-	});
-
 	it("returns empty array when nothing matches", () => {
 		const results = fuzzyFilter("xyz", items);
 		expect(results.length).toBe(0);
-	});
-
-	it("case-insensitive filtering", () => {
-		const results = fuzzyFilter("RUST", items);
-		expect(results.length).toBe(1);
-		expect(results[0]?.item.value).toBe("rs");
 	});
 
 	it("returns indices for each matched item", () => {

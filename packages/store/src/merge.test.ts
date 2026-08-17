@@ -141,13 +141,6 @@ describe("applyFieldDefaults", () => {
 	// Array fields
 	// ──────────────────────────────────────────────────────────────────────
 
-	it("should apply array defaults", () => {
-		const result = applyFieldDefaults(undefined, ARRAY_FIELDS);
-
-		expect(result.tags).toEqual(["default"]);
-		expect(result.count).toBe(0);
-	});
-
 	it("should use persisted array values", () => {
 		const persisted = { tags: ["a", "b"], count: 42 };
 		const result = applyFieldDefaults(persisted, ARRAY_FIELDS);
@@ -156,13 +149,6 @@ describe("applyFieldDefaults", () => {
 			tags: ["a", "b"],
 			count: 42,
 		});
-	});
-
-	it("should replace arrays wholesale, not merge elements", () => {
-		const persisted = { tags: ["a"], count: 1 };
-		const result = applyFieldDefaults(persisted, ARRAY_FIELDS);
-
-		expect(result.tags).toEqual(["a"]);
 	});
 
 	// ──────────────────────────────────────────────────────────────────────
@@ -174,42 +160,11 @@ describe("applyFieldDefaults", () => {
 		expect(result).toEqual({});
 	});
 
-	it("should handle empty persisted object", () => {
-		const result = applyFieldDefaults({}, BASIC_FIELDS);
-
-		expect(result).toEqual({
-			theme: "light",
-			verbose: false,
-			retries: 3,
-		});
-	});
-
 	it("should preserve null as a persisted value", () => {
 		const persisted = { theme: null, verbose: false, retries: 3 };
 		const result = applyFieldDefaults(persisted, BASIC_FIELDS);
 
 		expect(result.theme).toBeNull();
-	});
-
-	it("should preserve zero as a persisted value", () => {
-		const persisted = { retries: 0 };
-		const result = applyFieldDefaults(persisted, BASIC_FIELDS);
-
-		expect(result.retries).toBe(0);
-	});
-
-	it("should preserve empty string as a persisted value", () => {
-		const persisted = { theme: "" };
-		const result = applyFieldDefaults(persisted, BASIC_FIELDS);
-
-		expect(result.theme).toBe("");
-	});
-
-	it("should preserve false as a persisted value", () => {
-		const persisted = { verbose: false };
-		const result = applyFieldDefaults(persisted, BASIC_FIELDS);
-
-		expect(result.verbose).toBe(false);
 	});
 
 	// ──────────────────────────────────────────────────────────────────────

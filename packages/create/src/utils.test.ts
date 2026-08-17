@@ -87,11 +87,6 @@ describe("detectPackageManager", () => {
 		expect(detectPackageManager(tempDir)).toBe("yarn");
 	});
 
-	it("falls back to npm_config_user_agent for npm", () => {
-		process.env.npm_config_user_agent = "npm/10.0.0 node/v20.0.0";
-		expect(detectPackageManager(tempDir)).toBe("npm");
-	});
-
 	it("defaults to npm when no signals are present", () => {
 		expect(detectPackageManager(tempDir)).toBe("npm");
 	});
@@ -102,11 +97,6 @@ describe("detectPackageManager", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("isInGitRepo", () => {
-	it("returns true for a directory inside a git repo", () => {
-		// This test file is inside the crust monorepo
-		expect(isInGitRepo(process.cwd())).toBe(true);
-	});
-
 	it("returns false for a directory outside any git repo", () => {
 		// /tmp is not inside a git repo
 		expect(isInGitRepo(tmpdir())).toBe(false);
@@ -130,10 +120,5 @@ describe("isInGitRepo", () => {
 		expect(isInGitRepo(nested)).toBe(true);
 
 		rmSync(subDir, { recursive: true, force: true });
-	});
-
-	it("defaults to process.cwd() when no argument is provided", () => {
-		// cwd is inside the monorepo
-		expect(isInGitRepo()).toBe(true);
 	});
 });

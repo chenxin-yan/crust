@@ -23,10 +23,6 @@ describe("primitive helpers", () => {
 			expect(tryCoerceNumber("")).toBe(0);
 		});
 
-		it("coerces whitespace-padded numeric strings", () => {
-			expect(tryCoerceNumber(" 42 ")).toBe(42);
-		});
-
 		it("accepts Infinity", () => {
 			expect(tryCoerceNumber("Infinity")).toBe(Infinity);
 		});

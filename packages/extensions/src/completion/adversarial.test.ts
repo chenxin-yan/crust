@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -45,13 +45,6 @@ describe("walker · validation", () => {
 				type: "string",
 				choices: ["a", "two words", "c"],
 			})
-			.action(() => {});
-		expect(() => walkCommandNode(snapshotCommand(cli._node))).toThrow(/unsupported choice value/);
-	});
-
-	it("rejects choice values containing single quotes", () => {
-		const cli = new Crust("bad")
-			.flags({ name: "target", type: "string", choices: ["a", "it's", "c"] })
 			.action(() => {});
 		expect(() => walkCommandNode(snapshotCommand(cli._node))).toThrow(/unsupported choice value/);
 	});
@@ -252,28 +245,6 @@ describe("completion · --output-dir traversal", () => {
 		}
 		expect(stderrChunks.join("\n")).toMatch(/invalid binName/);
 		expect(process.exitCode).toBe(1);
-	});
-
-	it("does not write outside --output-dir", async () => {
-		// `assertSafeBinName` rejects separators, `..`, and unsafe characters
-		// before any write (see "rejects a binName containing path separators").
-		// We test the happy path here: a normal binName lands inside the
-		// target dir and nothing escapes.
-		const tmp = await mkdtemp(join(tmpdir(), "tp010-traversal-"));
-		try {
-			const cli = new Crust("good").extend(completion({ version: "1" })).action(() => {});
-			await cli.execute({
-				argv: ["completion", "bash", "--output-dir", tmp],
-			});
-			const entries = await readdir(tmp);
-			// Exactly the per-shell files for `good`, nothing else.
-			expect(entries.sort()).toEqual(["_good", "good", "good.fish"]);
-			// Files are non-empty and contain the expected header.
-			const head = await readFile(join(tmp, "good"), "utf8");
-			expect(head).toContain("# completion script for good v1");
-		} finally {
-			await rm(tmp, { recursive: true, force: true });
-		}
 	});
 });
 

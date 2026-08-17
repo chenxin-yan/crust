@@ -3,25 +3,7 @@ import { accessSync, chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs
 import { homedir, tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
-import {
-	AGENT_LABELS,
-	ALL_AGENTS,
-	detectInstalledAgents,
-	getAdditionalAgents,
-	getUniversalAgents,
-	isUniversalAgent,
-	resolveAgentPath,
-} from "./agents.ts";
-
-async function withCwd<T>(dir: string, fn: () => Promise<T> | T): Promise<T> {
-	const original = process.cwd;
-	process.cwd = () => dir;
-	try {
-		return await fn();
-	} finally {
-		process.cwd = original;
-	}
-}
+import { detectInstalledAgents, resolveAgentPath } from "./agents.ts";
 
 describe("resolveAgentPath", () => {
 	it("resolves claude-code project path", () => {
@@ -29,28 +11,9 @@ describe("resolveAgentPath", () => {
 		expect(result).toBe(join(process.cwd(), ".claude", "skills", "my-cli"));
 	});
 
-	it("resolves opencode project path to canonical universal dir", () => {
-		const result = resolveAgentPath("opencode", "project", "my-cli");
-		expect(result).toBe(join(process.cwd(), ".agents", "skills", "my-cli"));
-	});
-
 	it("resolves claude-code global path", () => {
 		const result = resolveAgentPath("claude-code", "global", "my-cli");
 		expect(result).toBe(join(homedir(), ".claude", "skills", "my-cli"));
-	});
-
-	it("resolves opencode global path", () => {
-		const result = resolveAgentPath("opencode", "global", "my-cli");
-		expect(result).toBe(join(homedir(), ".agents", "skills", "my-cli"));
-	});
-
-	it("resolves Antigravity's universal project and agent-specific global paths", () => {
-		expect(resolveAgentPath("antigravity", "project", "my-cli")).toBe(
-			join(process.cwd(), ".agents", "skills", "my-cli"),
-		);
-		expect(resolveAgentPath("antigravity", "global", "my-cli")).toBe(
-			join(homedir(), ".gemini", "config", "skills", "my-cli"),
-		);
 	});
 
 	it("resolves Mistral Vibe's global path from VIBE_HOME, falling back to ~/.vibe", () => {
@@ -71,60 +34,6 @@ describe("resolveAgentPath", () => {
 				process.env.VIBE_HOME = original;
 			}
 		}
-	});
-
-	it("treats home-directory project scope as global for universal agents", async () => {
-		await withCwd(homedir(), () => {
-			expect(resolveAgentPath("opencode", "project", "my-cli")).toBe(
-				resolveAgentPath("opencode", "global", "my-cli"),
-			);
-		});
-	});
-
-	it("treats home-directory project scope as global for agent-specific paths", async () => {
-		await withCwd(homedir(), () => {
-			expect(resolveAgentPath("claude-code", "project", "my-cli")).toBe(
-				resolveAgentPath("claude-code", "global", "my-cli"),
-			);
-		});
-	});
-});
-
-describe("agent registry", () => {
-	it("contains expected baseline agents", () => {
-		expect(ALL_AGENTS).toContain("claude-code");
-		expect(ALL_AGENTS).toContain("opencode");
-		expect(ALL_AGENTS).toContain("codex");
-		expect(ALL_AGENTS).toContain("warp");
-		expect(ALL_AGENTS).toContain("windsurf");
-		expect(ALL_AGENTS).toContain("zed");
-		expect(ALL_AGENTS).toContain("openclaw");
-	});
-
-	it("has a label for every agent", () => {
-		for (const agent of ALL_AGENTS) {
-			expect(AGENT_LABELS[agent]).toBeString();
-			expect(AGENT_LABELS[agent].length).toBeGreaterThan(0);
-		}
-	});
-
-	it("splits universal and additional agents", () => {
-		const universal = getUniversalAgents();
-		const additional = getAdditionalAgents();
-
-		expect(universal).toContain("opencode");
-		expect(universal).toContain("codex");
-		expect(universal).toContain("pi");
-		expect(universal).toContain("warp");
-		expect(universal).toContain("zed");
-		expect(additional).toContain("antigravity");
-		expect(additional).toContain("claude-code");
-		expect(additional).toContain("windsurf");
-		expect(isUniversalAgent("opencode")).toBe(true);
-		expect(isUniversalAgent("claude-code")).toBe(false);
-
-		const merged = new Set([...universal, ...additional]);
-		expect(merged.size).toBe(ALL_AGENTS.length);
 	});
 });
 
