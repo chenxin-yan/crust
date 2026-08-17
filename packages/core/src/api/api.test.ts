@@ -1,13 +1,20 @@
 import { describe, expect, it } from "bun:test";
 
-import { Crust, defineCommand, defineContext, defineExtension, defineFlag } from "../index.ts";
+import {
+	Crust,
+	defineCommand,
+	defineContext,
+	defineExtension,
+	defineFlag,
+	type ContextResolver,
+} from "../index.ts";
 
 type Expect<T extends true> = T;
 type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 describe("public beta API", () => {
-	it("passes typed command context into added definitions with requirements", async () => {
+	it("infers pulled Context values in added definitions", async () => {
 		const calls: string[] = [];
 		const verbose = defineFlag("verbose", { type: "boolean" });
 		const db = defineContext("db", ({ options }: { options: { url: string } }) => ({
@@ -20,17 +27,19 @@ describe("public beta API", () => {
 		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
 			verbose: flags.verbose === true,
 		}));
-		const deploy = defineCommand("deploy", { requires: [logging, db] }, (cmd) =>
+		const deploy = defineCommand("deploy", (cmd) =>
 			cmd
 				.args({ name: "target", type: "string", required: true })
 				.flags({ name: "env", type: "string", default: "prod" })
-				.action(({ args, flags, ctx }) => {
+				.action(async ({ args, flags, ctx }) => {
+					const log = await ctx.use(logging);
+					const database = await ctx.use(db);
 					type _target = Expect<Equal<typeof args.target, string>>;
 					type _env = Expect<Equal<typeof flags.env, string>>;
-					type _verbose = Expect<Equal<typeof ctx.logging.verbose, boolean>>;
-					type _dbUrl = Expect<Equal<typeof ctx.db.url, string>>;
+					type _verbose = Expect<Equal<typeof log.verbose, boolean>>;
+					type _dbUrl = Expect<Equal<typeof database.url, string>>;
 
-					ctx.db.query(`${args.target}:${flags.env}:${ctx.logging.verbose}`);
+					database.query(`${args.target}:${flags.env}:${log.verbose}`);
 				}),
 		);
 
@@ -47,12 +56,15 @@ describe("public beta API", () => {
 	it("adds one definition twice via .as()", async () => {
 		const seen: string[] = [];
 		const auth = defineContext("auth", () => ({ user: "chenxin" }));
-		const deploy = defineCommand("deploy", { requires: [auth] }, (command) =>
-			command.args({ name: "target", type: "string", required: true }).action(({ args, ctx }) => {
-				type _target = Expect<Equal<typeof args.target, string>>;
-				type _user = Expect<Equal<typeof ctx.auth.user, string>>;
-				seen.push(`${ctx.auth.user}:${args.target}`);
-			}),
+		const deploy = defineCommand("deploy", (command) =>
+			command
+				.args({ name: "target", type: "string", required: true })
+				.action(async ({ args, ctx }) => {
+					const identity = await ctx.use(auth);
+					type _target = Expect<Equal<typeof args.target, string>>;
+					type _user = Expect<Equal<typeof identity.user, string>>;
+					seen.push(`${identity.user}:${args.target}`);
+				}),
 		);
 		const app = new Crust("my-cli").provide(auth()).add(deploy, deploy.as("ship"));
 
@@ -74,7 +86,7 @@ describe("public beta API", () => {
 		});
 
 		const app = new Crust("my-cli").extend(version).action(({ flags, ctx }) => {
-			type _ctx = Expect<Equal<typeof ctx, Readonly<{}>>>;
+			type _ctx = Expect<Equal<typeof ctx, Pick<ContextResolver, "use">>>;
 			expect((flags as Record<string, unknown>).version).toBe(true);
 		});
 

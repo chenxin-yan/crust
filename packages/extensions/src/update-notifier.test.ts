@@ -362,6 +362,9 @@ describe("updateNotifier post-run hook", () => {
 			args: {},
 			flags: {},
 			rawArgs: [] as readonly string[],
+			use: async () => {
+				throw new Error("no Context providers in this hook test");
+			},
 			finish: () => undefined as never,
 			stdout: () => {},
 			stderr: (text: string) => stderrChunks.push(text),

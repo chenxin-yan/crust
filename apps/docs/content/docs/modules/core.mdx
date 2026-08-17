@@ -26,8 +26,8 @@ const app = new Crust("deploy")
   .extend(help())
   .flags({ name: "verbose", type: "boolean", short: "v" })
   .provide(config({ environment: "production" }))
-  .action(({ flags, ctx, stdout }) => {
-    stdout(`${ctx.config.environment}: verbose=${flags.verbose ?? false}`);
+  .action(async ({ flags, ctx, stdout }) => {
+    stdout(`${(await ctx.use(config)).environment}: verbose=${flags.verbose ?? false}`);
   });
 
 await app.execute();
@@ -48,7 +48,7 @@ const api = defineContext("api", { flags: [apiKey] }, ({ flags }) => ({
 const app = new Crust("my-cli").provide(api());
 ```
 
-Downstream commands and Contexts list `api` in their `requires` array and consume the derived capability through `ctx`. See [Contexts](/docs/guide/contexts).
+Downstream commands call `await ctx.use(api)`. Other Contexts can list `api` in their Context-level `requires` array. See [Contexts](/docs/guide/contexts).
 
 ## Runtime exports
 
@@ -70,9 +70,9 @@ Downstream commands and Contexts list `api` in their `requires` array and consum
 | `ArgsDef`                                     | Readonly ordered argument definitions                                            |
 | [`CommandDefinition`](/docs/api/crust)        | Opaque inert command recipe                                                      |
 | [`CommandDefinitionBuilder`](/docs/api/crust) | Configure-only builder used by command definitions                               |
-| [`CommandConfig`](/docs/api/crust)            | Static metadata and Context requirements for a reusable definition               |
+| [`CommandConfig`](/docs/api/crust)            | Static metadata for a reusable definition                                        |
 | `CommandMeta`                                 | Name, description, usage, sections, aliases, and visibility                      |
-| [`CommandRequirements`](/docs/api/crust)      | Context capability requirements checked at add time                              |
+| `ContextResolver` / `FactoryValueOf`          | Pull-based Context resolver and factory-value helper types                       |
 | [`RootCommandMeta`](/docs/api/crust)          | Root description, usage, and sections accepted by the `Crust` constructor        |
 | `FlagDef`                                     | Core-value or Standard Schema flag definition                                    |
 | `FlagsDef`                                    | Flag-name-to-definition record                                                   |

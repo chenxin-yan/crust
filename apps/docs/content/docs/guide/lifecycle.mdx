@@ -33,17 +33,17 @@ It requires an explicit typed command path, serializes structured input through 
 1. **Prepare definitions** — apply Extensions and reject command, flag, and alias collisions, including collisions with Context-owned flags (application and Context-only collisions are rejected earlier by `.flags()` or `.provide()`).
 2. **Route** — resolve the command path.
 3. **Parse syntax** — consume positional and flag tokens.
-4. **Run `preRun` hooks** — invoke Extension hooks in `.extend()` order. A hook can return `ctx.finish()` to skip the remaining hooks, validation, schemas, Contexts, and the Command Action.
+4. **Run `preRun` hooks** — invoke Extension hooks in `.extend()` order. Hooks may lazily pull flagless Contexts. A hook can return `ctx.finish()` to skip the remaining hooks, validation, schemas, and the Command Action.
 5. **Validate structure** — enforce required values, choices, and other core rules.
 6. **Apply schemas** — validate and transform every schema-backed input, aggregating issues.
-7. **Construct Contexts** — create the Context values the resolved command requires (its self-provided Contexts plus their transitive `requires` closure and that of its declared requirements) in topological order of their declared capability requirements (registration order among independent Contexts), passing each setup only its validated owned flags.
+7. **Resolve Contexts on demand** — each `ctx.use(factory)` constructs that Context's dependency closure once, passing setup only its validated owned flags.
 8. **Run the Command Action**.
-9. **Dispose Contexts** — run `Symbol.dispose` or `Symbol.asyncDispose` in reverse construction order, including after failure.
-10. **Run `postRun` hooks** — invoke every Extension hook in reverse `.extend()` order with the completed, finished, or failed outcome. This is the invocation-level `finally` slot.
+9. **Run `postRun` hooks** — invoke every Extension hook in reverse `.extend()` order with the completed, finished, or failed outcome. Hooks may pull or reuse Contexts here.
+10. **Dispose Contexts** — run `Symbol.dispose` or `Symbol.asyncDispose` in reverse construction order after all post-run hooks, including after failure.
 
 ## Error flow
 
-Definition, routing, and parse failures occur before `preRun` and `postRun`. A failure from `preRun`, validation, schema application, Context construction or disposal, or the Command Action still runs every `postRun` hook. The original failure wins over cleanup failures; after a successful or finished invocation, the first cleanup failure fails the invocation after remaining hooks run.
+Definition, routing, and parse failures occur before `preRun` and `postRun`. A failure from `preRun`, validation, schema application, Context construction, or the Command Action still runs every `postRun` hook. The original invocation failure wins over post-run hook failures; after a successful or finished invocation, the first post-run failure fails the invocation after remaining hooks run. Native disposal then follows `AsyncDisposableStack` error aggregation semantics.
 
 With `run()`, the original value is thrown to the caller. Action and Context failures are never wrapped in `CrustError`.
 

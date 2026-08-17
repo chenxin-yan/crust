@@ -36,10 +36,10 @@ export const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => ({
 	apiKey: flags["api-key"],
 }));
 
-// Inferred CommandDefinition<R> embeds the required ContextFactory shape
-export const deploy = defineCommand("deploy", { requires: [auth] }, (cmd) =>
-	cmd.action(({ ctx }) => {
-		void ctx.auth;
+// Pulling a Context infers its value from the factory argument
+export const deploy = defineCommand("deploy", (cmd) =>
+	cmd.action(async ({ ctx }) => {
+		void (await ctx.use(auth)).apiKey;
 	}),
 );
 

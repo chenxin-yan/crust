@@ -218,10 +218,12 @@ describe("deep builder chains", () => {
 			.provide(c38())
 			.provide(c39())
 			.provide(c40())
-			.action(({ ctx }) => {
-				type _First = Expect<Equal<typeof ctx.c01, number>>;
-				type _Last = Expect<Equal<typeof ctx.c40, number>>;
-				seen.push(ctx.c01, ctx.c40);
+			.action(async ({ ctx }) => {
+				const first = await ctx.use(c01);
+				const last = await ctx.use(c40);
+				type _First = Expect<Equal<typeof first, number>>;
+				type _Last = Expect<Equal<typeof last, number>>;
+				seen.push(first, last);
 			});
 		await app.run([]);
 		expect(seen).toEqual([1, 40]);

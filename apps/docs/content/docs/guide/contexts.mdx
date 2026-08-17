@@ -1,200 +1,87 @@
 ---
 title: Contexts
-description: Define lazy, typed command dependencies with declared requirements and native cleanup.
+description: Define lazy, typed dependencies with pull-based resolution and native cleanup.
 ---
 
-import { Callout } from "fumadocs-ui/components/callout";
-
-A Context is a named command dependency. `defineContext()` always returns a factory; invoke it and attach the resulting instance with `.provide()`.
+A Context is a named dependency. `defineContext()` returns a factory; invoke it for `.provide()`, then pull its typed value with `await ctx.use(factory)`.
 
 ```ts
-import { defineContext, Crust } from "@crustjs/core";
+import { Crust, defineContext } from "@crustjs/core";
 
 const database = defineContext("db", ({ options }: { options: { url: string } }) => ({
-  query(sql: string) {
-    return `${sql} on ${options.url}`;
-  },
+  query: (sql: string) => `${sql} on ${options.url}`,
 }));
 
 const app = new Crust("app")
   .provide(database({ url: "postgres://localhost/app" }))
-  .action(({ ctx, stdout }) => stdout(ctx.db.query("select 1")));
+  .action(async ({ ctx, stdout }) => {
+    const db = await ctx.use(database);
+    stdout(db.query("select 1"));
+  });
 ```
 
-The setup receives one input object. `options` is the factory argument; `stdout` and `stderr` are the same injectable callbacks passed to the Command Action. A zero-option factory is still a factory — invoke it with no argument:
+The factory passed to `use()` is the token and the type source. Resolution is asynchronous, lazy, and memoized per invocation: unused providers do not run setup, and repeated or concurrent pulls return the same value.
 
-```ts
-const clock = defineContext("clock", () => ({ now: () => Date.now() }));
-const app = new Crust("app").provide(clock());
-```
+A missing provider fails at the pull site with a `CrustError` whose message identifies the Context and recommends `.provide()`.
 
 ## Owned flags
 
-A Context can own the flags used to construct its value. Declare each flag once in its top-level `flags`; attaching the Context installs those flags on the provider command and its later-added descendants:
+A Context can own the flags used to construct its value. Attaching it installs those flags on the provider command and later-added descendants. Setup receives the validated owned slice only.
 
 ```ts
 import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
 
 const apiKey = defineFlag("api-key", { type: "string" });
-
 const api = defineContext("api", { flags: [apiKey] }, ({ flags }) => ({
-  apiKey: flags["api-key"],
-  get(path: string) {
-    return `${flags["api-key"] ?? "anonymous"}:${path}`;
-  },
+  get: (path: string) => `${flags["api-key"] ?? "anonymous"}:${path}`,
 }));
 
-const deploy = defineCommand("deploy", { requires: [api] }, (command) =>
-  command.action(({ ctx, stdout }) => stdout(ctx.api.get("/deploy"))),
+const deploy = defineCommand("deploy", (command) =>
+  command.action(async ({ ctx, stdout }) => {
+    stdout((await ctx.use(api)).get("/deploy"));
+  }),
 );
 
 const app = new Crust("app").provide(api()).add(deploy);
 ```
 
-Both `app --api-key secret deploy` and `app deploy --api-key secret` work. The owned flag appears in help and completion at the provider and descendant commands. Crust stores a cloned definition in the Context-owned propagation channel; the original `apiKey` value is not mutated.
+Both `app --api-key secret deploy` and `app deploy --api-key secret` work. Hooks run before validation, so a `preRun` hook cannot pull a Context whose dependency closure owns flags. Pull it from the action or from `postRun` after a validated invocation; `ctx.finish()` skips validation, so its post-run path has the same restriction.
 
-The child requires `ctx.api`, not the raw flag. If an action also needs the raw value, expose it from `api`; the owning Context remains the single boundary between CLI input and downstream capabilities.
+## Context dependencies
 
-## Lazy construction and inheritance
-
-Context values are constructed only after a command is routed, parsed, processed by `preRun` hooks, and validated — and only the Contexts the resolved command actually uses. For a command added with `defineCommand`, that means the Contexts it provides itself plus the transitive `requires` closure of its declared requirements and of those self-provided Contexts; inherited Contexts outside that closure are never constructed. Their owned flags still parse and appear in help, but are accepted without constructing the owning Context. The root command's own action constructs everything provided on it. An Extension that returns `ctx.finish()` does not construct them.
-
-This makes the provide site agnostic: provide every Context once at the root and each command pays only for what it declares.
-
-Contexts are inherited by descendant commands. An added command lists the factories it depends on in `requires`, which types `ctx` in its action and scopes construction:
+Context-level `requires` declares the other Contexts needed by setup. Commands declare no dependencies; they simply call `use()`.
 
 ```ts
-import { defineCommand } from "@crustjs/core";
-
-const status = defineCommand("status", { requires: [database] }, (command) =>
-  command.action(({ ctx, stdout }) => stdout(ctx.db.query("select 1"))),
-);
-
-const app = new Crust("app").provide(database({ url: process.env.DATABASE_URL! })).add(status);
-```
-
-Setups may be synchronous or asynchronous.
-
-## Requirements
-
-`defineContext(name, config, setup)` has two relationships:
-
-- Top-level `flags` are owned by the Context and installed when it is provided. `flags` always means flags the thing owns or parses.
-- `requires` lists other Context capabilities needed by setup. `defineCommand()` uses the same plain capability array.
-
-Both arrays contain defined values:
-
-```ts
-import { defineCommand, defineContext, defineFlag } from "@crustjs/core";
-
-const verbose = defineFlag("verbose", { type: "boolean" });
-const logging = defineContext("logging", { flags: [verbose] }, ({ flags, stderr }) => ({
-  debug(message: string) {
-    if (flags.verbose) stderr(message);
-  },
-}));
-const deploy = defineCommand("deploy", { requires: [logging] }, (command) =>
-  command.action(({ ctx }) => ctx.logging.debug("deploying")),
-);
 const config = defineContext("config", () => ({ url: "postgres://localhost/app" }));
-
 const database = defineContext("db", { requires: [config] }, ({ ctx }) => ({
   query: (sql: string) => `${sql} on ${ctx.config.url}`,
 }));
-```
 
-The setup input carries five fields:
-
-- `options` — the factory argument
-- `flags` — validated values for this Context's owned `flags` only
-- `ctx` — the constructed values from `requires`
-- `stdout` and `stderr` — the invocation's injectable output callbacks
-
-Contexts receive the exact callbacks passed to the Command Action, so capabilities can encapsulate output behavior such as verbose logging. Tests that inject capturing callbacks through `run()` or `execute()` observe Context output through those same callbacks.
-
-### Requirements and construction order
-
-Within one `.provide()` call, order is free: dependencies may appear after their dependents. Normalization immediately caches the Context path in **topological** `requires` order; independent Contexts keep registration order. Invocation constructs that trusted order without sorting it again.
-
-```ts
-// Equivalent — construction order is config, then database, either way:
-new Crust("app").provide(config(), database());
 new Crust("app").provide(database(), config());
 ```
 
-A missing dependency or dependency cycle is a `CrustError` with code `DEFINITION`, raised by `.provide()` during runtime normalization (or at materialization, when a definition's recipe provides Contexts). Cycles are enforced only at runtime; TypeScript brands do not attempt recursive cycle detection.
+Dependencies construct recursively before their dependent. Within one `.provide()` call, order is free. Missing dependencies and cycles fail during normalization with `CrustError` code `DEFINITION`.
 
-## Test doubles with `.of()`
+Contexts are inherited by descendants present when the builder is added. Provide dependencies before `.add()`; immutable builder chains do not backfill already-added children.
 
-Every factory carries `.of(value)`: it produces an instance whose setup returns the precomputed value under the same name and value type, with requirements considered satisfied. Owned flags remain installed so production and test command grammars match. Use it to swap a real Context for a fake in tests:
+## Test doubles
+
+Every factory has `.of(value)`, which provides a precomputed value with the same name and type. It skips the real setup and dependency list while retaining owned flags.
 
 ```ts
 const fake = database.of({ query: (sql) => `fake: ${sql}` });
-
-const app = new Crust("app").provide(fake).action(({ ctx, stdout }) => {
-  stdout(ctx.db.query("select 1"));
+const app = new Crust("app").provide(fake).action(async ({ ctx, stdout }) => {
+  stdout((await ctx.use(database)).query("select 1"));
 });
 ```
 
-The fake needs none of the real setup's dependency Contexts and skips setup entirely, including its I/O use. If the factory has owned `flags`, callers may still pass them and the command's help and completion remain unchanged.
+## Cleanup
 
-## Scope a guard to a subtree
-
-Provide a guarding Context on the command where its rule begins. Here, only `billing` and its descendants require a user:
-
-```ts
-const session = defineContext("session", () => ({
-  user: undefined as { id: string } | undefined,
-}));
-
-const user = defineContext("user", { requires: [session] }, ({ ctx }) => {
-  if (!ctx.session.user) throw new Error("Unauthenticated");
-  return ctx.session.user;
-});
-
-const invoices = defineCommand("invoices", { requires: [user] }, (child) =>
-  child.action(({ ctx, stdout }) => stdout(`Invoices for ${ctx.user.id}`)),
-);
-
-const billing = defineCommand("billing", { requires: [session] }, (command) =>
-  command.provide(user()).add(invoices),
-);
-
-const app = new Crust("app").provide(session()).add(billing);
-```
-
-A throwing setup aborts the invocation before the Command Action and disposes the values already constructed.
-
-## Context requirements in definitions
-
-A reusable command declares the Context factories it needs, and every `.add()` checks them — compile-time against the parent's provided value types, and at runtime by name:
-
-```ts
-const status = defineCommand("status", { requires: [database] }, (command) =>
-  command.action(({ ctx, stdout }) => stdout(ctx.db.query("select 1"))),
-);
-
-const app = new Crust("app").provide(logging(), config(), database()).add(status);
-```
-
-Call `.provide()` before `.add()`: a missing requirement name is a `DEFINITION` error at the `.add()` call. Contexts and their owned flags do not backfill children added on an earlier builder. The general add-time checks and finalize-before-adding rules live in [Subcommands](/docs/guide/subcommands).
-
-## Name and flag collisions
-
-Providing two Context values with the same name on one command path is a `DEFINITION` error at the `.provide()` call. This includes a descendant re-providing a name it inherited. For TypeScript consumers, statically known duplicates — a name repeated within one `.provide()` call, provided again in a later call on the same builder, or re-provided by a definition that also declares it in `requires` — fail typecheck with `FIX_DUPLICATE_CONTEXT`. Re-providing an inherited name the definition does not require, and dynamically built instances, remain runtime-only.
-
-Added definitions use the same rule. Because materialization starts with the parent's Context path, a definition or nested descendant that provides the same name is rejected during `.add()`.
-
-Owned flag names, short forms, and aliases must be unique across application flags, other Contexts, and Extensions. For TypeScript consumers, statically known application and Context collisions fail typecheck with `FIX_ALIAS_COLLISION`. Collisions between Contexts in the same `.provide()` call, inherited ancestor flags in child commands, dynamically built definitions, and Extension contributions remain runtime-only. Runtime validation reports every collision as `CrustError` code `DEFINITION` rather than shadowing a definition.
-
-## Native disposal
-
-Put cleanup on the constructed value using `Symbol.dispose` or `Symbol.asyncDispose`:
+Put cleanup on the constructed value using `Symbol.dispose` or `Symbol.asyncDispose`. Values are disposed in reverse construction order after all `postRun` hooks, on success or failure.
 
 ```ts
 const database = defineContext("db", async ({ options }: { options: { url: string } }) => {
   const connection = await connect(options.url);
-
   return {
     query: (sql: string) => connection.query(sql),
     async [Symbol.asyncDispose]() {
@@ -204,9 +91,6 @@ const database = defineContext("db", async ({ options }: { options: { url: strin
 });
 ```
 
-Crust disposes constructed Context values in reverse construction order after success or failure — with topological construction, dependents are always disposed before their dependencies. Prefer `Symbol.asyncDispose` when cleanup is asynchronous.
+## Collisions
 
-<Callout type="info">
-  Use Contexts for command setup and cleanup. Use Extension `preRun` and `postRun` hooks only for
-  app-wide cross-cutting behavior around an invocation.
-</Callout>
+Context names and owned flag spellings must be unique on a command path. Extension `provides` uses the same validation as `.provide()`. TypeScript catches statically known application collisions; dynamically assembled and inherited collisions fail with `CrustError` code `DEFINITION`.

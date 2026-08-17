@@ -25,8 +25,8 @@ type DuplicateContextBrand<C, Existing extends string> =
  * separate accumulator is needed. Wrappers generic over the builder type
  * use `any`, which opts out via the
  * `string extends keyof Ctx` guard instead of deferring. Widened names opt
- * out via `DefName`; a parent-provided Context that the definition does not
- * `requires` stays runtime-only because it is not in `Ctx`.
+ * out via `DefName`; a parent-provided Context stays runtime-only because it
+ * is not in the definition's `Ctx`.
  */
 export type ValidateContextNames<
 	Ctx extends ContextMap,

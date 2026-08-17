@@ -92,7 +92,7 @@ export interface ContextFactory<
 	OF extends FlagsDef = {},
 > {
 	(options: Options): ContextInstance<Name, Value, RC, OF>;
-	/** The Context name this factory produces (used in `requires` arrays). */
+	/** The Context name this factory produces (used by `use()` and Context `requires`). */
 	readonly contextName: Name;
 	/**
 	 * Produce an instance whose setup returns the precomputed `value`
@@ -129,16 +129,6 @@ export type FactoriesOutput<Fs extends readonly AnyContextFactory[]> = Fs extend
 	? FactoryOutput<H> & FactoriesOutput<T>
 	: {};
 
-/** Merged flags owned by a tuple of Context factories. */
-export type FactoriesOwnedFlags<Fs extends readonly AnyContextFactory[]> = Fs extends readonly [
-	infer H,
-	...infer T extends readonly AnyContextFactory[],
-]
-	? MergeFlags<FactoryOwnedFlags<H>, FactoriesOwnedFlags<T>>
-	: {};
-
-type FactoryOwnedFlags<F> = F extends ContextFactory<any, any, any, any, infer OF> ? OF : {};
-
 /** Merged flags owned by a tuple of Context instances. */
 export type ContextsOwnedFlags<Cs extends readonly ContextInstance[]> = Cs extends readonly [
 	infer H,
@@ -168,7 +158,7 @@ export type RequirementCtxOf<R extends { readonly requires?: ContextRequirements
  *
  * Always returns a factory that must be invoked, including zero-option
  * setups, so the API reads uniformly as
- * `defineContext("db", factory)` → `.provide(db(options))` → `ctx.db`.
+ * `defineContext("db", factory)` → `.provide(db(options))` → `await ctx.use(db)`.
  *
  * With a config argument, `flags` installs flags owned by the Context at
  * `.provide()`, while `requires` declares Context capabilities from the command
@@ -243,6 +233,14 @@ export function defineContext(
 	return factory as AnyContextFactory;
 }
 
+export type FactoryValueOf<F extends AnyContextFactory> =
+	F extends ContextFactory<any, any, infer Value, any, any> ? Awaited<Value> : never;
+
+export interface ContextResolver {
+	readonly use: <F extends AnyContextFactory>(factory: F) => Promise<FactoryValueOf<F>>;
+	setValidatedFlags(flags: Record<string, unknown>): void;
+}
+
 function registerDisposable(value: unknown, disposal: AsyncDisposableStack): void {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) {
 		return;
@@ -259,27 +257,69 @@ function registerDisposable(value: unknown, disposal: AsyncDisposableStack): voi
 	}
 }
 
-/**
- * Construct Context values in topological order, registering disposable
- * values on `disposal` so they are torn down in reverse construction order.
- *
- * @param flags - The validated parsed flags of the resolved invocation
- * @param io - The invocation output callbacks also passed to the action
- */
-export async function buildContexts(
+/** Create the lazy, invocation-scoped Context resolver used by actions and hooks. */
+export function createContextResolver(
 	contexts: readonly ContextInstance[],
-	flags: Record<string, unknown>,
 	io: InvocationIO,
 	disposal: AsyncDisposableStack,
-): Promise<ContextMap> {
-	const values: ContextMap = {};
-	for (const item of contexts) {
-		const ownedFlags = Object.fromEntries(
-			Object.keys(item.ownedFlags).map((name) => [name, flags[name]]),
-		);
-		const value = await item.setup({ flags: ownedFlags, ctx: values, ...io });
-		values[item.name] = value;
-		registerDisposable(value, disposal);
-	}
-	return values;
+): ContextResolver {
+	const byName = new Map(contexts.map((context) => [context.name, context]));
+	const values = new Map<string, Promise<unknown>>();
+	let validatedFlags: Record<string, unknown> | undefined;
+
+	const closureOwnsFlags = (context: ContextInstance, seen = new Set<string>()): boolean => {
+		if (seen.has(context.name)) return false;
+		seen.add(context.name);
+		if (Object.keys(context.ownedFlags).length > 0) return true;
+		return context.requiredCtx.some((name) => closureOwnsFlags(byName.get(name)!, seen));
+	};
+
+	const resolve = (context: ContextInstance): Promise<unknown> => {
+		const existing = values.get(context.name);
+		if (existing) return existing;
+
+		const pending = (async () => {
+			const ctx: ContextMap = {};
+			for (const name of context.requiredCtx) {
+				ctx[name] = await resolve(byName.get(name)!);
+			}
+			const ownedFlags = Object.fromEntries(
+				Object.keys(context.ownedFlags).map((name) => [name, validatedFlags?.[name]]),
+			);
+			const value = await context.setup({ flags: ownedFlags, ctx, ...io });
+			registerDisposable(value, disposal);
+			return value;
+		})();
+		values.set(context.name, pending);
+		return pending;
+	};
+
+	return {
+		use: <F extends AnyContextFactory>(factory: F): Promise<FactoryValueOf<F>> => {
+			const name = factory.contextName;
+			const context = byName.get(name);
+			if (!context) {
+				return Promise.reject(
+					new CrustError(
+						"DEFINITION",
+						`No provider for Context "${name}". Add .provide(${name}(...)) to the app or an ancestor command.`,
+						{ subject: "context", name, reason: "missing-context" },
+					),
+				);
+			}
+			if (validatedFlags === undefined && closureOwnsFlags(context)) {
+				return Promise.reject(
+					new CrustError(
+						"DEFINITION",
+						`Context "${name}" owns flags and cannot be pulled before flag validation. Pull it from an action or a postRun hook after a validated invocation.`,
+						{ subject: "context", name, reason: "flags-before-validation" },
+					),
+				);
+			}
+			return resolve(context) as Promise<FactoryValueOf<F>>;
+		},
+		setValidatedFlags(flags): void {
+			validatedFlags = flags;
+		},
+	};
 }

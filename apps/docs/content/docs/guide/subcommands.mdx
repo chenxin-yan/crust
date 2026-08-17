@@ -23,7 +23,7 @@ Routing consumes command names before parsing the resolved command's arguments a
 
 ## Requirements
 
-A definition lists the Context capabilities it expects from its parent in the `requires` array. The recipe builder and action's `ctx` are typed from those factories:
+A definition pulls Context capabilities with `await ctx.use(factory)`. The returned value is typed from the factory, while the app decides where to provide it:
 
 ```ts
 import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
@@ -38,48 +38,48 @@ const repository = defineContext("repository", () => ({
   defaultBranch: "main",
 }));
 
-const clone = defineCommand("clone", { requires: [logging, repository] }, (command) =>
-  command.args({ name: "url", type: "url", required: true }).action(({ args, ctx, stdout }) => {
-    ctx.logging.debug(`cloning ${args.url}`);
-    stdout(ctx.repository.defaultBranch);
-  }),
+const clone = defineCommand("clone", (command) =>
+  command
+    .args({ name: "url", type: "url", required: true })
+    .action(async ({ args, ctx, stdout }) => {
+      (await ctx.use(logging)).debug(`cloning ${args.url}`);
+      stdout((await ctx.use(repository)).defaultBranch);
+    }),
 );
 
 const app = new Crust("git").provide(logging(), repository()).add(clone);
 ```
 
-`.add()` checks the requirements at each call and creates a fresh command node. Use `.as(name)` to add one definition under different names:
+`.add()` creates a fresh command node. Use `.as(name)` to add one definition under different names:
 
 ```ts
 const git = new Crust("git").provide(logging()).provide(repository()).add(clone, clone.as("copy"));
 ```
 
-Missing or incompatible Context capabilities are TypeScript errors on `.add()`; missing capabilities are also runtime `DEFINITION` errors.
+A missing Context fails when `use()` runs with an actionable runtime `DEFINITION` error.
 
 ## Nested definitions
 
-Definitions can add other definitions. Nested requirements must be available at the exact nested `.add()` call:
+Definitions can add other definitions. Providers available on that command path are inherited by nested definitions:
 
 ```ts
 const environment = defineFlag("environment", { type: "string" });
 const deployment = defineContext("deployment", { flags: [environment] }, ({ flags }) => flags);
 
-const status = defineCommand("status", { requires: [logging, deployment] }, (command) =>
-  command.action(({ ctx }) => {
-    ctx.logging.debug(`environment: ${ctx.deployment.environment}`);
+const status = defineCommand("status", (command) =>
+  command.action(async ({ ctx }) => {
+    (await ctx.use(logging)).debug(`environment: ${(await ctx.use(deployment)).environment}`);
   }),
 );
 
-const deploy = defineCommand("deploy", { requires: [logging] }, (command) =>
-  command.provide(deployment()).add(status),
-);
+const deploy = defineCommand("deploy", (command) => command.provide(deployment()).add(status));
 
 const app = new Crust("app").provide(logging()).add(deploy);
 ```
 
 ## Context inheritance
 
-Adding materializes a fresh command scope seeded with the parent's current Context path. The added action and all nested descendants receive those Context values at runtime; list factories in `requires` to see them in the action's types.
+Adding materializes a fresh command scope seeded with the parent's current Context path. The added action and all nested descendants can pull those Context values; `use()` infers the value type directly from its factory argument.
 
 Finalize `.provide()` calls on the parent builder before `.add()`. [Flags owned by a provided Context](/docs/guide/contexts#owned-flags) propagate only into descendants added later. Later fluent calls return a new builder and do not backfill a definition that was already added.
 
