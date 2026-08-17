@@ -72,7 +72,7 @@ describe("buildEntrypoint", () => {
 			`import { Crust } from ${JSON.stringify(coreUrl)};\n` +
 				`import { skill } from ${JSON.stringify(skillsUrl)};\n` +
 				`import { man } from ${JSON.stringify(manUrl)};\n` +
-				`await new Crust("demo", { description: "Demo" }).extend(skill({ source: ${JSON.stringify(source)} }), man()).execute();\n`,
+				`await new Crust("demo", { description: "Demo" }).extend(skill({ packagedDir: ${JSON.stringify(source)} }), man()).execute();\n`,
 		);
 
 		// crust build runs from the project root; the entry subprocess inherits

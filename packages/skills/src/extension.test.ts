@@ -51,7 +51,7 @@ async function writeSource(name: string, content = name, description = name): Pr
 
 function createApp(source: string | URL, autoUpdate = true) {
 	return new Crust("demo", { description: "Demo" })
-		.extend(skill({ source, defaultScope: "project", autoUpdate }))
+		.extend(skill({ packagedDir: source, defaultScope: "project", autoUpdate }))
 		.action(() => {});
 }
 
@@ -59,7 +59,7 @@ function target(name = "demo") {
 	return join(tempRoot, ".agents", "skills", name);
 }
 
-describe("skill extension package sources", () => {
+describe("skill extension packaged directory", () => {
 	it("advertises every packaged skill in help with its resolved source path", async () => {
 		const source = await writeSource("demo", "demo", "Run demo workflows");
 		await writeSource("guide", "guide", "Explain deployment choices");
@@ -75,22 +75,22 @@ describe("skill extension package sources", () => {
 		);
 	});
 
-	it("keeps help usable when the packaged skill source cannot be resolved", async () => {
+	it("keeps help usable when the packaged skills directory cannot be resolved", async () => {
 		const source = join(tempRoot, "missing-skills");
 		const app = new Crust("demo", { description: "Demo" })
-			.extend(skill({ source, command: "agents" }))
+			.extend(skill({ packagedDir: source, command: "agents" }))
 			.action(() => {});
 		const output = renderHelp(await app.snapshot());
 
 		expect(output).toContain("Agent skills:");
-		expect(output).toContain("The skill source path is unavailable.");
+		expect(output).toContain("The packaged skills directory is unavailable.");
 		expect(output).toContain("Run `demo agents`");
 		expect(output).not.toContain(source);
 	});
 
 	it("copies packaged sources from its build hook", async () => {
 		const source = await writeSource("demo", "packaged");
-		const extension = skill({ source });
+		const extension = skill({ packagedDir: source });
 		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
 		const outDir = join(tempRoot, "dist");
 
@@ -108,7 +108,7 @@ describe("skill extension package sources", () => {
 			"---\nname: guide\ndescription: Deployment guide\n---\n",
 		);
 		await writeFile(join(authored, "content.md"), "authored\n");
-		const extension = skill({ source, extras: [authored] });
+		const extension = skill({ packagedDir: source, extras: [authored] });
 		const snapshot = await new Crust("demo", {
 			description: "Demo",
 			sections: [{ title: "Agent skills", body: "Application-authored agent guidance." }],
@@ -131,7 +131,7 @@ describe("skill extension package sources", () => {
 		);
 		expect(rootReference).toContain("# `demo`");
 		expect(rootReference).toContain("## Agent skills\nApplication-authored agent guidance.");
-		// The extension's Agent skills section advertises the input source path; it
+		// The extension's Agent skills section advertises the packaged directory; it
 		// must not leak build-machine paths into the regenerated command reference.
 		expect(rootReference).not.toContain(tempRoot);
 		expect(await readFile(join(outDir, "skills", "guide", "content.md"), "utf8")).toBe(
@@ -142,7 +142,7 @@ describe("skill extension package sources", () => {
 
 	it("copies packaged sources when extras is empty", async () => {
 		const source = await writeSource("demo", "packaged");
-		const extension = skill({ source, extras: [] });
+		const extension = skill({ packagedDir: source, extras: [] });
 		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
 		const outDir = join(tempRoot, "dist");
 
@@ -153,7 +153,7 @@ describe("skill extension package sources", () => {
 
 	it("renders from the snapshot without requiring a package version", async () => {
 		const source = join(tempRoot, "missing-skills");
-		const extension = skill({ source });
+		const extension = skill({ packagedDir: source });
 		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
 		const outDir = join(tempRoot, "dist");
 		await writeFile(join(tempRoot, "package.json"), "{}");
@@ -166,7 +166,7 @@ describe("skill extension package sources", () => {
 		expect(generated).toContain("name: demo");
 		expect(generated).not.toContain("version:");
 		expect(generated).not.toContain(tempRoot);
-		// The snapshot was prepared while the source was missing; the emitted
+		// The snapshot was prepared while the packaged directory was missing; the
 		// skill must not embed that stale warning in its command reference.
 		const rootReference = await readFile(
 			join(outDir, "skills", "demo", "commands", "demo.md"),
@@ -262,7 +262,7 @@ describe("skill extension package sources", () => {
 
 		let ran = false;
 		const app = new Crust("demo", { description: "Demo" })
-			.extend(skill({ source, defaultScope: "project" }))
+			.extend(skill({ packagedDir: source, defaultScope: "project" }))
 			.action(() => {
 				ran = true;
 			});
@@ -273,20 +273,20 @@ describe("skill extension package sources", () => {
 		expect(output).toContain("demo — Run demo workflows");
 	});
 
-	it("reports unreadable packaged skills without claiming the source path is unavailable", async () => {
+	it("reports unreadable packaged skills without claiming the directory is unavailable", async () => {
 		const source = await writeSource("demo");
 		await writeFile(join(source, "demo", "SKILL.md"), "---\nname: demo\n---\n");
 
 		const output = renderHelp(await createApp(source).snapshot());
 		expect(output).toContain("Agent skills:");
 		expect(output).toContain("Packaged skills could not be read.");
-		expect(output).not.toContain("The skill source path is unavailable.");
+		expect(output).not.toContain("The packaged skills directory is unavailable.");
 	});
 
-	it("does not break unrelated commands when the source is unavailable", async () => {
+	it("does not break unrelated commands when the packaged directory is unavailable", async () => {
 		let ran = false;
 		const app = new Crust("demo")
-			.extend(skill({ source: join(tempRoot, "missing-skills") }))
+			.extend(skill({ packagedDir: join(tempRoot, "missing-skills") }))
 			.action(() => {
 				ran = true;
 			});

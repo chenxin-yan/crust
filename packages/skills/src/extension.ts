@@ -123,7 +123,7 @@ async function repairInstalledSkill(
 async function autoRepairSkills(options: SkillOptions): Promise<void> {
 	let skills: readonly PackagedSkill[];
 	try {
-		skills = loadPackagedSkills(options.source);
+		skills = loadPackagedSkills(options.packagedDir);
 	} catch (error) {
 		// A missing or invalid packaged asset must not prevent unrelated CLI commands
 		// from running; the explicit skill command surfaces the same failure loudly.
@@ -177,7 +177,7 @@ function formatSkillDocumentation(
 		// A missing or invalid packaged asset degrades the advertisement instead of
 		// failing help, matching the auto-update hook's recovery behavior.
 		if (error instanceof SkillSourceUnavailableError) {
-			return `The skill source path is unavailable. Run \`${appName} ${commandName}\` to link packaged skills into an agent directory.`;
+			return `The packaged skills directory is unavailable. Run \`${appName} ${commandName}\` to link packaged skills into an agent directory.`;
 		}
 		// No warn here: the preRun repair hook already surfaces the underlying
 		// message once per invocation, and the explicit skill command fails loudly.
@@ -207,7 +207,7 @@ async function buildSkills(options: SkillOptions, context: ExtensionBuildContext
 	const outDir = join(context.outDir, "skills");
 	let source: string | undefined;
 	try {
-		source = resolveSkillSource(options.source);
+		source = resolveSkillSource(options.packagedDir);
 	} catch (error) {
 		if (!(error instanceof SkillSourceUnavailableError)) throw error;
 		// A missing packaged source is regenerated from the snapshot below.
@@ -222,10 +222,10 @@ async function buildSkills(options: SkillOptions, context: ExtensionBuildContext
 		return;
 	}
 
-	// rm below would destroy a source nested in (or equal to) the output it feeds.
+	// rm below would destroy a packaged directory nested in (or equal to) its output.
 	if (isWithin(outDir, source)) {
 		throw new Error(
-			`Skill source "${source}" cannot be nested inside output directory "${outDir}".`,
+			`Packaged skills directory "${source}" cannot be nested inside output directory "${outDir}".`,
 		);
 	}
 	await rm(outDir, { recursive: true, force: true });
@@ -238,12 +238,12 @@ export function skill(options: SkillOptions): Extension {
 	return defineExtension("skills", {
 		commands: [buildSkillCommand(commandName, options)],
 		// Skills are loaded when a snapshot is prepared, not at construction, so
-		// help and man pages reflect the source as it exists at render time.
+		// help and man pages reflect the packaged directory as it exists at render time.
 		sections: (snapshot) => [
 			{
 				command: [],
 				title: SKILLS_SECTION_TITLE,
-				body: formatSkillDocumentation(options.source, commandName, snapshot.meta.name),
+				body: formatSkillDocumentation(options.packagedDir, commandName, snapshot.meta.name),
 				except: [SKILLS],
 			},
 		],
@@ -432,7 +432,7 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 							})
 							.action(async (context) => {
 								const scope = await resolveScope(context.flags.scope, options);
-								for (const packagedSkill of loadPackagedSkills(options.source)) {
+								for (const packagedSkill of loadPackagedSkills(options.packagedDir)) {
 									await repairInstalledSkill(packagedSkill, scope, true);
 								}
 							}),
@@ -443,7 +443,7 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 					const scope = installAll
 						? (parseScopeFlag(context.flags.scope) ?? options.defaultScope ?? DEFAULT_SKILL_SCOPE)
 						: await resolveScope(context.flags.scope, options);
-					for (const packagedSkill of loadPackagedSkills(options.source)) {
+					for (const packagedSkill of loadPackagedSkills(options.packagedDir)) {
 						await reconcileSkill({ packagedSkill, scope, installAll });
 					}
 				}),
