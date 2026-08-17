@@ -187,6 +187,8 @@ export interface SkillStatusResult {
 export interface SkillOptions {
 	/** Read-only directory produced by writeSkills(). */
 	source: string | URL;
+	/** Hand-authored skill directories built alongside the generated command skill. */
+	extras?: readonly (string | URL)[];
 	/** Default agent-directory scope. */
 	defaultScope?: Scope;
 	/** Repair stale or dangling owned links before commands run. @default true */

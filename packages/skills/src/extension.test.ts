@@ -100,6 +100,30 @@ describe("skill extension package sources", () => {
 		expect(await readFile(join(outDir, "skills", "demo", "content.md"), "utf8")).toBe("packaged\n");
 	});
 
+	it("generates command and authored skills together when extras are configured", async () => {
+		const source = await writeSource("stale", "stale");
+		const authored = join(tempRoot, "authored", "guide");
+		await mkdir(authored, { recursive: true });
+		await writeFile(
+			join(authored, "SKILL.md"),
+			"---\nname: guide\ndescription: Deployment guide\n---\n",
+		);
+		await writeFile(join(authored, "content.md"), "authored\n");
+		const extension = skill({ source, extras: [authored] });
+		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
+		const outDir = join(tempRoot, "dist");
+
+		await extension.build?.({ snapshot, outDir });
+
+		expect(await readFile(join(outDir, "skills", "demo", "commands", "demo.md"), "utf8")).toContain(
+			"# `demo`",
+		);
+		expect(await readFile(join(outDir, "skills", "guide", "content.md"), "utf8")).toBe(
+			"authored\n",
+		);
+		await expect(lstat(join(outDir, "skills", "stale"))).rejects.toThrow();
+	});
+
 	it("renders from the snapshot without requiring a package version", async () => {
 		const source = join(tempRoot, "missing-skills");
 		const extension = skill({ source });

@@ -21,7 +21,7 @@ export interface WriteSkillsOptions {
 	/** Generated skill description. Defaults to the root command description. */
 	readonly description?: string;
 	/** Hand-authored skill directories included alongside the generated skill. */
-	readonly extras?: readonly string[];
+	readonly extras?: readonly (string | URL)[];
 }
 
 /**
