@@ -52,7 +52,7 @@ import { resolveCommand } from "./router.ts";
 import { snapshotCommand } from "./snapshot.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
 
-export { BUILD_OUT_DIR_ENV, BUILD_RESULT_PATH_ENV, SNAPSHOT_PATH_ENV } from "./invocation.ts";
+export { BUILD_OUT_DIR_ENV, SNAPSHOT_PATH_ENV } from "./invocation.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // CrustCommandContext — Runtime context for lifecycle hooks

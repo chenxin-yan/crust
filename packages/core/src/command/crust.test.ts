@@ -16,7 +16,6 @@ import {
 	defineCommand,
 	type CrustCommandContext,
 	BUILD_OUT_DIR_ENV,
-	BUILD_RESULT_PATH_ENV,
 	SNAPSHOT_PATH_ENV,
 } from "./crust.ts";
 
@@ -1030,38 +1029,6 @@ describe("Crust .extend()", () => {
 		expect(Object.isFrozen(ext)).toBe(true);
 		expect(ext.name).toBe("frozen");
 		expect(ext.flags).toEqual({ x: { type: "boolean" } });
-	});
-
-	it("exposes an async build hook with a frozen snapshot and outDir", async () => {
-		const outDir = join(tmpdir(), "crust-build");
-		let completed = false;
-		const extension = defineExtension("builder", {
-			async build(ctx) {
-				expect(Object.isFrozen(ctx.snapshot)).toBe(true);
-				expect(ctx.outDir).toBe(outDir);
-				await Promise.resolve();
-				completed = true;
-			},
-		});
-		const snapshot = await new Crust("cli").extend(extension).snapshot();
-
-		await extension.build?.({ snapshot, outDir });
-
-		expect(completed).toBe(true);
-	});
-
-	it("propagates build hook errors", async () => {
-		const failure = new Error("build failed");
-		const extension = defineExtension("builder", {
-			build: async () => {
-				throw failure;
-			},
-		});
-		const snapshot = await new Crust("cli").extend(extension).snapshot();
-
-		await expect(
-			extension.build?.({ snapshot, outDir: join(tmpdir(), "crust-build") }),
-		).rejects.toBe(failure);
 	});
 
 	it("infers Extension-owned flags in hook contexts", () => {
@@ -2518,7 +2485,6 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		console.error = originalConsoleError;
 		delete process.env[SNAPSHOT_PATH_ENV];
 		delete process.env[BUILD_OUT_DIR_ENV];
-		delete process.env[BUILD_RESULT_PATH_ENV];
 		await Promise.all(tempDirs.map((path) => rm(path, { recursive: true, force: true })));
 	});
 
@@ -2557,18 +2523,17 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		});
 	});
 
-	it("runs build hooks in registration order and records their names", async () => {
+	it("runs build hooks in registration order", async () => {
 		const path = await snapshotPath();
-		const resultPath = join(dirname(path), "build.json");
 		const outDir = join(dirname(path), "output");
 		process.env[SNAPSHOT_PATH_ENV] = path;
 		process.env[BUILD_OUT_DIR_ENV] = outDir;
-		process.env[BUILD_RESULT_PATH_ENV] = resultPath;
 		const calls: string[] = [];
 		const app = new Crust("build-subprocess")
 			.extend(
 				defineExtension("first", {
 					build: ({ snapshot, outDir: receivedOutDir }) => {
+						expect(Object.isFrozen(snapshot)).toBe(true);
 						expect(snapshot.meta.name).toBe("build-subprocess");
 						expect(receivedOutDir).toBe(outDir);
 						calls.push("first");
@@ -2588,14 +2553,12 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
 
 		expect(calls).toEqual(["first", "second"]);
-		expect(JSON.parse(await readFile(resultPath, "utf8"))).toEqual(["first", "second"]);
 	});
 
 	it("attributes build hook failures to the extension", async () => {
 		const path = await snapshotPath();
 		process.env[SNAPSHOT_PATH_ENV] = path;
 		process.env[BUILD_OUT_DIR_ENV] = join(dirname(path), "output");
-		process.env[BUILD_RESULT_PATH_ENV] = join(dirname(path), "build.json");
 		const app = new Crust("build-subprocess").extend(
 			defineExtension("broken", {
 				build: () => {
