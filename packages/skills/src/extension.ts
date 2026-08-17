@@ -320,7 +320,13 @@ async function reconcileSkill(opts: {
 	}
 
 	const toInstall = selected.filter((agent) => statusMap.get(agent)?.status !== "linked");
-	const toUninstall = [...installed].filter((agent) => !selected.includes(agent));
+	// Agents can share one resolved output directory (e.g. Antigravity and the
+	// universal group at project scope); removing a deselected agent's link there
+	// would also uninstall the retained agents.
+	const keptDirs = new Set(selected.map((agent) => statusMap.get(agent)?.outputDir));
+	const toUninstall = [...installed].filter(
+		(agent) => !selected.includes(agent) && !keptDirs.has(statusMap.get(agent)?.outputDir),
+	);
 
 	if (toInstall.length > 0) {
 		const groups = groupAgentsByOutputDir(toInstall, scope, packagedSkill.name);

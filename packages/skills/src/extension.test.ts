@@ -14,6 +14,8 @@ import { dirname, join, resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
 import { renderHelp } from "@crustjs/extensions";
+import { withPromptIO } from "@crustjs/prompts";
+import { createPromptIO } from "@crustjs/prompts/testing";
 
 import { skill } from "./extension.ts";
 import { installSkill } from "./generate.ts";
@@ -245,6 +247,32 @@ describe("skill extension package sources", () => {
 			});
 		await app.execute({ argv: [] });
 		expect(ran).toBe(true);
+	});
+
+	it("keeps a shared output directory when deselecting one of its agents", async () => {
+		const source = await writeSource("demo");
+		// Antigravity shares `.agents/skills` with the universal group at project
+		// scope; the pre-existing link marks both choices installed.
+		await withCwd(tempRoot, () =>
+			installSkill({ sourceDir: join(source, "demo"), agents: ["amp"], scope: "project" }),
+		);
+
+		// Empty PATH keeps agent detection deterministic: Antigravity is the only
+		// additional choice (installed), listed right after Universal.
+		const path = process.env.PATH;
+		process.env.PATH = "";
+		try {
+			const harness = createPromptIO();
+			const run = withCwd(tempRoot, () =>
+				withPromptIO(harness.io, () => createApp(source).execute({ argv: ["skill"] })),
+			);
+			harness.keys("down", "space", "enter");
+			await run;
+		} finally {
+			process.env.PATH = path;
+		}
+
+		expect((await lstat(target())).isSymbolicLink()).toBe(true);
 	});
 
 	it("continues installs after a conflict in another agent directory", async () => {
