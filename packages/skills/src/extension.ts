@@ -165,7 +165,7 @@ export function skill(options: SkillOptions): Extension {
 		commands: [buildSkillCommand(commandName, options)],
 		// Skills are loaded when a snapshot is prepared, not at construction, so
 		// help and man pages reflect the source as it exists at render time.
-		commandSections: (snapshot) => [
+		sections: (snapshot) => [
 			{
 				command: [],
 				title: "Agent skills",

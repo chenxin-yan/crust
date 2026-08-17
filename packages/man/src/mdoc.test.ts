@@ -49,7 +49,7 @@ describe("renderManPageMdoc", () => {
 		})
 			.extend(
 				defineExtension("docs", {
-					commandSections: () => [
+					sections: () => [
 						{
 							command: [],
 							title: "C:\\paths",

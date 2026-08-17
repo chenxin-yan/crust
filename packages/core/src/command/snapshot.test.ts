@@ -100,7 +100,7 @@ describe("snapshotCommand", () => {
 describe("command metadata sections", () => {
 	it("appends targeted Extension sections after authored sections in registration order", async () => {
 		const first = defineExtension("first", {
-			commandSections(snapshot) {
+			sections(snapshot) {
 				expect(snapshot.meta.sections).toEqual([{ title: "Root guide", body: "Root body" }]);
 				expect(snapshot.subCommands.build).toBeDefined();
 				expect(snapshot.subCommands.generated).toBeDefined();
@@ -117,7 +117,7 @@ describe("command metadata sections", () => {
 		});
 		const second = defineExtension("second", {
 			commands: [defineCommand("generated", (command) => command)],
-			commandSections: () => [{ command: [], title: "Second root", body: "Second body" }],
+			sections: () => [{ command: [], title: "Second root", body: "Second body" }],
 		});
 		const app = new Crust("cli", {
 			sections: [{ title: "Root guide", body: "Root body" }],
@@ -156,7 +156,7 @@ describe("command metadata sections", () => {
 			const app = new Crust("cli")
 				.extend(
 					defineExtension("docs", {
-						commandSections: () => [{ command, title: "Notes", body: "Body" }],
+						sections: () => [{ command, title: "Notes", body: "Body" }],
 					}),
 				)
 				.add(defineCommand("build", { aliases: ["b"] }, (builder) => builder));
@@ -206,7 +206,7 @@ describe("command metadata sections", () => {
 		for (const contributions of badReturns) {
 			const app = new Crust("cli").extend(
 				defineExtension("docs", {
-					commandSections: () => contributions as never,
+					sections: () => contributions as never,
 				}),
 			);
 			await expect(app.snapshot()).rejects.toMatchObject({
@@ -226,7 +226,7 @@ describe("command metadata sections", () => {
 		});
 		const contributed = new Crust("cli").extend(
 			defineExtension("docs", {
-				commandSections: () => [{ command: [], title: "Injected\rheading", body: "Body" }],
+				sections: () => [{ command: [], title: "Injected\rheading", body: "Body" }],
 			}),
 		);
 
@@ -246,7 +246,7 @@ describe("command metadata sections", () => {
 		const app = new Crust("cli")
 			.extend(
 				defineExtension("docs", {
-					commandSections: () => {
+					sections: () => {
 						called = true;
 						return [];
 					},

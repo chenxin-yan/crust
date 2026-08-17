@@ -39,10 +39,12 @@ type MaterializeCommandDefinition = (
  * Snapshot subprocess protocol used by first-party build tooling.
  *
  * When set to a non-empty file path, `.execute()` prepares and validates the
- * command tree, writes its JSON snapshot to that path, and exits without
- * dispatching a Command Action. In-process callers use `Crust.snapshot()`.
+ * command tree, writes its JSON snapshot to that path, optionally runs Extension
+ * build hooks when the build output directory is set, and exits without dispatching
+ * a Command Action. In-process callers use `Crust.snapshot()`.
  */
 export const SNAPSHOT_PATH_ENV = "CRUST_INTERNAL_SNAPSHOT_PATH";
+export const BUILD_OUT_DIR_ENV = "CRUST_INTERNAL_BUILD_OUT_DIR";
 const EXIT_CODE_CANCELLED = 130;
 
 function isAbortError(error: unknown): boolean {
@@ -207,9 +209,9 @@ function applyExtensionSections(
 	extension: Extension,
 	snapshot: CommandSnapshot,
 ): void {
-	if (!extension.commandSections) return;
+	if (!extension.sections) return;
 	const owner: SectionOwner = { subject: "extension", name: extension.name };
-	const contributions = extension.commandSections(snapshot);
+	const contributions = extension.sections(snapshot);
 	if (!Array.isArray(contributions)) throw invalidSections(owner);
 	for (const contribution of contributions as readonly ExtensionSectionContribution[]) {
 		// validateSection rejects null/non-object contributions, so reading
@@ -429,6 +431,21 @@ export async function executeInvocation(
 		try {
 			const snapshot = await prepareInvocationSnapshot(node, materializeCommandDefinition);
 			await Bun.write(snapshotPath, JSON.stringify(snapshot));
+
+			const buildOutDir = process.env[BUILD_OUT_DIR_ENV];
+			if (buildOutDir) {
+				for (const extension of node.extensions) {
+					if (!extension.build) continue;
+					try {
+						await extension.build({ snapshot, outDir: buildOutDir });
+					} catch (error) {
+						const message = error instanceof Error ? error.message : String(error);
+						throw new Error(`Extension "${extension.name}" build failed: ${message}`, {
+							cause: error,
+						});
+					}
+				}
+			}
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			console.error(message);

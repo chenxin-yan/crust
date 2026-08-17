@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import type { StandardSchema } from "@crustjs/utils/schema";
 
@@ -15,6 +15,7 @@ import {
 	Crust,
 	defineCommand,
 	type CrustCommandContext,
+	BUILD_OUT_DIR_ENV,
 	SNAPSHOT_PATH_ENV,
 } from "./crust.ts";
 
@@ -2483,6 +2484,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		process.exit = originalExit;
 		console.error = originalConsoleError;
 		delete process.env[SNAPSHOT_PATH_ENV];
+		delete process.env[BUILD_OUT_DIR_ENV];
 		await Promise.all(tempDirs.map((path) => rm(path, { recursive: true, force: true })));
 	});
 
@@ -2519,6 +2521,55 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 			meta: { name: "build-subprocess", description: "Snapshot test" },
 			hasAction: true,
 		});
+	});
+
+	it("runs build hooks in registration order", async () => {
+		const path = await snapshotPath();
+		const outDir = join(dirname(path), "output");
+		process.env[SNAPSHOT_PATH_ENV] = path;
+		process.env[BUILD_OUT_DIR_ENV] = outDir;
+		const calls: string[] = [];
+		const app = new Crust("build-subprocess")
+			.extend(
+				defineExtension("first", {
+					build: ({ snapshot, outDir: receivedOutDir }) => {
+						expect(Object.isFrozen(snapshot)).toBe(true);
+						expect(snapshot.meta.name).toBe("build-subprocess");
+						expect(receivedOutDir).toBe(outDir);
+						calls.push("first");
+					},
+				}),
+				defineExtension("runtime-only"),
+				defineExtension("second", {
+					build: () => {
+						calls.push("second");
+					},
+				}),
+			)
+			.action(() => {
+				calls.push("action");
+			});
+
+		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
+
+		expect(calls).toEqual(["first", "second"]);
+	});
+
+	it("attributes build hook failures to the extension", async () => {
+		const path = await snapshotPath();
+		process.env[SNAPSHOT_PATH_ENV] = path;
+		process.env[BUILD_OUT_DIR_ENV] = join(dirname(path), "output");
+		const app = new Crust("build-subprocess").extend(
+			defineExtension("broken", {
+				build: () => {
+					throw new Error("disk full");
+				},
+			}),
+		);
+
+		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
+
+		expect(errorCalls).toEqual(['Extension "broken" build failed: disk full']);
 	});
 
 	it("prints validation errors and exits one without writing a snapshot", async () => {
