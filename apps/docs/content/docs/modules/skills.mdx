@@ -28,7 +28,7 @@ import pkg from "./package.json" with { type: "json" };
 await writeSkills(app, {
   outDir: "dist/skills",
   version: pkg.version, // optional; recorded in the generated skill's metadata
-  extras: ["skills/deployment-guide"],
+  extras: ["skills-src/deployment-guide"],
 });
 ```
 
@@ -56,13 +56,13 @@ export const app = new Crust("my-cli", { description: "My CLI" })
   .extend(
     skill({
       source: new URL("../skills", import.meta.url),
-      extras: [new URL("../../skills/deployment-guide", import.meta.url)],
+      extras: [new URL("../skills-src/deployment-guide", import.meta.url)],
     }),
   )
   .action(() => {});
 ```
 
-When `extras` is non-empty, the build regenerates current command documentation and copies each authored skill into the output instead of copying an existing source. `source` remains the packaged directory used for runtime discovery and installation.
+When `extras` is non-empty, the build regenerates current command documentation and copies each authored skill into the output instead of copying an existing source. `source` remains the packaged directory used for runtime discovery and installation. Keep authored skill directories outside the build output; the build refuses an extra nested inside it.
 
 The extension registers `my-cli skill` and `my-cli skill update`. It also contributes an **Agent skills** section to root help and generated man pages. Each shipped skill is listed by name and description with its logical source path — relative to the working directory when the source is inside it, absolute otherwise — so agents can discover and load skills without installing them first. Run builds from the project root containing the skill source to keep absolute build-machine paths out of generated artifacts.
 

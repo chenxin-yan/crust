@@ -2,6 +2,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
 
 import type { CommandSnapshot } from "@crustjs/core";
+import { resolveSourceDir } from "@crustjs/utils/source";
 
 import { loadBundleFiles } from "./bundle.ts";
 import { SkillSourceConflictError } from "./errors.ts";
@@ -61,6 +62,13 @@ export async function writeSkillsFromSnapshot(
 	]);
 
 	for (const sourceDir of options.extras ?? []) {
+		const resolved = resolveSourceDir(sourceDir);
+		// outDir is replaced wholesale below; an extra nested inside it would be destroyed.
+		if (resolved === outDir || resolved.startsWith(outDir + sep)) {
+			throw new Error(
+				`Extra skill directory "${resolved}" is inside outDir "${outDir}", which is replaced on every build. Move authored skills outside the build output.`,
+			);
+		}
 		const bundle = await loadBundleFiles(sourceDir);
 		validateSkillName(bundle.frontmatter.name);
 		if (skills.has(bundle.frontmatter.name)) {
