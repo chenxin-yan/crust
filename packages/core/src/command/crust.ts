@@ -166,7 +166,7 @@ export interface CommandConfig extends Omit<CommandMeta, "name"> {}
 /** Static metadata accepted by the root command constructor. */
 export type RootCommandMeta = Pick<CommandMeta, "description" | "usage" | "sections">;
 
-type AnyCommandDefinitionBuilder = CommandDefinitionBuilder<any, any, any, any, any, any>;
+type AnyCommandDefinitionBuilder = CommandDefinitionBuilder<any, any, any, any, any, any, any>;
 
 // Child builders start without inherited flags: collisions with ancestor-owned
 // flags are runtime-only, caught while the definition materializes against its
@@ -284,6 +284,7 @@ export interface CommandDefinitionBuilder<
 	Sibs extends string = never,
 	Sp extends string = SpellingsOf<Flags>,
 	Tree extends object = {},
+	CtxFlags extends FlagsDef = {},
 > {
 	flags<const Defs extends readonly NamedFlagDef[]>(
 		...defs: ValidateNamedFlagDefs<Defs, Sp>
@@ -293,12 +294,13 @@ export interface CommandDefinitionBuilder<
 		Ctx,
 		Sibs,
 		Sp | SpellingsOf<NamedFlagsRecord<Defs>>,
-		Tree
+		Tree,
+		CtxFlags
 	>;
 
 	args<const NewA extends ArgsDef>(
 		...defs: NewA & AppendArgsChecks<A, NewA>
-	): CommandDefinitionBuilder<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree>;
+	): CommandDefinitionBuilder<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags>;
 
 	provide<const Cs extends readonly ContextInstance[]>(
 		...instances: ProvideChecks<Sp, Cs> & ValidateContextNames<Ctx, Cs>
@@ -308,7 +310,8 @@ export interface CommandDefinitionBuilder<
 		MergeContext<Ctx, ContextsOutput<Cs>>,
 		Sibs,
 		Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
-		Tree
+		Tree,
+		MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>
 	>;
 
 	add<const Ds extends readonly CommandDefinition<any, any, any>[]>(
@@ -319,12 +322,13 @@ export interface CommandDefinitionBuilder<
 		Ctx,
 		Sibs | CommandDefinitionSpellings<Ds[number]>,
 		Sp,
-		Tree & DefinitionsTree<Ds>
+		Tree & DefinitionsTree<Ds, CtxFlags>,
+		CtxFlags
 	>;
 
 	action(
 		action: (ctx: NoInfer<CrustCommandContext<A, Flags>>) => void | Promise<void>,
-	): CommandDefinitionBuilder<Flags, A, Ctx, Sibs, Sp, Tree>;
+	): CommandDefinitionBuilder<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags>;
 }
 
 type ShapeOfBuilder<B> =
@@ -339,8 +343,24 @@ type DefinitionShapeForSpelling<D, Spelling extends string> =
 			: never
 		: never;
 
-type DefinitionsTree<Ds extends readonly CommandDefinition<any, any, any>[]> = {
-	[K in CommandDefinitionSpellings<Ds[number]>]: DefinitionShapeForSpelling<Ds[number], K>;
+// Added definitions inherit the parent path's Context-owned flags at runtime
+// (materialization seeds the child with `parent.ownedFlags`), so the typed shape
+// merges them too — deeply, because nested definitions materialize against the
+// same inherited flag namespace. Local parent flags never inherit and stay out.
+type ShapeWithInheritedFlags<S, CF extends FlagsDef> = {} extends CF
+	? S
+	: S extends CommandShape<infer SA, infer SF, infer SC>
+		? CommandShape<SA, MergeFlags<CF, SF>, { [K in keyof SC]: ShapeWithInheritedFlags<SC[K], CF> }>
+		: never;
+
+type DefinitionsTree<
+	Ds extends readonly CommandDefinition<any, any, any>[],
+	CtxFlags extends FlagsDef = {},
+> = {
+	[K in CommandDefinitionSpellings<Ds[number]>]: ShapeWithInheritedFlags<
+		DefinitionShapeForSpelling<Ds[number], K>,
+		CtxFlags
+	>;
 };
 
 /**
@@ -562,6 +582,9 @@ function serializeRunArgv(
  * - `Ctx` — provided Context values
  * - `Sibs` — sibling command names and aliases already registered
  * - `Sp` — accumulated flag spellings used for collision checks
+ * - `Tree` — command shapes accumulated by `.add()` for typed `run()`
+ * - `CtxFlags` — Context-owned flags accumulated by `.provide()`, inherited by
+ *   the shapes of definitions added afterwards
  *
  * @example
  * ```ts
@@ -574,7 +597,7 @@ function serializeRunArgv(
  * ```
  */
 /** Broad application type for APIs that accept any fully-built Crust application. */
-export type AnyCrust = Crust<any, any, any, any, any, any>;
+export type AnyCrust = Crust<any, any, any, any, any, any, any>;
 
 export class Crust<
 	Flags extends FlagsDef = {},
@@ -583,6 +606,7 @@ export class Crust<
 	Sibs extends string = never,
 	Sp extends string = SpellingsOf<Flags>,
 	Tree extends object = {},
+	CtxFlags extends FlagsDef = {},
 > {
 	/** @internal — Phantom property exposing generic parameters for type-level testing */
 	declare readonly _types: {
@@ -664,7 +688,8 @@ export class Crust<
 		Ctx,
 		Sibs,
 		Sp | SpellingsOf<NamedFlagsRecord<Defs>>,
-		Tree
+		Tree,
+		CtxFlags
 	> {
 		const localFlags: FlagsDef = { ...this._node.localFlags };
 		const effectiveFlags: FlagsDef = { ...this._node.effectiveFlags };
@@ -695,7 +720,8 @@ export class Crust<
 			Ctx,
 			Sibs,
 			Sp | SpellingsOf<NamedFlagsRecord<Defs>>,
-			Tree
+			Tree,
+			CtxFlags
 		>;
 	}
 
@@ -713,10 +739,10 @@ export class Crust<
 	 */
 	args<const NewA extends ArgsDef>(
 		...defs: NewA & AppendArgsChecks<A, NewA>
-	): Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree> {
+	): Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags> {
 		return this._clone({
 			args: normalizeArgs(this._node.args, defs as ArgsDef),
-		}) as unknown as Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree>;
+		}) as unknown as Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags>;
 	}
 
 	/**
@@ -739,7 +765,8 @@ export class Crust<
 		MergeContext<Ctx, ContextsOutput<Cs>>,
 		Sibs,
 		Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
-		Tree
+		Tree,
+		MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>
 	> {
 		const ownedFlags = { ...this._node.ownedFlags };
 		const effectiveFlags = { ...this._node.effectiveFlags };
@@ -758,7 +785,8 @@ export class Crust<
 			MergeContext<Ctx, ContextsOutput<Cs>>,
 			Sibs,
 			Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
-			Tree
+			Tree,
+			MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>
 		>;
 	}
 
@@ -778,7 +806,7 @@ export class Crust<
 	 */
 	action(
 		action: (ctx: NoInfer<CrustCommandContext<A, Flags>>) => void | Promise<void>,
-	): Crust<Flags, A, Ctx, Sibs, Sp, Tree> {
+	): Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags> {
 		if (this._node.run) {
 			throw new CrustError(
 				"DEFINITION",
@@ -788,7 +816,7 @@ export class Crust<
 		}
 		return this._clone({
 			run: action as (ctx: unknown) => void | Promise<void>,
-		}) as Crust<Flags, A, Ctx, Sibs, Sp, Tree>;
+		}) as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags>;
 	}
 
 	/**
@@ -800,7 +828,7 @@ export class Crust<
 	 *
 	 * @throws {CrustError} `DEFINITION` when an Extension name is already registered
 	 */
-	extend(...extensions: readonly Extension[]): Crust<Flags, A, Ctx, Sibs, Sp, Tree> {
+	extend(...extensions: readonly Extension[]): Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags> {
 		const names = new Set(this._node.extensions.map((extension) => extension.name));
 		for (const extension of extensions) {
 			if (names.has(extension.name)) {
@@ -831,7 +859,7 @@ export class Crust<
 		return withContexts._clone({
 			subCommands,
 			extensions: [...this._node.extensions, ...extensions],
-		}) as Crust<Flags, A, Ctx, Sibs, Sp, Tree>;
+		}) as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags>;
 	}
 
 	/**
@@ -847,9 +875,10 @@ export class Crust<
 		Ctx,
 		Sibs | CommandDefinitionSpellings<Ds[number]>,
 		Sp,
-		Tree & DefinitionsTree<Ds>
+		Tree & DefinitionsTree<Ds, CtxFlags>,
+		CtxFlags
 	> {
-		let result = this as Crust<Flags, A, Ctx, Sibs, Sp, Tree>;
+		let result = this as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags>;
 		for (const definition of definitions) {
 			result = result._addDefinition(definition as CommandDefinition);
 		}
@@ -859,16 +888,19 @@ export class Crust<
 			Ctx,
 			Sibs | CommandDefinitionSpellings<Ds[number]>,
 			Sp,
-			Tree & DefinitionsTree<Ds>
+			Tree & DefinitionsTree<Ds, CtxFlags>,
+			CtxFlags
 		>;
 	}
 
-	private _addDefinition(definition: CommandDefinition): Crust<Flags, A, Ctx, Sibs, Sp, Tree> {
+	private _addDefinition(
+		definition: CommandDefinition,
+	): Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags> {
 		const childNode = materializeCommandDefinition(definition, this._node);
 
 		return this._clone({
 			subCommands: { ...this._node.subCommands, [definition.name]: childNode },
-		}) as Crust<Flags, A, Ctx, Sibs, Sp, Tree>;
+		}) as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags>;
 	}
 
 	/**

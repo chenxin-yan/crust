@@ -155,7 +155,7 @@ describe("command definitions", () => {
 		await expect(
 			app.run(["outer", "before"], { flags: { "api-key": "secret" } } as never),
 		).rejects.toThrow(/Unknown flag/);
-		await app.run(["outer", "after"], { flags: { "api-key": "secret" } } as never);
+		await app.run(["outer", "after"], { flags: { "api-key": "secret" } });
 		expect(calls).toEqual(["secret"]);
 	});
 
@@ -174,7 +174,7 @@ describe("command definitions", () => {
 		const deploy = defineCommand("deploy", (command) => command.add(status));
 		const app = new Crust("cli").provide(logging(), db()).add(deploy);
 
-		await app.run(["deploy", "status"], { flags: { verbose: true } } as never);
+		await app.run(["deploy", "status"], { flags: { verbose: true } });
 
 		expect(calls).toEqual(["database:true"]);
 	});

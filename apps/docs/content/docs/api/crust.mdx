@@ -304,6 +304,8 @@ For TypeScript consumers, statically known sibling name and alias collisions fai
 
 A definition can add other definitions. Context providers on the materialized command path are available to nested actions through `use()`.
 
+The typed [`run()`](#runpath-input-io) shape of an added definition merges the Context-owned flags already provided on the parent path, matching the runtime parser: descendants accept inherited Context-owned flags, while parent-local flags stay excluded.
+
 <Callout type="info">
   Finalize Contexts on the builder used for `.add()`. Later fluent calls create a new builder and do
   not backfill a definition that was already added.
