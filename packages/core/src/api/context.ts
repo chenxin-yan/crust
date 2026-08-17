@@ -266,6 +266,13 @@ export function createContextResolver(
 	const byName = new Map(contexts.map((context) => [context.name, context]));
 	const values = new Map<string, Promise<unknown>>();
 	let validatedFlags: Record<string, unknown> | undefined;
+	let disposed = false;
+	// Registered first so it runs last (LIFO): the flag flips only after every
+	// Context value has been disposed. onError hooks receiving the same frozen
+	// context object then get a clear rejection instead of a resurrected value.
+	disposal.defer(() => {
+		disposed = true;
+	});
 
 	// Cycles are rejected at .provide() time, so the recursion terminates.
 	const closureOwnsFlags = (context: ContextInstance): boolean =>
@@ -295,6 +302,15 @@ export function createContextResolver(
 	return {
 		use: <F extends AnyContextFactory>(factory: F): Promise<FactoryValueOf<F>> => {
 			const name = factory.contextName;
+			if (disposed) {
+				return Promise.reject(
+					new CrustError(
+						"DEFINITION",
+						`Context "${name}" cannot be pulled from onError because invocation Contexts have already been disposed.`,
+						{ subject: "context", name, reason: "context-after-disposal" },
+					),
+				);
+			}
 			const context = byName.get(name);
 			if (!context) {
 				return Promise.reject(

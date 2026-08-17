@@ -1788,6 +1788,25 @@ describe("Extension onError hooks", () => {
 		});
 	});
 
+	it("passes the same context identity from preRun to onError", async () => {
+		let preRunContext: unknown;
+		let onErrorContext: unknown;
+		const observer = defineExtension("observer", {
+			hooks: {
+				preRun(ctx) {
+					preRunContext = ctx;
+				},
+				onError(_error, ctx) {
+					onErrorContext = ctx;
+					return true;
+				},
+			},
+		});
+
+		await failing().extend(observer).execute({ argv: [] });
+		expect(onErrorContext).toBe(preRunContext);
+	});
+
 	it("falls through to Core's default renderer and never runs for run()", async () => {
 		let onErrorRan = false;
 		const observer = defineExtension("observer", {

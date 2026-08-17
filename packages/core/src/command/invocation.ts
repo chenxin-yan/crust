@@ -369,7 +369,10 @@ async function renderFailure(
 		io.stderr(`Error: ${message}`);
 	};
 
-	// Invocation Contexts are disposed after postRun, before onError rendering.
+	// Reuse the dispatch context so per-invocation identity (e.g. WeakMap keys
+	// set in preRun) survives into onError; its resolver already rejects pulls
+	// after disposal. The synthetic fallback exists only for failures before a
+	// context was ever built (routing/parse errors).
 	const unavailableUse: ExtensionContext["use"] = async (factory) => {
 		throw new CrustError(
 			"DEFINITION",
@@ -381,9 +384,9 @@ async function renderFailure(
 			},
 		);
 	};
-	const baseContext =
+	const context =
 		extensionContext ??
-		({
+		Object.freeze({
 			argv: [...argv] as readonly string[],
 			rootCommand: snapshotCommand(prepared.rootNode),
 			command: snapshotCommand(prepared.rootNode),
@@ -394,8 +397,8 @@ async function renderFailure(
 			finish: finishInvocation,
 			stdout: io.stdout,
 			stderr: io.stderr,
-		} satisfies Omit<ExtensionContext, "use">);
-	const context = Object.freeze({ ...baseContext, use: unavailableUse });
+			use: unavailableUse,
+		} satisfies ExtensionContext);
 
 	try {
 		for (const extension of prepared.extensions) {
