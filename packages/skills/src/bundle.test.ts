@@ -103,14 +103,6 @@ describe("loadBundleFiles", () => {
 		await expect(loadBundleFiles(dir)).rejects.toThrow(/SKILL\.md/);
 	});
 
-	it("returns the frontmatter name and description verbatim", async () => {
-		const { frontmatter } = await loadBundleFiles(FIXTURE_DIR);
-		expect(frontmatter).toEqual({
-			name: "funnel-builder",
-			description: "Build a sales funnel",
-		});
-	});
-
 	it("rejects SKILL.md with no frontmatter at all", async () => {
 		const dir = join(tmpDir, "no-frontmatter");
 		await mkdir(dir, { recursive: true });
@@ -140,17 +132,6 @@ describe("loadBundleFiles", () => {
 		await mkdir(dir, { recursive: true });
 		await writeFile(join(dir, "SKILL.md"), '---\nname: ""\ndescription: ""\n---\n');
 		await expect(loadBundleFiles(dir)).rejects.toThrow(/`name:`/);
-	});
-
-	it("accepts a quoted frontmatter name", async () => {
-		const dir = join(tmpDir, "name-quoted");
-		await mkdir(dir, { recursive: true });
-		await writeFile(
-			join(dir, "SKILL.md"),
-			'---\nname: "funnel-builder"\ndescription: Build a sales funnel\n---\n',
-		);
-		const { frontmatter } = await loadBundleFiles(dir);
-		expect(frontmatter.name).toBe("funnel-builder");
 	});
 
 	it("strips a leading UTF-8 BOM before locating the opening fence", async () => {

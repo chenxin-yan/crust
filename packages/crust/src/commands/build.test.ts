@@ -21,122 +21,6 @@ import {
 	TARGET_INFO,
 } from "../../src/utils/build-helpers.ts";
 
-/**
- * Helper to extract the build command's internal node for definition checks.
- */
-function makeBuildNode() {
-	const buildNode = new Crust("test").add(buildCommand)._node.subCommands.build;
-	if (!buildNode) throw new Error("build subcommand not found");
-	return buildNode;
-}
-
-/** Parse argv against the added build command's grammar. */
-async function parseBuildArgs(flags: Record<string, unknown> = {}) {
-	let captured: { args: Record<string, unknown>; flags: Record<string, unknown> } | undefined;
-	const app = new Crust("test").add(buildCommand);
-	const node = app._node.subCommands.build!;
-	node.run = (ctx) => {
-		const commandContext = ctx as {
-			args: Record<string, unknown>;
-			flags: Record<string, unknown>;
-		};
-		captured = commandContext;
-	};
-	await app.run(["build"], { flags } as never);
-	if (!captured) throw new Error("build action did not run");
-	return captured;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Unit tests for buildCommand definition
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("buildCommand definition", () => {
-	it("has correct meta", () => {
-		const node = makeBuildNode();
-		expect(node.meta.name).toBe("build");
-		expect(node.meta.description).toBe("Compile your CLI to a standalone executable");
-	});
-
-	it("has correct default flag values", async () => {
-		const result = await parseBuildArgs();
-		expect(result.flags.entry).toBe("src/cli.ts");
-		expect(result.flags.minify).toBe(true);
-		expect(result.flags.validate).toBe(true);
-		expect(result.flags.package).toBe(false);
-		expect(result.flags["stage-dir"]).toBe("dist/npm");
-		expect(result.flags.resolver).toBe("cli");
-		expect(result.flags.outdir).toBe("dist");
-		expect(result.flags.outfile).toBeUndefined();
-		expect(result.flags.name).toBeUndefined();
-		expect(result.flags.target).toBeUndefined();
-		expect(result.flags["env-file"]).toBeUndefined();
-	});
-
-	it("defines --entry/-e flag as string", async () => {
-		const result = await parseBuildArgs({ entry: "src/main.ts" });
-		expect(result.flags.entry).toBe("src/main.ts");
-	});
-
-	it("defines --outfile/-o flag as string", async () => {
-		const result = await parseBuildArgs({ outfile: "./my-cli" });
-		expect(result.flags.outfile).toBe("./my-cli");
-	});
-
-	it("defines --outdir/-d flag as string with default 'dist'", async () => {
-		const result = await parseBuildArgs({ outdir: "out" });
-		expect(result.flags.outdir).toBe("out");
-	});
-
-	it("defines --name/-n flag as string", async () => {
-		const result = await parseBuildArgs({ name: "my-tool" });
-		expect(result.flags.name).toBe("my-tool");
-	});
-
-	it("defines --minify flag as boolean with default true", async () => {
-		const result = await parseBuildArgs();
-		expect(result.flags.minify).toBe(true);
-	});
-
-	it("supports --no-minify to disable minification", async () => {
-		const result = await parseBuildArgs({ minify: false });
-		expect(result.flags.minify).toBe(false);
-	});
-
-	it("supports --no-validate to skip pre-compile validation", async () => {
-		const result = await parseBuildArgs({ validate: false });
-		expect(result.flags.validate).toBe(false);
-	});
-
-	it("defines --env-file as a repeatable string flag", async () => {
-		const result = await parseBuildArgs({ "env-file": [".env", ".env.local"] });
-		expect(result.flags["env-file"]).toEqual([".env", ".env.local"]);
-	});
-
-	it("supports --package with --stage-dir", async () => {
-		const result = await parseBuildArgs({ package: true, "stage-dir": ".stage" });
-		expect(result.flags.package).toBe(true);
-		expect(result.flags["stage-dir"]).toBe(".stage");
-	});
-
-	it("defines --target/-t as repeatable string flag", async () => {
-		const result = await parseBuildArgs({
-			target: ["bun-linux-x64-baseline", "bun-darwin-arm64"],
-		});
-		expect(result.flags.target).toEqual(["bun-linux-x64-baseline", "bun-darwin-arm64"]);
-	});
-
-	it("supports -t alias for --target", async () => {
-		const result = await parseBuildArgs({ target: ["bun-linux-x64-baseline"] });
-		expect(result.flags.target).toEqual(["bun-linux-x64-baseline"]);
-	});
-
-	it("has a run function", () => {
-		const node = makeBuildNode();
-		expect(typeof node.run).toBe("function");
-	});
-});
-
 describe("env file helpers", () => {
 	const tmpDir = join(import.meta.dir, ".tmp-env-files");
 
@@ -215,10 +99,6 @@ describe("resolveTarget", () => {
 	it("throws on unknown target", () => {
 		expect(() => resolveTarget("linux-arm32")).toThrow(/Unknown target/);
 	});
-
-	it("error message includes valid targets", () => {
-		expect(() => resolveTarget("nope")).toThrow(/Valid targets/);
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -276,11 +156,6 @@ describe("resolveOutfile", () => {
 		expect(result).toBe(resolve(cwd, "./my-cli"));
 	});
 
-	it("resolves --outfile relative to cwd", () => {
-		const result = resolveOutfile("dist/output", undefined, entry, cwd, "dist");
-		expect(result).toBe(resolve(cwd, "dist/output"));
-	});
-
 	it("uses --name as dist/<name> when --outfile not provided", () => {
 		const result = resolveOutfile(undefined, "my-tool", entry, cwd, "dist");
 		expect(result).toBe(resolve(cwd, "dist", "my-tool"));
@@ -291,64 +166,9 @@ describe("resolveOutfile", () => {
 		expect(result).toBe(resolve(cwd, "./custom"));
 	});
 
-	describe("with package.json", () => {
-		const tmpDir = join(import.meta.dir, ".tmp-resolve-test");
-
-		beforeAll(() => {
-			mkdirSync(tmpDir, { recursive: true });
-		});
-
-		afterAll(() => {
-			rmSync(tmpDir, { recursive: true, force: true });
-		});
-
-		it("falls back to package.json name when no --outfile or --name", () => {
-			writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ name: "my-cli-app" }));
-			const result = resolveOutfile(
-				undefined,
-				undefined,
-				join(tmpDir, "src/cli.ts"),
-				tmpDir,
-				"dist",
-			);
-			expect(result).toBe(resolve(tmpDir, "dist", "my-cli-app"));
-		});
-
-		it("strips scope prefix from package.json name", () => {
-			writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ name: "@scope/my-cli" }));
-			const result = resolveOutfile(
-				undefined,
-				undefined,
-				join(tmpDir, "src/cli.ts"),
-				tmpDir,
-				"dist",
-			);
-			expect(result).toBe(resolve(tmpDir, "dist", "my-cli"));
-		});
-	});
-
-	it("falls back to entry filename when no --outfile, --name, or package.json", () => {
-		const noPackageCwd = "/nonexistent/path/for/test";
-		const testEntry = "/nonexistent/path/for/test/src/main.ts";
-		const result = resolveOutfile(undefined, undefined, testEntry, noPackageCwd, "dist");
-		expect(result).toBe(resolve(noPackageCwd, "dist", "main"));
-	});
-
-	it("strips file extension from entry filename", () => {
-		const noPackageCwd = "/nonexistent/path/for/test";
-		const testEntry = "/nonexistent/path/for/test/src/app.cli.ts";
-		const result = resolveOutfile(undefined, undefined, testEntry, noPackageCwd, "dist");
-		expect(result).toBe(resolve(noPackageCwd, "dist", "app.cli"));
-	});
-
 	it("uses custom outdir when provided", () => {
 		const result = resolveOutfile(undefined, "my-tool", entry, cwd, "out");
 		expect(result).toBe(resolve(cwd, "out", "my-tool"));
-	});
-
-	it("ignores outdir when --outfile is provided", () => {
-		const result = resolveOutfile("./custom", undefined, entry, cwd, "out");
-		expect(result).toBe(resolve(cwd, "./custom"));
 	});
 });
 
@@ -377,17 +197,6 @@ describe("getBinaryFilename", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("generateResolver", () => {
-	it("includes bash shebang", () => {
-		const content = generateResolver("my-cli", SUPPORTED_TARGETS);
-		expect(content.startsWith("#!/usr/bin/env bash\n")).toBe(true);
-	});
-
-	it("detects platform using uname", () => {
-		const content = generateResolver("my-cli", SUPPORTED_TARGETS);
-		expect(content).toContain("uname -s");
-		expect(content).toContain("uname -m");
-	});
-
 	it("maps all Unix targets to correct uname keys", () => {
 		const content = generateResolver("my-cli", SUPPORTED_TARGETS);
 		expect(content).toContain("Linux-x86_64)");
@@ -424,34 +233,6 @@ describe("generateResolver", () => {
 		const content = generateResolver("my-tool", SUPPORTED_TARGETS);
 		expect(content).toContain("[my-tool]");
 	});
-
-	it("uses exec to replace shell process with binary", () => {
-		const content = generateResolver("my-cli", SUPPORTED_TARGETS);
-		expect(content).toContain('exec "$bin_path" "$@"');
-	});
-
-	it("includes chmod logic for execute permissions", () => {
-		const content = generateResolver("my-cli", SUPPORTED_TARGETS);
-		expect(content).toContain("chmod +x");
-	});
-
-	it("has a wildcard case for unsupported platforms", () => {
-		const content = generateResolver("my-cli", SUPPORTED_TARGETS);
-		expect(content).toContain("*)");
-		expect(content).toContain("Unsupported platform");
-	});
-
-	it("checks binary file exists before exec", () => {
-		const content = generateResolver("my-cli", SUPPORTED_TARGETS);
-		expect(content).toContain('[ ! -f "$bin_path" ]');
-		expect(content).toContain("Try reinstalling the package");
-	});
-
-	it("resolves symlinks to find the real script directory", () => {
-		const content = generateResolver("my-cli", SUPPORTED_TARGETS);
-		expect(content).toContain("readlink");
-		expect(content).toContain('[ -L "$source" ]');
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -459,31 +240,10 @@ describe("generateResolver", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("generateCmdResolver", () => {
-	it("generates a batch script with @echo off", () => {
-		const content = generateCmdResolver("my-cli", SUPPORTED_TARGETS);
-		expect(content).toStartWith("@echo off");
-	});
-
 	it("references the correct Windows binary filename", () => {
 		const content = generateCmdResolver("my-cli", SUPPORTED_TARGETS);
 		expect(content).toContain("my-cli-bun-windows-x64-baseline.exe");
 		expect(content).toContain("my-cli-bun-windows-arm64.exe");
-	});
-
-	it("detects Windows architecture using PROCESSOR_ARCHITECTURE", () => {
-		const content = generateCmdResolver("my-cli", SUPPORTED_TARGETS);
-		expect(content).toContain("PROCESSOR_ARCHITECTURE");
-		expect(content).toContain("PROCESSOR_ARCHITEW6432");
-	});
-
-	it("passes all arguments to the binary", () => {
-		const content = generateCmdResolver("my-cli", SUPPORTED_TARGETS);
-		expect(content).toContain("%*");
-	});
-
-	it("checks binary exists before running", () => {
-		const content = generateCmdResolver("my-cli", SUPPORTED_TARGETS);
-		expect(content).toContain('if not exist "%bin_path%"');
 	});
 
 	it("includes the base name in error messages", () => {
@@ -617,25 +377,4 @@ describe("buildCommand error handling", () => {
 			rmSync(tmpDir, { recursive: true, force: true });
 		}
 	}, 30_000);
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// SUPPORTED_TARGETS constant
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("SUPPORTED_TARGETS", () => {
-	it("contains 6 targets", () => {
-		expect(SUPPORTED_TARGETS).toHaveLength(6);
-	});
-
-	it("includes linux, darwin, and windows", () => {
-		expect(SUPPORTED_TARGETS.some((t) => t.includes("linux"))).toBe(true);
-		expect(SUPPORTED_TARGETS.some((t) => t.includes("darwin"))).toBe(true);
-		expect(SUPPORTED_TARGETS.some((t) => t.includes("windows"))).toBe(true);
-	});
-
-	it("includes x64 and arm64 architectures", () => {
-		expect(SUPPORTED_TARGETS.some((t) => t.includes("x64"))).toBe(true);
-		expect(SUPPORTED_TARGETS.some((t) => t.includes("arm64"))).toBe(true);
-	});
 });

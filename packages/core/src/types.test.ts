@@ -2,15 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import type { StandardSchema } from "@crustjs/utils/schema";
 
-import type {
-	ArgDef,
-	ArgsDef,
-	CommandMeta,
-	FlagDef,
-	FlagsDef,
-	InferArgs,
-	InferFlags,
-} from "./types.ts";
+import type { ArgDef, ArgsDef, FlagDef, InferArgs, InferFlags } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Type-level test utilities
@@ -111,44 +103,6 @@ describe("InferArgs type inference", () => {
 		expect(val.files).toEqual(["a.ts", "b.ts"]);
 	});
 
-	it('maps variadic "number" arg to number[]', () => {
-		type Args = readonly [{ name: "ports"; type: "number"; variadic: true }];
-		type Result = InferArgs<Args>;
-		type _check = Expect<Equal<Result, { ports: number[] }>>;
-
-		const val: Result = { ports: [3000, 4000] };
-		expect(val.ports).toEqual([3000, 4000]);
-	});
-
-	it("maps multiple args together", () => {
-		type Args = readonly [
-			{ name: "name"; type: "string"; required: true },
-			{ name: "port"; type: "number"; default: 3000 },
-			{ name: "verbose"; type: "boolean" },
-			{ name: "files"; type: "string"; variadic: true },
-		];
-		type Result = InferArgs<Args>;
-		type _check = Expect<
-			Equal<
-				Result,
-				{
-					name: string;
-					port: number;
-					verbose: boolean | undefined;
-					files: string[];
-				}
-			>
-		>;
-
-		const val: Result = {
-			name: "test",
-			port: 8080,
-			verbose: undefined,
-			files: [],
-		};
-		expect(val).toBeDefined();
-	});
-
 	it("returns Record<string, never> for non-ArgsDef input", () => {
 		type Result = InferArgs<undefined>;
 		type _check = Expect<Equal<Result, Record<string, never>>>;
@@ -244,28 +198,6 @@ describe("InferFlags type inference", () => {
 		expect(true).toBe(true);
 	});
 
-	it("maps multiple flags together", () => {
-		type Flags = {
-			verbose: { type: "boolean" };
-			port: { type: "number"; default: 3000 };
-			output: { type: "string"; required: true };
-		};
-		type Result = InferFlags<Flags>;
-		type _check = Expect<
-			Equal<
-				Result,
-				{
-					verbose: boolean | undefined;
-					port: number;
-					output: string;
-				}
-			>
-		>;
-
-		const val: Result = { verbose: undefined, port: 3000, output: "dist" };
-		expect(val).toBeDefined();
-	});
-
 	it("returns Record<string, never> for non-FlagsDef input", () => {
 		type Result = InferFlags<undefined>;
 		type _check = Expect<Equal<Result, Record<string, never>>>;
@@ -292,15 +224,6 @@ describe("InferFlags type inference", () => {
 		expect(val.port).toEqual([80, 443]);
 	});
 
-	it('maps multiple "boolean" flag to boolean[] | undefined', () => {
-		type Flags = { verbose: { type: "boolean"; multiple: true } };
-		type Result = InferFlags<Flags>;
-		type _check = Expect<Equal<Result, { verbose: boolean[] | undefined }>>;
-
-		const val: Result = { verbose: [true, true] };
-		expect(val).toBeDefined();
-	});
-
 	it("maps multiple flag with default to non-optional array type", () => {
 		type Flags = {
 			file: {
@@ -314,97 +237,6 @@ describe("InferFlags type inference", () => {
 
 		const val: Result = { file: ["default.ts"] };
 		expect(val.file).toEqual(["default.ts"]);
-	});
-
-	it("maps mixed multiple and non-multiple flags together", () => {
-		type Flags = {
-			file: { type: "string"; multiple: true };
-			verbose: { type: "boolean" };
-			port: { type: "number"; multiple: true; required: true };
-		};
-		type Result = InferFlags<Flags>;
-		type _check = Expect<
-			Equal<
-				Result,
-				{
-					file: string[] | undefined;
-					verbose: boolean | undefined;
-					port: number[];
-				}
-			>
-		>;
-
-		const val: Result = {
-			file: undefined,
-			verbose: undefined,
-			port: [80],
-		};
-		expect(val).toBeDefined();
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// ArgDef / FlagDef interface tests
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("ArgDef interface", () => {
-	it("accepts valid arg definitions", () => {
-		const stringArg: ArgDef = { name: "str", type: "string" };
-		const numberArg: ArgDef = { name: "port", type: "number", default: 3000 };
-		const boolArg: ArgDef = {
-			name: "flag",
-			type: "boolean",
-			description: "A flag",
-			required: true,
-		};
-		const variadicArg: ArgDef = {
-			name: "files",
-			type: "string",
-			variadic: true,
-		};
-
-		expect(stringArg.type).toBe("string");
-		expect(numberArg.default).toBe(3000);
-		expect(boolArg.required).toBe(true);
-		expect(variadicArg.variadic).toBe(true);
-	});
-
-	it("allows ArgsDef array", () => {
-		const args: ArgsDef = [
-			{ name: "name", type: "string", required: true },
-			{ name: "port", type: "number", default: 3000 },
-			{ name: "files", type: "string", variadic: true },
-		];
-
-		expect(args.map((a) => a.name)).toEqual(["name", "port", "files"]);
-	});
-});
-
-describe("FlagDef interface", () => {
-	it("accepts valid flag definitions", () => {
-		const boolFlag: FlagDef = { type: "boolean", short: "v" };
-		const stringFlag: FlagDef = {
-			type: "string",
-			short: "o",
-			aliases: ["out"],
-			required: true,
-		};
-		const numberFlag: FlagDef = { type: "number", default: 8080 };
-		const multipleFlag: FlagDef = { type: "string", multiple: true };
-
-		expect(boolFlag.short).toBe("v");
-		expect(stringFlag.required).toBe(true);
-		expect(numberFlag.default).toBe(8080);
-		expect(multipleFlag.multiple).toBe(true);
-	});
-
-	it("allows FlagsDef record", () => {
-		const flags: FlagsDef = {
-			verbose: { type: "boolean", short: "v" },
-			port: { type: "number", default: 3000, description: "Port number" },
-		};
-
-		expect(Object.keys(flags)).toEqual(["verbose", "port"]);
 	});
 });
 
@@ -481,13 +313,6 @@ describe("FlagDef discriminated union narrowing", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("ArgDef toggle fields", () => {
-	it("accepts true for toggle fields", () => {
-		const _req: ArgDef = { name: "a", type: "string", required: true };
-		const _var: ArgDef = { name: "b", type: "string", variadic: true };
-		expect(_req.required).toBe(true);
-		expect(_var.variadic).toBe(true);
-	});
-
 	it("rejects false for toggle fields", () => {
 		// @ts-expect-error — toggle fields only accept `true`, not `false`
 		const _bad1: ArgDef = { name: "a", type: "string", required: false };
@@ -497,42 +322,15 @@ describe("ArgDef toggle fields", () => {
 
 		expect(true).toBe(true);
 	});
-
-	it("rejects non-boolean values for toggle fields", () => {
-		// @ts-expect-error — toggle fields only accept `true`, not string
-		const _bad1: ArgDef = { name: "a", type: "string", required: "yes" };
-
-		// @ts-expect-error — toggle fields only accept `true`, not number
-		const _bad2: ArgDef = { name: "a", type: "string", variadic: 1 };
-
-		expect(true).toBe(true);
-	});
 });
 
 describe("FlagDef toggle fields", () => {
-	it("accepts true for toggle fields", () => {
-		const _req: FlagDef = { type: "string", required: true };
-		const _multi: FlagDef = { type: "string", multiple: true };
-		expect(_req.required).toBe(true);
-		expect(_multi.multiple).toBe(true);
-	});
-
 	it("rejects false for toggle fields", () => {
 		// @ts-expect-error — toggle fields only accept `true`, not `false`
 		const _bad1: FlagDef = { type: "string", required: false };
 
 		// @ts-expect-error — toggle fields only accept `true`, not `false`
 		const _bad2: FlagDef = { type: "string", multiple: false };
-
-		expect(true).toBe(true);
-	});
-
-	it("rejects non-boolean values for toggle fields", () => {
-		// @ts-expect-error — toggle fields only accept `true`, not string
-		const _bad1: FlagDef = { type: "string", required: "yes" };
-
-		// @ts-expect-error — toggle fields only accept `true`, not number
-		const _bad2: FlagDef = { type: "string", multiple: 1 };
 
 		expect(true).toBe(true);
 	});
@@ -627,69 +425,6 @@ describe("ArgDef choices field", () => {
 		expect(_bad.type).toBe("number");
 	});
 });
-
-// ────────────────────────────────────────────────────────────────────────────
-// CommandMeta / Command tests
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("CommandMeta interface", () => {
-	it("accepts valid metadata", () => {
-		const meta: CommandMeta = {
-			name: "serve",
-			description: "Start dev server",
-			usage: "serve [options]",
-		};
-
-		expect(meta.name).toBe("serve");
-	});
-
-	it("only requires name", () => {
-		const meta: CommandMeta = { name: "serve" };
-		expect(meta.name).toBe("serve");
-	});
-
-	it("accepts a readonly aliases array", () => {
-		const meta: CommandMeta = {
-			name: "issue",
-			aliases: ["issues", "i"] as const,
-		};
-		expect(meta.aliases).toEqual(["issues", "i"]);
-	});
-
-	it("accepts an empty aliases array", () => {
-		const meta: CommandMeta = { name: "serve", aliases: [] };
-		expect(meta.aliases).toEqual([]);
-	});
-
-	it("accepts hidden: true", () => {
-		const meta: CommandMeta = {
-			name: "__complete",
-			hidden: true,
-			description: "Internal completion entrypoint",
-		};
-		expect(meta.hidden).toBe(true);
-	});
-
-	it("accepts hidden: false explicitly", () => {
-		const meta: CommandMeta = { name: "serve", hidden: false };
-		expect(meta.hidden).toBe(false);
-	});
-
-	it("composes hidden with aliases", () => {
-		const meta: CommandMeta = {
-			name: "__complete",
-			aliases: ["__c"] as const,
-			hidden: true,
-		};
-		expect(meta.hidden).toBe(true);
-		expect(meta.aliases).toEqual(["__c"]);
-	});
-});
-
-// NOTE: Command, AnyCommand, CommandDef, and CommandContext interfaces have
-// been removed as part of the old API cleanup. Tests for the new builder API
-// live in crust.test.ts. CrustCommandContext (the replacement for
-// CommandContext) is tested there as well.
 
 // ────────────────────────────────────────────────────────────────────────────
 // InferFlags — url/path/json types

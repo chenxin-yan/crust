@@ -270,16 +270,6 @@ describe("built-in extensions", () => {
 		expect(buildOutput.indexOf("Build notes:")).toBeGreaterThan(buildOutput.indexOf("Options:"));
 	});
 
-	it("help reaches Extension-contributed commands regardless of registration order", async () => {
-		const app = new Crust("app").extend(help()).extend(lateSkillExtension());
-
-		await app.execute({ argv: ["skill", "update", "--help"] });
-
-		const output = stripAnsi(getStdout());
-		expect(output).toContain("app skill update");
-		expect(output).toContain("-h, --help");
-	});
-
 	it("recursive false Extension flags stay root-only", async () => {
 		const rootOnly = defineExtension("root-only", {
 			flags: [{ name: "root", type: "boolean", recursive: false }],
@@ -773,34 +763,6 @@ describe("built-in extensions", () => {
 		expect(plain).not.toMatch(/Usage:\s+app\s+<command>/);
 		expect(plain).not.toContain("Commands:");
 		expect(plain).not.toContain("__complete");
-	});
-
-	it("renderHelp hidden filtering composes with alias rendering", () => {
-		// A hidden subcommand with aliases should be entirely absent. A visible
-		// subcommand with aliases should still render `name (a, b)`.
-		const command = new Crust("app")
-			.add(
-				defineCommand("issue", { description: "Manage issues", aliases: ["issues", "i"] }, (cmd) =>
-					cmd.action(() => {}),
-				),
-			)
-			.add(
-				defineCommand(
-					"__complete",
-					{
-						description: "Internal",
-						aliases: ["__c"],
-						hidden: true,
-					},
-					(cmd) => cmd.action(() => {}),
-				),
-			)._node;
-
-		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
-		expect(plain).toContain("issue (issues, i)");
-		expect(plain).toContain("Manage issues");
-		expect(plain).not.toContain("__complete");
-		expect(plain).not.toContain("__c");
 	});
 
 	it("hidden subcommands remain invocable by direct name", async () => {

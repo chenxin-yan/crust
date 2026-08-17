@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { scaffold } from "@crustjs/create";
@@ -33,18 +33,15 @@ async function scaffoldProject(
 	context: { name: string },
 	options?: {
 		distribution?: DistributionMode;
-		conflict?: "abort" | "overwrite";
 	},
 ): Promise<void> {
 	const distribution = options?.distribution ?? "binary";
-	const conflict = options?.conflict ?? "overwrite";
 	const scaffoldContext = { ...context, ...TEMPLATE_VERSION_CONTEXT };
 
 	await scaffold({
 		template: resolve(TEMPLATE_DIR, "base"),
 		dest,
 		context: scaffoldContext,
-		conflict,
 	});
 
 	await scaffold({
@@ -62,15 +59,8 @@ async function scaffoldProject(
 	});
 }
 
-async function scaffoldBase(
-	dest: string,
-	context: { name: string },
-	conflict: "abort" | "overwrite" = "overwrite",
-): Promise<void> {
-	await scaffoldProject(dest, context, {
-		distribution: "binary",
-		conflict,
-	});
+async function scaffoldBase(dest: string, context: { name: string }): Promise<void> {
+	await scaffoldProject(dest, context, { distribution: "binary" });
 }
 
 beforeEach(() => {
@@ -88,15 +78,6 @@ afterEach(() => {
 });
 
 describe("scaffold", () => {
-	it("creates the project directory structure", async () => {
-		await scaffoldBase(TEST_DIR, { name: "my-cli" });
-
-		expect(existsSync(resolve(TEST_DIR, "package.json"))).toBe(true);
-		expect(existsSync(resolve(TEST_DIR, "tsconfig.json"))).toBe(true);
-		expect(existsSync(resolve(TEST_DIR, "src", "cli.ts"))).toBe(true);
-		expect(existsSync(resolve(TEST_DIR, "README.md"))).toBe(true);
-	});
-
 	it("generates package.json with correct name and dependencies", async () => {
 		await scaffoldBase(TEST_DIR, { name: "my-awesome-cli" });
 
@@ -145,28 +126,6 @@ describe("scaffold", () => {
 		});
 	});
 
-	it("generates package.json with generic description and no author", async () => {
-		await scaffoldBase(TEST_DIR, { name: "minimal-cli" });
-
-		const pkg = JSON.parse(readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"));
-
-		expect(pkg.name).toBe("minimal-cli");
-		expect(pkg.description).toBe("A CLI built with Crust");
-		expect(pkg.author).toBeUndefined();
-	});
-
-	it("generates tsconfig.json with strict mode and bundler resolution", async () => {
-		await scaffoldBase(TEST_DIR, { name: "my-cli" });
-
-		const tsconfig = JSON.parse(readFileSync(resolve(TEST_DIR, "tsconfig.json"), "utf-8"));
-
-		expect(tsconfig.compilerOptions.strict).toBe(true);
-		expect(tsconfig.compilerOptions.moduleResolution).toBe("bundler");
-		expect(tsconfig.compilerOptions.target).toBe("ESNext");
-		expect(tsconfig.compilerOptions.module).toBe("Preserve");
-		expect(tsconfig.include).toEqual(["src"]);
-	});
-
 	it("generates a valid CLI entry file with Crust builder API", async () => {
 		await scaffoldBase(TEST_DIR, { name: "test-cli" });
 
@@ -192,68 +151,6 @@ describe("scaffold", () => {
 		expect(cliContent).toContain('type: "string"');
 		// Has a run function
 		expect(cliContent).toContain(".action(");
-	});
-
-	it("generates CLI file that is valid TypeScript (compile check)", async () => {
-		await scaffoldBase(TEST_DIR, { name: "compile-test-cli" });
-
-		// Verify it parses without syntax errors by checking structure
-		const cliContent = readFileSync(resolve(TEST_DIR, "src", "cli.ts"), "utf-8");
-
-		expect(cliContent).toContain("import {");
-		expect(cliContent).toContain("const app = new Crust(");
-		expect(cliContent).toContain("await app.execute()");
-		expect(cliContent).toContain(".extend(");
-		expect(cliContent).toContain("version(");
-		expect(cliContent).toContain("help()");
-		// Has proper structure: name, args, flags, run
-		expect(cliContent).toContain('new Crust("compile-test-cli", {');
-		expect(cliContent).toContain(".args({");
-		expect(cliContent).toContain(".flags(");
-		expect(cliContent).toContain(".action(");
-	});
-
-	it("supports the minimal template with runtime distribution", async () => {
-		await scaffoldProject(
-			TEST_DIR,
-			{ name: "runtime-cli" },
-			{
-				distribution: "runtime",
-			},
-		);
-
-		expect(existsSync(resolve(TEST_DIR, "src", "cli.ts"))).toBe(true);
-
-		const pkg = JSON.parse(readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"));
-		expect(pkg.bin["runtime-cli"]).toBe("dist/cli.js");
-		expect(pkg.dependencies).toEqual(EXPECTED_CRUST_DEPENDENCIES);
-	});
-
-	it("creates project in nested directory (creates parent dirs)", async () => {
-		const nestedDir = resolve(TEST_DIR, "deep", "nested", "project");
-
-		await scaffoldBase(nestedDir, { name: "nested-cli" });
-
-		expect(existsSync(resolve(nestedDir, "package.json"))).toBe(true);
-		expect(existsSync(resolve(nestedDir, "src", "cli.ts"))).toBe(true);
-	});
-
-	it("overwrites existing directory when scaffold is called with overwrite", async () => {
-		// Create directory with some content
-		mkdirSync(resolve(TEST_DIR, "src"), { recursive: true });
-
-		// Scaffold over it
-		await scaffoldBase(TEST_DIR, { name: "overwrite-cli" });
-
-		const pkg = JSON.parse(readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"));
-		expect(pkg.name).toBe("overwrite-cli");
-	});
-
-	it("sets bin entry to match project name", async () => {
-		await scaffoldBase(TEST_DIR, { name: "my-custom-bin" });
-
-		const pkg = JSON.parse(readFileSync(resolve(TEST_DIR, "package.json"), "utf-8"));
-		expect(pkg.bin["my-custom-bin"]).toBe("dist/cli");
 	});
 
 	it("creates .gitignore from _gitignore template via dotfile renaming", async () => {

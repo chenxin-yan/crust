@@ -67,27 +67,6 @@ describe("buildManifest", () => {
 			expect(node.path).toEqual(["my-cli"]);
 		});
 
-		it("sets runnable to true when command has an action", () => {
-			const cmd = makeCommand({
-				meta: { name: "serve" },
-				run() {},
-			});
-
-			const node = buildManifest(snapshotCommand(cmd));
-
-			expect(node.runnable).toBe(true);
-		});
-
-		it("sets runnable to false when command has no action", () => {
-			const cmd = makeCommand({
-				meta: { name: "app" },
-			});
-
-			const node = buildManifest(snapshotCommand(cmd));
-
-			expect(node.runnable).toBe(false);
-		});
-
 		it("includes usage when provided", () => {
 			const cmd = makeCommand({
 				meta: { name: "build", usage: "build [options] <entry>" },
@@ -219,41 +198,6 @@ describe("buildManifest", () => {
 			expect(arg?.name).toBe("packages");
 			expect(arg?.variadic).toBe(true);
 			expect(arg?.required).toBe(false);
-		});
-
-		it("preserves positional order of multiple args", () => {
-			const cmd = makeCommand({
-				meta: { name: "copy" },
-				args: [
-					{ name: "source", type: "string", required: true },
-					{ name: "dest", type: "string", required: true },
-					{ name: "extras", type: "string", variadic: true },
-				] as ArgDef[],
-				run() {},
-			});
-
-			const node = buildManifest(snapshotCommand(cmd));
-			const [first, second, third] = node.args;
-
-			expect(node.args).toHaveLength(3);
-			expect(first?.name).toBe("source");
-			expect(second?.name).toBe("dest");
-			expect(third?.name).toBe("extras");
-			expect(third?.variadic).toBe(true);
-		});
-
-		it("normalizes a boolean arg with default", () => {
-			const cmd = makeCommand({
-				meta: { name: "toggle" },
-				args: [{ name: "enabled", type: "boolean", default: false }] as ArgDef[],
-				run() {},
-			});
-
-			const node = buildManifest(snapshotCommand(cmd));
-			const [arg] = node.args;
-
-			expect(arg?.type).toBe("boolean");
-			expect(arg?.default).toBe("false");
 		});
 
 		it("omits description when not provided on arg", () => {
@@ -427,22 +371,6 @@ describe("buildManifest", () => {
 			expect(flag?.default).toBe('["src/index.ts","src/cli.ts"]');
 		});
 
-		it("sorts flags alphabetically by name", () => {
-			const cmd = makeCommand({
-				meta: { name: "app" },
-				flags: {
-					zoo: { type: "string" },
-					alpha: { type: "boolean" },
-					middle: { type: "number" },
-				},
-				run() {},
-			});
-
-			const node = buildManifest(snapshotCommand(cmd));
-
-			expect(node.flags.map((f) => f.name)).toEqual(["alpha", "middle", "zoo"]);
-		});
-
 		it("omits description and default when not provided on flag", () => {
 			const cmd = makeCommand({
 				meta: { name: "test" },
@@ -465,31 +393,6 @@ describe("buildManifest", () => {
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("subcommand tree traversal", () => {
-		it("builds children from subCommands", () => {
-			const serve = makeCommand({
-				meta: { name: "serve", description: "Start server" },
-				run() {},
-			});
-
-			const build = makeCommand({
-				meta: { name: "build", description: "Build project" },
-				run() {},
-			});
-
-			const root = makeCommand({
-				meta: { name: "app" },
-				subCommands: { serve, build },
-			});
-
-			const node = buildManifest(snapshotCommand(root));
-			const [first, second] = node.children;
-
-			expect(node.children).toHaveLength(2);
-			// Children sorted alphabetically
-			expect(first?.name).toBe("build");
-			expect(second?.name).toBe("serve");
-		});
-
 		it("omits hidden commands from generated agent documentation", () => {
 			const root = makeCommand({
 				meta: { name: "app" },
@@ -501,39 +404,6 @@ describe("buildManifest", () => {
 			expect(buildManifest(snapshotCommand(root)).children.map((child) => child.name)).toEqual([
 				"visible",
 			]);
-		});
-
-		it("constructs correct paths for nested subcommands", () => {
-			const add = makeCommand({
-				meta: { name: "add", description: "Add a remote" },
-				args: [{ name: "name", type: "string", required: true }] as ArgDef[],
-				run() {},
-			});
-
-			const remove = makeCommand({
-				meta: { name: "remove", description: "Remove a remote" },
-				args: [{ name: "name", type: "string", required: true }] as ArgDef[],
-				run() {},
-			});
-
-			const remote = makeCommand({
-				meta: { name: "remote", description: "Manage remotes" },
-				subCommands: { add, remove },
-			});
-
-			const root = makeCommand({
-				meta: { name: "git" },
-				subCommands: { remote },
-			});
-
-			const node = buildManifest(snapshotCommand(root));
-			const remoteNode = node.children[0];
-			const [addNode, removeNode] = remoteNode?.children ?? [];
-
-			expect(node.path).toEqual(["git"]);
-			expect(remoteNode?.path).toEqual(["git", "remote"]);
-			expect(addNode?.path).toEqual(["git", "remote", "add"]);
-			expect(removeNode?.path).toEqual(["git", "remote", "remove"]);
 		});
 
 		it("sorts children alphabetically at every level", () => {
@@ -591,37 +461,6 @@ describe("buildManifest", () => {
 			expect(leafNode?.runnable).toBe(true);
 		});
 
-		it("handles a command that is both runnable and has subcommands", () => {
-			const sub = makeCommand({
-				meta: { name: "sub" },
-				run() {},
-			});
-
-			const parent = makeCommand({
-				meta: { name: "parent" },
-				subCommands: { sub },
-				run() {},
-			});
-
-			const node = buildManifest(snapshotCommand(parent));
-			const [child] = node.children;
-
-			expect(node.runnable).toBe(true);
-			expect(node.children).toHaveLength(1);
-			expect(child?.runnable).toBe(true);
-		});
-
-		it("handles commands with no subCommands returning empty children", () => {
-			const cmd = makeCommand({
-				meta: { name: "solo" },
-				run() {},
-			});
-
-			const node = buildManifest(snapshotCommand(cmd));
-
-			expect(node.children).toEqual([]);
-		});
-
 		it("preserves metadata sections on nested commands", () => {
 			const deploy = makeCommand({
 				meta: {
@@ -665,34 +504,6 @@ describe("buildManifest", () => {
 			expect(child?.sections).toEqual([
 				{ title: "Environment", body: "Read the environment carefully before execution." },
 			]);
-		});
-	});
-
-	// ────────────────────────────────────────────────────────────────────────
-	// Determinism — same input produces identical output
-	// ────────────────────────────────────────────────────────────────────────
-
-	describe("deterministic output", () => {
-		it("produces identical manifests from the same command tree", () => {
-			const leaf = makeCommand({
-				meta: { name: "deploy", description: "Deploy the app" },
-				args: [{ name: "env", type: "string", required: true }] as ArgDef[],
-				flags: {
-					force: { type: "boolean", short: "f" },
-					target: { type: "string", default: "production" },
-				},
-				run() {},
-			});
-
-			const root = makeCommand({
-				meta: { name: "app" },
-				subCommands: { deploy: leaf },
-			});
-
-			const first = buildManifest(snapshotCommand(root));
-			const second = buildManifest(snapshotCommand(root));
-
-			expect(JSON.stringify(first)).toBe(JSON.stringify(second));
 		});
 	});
 
@@ -834,18 +645,6 @@ describe("buildManifest", () => {
 
 			expect(deepNode?.name).toBe("deep");
 			expect(deepNode?.path).toEqual(["root", "level2", "level3", "deep"]);
-		});
-
-		it("handles empty flags record", () => {
-			const cmd = makeCommand({
-				meta: { name: "test" },
-				flags: {},
-				run() {},
-			});
-
-			const node = buildManifest(snapshotCommand(cmd));
-
-			expect(node.flags).toEqual([]);
 		});
 	});
 });

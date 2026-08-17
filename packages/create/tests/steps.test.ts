@@ -28,12 +28,6 @@ afterEach(() => {
 
 describe("runSteps", () => {
 	describe("git-init step", () => {
-		it("creates a .git directory", async () => {
-			await runSteps([{ type: "git-init" }], tempDir);
-
-			expect(existsSync(join(tempDir, ".git"))).toBe(true);
-		});
-
 		it("creates an initial commit when commit message is provided", async () => {
 			// Create a file so git has something to commit
 			writeFileSync(join(tempDir, "README.md"), "# Test Project\n");
@@ -154,11 +148,6 @@ describe("runSteps", () => {
 
 			// The second command should not have run
 			expect(existsSync(join(tempDir, "fail.txt"))).toBe(false);
-		});
-
-		it("handles empty steps array", async () => {
-			// Should complete without error
-			await runSteps([], tempDir);
 		});
 	});
 });

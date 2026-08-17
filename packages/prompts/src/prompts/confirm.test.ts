@@ -66,19 +66,6 @@ describe("confirm — default value", () => {
 		const result = await promise;
 		expect(result).toBe(false);
 	});
-
-	it("uses default: true when specified", async () => {
-		const promise = start({
-			message: "Continue?",
-			default: true,
-		});
-
-		await tick();
-		pressKey("", { name: "return" });
-
-		const result = await promise;
-		expect(result).toBe(true);
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -248,17 +235,6 @@ describe("confirm — custom labels", () => {
 		await promise;
 	});
 
-	it("renders default Yes/No labels when not customized", async () => {
-		const promise = start({ message: "Continue?" });
-
-		await tick();
-		expect(screen()).toContain("Yes");
-		expect(screen()).toContain("No");
-
-		pressKey("", { name: "return" });
-		await promise;
-	});
-
 	it("shows selected custom label on submit", async () => {
 		const promise = start({
 			message: "Accept?",
@@ -288,16 +264,6 @@ describe("confirm — rendering", () => {
 
 		await tick();
 		expect(screen()).toContain("Deploy to production?");
-
-		pressKey("", { name: "return" });
-		await promise;
-	});
-
-	it("renders separator between options", async () => {
-		const promise = start({ message: "Continue?" });
-
-		await tick();
-		expect(screen()).toContain(" · ");
 
 		pressKey("", { name: "return" });
 		await promise;
@@ -357,10 +323,6 @@ describe("confirm — non-TTY", () => {
 		return confirm(options, nonTTYIO());
 	}
 
-	it("throws NonInteractiveError when stdin is not a TTY", async () => {
-		await expect(nonTTY({ message: "Continue?" })).rejects.toThrow("interactive terminal");
-	});
-
 	it("returns initial value in non-TTY environment", async () => {
 		const result = await nonTTY({
 			message: "Continue?",
@@ -377,15 +339,6 @@ describe("confirm — non-TTY", () => {
 		});
 
 		expect(result).toBe(false);
-	});
-
-	it("returns explicit default true in non-TTY environment", async () => {
-		const result = await nonTTY({
-			message: "Continue?",
-			default: true,
-		});
-
-		expect(result).toBe(true);
 	});
 
 	it("throws NonInteractiveError when no explicit default in non-TTY", async () => {

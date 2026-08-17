@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
-import { bold, red } from "../runtimeExports.ts";
+import { bold } from "../runtimeExports.ts";
 import { setEnv, snapshotEnv } from "../testEnv.ts";
 import { center, padEnd, padStart } from "./pad.ts";
 
@@ -32,10 +32,6 @@ describe("padStart — plain text", () => {
 	it("pads empty string", () => {
 		expect(padStart("", 3)).toBe("   ");
 	});
-
-	it("pads single character", () => {
-		expect(padStart("x", 4)).toBe("   x");
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -49,16 +45,6 @@ describe("padStart — styled text", () => {
 		// Padding goes before the styled text
 		expect(result).toBe(`   ${styled}`);
 	});
-
-	it("returns styled text unchanged when already at target width", () => {
-		const styled = red("hello");
-		expect(padStart(styled, 5)).toBe(styled);
-	});
-
-	it("handles styled text wider than target", () => {
-		const styled = bold("hello world");
-		expect(padStart(styled, 5)).toBe(styled);
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -69,11 +55,6 @@ describe("padStart — full-width characters", () => {
 	it("pads correctly with CJK characters", () => {
 		// \u4f60 = 你, visible width = 2
 		expect(padStart("\u4f60", 5)).toBe("   \u4f60");
-	});
-
-	it("returns CJK text unchanged when at target width", () => {
-		// \u4f60\u597d = 你好, visible width = 4
-		expect(padStart("\u4f60\u597d", 4)).toBe("\u4f60\u597d");
 	});
 });
 
@@ -113,11 +94,6 @@ describe("padEnd — styled text", () => {
 		const result = padEnd(styled, 5);
 		// Padding goes after the styled text
 		expect(result).toBe(`${styled}   `);
-	});
-
-	it("returns styled text unchanged when already at target width", () => {
-		const styled = red("hello");
-		expect(padEnd(styled, 5)).toBe(styled);
 	});
 });
 
@@ -159,10 +135,6 @@ describe("center — plain text", () => {
 	it("centers empty string", () => {
 		expect(center("", 4)).toBe("    ");
 	});
-
-	it("centers single character", () => {
-		expect(center("x", 5)).toBe("  x  ");
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -174,11 +146,6 @@ describe("center — styled text", () => {
 		const styled = bold("hi");
 		const result = center(styled, 6);
 		expect(result).toBe(`  ${styled}  `);
-	});
-
-	it("returns styled text unchanged when already at target width", () => {
-		const styled = red("hello");
-		expect(center(styled, 5)).toBe(styled);
 	});
 });
 

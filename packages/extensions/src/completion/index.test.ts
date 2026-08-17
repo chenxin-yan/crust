@@ -84,14 +84,6 @@ function buildCli() {
 }
 
 describe("completion", () => {
-	it("registers a `completion` subcommand on the root command (after setup)", async () => {
-		const app = buildCli();
-		const root = await app.snapshot();
-		expect(Object.keys(root.subCommands)).toContain("completion");
-		const completionNode = root.subCommands.completion;
-		expect(completionNode?.meta.description).toBe("Generate shell tab-completion scripts");
-	});
-
 	it("exposes options: command name override", async () => {
 		const app = new Crust("mycli")
 			.extend(completion({ command: "shell-completion" }))

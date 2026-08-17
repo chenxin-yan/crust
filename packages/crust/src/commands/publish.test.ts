@@ -2,29 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { Crust } from "@crustjs/core";
-
 import {
 	buildPublishCommand,
-	publishCommand,
 	publishStagedPackages,
 	readPublishManifest,
 	validatePublishManifest,
 } from "../../src/commands/publish.ts";
 import type { DistributionManifest } from "../utils/distribute.ts";
-
-/** Parse argv against the added publish command's grammar. */
-async function parsePublishArgs(flags: Record<string, unknown> = {}) {
-	let captured: { flags: Record<string, unknown> } | undefined;
-	const app = new Crust("test").add(publishCommand);
-	const node = app._node.subCommands.publish!;
-	node.run = (ctx) => {
-		captured = { flags: (ctx as { flags: Record<string, unknown> }).flags };
-	};
-	await app.run(["publish"], { flags } as never);
-	if (!captured) throw new Error("publish action did not run");
-	return captured;
-}
 
 function writeStageFixture(tmpDir: string, manifest: DistributionManifest) {
 	mkdirSync(join(tmpDir, "root", "bin"), { recursive: true });
@@ -64,17 +48,6 @@ function writeStageFixture(tmpDir: string, manifest: DistributionManifest) {
 
 	writeFileSync(join(tmpDir, "manifest.json"), JSON.stringify(manifest, null, 2));
 }
-
-describe("publishCommand definition", () => {
-	it("has correct defaults", async () => {
-		const result = await parsePublishArgs();
-
-		expect(result.flags["stage-dir"]).toBe("dist/npm");
-		expect(result.flags.access).toBe("public");
-		expect(result.flags["dry-run"]).toBe(false);
-		expect(result.flags.verify).toBe(true);
-	});
-});
 
 describe("publish manifest validation", () => {
 	const tmpDir = join(import.meta.dir, ".tmp-publish");

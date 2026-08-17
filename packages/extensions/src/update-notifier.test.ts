@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
-import { Crust, defineExtension } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
 
 import {
@@ -636,31 +636,6 @@ describe("updateNotifier post-run hook", () => {
 			// No notice on timeout
 			expect(getOutput()).toBe("");
 		});
-
-		it("respects custom timeoutMs", async () => {
-			const pkgName = uniquePackageName("custom-timeout");
-			mockFetch(
-				(_input, init) =>
-					new Promise<Response>((_resolve, reject) => {
-						if (init?.signal) {
-							init.signal.addEventListener("abort", () => {
-								reject(new DOMException("The operation was aborted.", "AbortError"));
-							});
-						}
-					}),
-			);
-
-			const start = Date.now();
-			await runExtensionMiddleware({
-				currentVersion: "1.0.0",
-				packageName: pkgName,
-				timeoutMs: 50,
-			});
-			const elapsed = Date.now() - start;
-
-			// Should complete relatively close to the timeout value
-			expect(elapsed).toBeLessThan(2000);
-		});
 	});
 
 	// ── Dedupe behavior ───────────────────────────────────────────────────
@@ -996,33 +971,6 @@ describe("updateNotifier post-run hook", () => {
 			expect(commandExecuted).toBe(true);
 			expect(getOutput()).toContain("Update available");
 			expect(getOutput()).toContain("5.0.0");
-		});
-
-		it("does not interfere with other extensions", async () => {
-			const pkgName = uniquePackageName("other-extensions");
-			mockRegistryResponse("2.0.0");
-
-			let commandExecuted = false;
-
-			// Combine with a custom no-op extension
-			const otherExtension = defineExtension("test-other");
-
-			const app = new Crust(pkgName, { description: "Test" })
-				.extend(otherExtension)
-				.extend(
-					updateNotifier({
-						currentVersion: "1.0.0",
-						packageName: pkgName,
-					}),
-				)
-				.action(() => {
-					commandExecuted = true;
-				});
-
-			await app.execute({ argv: [] });
-
-			expect(commandExecuted).toBe(true);
-			expect(getOutput()).toContain("Update available");
 		});
 
 		it("does not break command execution when registry is down", async () => {

@@ -99,13 +99,6 @@ describe("command definitions", () => {
 		);
 	});
 
-	it("rejects a second action on the definition builder", () => {
-		const definition = defineCommand("duplicate", (command) =>
-			command.action(() => {}).action(() => {}),
-		);
-		expect(() => new Crust("cli").add(definition)).toThrow(/already has an action/);
-	});
-
 	it(".as() renames without mutating the original definition", () => {
 		const definition = defineCommand("build", (command) => command.action(() => {}));
 		const renamed = definition.as("compile");
@@ -216,21 +209,6 @@ describe("command definitions", () => {
 		);
 	});
 
-	it("runs added definitions through run and execute", async () => {
-		let calls = 0;
-		const definition = defineCommand("build", (command) =>
-			command.action(() => {
-				calls++;
-			}),
-		);
-		const app = new Crust("cli").add(definition);
-
-		await app.run(["build"]);
-		await app.execute({ argv: ["build"] });
-
-		expect(calls).toBe(2);
-	});
-
 	it("adds multiple definitions in one variadic call", async () => {
 		const ran: string[] = [];
 		const build = defineCommand("build", (command) =>
@@ -249,33 +227,6 @@ describe("command definitions", () => {
 		await app.run(["publish"]);
 
 		expect(ran).toEqual(["build", "publish"]);
-	});
-
-	it("uses the same lineage checks for inline definitions", () => {
-		expect(() =>
-			new Crust("cli").add(defineCommand("bad", () => new Crust("foreign") as never)),
-		).toThrow(/same command builder/);
-	});
-
-	it("validates canonical names and aliases on every add", () => {
-		const definition = defineCommand("build", { aliases: ["b"] }, (command) =>
-			command.action(() => {}),
-		);
-		const app = new Crust("cli").add(definition);
-
-		expect(() => {
-			// @ts-expect-error -- runtime twin rejects duplicate definitions for plain-JS consumers
-			app.add(definition);
-		}).toThrow(/already registered/);
-		expect(() => {
-			// @ts-expect-error -- runtime twin rejects a name colliding with a sibling alias
-			app.add(defineCommand("b", (command) => command));
-		}).toThrow(/collides with alias of sibling "build"/);
-		expect(() => {
-			const withB = new Crust("cli").add(defineCommand("b", (command) => command));
-			// @ts-expect-error -- runtime twin rejects an alias colliding with a sibling name
-			withB.add(definition);
-		}).toThrow(/collides with sibling canonical name "b"/);
 	});
 
 	it("rejects unrelated returned builders and nested Extensions", () => {

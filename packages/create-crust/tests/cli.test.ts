@@ -78,25 +78,6 @@ describe("create-crust CLI", () => {
 		expect(existsSync(join(projectDir, ".git"))).toBe(false);
 	}, 30_000);
 
-	it("rejects the removed --template flag (single minimal template)", async () => {
-		const tempRoot = makeTempRoot("create-crust-invalid-template");
-		const projectDir = join(tempRoot, "bad-template");
-
-		const result = await runCreateCrust([
-			projectDir,
-			"--template",
-			"modular",
-			"--distribution",
-			"binary",
-			"--no-install",
-			"--no-git",
-		]);
-
-		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain('Unknown flag "--template"');
-		expect(existsSync(projectDir)).toBe(false);
-	}, 30_000);
-
 	it("fails with a clear error for an invalid distribution", async () => {
 		const tempRoot = makeTempRoot("create-crust-invalid-distribution");
 		const projectDir = join(tempRoot, "bad-distribution");

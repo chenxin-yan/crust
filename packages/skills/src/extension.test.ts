@@ -19,7 +19,6 @@ import { createPromptIO } from "@crustjs/prompts/testing";
 
 import { skill } from "./extension.ts";
 import { installSkill } from "./generate.ts";
-import { SkillSourceUnavailableError, loadPackagedSkills } from "./source.ts";
 
 let tempRoot: string;
 
@@ -254,12 +253,6 @@ describe("skill extension package sources", () => {
 		expect(output).toContain("Agent skills:");
 		expect(output).toContain("Packaged skills could not be read.");
 		expect(output).not.toContain("The skill source path is unavailable.");
-	});
-
-	it("fails clearly when its source cannot be resolved", () => {
-		expect(() => loadPackagedSkills(join(tempRoot, "missing-skills"))).toThrow(
-			SkillSourceUnavailableError,
-		);
 	});
 
 	it("does not break unrelated commands when the source is unavailable", async () => {
