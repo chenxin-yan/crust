@@ -3,7 +3,6 @@ import {
 	type Extension,
 	type SectionConsumer,
 	defineExtension,
-	defineSectionConsumer,
 	sectionsFor,
 } from "@crustjs/core";
 import {
@@ -20,7 +19,7 @@ const FLAG_COLUMN_WIDTH = 28;
 const ARG_COLUMN_WIDTH = 18;
 const COMMAND_COLUMN_WIDTH = 10;
 
-export const HELP: SectionConsumer = defineSectionConsumer("help");
+export const HELP: SectionConsumer = "help";
 
 function formatArgToken(arg: DocumentationArg): string {
 	return arg.required ? yellow(arg.token) : dim(yellow(arg.token));

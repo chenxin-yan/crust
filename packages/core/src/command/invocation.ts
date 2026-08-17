@@ -162,23 +162,10 @@ function validateSectionConsumers(
 	consumers: unknown,
 	owner: SectionOwner,
 ): readonly SectionConsumer[] {
-	if (
-		!Array.isArray(consumers) ||
-		consumers.length === 0 ||
-		!consumers.every(
-			(consumer) =>
-				typeof consumer === "object" &&
-				consumer !== null &&
-				isText((consumer as { id?: unknown }).id),
-		)
-	) {
+	if (!Array.isArray(consumers) || consumers.length === 0 || !consumers.every(isText)) {
 		throw invalidSections(owner);
 	}
-	return Object.freeze(
-		consumers.map(
-			(consumer) => Object.freeze({ id: (consumer as { id: string }).id }) as SectionConsumer,
-		),
-	);
+	return Object.freeze([...consumers]);
 }
 
 function validateSection(section: unknown, owner: SectionOwner): CommandSection {
@@ -196,13 +183,13 @@ function validateSection(section: unknown, owner: SectionOwner): CommandSection 
 	) {
 		throw invalidSections(owner);
 	}
-	if (only !== undefined) {
-		return Object.freeze({ title, body, only: validateSectionConsumers(only, owner) });
-	}
-	if (except !== undefined) {
-		return Object.freeze({ title, body, except: validateSectionConsumers(except, owner) });
-	}
-	return Object.freeze({ title, body });
+	// Cast: the only/except mutual-exclusion check above enforces SectionAudience.
+	return Object.freeze({
+		title,
+		body,
+		...(only !== undefined && { only: validateSectionConsumers(only, owner) }),
+		...(except !== undefined && { except: validateSectionConsumers(except, owner) }),
+	}) as CommandSection;
 }
 
 function validateAuthoredSections(node: CommandNode): void {

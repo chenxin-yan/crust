@@ -49,7 +49,7 @@ export type {
 } from "./command/crust.ts";
 export { Crust, defineCommand } from "./command/crust.ts";
 // Documentation sections
-export { defineSectionConsumer, sectionsFor } from "./sections.ts";
+export { sectionsFor } from "./sections.ts";
 // Errors
 export type {
 	CommandNotFoundErrorDetails,

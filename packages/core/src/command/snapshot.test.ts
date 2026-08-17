@@ -4,7 +4,6 @@ import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
-import { defineSectionConsumer } from "../sections.ts";
 import { Crust, defineCommand } from "./crust.ts";
 import { createCommandNode } from "./node.ts";
 import { snapshotCommand } from "./snapshot.ts";
@@ -153,14 +152,12 @@ describe("command metadata sections", () => {
 	});
 
 	it("preserves authored and contributed section audiences", async () => {
-		const help = defineSectionConsumer("help");
-		const skills = defineSectionConsumer("skills");
 		const app = new Crust("cli", {
-			sections: [{ title: "Agent notes", body: "Agent body", only: [skills] }],
+			sections: [{ title: "Agent notes", body: "Agent body", only: ["skills"] }],
 		}).extend(
 			defineExtension("docs", {
 				sections: () => [
-					{ command: [], title: "Human notes", body: "Human body", except: [skills, help] },
+					{ command: [], title: "Human notes", body: "Human body", except: ["skills", "help"] },
 				],
 			}),
 		);
@@ -168,14 +165,13 @@ describe("command metadata sections", () => {
 		const snapshot = await app.snapshot();
 
 		expect(snapshot.meta.sections).toEqual([
-			{ title: "Agent notes", body: "Agent body", only: [skills] },
-			{ title: "Human notes", body: "Human body", except: [skills, help] },
+			{ title: "Agent notes", body: "Agent body", only: ["skills"] },
+			{ title: "Human notes", body: "Human body", except: ["skills", "help"] },
 		]);
 		expect(Object.isFrozen(snapshot.meta.sections?.[0]?.only)).toBe(true);
-		expect(Object.isFrozen(snapshot.meta.sections?.[0]?.only?.[0])).toBe(true);
 		const clonedSections = structuredClone(snapshot).meta.sections;
-		expect(clonedSections?.[0]?.only?.[0]?.id).toBe("skills");
-		expect(clonedSections?.[1]?.except?.map(({ id }) => id)).toEqual(["skills", "help"]);
+		expect(clonedSections?.[0]?.only).toEqual(["skills"]);
+		expect(clonedSections?.[1]?.except).toEqual(["skills", "help"]);
 	});
 
 	it("rejects unknown and aliased contribution paths", async () => {
@@ -206,13 +202,13 @@ describe("command metadata sections", () => {
 			[{ title: "Notes", body: "" }],
 			[{ title: 1, body: "Body" }],
 			[{ title: "Notes", body: null }],
-			[{ title: "Notes", body: "Body", only: [], except: [{ id: "help" }] }],
+			[{ title: "Notes", body: "Body", only: [], except: ["help"] }],
 			[{ title: "Notes", body: "Body", only: "help" }],
 			[{ title: "Notes", body: "Body", only: [] }],
 			[{ title: "Notes", body: "Body", except: [] }],
-			[{ title: "Notes", body: "Body", only: [{}] }],
-			[{ title: "Notes", body: "Body", except: [{ id: 1 }] }],
-			[{ title: "Notes", body: "Body", only: [{ id: "   " }] }],
+			[{ title: "Notes", body: "Body", only: [{ id: "help" }] }],
+			[{ title: "Notes", body: "Body", except: [1] }],
+			[{ title: "Notes", body: "Body", only: ["   "] }],
 			[null],
 		];
 		for (const sections of badSections) {
@@ -239,7 +235,7 @@ describe("command metadata sections", () => {
 			[{ command: [], title: "Notes", body: "Body", only: [], except: [] }],
 			[{ command: [], title: "Notes", body: "Body", only: "help" }],
 			[{ command: [], title: "Notes", body: "Body", only: [] }],
-			[{ command: [], title: "Notes", body: "Body", only: [{ id: null }] }],
+			[{ command: [], title: "Notes", body: "Body", only: [null] }],
 		];
 		for (const contributions of badReturns) {
 			const app = new Crust("cli").extend(

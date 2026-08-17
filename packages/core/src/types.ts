@@ -721,13 +721,8 @@ export type InputFlags<F extends FlagsDef> = Simplify<
 // CommandMeta — Command metadata
 // ────────────────────────────────────────────────────────────────────────────
 
-declare const sectionConsumerBrand: unique symbol;
-
-/** A renderer that consumes command documentation sections. */
-export interface SectionConsumer {
-	readonly id: string;
-	readonly [sectionConsumerBrand]: true;
-}
+/** Identifier of a renderer that consumes command documentation sections. */
+export type SectionConsumer = string;
 
 export type SectionAudience =
 	| { readonly only: readonly SectionConsumer[]; readonly except?: never }

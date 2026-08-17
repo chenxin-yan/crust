@@ -80,7 +80,7 @@ const guidance = defineExtension("guidance", {
 
 Titles must be non-empty single lines, and bodies are non-empty plain text so the same content is safe for terminal help and mdoc output.
 
-Sections are visible to every renderer by default. Renderer packages export consumer tokens that let authors narrow a section with mutually exclusive `only` or `except` fields:
+Sections are visible to every renderer by default. Renderer packages export consumer ids that let authors narrow a section with mutually exclusive `only` or `except` fields:
 
 ```ts
 import { defineCommand } from "@crustjs/core";
@@ -100,7 +100,7 @@ const deploy = defineCommand(
 );
 ```
 
-A renderer defines its own token with `defineSectionConsumer()` and selects its sections with `sectionsFor()`. Core does not maintain a fixed list of consumers. Passing several tokens to `sectionsFor()` uses any-of semantics.
+A renderer exports its own consumer id and selects its sections with `sectionsFor()`. Core does not maintain a fixed list of consumers.
 
 ## Build hooks
 
