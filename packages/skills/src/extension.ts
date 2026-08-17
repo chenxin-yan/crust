@@ -324,9 +324,18 @@ async function reconcileSkill(opts: {
 	// universal group at project scope); removing a deselected agent's link there
 	// would also uninstall the retained agents.
 	const keptDirs = new Set(selected.map((agent) => statusMap.get(agent)?.outputDir));
-	const toUninstall = [...installed].filter(
-		(agent) => !selected.includes(agent) && !keptDirs.has(statusMap.get(agent)?.outputDir),
-	);
+	const deselected = [...installed].filter((agent) => !selected.includes(agent));
+	const toUninstall = deselected.filter((agent) => !keptDirs.has(statusMap.get(agent)?.outputDir));
+	for (const agent of deselected) {
+		const entry = statusMap.get(agent);
+		if (entry && keptDirs.has(entry.outputDir)) {
+			console.warn(
+				yellow(
+					`Kept ${AGENT_LABELS[agent]} [${packagedSkill.name}]: "${entry.outputDir}" is shared with a selected agent.`,
+				),
+			);
+		}
+	}
 
 	if (toInstall.length > 0) {
 		const groups = groupAgentsByOutputDir(toInstall, scope, packagedSkill.name);
