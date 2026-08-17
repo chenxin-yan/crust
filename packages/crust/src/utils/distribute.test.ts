@@ -316,4 +316,20 @@ await app.execute();
 			}),
 		).rejects.toThrow("--stage-dir cannot contain the artifact output directory");
 	});
+
+	it("rejects a reserved bin artifact directory", async () => {
+		process.cwd = () => tmpDir;
+		const artifactOutDir = join(tmpDir, "dist-bin");
+		mkdirSync(join(artifactOutDir, "bin"), { recursive: true });
+
+		await expect(
+			runDistributeBuild({
+				entry: "src/cli.ts",
+				minify: true,
+				target: ["bun-darwin-arm64"],
+				stageDir: ".stage",
+				artifactOutDir,
+			}),
+		).rejects.toThrow('Artifact directory "bin"');
+	});
 });

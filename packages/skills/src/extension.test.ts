@@ -113,6 +113,13 @@ describe("skill extension package sources", () => {
 		expect(generated).toContain("name: demo");
 		expect(generated).not.toContain("version:");
 		expect(generated).not.toContain(tempRoot);
+		// The snapshot was prepared while the source was missing; the emitted
+		// skill must not embed that stale warning in its command reference.
+		const rootReference = await readFile(
+			join(outDir, "skills", "demo", "commands", "demo.md"),
+			"utf8",
+		);
+		expect(rootReference).not.toContain("unavailable");
 	});
 
 	it("installs every packaged skill as a link", async () => {

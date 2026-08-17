@@ -30,6 +30,7 @@ import {
 import type { AgentTarget, InstallSkillResult, Scope, SkillOptions } from "./types.ts";
 
 const DEFAULT_SKILL_COMMAND_NAME = "skill";
+const SKILLS_SECTION_TITLE = "Agent skills";
 const DEFAULT_SKILL_SCOPE = "global";
 const UNIVERSAL_GROUP = "__universal__";
 
@@ -202,10 +203,18 @@ async function buildSkills(options: SkillOptions, context: ExtensionBuildContext
 		source = resolveSkillSource(options.source);
 	} catch (error) {
 		if (!(error instanceof SkillSourceUnavailableError)) throw error;
-		await writeSkillsFromSnapshot(context.snapshot, {
-			outDir,
-			version: await readPackageVersion(),
-		});
+		// The snapshot's Agent skills section was rendered while the source was
+		// still missing; drop that stale warning from the skill this hook emits.
+		const meta = {
+			...context.snapshot.meta,
+			sections: context.snapshot.meta.sections?.filter(
+				(section) => section.title !== SKILLS_SECTION_TITLE,
+			),
+		};
+		await writeSkillsFromSnapshot(
+			{ ...context.snapshot, meta },
+			{ outDir, version: await readPackageVersion() },
+		);
 		return;
 	}
 
@@ -229,7 +238,7 @@ export function skill(options: SkillOptions): Extension {
 		sections: (snapshot) => [
 			{
 				command: [],
-				title: "Agent skills",
+				title: SKILLS_SECTION_TITLE,
 				body: formatSkillDocumentation(options.source, commandName, snapshot.meta.name),
 			},
 		],

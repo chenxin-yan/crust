@@ -29,6 +29,17 @@ describe("man Extension", () => {
 		expect(output).not.toContain(outDir);
 	});
 
+	it("honors a configured installed name", async () => {
+		const outDir = await mkdtemp(join(tmpdir(), "crust-man-extension-"));
+		directories.push(outDir);
+		const extension = man({ name: "my-tool" });
+		const snapshot = await new Crust("demo").extend(extension).snapshot();
+
+		await extension.build?.({ snapshot, outDir });
+
+		expect(await readFile(join(outDir, "man", "my-tool.1"), "utf8")).toContain(".Nm my-tool");
+	});
+
 	it("defaults to section 1", async () => {
 		const outDir = await mkdtemp(join(tmpdir(), "crust-man-extension-"));
 		directories.push(outDir);

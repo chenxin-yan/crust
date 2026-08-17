@@ -571,6 +571,13 @@ function collectArtifacts(
 		.filter((entry) => entry.isDirectory() && !isWithin(join(artifactOutDir, entry.name), stageDir))
 		.map((entry) => entry.name)
 		.sort();
+	// Staged packages generate their own bin/ (resolver + platform binaries); a
+	// hook artifact named bin would merge into it and could overwrite them.
+	if (names.includes("bin")) {
+		throw new Error(
+			`Artifact directory "bin" in ${artifactOutDir} conflicts with the generated npm bin directory.\n  Emit build artifacts under a different top-level name.`,
+		);
+	}
 	const manPages = names.includes("man")
 		? readdirSync(join(artifactOutDir, "man"), { withFileTypes: true })
 				.filter((entry) => entry.isFile())
