@@ -51,8 +51,8 @@ const AGENTS: Record<AgentTarget, AgentConfig> = {
 	antigravity: {
 		label: "Antigravity",
 		class: "additional",
-		projectSkillsDir: join(".agent", "skills"),
-		globalSkillsDir: (home) => join(home, ".gemini", "antigravity", "skills"),
+		projectSkillsDir: PROJECT_UNIVERSAL_SKILLS_DIR,
+		globalSkillsDir: (home) => join(home, ".gemini", "config", "skills"),
 		detectCommands: ["antigravity"],
 	},
 	augment: {
@@ -201,7 +201,7 @@ const AGENTS: Record<AgentTarget, AgentConfig> = {
 		label: "Mistral Vibe",
 		class: "additional",
 		projectSkillsDir: join(".vibe", "skills"),
-		globalSkillsDir: (home) => join(home, ".vibe", "skills"),
+		globalSkillsDir: (home) => join(process.env.VIBE_HOME || join(home, ".vibe"), "skills"),
 		detectCommands: ["mistral-vibe", "vibe"],
 	},
 	mux: {
@@ -240,10 +240,9 @@ const AGENTS: Record<AgentTarget, AgentConfig> = {
 	},
 	pi: {
 		label: "Pi",
-		class: "additional",
-		projectSkillsDir: join(".pi", "skills"),
-		globalSkillsDir: (home) => join(home, ".pi", "agent", "skills"),
-		detectCommands: ["pi"],
+		class: "universal",
+		projectSkillsDir: PROJECT_UNIVERSAL_SKILLS_DIR,
+		globalSkillsDir: universalGlobalSkillsDir,
 	},
 	pochi: {
 		label: "Pochi",
@@ -293,12 +292,24 @@ const AGENTS: Record<AgentTarget, AgentConfig> = {
 		globalSkillsDir: (home) => join(home, ".trae-cn", "skills"),
 		detectCommands: ["trae-cn", "trae"],
 	},
+	warp: {
+		label: "Warp",
+		class: "universal",
+		projectSkillsDir: PROJECT_UNIVERSAL_SKILLS_DIR,
+		globalSkillsDir: universalGlobalSkillsDir,
+	},
 	windsurf: {
 		label: "Windsurf",
 		class: "additional",
 		projectSkillsDir: join(".windsurf", "skills"),
 		globalSkillsDir: (home) => join(home, ".codeium", "windsurf", "skills"),
 		detectCommands: ["windsurf"],
+	},
+	zed: {
+		label: "Zed",
+		class: "universal",
+		projectSkillsDir: PROJECT_UNIVERSAL_SKILLS_DIR,
+		globalSkillsDir: universalGlobalSkillsDir,
 	},
 	zencoder: {
 		label: "Zencoder",
@@ -322,18 +333,18 @@ export function getUniversalAgents(): AgentTarget[] {
 	return ALL_AGENTS.filter((agent) => AGENTS[agent].class === "universal");
 }
 
-/** Returns agents that use agent-specific skill roots. */
+/** Returns agents that do not use the canonical layout at both scopes. */
 export function getAdditionalAgents(): AgentTarget[] {
 	return ALL_AGENTS.filter((agent) => AGENTS[agent].class === "additional");
 }
 
-/** Returns true if the agent uses the canonical `.agents/skills` layout. */
+/** Returns true if the agent uses the canonical layout at both scopes. */
 export function isUniversalAgent(agent: AgentTarget): boolean {
 	return AGENTS[agent].class === "universal";
 }
 
 /**
- * Detects installed additional agents by checking PATH for their CLI binaries.
+ * Detects installed non-universal agents by checking PATH for their CLI binaries.
  *
  * Universal agents are intentionally not detected here so callers can always
  * present them as a single optional "Universal" install target.

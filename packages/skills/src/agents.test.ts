@@ -44,6 +44,35 @@ describe("resolveAgentPath", () => {
 		expect(result).toBe(join(homedir(), ".agents", "skills", "my-cli"));
 	});
 
+	it("resolves Antigravity's universal project and agent-specific global paths", () => {
+		expect(resolveAgentPath("antigravity", "project", "my-cli")).toBe(
+			join(process.cwd(), ".agents", "skills", "my-cli"),
+		);
+		expect(resolveAgentPath("antigravity", "global", "my-cli")).toBe(
+			join(homedir(), ".gemini", "config", "skills", "my-cli"),
+		);
+	});
+
+	it("resolves Mistral Vibe's global path from VIBE_HOME, falling back to ~/.vibe", () => {
+		const original = process.env.VIBE_HOME;
+		try {
+			process.env.VIBE_HOME = join(homedir(), "custom-vibe");
+			expect(resolveAgentPath("mistral-vibe", "global", "my-cli")).toBe(
+				join(homedir(), "custom-vibe", "skills", "my-cli"),
+			);
+			delete process.env.VIBE_HOME;
+			expect(resolveAgentPath("mistral-vibe", "global", "my-cli")).toBe(
+				join(homedir(), ".vibe", "skills", "my-cli"),
+			);
+		} finally {
+			if (original === undefined) {
+				delete process.env.VIBE_HOME;
+			} else {
+				process.env.VIBE_HOME = original;
+			}
+		}
+	});
+
 	it("treats home-directory project scope as global for universal agents", async () => {
 		await withCwd(homedir(), () => {
 			expect(resolveAgentPath("opencode", "project", "my-cli")).toBe(
@@ -66,7 +95,9 @@ describe("agent registry", () => {
 		expect(ALL_AGENTS).toContain("claude-code");
 		expect(ALL_AGENTS).toContain("opencode");
 		expect(ALL_AGENTS).toContain("codex");
+		expect(ALL_AGENTS).toContain("warp");
 		expect(ALL_AGENTS).toContain("windsurf");
+		expect(ALL_AGENTS).toContain("zed");
 		expect(ALL_AGENTS).toContain("openclaw");
 	});
 
@@ -83,6 +114,10 @@ describe("agent registry", () => {
 
 		expect(universal).toContain("opencode");
 		expect(universal).toContain("codex");
+		expect(universal).toContain("pi");
+		expect(universal).toContain("warp");
+		expect(universal).toContain("zed");
+		expect(additional).toContain("antigravity");
 		expect(additional).toContain("claude-code");
 		expect(additional).toContain("windsurf");
 		expect(isUniversalAgent("opencode")).toBe(true);
