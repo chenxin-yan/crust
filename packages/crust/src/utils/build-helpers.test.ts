@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { buildEntrypoint, snapshotEntrypoint } from "./build-helpers.ts";
+import { buildEntrypoint } from "./build-helpers.ts";
 
-describe("snapshotEntrypoint", () => {
+describe("buildEntrypoint", () => {
 	const tempDirs: string[] = [];
 
 	afterEach(async () => {
@@ -27,7 +27,7 @@ describe("snapshotEntrypoint", () => {
 				`await Bun.write(${JSON.stringify(trailingMarker)}, "ran");\n`,
 		);
 
-		const root = await snapshotEntrypoint(entry);
+		const root = await buildEntrypoint(entry, join(directory, "dist"));
 
 		expect(root.meta).toMatchObject({ name: "fixture", description: "Fixture CLI" });
 		expect(root.hasAction).toBe(true);
@@ -114,7 +114,7 @@ describe("snapshotEntrypoint", () => {
 		const entry = join(directory, "cli.ts");
 		await writeFile(entry, "export {};\n");
 
-		await expect(snapshotEntrypoint(entry)).rejects.toThrow(
+		await expect(buildEntrypoint(entry, join(directory, "dist"))).rejects.toThrow(
 			"Entry exited without producing a Command Snapshot",
 		);
 	});
@@ -125,7 +125,9 @@ describe("snapshotEntrypoint", () => {
 		const entry = join(directory, "cli.ts");
 		await writeFile(entry, `throw new Error("entry blew up before execute");\n`);
 
-		await expect(snapshotEntrypoint(entry)).rejects.toThrow("entry blew up before execute");
+		await expect(buildEntrypoint(entry, join(directory, "dist"))).rejects.toThrow(
+			"entry blew up before execute",
+		);
 	});
 
 	it("explains when the snapshot file contains invalid JSON", async () => {
@@ -137,7 +139,7 @@ describe("snapshotEntrypoint", () => {
 			`await Bun.write(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!, "not json");\n`,
 		);
 
-		await expect(snapshotEntrypoint(entry)).rejects.toThrow(
+		await expect(buildEntrypoint(entry, join(directory, "dist"))).rejects.toThrow(
 			"Entry produced an invalid Command Snapshot",
 		);
 	});

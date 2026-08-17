@@ -209,7 +209,7 @@ async function buildSkills(options: SkillOptions, context: ExtensionBuildContext
 		return;
 	}
 
-	if (source === outDir) return;
+	// rm below would destroy a source nested in (or equal to) the output it feeds.
 	if (isWithin(outDir, source)) {
 		throw new Error(
 			`Skill source "${source}" cannot be nested inside output directory "${outDir}".`,

@@ -263,25 +263,10 @@ export async function execBuild(
  */
 const SNAPSHOT_TIMEOUT_MS = 30_000;
 
-export async function snapshotEntrypoint(
-	entryPath: string,
-	envFiles: readonly string[] = [],
-): Promise<CommandSnapshot> {
-	return prepareEntrypoint(entryPath, envFiles);
-}
-
 export async function buildEntrypoint(
 	entryPath: string,
 	outDir: string,
 	envFiles: readonly string[] = [],
-): Promise<CommandSnapshot> {
-	return prepareEntrypoint(entryPath, envFiles, resolve(outDir));
-}
-
-async function prepareEntrypoint(
-	entryPath: string,
-	envFiles: readonly string[],
-	buildOutDir?: string,
 ): Promise<CommandSnapshot> {
 	const absoluteEntry = resolve(entryPath);
 	const snapshotDir = await mkdtemp(join(tmpdir(), "crust-snapshot-"));
@@ -293,7 +278,7 @@ async function prepareEntrypoint(
 			env: {
 				...process.env,
 				[SNAPSHOT_PATH_ENV]: snapshotPath,
-				...(buildOutDir ? { [BUILD_OUT_DIR_ENV]: buildOutDir } : {}),
+				[BUILD_OUT_DIR_ENV]: resolve(outDir),
 				BUN_BE_BUN: "1",
 			},
 			cwd: process.cwd(),
@@ -349,17 +334,14 @@ async function prepareEntrypoint(
 			}
 			throw error;
 		}
-		let snapshot: CommandSnapshot;
 		try {
-			snapshot = JSON.parse(serialized) as CommandSnapshot;
+			return JSON.parse(serialized) as CommandSnapshot;
 		} catch (error) {
 			throw new Error(
 				`Entry produced an invalid Command Snapshot.\n  Ensure ${absoluteEntry} uses a compatible @crustjs/core version.`,
 				{ cause: error },
 			);
 		}
-
-		return snapshot;
 	} finally {
 		await rm(snapshotDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 	}

@@ -250,7 +250,7 @@ describe("runDistributeBuild Extension artifact staging", () => {
 		rmSync(tmpDir, { recursive: true, force: true });
 	});
 
-	it("preserves and stages artifacts when stage-dir contains outdir", async () => {
+	it("stages artifact directories into the root and platform packages", async () => {
 		rmSync(tmpDir, { recursive: true, force: true });
 		mkdirSync(join(tmpDir, "src"), { recursive: true });
 		writeFileSync(
@@ -269,7 +269,7 @@ await app.execute();
 			}),
 		);
 		process.cwd = () => tmpDir;
-		const artifactOutDir = join(tmpDir, ".stage", "artifacts");
+		const artifactOutDir = join(tmpDir, "dist");
 		mkdirSync(join(artifactOutDir, "man"), { recursive: true });
 		mkdirSync(join(artifactOutDir, "skills", "x"), { recursive: true });
 		writeFileSync(join(artifactOutDir, "man", "x.1"), ".Dd generated\n");
@@ -299,5 +299,21 @@ await app.execute();
 			),
 		).toBe("skill\n");
 		expect(readFileSync(join(artifactOutDir, "man", "x.1"), "utf-8")).toContain(".Dd");
+	});
+
+	it("rejects an artifact directory inside stage-dir", async () => {
+		process.cwd = () => tmpDir;
+		const artifactOutDir = join(tmpDir, ".stage", "artifacts");
+		mkdirSync(join(artifactOutDir, "man"), { recursive: true });
+
+		await expect(
+			runDistributeBuild({
+				entry: "src/cli.ts",
+				minify: true,
+				target: ["bun-darwin-arm64"],
+				stageDir: ".stage",
+				artifactOutDir,
+			}),
+		).rejects.toThrow("--stage-dir cannot contain the artifact output directory");
 	});
 });

@@ -3,13 +3,11 @@ import {
 	cpSync,
 	existsSync,
 	mkdirSync,
-	mkdtempSync,
 	readdirSync,
 	readFileSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { bold, cyan, dim, green } from "@crustjs/style";
@@ -510,29 +508,25 @@ export async function runDistributeBuild(options: {
 
 	console.log(`Staging ${bold(`${targets.length}`)} distribution target(s) in ${dim(stageDir)}...`);
 
-	const artifacts = preserveArtifacts(options.artifactOutDir, stageDir);
-	try {
-		stageDistributionPackages(cwd, stageDir, metadata, distributionTargets, {
-			artifactDirs: artifacts.names,
-			manPages: artifacts.manPages,
-		});
+	const artifacts = collectArtifacts(options.artifactOutDir, stageDir);
+	stageDistributionPackages(cwd, stageDir, metadata, distributionTargets, {
+		artifactDirs: artifacts.names,
+		manPages: artifacts.manPages,
+	});
 
+	if (options.artifactOutDir) {
 		const rootDir = join(stageDir, "root");
 		for (const name of artifacts.names) {
-			cpSync(join(artifacts.sourceDir, name), join(rootDir, name), { recursive: true });
+			const artifactDir = join(options.artifactOutDir, name);
+			cpSync(artifactDir, join(rootDir, name), { recursive: true });
 			// Runtime source resolution (e.g. packaged skills) falls back to
 			// dirname(process.execPath), which is a platform package's bin dir — the
 			// root package is unreachable from there, so each platform package ships
 			// its own copy of the artifacts.
 			for (const targetPackage of distributionTargets) {
-				cpSync(join(artifacts.sourceDir, name), join(targetPackage.packageDir, "bin", name), {
-					recursive: true,
-				});
+				cpSync(artifactDir, join(targetPackage.packageDir, "bin", name), { recursive: true });
 			}
 		}
-		artifacts.restore();
-	} finally {
-		artifacts.cleanup();
 	}
 
 	for (const targetPackage of distributionTargets) {
@@ -557,15 +551,19 @@ function isWithin(parent: string, child: string): boolean {
 	return path === "" || (!isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`));
 }
 
-function preserveArtifacts(artifactOutDir: string | undefined, stageDir: string) {
+function collectArtifacts(
+	artifactOutDir: string | undefined,
+	stageDir: string,
+): { names: string[]; manPages: string[] } {
 	if (!artifactOutDir || !existsSync(artifactOutDir)) {
-		return {
-			names: [] as string[],
-			manPages: [] as string[],
-			sourceDir: artifactOutDir ?? stageDir,
-			restore() {},
-			cleanup() {},
-		};
+		return { names: [], manPages: [] };
+	}
+
+	// Staging wipes stageDir; artifacts inside it would be deleted before copy.
+	if (isWithin(stageDir, artifactOutDir)) {
+		throw new Error(
+			`--stage-dir cannot contain the artifact output directory.\n  Staging replaces ${stageDir}, which would delete Extension build artifacts in ${artifactOutDir}.`,
+		);
 	}
 
 	// ponytail: hooks own top-level artifact directories; add an artifact manifest if file-level outputs are needed.
@@ -573,37 +571,12 @@ function preserveArtifacts(artifactOutDir: string | undefined, stageDir: string)
 		.filter((entry) => entry.isDirectory() && !isWithin(join(artifactOutDir, entry.name), stageDir))
 		.map((entry) => entry.name)
 		.sort();
-	const mustPreserve = isWithin(stageDir, artifactOutDir);
-	const temporaryDir = mustPreserve ? mkdtempSync(join(tmpdir(), "crust-artifacts-")) : undefined;
-	const sourceDir = temporaryDir ?? artifactOutDir;
-	if (temporaryDir) {
-		for (const name of names) {
-			cpSync(join(artifactOutDir, name), join(temporaryDir, name), { recursive: true });
-		}
-	}
-	const manDir = join(sourceDir, "man");
 	const manPages = names.includes("man")
-		? readdirSync(manDir, { withFileTypes: true })
+		? readdirSync(join(artifactOutDir, "man"), { withFileTypes: true })
 				.filter((entry) => entry.isFile())
 				.map((entry) => entry.name)
 				.sort()
 		: [];
 
-	return {
-		names,
-		manPages,
-		sourceDir,
-		restore() {
-			if (!temporaryDir) return;
-			mkdirSync(artifactOutDir, { recursive: true });
-			for (const name of names) {
-				const destination = join(artifactOutDir, name);
-				rmSync(destination, { recursive: true, force: true });
-				cpSync(join(sourceDir, name), destination, { recursive: true });
-			}
-		},
-		cleanup() {
-			if (temporaryDir) rmSync(temporaryDir, { recursive: true, force: true });
-		},
-	};
+	return { names, manPages };
 }
