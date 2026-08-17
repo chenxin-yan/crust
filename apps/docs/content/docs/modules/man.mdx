@@ -13,6 +13,19 @@ bun add -d @crustjs/man
 
 Peer dependency: `@crustjs/core`.
 
+## `man(options?)`
+
+Register the build-only Extension to generate a manual whenever `crust build` prepares the application:
+
+```ts
+import { Crust } from "@crustjs/core";
+import { man } from "@crustjs/man";
+
+const app = new Crust("my-cli").extend(man());
+```
+
+`man()` writes `<outdir>/man/<name>.1`. Pass `man({ section: 5 })` to select another section and filename, and `man({ name: "my-tool" })` when the installed command name differs from the application name (for example, `crust build --name` or a diverging npm `bin` key). Extension presence is the source of intent; there is no `--man` build flag. `crust build --no-validate` skips all build hooks, including this one. Package builds stage the generated directory and populate npm `files` and `man` metadata.
+
 ## `writeManPage(options)`
 
 ```ts
@@ -87,6 +100,4 @@ man -l man/my-cli.1
 mandoc -T lint -W warning man/my-cli.1
 ```
 
-## `crust build --man`
-
-[`crust build --man`](/docs/modules/crust) generates the same page from its snapshot subprocess while building; no entry-module export is required. With `--package --man`, the staged root npm package includes the generated page and npm `man` metadata.
+`writeManPage()` remains the lower-level API for custom pipelines that do not use the Extension build lifecycle.

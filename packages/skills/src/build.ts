@@ -31,7 +31,14 @@ export async function writeSkills(
 	app: { snapshot(): Promise<CommandSnapshot> },
 	options: WriteSkillsOptions,
 ): Promise<void> {
-	const snapshot = await app.snapshot();
+	await writeSkillsFromSnapshot(await app.snapshot(), options);
+}
+
+/** Renders skills from a Command Snapshot prepared in this or another process. */
+export async function writeSkillsFromSnapshot(
+	snapshot: CommandSnapshot,
+	options: WriteSkillsOptions,
+): Promise<void> {
 	const generatedMeta: SkillMeta = {
 		name: options.name ?? snapshot.meta.name,
 		description: options.description ?? snapshot.meta.description ?? "",

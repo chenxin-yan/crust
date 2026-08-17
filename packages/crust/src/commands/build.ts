@@ -1,8 +1,7 @@
 import { existsSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 import { defineCommand } from "@crustjs/core";
-import { writeManPage } from "@crustjs/man";
 import { bold, cyan, dim, green } from "@crustjs/style";
 
 import {
@@ -12,7 +11,7 @@ import {
 	resolveBaseName,
 	resolveTargets,
 	TARGET_INFO,
-	snapshotEntrypoint,
+	buildEntrypoint,
 } from "../utils/build-helpers.ts";
 
 /**
@@ -304,7 +303,7 @@ export const buildCommand = defineCommand(
 					name: "validate",
 					type: "boolean",
 					description:
-						"Materialize command definitions before compiling (disable with --no-validate)",
+						"Materialize command definitions before compiling; --no-validate also skips Extension build hooks",
 					default: true,
 				},
 				{
@@ -325,13 +324,6 @@ export const buildCommand = defineCommand(
 					description: "Directory to stage npm packages into when using --package",
 					default: "dist/npm",
 				},
-				{
-					name: "man",
-					type: "boolean",
-					description:
-						"Write an mdoc(7) page to <outdir>/man/<name>.1 (requires snapshot preparation even with --no-validate)",
-					default: false,
-				},
 			)
 			.action(async ({ flags }) => {
 				const cwd = process.cwd();
@@ -347,16 +339,30 @@ export const buildCommand = defineCommand(
 					);
 				}
 
-				const root =
-					flags.validate || flags.man ? await snapshotEntrypoint(entryPath, envFiles) : undefined;
+				if (flags.package && flags.outfile) {
+					throw new Error(
+						"--outfile cannot be used with --package.\n  Use --stage-dir to control the staged npm output directory.",
+					);
+				}
+				const targets = resolveTargets(flags.target);
+				if (!flags.package && flags.outfile && targets.length > 1) {
+					throw new Error(
+						"--outfile cannot be used when building for multiple targets.\n  Use --name to set the base binary name instead.",
+					);
+				}
+
+				// An explicit --outfile relocates the binary, so hook artifacts must
+				// land beside it for executable-relative source resolution to work at
+				// runtime. The guards above make --outfile imply a single-target,
+				// non-package build.
+				const outDir = flags.outfile
+					? dirname(resolve(cwd, flags.outfile))
+					: resolve(cwd, flags.outdir);
+				const prepared = flags.validate
+					? await buildEntrypoint(entryPath, outDir, envFiles)
+					: undefined;
 
 				if (flags.package) {
-					if (flags.outfile) {
-						throw new Error(
-							"--outfile cannot be used with --package.\n  Use --stage-dir to control the staged npm output directory.",
-						);
-					}
-
 					const { runDistributeBuild } = await import("../utils/distribute.ts");
 					await runDistributeBuild({
 						cwd,
@@ -366,33 +372,9 @@ export const buildCommand = defineCommand(
 						target: flags.target,
 						stageDir: flags["stage-dir"],
 						envFiles,
-						root,
-						man: flags.man,
-						outdir: flags.outdir,
+						artifactOutDir: prepared ? outDir : undefined,
 					});
 					return;
-				}
-
-				if (flags.man) {
-					const baseName = resolveBaseName(flags.name, entryPath, cwd);
-					const manPath = resolve(cwd, flags.outdir, "man", `${baseName}.1`);
-					console.log(`Writing man page ${dim(manPath)}...`);
-					await writeManPage({
-						root: root!,
-						name: baseName,
-						outfile: manPath,
-					});
-					console.log(`${green("✓")} Man page: ${manPath}`);
-				}
-
-				// Resolve targets: default is all platforms, --target narrows to specific ones
-				const targets = resolveTargets(flags.target);
-
-				// --outfile is only allowed with exactly one target
-				if (flags.outfile && targets.length > 1) {
-					throw new Error(
-						"--outfile cannot be used when building for multiple targets.\n  Use --name to set the base binary name instead.",
-					);
 				}
 
 				if (targets.length === 1) {

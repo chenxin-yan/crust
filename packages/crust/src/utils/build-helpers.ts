@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 
-import { type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
+import { BUILD_OUT_DIR_ENV, type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
 import { yellow } from "@crustjs/style";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -263,8 +263,9 @@ export async function execBuild(
  */
 const SNAPSHOT_TIMEOUT_MS = 30_000;
 
-export async function snapshotEntrypoint(
+export async function buildEntrypoint(
 	entryPath: string,
+	outDir: string,
 	envFiles: readonly string[] = [],
 ): Promise<CommandSnapshot> {
 	const absoluteEntry = resolve(entryPath);
@@ -277,6 +278,7 @@ export async function snapshotEntrypoint(
 			env: {
 				...process.env,
 				[SNAPSHOT_PATH_ENV]: snapshotPath,
+				[BUILD_OUT_DIR_ENV]: resolve(outDir),
 				BUN_BE_BUN: "1",
 			},
 			cwd: process.cwd(),
@@ -294,7 +296,7 @@ export async function snapshotEntrypoint(
 			// elapsed time to tell our timeout kill apart from external signals.
 			if (Date.now() - spawnedAt >= SNAPSHOT_TIMEOUT_MS) {
 				throw new Error(
-					`Command Snapshot preparation timed out after ${SNAPSHOT_TIMEOUT_MS / 1_000}s.\n  An extension setup() hook may be hanging. Use --no-validate to skip unless --man is enabled.`,
+					`Command Snapshot preparation timed out after ${SNAPSHOT_TIMEOUT_MS / 1_000}s.\n  An Extension build hook may be hanging. Use --no-validate to skip entry preparation and build hooks.`,
 				);
 			}
 			throw new Error(

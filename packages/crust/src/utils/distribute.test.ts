@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -84,13 +84,18 @@ describe("distribution manifest JSON builders", () => {
 			},
 		});
 
-		expect(buildDistributionRootPackageJson(metadata, targets, { includeMan: true })).toEqual({
+		expect(
+			buildDistributionRootPackageJson(metadata, targets, {
+				artifactDirs: ["man", "skills"],
+				manPages: ["crust.1"],
+			}),
+		).toEqual({
 			name: "@crustjs/crust",
 			version: "1.2.3",
 			type: "module",
 			description: "CLI tooling",
 			engines: { bun: ">=1.3.14" },
-			files: ["bin", "man"],
+			files: ["bin", "man", "skills"],
 			man: ["./man/crust.1"],
 			bin: { crust: "bin/crust.js" },
 			optionalDependencies: {
@@ -236,8 +241,8 @@ describe("runDistributeBuild", () => {
 	});
 });
 
-describe("runDistributeBuild with --man", () => {
-	const tmpDir = join(import.meta.dir, ".tmp-distribute-man");
+describe("runDistributeBuild Extension artifact staging", () => {
+	const tmpDir = join(import.meta.dir, ".tmp-distribute-artifacts");
 	const originalCwd = process.cwd;
 
 	afterAll(() => {
@@ -245,7 +250,7 @@ describe("runDistributeBuild with --man", () => {
 		rmSync(tmpDir, { recursive: true, force: true });
 	});
 
-	it("stages man under root/man and mirrors to outdir/man", async () => {
+	it("stages artifact directories into the root and platform packages", async () => {
 		rmSync(tmpDir, { recursive: true, force: true });
 		mkdirSync(join(tmpDir, "src"), { recursive: true });
 		writeFileSync(
@@ -258,36 +263,73 @@ await app.execute();
 		writeFileSync(
 			join(tmpDir, "package.json"),
 			JSON.stringify({
-				name: "man-stage-cli",
+				name: "artifact-stage-cli",
 				version: "0.1.0",
-				bin: {
-					mcli: "dist/cli",
-				},
+				bin: { cli: "dist/cli" },
 			}),
 		);
 		process.cwd = () => tmpDir;
+		const artifactOutDir = join(tmpDir, "dist");
+		mkdirSync(join(artifactOutDir, "man"), { recursive: true });
+		mkdirSync(join(artifactOutDir, "skills", "x"), { recursive: true });
+		writeFileSync(join(artifactOutDir, "man", "x.1"), ".Dd generated\n");
+		writeFileSync(join(artifactOutDir, "skills", "x", "SKILL.md"), "skill\n");
 
 		await runDistributeBuild({
 			entry: "src/cli.ts",
 			minify: true,
 			target: ["bun-darwin-arm64"],
-			stageDir: ".stage-man",
-			man: true,
-			outdir: ".dist-man",
+			stageDir: ".stage",
+			artifactOutDir,
 		});
 
 		const rootPkg = JSON.parse(
-			readFileSync(join(tmpDir, ".stage-man", "root", "package.json"), "utf-8"),
+			readFileSync(join(tmpDir, ".stage", "root", "package.json"), "utf-8"),
 		) as { files: string[]; man: string[] };
+		expect(rootPkg.files).toEqual(["bin", "man", "skills"]);
+		expect(rootPkg.man).toEqual(["./man/x.1"]);
+		expect(readFileSync(join(tmpDir, ".stage", "root", "man", "x.1"), "utf-8")).toContain(".Dd");
+		expect(readFileSync(join(tmpDir, ".stage", "root", "skills", "x", "SKILL.md"), "utf-8")).toBe(
+			"skill\n",
+		);
+		expect(
+			readFileSync(
+				join(tmpDir, ".stage", "darwin-arm64", "bin", "skills", "x", "SKILL.md"),
+				"utf-8",
+			),
+		).toBe("skill\n");
+		expect(readFileSync(join(artifactOutDir, "man", "x.1"), "utf-8")).toContain(".Dd");
+	});
 
-		expect(rootPkg.files).toEqual(["bin", "man"]);
-		expect(rootPkg.man).toEqual(["./man/man-stage-cli.1"]);
+	it("rejects an artifact directory inside stage-dir", async () => {
+		process.cwd = () => tmpDir;
+		const artifactOutDir = join(tmpDir, ".stage", "artifacts");
+		mkdirSync(join(artifactOutDir, "man"), { recursive: true });
 
-		const stagedMan = join(tmpDir, ".stage-man", "root", "man", "man-stage-cli.1");
-		expect(existsSync(stagedMan)).toBe(true);
-		expect(readFileSync(stagedMan, "utf-8")).toContain(".Dd");
+		await expect(
+			runDistributeBuild({
+				entry: "src/cli.ts",
+				minify: true,
+				target: ["bun-darwin-arm64"],
+				stageDir: ".stage",
+				artifactOutDir,
+			}),
+		).rejects.toThrow("--stage-dir cannot contain the artifact output directory");
+	});
 
-		const mirrorMan = join(tmpDir, ".dist-man", "man", "man-stage-cli.1");
-		expect(existsSync(mirrorMan)).toBe(true);
+	it("rejects a reserved bin artifact directory", async () => {
+		process.cwd = () => tmpDir;
+		const artifactOutDir = join(tmpDir, "dist-bin");
+		mkdirSync(join(artifactOutDir, "bin"), { recursive: true });
+
+		await expect(
+			runDistributeBuild({
+				entry: "src/cli.ts",
+				minify: true,
+				target: ["bun-darwin-arm64"],
+				stageDir: ".stage",
+				artifactOutDir,
+			}),
+		).rejects.toThrow('Artifact directory "bin"');
 	});
 });

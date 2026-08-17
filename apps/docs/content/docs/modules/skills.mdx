@@ -18,7 +18,7 @@ A **skill source** is the `skills/` directory shipped in your npm package. It is
 - A **generated skill**, rendered from the command tree and its `meta.sections`.
 - Any **authored skills**, included from hand-written skill directories via `extras`.
 
-Build the source alongside your other package artifacts:
+The `skill()` Extension owns its build output. During `crust build`, it copies an available packaged source wholesale to `<outdir>/skills`. If the source is unavailable (for example, on the first source build), it renders the generated skill from the prepared Command Snapshot. `crust build --package` includes the resulting directory in the staged root package. No `--skills` build flag is needed; `--no-validate` skips all Extension build hooks.
 
 ```ts
 import { writeSkills } from "@crustjs/skills";
@@ -32,7 +32,7 @@ await writeSkills(app, {
 });
 ```
 
-`outDir` must be named `skills`. Each skill gets its own `skills/<name>/` directory containing `SKILL.md` and any supporting files. `SKILL.md` follows the [Agent Skills specification](https://agentskills.io/specification) and declares required `name` and `description` frontmatter. `writeSkills()` replaces `outDir` on every build and never writes to an agent directory.
+For a custom pipeline with a prepared Command Snapshot instead of a live app, call `writeSkillsFromSnapshot(snapshot, options)`. `outDir` must be named `skills`. Each skill gets its own `skills/<name>/` directory containing `SKILL.md` and any supporting files. `writeSkills()` and `writeSkillsFromSnapshot()` replace `outDir` on every build and never write to an agent directory.
 
 Include the source in the published package:
 
@@ -61,7 +61,7 @@ export const app = new Crust("my-cli", { description: "My CLI" })
   .action(() => {});
 ```
 
-The extension registers `my-cli skill` and `my-cli skill update`. It also contributes an **Agent skills** section to root help and generated man pages. Each shipped skill is listed by name and description with its resolved logical source path, so agents can discover and load skills without installing them first.
+The extension registers `my-cli skill` and `my-cli skill update`. It also contributes an **Agent skills** section to root help and generated man pages. Each shipped skill is listed by name and description with its logical source path — relative to the working directory when the source is inside it, absolute otherwise — so agents can discover and load skills without installing them first. Run builds from the project root containing the skill source to keep absolute build-machine paths out of generated artifacts.
 
 The management command reads every skill in the source and creates links in selected agent directories. `--scope project|global` selects project or user locations; `--all` installs for universal and detected agents without prompting.
 
