@@ -1,5 +1,5 @@
-import { lstat, mkdir, readlink, readdir, rm, stat, symlink, unlink } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { lstat, mkdir, readlink, rm, stat, symlink, unlink } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 
 import { resolveSourceDir } from "@crustjs/utils/source";
 
@@ -49,16 +49,6 @@ async function pathExists(path: string): Promise<boolean> {
 	} catch {
 		return false;
 	}
-}
-
-async function listFiles(dir: string, prefix = ""): Promise<string[]> {
-	const files: string[] = [];
-	for (const entry of await readdir(dir, { withFileTypes: true })) {
-		const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
-		if (entry.isDirectory()) files.push(...(await listFiles(join(dir, entry.name), relativePath)));
-		else if (entry.isFile()) files.push(relativePath);
-	}
-	return files.sort();
 }
 
 type LinkInspection =
@@ -116,7 +106,7 @@ async function createSkillLink(target: string, outputDir: string): Promise<void>
 /** Links one packaged skill source into the requested agent directories. */
 export async function installSkill(options: InstallSkillOptions): Promise<InstallSkillResult> {
 	const sourceDir = resolveSourceDir(options.sourceDir);
-	const source = await readSkillFrontmatter(sourceDir);
+	const source = readSkillFrontmatter(sourceDir);
 	if (!isValidSkillName(source.name)) {
 		throw new Error(`Skill source "${sourceDir}" declares invalid name "${source.name}".`);
 	}
@@ -128,7 +118,6 @@ export async function installSkill(options: InstallSkillOptions): Promise<Instal
 
 	const agents = options.agents ?? [...getUniversalAgents(), ...(await detectInstalledAgents())];
 	const scope = options.scope ?? "global";
-	const files = await listFiles(sourceDir);
 	const results: AgentResult[] = [];
 
 	for (const [outputDir, groupedAgents] of groupAgentsByOutputDir(agents, scope, source.name)) {
@@ -154,12 +143,7 @@ export async function installSkill(options: InstallSkillOptions): Promise<Instal
 		}
 
 		for (const agent of groupedAgents) {
-			results.push({
-				agent,
-				outputDir,
-				files: status === "up-to-date" ? [] : files,
-				status,
-			});
+			results.push({ agent, outputDir, status });
 		}
 	}
 

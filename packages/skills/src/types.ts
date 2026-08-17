@@ -142,7 +142,6 @@ export type UninstallStatus = "removed" | "not-found";
 export interface AgentResult {
 	agent: AgentTarget;
 	outputDir: string;
-	files: string[];
 	status: InstallStatus;
 }
 

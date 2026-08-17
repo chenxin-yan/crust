@@ -191,14 +191,8 @@ describe("skill extension package sources", () => {
 		expect(output).not.toContain("The skill source path is unavailable.");
 	});
 
-	it("rejects a non-file source URL at construction", () => {
-		expect(() => skill({ source: new URL("https://example.com/skills") })).toThrow(
-			"file: protocol",
-		);
-	});
-
-	it("fails clearly when its source cannot be resolved", async () => {
-		await expect(loadPackagedSkills(join(tempRoot, "missing-skills"))).rejects.toBeInstanceOf(
+	it("fails clearly when its source cannot be resolved", () => {
+		expect(() => loadPackagedSkills(join(tempRoot, "missing-skills"))).toThrow(
 			SkillSourceUnavailableError,
 		);
 	});

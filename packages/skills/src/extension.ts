@@ -12,12 +12,7 @@ import {
 } from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";
 import { getSkillStatus, installSkill, uninstallSkill } from "./generate.ts";
-import {
-	SkillSourceUnavailableError,
-	loadPackagedSkills,
-	loadPackagedSkillsSync,
-	type PackagedSkill,
-} from "./source.ts";
+import { SkillSourceUnavailableError, loadPackagedSkills, type PackagedSkill } from "./source.ts";
 import type { AgentTarget, InstallSkillResult, Scope, SkillOptions } from "./types.ts";
 
 const DEFAULT_SKILL_COMMAND_NAME = "skill";
@@ -58,11 +53,7 @@ function formatAgentLabels(agents: readonly AgentTarget[]): string[] {
 async function repairInstalledSkill(
 	packagedSkill: PackagedSkill,
 	scope: Scope,
-	hooks: {
-		onNoRepair?: (scope: Scope) => void;
-		onRepaired?: (labels: string[], scope: Scope) => void;
-		onConflict?: (error: SkillConflictError) => void;
-	} = {},
+	report = false,
 ): Promise<void> {
 	const effectiveScope = resolveEffectiveScope(scope);
 	const status = await getSkillStatus({
@@ -81,7 +72,7 @@ async function repairInstalledSkill(
 	}
 	const stale = status.agents.filter((entry) => entry.status === "dangling");
 	if (stale.length === 0) {
-		hooks.onNoRepair?.(effectiveScope);
+		if (report) console.log(dim(`No repairs needed [${packagedSkill.name}] (${effectiveScope}).`));
 		return;
 	}
 
@@ -92,24 +83,25 @@ async function repairInstalledSkill(
 			scope,
 		});
 		const labels = formatAgentLabels(result.agents.map((entry) => entry.agent));
-		if (labels.length > 0) hooks.onRepaired?.(labels, effectiveScope);
-	} catch (error) {
-		if (!(error instanceof SkillConflictError)) throw error;
-		if (hooks.onConflict) hooks.onConflict(error);
-		else {
-			console.warn(
-				yellow(
-					`Skill conflict [${packagedSkill.name}]: "${error.details.outputDir}" is not owned by this skill. Skipping link repair.`,
-				),
+		if (report && labels.length > 0) {
+			console.log(
+				`\n${bold(`Repaired "${packagedSkill.name}" for ${labels.join(", ")} (${effectiveScope})`)}`,
 			);
 		}
+	} catch (error) {
+		if (!(error instanceof SkillConflictError)) throw error;
+		console.warn(
+			yellow(
+				`Skill conflict [${packagedSkill.name}]: "${error.details.outputDir}" is not owned by this skill. Skipping link repair.`,
+			),
+		);
 	}
 }
 
 async function autoRepairSkills(options: SkillOptions): Promise<void> {
 	let skills: readonly PackagedSkill[];
 	try {
-		skills = await loadPackagedSkills(options.source);
+		skills = loadPackagedSkills(options.source);
 	} catch (error) {
 		// A missing or invalid packaged asset must not prevent unrelated CLI commands
 		// from running; the explicit skill command surfaces the same failure loudly.
@@ -149,7 +141,7 @@ function formatSkillDocumentation(
 	appName: string,
 ): string {
 	try {
-		return loadPackagedSkillsSync(source)
+		return loadPackagedSkills(source)
 			.map(
 				(packagedSkill) =>
 					`${packagedSkill.name} — ${packagedSkill.description}\n  Source: ${packagedSkill.sourceDir}`,
@@ -172,9 +164,6 @@ function formatSkillDocumentation(
 
 export function skill(options: SkillOptions): Extension {
 	const commandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
-	if (options.source instanceof URL && options.source.protocol !== "file:") {
-		throw new Error(`Skill source URL must use file: protocol, got "${options.source.protocol}".`);
-	}
 	return defineExtension("skills", {
 		commands: [buildSkillCommand(commandName, options)],
 		// Skills are loaded when a snapshot is prepared, not at construction, so
@@ -343,21 +332,8 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 							})
 							.action(async (context) => {
 								const scope = await resolveScope(context.flags.scope, options);
-								for (const packagedSkill of await loadPackagedSkills(options.source)) {
-									await repairInstalledSkill(packagedSkill, scope, {
-										onNoRepair: (resolvedScope) =>
-											console.log(
-												dim(`No repairs needed [${packagedSkill.name}] (${resolvedScope}).`),
-											),
-										onRepaired: (labels, resolvedScope) =>
-											console.log(
-												`\n${bold(`Repaired "${packagedSkill.name}" for ${labels.join(", ")} (${resolvedScope})`)}`,
-											),
-										onConflict: (error) =>
-											console.warn(
-												yellow(`Skipped "${error.details.outputDir}": not owned by this skill.`),
-											),
-									});
+								for (const packagedSkill of loadPackagedSkills(options.source)) {
+									await repairInstalledSkill(packagedSkill, scope, true);
 								}
 							}),
 					),
@@ -367,7 +343,7 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 					const scope = installAll
 						? (parseScopeFlag(context.flags.scope) ?? options.defaultScope ?? DEFAULT_SKILL_SCOPE)
 						: await resolveScope(context.flags.scope, options);
-					for (const packagedSkill of await loadPackagedSkills(options.source)) {
+					for (const packagedSkill of loadPackagedSkills(options.source)) {
 						await reconcileSkill({ packagedSkill, scope, installAll });
 					}
 				}),

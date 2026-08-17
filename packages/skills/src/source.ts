@@ -10,7 +10,7 @@ export class SkillSourceUnavailableError extends Error {
 	override readonly name = "SkillSourceUnavailableError";
 }
 
-function directoryPathSync(path: string): string | null {
+function directoryPath(path: string): string | null {
 	try {
 		return statSync(path).isDirectory() ? path : null;
 	} catch {
@@ -32,8 +32,8 @@ function fallbackName(source: string | URL): string {
 	return isAbsolute(source) ? basename(source) : source;
 }
 
-/** Resolves a logical packaged skill-source root synchronously for snapshot-time documentation. */
-export function resolveSkillSourceSync(source: string | URL): string {
+/** Resolves a logical packaged skill-source root; compiled distributions must stage its basename beside the executable. */
+export function resolveSkillSource(source: string | URL): string {
 	let primary: string | undefined;
 	try {
 		primary = resolveSourceDir(source);
@@ -41,22 +41,17 @@ export function resolveSkillSourceSync(source: string | URL): string {
 		// Relative paths may not have a package entrypoint in compiled executables.
 	}
 	if (primary) {
-		const resolved = directoryPathSync(primary);
+		const resolved = directoryPath(primary);
 		if (resolved) return resolved;
 	}
 
 	const fallback = join(dirname(process.execPath), fallbackName(source));
-	const resolvedFallback = directoryPathSync(fallback);
+	const resolvedFallback = directoryPath(fallback);
 	if (resolvedFallback) return resolvedFallback;
 
 	throw new SkillSourceUnavailableError(
 		`Could not resolve skill source${primary ? ` at "${primary}"` : ""} or executable-relative fallback "${fallback}".`,
 	);
-}
-
-/** Async wrapper for resolving a logical packaged skill-source root. */
-export async function resolveSkillSource(source: string | URL): Promise<string> {
-	return resolveSkillSourceSync(source);
 }
 
 export interface PackagedSkill {
@@ -65,7 +60,9 @@ export interface PackagedSkill {
 	readonly description: string;
 }
 
-function readSkillFrontmatterSync(sourceDir: string): Pick<PackagedSkill, "name" | "description"> {
+export function readSkillFrontmatter(
+	sourceDir: string,
+): Pick<PackagedSkill, "name" | "description"> {
 	let content: string;
 	try {
 		content = readFileSync(join(sourceDir, "SKILL.md"), "utf8");
@@ -83,15 +80,9 @@ function readSkillFrontmatterSync(sourceDir: string): Pick<PackagedSkill, "name"
 	return { name: frontmatter.name, description: frontmatter.description };
 }
 
-export async function readSkillFrontmatter(
-	sourceDir: string,
-): Promise<Pick<PackagedSkill, "name" | "description">> {
-	return readSkillFrontmatterSync(sourceDir);
-}
-
-/** Reads every self-describing skill directory synchronously for snapshot-time documentation. */
-export function loadPackagedSkillsSync(source: string | URL): readonly PackagedSkill[] {
-	const root = resolveSkillSourceSync(source);
+/** Reads every self-describing skill directory in a packaged skill source. */
+export function loadPackagedSkills(source: string | URL): readonly PackagedSkill[] {
+	const root = resolveSkillSource(source);
 	const skills: PackagedSkill[] = [];
 	for (const entry of readdirSync(root, { withFileTypes: true })) {
 		if (!entry.isDirectory()) continue;
@@ -99,7 +90,7 @@ export function loadPackagedSkillsSync(source: string | URL): readonly PackagedS
 		// Cruft directories (__MACOSX, editor droppings) must not take down every
 		// valid skill; only a directory that claims to be a skill is validated.
 		if (!existsSync(join(sourceDir, "SKILL.md"))) continue;
-		const frontmatter = readSkillFrontmatterSync(sourceDir);
+		const frontmatter = readSkillFrontmatter(sourceDir);
 		if (frontmatter.name !== entry.name) {
 			throw new Error(
 				`Skill source directory "${sourceDir}" declares name "${frontmatter.name}" in SKILL.md.`,
@@ -111,9 +102,4 @@ export function loadPackagedSkillsSync(source: string | URL): readonly PackagedS
 		throw new Error(`Skill source "${root}" does not contain any skill directories.`);
 	}
 	return skills.sort((a, b) => a.name.localeCompare(b.name));
-}
-
-/** Async wrapper for reading every self-describing packaged skill directory. */
-export async function loadPackagedSkills(source: string | URL): Promise<readonly PackagedSkill[]> {
-	return loadPackagedSkillsSync(source);
 }

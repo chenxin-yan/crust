@@ -3,12 +3,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-	loadPackagedSkills,
-	resolveSkillSource,
-	resolveSkillSourceSync,
-	SkillSourceUnavailableError,
-} from "./source.ts";
+import { loadPackagedSkills, resolveSkillSource, SkillSourceUnavailableError } from "./source.ts";
 
 let tempRoot: string;
 
@@ -37,8 +32,7 @@ describe("packaged skill sources", () => {
 		await mkdir(join(tempRoot, "node_modules", "pkg"), { recursive: true });
 		await symlink(realSource, logicalSource);
 
-		expect(await resolveSkillSource(logicalSource)).toBe(logicalSource);
-		expect(resolveSkillSourceSync(logicalSource)).toBe(logicalSource);
+		expect(resolveSkillSource(logicalSource)).toBe(logicalSource);
 	});
 
 	it("resolves an executable-relative fallback", async () => {
@@ -51,23 +45,28 @@ describe("packaged skill sources", () => {
 			value: join(tempRoot, "bin", "cli"),
 		});
 		try {
-			expect(await resolveSkillSource(name)).toBe(source);
-			expect(resolveSkillSourceSync(name)).toBe(source);
+			expect(resolveSkillSource(name)).toBe(source);
 		} finally {
 			Object.defineProperty(process, "execPath", descriptor);
 		}
 	});
 
-	it("rejects non-file URLs as a definition error, not an unavailable source", async () => {
-		const rejection = expect(resolveSkillSource(new URL("https://example.com/skills"))).rejects;
-		await rejection.toThrow("file: protocol");
-		await rejection.not.toBeInstanceOf(SkillSourceUnavailableError);
+	it("rejects non-file URLs as a definition error, not an unavailable source", () => {
+		let error: unknown;
+		try {
+			resolveSkillSource(new URL("https://example.com/skills"));
+		} catch (caught) {
+			error = caught;
+		}
+		expect(error).toBeInstanceOf(Error);
+		expect((error as Error).message).toContain("file: protocol");
+		expect(error).not.toBeInstanceOf(SkillSourceUnavailableError);
 	});
 
 	it("loads name and description from SKILL.md frontmatter", async () => {
 		const root = join(tempRoot, "skills");
 		await writeSkill(root, "demo");
-		expect(await loadPackagedSkills(root)).toMatchObject([
+		expect(loadPackagedSkills(root)).toMatchObject([
 			{ name: "demo", description: "demo skill", sourceDir: join(root, "demo") },
 		]);
 	});
@@ -75,18 +74,14 @@ describe("packaged skill sources", () => {
 	it("rejects empty, invalid, and mismatched skill sources", async () => {
 		const empty = join(tempRoot, "empty");
 		await mkdir(empty);
-		await expect(loadPackagedSkills(empty)).rejects.toThrow(
-			"does not contain any skill directories",
-		);
+		expect(() => loadPackagedSkills(empty)).toThrow("does not contain any skill directories");
 
 		const invalid = join(tempRoot, "invalid");
 		await mkdir(join(invalid, "demo"), { recursive: true });
-		await expect(loadPackagedSkills(invalid)).rejects.toThrow(
-			"does not contain any skill directories",
-		);
+		expect(() => loadPackagedSkills(invalid)).toThrow("does not contain any skill directories");
 
 		await writeSkill(invalid, "demo", "other");
-		await expect(loadPackagedSkills(invalid)).rejects.toThrow('declares name "other"');
+		expect(() => loadPackagedSkills(invalid)).toThrow('declares name "other"');
 	});
 
 	it("rejects a SKILL.md missing name or description frontmatter", async () => {
@@ -94,7 +89,7 @@ describe("packaged skill sources", () => {
 		const dir = join(root, "demo");
 		await mkdir(dir, { recursive: true });
 		await writeFile(join(dir, "SKILL.md"), "---\nname: demo\n---\n");
-		await expect(loadPackagedSkills(root)).rejects.toThrow(
+		expect(() => loadPackagedSkills(root)).toThrow(
 			"requires name and description in SKILL.md frontmatter",
 		);
 	});
@@ -103,6 +98,6 @@ describe("packaged skill sources", () => {
 		const root = join(tempRoot, "skills");
 		await writeSkill(root, "demo");
 		await mkdir(join(root, "__MACOSX"), { recursive: true });
-		expect(await loadPackagedSkills(root)).toMatchObject([{ name: "demo" }]);
+		expect(loadPackagedSkills(root)).toMatchObject([{ name: "demo" }]);
 	});
 });

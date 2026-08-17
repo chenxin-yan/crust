@@ -70,7 +70,7 @@ describe("symlink-only skill installation", () => {
 		const sourceDir = await createSource();
 		await projectInstall(sourceDir);
 		const result = await projectInstall(sourceDir);
-		expect(result.agents[0]).toMatchObject({ status: "up-to-date", files: [] });
+		expect(result.agents[0]?.status).toBe("up-to-date");
 	});
 
 	it("repairs dangling and stale-target owned links", async () => {
