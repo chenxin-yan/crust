@@ -236,9 +236,9 @@ export function defineContext(
 export type FactoryValueOf<F extends AnyContextFactory> =
 	F extends ContextFactory<any, any, infer Value, any, any> ? Awaited<Value> : never;
 
+/** Pull-based resolver for provided Contexts, exposed to actions as `ctx`. */
 export interface ContextResolver {
 	readonly use: <F extends AnyContextFactory>(factory: F) => Promise<FactoryValueOf<F>>;
-	setValidatedFlags(flags: Record<string, unknown>): void;
 }
 
 function registerDisposable(value: unknown, disposal: AsyncDisposableStack): void {
@@ -262,17 +262,15 @@ export function createContextResolver(
 	contexts: readonly ContextInstance[],
 	io: InvocationIO,
 	disposal: AsyncDisposableStack,
-): ContextResolver {
+): ContextResolver & { setValidatedFlags(flags: Record<string, unknown>): void } {
 	const byName = new Map(contexts.map((context) => [context.name, context]));
 	const values = new Map<string, Promise<unknown>>();
 	let validatedFlags: Record<string, unknown> | undefined;
 
-	const closureOwnsFlags = (context: ContextInstance, seen = new Set<string>()): boolean => {
-		if (seen.has(context.name)) return false;
-		seen.add(context.name);
-		if (Object.keys(context.ownedFlags).length > 0) return true;
-		return context.requiredCtx.some((name) => closureOwnsFlags(byName.get(name)!, seen));
-	};
+	// Cycles are rejected at .provide() time, so the recursion terminates.
+	const closureOwnsFlags = (context: ContextInstance): boolean =>
+		Object.keys(context.ownedFlags).length > 0 ||
+		context.requiredCtx.some((name) => closureOwnsFlags(byName.get(name)!));
 
 	const resolve = (context: ContextInstance): Promise<unknown> => {
 		const existing = values.get(context.name);
@@ -318,7 +316,7 @@ export function createContextResolver(
 			}
 			return resolve(context) as Promise<FactoryValueOf<F>>;
 		},
-		setValidatedFlags(flags): void {
+		setValidatedFlags(flags: Record<string, unknown>): void {
 			validatedFlags = flags;
 		},
 	};

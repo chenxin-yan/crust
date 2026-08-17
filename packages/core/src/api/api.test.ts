@@ -86,7 +86,7 @@ describe("public beta API", () => {
 		});
 
 		const app = new Crust("my-cli").extend(version).action(({ flags, ctx }) => {
-			type _ctx = Expect<Equal<typeof ctx, Pick<ContextResolver, "use">>>;
+			type _ctx = Expect<Equal<typeof ctx, ContextResolver>>;
 			expect((flags as Record<string, unknown>).version).toBe(true);
 		});
 

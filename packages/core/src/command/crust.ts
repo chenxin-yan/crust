@@ -73,7 +73,7 @@ export interface CrustCommandContext<
 	/** Resolved flags, keyed by flag name */
 	flags: InferFlags<F>;
 	/** Lazily resolve a Context provided on this command path. */
-	ctx: Pick<ContextResolver, "use">;
+	ctx: ContextResolver;
 	/** Raw arguments that appeared after the `--` separator */
 	rawArgs: string[];
 	/** Readonly, serializable snapshot of the resolved command */
@@ -430,21 +430,20 @@ function installExtensionProviders(
 	node: CommandNode,
 	instances: readonly ContextInstance[],
 ): CommandNode {
+	// cloneCommandNode already deep-clones the subtree, so install by walking the copy.
 	const cloned = cloneCommandNode(node);
-	cloned.contexts = normalizeContext(
-		instances,
-		cloned.contexts,
-		cloned.effectiveFlags,
-		cloned.flagSpellings,
-		`the "${cloned.meta.name}" command path`,
-	);
-	for (const instance of instances) Object.assign(cloned.ownedFlags, instance.ownedFlags);
-	cloned.subCommands = Object.fromEntries(
-		Object.entries(cloned.subCommands).map(([name, child]) => [
-			name,
-			installExtensionProviders(child, instances),
-		]),
-	);
+	const walk = (target: CommandNode): void => {
+		target.contexts = normalizeContext(
+			instances,
+			target.contexts,
+			target.effectiveFlags,
+			target.flagSpellings,
+			`the "${target.meta.name}" command path`,
+		);
+		for (const instance of instances) Object.assign(target.ownedFlags, instance.ownedFlags);
+		for (const child of Object.values(target.subCommands)) walk(child);
+	};
+	walk(cloned);
 	return cloned;
 }
 
@@ -841,23 +840,8 @@ export class Crust<
 			names.add(extension.name);
 		}
 		const provided = extensions.flatMap((extension) => extension.provides ?? []);
-		const withContexts =
-			provided.length === 0
-				? this
-				: (this.provide as unknown as (...instances: readonly ContextInstance[]) => this)(
-						...provided,
-					);
-		const subCommands =
-			provided.length === 0
-				? withContexts._node.subCommands
-				: Object.fromEntries(
-						Object.entries(withContexts._node.subCommands).map(([name, child]) => [
-							name,
-							installExtensionProviders(child, provided),
-						]),
-					);
-		return withContexts._clone({
-			subCommands,
+		return this._clone({
+			...(provided.length > 0 ? installExtensionProviders(this._node, provided) : {}),
 			extensions: [...this._node.extensions, ...extensions],
 		}) as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags>;
 	}
