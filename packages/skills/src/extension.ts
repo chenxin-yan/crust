@@ -153,11 +153,8 @@ function formatSkillDocumentation(
 		if (error instanceof SkillSourceUnavailableError) {
 			return `The skill source path is unavailable. Run \`${appName} ${commandName}\` to link packaged skills into an agent directory.`;
 		}
-		console.warn(
-			yellow(
-				`Skipping skill advertisement: ${error instanceof Error ? error.message : String(error)}`,
-			),
-		);
+		// No warn here: the preRun repair hook already surfaces the underlying
+		// message once per invocation, and the explicit skill command fails loudly.
 		return `Packaged skills could not be read. Run \`${appName} ${commandName}\` for details.`;
 	}
 }

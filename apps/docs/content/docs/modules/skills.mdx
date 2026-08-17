@@ -38,7 +38,7 @@ Include the source in the published package:
 
 ```json
 {
-  "files": ["dist", "dist/skills"]
+  "files": ["dist"]
 }
 ```
 
@@ -71,13 +71,13 @@ my-cli skill --all --scope project
 my-cli skill update
 ```
 
-If the package-relative source cannot be found, Crust also checks for the same source directory next to `process.execPath`, supporting compiled distributions staged with their skills. When neither path resolves, the Agent skills section shows a fallback message pointing to the `skill` command instead. When the source resolves but a packaged skill is invalid (for example a `SKILL.md` without a description), the section reports that packaged skills could not be read. Directories without a `SKILL.md`, such as archive cruft, are skipped rather than failing valid skills. In every case the explicit `skill` command fails with a descriptive error, but unrelated CLI commands and help remain available. Skills are read when a snapshot is prepared, so help and generated man pages reflect the source as it exists at render time.
+If the package-relative source cannot be found, Crust also checks next to `process.execPath` — for the source's basename when the source is an absolute path or `file:` URL, or the same relative path otherwise — supporting compiled distributions staged with their skills. When neither path resolves, the Agent skills section shows a fallback message pointing to the `skill` command instead. When the source resolves but a packaged skill is invalid (for example a `SKILL.md` without a description), the section reports that packaged skills could not be read. Directories without a `SKILL.md`, such as archive cruft, are skipped rather than failing valid skills. In every case the explicit `skill` command fails with a descriptive error, but unrelated CLI commands and help remain available. Skills are read when a snapshot is prepared, so help and generated man pages reflect the source as it exists at render time. Artifacts generated at build time — man pages from `crust build` and the skill written by `writeSkills` — therefore capture the paths (or fallback text) resolved on the build machine, not on the end user's machine.
 
 <auto-type-table path="../../../../../packages/skills/src/types.ts" name="SkillOptions" />
 
 ## Link lifecycle and ownership
 
-Project installations use relative symlinks to the logical package path. Name-based package paths were empirically verified across npm, pnpm, and Bun, including pnpm reinstalls and store pruning. Global installations use absolute symlinks.
+Project installations use relative symlinks to the logical package path. Logical package paths are stable across npm, pnpm, and Bun. Global installations use absolute symlinks.
 
 There is no fallback install mechanism, ownership manifest, or mutable Crust store. Package content is visible through installed links immediately. Before ordinary commands run, the extension repairs an existing Crust-owned link when it is dangling or points at an old package source. It never creates a link that was not installed and never changes a real directory or foreign link. `my-cli skill update` runs the same repair explicitly. Set `autoUpdate: false` to disable the pre-run repair hook.
 

@@ -52,15 +52,9 @@ describe("packaged skill sources", () => {
 	});
 
 	it("rejects non-file URLs as a definition error, not an unavailable source", () => {
-		let error: unknown;
-		try {
-			resolveSkillSource(new URL("https://example.com/skills"));
-		} catch (caught) {
-			error = caught;
-		}
-		expect(error).toBeInstanceOf(Error);
-		expect((error as Error).message).toContain("file: protocol");
-		expect(error).not.toBeInstanceOf(SkillSourceUnavailableError);
+		const fn = () => resolveSkillSource(new URL("https://example.com/skills"));
+		expect(fn).toThrow("file: protocol");
+		expect(fn).not.toThrow(SkillSourceUnavailableError);
 	});
 
 	it("loads name and description from SKILL.md frontmatter", async () => {

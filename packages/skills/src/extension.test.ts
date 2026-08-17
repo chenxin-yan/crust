@@ -74,12 +74,14 @@ describe("skill extension package sources", () => {
 
 	it("keeps help usable when the packaged skill source cannot be resolved", async () => {
 		const source = join(tempRoot, "missing-skills");
-		const snapshot = await createApp(source).snapshot();
-		const output = renderHelp(snapshot);
+		const app = new Crust("demo", { description: "Demo" })
+			.extend(skill({ source, command: "agents" }))
+			.action(() => {});
+		const output = renderHelp(await app.snapshot());
 
 		expect(output).toContain("Agent skills:");
 		expect(output).toContain("The skill source path is unavailable.");
-		expect(output).toContain("Run `demo skill`");
+		expect(output).toContain("Run `demo agents`");
 		expect(output).not.toContain(source);
 	});
 

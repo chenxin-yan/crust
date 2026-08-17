@@ -21,19 +21,22 @@ function directoryPath(path: string): string | null {
 }
 
 function fallbackName(source: string | URL): string {
-	if (source instanceof URL) {
-		if (source.protocol !== "file:") {
-			// A wrong-protocol URL is a definition error, not a missing asset; it must
-			// not be classified as "unavailable" and silently degrade the extension.
-			throw new Error(`Skill source URL must use file: protocol, got "${source.protocol}".`);
-		}
-		return basename(fileURLToPath(source));
-	}
+	if (source instanceof URL) return basename(fileURLToPath(source));
 	return isAbsolute(source) ? basename(source) : source;
 }
 
-/** Resolves a logical packaged skill-source root; compiled distributions must stage its basename beside the executable. */
+/**
+ * Resolves a logical packaged skill-source root. When the package path is
+ * unavailable, falls back to the executable directory: absolute and URL
+ * sources by their basename, relative sources by the same relative path.
+ */
 export function resolveSkillSource(source: string | URL): string {
+	if (source instanceof URL && source.protocol !== "file:") {
+		// A wrong-protocol URL is a definition error, not a missing asset; validating
+		// before resolution keeps it out of the catch below so it is never classified
+		// as "unavailable" and silently degrades the extension.
+		throw new Error(`Skill source URL must use file: protocol, got "${source.protocol}".`);
+	}
 	let primary: string | undefined;
 	try {
 		primary = resolveSourceDir(source);

@@ -75,19 +75,12 @@ async function inspectLink(
 
 	const target = await readlink(outputDir);
 	if (!isOwnedSkillLink(target, name)) return { status: "conflict" };
+	const resolvedTarget = resolve(dirname(outputDir), target);
 	return {
 		status: "owned",
-		resolves: await pathExists(resolve(dirname(outputDir), target)),
-		correct:
-			expectedSourceDir === undefined ||
-			resolve(dirname(outputDir), target) === resolve(expectedSourceDir),
+		resolves: await pathExists(resolvedTarget),
+		correct: expectedSourceDir === undefined || resolvedTarget === resolve(expectedSourceDir),
 	};
-}
-
-async function removeEntry(outputDir: string): Promise<void> {
-	const entry = await lstat(outputDir);
-	if (entry.isSymbolicLink()) await unlink(outputDir);
-	else await rm(outputDir, { recursive: true, force: true });
 }
 
 async function createSkillLink(target: string, outputDir: string): Promise<void> {
@@ -138,7 +131,7 @@ export async function installSkill(options: InstallSkillOptions): Promise<Instal
 				: "repaired";
 
 		if (!upToDate) {
-			if (inspection.status !== "absent") await removeEntry(outputDir);
+			if (inspection.status !== "absent") await rm(outputDir, { recursive: true, force: true });
 			await createSkillLink(skillLinkTarget(sourceDir, outputDir, scope), outputDir);
 		}
 
