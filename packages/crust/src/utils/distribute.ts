@@ -566,7 +566,10 @@ function collectArtifacts(
 		);
 	}
 
-	// ponytail: hooks own top-level artifact directories; add an artifact manifest if file-level outputs are needed.
+	// ponytail: hooks own and clean unique top-level dirs in artifactOutDir; loose
+	// files are ignored and stale dirs get packaged. Add a manifest when hooks need
+	// file-level outputs, shared dirs, or conflict detection — hooks return declared
+	// paths, core writes one manifest; no filesystem diff-scanning, no legacy+manifest dual mode.
 	const names = readdirSync(artifactOutDir, { withFileTypes: true })
 		.filter((entry) => entry.isDirectory() && !isWithin(join(artifactOutDir, entry.name), stageDir))
 		.map((entry) => entry.name)

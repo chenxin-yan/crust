@@ -326,14 +326,15 @@ describe("updateNotifier post-run hook", () => {
 			timeoutMs?: number;
 			registryUrl?: string;
 			packageManager?: "npm" | "pnpm" | "yarn" | "bun" | "auto";
-			installScope?: "local" | "global" | "auto";
+			installScope?: "local" | "global";
 			updateCommand?:
 				| string
 				| ((
 						packageName: string,
 						packageManager: "npm" | "pnpm" | "yarn" | "bun",
-						installScope: "local" | "global",
+						installScope: "local" | "global" | undefined,
 				  ) => string);
+			updateDocsUrl?: string;
 			cache?: UpdateNotifierCacheAdapter;
 		},
 		overrides?: {
@@ -769,25 +770,71 @@ describe("updateNotifier post-run hook", () => {
 			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
+				installScope: "global",
 			});
 
-			// With no scope env vars set, default is "global"
 			expect(getOutput()).toContain(`bun add -g ${pkgName}@latest`);
 		});
 
-		it("passes the user-agent-derived installScope to updateCommand callback", async () => {
-			const pkgName = uniquePackageName("update-command-callback");
-			process.env.npm_config_user_agent = "npm/10.0.0 node/v22";
+		it("omits the update command when installScope and updateCommand are unset", async () => {
+			const pkgName = uniquePackageName("commandless-default");
 			mockRegistryResponse("2.0.0");
 
 			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
-				packageManager: "npm",
-				updateCommand: (_name, packageManager, installScope) => `${packageManager}:${installScope}`,
 			});
 
-			expect(getOutput()).toContain("npm:local");
+			expect(getOutput()).toContain("Update available");
+			expect(getOutput()).not.toContain("Run ");
+			expect(getOutput()).not.toContain(`${pkgName}@latest`);
+		});
+
+		it("includes updateDocsUrl without generating an update command", async () => {
+			const pkgName = uniquePackageName("docs-url");
+			mockRegistryResponse("2.0.0");
+
+			await runExtensionMiddleware({
+				currentVersion: "1.0.0",
+				packageName: pkgName,
+				updateDocsUrl: "https://example.com/update",
+			});
+
+			expect(getOutput()).toContain("See");
+			expect(getOutput()).toContain("https://example.com/update");
+			expect(getOutput()).not.toContain("Run ");
+		});
+
+		it("passes only an explicitly configured installScope to updateCommand callbacks", async () => {
+			const unsetPkgName = uniquePackageName("callback-unset-scope");
+			const receivedScopes: Array<"local" | "global" | undefined> = [];
+			process.env.npm_config_user_agent = "npm/10.0.0 node/v22";
+			mockRegistryResponse("2.0.0");
+
+			await runExtensionMiddleware({
+				currentVersion: "1.0.0",
+				packageName: unsetPkgName,
+				packageManager: "npm",
+				updateCommand: (_name, _packageManager, installScope) => {
+					receivedScopes.push(installScope);
+					return "custom update";
+				},
+			});
+
+			const explicitPkgName = uniquePackageName("callback-explicit-scope");
+			mockRegistryResponse("2.0.0");
+			await runExtensionMiddleware({
+				currentVersion: "1.0.0",
+				packageName: explicitPkgName,
+				packageManager: "npm",
+				installScope: "local",
+				updateCommand: (_name, _packageManager, installScope) => {
+					receivedScopes.push(installScope);
+					return "custom update";
+				},
+			});
+
+			expect(receivedScopes).toEqual([undefined, "local"]);
 		});
 
 		it("does not persist cache by default when adapter is omitted", async () => {

@@ -61,8 +61,10 @@ export function noColor(): Extension {
 				if (!colorRuns.has(context)) return;
 				colorRuns.delete(context);
 				activeRuns--;
-				// ponytail: last-writer-wins while runs overlap; only the ambient
-				// env is guaranteed restored once all runs finish.
+				// ponytail: opposing overlapping runs share process.env and are last-writer-wins;
+				// ambient env restored once all runs finish. If a consumer needs per-invocation
+				// color correctness, implement fail-fast (reject opposing overlap in preRun) —
+				// do not serialize (nested execute() deadlocks).
 				if (activeRuns === 0) {
 					if (baseForceColor === undefined) delete process.env.FORCE_COLOR;
 					else process.env.FORCE_COLOR = baseForceColor;
