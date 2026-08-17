@@ -168,7 +168,7 @@ export function skill(options: SkillOptions): Extension {
 		commands: [buildSkillCommand(commandName, options)],
 		// Skills are loaded when a snapshot is prepared, not at construction, so
 		// help and man pages reflect the source as it exists at render time.
-		sections: (snapshot) => [
+		commandSections: (snapshot) => [
 			{
 				command: [],
 				title: "Agent skills",
@@ -260,7 +260,12 @@ async function reconcileSkill(opts: {
 		const installedAgents: InstallSkillResult["agents"] = [];
 		for (const agents of groups.values()) {
 			const runInstall = (force?: boolean) =>
-				installSkill({ sourceDir: packagedSkill.sourceDir, agents, scope, force });
+				installSkill({
+					sourceDir: packagedSkill.sourceDir,
+					agents,
+					scope,
+					force,
+				});
 			try {
 				const result = await spinner({
 					message: `Installing skill [${packagedSkill.name}]...`,
@@ -300,7 +305,12 @@ async function reconcileSkill(opts: {
 	if (toUninstall.length > 0) {
 		await spinner({
 			message: `Removing skill [${packagedSkill.name}]...`,
-			task: () => uninstallSkill({ name: packagedSkill.name, agents: toUninstall, scope }),
+			task: () =>
+				uninstallSkill({
+					name: packagedSkill.name,
+					agents: toUninstall,
+					scope,
+				}),
 		});
 	}
 	if (toInstall.length === 0 && toUninstall.length === 0) {
@@ -315,7 +325,11 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 		(command) =>
 			command
 				.flags(
-					{ name: "scope", type: "string", description: "Install scope (project or global)" },
+					{
+						name: "scope",
+						type: "string",
+						description: "Install scope (project or global)",
+					},
 					{
 						name: "all",
 						type: "boolean",

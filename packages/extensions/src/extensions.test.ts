@@ -244,8 +244,12 @@ describe("built-in extensions", () => {
 		})
 			.extend(
 				defineExtension("docs", {
-					sections: () => [
-						{ command: ["build"], title: "Build notes", body: "Build body\nSecond line" },
+					commandSections: () => [
+						{
+							command: ["build"],
+							title: "Build notes",
+							body: "Build body\nSecond line",
+						},
 					],
 				}),
 			)
@@ -313,7 +317,10 @@ describe("built-in extensions", () => {
 		// `--no-color` → NO_COLOR=1: colors off, modifiers keep following
 		// TTY detection (no-color.org). Mock a TTY so the modifier half of
 		// the contract is observable regardless of the test runner's stdout.
-		Object.defineProperty(process.stdout, "isTTY", { configurable: true, value: true });
+		Object.defineProperty(process.stdout, "isTTY", {
+			configurable: true,
+			value: true,
+		});
 		const app = new Crust("app").extend(noColor()).extend(help());
 
 		await app.execute({ argv: ["--help", "--no-color"] });

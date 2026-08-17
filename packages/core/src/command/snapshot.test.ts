@@ -12,7 +12,12 @@ function buildTree() {
 	const root = createCommandNode("cli");
 	root.meta.description = "root cli";
 	root.args = [
-		{ name: "file", type: "string", required: true, parse: (s: string) => s.toUpperCase() },
+		{
+			name: "file",
+			type: "string",
+			required: true,
+			parse: (s: string) => s.toUpperCase(),
+		},
 	];
 	root.effectiveFlags = {
 		verbose: { type: "boolean", short: "v", description: "Verbose output" },
@@ -95,20 +100,24 @@ describe("snapshotCommand", () => {
 describe("command metadata sections", () => {
 	it("appends targeted Extension sections after authored sections in registration order", async () => {
 		const first = defineExtension("first", {
-			sections(snapshot) {
+			commandSections(snapshot) {
 				expect(snapshot.meta.sections).toEqual([{ title: "Root guide", body: "Root body" }]);
 				expect(snapshot.subCommands.build).toBeDefined();
 				expect(snapshot.subCommands.generated).toBeDefined();
 				return [
 					{ command: [], title: "First root", body: "First body" },
 					{ command: ["build"], title: "First build", body: "Build body" },
-					{ command: ["generated"], title: "Generated guide", body: "Generated body" },
+					{
+						command: ["generated"],
+						title: "Generated guide",
+						body: "Generated body",
+					},
 				];
 			},
 		});
 		const second = defineExtension("second", {
 			commands: [defineCommand("generated", (command) => command)],
-			sections: () => [{ command: [], title: "Second root", body: "Second body" }],
+			commandSections: () => [{ command: [], title: "Second root", body: "Second body" }],
 		});
 		const app = new Crust("cli", {
 			sections: [{ title: "Root guide", body: "Root body" }],
@@ -147,14 +156,18 @@ describe("command metadata sections", () => {
 			const app = new Crust("cli")
 				.extend(
 					defineExtension("docs", {
-						sections: () => [{ command, title: "Notes", body: "Body" }],
+						commandSections: () => [{ command, title: "Notes", body: "Body" }],
 					}),
 				)
 				.add(defineCommand("build", { aliases: ["b"] }, (builder) => builder));
 
 			await expect(app.snapshot()).rejects.toMatchObject({
 				code: "DEFINITION",
-				details: { subject: "extension", name: "docs", reason: "invalid-section-path" },
+				details: {
+					subject: "extension",
+					name: "docs",
+					reason: "invalid-section-path",
+				},
 			});
 		}
 	});
@@ -172,7 +185,11 @@ describe("command metadata sections", () => {
 			const app = new Crust("cli", { sections: sections as never });
 			await expect(app.snapshot()).rejects.toMatchObject({
 				code: "DEFINITION",
-				details: { subject: "command", name: "cli", reason: "invalid-sections" },
+				details: {
+					subject: "command",
+					name: "cli",
+					reason: "invalid-sections",
+				},
 			});
 		}
 	});
@@ -188,11 +205,17 @@ describe("command metadata sections", () => {
 		];
 		for (const contributions of badReturns) {
 			const app = new Crust("cli").extend(
-				defineExtension("docs", { sections: () => contributions as never }),
+				defineExtension("docs", {
+					commandSections: () => contributions as never,
+				}),
 			);
 			await expect(app.snapshot()).rejects.toMatchObject({
 				code: "DEFINITION",
-				details: { subject: "extension", name: "docs", reason: "invalid-sections" },
+				details: {
+					subject: "extension",
+					name: "docs",
+					reason: "invalid-sections",
+				},
 			});
 		}
 	});
@@ -203,14 +226,18 @@ describe("command metadata sections", () => {
 		});
 		const contributed = new Crust("cli").extend(
 			defineExtension("docs", {
-				sections: () => [{ command: [], title: "Injected\rheading", body: "Body" }],
+				commandSections: () => [{ command: [], title: "Injected\rheading", body: "Body" }],
 			}),
 		);
 
 		await expect(authored.snapshot()).rejects.toBeInstanceOf(CrustError);
 		await expect(contributed.snapshot()).rejects.toMatchObject({
 			code: "DEFINITION",
-			details: { subject: "extension", name: "docs", reason: "invalid-sections" },
+			details: {
+				subject: "extension",
+				name: "docs",
+				reason: "invalid-sections",
+			},
 		});
 	});
 
@@ -219,7 +246,7 @@ describe("command metadata sections", () => {
 		const app = new Crust("cli")
 			.extend(
 				defineExtension("docs", {
-					sections: () => {
+					commandSections: () => {
 						called = true;
 						return [];
 					},
