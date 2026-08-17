@@ -25,7 +25,7 @@ Two consequences of the root-only model:
 
 ## Author an Extension
 
-`defineExtension(name, config)` returns a frozen plain value. The config can contain `flags`, `commands`, `sections`, `build`, and `hooks`:
+`defineExtension(name, config)` returns a frozen plain value. The config can contain `flags`, `commands`, `provides`, `sections`, `build`, and `hooks`:
 
 <include lang="ts" meta='title="diagnostics.ts"'>
   ../../../examples/extensions/diagnostics.ts
@@ -45,7 +45,7 @@ const rootOnlyVersion = defineExtension("version", {
 
 Ordinary command flags are always local; Context-owned flags are the application-level propagation mechanism.
 
-Extension commands are `defineCommand()` definitions attached at the root. `new Crust()` creates only the application root; every contributed command is a definition. Definitions may declare Context capabilities under `requires`; a missing capability is a `DEFINITION` error when the application prepares. Their `.action()` callbacks receive the same typed action context as application commands, including `rootCommand`.
+Extension commands are `defineCommand()` definitions attached at the root. `new Crust()` creates only the application root; every contributed command is a definition. Their `.action()` callbacks receive the same typed action context as application commands, including `rootCommand` and pull-based `ctx.use()`.
 
 A contributed command name or alias cannot collide with the application or another Extension. Flag names, short forms, and long aliases cannot collide with application flags, [Context-owned flags](/docs/guide/contexts#owned-flags), or other Extensions. Every collision is a `CrustError` with code `DEFINITION`; Crust never warns and skips a contribution.
 
@@ -84,13 +84,40 @@ Titles must be non-empty single lines, and bodies are non-empty plain text so th
 
 `build(ctx)` generates artifacts when invoked by build tooling such as `crust build`; it does not run during ordinary `run()` or `execute()` dispatch. The snapshot subprocess invokes registered hooks in Extension registration order, so Extension presence is the source of intent. The context contains the frozen root Command Snapshot and a resolved absolute `outDir`. Build hooks may be async; errors propagate with the Extension name. `crust build --no-validate` skips entry preparation and all build hooks.
 
+## Dependency injection
+
+Hooks and command actions share the Context system. An app can supply services with `.provide()`, and hooks pull them with `await ctx.use(factory)`:
+
+```ts
+const telemetry = defineExtension("telemetry", {
+  hooks: {
+    async preRun(ctx) {
+      const log = await ctx.use(logger);
+      log.info("start");
+    },
+  },
+});
+```
+
+An Extension can install services on the root with `provides`; commands and other Extensions can consume them:
+
+```ts
+const logging = defineExtension("logging", {
+  provides: [logger({ level: "info" })],
+});
+```
+
+Extension providers use the same name and owned-flag collision checks as `.provide()`. Resolution is lazy and memoized for the invocation.
+
+A `preRun` hook runs before flag validation, so it may only pull Contexts whose full dependency closure owns no flags. Flag-owning Contexts are available from the action and from `postRun` after validation; they remain unavailable after `ctx.finish()`, which skips validation. Values stay live through all `postRun` hooks and are disposed afterwards.
+
 ## Hooks
 
 Hooks run after routing and syntax parsing. Where each hook sits in the invocation, and how failures flow through them, is defined once in the [Execution Model](/docs/guide/lifecycle).
 
 ### `preRun`
 
-`preRun(ctx)` runs before validation, Contexts, and the Command Action, in `.extend()` order. Return `ctx.finish()` to end the invocation successfully and skip the remaining work:
+`preRun(ctx)` runs before validation and the Command Action, in `.extend()` order. Return `ctx.finish()` to end the invocation successfully and skip the remaining work:
 
 <include lang="ts">../../../examples/extensions/hooks.ts#cached</include>
 
@@ -105,7 +132,7 @@ type InvocationOutcome =
   | { status: "failed"; error: unknown };
 ```
 
-Use a module-level `WeakMap<ExtensionContext, State>` for state shared by a hook pair: the same context identity reaches all hooks for one invocation, and entries can be removed in `postRun`. The diagnostics timer above follows this pattern.
+The same context identity reaches all hooks for one invocation. Use `ctx.use()` for injectable services; a `WeakMap<ExtensionContext, State>` remains suitable for private per-invocation ephemera shared by a hook pair.
 
 ### `onError`
 
@@ -113,7 +140,7 @@ Use a module-level `WeakMap<ExtensionContext, State>` for state shared by a hook
 
 <include lang="ts">../../../examples/extensions/hooks.ts#service-errors</include>
 
-Rendering never turns a failure into success, and programmatic `run()` throws the original error instead of invoking `onError` — see [Error flow](/docs/guide/lifecycle#error-flow).
+Rendering never turns a failure into success, and programmatic `run()` throws the original error instead of invoking `onError` — see [Error flow](/docs/guide/lifecycle#error-flow). Invocation Contexts are disposed after `postRun`, so `onError` cannot pull them with `use()`.
 
 Unlike `preRun`/`postRun`, `onError` does not infer owned flags: routing and syntax-parse failures render with a fallback context whose `flags` are empty, so its `ctx.flags` stays `Record<string, unknown>`.
 

@@ -1,6 +1,6 @@
 ---
 title: Split Commands Across Files
-description: Declare command requirements without coupling command files to the application root.
+description: Pull typed command dependencies without coupling command files to the application root.
 ---
 
 For a small application, add definitions inline at the root. When a command becomes large or reusable, export an inert definition from its own file and add it at the composition root.
@@ -23,7 +23,7 @@ A command file imports `defineCommand` and the shared values, never the applicat
   ../../../examples/split-files/commands/greet.ts
 </include>
 
-The recipe builder is typed from the declared requirements. The exported definition is inert and carries its own name: importing it does not build or run a command.
+The action pulls typed dependencies from their factories. The exported definition is inert and carries its own name: importing it does not build or run a command.
 
 ## Completed root
 
@@ -41,8 +41,8 @@ The composition root imports both sides:
   ../../../examples/split-files/cli.ts
 </include>
 
-`.add()` checks that `app` provides a compatible `logger` Context and reports a missing or incompatible requirement at this line. Because `.provide(logger())` precedes `.add()`, its owned `--verbose` flag is also available to the command. [How add-time checks and `.as()` renaming work](/docs/guide/subcommands) — including the finalize-before-adding rule — is covered in Subcommands.
+Because `.provide(logger())` precedes `.add()`, the logger and its owned `--verbose` flag are available on the command path. A missing provider is reported when the action calls `ctx.use(logger)`. [How `.add()` and `.as()` renaming work](/docs/guide/subcommands) — including the finalize-before-adding rule — is covered in Subcommands.
 
 ## Inline or split?
 
-Add `defineCommand(name, recipe)` inline when the implementation is short and local. Move the definition to its own file, with a `requires` config when needed, when a separate file improves readability or when the same command should be added more than once.
+Add `defineCommand(name, recipe)` inline when the implementation is short and local. Move the definition to its own file when that improves readability or when the same command should be added more than once; `ctx.use(factory)` keeps its dependencies explicit without extra command metadata.

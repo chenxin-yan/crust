@@ -89,7 +89,7 @@ Standard Schema failures are aggregated into one `VALIDATION` error. Paths are n
 
 ## Propagation boundaries
 
-`.run(path, input, io)` throws the original error without rendering it or changing process status. Context and Command Action failures are not wrapped in `CrustError`.
+`.run(path, input, io)` throws the original error without rendering it or changing process status. Context setup and Command Action failures are not wrapped in `CrustError`. Pulling an unprovided Context is a `DEFINITION` `CrustError` with `details.reason === "missing-context"`; its message names the Context and recommends `.provide()`. Pulling a flag-owning Context before validation reports `flags-before-validation`.
 
 ```ts
 const failure = new Error("database unavailable");

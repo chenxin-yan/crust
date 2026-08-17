@@ -12,7 +12,7 @@ import type {
 } from "../types.ts";
 import type { ValidateNamedFlagDefs } from "../validation/flags.brands.ts";
 import { normalizeFlag } from "../validation/normalize.ts";
-import type { Awaitable } from "./context.ts";
+import type { AnyContextFactory, Awaitable, ContextInstance, FactoryValueOf } from "./context.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Extension — the public integration contract
@@ -107,6 +107,12 @@ export interface ExtensionContext<
 	 */
 	readonly rawArgs: readonly string[];
 	/**
+	 * Lazily resolve a provided Context for this invocation.
+	 * A pre-run hook may only pull Contexts whose dependency closure owns no flags.
+	 * Values remain live through post-run hooks and are disposed afterwards.
+	 */
+	readonly use: <F extends AnyContextFactory>(factory: F) => Promise<FactoryValueOf<F>>;
+	/**
 	 * End the invocation successfully before validation, Context construction, and the action.
 	 *
 	 * @example
@@ -192,6 +198,8 @@ export interface ExtensionConfig<
 	readonly flags?: Defs;
 	/** Root command definitions this Extension owns and contributes to the application */
 	readonly commands?: readonly CommandDefinition<any>[];
+	/** Context instances installed on the application root when the Extension is registered. */
+	readonly provides?: readonly ContextInstance[];
 	/** Plain-text sections contributed to commands' `meta.sections` when the application is prepared. */
 	readonly sections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
 	/** Build-time artifact generation, invoked by build tooling (e.g. `crust build`). */
@@ -214,6 +222,7 @@ export interface Extension {
 	readonly name: string;
 	readonly flags?: Readonly<Record<string, ExtensionFlagDef>>;
 	readonly commands?: readonly CommandDefinition<any>[];
+	readonly provides?: readonly ContextInstance[];
 	readonly sections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
 	readonly build?: (ctx: ExtensionBuildContext) => void | Promise<void>;
 	readonly hooks?: ExtensionHooks;

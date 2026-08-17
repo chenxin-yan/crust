@@ -142,9 +142,9 @@ describe("command definitions", () => {
 			apiKey: flags["api-key"],
 		}));
 		const before = defineCommand("before", (command) => command.action(() => {}));
-		const after = defineCommand("after", { requires: [auth] }, (command) =>
-			command.action(({ ctx }) => {
-				calls.push(String(ctx.auth.apiKey));
+		const after = defineCommand("after", (command) =>
+			command.action(async ({ ctx }) => {
+				calls.push(String((await ctx.use(auth)).apiKey));
 			}),
 		);
 		const outer = defineCommand("outer", (command) =>
@@ -166,14 +166,12 @@ describe("command definitions", () => {
 			verbose: flags.verbose === true,
 		}));
 		const db = defineContext("db", () => "database");
-		const status = defineCommand("status", { requires: [logging, db] }, (command) =>
-			command.action(({ ctx }) => {
-				calls.push(`${ctx.db}:${String(ctx.logging.verbose)}`);
+		const status = defineCommand("status", (command) =>
+			command.action(async ({ ctx }) => {
+				calls.push(`${await ctx.use(db)}:${String((await ctx.use(logging)).verbose)}`);
 			}),
 		);
-		const deploy = defineCommand("deploy", { requires: [logging, db] }, (command) =>
-			command.add(status),
-		);
+		const deploy = defineCommand("deploy", (command) => command.add(status));
 		const app = new Crust("cli").provide(logging(), db()).add(deploy);
 
 		await app.run(["deploy", "status"], { flags: { verbose: true } });
@@ -203,18 +201,6 @@ describe("command definitions", () => {
 	it("rejects duplicate inherited Contexts during materialization", () => {
 		const db = defineContext("db", () => "database");
 		const definition = defineCommand("users", (command) => command.provide(db()));
-
-		expect(() => new Crust("cli").provide(db()).add(definition)).toThrow(
-			/Context "db" is already provided/,
-		);
-	});
-
-	it("rejects re-providing a Context declared in requires", () => {
-		const db = defineContext("db", () => "database");
-		const definition = defineCommand("users", { requires: [db] }, (command) =>
-			// @ts-expect-error -- name declared in requires (FIX_DUPLICATE_CONTEXT)
-			command.provide(db()),
-		);
 
 		expect(() => new Crust("cli").provide(db()).add(definition)).toThrow(
 			/Context "db" is already provided/,
@@ -319,43 +305,25 @@ describe("command definitions", () => {
 		);
 	});
 
-	it("checks Context requirement names at runtime when added", () => {
-		const db = defineContext("db", () => "database");
-		const definition = defineCommand("users", { requires: [db] }, (command) =>
-			command.action(() => {}),
-		);
-
-		expect(() => new Crust("cli").provide(db()).add(definition)).not.toThrow();
-		expect(() => new Crust("cli").add(definition as never)).toThrow(
-			/Command "users" requires Context "db"/,
-		);
-	});
-
-	it("checks requirements while preserving fluent action types", () => {
+	it("infers pulled Context values while preserving fluent action types", () => {
 		const auth = defineContext("auth", () => ({ user: "yan" }));
 		const region = defineContext("region", () => "us-east-1");
-		const definition = defineCommand("deploy", { requires: [auth] }, (command) =>
+		const definition = defineCommand("deploy", (command) =>
 			command
 				.args({ name: "target", type: "string", required: true })
 				.flags({ name: "force", type: "boolean", required: true })
 				.provide(region())
-				.action(({ args, flags, ctx }) => {
+				.action(async ({ args, flags, ctx }) => {
+					const identity = await ctx.use(auth);
+					const location = await ctx.use(region);
 					type _Target = Assert<IsEqual<typeof args.target, string>>;
 					type _Force = Assert<IsEqual<typeof flags.force, boolean>>;
-					type _Auth = Assert<IsEqual<typeof ctx.auth, { user: string }>>;
-					type _Region = Assert<IsEqual<typeof ctx.region, string>>;
+					type _Auth = Assert<IsEqual<typeof identity, { user: string }>>;
+					type _Region = Assert<IsEqual<typeof location, string>>;
 				}),
 		);
 
 		new Crust("cli").provide(auth()).add(definition);
-		expect(() =>
-			// @ts-expect-error -- missing Contexts: auth
-			new Crust("cli").add(definition),
-		).toThrow(/requires Context "auth"/);
-		new Crust("cli")
-			.provide(defineContext("auth", () => "wrong")())
-			// @ts-expect-error -- incompatible Contexts: auth
-			.add(definition);
 	});
 
 	it("keeps root-only methods off the definition builder", () => {
@@ -380,17 +348,6 @@ describe("command definitions", () => {
 				IsEqual<"extend" extends keyof typeof configured ? true : false, false>
 			>;
 			return configured;
-		});
-	});
-
-	it("checks nested requirements at the enclosing add point", () => {
-		const auth = defineContext("auth", () => ({ user: "yan" }));
-		const nested = defineCommand("nested", { requires: [auth] }, (command) => command);
-
-		defineCommand("outer", { requires: [auth] }, (command) => command.add(nested));
-		defineCommand("outer", (command) => {
-			// @ts-expect-error -- missing Contexts: auth
-			return command.add(nested);
 		});
 	});
 });

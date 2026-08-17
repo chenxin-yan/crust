@@ -1,4 +1,4 @@
-import { buildContexts } from "../api/context.ts";
+import { createContextResolver } from "../api/context.ts";
 import {
 	finishInvocation,
 	type Extension,
@@ -272,6 +272,10 @@ async function dispatch(
 	const resolvedNode = resolved.command;
 	const parsed = parseArgs(resolvedNode, resolved.argv);
 
+	// One resource scope and resolver span pre-run, the action, and post-run.
+	await using disposal = new AsyncDisposableStack();
+	const resolver = createContextResolver(resolvedNode.contexts, io, disposal);
+
 	const rootSnapshot = snapshotCommand(rootNode);
 	const extensionContext: ExtensionContext = Object.freeze({
 		argv: [...argv],
@@ -281,6 +285,7 @@ async function dispatch(
 		args: parsed.args,
 		flags: parsed.flags,
 		rawArgs: parsed.rawArgs,
+		use: resolver.use,
 		finish: finishInvocation,
 		stdout: io.stdout,
 		stderr: io.stderr,
@@ -289,27 +294,17 @@ async function dispatch(
 
 	const terminal = async (): Promise<void> => {
 		validateParsed(resolvedNode, parsed);
-		if (!resolvedNode.run) return;
 
 		// Standard Schemas on arg/flag definitions own value validation and
-		// transformation; the action receives schema outputs.
+		// transformation; actions and flag-owning Contexts receive schema outputs.
 		const validated = await applySchemas(resolvedNode, parsed);
-
-		// Native resource protocol: Context values implementing
-		// Symbol.dispose/asyncDispose are disposed in reverse construction
-		// order after success or failure (`await using` semantics).
-		await using disposal = new AsyncDisposableStack();
+		resolver.setValidatedFlags(validated.flags as Record<string, unknown>);
+		if (!resolvedNode.run) return;
 
 		const context = {
 			args: validated.args,
 			flags: validated.flags,
-			// Each Context setup receives its owned slice of the validated flags.
-			ctx: await buildContexts(
-				resolvedNode.contexts,
-				validated.flags as Record<string, unknown>,
-				io,
-				disposal,
-			),
+			ctx: { use: resolver.use },
 			rawArgs: parsed.rawArgs,
 			command: extensionContext.command,
 			rootCommand: rootSnapshot,
@@ -374,7 +369,21 @@ async function renderFailure(
 		io.stderr(`Error: ${message}`);
 	};
 
-	// Routing or parsing may have failed before an invocation context existed.
+	// Reuse the dispatch context so per-invocation identity (e.g. WeakMap keys
+	// set in preRun) survives into onError; its resolver already rejects pulls
+	// after disposal. The synthetic fallback exists only for failures before a
+	// context was ever built (routing/parse errors).
+	const unavailableUse: ExtensionContext["use"] = async (factory) => {
+		throw new CrustError(
+			"DEFINITION",
+			`Context "${factory.contextName}" cannot be pulled from onError because invocation Contexts have already been disposed.`,
+			{
+				subject: "context",
+				name: factory.contextName,
+				reason: "context-after-disposal",
+			},
+		);
+	};
 	const context =
 		extensionContext ??
 		Object.freeze({
@@ -388,6 +397,7 @@ async function renderFailure(
 			finish: finishInvocation,
 			stdout: io.stdout,
 			stderr: io.stderr,
+			use: unavailableUse,
 		} satisfies ExtensionContext);
 
 	try {

@@ -6,7 +6,9 @@ export type {
 	ContextInstance,
 	ContextMap,
 	ContextRequirements,
+	ContextResolver,
 	ContextSetup,
+	FactoryValueOf,
 	Simplify,
 } from "./api/context.ts";
 export { defineContext } from "./api/context.ts";
@@ -35,7 +37,6 @@ export type {
 	CommandConfig,
 	CommandDefinition,
 	CommandDefinitionBuilder,
-	CommandRequirements,
 	CommandPath,
 	CommandShape,
 	CommandShapeAt,

@@ -130,12 +130,13 @@ describe("integration: .execute() full pipeline with argv override", () => {
 		const dryRun = defineFlag("dryRun", { type: "boolean" });
 		const deployment = defineContext("deployment", { flags: [env, dryRun] }, ({ flags }) => flags);
 		const app = new Crust("deploy").provide(deployment()).add(
-			defineCommand("service", { requires: [deployment] }, (cmd) =>
-				cmd.args(defineArg("name", { type: "string", required: true })).action(({ args, ctx }) => {
-					console.log(
-						`deploy service=${args.name} env=${ctx.deployment.env} dryRun=${ctx.deployment.dryRun}`,
-					);
-				}),
+			defineCommand("service", (cmd) =>
+				cmd
+					.args(defineArg("name", { type: "string", required: true }))
+					.action(async ({ args, ctx }) => {
+						const config = await ctx.use(deployment);
+						console.log(`deploy service=${args.name} env=${config.env} dryRun=${config.dryRun}`);
+					}),
 			),
 		);
 
@@ -167,9 +168,10 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 		const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => ({
 			credential: flags["api-key"],
 		}));
-		const deploy = defineCommand("deploy", { requires: [auth] }, (command) =>
-			command.action(({ ctx }) => {
-				console.log(`${typeof ctx.auth.credential}:${ctx.auth.credential}`);
+		const deploy = defineCommand("deploy", (command) =>
+			command.action(async ({ ctx }) => {
+				const identity = await ctx.use(auth);
+				console.log(`${typeof identity.credential}:${identity.credential}`);
 			}),
 		);
 		const app = new Crust("cli").provide(auth()).add(deploy);
@@ -188,10 +190,12 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 			.flags({ name: "root-only", type: "boolean" })
 			.provide(logging())
 			.add(
-				defineCommand("group", { requires: [logging] }, (group) =>
+				defineCommand("group", (group) =>
 					group.add(
-						defineCommand("deploy", { requires: [logging] }, (deploy) =>
-							deploy.action(({ ctx }) => console.log(`verbose=${ctx.logging.verbose}`)),
+						defineCommand("deploy", (deploy) =>
+							deploy.action(async ({ ctx }) =>
+								console.log(`verbose=${(await ctx.use(logging)).verbose}`),
+							),
 						),
 					),
 				),
@@ -223,8 +227,10 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 		const app = new Crust("cli")
 			.provide(outputConfig())
 			.add(
-				defineCommand("render", { requires: [outputConfig] }, (command) =>
-					command.action(({ ctx }) => console.log(`output=${ctx["output-config"].output}`)),
+				defineCommand("render", (command) =>
+					command.action(async ({ ctx }) =>
+						console.log(`output=${(await ctx.use(outputConfig)).output}`),
+					),
 				),
 			);
 
@@ -314,14 +320,16 @@ describe("integration: nested added definitions end-to-end", () => {
 		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
 		const remoteConfig = defineContext("remote-config", { flags: [timeout] }, ({ flags }) => flags);
 		const app = new Crust("git").provide(logging()).add(
-			defineCommand("remote", { requires: [logging] }, (cmd) =>
+			defineCommand("remote", (cmd) =>
 				cmd.provide(remoteConfig()).add(
-					defineCommand("add", { requires: [logging, remoteConfig] }, (cmd2) =>
-						cmd2.args({ name: "name", type: "string", required: true }).action(({ args, ctx }) => {
-							console.log(
-								`add remote=${args.name} verbose=${ctx.logging.verbose} timeout=${ctx["remote-config"].timeout}`,
-							);
-						}),
+					defineCommand("add", (cmd2) =>
+						cmd2
+							.args({ name: "name", type: "string", required: true })
+							.action(async ({ args, ctx }) => {
+								console.log(
+									`add remote=${args.name} verbose=${(await ctx.use(logging)).verbose} timeout=${(await ctx.use(remoteConfig)).timeout}`,
+								);
+							}),
 					),
 				),
 			),
@@ -345,18 +353,17 @@ describe("integration: nested added definitions end-to-end", () => {
 			builtNames.push("db");
 			return "root-db";
 		});
-		const app = new Crust("cli").provide(db()).add(
-			defineCommand("sub", (cmd) =>
-				cmd.add(
-					// @ts-expect-error -- typed API brands this shape (`sub` must redeclare
-					// db); runtime scoping is per-node, so untyped consumers can require a
-					// root Context their parent command never declares.
-					defineCommand("g", { requires: [db] }, (child) =>
-						child.action(({ ctx }) => console.log(`db=${ctx.db}`)),
+		const app = new Crust("cli")
+			.provide(db())
+			.add(
+				defineCommand("sub", (cmd) =>
+					cmd.add(
+						defineCommand("g", (child) =>
+							child.action(async ({ ctx }) => console.log(`db=${await ctx.use(db)}`)),
+						),
 					),
 				),
-			),
-		);
+			);
 
 		const result = await executeCrust(app, ["sub", "g"]);
 		expect(result.stdout).toContain("db=root-db");
@@ -392,22 +399,24 @@ describe("integration: split-file definitions end-to-end", () => {
 
 	const verbose = defineFlag("verbose", { type: "boolean" });
 	const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
-	const listCommand = defineCommand("list", { requires: [logging] }, (command) =>
+	const listCommand = defineCommand("list", (command) =>
 		command
 			.flags({ name: "format", type: "string", default: "table" })
 			.args({ name: "resource", type: "string", required: true })
-			.action(({ args, flags, ctx }) => {
-				console.log(`list ${args.resource} format=${flags.format} verbose=${ctx.logging.verbose}`);
+			.action(async ({ args, flags, ctx }) => {
+				console.log(
+					`list ${args.resource} format=${flags.format} verbose=${(await ctx.use(logging)).verbose}`,
+				);
 			}),
 	);
-	const getCommand = defineCommand("get", { requires: [logging] }, (command) =>
+	const getCommand = defineCommand("get", (command) =>
 		command
 			.args(
 				{ name: "resource", type: "string", required: true },
 				{ name: "id", type: "string", required: true },
 			)
-			.action(({ args, ctx }) => {
-				console.log(`get ${args.resource}/${args.id} verbose=${ctx.logging.verbose}`);
+			.action(async ({ args, ctx }) => {
+				console.log(`get ${args.resource}/${args.id} verbose=${(await ctx.use(logging)).verbose}`);
 			}),
 	);
 
@@ -448,14 +457,14 @@ describe("integration: added definitions", () => {
 		const env = defineFlag("env", { type: "string" });
 		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
 		const deployment = defineContext("deployment", { flags: [env] }, ({ flags }) => flags);
-		const status = defineCommand("status", { requires: [logging, deployment] }, (command) =>
-			command.action(({ ctx }) => {
-				console.log(`verbose=${ctx.logging.verbose} env=${ctx.deployment.env}`);
+		const status = defineCommand("status", (command) =>
+			command.action(async ({ ctx }) => {
+				console.log(
+					`verbose=${(await ctx.use(logging)).verbose} env=${(await ctx.use(deployment)).env}`,
+				);
 			}),
 		);
-		const deploy = defineCommand("deploy", { requires: [logging] }, (command) =>
-			command.provide(deployment()).add(status),
-		);
+		const deploy = defineCommand("deploy", (command) => command.provide(deployment()).add(status));
 		const app = new Crust("cli").provide(logging()).add(deploy);
 
 		const result = await executeCrust(app, ["deploy", "status", "--verbose", "--env", "staging"]);
@@ -474,11 +483,15 @@ describe("integration: added definitions", () => {
 
 	it("adds multiple definitions in one call", async () => {
 		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
-		const deploy = defineCommand("deploy", { requires: [logging] }, (command) =>
-			command.action(({ ctx }) => console.log(`deploy verbose=${ctx.logging.verbose}`)),
+		const deploy = defineCommand("deploy", (command) =>
+			command.action(async ({ ctx }) =>
+				console.log(`deploy verbose=${(await ctx.use(logging)).verbose}`),
+			),
 		);
-		const status = defineCommand("status", { requires: [logging] }, (command) =>
-			command.action(({ ctx }) => console.log(`status verbose=${ctx.logging.verbose}`)),
+		const status = defineCommand("status", (command) =>
+			command.action(async ({ ctx }) =>
+				console.log(`status verbose=${(await ctx.use(logging)).verbose}`),
+			),
 		);
 		const app = new Crust("cli").provide(logging()).add(status, deploy);
 
@@ -500,9 +513,9 @@ describe("integration: Context-owned boolean flag negation", () => {
 		const verbose = defineFlag("verbose", { type: "boolean", default: true });
 		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
 		const app = new Crust("cli").provide(logging()).add(
-			defineCommand("sub", { requires: [logging] }, (cmd) =>
-				cmd.action(({ ctx }) => {
-					console.log(`verbose=${ctx.logging.verbose}`);
+			defineCommand("sub", (cmd) =>
+				cmd.action(async ({ ctx }) => {
+					console.log(`verbose=${(await ctx.use(logging)).verbose}`);
 				}),
 			),
 		);
@@ -526,9 +539,9 @@ describe("integration: Context-owned multiple-value flag", () => {
 		const tag = defineFlag("tag", { type: "string", multiple: true });
 		const tags = defineContext("tags", { flags: [tag] }, ({ flags }) => flags);
 		const app = new Crust("cli").provide(tags()).add(
-			defineCommand("sub", { requires: [tags] }, (cmd) =>
-				cmd.action(({ ctx }) => {
-					console.log(`tags=${JSON.stringify(ctx.tags.tag)}`);
+			defineCommand("sub", (cmd) =>
+				cmd.action(async ({ ctx }) => {
+					console.log(`tags=${JSON.stringify((await ctx.use(tags)).tag)}`);
 				}),
 			),
 		);
@@ -552,9 +565,9 @@ describe("integration: separator (--) with subcommand and Context-owned flags", 
 		const verbose = defineFlag("verbose", { type: "boolean" });
 		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
 		const app = new Crust("cli").provide(logging()).add(
-			defineCommand("sub", { requires: [logging] }, (cmd) =>
-				cmd.action(({ ctx, rawArgs }) => {
-					console.log(`verbose=${ctx.logging.verbose}`);
+			defineCommand("sub", (cmd) =>
+				cmd.action(async ({ ctx, rawArgs }) => {
+					console.log(`verbose=${(await ctx.use(logging)).verbose}`);
 					console.log(`rawArgs=${JSON.stringify(rawArgs)}`);
 				}),
 			),
@@ -595,18 +608,22 @@ describe("integration: complex real-world CLI scenario", () => {
 			.provide(settings())
 			.extend(auditExtension)
 			.add(
-				defineCommand("deploy", { requires: [settings] }, (cmd) =>
-					cmd.flags({ name: "env", type: "string", required: true }).action(({ flags, ctx }) => {
-						order.push("deploy:run");
-						console.log(
-							`deploy env=${flags.env} verbose=${ctx.settings.verbose} config=${ctx.settings.config}`,
-						);
-					}),
+				defineCommand("deploy", (cmd) =>
+					cmd
+						.flags({ name: "env", type: "string", required: true })
+						.action(async ({ flags, ctx }) => {
+							const config = await ctx.use(settings);
+							order.push("deploy:run");
+							console.log(
+								`deploy env=${flags.env} verbose=${config.verbose} config=${config.config}`,
+							);
+						}),
 				),
-				defineCommand("status", { requires: [settings] }, (cmd) =>
-					cmd.action(({ ctx }) => {
+				defineCommand("status", (cmd) =>
+					cmd.action(async ({ ctx }) => {
+						const config = await ctx.use(settings);
 						order.push("status:run");
-						console.log(`status verbose=${ctx.settings.verbose} config=${ctx.settings.config}`);
+						console.log(`status verbose=${config.verbose} config=${config.config}`);
 					}),
 				),
 			);
