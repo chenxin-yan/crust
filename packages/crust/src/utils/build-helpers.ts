@@ -3,12 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 
-import {
-	BUILD_OUT_DIR_ENV,
-	BUILD_RESULT_PATH_ENV,
-	type CommandSnapshot,
-	SNAPSHOT_PATH_ENV,
-} from "@crustjs/core/tooling";
+import { BUILD_OUT_DIR_ENV, type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
 import { yellow } from "@crustjs/style";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -272,14 +267,14 @@ export async function snapshotEntrypoint(
 	entryPath: string,
 	envFiles: readonly string[] = [],
 ): Promise<CommandSnapshot> {
-	return (await prepareEntrypoint(entryPath, envFiles)).snapshot;
+	return prepareEntrypoint(entryPath, envFiles);
 }
 
 export async function buildEntrypoint(
 	entryPath: string,
 	outDir: string,
 	envFiles: readonly string[] = [],
-): Promise<{ readonly snapshot: CommandSnapshot; readonly builtExtensions: readonly string[] }> {
+): Promise<CommandSnapshot> {
 	return prepareEntrypoint(entryPath, envFiles, resolve(outDir));
 }
 
@@ -287,11 +282,10 @@ async function prepareEntrypoint(
 	entryPath: string,
 	envFiles: readonly string[],
 	buildOutDir?: string,
-): Promise<{ readonly snapshot: CommandSnapshot; readonly builtExtensions: readonly string[] }> {
+): Promise<CommandSnapshot> {
 	const absoluteEntry = resolve(entryPath);
 	const snapshotDir = await mkdtemp(join(tmpdir(), "crust-snapshot-"));
 	const snapshotPath = join(snapshotDir, "command.json");
-	const buildResultPath = join(snapshotDir, "build.json");
 
 	try {
 		const spawnedAt = Date.now();
@@ -299,12 +293,7 @@ async function prepareEntrypoint(
 			env: {
 				...process.env,
 				[SNAPSHOT_PATH_ENV]: snapshotPath,
-				...(buildOutDir
-					? {
-							[BUILD_OUT_DIR_ENV]: buildOutDir,
-							[BUILD_RESULT_PATH_ENV]: buildResultPath,
-						}
-					: {}),
+				...(buildOutDir ? { [BUILD_OUT_DIR_ENV]: buildOutDir } : {}),
 				BUN_BE_BUN: "1",
 			},
 			cwd: process.cwd(),
@@ -370,30 +359,7 @@ async function prepareEntrypoint(
 			);
 		}
 
-		let builtExtensions: string[] = [];
-		if (buildOutDir) {
-			let serializedResult: string;
-			try {
-				serializedResult = await readFile(buildResultPath, "utf8");
-			} catch (error) {
-				if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-					throw new Error(
-						`Entry exited without producing Extension build results.\n  Ensure ${absoluteEntry} uses a @crustjs/core version that supports Extension build hooks, or pass --no-validate to skip them.`,
-						{ cause: error },
-					);
-				}
-				throw error;
-			}
-			try {
-				builtExtensions = JSON.parse(serializedResult) as string[];
-			} catch (error) {
-				throw new Error(
-					`Entry produced invalid Extension build results.\n  Ensure ${absoluteEntry} uses a compatible @crustjs/core version.`,
-					{ cause: error },
-				);
-			}
-		}
-		return { snapshot, builtExtensions };
+		return snapshot;
 	} finally {
 		await rm(snapshotDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 	}

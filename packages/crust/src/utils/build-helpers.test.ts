@@ -48,10 +48,9 @@ describe("snapshotEntrypoint", () => {
 				`await app.execute();\n`,
 		);
 
-		const result = await buildEntrypoint(entry, outDir);
+		const snapshot = await buildEntrypoint(entry, outDir);
 
-		expect(result.snapshot.meta.name).toBe("fixture");
-		expect(result.builtExtensions).toEqual(["artifact"]);
+		expect(snapshot.meta.name).toBe("fixture");
 		expect(await Bun.file(join(outDir, "artifact.txt")).text()).toBe("built");
 	});
 
@@ -79,14 +78,12 @@ describe("snapshotEntrypoint", () => {
 		// crust build runs from the project root; the entry subprocess inherits
 		// that cwd, so advertised sources relativize against the fixture project.
 		const cwdSpy = spyOn(process, "cwd").mockReturnValue(directory);
-		let result: Awaited<ReturnType<typeof buildEntrypoint>>;
 		try {
-			result = await buildEntrypoint(entry, outDir);
+			await buildEntrypoint(entry, outDir);
 		} finally {
 			cwdSpy.mockRestore();
 		}
 
-		expect(result.builtExtensions).toEqual(["skills", "man"]);
 		const manual = await Bun.file(join(outDir, "man", "demo.1")).text();
 		const packagedSkill = await Bun.file(join(outDir, "skills", "demo", "SKILL.md")).text();
 		expect(manual).toContain("Demo workflows");
@@ -119,24 +116,6 @@ describe("snapshotEntrypoint", () => {
 
 		await expect(snapshotEntrypoint(entry)).rejects.toThrow(
 			"Entry exited without producing a Command Snapshot",
-		);
-	});
-
-	it("explains when an entry produces a snapshot but no Extension build results", async () => {
-		const directory = await mkdtemp(join(tmpdir(), "crust-entry-snapshot-test-"));
-		tempDirs.push(directory);
-		const entry = join(directory, "cli.ts");
-		// Simulates an older @crustjs/core that honors the snapshot protocol but
-		// predates build hooks: it writes the snapshot and exits without build results.
-		await writeFile(
-			entry,
-			`const snapshot = { meta: { name: "fixture" }, args: [], flags: {}, subCommands: {} };\n` +
-				`await Bun.write(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!, JSON.stringify(snapshot));\n` +
-				`process.exit(0);\n`,
-		);
-
-		await expect(buildEntrypoint(entry, join(directory, "dist"))).rejects.toThrow(
-			"Entry exited without producing Extension build results",
 		);
 	});
 

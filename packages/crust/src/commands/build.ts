@@ -361,9 +361,6 @@ export const buildCommand = defineCommand(
 				const prepared = flags.validate
 					? await buildEntrypoint(entryPath, outDir, envFiles)
 					: undefined;
-				for (const extension of prepared?.builtExtensions ?? []) {
-					console.log(`${green("✓")} ${extension}`);
-				}
 
 				if (flags.package) {
 					const { runDistributeBuild } = await import("../utils/distribute.ts");
@@ -375,7 +372,7 @@ export const buildCommand = defineCommand(
 						target: flags.target,
 						stageDir: flags["stage-dir"],
 						envFiles,
-						artifactOutDir: prepared?.builtExtensions.length ? outDir : undefined,
+						artifactOutDir: prepared ? outDir : undefined,
 					});
 					return;
 				}
