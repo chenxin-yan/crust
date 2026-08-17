@@ -193,7 +193,7 @@ export interface ExtensionConfig<
 	/** Root command definitions this Extension owns and contributes to the application */
 	readonly commands?: readonly CommandDefinition<any>[];
 	/** Plain-text sections contributed to commands' `meta.sections` when the application is prepared. */
-	readonly commandSections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
+	readonly sections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
 	/** Build-time artifact generation, invoked by build tooling (e.g. `crust build`). */
 	readonly build?: (ctx: ExtensionBuildContext) => void | Promise<void>;
 	readonly hooks?: ExtensionHooks<Defs>;
@@ -214,7 +214,7 @@ export interface Extension {
 	readonly name: string;
 	readonly flags?: Readonly<Record<string, ExtensionFlagDef>>;
 	readonly commands?: readonly CommandDefinition<any>[];
-	readonly commandSections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
+	readonly sections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
 	readonly build?: (ctx: ExtensionBuildContext) => void | Promise<void>;
 	readonly hooks?: ExtensionHooks;
 }

@@ -224,7 +224,7 @@ The map shape used for inferred `ctx` values.
   name="ExtensionConfig"
 />
 
-`commands` entries are `defineCommand()` definitions contributed at the application root. `commandSections(snapshot)` returns plain-text sections targeted by canonical command paths relative to that root; contributions append to each target's `meta.sections` in Extension registration order. `build(ctx)` generates artifacts when invoked by build tooling and may be async; its errors propagate to the caller. See [Extensions](/docs/guide/extensions).
+`commands` entries are `defineCommand()` definitions contributed at the application root. `sections(snapshot)` returns plain-text sections targeted by canonical command paths relative to that root; contributions append to each target's `meta.sections` in Extension registration order. `build(ctx)` generates artifacts when invoked by build tooling and may be async; its errors propagate to the caller. See [Extensions](/docs/guide/extensions).
 
 ### `ExtensionBuildContext`
 

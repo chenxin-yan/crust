@@ -244,7 +244,7 @@ describe("built-in extensions", () => {
 		})
 			.extend(
 				defineExtension("docs", {
-					commandSections: () => [
+					sections: () => [
 						{
 							command: ["build"],
 							title: "Build notes",

@@ -210,9 +210,9 @@ function applyExtensionSections(
 	extension: Extension,
 	snapshot: CommandSnapshot,
 ): void {
-	if (!extension.commandSections) return;
+	if (!extension.sections) return;
 	const owner: SectionOwner = { subject: "extension", name: extension.name };
-	const contributions = extension.commandSections(snapshot);
+	const contributions = extension.sections(snapshot);
 	if (!Array.isArray(contributions)) throw invalidSections(owner);
 	for (const contribution of contributions as readonly ExtensionSectionContribution[]) {
 		// validateSection rejects null/non-object contributions, so reading

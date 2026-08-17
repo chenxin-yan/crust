@@ -25,7 +25,7 @@ Two consequences of the root-only model:
 
 ## Author an Extension
 
-`defineExtension(name, config)` returns a frozen plain value. The config can contain `flags`, `commands`, `commandSections`, `build`, and `hooks`:
+`defineExtension(name, config)` returns a frozen plain value. The config can contain `flags`, `commands`, `sections`, `build`, and `hooks`:
 
 <include lang="ts" meta='title="diagnostics.ts"'>
   ../../../examples/extensions/diagnostics.ts
@@ -65,11 +65,11 @@ const deploy = defineCommand(
 );
 ```
 
-Extensions can append sections to any command while the application prepares. The `commandSections` field is a contribution point into the target commands' `meta.sections`, not documentation of the Extension itself:
+Extensions can append sections to any command while the application prepares. The `sections` field is a contribution point into the target commands' `meta.sections`, not documentation of the Extension itself:
 
 ```ts
 const guidance = defineExtension("guidance", {
-  commandSections: () => [
+  sections: () => [
     { command: [], title: "Environment", body: "Set DEPLOY_TOKEN before running." },
     { command: ["deploy"], title: "Policy", body: "Production deploys require approval." },
   ],
