@@ -103,12 +103,10 @@ export interface UpdateNotifierOptions {
 
 	/**
 	 * Install scope used to generate the suggested upgrade command.
-	 * Set to `"auto"` to treat package-manager invocations as local and
-	 * otherwise default to `"global"`.
 	 *
-	 * @default "auto"
+	 * When omitted with no `updateCommand`, the notice does not suggest a command.
 	 */
-	installScope?: UpdateNotifierInstallScope | "auto";
+	installScope?: UpdateNotifierInstallScope;
 
 	/**
 	 * Override the upgrade command shown in the notice.
@@ -121,8 +119,13 @@ export interface UpdateNotifierOptions {
 		| ((
 				packageName: string,
 				packageManager: UpdateNotifierPackageManager,
-				installScope: UpdateNotifierInstallScope,
+				installScope: UpdateNotifierInstallScope | undefined,
 		  ) => string);
+
+	/**
+	 * Documentation URL shown after the update notice.
+	 */
+	updateDocsUrl?: string;
 
 	/**
 	 * Optional cache configuration for cross-run persistence.
@@ -271,13 +274,6 @@ function detectPackageManager(): UpdateNotifierPackageManager {
 	return "npm";
 }
 
-function detectInstallScope(): UpdateNotifierInstallScope {
-	// ponytail: a global CLI launched from inside a package-manager script
-	// inherits npm_config_user_agent and is misread as local; documented
-	// tradeoff — set installScope explicitly to override.
-	return process.env.npm_config_user_agent ? "local" : "global";
-}
-
 function detectPackageManagerFromExecPath(
 	execPath: string | undefined,
 ): UpdateNotifierPackageManager | null {
@@ -319,29 +315,31 @@ function defaultUpdateCommand(
 function resolveUpdateCommand(
 	packageName: string,
 	packageManagerOption: UpdateNotifierPackageManager | "auto" | undefined,
-	installScopeOption: UpdateNotifierInstallScope | "auto" | undefined,
+	installScopeOption: UpdateNotifierInstallScope | undefined,
 	override:
 		| string
 		| ((
 				packageName: string,
 				packageManager: UpdateNotifierPackageManager,
-				installScope: UpdateNotifierInstallScope,
+				installScope: UpdateNotifierInstallScope | undefined,
 		  ) => string)
 		| undefined,
-): string {
+): string | undefined {
 	if (typeof override === "string") return override;
+
+	if (typeof override !== "function" && installScopeOption === undefined) return undefined;
 
 	const detectedPackageManager =
 		packageManagerOption && packageManagerOption !== "auto"
 			? packageManagerOption
 			: detectPackageManager();
-	const detectedInstallScope =
-		installScopeOption && installScopeOption !== "auto" ? installScopeOption : detectInstallScope();
 
 	if (typeof override === "function") {
-		return override(packageName, detectedPackageManager, detectedInstallScope);
+		return override(packageName, detectedPackageManager, installScopeOption);
 	}
-	return defaultUpdateCommand(packageName, detectedPackageManager, detectedInstallScope);
+	return installScopeOption
+		? defaultUpdateCommand(packageName, detectedPackageManager, installScopeOption)
+		: undefined;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -356,6 +354,7 @@ function resolveUpdateCommand(
  * **Behavior:**
  * - With `cache`, checks are reused up to `cache.intervalMs` (default 24h).
  * - Without `cache`, checks run once per process execution.
+ * - The notice is command-less unless `installScope` or `updateCommand` is configured.
  * - The network check is non-blocking — it never delays command execution.
  * - All internal errors (network, cache, parsing) are silently swallowed.
  * - The update notice is emitted *after* the command action completes.
@@ -386,8 +385,9 @@ export function updateNotifier(options: UpdateNotifierOptions): Extension {
 		timeoutMs = DEFAULT_TIMEOUT_MS,
 		registryUrl = DEFAULT_REGISTRY_URL,
 		packageManager = "auto",
-		installScope = "auto",
+		installScope,
 		updateCommand,
+		updateDocsUrl,
 		cache,
 	} = options;
 	const hasCache = cache !== undefined;
@@ -424,6 +424,7 @@ export function updateNotifier(options: UpdateNotifierOptions): Extension {
 								currentVersion,
 								state.latestVersion,
 								resolvedUpdateCommand,
+								updateDocsUrl,
 								context.stderr,
 							);
 							await cacheAdapter.write({
@@ -458,7 +459,13 @@ export function updateNotifier(options: UpdateNotifierOptions): Extension {
 						isNewerVersion(currentVersion, latestVersion) &&
 						state.lastNotifiedVersion !== latestVersion
 					) {
-						emitUpdateNotice(currentVersion, latestVersion, resolvedUpdateCommand, context.stderr);
+						emitUpdateNotice(
+							currentVersion,
+							latestVersion,
+							resolvedUpdateCommand,
+							updateDocsUrl,
+							context.stderr,
+						);
 						nextState.lastNotifiedVersion = latestVersion;
 					}
 
@@ -492,23 +499,27 @@ const BOX_VERTICAL = "│";
  * The notice uses rounded-corner box-drawing characters and ANSI colors:
  * - Yellow box border
  * - Dim current version, bold green latest version
- * - Cyan update command
+ * - Optional cyan update command and documentation URL
  *
  * @internal
  */
 function emitUpdateNotice(
 	currentVersion: string,
 	latestVersion: string,
-	updateCommand: string,
+	updateCommand: string | undefined,
+	updateDocsUrl: string | undefined,
 	stderr: (text: string) => void,
 ): void {
 	const PADDING = 3;
 
-	const versionLine = `Update available  ${dim(currentVersion)} ${yellow("→")} ${bold(green(latestVersion))}`;
-	const commandLine = `Run ${cyan(updateCommand)}`;
+	const contentLines = [
+		`Update available  ${dim(currentVersion)} ${yellow("→")} ${bold(green(latestVersion))}`,
+		...(updateCommand !== undefined ? [`Run ${cyan(updateCommand)}`] : []),
+		...(updateDocsUrl !== undefined ? [`See ${cyan(updateDocsUrl)} to update`] : []),
+	];
 
 	// Determine content width from the longest visible line
-	const contentWidth = Math.max(Bun.stringWidth(versionLine), Bun.stringWidth(commandLine));
+	const contentWidth = Math.max(...contentLines.map((line) => Bun.stringWidth(line)));
 	const innerWidth = contentWidth + PADDING * 2;
 
 	const border = BOX_HORIZONTAL.repeat(innerWidth);
@@ -519,8 +530,10 @@ function emitUpdateNotice(
 		"",
 		`${yellow(BOX_TOP_LEFT)}${yellow(border)}${yellow(BOX_TOP_RIGHT)}`,
 		emptyLine,
-		`${yellow(BOX_VERTICAL)}${pad}${padEnd(versionLine, contentWidth)}${pad}${yellow(BOX_VERTICAL)}`,
-		`${yellow(BOX_VERTICAL)}${pad}${padEnd(commandLine, contentWidth)}${pad}${yellow(BOX_VERTICAL)}`,
+		...contentLines.map(
+			(line) =>
+				`${yellow(BOX_VERTICAL)}${pad}${padEnd(line, contentWidth)}${pad}${yellow(BOX_VERTICAL)}`,
+		),
 		emptyLine,
 		`${yellow(BOX_BOTTOM_LEFT)}${yellow(border)}${yellow(BOX_BOTTOM_RIGHT)}`,
 		"",
