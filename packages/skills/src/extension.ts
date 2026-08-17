@@ -204,13 +204,16 @@ async function readPackageVersion(): Promise<string | undefined> {
 
 async function buildSkills(options: SkillOptions, context: ExtensionBuildContext): Promise<void> {
 	const outDir = join(context.outDir, "skills");
-	let source: string;
+	let source: string | undefined;
 	try {
 		source = resolveSkillSource(options.source);
 	} catch (error) {
 		if (!(error instanceof SkillSourceUnavailableError)) throw error;
-		// The snapshot's Agent skills section was rendered while the source was
-		// still missing; drop that stale warning from the skill this hook emits.
+		// A missing packaged source is regenerated from the snapshot below.
+	}
+
+	if (source === undefined || (options.extras?.length ?? 0) > 0) {
+		// The Agent skills section describes the input source, not the output being generated here.
 		const meta = {
 			...context.snapshot.meta,
 			sections: context.snapshot.meta.sections?.filter(
@@ -219,7 +222,7 @@ async function buildSkills(options: SkillOptions, context: ExtensionBuildContext
 		};
 		await writeSkillsFromSnapshot(
 			{ ...context.snapshot, meta },
-			{ outDir, version: await readPackageVersion() },
+			{ outDir, version: await readPackageVersion(), extras: options.extras },
 		);
 		return;
 	}

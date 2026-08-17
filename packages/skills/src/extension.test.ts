@@ -99,6 +99,52 @@ describe("skill extension package sources", () => {
 		expect(await readFile(join(outDir, "skills", "demo", "content.md"), "utf8")).toBe("packaged\n");
 	});
 
+	it("generates command and authored skills together when extras are configured", async () => {
+		const source = await writeSource("stale", "stale");
+		const authored = join(tempRoot, "authored", "guide");
+		await mkdir(authored, { recursive: true });
+		await writeFile(
+			join(authored, "SKILL.md"),
+			"---\nname: guide\ndescription: Deployment guide\n---\n",
+		);
+		await writeFile(join(authored, "content.md"), "authored\n");
+		const extension = skill({ source, extras: [authored] });
+		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
+		const outDir = join(tempRoot, "dist");
+		await writeFile(join(tempRoot, "package.json"), '{"version":"9.9.9"}');
+
+		await withCwd(tempRoot, async () => {
+			await extension.build?.({ snapshot, outDir });
+		});
+
+		expect(await readFile(join(outDir, "skills", "demo", "SKILL.md"), "utf8")).toContain(
+			'version: "9.9.9"',
+		);
+		const rootReference = await readFile(
+			join(outDir, "skills", "demo", "commands", "demo.md"),
+			"utf8",
+		);
+		expect(rootReference).toContain("# `demo`");
+		// The Agent skills section advertises the input source path; it must not
+		// leak build-machine paths into the regenerated command reference.
+		expect(rootReference).not.toContain(tempRoot);
+		expect(await readFile(join(outDir, "skills", "guide", "content.md"), "utf8")).toBe(
+			"authored\n",
+		);
+		await expect(lstat(join(outDir, "skills", "stale"))).rejects.toThrow();
+	});
+
+	it("copies packaged sources when extras is empty", async () => {
+		const source = await writeSource("demo", "packaged");
+		const extension = skill({ source, extras: [] });
+		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
+		const outDir = join(tempRoot, "dist");
+
+		await extension.build?.({ snapshot, outDir });
+
+		expect(await readFile(join(outDir, "skills", "demo", "content.md"), "utf8")).toBe("packaged\n");
+	});
+
 	it("renders from the snapshot without requiring a package version", async () => {
 		const source = join(tempRoot, "missing-skills");
 		const extension = skill({ source });

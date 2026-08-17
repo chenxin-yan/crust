@@ -103,6 +103,23 @@ describe("writeSkills", () => {
 		await expect(readdir(outDir)).rejects.toThrow();
 	});
 
+	it("rejects an extra skill directory nested inside outDir", async () => {
+		const outDir = join(tempRoot, "skills");
+		await mkdir(join(outDir, "nested"), { recursive: true });
+		await writeFile(
+			join(outDir, "nested", "SKILL.md"),
+			"---\nname: nested\ndescription: Nested\n---\n",
+		);
+
+		const result = writeSkills(createApp(), {
+			outDir,
+			version: "1.0.0",
+			extras: [join(outDir, "nested")],
+		});
+		await expect(result).rejects.toThrow("is inside outDir");
+		expect(await readdir(join(outDir, "nested"))).toEqual(["SKILL.md"]);
+	});
+
 	it("requires a generated skill description", async () => {
 		const outDir = join(tempRoot, "skills");
 		const app = new Crust("demo").action(() => {});
