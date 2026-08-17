@@ -37,9 +37,7 @@ describe("package-as-source pipeline", () => {
 		await writeSkills(app, { outDir: source, version: "1.0.0" });
 
 		// Discovery reads required Agent Skills frontmatter and validates the directory name.
-		expect(await loadPackagedSkills(source)).toMatchObject([
-			{ name: "demo", description: "Demo CLI" },
-		]);
+		expect(loadPackagedSkills(source)).toMatchObject([{ name: "demo", description: "Demo CLI" }]);
 
 		await withCwd(tempRoot, () =>
 			installSkill({

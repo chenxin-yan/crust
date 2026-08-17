@@ -140,9 +140,13 @@ export interface ExtensionHooks<Defs extends readonly NamedExtensionFlagDef[] = 
 export type ExtensionFlagDef = FlagDef & { readonly recursive?: boolean };
 
 /** A named flag definition accepted by {@link defineExtension}. */
-export type NamedExtensionFlagDef = NamedFlagDef & { readonly recursive?: boolean };
+export type NamedExtensionFlagDef = NamedFlagDef & {
+	readonly recursive?: boolean;
+};
 
-type InferPreSchemaExtensionFlag<F extends ExtensionFlagDef> = F extends { schema: unknown }
+type InferPreSchemaExtensionFlag<F extends ExtensionFlagDef> = F extends {
+	schema: unknown;
+}
 	? F extends { multiple: true }
 		? F extends { type: "boolean" }
 			? boolean[] | undefined
@@ -180,8 +184,8 @@ export interface ExtensionConfig<
 	readonly flags?: Defs;
 	/** Root command definitions this Extension owns and contributes to the application */
 	readonly commands?: readonly CommandDefinition<any>[];
-	/** Plain-text sections contributed to commands when the application is prepared. */
-	readonly sections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
+	/** Plain-text sections contributed to commands' `meta.sections` when the application is prepared. */
+	readonly commandSections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
 	readonly hooks?: ExtensionHooks<Defs>;
 }
 
@@ -200,7 +204,7 @@ export interface Extension {
 	readonly name: string;
 	readonly flags?: Readonly<Record<string, ExtensionFlagDef>>;
 	readonly commands?: readonly CommandDefinition<any>[];
-	readonly sections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
+	readonly commandSections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
 	readonly hooks?: ExtensionHooks;
 }
 

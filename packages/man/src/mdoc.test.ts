@@ -9,7 +9,12 @@ describe("renderManPageMdoc", () => {
 	it("includes NAME SYNOPSIS SUBCOMMANDS OPTIONS", async () => {
 		const app = new Crust("demo", { description: "Demo CLI for tests." })
 			.extend(help())
-			.flags({ name: "verbose", type: "boolean", short: "v", description: "Verbose" })
+			.flags({
+				name: "verbose",
+				type: "boolean",
+				short: "v",
+				description: "Verbose",
+			})
 			.add(defineCommand("ping", { description: "Ping" }, (cmd) => cmd.action(() => {})));
 
 		const root = await app.snapshot();
@@ -27,7 +32,9 @@ describe("renderManPageMdoc", () => {
 	});
 
 	it("escapes leading dots in descriptions and .Nd", async () => {
-		const app = new Crust("x", { description: ".config is read automatically." }).action(() => {});
+		const app = new Crust("x", {
+			description: ".config is read automatically.",
+		}).action(() => {});
 
 		const root = await app.snapshot();
 		const mdoc = renderManPageMdoc({ root, name: "x", section: 1 });
@@ -42,7 +49,13 @@ describe("renderManPageMdoc", () => {
 		})
 			.extend(
 				defineExtension("docs", {
-					sections: () => [{ command: [], title: "C:\\paths", body: "'quoted lines are escaped." }],
+					commandSections: () => [
+						{
+							command: [],
+							title: "C:\\paths",
+							body: "'quoted lines are escaped.",
+						},
+					],
 				}),
 			)
 			.flags({ name: "verbose", type: "boolean" })

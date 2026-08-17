@@ -142,8 +142,10 @@ function renderSkillMd(manifest: ManifestNode, meta: SkillMeta, allNodes: Manife
 	lines.push("---");
 	lines.push(`name: ${escapeYaml(meta.name)}`);
 	lines.push(`description: ${escapeYaml(meta.description)}`);
-	lines.push("metadata:");
-	lines.push(`  version: "${meta.version}"`);
+	if (meta.version !== undefined) {
+		lines.push("metadata:");
+		lines.push(`  version: "${meta.version}"`);
+	}
 	lines.push("---");
 	lines.push("");
 

@@ -1,6 +1,6 @@
 # @crustjs/skills
 
-Package and install agent skills for Crust CLIs. Installation links the packaged source into agent directories, so the target agent must discover skills through symlinks.
+Package and install agent skills for Crust CLIs.
 
 ## Install
 

@@ -190,7 +190,11 @@ function contributionTarget(
 			throw new CrustError(
 				"DEFINITION",
 				`Extension "${extension.name}" section target "${command.join(" ")}" is not a canonical command path`,
-				{ subject: "extension", name: extension.name, reason: "invalid-section-path" },
+				{
+					subject: "extension",
+					name: extension.name,
+					reason: "invalid-section-path",
+				},
 			);
 		}
 		target = next;
@@ -203,9 +207,9 @@ function applyExtensionSections(
 	extension: Extension,
 	snapshot: CommandSnapshot,
 ): void {
-	if (!extension.sections) return;
+	if (!extension.commandSections) return;
 	const owner: SectionOwner = { subject: "extension", name: extension.name };
-	const contributions = extension.sections(snapshot);
+	const contributions = extension.commandSections(snapshot);
 	if (!Array.isArray(contributions)) throw invalidSections(owner);
 	for (const contribution of contributions as readonly ExtensionSectionContribution[]) {
 		// validateSection rejects null/non-object contributions, so reading

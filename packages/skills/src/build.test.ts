@@ -37,7 +37,12 @@ function createApp() {
 				"serve",
 				{
 					description: "Start the server",
-					sections: [{ title: "Deployment", body: "Check the target environment first." }],
+					sections: [
+						{
+							title: "Deployment",
+							body: "Check the target environment first.",
+						},
+					],
 				},
 				(command) => command.action(() => {}),
 			),
@@ -52,7 +57,7 @@ describe("writeSkills", () => {
 		await writeSkills(createApp(), {
 			outDir,
 			version: "1.2.3",
-			bundles: [bundleDir],
+			extras: [bundleDir],
 		});
 
 		expect((await readdir(tempRoot)).sort()).toEqual(["deployment-guide", "skills"]);
@@ -91,7 +96,7 @@ describe("writeSkills", () => {
 		const result = writeSkills(createApp(), {
 			outDir,
 			version: "1.0.0",
-			bundles: [bundleDir],
+			extras: [bundleDir],
 		});
 		await expect(result).rejects.toBeInstanceOf(SkillSourceConflictError);
 		await expect(result).rejects.toMatchObject({ skillName: "demo" });

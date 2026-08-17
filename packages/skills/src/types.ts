@@ -4,7 +4,7 @@ import type { CommandSnapshot } from "@crustjs/core";
 export interface SkillMeta {
 	name: string;
 	description: string;
-	version: string;
+	version?: string;
 }
 
 /** Supported agent targets for skill installation. */
@@ -151,8 +151,6 @@ export interface InstallSkillResult {
 
 export interface UninstallSkillOptions {
 	name: string;
-	/** Expected source. Resolving links to another source are not removed. */
-	sourceDir: string | URL;
 	agents?: AgentTarget[];
 	scope?: Scope;
 }
