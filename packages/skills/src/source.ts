@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -14,6 +14,8 @@ function directoryPathSync(path: string): string | null {
 	try {
 		return statSync(path).isDirectory() ? path : null;
 	} catch {
+		// ENOENT/EACCES: an absent or unreadable candidate is not a source root; the
+		// caller falls through to the next candidate or a clear unavailable error.
 		return null;
 	}
 }
@@ -21,9 +23,9 @@ function directoryPathSync(path: string): string | null {
 function fallbackName(source: string | URL): string {
 	if (source instanceof URL) {
 		if (source.protocol !== "file:") {
-			throw new SkillSourceUnavailableError(
-				`Skill source URL must use file: protocol, got "${source.protocol}".`,
-			);
+			// A wrong-protocol URL is a definition error, not a missing asset; it must
+			// not be classified as "unavailable" and silently degrade the extension.
+			throw new Error(`Skill source URL must use file: protocol, got "${source.protocol}".`);
 		}
 		return basename(fileURLToPath(source));
 	}
@@ -63,15 +65,14 @@ export interface PackagedSkill {
 	readonly description: string;
 }
 
-function readSkillFrontmatterSync(sourceDir: string): {
-	readonly name: string;
-	readonly description: string;
-} {
+function readSkillFrontmatterSync(sourceDir: string): Pick<PackagedSkill, "name" | "description"> {
 	let content: string;
 	try {
 		content = readFileSync(join(sourceDir, "SKILL.md"), "utf8");
-	} catch {
-		throw new Error(`Skill source directory "${sourceDir}" is missing SKILL.md.`);
+	} catch (error) {
+		// ENOENT: the directory is not a skill; anything else (EACCES, EISDIR) is unexpected.
+		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+		throw new Error(`Skill source directory "${sourceDir}" is missing SKILL.md.`, { cause: error });
 	}
 	const frontmatter = probeFrontmatter(content);
 	if (!frontmatter.name || !frontmatter.description) {
@@ -82,10 +83,9 @@ function readSkillFrontmatterSync(sourceDir: string): {
 	return { name: frontmatter.name, description: frontmatter.description };
 }
 
-export async function readSkillFrontmatter(sourceDir: string): Promise<{
-	readonly name: string;
-	readonly description: string;
-}> {
+export async function readSkillFrontmatter(
+	sourceDir: string,
+): Promise<Pick<PackagedSkill, "name" | "description">> {
 	return readSkillFrontmatterSync(sourceDir);
 }
 
@@ -96,6 +96,9 @@ export function loadPackagedSkillsSync(source: string | URL): readonly PackagedS
 	for (const entry of readdirSync(root, { withFileTypes: true })) {
 		if (!entry.isDirectory()) continue;
 		const sourceDir = join(root, entry.name);
+		// Cruft directories (__MACOSX, editor droppings) must not take down every
+		// valid skill; only a directory that claims to be a skill is validated.
+		if (!existsSync(join(sourceDir, "SKILL.md"))) continue;
 		const frontmatter = readSkillFrontmatterSync(sourceDir);
 		if (frontmatter.name !== entry.name) {
 			throw new Error(

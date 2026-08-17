@@ -164,8 +164,8 @@ describe("skill extension package sources", () => {
 		process.exitCode = 0;
 	});
 
-	it("does not break unrelated commands when the source contains an invalid skill directory", async () => {
-		const source = await writeSource("demo");
+	it("still advertises and runs valid skills when the source contains a cruft directory", async () => {
+		const source = await writeSource("demo", "demo", "Run demo workflows");
 		await mkdir(join(source, "__MACOSX"), { recursive: true });
 
 		let ran = false;
@@ -176,6 +176,25 @@ describe("skill extension package sources", () => {
 			});
 		await withCwd(tempRoot, () => app.execute({ argv: [] }));
 		expect(ran).toBe(true);
+
+		const output = renderHelp(await app.snapshot());
+		expect(output).toContain("demo — Run demo workflows");
+	});
+
+	it("reports unreadable packaged skills without claiming the source path is unavailable", async () => {
+		const source = await writeSource("demo");
+		await writeFile(join(source, "demo", "SKILL.md"), "---\nname: demo\n---\n");
+
+		const output = renderHelp(await createApp(source).snapshot());
+		expect(output).toContain("Agent skills:");
+		expect(output).toContain("Packaged skills could not be read.");
+		expect(output).not.toContain("The skill source path is unavailable.");
+	});
+
+	it("rejects a non-file source URL at construction", () => {
+		expect(() => skill({ source: new URL("https://example.com/skills") })).toThrow(
+			"file: protocol",
+		);
 	});
 
 	it("fails clearly when its source cannot be resolved", async () => {

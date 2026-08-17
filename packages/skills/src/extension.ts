@@ -127,49 +127,63 @@ async function autoRepairSkills(options: SkillOptions): Promise<void> {
 		: ["project", "global"];
 	const scopes = [...new Set(configuredScopes.map(resolveEffectiveScope))];
 	for (const packagedSkill of skills) {
-		for (const scope of scopes) await repairInstalledSkill(packagedSkill, scope);
+		for (const scope of scopes) {
+			try {
+				await repairInstalledSkill(packagedSkill, scope);
+			} catch (error) {
+				// Filesystem errors during background repair must not abort the user's
+				// unrelated command; the explicit skill command surfaces them loudly.
+				console.warn(
+					yellow(
+						`Skipping skill link repair [${packagedSkill.name}]: ${error instanceof Error ? error.message : String(error)}`,
+					),
+				);
+			}
+		}
 	}
 }
 
 function formatSkillDocumentation(
-	skills: readonly PackagedSkill[],
+	source: string | URL,
 	commandName: string,
 	appName: string,
 ): string {
-	if (skills.length === 0) {
-		return `The skill source path is unavailable. Run \`${appName} ${commandName}\` to link packaged skills into an agent directory.`;
+	try {
+		return loadPackagedSkillsSync(source)
+			.map(
+				(packagedSkill) =>
+					`${packagedSkill.name} — ${packagedSkill.description}\n  Source: ${packagedSkill.sourceDir}`,
+			)
+			.join("\n\n");
+	} catch (error) {
+		// A missing or invalid packaged asset degrades the advertisement instead of
+		// failing help, matching the auto-update hook's recovery behavior.
+		if (error instanceof SkillSourceUnavailableError) {
+			return `The skill source path is unavailable. Run \`${appName} ${commandName}\` to link packaged skills into an agent directory.`;
+		}
+		console.warn(
+			yellow(
+				`Skipping skill advertisement: ${error instanceof Error ? error.message : String(error)}`,
+			),
+		);
+		return `Packaged skills could not be read. Run \`${appName} ${commandName}\` for details.`;
 	}
-	return skills
-		.map(
-			(packagedSkill) =>
-				`${packagedSkill.name} — ${packagedSkill.description}\n  Source: ${packagedSkill.sourceDir}`,
-		)
-		.join("\n\n");
 }
 
 export function skill(options: SkillOptions): Extension {
 	const commandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
-	let packagedSkills: readonly PackagedSkill[] = [];
-	try {
-		packagedSkills = loadPackagedSkillsSync(options.source);
-	} catch (error) {
-		// A missing or invalid packaged asset degrades the advertisement instead of
-		// failing startup, matching the auto-update hook's recovery behavior.
-		if (!(error instanceof SkillSourceUnavailableError)) {
-			console.warn(
-				yellow(
-					`Skipping skill advertisement: ${error instanceof Error ? error.message : String(error)}`,
-				),
-			);
-		}
+	if (options.source instanceof URL && options.source.protocol !== "file:") {
+		throw new Error(`Skill source URL must use file: protocol, got "${options.source.protocol}".`);
 	}
 	return defineExtension("skills", {
 		commands: [buildSkillCommand(commandName, options)],
+		// Skills are loaded when a snapshot is prepared, not at construction, so
+		// help and man pages reflect the source as it exists at render time.
 		sections: (snapshot) => [
 			{
 				command: [],
 				title: "Agent skills",
-				body: formatSkillDocumentation(packagedSkills, commandName, snapshot.meta.name),
+				body: formatSkillDocumentation(options.source, commandName, snapshot.meta.name),
 			},
 		],
 		hooks: {

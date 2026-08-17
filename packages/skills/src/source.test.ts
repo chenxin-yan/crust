@@ -58,10 +58,10 @@ describe("packaged skill sources", () => {
 		}
 	});
 
-	it("rejects non-file URLs", async () => {
-		await expect(resolveSkillSource(new URL("https://example.com/skills"))).rejects.toBeInstanceOf(
-			SkillSourceUnavailableError,
-		);
+	it("rejects non-file URLs as a definition error, not an unavailable source", async () => {
+		const rejection = expect(resolveSkillSource(new URL("https://example.com/skills"))).rejects;
+		await rejection.toThrow("file: protocol");
+		await rejection.not.toBeInstanceOf(SkillSourceUnavailableError);
 	});
 
 	it("loads name and description from SKILL.md frontmatter", async () => {
@@ -81,9 +81,28 @@ describe("packaged skill sources", () => {
 
 		const invalid = join(tempRoot, "invalid");
 		await mkdir(join(invalid, "demo"), { recursive: true });
-		await expect(loadPackagedSkills(invalid)).rejects.toThrow("missing SKILL.md");
+		await expect(loadPackagedSkills(invalid)).rejects.toThrow(
+			"does not contain any skill directories",
+		);
 
 		await writeSkill(invalid, "demo", "other");
 		await expect(loadPackagedSkills(invalid)).rejects.toThrow('declares name "other"');
+	});
+
+	it("rejects a SKILL.md missing name or description frontmatter", async () => {
+		const root = join(tempRoot, "skills");
+		const dir = join(root, "demo");
+		await mkdir(dir, { recursive: true });
+		await writeFile(join(dir, "SKILL.md"), "---\nname: demo\n---\n");
+		await expect(loadPackagedSkills(root)).rejects.toThrow(
+			"requires name and description in SKILL.md frontmatter",
+		);
+	});
+
+	it("skips directories without SKILL.md instead of failing valid skills", async () => {
+		const root = join(tempRoot, "skills");
+		await writeSkill(root, "demo");
+		await mkdir(join(root, "__MACOSX"), { recursive: true });
+		expect(await loadPackagedSkills(root)).toMatchObject([{ name: "demo" }]);
 	});
 });
