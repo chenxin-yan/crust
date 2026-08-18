@@ -218,7 +218,10 @@ export function createContextResolver(
 	contexts: readonly ContextInstance[],
 	io: InvocationIO,
 	disposal: AsyncDisposableStack,
-): ContextResolver & { setValidatedFlags(flags: Record<string, unknown>): void } {
+): ContextResolver & {
+	setValidatedFlags(flags: Record<string, unknown>): void;
+	settle(): Promise<void>;
+} {
 	interface Entry {
 		readonly name: string;
 		readonly promise: Promise<unknown>;
@@ -375,6 +378,16 @@ export function createContextResolver(
 		use: makeUse(null),
 		setValidatedFlags(flags: Record<string, unknown>): void {
 			validatedFlags = flags;
+		},
+		// Structured teardown: a rejected sibling pull must not abandon an in-flight
+		// setup past disposal — a late value would register on a disposed stack and
+		// leak. A running setup can start new pulls, so loop until quiescent.
+		async settle(): Promise<void> {
+			for (;;) {
+				const pending = [...entries.values()].filter((entry) => !entry.settled);
+				if (pending.length === 0) return;
+				await Promise.allSettled(pending.map((entry) => entry.promise));
+			}
 		},
 	};
 }

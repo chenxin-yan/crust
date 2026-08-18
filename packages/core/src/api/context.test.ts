@@ -1090,6 +1090,27 @@ describe("Context disposal", () => {
 		expect(disposals).toBe(1);
 	});
 
+	it("disposes a slow sibling setup that finishes after a failed invocation", async () => {
+		let disposals = 0;
+		const fast = defineContext("fast", () => {
+			throw new Error("boom");
+		});
+		const slow = defineContext("slow", async () => {
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			return {
+				[Symbol.dispose]() {
+					disposals++;
+				},
+			};
+		});
+		const app = new Crust("cli").provide(fast(), slow()).action(async ({ ctx }) => {
+			await Promise.all([ctx.use(fast), ctx.use(slow)]);
+		});
+
+		await expect(app.run([])).rejects.toThrow("boom");
+		expect(disposals).toBe(1);
+	});
+
 	it("disposes values in reverse construction order after success", async () => {
 		const log: string[] = [];
 		const first = disposableContext("first", log);

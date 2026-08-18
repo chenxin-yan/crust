@@ -344,39 +344,45 @@ async function dispatch(
 
 	let outcome: InvocationOutcome = { status: "completed" };
 	try {
-		for (const extension of extensions) {
-			if ((await extension.hooks?.preRun?.(extensionContext)) === finishInvocation()) {
-				outcome = { status: "finished", by: extension.name };
-				break;
-			}
-		}
-		if (outcome.status !== "finished") {
-			await terminal();
-			outcome = { status: "completed" };
-		}
-	} catch (error) {
-		outcome = { status: "failed", error };
-	}
-
-	// Frozen so a mutating post-run hook cannot rewrite the outcome Core
-	// trusts below (e.g. flipping "failed" to "completed" to mask an error).
-	Object.freeze(outcome);
-
-	let postRunFailed = false;
-	let postRunError: unknown;
-	for (const extension of extensions.toReversed()) {
 		try {
-			await extension.hooks?.postRun?.(extensionContext, outcome);
+			for (const extension of extensions) {
+				if ((await extension.hooks?.preRun?.(extensionContext)) === finishInvocation()) {
+					outcome = { status: "finished", by: extension.name };
+					break;
+				}
+			}
+			if (outcome.status !== "finished") {
+				await terminal();
+				outcome = { status: "completed" };
+			}
 		} catch (error) {
-			if (outcome.status !== "failed" && !postRunFailed) {
-				postRunFailed = true;
-				postRunError = error;
+			outcome = { status: "failed", error };
+		}
+
+		// Frozen so a mutating post-run hook cannot rewrite the outcome Core
+		// trusts below (e.g. flipping "failed" to "completed" to mask an error).
+		Object.freeze(outcome);
+
+		let postRunFailed = false;
+		let postRunError: unknown;
+		for (const extension of extensions.toReversed()) {
+			try {
+				await extension.hooks?.postRun?.(extensionContext, outcome);
+			} catch (error) {
+				if (outcome.status !== "failed" && !postRunFailed) {
+					postRunFailed = true;
+					postRunError = error;
+				}
 			}
 		}
-	}
 
-	if (outcome.status === "failed") throw outcome.error;
-	if (postRunFailed) throw postRunError;
+		if (outcome.status === "failed") throw outcome.error;
+		if (postRunFailed) throw postRunError;
+	} finally {
+		// A rejected sibling pull can leave another setup in flight; wait for it
+		// so its value registers its disposer before the disposal scope exits.
+		await resolver.settle();
+	}
 }
 
 /** Render one failure through Extension onError hooks, ending in Core's default renderer. */
