@@ -5,7 +5,7 @@ description: Official application-wide capabilities for Crust CLIs.
 
 `@crustjs/extensions` provides the six official Extensions. Register them on the root builder with `.extend()`.
 
-The root export provides the full surface. Focused `completion`, `did-you-mean`, `help`, `no-color`, `update-notifier`, and `version` subpaths avoid loading unrelated Extensions; for example, `import { help } from "@crustjs/extensions/help"`.
+Import every Extension from the package root; for example, `import { help } from "@crustjs/extensions"`.
 
 ## Install
 
