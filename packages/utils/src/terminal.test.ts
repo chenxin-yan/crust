@@ -53,7 +53,7 @@ describe("ambient terminal IO", () => {
 		expect(seen).toEqual([first, second]);
 	});
 
-	it("reuses one process-wide storage instance across bundled module copies", () => {
+	it("keeps the process-wide storage when initialization repeats", () => {
 		const globalWithStorage = globalThis as typeof globalThis & {
 			[key: symbol]: AsyncLocalStorage<ReturnType<typeof createIO>> | undefined;
 		};

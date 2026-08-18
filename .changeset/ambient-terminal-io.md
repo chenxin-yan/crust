@@ -1,5 +1,4 @@
 ---
-"@crustjs/utils": minor
 "@crustjs/core": patch
 "@crustjs/progress": patch
 "@crustjs/prompts": patch

@@ -115,7 +115,7 @@ These types back [`run(path, input?, io?)`](/docs/api/crust) and the [`@crustjs/
 
 When `run(..., io)` or `execute({ io })` receives at least one explicit IO callback, Core also makes the resolved `InvocationIO` ambient for the full invocation, including Extension hooks. `@crustjs/progress` and `@crustjs/prompts` use that scope as a fallback, so their output follows the injected `stderr` callback instead of escaping to the process terminal. Progress indicators treat this line-oriented destination as non-TTY and emit only their final static line. Prompt output is bridged, but prompt input is never inferred from `InvocationIO`; inject `PromptIO.input` or use `@crustjs/prompts/testing` for interactive tests.
 
-Omitting `io` creates no ambient scope, preserving native TTY detection and rendering.
+Omitting `io` creates no new ambient scope, preserving native TTY detection and rendering. A nested invocation without injected IO still inherits an ambient scope established by its caller.
 
 ## Context types
 
