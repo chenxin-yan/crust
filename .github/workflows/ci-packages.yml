@@ -58,7 +58,6 @@ jobs:
       - name: Build, type check, and test
         run: |
           bun turbo run build check:types test --filter='./packages/*'
-          bun scripts/check-dist-inlined-utils.mjs
           bun test scripts
 
       - name: Lint and format check (packages)

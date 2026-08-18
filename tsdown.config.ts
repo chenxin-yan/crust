@@ -7,4 +7,9 @@ export default defineConfig({
 	// type:module makes ESM output .js/.d.ts, matching the exports maps
 	fixedExtension: false,
 	publint: "ci-only",
+	deps: {
+		// @crustjs/utils is private/unpublished; it must be inlined, never
+		// imported by dist output (js or d.ts). Allow every other package.
+		onlyImport: [/^(?!@crustjs\/utils$)/],
+	},
 });
