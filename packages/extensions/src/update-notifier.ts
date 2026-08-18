@@ -170,7 +170,11 @@ const DEFAULT_REGISTRY_URL = "https://registry.npmjs.org";
 // Internal utilities — version comparison
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Returns whether `latest` is newer, or false when either version is invalid. */
+/**
+ * Returns whether `latest` is newer, or false when either version is invalid.
+ *
+ * @internal
+ */
 export function isNewerVersion(current: string, latest: string): boolean {
 	try {
 		return Bun.semver.order(latest, current) === 1;
