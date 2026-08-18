@@ -22,7 +22,7 @@ beforeAll(() => {
 describe("package exports", () => {
 	it("exports only the root with targets that exist in dist", async () => {
 		const pkg = await Bun.file(join(pkgDir, "package.json")).json();
-		const exportsMap = pkg.exports as Record<string, Record<string, string>>;
+		const exportsMap = pkg.exports as Record<".", Record<string, string>>;
 
 		expect(Object.keys(exportsMap)).toEqual(["."]);
 
