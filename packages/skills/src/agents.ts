@@ -30,6 +30,7 @@ function universalGlobalSkillsDir(home: string): string {
 	return join(home, ".agents", "skills");
 }
 
+/** @internal */
 export function resolveEffectiveScope(scope: Scope): Scope {
 	return scope === "project" && process.cwd() === homedir() ? "global" : scope;
 }
@@ -320,10 +321,18 @@ const AGENTS: Record<AgentTarget, AgentConfig> = {
 	},
 };
 
-/** All agent targets supported by `@crustjs/skills`. */
+/**
+ * All agent targets supported by `@crustjs/skills`.
+ *
+ * @internal
+ */
 export const ALL_AGENTS = Object.keys(AGENTS) as AgentTarget[];
 
-/** Human-readable labels for each agent target. */
+/**
+ * Human-readable labels for each agent target.
+ *
+ * @internal
+ */
 export const AGENT_LABELS: Record<AgentTarget, string> = Object.fromEntries(
 	ALL_AGENTS.map((agent) => [agent, AGENTS[agent].label]),
 ) as Record<AgentTarget, string>;
@@ -373,6 +382,8 @@ export async function detectInstalledAgents(): Promise<AgentTarget[]> {
 
 /**
  * Resolves the filesystem path for a skill installation.
+ *
+ * @internal
  */
 export function resolveAgentPath(agent: AgentTarget, scope: Scope, name: string): string {
 	const effectiveScope = resolveEffectiveScope(scope);

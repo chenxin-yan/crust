@@ -97,7 +97,7 @@ interface StringArgDef extends ArgDefBase {
 	 * Validated at parse time before `parse` runs. Passing a value outside
 	 * `choices` throws `CrustError("PARSE", …)` before any `parse` transform
 	 * is applied. Also consumed by shell-completion extensions
-	 * (e.g. `@crustjs/extensions/completion`) to emit value candidates.
+	 * (e.g. `@crustjs/extensions`) to emit value candidates.
 	 *
 	 * Only available on string-typed args; not supported on number/boolean.
 	 *
@@ -260,7 +260,7 @@ interface StringFlagDef extends SingleFlagBase {
 	 * Validated at parse time before `parse` runs. Passing a value outside
 	 * `choices` throws `CrustError("PARSE", …)` before any `parse` transform
 	 * is applied. Also consumed by shell-completion extensions
-	 * (e.g. `@crustjs/extensions/completion`) to emit value candidates.
+	 * (e.g. `@crustjs/extensions`) to emit value candidates.
 	 *
 	 * Only available on string-typed flags; not supported on number/boolean.
 	 *
@@ -357,7 +357,7 @@ interface StringMultiFlagDef extends MultiFlagBase {
 	 * Each element is validated at parse time before `parse` runs. Passing
 	 * a value outside `choices` throws `CrustError("PARSE", …)` before any
 	 * `parse` transform is applied. Also consumed by shell-completion
-	 * extensions (e.g. `@crustjs/extensions/completion`) to emit value candidates.
+	 * extensions (e.g. `@crustjs/extensions`) to emit value candidates.
 	 *
 	 * Only available on string-typed multi-flags; not supported on number/boolean.
 	 *

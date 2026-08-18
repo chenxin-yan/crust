@@ -3,8 +3,7 @@ import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 // The bunup entry list and the package.json exports map are maintained by
-// hand; this guards against adding a subpath to one but not the other and
-// shipping an export that resolves to a missing dist file.
+// hand; this guards the root-only surface and verifies its dist targets.
 
 const pkgDir = resolve(import.meta.dir, "..");
 
@@ -21,20 +20,14 @@ beforeAll(() => {
 });
 
 describe("package exports", () => {
-	it("every exports map target exists in dist", async () => {
+	it("exports only the root with targets that exist in dist", async () => {
 		const pkg = await Bun.file(join(pkgDir, "package.json")).json();
-		const exportsMap = pkg.exports as Record<string, Record<string, string>>;
+		const exportsMap = pkg.exports as Record<".", Record<string, string>>;
 
-		expect(Object.keys(exportsMap).length).toBeGreaterThan(1);
+		expect(Object.keys(exportsMap)).toEqual(["."]);
 
-		const missing: string[] = [];
-		for (const [subpath, conditions] of Object.entries(exportsMap)) {
-			for (const [condition, target] of Object.entries(conditions)) {
-				if (!existsSync(join(pkgDir, target))) {
-					missing.push(`${subpath} (${condition}) → ${target}`);
-				}
-			}
+		for (const target of Object.values(exportsMap["."])) {
+			expect(existsSync(join(pkgDir, target))).toBe(true);
 		}
-		expect(missing).toEqual([]);
 	});
 });
