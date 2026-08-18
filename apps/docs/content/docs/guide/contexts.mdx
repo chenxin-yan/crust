@@ -45,7 +45,7 @@ const deploy = defineCommand("deploy", (command) =>
 const app = new Crust("app").provide(api()).add(deploy);
 ```
 
-Both `app --api-key secret deploy` and `app deploy --api-key secret` work. Hooks run before validation, so a `preRun` hook cannot pull a Context that owns flags. Pull it from the action or from `postRun` after a validated invocation; `ctx.finish()` skips validation, so its post-run path has the same restriction.
+Both `app --api-key secret deploy` and `app deploy --api-key secret` work. Hooks run before validation, so a `preRun` hook cannot pull a Context that owns flags — directly or through a dependency its setup pulls. Pull it from the action or from `postRun` after a validated invocation; `ctx.finish()` skips validation, so its post-run path has the same restriction.
 
 ## Context dependencies
 

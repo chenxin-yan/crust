@@ -108,8 +108,9 @@ export interface ExtensionContext<
 	readonly rawArgs: readonly string[];
 	/**
 	 * Lazily resolve a provided Context for this invocation.
-	 * A pre-run hook cannot pull a Context that owns flags. Pull dependencies
-	 * before acquiring resources. Values remain live through post-run hooks and
+	 * A pre-run hook cannot pull a Context that owns flags — directly or
+	 * through a dependency pulled during setup. Pull dependencies before
+	 * acquiring resources. Values remain live through post-run hooks and
 	 * are disposed afterwards.
 	 */
 	readonly use: ContextResolver["use"];
