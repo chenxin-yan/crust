@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import type { StandardSchema } from "@crustjs/utils/schema";
+import { getAmbientTerminalIO } from "@crustjs/utils/terminal";
 
 import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
@@ -1690,6 +1691,32 @@ describe("Crust .run()", () => {
 		expect(out).toEqual(["to out"]);
 		expect(err).toEqual(["to err"]);
 	});
+
+	it("makes explicitly injected run IO ambient during the invocation", async () => {
+		const stdout = () => {};
+		const stderr = () => {};
+		let observed: ReturnType<typeof getAmbientTerminalIO>;
+		const app = new Crust("test").action(() => {
+			observed = getAmbientTerminalIO();
+		});
+
+		await app.run([], undefined, { stdout, stderr });
+
+		expect(observed?.stdout).toBe(stdout);
+		expect(observed?.stderr).toBe(stderr);
+		expect(getAmbientTerminalIO()).toBeUndefined();
+	});
+
+	it("does not create an ambient terminal scope when run IO is omitted", async () => {
+		let observed: ReturnType<typeof getAmbientTerminalIO>;
+		const app = new Crust("test").action(() => {
+			observed = getAmbientTerminalIO();
+		});
+
+		await app.run([]);
+
+		expect(observed).toBeUndefined();
+	});
 });
 
 describe("Crust .execute()", () => {
@@ -2157,6 +2184,49 @@ describe("Crust .execute()", () => {
 
 		expect(stdoutChunks).toContain("hello out");
 		expect(stderrChunks).toContain("hello err");
+	});
+
+	it("keeps extension hooks and the action inside explicitly injected IO", async () => {
+		const stdout = () => {};
+		const stderr = () => {};
+		const observed: (ReturnType<typeof getAmbientTerminalIO> | undefined)[] = [];
+		const observer = defineExtension("ambient-observer", {
+			hooks: {
+				preRun: () => {
+					observed.push(getAmbientTerminalIO());
+				},
+				postRun: () => {
+					observed.push(getAmbientTerminalIO());
+				},
+				onError: () => {
+					observed.push(getAmbientTerminalIO());
+				},
+			},
+		});
+		const app = new Crust("test").extend(observer).action(() => {
+			observed.push(getAmbientTerminalIO());
+			throw new Error("expected failure");
+		});
+
+		await app.execute({ argv: [], io: { stdout, stderr } });
+
+		expect(observed).toHaveLength(4);
+		for (const io of observed) {
+			expect(io?.stdout).toBe(stdout);
+			expect(io?.stderr).toBe(stderr);
+		}
+		expect(getAmbientTerminalIO()).toBeUndefined();
+	});
+
+	it("does not create an ambient terminal scope when execute IO is omitted", async () => {
+		let observed: ReturnType<typeof getAmbientTerminalIO>;
+		const app = new Crust("test").action(() => {
+			observed = getAmbientTerminalIO();
+		});
+
+		await app.execute({ argv: [] });
+
+		expect(observed).toBeUndefined();
 	});
 
 	it("command context contains a serializable snapshot of the resolved command", async () => {

@@ -1,16 +1,50 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { PassThrough, Writable } from "node:stream";
 
+import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
+
 import { createPromptIO } from "../testing.ts";
 import {
 	assertTTY,
 	NonInteractiveError,
 	type PromptConfig,
+	resolvePromptIO,
 	runPrompt,
 	submit,
 	withPromptIO,
 } from "./renderer.ts";
 import { defaultTheme } from "./theme.ts";
+
+describe("resolvePromptIO", () => {
+	it("line-buffers ambient terminal output without changing input", () => {
+		const errors: string[] = [];
+
+		withAmbientTerminalIO({ stdout: () => {}, stderr: (text) => errors.push(text) }, () => {
+			const resolved = resolvePromptIO();
+			expect(resolved.input).toBe(process.stdin);
+
+			resolved.output.write("first");
+			resolved.output.write(" line\nsecond\npartial");
+		});
+
+		expect(errors).toEqual(["first line", "second"]);
+	});
+
+	it("prefers explicit and prompt-scoped output over ambient terminal output", () => {
+		const errors: string[] = [];
+		const explicit = new Writable({ write: (_chunk, _encoding, done) => done() });
+		const scoped = new Writable({ write: (_chunk, _encoding, done) => done() });
+
+		withAmbientTerminalIO({ stdout: () => {}, stderr: (text) => errors.push(text) }, () => {
+			expect(resolvePromptIO({ output: explicit }).output).toBe(explicit);
+			withPromptIO({ output: scoped }, () => {
+				expect(resolvePromptIO().output).toBe(scoped);
+			});
+		});
+
+		expect(errors).toEqual([]);
+	});
+});
 
 describe("assertTTY", () => {
 	const originalIsTTY = process.stdin.isTTY;

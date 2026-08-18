@@ -8,7 +8,8 @@
 	"exports": {
 		"./primitive": "./src/primitive.ts",
 		"./source": "./src/source.ts",
-		"./schema": "./src/schema.ts"
+		"./schema": "./src/schema.ts",
+		"./terminal": "./src/terminal.ts"
 	},
 	"scripts": {
 		"check:types": "tsc --noEmit",
