@@ -51,7 +51,7 @@ Run `bun run test` when your change affects runtime behavior.
 
 ## Working on Packages
 
-Most packages in `packages/` are built with `bunup`; `@crustjs/crust` uses Bun directly. Packages are tested with `bun test` and type-checked with `tsc`.
+Most packages in `packages/` are built with `tsdown`; `@crustjs/crust` uses Bun directly. Packages are tested with `bun test` and type-checked with `tsc`.
 
 You can work from the repository root or from an individual package directory.
 

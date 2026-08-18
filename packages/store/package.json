@@ -3,6 +3,7 @@
 	"version": "0.2.0",
 	"description": "DX-first, typed persistence for CLI apps with config/data/state/cache separation",
 	"type": "module",
+	"sideEffects": false,
 	"license": "MIT",
 	"author": "chenxin-yan",
 	"repository": {
@@ -39,8 +40,8 @@
 		"access": "public"
 	},
 	"scripts": {
-		"build": "bunup",
-		"dev": "bunup --watch",
+		"build": "tsdown",
+		"dev": "tsdown --watch",
 		"check:types": "tsc --noEmit",
 		"test": "bun test",
 		"publish": "bun publish --no-git-checks",
@@ -49,9 +50,9 @@
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
+		"zod": "^4.0.0",
 		"@crustjs/utils": "workspace:*",
-		"bunup": "catalog:",
-		"zod": "^4.0.0"
+		"tsdown": "catalog:"
 	},
 	"peerDependencies": {
 		"typescript": "^7.0.0"
@@ -62,6 +63,7 @@
 		}
 	},
 	"engines": {
-		"bun": ">=1.3.14"
+		"bun": ">=1.3.14",
+		"node": ">=20"
 	}
 }

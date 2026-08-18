@@ -3,6 +3,7 @@
 	"version": "0.1.2",
 	"description": "Generate mdoc(7) manual pages from Crust CLI definitions",
 	"type": "module",
+	"sideEffects": false,
 	"license": "MIT",
 	"author": "chenxin-yan",
 	"repository": {
@@ -35,8 +36,8 @@
 		"access": "public"
 	},
 	"scripts": {
-		"build": "bunup",
-		"dev": "bunup --watch",
+		"build": "tsdown",
+		"dev": "tsdown --watch",
 		"check:types": "tsc --noEmit",
 		"test": "bun test",
 		"publish": "bun publish --no-git-checks",
@@ -47,7 +48,7 @@
 		"@crustjs/config": "workspace:*",
 		"@crustjs/core": "workspace:*",
 		"@crustjs/extensions": "workspace:*",
-		"bunup": "catalog:"
+		"tsdown": "catalog:"
 	},
 	"peerDependencies": {
 		"@crustjs/core": "workspace:0.x",
@@ -59,6 +60,7 @@
 		}
 	},
 	"engines": {
-		"bun": ">=1.3.14"
+		"bun": ">=1.3.14",
+		"node": ">=20"
 	}
 }

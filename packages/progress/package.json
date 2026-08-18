@@ -3,6 +3,7 @@
 	"version": "0.0.4",
 	"description": "Progress indicators for the Crust CLI ecosystem",
 	"type": "module",
+	"sideEffects": false,
 	"license": "MIT",
 	"author": "chenxin-yan",
 	"repository": {
@@ -35,8 +36,8 @@
 		"access": "public"
 	},
 	"scripts": {
-		"build": "bunup",
-		"dev": "bunup --watch",
+		"build": "tsdown",
+		"dev": "tsdown --watch",
 		"check:types": "tsc --noEmit",
 		"test": "bun test",
 		"publish": "bun publish --no-git-checks",
@@ -57,9 +58,10 @@
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
 		"@crustjs/utils": "workspace:*",
-		"bunup": "catalog:"
+		"tsdown": "catalog:"
 	},
 	"engines": {
-		"bun": ">=1.3.14"
+		"bun": ">=1.3.14",
+		"node": ">=20"
 	}
 }

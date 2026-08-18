@@ -3,6 +3,7 @@
 	"version": "0.0.19",
 	"description": "Core library for the Crust CLI framework",
 	"type": "module",
+	"sideEffects": false,
 	"license": "MIT",
 	"author": "chenxin-yan",
 	"repository": {
@@ -40,8 +41,8 @@
 		"access": "public"
 	},
 	"scripts": {
-		"build": "bunup",
-		"dev": "bunup --watch",
+		"build": "tsdown",
+		"dev": "tsdown --watch",
 		"check:types": "tsc --noEmit",
 		"test": "bun test",
 		"publish": "bun publish --no-git-checks",
@@ -51,7 +52,7 @@
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
 		"@crustjs/utils": "workspace:*",
-		"bunup": "catalog:"
+		"tsdown": "catalog:"
 	},
 	"peerDependencies": {
 		"typescript": "^7.0.0"
@@ -62,6 +63,7 @@
 		}
 	},
 	"engines": {
-		"bun": ">=1.3.14"
+		"bun": ">=1.3.14",
+		"node": ">=20"
 	}
 }
