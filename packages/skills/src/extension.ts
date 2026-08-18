@@ -210,7 +210,7 @@ async function buildSkills(options: SkillOptions, context: ExtensionBuildContext
 		source = resolveSkillSource(options.packagedDir);
 	} catch (error) {
 		if (!(error instanceof SkillSourceUnavailableError)) throw error;
-		// A missing packaged source is regenerated from the snapshot below.
+		// A missing packaged directory is regenerated from the snapshot below.
 	}
 
 	if (source === undefined || (options.extras?.length ?? 0) > 0) {
