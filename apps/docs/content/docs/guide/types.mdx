@@ -48,7 +48,7 @@ Runtime normalization is the source of truth. For literal-typed TypeScript calle
 | `commandCollision` | `FIX_COMMAND_COLLISION` |
 | `duplicateContext` | `FIX_DUPLICATE_CONTEXT` |
 
-Some runtime rules intentionally have no type-level counterpart because widened TypeScript types cannot project them reliably. The parity test's runtime-only allowlist is: `nonEmptyName`, `reservedSpelling` (`__proto__`), `defaultWithinChoices`, `definitionProvenance`, `duplicateExtension`, `missingContextDependency`, `contextFlagPairCollision`, and `contextCycle` (the latter `duplicateExtension` and `contextFlagPairCollision` checks are enforced inline during command materialization rather than as named rule functions). `schemaExclusivity` and `parserType` also need no `FIX_*` brand because the definition unions enforce them structurally.
+Some runtime rules intentionally have no type-level counterpart because widened TypeScript types cannot project them reliably. The parity test's runtime-only allowlist is: `nonEmptyName`, `reservedSpelling` (`__proto__`), `defaultWithinChoices`, `definitionProvenance`, `duplicateExtension`, and `contextFlagPairCollision` (the latter `duplicateExtension` and `contextFlagPairCollision` checks are enforced inline during command materialization rather than as named rule functions). `schemaExclusivity` and `parserType` also need no `FIX_*` brand because the definition unions enforce them structurally.
 
 ## Schema-backed definitions
 

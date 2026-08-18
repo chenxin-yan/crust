@@ -170,33 +170,30 @@ The same injectable callbacks are passed to the Command Action and every Context
 ### `ContextFactory`
 
 ```ts
-interface ContextFactory<Name extends string, Options, Value, RC, OF> {
-  (options: Options): ContextInstance<Name, Value, RC, OF>;
+interface ContextFactory<Name extends string, Options, Value, OF> {
+  (options: Options): ContextInstance<Name, Value, OF>;
   readonly contextName: Name;
-  of(value: Value): ContextInstance<Name, Value, {}, OF>;
+  of(value: Value): ContextInstance<Name, Value, OF>;
 }
 ```
 
-`defineContext(name, setup)` and `defineContext(name, config, setup)` always return a factory. Invoke it even when `Options` is `void`. `contextName` lets `ctx.use()` and Context dependency arrays identify the factory; `.of(value)` produces an instance returning the precomputed value with dependencies skipped while retaining its owned flags. `AnyContextFactory` is the shared factory constraint.
+`defineContext(name, setup)` and `defineContext(name, config, setup)` always return a factory. Invoke it even when `Options` is `void`. `contextName` identifies the factory for `ctx.use()`; `.of(value)` produces an instance returning the precomputed value without running setup while retaining its owned flags. `AnyContextFactory` is the shared factory constraint.
 
-### `ContextRequirements`, `ContextConfig`, and `ContextSetup`
+### `ContextConfig` and `ContextSetup`
 
 ```ts
-type ContextRequirements = readonly AnyContextFactory[];
-
 interface ContextConfig {
   readonly flags?: readonly NamedFlagDef[];
-  readonly requires?: ContextRequirements;
 }
 
-interface ContextSetup<Options, RC, OF> extends InvocationIO {
+interface ContextSetup<Options, OF> extends InvocationIO {
   readonly options: Options;
   readonly flags: InferFlags<OF>;
-  readonly ctx: Readonly<RC>;
+  readonly ctx: ContextResolver;
 }
 ```
 
-`ContextConfig.flags` declares propagating flags installed when an instance is provided; `requires` lists Context capabilities needed by this Context's setup. Commands do not declare requirements; they pull a typed value with `ctx.use(factory)`. `ContextSetup` receives the factory argument, validated values for its owned flags only, the declared Context values, and the invocation's `stdout` and `stderr` callbacks. See [Contexts](/docs/guide/contexts) for construction order and collision rules.
+`ContextConfig.flags` declares propagating flags installed when an instance is provided. `ContextSetup` receives the factory argument, validated values for its owned flags only, the pull-based Context resolver, and the invocation's `stdout` and `stderr` callbacks. See [Contexts](/docs/guide/contexts) for construction and collision rules.
 
 ### `ContextInstance`
 
@@ -205,7 +202,7 @@ interface ContextSetup<Options, RC, OF> extends InvocationIO {
   name="ContextInstance"
 />
 
-Attach an instance with `.provide()`. Core constructs it lazily on the first `ctx.use(factory)`, recursively resolving declared Context dependencies first and memoizing the value for the invocation.
+Attach an instance with `.provide()`. Core constructs it lazily on the first `ctx.use(factory)` and memoizes the value for the invocation. Setup can recursively pull dependencies with the same resolver.
 
 ### `ContextMap`
 
@@ -213,7 +210,7 @@ Attach an instance with `.provide()`. Core constructs it lazily on the first `ct
 type ContextMap = Record<string, unknown>;
 ```
 
-The map shape used for Context setup dependency values. Command actions and Extension hooks receive the resolver's generic `use(factory)` function, which returns `Promise<FactoryValueOf<typeof factory>>`.
+The name registry shape accumulated by `.provide()`. Command actions and Extension hooks receive the resolver's generic `use(factory)` function, which returns `Promise<FactoryValueOf<typeof factory>>`.
 
 ## Extension types
 
@@ -277,7 +274,7 @@ Infers the syntax-parsed values from an Extension's named-definition array and e
   name="ExtensionHooks"
 />
 
-`preRun` runs in `.extend()` order after routing and syntax parsing, before validation. It can call `ctx.use()` for Contexts whose dependency closure owns no flags. Return `ctx.finish()` to end successfully. `postRun` is the LIFO `finally` hook: it can pull or reuse Contexts and runs for every Extension after a completed, finished, or failed invocation. Context disposal follows post-run hooks. `onError` is used by `.execute()` only; return `true` after rendering to stop the chain, or a falsy value to continue to Core's renderer.
+`preRun` runs in `.extend()` order after routing and syntax parsing, before validation. It can call `ctx.use()` for Contexts that own no flags; pulling a flag-owning Context rejects before validation. Return `ctx.finish()` to end successfully. `postRun` is the LIFO `finally` hook: it can pull or reuse Contexts and runs for every Extension after a completed, finished, or failed invocation. Context disposal follows post-run hooks. `onError` is used by `.execute()` only; return `true` after rendering to stop the chain, or a falsy value to continue to Core's renderer.
 
 ### `Finished`
 

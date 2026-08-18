@@ -6,11 +6,7 @@ import type { ValidateContextNames } from "./contexts.brands.ts";
 type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type Expect<T extends true> = T;
-type Inst<Name extends string, RC extends Record<string, unknown> = {}> = ContextInstance<
-	Name,
-	unknown,
-	RC
->;
+type Inst<Name extends string> = ContextInstance<Name>;
 type NameBrandOf<T> = Extract<keyof T, "FIX_DUPLICATE_CONTEXT">;
 
 describe("compile-time duplicate context name validation", () => {

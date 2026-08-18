@@ -45,28 +45,29 @@ const deploy = defineCommand("deploy", (command) =>
 const app = new Crust("app").provide(api()).add(deploy);
 ```
 
-Both `app --api-key secret deploy` and `app deploy --api-key secret` work. Hooks run before validation, so a `preRun` hook cannot pull a Context whose dependency closure owns flags. Pull it from the action or from `postRun` after a validated invocation; `ctx.finish()` skips validation, so its post-run path has the same restriction.
+Both `app --api-key secret deploy` and `app deploy --api-key secret` work. Hooks run before validation, so a `preRun` hook cannot pull a Context that owns flags. Pull it from the action or from `postRun` after a validated invocation; `ctx.finish()` skips validation, so its post-run path has the same restriction.
 
 ## Context dependencies
 
-Context-level `requires` declares the other Contexts needed by setup. Commands declare no dependencies; they simply call `use()`.
+Context setup pulls other Contexts with the same typed resolver used by actions. Pull dependencies first, before acquiring resources.
 
 ```ts
 const config = defineContext("config", () => ({ url: "postgres://localhost/app" }));
-const database = defineContext("db", { requires: [config] }, ({ ctx }) => ({
-  query: (sql: string) => `${sql} on ${ctx.config.url}`,
-}));
+const database = defineContext("db", async ({ ctx }) => {
+  const cfg = await ctx.use(config);
+  return { query: (sql: string) => `${sql} on ${cfg.url}` };
+});
 
 new Crust("app").provide(database(), config());
 ```
 
-Dependencies construct recursively before their dependent. Within one `.provide()` call, order is free. Missing dependencies and cycles fail during normalization with `CrustError` code `DEFINITION`.
+Dependencies construct lazily when pulled and are memoized for the invocation. Provide order is free. Missing providers fail at the pull site with `missing-context`; dynamic dependency cycles fail with `context-cycle`.
 
-Contexts are inherited by descendants present when the builder is added. Provide dependencies before `.add()`; immutable builder chains do not backfill already-added children.
+Contexts are inherited by descendants present when the builder is added. Provide Contexts before `.add()`; immutable builder chains do not backfill already-added children.
 
 ## Test doubles
 
-Every factory has `.of(value)`, which provides a precomputed value with the same name and type. It skips the real setup and dependency list while retaining owned flags.
+Every factory has `.of(value)`, which provides a precomputed value with the same name and type. It skips the real setup and its dependency pulls while retaining owned flags.
 
 ```ts
 const fake = database.of({ query: (sql) => `fake: ${sql}` });

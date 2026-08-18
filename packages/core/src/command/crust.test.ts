@@ -2650,32 +2650,6 @@ describe("definition normalization timing", () => {
 		).toThrow(/Async parse not supported for argument <mode>/);
 	});
 
-	it("rejects missing and cyclic Context dependencies at provide time", () => {
-		const base = defineContext("base", () => ({}));
-		const dependent = defineContext("dependent", { requires: [base] }, () => ({}));
-		try {
-			new Crust("cli").provide(dependent());
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("DEFINITION");
-			expect((err as CrustError).message).toMatch(/requires Context "base"/);
-		}
-
-		const a = defineContext("a", () => ({}))();
-		const b = defineContext("b", () => ({}))();
-		(a as { requiredCtx: readonly string[] }).requiredCtx = ["b"];
-		(b as { requiredCtx: readonly string[] }).requiredCtx = ["a"];
-		try {
-			new Crust("cli").provide(a, b);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("DEFINITION");
-			expect((err as CrustError).message).toMatch(/dependency cycle/);
-		}
-	});
-
 	it("materializes and normalizes invalid definitions two levels behind an Extension", async () => {
 		const invalidLeaf = defineCommand("leaf", (command) =>
 			command.flags({

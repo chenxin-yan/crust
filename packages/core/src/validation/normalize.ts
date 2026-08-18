@@ -9,12 +9,7 @@ import {
 	schemaExclusivity,
 	variadicPosition,
 } from "./args.rules.ts";
-import {
-	contextCycle,
-	definitionProvenance,
-	duplicateContext,
-	missingContextDependency,
-} from "./contexts.rules.ts";
+import { definitionProvenance, duplicateContext } from "./contexts.rules.ts";
 import { aliasCollision, noPrefix, parserType, reservedSpelling } from "./flags.rules.ts";
 
 /**
@@ -69,13 +64,13 @@ export function normalizeArgs(existing: ArgsDef | undefined, incoming: ArgsDef):
 	return args;
 }
 
-/** Normalize one Context batch and return its cached topological order. */
+/** Normalize one Context batch. */
 export function normalizeContext(
 	incoming: readonly ContextInstance[],
 	existing: readonly ContextInstance[],
 	effectiveFlags: FlagsDef,
 	spellings: Map<string, FlagSpelling>,
-	where: string,
+	_where: string,
 ): ContextInstance[] {
 	const contexts = [...existing];
 	for (const instance of incoming) {
@@ -87,6 +82,5 @@ export function normalizeContext(
 		}
 		contexts.push(instance);
 	}
-	missingContextDependency(contexts, where);
-	return contextCycle(contexts, where);
+	return contexts;
 }

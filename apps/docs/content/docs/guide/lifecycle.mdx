@@ -36,7 +36,7 @@ It requires an explicit typed command path, serializes structured input through 
 4. **Run `preRun` hooks** — invoke Extension hooks in `.extend()` order. Hooks may lazily pull flagless Contexts. A hook can return `ctx.finish()` to skip the remaining hooks, validation, schemas, and the Command Action.
 5. **Validate structure** — enforce required values, choices, and other core rules.
 6. **Apply schemas** — validate and transform every schema-backed input, aggregating issues.
-7. **Resolve Contexts on demand** — each `ctx.use(factory)` constructs that Context's dependency closure once, passing setup only its validated owned flags.
+7. **Resolve Contexts on demand** — each `ctx.use(factory)` constructs that Context once; setup can pull other Contexts and receives only its validated owned flags.
 8. **Run the Command Action**.
 9. **Run `postRun` hooks** — invoke every Extension hook in reverse `.extend()` order with the completed, finished, or failed outcome. Hooks may pull or reuse Contexts here.
 10. **Dispose Contexts** — run `Symbol.dispose` or `Symbol.asyncDispose` in reverse construction order after all post-run hooks, including after failure.

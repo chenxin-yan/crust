@@ -748,10 +748,9 @@ export class Crust<
 	 * Attach Contexts — named command dependencies — to this command.
 	 *
 	 * Contexts are inherited by descendant commands and constructed lazily when
-	 * an action or Extension calls `ctx.use(factory)`. Declared Context dependencies
-	 * are resolved first. Within one `.provide()` call, dependencies may appear
-	 * after their dependents. Disposable values are released in reverse
-	 * construction order after post-run hooks.
+	 * an action, Extension, or Context setup calls `ctx.use(factory)`. Provide order
+	 * does not affect pull-driven construction. Disposable values are released in
+	 * reverse construction order after post-run hooks.
 	 *
 	 * @throws {CrustError} `DEFINITION` when a name is already provided on
 	 *                      this command path

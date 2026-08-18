@@ -5,7 +5,6 @@ export type {
 	ContextFactory,
 	ContextInstance,
 	ContextMap,
-	ContextRequirements,
 	ContextResolver,
 	ContextSetup,
 	FactoryValueOf,

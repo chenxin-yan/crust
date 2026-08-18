@@ -48,7 +48,7 @@ const api = defineContext("api", { flags: [apiKey] }, ({ flags }) => ({
 const app = new Crust("my-cli").provide(api());
 ```
 
-Downstream commands call `await ctx.use(api)`. Other Contexts can list `api` in their Context-level `requires` array. See [Contexts](/docs/guide/contexts).
+Downstream commands and other Context setups call `await ctx.use(api)`. See [Contexts](/docs/guide/contexts).
 
 ## Runtime exports
 
@@ -56,7 +56,7 @@ Downstream commands call `await ctx.use(api)`. Other Contexts can list `api` in 
 | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`Crust`](/docs/api/crust)            | Immutable command builder with Context `.provide()`, `.add()`, `.action()`, tooling `.snapshot()`, programmatic `.run()`, and terminal `.execute()` |
 | [`defineCommand`](/docs/api/crust)    | Create a named, inert reusable command definition                                                                                                   |
-| `defineContext(name, config?, setup)` | Define a named Context factory with optional requirements and owned flags; setup receives invocation I/O                                            |
+| `defineContext(name, config?, setup)` | Define a named Context factory with optional owned flags; setup receives a Context resolver and invocation I/O                                      |
 | `defineExtension(name, config)`       | Define a frozen, application-wide Extension value                                                                                                   |
 | `defineFlag(name, definition)`        | Define one named flag, preserving its literal definition                                                                                            |
 | `defineArg(name, definition)`         | Define one named positional argument, preserving its literal definition                                                                             |
@@ -119,15 +119,14 @@ Omitting `io` creates no new ambient scope, preserving native TTY detection and 
 
 ## Context types
 
-| Type                  | Description                                                                 |
-| --------------------- | --------------------------------------------------------------------------- |
-| `ContextFactory`      | Factory returned by `defineContext()`, with `contextName` and `.of()`       |
-| `AnyContextFactory`   | Requirement-array element type for `requires`                               |
-| `ContextInstance`     | Named lazy dependency attached with `.provide()`                            |
-| `ContextRequirements` | Context capabilities required from a command path                           |
-| `ContextConfig`       | Owned flags plus capability dependencies under `requires`                   |
-| `ContextSetup`        | Typed setup input: `options`, `flags`, dependency `ctx`, and invocation I/O |
-| `ContextMap`          | Record shape used for inferred Command Action `ctx` values                  |
+| Type                | Description                                                               |
+| ------------------- | ------------------------------------------------------------------------- |
+| `ContextFactory`    | Factory returned by `defineContext()`, with `contextName` and `.of()`     |
+| `AnyContextFactory` | Shared constraint for factories accepted by `ctx.use()`                   |
+| `ContextInstance`   | Named lazy dependency attached with `.provide()`                          |
+| `ContextConfig`     | Flags owned by a Context                                                  |
+| `ContextSetup`      | Typed setup input: `options`, `flags`, resolver `ctx`, and invocation I/O |
+| `ContextMap`        | Record shape used by accumulated command Context types                    |
 
 ## Extension types
 

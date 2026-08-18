@@ -108,8 +108,9 @@ export interface ExtensionContext<
 	readonly rawArgs: readonly string[];
 	/**
 	 * Lazily resolve a provided Context for this invocation.
-	 * A pre-run hook may only pull Contexts whose dependency closure owns no flags.
-	 * Values remain live through post-run hooks and are disposed afterwards.
+	 * A pre-run hook cannot pull a Context that owns flags. Pull dependencies
+	 * before acquiring resources. Values remain live through post-run hooks and
+	 * are disposed afterwards.
 	 */
 	readonly use: <F extends AnyContextFactory>(factory: F) => Promise<FactoryValueOf<F>>;
 	/**
