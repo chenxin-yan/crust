@@ -896,6 +896,23 @@ describe("pull-based Context resolution", () => {
 		expect(serviceSetups).toBe(2);
 	});
 
+	it("rejects with the setup error even when its cause getter throws", async () => {
+		const hostile = new Error("setup failed");
+		Object.defineProperty(hostile, "cause", {
+			get() {
+				throw new Error("trap");
+			},
+		});
+		const broken = defineContext("broken", () => {
+			throw hostile;
+		});
+		const app = new Crust("cli").provide(broken()).action(async ({ ctx }) => {
+			await ctx.use(broken);
+		});
+
+		await expect(app.run([])).rejects.toBe(hostile);
+	}, 500);
+
 	it("memoizes a replacement error after setup swallows flag rejection", async () => {
 		let setups = 0;
 		const token = defineFlag("token", { type: "string" });
@@ -1048,6 +1065,26 @@ describe("Context disposal", () => {
 			.provide(db(), alias())
 			.action(async ({ ctx }) => {
 				expect(await ctx.use(alias)).toBe(await ctx.use(db));
+			})
+			.run([]);
+		expect(disposals).toBe(1);
+	});
+
+	it("disposes a shared value decorated with a disposer after first being returned bare", async () => {
+		let disposals = 0;
+		const shared: Record<PropertyKey, unknown> = {};
+		const bare = defineContext("bare", () => shared);
+		const decorated = defineContext("decorated", async ({ ctx }) => {
+			const value = await ctx.use(bare);
+			value[Symbol.dispose] = () => {
+				disposals++;
+			};
+			return value;
+		});
+		await new Crust("cli")
+			.provide(bare(), decorated())
+			.action(async ({ ctx }) => {
+				await ctx.use(decorated);
 			})
 			.run([]);
 		expect(disposals).toBe(1);

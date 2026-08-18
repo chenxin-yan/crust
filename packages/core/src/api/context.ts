@@ -198,7 +198,6 @@ function registerDisposable(
 	// An alias setup can resolve to another Context's value; registering it twice
 	// would double-dispose a non-idempotent Symbol.(async)Dispose.
 	if (registered.has(value)) return;
-	registered.add(value);
 	const candidate = value as {
 		[Symbol.dispose]?: () => void;
 		[Symbol.asyncDispose]?: () => PromiseLike<void>;
@@ -207,6 +206,9 @@ function registerDisposable(
 		typeof candidate[Symbol.asyncDispose] === "function" ||
 		typeof candidate[Symbol.dispose] === "function"
 	) {
+		// Marked only on actual registration: a bare value returned first must not
+		// block disposal when a later setup decorates the same object and returns it.
+		registered.add(value);
 		disposal.use(candidate as Disposable | AsyncDisposable);
 	}
 }
@@ -258,18 +260,24 @@ export function createContextResolver(
 	const isFlagValidationError = (error: unknown): boolean => {
 		// Setups may wrap the pull rejection (e.g. new Error("...", { cause })); walk
 		// the cause chain so the retry-after-validation marker survives wrapping.
-		const seen = new Set<unknown>();
-		for (let e = error; e != null && !seen.has(e); e = (e as { cause?: unknown }).cause) {
-			seen.add(e);
-			if (
-				e instanceof CrustError &&
-				e.code === "DEFINITION" &&
-				e.details?.reason === "flags-before-validation"
-			) {
-				return true;
+		// A throwing `cause` getter must not escape: this runs while settling the
+		// entry, and an escape would leave the promise pending for every puller.
+		try {
+			const seen = new Set<unknown>();
+			for (let e = error; e != null && !seen.has(e); e = (e as { cause?: unknown }).cause) {
+				seen.add(e);
+				if (
+					e instanceof CrustError &&
+					e.code === "DEFINITION" &&
+					e.details?.reason === "flags-before-validation"
+				) {
+					return true;
+				}
 			}
+			return false;
+		} catch {
+			return false;
 		}
-		return false;
 	};
 
 	const makeUse =

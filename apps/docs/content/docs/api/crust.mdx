@@ -209,7 +209,7 @@ provide<const Cs extends readonly ContextInstance[]>(
 >
 ```
 
-Attaches Contexts produced by invoking `defineContext()` factories. Contexts are inherited by descendants and constructed lazily when an action or Extension calls `ctx.use(factory)`. The return type merges every instance's owned `flags` into the builder's accumulated flag type.
+Attaches Contexts produced by invoking `defineContext()` factories. Contexts are inherited by descendants and constructed lazily when an action, Extension, or another Context's setup calls `ctx.use(factory)`. The return type merges every instance's owned `flags` into the builder's accumulated flag type.
 
 ```ts
 import { defineContext, Crust } from "@crustjs/core";
