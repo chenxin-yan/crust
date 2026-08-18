@@ -57,7 +57,7 @@ Both values are non-optional in the Command Action. Other flags include `undefin
 .flags({ name: "target", type: "string", choices: ["bun", "node"] })
 ```
 
-Choices are supported on string flags. A declared default outside this set is a `DEFINITION` error when `.flags()` runs; an argv value outside it is a `PARSE` error during invocation.
+Choices are supported on string flags. When `choices` and `default` are literals, TypeScript reports `FIX_DEFAULT_CHOICE` if the default falls outside the set. Widened `string[]` choices opt out of that compile-time comparison. An argv value outside the choices is a `PARSE` error during invocation.
 
 When the choices list is a literal tuple (an inline array as above, or a variable declared `as const`), the flag's inferred type narrows to the union of those literals — `"bun" | "node"` here instead of `string`. A widened `string[]` variable keeps the type as plain `string`.
 

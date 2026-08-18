@@ -34,3 +34,29 @@ export type AsyncParseBrand<T> = T extends { parse: (...args: never[]) => infer 
 				readonly FIX_ASYNC_PARSE: "parse must be synchronous; do async work in run()";
 			}
 	: {};
+
+/** Brand literal defaults that fall outside a literal `choices` tuple. */
+export type DefaultWithinChoicesBrand<T> = T extends {
+	choices: readonly (infer Choice extends string)[];
+	default: infer Default;
+}
+	? string extends Choice
+		? {}
+		: Default extends readonly string[]
+			? string extends Default[number]
+				? {}
+				: Exclude<Default[number], Choice> extends never
+					? {}
+					: {
+							readonly FIX_DEFAULT_CHOICE: "default must be one of choices";
+						}
+			: Default extends string
+				? string extends Default
+					? {}
+					: Exclude<Default, Choice> extends never
+						? {}
+						: {
+								readonly FIX_DEFAULT_CHOICE: "default must be one of choices";
+							}
+				: {}
+	: {};

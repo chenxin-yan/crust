@@ -522,10 +522,8 @@ export type NamedFlagsRecord<Defs extends readonly NamedFlagDef[]> = {
 /**
  * Merges two flag sets as a flat intersection.
  *
- * Override-wins semantics are unnecessary: a shared key across the two sets
- * is branded at compile time (`DuplicateNameBrand`,
- * `ExistingFlagCollisionBrand`, `ProvideChecks`) and throws at runtime, so
- * valid programs never merge overlapping records. A plain intersection stays
+ * Statically known shared keys are branded at compile time (`DuplicateNameBrand`,
+ * `ExistingFlagCollisionBrand`, `ProvideChecks`). A plain intersection stays
  * flat in the checker — chained `.flags()`/`.provide()` calls cost constant
  * instantiation depth, where per-call merge layers (mapped type or
  * `Simplify<Omit & …>`) nested and hit TS2589 at ~47 / ~31 chained calls.

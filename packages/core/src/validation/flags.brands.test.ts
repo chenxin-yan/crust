@@ -227,4 +227,46 @@ describe("ValidateNamedFlagDefs", () => {
 
 		expect(true).toBe(true);
 	});
+
+	it("brands literal defaults outside literal choices", () => {
+		type InvalidSingle = ValidateNamedFlagDefs<
+			readonly [{ name: "mode"; type: "string"; choices: ["a", "b"]; default: "z" }]
+		>;
+		type InvalidMultiple = ValidateNamedFlagDefs<
+			readonly [
+				{ name: "mode"; type: "string"; multiple: true; choices: ["a", "b"]; default: ["a", "z"] },
+			]
+		>;
+		type Valid = ValidateNamedFlagDefs<
+			readonly [{ name: "mode"; type: "string"; choices: ["a", "b"]; default: "a" }]
+		>;
+		type Widened = ValidateNamedFlagDefs<
+			readonly [{ name: "mode"; type: "string"; choices: readonly string[]; default: string }]
+		>;
+		type _single = Expect<
+			Equal<InvalidSingle[0]["FIX_DEFAULT_CHOICE"], "default must be one of choices">
+		>;
+		type _multiple = Expect<
+			Equal<InvalidMultiple[0]["FIX_DEFAULT_CHOICE"], "default must be one of choices">
+		>;
+		type _valid = Expect<Equal<Extract<keyof Valid[0], "FIX_DEFAULT_CHOICE">, never>>;
+		type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_DEFAULT_CHOICE">, never>>;
+
+		expect(true).toBe(true);
+	});
+
+	it('brands the reserved "__proto__" spelling', () => {
+		type Name = ValidateNamedFlagDefs<readonly [{ name: "__proto__"; type: "boolean" }]>;
+		type Alias = ValidateNamedFlagDefs<
+			readonly [{ name: "safe"; type: "boolean"; aliases: ["__proto__"] }]
+		>;
+		type _name = Expect<
+			Equal<Name[0]["FIX_RESERVED_SPELLING"], 'Flag spelling "__proto__" is reserved'>
+		>;
+		type _alias = Expect<
+			Equal<Alias[0]["FIX_RESERVED_SPELLING"], 'Flag spelling "__proto__" is reserved'>
+		>;
+
+		expect(true).toBe(true);
+	});
 });

@@ -20,13 +20,13 @@ await app.execute();
 
 Use the [Testing guide](/docs/guide/testing) for `captureRun()` and `runInteractive()` helpers. It also explains when custom prompt authors should use `@crustjs/prompts/testing` directly.
 
-## Validate definitions
+## Prepare the build snapshot
 
 ```sh
 crust build
 ```
 
-Build validation prepares the complete command graph, including Extension-owned flags and commands, before compilation. It catches collisions and malformed definitions without running Command Actions. Use `--no-validate` only when the snapshot subprocess cannot run in your environment.
+The build snapshot subprocess prepares the complete command graph, including Extension-owned flags and commands, validates documentation sections, and runs Extension build hooks before compilation. Definition checks run through TypeScript. Use `--no-validate` only when the snapshot subprocess cannot run in your environment.
 
 ## Inspect input
 

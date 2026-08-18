@@ -230,5 +230,3 @@ describe("schema type inference", () => {
 		expect(true).toBe(true);
 	});
 });
-
-describe("schema mode exclusivity", () => {});

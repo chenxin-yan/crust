@@ -227,7 +227,6 @@ function materializeCommandDefinition(
 	const name = definition.name;
 
 	const child = new Crust(name);
-	(child as { _ancestorOwnedFlags: FlagsDef })._ancestorOwnedFlags = parent.ownedFlags;
 	child._node.ownedFlags = { ...parent.ownedFlags };
 	child._node.effectiveFlags = { ...parent.ownedFlags };
 	child._node.flagSpellings = cloneFlagSpellings(parent.flagSpellings, child._node.effectiveFlags);
@@ -584,9 +583,6 @@ export class Crust<
 	/** @internal */
 	readonly _node: CommandNode;
 
-	/** @internal — Runtime identity anchor for the ancestor-owned flag carrier */
-	readonly _ancestorOwnedFlags: FlagsDef;
-
 	/**
 	 * Create a new root command builder.
 	 *
@@ -600,7 +596,6 @@ export class Crust<
 		if (meta.sections !== undefined) {
 			this._node.meta.sections = meta.sections.map((section) => ({ ...section }));
 		}
-		this._ancestorOwnedFlags = {};
 	}
 
 	/**
@@ -624,7 +619,6 @@ export class Crust<
 			...nodeOverrides,
 		};
 		(cloned as { _node: CommandNode })._node = newNode;
-		(cloned as { _ancestorOwnedFlags: FlagsDef })._ancestorOwnedFlags = this._ancestorOwnedFlags;
 		return cloned;
 	}
 

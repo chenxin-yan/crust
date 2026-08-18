@@ -53,7 +53,7 @@ Use `choices` for a static string set:
 .args({ name: "target", type: "string", choices: ["bun", "node"] })
 ```
 
-A declared default outside the choices is a `DEFINITION` error when `.args()` runs. An argv value outside the choices is a `PARSE` error during invocation.
+When `choices` and `default` are literals, TypeScript reports `FIX_DEFAULT_CHOICE` if the default falls outside the set. Widened `string[]` choices opt out of that compile-time comparison. An argv value outside the choices is a `PARSE` error during invocation.
 
 As with flags, a literal choices tuple narrows the argument's inferred type to the union of those literals (`"bun" | "node"` above); a widened `string[]` keeps it as `string`.
 

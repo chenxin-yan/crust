@@ -32,7 +32,7 @@ A `CrustError` exposes `code`, `message`, `details`, optional `cause`, `.is(code
 
 Crust checks developer-authored definitions at compile time through TypeScript. `FIX_*` brands report malformed definitions and collisions at their call sites; Core does not repeat those checks when the command tree is built.
 
-Argv is untrusted and remains runtime-validated. Invalid tokens and built-in conversions throw `PARSE`; missing values, choices, and Standard Schema issues throw `VALIDATION`. Context dependencies are discovered dynamically through `ctx.use()`, so a missing provider or dependency cycle throws `DEFINITION` when pulled. Snapshot preparation also retains runtime checks for authored and Extension-contributed documentation sections.
+Argv is untrusted and remains runtime-validated. Invalid tokens, choices, and built-in conversions throw `PARSE`; missing values and Standard Schema issues throw `VALIDATION`. Context dependencies are discovered dynamically through `ctx.use()`, so a missing provider or dependency cycle throws `DEFINITION` when pulled. Snapshot preparation also retains runtime checks for authored and Extension-contributed documentation sections.
 
 `COMMAND_NOT_FOUND` details contain `input`, `available`, `commandPath`, and `parentCommand`, a readonly serializable Command Snapshot.
 

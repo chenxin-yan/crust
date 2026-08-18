@@ -84,6 +84,25 @@ describe("ValidateVariadicArgs type inference", () => {
 		expect(true).toBe(true);
 	});
 
+	it("brands literal defaults outside literal choices", () => {
+		type Invalid = ValidateVariadicArgs<
+			readonly [{ name: "mode"; type: "string"; choices: ["a", "b"]; default: "z" }]
+		>;
+		type Valid = ValidateVariadicArgs<
+			readonly [{ name: "mode"; type: "string"; choices: ["a", "b"]; default: "a" }]
+		>;
+		type Widened = ValidateVariadicArgs<
+			readonly [{ name: "mode"; type: "string"; choices: readonly string[]; default: string }]
+		>;
+		type _invalid = Expect<
+			Equal<Invalid[0]["FIX_DEFAULT_CHOICE"], "default must be one of choices">
+		>;
+		type _valid = Expect<Equal<Extract<keyof Valid[0], "FIX_DEFAULT_CHOICE">, never>>;
+		type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_DEFAULT_CHOICE">, never>>;
+
+		expect(true).toBe(true);
+	});
+
 	it("resolves to identity for empty args", () => {
 		type Args = readonly [];
 		type Result = ValidateVariadicArgs<Args>;

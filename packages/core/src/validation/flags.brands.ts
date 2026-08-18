@@ -1,5 +1,5 @@
 import type { FlagsDef, NamedFlagDef, NamedFlagsRecord } from "../types.ts";
-import type { AsyncParseBrand, DefName, Overlap } from "./shared.ts";
+import type { AsyncParseBrand, DefaultWithinChoicesBrand, DefName, Overlap } from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Compile-time validation
@@ -19,6 +19,13 @@ type ExistingFlagCollisionBrand<F, Existing extends string> =
 					readonly FIX_ALIAS_COLLISION: `Flag spelling "${Collision}" collides with an existing flag`;
 				}
 		: never;
+
+/** Reject `__proto__`, which mutates the prototype of plain-object flag registries. */
+type ReservedSpellingBrand<F> = "__proto__" extends DefName<F> | ExtractAllAliases<F>
+	? {
+			readonly FIX_RESERVED_SPELLING: 'Flag spelling "__proto__" is reserved';
+		}
+	: {};
 
 /** Canonical names claimed by more than one definition in the same call. */
 type DuplicateNames<
@@ -63,7 +70,9 @@ export type ValidateNamedFlagDefs<
 		FlagDefBrand<Defs[I]["name"], Validated> &
 		ExistingFlagCollisionBrand<Defs[I], Existing> &
 		DuplicateNameBrand<Defs[I], Dups> &
-		AsyncParseBrand<Defs[I]>;
+		AsyncParseBrand<Defs[I]> &
+		DefaultWithinChoicesBrand<Defs[I]> &
+		ReservedSpellingBrand<Defs[I]>;
 };
 
 // ────────────────────────────────────────────────────────────────────────────

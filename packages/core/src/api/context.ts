@@ -13,6 +13,7 @@ import type { ValidateNamedFlagDefs } from "../validation/flags.brands.ts";
 export type ContextMap = Record<string, unknown>;
 export type Awaitable<T> = T | Promise<T>;
 export type Simplify<T> = { [K in keyof T]: T[K] };
+// Flat intersections keep chained composition at constant instantiation depth.
 export type MergeContext<A, B> = A & B;
 
 /** Lazy, invocation-scoped Context values. Reading a property starts construction. */
