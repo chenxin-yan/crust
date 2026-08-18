@@ -253,16 +253,6 @@ const NO_CACHE_ADAPTER: UpdateNotifierCacheAdapter = {
 	write: async () => {},
 };
 
-/**
- * Sanitizes a package name for use as a state directory name.
- *
- * `stateDir` rejects path separators, so scoped names like `@scope/cli`
- * would otherwise throw and silently disable the notifier.
- */
-function stateDirName(packageName: string): string {
-	return packageName.replace(/^@/, "").replace(/[/\\]/g, "-");
-}
-
 function detectPackageManager(): UpdateNotifierPackageManager {
 	const userAgent = process.env.npm_config_user_agent;
 	if (userAgent) {
@@ -413,7 +403,8 @@ export function updateNotifier(options: UpdateNotifierOptions): Extension {
 						} else {
 							const { createStore, stateDir } = await import("@crustjs/store");
 							cacheAdapter = createStore({
-								dirPath: stateDir(stateDirName(packageName)),
+								// stateDir rejects path separators; sanitize scoped names (@scope/cli → scope-cli)
+								dirPath: stateDir(packageName.replace(/^@/, "").replace(/[/\\]/g, "-")),
 								name: "update-notifier",
 								fields: {
 									lastCheckedAt: { type: "number", default: 0 },
@@ -424,16 +415,10 @@ export function updateNotifier(options: UpdateNotifierOptions): Extension {
 						}
 					}
 
-					let rawState: UpdateNotifierState | null | undefined;
-					try {
-						rawState = await cacheAdapter.read();
-					} catch {
-						// Corrupt or unreadable cache (e.g. CrustStoreError PARSE) — treat
-						// as empty so the next successful write repairs the file instead of
-						// permanently disabling the notifier.
-						rawState = null;
-					}
-					const state = normalizeNotifierState(rawState);
+					// Corrupt/unreadable cache (e.g. CrustStoreError PARSE) reads as empty
+					// so the next successful write repairs the file instead of permanently
+					// disabling the notifier.
+					const state = normalizeNotifierState(await cacheAdapter.read().catch(() => null));
 					const resolvedUpdateCommand = resolveUpdateCommand(
 						packageName,
 						packageManager,

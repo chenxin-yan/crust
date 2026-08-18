@@ -333,6 +333,21 @@ describe("updateNotifier post-run hook", () => {
 		return cachedState;
 	}
 
+	/**
+	 * Points XDG_STATE_HOME at a plain file so any built-in cache read/write
+	 * fails loudly; returns the file path to assert it stays untouched.
+	 */
+	async function makeUnusableStateHome(label: string): Promise<string> {
+		const stateHomeFile = join(
+			await mkdtemp(join(tmpdir(), `crust-update-notifier-${label}-`)),
+			"not-a-directory",
+		);
+		tempDirs.push(join(stateHomeFile, ".."));
+		await writeFile(stateHomeFile, "unchanged");
+		process.env.XDG_STATE_HOME = stateHomeFile;
+		return stateHomeFile;
+	}
+
 	const memoryCache: UpdateNotifierCacheAdapter = {
 		read: async () => getCachedState(),
 		write: async (state: UpdateNotifierState) => {
@@ -897,9 +912,7 @@ describe("updateNotifier post-run hook", () => {
 
 		it("persists and deduplicates with the built-in cache by default", async () => {
 			const pkgName = uniquePackageName("built-in-cache");
-			const stateHome = await mkdtemp(join(tmpdir(), "crust-update-notifier-"));
-			tempDirs.push(stateHome);
-			process.env.XDG_STATE_HOME = stateHome;
+			const stateHome = process.env.XDG_STATE_HOME as string;
 			let fetchCalls = 0;
 			mockFetch(() => {
 				fetchCalls++;
@@ -995,13 +1008,7 @@ describe("updateNotifier post-run hook", () => {
 
 		it("does not read or write the built-in cache when cache is false", async () => {
 			const pkgName = uniquePackageName("cache-disabled");
-			const stateHomeFile = join(
-				await mkdtemp(join(tmpdir(), "crust-update-notifier-disabled-")),
-				"not-a-directory",
-			);
-			tempDirs.push(join(stateHomeFile, ".."));
-			await writeFile(stateHomeFile, "unchanged");
-			process.env.XDG_STATE_HOME = stateHomeFile;
+			const stateHomeFile = await makeUnusableStateHome("disabled");
 			let fetchCalls = 0;
 			mockFetch(() => {
 				fetchCalls++;
@@ -1033,13 +1040,7 @@ describe("updateNotifier post-run hook", () => {
 
 		it("uses a custom adapter without touching the built-in store", async () => {
 			const pkgName = uniquePackageName("custom-cache");
-			const stateHomeFile = join(
-				await mkdtemp(join(tmpdir(), "crust-update-notifier-custom-")),
-				"not-a-directory",
-			);
-			tempDirs.push(join(stateHomeFile, ".."));
-			await writeFile(stateHomeFile, "unchanged");
-			process.env.XDG_STATE_HOME = stateHomeFile;
+			const stateHomeFile = await makeUnusableStateHome("custom");
 			mockRegistryResponse("2.0.0");
 
 			await runExtensionMiddleware({
