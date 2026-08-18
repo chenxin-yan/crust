@@ -116,6 +116,7 @@
       "name": "@crustjs/extensions",
       "version": "0.1.2",
       "dependencies": {
+        "@crustjs/store": "workspace:^",
         "@crustjs/style": "workspace:^",
       },
       "devDependencies": {

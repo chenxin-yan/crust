@@ -35,9 +35,30 @@ function updateNotifier(options: UpdateNotifierOptions): Extension;
 
 The `postRun` hook checks for an update only after a Command Action completes successfully. Network, registry, cache, and response failures are swallowed so the notifier does not fail a successful command. It does not check after `ctx.finish()` short-circuits such as `--help`. The notice is written through the invocation's stderr callback (process stderr under `execute()`). Version comparison follows SemVer precedence, so a stable release is considered newer than its prerelease.
 
-Without `cache`, the check occurs once per process execution. With `cache`, a fresh cached result is reused for `intervalMs` and duplicate notices for the same version are suppressed. By default, the notice reports only the available version. Set `installScope` to generate a package-manager-specific update command, provide `updateCommand` for a custom command, or set `updateDocsUrl` to link to update instructions. Automatic package-manager detection uses `npm_config_user_agent` when available. An `updateCommand` callback receives `undefined` for `installScope` unless the scope was explicitly configured.
+By default, notifier state is persisted at `stateDir(packageName)` using `@crustjs/store`. A fresh cached result is reused for 24 hours and duplicate notices for the same version are suppressed across process invocations. Set `cache: false` to opt out, or provide a custom adapter to control persistence and `intervalMs`. By default, the notice reports only the available version. Set `installScope` to generate a package-manager-specific update command, provide `updateCommand` for a custom command, or set `updateDocsUrl` to link to update instructions. Automatic package-manager detection uses `npm_config_user_agent` when available. An `updateCommand` callback receives `undefined` for `installScope` unless the scope was explicitly configured.
 
-## Cache adapter
+## Cache
+
+The built-in cache is enabled automatically; no setup is required:
+
+```ts
+updateNotifier({
+  packageName: "my-cli",
+  currentVersion: "1.2.3",
+});
+```
+
+Disable all cache reads and writes when every invocation should check the registry:
+
+```ts
+updateNotifier({
+  packageName: "my-cli",
+  currentVersion: "1.2.3",
+  cache: false,
+});
+```
+
+For custom persistence, provide an adapter:
 
 <auto-type-table
   path="../../../../../../packages/extensions/src/update-notifier.ts"
@@ -59,34 +80,19 @@ The adapter reads and writes this structural state shape; `UpdateNotifierState` 
 The package exports `UpdateNotifierCacheAdapter`, `UpdateNotifierCacheConfig`, `UpdateNotifierInstallScope`, and `UpdateNotifierPackageManager` alongside `UpdateNotifierOptions`.
 
 ```ts
-import { createStore, stateDir } from "@crustjs/store";
 import { updateNotifier, type UpdateNotifierCacheAdapter } from "@crustjs/extensions";
 
-const store = createStore({
-  dirPath: stateDir("my-cli"),
-  name: "update-notifier",
-  fields: {
-    lastCheckedAt: { type: "number", default: 0 },
-    latestVersion: { type: "string" },
-    lastNotifiedVersion: { type: "string" },
-  },
-});
-
+let state: Awaited<ReturnType<UpdateNotifierCacheAdapter["read"]>>;
 const adapter: UpdateNotifierCacheAdapter = {
-  read: () => store.read(),
-  write: (state) =>
-    store.write({
-      lastCheckedAt: state.lastCheckedAt,
-      latestVersion: state.latestVersion,
-      lastNotifiedVersion: state.lastNotifiedVersion,
-    }),
+  read: async () => state,
+  write: async (nextState) => {
+    state = nextState;
+  },
 };
 
 const notifier = updateNotifier({
   packageName: "my-cli",
   currentVersion: "1.2.3",
-  packageManager: "bun",
-  installScope: "global",
-  cache: { adapter },
+  cache: { adapter, intervalMs: 60 * 60 * 1000 },
 });
 ```

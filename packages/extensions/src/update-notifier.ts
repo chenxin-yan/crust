@@ -128,29 +128,18 @@ export interface UpdateNotifierOptions {
 	updateDocsUrl?: string;
 
 	/**
-	 * Optional cache configuration for cross-run persistence.
+	 * Cache configuration for cross-run persistence.
 	 *
-	 * By default, no cross-run persistence is used and checks occur once
-	 * per process execution.
+	 * By default, notifier state is persisted in the platform-standard state
+	 * directory for {@link packageName}. Set to `false` to disable persistence,
+	 * or provide a custom adapter to control storage.
 	 *
 	 * @example
 	 * ```ts
-	 * cache: {
-	 *   adapter: {
-	 *     read: async () => ({ lastCheckedAt: 0 }),
-	 *     write: async (state) => {
-	 *       await store.write({
-	 *         lastCheckedAt: state.lastCheckedAt,
-	 *         latestVersion: state.latestVersion,
-	 *         lastNotifiedVersion: state.lastNotifiedVersion,
-	 *       });
-	 *     },
-	 *   },
-	 *   intervalMs: 86_400_000, // 24 hours
-	 * }
+	 * cache: false
 	 * ```
 	 */
-	cache?: UpdateNotifierCacheConfig;
+	cache?: false | UpdateNotifierCacheConfig;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -356,8 +345,9 @@ function resolveUpdateCommand(
  * version is available.
  *
  * **Behavior:**
- * - With `cache`, checks are reused up to `cache.intervalMs` (default 24h).
- * - Without `cache`, checks run once per process execution.
+ * - By default, checks are cached for 24 hours in the package's state directory.
+ * - `cache: false` disables cross-run persistence.
+ * - A custom cache adapter can override the built-in persistence.
  * - The notice is command-less unless `installScope` or `updateCommand` is configured.
  * - The network check is non-blocking — it never delays command execution.
  * - All internal errors (network, cache, parsing) are silently swallowed.
@@ -394,9 +384,7 @@ export function updateNotifier(options: UpdateNotifierOptions): Extension {
 		updateDocsUrl,
 		cache,
 	} = options;
-	const hasCache = cache !== undefined;
-	const intervalMs = cache?.intervalMs ?? DEFAULT_INTERVAL_MS;
-	const cacheAdapter = cache?.adapter ?? NO_CACHE_ADAPTER;
+	const intervalMs = (cache === false ? undefined : cache?.intervalMs) ?? DEFAULT_INTERVAL_MS;
 
 	return defineExtension("update-notifier", {
 		hooks: {
@@ -404,7 +392,22 @@ export function updateNotifier(options: UpdateNotifierOptions): Extension {
 				if (outcome.status !== "completed") return;
 
 				try {
-					// ── Resolve package name ─────────────────────────────────
+					let cacheAdapter: UpdateNotifierCacheAdapter = NO_CACHE_ADAPTER;
+					if (cache === undefined) {
+						const { createStore, stateDir } = await import("@crustjs/store");
+						cacheAdapter = createStore({
+							dirPath: stateDir(packageName),
+							name: "update-notifier",
+							fields: {
+								lastCheckedAt: { type: "number", default: 0 },
+								latestVersion: { type: "string" },
+								lastNotifiedVersion: { type: "string" },
+							},
+						});
+					} else if (cache !== false) {
+						cacheAdapter = cache.adapter;
+					}
+
 					const state = normalizeNotifierState(await cacheAdapter.read());
 					const resolvedUpdateCommand = resolveUpdateCommand(
 						packageName,
@@ -417,7 +420,7 @@ export function updateNotifier(options: UpdateNotifierOptions): Extension {
 					const now = Date.now();
 					const elapsed = now - state.lastCheckedAt;
 
-					if (hasCache && elapsed < intervalMs) {
+					if (cache !== false && elapsed < intervalMs) {
 						// Cache is still fresh — use cached version if available
 						if (
 							state.latestVersion &&

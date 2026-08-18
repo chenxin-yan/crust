@@ -47,6 +47,7 @@
 		"postpack": "rm -f LICENSE"
 	},
 	"dependencies": {
+		"@crustjs/store": "workspace:^",
 		"@crustjs/style": "workspace:^"
 	},
 	"devDependencies": {

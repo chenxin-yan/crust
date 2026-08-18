@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { Crust } from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
@@ -246,18 +249,27 @@ describe("updateNotifier post-run hook", () => {
 	const originalFetch = globalThis.fetch;
 	const originalUserAgent = process.env.npm_config_user_agent;
 	const originalNpmExecpath = process.env.npm_execpath;
+	const originalXdgStateHome = process.env.XDG_STATE_HOME;
 	let originalStderrWrite: typeof process.stderr.write;
 	let originalConsoleError: typeof console.error;
 	let processStderrChunks: string[];
 	let stderrChunks: string[];
 	let cachedState: UpdateNotifierState | undefined;
+	let tempDirs: string[];
 
 	/** Auto-incrementing counter to generate unique package names per test. */
 	let testCounter = 0;
 
-	beforeEach(() => {
+	beforeEach(async () => {
 		testCounter++;
 		cachedState = undefined;
+		tempDirs = [];
+
+		// Default-on built-in cache writes to stateDir(); sandbox it per test so
+		// suites that don't care about caching never touch the real user state dir.
+		const stateHome = await mkdtemp(join(tmpdir(), "crust-update-notifier-state-"));
+		tempDirs.push(stateHome);
+		process.env.XDG_STATE_HOME = stateHome;
 
 		stderrChunks = [];
 		processStderrChunks = [];
@@ -277,12 +289,14 @@ describe("updateNotifier post-run hook", () => {
 		else process.env[key] = original;
 	}
 
-	afterEach(() => {
+	afterEach(async () => {
 		globalThis.fetch = originalFetch;
 		process.stderr.write = originalStderrWrite;
 		console.error = originalConsoleError;
 		restoreEnv("npm_config_user_agent", originalUserAgent);
 		restoreEnv("npm_execpath", originalNpmExecpath);
+		restoreEnv("XDG_STATE_HOME", originalXdgStateHome);
+		await Promise.all(tempDirs.map((dir) => rm(dir, { recursive: true, force: true })));
 		process.exitCode = 0;
 	});
 
@@ -335,20 +349,22 @@ describe("updateNotifier post-run hook", () => {
 						installScope: "local" | "global" | undefined,
 				  ) => string);
 			updateDocsUrl?: string;
-			cache?: UpdateNotifierCacheAdapter;
+			cache?: UpdateNotifierCacheAdapter | false;
 		},
 		overrides?: {
 			commandName?: string;
-			disableDefaultCache?: boolean;
+			useBuiltInCache?: boolean;
 		},
 	) {
-		const { intervalMs, cache: cacheAdapter, ...rest } = options;
-		const resolvedAdapter = overrides?.disableDefaultCache
-			? cacheAdapter
-			: (cacheAdapter ?? memoryCache);
+		const { intervalMs, cache, ...rest } = options;
+		const resolvedCache = overrides?.useBuiltInCache ? undefined : (cache ?? memoryCache);
 		const extensionOptions = {
 			...rest,
-			...(resolvedAdapter ? { cache: { adapter: resolvedAdapter, intervalMs } } : {}),
+			...(resolvedCache === false
+				? { cache: false as const }
+				: resolvedCache
+					? { cache: { adapter: resolvedCache, intervalMs } }
+					: {}),
 		};
 		const extension = updateNotifier(extensionOptions);
 
@@ -815,8 +831,11 @@ describe("updateNotifier post-run hook", () => {
 			expect(receivedScopes).toEqual([undefined, "local"]);
 		});
 
-		it("does not persist cache by default when adapter is omitted", async () => {
-			const pkgName = uniquePackageName("no-default-cache");
+		it("persists and deduplicates with the built-in cache by default", async () => {
+			const pkgName = uniquePackageName("built-in-cache");
+			const stateHome = await mkdtemp(join(tmpdir(), "crust-update-notifier-"));
+			tempDirs.push(stateHome);
+			process.env.XDG_STATE_HOME = stateHome;
 			let fetchCalls = 0;
 			mockFetch(() => {
 				fetchCalls++;
@@ -828,24 +847,79 @@ describe("updateNotifier post-run hook", () => {
 			});
 
 			await runExtensionMiddleware(
-				{
-					currentVersion: "1.0.0",
-					packageName: pkgName,
-					intervalMs: Number.MAX_SAFE_INTEGER,
-				},
-				{ disableDefaultCache: true },
+				{ currentVersion: "1.0.0", packageName: pkgName },
+				{ useBuiltInCache: true },
+			);
+			expect(getOutput()).toContain("Update available");
+
+			stderrChunks = [];
+			await runExtensionMiddleware(
+				{ currentVersion: "1.0.0", packageName: pkgName },
+				{ useBuiltInCache: true },
 			);
 
-			await runExtensionMiddleware(
-				{
-					currentVersion: "1.0.0",
-					packageName: pkgName,
-					intervalMs: Number.MAX_SAFE_INTEGER,
-				},
-				{ disableDefaultCache: true },
+			expect(fetchCalls).toBe(1);
+			expect(getOutput()).toBe("");
+			const persisted = JSON.parse(
+				await readFile(join(stateHome, pkgName, "update-notifier.json"), "utf8"),
+			) as UpdateNotifierState;
+			expect(persisted.latestVersion).toBe("2.0.0");
+			expect(persisted.lastNotifiedVersion).toBe("2.0.0");
+		});
+
+		it("does not read or write the built-in cache when cache is false", async () => {
+			const pkgName = uniquePackageName("cache-disabled");
+			const stateHomeFile = join(
+				await mkdtemp(join(tmpdir(), "crust-update-notifier-disabled-")),
+				"not-a-directory",
 			);
+			tempDirs.push(join(stateHomeFile, ".."));
+			await writeFile(stateHomeFile, "unchanged");
+			process.env.XDG_STATE_HOME = stateHomeFile;
+			let fetchCalls = 0;
+			mockFetch(() => {
+				fetchCalls++;
+				return Promise.resolve(
+					new Response(JSON.stringify({ "dist-tags": { latest: "2.0.0" } }), {
+						status: 200,
+					}),
+				);
+			});
+
+			await runExtensionMiddleware({
+				currentVersion: "1.0.0",
+				packageName: pkgName,
+				cache: false,
+			});
+			await runExtensionMiddleware({
+				currentVersion: "1.0.0",
+				packageName: pkgName,
+				cache: false,
+			});
 
 			expect(fetchCalls).toBe(2);
+			expect(await readFile(stateHomeFile, "utf8")).toBe("unchanged");
+		});
+
+		it("uses a custom adapter without touching the built-in store", async () => {
+			const pkgName = uniquePackageName("custom-cache");
+			const stateHomeFile = join(
+				await mkdtemp(join(tmpdir(), "crust-update-notifier-custom-")),
+				"not-a-directory",
+			);
+			tempDirs.push(join(stateHomeFile, ".."));
+			await writeFile(stateHomeFile, "unchanged");
+			process.env.XDG_STATE_HOME = stateHomeFile;
+			mockRegistryResponse("2.0.0");
+
+			await runExtensionMiddleware({
+				currentVersion: "1.0.0",
+				packageName: pkgName,
+				cache: memoryCache,
+			});
+
+			expect(getCachedState()?.latestVersion).toBe("2.0.0");
+			expect(await readFile(stateHomeFile, "utf8")).toBe("unchanged");
 		});
 
 		it("uses explicit packageName over command meta name", async () => {
