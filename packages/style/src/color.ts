@@ -1,11 +1,10 @@
 // ────────────────────────────────────────────────────────────────────────────
-// Dynamic Colors — depth-aware `fg` / `bg` helpers powered by `Bun.color()`.
+// Dynamic Colors — portable depth-aware `fg` / `bg` helpers.
 // ────────────────────────────────────────────────────────────────────────────
-// `truecolor` / `256` go through `Bun.color()`; `16` uses an in-package
-// quantizer (see {@link rgbToAnsi16Param}). See {@link ColorInput} for the
-// accepted input surface.
+// Inputs are intentionally limited to hex, rgb triples, and named colors.
 
 import type { AnsiPair } from "./ansiCodes.ts";
+import { namedColorValues } from "./namedColorValues.ts";
 import { applyStyle } from "./styleEngine.ts";
 import type { ColorDepth, ColorInput } from "./types.ts";
 
@@ -21,7 +20,7 @@ const FG_CLOSE = "\x1b[39m";
 /** Background close: matches the close of every static bg color (`\x1b[49m`). */
 const BG_CLOSE = "\x1b[49m";
 
-/** Leading SGR introducer Bun emits for fg sequences — replaced for bg. */
+/** Foreground/background extended-color SGR introducers. */
 const FG_INTRODUCER = "\x1b[38;";
 const BG_INTRODUCER = "\x1b[48;";
 
@@ -41,18 +40,61 @@ function describeInput(input: unknown): string {
 	return String(input);
 }
 
-/**
- * Parse `input` into an `[r, g, b]` triple via `Bun.color()`. Throws
- * `TypeError` on inputs Bun cannot parse.
- *
- * @internal
- */
+/** Parse a supported color into an RGB triple. */
 function parseRgb(input: ColorInput): readonly [number, number, number] {
-	const rgb = Bun.color(input, "[rgb]");
-	if (rgb === null) {
-		throw new TypeError(`Invalid color input: ${describeInput(input)}`);
+	if (Array.isArray(input)) {
+		if (
+			input.length === 3 &&
+			input.every((channel) => Number.isInteger(channel) && channel >= 0 && channel <= 255)
+		) {
+			return input as readonly [number, number, number];
+		}
+	} else if (typeof input === "string") {
+		const value = input.toLowerCase();
+		if (Object.hasOwn(namedColorValues, value)) {
+			return namedColorValues[value as keyof typeof namedColorValues];
+		}
+
+		const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(value)?.[1];
+		if (hex) {
+			const expanded =
+				hex.length === 3
+					? hex
+							.split("")
+							.map((digit) => digit + digit)
+							.join("")
+					: hex;
+			return [0, 2, 4].map((offset) =>
+				Number.parseInt(expanded.slice(offset, offset + 2), 16),
+			) as unknown as readonly [number, number, number];
+		}
+
+		const rgb = /^rgb\(\s*(\d{1,3})\s*(?:,\s*|\s+)(\d{1,3})\s*(?:,\s*|\s+)(\d{1,3})\s*\)$/i.exec(
+			value,
+		);
+		if (rgb) {
+			const channels = rgb.slice(1).map(Number);
+			if (channels.every((channel) => channel <= 255))
+				return channels as unknown as readonly [number, number, number];
+		}
 	}
-	return rgb;
+	throw new TypeError(`Invalid color input: ${describeInput(input)}`);
+}
+
+function rgbToAnsi256(r: number, g: number, b: number): number {
+	if (r === g && g === b) {
+		if (r < 8) return 16;
+		if (r > 248) return 231;
+		return Math.round((r - 8) / 10) + 232;
+	}
+	const levels = [0, 95, 135, 175, 215, 255];
+	const nearest = (channel: number) =>
+		levels.reduce(
+			(best, value, index) =>
+				Math.abs(value - channel) < Math.abs(levels[best]! - channel) ? index : best,
+			0,
+		);
+	return 16 + 36 * nearest(r) + 6 * nearest(g) + nearest(b);
 }
 
 /**
@@ -60,13 +102,6 @@ function parseRgb(input: ColorInput): readonly [number, number, number] {
  * Same algorithm as `ansi-styles` / `chalk`: bucket each channel at 50%,
  * pack into a 3-bit base color, then add 60 for bright when the max
  * channel rounds up. Call sites add `+10` for backgrounds.
- *
- * TODO(bun#22161): drop this helper and use `Bun.color(input, "ansi-16")`
- * once https://github.com/oven-sh/bun/issues/22161 is fixed. Bun's
- * `"ansi-16"` path currently packs the palette index as a single ASCII
- * byte instead of decimal digits (e.g. index 9 → literal TAB),
- * producing malformed sequences like `"\x1b[38;5;\tm"`. Reproduced on
- * Bun 1.3.11.
  *
  * @internal
  */
@@ -85,23 +120,15 @@ function rgbToAnsi16Param(r: number, g: number, b: number): number {
 }
 
 /**
- * Foreground SGR open sequence at `depth`. `truecolor` / `256` use
- * `Bun.color()`; `16` uses {@link rgbToAnsi16Param} — see the TODO
- * there for why we don't call `Bun.color(_, "ansi-16")`.
+ * Foreground SGR open sequence at `depth`.
  *
  * @internal
  */
 function fgOpen(input: ColorInput, depth: Exclude<ColorDepth, "none">): string {
-	if (depth === "16") {
-		const [r, g, b] = parseRgb(input);
-		return `\x1b[${rgbToAnsi16Param(r, g, b)}m`;
-	}
-	const format = depth === "truecolor" ? "ansi-16m" : "ansi-256";
-	const open = Bun.color(input, format);
-	if (open === null) {
-		throw new TypeError(`Invalid color input: ${describeInput(input)}`);
-	}
-	return open;
+	const [r, g, b] = parseRgb(input);
+	if (depth === "16") return `\x1b[${rgbToAnsi16Param(r, g, b)}m`;
+	if (depth === "256") return `\x1b[38;5;${rgbToAnsi256(r, g, b)}m`;
+	return `\x1b[38;2;${r};${g};${b}m`;
 }
 
 /**
@@ -179,7 +206,7 @@ export function fg(text: string, input: ColorInput, depth: ColorDepth = "truecol
 	// Validate the color BEFORE the empty-string short-circuit so callers
 	// get TypeError on bad input regardless of `text`. Otherwise
 	// `fg("", "definitely-not-a-color")` would silently return "" and mask
-	// the bug. The validation walk is cheap (Bun.color call) and the
+	// the bug. Validation is cheap and the
 	// non-empty path needs the parsed open sequence anyway.
 	if (depth === "none") {
 		fgOpen(input, "truecolor"); // validate, do not emit
@@ -198,7 +225,7 @@ export function fg(text: string, input: ColorInput, depth: ColorDepth = "truecol
  * @example
  * ```ts
  * bg("warning", "#ff8800");
- * bg("info", "hsl(210, 100%, 50%)");
+ * bg("info", "rgb(0, 128, 255)");
  * ```
  */
 export function bg(text: string, input: ColorInput, depth: ColorDepth = "truecolor"): string {

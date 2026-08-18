@@ -7,6 +7,7 @@ import * as readline from "node:readline";
 import type { Readable } from "node:stream";
 import { Writable } from "node:stream";
 
+import { stringWidth } from "@crustjs/style";
 import { getAmbientTerminalIO } from "@crustjs/utils/terminal";
 
 import { resolveTheme } from "./theme.ts";
@@ -175,7 +176,7 @@ function physicalLineCount(content: string, columns: number): number {
 	const lines = content.split("\n");
 	let count = 0;
 	for (const line of lines) {
-		const width = Bun.stringWidth(line);
+		const width = stringWidth(line);
 		// An empty line still occupies one physical row
 		count += width === 0 ? 1 : Math.ceil(width / columns);
 	}

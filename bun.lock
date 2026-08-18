@@ -110,6 +110,7 @@
         "@crustjs/core": "workspace:*",
         "@crustjs/extensions": "workspace:*",
         "@crustjs/style": "workspace:*",
+        "@crustjs/utils": "workspace:*",
       },
     },
     "packages/extensions": {
@@ -122,6 +123,7 @@
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "@crustjs/core": "workspace:*",
+        "@crustjs/utils": "workspace:*",
         "tsdown": "catalog:",
       },
       "peerDependencies": {
@@ -193,6 +195,7 @@
         "@crustjs/progress": "workspace:^",
         "@crustjs/prompts": "workspace:^",
         "@crustjs/style": "workspace:^",
+        "yaml": "^2.9.0",
       },
       "devDependencies": {
         "@crustjs/config": "workspace:*",

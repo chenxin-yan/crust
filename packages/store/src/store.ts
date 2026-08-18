@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 // ────────────────────────────────────────────────────────────────────────────
 // @crustjs/store — createStore factory and async object-store API
 // ────────────────────────────────────────────────────────────────────────────
@@ -223,7 +224,7 @@ export function createStore<const F extends FieldsDef>(
 				// would fail the schema on the next read. Compare structurally
 				// because Standard Schema parsers (e.g. Zod arrays/objects)
 				// return fresh references even when contents are identical.
-				if (!Bun.deepEquals(transformed, value)) {
+				if (!isDeepStrictEqual(transformed, value)) {
 					let recheck: unknown;
 					try {
 						recheck = await validator(transformed);
@@ -243,7 +244,7 @@ export function createStore<const F extends FieldsDef>(
 					// different value than the one we'd persist now.
 					if (
 						recheck !== undefined &&
-						(!isFieldValueResult(recheck) || !Bun.deepEquals(recheck.value, transformed))
+						(!isFieldValueResult(recheck) || !isDeepStrictEqual(recheck.value, transformed))
 					) {
 						issues.push({
 							message: `read-unstable transform: output would be transformed again on re-read`,

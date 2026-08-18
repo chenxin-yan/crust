@@ -1,3 +1,5 @@
+import { writeFile } from "node:fs/promises";
+
 import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
 
 import { createContextResolver } from "../api/context.ts";
@@ -508,7 +510,7 @@ export async function executeInvocation(
 		try {
 			const prepared = prepareInvocation(node, materializeCommandDefinition);
 			const snapshot = snapshotCommand(prepared.rootNode);
-			await Bun.write(snapshotPath, JSON.stringify(snapshot));
+			await writeFile(snapshotPath, JSON.stringify(snapshot));
 
 			const buildOutDir = process.env[BUILD_OUT_DIR_ENV];
 			if (buildOutDir) {

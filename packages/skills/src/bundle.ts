@@ -6,6 +6,7 @@ import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { join, sep } from "node:path";
 
 import { resolveSourceDir } from "@crustjs/utils/source";
+import { parse } from "yaml";
 
 import type { RenderedFile } from "./types.ts";
 
@@ -45,7 +46,7 @@ export function probeFrontmatter(content: string): BundleFrontmatter {
 	if (closing === -1) return result;
 
 	try {
-		const parsed = Bun.YAML.parse(lines.slice(opening + 1, closing).join("\n"));
+		const parsed = parse(lines.slice(opening + 1, closing).join("\n"));
 		if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return result;
 		const frontmatter = parsed as FrontmatterProbe;
 		return {

@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -5,6 +6,7 @@ import { basename, join, resolve } from "node:path";
 
 import { BUILD_OUT_DIR_ENV, type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
 import { yellow } from "@crustjs/style";
+import { which } from "@crustjs/utils/process";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Supported Bun compile targets
@@ -177,8 +179,8 @@ export type BunBuildRunner = {
  * Fall back to the current executable with `BUN_BE_BUN=1` so packaged Crust
  * binaries still work in environments without a separate Bun install.
  */
-export function resolveBunBuildRunner(): BunBuildRunner {
-	const bunPath = Bun.which("bun");
+export function resolveBunBuildRunner(path: string | undefined = process.env.PATH): BunBuildRunner {
+	const bunPath = which("bun", path);
 	if (bunPath) {
 		return {
 			command: bunPath,
@@ -231,17 +233,16 @@ export async function execBuild(
 		entryPath,
 	];
 
-	const proc = Bun.spawn(args, {
-		env: runner.env,
+	const proc = spawn(args[0]!, args.slice(1), {
+		env: runner.env as NodeJS.ProcessEnv,
 		cwd: process.cwd(),
-		stdout: "pipe",
-		stderr: "pipe",
+		stdio: ["ignore", "pipe", "pipe"],
 	});
 
 	const [stdout, stderr, exitCode] = await Promise.all([
-		new Response(proc.stdout).text(),
-		new Response(proc.stderr).text(),
-		proc.exited,
+		readStream(proc.stdout),
+		readStream(proc.stderr),
+		exitCodeOf(proc),
 	]);
 
 	if (exitCode !== 0) {
@@ -274,7 +275,7 @@ export async function buildEntrypoint(
 
 	try {
 		const spawnedAt = Date.now();
-		const proc = Bun.spawn([process.execPath, ...toBunEnvFileArgs(envFiles), absoluteEntry], {
+		const proc = spawn(process.execPath, [...toBunEnvFileArgs(envFiles), absoluteEntry], {
 			env: {
 				...process.env,
 				[SNAPSHOT_PATH_ENV]: snapshotPath,
@@ -282,18 +283,17 @@ export async function buildEntrypoint(
 				BUN_BE_BUN: "1",
 			},
 			cwd: process.cwd(),
-			stdout: "ignore",
-			stderr: "pipe",
+			stdio: ["ignore", "ignore", "pipe"],
 			timeout: SNAPSHOT_TIMEOUT_MS,
 		});
 
-		const stderrPromise = new Response(proc.stderr).text();
-		const exitCode = await proc.exited;
+		const stderrPromise = readStream(proc.stderr);
+		const exitCode = await exitCodeOf(proc);
 		const stderr = (await stderrPromise).trim();
 
 		if (proc.signalCode !== null) {
-			// Bun's async Subprocess does not expose exitedDueToTimeout, so use
-			// elapsed time to tell our timeout kill apart from external signals.
+			// ChildProcess does not report whether the kill came from our timeout
+			// option, so use elapsed time to tell it apart from external signals.
 			if (Date.now() - spawnedAt >= SNAPSHOT_TIMEOUT_MS) {
 				throw new Error(
 					`Command Snapshot preparation timed out after ${SNAPSHOT_TIMEOUT_MS / 1_000}s.\n  An Extension build hook may be hanging. Use --no-validate to skip entry preparation and build hooks.`,
@@ -345,4 +345,21 @@ export async function buildEntrypoint(
 	} finally {
 		await rm(snapshotDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 	}
+}
+
+function readStream(stream: NodeJS.ReadableStream): Promise<string> {
+	return new Promise((complete, reject) => {
+		let output = "";
+		stream.setEncoding("utf8");
+		stream.on("data", (chunk) => (output += chunk));
+		stream.once("end", () => complete(output));
+		stream.once("error", reject);
+	});
+}
+
+function exitCodeOf(proc: ReturnType<typeof spawn>): Promise<number> {
+	return new Promise((complete, reject) => {
+		proc.once("error", reject);
+		proc.once("close", (code) => complete(code ?? 1));
+	});
 }

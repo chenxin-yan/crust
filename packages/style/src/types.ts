@@ -7,67 +7,26 @@ import type { HyperlinkOptions } from "./hyperlinks.ts";
 import type { NamedColor } from "./namedColors.ts";
 import type { StyleMethodName as RegisteredStyleMethodName } from "./styleMethodRegistry.ts";
 
-/**
- * Completion-bait literals for the non-named color syntaxes: the `#` hex
- * prefix and the CSS functional notations `Bun.color()` parses.
- *
- * These are concrete literals — not template-literal types — because
- * TypeScript only expands template literals with *finite* holes into
- * completion entries; `` `rgb(${string})` `` produces nothing, not even
- * the prefix. A picked entry like `"rgb()"` is filled in by the user;
- * `Bun.color()` validates the result at runtime and throws `TypeError`
- * on garbage. Contents are deliberately NOT validated at the type level.
- */
-type ColorSyntaxHint =
-	| "#"
-	| "rgb()"
-	| "rgba()"
-	| "hsl()"
-	| "hsla()"
-	| "hwb()"
-	| "lab()"
-	| "lch()"
-	| "oklab()"
-	| "oklch()"
-	| "color-mix()";
+/** Completion hints for supported non-named color strings. */
+type ColorSyntaxHint = "#" | "rgb()";
 
 /**
  * String forms accepted by `fg` / `bg`.
  *
  * Editors autocomplete the 148 CSS {@link NamedColor | named colors}
- * plus {@link ColorSyntaxHint | syntax hints} for hex (`#`) and
- * functional notation (`rgb()`, `hsl()`, `oklch()`, …), while still
- * accepting any other string Bun's CSS parser understands.
+ * plus {@link ColorSyntaxHint | syntax hints} for hex (`#`) and `rgb()`.
+ * Other strings remain assignable so dynamic input can be validated at runtime.
  */
 export type ColorString = NamedColor | ColorSyntaxHint | (string & {});
 
 /**
  * Input accepted by `fg` and `bg`.
  *
- * Mirrors [`Bun.color()`](https://bun.com/docs/runtime/color)'s parameter
- * surface, with a richer `string` branch so editors autocomplete CSS
- * named colors plus hex and functional-notation syntax hints. All
- * members are assignable to `Bun.color()` at runtime.
- *
- * Accepted shapes:
- * - {@link ColorString} — hex (`"#f00"`, `"#ff0000"`, `"#ff000080"`),
- *   {@link NamedColor | named CSS colors} (`"rebeccapurple"`),
- *   functional notation (`"rgb(0, 128, 255)"`, `"hsl(210, 100%, 50%)"`,
- *   `"lab(50% 30 -20)"`).
- * - `number` — packed `0xRRGGBB` (24-bit, no alpha).
- * - `[r, g, b]` / `[r, g, b, a]` — channel tuples (0–255).
- * - `{ r, g, b, a? }` — channel objects (0–255; `a` defaults to 255).
- *
- * Invalid inputs throw a `TypeError` at call time (from `Bun.color()`
- * parsing), so typos surface immediately with the offending value in
- * the message.
+ * Accepted shapes are hex strings (`#rgb` / `#rrggbb`), the 148 named CSS
+ * colors, `rgb(r, g, b)` strings, and `[r, g, b]` tuples with integer channels
+ * from 0 through 255. Invalid inputs throw `TypeError` at call time.
  */
-export type ColorInput =
-	| ColorString
-	| number
-	| readonly [r: number, g: number, b: number]
-	| readonly [r: number, g: number, b: number, a: number]
-	| { r: number; g: number; b: number; a?: number };
+export type ColorInput = ColorString | readonly [r: number, g: number, b: number];
 
 /**
  * Color emission mode for a style instance.
@@ -100,10 +59,8 @@ export type ColorMode = "auto" | "always" | "never";
 /**
  * Resolved color depth tier for a terminal.
  *
- * - `"truecolor"` — 24-bit color (`Bun.color(input, "ansi-16m")`). Required
- *   for full {@link ColorInput} fidelity.
- * - `"256"` — 256-color extended palette (`Bun.color(input, "ansi-256")`).
- *   `Bun.color()` picks the closest palette index for arbitrary RGB inputs.
+ * - `"truecolor"` — 24-bit color. Required for full {@link ColorInput} fidelity.
+ * - `"256"` — 256-color extended palette; arbitrary RGB inputs are quantized.
  * - `"16"` — Standard 16-color ANSI (`\x1b[3X/9Xm` fg, `\x1b[4X/10Xm` bg).
  *   Quantized in-package to the closest match against the basic ANSI
  *   color set.
@@ -270,9 +227,8 @@ export interface StyleInstance extends StyleMethodMap {
 	// ── Dynamic colors ──
 
 	/**
-	 * Apply a foreground color to text from any input `Bun.color()` accepts
-	 * (hex, named CSS colors, `rgb()`, `hsl()`, numeric, `{ r, g, b }`,
-	 * `[r, g, b]`, etc.). Output is rendered at the depth captured at
+	 * Apply a foreground color to text from a hex string, named CSS color,
+	 * `rgb()` string, or `[r, g, b]` tuple. Output is rendered at the depth captured at
 	 * `createStyle()` time — see {@link StyleInstance.colorDepth}.
 	 *
 	 * Two call shapes:

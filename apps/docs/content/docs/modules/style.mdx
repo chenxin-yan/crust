@@ -23,7 +23,7 @@ import { bold, green, style, fg, link } from "@crustjs/style";
 console.log(green("✓"), bold("Build succeeded"));
 console.log(style.bold.red("Critical failure")); // chaining
 console.log(style.bold.red`Build in ${42}ms`); // tagged template
-console.log(fg("brand", "#4FA83D")); // any CSS color
+console.log(fg("brand", "#4FA83D")); // hex, rgb triple, or named color
 console.log(link("docs", "https://crustjs.com")); // OSC 8 hyperlink
 ```
 
@@ -61,17 +61,15 @@ renderError(style.bold.red); // mode-aware, per-step NO_COLOR degradation
 
 ## Dynamic colors
 
-`fg(text, input)` / `bg(text, input)` accept every input [`Bun.color()`](https://bun.com/docs/runtime/color) understands, and also work as chain steps:
+`fg(text, input)` / `bg(text, input)` accept hex, RGB triples, and the 148 named CSS colors, and also work as chain steps:
 
 ```ts
 import { fg, bg, style } from "@crustjs/style";
 
-fg("error", "#ff0000"); // hex (3/6/8-digit)
+fg("error", "#ff0000"); // 3- or 6-digit hex
 fg("royal", "rebeccapurple"); // 148 named CSS colors (autocompleted)
-fg("ocean", "rgb(0, 128, 255)"); // any CSS notation (hsl, lab, oklch, …)
-fg("red", 0xff0000); // packed number
-fg("coral", [255, 127, 80]); // tuple
-bg("slate", { r: 100, g: 116, b: 139 }); // object
+fg("ocean", "rgb(0, 128, 255)"); // RGB function
+fg("coral", [255, 127, 80]); // RGB tuple
 
 style.bold.fg("#ff8800")("warning"); // chain extension
 style.fg("rebeccapurple").italic("emphasis"); // chain root
@@ -81,14 +79,12 @@ Invalid colors throw `TypeError: Invalid color input: ...` at call time — even
 
 Output adapts to the resolved depth:
 
-| Depth         | Output                         | Detected when                                                                            |
-| ------------- | ------------------------------ | ---------------------------------------------------------------------------------------- |
-| `"truecolor"` | `Bun.color(input, "ansi-16m")` | `COLORTERM=truecolor\|24bit`, or `TERM` contains `truecolor`/`24bit`/ends with `-direct` |
-| `"256"`       | `Bun.color(input, "ansi-256")` | `TERM` contains `256color`                                                               |
-| `"16"`        | In-package quantizer¹          | Any other TTY                                                                            |
-| `"none"`      | Plain text                     | Not a TTY, `NO_COLOR`, `FORCE_COLOR=0`, `TERM=dumb`, or `mode: "never"`                  |
-
-¹ Same algorithm as `ansi-styles` / `chalk`, pending [oven-sh/bun#22161](https://github.com/oven-sh/bun/issues/22161).
+| Depth         | Output         | Detected when                                                                            |
+| ------------- | -------------- | ---------------------------------------------------------------------------------------- |
+| `"truecolor"` | 24-bit ANSI    | `COLORTERM=truecolor\|24bit`, or `TERM` contains `truecolor`/`24bit`/ends with `-direct` |
+| `"256"`       | 256-color ANSI | `TERM` contains `256color`                                                               |
+| `"16"`        | 16-color ANSI  | Any other TTY                                                                            |
+| `"none"`      | Plain text     | Not a TTY, `NO_COLOR`, `FORCE_COLOR=0`, `TERM=dumb`, or `mode: "never"`                  |
 
 Inspect the resolved tier via `style.colorDepth` (live) or `instance.colorDepth` (frozen at creation).
 
@@ -159,10 +155,7 @@ table(
 
 `padStart` / `padEnd` / `center` measure visible width — unlike `String.prototype.padStart`, which counts code units and ANSI escapes. `table` supports per-column alignment, padding, separators, and styled cells.
 
-<Callout type="info">
-  For width measurement and ANSI stripping, use Bun's built-ins directly: `Bun.stringWidth(text)`
-  (ANSI-aware and CJK-aware by default) and `Bun.stripANSI(text)`.
-</Callout>
+Use the exported `stringWidth(text)` helper for ANSI-, CJK-, combining-mark-, and emoji-aware terminal width measurement.
 
 ## Reference
 
@@ -172,18 +165,15 @@ table(
 | Chainables     | 7 modifiers, 16 foreground, 16 background (listed under [Styling](#styling))                                                                                                                               |
 | Dynamic colors | `fg(text, input, depth?)`, `bg(text, input, depth?)`                                                                                                                                                       |
 | Hyperlinks     | `link(text, url, options?)`                                                                                                                                                                                |
-| Layout         | `padStart`, `padEnd`, `center`, `table`                                                                                                                                                                    |
+| Layout         | `padStart`, `padEnd`, `center`, `table`, `stringWidth`                                                                                                                                                     |
 | Types          | `AnsiPair`, `ColorInput`, `ColorString`, `NamedColor`, `ColorMode`, `ColorDepth`, `StyleFn`, `StyleInstance`, `StyleOptions`, `CapabilityOverrides`, `HyperlinkOptions`, `TableOptions`, `ColumnAlignment` |
 
 Scalar types in prose: `ColorMode` is `"auto" | "always" | "never"`; `ColorDepth` is `"truecolor" | "256" | "16" | "none"`; `StyleFn` is `(text: string) => string`; `ColumnAlignment` is `"left" | "right" | "center"`.
 
 ```ts
 type ColorInput =
-  | ColorString // NamedColor | "#" | "rgb()" | … | (string & {}) — autocompletes 148 CSS names plus hex/functional syntax hints
-  | number // packed 0xRRGGBB
-  | readonly [r: number, g: number, b: number]
-  | readonly [r: number, g: number, b: number, a: number]
-  | { r: number; g: number; b: number; a?: number };
+  | ColorString // NamedColor | "#" | "rgb()" | (string & {})
+  | readonly [r: number, g: number, b: number];
 ```
 
 <auto-type-table path="../../../../../packages/style/src/types.ts" name="StyleOptions" />

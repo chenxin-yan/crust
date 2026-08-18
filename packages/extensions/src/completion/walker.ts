@@ -1,3 +1,5 @@
+import { stripVTControlCharacters } from "node:util";
+
 import type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "@crustjs/core";
 
 import { assertSafeChoiceValue, assertSafeIdentifier, sanitizeFreeText } from "./escape.ts";
@@ -10,7 +12,7 @@ import type { CompletionArg, CompletionCommand, CompletionFlag } from "./spec.ts
  */
 function normaliseDescription(value: string | undefined): string | undefined {
 	if (value === undefined) return undefined;
-	const stripped = sanitizeFreeText(Bun.stripANSI(value)).trim();
+	const stripped = sanitizeFreeText(stripVTControlCharacters(value)).trim();
 	return stripped.length === 0 ? undefined : stripped;
 }
 

@@ -60,6 +60,9 @@ jobs:
           bun turbo run build check:types test --filter='./packages/*'
           bun test scripts
 
+      - name: Portable-runtime guard (no Bun globals in portable packages)
+        run: bun scripts/check-portable-runtime.mjs
+
       - name: Lint and format check (packages)
         run: |
           bun run lint packages
