@@ -11,7 +11,7 @@ Thanks for contributing to Crust. This repository is a Bun-native, TypeScript-fi
 ## Prerequisites
 
 - [Bun](https://bun.sh) `1.3.14`
-- Node.js `>=18`
+- Node.js `>=22.18` (package builds run tsdown under Node)
 - Git
 
 ## Repository Layout

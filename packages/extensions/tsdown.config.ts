@@ -2,8 +2,7 @@ import { defineConfig } from "tsdown";
 
 export default defineConfig({
 	entry: ["src/index.ts"],
-	format: ["esm"],
-	platform: "node",
-	outExtensions: () => ({ js: ".js", dts: ".d.ts" }),
-	dts: true,
+	// type:module makes ESM output .js/.d.ts, matching the exports map
+	fixedExtension: false,
+	publint: "ci-only",
 });
