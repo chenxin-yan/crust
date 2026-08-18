@@ -26,14 +26,8 @@ describe("package exports", () => {
 
 		expect(Object.keys(exportsMap)).toEqual(["."]);
 
-		const missing: string[] = [];
-		for (const [subpath, conditions] of Object.entries(exportsMap)) {
-			for (const [condition, target] of Object.entries(conditions)) {
-				if (!existsSync(join(pkgDir, target))) {
-					missing.push(`${subpath} (${condition}) → ${target}`);
-				}
-			}
+		for (const target of Object.values(exportsMap["."])) {
+			expect(existsSync(join(pkgDir, target))).toBe(true);
 		}
-		expect(missing).toEqual([]);
 	});
 });
