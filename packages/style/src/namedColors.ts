@@ -4,18 +4,16 @@
 //
 // `NamedColor` is the CSS Color Module Level 4 named-color set (148 entries,
 // including `rebeccapurple`; excluding `transparent` and `currentcolor` since
-// they have no meaningful ANSI mapping). It mirrors the strings
-// `Bun.color()` accepts at runtime — passed-through to Bun's CSS parser.
+// they have no meaningful ANSI mapping).
 
 /**
- * The 148 CSS named colors recognized by `Bun.color()`.
+ * The 148 CSS named colors recognized by the portable color parser.
  *
  * Includes `rebeccapurple` (CSS Color Module Level 4 addition).
  * Excludes `transparent` and `currentcolor`, which have no meaningful
  * mapping to an ANSI foreground/background sequence.
  *
- * Used by {@link ColorInput} so editors autocomplete every named color
- * the underlying Bun parser actually supports.
+ * Used by {@link ColorInput} so editors autocomplete every supported named color.
  *
  * @see {@link https://drafts.csswg.org/css-color/#named-colors | CSS Color Module Level 4 — Named Colors}
  */

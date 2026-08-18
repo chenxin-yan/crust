@@ -48,7 +48,8 @@
 	"dependencies": {
 		"@crustjs/progress": "workspace:^",
 		"@crustjs/prompts": "workspace:^",
-		"@crustjs/style": "workspace:^"
+		"@crustjs/style": "workspace:^",
+		"yaml": "^2.9.0"
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",

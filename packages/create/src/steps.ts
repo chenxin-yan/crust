@@ -1,3 +1,5 @@
+import { spawn, spawnSync } from "node:child_process";
+
 import { $ } from "bun";
 
 import type { PostScaffoldStep } from "./types.ts";
@@ -57,12 +59,8 @@ export async function runSteps(steps: PostScaffoldStep[], cwd: string): Promise<
  */
 async function runInstall(cwd: string): Promise<void> {
 	const pm = detectPackageManager(cwd);
-	const proc = Bun.spawn([pm, "install"], {
-		cwd,
-		stdout: "inherit",
-		stderr: "inherit",
-	});
-	const exitCode = await proc.exited;
+	const proc = spawn(pm, ["install"], { cwd, stdio: "inherit" });
+	const exitCode = await exitCodeOf(proc);
 	if (exitCode !== 0) {
 		throw new Error(`"${pm} install" exited with code ${exitCode}`);
 	}
@@ -95,15 +93,12 @@ async function runOpenEditor(cwd: string): Promise<void> {
 	const editor = process.env.EDITOR || "code";
 
 	try {
-		const proc = Bun.spawn([editor, cwd], {
-			stdout: "ignore",
-			stderr: "ignore",
-		});
+		const proc = spawn(editor, [cwd], { stdio: "ignore" });
 		// Don't wait for the editor to close — it may be a GUI process
 		// Just check that it started without immediately failing
 		// Use a short race to detect spawn failures
 		const raceResult = await Promise.race([
-			proc.exited.then((code) => ({ kind: "exited" as const, code })),
+			exitCodeOf(proc).then((code) => ({ kind: "exited" as const, code })),
 			new Promise<{ kind: "timeout" }>((resolve) =>
 				setTimeout(() => resolve({ kind: "timeout" }), 500),
 			),
@@ -144,8 +139,8 @@ async function runCommand(cmd: string, cwd: string): Promise<void> {
  * are not already set at any level (local, global, system).
  */
 async function ensureGitIdentity(cwd: string): Promise<void> {
-	const hasName = Bun.spawnSync(["git", "config", "user.name"], { cwd }).exitCode === 0;
-	const hasEmail = Bun.spawnSync(["git", "config", "user.email"], { cwd }).exitCode === 0;
+	const hasName = spawnSync("git", ["config", "user.name"], { cwd }).status === 0;
+	const hasEmail = spawnSync("git", ["config", "user.email"], { cwd }).status === 0;
 
 	if (!hasName) {
 		await spawnChecked(["git", "config", "user.name", "Crust"], cwd, "git config user.name");
@@ -163,16 +158,20 @@ async function ensureGitIdentity(cwd: string): Promise<void> {
  * Spawn a process and throw a descriptive error if it exits non-zero.
  */
 async function spawnChecked(cmd: string[], cwd: string, label: string): Promise<void> {
-	const proc = Bun.spawn(cmd, {
-		cwd,
-		stdout: "ignore",
-		stderr: "pipe",
-	});
-	const exitCode = await proc.exited;
+	const proc = spawn(cmd[0]!, cmd.slice(1), { cwd, stdio: ["ignore", "ignore", "pipe"] });
+	let stderr = "";
+	proc.stderr.on("data", (chunk) => (stderr += chunk));
+	const exitCode = await exitCodeOf(proc);
 	if (exitCode !== 0) {
-		const stderr = await new Response(proc.stderr).text();
 		throw new Error(
 			`"${label}" failed with exit code ${exitCode}${stderr ? `: ${stderr.trim()}` : ""}`,
 		);
 	}
+}
+
+function exitCodeOf(proc: ReturnType<typeof spawn>): Promise<number> {
+	return new Promise((resolve, reject) => {
+		proc.once("error", reject);
+		proc.once("close", (code) => resolve(code ?? 1));
+	});
 }

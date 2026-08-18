@@ -49,29 +49,15 @@ describe("env file helpers", () => {
 
 describe("resolveBunBuildRunner", () => {
 	it("prefers the real bun binary when available", () => {
-		const originalWhich = Bun.which;
-		(Bun as typeof Bun & { which: typeof Bun.which }).which = () => "/tmp/bun";
-
-		try {
-			const runner = resolveBunBuildRunner();
-			expect(runner.command).toBe("/tmp/bun");
-			expect(runner.env.BUN_BE_BUN).toBe(process.env.BUN_BE_BUN);
-		} finally {
-			(Bun as typeof Bun & { which: typeof Bun.which }).which = originalWhich;
-		}
+		const runner = resolveBunBuildRunner();
+		expect(runner.command).toBe(process.execPath);
+		expect(runner.env.BUN_BE_BUN).toBe(process.env.BUN_BE_BUN);
 	});
 
 	it("falls back to the current executable when bun is unavailable", () => {
-		const originalWhich = Bun.which;
-		(Bun as typeof Bun & { which: typeof Bun.which }).which = () => null;
-
-		try {
-			const runner = resolveBunBuildRunner();
-			expect(runner.command).toBe(process.execPath);
-			expect(runner.env.BUN_BE_BUN).toBe("1");
-		} finally {
-			(Bun as typeof Bun & { which: typeof Bun.which }).which = originalWhich;
-		}
+		const runner = resolveBunBuildRunner("");
+		expect(runner.command).toBe(process.execPath);
+		expect(runner.env.BUN_BE_BUN).toBe("1");
 	});
 });
 

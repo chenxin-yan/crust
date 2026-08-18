@@ -58,6 +58,7 @@ export {
 	yellow,
 } from "./runtimeExports.ts";
 // Text utilities
+export { stringWidth } from "./stringWidth.ts";
 export { center, padEnd, padStart } from "./text/pad.ts";
 // Capability detection
 export type {

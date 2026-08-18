@@ -2,6 +2,7 @@
 // Tables — Column-aligned table rendering with visible width
 // ────────────────────────────────────────────────────────────────────────────
 
+import { stringWidth } from "../stringWidth.ts";
 import { center, padEnd, padStart } from "../text/pad.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -68,7 +69,7 @@ function computeColumnWidths(headers: string[], rows: string[][], minWidth: numb
 	for (let col = 0; col < columnCount; col++) {
 		const header = headers[col];
 		if (header !== undefined) {
-			widths[col] = Math.max(widths[col] ?? 0, Bun.stringWidth(header));
+			widths[col] = Math.max(widths[col] ?? 0, stringWidth(header));
 		}
 	}
 
@@ -76,7 +77,7 @@ function computeColumnWidths(headers: string[], rows: string[][], minWidth: numb
 		for (let col = 0; col < columnCount; col++) {
 			const cell = row[col];
 			if (cell !== undefined) {
-				widths[col] = Math.max(widths[col] ?? 0, Bun.stringWidth(cell));
+				widths[col] = Math.max(widths[col] ?? 0, stringWidth(cell));
 			}
 		}
 	}

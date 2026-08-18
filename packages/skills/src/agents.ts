@@ -5,6 +5,8 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { which } from "@crustjs/utils/process";
+
 import type { AgentClass, AgentTarget, Scope } from "./types.ts";
 
 interface AgentConfig {
@@ -366,7 +368,7 @@ export async function detectInstalledAgents(): Promise<AgentTarget[]> {
 		let installed = false;
 
 		for (const command of commands) {
-			if (Bun.which(command, { PATH: process.env.PATH }) !== null) {
+			if (which(command) !== null) {
 				installed = true;
 				break;
 			}

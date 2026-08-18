@@ -7,6 +7,7 @@
 	"sideEffects": false,
 	"exports": {
 		"./primitive": "./src/primitive.ts",
+		"./process": "./src/process.ts",
 		"./source": "./src/source.ts",
 		"./schema": "./src/schema.ts",
 		"./terminal": "./src/terminal.ts"

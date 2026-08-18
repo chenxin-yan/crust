@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
@@ -82,12 +83,11 @@ export function detectPackageManager(cwd?: string): PackageManager {
  */
 export function isInGitRepo(cwd?: string): boolean {
 	try {
-		const result = Bun.spawnSync(["git", "rev-parse", "--is-inside-work-tree"], {
+		const result = spawnSync("git", ["rev-parse", "--is-inside-work-tree"], {
 			cwd: cwd ?? process.cwd(),
-			stdout: "ignore",
-			stderr: "ignore",
+			stdio: "ignore",
 		});
-		return result.exitCode === 0;
+		return result.status === 0;
 	} catch {
 		return false;
 	}
