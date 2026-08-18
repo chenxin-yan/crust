@@ -43,6 +43,19 @@ function tick(ms = 10): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function waitForScreen(needle: string, timeout = 500): Promise<void> {
+	const start = Date.now();
+	while (!screen().includes(needle)) {
+		if (Date.now() - start > timeout) {
+			throw new Error(
+				`screen never contained ${JSON.stringify(needle)} within ${timeout}ms. ` +
+					`Got: ${JSON.stringify(screen())}`,
+			);
+		}
+		await tick(5);
+	}
+}
+
 function nonTTYIO() {
 	return createPromptIO({ isTTY: false }).io;
 }
@@ -368,7 +381,8 @@ describe("password — secrecy", () => {
 			await tick();
 		}
 		pressKey("", { name: "return" });
-		await tick();
+		// Schema validation is async; a fixed tick races the error render on slow runners.
+		await waitForScreen("too short");
 
 		expect(screen()).toContain("too short");
 		expect(screen()).not.toContain(SECRET);
