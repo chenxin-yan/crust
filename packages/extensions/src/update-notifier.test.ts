@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -242,6 +242,20 @@ describe("fetchLatestVersion", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+// Lazy store import — sideEffects:false invariant
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("lazy store import", () => {
+	it("never imports @crustjs/store statically", async () => {
+		// The env-sandbox tests can't detect an eager import (env is read at call
+		// time), so pin the deferred-import invariant against the source itself.
+		const source = await Bun.file(new URL("./update-notifier.ts", import.meta.url)).text();
+		expect(source).not.toMatch(/^import[^;]*["']@crustjs\/store["']/m);
+		expect(source).toContain('await import("@crustjs/store")');
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // updateNotifier — post-run integration tests
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -364,7 +378,9 @@ describe("updateNotifier post-run hook", () => {
 				? { cache: false as const }
 				: resolvedCache
 					? { cache: { adapter: resolvedCache, intervalMs } }
-					: {}),
+					: intervalMs !== undefined
+						? { cache: { intervalMs } }
+						: {}),
 		};
 		const extension = updateNotifier(extensionOptions);
 
@@ -535,6 +551,54 @@ describe("updateNotifier post-run hook", () => {
 			// Notice should come from cached version (2.0.0), not fetch (3.0.0)
 			expect(getOutput()).toContain("2.0.0");
 			expect(getOutput()).not.toContain("3.0.0");
+		});
+
+		it("refetches when elapsed equals intervalMs exactly (strict boundary)", async () => {
+			const pkgName = uniquePackageName("ttl-boundary");
+			const fixedNow = 1_700_000_000_000;
+			const realNow = Date.now;
+			Date.now = () => fixedNow;
+			try {
+				setCachedState({
+					lastCheckedAt: fixedNow - 1000,
+					latestVersion: "2.0.0",
+					lastNotifiedVersion: undefined,
+				});
+				mockRegistryResponse("3.0.0");
+
+				await runExtensionMiddleware({
+					currentVersion: "1.0.0",
+					packageName: pkgName,
+					intervalMs: 1000,
+				});
+
+				// elapsed === intervalMs is stale (`<`, not `<=`) — fresh fetch wins
+				expect(getOutput()).toContain("3.0.0");
+			} finally {
+				Date.now = realNow;
+			}
+		});
+
+		it("treats a future lastCheckedAt as stale and rewrites it", async () => {
+			const pkgName = uniquePackageName("future-timestamp");
+			// Clock rollback / corrupt timestamp: without the elapsed >= 0 guard
+			// this state would stay "fresh" forever and never be repaired.
+			setCachedState({
+				lastCheckedAt: Date.now() + 9e12,
+				latestVersion: "2.0.0",
+				lastNotifiedVersion: undefined,
+			});
+			mockRegistryResponse("3.0.0");
+
+			await runExtensionMiddleware({
+				currentVersion: "1.0.0",
+				packageName: pkgName,
+			});
+
+			expect(getOutput()).toContain("3.0.0");
+			const state = getCachedState();
+			if (!state) throw new Error("state should exist");
+			expect(state.lastCheckedAt).toBeLessThanOrEqual(Date.now());
 		});
 
 		it("refetches when custom intervalMs is exceeded", async () => {
@@ -867,6 +931,68 @@ describe("updateNotifier post-run hook", () => {
 			expect(persisted.lastNotifiedVersion).toBe("2.0.0");
 		});
 
+		it("sanitizes scoped package names for the built-in state directory", async () => {
+			const scopedName = `@crust-test/scoped-${testCounter}-${Date.now()}`;
+			const stateHome = process.env.XDG_STATE_HOME as string;
+			mockRegistryResponse("2.0.0");
+
+			await runExtensionMiddleware(
+				{ currentVersion: "1.0.0", packageName: scopedName },
+				{ useBuiltInCache: true },
+			);
+
+			// A raw scoped name would make stateDir() throw and silently kill the notifier
+			expect(getOutput()).toContain("Update available");
+			const sanitized = scopedName.slice(1).replace("/", "-");
+			const persisted = JSON.parse(
+				await readFile(join(stateHome, sanitized, "update-notifier.json"), "utf8"),
+			) as UpdateNotifierState;
+			expect(persisted.latestVersion).toBe("2.0.0");
+		});
+
+		it("treats a corrupt built-in cache file as empty and repairs it", async () => {
+			const pkgName = uniquePackageName("corrupt-cache");
+			const stateHome = process.env.XDG_STATE_HOME as string;
+			await mkdir(join(stateHome, pkgName), { recursive: true });
+			const cacheFile = join(stateHome, pkgName, "update-notifier.json");
+			await writeFile(cacheFile, "not json");
+			mockRegistryResponse("2.0.0");
+
+			await runExtensionMiddleware(
+				{ currentVersion: "1.0.0", packageName: pkgName },
+				{ useBuiltInCache: true },
+			);
+
+			expect(getOutput()).toContain("Update available");
+			const persisted = JSON.parse(await readFile(cacheFile, "utf8")) as UpdateNotifierState;
+			expect(persisted.latestVersion).toBe("2.0.0");
+		});
+
+		it("honors intervalMs with the built-in cache when no adapter is given", async () => {
+			const pkgName = uniquePackageName("builtin-interval");
+			let fetchCalls = 0;
+			mockFetch(() => {
+				fetchCalls++;
+				return Promise.resolve(
+					new Response(JSON.stringify({ "dist-tags": { latest: "2.0.0" } }), {
+						status: 200,
+					}),
+				);
+			});
+
+			// intervalMs: 0 disables reuse — the default 24h would dedupe to 1 fetch
+			await runExtensionMiddleware(
+				{ currentVersion: "1.0.0", packageName: pkgName, intervalMs: 0 },
+				{ useBuiltInCache: true },
+			);
+			await runExtensionMiddleware(
+				{ currentVersion: "1.0.0", packageName: pkgName, intervalMs: 0 },
+				{ useBuiltInCache: true },
+			);
+
+			expect(fetchCalls).toBe(2);
+		});
+
 		it("does not read or write the built-in cache when cache is false", async () => {
 			const pkgName = uniquePackageName("cache-disabled");
 			const stateHomeFile = join(
@@ -891,11 +1017,15 @@ describe("updateNotifier post-run hook", () => {
 				packageName: pkgName,
 				cache: false,
 			});
+			expect(getOutput()).toContain("Update available");
+			stderrChunks = [];
 			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 				cache: false,
 			});
+			// No persistence means no dedupe — the notice must reappear
+			expect(getOutput()).toContain("Update available");
 
 			expect(fetchCalls).toBe(2);
 			expect(await readFile(stateHomeFile, "utf8")).toBe("unchanged");

@@ -29,8 +29,11 @@ export interface UpdateNotifierCacheAdapter {
 export interface UpdateNotifierCacheConfig {
 	/**
 	 * Persistence adapter for reading and writing notifier state.
+	 *
+	 * When omitted, the built-in `@crustjs/store` persistence is used, so
+	 * `intervalMs` can be tuned without reimplementing storage.
 	 */
-	adapter: UpdateNotifierCacheAdapter;
+	adapter?: UpdateNotifierCacheAdapter;
 
 	/**
 	 * Minimum interval in milliseconds between network update checks.
@@ -132,7 +135,8 @@ export interface UpdateNotifierOptions {
 	 *
 	 * By default, notifier state is persisted in the platform-standard state
 	 * directory for {@link packageName}. Set to `false` to disable persistence,
-	 * or provide a custom adapter to control storage.
+	 * provide `intervalMs` alone to tune the built-in cache interval, or
+	 * provide a custom adapter to control storage.
 	 *
 	 * @example
 	 * ```ts
@@ -248,6 +252,16 @@ const NO_CACHE_ADAPTER: UpdateNotifierCacheAdapter = {
 	read: async () => null,
 	write: async () => {},
 };
+
+/**
+ * Sanitizes a package name for use as a state directory name.
+ *
+ * `stateDir` rejects path separators, so scoped names like `@scope/cli`
+ * would otherwise throw and silently disable the notifier.
+ */
+function stateDirName(packageName: string): string {
+	return packageName.replace(/^@/, "").replace(/[/\\]/g, "-");
+}
 
 function detectPackageManager(): UpdateNotifierPackageManager {
 	const userAgent = process.env.npm_config_user_agent;
@@ -393,22 +407,33 @@ export function updateNotifier(options: UpdateNotifierOptions): Extension {
 
 				try {
 					let cacheAdapter: UpdateNotifierCacheAdapter = NO_CACHE_ADAPTER;
-					if (cache === undefined) {
-						const { createStore, stateDir } = await import("@crustjs/store");
-						cacheAdapter = createStore({
-							dirPath: stateDir(packageName),
-							name: "update-notifier",
-							fields: {
-								lastCheckedAt: { type: "number", default: 0 },
-								latestVersion: { type: "string" },
-								lastNotifiedVersion: { type: "string" },
-							},
-						});
-					} else if (cache !== false) {
-						cacheAdapter = cache.adapter;
+					if (cache !== false) {
+						if (cache?.adapter) {
+							cacheAdapter = cache.adapter;
+						} else {
+							const { createStore, stateDir } = await import("@crustjs/store");
+							cacheAdapter = createStore({
+								dirPath: stateDir(stateDirName(packageName)),
+								name: "update-notifier",
+								fields: {
+									lastCheckedAt: { type: "number", default: 0 },
+									latestVersion: { type: "string" },
+									lastNotifiedVersion: { type: "string" },
+								},
+							});
+						}
 					}
 
-					const state = normalizeNotifierState(await cacheAdapter.read());
+					let rawState: UpdateNotifierState | null | undefined;
+					try {
+						rawState = await cacheAdapter.read();
+					} catch {
+						// Corrupt or unreadable cache (e.g. CrustStoreError PARSE) — treat
+						// as empty so the next successful write repairs the file instead of
+						// permanently disabling the notifier.
+						rawState = null;
+					}
+					const state = normalizeNotifierState(rawState);
 					const resolvedUpdateCommand = resolveUpdateCommand(
 						packageName,
 						packageManager,
@@ -420,7 +445,9 @@ export function updateNotifier(options: UpdateNotifierOptions): Extension {
 					const now = Date.now();
 					const elapsed = now - state.lastCheckedAt;
 
-					if (cache !== false && elapsed < intervalMs) {
+					// Negative elapsed (clock rollback, corrupt future timestamp) is
+					// treated as stale so the refetch rewrites lastCheckedAt.
+					if (cache !== false && elapsed >= 0 && elapsed < intervalMs) {
 						// Cache is still fresh — use cached version if available
 						if (
 							state.latestVersion &&
