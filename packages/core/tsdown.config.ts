@@ -1,8 +1,8 @@
 import { defineConfig } from "tsdown";
 
+import base from "../../tsdown.config.ts";
+
 export default defineConfig({
+	...base,
 	entry: ["src/index.ts", "src/tooling.ts"],
-	// type:module makes ESM output .js/.d.ts, matching the exports map
-	fixedExtension: false,
-	publint: "ci-only",
 });

@@ -1,6 +1,7 @@
 {
 	"name": "crust",
 	"private": true,
+	"type": "module",
 	"scripts": {
 		"build": "turbo run build",
 		"build:docs": "turbo run build --filter='./apps/docs'",
@@ -26,6 +27,7 @@
 		"publint": "^0.3.23",
 		"oxlint": "^1.77.0",
 		"oxlint-tsgolint": "^7.0.2001",
+		"tsdown": "catalog:",
 		"turbo": "^2.10.8",
 		"typescript": "catalog:"
 	},

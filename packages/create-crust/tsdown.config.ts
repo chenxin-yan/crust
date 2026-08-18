@@ -1,9 +1,9 @@
 import { defineConfig } from "tsdown";
 
+import base from "../../tsdown.config.ts";
+
 export default defineConfig({
-	entry: ["src/index.ts"],
-	// type:module makes ESM output .js/.d.ts, matching the exports map
-	fixedExtension: false,
+	...base,
 	// bin-only package, no types published; auto-detect wrongly enables dts here
 	dts: false,
 	minify: true,

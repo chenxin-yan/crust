@@ -12,6 +12,7 @@
         "oxlint": "^1.77.0",
         "oxlint-tsgolint": "^7.0.2001",
         "publint": "^0.3.23",
+        "tsdown": "catalog:",
         "turbo": "^2.10.8",
         "typescript": "catalog:",
       },
