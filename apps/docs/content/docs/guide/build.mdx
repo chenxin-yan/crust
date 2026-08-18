@@ -164,11 +164,11 @@ crust build --env-file .env.production
 
 See [Environment Variables](/docs/guide/environment) for the full env model, including runtime env, Bun `.env` loading, and recommended config patterns.
 
-## Pre-compile Validation
+## Pre-compile snapshot preparation
 
-By default, `crust build` materializes your full command tree before compiling. It runs the entry file in a subprocess to prepare a Command Snapshot, forcing all command recipes and Extensions. Materializing the full CLI normalizes every Command Node and catches Definition Errors — such as flag alias collisions, reserved `no-` prefix misuse, and other structural issues — **before** the binary is compiled, rather than when users invoke it.
+By default, `crust build` materializes your full command tree before compiling. It runs the entry file in a subprocess to prepare a Command Snapshot, forcing all command recipes and Extensions. Definition correctness is enforced by TypeScript during compilation rather than repeated during this runtime materialization.
 
-`crust build` sets `CRUST_INTERNAL_SNAPSHOT_PATH` in the subprocess environment, pointing at a temporary file. `.execute()` materializes the full command graph, including nested subcommands and Extension-owned flags and commands. Successful materialization is the validation boundary; there is no second tree-validation pass. It then writes the JSON snapshot and exits without executing Command Actions or code after `await app.execute()`.
+`crust build` sets `CRUST_INTERNAL_SNAPSHOT_PATH` in the subprocess environment, pointing at a temporary file. `.execute()` materializes the full command graph, including nested subcommands and Extension-owned flags and commands, validates documentation sections, writes the JSON snapshot, and exits without executing Command Actions or code after `await app.execute()`.
 
 <Callout type="warn">
   Materialization imports your entry module, so its top-level side effects run before compilation.
@@ -180,26 +180,15 @@ After preparing the snapshot, the same subprocess runs every registered Extensio
 
 If you pass `--env-file`, the snapshot subprocess receives the same explicit env-file inputs as the build step. This keeps Extension configuration and command definitions aligned with the final compilation.
 
-### What it catches
+### Skipping snapshot preparation
 
-| Issue                          | Error Code   | Example                                                 |
-| ------------------------------ | ------------ | ------------------------------------------------------- |
-| Flag alias collision           | `DEFINITION` | App, Context, or Extension flags share `-v` as an alias |
-| `no-` prefixed flag name       | `DEFINITION` | Flag named `no-cache` instead of `cache`                |
-| `no-` prefixed alias           | `DEFINITION` | Alias `no-store` on a flag                              |
-| Long alias shadowing flag name | `DEFINITION` | Alias `out` when another flag is named `out`            |
-
-Extension-owned command names, aliases, flag names, short forms, and long aliases are checked against application and Context-owned definitions and other Extensions. Collisions are `DEFINITION` errors; Crust never warns and skips a contribution.
-
-### Skipping validation
-
-Validation is enabled by default. To skip it:
+Snapshot preparation is enabled by default. To skip it:
 
 ```sh
 crust build --no-validate
 ```
 
-Use this escape hatch for entries with unavoidable import-time side effects. It can also help when the snapshot subprocess cannot resolve your project's dependencies in a particular environment (for example, a non-standard module resolution setup), or when the entry never calls `await app.execute()` — such entries fail validation with a missing-snapshot error. Because build hooks run in that subprocess, `--no-validate` also skips every Extension build hook.
+Use this escape hatch for entries with unavoidable import-time side effects. It can also help when the snapshot subprocess cannot resolve your project's dependencies in a particular environment (for example, a non-standard module resolution setup), or when the entry never calls `await app.execute()` — such entries fail with a missing-snapshot error. Because build hooks run in that subprocess, `--no-validate` also skips every Extension build hook.
 
 ## Per-OS Distribution with `--package`
 

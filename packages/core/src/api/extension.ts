@@ -11,9 +11,7 @@ import type {
 	NamedFlagsRecord,
 } from "../types.ts";
 import type { DeclaredDepsOf } from "../validation/contexts.brands.ts";
-import { usesProvenance } from "../validation/contexts.rules.ts";
 import type { ValidateNamedFlagDefs } from "../validation/flags.brands.ts";
-import { normalizeFlag } from "../validation/normalize.ts";
 import type {
 	AnyContextFactory,
 	Awaitable,
@@ -268,10 +266,7 @@ export type ExtensionsProvidesOutput<Es extends readonly Extension<any, any>[]> 
  * Define an Extension.
  *
  * Extensions apply to the whole application and own the flags and commands
- * they contribute; contributed names must not collide with application or
- * other Extension definitions. Collisions within one Extension throw here at
- * define time; collisions with application or other Extension definitions
- * surface when the application prepares.
+ * they contribute.
  */
 export function defineExtension<
 	const Defs extends readonly NamedExtensionFlagDef[] = [],
@@ -287,17 +282,9 @@ export function defineExtension<
 		CommandDefinitionsDependencies<Commands>,
 	Provides
 > {
-	usesProvenance(`Extension "${id}"`, "extension", config.uses ?? []);
 	const ownedFlags: FlagsDef = {};
-	const spellings = new Map();
 	for (const def of config.flags ?? []) {
 		const { name: flagName, ...rest } = def;
-		normalizeFlag(
-			{ name: flagName, def: rest as FlagDef },
-			ownedFlags,
-			spellings,
-			`Extension "${id}"`,
-		);
 		ownedFlags[flagName] = rest as ExtensionFlagDef;
 	}
 

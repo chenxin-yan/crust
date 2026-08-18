@@ -220,9 +220,9 @@ type ContextFlagCollisionBrand<C, Existing extends string> =
 /**
  * Validate Context-owned flags against accumulated existing spellings.
  *
- * Only compares each instance against `Sp`: collisions between two instances
- * in the same `.provide(a(), b())` call stay runtime-only — a type-level
- * pairwise check cost ~9k extra instantiations for a rare misuse.
+ * Only compares each instance against `Sp`. Pairwise checks between instances
+ * in the same `.provide(a(), b())` call are omitted because they cost roughly
+ * 9k extra type instantiations for a rare misuse.
  */
 export type ProvideChecks<Sp extends string, Cs extends readonly unknown[]> = {
 	[I in keyof Cs]: Cs[I] & ContextFlagCollisionBrand<Cs[I], Sp>;

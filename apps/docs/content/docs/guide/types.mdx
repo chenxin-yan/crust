@@ -31,24 +31,13 @@ Use `parse` for a small synchronous transformation when a full schema is unneces
 })
 ```
 
-The Command Action receives the return type. A parser must be synchronous: TypeScript rejects Promise-returning parsers with `FIX_ASYNC_PARSE`, and runtime normalization rejects declared `async` functions at definition or materialization time for plain-JS consumers.
+The Command Action receives the return type. A parser must be synchronous: TypeScript rejects Promise-returning parsers with `FIX_ASYNC_PARSE`.
 
-## Runtime rules and type brands
+## Compile-time definition checks
 
-Runtime normalization is the source of truth. For literal-typed TypeScript callers, Crust projects the same rules into `FIX_*` brands so the editor can point at the offending definition before execution. The [error-handling guide](/docs/guide/error-handling) explains when Definition Errors surface.
+Crust is TypeScript-first: command, flag, argument, Context, and Extension definitions are checked at compile time. `FIX_*` brands let the editor point at collisions, invalid alias shapes, asynchronous parsers, duplicate names, and invalid variadic positions. Core does not repeat these definition checks at runtime.
 
-| Runtime rule       | TypeScript brand        |
-| ------------------ | ----------------------- |
-| `aliasCollision`   | `FIX_ALIAS_COLLISION`   |
-| `noPrefix`         | `FIX_NO_PREFIX`         |
-| `asyncParse`       | `FIX_ASYNC_PARSE`       |
-| `duplicateArg`     | `FIX_DUPLICATE_ARG`     |
-| `variadicPosition` | `FIX_VARIADIC_POSITION` |
-| `aliasShape`       | `FIX_ALIAS_SHAPE`       |
-| `commandCollision` | `FIX_COMMAND_COLLISION` |
-| `duplicateContext` | `FIX_DUPLICATE_CONTEXT` |
-
-Some runtime rules intentionally have no type-level counterpart because widened TypeScript types cannot project them reliably. The parity test's runtime-only allowlist is: `nonEmptyName`, `reservedSpelling` (`__proto__`), `defaultWithinChoices`, `definitionProvenance`, `duplicateExtension`, and `contextFlagPairCollision` (the latter `duplicateExtension` and `contextFlagPairCollision` checks are enforced inline during command materialization rather than as named rule functions). `schemaExclusivity` and `parserType` also need no `FIX_*` brand because the definition unions enforce them structurally.
+Argv remains untrusted input. Parsing, built-in conversion, required values, choices, and Standard Schema validation still run for every invocation. Context dependencies are dynamic, so missing providers and dependency cycles are also checked at runtime when a Context is pulled.
 
 ## Schema-backed definitions
 
@@ -76,7 +65,7 @@ For arguments, the schema receives `string | undefined`, or `string[]` for a var
 
 On a schema-backed flag, `type` remains necessary to define token grammar: `"string"` consumes the next token, while `"boolean"` is a switch. It does not own output conversion.
 
-Schemas exclusively own coercion, defaults, requiredness, choices, and validation. Do not mix `schema` with core value options (`type` on arguments, or `default`, `required`, `choices`, and `parse`). An invalid combination is a `DEFINITION` error.
+Schemas exclusively own coercion, defaults, requiredness, choices, and validation. Do not mix `schema` with core value options (`type` on arguments, or `default`, `required`, `choices`, and `parse`); TypeScript rejects invalid combinations.
 
 All schema failures in an invocation are aggregated into one `CrustError` with code `VALIDATION`:
 

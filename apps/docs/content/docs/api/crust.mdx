@@ -109,7 +109,7 @@ const deploy = defineCommand(
 );
 ```
 
-The recipe does not execute when the definition is created. It executes once for each `.add()`, so keep configuration side-effect-free. An empty name or a missing recipe throws `DEFINITION`.
+The recipe does not execute when the definition is created. It executes once for each `.add()`, so keep configuration side-effect-free. TypeScript validates the definition and recipe.
 
 ## Constructor
 
@@ -127,7 +127,7 @@ class Crust<
 new Crust(name: string, meta?: RootCommandMeta)
 ```
 
-Creates a root command builder. Root metadata is declared at construction because aliases and hidden state only apply to subcommands. `sections` accepts the same ordered plain-text entries as subcommand metadata. An empty or whitespace-only name throws a `CrustError` with code `DEFINITION`.
+Creates a root command builder. Root metadata is declared at construction because aliases and hidden state only apply to subcommands. `sections` accepts the same ordered plain-text entries as subcommand metadata.
 
 ```ts
 const app = new Crust("my-cli", {
@@ -136,11 +136,11 @@ const app = new Crust("my-cli", {
 });
 ```
 
-Definition aliases must be non-empty, contain no whitespace, not start with `-`, differ from their command's canonical name, and not collide with sibling names or aliases. For TypeScript consumers, known empty, space- or tab-containing, dash-prefixed, and self-equal aliases fail at `defineCommand()` with `FIX_ALIAS_SHAPE`, while sibling collisions fail at `.add()` with `FIX_COMMAND_COLLISION`. Runtime normalization throws `DEFINITION` at definition or materialization time for plain-JS consumers and cases hidden from the type system, including other whitespace, duplicate aliases within one definition, widened definitions, and `.as()` renaming a definition to one of its own aliases.
+Definition aliases must be non-empty, contain no whitespace, not start with `-`, differ from their command's canonical name, and not collide with sibling names or aliases. TypeScript reports known alias-shape violations at `defineCommand()` with `FIX_ALIAS_SHAPE` and sibling collisions at `.add()` with `FIX_COMMAND_COLLISION`.
 
 ## Chaining semantics
 
-Variadic builder methods accumulate across calls: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` preserve earlier registrations and reject duplicate names or spellings. TypeScript reports the statically known flag, argument, and sibling-command collisions described below; runtime normalization throws `DEFINITION` immediately for plain-JS consumers, dynamically built definitions, and runtime-only cases. `.action()` is set once and throws `DEFINITION` if called again.
+Variadic builder methods accumulate across calls: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` preserve earlier registrations. TypeScript reports statically known invalid definitions and collisions. Runtime definition validation is intentionally omitted; argv input remains runtime-validated.
 
 ## `.args(...defs)`
 
@@ -150,7 +150,7 @@ args<const NewA extends ArgsDef>(
 ): Crust
 ```
 
-Defines positional arguments; repeated calls append in call order. Pass values from `defineArg(name, def)` or inline literals. For TypeScript consumers, duplicate names fail typecheck with `FIX_DUPLICATE_ARG`; runtime normalization throws `DEFINITION` for duplicates from plain-JS consumers or dynamically built definitions. A Promise-returning custom `parse` fails typecheck with `FIX_ASYNC_PARSE`, while runtime normalization rejects declared `async` functions for plain-JS consumers. Only the final argument across all calls may be variadic. A declared default outside its own `choices` also throws during this call.
+Defines positional arguments; repeated calls append in call order. Pass values from `defineArg(name, def)` or inline literals. Duplicate names fail typecheck with `FIX_DUPLICATE_ARG`, Promise-returning custom parsers fail with `FIX_ASYNC_PARSE`, and only the final argument across all calls may be variadic.
 
 ```ts
 const app = new Crust("copy").args(
@@ -183,7 +183,7 @@ const app = new Crust("serve").flags(
 );
 ```
 
-Repeated `.flags()` calls accumulate local flags and cache their statically known spellings — the union of flag names and aliases that `SpellingsOf` computes — in the `Sp` parameter. Because `Sp` accumulates per call, spellings registered before a widened (dynamically typed) `.flags()` call stay collision-checked at compile time; previously any widened call deferred all subsequent collision checks to runtime. For TypeScript consumers, statically known spelling collisions fail typecheck with `FIX_ALIAS_COLLISION`; runtime validation throws `DEFINITION` for collisions from plain-JS consumers or dynamically built definitions. Generic wrapper functions that keep the flag parameter bounded (e.g. `<F extends FlagsDef>(app: Crust<F, A, Ctx>)`) defer the default `Sp = SpellingsOf<F>` and will not typecheck further `.flags()` calls; type wrapper parameters as `Crust<any, any, any, any, any>` instead — runtime validation still applies. A spelling typed as a union of literals (e.g. `short: cond ? "a" : "b"`) is conservatively rejected when any member collides, even though the runtime value might not; widen it to `string` to defer the check to runtime. Promise-returning custom `parse` functions similarly fail with `FIX_ASYNC_PARSE` because parsing consumes their result synchronously; runtime validation rejects declared `async` functions for plain-JS consumers.
+Repeated `.flags()` calls accumulate local flags and cache their statically known spellings — the union of flag names and aliases that `SpellingsOf` computes — in the `Sp` parameter. Statically known spelling collisions fail typecheck with `FIX_ALIAS_COLLISION`. Generic wrapper functions that keep the flag parameter bounded (e.g. `<F extends FlagsDef>(app: Crust<F, A, Ctx>)`) defer the default `Sp = SpellingsOf<F>` and will not typecheck further `.flags()` calls; type wrapper parameters as `Crust<any, any, any, any, any>` instead. A spelling typed as a union of literals (e.g. `short: cond ? "a" : "b"`) is conservatively rejected when any member collides. Promise-returning custom `parse` functions similarly fail with `FIX_ASYNC_PARSE` because parsing consumes their result synchronously.
 
 Flags declared here are local to this command. Context-owned flags are the propagation mechanism for descendant parsers; downstream code receives their derived Context capability. Boolean flags support generated `--no-<spelling>` negation for the canonical name and every long alias; `noNegate: true` rejects negation with a `PARSE` error and hides the generated label from help, completion, and man output. Names and aliases beginning with `no-` are reserved.
 
@@ -232,7 +232,7 @@ const app = new Crust("my-cli")
 
 A Context's top-level `flags` are installed as propagating flags on this builder and later-added descendants, without mutating the original definitions. Dependencies construct recursively on the first pull.
 
-Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in reverse construction order after post-run hooks. Context-owned flag collisions with existing effective flags fail typecheck with `FIX_ALIAS_COLLISION` for TypeScript consumers; collisions between instances in the same `.provide()` call remain runtime-only. A duplicate Context name, passing a factory instead of an instance, or any runtime-detected flag collision throws `DEFINITION`.
+Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in reverse construction order after post-run hooks. Context names and owned-flag collisions are checked by TypeScript. Missing providers and dynamic dependency cycles remain runtime `DEFINITION` errors because dependencies are discovered through `ctx.use()`.
 
 ## `.extend(...extensions)`
 
@@ -240,7 +240,7 @@ Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in re
 extend(...extensions: readonly Extension[]): Crust
 ```
 
-Registers application-wide Extensions. Repeated calls accumulate in registration order; duplicate Extension ids across or within calls throw `DEFINITION`. `.extend()` exists on `Crust` roots and is intentionally absent from `CommandDefinitionBuilder`.
+Registers application-wide Extensions. Repeated calls accumulate in registration order. `.extend()` exists on `Crust` roots and is intentionally absent from `CommandDefinitionBuilder`.
 
 ```ts
 import { help, version } from "@crustjs/extensions";
@@ -250,7 +250,7 @@ const app = new Crust("my-cli").extend(help(), version("1.2.3"));
 
 Added definitions become ordinary command nodes before root Extensions prepare the application, so root Extensions apply to them. Extension-contributed definitions are materialized when the application prepares.
 
-Extension-owned command or flag name and alias collisions throw `DEFINITION` when the application is prepared. An Extension's `provides` instances are installed on the root immediately through the same Context and owned-flag collision checks as `.provide()`.
+An Extension's `provides` instances are installed on the root immediately and Extension commands and flags are materialized during preparation. Extension definitions are TypeScript-checked rather than runtime-validated.
 
 See [Extensions](/docs/guide/extensions) for authoring custom Extensions.
 
@@ -262,7 +262,7 @@ action(
 ): Crust
 ```
 
-Defines the Command Action once. A second `.action()` call throws `DEFINITION` instead of replacing existing behavior. The action runs after routing, parsing, `preRun` hooks, and validation; Contexts construct on demand.
+Defines the Command Action. A later `.action()` call replaces the action on the returned immutable builder. The action runs after routing, parsing, `preRun` hooks, and validation; Contexts construct on demand.
 
 ```ts
 const app = new Crust("greet")
@@ -302,7 +302,7 @@ const app = new Crust("my-cli").add(
 );
 ```
 
-For TypeScript consumers, statically known sibling name and alias collisions fail at `.add()` with `FIX_COMMAND_COLLISION`; the statically checked alias shape violations listed above fail at `defineCommand()` with `FIX_ALIAS_SHAPE`. Runtime validation throws `CrustError` code `DEFINITION` for the same misuse from plain JavaScript or dynamically built definitions, and for runtime-only cases: empty names, duplicate provided Context names, unrelated recipe returns, values that are not `defineCommand()` definitions, Extensions registered inside definitions, and `.as()` renaming a definition to one of its own aliases.
+Statically known sibling name and alias collisions fail at `.add()` with `FIX_COMMAND_COLLISION`; alias shape violations fail at `defineCommand()` with `FIX_ALIAS_SHAPE`. Core assumes TypeScript-checked definitions and does not repeat these checks during materialization.
 
 A definition can add other definitions. Context providers are inherited on the materialized command path; a nested definition accesses one by declaring its factory in `uses` and awaiting the corresponding `ctx` property.
 
@@ -319,7 +319,7 @@ The typed [`run()`](#runpath-input-io) shape of an added definition merges the C
 snapshot(): Promise<CommandSnapshot>
 ```
 
-Prepares a frozen, validated Command Snapshot for tooling such as man-page, skill, and build generators. It materializes Extension contributions and command definitions, then validates the resulting command tree. It does not call Command Actions. Rejects with a [`CrustError`](/docs/api/errors) of code `DEFINITION` when materialization or validation fails.
+Prepares a frozen Command Snapshot for tooling such as man-page, skill, and build generators. It materializes Extension contributions and command definitions and validates documentation sections. It does not call Command Actions.
 
 ```ts
 import type { CommandSnapshot } from "@crustjs/core";

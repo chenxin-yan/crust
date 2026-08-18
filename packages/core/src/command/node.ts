@@ -24,7 +24,7 @@ export interface CommandNode {
 	ownedFlags: FlagsDef;
 	/** Context-owned and local flags merged for parsing */
 	effectiveFlags: FlagsDef;
-	/** Cached canonical/short/alias table for the normalized effective flags. */
+	/** Cached canonical/short/alias table for the effective flags. */
 	flagSpellings: Map<string, FlagSpelling>;
 	/** Positional argument definitions */
 	args: ArgsDef | undefined;

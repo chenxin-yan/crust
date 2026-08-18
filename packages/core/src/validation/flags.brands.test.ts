@@ -202,8 +202,8 @@ describe("ValidateNamedFlagDefs", () => {
 		// still retains spellings accumulated before a widened .flags() call.
 		type _widenedRecord = Expect<Equal<SpellingsOf<FlagsDef>, never>>;
 
-		// Widened names/aliases fall back to runtime validation instead of
-		// false-positive branding against existing spellings.
+		// Widened names/aliases opt out instead of receiving false-positive
+		// branding against existing spellings.
 		type Defs = readonly [{ name: string; type: "string"; short: string; aliases: string[] }];
 		type Result = ValidateNamedFlagDefs<Defs, "verbose" | "v">;
 		type _noBrands = Expect<Equal<Extract<keyof Result[0], `FIX_${string}`>, never>>;

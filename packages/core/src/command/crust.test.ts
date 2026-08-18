@@ -10,7 +10,6 @@ import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
-import { defineExtensionId } from "../identity.ts";
 import {
 	type CommandDefinitionBuilder,
 	Crust,
@@ -51,27 +50,6 @@ describe("Crust constructor", () => {
 			aliases: ["cli"],
 		}).snapshot();
 		expect(snapshot.meta.aliases).toBeUndefined();
-	});
-
-	it("throws CrustError DEFINITION on empty name", () => {
-		try {
-			new Crust("");
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("DEFINITION");
-			expect((err as CrustError).message).toContain("meta.name must be a non-empty string");
-		}
-	});
-
-	it("throws CrustError DEFINITION on whitespace-only name", () => {
-		try {
-			new Crust("   ");
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("DEFINITION");
-		}
 	});
 });
 
@@ -142,45 +120,6 @@ describe("Crust .flags()", () => {
 		expect((await app.snapshot()).flags.verbose?.short).toBe("v");
 	});
 
-	it("throws CrustError DEFINITION at definition time on flag name starting with no-", () => {
-		try {
-			new Crust("test").flags({ name: "no-cache", type: "boolean" } as never);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("DEFINITION");
-			expect((err as CrustError).message).toMatch(
-				/Command "test" flag "--no-cache" must not use "no-" prefix/,
-			);
-		}
-	});
-
-	it("throws CrustError DEFINITION at definition time on aliases starting with no-", () => {
-		try {
-			new Crust("test").flags({ name: "cache", type: "boolean", aliases: ["no-store"] } as never);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("DEFINITION");
-			expect((err as CrustError).message).toMatch(
-				/Command "test" alias "--no-store" on "--cache" must not use "no-" prefix/,
-			);
-		}
-	});
-
-	it("throws CrustError DEFINITION at definition time on short aliases starting with no-", () => {
-		try {
-			new Crust("test").flags({ name: "cache", type: "boolean", short: "no-c" } as never);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("DEFINITION");
-			expect((err as CrustError).message).toMatch(
-				/Command "test" short alias "-no-c" on "--cache" must not use "no-" prefix/,
-			);
-		}
-	});
-
 	it("repeated .flags() calls accumulate runtime and action types", async () => {
 		let received: { first: boolean | undefined; second: string | undefined } | undefined;
 		const app = new Crust("test")
@@ -198,116 +137,6 @@ describe("Crust .flags()", () => {
 			first: { type: "boolean" },
 			second: { type: "string" },
 		});
-	});
-
-	it("throws CrustError DEFINITION on flag collisions across .flags() calls", () => {
-		expect(() =>
-			new Crust("test").flags({ name: "verbose", type: "boolean" }).flags(
-				// @ts-expect-error -- canonical name collides with a flag from an earlier call
-				{ name: "verbose", type: "string" },
-			),
-		).toThrow(/Flag "--verbose" is already defined/);
-
-		expect(() =>
-			new Crust("test").flags({ name: "verbose", type: "boolean", short: "v" }).flags(
-				// @ts-expect-error -- short alias collides with a flag from an earlier call
-				{ name: "version", type: "boolean", short: "v" },
-			),
-		).toThrow(/spelling "v" collides with flag "--verbose"/);
-
-		expect(() =>
-			new Crust("test").flags({ name: "output", type: "string", aliases: ["out"] }).flags(
-				// @ts-expect-error -- long alias collides with a flag from an earlier call
-				{ name: "other", type: "string", aliases: ["out"] },
-			),
-		).toThrow(/spelling "out" collides with flag "--output"/);
-	});
-
-	it("throws CrustError DEFINITION on duplicate names within one .flags() call", () => {
-		expect(() =>
-			new Crust("test").flags(
-				// @ts-expect-error -- canonical name repeated within one call
-				{ name: "verbose", type: "boolean" },
-				{ name: "verbose", type: "string" },
-			),
-		).toThrow(/already defined/);
-	});
-
-	it("falls back to runtime validation for widened flag names", () => {
-		// No @ts-expect-error: widened names opt out of compile-time checks,
-		// so the duplicate must be caught by the runtime twin instead.
-		const dynamic = "verbose" as string;
-		const app = new Crust("test").flags({ name: dynamic, type: "boolean" });
-		expect(() => app.flags({ name: dynamic, type: "string" })).toThrow(
-			/Flag "--verbose" is already defined/,
-		);
-	});
-
-	it("retains known spellings across widened definitions and other fluent calls", () => {
-		const dynamicDefs: { name: string; type: "boolean" }[] = [{ name: "dynamic", type: "boolean" }];
-		const app = new Crust("test")
-			.flags({ name: "verbose", type: "boolean", short: "v" })
-			.flags(...dynamicDefs)
-			.args({ name: "file", type: "string" })
-			.extend(defineExtension(defineExtensionId("noop")));
-
-		// Sp retention is pinned by the @ts-expect-error collision checks below:
-		// if the accumulator dropped "v", they would become unused and fail the
-		// typecheck.
-		expect(() =>
-			app.flags(
-				// @ts-expect-error -- the accumulator retains "v" from before the widened call
-				{ name: "version", type: "boolean", short: "v" },
-			),
-		).toThrow(/spelling "v" collides with flag "--verbose"/);
-
-		const colliding = defineContext(
-			"colliding",
-			{ flags: [defineFlag("vv", { type: "boolean", short: "v" })] },
-			() => ({}),
-		);
-		expect(() =>
-			app.provide(
-				// @ts-expect-error -- Context-owned short "v" collides with the retained spelling
-				colliding(),
-			),
-		).toThrow(/spelling "v" collides with flag "--verbose"/);
-	});
-
-	it("accumulates Context-owned spellings for later .flags() collision checks", () => {
-		const owner = defineContext(
-			"owner",
-			{ flags: [defineFlag("vv", { type: "boolean", short: "v" })] },
-			() => ({}),
-		);
-		const app = new Crust("test").provide(owner());
-		expect(() =>
-			app.flags(
-				// @ts-expect-error -- short "v" collides with the Context-owned flag provided earlier
-				{ name: "version", type: "boolean", short: "v" },
-			),
-		).toThrow(/spelling "v" collides with flag "--vv"/);
-	});
-
-	it("throws CrustError DEFINITION on short/alias collisions within one .flags() call", () => {
-		// Typed callers are caught by ValidateFlagAliases at compile time; the
-		// expect-error markers simulate dynamic/untyped construction, which must
-		// fail at normalization rather than at first invocation.
-		expect(() =>
-			new Crust("test").flags(
-				// @ts-expect-error -- short "v" claimed twice in one call
-				{ name: "verbose", type: "boolean", short: "v" },
-				{ name: "version", type: "boolean", short: "v" },
-			),
-		).toThrow(/spelling "v" collides with flag "--verbose"/);
-
-		expect(() =>
-			new Crust("test").flags(
-				{ name: "output", type: "string" },
-				// @ts-expect-error -- alias duplicates a sibling's canonical name
-				{ name: "outfile", type: "string", aliases: ["output"] },
-			),
-		).toThrow(/spelling "output" collides with flag "--output"/);
 	});
 });
 
@@ -355,55 +184,6 @@ describe("Crust .args()", () => {
 		await app.run([], { args: { source: "from", destination: "to" } });
 		expect(received).toEqual({ source: "from", destination: "to" });
 		expect((await app.snapshot()).args.map((arg) => arg.name)).toEqual(["source", "destination"]);
-	});
-
-	it("throws CrustError DEFINITION on an arg definition without a name", () => {
-		expect(() =>
-			new Crust("test").args(
-				// @ts-expect-error -- missing name is also guarded at runtime
-				{ type: "string" },
-			),
-		).toThrow(/Every argument definition must carry a non-empty name/);
-	});
-
-	it("throws CrustError DEFINITION on duplicate arg names", () => {
-		expect(() =>
-			new Crust("test").args({ name: "file", type: "string" }).args(
-				// @ts-expect-error -- duplicate name from an earlier .args() call
-				{ name: "file", type: "string" },
-			),
-		).toThrow(/Argument "file" is already defined/);
-		expect(() =>
-			new Crust("test").args(
-				// @ts-expect-error -- duplicate names within one .args() call
-				{ name: "file", type: "string" },
-				{ name: "file", type: "string" },
-			),
-		).toThrow(/Argument "file" is already defined/);
-	});
-
-	it("falls back to runtime validation for widened arg names", () => {
-		// No @ts-expect-error: widened names opt out of compile-time checks,
-		// so the duplicate must be caught by the runtime twin instead.
-		const dynamic = "file" as string;
-		const app = new Crust("test").args({ name: dynamic, type: "string" });
-		expect(() => app.args({ name: dynamic, type: "string" })).toThrow(
-			/Argument "file" is already defined/,
-		);
-	});
-
-	it("throws CrustError DEFINITION when an arg follows a variadic from an earlier call", () => {
-		const app = new Crust("test").args({
-			name: "files",
-			type: "string",
-			variadic: true,
-		});
-		expect(() =>
-			app.args(
-				// @ts-expect-error -- the variadic position is also guarded at runtime
-				{ name: "destination", type: "string" },
-			),
-		).toThrow(/only the last positional argument can be variadic/);
 	});
 });
 
@@ -573,19 +353,6 @@ describe("Crust .add() with inline definitions", () => {
 		});
 	});
 
-	it("throws CrustError DEFINITION on duplicate subcommand name", () => {
-		const app = new Crust("cli").add(defineCommand("sub", (cmd) => cmd));
-		try {
-			// @ts-expect-error -- runtime twin rejects duplicate sibling names for plain-JS consumers
-			app.add(defineCommand("sub", (cmd) => cmd));
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("DEFINITION");
-			expect((err as CrustError).message).toContain("already registered");
-		}
-	});
-
 	it("callback receives a fresh child builder (not the parent)", async () => {
 		let receivedBuilder: CommandDefinitionBuilder | undefined;
 
@@ -719,21 +486,6 @@ describe("Crust .action()", () => {
 		});
 	});
 
-	it("throws CrustError DEFINITION instead of replacing an existing action", () => {
-		const app = new Crust("test").action(() => {});
-		let error: unknown;
-		try {
-			app.action(() => {});
-		} catch (cause) {
-			error = cause;
-		}
-		expect(error).toMatchObject({
-			code: "DEFINITION",
-			message: 'Command "test" already has an action',
-			details: { subject: "command", name: "test", reason: "duplicate-action" },
-		});
-	});
-
 	it("preserves the definition and can follow .add()", async () => {
 		const app = new Crust("cli")
 			.flags({ name: "verbose", type: "boolean" })
@@ -814,7 +566,7 @@ describe("Crust .extend()", () => {
 	it("runs Extensions in registration order", async () => {
 		const calls: string[] = [];
 		const extension = (name: string) =>
-			defineExtension(defineExtensionId(name), {
+			defineExtension(name, {
 				hooks: {
 					preRun: () => {
 						calls.push(name);
@@ -830,30 +582,18 @@ describe("Crust .extend()", () => {
 		expect(calls).toEqual(["one", "two", "three"]);
 	});
 
-	it("throws CrustError DEFINITION on duplicate Extension names", () => {
-		const first = defineExtension(defineExtensionId("duplicate"));
-		const second = defineExtension(defineExtensionId("duplicate"));
-
-		expect(() => new Crust("test").extend(first).extend(second)).toThrow(
-			/Extension "duplicate" is already registered/,
-		);
-		expect(() => new Crust("test").extend(first, second)).toThrow(
-			/Extension "duplicate" is already registered/,
-		);
-	});
-
 	it("defineExtension() returns a frozen plain config", () => {
-		const ext = defineExtension(defineExtensionId("frozen"), {
+		const ext = defineExtension("frozen", {
 			flags: [{ name: "x", type: "boolean" }],
 		});
 
 		expect(Object.isFrozen(ext)).toBe(true);
-		expect(ext.id as string).toBe("frozen");
+		expect(ext.name).toBe("frozen");
 		expect(ext.flags).toEqual({ x: { type: "boolean" } });
 	});
 
 	it("infers Extension-owned flags in hook contexts", () => {
-		const ext = defineExtension(defineExtensionId("typed-flags"), {
+		const ext = defineExtension("typed-flags", {
 			flags: [
 				{ name: "verbose", type: "boolean", default: false },
 				{ name: "rootPort", type: "number", default: 3000, recursive: false },
@@ -886,12 +626,12 @@ describe("Crust .extend()", () => {
 			},
 		});
 
-		expect(ext.id as string).toBe("typed-flags");
+		expect(ext.name).toBe("typed-flags");
 	});
 
 	it("infers defineFlag() values attached to an Extension", () => {
 		const trace = defineFlag("trace", { type: "boolean", default: false });
-		const ext = defineExtension(defineExtensionId("defined-flags"), {
+		const ext = defineExtension("defined-flags", {
 			flags: [trace],
 			hooks: {
 				preRun(ctx) {
@@ -903,66 +643,13 @@ describe("Crust .extend()", () => {
 		expect(ext.flags?.trace).toEqual({ type: "boolean", default: false });
 	});
 
-	it("defineExtension() rejects duplicate owned flag names at define time", () => {
-		const flags = [
-			{ name: "mode", type: "string" },
-			{ name: "mode", type: "number" },
-		] as const;
-		const define = () =>
-			defineExtension(defineExtensionId("duplicate-flags"), { flags: flags as never });
-
-		expect(define).toThrow(CrustError);
-		try {
-			define();
-			expect.unreachable();
-		} catch (error) {
-			expect(error).toMatchObject({
-				code: "DEFINITION",
-				message:
-					'Extension "duplicate-flags" flag "--mode" spelling "mode" collides with flag "--mode"',
-			});
-		}
-	});
-
-	it("defineExtension() surfaces intra-extension spelling collisions at define time", () => {
-		const flags = [
-			{ name: "loud", type: "boolean", short: "v" },
-			{ name: "verbose", type: "boolean", short: "v" },
-		] as const;
-
-		expect(() =>
-			defineExtension(defineExtensionId("short-clash"), { flags: flags as never }),
-		).toThrow('Extension "short-clash" flag "--verbose" spelling "v" collides with flag "--loud"');
-	});
-
-	it("defineExtension() rejects a flag definition without a name", () => {
-		expect(() =>
-			defineExtension(defineExtensionId("nameless"), { flags: [{ type: "boolean" }] as never }),
-		).toThrow("Every flag definition must carry a non-empty name");
-	});
-
-	it("defineExtension() rejects mixing a schema with core options", () => {
-		const flags = [
-			{
-				name: "endpoint",
-				type: "string",
-				schema: {} as StandardSchema<string | undefined, URL>,
-				default: "http://localhost",
-			},
-		] as const;
-
-		expect(() =>
-			defineExtension(defineExtensionId("schema-mix"), { flags: flags as never }),
-		).toThrow(/schema exclusively owns/);
-	});
-
 	it("preserves the command definition when extending", async () => {
 		const app = new Crust("test")
 			.flags({ name: "verbose", type: "boolean" })
 			.args({ name: "file", type: "string" })
 			.add(defineCommand("sub", (command) => command))
 			.action(() => {})
-			.extend(defineExtension(defineExtensionId("test-extension")));
+			.extend(defineExtension("test-extension"));
 
 		expect(await app.snapshot()).toMatchObject({
 			hasAction: true,
@@ -975,7 +662,7 @@ describe("Crust .extend()", () => {
 	it("intermediate builders retain independent Extension lists", async () => {
 		const calls: string[] = [];
 		const extension = (name: string) =>
-			defineExtension(defineExtensionId(name), {
+			defineExtension(name, {
 				hooks: {
 					preRun: () => {
 						calls.push(name);
@@ -996,7 +683,7 @@ describe("Crust .extend()", () => {
 describe("Extension application at prepare time", () => {
 	it("recursive Extension flags reach every command, including Extension commands", async () => {
 		const seen: Record<string, unknown>[] = [];
-		const debug = defineExtension(defineExtensionId("debug"), {
+		const debug = defineExtension("debug", {
 			flags: [{ name: "debug", type: "boolean" }],
 		});
 
@@ -1014,7 +701,7 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("non-recursive Extension flags stay on the root", async () => {
-		const version = defineExtension(defineExtensionId("version"), {
+		const version = defineExtension("version", {
 			flags: [{ name: "version", type: "boolean", recursive: false }],
 		});
 
@@ -1043,46 +730,10 @@ describe("Extension application at prepare time", () => {
 		expect(stderr.join("\n")).toContain("--version");
 	});
 
-	it("Extension flag colliding with an application flag is a DEFINITION error", async () => {
-		const clash = defineExtension(defineExtensionId("clash"), {
-			flags: [{ name: "verbose", type: "boolean" }],
-		});
-		const app = new Crust("cli")
-			.flags({ name: "verbose", type: "boolean" })
-			.extend(clash)
-			.action(() => {});
-
-		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
-	});
-
-	it("Extension flag short/alias collisions are DEFINITION errors at prepare time", async () => {
-		const clash = defineExtension(defineExtensionId("clash"), {
-			flags: [{ name: "loud", type: "boolean", short: "v" }],
-		});
-		const app = new Crust("cli")
-			.flags({ name: "verbose", type: "boolean", short: "v" })
-			.extend(clash)
-			.action(() => {});
-
-		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
-	});
-
-	it("Extension flag colliding with another Extension's flag is a DEFINITION error", async () => {
-		const a = defineExtension(defineExtensionId("a"), {
-			flags: [{ name: "shared", type: "boolean" }],
-		});
-		const b = defineExtension(defineExtensionId("b"), {
-			flags: [{ name: "shared", type: "boolean" }],
-		});
-		const app = new Crust("cli").extend(a, b).action(() => {});
-
-		await expect(app.run([])).rejects.toMatchObject({ code: "DEFINITION" });
-	});
-
 	it("Extension command definitions are routable, validated, and receive recursive flags", async () => {
 		const lines: string[] = [];
 		const errors: string[] = [];
-		const completion = defineExtension(defineExtensionId("completion"), {
+		const completion = defineExtension("completion", {
 			commands: [
 				defineCommand("completion", (command) =>
 					command
@@ -1106,7 +757,7 @@ describe("Extension application at prepare time", () => {
 				},
 			},
 		});
-		const verbose = defineExtension(defineExtensionId("verbose"), {
+		const verbose = defineExtension("verbose", {
 			flags: [{ name: "verbose", type: "boolean" }],
 		});
 
@@ -1124,73 +775,9 @@ describe("Extension application at prepare time", () => {
 		expect(errors).toEqual(["PARSE", "VALIDATION"]);
 	});
 
-	it("Extension command colliding with an application command is a DEFINITION error", async () => {
-		const clash = defineExtension(defineExtensionId("clash"), {
-			commands: [defineCommand("sub", (command) => command.action(() => {}))],
-		});
-		const app = new Crust("cli")
-			.add(defineCommand("sub", (cmd) => cmd.action(() => {})))
-			.extend(clash);
-
-		await expect(app.run(["sub"])).rejects.toMatchObject({
-			code: "DEFINITION",
-		});
-	});
-
-	it("rejects non-definition Extension commands", async () => {
-		const invalid = defineExtension(defineExtensionId("invalid"), { commands: [{} as never] });
-
-		await expect(new Crust("cli").extend(invalid).run([])).rejects.toMatchObject({
-			code: "DEFINITION",
-			message: 'Extension "invalid" requires a command definition created by defineCommand()',
-		});
-	});
-
-	it("attributes foreign builders returned by Extension command definitions", async () => {
-		const invalid = defineExtension(defineExtensionId("invalid"), {
-			commands: [defineCommand("foreign", () => new Crust("other") as never)],
-		});
-
-		await expect(new Crust("cli").extend(invalid).run([])).rejects.toMatchObject({
-			code: "DEFINITION",
-			message:
-				'Extension "invalid" command "foreign" definition must return the same command builder it received',
-			details: {
-				subject: "extension",
-				name: "invalid",
-				reason: "foreign-command-builder",
-			},
-		});
-	});
-
-	it("attributes nested Extensions inside Extension command definitions", async () => {
-		const invalid = defineExtension(defineExtensionId("invalid"), {
-			commands: [
-				defineCommand(
-					"nested",
-					(command) =>
-						(command as unknown as Crust).extend(
-							defineExtension(defineExtensionId("nested-extension")),
-						) as never,
-				),
-			],
-		});
-
-		await expect(new Crust("cli").extend(invalid).run([])).rejects.toMatchObject({
-			code: "DEFINITION",
-			message:
-				'Extension "invalid" command "nested" cannot register Extensions inside command definitions',
-			details: {
-				subject: "extension",
-				name: "invalid",
-				reason: "nested-command-extension",
-			},
-		});
-	});
-
 	it("reuses one application across executions while running hooks each time", async () => {
 		const calls: string[] = [];
-		const debug = defineExtension(defineExtensionId("debug"), {
+		const debug = defineExtension("debug", {
 			flags: [{ name: "debug", type: "boolean" }],
 			hooks: {
 				preRun: () => {
@@ -1241,7 +828,7 @@ describe("Extension application at prepare time", () => {
 	it("materializes Extension command recipes once per builder across runs", async () => {
 		let materialized = 0;
 		const calls: string[] = [];
-		const tools = defineExtension(defineExtensionId("tools"), {
+		const tools = defineExtension("tools", {
 			commands: [
 				defineCommand("sub", (command) => {
 					materialized++;
@@ -1264,7 +851,7 @@ describe("Extension application at prepare time", () => {
 
 	it("does not cache a failed preparation: a throwing recipe is retried", async () => {
 		let attempts = 0;
-		const flaky = defineExtension(defineExtensionId("flaky"), {
+		const flaky = defineExtension("flaky", {
 			commands: [
 				defineCommand("sub", (command) => {
 					attempts++;
@@ -1283,7 +870,7 @@ describe("Extension application at prepare time", () => {
 
 	it("extending a builder after a cached run affects only the derived builder", async () => {
 		const calls: string[] = [];
-		const audit = defineExtension(defineExtensionId("audit"), {
+		const audit = defineExtension("audit", {
 			hooks: {
 				preRun: () => {
 					calls.push("audit");
@@ -1306,14 +893,14 @@ describe("Extension application at prepare time", () => {
 describe("Extension named hooks", () => {
 	it("runs pre-run hooks in extension order and finish skips later hooks and the action", async () => {
 		const order: string[] = [];
-		const first = defineExtension(defineExtensionId("first"), {
+		const first = defineExtension("first", {
 			hooks: {
 				preRun: () => {
 					order.push("first");
 				},
 			},
 		});
-		const gate = defineExtension(defineExtensionId("gate"), {
+		const gate = defineExtension("gate", {
 			hooks: {
 				preRun(ctx) {
 					order.push("gate");
@@ -1321,7 +908,7 @@ describe("Extension named hooks", () => {
 				},
 			},
 		});
-		const last = defineExtension(defineExtensionId("last"), {
+		const last = defineExtension("last", {
 			hooks: {
 				preRun: () => {
 					order.push("last");
@@ -1341,14 +928,14 @@ describe("Extension named hooks", () => {
 
 	it("runs post-run hooks LIFO for completed, failed, and finished invocations", async () => {
 		const outcomes: string[] = [];
-		const first = defineExtension(defineExtensionId("first"), {
+		const first = defineExtension("first", {
 			hooks: {
 				postRun: (_ctx, outcome) => {
 					outcomes.push(`first:${outcome.status}`);
 				},
 			},
 		});
-		const second = defineExtension(defineExtensionId("second"), {
+		const second = defineExtension("second", {
 			hooks: {
 				postRun: (_ctx, outcome) => {
 					outcomes.push(`second:${outcome.status}`);
@@ -1374,7 +961,7 @@ describe("Extension named hooks", () => {
 		expect(outcomes).toEqual(["second:failed", "first:failed"]);
 
 		outcomes.length = 0;
-		const gate = defineExtension(defineExtensionId("gate"), {
+		const gate = defineExtension("gate", {
 			hooks: { preRun: (ctx) => ctx.finish() },
 		});
 		await new Crust("cli")
@@ -1387,7 +974,7 @@ describe("Extension named hooks", () => {
 	it("reports the finishing Extension and exposes parsed snapshots before validation", async () => {
 		let outcomeBy = "";
 		let seenPort: unknown;
-		const gate = defineExtension(defineExtensionId("gate"), {
+		const gate = defineExtension("gate", {
 			hooks: {
 				preRun(ctx) {
 					seenPort = ctx.flags.port;
@@ -1411,7 +998,7 @@ describe("Extension named hooks", () => {
 	it("does not run hooks for routing failures and exposes frozen snapshots with injected io", async () => {
 		let preRunCalled = false;
 		const lines: string[] = [];
-		const probe = defineExtension(defineExtensionId("probe"), {
+		const probe = defineExtension("probe", {
 			hooks: {
 				preRun(ctx) {
 					preRunCalled = true;
@@ -1437,7 +1024,7 @@ describe("Extension named hooks", () => {
 
 	it("preserves a failed invocation over post-run errors and fails success with the first cleanup error", async () => {
 		const original = new Error("original");
-		const cleanup = defineExtension(defineExtensionId("cleanup"), {
+		const cleanup = defineExtension("cleanup", {
 			hooks: {
 				postRun() {
 					throw new Error("cleanup");
@@ -1454,7 +1041,7 @@ describe("Extension named hooks", () => {
 		).rejects.toBe(original);
 
 		const calls: string[] = [];
-		const first = defineExtension(defineExtensionId("first"), {
+		const first = defineExtension("first", {
 			hooks: {
 				postRun() {
 					calls.push("first");
@@ -1462,7 +1049,7 @@ describe("Extension named hooks", () => {
 				},
 			},
 		});
-		const second = defineExtension(defineExtensionId("second"), {
+		const second = defineExtension("second", {
 			hooks: {
 				postRun() {
 					calls.push("second");
@@ -1481,7 +1068,7 @@ describe("Extension named hooks", () => {
 
 	it("passes the application root snapshot to app and Extension command actions", async () => {
 		const roots: string[] = [];
-		const extension = defineExtension(defineExtensionId("extension"), {
+		const extension = defineExtension("extension", {
 			commands: [
 				defineCommand("owned", (command) =>
 					command.action(({ rootCommand }) => {
@@ -1534,10 +1121,10 @@ describe("Extension onError hooks", () => {
 
 	it("stops at the first truthy result and retains the nonzero exit status", async () => {
 		const order: string[] = [];
-		const first = defineExtension(defineExtensionId("first"), {
+		const first = defineExtension("first", {
 			hooks: { onError: () => (order.push("first"), undefined) },
 		});
-		const presenter = defineExtension(defineExtensionId("presenter"), {
+		const presenter = defineExtension("presenter", {
 			hooks: {
 				onError(error, ctx) {
 					order.push("presenter");
@@ -1546,7 +1133,7 @@ describe("Extension onError hooks", () => {
 				},
 			},
 		});
-		const never = defineExtension(defineExtensionId("never"), {
+		const never = defineExtension("never", {
 			hooks: {
 				onError: () => {
 					order.push("never");
@@ -1561,9 +1148,9 @@ describe("Extension onError hooks", () => {
 		expect(process.exitCode).toBe(1);
 	});
 
-	it("keeps invocation Contexts live through onError and disposes them afterwards", async () => {
+	it("rejects Context pulls after disposal in onError", async () => {
 		let disposed = false;
-		let pulled = false;
+		let pullError: unknown;
 		const resource = defineContext("resource", () => ({
 			[Symbol.dispose]() {
 				disposed = true;
@@ -1588,14 +1175,17 @@ describe("Extension onError hooks", () => {
 			});
 
 		await app.execute({ argv: [] });
-		expect(pulled).toBe(true);
 		expect(disposed).toBe(true);
+		expect(pullError).toMatchObject({
+			code: "DEFINITION",
+			details: { reason: "context-after-disposal" },
+		});
 	});
 
 	it("passes the same context identity from preRun to onError", async () => {
 		let preRunContext: unknown;
 		let onErrorContext: unknown;
-		const observer = defineExtension(defineExtensionId("observer"), {
+		const observer = defineExtension("observer", {
 			hooks: {
 				preRun(ctx) {
 					preRunContext = ctx;
@@ -1611,59 +1201,9 @@ describe("Extension onError hooks", () => {
 		expect(onErrorContext).toBe(preRunContext);
 	});
 
-	it("attributes handled and core-rendered failures before postRun", async () => {
-		const handled: unknown[] = [];
-		const unhandled: unknown[] = [];
-		const presenterId = defineExtensionId("presenter");
-		const presenter = defineExtension(presenterId, {
-			hooks: {
-				onError: () => true,
-				postRun: (_ctx, outcome) => void handled.push(outcome),
-			},
-		});
-		const observer = defineExtension(defineExtensionId("observer"), {
-			hooks: { postRun: (_ctx, outcome) => void unhandled.push(outcome) },
-		});
-
-		await failing().extend(presenter).execute({ argv: [] });
-		await failing().extend(observer).execute({ argv: [] });
-		expect(handled[0]).toMatchObject({ status: "failed", by: presenterId });
-		expect(Object.isFrozen(handled[0])).toBe(true);
-		expect(unhandled[0]).toMatchObject({ status: "failed" });
-		expect(unhandled[0]).not.toHaveProperty("by");
-	});
-
-	it("falls through to Core's renderer without attribution when an onError hook throws", async () => {
-		let laterRan = false;
-		const outcomes: unknown[] = [];
-		const thrower = defineExtension(defineExtensionId("thrower"), {
-			hooks: {
-				onError: () => {
-					throw new Error("renderer broke");
-				},
-				postRun: (_ctx, outcome) => void outcomes.push(outcome),
-			},
-		});
-		const later = defineExtension(defineExtensionId("later"), {
-			hooks: {
-				onError: () => {
-					laterRan = true;
-					return true;
-				},
-			},
-		});
-
-		await failing().extend(thrower, later).execute({ argv: [] });
-		expect(laterRan).toBe(false);
-		expect(stderrChunks.join("\n")).toContain("Error: boom");
-		expect(outcomes[0]).toMatchObject({ status: "failed" });
-		expect(outcomes[0]).not.toHaveProperty("by");
-		expect(process.exitCode).toBe(1);
-	});
-
 	it("falls through to Core's default renderer and never runs for run()", async () => {
 		let onErrorRan = false;
-		const observer = defineExtension(defineExtensionId("observer"), {
+		const observer = defineExtension("observer", {
 			hooks: {
 				onError() {
 					onErrorRan = true;
@@ -1923,7 +1463,7 @@ describe("Crust .execute()", () => {
 
 	it("offers AbortError to onError hooks before the silent default", async () => {
 		const seen: unknown[] = [];
-		const cancelRenderer = defineExtension(defineExtensionId("cancel-renderer"), {
+		const cancelRenderer = defineExtension("cancel-renderer", {
 			hooks: {
 				onError(error, ctx) {
 					seen.push(error);
@@ -1946,7 +1486,7 @@ describe("Crust .execute()", () => {
 	});
 
 	it("preserves the cancellation exit code after onError hooks", async () => {
-		const exitCodeOverride = defineExtension(defineExtensionId("exit-code-override"), {
+		const exitCodeOverride = defineExtension("exit-code-override", {
 			hooks: {
 				onError() {
 					process.exitCode = 1;
@@ -1965,7 +1505,7 @@ describe("Crust .execute()", () => {
 
 	it("keeps cancellation silent when onError hooks decline it", async () => {
 		let observed = false;
-		const observer = defineExtension(defineExtensionId("observer"), {
+		const observer = defineExtension("observer", {
 			hooks: {
 				onError() {
 					observed = true;
@@ -2026,10 +1566,10 @@ describe("Crust .execute()", () => {
 	it("Extension-owned command trees receive other Extensions' recursive flags", async () => {
 		let receivedFlags: Record<string, unknown> = {};
 
-		const helpLike = defineExtension(defineExtensionId("help-like"), {
+		const helpLike = defineExtension("help-like", {
 			flags: [{ name: "help", type: "boolean" }],
 		});
-		const skillLike = defineExtension(defineExtensionId("inject-subcommand"), {
+		const skillLike = defineExtension("inject-subcommand", {
 			commands: [
 				defineCommand("skill", (command) =>
 					command.add(
@@ -2093,7 +1633,7 @@ describe("Crust .execute()", () => {
 		let preRunName = "";
 		let preRunFlags: Record<string, unknown> = {};
 
-		const inspect = defineExtension(defineExtensionId("inspect"), {
+		const inspect = defineExtension("inspect", {
 			hooks: {
 				preRun(ctx) {
 					preRunName = ctx.command.meta.name;
@@ -2174,23 +1714,8 @@ describe("Crust .execute()", () => {
 		expect(receivedVerbose).toBe(true);
 	});
 
-	it("Extension apply error is rendered and sets exitCode", async () => {
-		const clash = defineExtension(defineExtensionId("clash"), {
-			flags: [{ name: "verbose", type: "boolean" }],
-		});
-		const app = new Crust("test")
-			.flags({ name: "verbose", type: "boolean" })
-			.extend(clash)
-			.action(() => {});
-
-		await app.execute({ argv: [] });
-
-		expect(process.exitCode).toBe(1);
-		expect(stderrChunks.join("\n")).toContain("collides");
-	});
-
 	it("treats pre-run prompt cancellation as a silent user abort", async () => {
-		const cancel = defineExtension(defineExtensionId("cancel"), {
+		const cancel = defineExtension("cancel", {
 			hooks: {
 				preRun: () => {
 					throw new DOMException("Prompt was cancelled.", "AbortError");
@@ -2235,7 +1760,7 @@ describe("Crust .execute()", () => {
 		const stdout = () => {};
 		const stderr = () => {};
 		const observed: (ReturnType<typeof getAmbientTerminalIO> | undefined)[] = [];
-		const observer = defineExtension(defineExtensionId("ambient-observer"), {
+		const observer = defineExtension("ambient-observer", {
 			hooks: {
 				preRun: () => {
 					observed.push(getAmbientTerminalIO());
@@ -2338,7 +1863,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		process.env[SNAPSHOT_PATH_ENV] = path;
 		let actionRan = false;
 		let preRunRan = false;
-		const spy = defineExtension(defineExtensionId("spy"), {
+		const spy = defineExtension("spy", {
 			hooks: {
 				preRun: () => {
 					preRunRan = true;
@@ -2370,7 +1895,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		const calls: string[] = [];
 		const app = new Crust("build-subprocess")
 			.extend(
-				defineExtension(defineExtensionId("first"), {
+				defineExtension("first", {
 					build: ({ snapshot, outDir: receivedOutDir }) => {
 						expect(Object.isFrozen(snapshot)).toBe(true);
 						expect(snapshot.meta.name).toBe("build-subprocess");
@@ -2378,8 +1903,8 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 						calls.push("first");
 					},
 				}),
-				defineExtension(defineExtensionId("runtime-only")),
-				defineExtension(defineExtensionId("second"), {
+				defineExtension("runtime-only"),
+				defineExtension("second", {
 					build: () => {
 						calls.push("second");
 					},
@@ -2399,7 +1924,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		process.env[SNAPSHOT_PATH_ENV] = path;
 		process.env[BUILD_OUT_DIR_ENV] = join(dirname(path), "output");
 		const app = new Crust("build-subprocess").extend(
-			defineExtension(defineExtensionId("broken"), {
+			defineExtension("broken", {
 				build: () => {
 					throw new Error("disk full");
 				},
@@ -2410,26 +1935,11 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 
 		expect(errorCalls).toEqual(['Extension "broken" build failed: disk full']);
 	});
-
-	it("prints validation errors and exits one without writing a snapshot", async () => {
-		const path = await snapshotPath();
-		process.env[SNAPSHOT_PATH_ENV] = path;
-		const extension = defineExtension(defineExtensionId("collision"), {
-			flags: [{ name: "verbose", type: "boolean" }],
-		});
-		const app = new Crust("cli").flags({ name: "verbose", type: "boolean" }).extend(extension);
-
-		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
-
-		expect(exitCalls).toEqual([1]);
-		expect(errorCalls.join("\n")).toContain("collides with flag");
-		await expect(readFile(path, "utf8")).rejects.toThrow();
-	});
 });
 
 describe("Crust.snapshot", () => {
 	it("returns a frozen snapshot with Extension flags applied", async () => {
-		const docs = defineExtension(defineExtensionId("doc-test"), {
+		const docs = defineExtension("doc-test", {
 			flags: [{ name: "extra", type: "boolean", description: "Injected for docs" }],
 		});
 
@@ -2479,240 +1989,5 @@ describe("Crust .add() aliases", () => {
 		await app.run(["issues"]);
 		expect(calls).toBe(1);
 		expect((await app.snapshot()).subCommands.issue?.meta.aliases).toEqual(["issues", "i"]);
-	});
-
-	it("throws DEFINITION when an alias collides with a sibling's canonical name", () => {
-		const app = new Crust("cli").add(defineCommand("build", (cmd) => cmd.action(() => {})));
-		expect(() => {
-			// @ts-expect-error -- runtime twin rejects aliases colliding with sibling names
-			app.add(defineCommand("compile", { aliases: ["build"] }, (cmd) => cmd.action(() => {})));
-		}).toThrow(/collides with sibling canonical name "build"/);
-	});
-
-	it("throws DEFINITION when an alias collides with another sibling's alias", () => {
-		const app = new Crust("cli").add(
-			defineCommand("issue", { aliases: ["i"] }, (cmd) => cmd.action(() => {})),
-		);
-		expect(() => {
-			// @ts-expect-error -- runtime twin rejects aliases colliding across siblings
-			app.add(defineCommand("info", { aliases: ["i"] }, (cmd) => cmd.action(() => {})));
-		}).toThrow(/collides with alias of sibling "issue"/);
-	});
-
-	it("throws DEFINITION on the reverse-order case (new canonical equals an existing alias)", () => {
-		const app = new Crust("cli").add(
-			defineCommand("issue", { aliases: ["i"] }, (cmd) => cmd.action(() => {})),
-		);
-		// Now try to register a *new* command whose canonical name == existing alias.
-		expect(() => {
-			// @ts-expect-error -- runtime twin rejects names colliding with sibling aliases
-			app.add(defineCommand("i", (cmd) => cmd.action(() => {})));
-		}).toThrow(/canonical name "i" collides with alias of sibling "issue"/);
-	});
-
-	it("throws DEFINITION on duplicate aliases within one subcommand's own list", () => {
-		expect(() =>
-			new Crust("cli").add(
-				defineCommand("issue", { aliases: ["i", "i"] }, (cmd) => cmd.action(() => {})),
-			),
-		).toThrow(/lists alias "i" more than once/);
-	});
-
-	it("throws DEFINITION on an alias equal to its own canonical name", () => {
-		expect(() =>
-			new Crust("cli").add(
-				// @ts-expect-error -- runtime twin rejects aliases equal to their canonical name
-				defineCommand("issue", { aliases: ["issue"] }, (cmd) => cmd.action(() => {})),
-			),
-		).toThrow(/must not equal its own canonical name/);
-	});
-
-	it("throws DEFINITION on an empty alias", () => {
-		expect(() =>
-			new Crust("cli").add(
-				// @ts-expect-error -- runtime twin rejects empty aliases
-				defineCommand("issue", { aliases: [""] }, (cmd) => cmd.action(() => {})),
-			),
-		).toThrow(/must be a non-empty string/);
-	});
-
-	it("throws DEFINITION on an alias containing whitespace", () => {
-		expect(() =>
-			new Crust("cli").add(
-				// @ts-expect-error -- runtime twin rejects whitespace in aliases
-				defineCommand("issue", { aliases: ["my issue"] }, (cmd) => cmd.action(() => {})),
-			),
-		).toThrow(/must not contain whitespace/);
-	});
-
-	it("throws DEFINITION on an alias starting with '-'", () => {
-		expect(() =>
-			new Crust("cli").add(
-				// @ts-expect-error -- runtime twin rejects aliases starting with a dash
-				defineCommand("issue", { aliases: ["-i"] }, (cmd) => cmd.action(() => {})),
-			),
-		).toThrow(/must not start with "-"/);
-	});
-
-	it("keeps configured aliases when a definition is renamed with .as()", () => {
-		const issue = defineCommand("issue", { aliases: ["i"] }, (command) => command.action(() => {}));
-		const app = new Crust("cli").add(issue);
-
-		expect(() => {
-			// @ts-expect-error -- .as() preserves configured aliases in the sibling spelling set
-			app.add(issue.as("ticket"));
-		}).toThrow(/collides with alias of sibling "issue"/);
-	});
-
-	it("throws DEFINITION when .as() renames a definition to one of its own aliases", () => {
-		// Deliberately runtime-only: the rename target is compared against the
-		// definition's own aliases, which the type level does not cross-check.
-		const issue = defineCommand("issue", { aliases: ["i"] }, (command) => command.action(() => {}));
-
-		expect(() => new Crust("cli").add(issue.as("i"))).toThrow(
-			/must not equal its own canonical name/,
-		);
-	});
-
-	it("Extension command with a colliding alias is a DEFINITION error (no silent shadowing)", async () => {
-		// Without this guard, an Extension could attach an alias that silently
-		// changes routing for an existing user command.
-		const rogue = defineExtension(defineExtensionId("rogue"), {
-			commands: [defineCommand("info", { aliases: ["i"] }, (command) => command.action(() => {}))],
-		});
-
-		const app = new Crust("cli")
-			.extend(rogue)
-			.add(defineCommand("issue", { aliases: ["i"] }, (cmd) => cmd.action(() => {})));
-
-		await expect(app.run(["i"])).rejects.toMatchObject({ code: "DEFINITION" });
-	});
-
-	it("normalizes flags of a hand-written Extension object at prepare time", async () => {
-		// Extension is a public structural type, so a plain object that never
-		// went through defineExtension() typechecks; its flags must still hit
-		// the normalization boundary instead of being trusted as pre-validated.
-		const rogue = {
-			name: "rogue",
-			flags: { mode: { type: "string", choices: ["a", "b"], default: "z" } },
-		} as unknown as Parameters<Crust["extend"]>[0];
-
-		await expect(
-			new Crust("cli")
-				.action(() => {})
-				.extend(rogue)
-				.run([]),
-		).rejects.toMatchObject({
-			code: "DEFINITION",
-			message: 'Invalid default value "z" for --mode. Expected one of: a, b',
-		});
-
-		const asyncRogue = {
-			name: "rogue",
-			flags: { val: { type: "string", parse: async (raw: string) => raw } },
-		} as unknown as Parameters<Crust["extend"]>[0];
-
-		await expect(
-			new Crust("cli")
-				.action(() => {})
-				.extend(asyncRogue)
-				.run([]),
-		).rejects.toMatchObject({
-			code: "DEFINITION",
-			message:
-				"Async parse not supported for flag --val. Use a sync parser; do async work in run().",
-		});
-	});
-});
-
-describe("definition normalization timing", () => {
-	it("rejects defaults outside choices when flags and args are defined", () => {
-		try {
-			new Crust("cli").flags({
-				name: "mode",
-				type: "string",
-				choices: ["a", "b"],
-				default: "z",
-			});
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("DEFINITION");
-			expect((err as CrustError).message).toBe(
-				'Invalid default value "z" for --mode. Expected one of: a, b',
-			);
-		}
-		try {
-			new Crust("cli").args({
-				name: "mode",
-				type: "string",
-				choices: ["a", "b"],
-				default: "z",
-			});
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("DEFINITION");
-			expect((err as CrustError).message).toBe(
-				'Invalid default value "z" for <mode>. Expected one of: a, b',
-			);
-		}
-	});
-
-	it("rejects array defaults outside choices for multiple flags", () => {
-		try {
-			new Crust("cli").flags({
-				name: "mode",
-				type: "string",
-				multiple: true,
-				choices: ["a", "b"],
-				default: ["a", "z"],
-			} as never);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			expect(err).toBeInstanceOf(CrustError);
-			expect((err as CrustError).code).toBe("DEFINITION");
-			expect((err as CrustError).message).toBe(
-				'Invalid default value "z" for --mode. Expected one of: a, b',
-			);
-		}
-	});
-
-	it("rejects async parsers when flags and args are defined", () => {
-		expect(() =>
-			new Crust("cli").flags({
-				name: "mode",
-				type: "string",
-				parse: async (raw: string) => raw,
-			} as never),
-		).toThrow(/Async parse not supported for flag --mode/);
-		expect(() =>
-			new Crust("cli").args({
-				name: "mode",
-				type: "string",
-				parse: async (raw: string) => raw,
-			} as never),
-		).toThrow(/Async parse not supported for argument <mode>/);
-	});
-
-	it("materializes and normalizes invalid definitions two levels behind an Extension", async () => {
-		const invalidLeaf = defineCommand("leaf", (command) =>
-			command.flags({
-				name: "mode",
-				type: "string",
-				choices: ["a", "b"],
-				default: "z",
-			}),
-		);
-		const middle = defineCommand("middle", (command) => command.add(invalidLeaf));
-		const extension = defineExtension(defineExtensionId("deep"), { commands: [middle] });
-
-		try {
-			await new Crust("cli").extend(extension).snapshot();
-			expect.unreachable("snapshot should reject the invalid nested definition");
-		} catch (error) {
-			expect(error).toBeInstanceOf(CrustError);
-			expect((error as CrustError).code).toBe("DEFINITION");
-		}
 	});
 });

@@ -43,20 +43,6 @@ describe("defineFlag", () => {
 			output: { type: "string", short: "o" },
 		});
 	});
-
-	it("brands invalid definitions on the offending variadic argument", () => {
-		expect(() =>
-			new Crust("cli").flags(
-				// @ts-expect-error -- alias collision: short "f" is claimed twice (brands both defs)
-				{ name: "force", type: "boolean", short: "f" },
-				{ name: "format", type: "string", short: "f" },
-			),
-		).toThrow(/spelling "f" collides/);
-		expect(() =>
-			// @ts-expect-error -- "no-" prefixed names are reserved for boolean negation
-			new Crust("cli").flags({ name: "no-color", type: "boolean" }),
-		).toThrow(/must not use "no-" prefix/);
-	});
 });
 
 describe("defineArg", () => {

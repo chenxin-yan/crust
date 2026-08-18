@@ -74,8 +74,8 @@ describe("ValidateVariadicArgs type inference", () => {
 	});
 
 	it("opts widened definitions out of compile-time checks", () => {
-		// Widened names fall back to runtime validation instead of
-		// false-positive duplicate branding.
+		// Widened names opt out instead of receiving false-positive duplicate
+		// branding.
 		type Defs = readonly [{ name: string; type: "string" }, { name: string; type: "string" }];
 		type Result = ValidateVariadicArgs<Defs, "file">;
 		type _first = Expect<Equal<Extract<keyof Result[0], `FIX_${string}`>, never>>;

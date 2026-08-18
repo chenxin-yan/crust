@@ -231,25 +231,4 @@ describe("schema type inference", () => {
 	});
 });
 
-describe("schema mode exclusivity", () => {
-	it("rejects mixing core value options with a schema on args", () => {
-		expect(() => new Crust("cli").args({ name: "x", schema: port(), default: "5" } as any)).toThrow(
-			CrustError,
-		);
-	});
-
-	it("rejects a parser type on schema args (raw strings only)", () => {
-		expect(() =>
-			new Crust("cli").args({ name: "x", type: "number", schema: port() } as any),
-		).toThrow(CrustError);
-	});
-
-	it("rejects mixing core value options with a schema on flags", () => {
-		expect(() =>
-			new Crust("cli").flags({
-				...({ type: "string", schema: port(), required: true } as any),
-				name: "x",
-			}),
-		).toThrow(CrustError);
-	});
-});
+describe("schema mode exclusivity", () => {});

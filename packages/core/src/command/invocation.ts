@@ -12,11 +12,9 @@ import { CrustError } from "../errors.ts";
 import { defineExtensionId, type ExtensionId } from "../identity.ts";
 import { parseArgs, validateParsed } from "../parsing/parser.ts";
 import { applySchemas } from "../parsing/schema.ts";
-import { cloneFlagSpellings } from "../parsing/spellings.ts";
+import { addFlagSpellingEntries, cloneFlagSpellings } from "../parsing/spellings.ts";
 import { isText } from "../sections.ts";
 import type { CommandSection, FlagDef, FlagsDef, InvocationIO } from "../types.ts";
-import { missingDependency } from "../validation/contexts.rules.ts";
-import { normalizeFlag } from "../validation/normalize.ts";
 import type { CommandDefinition } from "./crust.ts";
 import type { CommandNode } from "./node.ts";
 import { resolveCommand } from "./router.ts";
@@ -43,8 +41,8 @@ type MaterializeCommandDefinition = (
 /**
  * Snapshot subprocess protocol used by first-party build tooling.
  *
- * When set to a non-empty file path, `.execute()` prepares and validates the
- * command tree, writes its JSON snapshot to that path, optionally runs Extension
+ * When set to a non-empty file path, `.execute()` prepares the command tree,
+ * validates its documentation sections, writes its JSON snapshot, optionally runs Extension
  * build hooks when the build output directory is set, and exits without dispatching
  * a Command Action. In-process callers use `Crust.snapshot()`.
  */
@@ -63,18 +61,12 @@ function injectExtensionFlag(
 	name: string,
 	def: FlagDef,
 	recursive: boolean,
-	extensionName: string,
 ): void {
-	normalizeFlag(
-		{ name, def },
-		node.effectiveFlags,
-		node.flagSpellings,
-		`Extension "${extensionName}" on "${node.meta.name}"`,
-	);
 	node.effectiveFlags[name] = def;
+	addFlagSpellingEntries(node.flagSpellings, name, def);
 	if (!recursive) return;
 	for (const sub of Object.values(node.subCommands)) {
-		injectExtensionFlag(sub, name, def, true, extensionName);
+		injectExtensionFlag(sub, name, def, true);
 	}
 }
 
@@ -94,7 +86,7 @@ function applyExtensionCommands(
 function applyExtensionFlags(root: CommandNode, extension: Extension): void {
 	for (const [name, defWithScope] of Object.entries(extension.flags ?? {})) {
 		const { recursive = true, ...def } = defWithScope;
-		injectExtensionFlag(root, name, def as FlagDef, recursive, extension.id);
+		injectExtensionFlag(root, name, def as FlagDef, recursive);
 	}
 }
 
@@ -272,23 +264,6 @@ function prepareInvocation(
 		applyExtensionCommands(rootNode, extension, materializeCommandDefinition);
 	}
 	for (const extension of extensions) applyExtensionFlags(rootNode, extension);
-
-	// Hooks run on every invocation, so each Extension's `uses` must resolve on
-	// every command path. A child added before a later `.provide()` keeps its
-	// contexts snapshot (no backfill), which extend-time root validation misses.
-	const validateExtensionDependencies = (target: CommandNode): void => {
-		const available = new Set(target.contexts.map((context) => context.name));
-		for (const extension of extensions) {
-			missingDependency(
-				`Extension "${extension.id}"`,
-				extension.uses ?? [],
-				available,
-				`the "${target.meta.name}" command path`,
-			);
-		}
-		for (const child of Object.values(target.subCommands)) validateExtensionDependencies(child);
-	};
-	validateExtensionDependencies(rootNode);
 
 	validateAuthoredSections(rootNode);
 	const authoredSnapshot = snapshotCommand(rootNode);

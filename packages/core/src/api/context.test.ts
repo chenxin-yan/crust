@@ -1,9 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { Crust, defineCommand } from "../command/crust.ts";
-import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
-import type { NamedFlagDef } from "../types.ts";
 import {
 	type AnyContextFactory,
 	type ContextBag,
@@ -111,49 +109,6 @@ describe("Crust .provide()", () => {
 
 		await app.run([]);
 		expect(seen).toEqual(["value-a:value-b"]);
-	});
-
-	it("throws DEFINITION on a duplicate Context name on the same command", () => {
-		const a = defineContext("db", () => 1);
-		const b = defineContext("db", () => 2);
-
-		// @ts-expect-error -- name already provided in an earlier call (FIX_DUPLICATE_CONTEXT)
-		expect(() => new Crust("cli").provide(a()).provide(b())).toThrow(CrustError);
-		// @ts-expect-error -- name repeated within one call (FIX_DUPLICATE_CONTEXT)
-		expect(() => new Crust("cli").provide(a(), b())).toThrow(/Context "db" is already provided/);
-		try {
-			// @ts-expect-error -- name already provided in an earlier call (FIX_DUPLICATE_CONTEXT)
-			new Crust("cli").provide(a()).provide(b());
-		} catch (error) {
-			expect((error as CrustError).is("DEFINITION")).toBe(true);
-		}
-	});
-
-	it("throws DEFINITION when a factory is provided without being invoked", () => {
-		const db = defineContext("db", () => 1);
-
-		expect(() => new Crust("cli").provide(db as never)).toThrow(/invoke the factory/);
-	});
-
-	it("throws DEFINITION when a child re-provides a name inherited from its path", () => {
-		const parentDb = defineContext("db", () => "parent");
-		const childDb = defineContext("db", () => "child");
-
-		expect(() =>
-			new Crust("cli")
-				.provide(parentDb())
-				.add(defineCommand("sub", (cmd) => cmd.provide(childDb()).action(() => {}))),
-		).toThrow(CrustError);
-	});
-
-	it("throws DEFINITION when an added subtree re-provides a path name", () => {
-		const parentDb = defineContext("db", () => "parent");
-		const nestedDb = defineContext("db", () => "nested");
-		const sub = defineCommand("sub", (command) =>
-			command.add(defineCommand("g", (child) => child.provide(nestedDb()).action(() => {}))),
-		);
-
-		expect(() => new Crust("cli").provide(parentDb()).add(sub)).toThrow(CrustError);
 	});
 
 	it("seeds added descendants with the parent Context path", async () => {
@@ -490,71 +445,6 @@ describe("Context-owned flags", () => {
 			})
 			.run([], { flags: { "api-key": "fake-key" } });
 	});
-
-	it("rejects duplicate owned flag names at definition time", () => {
-		const duplicates: readonly NamedFlagDef[] = [apiKey, apiKey];
-
-		expect(() => defineContext("auth", { flags: duplicates }, () => ({}))).toThrow(
-			/flag "--api-key" spelling "api-key" collides with flag "--api-key"/,
-		);
-	});
-
-	it("rejects collisions between owned flag spellings at definition time", () => {
-		const colliding: readonly NamedFlagDef[] = [
-			{ name: "api-key", type: "string", short: "k" },
-			{ name: "key-file", type: "string", aliases: ["k"] },
-		];
-
-		expect(() => defineContext("auth", { flags: colliding }, () => ({}))).toThrow(
-			/Context "auth" flag "--key-file" spelling "k" collides with flag "--api-key"/,
-		);
-	});
-
-	it("rejects application and Context-owned collisions in both fluent orders", () => {
-		const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
-		expect(() =>
-			new Crust("cli").flags(apiKey).provide(
-				// @ts-expect-error -- provided Context flag collides with an existing local flag
-				auth(),
-			),
-		).toThrow(/collides/);
-		expect(() =>
-			new Crust("cli").provide(auth()).flags(
-				// @ts-expect-error -- local flag collides with an existing Context-owned flag
-				apiKey,
-			),
-		).toThrow(/collides/);
-	});
-
-	it("rejects collisions between different Contexts in one or separate provide calls", () => {
-		const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
-		const session = defineContext(
-			"session",
-			{ flags: [{ name: "session-key", type: "string", short: "k" }] },
-			() => ({}),
-		);
-		expect(() => new Crust("cli").provide(auth(), session())).toThrow(/collides/);
-		expect(() =>
-			new Crust("cli").provide(auth()).provide(
-				// @ts-expect-error -- Context-owned short alias collides across provide calls
-				session(),
-			),
-		).toThrow(/collides/);
-	});
-
-	it("rejects Extension collisions regardless of fluent registration order", async () => {
-		const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
-		const extension = defineExtension(defineExtensionId("auth-extension"), {
-			flags: [{ name: "other", type: "string", aliases: ["api-key"] }],
-		});
-
-		await expect(new Crust("cli").extend(extension).provide(auth()).run([])).rejects.toThrow(
-			/collides/,
-		);
-		await expect(new Crust("cli").provide(auth()).extend(extension).run([])).rejects.toThrow(
-			/collides/,
-		);
-	});
 });
 
 describe("Context setup dependencies", () => {
@@ -808,23 +698,6 @@ describe("Context setup dependencies", () => {
 });
 
 describe("Context dependency runtime boundaries", () => {
-	it("mirrors missing dependency validation at every composition site", () => {
-		const config = defineContext("config", () => "config");
-		const db = defineContext("db", { uses: [config] }, async ({ ctx }) => await ctx.config);
-		const command = defineCommand("run", { uses: [config] }, (builder) => builder.action(() => {}));
-		const extension = defineExtension(defineExtensionId("runtime-deps"), { uses: [config] });
-
-		expect(() => new Crust("cli").provide(db() as never)).toThrow(
-			'Context "db" uses Context "config" which is not provided',
-		);
-		expect(() => new Crust("cli").add(command as never)).toThrow(
-			'Command "run" uses Context "config" which is not provided',
-		);
-		expect(() => new Crust("cli").extend(extension as never)).toThrow(
-			'Extension "runtime-deps" uses Context "config" which is not provided',
-		);
-	});
-
 	it("rejects a hook dependency absent from a stale child path", async () => {
 		const logger = defineContext("logger", () => "logger");
 		const child = defineCommand("child", (builder) => builder.action(() => {}));
@@ -1034,9 +907,6 @@ describe("lazy Context bags", () => {
 
 		await app.run(["run"]);
 		expect(events).toEqual(["extension", "extension"]);
-		expect(() => new Crust("cli").provide(logger()).extend(provider)).toThrow(
-			/Context "logger" is already provided/,
-		);
 	});
 
 	it("resolves dependencies across Extension providers regardless of order", async () => {

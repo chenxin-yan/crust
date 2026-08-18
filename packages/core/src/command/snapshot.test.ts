@@ -4,7 +4,6 @@ import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
-import { defineExtensionId } from "../identity.ts";
 import { Crust, defineCommand } from "./crust.ts";
 import { createCommandNode } from "./node.ts";
 import { snapshotCommand } from "./snapshot.ts";
@@ -100,7 +99,7 @@ describe("snapshotCommand", () => {
 
 describe("command metadata sections", () => {
 	it("appends targeted Extension sections after authored sections in registration order", async () => {
-		const first = defineExtension(defineExtensionId("first"), {
+		const first = defineExtension("first", {
 			sections(snapshot) {
 				expect(snapshot.meta.sections).toEqual([{ title: "Root guide", body: "Root body" }]);
 				expect(snapshot.subCommands.build).toBeDefined();
@@ -116,7 +115,7 @@ describe("command metadata sections", () => {
 				];
 			},
 		});
-		const second = defineExtension(defineExtensionId("second"), {
+		const second = defineExtension("second", {
 			commands: [defineCommand("generated", (command) => command)],
 			sections: () => [{ command: [], title: "Second root", body: "Second body" }],
 		});
@@ -153,19 +152,12 @@ describe("command metadata sections", () => {
 	});
 
 	it("preserves authored and contributed section audiences", async () => {
-		const agentDocs = defineExtensionId("agent-docs");
-		const terminal = defineExtensionId("terminal");
 		const app = new Crust("cli", {
-			sections: [{ title: "Agent notes", body: "Agent body", only: [agentDocs] }],
+			sections: [{ title: "Agent notes", body: "Agent body", only: ["skills"] }],
 		}).extend(
-			defineExtension(defineExtensionId("docs"), {
+			defineExtension("docs", {
 				sections: () => [
-					{
-						command: [],
-						title: "Human notes",
-						body: "Human body",
-						except: [agentDocs, terminal],
-					},
+					{ command: [], title: "Human notes", body: "Human body", except: ["skills", "help"] },
 				],
 			}),
 		);
@@ -173,20 +165,20 @@ describe("command metadata sections", () => {
 		const snapshot = await app.snapshot();
 
 		expect(snapshot.meta.sections).toEqual([
-			{ title: "Agent notes", body: "Agent body", only: [agentDocs] },
-			{ title: "Human notes", body: "Human body", except: [agentDocs, terminal] },
+			{ title: "Agent notes", body: "Agent body", only: ["skills"] },
+			{ title: "Human notes", body: "Human body", except: ["skills", "help"] },
 		]);
 		expect(Object.isFrozen(snapshot.meta.sections?.[0]?.only)).toBe(true);
 		const clonedSections = structuredClone(snapshot).meta.sections;
-		expect(clonedSections?.[0]?.only).toEqual([agentDocs]);
-		expect(clonedSections?.[1]?.except).toEqual([agentDocs, terminal]);
+		expect(clonedSections?.[0]?.only).toEqual(["skills"]);
+		expect(clonedSections?.[1]?.except).toEqual(["skills", "help"]);
 	});
 
 	it("rejects unknown and aliased contribution paths", async () => {
 		for (const command of [["missing"], ["b"], ["constructor"], ["__proto__"], ["toString"]]) {
 			const app = new Crust("cli")
 				.extend(
-					defineExtension(defineExtensionId("docs"), {
+					defineExtension("docs", {
 						sections: () => [{ command, title: "Notes", body: "Body" }],
 					}),
 				)
@@ -210,11 +202,11 @@ describe("command metadata sections", () => {
 			[{ title: "Notes", body: "" }],
 			[{ title: 1, body: "Body" }],
 			[{ title: "Notes", body: null }],
-			[{ title: "Notes", body: "Body", only: [], except: ["terminal"] }],
-			[{ title: "Notes", body: "Body", only: "terminal" }],
+			[{ title: "Notes", body: "Body", only: [], except: ["help"] }],
+			[{ title: "Notes", body: "Body", only: "help" }],
 			[{ title: "Notes", body: "Body", only: [] }],
 			[{ title: "Notes", body: "Body", except: [] }],
-			[{ title: "Notes", body: "Body", only: [{ id: "terminal" }] }],
+			[{ title: "Notes", body: "Body", only: [{ id: "help" }] }],
 			[{ title: "Notes", body: "Body", except: [1] }],
 			[{ title: "Notes", body: "Body", only: ["   "] }],
 			[null],
@@ -241,13 +233,13 @@ describe("command metadata sections", () => {
 			[{ command: [], title: "", body: "Body" }],
 			[{ command: [], title: "Notes", body: "   " }],
 			[{ command: [], title: "Notes", body: "Body", only: [], except: [] }],
-			[{ command: [], title: "Notes", body: "Body", only: "terminal" }],
+			[{ command: [], title: "Notes", body: "Body", only: "help" }],
 			[{ command: [], title: "Notes", body: "Body", only: [] }],
 			[{ command: [], title: "Notes", body: "Body", only: [null] }],
 		];
 		for (const contributions of badReturns) {
 			const app = new Crust("cli").extend(
-				defineExtension(defineExtensionId("docs"), {
+				defineExtension("docs", {
 					sections: () => contributions as never,
 				}),
 			);
@@ -267,7 +259,7 @@ describe("command metadata sections", () => {
 			sections: [{ title: "Injected\nheading", body: "Body" }],
 		});
 		const contributed = new Crust("cli").extend(
-			defineExtension(defineExtensionId("docs"), {
+			defineExtension("docs", {
 				sections: () => [{ command: [], title: "Injected\rheading", body: "Body" }],
 			}),
 		);
@@ -281,27 +273,5 @@ describe("command metadata sections", () => {
 				reason: "invalid-sections",
 			},
 		});
-	});
-
-	it("validates the complete Extension command tree before running section callbacks", async () => {
-		let called = false;
-		const app = new Crust("cli")
-			.extend(
-				defineExtension(defineExtensionId("docs"), {
-					sections: () => {
-						called = true;
-						return [];
-					},
-				}),
-			)
-			.extend(
-				defineExtension(defineExtensionId("commands"), {
-					commands: [defineCommand("build", (command) => command)],
-				}),
-			)
-			.add(defineCommand("build", (command) => command));
-
-		await expect(app.snapshot()).rejects.toBeInstanceOf(CrustError);
-		expect(called).toBe(false);
 	});
 });

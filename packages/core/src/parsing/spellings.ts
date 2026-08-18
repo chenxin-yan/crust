@@ -8,7 +8,7 @@ export interface FlagSpelling {
 	negatable: boolean;
 }
 
-/** Add one normalized flag to a command's cached spelling table. */
+/** Add one flag to a command's cached spelling table. */
 export function addFlagSpellingEntries(
 	spellings: Map<string, FlagSpelling>,
 	canonicalName: string,

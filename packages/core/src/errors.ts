@@ -30,7 +30,7 @@ export interface ParseErrorDetails {
 	readonly reason?: string;
 }
 
-/** Details for invalid application definitions. */
+/** Details for runtime Context lifecycle and documentation definition failures. */
 export interface DefinitionErrorDetails {
 	readonly subject?: "arg" | "command" | "context" | "extension" | "flag";
 	readonly name?: string;
@@ -47,7 +47,7 @@ export interface CrustErrorDetailsMap {
 /**
  * All possible error codes emitted by Crust.
  *
- * - `DEFINITION` — Invalid command configuration (empty name, alias collision, bad variadic position, unsupported definition such as async `parse`)
+ * - `DEFINITION` — Runtime Context lifecycle/dependency or documentation definition failure
  * - `VALIDATION` — Missing required arguments or flags
  * - `PARSE` — Argv parsing failures (unknown flags, type coercion)
  * - `COMMAND_NOT_FOUND` — Unrecognised subcommand at the current level

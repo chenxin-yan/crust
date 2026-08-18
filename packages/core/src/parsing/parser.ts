@@ -122,9 +122,7 @@ function invokeParse(
  *   raw default → parse | coerce → result
  *
  * Without this, `{ type: "path", default: "./dist" }` returns the raw
- * relative string while `--out ./dist` returns an absolute path. Defaults
- * violating `choices` are a Definition Error, rejected during normalization
- * before any invocation runs.
+ * relative string while `--out ./dist` returns an absolute path.
  *
  * `parse` is preferred when present (matches the escape-hatch contract).
  * `type: "path"` defaults are coerced through `coercePath` because their

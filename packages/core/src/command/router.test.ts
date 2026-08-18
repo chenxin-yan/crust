@@ -360,9 +360,8 @@ describe("resolveCommand — aliases", () => {
 
 	it("prefers a canonical name over an alias when both could match", () => {
 		// Pathological: a sibling's alias happens to equal another sibling's canonical name.
-		// Registration-time validation should already reject this in user code (Step 3),
-		// but if a node is constructed directly bypassing the builder, the resolver MUST
-		// pick the canonical sibling first to keep behavior deterministic.
+		// TypeScript rejects this in statically known definitions. The resolver still
+		// picks the canonical sibling first to keep runtime behavior deterministic.
 		const foo = makeChild("foo");
 		const bar = makeChild("bar", ["foo"]);
 		const root = createCommandNode("app");

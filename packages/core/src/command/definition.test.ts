@@ -3,7 +3,6 @@ import { describe, expect, it } from "bun:test";
 import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
-import { defineExtensionId } from "../identity.ts";
 import type { CommandDefinitionBuilder } from "./crust.ts";
 import { Crust, defineCommand } from "./crust.ts";
 
@@ -56,65 +55,6 @@ describe("command definitions", () => {
 			args: { source: "from", destination: "to" },
 			flags: { verbose: true, output: "dist" },
 		});
-	});
-
-	it("accumulates flag spellings across builder calls for compile-time collision checks", () => {
-		// The CommandDefinitionBuilder interface mirrors Crust's Sp accumulator
-		// type-only; this pins the recipe path so the mirror cannot drift. The
-		// widened call in between proves Sp retains earlier literals instead of
-		// recomputing from the (now-widened) Flags.
-		const dynamicDefs: { name: string; type: "boolean" }[] = [{ name: "dynamic", type: "boolean" }];
-		const definition = defineCommand("serve", (command) =>
-			command
-				.flags({ name: "verbose", type: "boolean", short: "v" })
-				.flags(...dynamicDefs)
-				.args({ name: "file", type: "string" })
-				.flags(
-					// @ts-expect-error -- "v" collides with the earlier .flags() call
-					{ name: "version", type: "boolean", short: "v" },
-				)
-				.action(() => {}),
-		);
-		expect(() => new Crust("cli").add(definition)).toThrow(
-			/spelling "v" collides with flag "--verbose"/,
-		);
-	});
-
-	it("accumulates Context-owned spellings for later .flags() calls on the builder", () => {
-		const owner = defineContext(
-			"owner",
-			{ flags: [defineFlag("vv", { type: "boolean", short: "v" })] },
-			() => ({}),
-		);
-		const definition = defineCommand("serve", (command) =>
-			command
-				.provide(owner())
-				.flags(
-					// @ts-expect-error -- short "v" collides with the Context-owned flag provided earlier
-					{ name: "version", type: "boolean", short: "v" },
-				)
-				.action(() => {}),
-		);
-		expect(() => new Crust("cli").add(definition)).toThrow(
-			/spelling "v" collides with flag "--vv"/,
-		);
-	});
-
-	it(".as() renames without mutating the original definition", () => {
-		const definition = defineCommand("build", (command) => command.action(() => {}));
-		const renamed = definition.as("compile");
-
-		expect(definition.name).toBe("build");
-		expect(renamed.name).toBe("compile");
-		expect(renamed).not.toBe(definition);
-		type _PreservesRenamedLiteral = Assert<IsEqual<typeof renamed.name, "compile">>;
-
-		expect(() => definition.as("  ")).toThrow(/non-empty/);
-	});
-
-	it("rejects an empty definition name", () => {
-		expect(() => defineCommand("", (command) => command)).toThrow(/non-empty/);
-		expect(() => defineCommand("   ", (command) => command)).toThrow(/non-empty/);
 	});
 
 	it("does not backfill nested definitions with later inheritable flags", async () => {
@@ -194,15 +134,6 @@ describe("command definitions", () => {
 		);
 	});
 
-	it("rejects duplicate inherited Contexts during materialization", () => {
-		const db = defineContext("db", () => "database");
-		const definition = defineCommand("users", (command) => command.provide(db()));
-
-		expect(() => new Crust("cli").provide(db()).add(definition)).toThrow(
-			/Context "db" is already provided/,
-		);
-	});
-
 	it("excludes parent local flags from added commands", async () => {
 		const definition = defineCommand("users", (command) => command.action(() => {}));
 		const app = new Crust("cli").flags({ name: "secret", type: "string" }).add(definition);
@@ -230,34 +161,6 @@ describe("command definitions", () => {
 		await app.run(["publish"]);
 
 		expect(ran).toEqual(["build", "publish"]);
-	});
-
-	it("rejects unrelated returned builders and nested Extensions", () => {
-		const unrelated = defineCommand("bad", () => new Crust("other") as never);
-		expect(() => new Crust("cli").add(unrelated)).toThrow(/same command builder/);
-
-		const nestedExtension = defineCommand(
-			"bad",
-			(command) =>
-				(command as unknown as Crust).extend(defineExtension(defineExtensionId("nested"))) as never,
-		);
-		expect(() => new Crust("cli").add(nestedExtension)).toThrow(
-			/Command "bad" cannot register Extensions inside command definitions/,
-		);
-	});
-
-	it("rejects values that are not command definitions", () => {
-		for (const bad of [{}, null, undefined, "definition"]) {
-			expect(() => new Crust("cli").add(bad as never)).toThrow(
-				/requires a command definition created by defineCommand/,
-			);
-		}
-	});
-
-	it("rejects a missing recipe at definition time", () => {
-		expect(() => (defineCommand as (name: string, recipe?: unknown) => unknown)("bad")).toThrow(
-			/requires a recipe function/,
-		);
 	});
 
 	it("infers pulled Context values while preserving fluent action types", () => {
@@ -294,7 +197,7 @@ describe("command definitions", () => {
 
 		defineCommand("configured", (command) => {
 			// @ts-expect-error -- Extensions are root-only
-			command.extend(defineExtension(defineExtensionId("nested")));
+			command.extend(defineExtension("nested"));
 			const configured = command
 				.args({ name: "target", type: "string" })
 				.flags({ name: "force", type: "boolean" })

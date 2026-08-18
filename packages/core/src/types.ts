@@ -278,8 +278,7 @@ interface StringFlagDef extends SingleFlagBase {
 	 * becomes the flag's runtime type.
 	 *
 	 * Constraints:
-	 * - Synchronous only. `async` parsers are rejected at command setup
-	 *   with `CrustError("DEFINITION", …)`.
+	 * - Synchronous only. TypeScript rejects Promise-returning parsers.
 	 * - Only allowed on `type: "string"` (single + multi) and string args.
 	 *   `parse?: never` on every non-string variant prevents misuse at
 	 *   compile time.
@@ -589,8 +588,7 @@ type RawArgBase<A> = A extends { choices: readonly (infer C extends string)[] } 
  *
  * Deliberately recursive rather than key-remapped over `A[number]`:
  * intersection turns duplicate arg names with conflicting types into
- * `never`; builder registration also rejects duplicate positional names at
- * runtime. A widened non-tuple `ArgsDef` resolves to `{}` instead of a
+ * `never`. A widened non-tuple `ArgsDef` resolves to `{}` instead of a
  * string-indexed record.
  */
 type InferArgsTuple<A extends readonly ArgDef[]> = A extends readonly [
@@ -752,8 +750,7 @@ export interface CommandMeta {
 	 *
 	 * **Conflict policy.** Alias strings must not collide with this command's
 	 * own canonical `name`, with any sibling's `name`, or with any sibling's
-	 * own alias. Collisions throw a `CrustError("DEFINITION", …)` during
-	 * normalization, including for Extension-installed subcommands. Each alias
+	 * own alias. TypeScript reports statically known collisions. Each alias
 	 * must also be a non-empty string with no
 	 * whitespace and must not start with `-`.
 	 *
