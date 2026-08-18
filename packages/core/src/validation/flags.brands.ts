@@ -203,7 +203,7 @@ type ValidateNoPrefixedFlags<F extends FlagsDef> = {
 // ────────────────────────────────────────────────────────────────────────────
 
 type ContextOwnedFlags<C> = C extends {
-	readonly _requires?: { ownedFlags: infer OF extends FlagsDef };
+	readonly _ownedFlags?: infer OF extends FlagsDef;
 }
 	? OF
 	: {};

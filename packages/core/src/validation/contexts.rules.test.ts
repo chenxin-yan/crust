@@ -12,8 +12,8 @@ describe("context runtime rules", () => {
 		expect(() => definitionProvenance(null as never)).toThrow(
 			/provide\(\) requires Context instances/,
 		);
-		expect(() => duplicateContext(context("db"), [context("db")])).toThrow(
-			/Context "db" is already provided/,
-		);
+		expect(() =>
+			duplicateContext(context("db"), [context("db")], 'the "cli" command path'),
+		).toThrow(/Context "db" is already provided on the "cli" command path/);
 	});
 });

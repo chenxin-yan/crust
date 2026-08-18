@@ -15,15 +15,12 @@ export function definitionProvenance(instance: ContextInstance): void {
 export function duplicateContext(
 	instance: ContextInstance,
 	existing: readonly ContextInstance[],
+	where: string,
 ): void {
 	if (!existing.some((entry) => entry.name === instance.name)) return;
-	throw new CrustError(
-		"DEFINITION",
-		`Context "${instance.name}" is already provided on this command path`,
-		{
-			subject: "context",
-			name: instance.name,
-			reason: "duplicate-context",
-		},
-	);
+	throw new CrustError("DEFINITION", `Context "${instance.name}" is already provided on ${where}`, {
+		subject: "context",
+		name: instance.name,
+		reason: "duplicate-context",
+	});
 }

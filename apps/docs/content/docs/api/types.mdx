@@ -156,7 +156,7 @@ The same injectable callbacks are passed to the Command Action and every Context
 
 ## Command Action context
 
-### `CrustCommandContext<A, F, Ctx>`
+### `CrustCommandContext<A, F>`
 
 <auto-type-table
   path="../../../../../packages/core/src/command/crust.ts"
@@ -274,7 +274,7 @@ Infers the syntax-parsed values from an Extension's named-definition array and e
   name="ExtensionHooks"
 />
 
-`preRun` runs in `.extend()` order after routing and syntax parsing, before validation. It can call `ctx.use()` for Contexts that own no flags; pulling a flag-owning Context rejects before validation. Return `ctx.finish()` to end successfully. `postRun` is the LIFO `finally` hook: it can pull or reuse Contexts and runs for every Extension after a completed, finished, or failed invocation. Context disposal follows post-run hooks. `onError` is used by `.execute()` only; return `true` after rendering to stop the chain, or a falsy value to continue to Core's renderer.
+`preRun` runs in `.extend()` order after routing and syntax parsing, before validation. It can call `ctx.use()` for Contexts that own no flags; pulling a flag-owning Context rejects before validation, and a later post-validation pull re-executes that Context's setup from the start. Return `ctx.finish()` to end successfully. `postRun` is the LIFO `finally` hook: it can pull or reuse Contexts and runs for every Extension after a completed, finished, or failed invocation. Context disposal follows post-run hooks. `onError` is used by `.execute()` only; return `true` after rendering to stop the chain, or a falsy value to continue to Core's renderer.
 
 ### `Finished`
 

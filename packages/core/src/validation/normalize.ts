@@ -70,12 +70,12 @@ export function normalizeContext(
 	existing: readonly ContextInstance[],
 	effectiveFlags: FlagsDef,
 	spellings: Map<string, FlagSpelling>,
-	_where: string,
+	where: string,
 ): ContextInstance[] {
 	const contexts = [...existing];
 	for (const instance of incoming) {
 		definitionProvenance(instance);
-		duplicateContext(instance, contexts);
+		duplicateContext(instance, contexts, where);
 		for (const [name, def] of Object.entries(instance.ownedFlags)) {
 			normalizeFlag({ name, def }, effectiveFlags, spellings, `Context "${instance.name}"`);
 			effectiveFlags[name] = def;

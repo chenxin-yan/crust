@@ -872,6 +872,30 @@ describe("pull-based Context resolution", () => {
 		expect(serviceSetups).toBe(2);
 	});
 
+	it("retries flag-validation failures the setup wrapped with a cause", async () => {
+		let serviceSetups = 0;
+		const token = defineFlag("token", { type: "string" });
+		const auth = defineContext("auth", { flags: [token] }, ({ flags }) => flags.token);
+		const service = defineContext("service", async ({ ctx }) => {
+			serviceSetups++;
+			try {
+				return await ctx.use(auth);
+			} catch (error) {
+				throw new Error("auth unavailable", { cause: error });
+			}
+		});
+		const extension = defineExtension("consumer", {
+			hooks: { preRun: async (ctx) => void (await ctx.use(service).catch(() => undefined)) },
+		});
+		const app = new Crust("cli")
+			.provide(auth(), service())
+			.extend(extension)
+			.action(async ({ ctx }) => expect(await ctx.use(service)).toBe("secret"));
+
+		await app.run([], { flags: { token: "secret" } });
+		expect(serviceSetups).toBe(2);
+	});
+
 	it("memoizes a replacement error after setup swallows flag rejection", async () => {
 		let setups = 0;
 		const token = defineFlag("token", { type: "string" });
@@ -892,7 +916,9 @@ describe("pull-based Context resolution", () => {
 		const app = new Crust("cli")
 			.provide(auth(), service())
 			.extend(extension)
-			.action(async ({ ctx }) => expect(ctx.use(service)).rejects.toBe(replacement));
+			.action(async ({ ctx }) => {
+				await expect(ctx.use(service)).rejects.toBe(replacement);
+			});
 
 		await app.run([], { flags: { token: "secret" } });
 		expect(setups).toBe(1);
@@ -979,6 +1005,52 @@ describe("Context disposal", () => {
 
 		await app.run([]);
 		expect(events).toEqual(["use", "use", "postRun", "dispose"]);
+	});
+
+	it("constructs a Context first pulled from postRun after a failed action", async () => {
+		const events: string[] = [];
+		const resource = defineContext("resource", () => ({
+			use() {
+				events.push("use");
+			},
+			[Symbol.dispose]() {
+				events.push("dispose");
+			},
+		}));
+		const observer = defineExtension("observer", {
+			hooks: {
+				async postRun(ctx) {
+					(await ctx.use(resource)).use();
+				},
+			},
+		});
+		const failure = new Error("action failed");
+		const app = new Crust("cli")
+			.provide(resource())
+			.extend(observer)
+			.action(() => {
+				throw failure;
+			});
+
+		await expect(app.run([])).rejects.toBe(failure);
+		expect(events).toEqual(["use", "dispose"]);
+	});
+
+	it("disposes a value once when an alias setup returns it", async () => {
+		let disposals = 0;
+		const db = defineContext("db", () => ({
+			[Symbol.dispose]() {
+				disposals++;
+			},
+		}));
+		const alias = defineContext("alias", async ({ ctx }) => await ctx.use(db));
+		await new Crust("cli")
+			.provide(db(), alias())
+			.action(async ({ ctx }) => {
+				expect(await ctx.use(alias)).toBe(await ctx.use(db));
+			})
+			.run([]);
+		expect(disposals).toBe(1);
 	});
 
 	it("disposes values in reverse construction order after success", async () => {

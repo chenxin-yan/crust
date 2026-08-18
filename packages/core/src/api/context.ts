@@ -54,7 +54,7 @@ export interface ContextInstance<
 	/** @internal */
 	setup(input: ContextSetupInput<OF>): Awaitable<Value>;
 	/** @internal — phantom carrying flag ownership types */
-	readonly _requires?: { ownedFlags: OF };
+	readonly _ownedFlags?: OF;
 }
 
 /** The typed setup input for one Context factory. */
@@ -187,10 +187,18 @@ export interface ContextResolver {
 	readonly use: <F extends AnyContextFactory>(factory: F) => Promise<FactoryValueOf<F>>;
 }
 
-function registerDisposable(value: unknown, disposal: AsyncDisposableStack): void {
+function registerDisposable(
+	value: unknown,
+	disposal: AsyncDisposableStack,
+	registered: WeakSet<object>,
+): void {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) {
 		return;
 	}
+	// An alias setup can resolve to another Context's value; registering it twice
+	// would double-dispose a non-idempotent Symbol.(async)Dispose.
+	if (registered.has(value)) return;
+	registered.add(value);
 	const candidate = value as {
 		[Symbol.dispose]?: () => void;
 		[Symbol.asyncDispose]?: () => PromiseLike<void>;
@@ -220,6 +228,7 @@ export function createContextResolver(
 
 	const byName = new Map(contexts.map((context) => [context.name, context]));
 	const entries = new Map<string, Entry>();
+	const registered = new WeakSet<object>();
 	let validatedFlags: Record<string, unknown> | undefined;
 	let disposed = false;
 	// Registered first so it runs last (LIFO): the flag flips only after every
@@ -246,10 +255,22 @@ export function createContextResolver(
 		return undefined;
 	};
 
-	const isFlagValidationError = (error: unknown): boolean =>
-		error instanceof CrustError &&
-		error.code === "DEFINITION" &&
-		error.details?.reason === "flags-before-validation";
+	const isFlagValidationError = (error: unknown): boolean => {
+		// Setups may wrap the pull rejection (e.g. new Error("...", { cause })); walk
+		// the cause chain so the retry-after-validation marker survives wrapping.
+		const seen = new Set<unknown>();
+		for (let e = error; e != null && !seen.has(e); e = (e as { cause?: unknown }).cause) {
+			seen.add(e);
+			if (
+				e instanceof CrustError &&
+				e.code === "DEFINITION" &&
+				e.details?.reason === "flags-before-validation"
+			) {
+				return true;
+			}
+		}
+		return false;
+	};
 
 	const makeUse =
 		(origin: Entry | null): ContextResolver["use"] =>
@@ -311,7 +332,7 @@ export function createContextResolver(
 							ctx: { use: makeUse(current) },
 							...io,
 						});
-						registerDisposable(value, disposal);
+						registerDisposable(value, disposal, registered);
 						current.resolve(value);
 					} catch (error) {
 						if (isFlagValidationError(error)) entries.delete(name);

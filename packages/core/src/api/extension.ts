@@ -12,7 +12,7 @@ import type {
 } from "../types.ts";
 import type { ValidateNamedFlagDefs } from "../validation/flags.brands.ts";
 import { normalizeFlag } from "../validation/normalize.ts";
-import type { AnyContextFactory, Awaitable, ContextInstance, FactoryValueOf } from "./context.ts";
+import type { Awaitable, ContextInstance, ContextResolver } from "./context.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Extension — the public integration contract
@@ -112,7 +112,7 @@ export interface ExtensionContext<
 	 * before acquiring resources. Values remain live through post-run hooks and
 	 * are disposed afterwards.
 	 */
-	readonly use: <F extends AnyContextFactory>(factory: F) => Promise<FactoryValueOf<F>>;
+	readonly use: ContextResolver["use"];
 	/**
 	 * End the invocation successfully before validation, Context construction, and the action.
 	 *
