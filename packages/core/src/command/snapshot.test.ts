@@ -153,11 +153,16 @@ describe("command metadata sections", () => {
 
 	it("preserves authored and contributed section audiences", async () => {
 		const app = new Crust("cli", {
-			sections: [{ title: "Agent notes", body: "Agent body", only: ["skills"] }],
+			sections: [{ title: "Agent notes", body: "Agent body", only: ["agent-docs"] }],
 		}).extend(
 			defineExtension("docs", {
 				sections: () => [
-					{ command: [], title: "Human notes", body: "Human body", except: ["skills", "help"] },
+					{
+						command: [],
+						title: "Human notes",
+						body: "Human body",
+						except: ["agent-docs", "terminal"],
+					},
 				],
 			}),
 		);
@@ -165,13 +170,13 @@ describe("command metadata sections", () => {
 		const snapshot = await app.snapshot();
 
 		expect(snapshot.meta.sections).toEqual([
-			{ title: "Agent notes", body: "Agent body", only: ["skills"] },
-			{ title: "Human notes", body: "Human body", except: ["skills", "help"] },
+			{ title: "Agent notes", body: "Agent body", only: ["agent-docs"] },
+			{ title: "Human notes", body: "Human body", except: ["agent-docs", "terminal"] },
 		]);
 		expect(Object.isFrozen(snapshot.meta.sections?.[0]?.only)).toBe(true);
 		const clonedSections = structuredClone(snapshot).meta.sections;
-		expect(clonedSections?.[0]?.only).toEqual(["skills"]);
-		expect(clonedSections?.[1]?.except).toEqual(["skills", "help"]);
+		expect(clonedSections?.[0]?.only).toEqual(["agent-docs"]);
+		expect(clonedSections?.[1]?.except).toEqual(["agent-docs", "terminal"]);
 	});
 
 	it("rejects unknown and aliased contribution paths", async () => {
@@ -202,11 +207,11 @@ describe("command metadata sections", () => {
 			[{ title: "Notes", body: "" }],
 			[{ title: 1, body: "Body" }],
 			[{ title: "Notes", body: null }],
-			[{ title: "Notes", body: "Body", only: [], except: ["help"] }],
-			[{ title: "Notes", body: "Body", only: "help" }],
+			[{ title: "Notes", body: "Body", only: [], except: ["terminal"] }],
+			[{ title: "Notes", body: "Body", only: "terminal" }],
 			[{ title: "Notes", body: "Body", only: [] }],
 			[{ title: "Notes", body: "Body", except: [] }],
-			[{ title: "Notes", body: "Body", only: [{ id: "help" }] }],
+			[{ title: "Notes", body: "Body", only: [{ id: "terminal" }] }],
 			[{ title: "Notes", body: "Body", except: [1] }],
 			[{ title: "Notes", body: "Body", only: ["   "] }],
 			[null],
@@ -233,7 +238,7 @@ describe("command metadata sections", () => {
 			[{ command: [], title: "", body: "Body" }],
 			[{ command: [], title: "Notes", body: "   " }],
 			[{ command: [], title: "Notes", body: "Body", only: [], except: [] }],
-			[{ command: [], title: "Notes", body: "Body", only: "help" }],
+			[{ command: [], title: "Notes", body: "Body", only: "terminal" }],
 			[{ command: [], title: "Notes", body: "Body", only: [] }],
 			[{ command: [], title: "Notes", body: "Body", only: [null] }],
 		];

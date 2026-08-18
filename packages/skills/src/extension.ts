@@ -235,7 +235,7 @@ async function buildSkills(options: SkillOptions, context: ExtensionBuildContext
 
 export function skill(options: SkillOptions): Extension {
 	const commandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
-	return defineExtension("crust:skills", {
+	return defineExtension(SKILLS, {
 		commands: [buildSkillCommand(commandName, options)],
 		// Skills are loaded when a snapshot is prepared, not at construction, so
 		// help and man pages reflect the packaged directory as it exists at render time.

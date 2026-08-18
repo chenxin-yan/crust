@@ -2,6 +2,8 @@ import { join } from "node:path";
 
 import { type Extension, defineExtension } from "@crustjs/core";
 
+import { MAN } from "./mdoc.ts";
+
 export interface ManOptions {
 	/** Manual section. Defaults to 1. */
 	readonly section?: number;
@@ -16,7 +18,7 @@ export interface ManOptions {
 /** Adds build-time mdoc generation for the application. */
 export function man(options: ManOptions = {}): Extension {
 	const section = options.section ?? 1;
-	return defineExtension("crust:man", {
+	return defineExtension(MAN, {
 		async build({ snapshot, outDir }) {
 			const { writeManPage } = await import("./write-man-page.ts");
 			const name = options.name ?? snapshot.meta.name;

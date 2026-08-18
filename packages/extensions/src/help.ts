@@ -104,7 +104,7 @@ export function renderHelp(command: CommandSnapshot, path?: readonly string[]): 
 }
 
 export function help(): Extension {
-	return defineExtension("crust:help", {
+	return defineExtension(HELP, {
 		flags: [
 			{ name: "help", type: "boolean", short: "h", noNegate: true, description: "Show help" },
 		],

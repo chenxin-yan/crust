@@ -7,25 +7,25 @@ const universal = { title: "Universal", body: "Everywhere" } as const;
 
 describe("sectionsFor", () => {
 	it("includes untargeted sections for every consumer", () => {
-		expect(sectionsFor([universal], "help")).toEqual([universal]);
+		expect(sectionsFor([universal], "terminal")).toEqual([universal]);
 	});
 
 	it("includes only sections addressed to the requested consumer", () => {
-		const section = { title: "Agent notes", body: "For agents", only: ["skills"] } as const;
-		expect(sectionsFor([section], "skills")).toEqual([section]);
-		expect(sectionsFor([section], "help")).toEqual([]);
+		const section = { title: "Agent notes", body: "For agents", only: ["agent-docs"] } as const;
+		expect(sectionsFor([section], "agent-docs")).toEqual([section]);
+		expect(sectionsFor([section], "terminal")).toEqual([]);
 	});
 
 	it("excludes sections from an excepted consumer", () => {
-		const section = { title: "Human notes", body: "For humans", except: ["skills"] } as const;
-		expect(sectionsFor([section], "help")).toEqual([section]);
-		expect(sectionsFor([section], "skills")).toEqual([]);
+		const section = { title: "Human notes", body: "For humans", except: ["agent-docs"] } as const;
+		expect(sectionsFor([section], "terminal")).toEqual([section]);
+		expect(sectionsFor([section], "agent-docs")).toEqual([]);
 	});
 
 	it("matches consumer ids after structured cloning", () => {
 		const sections = structuredClone([
-			{ title: "Agent notes", body: "For agents", only: ["skills"] },
+			{ title: "Agent notes", body: "For agents", only: ["agent-docs"] },
 		]) as CommandSection[];
-		expect(sectionsFor(sections, "skills")).toEqual(sections);
+		expect(sectionsFor(sections, "agent-docs")).toEqual(sections);
 	});
 });
