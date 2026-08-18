@@ -4,7 +4,10 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import * as readline from "node:readline";
-import type { Readable, Writable } from "node:stream";
+import type { Readable } from "node:stream";
+import { Writable } from "node:stream";
+
+import { getAmbientTerminalIO } from "@crustjs/utils/terminal";
 
 import { resolveTheme } from "./theme.ts";
 import type { PartialPromptTheme, PromptTheme } from "./types.ts";
@@ -37,12 +40,32 @@ export function withPromptIO<T>(io: PromptIO, fn: () => T): T {
 	return promptIOStorage.run(io, fn);
 }
 
-/** Resolve explicit, ambient, then process-global prompt streams. */
+function ambientTerminalWritable(): PromptOutput | undefined {
+	const io = getAmbientTerminalIO();
+	if (!io) return undefined;
+
+	let pending = "";
+	return new Writable({
+		decodeStrings: false,
+		write(chunk, _encoding, callback) {
+			pending += typeof chunk === "string" ? chunk : chunk.toString();
+			let newline = pending.indexOf("\n");
+			while (newline !== -1) {
+				io.stderr(pending.slice(0, newline));
+				pending = pending.slice(newline + 1);
+				newline = pending.indexOf("\n");
+			}
+			callback();
+		},
+	});
+}
+
+/** Resolve explicit, prompt-scoped, invocation, then process-global streams. */
 export function resolvePromptIO(io?: PromptIO): Required<PromptIO> {
 	const ambient = promptIOStorage.getStore();
 	return {
 		input: io?.input ?? ambient?.input ?? process.stdin,
-		output: io?.output ?? ambient?.output ?? process.stderr,
+		output: io?.output ?? ambient?.output ?? ambientTerminalWritable() ?? process.stderr,
 	};
 }
 

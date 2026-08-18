@@ -1,3 +1,5 @@
+import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
+
 import { createContextResolver } from "../api/context.ts";
 import {
 	finishInvocation,
@@ -435,6 +437,11 @@ async function renderFailure(
 	renderDefault();
 }
 
+/** Explicitly injected IO opts an invocation into the ambient terminal scope. */
+function hasInjectedIO(io: Partial<InvocationIO> | undefined): boolean {
+	return io !== undefined && Object.keys(io).length > 0;
+}
+
 /** Programmatic boundary: throw raw failures and leave process status untouched. */
 export async function runInvocation(
 	node: CommandNode,
@@ -444,7 +451,8 @@ export async function runInvocation(
 ): Promise<void> {
 	const resolvedIO: InvocationIO = { ...DEFAULT_IO, ...io };
 	const prepared = prepareInvocation(node, materializeCommandDefinition);
-	await dispatch(argv, prepared, resolvedIO);
+	const invoke = () => dispatch(argv, prepared, resolvedIO);
+	await (hasInjectedIO(io) ? withAmbientTerminalIO(resolvedIO, invoke) : invoke());
 }
 
 /** Terminal CLI boundary: render failures and set the process exit status. */
@@ -489,40 +497,44 @@ export async function executeInvocation(
 		return process.exit(0);
 	}
 
-	let prepared: PreparedInvocation;
-	try {
-		prepared = prepareInvocation(node, materializeCommandDefinition);
-	} catch (error) {
-		// Extension-application failures render directly: hooks belong to
-		// Extensions that just failed to apply.
-		if (isAbortError(error)) {
-			process.exitCode = EXIT_CODE_CANCELLED;
+	const invoke = async (): Promise<void> => {
+		let prepared: PreparedInvocation;
+		try {
+			prepared = prepareInvocation(node, materializeCommandDefinition);
+		} catch (error) {
+			// Extension-application failures render directly: hooks belong to
+			// Extensions that just failed to apply.
+			if (isAbortError(error)) {
+				process.exitCode = EXIT_CODE_CANCELLED;
+				return;
+			}
+			const message = error instanceof Error ? error.message : String(error);
+			io.stderr(`Error: ${message}`);
+			process.exitCode = 1;
 			return;
 		}
-		const message = error instanceof Error ? error.message : String(error);
-		io.stderr(`Error: ${message}`);
-		process.exitCode = 1;
-		return;
-	}
 
-	let extensionContext: ExtensionContext | undefined;
-	try {
-		await dispatch(argv, prepared, io, (context) => {
-			extensionContext = context;
-		});
-	} catch (error) {
-		if (isAbortError(error)) {
-			// Cancellation keeps its dedicated exit code while allowing Extension
-			// onError hooks to render a message. Core's default stays silent.
-			await renderFailure(error, argv, prepared, io, extensionContext, true);
-			process.exitCode = EXIT_CODE_CANCELLED;
-			return;
+		let extensionContext: ExtensionContext | undefined;
+		try {
+			await dispatch(argv, prepared, io, (context) => {
+				extensionContext = context;
+			});
+		} catch (error) {
+			if (isAbortError(error)) {
+				// Cancellation keeps its dedicated exit code while allowing Extension
+				// onError hooks to render a message. Core's default stays silent.
+				await renderFailure(error, argv, prepared, io, extensionContext, true);
+				process.exitCode = EXIT_CODE_CANCELLED;
+				return;
+			}
+			// Core always preserves a nonzero failure outcome, regardless of
+			// what Extension onError hooks do.
+			process.exitCode = 1;
+			await renderFailure(error, argv, prepared, io, extensionContext);
 		}
-		// Core always preserves a nonzero failure outcome, regardless of
-		// what Extension onError hooks do.
-		process.exitCode = 1;
-		await renderFailure(error, argv, prepared, io, extensionContext);
-	}
+	};
+
+	await (hasInjectedIO(options?.io) ? withAmbientTerminalIO(io, invoke) : invoke());
 }
 
 /** Prepare a frozen, validated snapshot without invoking a command action. */

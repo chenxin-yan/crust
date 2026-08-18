@@ -53,7 +53,9 @@ const addons = await multifilter({
 
 ## Injecting IO
 
-Every prompt accepts an optional second `io` argument. Prompt input and UI output resolve in this order: the explicit argument, the current `withPromptIO()` scope, then `process.stdin` and `process.stderr`. Prompt UI writes to the resolved output stream — stderr by default, keeping stdout clean for piped output.
+Every prompt accepts an optional second `io` argument. Prompt input resolves from the explicit argument, the current `withPromptIO()` scope, then `process.stdin`. Prompt output adds one fallback before `process.stderr`: ambient `InvocationIO` supplied when `@crustjs/core` receives explicit invocation IO. Prompt UI therefore follows an injected Core `stderr(text)` callback instead of escaping to the process terminal.
+
+Only output is bridged. Core's line-oriented IO cannot supply an interactive input stream, so inject `PromptIO.input` explicitly (or use the testing helpers) when a test needs to drive a prompt. Per-call and `withPromptIO()` streams still take precedence over the Core bridge, and omitting invocation IO preserves the process-stream defaults.
 
 ```ts
 import { select, withPromptIO, type PromptIO } from "@crustjs/prompts";

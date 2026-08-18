@@ -347,7 +347,9 @@ await app.run(
 );
 ```
 
-Structured values are serialized to argv and pass through the normal router, parser, schema, Context, and Command Action pipeline. The optional `raw` array is appended after a `--` separator and reaches the Command Action unchanged as `rawArgs`:
+Structured values are serialized to argv and pass through the normal router, parser, schema, Context, and Command Action pipeline. When `io` contains at least one callback, the resolved callbacks are also ambient for the full invocation: progress indicators and prompt output default to the injected `stderr` callback. Progress uses non-TTY static lines, and prompt input remains a separate `PromptIO` concern.
+
+The optional `raw` array is appended after a `--` separator and reaches the Command Action unchanged as `rawArgs`:
 
 ```ts
 await app.run(["exec"], { args: { command: "lint" }, raw: ["--fix", "src"] });
@@ -368,7 +370,7 @@ execute(options?: {
 }): Promise<void>
 ```
 
-Runs the terminal boundary. By default it parses `process.argv.slice(2)`; `options.argv` overrides it, while `options.io` captures rendered output in tests.
+Runs the terminal boundary. By default it parses `process.argv.slice(2)`; `options.argv` overrides it, while `options.io` captures rendered output in tests. Explicit IO also captures default `@crustjs/progress` output and `@crustjs/prompts` output for the full invocation; it does not provide prompt input.
 
 ```ts
 await app.execute();

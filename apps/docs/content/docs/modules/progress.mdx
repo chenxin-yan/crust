@@ -182,7 +182,9 @@ The bare `progress`/`spinner` exports use `defaultTheme`. Resolution order: `def
 
 ## Output sinks
 
-Indicators write to `process.stderr` by default so piped `stdout` stays clean. Both `spinner()` and `progress()` accept a `sink` option — a `ProgressSink` (`{ isTTY, write }`) receiving the rendered output — and `withProgressSink(sink, fn)` makes a sink ambiently available to every indicator created in `fn`'s async scope, mirroring `withPromptIO` in `@crustjs/prompts`. Resolution order: per-call `sink` option → ambient sink → `process.stderr`.
+Indicators write to `process.stderr` by default so piped `stdout` stays clean. Both `spinner()` and `progress()` accept a `sink` option — a `ProgressSink` (`{ isTTY, write }`) receiving the rendered output — and `withProgressSink(sink, fn)` makes a sink ambiently available to every indicator created in `fn`'s async scope, mirroring `withPromptIO` in `@crustjs/prompts`. Resolution order: per-call `sink` option → ambient sink → ambient `InvocationIO` from `@crustjs/core` → `process.stderr`.
+
+When a Core invocation receives explicit `io`, its `stderr(text)` callback supplies the ambient fallback. The adapter is intentionally non-TTY: captured or redirected progress emits one static final line instead of cursor animation. Omitting invocation IO preserves native terminal detection.
 
 ```ts
 import { type ProgressSink, spinner, withProgressSink } from "@crustjs/progress";

@@ -133,6 +133,17 @@ describe("captureExecute", () => {
 		expect(result).toEqual({ stdout: "hello", stderr: "", exitCode: 0 });
 	});
 
+	it("captures progress output through execute IO", async () => {
+		const app = new Crust("test-cli").action(async () => {
+			await spinner({ message: "Deploying", task: async () => "ok" });
+		});
+
+		const result = await captureExecute(app, []);
+
+		expect(result.stderr).toContain("✓ Deploying");
+		expect(result.exitCode).toBe(0);
+	});
+
 	it("captures exit code 1 and the rendered failure", async () => {
 		const app = new Crust("test-cli").action(() => {
 			throw new Error("boom");

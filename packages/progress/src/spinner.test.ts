@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
+import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
+
 import { type ProgressSink, spinner, withProgressSink } from "./spinner.ts";
 
 const originalStderrWrite = process.stderr.write;
@@ -169,6 +171,36 @@ describe("spinner — sink resolution", () => {
 		});
 
 		expect(writes[0]).toContain("✓ Ambient\n");
+	});
+
+	it("routes non-interactive final lines through ambient terminal IO", () => {
+		const errors: string[] = [];
+
+		withAmbientTerminalIO({ stdout: () => {}, stderr: (text) => errors.push(text) }, () => {
+			const handle = spinner({ message: "Bridged" });
+			handle.start();
+			handle.stop();
+		});
+
+		expect(errors).toHaveLength(1);
+		expect(errors[0]).toContain("✓ Bridged");
+		expect(errors[0]).not.toEndWith("\n");
+	});
+
+	it("prefers the progress ambient sink over ambient terminal IO", () => {
+		const { sink, writes } = createFakeSink(false);
+		const errors: string[] = [];
+
+		withAmbientTerminalIO({ stdout: () => {}, stderr: (text) => errors.push(text) }, () =>
+			withProgressSink(sink, () => {
+				const handle = spinner({ message: "Progress ambient" });
+				handle.start();
+				handle.stop();
+			}),
+		);
+
+		expect(writes[0]).toContain("✓ Progress ambient\n");
+		expect(errors).toEqual([]);
 	});
 
 	it("per-call sink option wins over the ambient sink", () => {
