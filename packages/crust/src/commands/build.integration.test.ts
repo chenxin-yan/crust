@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
@@ -45,16 +46,22 @@ function getHostBunTarget(): string | null {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("Deno compile integration", () => {
-	const tmpDir = join(import.meta.dir, ".tmp-deno-build-integration");
+	// OS tmpdir, not import.meta.dir: this repo's tsconfig covers src/ with
+	// lib ESNext + Bun types, and deno compile would apply it to the entry
+	// and fail type-checking on `console`.
+	const tmpDir = mkdtempSync(join(tmpdir(), "crust-deno-build-integration-"));
 
 	afterAll(() => rmSync(tmpDir, { recursive: true, force: true }));
 
 	it.skipIf(Bun.which("deno") === null)("compiles and runs a host executable", async () => {
-		rmSync(tmpDir, { recursive: true, force: true });
-		mkdirSync(tmpDir, { recursive: true });
 		const entry = join(tmpDir, "main.ts");
 		const outfile = join(tmpDir, process.platform === "win32" ? "hello.exe" : "hello");
-		writeFileSync(entry, 'console.log("hello from deno compile");\n');
+		// Reading process.env locks the -A grant: without it the compiled binary
+		// crashes with NotCapable before producing output.
+		writeFileSync(
+			entry,
+			'process.env.CRUST_SMOKE_PROBE;\nconsole.log("hello from deno compile");\n',
+		);
 		await execDenoBuild(entry, outfile);
 		const proc = Bun.spawn([outfile], { stdout: "pipe", stderr: "pipe" });
 		const [exitCode, stdout] = await Promise.all([proc.exited, new Response(proc.stdout).text()]);

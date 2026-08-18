@@ -234,10 +234,11 @@ export function resolveEnvFilePaths(cwd: string, envFiles: string[] | undefined)
 /**
  * The `crust build` command.
  *
- * Compiles a CLI entry file to standalone Bun executable(s).
- * By default, builds for all supported platforms and generates shell/CMD
- * resolver scripts for runtime-free dispatch.
- * Use `--target` to build for specific platform(s) only.
+ * Compiles a CLI entry file to standalone executable(s) with Bun or Deno.
+ * The toolchain comes from explicit `--target` flags, then `engines`, then
+ * project markers (deno.json / bun.lock), defaulting to Bun. Bun builds
+ * default to all supported platforms plus shell/CMD resolver scripts;
+ * detected Deno projects build a single host binary.
  *
  * @example
  * ```sh

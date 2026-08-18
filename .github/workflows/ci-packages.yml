@@ -107,6 +107,12 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
+      # Deno on PATH lets the deno-compile integration test run instead of skip.
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
       # tsdown's bin runs under Node (engines ^22.18 || >=24.11); don't rely
       # on the runner image's preinstalled Node.
       - name: Setup Node

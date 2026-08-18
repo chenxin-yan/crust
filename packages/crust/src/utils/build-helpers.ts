@@ -424,8 +424,12 @@ export async function execDenoBuild(
 	}
 
 	await mkdir(dirname(outfilePath), { recursive: true });
+	// -A: Crust core reads process.env before dispatch, so a sandboxed binary
+	// crashes with NotCapable on startup. Full grants also match Bun compile,
+	// which has no sandbox. A permission passthrough flag can narrow this later.
 	const args = [
 		"compile",
+		"-A",
 		"--output",
 		outfilePath,
 		...envFiles.map((envFile) => `--env-file=${envFile}`),

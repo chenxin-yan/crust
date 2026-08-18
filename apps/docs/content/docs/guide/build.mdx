@@ -65,7 +65,7 @@ Without an explicit target, Crust detects the runtime in this order:
 
 Deno wins when both runtimes are declared or both marker families exist. A detected Deno project builds for the host. A detected or fallback Bun project keeps the existing default of building every supported Bun target. Bun and Deno target strings cannot be mixed in one build.
 
-Deno binaries keep Deno's default permission sandbox; `crust build` does not grant `--allow-*` permissions implicitly.
+Deno binaries are compiled with `-A` (all permissions): Crust reads environment variables at startup, so a sandboxed binary would fail before reaching your command. This matches Bun executables, which have no permission sandbox.
 
 ## Supported Targets
 

@@ -79,7 +79,7 @@ export type PostScaffoldStep =
 	/** Open the project in `$EDITOR` or VS Code; does not fail when no editor is found. */
 	| { readonly type: "open-editor" }
 	/**
-	 * Run a Bun Shell command string. Cross-platform shell syntax like
-	 * redirection and `exit` is supported without a system `sh` executable.
+	 * Run a command string through the platform shell (`sh` on POSIX,
+	 * `cmd.exe` on Windows), so shell syntax is platform-dependent.
 	 */
 	| { readonly type: "command"; readonly cmd: string; readonly cwd?: string };
