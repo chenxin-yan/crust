@@ -3,7 +3,7 @@
 	"extends": ["//"],
 	"tasks": {
 		"test": {
-			// declaration-emission.test.ts rebuilds dist via bunup; without this
+			// declaration-emission.test.ts rebuilds dist via tsdown; without this
 			// own-build dependency it races turbo's core:build writing the same dist.
 			"dependsOn": ["^build", "build"]
 		}

@@ -11,7 +11,7 @@ Thanks for contributing to Crust. This repository is a Bun-native, TypeScript-fi
 ## Prerequisites
 
 - [Bun](https://bun.sh) `1.3.14`
-- Node.js `>=18`
+- Node.js `^22.18 || >=24.11` (package builds run tsdown under Node, which enforces this exact range — Node 23.x and 24.0–24.10 are rejected)
 - Git
 
 ## Repository Layout
@@ -51,7 +51,7 @@ Run `bun run test` when your change affects runtime behavior.
 
 ## Working on Packages
 
-Most packages in `packages/` are built with `bunup`; `@crustjs/crust` uses Bun directly. Packages are tested with `bun test` and type-checked with `tsc`.
+Most packages in `packages/` are built with `tsdown`; `@crustjs/crust` uses Bun directly. Packages are tested with `bun test` and type-checked with `tsc`.
 
 You can work from the repository root or from an individual package directory.
 

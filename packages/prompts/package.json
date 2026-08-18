@@ -3,6 +3,7 @@
 	"version": "0.1.0",
 	"description": "Interactive terminal prompts for the Crust CLI ecosystem",
 	"type": "module",
+	"sideEffects": false,
 	"license": "MIT",
 	"author": "chenxin-yan",
 	"repository": {
@@ -39,8 +40,8 @@
 		"access": "public"
 	},
 	"scripts": {
-		"build": "bunup",
-		"dev": "bunup --watch",
+		"build": "tsdown",
+		"dev": "tsdown --watch",
 		"check:types": "tsc --noEmit",
 		"test": "bun test",
 		"publish": "bun publish --no-git-checks",
@@ -60,11 +61,12 @@
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
+		"zod": "^4.0.0",
 		"@crustjs/utils": "workspace:*",
-		"bunup": "catalog:",
-		"zod": "^4.0.0"
+		"tsdown": "catalog:"
 	},
 	"engines": {
-		"bun": ">=1.3.14"
+		"bun": ">=1.3.14",
+		"node": ">=22"
 	}
 }

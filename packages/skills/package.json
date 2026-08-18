@@ -3,6 +3,7 @@
 	"version": "0.1.2",
 	"description": "Agent skill generation from Crust command definitions",
 	"type": "module",
+	"sideEffects": false,
 	"license": "MIT",
 	"author": "chenxin-yan",
 	"repository": {
@@ -36,8 +37,8 @@
 		"access": "public"
 	},
 	"scripts": {
-		"build": "bunup",
-		"dev": "bunup --watch",
+		"build": "tsdown",
+		"dev": "tsdown --watch",
 		"check:types": "tsc --noEmit",
 		"test": "bun test",
 		"publish": "bun publish --no-git-checks",
@@ -54,7 +55,7 @@
 		"@crustjs/core": "workspace:*",
 		"@crustjs/extensions": "workspace:*",
 		"@crustjs/utils": "workspace:*",
-		"bunup": "catalog:"
+		"tsdown": "catalog:"
 	},
 	"peerDependencies": {
 		"@crustjs/core": "workspace:0.x",
@@ -66,6 +67,7 @@
 		}
 	},
 	"engines": {
-		"bun": ">=1.3.14"
+		"bun": ">=1.3.14",
+		"node": ">=22"
 	}
 }

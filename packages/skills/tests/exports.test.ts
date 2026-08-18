@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-// The bunup entry list and the package.json exports map are maintained by
+// The tsdown entry list and the package.json exports map are maintained by
 // hand; this guards the root-only surface and verifies its dist targets.
 
 const pkgDir = resolve(import.meta.dir, "..");
