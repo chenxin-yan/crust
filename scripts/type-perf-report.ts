@@ -142,7 +142,7 @@ export function generateConsumerSource(size: number): string {
 			);
 		} else {
 			lines.push(
-				`const context${index} = defineContext("context-${index}", { flags: [contextFlag${index}], requires: [context${index - 1}] }, ({ flags, ctx }) => ({ value: ctx["context-${index - 1}"].value + (flags["context-${index}-token"] ?? "") }));`,
+				`const context${index} = defineContext("context-${index}", { flags: [contextFlag${index}] }, async ({ flags, ctx }) => ({ value: (await ctx.use(context${index - 1})).value + (flags["context-${index}-token"] ?? "") }));`,
 			);
 		}
 	}

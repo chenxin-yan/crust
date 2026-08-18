@@ -36,6 +36,11 @@ export const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => ({
 	apiKey: flags["api-key"],
 }));
 
+// Inferred setup input exposes the public ContextResolver type
+export const authenticatedApi = defineContext("authenticated-api", async ({ ctx }) => ({
+	apiKey: (await ctx.use(auth)).apiKey,
+}));
+
 // Pulling a Context infers its value from the factory argument
 export const deploy = defineCommand("deploy", (cmd) =>
 	cmd.action(async ({ ctx }) => {
@@ -46,7 +51,7 @@ export const deploy = defineCommand("deploy", (cmd) =>
 // Inferred builder type references accumulated Context-owned flag shapes
 export const app = new Crust("consumer-cli")
 	.flags(...flags)
-	.provide(auth())
+	.provide(auth(), authenticatedApi())
 	.add(defineCommand("build", (cmd) => cmd.action(() => {})))
 	.add(deploy);
 `;

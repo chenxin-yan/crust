@@ -1,15 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
 import type { ContextInstance } from "../api/context.ts";
-import {
-	contextCycle,
-	definitionProvenance,
-	duplicateContext,
-	missingContextDependency,
-} from "./contexts.rules.ts";
+import { definitionProvenance, duplicateContext } from "./contexts.rules.ts";
 
-function context(name: string, requiredCtx: string[] = []): ContextInstance {
-	return { kind: "context", name, requiredCtx, ownedFlags: {}, setup: () => undefined };
+function context(name: string): ContextInstance {
+	return { kind: "context", name, ownedFlags: {}, setup: () => undefined };
 }
 
 describe("context runtime rules", () => {
@@ -17,17 +12,8 @@ describe("context runtime rules", () => {
 		expect(() => definitionProvenance(null as never)).toThrow(
 			/provide\(\) requires Context instances/,
 		);
-		expect(() => duplicateContext(context("db"), [context("db")])).toThrow(
-			/Context "db" is already provided/,
-		);
-	});
-
-	it("rejects missing and cyclic dependencies", () => {
-		expect(() => missingContextDependency([context("app", ["db"])], 'Command "cli"')).toThrow(
-			/requires Context "db"/,
-		);
-		expect(() => contextCycle([context("a", ["b"]), context("b", ["a"])], 'Command "cli"')).toThrow(
-			/form a dependency cycle/,
-		);
+		expect(() =>
+			duplicateContext(context("db"), [context("db")], 'the "cli" command path'),
+		).toThrow(/Context "db" is already provided on the "cli" command path/);
 	});
 });

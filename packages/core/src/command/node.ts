@@ -30,7 +30,7 @@ export interface CommandNode {
 	args: ArgsDef | undefined;
 	/** Named subcommands keyed by name */
 	subCommands: Record<string, CommandNode>;
-	/** Context instances available to this command in cached topological order. */
+	/** Context instances available to this command in provide order (construction order is pull-driven). */
 	contexts: ContextInstance[];
 	/** Extensions registered via `.extend()` (root builder only) */
 	extensions: Extension[];

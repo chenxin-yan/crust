@@ -2,9 +2,8 @@ import { expect, it } from "bun:test";
 import { readdirSync } from "node:fs";
 
 // Rules with no FIX_* brand by design: cheap-to-hit definition mistakes the
-// runtime catches without type-level machinery. `contextCycle` joined when
-// #213 deleted the fragile recursive cycle brand (HasCycleFrom/Reachable).
-// `duplicateExtension` and `contextFlagPairCollision` are enforced inline in
+// runtime catches without type-level machinery. `duplicateExtension` and
+// `contextFlagPairCollision` are enforced inline in
 // command/crust.ts rather than as exported rule functions; the entries
 // pre-exempt them if they are ever extracted.
 const runtimeOnly = new Set([
@@ -13,9 +12,7 @@ const runtimeOnly = new Set([
 	"defaultWithinChoices",
 	"definitionProvenance",
 	"duplicateExtension",
-	"missingContextDependency",
 	"contextFlagPairCollision",
-	"contextCycle",
 ]);
 const structuralTypeRules = new Set(["schemaExclusivity", "parserType"]);
 

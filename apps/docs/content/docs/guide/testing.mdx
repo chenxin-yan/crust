@@ -51,7 +51,7 @@ test("renders invalid input", async () => {
 
 ## Fake a Context
 
-Every `defineContext()` factory carries `.of(value)`, which produces an instance returning the precomputed value with requirements considered satisfied. Provide it in place of the real Context when composing an application for a test:
+Every `defineContext()` factory carries `.of(value)`, which produces an instance returning the precomputed value without running setup. Provide it in place of the real Context when composing an application for a test:
 
 ```ts
 import { Crust } from "@crustjs/core";
@@ -62,7 +62,7 @@ const app = new Crust("my-cli")
   .action(async ({ ctx, stdout }) => stdout((await ctx.use(database)).query("select 1")));
 ```
 
-See [Contexts](/docs/guide/contexts#test-doubles-with-of).
+See [Contexts](/docs/guide/contexts#test-doubles).
 
 ## Test interactive commands
 

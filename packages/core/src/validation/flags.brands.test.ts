@@ -209,10 +209,7 @@ describe("ValidateNamedFlagDefs", () => {
 		type _noBrands = Expect<Equal<Extract<keyof Result[0], `FIX_${string}`>, never>>;
 
 		// Context instances with widened owned flags opt out of provide-site checks.
-		type Provided = ProvideChecks<
-			"verbose" | "v",
-			readonly [{ readonly _requires?: { ownedFlags: FlagsDef } }]
-		>;
+		type Provided = ProvideChecks<"verbose" | "v", readonly [{ readonly _ownedFlags?: FlagsDef }]>;
 		type _noProvideBrand = Expect<Equal<Extract<keyof Provided[0], `FIX_${string}`>, never>>;
 
 		expect(true).toBe(true);

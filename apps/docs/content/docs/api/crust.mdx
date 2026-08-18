@@ -23,7 +23,7 @@ import {
 
 ## Reusable command definitions
 
-Command actions pull provided Contexts with `await ctx.use(factory)`. Command metadata has no dependency declaration; `use()` infers the value from the factory and reports a missing provider when called. Context setup dependencies are declared with Context-level `requires` in `defineContext()`.
+Command actions and Context setup pull provided Contexts with `await ctx.use(factory)`. `use()` infers the value from the factory and reports a missing provider when called.
 
 ### `CommandDefinitionBuilder`
 
@@ -209,7 +209,7 @@ provide<const Cs extends readonly ContextInstance[]>(
 >
 ```
 
-Attaches Contexts produced by invoking `defineContext()` factories. Contexts are inherited by descendants and constructed lazily when an action or Extension calls `ctx.use(factory)`. The return type merges every instance's owned `flags` into the builder's accumulated flag type.
+Attaches Contexts produced by invoking `defineContext()` factories. Contexts are inherited by descendants and constructed lazily when an action, Extension, or another Context's setup calls `ctx.use(factory)`. The return type merges every instance's owned `flags` into the builder's accumulated flag type.
 
 ```ts
 import { defineContext, Crust } from "@crustjs/core";
@@ -226,7 +226,7 @@ const app = new Crust("my-cli")
   });
 ```
 
-Within one `.provide()` call, order is free: dependencies may appear after their dependents. Runtime normalization sorts the complete Context path immediately, preserving registration order among independent Contexts. A missing capability dependency or cycle throws `DEFINITION` from `.provide()`. Cycles are enforced only at runtime; TypeScript brands do not attempt recursive cycle detection.
+Provide order is free: setup discovers dependencies by calling `await ctx.use(factory)`. A missing provider or dynamic dependency cycle throws `DEFINITION` when pulled, with reason `missing-context` or `context-cycle`.
 
 A Context's top-level `flags` are installed as propagating flags on this builder and later-added descendants, without mutating the original definitions. Dependencies construct recursively on the first pull.
 
