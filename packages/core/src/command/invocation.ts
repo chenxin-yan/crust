@@ -437,6 +437,11 @@ async function renderFailure(
 	renderDefault();
 }
 
+/** Explicitly injected IO opts an invocation into the ambient terminal scope. */
+function hasInjectedIO(io: Partial<InvocationIO> | undefined): boolean {
+	return io !== undefined && Object.keys(io).length > 0;
+}
+
 /** Programmatic boundary: throw raw failures and leave process status untouched. */
 export async function runInvocation(
 	node: CommandNode,
@@ -447,7 +452,7 @@ export async function runInvocation(
 	const resolvedIO: InvocationIO = { ...DEFAULT_IO, ...io };
 	const prepared = prepareInvocation(node, materializeCommandDefinition);
 	const invoke = () => dispatch(argv, prepared, resolvedIO);
-	await (io && Object.keys(io).length > 0 ? withAmbientTerminalIO(resolvedIO, invoke) : invoke());
+	await (hasInjectedIO(io) ? withAmbientTerminalIO(resolvedIO, invoke) : invoke());
 }
 
 /** Terminal CLI boundary: render failures and set the process exit status. */
@@ -529,9 +534,7 @@ export async function executeInvocation(
 		}
 	};
 
-	await (options?.io && Object.keys(options.io).length > 0
-		? withAmbientTerminalIO(io, invoke)
-		: invoke());
+	await (hasInjectedIO(options?.io) ? withAmbientTerminalIO(io, invoke) : invoke());
 }
 
 /** Prepare a frozen, validated snapshot without invoking a command action. */

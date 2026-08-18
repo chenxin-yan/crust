@@ -1,18 +1,12 @@
 import { beforeAll, describe, expect, it } from "bun:test";
 import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
-
-const coreDir = resolve(import.meta.dir, "../../core");
-const progressDir = resolve(import.meta.dir, "../../progress");
+import { resolve } from "node:path";
 
 beforeAll(() => {
-	// Turbo builds dependencies before tests. These fallbacks only serve a
-	// direct `bun test` on a fresh checkout and never replace an existing dist.
-	for (const packageDir of [coreDir, progressDir]) {
-		if (existsSync(join(packageDir, "dist/index.js"))) continue;
-		const build = Bun.spawnSync(["bun", "run", "build"], { cwd: packageDir });
-		if (build.exitCode !== 0) {
-			throw new Error(`build failed:\n${build.stdout.toString()}\n${build.stderr.toString()}`);
+	// Turbo builds dependencies before tests; a direct `bun test` needs dist built first.
+	for (const pkg of ["core", "progress"]) {
+		if (!existsSync(resolve(import.meta.dir, `../../${pkg}/dist/index.js`))) {
+			throw new Error(`${pkg} dist missing — run \`bun run build\` first`);
 		}
 	}
 });
