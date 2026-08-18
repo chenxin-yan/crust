@@ -13,8 +13,12 @@ import {
 } from "../../src/commands/build.ts";
 import type { BunTarget } from "../../src/utils/build-helpers.ts";
 import {
+	DENO_TARGETS,
+	execDenoBuild,
 	getBinaryFilename,
 	resolveBaseName,
+	readProjectMetadata,
+	resolveBuildPlan,
 	resolveBunBuildRunner,
 	resolveTarget,
 	SUPPORTED_TARGETS,
@@ -47,6 +51,14 @@ describe("env file helpers", () => {
 	});
 });
 
+describe("Deno build runner", () => {
+	it("fails with an actionable error when Deno is unavailable", async () => {
+		await expect(execDenoBuild("entry.ts", "out", undefined, [], "")).rejects.toThrow(
+			/Deno was selected.*not found on PATH.*Install Deno/,
+		);
+	});
+});
+
 describe("resolveBunBuildRunner", () => {
 	it("prefers the real bun binary when available", () => {
 		const runner = resolveBunBuildRunner();
@@ -65,6 +77,101 @@ describe("resolveBunBuildRunner", () => {
 // Unit tests for resolveTarget
 // ────────────────────────────────────────────────────────────────────────────
 
+describe("project runtime detection", () => {
+	const tmpDir = join(import.meta.dir, ".tmp-runtime-detection");
+
+	beforeAll(() => {
+		rmSync(tmpDir, { recursive: true, force: true });
+		mkdirSync(tmpDir, { recursive: true });
+	});
+
+	afterAll(() => rmSync(tmpDir, { recursive: true, force: true }));
+
+	it("reads engines and project markers in one metadata pass", () => {
+		writeFileSync(
+			join(tmpDir, "package.json"),
+			JSON.stringify({ name: "detected", engines: { deno: ">=2" } }),
+		);
+		writeFileSync(join(tmpDir, "bun.lock"), "");
+		expect(readProjectMetadata(tmpDir)).toEqual({
+			name: "detected",
+			engines: { deno: ">=2" },
+			hasDenoMarker: false,
+			hasBunMarker: true,
+		});
+	});
+});
+
+describe("resolveBuildPlan", () => {
+	const none = { engines: {}, hasDenoMarker: false, hasBunMarker: false };
+
+	it("uses explicit runtime before engines and markers", () => {
+		expect(
+			resolveBuildPlan(["bun"], {
+				engines: { deno: ">=2" },
+				hasDenoMarker: true,
+				hasBunMarker: false,
+			}).runtime,
+		).toBe("bun");
+		expect(
+			resolveBuildPlan(["deno"], {
+				engines: { bun: ">=1" },
+				hasDenoMarker: false,
+				hasBunMarker: true,
+			}).runtime,
+		).toBe("deno");
+	});
+
+	it("prefers engines over markers and deno over bun within each tier", () => {
+		expect(
+			resolveBuildPlan(undefined, {
+				engines: { bun: ">=1", deno: ">=2" },
+				hasDenoMarker: false,
+				hasBunMarker: true,
+			}).runtime,
+		).toBe("deno");
+		expect(
+			resolveBuildPlan(undefined, {
+				engines: { bun: ">=1" },
+				hasDenoMarker: true,
+				hasBunMarker: false,
+			}).runtime,
+		).toBe("bun");
+		expect(
+			resolveBuildPlan(undefined, {
+				engines: {},
+				hasDenoMarker: true,
+				hasBunMarker: true,
+			}).runtime,
+		).toBe("deno");
+	});
+
+	it("defaults to Bun's existing all-target build", () => {
+		expect(resolveBuildPlan(undefined, none)).toEqual({
+			runtime: "bun",
+			targets: [...SUPPORTED_TARGETS],
+		});
+	});
+
+	it("uses a single host build for a bare runtime selector", () => {
+		expect(resolveBuildPlan(["bun"], none).targets).toHaveLength(1);
+		expect(resolveBuildPlan(["deno"], none)).toEqual({ runtime: "deno", targets: [] });
+	});
+
+	it("accepts explicit Deno targets and rejects mixed toolchains", () => {
+		expect(resolveBuildPlan(["deno", DENO_TARGETS[0]], none)).toEqual({
+			runtime: "deno",
+			targets: [DENO_TARGETS[0]],
+		});
+		expect(() => resolveBuildPlan(["deno", "bun-linux-x64-baseline"], none)).toThrow(
+			/Cannot mix Deno and Bun targets/,
+		);
+		expect(() => resolveBuildPlan(["bun", DENO_TARGETS[0]], none)).toThrow(
+			/Cannot mix Bun and Deno targets/,
+		);
+	});
+});
+
 describe("resolveTarget", () => {
 	it("accepts full Bun target names directly", () => {
 		for (const target of SUPPORTED_TARGETS) {
@@ -76,9 +183,10 @@ describe("resolveTarget", () => {
 		for (const target of SUPPORTED_TARGETS) {
 			const alias = TARGET_INFO[target].alias;
 			expect(() => resolveTarget(alias)).toThrow(
-				`Unknown target "${alias}". Targets must use canonical Bun names. Did you mean "${target}"?`,
+				`Unknown target "${alias}". Did you mean "${target}"?`,
 			);
-			expect(() => resolveTarget(alias)).toThrow(/Valid targets: bun-linux-x64-baseline/);
+			expect(() => resolveTarget(alias)).toThrow(/canonical Bun targets \(bun-linux-x64-baseline/);
+			expect(() => resolveTarget(alias)).toThrow(/Deno compile triples \(x86_64-unknown-linux-gnu/);
 		}
 	});
 
@@ -175,6 +283,9 @@ describe("getBinaryFilename", () => {
 			"my-cli-bun-windows-x64-baseline.exe",
 		);
 		expect(getBinaryFilename("my-cli", "bun-windows-arm64")).toBe("my-cli-bun-windows-arm64.exe");
+		expect(getBinaryFilename("my-cli", "x86_64-pc-windows-msvc")).toBe(
+			"my-cli-x86_64-pc-windows-msvc.exe",
+		);
 	});
 });
 
@@ -213,6 +324,16 @@ describe("generateResolver", () => {
 		// Should NOT contain platforms not in subset
 		expect(content).not.toContain("Linux-aarch64)");
 		expect(content).not.toContain("Darwin-x86_64)");
+	});
+
+	it("maps Deno targets to the same resolver platform keys", () => {
+		const content = generateResolver("my-cli", [
+			"x86_64-unknown-linux-gnu",
+			"aarch64-apple-darwin",
+		]);
+		expect(content).toContain("Linux-x86_64)");
+		expect(content).toContain('"my-cli-x86_64-unknown-linux-gnu"');
+		expect(content).toContain("Darwin-arm64)");
 	});
 
 	it("includes the base name in error messages", () => {

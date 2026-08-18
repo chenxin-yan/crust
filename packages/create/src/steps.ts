@@ -1,7 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
 
-import { $ } from "bun";
-
 import type { PostScaffoldStep } from "./types.ts";
 import { detectPackageManager } from "./utils.ts";
 
@@ -113,15 +111,10 @@ async function runOpenEditor(cwd: string): Promise<void> {
 	}
 }
 
-/**
- * Run an arbitrary Bun Shell command string.
- *
- * Bun Shell is cross-platform and does not depend on `/bin/sh`,
- * so shell features like redirection work on Windows as well.
- */
+/** Run an arbitrary command through the platform shell. */
 async function runCommand(cmd: string, cwd: string): Promise<void> {
-	const result = await $`${{ raw: cmd }}`.cwd(cwd).nothrow();
-	const exitCode = result.exitCode;
+	const proc = spawn(cmd, { cwd, shell: true, stdio: "inherit" });
+	const exitCode = await exitCodeOf(proc);
 	if (exitCode !== 0) {
 		throw new Error(`Command "${cmd}" exited with code ${exitCode}`);
 	}

@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-const exemptPackages = new Set(["crust", "create", "create-crust"]);
+const exemptPackages = new Set(["crust", "create-crust"]);
 const violations = [];
 
 async function scan(directory) {

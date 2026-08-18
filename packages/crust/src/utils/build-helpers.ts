@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 import { BUILD_OUT_DIR_ENV, type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
 import { yellow } from "@crustjs/style";
@@ -28,6 +28,19 @@ export const SUPPORTED_TARGETS = [
 ] as const;
 
 export type BunTarget = (typeof SUPPORTED_TARGETS)[number];
+
+/** Deno cross-compile targets supported by `deno compile`. */
+export const DENO_TARGETS = [
+	"x86_64-unknown-linux-gnu",
+	"aarch64-unknown-linux-gnu",
+	"x86_64-apple-darwin",
+	"aarch64-apple-darwin",
+	"x86_64-pc-windows-msvc",
+] as const;
+
+export type DenoTarget = (typeof DENO_TARGETS)[number];
+export type CompileTarget = BunTarget | DenoTarget;
+export type BuildRuntime = "bun" | "deno";
 
 /**
  * Consolidated metadata for every supported Bun compile target.
@@ -92,6 +105,50 @@ export const TARGET_INFO = {
 	},
 } as const satisfies Record<BunTarget, TargetInfo>;
 
+export const DENO_TARGET_INFO = {
+	"x86_64-unknown-linux-gnu": {
+		alias: "linux-x64",
+		platformKey: "linux-x64",
+		unameKey: "Linux-x86_64",
+		os: "linux",
+		cpu: "x64",
+	},
+	"aarch64-unknown-linux-gnu": {
+		alias: "linux-arm64",
+		platformKey: "linux-arm64",
+		unameKey: "Linux-aarch64",
+		os: "linux",
+		cpu: "arm64",
+	},
+	"x86_64-apple-darwin": {
+		alias: "darwin-x64",
+		platformKey: "darwin-x64",
+		unameKey: "Darwin-x86_64",
+		os: "darwin",
+		cpu: "x64",
+	},
+	"aarch64-apple-darwin": {
+		alias: "darwin-arm64",
+		platformKey: "darwin-arm64",
+		unameKey: "Darwin-arm64",
+		os: "darwin",
+		cpu: "arm64",
+	},
+	"x86_64-pc-windows-msvc": {
+		alias: "windows-x64",
+		platformKey: "win32-x64",
+		unameKey: "Windows-x64",
+		os: "win32",
+		cpu: "x64",
+	},
+} as const satisfies Record<DenoTarget, TargetInfo>;
+
+export function getTargetInfo(target: CompileTarget): TargetInfo {
+	return target.startsWith("bun-")
+		? TARGET_INFO[target as BunTarget]
+		: DENO_TARGET_INFO[target as DenoTarget];
+}
+
 /**
  * Resolve a canonical Bun target string to a supported compile target.
  *
@@ -108,7 +165,7 @@ export function resolveTarget(input: string): BunTarget {
 	const hint = canonical ? ` Did you mean "${canonical}"?` : "";
 	const validTargets = SUPPORTED_TARGETS.join(", ");
 	throw new Error(
-		`Unknown target "${input}". Targets must use canonical Bun names.${hint}\n  Valid targets: ${validTargets}`,
+		`Unknown target "${input}".${hint}\n  Valid targets: "bun", "deno", canonical Bun targets (${validTargets}), or Deno compile triples (${DENO_TARGETS.join(", ")})`,
 	);
 }
 
@@ -137,26 +194,130 @@ export function resolveTargets(targetFlags: string[] | undefined): BunTarget[] {
  * @param target - The Bun compile target
  * @returns The filename (e.g. "my-cli-bun-darwin-arm64" or "my-cli-bun-windows-x64-baseline.exe")
  */
-export function getBinaryFilename(baseName: string, target: BunTarget): string {
-	const isWindows = target.startsWith("bun-windows");
-	const ext = isWindows ? ".exe" : "";
+export function getBinaryFilename(baseName: string, target: CompileTarget): string {
+	const ext = getTargetInfo(target).os === "win32" ? ".exe" : "";
 	return `${baseName}-${target}${ext}`;
 }
 
-/** Resolve the base binary name from an explicit name, package name, or entry filename. */
-export function resolveBaseName(name: string | undefined, entry: string, cwd: string): string {
-	if (name) return name;
+export type ProjectMetadata = {
+	name?: string;
+	engines: { bun?: string; deno?: string };
+	hasDenoMarker: boolean;
+	hasBunMarker: boolean;
+};
 
+/** Read project metadata once for runtime detection and output naming. */
+export function readProjectMetadata(cwd: string): ProjectMetadata {
+	let name: string | undefined;
+	let engines: ProjectMetadata["engines"] = {};
 	const pkgPath = join(cwd, "package.json");
 	if (existsSync(pkgPath)) {
 		try {
-			const pkgJson = JSON.parse(readFileSync(pkgPath, "utf-8")) as { name?: string };
-			if (typeof pkgJson.name === "string") return pkgJson.name.replace(/^@[^/]+\//, "");
+			const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as {
+				name?: unknown;
+				engines?: { bun?: unknown; deno?: unknown };
+			};
+			if (typeof pkg.name === "string") name = pkg.name;
+			engines = {
+				...(typeof pkg.engines?.bun === "string" ? { bun: pkg.engines.bun } : {}),
+				...(typeof pkg.engines?.deno === "string" ? { deno: pkg.engines.deno } : {}),
+			};
 		} catch {
-			// Ignore parse errors, fall through to entry filename
+			// Invalid package metadata does not prevent marker-based detection.
 		}
 	}
 
+	return {
+		name,
+		engines,
+		hasDenoMarker: ["deno.json", "deno.jsonc", "deno.lock"].some((file) =>
+			existsSync(join(cwd, file)),
+		),
+		hasBunMarker: ["bun.lock", "bun.lockb"].some((file) => existsSync(join(cwd, file))),
+	};
+}
+
+function hostBunTarget(): BunTarget {
+	const target = SUPPORTED_TARGETS.find(
+		(candidate) => TARGET_INFO[candidate].platformKey === `${process.platform}-${process.arch}`,
+	);
+	if (!target) {
+		throw new Error(`Bun compilation is unsupported on ${process.platform}-${process.arch}.`);
+	}
+	return target;
+}
+
+export type BuildPlan =
+	| { runtime: "bun"; targets: BunTarget[] }
+	| { runtime: "deno"; targets: DenoTarget[] };
+
+/** Resolve toolchain and targets with explicit flags > engines > markers > Bun default. */
+export function resolveBuildPlan(
+	targetFlags: string[] | undefined,
+	metadata: Pick<ProjectMetadata, "engines" | "hasDenoMarker" | "hasBunMarker">,
+): BuildPlan {
+	const flags = targetFlags ?? [];
+	const runtimeFlags = flags.filter(
+		(flag): flag is BuildRuntime => flag === "bun" || flag === "deno",
+	);
+	if (new Set(runtimeFlags).size > 1) {
+		throw new Error('Cannot combine "--target bun" and "--target deno".');
+	}
+
+	const requested = flags.filter((flag) => flag !== "bun" && flag !== "deno");
+	const bunTargets = requested.filter((flag) =>
+		(SUPPORTED_TARGETS as readonly string[]).includes(flag),
+	);
+	const denoTargets = requested.filter((flag) =>
+		(DENO_TARGETS as readonly string[]).includes(flag),
+	);
+	const unknown = requested.filter(
+		(flag) => !bunTargets.includes(flag) && !denoTargets.includes(flag),
+	);
+	if (unknown.length > 0) resolveTarget(unknown[0]!);
+
+	const explicitRuntime = runtimeFlags[0];
+	if (explicitRuntime === "bun" && denoTargets.length > 0) {
+		throw new Error("Cannot mix Bun and Deno targets in one build.");
+	}
+	if (explicitRuntime === "deno" && bunTargets.length > 0) {
+		throw new Error("Cannot mix Deno and Bun targets in one build.");
+	}
+	if (bunTargets.length > 0 && denoTargets.length > 0) {
+		throw new Error("Cannot mix Bun and Deno targets in one build.");
+	}
+
+	if (explicitRuntime === "bun" || bunTargets.length > 0) {
+		return {
+			runtime: "bun",
+			targets: (bunTargets.length > 0 ? bunTargets : [hostBunTarget()]) as BunTarget[],
+		};
+	}
+	if (explicitRuntime === "deno" || denoTargets.length > 0) {
+		return { runtime: "deno", targets: denoTargets as DenoTarget[] };
+	}
+
+	const runtime: BuildRuntime = metadata.engines.deno
+		? "deno"
+		: metadata.engines.bun
+			? "bun"
+			: metadata.hasDenoMarker
+				? "deno"
+				: "bun";
+	return runtime === "deno"
+		? { runtime, targets: [] }
+		: { runtime, targets: [...SUPPORTED_TARGETS] };
+}
+
+/** Resolve the base binary name from an explicit name, package name, or entry filename. */
+export function resolveBaseName(
+	name: string | undefined,
+	entry: string,
+	cwd: string,
+	metadata: ProjectMetadata = readProjectMetadata(cwd),
+): string {
+	if (name) return name;
+	if (metadata.name) return metadata.name.replace(/^@[^/]+\//, "");
 	return basename(entry).replace(/\.[^.]+$/, "");
 }
 
@@ -245,6 +406,45 @@ export async function execBuild(
 		exitCodeOf(proc),
 	]);
 
+	if (exitCode !== 0) {
+		const output = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
+		throw new Error(`Build failed for ${outfilePath}${output ? `:\n${output}` : ""}`);
+	}
+}
+
+/** Compile a standalone executable with Deno's native compiler. */
+export async function execDenoBuild(
+	entryPath: string,
+	outfilePath: string,
+	target?: DenoTarget,
+	envFiles: readonly string[] = [],
+	path: string | undefined = process.env.PATH,
+): Promise<void> {
+	const denoPath = which("deno", path);
+	if (!denoPath) {
+		throw new Error(
+			'Deno was selected for this build but "deno" was not found on PATH. Install Deno from https://deno.com/runtime or select --target bun.',
+		);
+	}
+
+	await mkdir(dirname(outfilePath), { recursive: true });
+	const args = [
+		"compile",
+		"--output",
+		outfilePath,
+		...envFiles.map((envFile) => `--env-file=${envFile}`),
+		...(target ? ["--target", target] : []),
+		entryPath,
+	];
+	const proc = spawn(denoPath, args, {
+		cwd: process.cwd(),
+		stdio: ["ignore", "pipe", "pipe"],
+	});
+	const [stdout, stderr, exitCode] = await Promise.all([
+		readStream(proc.stdout),
+		readStream(proc.stderr),
+		exitCodeOf(proc),
+	]);
 	if (exitCode !== 0) {
 		const output = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
 		throw new Error(`Build failed for ${outfilePath}${output ? `:\n${output}` : ""}`);

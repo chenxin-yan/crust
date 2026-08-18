@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { Crust } from "@crustjs/core";
 
 import { buildCommand } from "../../src/commands/build.ts";
-import { SUPPORTED_TARGETS, TARGET_INFO } from "../../src/utils/build-helpers.ts";
+import { execDenoBuild, SUPPORTED_TARGETS, TARGET_INFO } from "../../src/utils/build-helpers.ts";
 
 function getHostTarget(): string | null {
 	if (process.platform === "darwin" && process.arch === "arm64") {
@@ -39,6 +39,29 @@ function getHostBunTarget(): string | null {
 	const hostTarget = getHostTarget();
 	return SUPPORTED_TARGETS.find((target) => TARGET_INFO[target].alias === hostTarget) ?? null;
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Integration test: Deno compiler (only when installed)
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("Deno compile integration", () => {
+	const tmpDir = join(import.meta.dir, ".tmp-deno-build-integration");
+
+	afterAll(() => rmSync(tmpDir, { recursive: true, force: true }));
+
+	it.skipIf(Bun.which("deno") === null)("compiles and runs a host executable", async () => {
+		rmSync(tmpDir, { recursive: true, force: true });
+		mkdirSync(tmpDir, { recursive: true });
+		const entry = join(tmpDir, "main.ts");
+		const outfile = join(tmpDir, process.platform === "win32" ? "hello.exe" : "hello");
+		writeFileSync(entry, 'console.log("hello from deno compile");\n');
+		await execDenoBuild(entry, outfile);
+		const proc = Bun.spawn([outfile], { stdout: "pipe", stderr: "pipe" });
+		const [exitCode, stdout] = await Promise.all([proc.exited, new Response(proc.stdout).text()]);
+		expect(exitCode).toBe(0);
+		expect(stdout.trim()).toBe("hello from deno compile");
+	});
+});
 
 // ────────────────────────────────────────────────────────────────────────────
 // Integration test: single-target build (--target flag)

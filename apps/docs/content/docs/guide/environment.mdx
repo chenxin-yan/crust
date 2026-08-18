@@ -19,7 +19,7 @@ const deploy = new Crust("deploy").action(({ stdout }) => {
 
 ## Build-time constants
 
-`crust build` follows Bun's `PUBLIC_*` model. It can use Bun's auto-loaded current-directory environment or explicit repeatable `--env-file` flags:
+Bun-mode `crust build` follows Bun's `PUBLIC_*` model. It can use Bun's auto-loaded current-directory environment or explicit repeatable `--env-file` flags. Deno compilation does not embed `PUBLIC_*` values; read those from the runtime environment instead.
 
 ```sh
 crust build --env-file .env.production
@@ -37,4 +37,4 @@ Later files override earlier files, and the shell environment wins. Only `PUBLIC
 | API keys, tokens, private deployment config | Runtime environment             |
 | Public API origins, public build labels     | `PUBLIC_*` build-time constants |
 
-If Extension configuration reads environment values while definitions are prepared, pass the same `--env-file` values to `crust build` so its snapshot subprocess sees them. See [Building and Distribution](/docs/guide/build).
+If Extension configuration reads environment values while definitions are prepared, pass the same `--env-file` values to a Bun build so its snapshot subprocess sees them. See [Building and Distribution](/docs/guide/build).

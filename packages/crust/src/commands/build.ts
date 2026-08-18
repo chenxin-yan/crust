@@ -5,13 +5,18 @@ import { defineCommand } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
 
 import {
-	type BunTarget,
-	execBuild,
-	getBinaryFilename,
-	resolveBaseName,
-	resolveTargets,
-	TARGET_INFO,
 	buildEntrypoint,
+	type BunTarget,
+	type CompileTarget,
+	type DenoTarget,
+	execBuild,
+	execDenoBuild,
+	getBinaryFilename,
+	getTargetInfo,
+	type ProjectMetadata,
+	readProjectMetadata,
+	resolveBaseName,
+	resolveBuildPlan,
 } from "../utils/build-helpers.ts";
 
 /**
@@ -32,13 +37,14 @@ export function resolveOutfile(
 	entry: string,
 	cwd: string,
 	outdir: string,
+	project?: ProjectMetadata,
 ): string {
 	// Explicit --outfile takes highest priority
 	if (outfile) {
 		return resolve(cwd, outfile);
 	}
 
-	const baseName = resolveBaseName(name, entry, cwd);
+	const baseName = resolveBaseName(name, entry, cwd, project);
 	return resolve(cwd, outdir, baseName);
 }
 
@@ -57,12 +63,13 @@ export function resolveOutfile(
  * @param targets - The list of targets that were built
  * @returns The shell resolver script as a string
  */
-export function generateResolver(baseName: string, targets: readonly BunTarget[]): string {
+export function generateResolver(baseName: string, targets: readonly CompileTarget[]): string {
 	// Build case entries for only the targets that were built (excluding Windows)
 	const caseEntries: string[] = [];
 	for (const target of targets) {
-		if (target.startsWith("bun-windows")) continue;
-		const unameKey = TARGET_INFO[target].unameKey;
+		const targetInfo = getTargetInfo(target);
+		if (targetInfo.os === "win32") continue;
+		const unameKey = targetInfo.unameKey;
 		const filename = getBinaryFilename(baseName, target);
 		caseEntries.push(`\t${unameKey}) bin="${filename}" ;;`);
 	}
@@ -119,18 +126,16 @@ exec "$bin_path" "$@"
  * @param targets - The list of targets that were built
  * @returns The .cmd resolver script as a string
  */
-export function generateCmdResolver(baseName: string, targets: readonly BunTarget[]): string {
-	const windowsTargets = targets.filter((t) => t.startsWith("bun-windows"));
+export function generateCmdResolver(baseName: string, targets: readonly CompileTarget[]): string {
+	const windowsTargets = targets.filter((target) => getTargetInfo(target).os === "win32");
 
 	// If no Windows targets were built, generate a stub that tells the user
 	if (windowsTargets.length === 0) {
 		return `@echo off\r\necho [${baseName}] No Windows binary was built for this package. >&2\r\nexit /b 1\r\n`;
 	}
 
-	const windowsX64Target = windowsTargets.find(
-		(t): t is BunTarget => t === "bun-windows-x64-baseline",
-	);
-	const windowsArm64Target = windowsTargets.find((t): t is BunTarget => t === "bun-windows-arm64");
+	const windowsX64Target = windowsTargets.find((target) => getTargetInfo(target).cpu === "x64");
+	const windowsArm64Target = windowsTargets.find((target) => getTargetInfo(target).cpu === "arm64");
 
 	const x64Filename = windowsX64Target ? getBinaryFilename(baseName, windowsX64Target) : "";
 	const arm64Filename = windowsArm64Target ? getBinaryFilename(baseName, windowsArm64Target) : "";
@@ -197,7 +202,7 @@ if not exist "%bin_path%" (\r
 function writeResolver(
 	resolverPath: string,
 	baseName: string,
-	targets: readonly BunTarget[],
+	targets: readonly CompileTarget[],
 ): void {
 	const shellContent = generateResolver(baseName, targets);
 	writeFileSync(resolverPath, shellContent, { mode: 0o755 });
@@ -240,6 +245,7 @@ export function resolveEnvFilePaths(cwd: string, envFiles: string[] | undefined)
  * crust build --entry src/main.ts             # Custom entry point
  * crust build --name my-tool                  # Output as dist/my-tool-*
  * crust build --no-minify                     # Disable minification
+ * crust build --target deno                               # Build for the host with Deno
  * crust build --target bun-linux-x64-baseline              # Build only for Linux x64
  * crust build --target bun-linux-x64-baseline --target bun-darwin-arm64  # Specific platforms only
  * crust build --target bun-linux-x64-baseline --outfile ./my-cli     # Single target with custom output
@@ -282,7 +288,7 @@ export const buildCommand = defineCommand(
 					type: "string",
 					multiple: true,
 					description:
-						"Canonical Bun target(s) to compile for (e.g. bun-linux-x64-baseline, bun-darwin-arm64). Omit to build all.",
+						"Runtime (bun or deno) and optional canonical compile target(s). Omit to detect from engines and project markers.",
 					short: "t",
 				},
 				{
@@ -327,6 +333,8 @@ export const buildCommand = defineCommand(
 			)
 			.action(async ({ flags }) => {
 				const cwd = process.cwd();
+				const project = readProjectMetadata(cwd);
+				const plan = resolveBuildPlan(flags.target, project);
 
 				// Resolve entry file path relative to cwd
 				const entryPath = resolve(cwd, flags.entry);
@@ -344,8 +352,13 @@ export const buildCommand = defineCommand(
 						"--outfile cannot be used with --package.\n  Use --stage-dir to control the staged npm output directory.",
 					);
 				}
-				const targets = resolveTargets(flags.target);
-				if (!flags.package && flags.outfile && targets.length > 1) {
+				if (flags.package && plan.runtime === "deno") {
+					throw new Error(
+						"--package currently supports Bun builds only. Select --target bun or omit Deno project markers.",
+					);
+				}
+				const targetCount = Math.max(plan.targets.length, 1);
+				if (!flags.package && flags.outfile && targetCount > 1) {
 					throw new Error(
 						"--outfile cannot be used when building for multiple targets.\n  Use --name to set the base binary name instead.",
 					);
@@ -358,9 +371,15 @@ export const buildCommand = defineCommand(
 				const outDir = flags.outfile
 					? dirname(resolve(cwd, flags.outfile))
 					: resolve(cwd, flags.outdir);
-				const prepared = flags.validate
-					? await buildEntrypoint(entryPath, outDir, envFiles)
-					: undefined;
+				const prepared =
+					plan.runtime === "bun" && flags.validate
+						? await buildEntrypoint(entryPath, outDir, envFiles)
+						: undefined;
+				if (plan.runtime === "deno" && flags.validate) {
+					console.warn(
+						"Warning: Command Snapshot validation and Extension build hooks are skipped for Deno builds; use a Bun build when build-time artifacts are required.",
+					);
+				}
 
 				if (flags.package) {
 					const { runDistributeBuild } = await import("../utils/distribute.ts");
@@ -369,7 +388,7 @@ export const buildCommand = defineCommand(
 						entry: flags.entry,
 						name: flags.name,
 						minify: flags.minify,
-						target: flags.target,
+						target: plan.runtime === "bun" ? plan.targets : undefined,
 						stageDir: flags["stage-dir"],
 						envFiles,
 						artifactOutDir: prepared ? outDir : undefined,
@@ -377,37 +396,54 @@ export const buildCommand = defineCommand(
 					return;
 				}
 
-				if (targets.length === 1) {
-					// Single-target build: one binary, no resolver
+				if (targetCount === 1) {
+					// Single-target (or Deno host) build: one binary, no resolver.
 					const outfilePath = resolveOutfile(
 						flags.outfile,
 						flags.name,
 						entryPath,
 						cwd,
 						flags.outdir,
+						project,
 					);
 
 					console.log(`Building ${dim(entryPath)} ${cyan("→")} ${dim(outfilePath)}...`);
-					await execBuild(entryPath, outfilePath, flags.minify, targets[0], envFiles);
+					if (plan.runtime === "bun") {
+						await execBuild(entryPath, outfilePath, flags.minify, plan.targets[0], envFiles);
+					} else {
+						await execDenoBuild(entryPath, outfilePath, plan.targets[0], envFiles);
+					}
 					console.log(`${green("✓")} Built successfully: ${outfilePath}`);
 				} else {
 					// Multi-target build: multiple binaries + shell/CMD resolvers
-					const baseName = resolveBaseName(flags.name, entryPath, cwd);
+					const baseName = resolveBaseName(flags.name, entryPath, cwd, project);
 
-					console.log(`Building ${dim(entryPath)} for ${bold(`${targets.length}`)} target(s)...`);
+					console.log(
+						`Building ${dim(entryPath)} for ${bold(`${plan.targets.length}`)} target(s)...`,
+					);
 
 					const results: string[] = [];
-					for (const target of targets) {
+					for (const target of plan.targets) {
 						const targetOutfile = resolve(cwd, flags.outdir, getBinaryFilename(baseName, target));
 
 						console.log(`  ${cyan("→")} ${bold(target)}: ${dim(targetOutfile)}`);
-						await execBuild(entryPath, targetOutfile, flags.minify, target, envFiles);
+						if (plan.runtime === "bun") {
+							await execBuild(
+								entryPath,
+								targetOutfile,
+								flags.minify,
+								target as BunTarget,
+								envFiles,
+							);
+						} else {
+							await execDenoBuild(entryPath, targetOutfile, target as DenoTarget, envFiles);
+						}
 						results.push(targetOutfile);
 					}
 
 					// Generate resolver scripts
 					const resolverPath = resolve(cwd, flags.outdir, flags.resolver);
-					writeResolver(resolverPath, baseName, targets);
+					writeResolver(resolverPath, baseName, plan.targets);
 
 					console.log(`\n${green("✓")} Built ${bold(`${results.length}`)} target(s) successfully:`);
 					for (const r of results) {
