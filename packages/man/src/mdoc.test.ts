@@ -1,11 +1,27 @@
 import { describe, expect, it } from "bun:test";
 
-import { Crust, defineCommand, defineExtension } from "@crustjs/core";
+import { Crust, defineCommand, defineExtension, defineExtensionId } from "@crustjs/core";
 import { help } from "@crustjs/extensions";
 
+import { man } from "./extension.ts";
 import { renderManPageMdoc } from "./mdoc.ts";
 
 describe("renderManPageMdoc", () => {
+	it("honors only and except audiences", async () => {
+		const other = defineExtensionId("acme:other");
+		const snapshot = await new Crust("demo", {
+			sections: [
+				{ title: "MAN ONLY", body: "visible", only: [man.id] },
+				{ title: "OTHER ONLY", body: "hidden", only: [other] },
+				{ title: "NOT MAN", body: "hidden", except: [man.id] },
+			],
+		}).snapshot();
+		const output = renderManPageMdoc({ root: snapshot, name: "demo" });
+		expect(output).toContain(".Sh MAN ONLY");
+		expect(output).not.toContain(".Sh OTHER ONLY");
+		expect(output).not.toContain(".Sh NOT MAN");
+	});
+
 	it("includes NAME SYNOPSIS SUBCOMMANDS OPTIONS", async () => {
 		const app = new Crust("demo", { description: "Demo CLI for tests." })
 			.extend(help())
@@ -48,7 +64,7 @@ describe("renderManPageMdoc", () => {
 			sections: [{ title: "Extra notes", body: ".config is supported.\nMore details." }],
 		})
 			.extend(
-				defineExtension("docs", {
+				defineExtension(defineExtensionId("docs"), {
 					sections: () => [
 						{
 							command: [],

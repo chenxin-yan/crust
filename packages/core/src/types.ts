@@ -2,6 +2,7 @@ import type { BaseValueType } from "@crustjs/utils/primitive";
 import type { InferOutput, StandardSchema } from "@crustjs/utils/schema";
 
 import type { Simplify } from "./api/context.ts";
+import type { ExtensionId } from "./identity.ts";
 
 /** Injectable output callbacks threaded through one invocation. */
 export interface InvocationIO {
@@ -721,12 +722,9 @@ export type InputFlags<F extends FlagsDef> = Simplify<
 // CommandMeta — Command metadata
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Identifier of a renderer that consumes command documentation sections. */
-export type SectionConsumer = string;
-
 export type SectionAudience =
-	| { readonly only: readonly SectionConsumer[]; readonly except?: never }
-	| { readonly except: readonly SectionConsumer[]; readonly only?: never }
+	| { readonly only: readonly ExtensionId[]; readonly except?: never }
+	| { readonly except: readonly ExtensionId[]; readonly only?: never }
 	| { readonly only?: never; readonly except?: never };
 
 /** A plain-text documentation section rendered after built-in command documentation. */

@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { Crust, defineCommand } from "../command/crust.ts";
 import { CrustError } from "../errors.ts";
+import { defineExtensionId } from "../identity.ts";
 import type { NamedFlagDef } from "../types.ts";
 import { defineContext, type ContextResolver } from "./context.ts";
 import { defineExtension } from "./extension.ts";
@@ -532,7 +533,7 @@ describe("Context-owned flags", () => {
 
 	it("rejects Extension collisions regardless of fluent registration order", async () => {
 		const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
-		const extension = defineExtension("auth-extension", {
+		const extension = defineExtension(defineExtensionId("auth-extension"), {
 			flags: [{ name: "other", type: "string", aliases: ["api-key"] }],
 		});
 
@@ -773,7 +774,7 @@ describe("pull-based Context resolution", () => {
 		let setups = 0;
 		const service = defineContext("service", () => ({ id: ++setups }));
 		const seen: number[] = [];
-		const observer = defineExtension("observer", {
+		const observer = defineExtension(defineExtensionId("observer"), {
 			hooks: {
 				async preRun(ctx) {
 					seen.push((await ctx.use(service)).id);
@@ -808,8 +809,8 @@ describe("pull-based Context resolution", () => {
 	it("installs Extension providers for commands and other Extensions", async () => {
 		const logger = defineContext("logger", () => ({ label: "extension" }));
 		const events: string[] = [];
-		const provider = defineExtension("provider", { provides: [logger()] });
-		const consumer = defineExtension("consumer", {
+		const provider = defineExtension(defineExtensionId("provider"), { provides: [logger()] });
+		const consumer = defineExtension(defineExtensionId("consumer"), {
 			hooks: { preRun: async (ctx) => void events.push((await ctx.use(logger)).label) },
 		});
 		const command = defineCommand("run", (builder) =>
@@ -827,8 +828,12 @@ describe("pull-based Context resolution", () => {
 	it("resolves dependencies across Extension providers regardless of order", async () => {
 		const base = defineContext("base", () => "base");
 		const service = defineContext("service", async ({ ctx }) => `service:${await ctx.use(base)}`);
-		const serviceProvider = defineExtension("service-provider", { provides: [service()] });
-		const baseProvider = defineExtension("base-provider", { provides: [base()] });
+		const serviceProvider = defineExtension(defineExtensionId("service-provider"), {
+			provides: [service()],
+		});
+		const baseProvider = defineExtension(defineExtensionId("base-provider"), {
+			provides: [base()],
+		});
 		await new Crust("cli")
 			.extend(serviceProvider, baseProvider)
 			.action(async ({ ctx }) => expect(await ctx.use(service)).toBe("service:base"))
@@ -839,7 +844,7 @@ describe("pull-based Context resolution", () => {
 		const token = defineFlag("token", { type: "string" });
 		const auth = defineContext("auth", { flags: [token] }, ({ flags }) => flags.token);
 		const service = defineContext("service", async ({ ctx }) => await ctx.use(auth));
-		const extension = defineExtension("consumer", {
+		const extension = defineExtension(defineExtensionId("consumer"), {
 			hooks: { preRun: async (ctx) => void (await ctx.use(service)) },
 		});
 		const app = new Crust("cli")
@@ -860,7 +865,7 @@ describe("pull-based Context resolution", () => {
 			serviceSetups++;
 			return await ctx.use(auth);
 		});
-		const extension = defineExtension("consumer", {
+		const extension = defineExtension(defineExtensionId("consumer"), {
 			hooks: { preRun: async (ctx) => void (await ctx.use(service).catch(() => undefined)) },
 		});
 		const app = new Crust("cli")
@@ -884,7 +889,7 @@ describe("pull-based Context resolution", () => {
 				throw new Error("auth unavailable", { cause: error });
 			}
 		});
-		const extension = defineExtension("consumer", {
+		const extension = defineExtension(defineExtensionId("consumer"), {
 			hooks: { preRun: async (ctx) => void (await ctx.use(service).catch(() => undefined)) },
 		});
 		const app = new Crust("cli")
@@ -923,7 +928,7 @@ describe("pull-based Context resolution", () => {
 			await ctx.use(auth).catch(() => undefined);
 			throw replacement;
 		});
-		const extension = defineExtension("consumer", {
+		const extension = defineExtension(defineExtensionId("consumer"), {
 			hooks: {
 				preRun: async (ctx) => {
 					await ctx.use(service).catch(() => undefined);
@@ -961,7 +966,7 @@ describe("pull-based Context resolution", () => {
 	it("allows nested flag-free pulls in preRun", async () => {
 		const base = defineContext("base", () => "ok");
 		const service = defineContext("service", async ({ ctx }) => await ctx.use(base));
-		const extension = defineExtension("consumer", {
+		const extension = defineExtension(defineExtensionId("consumer"), {
 			hooks: { preRun: async (ctx) => expect(await ctx.use(service)).toBe("ok") },
 		});
 		await new Crust("cli").provide(base(), service()).extend(extension).run([]);
@@ -970,7 +975,7 @@ describe("pull-based Context resolution", () => {
 	it("rejects flag-owning Contexts after finish skips validation", async () => {
 		const token = defineFlag("token", { type: "string" });
 		const auth = defineContext("auth", { flags: [token] }, ({ flags }) => flags.token);
-		const extension = defineExtension("consumer", {
+		const extension = defineExtension(defineExtensionId("consumer"), {
 			hooks: {
 				preRun: (ctx) => ctx.finish(),
 				postRun: async (ctx) => void (await ctx.use(auth)),
@@ -1007,7 +1012,7 @@ describe("Context disposal", () => {
 				events.push("dispose");
 			},
 		}));
-		const observer = defineExtension("observer", {
+		const observer = defineExtension(defineExtensionId("observer"), {
 			hooks: {
 				async postRun(ctx) {
 					(await ctx.use(resource)).use();
@@ -1034,7 +1039,7 @@ describe("Context disposal", () => {
 				events.push("dispose");
 			},
 		}));
-		const observer = defineExtension("observer", {
+		const observer = defineExtension(defineExtensionId("observer"), {
 			hooks: {
 				async postRun(ctx) {
 					(await ctx.use(resource)).use();

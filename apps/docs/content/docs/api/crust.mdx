@@ -238,7 +238,7 @@ Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in re
 extend(...extensions: readonly Extension[]): Crust
 ```
 
-Registers application-wide Extensions. Repeated calls accumulate in registration order; duplicate Extension names across or within calls throw `DEFINITION`. `.extend()` exists on `Crust` roots and is intentionally absent from `CommandDefinitionBuilder`.
+Registers application-wide Extensions. Repeated calls accumulate in registration order; duplicate Extension ids across or within calls throw `DEFINITION`. `.extend()` exists on `Crust` roots and is intentionally absent from `CommandDefinitionBuilder`.
 
 ```ts
 import { help, version } from "@crustjs/extensions";

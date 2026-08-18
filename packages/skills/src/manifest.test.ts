@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
-import type { ArgDef, FlagDef } from "@crustjs/core";
-import { Crust, defineCommand } from "@crustjs/core";
+import type { ArgDef, CommandSection, FlagDef } from "@crustjs/core";
+import { Crust, defineCommand, defineExtensionId } from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
 type CommandNode = Parameters<typeof snapshotCommand>[0];
 
-import { buildManifest } from "./manifest.ts";
+import { buildManifest, SKILLS } from "./manifest.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helper — builds a CommandNode for introspection tests
@@ -17,7 +17,7 @@ function makeCommand(opts: {
 		description?: string;
 		usage?: string;
 		hidden?: boolean;
-		sections?: readonly { title: string; body: string }[];
+		sections?: readonly CommandSection[];
 	};
 	args?: readonly ArgDef[];
 	flags?: Record<string, FlagDef>;
@@ -117,6 +117,24 @@ describe("buildManifest", () => {
 			expect(node.sections).toEqual([
 				{ title: "Safety", body: "Confirm destructive operations before execution." },
 				{ title: "Preview", body: "Prefer dry-run flags when available." },
+			]);
+		});
+
+		it("honors only and except section audiences", () => {
+			const other = defineExtensionId("acme:other");
+			const cmd = makeCommand({
+				meta: {
+					name: "deploy",
+					sections: [
+						{ title: "Skills only", body: "visible", only: [SKILLS] },
+						{ title: "Other only", body: "hidden", only: [other] },
+						{ title: "Not skills", body: "hidden", except: [SKILLS] },
+					],
+				},
+			});
+
+			expect(buildManifest(snapshotCommand(cmd)).sections).toEqual([
+				{ title: "Skills only", body: "visible" },
 			]);
 		});
 	});

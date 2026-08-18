@@ -1,4 +1,12 @@
-import { type Extension, type ExtensionContext, defineExtension } from "@crustjs/core";
+import {
+	type Extension,
+	type ExtensionId,
+	type ExtensionContext,
+	defineExtension,
+	defineExtensionId,
+} from "@crustjs/core";
+
+const NO_COLOR: ExtensionId = defineExtensionId("crust:no-color");
 
 /**
  * Adds a recursive `--color` / `--no-color` flag pair that scopes the
@@ -28,8 +36,8 @@ let baseForceColor: string | undefined;
 let baseNoColor: string | undefined;
 const colorRuns = new WeakMap<ExtensionContext, true>();
 
-export function noColor(): Extension {
-	return defineExtension("crust:no-color", {
+function noColorFactory(): Extension {
+	return defineExtension(NO_COLOR, {
 		flags: [
 			{
 				name: "color",
@@ -75,3 +83,8 @@ export function noColor(): Extension {
 		},
 	});
 }
+
+export const noColor: typeof noColorFactory & { readonly id: ExtensionId } = Object.assign(
+	noColorFactory,
+	{ id: NO_COLOR },
+);

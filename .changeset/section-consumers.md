@@ -1,12 +1,16 @@
 ---
-"@crustjs/core": minor
-"@crustjs/extensions": minor
-"@crustjs/man": minor
-"@crustjs/skills": minor
+"@crustjs/core": major
+"@crustjs/extensions": major
+"@crustjs/man": major
+"@crustjs/skills": major
 ---
 
-Add section consumer ids and audience filtering for help, man pages, and generated agent skills. Application-authored sections titled "Agent skills" are now preserved in generated skills.
+Add audience filtering for command documentation sections. Sections are visible to every renderer by default; `only` and `except` target branded Extension identities. Help, man pages, and generated agent skills select their own audiences, and application-authored "Agent skills" sections remain preserved in generated skills.
 
-Reserve the `crust:` namespace by convention for official identities; nothing enforces the prefix at runtime. Official Extension names are now `crust:help`, `crust:version`, `crust:completion`, `crust:did-you-mean`, `crust:no-color`, `crust:update-notifier`, `crust:man`, and `crust:skills`; the `HELP`, `MAN`, and `SKILLS` section consumer values are now `crust:help`, `crust:man`, and `crust:skills`. Third-party packages should namespace published identities with their own prefix.
+Replace string Extension names and section consumers with branded `ExtensionId` values minted by `defineExtensionId()`. Extensions now expose `id`, accept soft `after` ordering constraints, and attribute handled failures through `InvocationOutcome.by`. Official identities retain their reserved `crust:*` namespace.
 
-Migrate raw section filters such as `only: ["skills"]` and `except: ["help"]` by importing and using `SKILLS`, `HELP`, or `MAN`; un-migrated raw filters still typecheck but silently stop matching, so the section vanishes from that renderer's output. Migrate `outcome.by` comparisons to compare against the configured Extension's `.name`, or use the new exact names (for example, `outcome.by === "crust:help"`). Error messages and other diagnostics that label an official Extension also contain its new `crust:*` name. Plain user Extension names remain valid and no longer collide with official Extensions that previously used the same flat name.
+Official renderer identities now live on factory statics (`help.id`, `man.id`, and `skill.id`); the `HELP`, `MAN`, and `SKILLS` exports are removed. All official Extension factories expose their identity through `.id`.
+
+Migrate Extension definitions from `defineExtension("acme:feature", config)` to `defineExtension(defineExtensionId("acme:feature"), config)`, and replace `.name` reads with `.id`. Replace section filters such as `only: ["skills"]` with factory statics such as `only: [skill.id]`; raw strings no longer typecheck. Compare attribution with factory statics too, for example `outcome.by === help.id`.
+
+For `execute()` failures reached during dispatch, `onError` now settles before `postRun`. The handling Extension is available as `outcome.by`, and invocation Contexts remain pullable through `onError` and `postRun` before disposal. Core fallback rendering leaves `outcome.by` undefined.

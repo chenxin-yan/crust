@@ -1,8 +1,13 @@
-import { type ExtensionContext, defineCommand, defineExtension } from "@crustjs/core";
+import {
+  type ExtensionContext,
+  defineCommand,
+  defineExtension,
+  defineExtensionId,
+} from "@crustjs/core";
 
 const timers = new WeakMap<ExtensionContext, number>();
 
-export const diagnostics = defineExtension("diagnostics", {
+export const diagnostics = defineExtension(defineExtensionId("diagnostics"), {
   flags: [
     {
       name: "trace",

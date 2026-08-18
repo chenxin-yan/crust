@@ -1,4 +1,9 @@
-import { type CommandSnapshot, type SectionConsumer, sectionsFor } from "@crustjs/core";
+import {
+	type CommandSnapshot,
+	type ExtensionId,
+	defineExtensionId,
+	sectionsFor,
+} from "@crustjs/core";
 import {
 	buildCommandDocumentation,
 	formatDescription,
@@ -6,7 +11,7 @@ import {
 	type DocumentationFlag,
 } from "@crustjs/core/tooling";
 
-export const MAN: SectionConsumer = "crust:man";
+export const MAN: ExtensionId = defineExtensionId("crust:man");
 
 function escapeMdocBodyLine(line: string): string {
 	// Both `.` and `'` start roff control lines.

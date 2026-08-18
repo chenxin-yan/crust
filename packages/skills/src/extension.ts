@@ -3,6 +3,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import {
 	type Extension,
+	type ExtensionId,
 	type ExtensionBuildContext,
 	defineCommand,
 	defineExtension,
@@ -233,7 +234,7 @@ async function buildSkills(options: SkillOptions, context: ExtensionBuildContext
 	await cp(source, outDir, { recursive: true });
 }
 
-export function skill(options: SkillOptions): Extension {
+function skillFactory(options: SkillOptions): Extension {
 	const commandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
 	return defineExtension(SKILLS, {
 		commands: [buildSkillCommand(commandName, options)],
@@ -256,6 +257,11 @@ export function skill(options: SkillOptions): Extension {
 		},
 	});
 }
+
+export const skill: typeof skillFactory & { readonly id: ExtensionId } = Object.assign(
+	skillFactory,
+	{ id: SKILLS },
+);
 
 async function reconcileSkill(opts: {
 	packagedSkill: PackagedSkill;

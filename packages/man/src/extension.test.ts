@@ -6,7 +6,6 @@ import { join } from "node:path";
 import { Crust } from "@crustjs/core";
 
 import { man } from "./extension.ts";
-import { MAN } from "./mdoc.ts";
 
 const directories: string[] = [];
 
@@ -15,8 +14,9 @@ afterEach(async () => {
 });
 
 describe("man Extension", () => {
-	it("uses reserved identities for the official Extension and section consumer", () => {
-		expect([man().name, MAN]).toEqual(["crust:man", "crust:man"]);
+	it("exposes the reserved identity on the factory", () => {
+		expect(String(man.id)).toBe("crust:man");
+		expect(man().id).toBe(man.id);
 	});
 
 	it("writes the root manual with a configurable section", async () => {

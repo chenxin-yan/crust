@@ -344,8 +344,8 @@ describe("buildCommand error handling", () => {
 		mkdirSync(join(tmpDir, "src"), { recursive: true });
 		writeFileSync(
 			join(tmpDir, "src", "cli.ts"),
-			`import { Crust, defineExtension } from "@crustjs/core";\n` +
-				`const artifact = defineExtension("artifact", { build: ({ outDir }) => Bun.write(outDir + "/artifact.txt", "built") });\n` +
+			`import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";\n` +
+				`const artifact = defineExtension(defineExtensionId("artifact"), { build: ({ outDir }) => Bun.write(outDir + "/artifact.txt", "built") });\n` +
 				`await new Crust("fixture").extend(artifact).action(() => {}).execute();\n`,
 		);
 

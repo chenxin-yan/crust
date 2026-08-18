@@ -1,6 +1,6 @@
 import type { CommandDefinition } from "../command/crust.ts";
 import type { CommandSnapshot } from "../command/snapshot.ts";
-import { CrustError } from "../errors.ts";
+import type { ExtensionId } from "../identity.ts";
 import type {
 	CommandSection,
 	FlagDef,
@@ -34,8 +34,8 @@ export function finishInvocation(): Finished {
 
 export type InvocationOutcome =
 	| { readonly status: "completed" }
-	| { readonly status: "finished"; readonly by: string }
-	| { readonly status: "failed"; readonly error: unknown };
+	| { readonly status: "finished"; readonly by: ExtensionId }
+	| { readonly status: "failed"; readonly error: unknown; readonly by?: ExtensionId };
 
 /** Build-time context passed to an Extension's artifact generator. */
 export interface ExtensionBuildContext {
@@ -206,6 +206,8 @@ export interface ExtensionConfig<
 	readonly sections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
 	/** Build-time artifact generation, invoked by build tooling (e.g. `crust build`). */
 	readonly build?: (ctx: ExtensionBuildContext) => void | Promise<void>;
+	/** Extension ids that should run before this Extension when registered. */
+	readonly after?: readonly ExtensionId[];
 	readonly hooks?: ExtensionHooks<Defs>;
 }
 
@@ -221,12 +223,13 @@ type ValidateExtensionConfig<Defs extends readonly NamedExtensionFlagDef[]> = {
  * see {@link defineExtension}.
  */
 export interface Extension {
-	readonly name: string;
+	readonly id: ExtensionId;
 	readonly flags?: Readonly<Record<string, ExtensionFlagDef>>;
 	readonly commands?: readonly CommandDefinition<any>[];
 	readonly provides?: readonly ContextInstance[];
 	readonly sections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
 	readonly build?: (ctx: ExtensionBuildContext) => void | Promise<void>;
+	readonly after?: readonly ExtensionId[];
 	readonly hooks?: ExtensionHooks;
 }
 
@@ -240,16 +243,9 @@ export interface Extension {
  * surface when the application prepares.
  */
 export function defineExtension<const Defs extends readonly NamedExtensionFlagDef[] = []>(
-	name: string,
+	id: ExtensionId,
 	config: ExtensionConfig<Defs> & ValidateExtensionConfig<Defs> = {},
 ): Extension {
-	if (!name.trim()) {
-		throw new CrustError("DEFINITION", "Extension name must be a non-empty string", {
-			subject: "extension",
-			reason: "empty-name",
-		});
-	}
-
 	const ownedFlags: FlagsDef = {};
 	const spellings = new Map();
 	for (const def of config.flags ?? []) {
@@ -258,7 +254,7 @@ export function defineExtension<const Defs extends readonly NamedExtensionFlagDe
 			{ name: flagName, def: rest as FlagDef },
 			ownedFlags,
 			spellings,
-			`Extension "${name}"`,
+			`Extension "${id}"`,
 		);
 		ownedFlags[flagName] = rest as ExtensionFlagDef;
 	}
@@ -267,6 +263,6 @@ export function defineExtension<const Defs extends readonly NamedExtensionFlagDe
 	return Object.freeze({
 		...config,
 		...(config.flags === undefined ? {} : { flags: ownedFlags }),
-		name,
+		id,
 	}) as Extension;
 }

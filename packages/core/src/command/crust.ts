@@ -822,21 +822,21 @@ export class Crust<
 	 *
 	 * Extensions are application-wide: they own the flags and commands they
 	 * contribute. Repeated calls accumulate Extensions in registration order;
-	 * duplicate names throw. Command definition builders do not expose this method.
+	 * duplicate ids throw. Command definition builders do not expose this method.
 	 *
-	 * @throws {CrustError} `DEFINITION` when an Extension name is already registered
+	 * @throws {CrustError} `DEFINITION` when an Extension id is already registered
 	 */
 	extend(...extensions: readonly Extension[]): Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags> {
-		const names = new Set(this._node.extensions.map((extension) => extension.name));
+		const ids = new Set(this._node.extensions.map((extension) => extension.id));
 		for (const extension of extensions) {
-			if (names.has(extension.name)) {
-				throw new CrustError("DEFINITION", `Extension "${extension.name}" is already registered`, {
+			if (ids.has(extension.id)) {
+				throw new CrustError("DEFINITION", `Extension "${extension.id}" is already registered`, {
 					subject: "extension",
-					name: extension.name,
+					name: extension.id,
 					reason: "duplicate-extension",
 				});
 			}
-			names.add(extension.name);
+			ids.add(extension.id);
 		}
 		const provided = extensions.flatMap((extension) => extension.provides ?? []);
 		return this._clone({

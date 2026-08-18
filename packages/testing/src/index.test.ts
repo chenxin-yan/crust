@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { Crust, defineCommand, defineExtension } from "@crustjs/core";
+import { Crust, defineCommand, defineExtension, defineExtensionId } from "@crustjs/core";
 import { progress, spinner } from "@crustjs/progress";
 import { input } from "@crustjs/prompts";
 
@@ -165,7 +165,7 @@ describe("captureExecute", () => {
 	});
 
 	it("captures onError extension rendering", async () => {
-		const renderer = defineExtension("renderer", {
+		const renderer = defineExtension(defineExtensionId("renderer"), {
 			hooks: {
 				onError(error, ctx) {
 					ctx.stderr(`custom: ${(error as Error).message}`);

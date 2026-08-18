@@ -10,6 +10,7 @@ import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
+import { defineExtensionId } from "../identity.ts";
 import {
 	type CommandDefinitionBuilder,
 	Crust,
@@ -248,7 +249,7 @@ describe("Crust .flags()", () => {
 			.flags({ name: "verbose", type: "boolean", short: "v" })
 			.flags(...dynamicDefs)
 			.args({ name: "file", type: "string" })
-			.extend(defineExtension("noop"));
+			.extend(defineExtension(defineExtensionId("noop")));
 
 		// Sp retention is pinned by the @ts-expect-error collision checks below:
 		// if the accumulator dropped "v", they would become unused and fail the
@@ -813,7 +814,7 @@ describe("Crust .extend()", () => {
 	it("runs Extensions in registration order", async () => {
 		const calls: string[] = [];
 		const extension = (name: string) =>
-			defineExtension(name, {
+			defineExtension(defineExtensionId(name), {
 				hooks: {
 					preRun: () => {
 						calls.push(name);
@@ -829,9 +830,47 @@ describe("Crust .extend()", () => {
 		expect(calls).toEqual(["one", "two", "three"]);
 	});
 
+	it("orders Extensions by after while ignoring absent ids", async () => {
+		const calls: string[] = [];
+		const firstId = defineExtensionId("first");
+		const secondId = defineExtensionId("second");
+		const absentId = defineExtensionId("absent");
+		const first = defineExtension(firstId, {
+			after: [secondId, absentId],
+			hooks: {
+				preRun: () => void calls.push("first"),
+				postRun: () => void calls.push("first:post"),
+			},
+		});
+		const second = defineExtension(secondId, {
+			hooks: {
+				preRun: () => void calls.push("second"),
+				postRun: () => void calls.push("second:post"),
+			},
+		});
+		await new Crust("test")
+			.extend(first, second)
+			.action(() => {})
+			.run([]);
+		expect(calls).toEqual(["second", "first", "first:post", "second:post"]);
+	});
+
+	it("rejects Extension ordering cycles", async () => {
+		const firstId = defineExtensionId("first");
+		const secondId = defineExtensionId("second");
+		const app = new Crust("test").extend(
+			defineExtension(firstId, { after: [secondId] }),
+			defineExtension(secondId, { after: [firstId] }),
+		);
+		await expect(app.snapshot()).rejects.toMatchObject({
+			code: "DEFINITION",
+			message: expect.stringContaining('"first", "second"'),
+		});
+	});
+
 	it("throws CrustError DEFINITION on duplicate Extension names", () => {
-		const first = defineExtension("duplicate");
-		const second = defineExtension("duplicate");
+		const first = defineExtension(defineExtensionId("duplicate"));
+		const second = defineExtension(defineExtensionId("duplicate"));
 
 		expect(() => new Crust("test").extend(first).extend(second)).toThrow(
 			/Extension "duplicate" is already registered/,
@@ -842,17 +881,17 @@ describe("Crust .extend()", () => {
 	});
 
 	it("defineExtension() returns a frozen plain config", () => {
-		const ext = defineExtension("frozen", {
+		const ext = defineExtension(defineExtensionId("frozen"), {
 			flags: [{ name: "x", type: "boolean" }],
 		});
 
 		expect(Object.isFrozen(ext)).toBe(true);
-		expect(ext.name).toBe("frozen");
+		expect(ext.id as string).toBe("frozen");
 		expect(ext.flags).toEqual({ x: { type: "boolean" } });
 	});
 
 	it("infers Extension-owned flags in hook contexts", () => {
-		const ext = defineExtension("typed-flags", {
+		const ext = defineExtension(defineExtensionId("typed-flags"), {
 			flags: [
 				{ name: "verbose", type: "boolean", default: false },
 				{ name: "rootPort", type: "number", default: 3000, recursive: false },
@@ -885,12 +924,12 @@ describe("Crust .extend()", () => {
 			},
 		});
 
-		expect(ext.name).toBe("typed-flags");
+		expect(ext.id as string).toBe("typed-flags");
 	});
 
 	it("infers defineFlag() values attached to an Extension", () => {
 		const trace = defineFlag("trace", { type: "boolean", default: false });
-		const ext = defineExtension("defined-flags", {
+		const ext = defineExtension(defineExtensionId("defined-flags"), {
 			flags: [trace],
 			hooks: {
 				preRun(ctx) {
@@ -907,7 +946,8 @@ describe("Crust .extend()", () => {
 			{ name: "mode", type: "string" },
 			{ name: "mode", type: "number" },
 		] as const;
-		const define = () => defineExtension("duplicate-flags", { flags: flags as never });
+		const define = () =>
+			defineExtension(defineExtensionId("duplicate-flags"), { flags: flags as never });
 
 		expect(define).toThrow(CrustError);
 		try {
@@ -928,15 +968,15 @@ describe("Crust .extend()", () => {
 			{ name: "verbose", type: "boolean", short: "v" },
 		] as const;
 
-		expect(() => defineExtension("short-clash", { flags: flags as never })).toThrow(
-			'Extension "short-clash" flag "--verbose" spelling "v" collides with flag "--loud"',
-		);
+		expect(() =>
+			defineExtension(defineExtensionId("short-clash"), { flags: flags as never }),
+		).toThrow('Extension "short-clash" flag "--verbose" spelling "v" collides with flag "--loud"');
 	});
 
 	it("defineExtension() rejects a flag definition without a name", () => {
-		expect(() => defineExtension("nameless", { flags: [{ type: "boolean" }] as never })).toThrow(
-			"Every flag definition must carry a non-empty name",
-		);
+		expect(() =>
+			defineExtension(defineExtensionId("nameless"), { flags: [{ type: "boolean" }] as never }),
+		).toThrow("Every flag definition must carry a non-empty name");
 	});
 
 	it("defineExtension() rejects mixing a schema with core options", () => {
@@ -949,13 +989,9 @@ describe("Crust .extend()", () => {
 			},
 		] as const;
 
-		expect(() => defineExtension("schema-mix", { flags: flags as never })).toThrow(
-			/schema exclusively owns/,
-		);
-	});
-
-	it("defineExtension() rejects an empty name", () => {
-		expect(() => defineExtension("  ")).toThrow(CrustError);
+		expect(() =>
+			defineExtension(defineExtensionId("schema-mix"), { flags: flags as never }),
+		).toThrow(/schema exclusively owns/);
 	});
 
 	it("preserves the command definition when extending", async () => {
@@ -964,7 +1000,7 @@ describe("Crust .extend()", () => {
 			.args({ name: "file", type: "string" })
 			.add(defineCommand("sub", (command) => command))
 			.action(() => {})
-			.extend(defineExtension("test-extension"));
+			.extend(defineExtension(defineExtensionId("test-extension")));
 
 		expect(await app.snapshot()).toMatchObject({
 			hasAction: true,
@@ -977,7 +1013,7 @@ describe("Crust .extend()", () => {
 	it("intermediate builders retain independent Extension lists", async () => {
 		const calls: string[] = [];
 		const extension = (name: string) =>
-			defineExtension(name, {
+			defineExtension(defineExtensionId(name), {
 				hooks: {
 					preRun: () => {
 						calls.push(name);
@@ -998,7 +1034,7 @@ describe("Crust .extend()", () => {
 describe("Extension application at prepare time", () => {
 	it("recursive Extension flags reach every command, including Extension commands", async () => {
 		const seen: Record<string, unknown>[] = [];
-		const debug = defineExtension("debug", {
+		const debug = defineExtension(defineExtensionId("debug"), {
 			flags: [{ name: "debug", type: "boolean" }],
 		});
 
@@ -1016,7 +1052,7 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("non-recursive Extension flags stay on the root", async () => {
-		const version = defineExtension("version", {
+		const version = defineExtension(defineExtensionId("version"), {
 			flags: [{ name: "version", type: "boolean", recursive: false }],
 		});
 
@@ -1046,7 +1082,7 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("Extension flag colliding with an application flag is a DEFINITION error", async () => {
-		const clash = defineExtension("clash", {
+		const clash = defineExtension(defineExtensionId("clash"), {
 			flags: [{ name: "verbose", type: "boolean" }],
 		});
 		const app = new Crust("cli")
@@ -1058,7 +1094,7 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("Extension flag short/alias collisions are DEFINITION errors at prepare time", async () => {
-		const clash = defineExtension("clash", {
+		const clash = defineExtension(defineExtensionId("clash"), {
 			flags: [{ name: "loud", type: "boolean", short: "v" }],
 		});
 		const app = new Crust("cli")
@@ -1070,10 +1106,10 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("Extension flag colliding with another Extension's flag is a DEFINITION error", async () => {
-		const a = defineExtension("a", {
+		const a = defineExtension(defineExtensionId("a"), {
 			flags: [{ name: "shared", type: "boolean" }],
 		});
-		const b = defineExtension("b", {
+		const b = defineExtension(defineExtensionId("b"), {
 			flags: [{ name: "shared", type: "boolean" }],
 		});
 		const app = new Crust("cli").extend(a, b).action(() => {});
@@ -1084,7 +1120,7 @@ describe("Extension application at prepare time", () => {
 	it("Extension command definitions are routable, validated, and receive recursive flags", async () => {
 		const lines: string[] = [];
 		const errors: string[] = [];
-		const completion = defineExtension("completion", {
+		const completion = defineExtension(defineExtensionId("completion"), {
 			commands: [
 				defineCommand("completion", (command) =>
 					command
@@ -1108,7 +1144,7 @@ describe("Extension application at prepare time", () => {
 				},
 			},
 		});
-		const verbose = defineExtension("verbose", {
+		const verbose = defineExtension(defineExtensionId("verbose"), {
 			flags: [{ name: "verbose", type: "boolean" }],
 		});
 
@@ -1127,7 +1163,7 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("Extension command colliding with an application command is a DEFINITION error", async () => {
-		const clash = defineExtension("clash", {
+		const clash = defineExtension(defineExtensionId("clash"), {
 			commands: [defineCommand("sub", (command) => command.action(() => {}))],
 		});
 		const app = new Crust("cli")
@@ -1140,7 +1176,7 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("rejects non-definition Extension commands", async () => {
-		const invalid = defineExtension("invalid", { commands: [{} as never] });
+		const invalid = defineExtension(defineExtensionId("invalid"), { commands: [{} as never] });
 
 		await expect(new Crust("cli").extend(invalid).run([])).rejects.toMatchObject({
 			code: "DEFINITION",
@@ -1149,7 +1185,7 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("attributes foreign builders returned by Extension command definitions", async () => {
-		const invalid = defineExtension("invalid", {
+		const invalid = defineExtension(defineExtensionId("invalid"), {
 			commands: [defineCommand("foreign", () => new Crust("other") as never)],
 		});
 
@@ -1166,12 +1202,14 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("attributes nested Extensions inside Extension command definitions", async () => {
-		const invalid = defineExtension("invalid", {
+		const invalid = defineExtension(defineExtensionId("invalid"), {
 			commands: [
 				defineCommand(
 					"nested",
 					(command) =>
-						(command as unknown as Crust).extend(defineExtension("nested-extension")) as never,
+						(command as unknown as Crust).extend(
+							defineExtension(defineExtensionId("nested-extension")),
+						) as never,
 				),
 			],
 		});
@@ -1190,7 +1228,7 @@ describe("Extension application at prepare time", () => {
 
 	it("reuses one application across executions while running hooks each time", async () => {
 		const calls: string[] = [];
-		const debug = defineExtension("debug", {
+		const debug = defineExtension(defineExtensionId("debug"), {
 			flags: [{ name: "debug", type: "boolean" }],
 			hooks: {
 				preRun: () => {
@@ -1241,7 +1279,7 @@ describe("Extension application at prepare time", () => {
 	it("materializes Extension command recipes once per builder across runs", async () => {
 		let materialized = 0;
 		const calls: string[] = [];
-		const tools = defineExtension("tools", {
+		const tools = defineExtension(defineExtensionId("tools"), {
 			commands: [
 				defineCommand("sub", (command) => {
 					materialized++;
@@ -1264,7 +1302,7 @@ describe("Extension application at prepare time", () => {
 
 	it("does not cache a failed preparation: a throwing recipe is retried", async () => {
 		let attempts = 0;
-		const flaky = defineExtension("flaky", {
+		const flaky = defineExtension(defineExtensionId("flaky"), {
 			commands: [
 				defineCommand("sub", (command) => {
 					attempts++;
@@ -1283,7 +1321,7 @@ describe("Extension application at prepare time", () => {
 
 	it("extending a builder after a cached run affects only the derived builder", async () => {
 		const calls: string[] = [];
-		const audit = defineExtension("audit", {
+		const audit = defineExtension(defineExtensionId("audit"), {
 			hooks: {
 				preRun: () => {
 					calls.push("audit");
@@ -1306,14 +1344,14 @@ describe("Extension application at prepare time", () => {
 describe("Extension named hooks", () => {
 	it("runs pre-run hooks in extension order and finish skips later hooks and the action", async () => {
 		const order: string[] = [];
-		const first = defineExtension("first", {
+		const first = defineExtension(defineExtensionId("first"), {
 			hooks: {
 				preRun: () => {
 					order.push("first");
 				},
 			},
 		});
-		const gate = defineExtension("gate", {
+		const gate = defineExtension(defineExtensionId("gate"), {
 			hooks: {
 				preRun(ctx) {
 					order.push("gate");
@@ -1321,7 +1359,7 @@ describe("Extension named hooks", () => {
 				},
 			},
 		});
-		const last = defineExtension("last", {
+		const last = defineExtension(defineExtensionId("last"), {
 			hooks: {
 				preRun: () => {
 					order.push("last");
@@ -1341,14 +1379,14 @@ describe("Extension named hooks", () => {
 
 	it("runs post-run hooks LIFO for completed, failed, and finished invocations", async () => {
 		const outcomes: string[] = [];
-		const first = defineExtension("first", {
+		const first = defineExtension(defineExtensionId("first"), {
 			hooks: {
 				postRun: (_ctx, outcome) => {
 					outcomes.push(`first:${outcome.status}`);
 				},
 			},
 		});
-		const second = defineExtension("second", {
+		const second = defineExtension(defineExtensionId("second"), {
 			hooks: {
 				postRun: (_ctx, outcome) => {
 					outcomes.push(`second:${outcome.status}`);
@@ -1374,7 +1412,7 @@ describe("Extension named hooks", () => {
 		expect(outcomes).toEqual(["second:failed", "first:failed"]);
 
 		outcomes.length = 0;
-		const gate = defineExtension("gate", {
+		const gate = defineExtension(defineExtensionId("gate"), {
 			hooks: { preRun: (ctx) => ctx.finish() },
 		});
 		await new Crust("cli")
@@ -1387,7 +1425,7 @@ describe("Extension named hooks", () => {
 	it("reports the finishing Extension and exposes parsed snapshots before validation", async () => {
 		let outcomeBy = "";
 		let seenPort: unknown;
-		const gate = defineExtension("gate", {
+		const gate = defineExtension(defineExtensionId("gate"), {
 			hooks: {
 				preRun(ctx) {
 					seenPort = ctx.flags.port;
@@ -1411,7 +1449,7 @@ describe("Extension named hooks", () => {
 	it("does not run hooks for routing failures and exposes frozen snapshots with injected io", async () => {
 		let preRunCalled = false;
 		const lines: string[] = [];
-		const probe = defineExtension("probe", {
+		const probe = defineExtension(defineExtensionId("probe"), {
 			hooks: {
 				preRun(ctx) {
 					preRunCalled = true;
@@ -1437,7 +1475,7 @@ describe("Extension named hooks", () => {
 
 	it("preserves a failed invocation over post-run errors and fails success with the first cleanup error", async () => {
 		const original = new Error("original");
-		const cleanup = defineExtension("cleanup", {
+		const cleanup = defineExtension(defineExtensionId("cleanup"), {
 			hooks: {
 				postRun() {
 					throw new Error("cleanup");
@@ -1454,7 +1492,7 @@ describe("Extension named hooks", () => {
 		).rejects.toBe(original);
 
 		const calls: string[] = [];
-		const first = defineExtension("first", {
+		const first = defineExtension(defineExtensionId("first"), {
 			hooks: {
 				postRun() {
 					calls.push("first");
@@ -1462,7 +1500,7 @@ describe("Extension named hooks", () => {
 				},
 			},
 		});
-		const second = defineExtension("second", {
+		const second = defineExtension(defineExtensionId("second"), {
 			hooks: {
 				postRun() {
 					calls.push("second");
@@ -1481,7 +1519,7 @@ describe("Extension named hooks", () => {
 
 	it("passes the application root snapshot to app and Extension command actions", async () => {
 		const roots: string[] = [];
-		const extension = defineExtension("extension", {
+		const extension = defineExtension(defineExtensionId("extension"), {
 			commands: [
 				defineCommand("owned", (command) =>
 					command.action(({ rootCommand }) => {
@@ -1534,10 +1572,10 @@ describe("Extension onError hooks", () => {
 
 	it("stops at the first truthy result and retains the nonzero exit status", async () => {
 		const order: string[] = [];
-		const first = defineExtension("first", {
+		const first = defineExtension(defineExtensionId("first"), {
 			hooks: { onError: () => (order.push("first"), undefined) },
 		});
-		const presenter = defineExtension("presenter", {
+		const presenter = defineExtension(defineExtensionId("presenter"), {
 			hooks: {
 				onError(error, ctx) {
 					order.push("presenter");
@@ -1546,7 +1584,7 @@ describe("Extension onError hooks", () => {
 				},
 			},
 		});
-		const never = defineExtension("never", {
+		const never = defineExtension(defineExtensionId("never"), {
 			hooks: {
 				onError: () => {
 					order.push("never");
@@ -1561,22 +1599,19 @@ describe("Extension onError hooks", () => {
 		expect(process.exitCode).toBe(1);
 	});
 
-	it("rejects Context pulls after disposal in onError", async () => {
+	it("keeps invocation Contexts live through onError and disposes them afterwards", async () => {
 		let disposed = false;
-		let pullError: unknown;
+		let pulled = false;
 		const resource = defineContext("resource", () => ({
 			[Symbol.dispose]() {
 				disposed = true;
 			},
 		}));
-		const observer = defineExtension("observer", {
+		const observer = defineExtension(defineExtensionId("observer"), {
 			hooks: {
 				async onError(_error, ctx) {
-					try {
-						await ctx.use(resource);
-					} catch (error) {
-						pullError = error;
-					}
+					await ctx.use(resource);
+					pulled = true;
 					return true;
 				},
 			},
@@ -1590,17 +1625,14 @@ describe("Extension onError hooks", () => {
 			});
 
 		await app.execute({ argv: [] });
+		expect(pulled).toBe(true);
 		expect(disposed).toBe(true);
-		expect(pullError).toMatchObject({
-			code: "DEFINITION",
-			details: { reason: "context-after-disposal" },
-		});
 	});
 
 	it("passes the same context identity from preRun to onError", async () => {
 		let preRunContext: unknown;
 		let onErrorContext: unknown;
-		const observer = defineExtension("observer", {
+		const observer = defineExtension(defineExtensionId("observer"), {
 			hooks: {
 				preRun(ctx) {
 					preRunContext = ctx;
@@ -1616,9 +1648,30 @@ describe("Extension onError hooks", () => {
 		expect(onErrorContext).toBe(preRunContext);
 	});
 
+	it("attributes handled and core-rendered failures before postRun", async () => {
+		const handled: unknown[] = [];
+		const unhandled: unknown[] = [];
+		const presenterId = defineExtensionId("presenter");
+		const presenter = defineExtension(presenterId, {
+			hooks: {
+				onError: () => true,
+				postRun: (_ctx, outcome) => void handled.push(outcome),
+			},
+		});
+		const observer = defineExtension(defineExtensionId("observer"), {
+			hooks: { postRun: (_ctx, outcome) => void unhandled.push(outcome) },
+		});
+
+		await failing().extend(presenter).execute({ argv: [] });
+		await failing().extend(observer).execute({ argv: [] });
+		expect(handled[0]).toMatchObject({ status: "failed", by: presenterId });
+		expect(unhandled[0]).toMatchObject({ status: "failed" });
+		expect(unhandled[0]).not.toHaveProperty("by");
+	});
+
 	it("falls through to Core's default renderer and never runs for run()", async () => {
 		let onErrorRan = false;
-		const observer = defineExtension("observer", {
+		const observer = defineExtension(defineExtensionId("observer"), {
 			hooks: {
 				onError() {
 					onErrorRan = true;
@@ -1878,7 +1931,7 @@ describe("Crust .execute()", () => {
 
 	it("offers AbortError to onError hooks before the silent default", async () => {
 		const seen: unknown[] = [];
-		const cancelRenderer = defineExtension("cancel-renderer", {
+		const cancelRenderer = defineExtension(defineExtensionId("cancel-renderer"), {
 			hooks: {
 				onError(error, ctx) {
 					seen.push(error);
@@ -1901,7 +1954,7 @@ describe("Crust .execute()", () => {
 	});
 
 	it("preserves the cancellation exit code after onError hooks", async () => {
-		const exitCodeOverride = defineExtension("exit-code-override", {
+		const exitCodeOverride = defineExtension(defineExtensionId("exit-code-override"), {
 			hooks: {
 				onError() {
 					process.exitCode = 1;
@@ -1920,7 +1973,7 @@ describe("Crust .execute()", () => {
 
 	it("keeps cancellation silent when onError hooks decline it", async () => {
 		let observed = false;
-		const observer = defineExtension("observer", {
+		const observer = defineExtension(defineExtensionId("observer"), {
 			hooks: {
 				onError() {
 					observed = true;
@@ -1981,10 +2034,10 @@ describe("Crust .execute()", () => {
 	it("Extension-owned command trees receive other Extensions' recursive flags", async () => {
 		let receivedFlags: Record<string, unknown> = {};
 
-		const helpLike = defineExtension("help-like", {
+		const helpLike = defineExtension(defineExtensionId("help-like"), {
 			flags: [{ name: "help", type: "boolean" }],
 		});
-		const skillLike = defineExtension("inject-subcommand", {
+		const skillLike = defineExtension(defineExtensionId("inject-subcommand"), {
 			commands: [
 				defineCommand("skill", (command) =>
 					command.add(
@@ -2048,7 +2101,7 @@ describe("Crust .execute()", () => {
 		let preRunName = "";
 		let preRunFlags: Record<string, unknown> = {};
 
-		const inspect = defineExtension("inspect", {
+		const inspect = defineExtension(defineExtensionId("inspect"), {
 			hooks: {
 				preRun(ctx) {
 					preRunName = ctx.command.meta.name;
@@ -2130,7 +2183,7 @@ describe("Crust .execute()", () => {
 	});
 
 	it("Extension apply error is rendered and sets exitCode", async () => {
-		const clash = defineExtension("clash", {
+		const clash = defineExtension(defineExtensionId("clash"), {
 			flags: [{ name: "verbose", type: "boolean" }],
 		});
 		const app = new Crust("test")
@@ -2145,7 +2198,7 @@ describe("Crust .execute()", () => {
 	});
 
 	it("treats pre-run prompt cancellation as a silent user abort", async () => {
-		const cancel = defineExtension("cancel", {
+		const cancel = defineExtension(defineExtensionId("cancel"), {
 			hooks: {
 				preRun: () => {
 					throw new DOMException("Prompt was cancelled.", "AbortError");
@@ -2190,7 +2243,7 @@ describe("Crust .execute()", () => {
 		const stdout = () => {};
 		const stderr = () => {};
 		const observed: (ReturnType<typeof getAmbientTerminalIO> | undefined)[] = [];
-		const observer = defineExtension("ambient-observer", {
+		const observer = defineExtension(defineExtensionId("ambient-observer"), {
 			hooks: {
 				preRun: () => {
 					observed.push(getAmbientTerminalIO());
@@ -2293,7 +2346,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		process.env[SNAPSHOT_PATH_ENV] = path;
 		let actionRan = false;
 		let preRunRan = false;
-		const spy = defineExtension("spy", {
+		const spy = defineExtension(defineExtensionId("spy"), {
 			hooks: {
 				preRun: () => {
 					preRunRan = true;
@@ -2325,7 +2378,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		const calls: string[] = [];
 		const app = new Crust("build-subprocess")
 			.extend(
-				defineExtension("first", {
+				defineExtension(defineExtensionId("first"), {
 					build: ({ snapshot, outDir: receivedOutDir }) => {
 						expect(Object.isFrozen(snapshot)).toBe(true);
 						expect(snapshot.meta.name).toBe("build-subprocess");
@@ -2333,8 +2386,8 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 						calls.push("first");
 					},
 				}),
-				defineExtension("runtime-only"),
-				defineExtension("second", {
+				defineExtension(defineExtensionId("runtime-only")),
+				defineExtension(defineExtensionId("second"), {
 					build: () => {
 						calls.push("second");
 					},
@@ -2354,7 +2407,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		process.env[SNAPSHOT_PATH_ENV] = path;
 		process.env[BUILD_OUT_DIR_ENV] = join(dirname(path), "output");
 		const app = new Crust("build-subprocess").extend(
-			defineExtension("broken", {
+			defineExtension(defineExtensionId("broken"), {
 				build: () => {
 					throw new Error("disk full");
 				},
@@ -2369,7 +2422,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 	it("prints validation errors and exits one without writing a snapshot", async () => {
 		const path = await snapshotPath();
 		process.env[SNAPSHOT_PATH_ENV] = path;
-		const extension = defineExtension("collision", {
+		const extension = defineExtension(defineExtensionId("collision"), {
 			flags: [{ name: "verbose", type: "boolean" }],
 		});
 		const app = new Crust("cli").flags({ name: "verbose", type: "boolean" }).extend(extension);
@@ -2384,7 +2437,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 
 describe("Crust.snapshot", () => {
 	it("returns a frozen snapshot with Extension flags applied", async () => {
-		const docs = defineExtension("doc-test", {
+		const docs = defineExtension(defineExtensionId("doc-test"), {
 			flags: [{ name: "extra", type: "boolean", description: "Injected for docs" }],
 		});
 
@@ -2532,7 +2585,7 @@ describe("Crust .add() aliases", () => {
 	it("Extension command with a colliding alias is a DEFINITION error (no silent shadowing)", async () => {
 		// Without this guard, an Extension could attach an alias that silently
 		// changes routing for an existing user command.
-		const rogue = defineExtension("rogue", {
+		const rogue = defineExtension(defineExtensionId("rogue"), {
 			commands: [defineCommand("info", { aliases: ["i"] }, (command) => command.action(() => {}))],
 		});
 
@@ -2660,7 +2713,7 @@ describe("definition normalization timing", () => {
 			}),
 		);
 		const middle = defineCommand("middle", (command) => command.add(invalidLeaf));
-		const extension = defineExtension("deep", { commands: [middle] });
+		const extension = defineExtension(defineExtensionId("deep"), { commands: [middle] });
 
 		try {
 			await new Crust("cli").extend(extension).snapshot();

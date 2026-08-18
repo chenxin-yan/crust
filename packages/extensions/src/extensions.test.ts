@@ -1,12 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { stripVTControlCharacters } from "node:util";
 
-import { Crust, defineCommand, defineContext, defineExtension, defineFlag } from "@crustjs/core";
+import {
+	Crust,
+	defineCommand,
+	defineContext,
+	defineExtension,
+	defineExtensionId,
+	defineFlag,
+} from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
 
 import { completion } from "./completion/index.ts";
 import { didYouMean } from "./did-you-mean.ts";
-import { HELP, help, renderHelp } from "./help.ts";
+import { help, renderHelp } from "./help.ts";
 import { noColor } from "./no-color.ts";
 import { updateNotifier } from "./update-notifier.ts";
 import { version } from "./version.ts";
@@ -69,7 +76,7 @@ function getStderr() {
 const stripAnsi = stripVTControlCharacters;
 
 function lateSkillExtension() {
-	return defineExtension("late-skill", {
+	return defineExtension(defineExtensionId("late-skill"), {
 		commands: [
 			defineCommand("skill", { description: "Manage agent skills" }, (command) =>
 				command
@@ -85,31 +92,27 @@ function lateSkillExtension() {
 }
 
 describe("built-in extensions", () => {
-	it("uses reserved identities for official extensions and section consumers", () => {
-		expect([
-			help().name,
-			version().name,
-			completion().name,
-			didYouMean().name,
-			noColor().name,
-			updateNotifier({ currentVersion: "1.0.0", packageName: "demo" }).name,
-			HELP,
-		]).toEqual([
+	it("exposes reserved identities on official factories", () => {
+		expect(
+			[help.id, version.id, completion.id, didYouMean.id, noColor.id, updateNotifier.id].map(
+				String,
+			),
+		).toEqual([
 			"crust:help",
 			"crust:version",
 			"crust:completion",
 			"crust:did-you-mean",
 			"crust:no-color",
 			"crust:update-notifier",
-			"crust:help",
 		]);
+		expect(help().id).toBe(help.id);
 	});
 
 	it("lets official help coexist with a user Extension named help", async () => {
 		let userHelpRan = false;
 		const app = new Crust("app")
 			.extend(
-				defineExtension("help", {
+				defineExtension(defineExtensionId("help"), {
 					hooks: { preRun: () => void (userHelpRan = true) },
 				}),
 			)
@@ -119,6 +122,21 @@ describe("built-in extensions", () => {
 
 		expect(userHelpRan).toBe(true);
 		expect(stripAnsi(getStdout())).toContain("Usage:");
+	});
+
+	it("renderHelp honors only and except audiences", async () => {
+		const other = defineExtensionId("acme:other");
+		const snapshot = await new Crust("demo", {
+			sections: [
+				{ title: "Help only", body: "visible", only: [help.id] },
+				{ title: "Other only", body: "hidden", only: [other] },
+				{ title: "Not help", body: "hidden", except: [help.id] },
+			],
+		}).snapshot();
+		const output = stripAnsi(renderHelp(snapshot));
+		expect(output).toContain("Help only:");
+		expect(output).not.toContain("Other only:");
+		expect(output).not.toContain("Not help:");
 	});
 
 	it("renderHelp styles sections and preserves plain-text structure", () => {
@@ -282,7 +300,7 @@ describe("built-in extensions", () => {
 			sections: [{ title: "Root notes", body: "Root body" }],
 		})
 			.extend(
-				defineExtension("docs", {
+				defineExtension(defineExtensionId("docs"), {
 					sections: () => [
 						{
 							command: ["build"],
@@ -310,7 +328,7 @@ describe("built-in extensions", () => {
 	});
 
 	it("recursive false Extension flags stay root-only", async () => {
-		const rootOnly = defineExtension("root-only", {
+		const rootOnly = defineExtension(defineExtensionId("root-only"), {
 			flags: [{ name: "root", type: "boolean", recursive: false }],
 		});
 		let rootSaw: unknown;
