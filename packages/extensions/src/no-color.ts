@@ -29,7 +29,7 @@ let baseNoColor: string | undefined;
 const colorRuns = new WeakMap<ExtensionContext, true>();
 
 export function noColor(): Extension {
-	return defineExtension("no-color", {
+	return defineExtension("crust:no-color", {
 		flags: [
 			{
 				name: "color",

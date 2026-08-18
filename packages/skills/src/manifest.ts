@@ -8,7 +8,7 @@ import {
 
 import type { ManifestArg, ManifestFlag, ManifestNode } from "./types.ts";
 
-export const SKILLS: SectionConsumer = "skills";
+export const SKILLS: SectionConsumer = "crust:skills";
 
 export function buildManifest(command: CommandSnapshot): ManifestNode {
 	return buildNode(buildCommandDocumentation(command), command);

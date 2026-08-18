@@ -31,6 +31,8 @@ Two consequences of the root-only model:
   ../../../examples/extensions/diagnostics.ts
 </include>
 
+Official Extension identities use the `crust:` namespace, which is reserved for official Crust identities. Third-party packages should namespace published Extension ids with their own prefix; application-local ids can remain plain.
+
 ## Owned flags and commands
 
 Extension flags are a readonly array of named definitions. Use `defineFlag()` values for ordinary recursive flags, or write a named definition inline. Extension flags default to `recursive: true`, which contributes them to every command. The documented way to set the Extension-only `recursive` option for a root-only flag is an inline definition:
@@ -100,7 +102,7 @@ const deploy = defineCommand(
 );
 ```
 
-A renderer exports its own consumer id and selects its sections with `sectionsFor()`. Core does not maintain a fixed list of consumers.
+A renderer exports its own consumer id and selects its sections with `sectionsFor()`. The official `HELP`, `MAN`, and `SKILLS` constants resolve to reserved `crust:*` ids; use those exports rather than raw strings. Core does not maintain a fixed list of consumers.
 
 ## Build hooks
 
@@ -154,7 +156,7 @@ type InvocationOutcome =
   | { status: "failed"; error: unknown };
 ```
 
-The same context identity reaches all hooks for one invocation. Use `ctx.use()` for injectable services; a `WeakMap<ExtensionContext, State>` remains suitable for private per-invocation ephemera shared by a hook pair.
+For a finished invocation, `outcome.by` is the exact Extension name. Official Extensions therefore report names such as `crust:help`; diagnostics that label an Extension use the same exact identity. The same context identity reaches all hooks for one invocation. Use `ctx.use()` for injectable services; a `WeakMap<ExtensionContext, State>` remains suitable for private per-invocation ephemera shared by a hook pair.
 
 ### `onError`
 

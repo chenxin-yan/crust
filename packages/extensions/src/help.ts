@@ -19,7 +19,7 @@ const FLAG_COLUMN_WIDTH = 28;
 const ARG_COLUMN_WIDTH = 18;
 const COMMAND_COLUMN_WIDTH = 10;
 
-export const HELP: SectionConsumer = "help";
+export const HELP: SectionConsumer = "crust:help";
 
 function formatArgToken(arg: DocumentationArg): string {
 	return arg.required ? yellow(arg.token) : dim(yellow(arg.token));
@@ -104,7 +104,7 @@ export function renderHelp(command: CommandSnapshot, path?: readonly string[]): 
 }
 
 export function help(): Extension {
-	return defineExtension("help", {
+	return defineExtension("crust:help", {
 		flags: [
 			{ name: "help", type: "boolean", short: "h", noNegate: true, description: "Show help" },
 		],

@@ -16,7 +16,7 @@ export interface ManOptions {
 /** Adds build-time mdoc generation for the application. */
 export function man(options: ManOptions = {}): Extension {
 	const section = options.section ?? 1;
-	return defineExtension("man", {
+	return defineExtension("crust:man", {
 		async build({ snapshot, outDir }) {
 			const { writeManPage } = await import("./write-man-page.ts");
 			const name = options.name ?? snapshot.meta.name;

@@ -390,7 +390,7 @@ export function updateNotifier(options: UpdateNotifierOptions): Extension {
 	} = options;
 	const intervalMs = (cache === false ? undefined : cache?.intervalMs) ?? DEFAULT_INTERVAL_MS;
 
-	return defineExtension("update-notifier", {
+	return defineExtension("crust:update-notifier", {
 		hooks: {
 			async postRun(context, outcome) {
 				if (outcome.status !== "completed") return;

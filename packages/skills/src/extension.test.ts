@@ -19,6 +19,7 @@ import { createPromptIO } from "@crustjs/prompts/testing";
 
 import { skill } from "./extension.ts";
 import { installSkill } from "./generate.ts";
+import { SKILLS } from "./manifest.ts";
 
 let tempRoot: string;
 
@@ -60,6 +61,10 @@ function target(name = "demo") {
 }
 
 describe("skill extension packaged directory", () => {
+	it("uses reserved identities for the official Extension and section consumer", () => {
+		expect([skill({ packagedDir: "." }).name, SKILLS]).toEqual(["crust:skills", "crust:skills"]);
+	});
+
 	it("advertises every packaged skill in help with its resolved source path", async () => {
 		const source = await writeSource("demo", "demo", "Run demo workflows");
 		await writeSource("guide", "guide", "Explain deployment choices");

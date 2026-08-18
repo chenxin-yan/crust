@@ -95,7 +95,7 @@ function findSuggestions(
 export function didYouMean(options: DidYouMeanOptions = {}): Extension {
 	const mode = options.mode ?? "error";
 
-	return defineExtension("did-you-mean", {
+	return defineExtension("crust:did-you-mean", {
 		hooks: {
 			onError(error, context) {
 				if (!(error instanceof CrustError) || !error.is("COMMAND_NOT_FOUND")) return;

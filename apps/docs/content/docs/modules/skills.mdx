@@ -126,7 +126,7 @@ await uninstallSkill({ name: "my-cli" });
 
 ## Command sections
 
-Add agent-facing guidance to a command's metadata. Each section is rendered as a Markdown heading and body in that command's generated documentation. Sections are shared with every renderer by default; use the exported `SKILLS` consumer id for agent-only guidance:
+Add agent-facing guidance to a command's metadata. Each section is rendered as a Markdown heading and body in that command's generated documentation. Sections are shared with every renderer by default; use the exported `SKILLS` (`crust:skills`) consumer id for agent-only guidance:
 
 ```ts
 import { defineCommand } from "@crustjs/core";

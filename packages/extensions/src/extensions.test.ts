@@ -4,8 +4,11 @@ import { stripVTControlCharacters } from "node:util";
 import { Crust, defineCommand, defineContext, defineExtension, defineFlag } from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
 
-import { help, renderHelp } from "./help.ts";
+import { completion } from "./completion/index.ts";
+import { didYouMean } from "./did-you-mean.ts";
+import { HELP, help, renderHelp } from "./help.ts";
 import { noColor } from "./no-color.ts";
+import { updateNotifier } from "./update-notifier.ts";
 import { version } from "./version.ts";
 
 let stdoutChunks: string[];
@@ -82,6 +85,42 @@ function lateSkillExtension() {
 }
 
 describe("built-in extensions", () => {
+	it("uses reserved identities for official extensions and section consumers", () => {
+		expect([
+			help().name,
+			version().name,
+			completion().name,
+			didYouMean().name,
+			noColor().name,
+			updateNotifier({ currentVersion: "1.0.0", packageName: "demo" }).name,
+			HELP,
+		]).toEqual([
+			"crust:help",
+			"crust:version",
+			"crust:completion",
+			"crust:did-you-mean",
+			"crust:no-color",
+			"crust:update-notifier",
+			"crust:help",
+		]);
+	});
+
+	it("lets official help coexist with a user Extension named help", async () => {
+		let userHelpRan = false;
+		const app = new Crust("app")
+			.extend(
+				defineExtension("help", {
+					hooks: { preRun: () => void (userHelpRan = true) },
+				}),
+			)
+			.extend(help());
+
+		await app.execute({ argv: [] });
+
+		expect(userHelpRan).toBe(true);
+		expect(stripAnsi(getStdout())).toContain("Usage:");
+	});
+
 	it("renderHelp styles sections and preserves plain-text structure", () => {
 		// Force colors on so the ANSI assertion is deterministic in non-TTY
 		// test environments (e.g. CI). Reset via afterEach.

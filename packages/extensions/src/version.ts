@@ -19,7 +19,7 @@ export function version(
 ): Extension {
 	const { format } = options;
 
-	return defineExtension("version", {
+	return defineExtension("crust:version", {
 		flags: [
 			{
 				name: "version",

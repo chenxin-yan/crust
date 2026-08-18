@@ -172,7 +172,7 @@ const sections: readonly CommandSection[] = [
 const webSections = sectionsFor(sections, WEB_DOCS);
 ```
 
-Consumers match by string id, so targeting remains stable when snapshots are cloned or serialized. Consumer packages own and export their ids; core has no built-in consumer registry. Namespace third-party ids to avoid collisions.
+Consumers match by string id, so targeting remains stable when snapshots are cloned or serialized. Consumer packages own and export their ids; core has no built-in consumer registry. Official consumer ids use the `crust:` namespace, which is reserved for official Crust identities. Third-party packages should namespace published ids with their own prefix, as in `acme:web-docs` above.
 
 ## Tooling subpath
 

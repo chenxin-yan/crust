@@ -6,7 +6,7 @@ import {
 	type DocumentationFlag,
 } from "@crustjs/core/tooling";
 
-export const MAN: SectionConsumer = "man";
+export const MAN: SectionConsumer = "crust:man";
 
 function escapeMdocBodyLine(line: string): string {
 	// Both `.` and `'` start roff control lines.

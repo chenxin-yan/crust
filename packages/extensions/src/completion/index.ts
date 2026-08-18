@@ -150,5 +150,5 @@ export function completion(options: CompletionOptions = {}): Extension {
 				}),
 	);
 
-	return defineExtension("completion", { commands: [completionCommand] });
+	return defineExtension("crust:completion", { commands: [completionCommand] });
 }

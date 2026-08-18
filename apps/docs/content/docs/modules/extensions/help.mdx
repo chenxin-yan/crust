@@ -30,7 +30,7 @@ The renderer includes usage, visible subcommands, positional arguments, effectiv
 
 ## Section consumer
 
-The package exports `HELP`, the consumer id used by the help renderer. Sections render everywhere by default; target help specifically with `only: [HELP]`, or omit a section from help with `except: [HELP]`:
+The package exports `HELP` (`crust:help`), the consumer id used by the help renderer. Sections render everywhere by default; target help specifically with `only: [HELP]`, or omit a section from help with `except: [HELP]`:
 
 ```ts
 import { Crust } from "@crustjs/core";
