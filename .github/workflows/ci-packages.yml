@@ -131,7 +131,7 @@ jobs:
           bun test scripts
 
       - name: Portable-runtime guard (no Bun globals in portable packages)
-        run: bun scripts/check-portable-runtime.mjs
+        run: bun run check:portable
 
       - name: Lint and format check (packages)
         run: |

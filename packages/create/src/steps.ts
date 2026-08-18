@@ -1,5 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 
+import { exitCodeOf } from "@crustjs/utils/process";
+
 import type { PostScaffoldStep } from "./types.ts";
 import { detectPackageManager } from "./utils.ts";
 
@@ -160,11 +162,4 @@ async function spawnChecked(cmd: string[], cwd: string, label: string): Promise<
 			`"${label}" failed with exit code ${exitCode}${stderr ? `: ${stderr.trim()}` : ""}`,
 		);
 	}
-}
-
-function exitCodeOf(proc: ReturnType<typeof spawn>): Promise<number> {
-	return new Promise((resolve, reject) => {
-		proc.once("error", reject);
-		proc.once("close", (code) => resolve(code ?? 1));
-	});
 }

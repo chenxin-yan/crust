@@ -6,7 +6,7 @@ import { basename, dirname, join, resolve } from "node:path";
 
 import { BUILD_OUT_DIR_ENV, type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
 import { yellow } from "@crustjs/style";
-import { which } from "@crustjs/utils/process";
+import { exitCodeOf, which } from "@crustjs/utils/process";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Supported Bun compile targets
@@ -143,10 +143,10 @@ export const DENO_TARGET_INFO = {
 	},
 } as const satisfies Record<DenoTarget, TargetInfo>;
 
+const COMPILE_TARGET_INFO = { ...TARGET_INFO, ...DENO_TARGET_INFO } as const;
+
 export function getTargetInfo(target: CompileTarget): TargetInfo {
-	return target.startsWith("bun-")
-		? TARGET_INFO[target as BunTarget]
-		: DENO_TARGET_INFO[target as DenoTarget];
+	return COMPILE_TARGET_INFO[target];
 }
 
 /**
@@ -277,23 +277,19 @@ export function resolveBuildPlan(
 	if (unknown.length > 0) resolveTarget(unknown[0]!);
 
 	const explicitRuntime = runtimeFlags[0];
-	if (explicitRuntime === "bun" && denoTargets.length > 0) {
-		throw new Error("Cannot mix Bun and Deno targets in one build.");
-	}
-	if (explicitRuntime === "deno" && bunTargets.length > 0) {
-		throw new Error("Cannot mix Deno and Bun targets in one build.");
-	}
-	if (bunTargets.length > 0 && denoTargets.length > 0) {
+	const wantsBun = explicitRuntime === "bun" || bunTargets.length > 0;
+	const wantsDeno = explicitRuntime === "deno" || denoTargets.length > 0;
+	if (wantsBun && wantsDeno) {
 		throw new Error("Cannot mix Bun and Deno targets in one build.");
 	}
 
-	if (explicitRuntime === "bun" || bunTargets.length > 0) {
+	if (wantsBun) {
 		return {
 			runtime: "bun",
 			targets: (bunTargets.length > 0 ? bunTargets : [hostBunTarget()]) as BunTarget[],
 		};
 	}
-	if (explicitRuntime === "deno" || denoTargets.length > 0) {
+	if (wantsDeno) {
 		return { runtime: "deno", targets: denoTargets as DenoTarget[] };
 	}
 
@@ -554,12 +550,5 @@ function readStream(stream: NodeJS.ReadableStream): Promise<string> {
 		stream.on("data", (chunk) => (output += chunk));
 		stream.once("end", () => complete(output));
 		stream.once("error", reject);
-	});
-}
-
-function exitCodeOf(proc: ReturnType<typeof spawn>): Promise<number> {
-	return new Promise((complete, reject) => {
-		proc.once("error", reject);
-		proc.once("close", (code) => complete(code ?? 1));
 	});
 }

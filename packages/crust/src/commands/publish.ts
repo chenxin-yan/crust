@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 
 import { defineCommand } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
+import { exitCodeOf } from "@crustjs/utils/process";
 
 import type { DistributionManifest } from "../utils/distribute.ts";
 
@@ -157,10 +158,7 @@ async function defaultSpawnPublish(dir: string, command: string[]): Promise<numb
 		stdio: "inherit",
 	});
 
-	return new Promise((complete, reject) => {
-		proc.once("error", reject);
-		proc.once("close", (code) => complete(code ?? 1));
-	});
+	return exitCodeOf(proc);
 }
 
 export async function publishStagedPackages(

@@ -164,7 +164,7 @@ describe("resolveBuildPlan", () => {
 			targets: [DENO_TARGETS[0]],
 		});
 		expect(() => resolveBuildPlan(["deno", "bun-linux-x64-baseline"], none)).toThrow(
-			/Cannot mix Deno and Bun targets/,
+			/Cannot mix Bun and Deno targets/,
 		);
 		expect(() => resolveBuildPlan(["bun", DENO_TARGETS[0]], none)).toThrow(
 			/Cannot mix Bun and Deno targets/,
