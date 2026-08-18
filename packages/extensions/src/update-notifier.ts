@@ -402,16 +402,33 @@ export function updateNotifier(options: UpdateNotifierOptions): Extension {
 							cacheAdapter = cache.adapter;
 						} else {
 							const { createStore, stateDir } = await import("@crustjs/store");
-							cacheAdapter = createStore({
-								// stateDir rejects path separators; sanitize scoped names (@scope/cli → scope-cli)
-								dirPath: stateDir(packageName.replace(/^@/, "").replace(/[/\\]/g, "-")),
+							const store = createStore({
+								// stateDir rejects path separators; encodeURIComponent is injective
+								// (@scope/cli → %40scope%2Fcli), so distinct packages never collide
+								dirPath: stateDir(encodeURIComponent(packageName)),
 								name: "update-notifier",
 								fields: {
 									lastCheckedAt: { type: "number", default: 0 },
 									latestVersion: { type: "string" },
 									lastNotifiedVersion: { type: "string" },
+									registryUrl: { type: "string" },
 								},
 							});
+							cacheAdapter = {
+								// State cached from a different registry is stale, not reusable
+								read: async () => {
+									const state = await store.read();
+									return state.registryUrl === registryUrl ? state : null;
+								},
+								// Explicit keys: the store's write type requires every field present
+								write: (state) =>
+									store.write({
+										lastCheckedAt: state.lastCheckedAt,
+										latestVersion: state.latestVersion,
+										lastNotifiedVersion: state.lastNotifiedVersion,
+										registryUrl,
+									}),
+							};
 						}
 					}
 

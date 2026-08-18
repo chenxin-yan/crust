@@ -956,11 +956,41 @@ describe("updateNotifier post-run hook", () => {
 
 			// A raw scoped name would make stateDir() throw and silently kill the notifier
 			expect(getOutput()).toContain("Update available");
-			const sanitized = scopedName.slice(1).replace("/", "-");
+			const sanitized = encodeURIComponent(scopedName);
 			const persisted = JSON.parse(
 				await readFile(join(stateHome, sanitized, "update-notifier.json"), "utf8"),
 			) as UpdateNotifierState;
 			expect(persisted.latestVersion).toBe("2.0.0");
+		});
+
+		it("discards built-in cached state from a different registryUrl", async () => {
+			const pkgName = uniquePackageName("registry-switch");
+			let fetchCalls = 0;
+			mockFetch(() => {
+				fetchCalls++;
+				return Promise.resolve(
+					new Response(JSON.stringify({ "dist-tags": { latest: "2.0.0" } }), {
+						status: 200,
+					}),
+				);
+			});
+
+			await runExtensionMiddleware(
+				{ currentVersion: "1.0.0", packageName: pkgName },
+				{ useBuiltInCache: true },
+			);
+			expect(fetchCalls).toBe(1);
+
+			// Cache is fresh, but a different registry must not reuse it
+			await runExtensionMiddleware(
+				{
+					currentVersion: "1.0.0",
+					packageName: pkgName,
+					registryUrl: "https://private.example.com",
+				},
+				{ useBuiltInCache: true },
+			);
+			expect(fetchCalls).toBe(2);
 		});
 
 		it("treats a corrupt built-in cache file as empty and repairs it", async () => {
