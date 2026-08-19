@@ -49,7 +49,7 @@
 		"@crustjs/progress": "workspace:^",
 		"@crustjs/prompts": "workspace:^",
 		"@crustjs/style": "workspace:^",
-		"yaml": "^2.9.0"
+		"ultramatter": "^0.0.4"
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
