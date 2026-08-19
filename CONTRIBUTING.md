@@ -12,7 +12,7 @@ Thanks for contributing to Crust. This repository is a Bun-native, TypeScript-fi
 
 - [Bun](https://bun.sh) `1.3.14`
 - Node.js `^22.18 || >=24.11` (package builds run tsdown under Node, which enforces this exact range — Node 23.x and 24.0–24.10 are rejected)
-- [Deno](https://deno.com) `>=2.8` (runs the `bun run test:deno` runtime smoke suite)
+- [Deno](https://deno.com) `>=2.8` (runs the `bun run smoke:deno` cross-runtime smoke suite)
 - Git
 
 ## Repository Layout

@@ -22,6 +22,55 @@ permissions:
   contents: read
 
 jobs:
+  runtime-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        include:
+          - runtime: node
+            smoke: node scripts/smoke-runtimes/smoke.mjs
+          - runtime: deno
+            smoke: deno run --allow-env --allow-read --allow-write --allow-run --config scripts/smoke-runtimes/deno.json scripts/smoke-runtimes/smoke.mjs
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        if: matrix.runtime == 'node'
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Setup Deno
+        if: matrix.runtime == 'deno'
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun ci
+
+      - name: Cache Turbo
+        uses: actions/cache@v6
+        with:
+          path: .turbo
+          key: turbo-${{ matrix.runtime }}-smoke-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ matrix.runtime }}-smoke-${{ runner.os }}-
+            turbo-packages-${{ runner.os }}-
+
+      - name: Build packages
+        run: bun turbo run build --filter='./packages/*'
+
+      - name: Smoke built distributions with ${{ matrix.runtime }}
+        run: ${{ matrix.smoke }}
+
   ci:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -36,6 +85,12 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
+
+      # Installed so Deno-gated integration tests run instead of skipping.
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
 
       # tsdown's bin runs under Node (engines ^22.18 || >=24.11); don't rely
       # on the runner image's preinstalled Node.
@@ -60,6 +115,8 @@ jobs:
           bun turbo run build check:types test --filter='./packages/*'
           bun test scripts
 
+      - name: Portable-runtime guard (no Bun globals in portable packages)
+        run: bun run check:portable
 
       - name: Lint and format check (packages)
         run: |
@@ -72,34 +129,3 @@ jobs:
           for package_manager in bun npm pnpm; do
             CRUST_SMOKE_PM="$package_manager" bun test ./packages/crust/tests/package-manager.smoke.test.ts
           done
-
-  deno:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    concurrency:
-      group: ci-packages-deno-${{ github.ref }}
-      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-
-      - name: Setup Node
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
-
-      - name: Setup Deno
-        uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
-
-      - name: Install dependencies
-        run: bun ci
-
-      - name: Run Deno runtime smoke tests
-        run: bun run test:deno
