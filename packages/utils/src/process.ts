@@ -2,12 +2,12 @@ import { accessSync, constants, statSync } from "node:fs";
 import { delimiter, extname, join } from "node:path";
 
 /** Resolve an executable from PATH. */
-export function which(command: string, path: string | undefined = process.env.PATH): string | null {
+export function which(command: string): string | null {
 	const extensions =
 		process.platform === "win32" && !extname(command)
 			? (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";")
 			: [""];
-	for (const directory of path?.split(delimiter) ?? []) {
+	for (const directory of process.env.PATH?.split(delimiter) ?? []) {
 		for (const extension of extensions) {
 			const candidate = join(directory, command + extension);
 			try {

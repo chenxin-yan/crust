@@ -55,9 +55,15 @@ describe("resolveBunBuildRunner", () => {
 	});
 
 	it("falls back to the current executable when bun is unavailable", () => {
-		const runner = resolveBunBuildRunner("");
-		expect(runner.command).toBe(process.execPath);
-		expect(runner.env.BUN_BE_BUN).toBe("1");
+		const originalPath = process.env.PATH;
+		process.env.PATH = "";
+		try {
+			const runner = resolveBunBuildRunner();
+			expect(runner.command).toBe(process.execPath);
+			expect(runner.env.BUN_BE_BUN).toBe("1");
+		} finally {
+			process.env.PATH = originalPath;
+		}
 	});
 });
 

@@ -1,30 +1,20 @@
 import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 
 const exemptPackages = new Set(["crust", "create", "create-crust"]);
 const violations = [];
 
-async function scan(directory) {
-	for (const entry of await readdir(directory, { withFileTypes: true })) {
-		const path = join(directory, entry.name);
-		if (entry.isDirectory()) await scan(path);
-		else if (
-			/\.tsx?$/.test(entry.name) &&
-			!entry.name.endsWith(".test.ts") &&
-			(await readFile(path, "utf8")).includes("Bun.")
-		) {
-			violations.push(path);
-		}
-	}
-}
-
-for (const entry of await readdir("packages", { withFileTypes: true })) {
-	if (entry.isDirectory() && !exemptPackages.has(entry.name)) {
-		try {
-			await scan(join("packages", entry.name, "src"));
-		} catch (error) {
-			if (error.code !== "ENOENT") throw error;
-		}
+for (const relative of await readdir("packages", { recursive: true })) {
+	const [pkg, dir] = relative.split(sep);
+	const path = join("packages", relative);
+	if (
+		dir === "src" &&
+		!exemptPackages.has(pkg) &&
+		/\.tsx?$/.test(relative) &&
+		!relative.endsWith(".test.ts") &&
+		(await readFile(path, "utf8")).includes("Bun.")
+	) {
+		violations.push(path);
 	}
 }
 
