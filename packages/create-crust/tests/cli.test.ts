@@ -18,7 +18,7 @@ async function runCreateCrust(
 	args: string[],
 	options?: { env?: Record<string, string>; cwd?: string },
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
-	const proc = Bun.spawn([process.execPath, builtCliPath, ...args], {
+	const proc = Bun.spawn(["node", builtCliPath, ...args], {
 		cwd: options?.cwd ?? packageRoot,
 		env: {
 			...process.env,

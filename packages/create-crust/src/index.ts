@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 
 import { existsSync, readdirSync } from "node:fs";
 import { basename, resolve } from "node:path";
