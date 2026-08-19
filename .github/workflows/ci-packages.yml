@@ -117,8 +117,13 @@ jobs:
           bun turbo run build check:types test --filter='./packages/*'
           bun test scripts
 
+      # Portable packages must not reference Bun APIs: typecheck (@types/bun),
+      # lint, and bun test are all blind to them, and the runtime smoke only
+      # exercises a slice of each package. Feature-detection via globalThis.Bun
+      # (see stringWidth.ts) is the sanctioned escape hatch and doesn't match.
       - name: Portable-runtime guard (no Bun globals in portable packages)
-        run: bun run check:portable
+        run: |
+          ! git grep -l -e 'Bun\.' -e 'from "bun"' -e '"bun:' -- 'packages/*/src/*.ts*' ':!*.test.ts*' ':!packages/crust/*'
 
       - name: Lint and format check (packages)
         run: |
