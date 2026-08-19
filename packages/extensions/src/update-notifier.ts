@@ -29,8 +29,11 @@ export interface UpdateNotifierCacheAdapter {
 export interface UpdateNotifierCacheConfig {
 	/**
 	 * Persistence adapter for reading and writing notifier state.
+	 *
+	 * When omitted, the built-in `@crustjs/store` persistence is used, so
+	 * `intervalMs` can be tuned without reimplementing storage.
 	 */
-	adapter: UpdateNotifierCacheAdapter;
+	adapter?: UpdateNotifierCacheAdapter;
 
 	/**
 	 * Minimum interval in milliseconds between network update checks.
@@ -128,29 +131,19 @@ export interface UpdateNotifierOptions {
 	updateDocsUrl?: string;
 
 	/**
-	 * Optional cache configuration for cross-run persistence.
+	 * Cache configuration for cross-run persistence.
 	 *
-	 * By default, no cross-run persistence is used and checks occur once
-	 * per process execution.
+	 * By default, notifier state is persisted in the platform-standard state
+	 * directory for {@link packageName}. Set to `false` to disable persistence,
+	 * provide `intervalMs` alone to tune the built-in cache interval, or
+	 * provide a custom adapter to control storage.
 	 *
 	 * @example
 	 * ```ts
-	 * cache: {
-	 *   adapter: {
-	 *     read: async () => ({ lastCheckedAt: 0 }),
-	 *     write: async (state) => {
-	 *       await store.write({
-	 *         lastCheckedAt: state.lastCheckedAt,
-	 *         latestVersion: state.latestVersion,
-	 *         lastNotifiedVersion: state.lastNotifiedVersion,
-	 *       });
-	 *     },
-	 *   },
-	 *   intervalMs: 86_400_000, // 24 hours
-	 * }
+	 * cache: false
 	 * ```
 	 */
-	cache?: UpdateNotifierCacheConfig;
+	cache?: false | UpdateNotifierCacheConfig;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -356,8 +349,9 @@ function resolveUpdateCommand(
  * version is available.
  *
  * **Behavior:**
- * - With `cache`, checks are reused up to `cache.intervalMs` (default 24h).
- * - Without `cache`, checks run once per process execution.
+ * - By default, checks are cached for 24 hours in the package's state directory.
+ * - `cache: false` disables cross-run persistence.
+ * - A custom cache adapter can override the built-in persistence.
  * - The notice is command-less unless `installScope` or `updateCommand` is configured.
  * - The network check is non-blocking — it never delays command execution.
  * - All internal errors (network, cache, parsing) are silently swallowed.
@@ -394,9 +388,7 @@ export function updateNotifier(options: UpdateNotifierOptions): Extension {
 		updateDocsUrl,
 		cache,
 	} = options;
-	const hasCache = cache !== undefined;
-	const intervalMs = cache?.intervalMs ?? DEFAULT_INTERVAL_MS;
-	const cacheAdapter = cache?.adapter ?? NO_CACHE_ADAPTER;
+	const intervalMs = (cache === false ? undefined : cache?.intervalMs) ?? DEFAULT_INTERVAL_MS;
 
 	return defineExtension("update-notifier", {
 		hooks: {
@@ -404,8 +396,46 @@ export function updateNotifier(options: UpdateNotifierOptions): Extension {
 				if (outcome.status !== "completed") return;
 
 				try {
-					// ── Resolve package name ─────────────────────────────────
-					const state = normalizeNotifierState(await cacheAdapter.read());
+					let cacheAdapter: UpdateNotifierCacheAdapter = NO_CACHE_ADAPTER;
+					if (cache !== false) {
+						if (cache?.adapter) {
+							cacheAdapter = cache.adapter;
+						} else {
+							const { createStore, stateDir } = await import("@crustjs/store");
+							const store = createStore({
+								// stateDir rejects path separators; encodeURIComponent is injective
+								// (@scope/cli → %40scope%2Fcli), so distinct packages never collide
+								dirPath: stateDir(encodeURIComponent(packageName)),
+								name: "update-notifier",
+								fields: {
+									lastCheckedAt: { type: "number", default: 0 },
+									latestVersion: { type: "string" },
+									lastNotifiedVersion: { type: "string" },
+									registryUrl: { type: "string" },
+								},
+							});
+							cacheAdapter = {
+								// State cached from a different registry is stale, not reusable
+								read: async () => {
+									const state = await store.read();
+									return state.registryUrl === registryUrl ? state : null;
+								},
+								// Explicit keys: the store's write type requires every field present
+								write: (state) =>
+									store.write({
+										lastCheckedAt: state.lastCheckedAt,
+										latestVersion: state.latestVersion,
+										lastNotifiedVersion: state.lastNotifiedVersion,
+										registryUrl,
+									}),
+							};
+						}
+					}
+
+					// Corrupt/unreadable cache (e.g. CrustStoreError PARSE) reads as empty
+					// so the next successful write repairs the file instead of permanently
+					// disabling the notifier.
+					const state = normalizeNotifierState(await cacheAdapter.read().catch(() => null));
 					const resolvedUpdateCommand = resolveUpdateCommand(
 						packageName,
 						packageManager,
@@ -417,7 +447,9 @@ export function updateNotifier(options: UpdateNotifierOptions): Extension {
 					const now = Date.now();
 					const elapsed = now - state.lastCheckedAt;
 
-					if (hasCache && elapsed < intervalMs) {
+					// Negative elapsed (clock rollback, corrupt future timestamp) is
+					// treated as stale so the refetch rewrites lastCheckedAt.
+					if (cache !== false && elapsed >= 0 && elapsed < intervalMs) {
 						// Cache is still fresh — use cached version if available
 						if (
 							state.latestVersion &&
