@@ -184,11 +184,11 @@ export interface SkillStatusResult {
 /** Options for the skills extension. */
 export interface SkillOptions {
 	/** Read-only directory produced by writeSkills(). */
-	packagedDir: string | URL;
+	distDir: string | URL;
 	/**
 	 * Hand-authored skill directories (URL, absolute, or package-root-relative path).
 	 * When non-empty, the build regenerates the command skill from the snapshot and
-	 * includes only these authored skills instead of copying `packagedDir`.
+	 * includes only these authored skills instead of copying `distDir`.
 	 */
 	extras?: readonly (string | URL)[];
 	/** Default agent-directory scope. */

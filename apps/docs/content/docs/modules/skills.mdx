@@ -55,18 +55,18 @@ import { skill } from "@crustjs/skills";
 export const app = new Crust("my-cli", { description: "My CLI" })
   .extend(
     skill({
-      packagedDir: new URL("../skills", import.meta.url),
+      distDir: new URL("../skills", import.meta.url),
       extras: [new URL("../skills-src/deployment-guide", import.meta.url)],
     }),
   )
   .action(() => {});
 ```
 
-When `extras` is non-empty, the build regenerates current command documentation and copies each authored skill into the output instead of copying the existing packaged skills directory. `packagedDir` remains the directory used for runtime discovery and installation. Keep authored skill directories outside the build output; the build refuses an extra nested inside it.
+When `extras` is non-empty, the build regenerates current command documentation and copies each authored skill into the output instead of copying the existing packaged skills directory. `distDir` remains the directory used for runtime discovery and installation. Keep authored skill directories outside the build output; the build refuses an extra nested inside it.
 
 The extension registers `my-cli skill` and `my-cli skill update`. It also contributes an **Agent skills** section to root help and generated man pages. Each shipped skill is listed by name and description with its logical source path — relative to the working directory when the packaged directory is inside it, absolute otherwise — so agents can discover and load skills without installing them first. Run builds from the project root containing the packaged skills directory to keep absolute build-machine paths out of generated artifacts.
 
-The management command reads every skill in `packagedDir` and creates links in selected agent directories. `--scope project|global` selects project or user locations; `--all` installs for universal and detected agents without prompting.
+The management command reads every skill in `distDir` and creates links in selected agent directories. `--scope project|global` selects project or user locations; `--all` installs for universal and detected agents without prompting.
 
 ```sh
 my-cli skill
@@ -74,7 +74,7 @@ my-cli skill --all --scope project
 my-cli skill update
 ```
 
-If `packagedDir` cannot be found relative to the package, Crust also checks next to `process.execPath` — for the directory's basename when it is an absolute path or `file:` URL, or the same relative path otherwise — supporting compiled distributions staged with their skills. When neither path resolves, the Agent skills section shows a fallback message pointing to the `skill` command instead. When the directory resolves but a packaged skill is invalid (for example a `SKILL.md` without a description), the section reports that packaged skills could not be read. Directories without a `SKILL.md`, such as archive cruft, are skipped rather than failing valid skills. In every case the explicit `skill` command fails with a descriptive error, but unrelated CLI commands and help remain available. Skills are read when a snapshot is prepared, so help and generated man pages reflect the packaged directory as it exists at render time. Artifacts generated at build time — man pages from `crust build` and the skill written by `writeSkills` — therefore capture the paths (or fallback text) resolved on the build machine, not on the end user's machine.
+If `distDir` cannot be found relative to the package, Crust also checks next to `process.execPath` — for the directory's basename when it is an absolute path or `file:` URL, or the same relative path otherwise — supporting compiled distributions staged with their skills. When neither path resolves, the Agent skills section shows a fallback message pointing to the `skill` command instead. When the directory resolves but a packaged skill is invalid (for example a `SKILL.md` without a description), the section reports that packaged skills could not be read. Directories without a `SKILL.md`, such as archive cruft, are skipped rather than failing valid skills. In every case the explicit `skill` command fails with a descriptive error, but unrelated CLI commands and help remain available. Skills are read when a snapshot is prepared, so help and generated man pages reflect the packaged directory as it exists at render time. Artifacts generated at build time — man pages from `crust build` and the skill written by `writeSkills` — therefore capture the paths (or fallback text) resolved on the build machine, not on the end user's machine.
 
 <auto-type-table path="../../../../../packages/skills/src/types.ts" name="SkillOptions" />
 

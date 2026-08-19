@@ -124,7 +124,7 @@ async function repairInstalledSkill(
 async function autoRepairSkills(options: SkillOptions): Promise<void> {
 	let skills: readonly PackagedSkill[];
 	try {
-		skills = loadPackagedSkills(options.packagedDir);
+		skills = loadPackagedSkills(options.distDir);
 	} catch (error) {
 		// A missing or invalid packaged asset must not prevent unrelated CLI commands
 		// from running; the explicit skill command surfaces the same failure loudly.
@@ -208,7 +208,7 @@ async function buildSkills(options: SkillOptions, context: ExtensionBuildContext
 	const outDir = join(context.outDir, "skills");
 	let source: string | undefined;
 	try {
-		source = resolveSkillSource(options.packagedDir);
+		source = resolveSkillSource(options.distDir);
 	} catch (error) {
 		if (!(error instanceof SkillSourceUnavailableError)) throw error;
 		// A missing packaged directory is regenerated from the snapshot below.
@@ -244,7 +244,7 @@ function skillFactory(options: SkillOptions): Extension {
 			{
 				command: [],
 				title: SKILLS_SECTION_TITLE,
-				body: formatSkillDocumentation(options.packagedDir, commandName, snapshot.meta.name),
+				body: formatSkillDocumentation(options.distDir, commandName, snapshot.meta.name),
 				except: [SKILLS],
 			},
 		],
@@ -438,7 +438,7 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 							})
 							.action(async (context) => {
 								const scope = await resolveScope(context.flags.scope, options);
-								for (const packagedSkill of loadPackagedSkills(options.packagedDir)) {
+								for (const packagedSkill of loadPackagedSkills(options.distDir)) {
 									await repairInstalledSkill(packagedSkill, scope, true);
 								}
 							}),
@@ -449,7 +449,7 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 					const scope = installAll
 						? (parseScopeFlag(context.flags.scope) ?? options.defaultScope ?? DEFAULT_SKILL_SCOPE)
 						: await resolveScope(context.flags.scope, options);
-					for (const packagedSkill of loadPackagedSkills(options.packagedDir)) {
+					for (const packagedSkill of loadPackagedSkills(options.distDir)) {
 						await reconcileSkill({ packagedSkill, scope, installAll });
 					}
 				}),
