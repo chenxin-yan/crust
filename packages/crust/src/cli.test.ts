@@ -82,7 +82,7 @@ describe("crust CLI entry point", () => {
 			expect(output).toContain("Commands:");
 			expect(output).toContain("build");
 			expect(output).toContain("publish");
-			expect(output).toContain("Compile your CLI to a standalone executable");
+			expect(output).toContain("Build your CLI for Bun, Deno, or Node");
 			expect(output).toContain("Publish staged npm packages created by crust build --package");
 		});
 

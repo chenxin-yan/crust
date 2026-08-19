@@ -1,11 +1,16 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
 
 import { buildCommand } from "../../src/commands/build.ts";
-import { SUPPORTED_TARGETS, TARGET_INFO } from "../../src/utils/build-helpers.ts";
+import {
+	DENO_TARGET_INFO,
+	SUPPORTED_DENO_TARGETS,
+	SUPPORTED_TARGETS,
+	TARGET_INFO,
+} from "../../src/utils/build-helpers.ts";
 
 function getHostTarget(): string | null {
 	if (process.platform === "darwin" && process.arch === "arm64") {
@@ -38,6 +43,13 @@ function getHostTarget(): string | null {
 function getHostBunTarget(): string | null {
 	const hostTarget = getHostTarget();
 	return SUPPORTED_TARGETS.find((target) => TARGET_INFO[target].alias === hostTarget) ?? null;
+}
+
+function getHostDenoTarget(): string | null {
+	const hostTarget = getHostTarget();
+	return (
+		SUPPORTED_DENO_TARGETS.find((target) => DENO_TARGET_INFO[target].alias === hostTarget) ?? null
+	);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -333,6 +345,71 @@ await app.execute();
 				process.cwd = prevCwd;
 			}
 		},
+	);
+
+	it.skipIf(Bun.which("node") === null)(
+		"builds an executable Node artifact from package.json runtime config",
+		async () => {
+			process.cwd = () => tmpDir;
+			writeFileSync(
+				join(tmpDir, "package.json"),
+				JSON.stringify({ name: "test-build-cli", version: "0.1.0", crust: { runtime: "node" } }),
+			);
+			const outPath = join(tmpDir, "dist", "node-cli.js");
+			try {
+				await new Crust("test").add(buildCommand).execute({
+					argv: ["build", "--entry", "src/cli.ts", "--outfile", outPath, "--no-validate"],
+				});
+				expect(readFileSync(outPath, "utf8").startsWith("#!/usr/bin/env node\n")).toBe(true);
+				if (process.platform !== "win32") expect(statSync(outPath).mode & 0o111).not.toBe(0);
+
+				const proc = Bun.spawn([Bun.which("node")!, outPath], {
+					stdout: "pipe",
+					stderr: "pipe",
+				});
+				const [exitCode, stdout] = await Promise.all([
+					proc.exited,
+					new Response(proc.stdout).text(),
+				]);
+				expect(exitCode).toBe(0);
+				expect(stdout.trim()).toBe("hello from crust build test");
+			} finally {
+				writeFileSync(
+					join(tmpDir, "package.json"),
+					JSON.stringify({ name: "test-build-cli", version: "0.1.0" }),
+				);
+			}
+		},
+		30_000,
+	);
+
+	it.skipIf(Bun.which("deno") === null || getHostDenoTarget() === null)(
+		"builds and runs a Deno standalone executable for the host target",
+		async () => {
+			const hostTarget = getHostDenoTarget();
+			if (!hostTarget) return;
+			process.cwd = () => tmpDir;
+			const outPath = join(tmpDir, "dist", "deno-cli");
+			await new Crust("test").add(buildCommand).execute({
+				argv: [
+					"build",
+					"--runtime",
+					"deno",
+					"--entry",
+					"src/cli.ts",
+					"--target",
+					hostTarget,
+					"--outfile",
+					outPath,
+					"--no-validate",
+				],
+			});
+			const proc = Bun.spawn([outPath], { stdout: "pipe", stderr: "pipe" });
+			const [exitCode, stdout] = await Promise.all([proc.exited, new Response(proc.stdout).text()]);
+			expect(exitCode).toBe(0);
+			expect(stdout.trim()).toBe("hello from crust build test");
+		},
+		60_000,
 	);
 
 	it.skipIf(getHostBunTarget() === null)(

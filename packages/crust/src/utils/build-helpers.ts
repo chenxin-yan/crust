@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { existsSync, readFileSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { text } from "node:stream/consumers";
@@ -11,8 +11,11 @@ import { yellow } from "@crustjs/style";
 import { which } from "@crustjs/utils/process";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Supported Bun compile targets
+// Build runtimes and compile targets
 // ────────────────────────────────────────────────────────────────────────────
+
+export const BUILD_RUNTIMES = ["bun", "deno", "node"] as const;
+export type BuildRuntime = (typeof BUILD_RUNTIMES)[number];
 
 /**
  * All Bun compile targets supported by `crust build`.
@@ -95,6 +98,67 @@ export const TARGET_INFO = {
 } as const satisfies Record<BunTarget, TargetInfo>;
 
 /**
+ * Deno 2.9 compile targets, verified against `deno compile --help`.
+ * Keep this table separate from Bun's target namespace: the compilers use
+ * different canonical strings even when they describe the same platform.
+ */
+export const SUPPORTED_DENO_TARGETS = [
+	"x86_64-unknown-linux-gnu",
+	"aarch64-unknown-linux-gnu",
+	"x86_64-apple-darwin",
+	"aarch64-apple-darwin",
+	"x86_64-pc-windows-msvc",
+	"aarch64-pc-windows-msvc",
+] as const;
+
+export type DenoTarget = (typeof SUPPORTED_DENO_TARGETS)[number];
+
+/** Subset of target metadata the generated resolver scripts consume. */
+export type ResolverTargetInfo = Pick<TargetInfo, "unameKey" | "os" | "cpu">;
+
+/** No platformKey: npm per-platform packaging (distribute.ts) is Bun-only. */
+type DenoTargetInfo = Omit<TargetInfo, "platformKey">;
+
+export const DENO_TARGET_INFO = {
+	"x86_64-unknown-linux-gnu": {
+		alias: "linux-x64",
+		unameKey: "Linux-x86_64",
+		os: "linux",
+		cpu: "x64",
+	},
+	"aarch64-unknown-linux-gnu": {
+		alias: "linux-arm64",
+		unameKey: "Linux-aarch64",
+		os: "linux",
+		cpu: "arm64",
+	},
+	"x86_64-apple-darwin": {
+		alias: "darwin-x64",
+		unameKey: "Darwin-x86_64",
+		os: "darwin",
+		cpu: "x64",
+	},
+	"aarch64-apple-darwin": {
+		alias: "darwin-arm64",
+		unameKey: "Darwin-arm64",
+		os: "darwin",
+		cpu: "arm64",
+	},
+	"x86_64-pc-windows-msvc": {
+		alias: "windows-x64",
+		unameKey: "Windows-x64",
+		os: "win32",
+		cpu: "x64",
+	},
+	"aarch64-pc-windows-msvc": {
+		alias: "windows-arm64",
+		unameKey: "Windows-arm64",
+		os: "win32",
+		cpu: "arm64",
+	},
+} as const satisfies Record<DenoTarget, DenoTargetInfo>;
+
+/**
  * Resolve a canonical Bun target string to a supported compile target.
  *
  * @param input - User-provided canonical Bun target string
@@ -132,6 +196,24 @@ export function resolveTargets(targetFlags: string[] | undefined): BunTarget[] {
 	return targetFlags.map(resolveTarget);
 }
 
+export function resolveDenoTarget(input: string): DenoTarget {
+	if ((SUPPORTED_DENO_TARGETS as readonly string[]).includes(input)) {
+		return input as DenoTarget;
+	}
+
+	const canonical = SUPPORTED_DENO_TARGETS.find(
+		(target) => DENO_TARGET_INFO[target].alias === input,
+	);
+	const hint = canonical ? ` Did you mean "${canonical}"?` : "";
+	throw new Error(
+		`Unknown Deno target "${input}". Targets must use canonical Deno names.${hint}\n  Valid targets: ${SUPPORTED_DENO_TARGETS.join(", ")}`,
+	);
+}
+
+export function resolveDenoTargets(targetFlags: string[] | undefined): DenoTarget[] {
+	return targetFlags?.length ? targetFlags.map(resolveDenoTarget) : [...SUPPORTED_DENO_TARGETS];
+}
+
 /**
  * Get the binary filename (basename only) for a given target.
  *
@@ -142,6 +224,11 @@ export function resolveTargets(targetFlags: string[] | undefined): BunTarget[] {
 export function getBinaryFilename(baseName: string, target: BunTarget): string {
 	const isWindows = target.startsWith("bun-windows");
 	const ext = isWindows ? ".exe" : "";
+	return `${baseName}-${target}${ext}`;
+}
+
+export function getDenoBinaryFilename(baseName: string, target: DenoTarget): string {
+	const ext = DENO_TARGET_INFO[target].os === "win32" ? ".exe" : "";
 	return `${baseName}-${target}${ext}`;
 }
 
@@ -166,10 +253,12 @@ function toBunEnvFileArgs(envFiles: readonly string[]): string[] {
 	return envFiles.flatMap((envFile) => ["--env-file", envFile]);
 }
 
-export type BunBuildRunner = {
+export type BuildRunner = {
 	command: string;
 	env: Record<string, string | undefined>;
 };
+
+export type BunBuildRunner = BuildRunner;
 
 /**
  * Resolve the safest executable to run `bun build`.
@@ -222,8 +311,18 @@ export async function execBuild(
 	envFiles: readonly string[] = [],
 ): Promise<void> {
 	const runner = resolveBunBuildRunner();
-	const args = [
-		runner.command,
+	const args = createBunCompileArgs(entryPath, outfilePath, minify, target, envFiles);
+	await runBuildProcess(runner, args, outfilePath);
+}
+
+export function createBunCompileArgs(
+	entryPath: string,
+	outfilePath: string,
+	minify: boolean,
+	target?: BunTarget,
+	envFiles: readonly string[] = [],
+): string[] {
+	return [
 		"build",
 		"--compile",
 		...toBunEnvFileArgs(envFiles),
@@ -234,8 +333,58 @@ export async function execBuild(
 		...(target ? ["--target", target] : []),
 		entryPath,
 	];
+}
 
-	const proc = spawn(args[0]!, args.slice(1), {
+export function createNodeBuildArgs(
+	entryPath: string,
+	outfilePath: string,
+	minify: boolean,
+	envFiles: readonly string[] = [],
+): string[] {
+	return [
+		"build",
+		...toBunEnvFileArgs(envFiles),
+		"--env=PUBLIC_*",
+		"--target",
+		"node",
+		"--format",
+		"esm",
+		"--outfile",
+		outfilePath,
+		...(minify ? ["--minify"] : []),
+		entryPath,
+	];
+}
+
+export function createDenoCompileArgs(
+	entryPath: string,
+	outfilePath: string,
+	target: DenoTarget,
+): string[] {
+	// No --env-file: `deno compile` embeds EVERY variable from the file into the
+	// binary (verified empirically on Deno 2.9 — secrets included), with no
+	// equivalent of bun's --env=PUBLIC_* filter. The build command rejects
+	// --env-file for the deno runtime instead of leaking secrets.
+	return [
+		"compile",
+		// -A: Crust core reads process.env before dispatch, so a sandboxed binary
+		// crashes with NotCapable on startup. Full grants also match Bun compile,
+		// which has no sandbox. A permission passthrough flag can narrow this later.
+		"-A",
+		"--output",
+		outfilePath,
+		"--target",
+		target,
+		entryPath,
+	];
+}
+
+async function runBuildProcess(
+	runner: BuildRunner,
+	args: readonly string[],
+	outfilePath: string,
+): Promise<void> {
+	const proc = spawn(runner.command, args, {
 		env: runner.env as NodeJS.ProcessEnv,
 		cwd: process.cwd(),
 		stdio: ["ignore", "pipe", "pipe"],
@@ -251,6 +400,43 @@ export async function execBuild(
 		const output = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
 		throw new Error(`Build failed for ${outfilePath}${output ? `:\n${output}` : ""}`);
 	}
+}
+
+export async function execNodeBuild(
+	entryPath: string,
+	outfilePath: string,
+	minify: boolean,
+	envFiles: readonly string[] = [],
+): Promise<void> {
+	const runner = resolveBunBuildRunner();
+	await runBuildProcess(
+		runner,
+		createNodeBuildArgs(entryPath, outfilePath, minify, envFiles),
+		outfilePath,
+	);
+
+	const output = await readFile(outfilePath, "utf8");
+	const shebang = "#!/usr/bin/env node\n";
+	await writeFile(outfilePath, shebang + output.replace(/^#![^\n]*(?:\n|$)/, ""));
+	if (process.platform !== "win32") await chmod(outfilePath, 0o755);
+}
+
+export async function execDenoBuild(
+	entryPath: string,
+	outfilePath: string,
+	target: DenoTarget,
+): Promise<void> {
+	const denoPath = which("deno");
+	if (!denoPath) {
+		throw new Error(
+			"Deno is required for --runtime deno but was not found on PATH.\n  Install Deno from https://deno.com/ and try again.",
+		);
+	}
+	await runBuildProcess(
+		{ command: denoPath, env: { ...process.env } },
+		createDenoCompileArgs(entryPath, outfilePath, target),
+		outfilePath,
+	);
 }
 
 /**

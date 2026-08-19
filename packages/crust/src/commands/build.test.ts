@@ -7,16 +7,28 @@ import { Crust } from "@crustjs/core";
 import {
 	buildCommand,
 	generateCmdResolver,
+	generateDenoCmdResolver,
+	generateDenoResolver,
 	generateResolver,
+	resolveBuildRuntime,
 	resolveEnvFilePaths,
+	resolveNodeOutfile,
 	resolveOutfile,
 } from "../../src/commands/build.ts";
 import type { BunTarget } from "../../src/utils/build-helpers.ts";
 import {
+	createBunCompileArgs,
+	createDenoCompileArgs,
+	createNodeBuildArgs,
+	DENO_TARGET_INFO,
 	getBinaryFilename,
+	getDenoBinaryFilename,
 	resolveBaseName,
 	resolveBunBuildRunner,
+	resolveDenoTarget,
+	resolveDenoTargets,
 	resolveTarget,
+	SUPPORTED_DENO_TARGETS,
 	SUPPORTED_TARGETS,
 	TARGET_INFO,
 } from "../../src/utils/build-helpers.ts";
@@ -44,6 +56,83 @@ describe("env file helpers", () => {
 
 	it("throws when an env-file is missing", () => {
 		expect(() => resolveEnvFilePaths(tmpDir, [".env.missing"])).toThrow(/Env file not found/);
+	});
+});
+
+describe("runtime build configuration", () => {
+	const tmpDir = join(import.meta.dir, ".tmp-runtime-config");
+
+	beforeAll(() => {
+		rmSync(tmpDir, { recursive: true, force: true });
+		mkdirSync(tmpDir, { recursive: true });
+	});
+
+	afterAll(() => rmSync(tmpDir, { recursive: true, force: true }));
+
+	it("defaults to Bun without project configuration", () => {
+		expect(resolveBuildRuntime(tmpDir)).toBe("bun");
+	});
+
+	it("reads package.json crust.runtime and lets --runtime override it", () => {
+		writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ crust: { runtime: "deno" } }));
+		expect(resolveBuildRuntime(tmpDir)).toBe("deno");
+		expect(resolveBuildRuntime(tmpDir, "node")).toBe("node");
+	});
+
+	it("rejects an invalid configured runtime", () => {
+		writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ crust: { runtime: "python" } }));
+		expect(() => resolveBuildRuntime(tmpDir)).toThrow(/Invalid package.json crust.runtime/);
+	});
+});
+
+describe("build argument construction", () => {
+	it("constructs a Node bundle with portable env embedding", () => {
+		expect(createNodeBuildArgs("/src/cli.ts", "/dist/cli.js", true, ["/src/.env"])).toEqual([
+			"build",
+			"--env-file",
+			"/src/.env",
+			"--env=PUBLIC_*",
+			"--target",
+			"node",
+			"--format",
+			"esm",
+			"--outfile",
+			"/dist/cli.js",
+			"--minify",
+			"/src/cli.ts",
+		]);
+	});
+
+	it("constructs a Bun compile with the legacy argument sequence", () => {
+		expect(
+			createBunCompileArgs("/src/cli.ts", "/dist/cli", true, "bun-linux-x64-baseline", [
+				"/src/.env",
+			]),
+		).toEqual([
+			"build",
+			"--compile",
+			"--env-file",
+			"/src/.env",
+			"--env=PUBLIC_*",
+			"--outfile",
+			"/dist/cli",
+			"--minify",
+			"--target",
+			"bun-linux-x64-baseline",
+			"/src/cli.ts",
+		]);
+	});
+
+	it("constructs a Deno compile with its canonical target", () => {
+		expect(createDenoCompileArgs("/src/cli.ts", "/dist/cli", "x86_64-unknown-linux-gnu")).toEqual([
+			"compile",
+			"-A",
+			"--output",
+			"/dist/cli",
+			"--target",
+			"x86_64-unknown-linux-gnu",
+			"/src/cli.ts",
+		]);
 	});
 });
 
@@ -90,6 +179,30 @@ describe("resolveTarget", () => {
 
 	it("throws on unknown target", () => {
 		expect(() => resolveTarget("linux-arm32")).toThrow(/Unknown target/);
+	});
+});
+
+describe("resolveDenoTarget", () => {
+	it("accepts exactly the targets supported by deno compile", () => {
+		for (const target of SUPPORTED_DENO_TARGETS) expect(resolveDenoTarget(target)).toBe(target);
+		expect(resolveDenoTargets(undefined)).toEqual([...SUPPORTED_DENO_TARGETS]);
+	});
+
+	it("guides aliases to canonical Deno target names", () => {
+		for (const target of SUPPORTED_DENO_TARGETS) {
+			expect(() => resolveDenoTarget(DENO_TARGET_INFO[target].alias)).toThrow(
+				`Did you mean "${target}"?`,
+			);
+		}
+	});
+
+	it("uses Deno target names and the Windows executable extension", () => {
+		expect(getDenoBinaryFilename("cli", "x86_64-unknown-linux-gnu")).toBe(
+			"cli-x86_64-unknown-linux-gnu",
+		);
+		expect(getDenoBinaryFilename("cli", "aarch64-pc-windows-msvc")).toBe(
+			"cli-aarch64-pc-windows-msvc.exe",
+		);
 	});
 });
 
@@ -162,6 +275,15 @@ describe("resolveOutfile", () => {
 		const result = resolveOutfile(undefined, "my-tool", entry, cwd, "out");
 		expect(result).toBe(resolve(cwd, "out", "my-tool"));
 	});
+
+	it("adds .js to implicit Node outputs but respects explicit outfile", () => {
+		expect(resolveNodeOutfile(undefined, "my-tool", entry, cwd, "dist")).toBe(
+			resolve(cwd, "dist", "my-tool.js"),
+		);
+		expect(resolveNodeOutfile("bin/custom.mjs", undefined, entry, cwd, "dist")).toBe(
+			resolve(cwd, "bin/custom.mjs"),
+		);
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -231,6 +353,18 @@ describe("generateResolver", () => {
 // Unit tests for generateCmdResolver (Windows batch)
 // ────────────────────────────────────────────────────────────────────────────
 
+describe("Deno resolvers", () => {
+	it("maps Deno targets to their platform-specific filenames", () => {
+		const shell = generateDenoResolver("my-cli", SUPPORTED_DENO_TARGETS);
+		expect(shell).toContain('Linux-x86_64) bin="my-cli-x86_64-unknown-linux-gnu"');
+		expect(shell).not.toContain("pc-windows-msvc");
+
+		const cmd = generateDenoCmdResolver("my-cli", SUPPORTED_DENO_TARGETS);
+		expect(cmd).toContain("my-cli-x86_64-pc-windows-msvc.exe");
+		expect(cmd).toContain("my-cli-aarch64-pc-windows-msvc.exe");
+	});
+});
+
 describe("generateCmdResolver", () => {
 	it("references the correct Windows binary filename", () => {
 		const content = generateCmdResolver("my-cli", SUPPORTED_TARGETS);
@@ -259,7 +393,67 @@ describe("generateCmdResolver", () => {
 // Error handling tests
 // ────────────────────────────────────────────────────────────────────────────
 
+async function executeBuildError(name: string, argv: string[]): Promise<string> {
+	const originalCwd = process.cwd;
+	const originalLog = console.log;
+	const originalError = console.error;
+	const tmpDir = join(import.meta.dir, `.tmp-${name}`);
+	const errors: string[] = [];
+	rmSync(tmpDir, { recursive: true, force: true });
+	mkdirSync(join(tmpDir, "src"), { recursive: true });
+	writeFileSync(join(tmpDir, "src", "cli.ts"), "console.log('hi');");
+	process.cwd = () => tmpDir;
+	console.log = () => {};
+	console.error = (...args: unknown[]) => errors.push(args.map(String).join(" "));
+	try {
+		process.exitCode = 0;
+		await new Crust("test").add(buildCommand).execute({ argv: ["build", ...argv] });
+		return errors.join("\n");
+	} finally {
+		process.exitCode = 0;
+		process.cwd = originalCwd;
+		console.log = originalLog;
+		console.error = originalError;
+		rmSync(tmpDir, { recursive: true, force: true });
+	}
+}
+
 describe("buildCommand error handling", () => {
+	it("rejects unsupported runtime and flag combinations before compiling", async () => {
+		expect(
+			await executeBuildError("node-target", [
+				"--runtime",
+				"node",
+				"--target",
+				"bun-linux-x64-baseline",
+				"--no-validate",
+			]),
+		).toContain("--target cannot be used with --runtime node");
+		expect(
+			await executeBuildError("node-package", ["--runtime", "node", "--package", "--no-validate"]),
+		).toContain("--package does not apply to Node builds");
+		expect(
+			await executeBuildError("deno-package", ["--runtime", "deno", "--package", "--no-validate"]),
+		).toContain("Deno per-platform npm staging is reserved for a follow-up");
+		expect(
+			await executeBuildError("deno-minify", ["--runtime", "deno", "--minify", "--no-validate"]),
+		).toContain("--minify is not supported with --runtime deno");
+		const envFile = join(import.meta.dir, ".tmp-deno-env-file.env");
+		writeFileSync(envFile, "SECRET=x\n");
+		try {
+			expect(
+				await executeBuildError("deno-env-file", [
+					"--runtime",
+					"deno",
+					"--env-file",
+					envFile,
+					"--no-validate",
+				]),
+			).toContain("--env-file is not supported with --runtime deno");
+		} finally {
+			rmSync(envFile, { force: true });
+		}
+	});
 	it("sets exitCode and logs error when entry file is missing", async () => {
 		const originalCwd = process.cwd;
 		const tmpDir = join(import.meta.dir, ".tmp-missing-entry");
