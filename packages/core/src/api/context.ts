@@ -217,9 +217,69 @@ export function defineContext(
 export type FactoryValueOf<F extends AnyContextFactory> =
 	F extends ContextFactory<any, any, infer Value, any, any> ? Awaited<Value> : never;
 
+/**
+ * The slice of `AsyncDisposableStack` invocation disposal actually uses.
+ *
+ * Typed structurally because the global `AsyncDisposableStack` constructor
+ * only exists on Bun, Deno, and Node >= 24 (V8 13.8); on Node 22 invocations
+ * run with {@link FallbackAsyncDisposableStack} instead.
+ */
+export interface DisposalScope {
+	use<T extends Disposable | AsyncDisposable>(value: T): T;
+	defer(onDisposeAsync: () => void | PromiseLike<void>): void;
+}
+
+/**
+ * Minimal `AsyncDisposableStack` stand-in for runtimes without the global
+ * (Node 22): LIFO disposal of used resources and deferred callbacks,
+ * preferring `Symbol.asyncDispose` over `Symbol.dispose`.
+ *
+ * ponytail: multiple disposal errors aggregate as `AggregateError` instead of
+ * the native `SuppressedError` chain; delete this class when Node 22 leaves
+ * the support floor.
+ *
+ * @internal Exported for unit testing and invocation wiring.
+ */
+export class FallbackAsyncDisposableStack implements DisposalScope, AsyncDisposable {
+	#entries: (() => void | PromiseLike<void>)[] = [];
+
+	use<T extends Disposable | AsyncDisposable>(value: T): T {
+		const dispose =
+			(value as Partial<AsyncDisposable>)[Symbol.asyncDispose] ??
+			(value as Disposable)[Symbol.dispose];
+		this.#entries.push(() => dispose.call(value));
+		return value;
+	}
+
+	defer(onDisposeAsync: () => void | PromiseLike<void>): void {
+		this.#entries.push(onDisposeAsync);
+	}
+
+	async [Symbol.asyncDispose](): Promise<void> {
+		const errors: unknown[] = [];
+		for (let index = this.#entries.length - 1; index >= 0; index--) {
+			try {
+				await this.#entries[index]!();
+			} catch (error) {
+				errors.push(error);
+			}
+		}
+		if (errors.length === 1) throw errors[0];
+		if (errors.length > 1) throw new AggregateError(errors, "Disposal failed");
+	}
+}
+
+/**
+ * Disposal-stack constructor for the current runtime: the native
+ * `AsyncDisposableStack` when the global exists, else the fallback.
+ */
+export const DisposalStack: new () => DisposalScope & AsyncDisposable =
+	(globalThis as { AsyncDisposableStack?: new () => DisposalScope & AsyncDisposable })
+		.AsyncDisposableStack ?? FallbackAsyncDisposableStack;
+
 function registerDisposable(
 	value: unknown,
-	disposal: AsyncDisposableStack,
+	disposal: DisposalScope,
 	registered: WeakSet<object>,
 ): void {
 	if (value === null || (typeof value !== "object" && typeof value !== "function")) {
@@ -247,7 +307,7 @@ function registerDisposable(
 export function createContextResolver(
 	contexts: readonly ContextInstance[],
 	io: InvocationIO,
-	disposal: AsyncDisposableStack,
+	disposal: DisposalScope,
 ): {
 	bag<Deps extends ContextMap>(
 		sources: readonly (AnyContextFactory | ContextInstance)[],

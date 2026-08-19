@@ -11,6 +11,7 @@ import {
 	type ContextSetup,
 	createContextResolver,
 	defineContext,
+	FallbackAsyncDisposableStack,
 } from "./context.ts";
 import { defineExtension } from "./extension.ts";
 import { defineFlag } from "./flags.ts";
@@ -1441,5 +1442,61 @@ describe("Context disposal", () => {
 
 		await expect(app.run([])).rejects.toThrow("Unauthenticated");
 		expect(events).toEqual(["disposed"]);
+	});
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// FallbackAsyncDisposableStack (Node 22 lacks the AsyncDisposableStack global)
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("FallbackAsyncDisposableStack", () => {
+	it("disposes used resources and deferred callbacks in LIFO order", async () => {
+		const order: string[] = [];
+		{
+			await using disposal = new FallbackAsyncDisposableStack();
+			disposal.use({ [Symbol.dispose]: () => order.push("sync") });
+			disposal.use({
+				[Symbol.asyncDispose]: async () => {
+					order.push("async");
+				},
+			});
+			disposal.defer(() => {
+				order.push("deferred");
+			});
+		}
+		expect(order).toEqual(["deferred", "async", "sync"]);
+	});
+
+	it("prefers asyncDispose when a resource has both, and returns the resource", async () => {
+		const order: string[] = [];
+		const resource = {
+			[Symbol.dispose]: () => order.push("sync"),
+			[Symbol.asyncDispose]: async () => {
+				order.push("async");
+			},
+		};
+		{
+			await using disposal = new FallbackAsyncDisposableStack();
+			expect(disposal.use(resource)).toBe(resource);
+		}
+		expect(order).toEqual(["async"]);
+	});
+
+	it("disposes every resource even when one throws, then rethrows", async () => {
+		const order: string[] = [];
+		const run = async () => {
+			await using disposal = new FallbackAsyncDisposableStack();
+			disposal.defer(() => {
+				order.push("first");
+			});
+			disposal.defer(() => {
+				throw new Error("boom");
+			});
+			disposal.defer(() => {
+				order.push("last");
+			});
+		};
+		await expect(run()).rejects.toThrow("boom");
+		expect(order).toEqual(["last", "first"]);
 	});
 });

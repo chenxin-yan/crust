@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 
 import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
 
-import { createContextResolver } from "../api/context.ts";
+import { createContextResolver, DisposalStack } from "../api/context.ts";
 import {
 	finishInvocation,
 	type Extension,
@@ -320,7 +320,8 @@ async function dispatch(
 	const parsed = parseArgs(resolvedNode, resolved.argv);
 
 	// One resource scope and resolver span pre-run, the action, and post-run.
-	await using disposal = new AsyncDisposableStack();
+	// DisposalStack (not the bare global): Node 22 has no AsyncDisposableStack.
+	await using disposal = new DisposalStack();
 	const resolver = createContextResolver(resolvedNode.contexts, io, disposal);
 
 	const rootSnapshot = snapshotCommand(rootNode);
