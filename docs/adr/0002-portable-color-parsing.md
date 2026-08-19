@@ -1,7 +1,8 @@
-# ADR 0001: Narrow color parsing for portable runtimes
+# ADR 0002: Narrow color parsing for portable runtimes
 
-- Status: Accepted
-- Date: 2026-08-18
+Status: accepted
+
+Date: 2026-08-18
 
 ## Context
 
@@ -12,7 +13,7 @@
 Parse colors in-package and accept only:
 
 - three- and six-digit hexadecimal strings;
-- integer RGB triples as `rgb(r, g, b)` or `[r, g, b]`;
+- integer RGB triples as `rgb(r, g, b)`, `rgb(r g b)` (separators not mixed), or `[r, g, b]`;
 - the 148 named CSS colors already represented by `NamedColor`.
 
 The parser emits truecolor, 256-color, and 16-color ANSI sequences consistently on Bun, Deno, and Node. Other CSS notation and the former packed-number, object, alpha-tuple, and alpha-hex forms are unsupported.

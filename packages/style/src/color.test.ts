@@ -147,6 +147,16 @@ describe("edge cases", () => {
 		expect(fg("x", [0, 0, 0])).toBe("\x1b[38;2;0;0;0mx\x1b[39m");
 		expect(fg("x", [255, 255, 255])).toBe("\x1b[38;2;255;255;255mx\x1b[39m");
 	});
+
+	it("rejects out-of-range rgb() channels", () => {
+		expect(() => fg("x", "rgb(300, 0, 0)")).toThrow(TypeError);
+		expect(() => fg("x", "rgb(0 0 256)")).toThrow(TypeError);
+	});
+
+	it("rejects 4- and 8-digit hex", () => {
+		expect(() => fg("x", "#f00a")).toThrow(TypeError);
+		expect(() => fg("x", "#ff000080")).toThrow(TypeError);
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────

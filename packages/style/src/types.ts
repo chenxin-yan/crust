@@ -4,7 +4,7 @@
 
 import type { AnsiPair } from "./ansiCodes.ts";
 import type { HyperlinkOptions } from "./hyperlinks.ts";
-import type { NamedColor } from "./namedColors.ts";
+import type { NamedColor } from "./namedColorValues.ts";
 import type { StyleMethodName as RegisteredStyleMethodName } from "./styleMethodRegistry.ts";
 
 /** Completion hints for supported non-named color strings. */
@@ -23,8 +23,9 @@ export type ColorString = NamedColor | ColorSyntaxHint | (string & {});
  * Input accepted by `fg` and `bg`.
  *
  * Accepted shapes are hex strings (`#rgb` / `#rrggbb`), the 148 named CSS
- * colors, `rgb(r, g, b)` strings, and `[r, g, b]` tuples with integer channels
- * from 0 through 255. Invalid inputs throw `TypeError` at call time.
+ * colors, `rgb(r, g, b)` / `rgb(r g b)` strings, and `[r, g, b]` tuples with
+ * integer channels from 0 through 255 (separators must not be mixed).
+ * Invalid inputs throw `TypeError` at call time.
  */
 export type ColorInput = ColorString | readonly [r: number, g: number, b: number];
 

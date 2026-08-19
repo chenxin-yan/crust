@@ -55,7 +55,8 @@ export function stringWidth(input: string): number {
 		}
 	).Bun;
 
-	// Native fast paths are reserved for hand-rolled fallbacks on render-hot paths.
+	// Prefer Bun's native stringWidth when the Bun global is present; fall back
+	// to the JS implementation on other runtimes.
 	// The globalThis cast avoids a ReferenceError on runtimes without the Bun
 	// global (Node, Deno) and keeps Bun types out of the portable package.
 	// If a native split ever needs real tree-shaking, use package.json export

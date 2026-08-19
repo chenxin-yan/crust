@@ -141,8 +141,8 @@ function fgOpen(input: ColorInput, depth: Exclude<ColorDepth, "none">): string {
 /**
  * Background SGR open sequence at `depth`. For `truecolor` / `256`,
  * derived from {@link fgOpen} by swapping the `\x1b[38;` introducer for
- * `\x1b[48;` (both Bun formats use it). For `16`, quantized directly to
- * a real background SGR.
+ * `\x1b[48;` (both the truecolor and 256-color forms use it). For `16`,
+ * quantized directly to a real background SGR.
  *
  * @internal
  */
@@ -168,7 +168,7 @@ function bgOpen(input: ColorInput, depth: Exclude<ColorDepth, "none">): string {
  */
 export function fgPairAtDepth(input: ColorInput, depth: ColorDepth): AnsiPair {
 	if (depth === "none") {
-		fgOpen(input, "truecolor"); // validate, do not emit
+		parseRgb(input); // validate, do not emit
 		return { open: "", close: "" };
 	}
 	return { open: fgOpen(input, depth), close: FG_CLOSE };
@@ -183,7 +183,7 @@ export function fgPairAtDepth(input: ColorInput, depth: ColorDepth): AnsiPair {
  */
 export function bgPairAtDepth(input: ColorInput, depth: ColorDepth): AnsiPair {
 	if (depth === "none") {
-		fgOpen(input, "truecolor"); // validate, do not emit
+		parseRgb(input); // validate, do not emit
 		return { open: "", close: "" };
 	}
 	return { open: bgOpen(input, depth), close: BG_CLOSE };
@@ -216,7 +216,7 @@ export function fg(text: string, input: ColorInput, depth: ColorDepth = "truecol
 	// the bug. Validation is cheap and the
 	// non-empty path needs the parsed open sequence anyway.
 	if (depth === "none") {
-		fgOpen(input, "truecolor"); // validate, do not emit
+		parseRgb(input); // validate, do not emit
 		return text === "" ? "" : text;
 	}
 	const open = fgOpen(input, depth);
@@ -238,7 +238,7 @@ export function fg(text: string, input: ColorInput, depth: ColorDepth = "truecol
 export function bg(text: string, input: ColorInput, depth: ColorDepth = "truecolor"): string {
 	// See `fg` above — validate before short-circuiting on empty `text`.
 	if (depth === "none") {
-		fgOpen(input, "truecolor");
+		parseRgb(input);
 		return text === "" ? "" : text;
 	}
 	const open = bgOpen(input, depth);

@@ -42,13 +42,15 @@ jobs:
         if: matrix.runtime == 'node'
         uses: actions/setup-node@v7
         with:
-          node-version: 24
+          # Documented floor (runtimes.mdx claims Node 22+); smoke the floor, not latest.
+          node-version: 22
 
       - name: Setup Deno
         if: matrix.runtime == 'deno'
         uses: denoland/setup-deno@v2
         with:
-          deno-version: v2.x
+          # Documented floor (runtimes.mdx claims Deno 2.8+); smoke the floor, not latest.
+          deno-version: v2.8.x
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2

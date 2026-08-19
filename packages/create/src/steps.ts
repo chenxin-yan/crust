@@ -7,6 +7,17 @@ import { which } from "@crustjs/utils/process";
 import type { PostScaffoldStep } from "./types.ts";
 import { detectPackageManager } from "./utils.ts";
 
+/**
+ * Whether spawning this executable requires `shell: true`.
+ *
+ * On Windows, package managers resolve to `.cmd`/`.bat` shims, which Node
+ * refuses to spawn directly since the CVE-2024-27980 hardening (throws
+ * EINVAL). Safe here because all callers pass fixed literal args.
+ */
+function needsShell(executable: string): boolean {
+	return /\.(cmd|bat)$/i.test(executable);
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Post-Scaffold Step Runner
 // ────────────────────────────────────────────────────────────────────────────
@@ -66,7 +77,10 @@ async function runInstall(cwd: string): Promise<void> {
 		throw new Error(`Package manager "${pm}" was not found on PATH. Install ${pm} and try again.`);
 	}
 
-	const proc = spawn(executable, ["install"], { cwd, stdio: "inherit" });
+	// Under shell mode, pass the bare pm name so cmd.exe resolves it — the
+	// resolved path may contain spaces, which an unquoted shell string breaks.
+	const shell = needsShell(executable);
+	const proc = spawn(shell ? pm : executable, ["install"], { cwd, stdio: "inherit", shell });
 	const [exitCode] = await once(proc, "close");
 	if (exitCode !== 0) {
 		throw new Error(`"${pm} install" exited with code ${exitCode}`);
@@ -105,7 +119,14 @@ async function runOpenEditor(cwd: string): Promise<void> {
 	const editor = process.env.EDITOR || "code";
 
 	try {
-		const proc = spawn(editor, [cwd], { stdio: "ignore" });
+		const proc = spawn(editor, [cwd], {
+			stdio: "ignore",
+			// $EDITOR may be a bare name that resolves to a .cmd shim on Windows
+			// (e.g. "code"); shell mode is required to spawn those.
+			shell: process.platform === "win32",
+		});
+		// Don't block the event loop on a long-lived editor process.
+		proc.unref();
 		// Don't wait for the editor to close — it may be a GUI process
 		// Just check that it started without immediately failing
 		// Use a short race to detect spawn failures

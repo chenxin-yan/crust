@@ -18,6 +18,12 @@ describe("stringWidth", () => {
 		expect(stringWidthJs("\u{1AFF0}")).toBe(2); // Kana Extended-B
 	});
 
+	it("treats East-Asian-Ambiguous characters as narrow", () => {
+		expect(stringWidthJs("\u2460")).toBe(1); // ① circled digit one
+		expect(stringWidthJs("\u03b1")).toBe(1); // α Greek alpha
+		expect(stringWidthJs("\u00b1")).toBe(1); // ± plus-minus sign
+	});
+
 	it("keeps the JavaScript fallback aligned with Bun", () => {
 		// Decomposed Hangul is intentionally covered above but excluded here: Bun 1.3.14
 		// reports four columns for the two-column grapheme due to Unicode implementation drift.

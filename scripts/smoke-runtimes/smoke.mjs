@@ -15,7 +15,7 @@ import {
 } from "../../packages/prompts/dist/index.js";
 import { loadPackagedSkills } from "../../packages/skills/dist/index.js";
 import { createStore } from "../../packages/store/dist/index.js";
-import { createStyle, stringWidth } from "../../packages/style/dist/index.js";
+import { createStyle, fg, stringWidth } from "../../packages/style/dist/index.js";
 import * as testing from "../../packages/testing/dist/index.js";
 
 function assert(condition, message) {
@@ -43,6 +43,18 @@ assert(style.red("crust") === "\x1b[31mcrust\x1b[39m", "expected red ANSI output
 assert(stringWidth("abc") === 3, "expected ASCII width 3");
 assert(stringWidth("界") === 2, "expected CJK width 2");
 assert(stringWidth("👋") === 2, "expected emoji width 2");
+// Route through the mode-forced instance: bare `fg` degrades on non-TTY stdout.
+assert(
+	style.fg("#ff0000")("x") === "\x1b[38;2;255;0;0mx\x1b[39m",
+	"expected vendored color parser output",
+);
+let invalidColorRejected = false;
+try {
+	fg("x", "not-a-color");
+} catch (error) {
+	invalidColorRejected = error instanceof TypeError;
+}
+assert(invalidColorRejected, "expected TypeError for invalid color input");
 
 const skillsRoot = await mkdtemp(join(tmpdir(), "crust-runtime-skills-"));
 try {

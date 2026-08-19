@@ -1,7 +1,6 @@
-import type { NamedColor } from "./namedColors.ts";
-
-// Typed against NamedColor so tsc enforces the table stays in sync with the union.
-export const namedColorValues: Readonly<Record<NamedColor, readonly [number, number, number]>> = {
+// Not exported directly: isolatedDeclarations requires explicit annotations on
+// exports, and annotating would erase the inferred key union NamedColor derives from.
+const table = {
 	aliceblue: [240, 248, 255],
 	antiquewhite: [250, 235, 215],
 	aqua: [0, 255, 255],
@@ -150,4 +149,20 @@ export const namedColorValues: Readonly<Record<NamedColor, readonly [number, num
 	whitesmoke: [245, 245, 245],
 	yellow: [255, 255, 0],
 	yellowgreen: [154, 205, 50],
-};
+} as const;
+
+export const namedColorValues: Readonly<Record<NamedColor, readonly [number, number, number]>> =
+	table;
+
+/**
+ * The 148 CSS named colors recognized by the portable color parser.
+ *
+ * Includes `rebeccapurple` (CSS Color Module Level 4 addition).
+ * Excludes `transparent` and `currentcolor`, which have no meaningful
+ * mapping to an ANSI foreground/background sequence.
+ *
+ * Used by {@link ColorInput} so editors autocomplete every supported named color.
+ *
+ * @see {@link https://drafts.csswg.org/css-color/#named-colors | CSS Color Module Level 4 — Named Colors}
+ */
+export type NamedColor = keyof typeof table;

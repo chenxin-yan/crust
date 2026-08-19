@@ -306,15 +306,20 @@ type BinaryBuildOptions<T extends string> = {
 
 async function buildBinaryOutputs<T extends string>(options: BinaryBuildOptions<T>): Promise<void> {
 	if (options.targets.length === 1) {
-		const outfilePath = resolveOutfile(
+		const target = options.targets[0]!;
+		// Windows targets produce `.exe` files; suffix the outfile so the path we
+		// print (and pass to the compiler) matches the artifact on disk.
+		const ext = options.getFilename("x", target).endsWith(".exe") ? ".exe" : "";
+		const resolved = resolveOutfile(
 			options.outfile,
 			options.name,
 			options.entryPath,
 			options.cwd,
 			options.outdir,
 		);
+		const outfilePath = ext && !resolved.endsWith(ext) ? resolved + ext : resolved;
 		console.log(`Building ${dim(options.entryPath)} ${cyan("→")} ${dim(outfilePath)}...`);
-		await options.execute(options.entryPath, outfilePath, options.targets[0]!, options.envFiles);
+		await options.execute(options.entryPath, outfilePath, target, options.envFiles);
 		console.log(`${green("✓")} Built successfully: ${outfilePath}`);
 		return;
 	}
@@ -497,6 +502,13 @@ export const buildCommand = defineCommand(
 				if (runtime === "node" && flags.target?.length) {
 					throw new Error(
 						"--target cannot be used with --runtime node.\n  Node builds produce one portable JavaScript artifact.",
+					);
+				}
+				// Warn (not error): "cli" is the flag default, so only a non-default
+				// value signals explicit — and ignored — user intent.
+				if (runtime === "node" && flags.resolver !== "cli") {
+					console.warn(
+						"Warning: --resolver is ignored with --runtime node; Node builds produce a single JavaScript artifact.",
 					);
 				}
 				if (runtime === "deno" && flags.minify) {

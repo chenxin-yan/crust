@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
+import { which } from "@crustjs/utils/process";
 
 import {
 	buildCommand,
@@ -138,8 +139,10 @@ describe("build argument construction", () => {
 
 describe("resolveBunBuildRunner", () => {
 	it("prefers the real bun binary when available", () => {
+		const bunPath = which("bun");
+		expect(bunPath).not.toBeNull();
 		const runner = resolveBunBuildRunner();
-		expect(runner.command).toBe(process.execPath);
+		expect(runner.command).toBe(bunPath!);
 		expect(runner.env.BUN_BE_BUN).toBe(process.env.BUN_BE_BUN);
 	});
 

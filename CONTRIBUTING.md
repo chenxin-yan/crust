@@ -39,6 +39,8 @@ bun run format
 bun run check
 bun run check:types
 bun run test
+bun run smoke:node
+bun run smoke:deno
 ```
 
 Before opening a pull request, always run:

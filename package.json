@@ -12,7 +12,7 @@
 		"format": "oxfmt --check",
 		"format:fix": "oxfmt",
 		"check": "bun run check:portable && turbo run build --filter='./packages/*' && turbo run //#lint //#format",
-		"check:portable": "! git grep -l 'Bun\\.' -- 'packages/*/src/*.ts*' ':!*.test.ts*' ':!packages/crust/*'",
+		"check:portable": "! git grep -l -e 'Bun\\.' -e 'from \"bun\"' -e '\"bun:' -- 'packages/*/src/*.ts*' ':!*.test.ts*' ':!packages/crust/*'",
 		"check:fix": "turbo run build --filter='./packages/*' && oxlint --fix && oxfmt",
 		"check:types": "turbo run check:types",
 		"test": "turbo run test --filter='./packages/*'",

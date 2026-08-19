@@ -355,24 +355,44 @@ await app.execute();
 				join(tmpDir, "package.json"),
 				JSON.stringify({ name: "test-build-cli", version: "0.1.0", crust: { runtime: "node" } }),
 			);
+			// Bundle @crustjs/core into the artifact — the portability claim is "a
+			// Crust CLI runs under node", not "a console.log runs under node".
+			writeFileSync(
+				join(tmpDir, "src", "node-core-cli.ts"),
+				`import { Crust } from ${JSON.stringify(corePath)};
+const app = new Crust("node-core-cli", { version: "1.0.0" }).action(() => console.log("core under node"));
+await app.execute();
+`,
+			);
 			const outPath = join(tmpDir, "dist", "node-cli.js");
 			try {
 				await new Crust("test").add(buildCommand).execute({
-					argv: ["build", "--entry", "src/cli.ts", "--outfile", outPath, "--no-validate"],
+					argv: ["build", "--entry", "src/node-core-cli.ts", "--outfile", outPath, "--no-validate"],
 				});
 				expect(readFileSync(outPath, "utf8").startsWith("#!/usr/bin/env node\n")).toBe(true);
 				if (process.platform !== "win32") expect(statSync(outPath).mode & 0o111).not.toBe(0);
 
-				const proc = Bun.spawn([Bun.which("node")!, outPath], {
-					stdout: "pipe",
-					stderr: "pipe",
-				});
-				const [exitCode, stdout] = await Promise.all([
-					proc.exited,
-					new Response(proc.stdout).text(),
-				]);
-				expect(exitCode).toBe(0);
-				expect(stdout.trim()).toBe("hello from crust build test");
+				const run = async (args: string[]) => {
+					const proc = Bun.spawn([Bun.which("node")!, outPath, ...args], {
+						stdout: "pipe",
+						stderr: "pipe",
+					});
+					const [exitCode, stdout, stderr] = await Promise.all([
+						proc.exited,
+						new Response(proc.stdout).text(),
+						new Response(proc.stderr).text(),
+					]);
+					return { exitCode, stdout, stderr };
+				};
+
+				const action = await run([]);
+				expect(action.exitCode).toBe(0);
+				expect(action.stdout.trim()).toBe("core under node");
+
+				// Unknown flag exercises core's dispatch/error path in the bundle.
+				const bad = await run(["--definitely-not-a-flag"]);
+				expect(bad.exitCode).toBe(1);
+				expect(bad.stderr).toContain("Unknown flag");
 			} finally {
 				writeFileSync(
 					join(tmpDir, "package.json"),
@@ -383,6 +403,11 @@ await app.execute();
 		30_000,
 	);
 
+	// ponytail: entry is dependency-free — `deno compile` type-checks raw
+	// workspace TS (unlike published dist), so bundling @crustjs/core here fails
+	// for monorepo reasons real users never hit. The dist-layer "core runs under
+	// Deno" claim is covered by the CI smoke matrix; a faithful compile-with-deps
+	// test needs a pack+install harness.
 	it.skipIf(Bun.which("deno") === null || getHostDenoTarget() === null)(
 		"builds and runs a Deno standalone executable for the host target",
 		async () => {

@@ -258,8 +258,6 @@ export type BuildRunner = {
 	env: Record<string, string | undefined>;
 };
 
-export type BunBuildRunner = BuildRunner;
-
 /**
  * Resolve the safest executable to run `bun build`.
  *
@@ -270,7 +268,7 @@ export type BunBuildRunner = BuildRunner;
  * Fall back to the current executable with `BUN_BE_BUN=1` so packaged Crust
  * binaries still work in environments without a separate Bun install.
  */
-export function resolveBunBuildRunner(): BunBuildRunner {
+export function resolveBunBuildRunner(): BuildRunner {
 	const bunPath = which("bun");
 	if (bunPath) {
 		return {

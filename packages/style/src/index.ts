@@ -9,7 +9,7 @@ export type { ColumnAlignment, TableOptions } from "./blocks/tables.ts";
 export { table } from "./blocks/tables.ts";
 export { createStyle, style } from "./createStyle.ts";
 export type { HyperlinkOptions } from "./hyperlinks.ts";
-export type { NamedColor } from "./namedColors.ts";
+export type { NamedColor } from "./namedColorValues.ts";
 export {
 	bg,
 	// Background
