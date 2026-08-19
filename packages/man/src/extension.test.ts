@@ -14,6 +14,11 @@ afterEach(async () => {
 });
 
 describe("man Extension", () => {
+	it("exposes the reserved identity on the factory", () => {
+		expect(String(man.id)).toBe("crust:man");
+		expect(man().id).toBe(man.id);
+	});
+
 	it("writes the root manual with a configurable section", async () => {
 		const outDir = await mkdtemp(join(tmpdir(), "crust-man-extension-"));
 		directories.push(outDir);

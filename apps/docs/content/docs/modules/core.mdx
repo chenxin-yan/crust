@@ -57,7 +57,8 @@ Downstream commands and other Context setups call `await ctx.use(api)`. See [Con
 | [`Crust`](/docs/api/crust)            | Immutable command builder with Context `.provide()`, `.add()`, `.action()`, tooling `.snapshot()`, programmatic `.run()`, and terminal `.execute()` |
 | [`defineCommand`](/docs/api/crust)    | Create a named, inert reusable command definition                                                                                                   |
 | `defineContext(name, config?, setup)` | Define a named Context factory with optional owned flags; setup receives a Context resolver and invocation I/O                                      |
-| `defineExtension(name, config)`       | Define a frozen, application-wide Extension value                                                                                                   |
+| `defineExtension(id, config)`         | Define a frozen, application-wide Extension value                                                                                                   |
+| `defineExtensionId(id)`               | Mint a branded Extension identity from any non-blank string                                                                                         |
 | `defineFlag(name, definition)`        | Define one named flag, preserving its literal definition                                                                                            |
 | `defineArg(name, definition)`         | Define one named positional argument, preserving its literal definition                                                                             |
 | `sectionsFor(sections, consumer)`     | Select sections visible to the given consumer id                                                                                                    |
@@ -74,7 +75,7 @@ Downstream commands and other Context setups call `await ctx.use(api)`. See [Con
 | [`CommandConfig`](/docs/api/crust)            | Static metadata for a reusable definition                                        |
 | `CommandMeta`                                 | Name, description, usage, sections, aliases, and visibility                      |
 | `CommandSection`                              | A titled documentation block with an optional consumer audience                  |
-| `SectionConsumer`                             | String id of a renderer that consumes command sections                           |
+| `ExtensionId`                                 | Branded identity minted by `defineExtensionId()`                                 |
 | `ContextResolver` / `FactoryValueOf`          | Pull-based Context resolver and factory-value helper types                       |
 | [`RootCommandMeta`](/docs/api/crust)          | Root description, usage, and sections accepted by the `Crust` constructor        |
 | `FlagDef`                                     | Core-value or Standard Schema flag definition                                    |
@@ -132,7 +133,7 @@ Omitting `io` creates no new ambient scope, preserving native TTY detection and 
 
 | Type                    | Description                                                                 |
 | ----------------------- | --------------------------------------------------------------------------- |
-| `Extension`             | Named frozen Extension value                                                |
+| `Extension`             | Identified frozen Extension value                                           |
 | `ExtensionBuildContext` | Frozen root snapshot and resolved output directory for artifact generation  |
 | `ExtensionConfig`       | Owned flags, commands, section contributions, build generation, and hooks   |
 | `ExtensionFlagDef`      | Extension-owned flag with optional `recursive` scope                        |
@@ -160,9 +161,9 @@ Omitting `io` creates no new ambient scope, preserving native TTY detection and 
 A command section without an audience is available to every renderer. Use `only` or `except` with consumer ids exported by renderer packages to narrow it; the two fields are mutually exclusive:
 
 ```ts
-import { sectionsFor, type CommandSection, type SectionConsumer } from "@crustjs/core";
+import { defineExtensionId, sectionsFor, type CommandSection } from "@crustjs/core";
 
-export const WEB_DOCS: SectionConsumer = "acme:web-docs";
+export const WEB_DOCS = defineExtensionId("acme:web-docs");
 
 const sections: readonly CommandSection[] = [
   { title: "Overview", body: "Visible everywhere." },
@@ -172,7 +173,7 @@ const sections: readonly CommandSection[] = [
 const webSections = sectionsFor(sections, WEB_DOCS);
 ```
 
-Consumers match by string id, so targeting remains stable when snapshots are cloned or serialized. Consumer packages own and export their ids; core has no built-in consumer registry. Namespace third-party ids to avoid collisions.
+Extension identities remain plain strings at runtime and match by value, so targeting remains stable when snapshots are cloned or serialized. Renderer packages expose their ids on factory statics; core has no built-in consumer registry. Official consumer ids use the `crust:` namespace, reserved by convention for official Crust identities. Third-party packages should namespace published ids with their own prefix, as in `acme:web-docs` above.
 
 ## Tooling subpath
 

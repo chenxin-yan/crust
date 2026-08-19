@@ -1,4 +1,12 @@
-import { type Extension, type ExtensionContext, defineExtension } from "@crustjs/core";
+import {
+	type Extension,
+	type ExtensionId,
+	type ExtensionContext,
+	defineExtension,
+	defineExtensionId,
+} from "@crustjs/core";
+
+const VERSION: ExtensionId = defineExtensionId("crust:version");
 
 export type VersionValue = string | (() => string);
 
@@ -13,13 +21,13 @@ export interface VersionOptions {
 	readonly format?: "plain" | ((version: string, context: ExtensionContext) => string);
 }
 
-export function version(
+function versionFactory(
 	versionValue: VersionValue = "0.0.0",
 	options: VersionOptions = {},
 ): Extension {
 	const { format } = options;
 
-	return defineExtension("version", {
+	return defineExtension(VERSION, {
 		flags: [
 			{
 				name: "version",
@@ -48,3 +56,8 @@ export function version(
 		},
 	});
 }
+
+export const version: typeof versionFactory & { readonly id: ExtensionId } = Object.assign(
+	versionFactory,
+	{ id: VERSION },
+);

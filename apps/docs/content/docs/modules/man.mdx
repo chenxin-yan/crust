@@ -76,16 +76,16 @@ const source = renderManPageMdoc({
 });
 ```
 
-The renderer uses semantic mdoc(7) flag and argument macros. It intentionally summarizes only the root command's immediate visible subcommands; nested commands remain available in the shared full-tree documentation model. Root `meta.sections` visible to the exported `MAN` consumer are appended after the built-in sections as mdoc `.Sh` sections.
+The renderer uses semantic mdoc(7) flag and argument macros. It intentionally summarizes only the root command's immediate visible subcommands; nested commands remain available in the shared full-tree documentation model. Root `meta.sections` visible to the `man.id` (`crust:man`) consumer are appended after the built-in sections as mdoc `.Sh` sections.
 
-Target a section to man pages with `only: [MAN]`, or exclude it with `except: [MAN]`:
+Target a section to man pages with `only: [man.id]`, or exclude it with `except: [man.id]`:
 
 ```ts
 import { Crust } from "@crustjs/core";
-import { MAN } from "@crustjs/man";
+import { man } from "@crustjs/man";
 
 const documentedApp = new Crust("my-cli", {
-  sections: [{ title: "FILES", body: "~/.config/my-cli.json", only: [MAN] }],
+  sections: [{ title: "FILES", body: "~/.config/my-cli.json", only: [man.id] }],
 });
 ```
 

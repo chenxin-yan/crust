@@ -1,10 +1,18 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
 
-import { type Extension, defineCommand, defineExtension } from "@crustjs/core";
+import {
+	type Extension,
+	type ExtensionId,
+	defineCommand,
+	defineExtension,
+	defineExtensionId,
+} from "@crustjs/core";
 
 import { assertSafeBinName, sanitizeFreeText } from "./escape.ts";
 import { walkCommandNode } from "./walker.ts";
+
+const COMPLETION: ExtensionId = defineExtensionId("crust:completion");
 
 /** The set of shells supported by the v1 completion extension. */
 export type CompletionShell = "bash" | "zsh" | "fish";
@@ -93,7 +101,7 @@ async function renderForShell(
  *   distribution channels — distributors run it once at packaging time
  *   and the resulting files become drop-ins.
  */
-export function completion(options: CompletionOptions = {}): Extension {
+function completionFactory(options: CompletionOptions = {}): Extension {
 	const subcommandName = options.command ?? "completion";
 	const version = options.version ?? "0.0.0";
 
@@ -150,5 +158,10 @@ export function completion(options: CompletionOptions = {}): Extension {
 				}),
 	);
 
-	return defineExtension("completion", { commands: [completionCommand] });
+	return defineExtension(COMPLETION, { commands: [completionCommand] });
 }
+
+export const completion: typeof completionFactory & { readonly id: ExtensionId } = Object.assign(
+	completionFactory,
+	{ id: COMPLETION },
+);

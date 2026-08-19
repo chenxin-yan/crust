@@ -25,18 +25,20 @@ Two consequences of the root-only model:
 
 ## Author an Extension
 
-`defineExtension(name, config)` returns a frozen plain value. The config can contain `flags`, `commands`, `provides`, `sections`, `build`, and `hooks`:
+`defineExtension(id, config)` returns a frozen plain value. The config can contain `flags`, `commands`, `provides`, `sections`, `build`, and `hooks`:
 
 <include lang="ts" meta='title="diagnostics.ts"'>
   ../../../examples/extensions/diagnostics.ts
 </include>
+
+Official Extension identities use the `crust:` namespace, reserved by convention for official Crust identities (the prefix is not enforced at runtime). Third-party packages should namespace published Extension ids with their own prefix; application-local ids can remain plain.
 
 ## Owned flags and commands
 
 Extension flags are a readonly array of named definitions. Use `defineFlag()` values for ordinary recursive flags, or write a named definition inline. Extension flags default to `recursive: true`, which contributes them to every command. The documented way to set the Extension-only `recursive` option for a root-only flag is an inline definition:
 
 ```ts
-const rootOnlyVersion = defineExtension("version", {
+const rootOnlyVersion = defineExtension(defineExtensionId("version"), {
   flags: [{ name: "version", type: "boolean", recursive: false }],
 });
 ```
@@ -68,7 +70,7 @@ const deploy = defineCommand(
 Extensions can append sections to any command while the application prepares. The `sections` field is a contribution point into the target commands' `meta.sections`, not documentation of the Extension itself:
 
 ```ts
-const guidance = defineExtension("guidance", {
+const guidance = defineExtension(defineExtensionId("guidance"), {
   sections: () => [
     { command: [], title: "Environment", body: "Set DEPLOY_TOKEN before running." },
     { command: ["deploy"], title: "Policy", body: "Production deploys require approval." },
@@ -76,7 +78,7 @@ const guidance = defineExtension("guidance", {
 });
 ```
 
-`command` is a canonical path relative to the root; `[]` targets the root. Unknown paths and aliases are rejected with a `DEFINITION` error instead of being silently omitted. Contributions are appended after authored `meta.sections`, in `.extend()` order. The callback receives a frozen snapshot containing the fully materialized command tree and authored sections; renderers consume only each target command's merged `meta.sections`.
+`command` is a canonical path relative to the root; `[]` targets the root. Unknown paths and aliases are rejected with a `DEFINITION` error instead of being silently omitted. Contributions are appended after authored `meta.sections`, in Extension registration order. The callback receives a frozen snapshot containing the fully materialized command tree and authored sections; renderers consume only each target command's merged `meta.sections`.
 
 Titles must be non-empty single lines, and bodies are non-empty plain text so the same content is safe for terminal help and mdoc output.
 
@@ -84,34 +86,34 @@ Sections are visible to every renderer by default. Renderer packages export cons
 
 ```ts
 import { defineCommand } from "@crustjs/core";
-import { HELP } from "@crustjs/extensions";
-import { SKILLS } from "@crustjs/skills";
+import { help } from "@crustjs/extensions";
+import { skill } from "@crustjs/skills";
 
 const deploy = defineCommand(
   "deploy",
   {
     sections: [
       { title: "Safety", body: "Use preview mode first." },
-      { title: "Agent notes", body: "Inspect the plan before deploying.", only: [SKILLS] },
-      { title: "Examples", body: "deploy production", only: [HELP, SKILLS] },
+      { title: "Agent notes", body: "Inspect the plan before deploying.", only: [skill.id] },
+      { title: "Examples", body: "deploy production", only: [help.id, skill.id] },
     ],
   },
   (command) => command.action(() => {}),
 );
 ```
 
-A renderer exports its own consumer id and selects its sections with `sectionsFor()`. Core does not maintain a fixed list of consumers.
+A renderer exposes its identity on its factory and selects sections with `sectionsFor()`. Use official factory statics such as `help.id`, `man.id`, and `skill.id` rather than raw strings. Core does not maintain a fixed list of identities.
 
 ## Build hooks
 
-`build(ctx)` generates artifacts when invoked by build tooling such as `crust build`; it does not run during ordinary `run()` or `execute()` dispatch. The snapshot subprocess invokes registered hooks in Extension registration order, so Extension presence is the source of intent. The context contains the frozen root Command Snapshot and a resolved absolute `outDir`. Build hooks may be async; errors propagate with the Extension name. `crust build --no-validate` skips entry preparation and all build hooks.
+`build(ctx)` generates artifacts when invoked by build tooling such as `crust build`; it does not run during ordinary `run()` or `execute()` dispatch. The snapshot subprocess invokes registered hooks in Extension registration order, so Extension presence is the source of intent. The context contains the frozen root Command Snapshot and a resolved absolute `outDir`. Build hooks may be async; errors propagate with the Extension id. `crust build --no-validate` skips entry preparation and all build hooks.
 
 ## Dependency injection
 
 Hooks and command actions share the Context system. An app can supply services with `.provide()`, and hooks pull them with `await ctx.use(factory)`:
 
 ```ts
-const telemetry = defineExtension("telemetry", {
+const telemetry = defineExtension(defineExtensionId("telemetry"), {
   hooks: {
     async preRun(ctx) {
       const log = await ctx.use(logger);
@@ -124,7 +126,7 @@ const telemetry = defineExtension("telemetry", {
 An Extension can install services on the root with `provides`; commands and other Extensions can consume them:
 
 ```ts
-const logging = defineExtension("logging", {
+const logging = defineExtension(defineExtensionId("logging"), {
   provides: [logger({ level: "info" })],
 });
 ```
@@ -150,19 +152,19 @@ Hooks run after routing and syntax parsing. Where each hook sits in the invocati
 ```ts
 type InvocationOutcome =
   | { status: "completed" }
-  | { status: "finished"; by: string }
-  | { status: "failed"; error: unknown };
+  | { status: "finished"; by: ExtensionId }
+  | { status: "failed"; error: unknown; by?: ExtensionId };
 ```
 
-The same context identity reaches all hooks for one invocation. Use `ctx.use()` for injectable services; a `WeakMap<ExtensionContext, State>` remains suitable for private per-invocation ephemera shared by a hook pair.
+For a finished invocation, `outcome.by` is the Extension id. A failed outcome carries `by` when an Extension handled it in `onError`; Core fallback rendering leaves `by` undefined. Official Extensions therefore report names such as `crust:help`; diagnostics that label an Extension use the same exact identity. The same context identity reaches all hooks for one invocation. Use `ctx.use()` for injectable services; a `WeakMap<ExtensionContext, State>` remains suitable for private per-invocation ephemera shared by a hook pair.
 
 ### `onError`
 
-`onError(error, ctx)` presents failures for `execute()` only, in `.extend()` order. Return `true` after rendering to stop presentation; return nothing (or `false`) to delegate to the next Extension and ultimately Core's default renderer.
+`onError(error, ctx)` presents failures for `execute()` only, in `.extend()` order. Return `true` after rendering to stop presentation; return nothing (or `false`) to delegate to the next Extension and ultimately Core's default renderer. A hook that throws ends the chain: remaining hooks are skipped and Core's default renderer reports the original failure.
 
 <include lang="ts">../../../examples/extensions/hooks.ts#service-errors</include>
 
-Rendering never turns a failure into success, and programmatic `run()` throws the original error instead of invoking `onError` — see [Error flow](/docs/guide/lifecycle#error-flow). Invocation Contexts are disposed after `postRun`, so `onError` cannot pull them with `use()`.
+Rendering never turns a failure into success, and programmatic `run()` throws the original error instead of invoking `onError` — see [Error flow](/docs/guide/lifecycle#error-flow). For failures reached during dispatch, `onError` settles before `postRun`, so cleanup hooks observe the attributed outcome and invocation Contexts remain available until cleanup completes.
 
 Unlike `preRun`/`postRun`, `onError` does not infer owned flags: routing and syntax-parse failures render with a fallback context whose `flags` are empty, so its `ctx.flags` stays `Record<string, unknown>`.
 

@@ -13,7 +13,7 @@ await app.execute();
 ```
 
 ```ts
-function noColor(): Extension;
+const noColor: (() => Extension) & { readonly id: ExtensionId };
 ```
 
 `noColor()` owns a recursive boolean `color` flag. Crust's normal boolean negation provides both forms:

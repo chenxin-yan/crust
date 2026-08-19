@@ -8,6 +8,7 @@ import {
 	defineCommand,
 	defineContext,
 	defineExtension,
+	defineExtensionId,
 	defineFlag,
 } from "../src/index";
 import { executeCrust } from "./helpers";
@@ -213,7 +214,7 @@ describe("integration: Extension adds flag visible to subcommand action", () => 
 	});
 
 	it("Extension flag on root is parsed and available to root action", async () => {
-		const versionFlag = defineExtension("version-extension", {
+		const versionFlag = defineExtension(defineExtensionId("version-extension"), {
 			flags: [{ name: "version", type: "boolean", short: "V", recursive: false }],
 		});
 
@@ -232,7 +233,7 @@ describe("integration: Extension adds flag visible to subcommand action", () => 
 
 	it("Extension hooks run around subcommand execution", async () => {
 		const order: string[] = [];
-		const logging = defineExtension("logging", {
+		const logging = defineExtension(defineExtensionId("logging"), {
 			hooks: {
 				preRun: (ctx) => {
 					order.push(`pre:${ctx.command.meta.name}`);
@@ -483,7 +484,7 @@ describe("integration: complex real-world CLI scenario", () => {
 	it("full CLI with global flags, multiple subcommands, extensions, and lifecycle hooks", async () => {
 		const order: string[] = [];
 
-		const auditExtension = defineExtension("audit", {
+		const auditExtension = defineExtension(defineExtensionId("audit"), {
 			hooks: {
 				preRun: (ctx) => {
 					order.push(`audit:${ctx.command.meta.name}`);

@@ -60,6 +60,11 @@ function target(name = "demo") {
 }
 
 describe("skill extension packaged directory", () => {
+	it("exposes the reserved identity on the factory", () => {
+		expect(String(skill.id)).toBe("crust:skills");
+		expect(skill({ packagedDir: "." }).id).toBe(skill.id);
+	});
+
 	it("advertises every packaged skill in help with its resolved source path", async () => {
 		const source = await writeSource("demo", "demo", "Run demo workflows");
 		await writeSource("guide", "guide", "Explain deployment choices");

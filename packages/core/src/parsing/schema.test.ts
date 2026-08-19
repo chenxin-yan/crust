@@ -4,6 +4,7 @@ import type { StandardSchema } from "@crustjs/utils/schema";
 
 import { Crust } from "../command/crust.ts";
 import { CrustError } from "../errors.ts";
+import { defineExtensionId } from "../identity.ts";
 
 /** Minimal hand-rolled Standard Schema (no vendor dependency). */
 function schema<Input, Output>(
@@ -171,7 +172,7 @@ describe("schema interaction with Extensions", () => {
 		let preRunSaw: unknown;
 		let actionSaw: unknown;
 
-		const probe = defineExtension("probe", {
+		const probe = defineExtension(defineExtensionId("probe"), {
 			hooks: {
 				preRun(ctx) {
 					preRunSaw = ctx.flags.port;
@@ -199,7 +200,9 @@ describe("schema interaction with Extensions", () => {
 			return { value: String(raw) };
 		});
 		const { defineExtension } = await import("../api/extension.ts");
-		const gate = defineExtension("gate", { hooks: { preRun: (ctx) => ctx.finish() } });
+		const gate = defineExtension(defineExtensionId("gate"), {
+			hooks: { preRun: (ctx) => ctx.finish() },
+		});
 
 		const app = new Crust("cli")
 			.flags({ name: "x", type: "string", schema: spy })

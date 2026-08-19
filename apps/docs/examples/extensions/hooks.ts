@@ -1,7 +1,7 @@
-import { defineExtension } from "@crustjs/core";
+import { defineExtension, defineExtensionId } from "@crustjs/core";
 
 //#region cached
-export const cached = defineExtension("cached", {
+export const cached = defineExtension(defineExtensionId("cached"), {
   hooks: {
     preRun(ctx) {
       if (ctx.flags.cached !== true) return;
@@ -13,7 +13,7 @@ export const cached = defineExtension("cached", {
 //#endregion
 
 //#region service-errors
-export const serviceErrors = defineExtension("service-errors", {
+export const serviceErrors = defineExtension(defineExtensionId("service-errors"), {
   hooks: {
     onError(error, ctx) {
       if (!(error instanceof Error) || error.name !== "ServiceUnavailableError") return;

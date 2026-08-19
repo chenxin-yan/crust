@@ -109,7 +109,7 @@ const target = defineArg("target", { type: "string", required: true });
 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="CommandMeta" />
 
-`sections` is an ordered list of plain-text `{ title, body }` entries. Declare it in the metadata passed to `new Crust()` or `defineCommand()`; help and man render the entries after their built-in sections. `hidden` removes a command from user-facing help, completion, man-page, typo-suggestion, and skill listings without disabling direct routing.
+`sections` is an ordered list of plain-text `{ title, body }` entries, optionally scoped to renderer identities with `only` or `except` audiences. Declare it in the metadata passed to `new Crust()` or `defineCommand()`; help and man render the entries after their built-in sections. `hidden` removes a command from user-facing help, completion, man-page, typo-suggestion, and skill listings without disabling direct routing.
 
 ## Command Snapshots
 
@@ -221,7 +221,7 @@ The name registry shape accumulated by `.provide()`. Command actions and Extensi
   name="ExtensionConfig"
 />
 
-`commands` entries are `defineCommand()` definitions contributed at the application root. `sections(snapshot)` returns plain-text sections targeted by canonical command paths relative to that root; contributions append to each target's `meta.sections` in Extension registration order. `build(ctx)` generates artifacts when invoked by build tooling and may be async; its errors propagate to the caller. See [Extensions](/docs/guide/extensions).
+`commands` entries are `defineCommand()` definitions contributed at the application root. `sections(snapshot)` returns plain-text sections targeted by canonical command paths relative to that root; contributions append to each target's `meta.sections` in Extension registration order. `build(ctx)` generates artifacts in Extension registration order when invoked by build tooling and may be async; its errors propagate to the caller. See [Extensions](/docs/guide/extensions).
 
 ### `ExtensionBuildContext`
 
@@ -236,7 +236,7 @@ The build context contains the frozen root Command Snapshot and the resolved abs
 
 <auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="Extension" />
 
-`defineExtension(name, config)` returns a frozen structural value.
+`defineExtension(id, config)` returns a frozen structural value. Mint the branded `ExtensionId` with `defineExtensionId()`.
 
 ### `ExtensionFlagDef`
 
@@ -274,7 +274,7 @@ Infers the syntax-parsed values from an Extension's named-definition array and e
   name="ExtensionHooks"
 />
 
-`preRun` runs in `.extend()` order after routing and syntax parsing, before validation. It can call `ctx.use()` for Contexts whose setup pulls no flag-owning Context anywhere in its chain; pulling a flag-owning Context — directly or through a dependency's setup — rejects before validation, and a later post-validation pull re-executes that Context's setup from the start. Return `ctx.finish()` to end successfully. `postRun` is the LIFO `finally` hook: it can pull or reuse Contexts and runs for every Extension after a completed, finished, or failed invocation. Context disposal follows post-run hooks. `onError` is used by `.execute()` only; return `true` after rendering to stop the chain, or a falsy value to continue to Core's renderer.
+`preRun` runs in `.extend()` order after routing and syntax parsing, before validation. It can call `ctx.use()` for Contexts whose setup pulls no flag-owning Context anywhere in its chain; pulling a flag-owning Context — directly or through a dependency's setup — rejects before validation, and a later post-validation pull re-executes that Context's setup from the start. Return `ctx.finish()` to end successfully. `onError` is used by `.execute()` only and settles before `postRun`; return `true` after rendering to stop the chain, or a falsy value to continue to Core's renderer. `postRun` is the reverse-`.extend()`-order `finally` hook: it can pull or reuse Contexts, observes any failed-outcome attribution from `onError`, and runs for every Extension after a completed, finished, or failed invocation. Invocation Contexts remain available through these hooks, and disposal follows post-run hooks.
 
 ### `Finished`
 
@@ -289,7 +289,7 @@ Infers the syntax-parsed values from an Extension's named-definition array and e
   name="InvocationOutcome"
 />
 
-`postRun` receives `completed` after a Command Action completes, `finished` when an Extension short-circuits with `ctx.finish()`, or `failed` with the thrown value.
+`postRun` receives `completed` after a Command Action completes, `finished` with the short-circuiting Extension's `by` id, or `failed` with the thrown value. A failed outcome's optional `by` identifies the Extension whose `onError` returned true; it is absent when Core's fallback renderer handled the failure.
 
 ## Error types
 

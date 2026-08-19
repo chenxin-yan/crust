@@ -1,8 +1,9 @@
 import {
 	type CommandSnapshot,
 	type Extension,
-	type SectionConsumer,
+	type ExtensionId,
 	defineExtension,
+	defineExtensionId,
 	sectionsFor,
 } from "@crustjs/core";
 import {
@@ -19,7 +20,7 @@ const FLAG_COLUMN_WIDTH = 28;
 const ARG_COLUMN_WIDTH = 18;
 const COMMAND_COLUMN_WIDTH = 10;
 
-export const HELP: SectionConsumer = "help";
+const HELP: ExtensionId = defineExtensionId("crust:help");
 
 function formatArgToken(arg: DocumentationArg): string {
 	return arg.required ? yellow(arg.token) : dim(yellow(arg.token));
@@ -103,8 +104,8 @@ export function renderHelp(command: CommandSnapshot, path?: readonly string[]): 
 	return lines.join("\n");
 }
 
-export function help(): Extension {
-	return defineExtension("help", {
+function helpFactory(): Extension {
+	return defineExtension(HELP, {
 		flags: [
 			{ name: "help", type: "boolean", short: "h", noNegate: true, description: "Show help" },
 		],
@@ -117,3 +118,7 @@ export function help(): Extension {
 		},
 	});
 }
+
+export const help: typeof helpFactory & { readonly id: ExtensionId } = Object.assign(helpFactory, {
+	id: HELP,
+});

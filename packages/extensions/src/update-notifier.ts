@@ -4,8 +4,15 @@
 
 import { basename } from "node:path";
 
-import { type Extension, defineExtension } from "@crustjs/core";
+import {
+	type Extension,
+	type ExtensionId,
+	defineExtension,
+	defineExtensionId,
+} from "@crustjs/core";
 import { bold, cyan, dim, green, padEnd, yellow } from "@crustjs/style";
+
+const UPDATE_NOTIFIER: ExtensionId = defineExtensionId("crust:update-notifier");
 
 export type UpdateNotifierPackageManager = "npm" | "pnpm" | "yarn" | "bun";
 export type UpdateNotifierInstallScope = "local" | "global";
@@ -376,7 +383,7 @@ function resolveUpdateCommand(
  * await app.execute();
  * ```
  */
-export function updateNotifier(options: UpdateNotifierOptions): Extension {
+function updateNotifierFactory(options: UpdateNotifierOptions): Extension {
 	const {
 		currentVersion,
 		packageName,
@@ -390,7 +397,7 @@ export function updateNotifier(options: UpdateNotifierOptions): Extension {
 	} = options;
 	const intervalMs = (cache === false ? undefined : cache?.intervalMs) ?? DEFAULT_INTERVAL_MS;
 
-	return defineExtension("update-notifier", {
+	return defineExtension(UPDATE_NOTIFIER, {
 		hooks: {
 			async postRun(context, outcome) {
 				if (outcome.status !== "completed") return;
@@ -577,3 +584,6 @@ function emitUpdateNotice(
 
 	stderr(lines.join("\n"));
 }
+
+export const updateNotifier: typeof updateNotifierFactory & { readonly id: ExtensionId } =
+	Object.assign(updateNotifierFactory, { id: UPDATE_NOTIFIER });

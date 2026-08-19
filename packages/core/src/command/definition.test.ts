@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
+import { defineExtensionId } from "../identity.ts";
 import type { CommandDefinitionBuilder } from "./crust.ts";
 import { Crust, defineCommand } from "./crust.ts";
 
@@ -235,7 +236,8 @@ describe("command definitions", () => {
 
 		const nestedExtension = defineCommand(
 			"bad",
-			(command) => (command as unknown as Crust).extend(defineExtension("nested")) as never,
+			(command) =>
+				(command as unknown as Crust).extend(defineExtension(defineExtensionId("nested"))) as never,
 		);
 		expect(() => new Crust("cli").add(nestedExtension)).toThrow(
 			/Command "bad" cannot register Extensions inside command definitions/,
@@ -290,7 +292,7 @@ describe("command definitions", () => {
 
 		defineCommand("configured", (command) => {
 			// @ts-expect-error -- Extensions are root-only
-			command.extend(defineExtension("nested"));
+			command.extend(defineExtension(defineExtensionId("nested")));
 			const configured = command
 				.args({ name: "target", type: "string" })
 				.flags({ name: "force", type: "boolean" })

@@ -86,7 +86,7 @@ try {
 `execute()` sets `process.exitCode` to `130` and offers the `AbortError` to Extension `onError` hooks, so an application can render a cancellation message in one place:
 
 ```ts
-const cancelMessage = defineExtension("cancel-message", {
+const cancelMessage = defineExtension(defineExtensionId("cancel-message"), {
   hooks: {
     onError(error, ctx) {
       if (error instanceof DOMException && error.name === "AbortError") {

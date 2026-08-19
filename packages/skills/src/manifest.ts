@@ -1,4 +1,9 @@
-import { type CommandSnapshot, type SectionConsumer, sectionsFor } from "@crustjs/core";
+import {
+	type CommandSnapshot,
+	type ExtensionId,
+	defineExtensionId,
+	sectionsFor,
+} from "@crustjs/core";
 import {
 	buildCommandDocumentation,
 	type CommandDocumentation,
@@ -8,7 +13,7 @@ import {
 
 import type { ManifestArg, ManifestFlag, ManifestNode } from "./types.ts";
 
-export const SKILLS: SectionConsumer = "skills";
+export const SKILLS: ExtensionId = defineExtensionId("crust:skills");
 
 export function buildManifest(command: CommandSnapshot): ManifestNode {
 	return buildNode(buildCommandDocumentation(command), command);

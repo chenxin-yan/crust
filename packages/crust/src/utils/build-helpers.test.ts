@@ -42,8 +42,8 @@ describe("buildEntrypoint", () => {
 		const coreUrl = pathToFileURL(resolve(import.meta.dir, "../../../core/src/index.ts")).href;
 		await writeFile(
 			entry,
-			`import { Crust, defineExtension } from ${JSON.stringify(coreUrl)};\n` +
-				`const artifact = defineExtension("artifact", { build: ({ outDir }) => Bun.write(outDir + "/artifact.txt", "built") });\n` +
+			`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(coreUrl)};\n` +
+				`const artifact = defineExtension(defineExtensionId("artifact"), { build: ({ outDir }) => Bun.write(outDir + "/artifact.txt", "built") });\n` +
 				`const app = new Crust("fixture").extend(artifact).action(() => {});\n` +
 				`await app.execute();\n`,
 		);
@@ -98,8 +98,8 @@ describe("buildEntrypoint", () => {
 		const coreUrl = pathToFileURL(resolve(import.meta.dir, "../../../core/src/index.ts")).href;
 		await writeFile(
 			entry,
-			`import { Crust, defineExtension } from ${JSON.stringify(coreUrl)};\n` +
-				`const broken = defineExtension("broken", { build: () => { throw new Error("disk full"); } });\n` +
+			`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(coreUrl)};\n` +
+				`const broken = defineExtension(defineExtensionId("broken"), { build: () => { throw new Error("disk full"); } });\n` +
 				`await new Crust("fixture").extend(broken).execute();\n`,
 		);
 

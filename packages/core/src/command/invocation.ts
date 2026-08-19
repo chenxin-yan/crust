@@ -9,11 +9,12 @@ import {
 	type InvocationOutcome,
 } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
+import { defineExtensionId, type ExtensionId } from "../identity.ts";
 import { parseArgs, validateParsed } from "../parsing/parser.ts";
 import { applySchemas } from "../parsing/schema.ts";
 import { cloneFlagSpellings } from "../parsing/spellings.ts";
 import { isText } from "../sections.ts";
-import type { CommandSection, FlagDef, FlagsDef, InvocationIO, SectionConsumer } from "../types.ts";
+import type { CommandSection, FlagDef, FlagsDef, InvocationIO } from "../types.ts";
 import { normalizeFlag } from "../validation/normalize.ts";
 import type { CommandDefinition } from "./crust.ts";
 import type { CommandNode } from "./node.ts";
@@ -83,7 +84,7 @@ function applyExtensionCommands(
 	materializeCommandDefinition: MaterializeCommandDefinition,
 ): void {
 	for (const definition of extension.commands ?? []) {
-		const node = materializeCommandDefinition(definition, root, extension.name);
+		const node = materializeCommandDefinition(definition, root, extension.id);
 		root.subCommands[definition.name] = node;
 	}
 }
@@ -92,7 +93,7 @@ function applyExtensionCommands(
 function applyExtensionFlags(root: CommandNode, extension: Extension): void {
 	for (const [name, defWithScope] of Object.entries(extension.flags ?? {})) {
 		const { recursive = true, ...def } = defWithScope;
-		injectExtensionFlag(root, name, def as FlagDef, recursive, extension.name);
+		injectExtensionFlag(root, name, def as FlagDef, recursive, extension.id);
 	}
 }
 
@@ -160,14 +161,12 @@ function invalidSections({ subject, name }: SectionOwner): CrustError {
 	);
 }
 
-function validateSectionConsumers(
-	consumers: unknown,
-	owner: SectionOwner,
-): readonly SectionConsumer[] {
-	if (!Array.isArray(consumers) || consumers.length === 0 || !consumers.every(isText)) {
+function validateSectionAudienceIds(ids: unknown, owner: SectionOwner): readonly ExtensionId[] {
+	if (!Array.isArray(ids) || ids.length === 0 || !ids.every(isText)) {
 		throw invalidSections(owner);
 	}
-	return Object.freeze([...consumers]);
+	// defineExtensionId is the single identity boundary; it rejects untrimmed ids.
+	return Object.freeze(ids.map((id) => defineExtensionId(id)));
 }
 
 function validateSection(section: unknown, owner: SectionOwner): CommandSection {
@@ -189,8 +188,8 @@ function validateSection(section: unknown, owner: SectionOwner): CommandSection 
 	return Object.freeze({
 		title,
 		body,
-		...(only !== undefined && { only: validateSectionConsumers(only, owner) }),
-		...(except !== undefined && { except: validateSectionConsumers(except, owner) }),
+		...(only !== undefined && { only: validateSectionAudienceIds(only, owner) }),
+		...(except !== undefined && { except: validateSectionAudienceIds(except, owner) }),
 	}) as CommandSection;
 }
 
@@ -218,10 +217,10 @@ function contributionTarget(
 		if (!next) {
 			throw new CrustError(
 				"DEFINITION",
-				`Extension "${extension.name}" section target "${command.join(" ")}" is not a canonical command path`,
+				`Extension "${extension.id}" section target "${command.join(" ")}" is not a canonical command path`,
 				{
 					subject: "extension",
-					name: extension.name,
+					name: extension.id,
 					reason: "invalid-section-path",
 				},
 			);
@@ -237,7 +236,7 @@ function applyExtensionSections(
 	snapshot: CommandSnapshot,
 ): void {
 	if (!extension.sections) return;
-	const owner: SectionOwner = { subject: "extension", name: extension.name };
+	const owner: SectionOwner = { subject: "extension", name: extension.id };
 	const contributions = extension.sections(snapshot);
 	if (!Array.isArray(contributions)) throw invalidSections(owner);
 	for (const contribution of contributions as readonly ExtensionSectionContribution[]) {
@@ -266,7 +265,7 @@ function prepareInvocation(
 	if (cached) return cached;
 
 	const rootNode = cloneCommandNode(node);
-	const extensions = node.extensions;
+	const extensions = Object.freeze([...node.extensions]);
 
 	for (const extension of extensions) {
 		applyExtensionCommands(rootNode, extension, materializeCommandDefinition);
@@ -291,6 +290,7 @@ async function dispatch(
 	prepared: PreparedInvocation,
 	io: InvocationIO,
 	onExtensionContext?: (context: ExtensionContext) => void,
+	onFailure?: (error: unknown, context: ExtensionContext) => Promise<ExtensionId | undefined>,
 ): Promise<void> {
 	const { rootNode, extensions } = prepared;
 
@@ -347,16 +347,16 @@ async function dispatch(
 		try {
 			for (const extension of extensions) {
 				if ((await extension.hooks?.preRun?.(extensionContext)) === finishInvocation()) {
-					outcome = { status: "finished", by: extension.name };
+					outcome = { status: "finished", by: extension.id };
 					break;
 				}
 			}
 			if (outcome.status !== "finished") {
 				await terminal();
-				outcome = { status: "completed" };
 			}
 		} catch (error) {
-			outcome = { status: "failed", error };
+			const by = await onFailure?.(error, extensionContext);
+			outcome = { status: "failed", error, ...(by === undefined ? {} : { by }) };
 		}
 
 		// Frozen so a mutating post-run hook cannot rewrite the outcome Core
@@ -393,7 +393,7 @@ async function renderFailure(
 	io: InvocationIO,
 	extensionContext: ExtensionContext | undefined,
 	silentDefault = false,
-): Promise<void> {
+): Promise<ExtensionId | undefined> {
 	const renderDefault = (): void => {
 		// Cancellation (AbortError) has no default rendering — a user abort
 		// is not an error to report unless an onError hook claims it.
@@ -403,9 +403,9 @@ async function renderFailure(
 	};
 
 	// Reuse the dispatch context so per-invocation identity (e.g. WeakMap keys
-	// set in preRun) survives into onError; its resolver already rejects pulls
-	// after disposal. The synthetic fallback exists only for failures before a
-	// context was ever built (routing/parse errors).
+	// set in preRun) survives into onError. During dispatch its Contexts remain
+	// live through postRun; errors raised after cleanup see the closed resolver.
+	// The synthetic fallback exists only for failures before a context was built.
 	const unavailableUse: ExtensionContext["use"] = async (factory) => {
 		throw new CrustError(
 			"DEFINITION",
@@ -435,12 +435,13 @@ async function renderFailure(
 
 	try {
 		for (const extension of prepared.extensions) {
-			if (await extension.hooks?.onError?.(error, context)) return;
+			if (await extension.hooks?.onError?.(error, context)) return extension.id;
 		}
 	} catch {
 		// Rendering must not hide the original invocation failure.
 	}
 	renderDefault();
+	return undefined;
 }
 
 /** Explicitly injected IO opts an invocation into the ambient terminal scope. */
@@ -478,18 +479,19 @@ export async function executeInvocation(
 
 	if (snapshotPath) {
 		try {
-			const snapshot = await prepareInvocationSnapshot(node, materializeCommandDefinition);
+			const prepared = prepareInvocation(node, materializeCommandDefinition);
+			const snapshot = snapshotCommand(prepared.rootNode);
 			await Bun.write(snapshotPath, JSON.stringify(snapshot));
 
 			const buildOutDir = process.env[BUILD_OUT_DIR_ENV];
 			if (buildOutDir) {
-				for (const extension of node.extensions) {
+				for (const extension of prepared.extensions) {
 					if (!extension.build) continue;
 					try {
 						await extension.build({ snapshot, outDir: buildOutDir });
 					} catch (error) {
 						const message = error instanceof Error ? error.message : String(error);
-						throw new Error(`Extension "${extension.name}" build failed: ${message}`, {
+						throw new Error(`Extension "${extension.id}" build failed: ${message}`, {
 							cause: error,
 						});
 					}
@@ -521,22 +523,36 @@ export async function executeInvocation(
 		}
 
 		let extensionContext: ExtensionContext | undefined;
+		let renderedInDispatch = false;
 		try {
-			await dispatch(argv, prepared, io, (context) => {
-				extensionContext = context;
-			});
+			await dispatch(
+				argv,
+				prepared,
+				io,
+				(context) => {
+					extensionContext = context;
+				},
+				async (error, context) => {
+					renderedInDispatch = true;
+					const cancelled = isAbortError(error);
+					process.exitCode = cancelled ? EXIT_CODE_CANCELLED : 1;
+					return renderFailure(error, argv, prepared, io, context, cancelled);
+				},
+			);
 		} catch (error) {
 			if (isAbortError(error)) {
 				// Cancellation keeps its dedicated exit code while allowing Extension
 				// onError hooks to render a message. Core's default stays silent.
-				await renderFailure(error, argv, prepared, io, extensionContext, true);
+				if (!renderedInDispatch) {
+					await renderFailure(error, argv, prepared, io, extensionContext, true);
+				}
 				process.exitCode = EXIT_CODE_CANCELLED;
 				return;
 			}
 			// Core always preserves a nonzero failure outcome, regardless of
 			// what Extension onError hooks do.
 			process.exitCode = 1;
-			await renderFailure(error, argv, prepared, io, extensionContext);
+			if (!renderedInDispatch) await renderFailure(error, argv, prepared, io, extensionContext);
 		}
 	};
 

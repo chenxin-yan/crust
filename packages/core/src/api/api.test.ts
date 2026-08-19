@@ -5,6 +5,7 @@ import {
 	defineCommand,
 	defineContext,
 	defineExtension,
+	defineExtensionId,
 	defineFlag,
 	type ContextResolver,
 } from "../index.ts";
@@ -76,7 +77,7 @@ describe("public beta API", () => {
 
 	it("loads extensions separately from command context", async () => {
 		let wrapperCalled = false;
-		const version = defineExtension("version", {
+		const version = defineExtension(defineExtensionId("version"), {
 			flags: [{ name: "version", type: "boolean" }],
 			hooks: {
 				preRun() {
@@ -97,7 +98,7 @@ describe("public beta API", () => {
 
 	it("can execute repeatedly without freezing or accumulating extension setup on the source builder", async () => {
 		let runCount = 0;
-		const debug = defineExtension("debug", {
+		const debug = defineExtension(defineExtensionId("debug"), {
 			flags: [{ name: "debug", type: "boolean" }],
 		});
 		const app = new Crust("repeat").extend(debug).action(({ flags }) => {

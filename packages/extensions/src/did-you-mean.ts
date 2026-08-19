@@ -1,6 +1,15 @@
-import { type CommandSnapshot, CrustError, type Extension, defineExtension } from "@crustjs/core";
+import {
+	type CommandSnapshot,
+	CrustError,
+	type Extension,
+	type ExtensionId,
+	defineExtension,
+	defineExtensionId,
+} from "@crustjs/core";
 
 import { renderHelp } from "./help.ts";
+
+const DID_YOU_MEAN: ExtensionId = defineExtensionId("crust:did-you-mean");
 
 export interface DidYouMeanOptions {
 	/**
@@ -92,10 +101,10 @@ function findSuggestions(
 		.map(([name]) => name);
 }
 
-export function didYouMean(options: DidYouMeanOptions = {}): Extension {
+function didYouMeanFactory(options: DidYouMeanOptions = {}): Extension {
 	const mode = options.mode ?? "error";
 
-	return defineExtension("did-you-mean", {
+	return defineExtension(DID_YOU_MEAN, {
 		hooks: {
 			onError(error, context) {
 				if (!(error instanceof CrustError) || !error.is("COMMAND_NOT_FOUND")) return;
@@ -132,3 +141,8 @@ export function didYouMean(options: DidYouMeanOptions = {}): Extension {
 		},
 	});
 }
+
+export const didYouMean: typeof didYouMeanFactory & { readonly id: ExtensionId } = Object.assign(
+	didYouMeanFactory,
+	{ id: DID_YOU_MEAN },
+);
