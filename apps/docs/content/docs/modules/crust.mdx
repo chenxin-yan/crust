@@ -15,12 +15,12 @@ bun add -d @crustjs/crust
 
 | Command                                                            | Description                                                    |
 | ------------------------------------------------------------------ | -------------------------------------------------------------- |
-| [`crust build`](/docs/guide/build)                                 | Validate and compile a CLI to standalone executables           |
+| [`crust build`](/docs/guide/build)                                 | Validate and build a CLI: Bun/Deno standalone executables or a Node JS bundle (`--runtime`, `crust.runtime`) |
 | [`crust publish`](/docs/guide/build#publishing-with-crust-publish) | Publish staged npm packages created by `crust build --package` |
 
 `crust build` runs the entry point in a snapshot subprocess before compiling it. It uses the lockstep `SNAPSHOT_PATH_ENV` and `BUILD_OUT_DIR_ENV` tooling constants internally; `.execute()` writes the validated Command Snapshot, runs registered Extension build hooks in order, and exits before dispatch. Application code should not set these internal environment variables.
 
-The build command can embed `PUBLIC_*` constants from Bun's current-directory environment or explicit `--env-file` inputs. See [Environment variables](/docs/guide/environment).
+The build command can embed `PUBLIC_*` constants from Bun's current-directory environment or explicit `--env-file` inputs (Bun and Node runtimes; Deno builds reject `--env-file`). See [Environment variables](/docs/guide/environment).
 
 ## Distribution modes
 
