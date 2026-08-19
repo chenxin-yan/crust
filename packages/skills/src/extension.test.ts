@@ -51,7 +51,7 @@ async function writeSource(name: string, content = name, description = name): Pr
 
 function createApp(source: string | URL, autoUpdate = true) {
 	return new Crust("demo", { description: "Demo" })
-		.extend(skill({ packagedDir: source, defaultScope: "project", autoUpdate }))
+		.extend(skill({ distDir: source, defaultScope: "project", autoUpdate }))
 		.action(() => {});
 }
 
@@ -62,7 +62,7 @@ function target(name = "demo") {
 describe("skill extension packaged directory", () => {
 	it("exposes the reserved identity on the factory", () => {
 		expect(String(skill.id)).toBe("crust:skills");
-		expect(skill({ packagedDir: "." }).id).toBe(skill.id);
+		expect(skill({ distDir: "." }).id).toBe(skill.id);
 	});
 
 	it("advertises every packaged skill in help with its resolved source path", async () => {
@@ -83,7 +83,7 @@ describe("skill extension packaged directory", () => {
 	it("keeps help usable when the packaged skills directory cannot be resolved", async () => {
 		const source = join(tempRoot, "missing-skills");
 		const app = new Crust("demo", { description: "Demo" })
-			.extend(skill({ packagedDir: source, command: "agents" }))
+			.extend(skill({ distDir: source, command: "agents" }))
 			.action(() => {});
 		const output = renderHelp(await app.snapshot());
 
@@ -95,7 +95,7 @@ describe("skill extension packaged directory", () => {
 
 	it("copies packaged sources from its build hook", async () => {
 		const source = await writeSource("demo", "packaged");
-		const extension = skill({ packagedDir: source });
+		const extension = skill({ distDir: source });
 		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
 		const outDir = join(tempRoot, "dist");
 
@@ -113,7 +113,7 @@ describe("skill extension packaged directory", () => {
 			"---\nname: guide\ndescription: Deployment guide\n---\n",
 		);
 		await writeFile(join(authored, "content.md"), "authored\n");
-		const extension = skill({ packagedDir: source, extras: [authored] });
+		const extension = skill({ distDir: source, extras: [authored] });
 		const snapshot = await new Crust("demo", {
 			description: "Demo",
 			sections: [{ title: "Agent skills", body: "Application-authored agent guidance." }],
@@ -147,7 +147,7 @@ describe("skill extension packaged directory", () => {
 
 	it("copies packaged sources when extras is empty", async () => {
 		const source = await writeSource("demo", "packaged");
-		const extension = skill({ packagedDir: source, extras: [] });
+		const extension = skill({ distDir: source, extras: [] });
 		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
 		const outDir = join(tempRoot, "dist");
 
@@ -158,7 +158,7 @@ describe("skill extension packaged directory", () => {
 
 	it("renders from the snapshot without requiring a package version", async () => {
 		const source = join(tempRoot, "missing-skills");
-		const extension = skill({ packagedDir: source });
+		const extension = skill({ distDir: source });
 		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
 		const outDir = join(tempRoot, "dist");
 		await writeFile(join(tempRoot, "package.json"), "{}");
@@ -267,7 +267,7 @@ describe("skill extension packaged directory", () => {
 
 		let ran = false;
 		const app = new Crust("demo", { description: "Demo" })
-			.extend(skill({ packagedDir: source, defaultScope: "project" }))
+			.extend(skill({ distDir: source, defaultScope: "project" }))
 			.action(() => {
 				ran = true;
 			});
@@ -291,7 +291,7 @@ describe("skill extension packaged directory", () => {
 	it("does not break unrelated commands when the packaged directory is unavailable", async () => {
 		let ran = false;
 		const app = new Crust("demo")
-			.extend(skill({ packagedDir: join(tempRoot, "missing-skills") }))
+			.extend(skill({ distDir: join(tempRoot, "missing-skills") }))
 			.action(() => {
 				ran = true;
 			});
