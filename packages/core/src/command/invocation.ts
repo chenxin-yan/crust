@@ -312,7 +312,7 @@ async function dispatch(
 		args: parsed.args,
 		flags: parsed.flags,
 		rawArgs: parsed.rawArgs,
-		ctx: resolver.bag(resolvedNode.contexts),
+		ctx: resolver.bag(extensions.flatMap((extension) => extension.uses ?? [])),
 		finish: finishInvocation,
 		stdout: io.stdout,
 		stderr: io.stderr,
@@ -419,7 +419,13 @@ async function renderFailure(
 			),
 		);
 	}
-	const unavailableContext = new Proxy({}, { get: (_, property) => unavailable(property) });
+	const unavailableContext = new Proxy(
+		{},
+		{
+			get: (_, property) =>
+				property === "then" || typeof property === "symbol" ? undefined : unavailable(property),
+		},
+	);
 	const context =
 		extensionContext ??
 		Object.freeze({

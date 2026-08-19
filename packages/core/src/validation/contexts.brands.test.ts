@@ -1,7 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
 import type { ContextInstance } from "../api/context.ts";
-import type { ValidateContextDeps, ValidateContextNames } from "./contexts.brands.ts";
+import type {
+	ValidateContextDeps,
+	ValidateContextNames,
+	ValidateDeclaredDeps,
+} from "./contexts.brands.ts";
 
 type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
@@ -31,6 +35,17 @@ describe("compile-time Context validation", () => {
 
 		expect(true).toBe(true);
 	});
+	it("brands sealed-unit dependencies and opts widened contracts out", () => {
+		type Missing = ValidateDeclaredDeps<{}, readonly [{ readonly _deps?: { db: string } }]>;
+		type _missing = Expect<
+			Equal<Missing[0]["FIX_MISSING_DEPENDENCY"], 'Uses Context "db" which is not provided'>
+		>;
+		type Broad = ValidateDeclaredDeps<{}, readonly [{ readonly _deps?: Record<string, unknown> }]>;
+		type _broad = Expect<Equal<Extract<keyof Broad[0], "FIX_MISSING_DEPENDENCY">, never>>;
+
+		expect(true).toBe(true);
+	});
+
 	it("brands a name already provided in an earlier call", () => {
 		type Result = ValidateContextNames<{ db: number }, readonly [Inst<"db">]>;
 		type _check = Expect<

@@ -405,13 +405,16 @@ export function createContextResolver(
 		origin: Entry | null,
 	): ContextBag<Deps> => {
 		const bag: Record<string, Promise<unknown>> = {};
-		for (const source of sources) {
+		const add = (source: AnyContextFactory | ContextInstance): void => {
 			const name = "contextName" in source ? source.contextName : source.name;
+			if (Object.hasOwn(bag, name)) return;
 			Object.defineProperty(bag, name, {
 				enumerable: true,
 				get: () => makePull(origin)(name),
 			});
-		}
+			for (const dependency of byName.get(name)?.uses ?? []) add(dependency);
+		};
+		for (const source of sources) add(source);
 		return Object.freeze(bag) as ContextBag<Deps>;
 	};
 

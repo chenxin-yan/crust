@@ -64,7 +64,9 @@ export type DeclaredDepsOf<T> =
 		: T extends { readonly _deps?: infer Deps extends ContextMap }
 			? IsAny<Deps> extends true
 				? {}
-				: Deps
+				: string extends keyof Deps
+					? {}
+					: Deps
 			: {};
 
 type MissingDeclaredDependencyBrand<T, Known extends string> =

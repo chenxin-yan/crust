@@ -4,7 +4,13 @@ import { Crust, defineCommand } from "../command/crust.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { NamedFlagDef } from "../types.ts";
-import { defineContext, type ContextSetup } from "./context.ts";
+import {
+	createContextResolver,
+	defineContext,
+	type ContextBag,
+	type ContextInstance,
+	type ContextSetup,
+} from "./context.ts";
 import { defineExtension } from "./extension.ts";
 import { defineFlag } from "./flags.ts";
 
@@ -563,7 +569,11 @@ describe("Context setup dependencies", () => {
 		new Crust("cli").provide(db(), config());
 
 		const command = defineCommand("run", { uses: [db] }, (builder) =>
-			builder.action(async ({ ctx }) => void (await ctx.db)),
+			builder.action(async ({ ctx }) => {
+				void (await ctx.db);
+				// @ts-expect-error -- action bags expose only declared Contexts
+				void ctx.logger;
+			}),
 		);
 		new Crust("cli").provide(config(), db()).add(command);
 
@@ -602,6 +612,26 @@ describe("Context setup dependencies", () => {
 		await new Crust("cli")
 			.provide(session(), user(), configured())
 			.action(async ({ ctx }) => expect(await ctx.configured).toBe("yan"))
+			.run([]);
+	});
+
+	it("exposes the transitive dependency closure at runtime", async () => {
+		const base = defineContext("base", () => "base");
+		const mid = defineContext("mid", { uses: [base] }, async ({ ctx }) => await ctx.base);
+		const db = defineContext("db", { uses: [mid] }, async ({ ctx }) => await ctx.base);
+
+		await new Crust("cli")
+			.provide(db(), mid(), base())
+			.action(async ({ ctx }) => expect(await ctx.db).toBe("base"))
+			.run([]);
+	});
+
+	it("deduplicates repeated dependency names in a setup bag", async () => {
+		const base = defineContext("base", () => "base");
+		const db = defineContext("db", { uses: [base, base] }, async ({ ctx }) => await ctx.base);
+		await new Crust("cli")
+			.provide(base(), db())
+			.action(async ({ ctx }) => expect(await ctx.db).toBe("base"))
 			.run([]);
 	});
 
@@ -701,6 +731,85 @@ describe("Context setup dependencies", () => {
 			setup: () => ({}),
 		} as unknown as Parameters<Crust["provide"]>[0];
 		expect(() => new Crust("cli").provide(rogue)).toThrow(/Invalid default value/);
+	});
+});
+
+describe("Context dependency runtime boundaries", () => {
+	it("mirrors missing dependency validation at every composition site", () => {
+		const config = defineContext("config", () => "config");
+		const db = defineContext("db", { uses: [config] }, async ({ ctx }) => await ctx.config);
+		const command = defineCommand("run", { uses: [config] }, (builder) => builder.action(() => {}));
+		const extension = defineExtension(defineExtensionId("runtime-deps"), { uses: [config] });
+
+		expect(() => new Crust("cli").provide(db() as never)).toThrow(
+			'Context "db" uses Context "config" which is not provided',
+		);
+		expect(() => new Crust("cli").add(command as never)).toThrow(
+			'Command "run" uses Context "config" which is not provided',
+		);
+		expect(() => new Crust("cli").extend(extension as never)).toThrow(
+			'Extension "runtime-deps" uses Context "config" which is not provided',
+		);
+	});
+
+	it("rejects a hook dependency absent from a stale child path", async () => {
+		const logger = defineContext("logger", () => "logger");
+		const child = defineCommand("child", (builder) => builder.action(() => {}));
+		const observer = defineExtension(defineExtensionId("observer"), {
+			uses: [logger],
+			hooks: { preRun: async ({ ctx }) => void (await ctx.logger) },
+		});
+		const app = new Crust("cli").add(child).provide(logger()).extend(observer);
+
+		await expect(app.run(["child"])).rejects.toMatchObject({
+			details: { name: "logger", reason: "missing-context" },
+		});
+	});
+
+	it("keeps dynamic cycle detection for untyped Context instances", async () => {
+		const aFactory = defineContext("a", () => "a");
+		const bFactory = defineContext("b", () => "b");
+		const a: ContextInstance<"a"> = {
+			kind: "context",
+			name: "a",
+			ownedFlags: {},
+			uses: [bFactory],
+			setup: async ({ ctx }) => await ctx.b,
+		};
+		const b: ContextInstance<"b"> = {
+			kind: "context",
+			name: "b",
+			ownedFlags: {},
+			uses: [aFactory],
+			setup: async ({ ctx }) => await ctx.a,
+		};
+		const app = new Crust("cli").provide(a, b).action(async ({ ctx }) => void (await ctx.a));
+
+		await expect(app.run([])).rejects.toMatchObject({ details: { reason: "context-cycle" } });
+	});
+
+	it("keeps missing and disposed guards on lazy bag getters", async () => {
+		const service = defineContext("service", () => "service");
+		await using missingDisposal = new AsyncDisposableStack();
+		const missing = createContextResolver(
+			[],
+			{ stdout: () => {}, stderr: () => {} },
+			missingDisposal,
+		).bag<{ service: string }>([service]);
+		await expect(missing.service).rejects.toMatchObject({ details: { reason: "missing-context" } });
+
+		let disposed: ContextBag<{ service: string }>;
+		{
+			await using disposal = new AsyncDisposableStack();
+			disposed = createContextResolver(
+				[service()],
+				{ stdout: () => {}, stderr: () => {} },
+				disposal,
+			).bag<{ service: string }>([service]);
+		}
+		await expect(disposed.service).rejects.toMatchObject({
+			details: { reason: "context-after-disposal" },
+		});
 	});
 });
 
