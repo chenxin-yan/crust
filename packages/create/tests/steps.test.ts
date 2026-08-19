@@ -121,7 +121,7 @@ describe("runSteps", () => {
 		});
 
 		it("throws when command exits with non-zero code", async () => {
-			expect(runSteps([{ type: "command", cmd: "exit 1" }], tempDir)).rejects.toThrow(
+			await expect(runSteps([{ type: "command", cmd: "exit 1" }], tempDir)).rejects.toThrow(
 				'Command "exit 1" exited with code 1',
 			);
 		});
@@ -150,7 +150,7 @@ describe("runSteps", () => {
 		});
 
 		it("stops on first failure and does not execute remaining steps", async () => {
-			expect(
+			await expect(
 				runSteps(
 					[
 						{ type: "command", cmd: "exit 1" },
