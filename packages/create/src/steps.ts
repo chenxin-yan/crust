@@ -1,4 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
+import { text } from "node:stream/consumers";
 
 import { $ } from "bun";
 
@@ -60,7 +62,7 @@ export async function runSteps(steps: PostScaffoldStep[], cwd: string): Promise<
 async function runInstall(cwd: string): Promise<void> {
 	const pm = detectPackageManager(cwd);
 	const proc = spawn(pm, ["install"], { cwd, stdio: "inherit" });
-	const exitCode = await exitCodeOf(proc);
+	const [exitCode] = await once(proc, "close");
 	if (exitCode !== 0) {
 		throw new Error(`"${pm} install" exited with code ${exitCode}`);
 	}
@@ -98,7 +100,7 @@ async function runOpenEditor(cwd: string): Promise<void> {
 		// Just check that it started without immediately failing
 		// Use a short race to detect spawn failures
 		const raceResult = await Promise.race([
-			exitCodeOf(proc).then((code) => ({ kind: "exited" as const, code })),
+			once(proc, "close").then(([code]) => ({ kind: "exited" as const, code })),
 			new Promise<{ kind: "timeout" }>((resolve) =>
 				setTimeout(() => resolve({ kind: "timeout" }), 500),
 			),
@@ -159,19 +161,10 @@ async function ensureGitIdentity(cwd: string): Promise<void> {
  */
 async function spawnChecked(cmd: string[], cwd: string, label: string): Promise<void> {
 	const proc = spawn(cmd[0]!, cmd.slice(1), { cwd, stdio: ["ignore", "ignore", "pipe"] });
-	let stderr = "";
-	proc.stderr.on("data", (chunk) => (stderr += chunk));
-	const exitCode = await exitCodeOf(proc);
+	const [stderr, [exitCode]] = await Promise.all([text(proc.stderr), once(proc, "close")]);
 	if (exitCode !== 0) {
 		throw new Error(
 			`"${label}" failed with exit code ${exitCode}${stderr ? `: ${stderr.trim()}` : ""}`,
 		);
 	}
-}
-
-function exitCodeOf(proc: ReturnType<typeof spawn>): Promise<number> {
-	return new Promise((resolve, reject) => {
-		proc.once("error", reject);
-		proc.once("close", (code) => resolve(code ?? 1));
-	});
 }

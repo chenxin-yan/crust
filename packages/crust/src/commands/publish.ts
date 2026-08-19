@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -157,10 +158,7 @@ async function defaultSpawnPublish(dir: string, command: string[]): Promise<numb
 		stdio: "inherit",
 	});
 
-	return new Promise((complete, reject) => {
-		proc.once("error", reject);
-		proc.once("close", (code) => complete(code ?? 1));
-	});
+	return once(proc, "close").then(([code]) => code ?? 1);
 }
 
 export async function publishStagedPackages(

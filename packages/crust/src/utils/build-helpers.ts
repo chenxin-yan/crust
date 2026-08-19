@@ -1,8 +1,10 @@
 import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
+import { text } from "node:stream/consumers";
 
 import { BUILD_OUT_DIR_ENV, type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
 import { yellow } from "@crustjs/style";
@@ -179,8 +181,8 @@ export type BunBuildRunner = {
  * Fall back to the current executable with `BUN_BE_BUN=1` so packaged Crust
  * binaries still work in environments without a separate Bun install.
  */
-export function resolveBunBuildRunner(path: string | undefined = process.env.PATH): BunBuildRunner {
-	const bunPath = which("bun", path);
+export function resolveBunBuildRunner(): BunBuildRunner {
+	const bunPath = which("bun");
 	if (bunPath) {
 		return {
 			command: bunPath,
@@ -239,10 +241,10 @@ export async function execBuild(
 		stdio: ["ignore", "pipe", "pipe"],
 	});
 
-	const [stdout, stderr, exitCode] = await Promise.all([
-		readStream(proc.stdout),
-		readStream(proc.stderr),
-		exitCodeOf(proc),
+	const [stdout, stderr, [exitCode]] = await Promise.all([
+		text(proc.stdout),
+		text(proc.stderr),
+		once(proc, "close"),
 	]);
 
 	if (exitCode !== 0) {
@@ -287,8 +289,8 @@ export async function buildEntrypoint(
 			timeout: SNAPSHOT_TIMEOUT_MS,
 		});
 
-		const stderrPromise = readStream(proc.stderr);
-		const exitCode = await exitCodeOf(proc);
+		const stderrPromise = text(proc.stderr);
+		const [exitCode] = await once(proc, "close");
 		const stderr = (await stderrPromise).trim();
 
 		if (proc.signalCode !== null) {
@@ -345,21 +347,4 @@ export async function buildEntrypoint(
 	} finally {
 		await rm(snapshotDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 	}
-}
-
-function readStream(stream: NodeJS.ReadableStream): Promise<string> {
-	return new Promise((complete, reject) => {
-		let output = "";
-		stream.setEncoding("utf8");
-		stream.on("data", (chunk) => (output += chunk));
-		stream.once("end", () => complete(output));
-		stream.once("error", reject);
-	});
-}
-
-function exitCodeOf(proc: ReturnType<typeof spawn>): Promise<number> {
-	return new Promise((complete, reject) => {
-		proc.once("error", reject);
-		proc.once("close", (code) => complete(code ?? 1));
-	});
 }
