@@ -243,9 +243,12 @@ type ValidateExtensionConfig<Defs extends readonly NamedExtensionFlagDef[]> = {
 export interface Extension<
 	Deps extends ContextMap = ContextMap,
 	Provides extends readonly ContextInstance[] = readonly ContextInstance[],
+	FlagDefs extends readonly NamedExtensionFlagDef[] = readonly NamedExtensionFlagDef[],
 > {
 	readonly id: ExtensionId;
 	readonly flags?: Readonly<Record<string, ExtensionFlagDef>>;
+	/** @internal — phantom carrying declared flag literals for extend-time collision checks */
+	readonly _flagDefs?: FlagDefs;
 	readonly commands?: readonly CommandDefinition<any>[];
 	readonly uses: readonly AnyContextFactory[];
 	readonly provides?: Provides;
@@ -280,7 +283,8 @@ export function defineExtension<
 	ContextDependencies<Uses> &
 		ContextsDependencies<Provides> &
 		CommandDefinitionsDependencies<Commands>,
-	Provides
+	Provides,
+	Defs
 > {
 	const ownedFlags: FlagsDef = {};
 	for (const def of config.flags ?? []) {
@@ -298,6 +302,7 @@ export function defineExtension<
 		ContextDependencies<Uses> &
 			ContextsDependencies<Provides> &
 			CommandDefinitionsDependencies<Commands>,
-		Provides
+		Provides,
+		Defs
 	>;
 }

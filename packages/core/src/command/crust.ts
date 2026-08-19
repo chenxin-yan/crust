@@ -39,7 +39,9 @@ import type {
 	ValidateDeclaredDeps,
 } from "../validation/contexts.brands.ts";
 import type {
+	ExtensionsSpellings,
 	ProvideChecks,
+	ValidateExtensionFlags,
 	SpellingsOf,
 	ValidateNamedFlagDefs,
 } from "../validation/flags.brands.ts";
@@ -787,9 +789,19 @@ export class Crust<
 	 * contribute. Repeated calls accumulate Extensions in registration order;
 	 * Command definition builders do not expose this method.
 	 */
-	extend<const Es extends readonly Extension<any, any>[]>(
-		...extensions: Es & ValidateDeclaredDeps<MergeContext<Ctx, ExtensionsProvidesOutput<Es>>, Es>
-	): Crust<Flags, A, MergeContext<Ctx, ExtensionsProvidesOutput<Es>>, Sibs, Sp, Tree, CtxFlags> {
+	extend<const Es extends readonly Extension<any, any, any>[]>(
+		...extensions: Es &
+			ValidateDeclaredDeps<MergeContext<Ctx, ExtensionsProvidesOutput<Es>>, Es> &
+			ValidateExtensionFlags<Es, Sp>
+	): Crust<
+		Flags,
+		A,
+		MergeContext<Ctx, ExtensionsProvidesOutput<Es>>,
+		Sibs,
+		Sp | ExtensionsSpellings<Es>,
+		Tree,
+		CtxFlags
+	> {
 		const provided = extensions.flatMap((extension) => extension.provides ?? []);
 		return this._clone({
 			...(provided.length > 0 ? installContexts(this._node, provided) : {}),
@@ -799,7 +811,7 @@ export class Crust<
 			A,
 			MergeContext<Ctx, ExtensionsProvidesOutput<Es>>,
 			Sibs,
-			Sp,
+			Sp | ExtensionsSpellings<Es>,
 			Tree,
 			CtxFlags
 		>;

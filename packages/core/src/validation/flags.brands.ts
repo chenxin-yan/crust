@@ -27,6 +27,13 @@ type ReservedSpellingBrand<F> = "__proto__" extends DefName<F> | ExtractAllAlias
 		}
 	: {};
 
+/** Reject empty spellings: their CLI tokens (`--`, `-`) are unparseable, so the flag can never be supplied. */
+type EmptySpellingBrand<F> = "" extends DefName<F> | ExtractAllAliases<F>
+	? {
+			readonly FIX_EMPTY_SPELLING: "Flag names and aliases must be non-empty strings";
+		}
+	: {};
+
 /** Canonical names claimed by more than one definition in the same call. */
 type DuplicateNames<
 	Defs extends readonly NamedFlagDef[],
@@ -72,7 +79,8 @@ export type ValidateNamedFlagDefs<
 		DuplicateNameBrand<Defs[I], Dups> &
 		AsyncParseBrand<Defs[I]> &
 		DefaultWithinChoicesBrand<Defs[I]> &
-		ReservedSpellingBrand<Defs[I]>;
+		ReservedSpellingBrand<Defs[I]> &
+		EmptySpellingBrand<Defs[I]>;
 };
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -225,6 +233,64 @@ type ContextFlagCollisionBrand<C, Existing extends string> =
 					readonly FIX_ALIAS_COLLISION: `Flag spelling "${Collision}" collides with an existing flag`;
 				}
 		: never;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Extension flag validation (compile-time, per-extension granularity)
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Declared flag literals carried by an Extension's `_flagDefs` phantom; widened Extensions opt out. */
+type ExtensionFlagDefsOf<E> = E extends {
+	readonly _flagDefs?: infer D extends readonly NamedFlagDef[];
+}
+	? D
+	: readonly NamedFlagDef[];
+
+type ProvidedSpellings<P extends readonly unknown[]> = P extends readonly [
+	infer H,
+	...infer T extends readonly unknown[],
+]
+	? SpellingsOf<ContextOwnedFlags<H>> | ProvidedSpellings<T>
+	: never;
+
+/** All statically known flag spellings an Extension contributes: declared flags plus provided Context-owned flags. */
+export type ExtensionSpellings<E> =
+	| SpellingsOf<NamedFlagsRecord<ExtensionFlagDefsOf<E>>>
+	| (E extends { readonly provides?: infer P extends readonly unknown[] }
+			? ProvidedSpellings<P>
+			: never);
+
+type ExtensionFlagCollisionBrand<E, Existing extends string> =
+	Overlap<ExtensionSpellings<E>, Existing> extends infer Collision extends string
+		? [Collision] extends [never]
+			? {}
+			: {
+					readonly FIX_ALIAS_COLLISION: `Extension flag spelling "${Collision}" collides with an existing flag`;
+				}
+		: never;
+
+/**
+ * Validate each Extension's contributed flag spellings against accumulated
+ * existing spellings and against Extensions earlier in the same `.extend()`
+ * call. Extensions must not override application flags: a silent overwrite
+ * would retype an already-bound action's flag at parse time.
+ */
+export type ValidateExtensionFlags<
+	Es extends readonly unknown[],
+	Existing extends string,
+> = Es extends readonly [infer H, ...infer T extends readonly unknown[]]
+	? readonly [
+			H & ExtensionFlagCollisionBrand<H, Existing>,
+			...ValidateExtensionFlags<T, Existing | ExtensionSpellings<H>>,
+		]
+	: Es;
+
+/** Union of every statically known flag spelling contributed by a tuple of Extensions. */
+export type ExtensionsSpellings<Es extends readonly unknown[]> = Es extends readonly [
+	infer H,
+	...infer T extends readonly unknown[],
+]
+	? ExtensionSpellings<H> | ExtensionsSpellings<T>
+	: never;
 
 /**
  * Validate Context-owned flags against accumulated existing spellings.

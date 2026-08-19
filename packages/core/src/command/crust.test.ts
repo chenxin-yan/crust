@@ -682,6 +682,15 @@ describe("Crust .extend()", () => {
 });
 
 describe("Extension application at prepare time", () => {
+	it("rejects an Extension flag colliding with an application flag at compile time", () => {
+		const themer = defineExtension(defineExtensionId("themer"), {
+			flags: [{ name: "mode", type: "boolean" }],
+		});
+		const app = new Crust("cli").flags({ name: "mode", type: "string" });
+		// @ts-expect-error -- Extension flag "mode" collides with the application flag (FIX_ALIAS_COLLISION)
+		expect(() => app.extend(themer)).not.toThrow();
+	});
+
 	it("recursive Extension flags reach every command, including Extension commands", async () => {
 		const seen: Record<string, unknown>[] = [];
 		const debug = defineExtension(defineExtensionId("debug"), {
@@ -706,9 +715,11 @@ describe("Extension application at prepare time", () => {
 		const replacement = defineExtension(defineExtensionId("replacement"), {
 			flags: [{ name: "mode", type: "boolean", short: "n", aliases: ["new"] }],
 		});
+		// Typed code is rejected by the .extend() collision brand; the cast
+		// exercises the runtime spelling-table hygiene on the dynamic path.
 		const app = new Crust("cli")
 			.flags({ name: "mode", type: "boolean", short: "o", aliases: ["old"] })
-			.extend(replacement)
+			.extend(replacement as never)
 			.action(() => {
 				runs++;
 			});

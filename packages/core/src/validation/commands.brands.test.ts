@@ -53,6 +53,19 @@ describe("compile-time command validation", () => {
 		expect(true).toBe(true);
 	});
 
+	it("brands empty command names at the composition site and lets widened names opt out", () => {
+		type Empty = ValidateCommandDefinitions<readonly [Def<"">]>;
+		type Valid = ValidateCommandDefinitions<readonly [Def<"issue">]>;
+		type Widened = ValidateCommandDefinitions<readonly [Def<string>]>;
+		type _empty = Expect<
+			Equal<Empty[0]["FIX_EMPTY_NAME"], "Command name must be a non-empty string">
+		>;
+		type _valid = Expect<Equal<Extract<keyof Valid[0], "FIX_EMPTY_NAME">, never>>;
+		type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_EMPTY_NAME">, never>>;
+
+		expect(true).toBe(true);
+	});
+
 	it("brands every statically known invalid alias shape", () => {
 		type Empty = ValidateCommandConfig<"issue", { aliases: readonly [""] }>;
 		type Dash = ValidateCommandConfig<"issue", { aliases: readonly ["-i"] }>;

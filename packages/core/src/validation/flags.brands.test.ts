@@ -1,7 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
-import type { FlagsDef } from "../types.ts";
-import type { ProvideChecks, SpellingsOf, ValidateNamedFlagDefs } from "./flags.brands.ts";
+import type { FlagsDef, NamedFlagDef } from "../types.ts";
+import type {
+	ProvideChecks,
+	SpellingsOf,
+	ValidateExtensionFlags,
+	ValidateNamedFlagDefs,
+} from "./flags.brands.ts";
 
 type Expect<T extends true> = T;
 type Equal<A, B> =
@@ -251,6 +256,73 @@ describe("ValidateNamedFlagDefs", () => {
 		>;
 		type _valid = Expect<Equal<Extract<keyof Valid[0], "FIX_DEFAULT_CHOICE">, never>>;
 		type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_DEFAULT_CHOICE">, never>>;
+
+		expect(true).toBe(true);
+	});
+
+	it("brands Extension flag spellings colliding with existing or earlier-Extension flags", () => {
+		type Ext<Defs extends readonly NamedFlagDef[], Provides extends readonly unknown[] = []> = {
+			readonly _flagDefs?: Defs;
+			readonly provides?: Provides;
+		};
+		type AppCollision = ValidateExtensionFlags<
+			readonly [Ext<readonly [{ name: "mode"; type: "boolean" }]>],
+			"mode"
+		>;
+		type CrossExtension = ValidateExtensionFlags<
+			readonly [
+				Ext<readonly [{ name: "verbose"; type: "boolean" }]>,
+				Ext<readonly [{ name: "verbose"; type: "string" }]>,
+			],
+			never
+		>;
+		type Provided = ValidateExtensionFlags<
+			readonly [Ext<readonly [], readonly [{ _ownedFlags?: { mode: { type: "string" } } }]>],
+			"mode"
+		>;
+		type Clean = ValidateExtensionFlags<
+			readonly [Ext<readonly [{ name: "verbose"; type: "boolean" }]>],
+			"mode"
+		>;
+		type Widened = ValidateExtensionFlags<
+			readonly [{ readonly _flagDefs?: NamedFlagDef[] }],
+			"mode"
+		>;
+		type _app = Expect<
+			Equal<
+				AppCollision[0]["FIX_ALIAS_COLLISION"],
+				'Extension flag spelling "mode" collides with an existing flag'
+			>
+		>;
+		type _cross = Expect<
+			Equal<
+				CrossExtension[1]["FIX_ALIAS_COLLISION"],
+				'Extension flag spelling "verbose" collides with an existing flag'
+			>
+		>;
+		type _provided = Expect<
+			Equal<
+				Provided[0]["FIX_ALIAS_COLLISION"],
+				'Extension flag spelling "mode" collides with an existing flag'
+			>
+		>;
+		type _clean = Expect<Equal<Extract<keyof Clean[0], "FIX_ALIAS_COLLISION">, never>>;
+		type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_ALIAS_COLLISION">, never>>;
+
+		expect(true).toBe(true);
+	});
+
+	it("brands empty flag names and aliases", () => {
+		type Name = ValidateNamedFlagDefs<readonly [{ name: ""; type: "boolean" }]>;
+		type Alias = ValidateNamedFlagDefs<readonly [{ name: "safe"; type: "boolean"; aliases: [""] }]>;
+		type Widened = ValidateNamedFlagDefs<readonly [{ name: string; type: "boolean" }]>;
+		type _name = Expect<
+			Equal<Name[0]["FIX_EMPTY_SPELLING"], "Flag names and aliases must be non-empty strings">
+		>;
+		type _alias = Expect<
+			Equal<Alias[0]["FIX_EMPTY_SPELLING"], "Flag names and aliases must be non-empty strings">
+		>;
+		type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_EMPTY_SPELLING">, never>>;
 
 		expect(true).toBe(true);
 	});

@@ -35,6 +35,16 @@ export type ValidateCommandConfig<Name extends string, C> = string extends Name
 		? {}
 		: { readonly FIX_ALIAS_SHAPE: AliasShapeErrors<Name, C> };
 
+/**
+ * Brand a statically known empty command name at the composition site:
+ * routing stops at empty argv tokens, so such a command can never dispatch.
+ * Widened names opt out (`DefName` yields `never`, which `""` does not extend).
+ */
+type EmptyNameBrand<D> =
+	"" extends DefName<D>
+		? { readonly FIX_EMPTY_NAME: "Command name must be a non-empty string" }
+		: {};
+
 type DefinitionAliases<D> = D extends {
 	readonly _aliases?: infer A extends readonly string[];
 }
@@ -70,7 +80,7 @@ export type ValidateCommandDefinitions<
 	Existing extends string = never,
 > = Ds extends readonly [infer Head, ...infer Tail]
 	? readonly [
-			Head & CommandCollisionBrand<Head, Existing>,
+			Head & CommandCollisionBrand<Head, Existing> & EmptyNameBrand<Head>,
 			...ValidateCommandDefinitions<Tail, Existing | CommandDefinitionSpellings<Head>>,
 		]
 	: Ds;
