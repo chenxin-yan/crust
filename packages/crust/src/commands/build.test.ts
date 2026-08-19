@@ -124,6 +124,7 @@ describe("build argument construction", () => {
 	it("constructs a Deno compile with its canonical target", () => {
 		expect(createDenoCompileArgs("/src/cli.ts", "/dist/cli", "x86_64-unknown-linux-gnu")).toEqual([
 			"compile",
+			"-A",
 			"--output",
 			"/dist/cli",
 			"--target",

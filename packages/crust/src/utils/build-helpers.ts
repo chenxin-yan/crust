@@ -113,50 +113,50 @@ export const SUPPORTED_DENO_TARGETS = [
 
 export type DenoTarget = (typeof SUPPORTED_DENO_TARGETS)[number];
 
+/** Subset of target metadata the generated resolver scripts consume. */
+export type ResolverTargetInfo = Pick<TargetInfo, "unameKey" | "os" | "cpu">;
+
+/** No platformKey: npm per-platform packaging (distribute.ts) is Bun-only. */
+type DenoTargetInfo = Omit<TargetInfo, "platformKey">;
+
 export const DENO_TARGET_INFO = {
 	"x86_64-unknown-linux-gnu": {
 		alias: "linux-x64",
-		platformKey: "linux-x64",
 		unameKey: "Linux-x86_64",
 		os: "linux",
 		cpu: "x64",
 	},
 	"aarch64-unknown-linux-gnu": {
 		alias: "linux-arm64",
-		platformKey: "linux-arm64",
 		unameKey: "Linux-aarch64",
 		os: "linux",
 		cpu: "arm64",
 	},
 	"x86_64-apple-darwin": {
 		alias: "darwin-x64",
-		platformKey: "darwin-x64",
 		unameKey: "Darwin-x86_64",
 		os: "darwin",
 		cpu: "x64",
 	},
 	"aarch64-apple-darwin": {
 		alias: "darwin-arm64",
-		platformKey: "darwin-arm64",
 		unameKey: "Darwin-arm64",
 		os: "darwin",
 		cpu: "arm64",
 	},
 	"x86_64-pc-windows-msvc": {
 		alias: "windows-x64",
-		platformKey: "win32-x64",
 		unameKey: "Windows-x64",
 		os: "win32",
 		cpu: "x64",
 	},
 	"aarch64-pc-windows-msvc": {
 		alias: "windows-arm64",
-		platformKey: "win32-arm64",
 		unameKey: "Windows-arm64",
 		os: "win32",
 		cpu: "arm64",
 	},
-} as const satisfies Record<DenoTarget, TargetInfo>;
+} as const satisfies Record<DenoTarget, DenoTargetInfo>;
 
 /**
  * Resolve a canonical Bun target string to a supported compile target.
@@ -367,6 +367,10 @@ export function createDenoCompileArgs(
 	// --env-file for the deno runtime instead of leaking secrets.
 	return [
 		"compile",
+		// -A: Crust core reads process.env before dispatch, so a sandboxed binary
+		// crashes with NotCapable on startup. Full grants also match Bun compile,
+		// which has no sandbox. A permission passthrough flag can narrow this later.
+		"-A",
 		"--output",
 		outfilePath,
 		"--target",

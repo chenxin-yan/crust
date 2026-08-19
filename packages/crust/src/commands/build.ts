@@ -20,7 +20,7 @@ import {
 	resolveTargets,
 	TARGET_INFO,
 	buildEntrypoint,
-	type TargetInfo,
+	type ResolverTargetInfo,
 } from "../utils/build-helpers.ts";
 
 /**
@@ -112,7 +112,7 @@ export function resolveBuildRuntime(cwd: string, override?: string): BuildRuntim
 function generateResolverFor<T extends string>(
 	baseName: string,
 	targets: readonly T[],
-	targetInfo: Record<T, TargetInfo>,
+	targetInfo: Record<T, ResolverTargetInfo>,
 	getFilename: (baseName: string, target: T) => string,
 ): string {
 	const caseEntries: string[] = [];
@@ -185,7 +185,7 @@ export function generateDenoResolver(baseName: string, targets: readonly DenoTar
 function generateCmdResolverFor<T extends string>(
 	baseName: string,
 	targets: readonly T[],
-	targetInfo: Record<T, TargetInfo>,
+	targetInfo: Record<T, ResolverTargetInfo>,
 	getFilename: (baseName: string, target: T) => string,
 ): string {
 	const windowsTargets = targets.filter((target) => targetInfo[target].os === "win32");

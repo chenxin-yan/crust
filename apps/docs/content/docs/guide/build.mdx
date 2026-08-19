@@ -87,11 +87,11 @@ Node produces a single portable JavaScript artifact, so it rejects `--target` an
 | `x86_64-pc-windows-msvc`    | Windows x86_64      |
 | `aarch64-pc-windows-msvc`   | Windows ARM64       |
 
-<Callout type="warn">
-  Deno executables enforce Deno's permission model at runtime. Crust bakes no `--allow-*` flags
-  into the binary, so a CLI that reads env vars (including `NO_COLOR`), touches the filesystem, or
-  spawns subprocesses will prompt for permissions — or fail non-interactively — unless users grant
-  them. Document the flags your CLI needs, or compile with a wrapper that passes them explicitly.
+<Callout type="info">
+  Deno binaries are compiled with `-A` (all permissions granted). Crust core reads environment
+  variables before dispatch, so a sandboxed binary would crash on startup — and Bun- and
+  Node-built CLIs have no sandbox either, so this matches the other runtimes. A permission
+  passthrough flag for narrower grants is planned follow-up scope.
 </Callout>
 
 ## Multi-Target Build (Bun and Deno)
