@@ -81,7 +81,7 @@ const app = new Crust("app").provide(logging()).add(deploy);
 
 ## Context inheritance
 
-Adding materializes a fresh command scope seeded with the parent's current Context path. The added action and all nested descendants can pull those Context values; `use()` infers the value type directly from its factory argument.
+Adding materializes a fresh command scope seeded with the parent's current Context path. Nested definitions declare inherited providers in `uses`; the corresponding lazy bag property carries the factory's value type.
 
 Finalize `.provide()` calls on the parent builder before `.add()`. [Flags owned by a provided Context](/docs/guide/contexts#owned-flags) propagate only into descendants added later. Later fluent calls return a new builder and do not backfill a definition that was already added.
 

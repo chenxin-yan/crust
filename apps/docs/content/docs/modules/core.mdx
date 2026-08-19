@@ -56,7 +56,7 @@ Downstream commands and other Context setups call `await ctx.api`. See [Contexts
 | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`Crust`](/docs/api/crust)            | Immutable command builder with Context `.provide()`, `.add()`, `.action()`, tooling `.snapshot()`, programmatic `.run()`, and terminal `.execute()` |
 | [`defineCommand`](/docs/api/crust)    | Create a named, inert reusable command definition                                                                                                   |
-| `defineContext(name, config?, setup)` | Define a named Context factory with optional owned flags; setup receives a Context resolver and invocation I/O                                      |
+| `defineContext(name, config?, setup)` | Define a named Context factory with optional owned flags; setup receives its declared lazy Context bag and invocation I/O                           |
 | `defineExtension(id, config)`         | Define a frozen, application-wide Extension value                                                                                                   |
 | `defineExtensionId(id)`               | Mint a branded Extension identity from any non-blank string                                                                                         |
 | `defineFlag(name, definition)`        | Define one named flag, preserving its literal definition                                                                                            |
@@ -126,7 +126,7 @@ Omitting `io` creates no new ambient scope, preserving native TTY detection and 
 | `AnyContextFactory` | Shared constraint for factories accepted by `uses`                        |
 | `ContextInstance`   | Named lazy dependency attached with `.provide()`                          |
 | `ContextConfig`     | Flags owned by a Context                                                  |
-| `ContextSetup`      | Typed setup input: `options`, `flags`, resolver `ctx`, and invocation I/O |
+| `ContextSetup`      | Typed setup input: `options`, `flags`, lazy bag `ctx`, and invocation I/O |
 | `ContextMap`        | Record shape used by accumulated command Context types                    |
 
 ## Extension types

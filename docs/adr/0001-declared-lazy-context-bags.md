@@ -31,3 +31,5 @@ Dependency contracts are visible in declarations and cannot drift: undeclared pr
 Construction remains lazy, but property access has an effect. Destructuring `ctx` reads the selected properties immediately and therefore starts those Contexts; documentation calls this out as “destructure = eager.” Context names that are not identifier-safe use bracket access, for example `await ctx["remote-config"]`.
 
 Reusable nested definitions may repeat an inherited dependency in their own `uses` contract. This is intentional: every sealed definition remains independently checkable, and `.add()` errors stay local rather than being deferred to execution.
+
+A double cuts dependencies for the factory instance it replaces. A downstream factory still carries the original dependency's closure in its own static type, so replacing only that intermediate dependency with `.of()` does not shrink the downstream type-level closure. Provide the downstream factory's own `.of()` double when the entire subgraph must be omitted.
