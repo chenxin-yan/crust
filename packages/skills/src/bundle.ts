@@ -6,7 +6,7 @@ import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { join, sep } from "node:path";
 
 import { resolveSourceDir } from "@crustjs/utils/source";
-import { parse } from "yaml";
+import { parse } from "ultramatter";
 
 import type { RenderedFile } from "./types.ts";
 
@@ -32,6 +32,28 @@ type FrontmatterProbe = {
 	readonly description?: unknown;
 };
 
+/**
+ * Protects hashes inside quoted scalars from ultramatter's comment stripping.
+ * The sentinel cannot collide because it is chosen to be absent from the input.
+ */
+function protectQuotedHashes(input: string): { input: string; sentinel: string } {
+	let sentinel = "\uE000";
+	while (input.includes(sentinel)) sentinel += "\uE000";
+
+	let quote: "'" | '"' | null = null;
+	let protectedInput = "";
+	for (let index = 0; index < input.length; index++) {
+		const char = input[index]!;
+		if (quote === '"' && char === "\\") {
+			protectedInput += char + (input[++index] ?? "");
+			continue;
+		}
+		if (char === "'" || char === '"') quote = quote === char ? null : (quote ?? char);
+		protectedInput += char === "#" && quote !== null ? sentinel : char;
+	}
+	return { input: protectedInput, sentinel };
+}
+
 /** Reads top-level `name` and `description` from leading YAML frontmatter. */
 export function probeFrontmatter(content: string): BundleFrontmatter {
 	const result: BundleFrontmatter = { name: null, description: null };
@@ -46,12 +68,20 @@ export function probeFrontmatter(content: string): BundleFrontmatter {
 	if (closing === -1) return result;
 
 	try {
-		const parsed = parse(lines.slice(opening + 1, closing).join("\n"));
+		const block = lines.slice(opening + 1, closing).join("\n");
+		const protectedBlock = protectQuotedHashes(block);
+		const parsed = parse(`---\n${protectedBlock.input}\n---`).frontmatter;
 		if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return result;
 		const frontmatter = parsed as FrontmatterProbe;
 		return {
-			name: frontmatter.name == null ? null : String(frontmatter.name),
-			description: frontmatter.description == null ? null : String(frontmatter.description),
+			name:
+				frontmatter.name == null
+					? null
+					: String(frontmatter.name).replaceAll(protectedBlock.sentinel, "#"),
+			description:
+				frontmatter.description == null
+					? null
+					: String(frontmatter.description).replaceAll(protectedBlock.sentinel, "#"),
 		};
 	} catch {
 		return result;
