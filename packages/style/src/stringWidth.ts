@@ -29,8 +29,8 @@ function isFullWidth(code: number): boolean {
 	);
 }
 
-/** Measure terminal columns, ignoring ANSI escapes. */
-export function stringWidth(input: string): number {
+/** @internal JavaScript fallback for runtimes without a native width implementation. */
+export function stringWidthJs(input: string): number {
 	let width = 0;
 	for (const { segment } of segmenter.segment(stripVTControlCharacters(input))) {
 		if (emoji.test(segment)) {
@@ -43,4 +43,18 @@ export function stringWidth(input: string): number {
 		if (!zeroWidth.test(String.fromCodePoint(code))) width += isFullWidth(code) ? 2 : 1;
 	}
 	return width;
+}
+
+/** Measure terminal columns, ignoring ANSI escapes. */
+export function stringWidth(input: string): number {
+	const bun = (
+		globalThis as {
+			Bun?: {
+				stringWidth(value: string, options?: { countAnsiEscapeCodes?: boolean }): number;
+			};
+		}
+	).Bun;
+
+	// Native fast paths are reserved for hand-rolled fallbacks on render-hot paths.
+	return bun?.stringWidth(input, { countAnsiEscapeCodes: false }) ?? stringWidthJs(input);
 }
