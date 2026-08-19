@@ -23,7 +23,7 @@ Routing consumes command names before parsing the resolved command's arguments a
 
 ## Requirements
 
-A definition pulls Context capabilities with `await ctx.use(factory)`. The returned value is typed from the factory, while the app decides where to provide it:
+A definition declares Context capabilities in `uses` and awaits them from its typed `ctx` bag. The app decides where to provide them:
 
 ```ts
 import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
@@ -38,12 +38,12 @@ const repository = defineContext("repository", () => ({
   defaultBranch: "main",
 }));
 
-const clone = defineCommand("clone", (command) =>
+const clone = defineCommand("clone", { uses: [logging, repository] }, (command) =>
   command
     .args({ name: "url", type: "url", required: true })
     .action(async ({ args, ctx, stdout }) => {
-      (await ctx.use(logging)).debug(`cloning ${args.url}`);
-      stdout((await ctx.use(repository)).defaultBranch);
+      (await ctx.logging).debug(`cloning ${args.url}`);
+      stdout((await ctx.repository).defaultBranch);
     }),
 );
 
@@ -56,7 +56,7 @@ const app = new Crust("git").provide(logging(), repository()).add(clone);
 const git = new Crust("git").provide(logging()).provide(repository()).add(clone, clone.as("copy"));
 ```
 
-A missing Context fails when `use()` runs with an actionable runtime `DEFINITION` error.
+A missing Context is a type error at `.add()` and a definition-time error for dynamic JavaScript inputs.
 
 ## Nested definitions
 
@@ -66,13 +66,15 @@ Definitions can add other definitions. Providers available on that command path 
 const environment = defineFlag("environment", { type: "string" });
 const deployment = defineContext("deployment", { flags: [environment] }, ({ flags }) => flags);
 
-const status = defineCommand("status", (command) =>
+const status = defineCommand("status", { uses: [logging, deployment] }, (command) =>
   command.action(async ({ ctx }) => {
-    (await ctx.use(logging)).debug(`environment: ${(await ctx.use(deployment)).environment}`);
+    (await ctx.logging).debug(`environment: ${(await ctx.deployment).environment}`);
   }),
 );
 
-const deploy = defineCommand("deploy", (command) => command.provide(deployment()).add(status));
+const deploy = defineCommand("deploy", { uses: [logging] }, (command) =>
+  command.provide(deployment()).add(status),
+);
 
 const app = new Crust("app").provide(logging()).add(deploy);
 ```

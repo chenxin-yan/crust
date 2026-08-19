@@ -91,8 +91,8 @@ const logging = defineContext("logging", { flags: [verbose] }, ({ flags, stderr 
   },
 }));
 
-const deploy = defineCommand("deploy", (command) =>
-  command.action(async ({ ctx }) => (await ctx.use(logging)).debug("deploying")),
+const deploy = defineCommand("deploy", { uses: [logging] }, (command) =>
+  command.action(async ({ ctx }) => (await ctx.logging).debug("deploying")),
 );
 
 const app = new Crust("app").provide(logging()).add(deploy);

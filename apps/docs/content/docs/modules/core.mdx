@@ -27,7 +27,7 @@ const app = new Crust("deploy")
   .flags({ name: "verbose", type: "boolean", short: "v" })
   .provide(config({ environment: "production" }))
   .action(async ({ flags, ctx, stdout }) => {
-    stdout(`${(await ctx.use(config)).environment}: verbose=${flags.verbose ?? false}`);
+    stdout(`${(await ctx.config).environment}: verbose=${flags.verbose ?? false}`);
   });
 
 await app.execute();
@@ -48,7 +48,7 @@ const api = defineContext("api", { flags: [apiKey] }, ({ flags }) => ({
 const app = new Crust("my-cli").provide(api());
 ```
 
-Downstream commands and other Context setups call `await ctx.use(api)`. See [Contexts](/docs/guide/contexts).
+Downstream commands and other Context setups call `await ctx.api`. See [Contexts](/docs/guide/contexts).
 
 ## Runtime exports
 
@@ -76,7 +76,7 @@ Downstream commands and other Context setups call `await ctx.use(api)`. See [Con
 | `CommandMeta`                                 | Name, description, usage, sections, aliases, and visibility                      |
 | `CommandSection`                              | A titled documentation block with an optional consumer audience                  |
 | `ExtensionId`                                 | Branded identity minted by `defineExtensionId()`                                 |
-| `ContextResolver` / `FactoryValueOf`          | Pull-based Context resolver and factory-value helper types                       |
+| `ContextBag` / `FactoryValueOf`               | Lazy Context property bag and factory-value helper types                         |
 | [`RootCommandMeta`](/docs/api/crust)          | Root description, usage, and sections accepted by the `Crust` constructor        |
 | `FlagDef`                                     | Core-value or Standard Schema flag definition                                    |
 | `FlagsDef`                                    | Flag-name-to-definition record                                                   |
@@ -123,7 +123,7 @@ Omitting `io` creates no new ambient scope, preserving native TTY detection and 
 | Type                | Description                                                               |
 | ------------------- | ------------------------------------------------------------------------- |
 | `ContextFactory`    | Factory returned by `defineContext()`, with `contextName` and `.of()`     |
-| `AnyContextFactory` | Shared constraint for factories accepted by `ctx.use()`                   |
+| `AnyContextFactory` | Shared constraint for factories accepted by `uses`                        |
 | `ContextInstance`   | Named lazy dependency attached with `.provide()`                          |
 | `ContextConfig`     | Flags owned by a Context                                                  |
 | `ContextSetup`      | Typed setup input: `options`, `flags`, resolver `ctx`, and invocation I/O |

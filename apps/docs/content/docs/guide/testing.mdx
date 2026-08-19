@@ -59,7 +59,7 @@ import { database } from "./contexts.ts";
 
 const app = new Crust("my-cli")
   .provide(database.of({ query: (sql) => `fake: ${sql}` }))
-  .action(async ({ ctx, stdout }) => stdout((await ctx.use(database)).query("select 1")));
+  .action(async ({ ctx, stdout }) => stdout((await ctx.database).query("select 1")));
 ```
 
 See [Contexts](/docs/guide/contexts#test-doubles).

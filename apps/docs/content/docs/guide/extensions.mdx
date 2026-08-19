@@ -47,7 +47,7 @@ const rootOnlyVersion = defineExtension(defineExtensionId("version"), {
 
 Ordinary command flags are always local; Context-owned flags are the application-level propagation mechanism.
 
-Extension commands are `defineCommand()` definitions attached at the root. `new Crust()` creates only the application root; every contributed command is a definition. Their `.action()` callbacks receive the same typed action context as application commands, including `rootCommand` and pull-based `ctx.use()`.
+Extension commands are `defineCommand()` definitions attached at the root. `new Crust()` creates only the application root; every contributed command is a definition. Their `.action()` callbacks receive the same typed action context as application commands, including `rootCommand` and the lazy Context bag.
 
 A contributed command name or alias cannot collide with the application or another Extension. Flag names, short forms, and long aliases cannot collide with application flags, [Context-owned flags](/docs/guide/contexts#owned-flags), or other Extensions. Every collision is a `CrustError` with code `DEFINITION`; Crust never warns and skips a contribution.
 
@@ -110,13 +110,14 @@ A renderer exposes its identity on its factory and selects sections with `sectio
 
 ## Dependency injection
 
-Hooks and command actions share the Context system. An app can supply services with `.provide()`, and hooks pull them with `await ctx.use(factory)`:
+Hooks and command actions share the Context system. An Extension declares consumed services with `uses`, and hooks await them from the same lazy bag:
 
 ```ts
 const telemetry = defineExtension(defineExtensionId("telemetry"), {
+  uses: [logger],
   hooks: {
-    async preRun(ctx) {
-      const log = await ctx.use(logger);
+    async preRun({ ctx }) {
+      const log = await ctx.logger;
       log.info("start");
     },
   },
@@ -156,7 +157,7 @@ type InvocationOutcome =
   | { status: "failed"; error: unknown; by?: ExtensionId };
 ```
 
-For a finished invocation, `outcome.by` is the Extension id. A failed outcome carries `by` when an Extension handled it in `onError`; Core fallback rendering leaves `by` undefined. Official Extensions therefore report names such as `crust:help`; diagnostics that label an Extension use the same exact identity. The same context identity reaches all hooks for one invocation. Use `ctx.use()` for injectable services; a `WeakMap<ExtensionContext, State>` remains suitable for private per-invocation ephemera shared by a hook pair.
+For a finished invocation, `outcome.by` is the Extension id. A failed outcome carries `by` when an Extension handled it in `onError`; Core fallback rendering leaves `by` undefined. Official Extensions therefore report names such as `crust:help`; diagnostics that label an Extension use the same exact identity. The same context identity reaches all hooks for one invocation. Declare injectable services in `uses` and access them through `ctx`; a `WeakMap<ExtensionContext, State>` remains suitable for private per-invocation ephemera shared by a hook pair.
 
 ### `onError`
 
