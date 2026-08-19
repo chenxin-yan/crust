@@ -676,13 +676,13 @@ describe("Crust .add() type-level tests", () => {
 			.flags({ name: "rootOnly", type: "string" })
 			.provide(logging())
 			.add(
-				defineCommand("level1", (command) =>
+				defineCommand("level1", { uses: [logging] }, (command) =>
 					command.add(
-						defineCommand("level2", (child) =>
+						defineCommand("level2", { uses: [logging] }, (child) =>
 							child
 								.args({ name: "target", type: "string", required: true })
 								.action(async ({ args, flags, ctx }) => {
-									const log = await ctx.use(logging);
+									const log = await ctx.logging;
 									type _target = Expect<Equal<typeof args.target, string>>;
 									type _verbose = Expect<Equal<typeof log.verbose, boolean>>;
 									// @ts-expect-error -- ancestor-owned flags are parsed but not action-visible
@@ -1570,9 +1570,10 @@ describe("Extension onError hooks", () => {
 			},
 		}));
 		const observer = defineExtension(defineExtensionId("observer"), {
+			uses: [resource],
 			hooks: {
 				async onError(_error, ctx) {
-					await ctx.use(resource);
+					await ctx.ctx.resource;
 					pulled = true;
 					return true;
 				},
@@ -1582,7 +1583,7 @@ describe("Extension onError hooks", () => {
 			.provide(resource())
 			.extend(observer)
 			.action(async ({ ctx }) => {
-				await ctx.use(resource);
+				await ctx.resource;
 				throw new Error("boom");
 			});
 
@@ -2121,9 +2122,9 @@ describe("Crust .execute()", () => {
 		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
 			verbose: flags.verbose === true,
 		}));
-		const sub = defineCommand("sub", (command) =>
+		const sub = defineCommand("sub", { uses: [logging] }, (command) =>
 			command.action(async ({ ctx }) => {
-				receivedVerbose = (await ctx.use(logging)).verbose;
+				receivedVerbose = (await ctx.logging).verbose;
 			}),
 		);
 		const app = new Crust("cli").provide(logging()).add(sub);
@@ -2141,9 +2142,9 @@ describe("Crust .execute()", () => {
 			port: flags.port,
 		}));
 		const app = new Crust("cli").provide(ports()).add(
-			defineCommand("sub", (cmd) =>
+			defineCommand("sub", { uses: [ports] }, (cmd) =>
 				cmd.action(async ({ ctx }) => {
-					receivedPort = (await ctx.use(ports)).port;
+					receivedPort = (await ctx.ports).port;
 				}),
 			),
 		);
@@ -2161,9 +2162,9 @@ describe("Crust .execute()", () => {
 			verbose: flags.verbose,
 		}));
 		const app = new Crust("cli").provide(logging()).add(
-			defineCommand("sub", (cmd) =>
+			defineCommand("sub", { uses: [logging] }, (cmd) =>
 				cmd.action(async ({ ctx }) => {
-					receivedVerbose = (await ctx.use(logging)).verbose;
+					receivedVerbose = (await ctx.logging).verbose;
 				}),
 			),
 		);

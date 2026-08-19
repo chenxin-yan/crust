@@ -1,11 +1,11 @@
 // Contexts and Extensions
 export type {
 	AnyContextFactory,
+	ContextBag,
 	ContextConfig,
 	ContextFactory,
 	ContextInstance,
 	ContextMap,
-	ContextResolver,
 	ContextSetup,
 	FactoryValueOf,
 	Simplify,

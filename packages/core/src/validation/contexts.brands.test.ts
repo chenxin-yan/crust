@@ -1,15 +1,36 @@
 import { describe, expect, it } from "bun:test";
 
 import type { ContextInstance } from "../api/context.ts";
-import type { ValidateContextNames } from "./contexts.brands.ts";
+import type { ValidateContextDeps, ValidateContextNames } from "./contexts.brands.ts";
 
 type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type Expect<T extends true> = T;
-type Inst<Name extends string> = ContextInstance<Name>;
+type Inst<Name extends string, Deps extends Record<string, unknown> = {}> = ContextInstance<
+	Name,
+	unknown,
+	{},
+	Deps
+>;
 type NameBrandOf<T> = Extract<keyof T, "FIX_DUPLICATE_CONTEXT">;
 
-describe("compile-time duplicate context name validation", () => {
+describe("compile-time Context validation", () => {
+	it("brands an unsatisfied dependency and accepts same-batch providers", () => {
+		type Missing = ValidateContextDeps<{}, readonly [Inst<"db", { config: string }>]>;
+		type _missing = Expect<
+			Equal<
+				Missing[0]["FIX_MISSING_DEPENDENCY"],
+				'Context "db" uses Context "config" which is not provided on this command path'
+			>
+		>;
+		type Satisfied = ValidateContextDeps<
+			{},
+			readonly [Inst<"db", { config: string }>, Inst<"config">]
+		>;
+		type _satisfied = Expect<Equal<Extract<keyof Satisfied[0], "FIX_MISSING_DEPENDENCY">, never>>;
+
+		expect(true).toBe(true);
+	});
 	it("brands a name already provided in an earlier call", () => {
 		type Result = ValidateContextNames<{ db: number }, readonly [Inst<"db">]>;
 		type _check = Expect<

@@ -312,7 +312,7 @@ async function dispatch(
 		args: parsed.args,
 		flags: parsed.flags,
 		rawArgs: parsed.rawArgs,
-		use: resolver.use,
+		ctx: resolver.bag(resolvedNode.contexts),
 		finish: finishInvocation,
 		stdout: io.stdout,
 		stderr: io.stderr,
@@ -331,7 +331,7 @@ async function dispatch(
 		const context = {
 			args: validated.args,
 			flags: validated.flags,
-			ctx: { use: resolver.use },
+			ctx: resolver.bag(resolvedNode.contexts),
 			rawArgs: parsed.rawArgs,
 			command: extensionContext.command,
 			rootCommand: rootSnapshot,
@@ -406,17 +406,20 @@ async function renderFailure(
 	// set in preRun) survives into onError. During dispatch its Contexts remain
 	// live through postRun; errors raised after cleanup see the closed resolver.
 	// The synthetic fallback exists only for failures before a context was built.
-	const unavailableUse: ExtensionContext["use"] = async (factory) => {
-		throw new CrustError(
-			"DEFINITION",
-			`Context "${factory.contextName}" cannot be pulled from onError because invocation Contexts have already been disposed.`,
-			{
-				subject: "context",
-				name: factory.contextName,
-				reason: "context-after-disposal",
-			},
+	function unavailable(property: PropertyKey): Promise<never> {
+		return Promise.reject(
+			new CrustError(
+				"DEFINITION",
+				`Context "${String(property)}" cannot be pulled from onError because invocation Contexts have already been disposed.`,
+				{
+					subject: "context",
+					name: String(property),
+					reason: "context-after-disposal",
+				},
+			),
 		);
-	};
+	}
+	const unavailableContext = new Proxy({}, { get: (_, property) => unavailable(property) });
 	const context =
 		extensionContext ??
 		Object.freeze({
@@ -430,7 +433,7 @@ async function renderFailure(
 			finish: finishInvocation,
 			stdout: io.stdout,
 			stderr: io.stderr,
-			use: unavailableUse,
+			ctx: unavailableContext,
 		} satisfies ExtensionContext);
 
 	try {

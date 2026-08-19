@@ -36,15 +36,15 @@ export const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => ({
 	apiKey: flags["api-key"],
 }));
 
-// Inferred setup input exposes the public ContextResolver type
-export const authenticatedApi = defineContext("authenticated-api", async ({ ctx }) => ({
-	apiKey: (await ctx.use(auth)).apiKey,
+// Inferred setup input exposes the declared lazy Context bag
+export const authenticatedApi = defineContext("authenticated-api", { uses: [auth] }, async ({ ctx }) => ({
+	apiKey: (await ctx.auth).apiKey,
 }));
 
-// Pulling a Context infers its value from the factory argument
-export const deploy = defineCommand("deploy", (cmd) =>
+// A declared Context bag preserves the factory's value type
+export const deploy = defineCommand("deploy", { uses: [auth] }, (cmd) =>
 	cmd.action(async ({ ctx }) => {
-		void (await ctx.use(auth)).apiKey;
+		void (await ctx.auth).apiKey;
 	}),
 );
 
