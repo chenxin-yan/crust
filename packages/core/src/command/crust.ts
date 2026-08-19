@@ -888,6 +888,22 @@ export class Crust<
 				available,
 				"the root command path",
 			);
+			// Contributed commands carry their own dependency contracts; the typed
+			// brand rejects them at the extend() call site, so the runtime twin must
+			// too instead of deferring to run()/snapshot() materialization.
+			for (const definition of extension.commands ?? []) {
+				const internal = (definition as Partial<CommandDefinition> | null)?.[
+					commandDefinitionInternal
+				];
+				// Non-definitions get the dedicated invalid-command-definition error at prepare time.
+				if (internal === undefined) continue;
+				missingDependency(
+					`Extension "${extension.id}" command "${definition.name}"`,
+					internal.uses,
+					available,
+					"the root command path",
+				);
+			}
 		}
 		return this._clone({
 			...(provided.length > 0 ? installExtensionProviders(this._node, provided) : {}),

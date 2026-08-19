@@ -73,9 +73,11 @@ export function normalizeContext(
 	where: string,
 ): ContextInstance[] {
 	const contexts = [...existing];
+	// Provenance first: building `available` reads `.name`, which would turn a
+	// null/undefined provide() into a TypeError instead of the not-a-context error.
+	for (const instance of incoming) definitionProvenance(instance);
 	const available = new Set([...existing, ...incoming].map((context) => context.name));
 	for (const instance of incoming) {
-		definitionProvenance(instance);
 		duplicateContext(instance, contexts, where);
 		missingDependency(`Context "${instance.name}"`, instance.uses ?? [], available, where);
 		for (const [name, def] of Object.entries(instance.ownedFlags)) {

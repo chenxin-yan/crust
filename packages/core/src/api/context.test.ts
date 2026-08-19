@@ -797,6 +797,14 @@ describe("Context setup dependencies", () => {
 		} as unknown as Parameters<Crust["provide"]>[0];
 		expect(() => new Crust("cli").provide(rogue)).toThrow(/Invalid default value/);
 	});
+
+	it("rejects null and undefined at provide time with the not-a-context error", () => {
+		for (const value of [null, undefined]) {
+			expect(() => new Crust("cli").provide(value as never)).toThrow(
+				/provide\(\) requires Context instances/,
+			);
+		}
+	});
 });
 
 describe("Context dependency runtime boundaries", () => {
@@ -836,7 +844,7 @@ describe("Context dependency runtime boundaries", () => {
 		});
 	});
 
-	it("rejects an Extension-contributed command with an unmet dependency at prepare time", async () => {
+	it("rejects an Extension-contributed command with an unmet dependency at extend time", () => {
 		const config = defineContext("config", () => "config");
 		const report = defineCommand("report", { uses: [config] }, (builder) =>
 			builder.action(() => {}),
@@ -844,9 +852,8 @@ describe("Context dependency runtime boundaries", () => {
 		const reporter = defineExtension(defineExtensionId("reporter"), {
 			commands: [report],
 		});
-		const app = new Crust("cli").extend(reporter as never);
-		await expect(app.run([])).rejects.toThrow(
-			'Extension "reporter" command "report" uses Context "config" which is not provided on the "cli" command path',
+		expect(() => new Crust("cli").extend(reporter as never)).toThrow(
+			'Extension "reporter" command "report" uses Context "config" which is not provided on the root command path',
 		);
 	});
 
