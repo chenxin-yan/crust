@@ -1,0 +1,34 @@
+---
+title: Runtime support
+description: Use Crust libraries with Bun, Node.js, or Deno.
+---
+
+## Supported runtimes
+
+Crust is Bun-first tooling with runtime-portable libraries. `@crustjs/core`, `style`, `prompts`, `progress`, `store`, `skills`, `man`, `extensions`, and `testing` have first-class support for Bun 1.3.14+, Node.js 22+, and Deno 2.8+ through shared `node:` APIs.
+
+Install packages with the package manager for your runtime:
+
+```sh tab="Bun"
+bun add @crustjs/core
+```
+
+```sh tab="Node.js"
+npm install @crustjs/core
+```
+
+```sh tab="Deno"
+deno add npm:@crustjs/core
+```
+
+The `crust` build CLI remains Bun tooling, but its npm distribution ships as standalone executables with Bun embedded. You do not need a separate Bun installation to run the packaged CLI.
+
+## Deno permissions
+
+Deno applies its permission sandbox to library code. Grant only the capabilities your CLI uses:
+
+- subprocesses require `--allow-run` (prefer a scoped value such as `--allow-run=git`)
+- reading and writing files require `--allow-read` and `--allow-write` (`-R` and `-W`)
+- environment-based terminal detection such as `NO_COLOR` requires `--allow-env` (`-E`)
+
+For local development, `deno run -A` is convenient. Use scoped permission flags in production so the CLI receives only the access it needs.

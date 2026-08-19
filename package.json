@@ -15,6 +15,7 @@
 		"check:fix": "turbo run build --filter='./packages/*' && oxlint --fix && oxfmt",
 		"check:types": "turbo run check:types",
 		"test": "turbo run test --filter='./packages/*'",
+		"test:deno": "bun run build:pkgs && deno test --no-check --config runtime-tests/deno/deno.json --allow-read --allow-env --allow-write --allow-run runtime-tests/deno/smoke.ts",
 		"changeset": "changeset",
 		"packages:version": "changeset version && bun install",
 		"packages:publish": "bun ./scripts/publish-packages.mjs"
