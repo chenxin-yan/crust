@@ -13,7 +13,13 @@ type NarrowAliases<A extends readonly string[]> = string extends A[number] ? nev
 
 type AliasShapeError<Name extends string, Alias extends string> = Alias extends ""
 	? `Subcommand "${Name}" has an invalid alias: must be a non-empty string`
-	: Alias extends `${string} ${string}` | `${string}\t${string}`
+	: Alias extends
+				| `${string} ${string}`
+				| `${string}\t${string}`
+				| `${string}\n${string}`
+				| `${string}\r${string}`
+				| `${string}\v${string}`
+				| `${string}\f${string}`
 		? `Subcommand "${Name}" alias "${Alias}" must not contain whitespace`
 		: Alias extends `-${string}`
 			? `Subcommand "${Name}" alias "${Alias}" must not start with "-" (reserved for flags)`

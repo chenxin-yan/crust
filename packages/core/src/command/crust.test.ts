@@ -682,6 +682,21 @@ describe("Crust .extend()", () => {
 });
 
 describe("Extension application at prepare time", () => {
+	it("rejects an Extension flag colliding with its own provided Context's flag at compile time", () => {
+		const modeContext = defineContext(
+			"mode-owner",
+			{ flags: [{ name: "mode", type: "number" }] },
+			() => ({}),
+		);
+		expect(() =>
+			defineExtension(defineExtensionId("self-collider"), {
+				provides: [modeContext()],
+				// @ts-expect-error -- declared flag "mode" collides with the provided Context's owned flag (FIX_ALIAS_COLLISION)
+				flags: [{ name: "mode", type: "string" }],
+			}),
+		).not.toThrow();
+	});
+
 	it("rejects an Extension flag colliding with an application flag at compile time", () => {
 		const themer = defineExtension(defineExtensionId("themer"), {
 			flags: [{ name: "mode", type: "boolean" }],

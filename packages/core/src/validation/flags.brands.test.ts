@@ -260,6 +260,21 @@ describe("ValidateNamedFlagDefs", () => {
 		expect(true).toBe(true);
 	});
 
+	it("brands Context-owned flag collisions inside one .provide() batch", () => {
+		type First = { readonly _ownedFlags?: { token: { type: "string"; required: true } } };
+		type Second = { readonly _ownedFlags?: { auth: { type: "string"; aliases: ["token"] } } };
+		type Batch = ProvideChecks<never, readonly [First, Second]>;
+		type _first = Expect<Equal<Extract<keyof Batch[0], "FIX_ALIAS_COLLISION">, never>>;
+		type _second = Expect<
+			Equal<
+				Batch[1]["FIX_ALIAS_COLLISION"],
+				'Flag spelling "token" collides with an existing flag'
+			>
+		>;
+
+		expect(true).toBe(true);
+	});
+
 	it("brands Extension flag spellings colliding with existing or earlier-Extension flags", () => {
 		type Ext<Defs extends readonly NamedFlagDef[], Provides extends readonly unknown[] = []> = {
 			readonly _flagDefs?: Defs;

@@ -71,6 +71,8 @@ describe("compile-time command validation", () => {
 		type Dash = ValidateCommandConfig<"issue", { aliases: readonly ["-i"] }>;
 		type Space = ValidateCommandConfig<"issue", { aliases: readonly ["my issue"] }>;
 		type Tab = ValidateCommandConfig<"issue", { aliases: readonly ["my\tissue"] }>;
+		type Newline = ValidateCommandConfig<"issue", { aliases: readonly ["my\nissue"] }>;
+		type Carriage = ValidateCommandConfig<"issue", { aliases: readonly ["my\rissue"] }>;
 		type OwnName = ValidateCommandConfig<"issue", { aliases: readonly ["issue"] }>;
 
 		type _empty = Expect<
@@ -95,6 +97,18 @@ describe("compile-time command validation", () => {
 			Equal<
 				Tab["FIX_ALIAS_SHAPE"],
 				'Subcommand "issue" alias "my\tissue" must not contain whitespace'
+			>
+		>;
+		type _newline = Expect<
+			Equal<
+				Newline["FIX_ALIAS_SHAPE"],
+				'Subcommand "issue" alias "my\nissue" must not contain whitespace'
+			>
+		>;
+		type _carriage = Expect<
+			Equal<
+				Carriage["FIX_ALIAS_SHAPE"],
+				'Subcommand "issue" alias "my\rissue" must not contain whitespace'
 			>
 		>;
 		type _ownName = Expect<

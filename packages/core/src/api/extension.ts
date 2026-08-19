@@ -11,7 +11,7 @@ import type {
 	NamedFlagsRecord,
 } from "../types.ts";
 import type { DeclaredDepsOf } from "../validation/contexts.brands.ts";
-import type { ValidateNamedFlagDefs } from "../validation/flags.brands.ts";
+import type { ProvidedContextSpellings, ValidateNamedFlagDefs } from "../validation/flags.brands.ts";
 import type {
 	AnyContextFactory,
 	Awaitable,
@@ -236,8 +236,14 @@ export interface ExtensionConfig<
 	readonly hooks?: ExtensionHooks<Defs, ContextDependencies<Uses>>;
 }
 
-type ValidateExtensionConfig<Defs extends readonly NamedExtensionFlagDef[]> = {
-	readonly flags?: ValidateNamedFlagDefs<Defs>;
+type ValidateExtensionConfig<
+	Defs extends readonly NamedExtensionFlagDef[],
+	Provides extends readonly ContextInstance[],
+> = {
+	// Provided Context-owned spellings count as existing: a declared flag
+	// colliding with the same Extension's provided flag would silently retype
+	// the Context's setup flags at parse time.
+	readonly flags?: ValidateNamedFlagDefs<Defs, ProvidedContextSpellings<Provides>>;
 };
 
 export interface Extension<
@@ -278,7 +284,8 @@ export function defineExtension<
 	const Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
 >(
 	id: ExtensionId,
-	config: ExtensionConfig<Defs, Uses, Provides, Commands> & ValidateExtensionConfig<Defs> = {},
+	config: ExtensionConfig<Defs, Uses, Provides, Commands> &
+		ValidateExtensionConfig<Defs, Provides> = {},
 ): Extension<
 	ContextDependencies<Uses> &
 		ContextsDependencies<Provides> &
