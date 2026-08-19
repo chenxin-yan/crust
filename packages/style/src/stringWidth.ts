@@ -56,7 +56,10 @@ export function stringWidth(input: string): number {
 	).Bun;
 
 	// Native fast paths are reserved for hand-rolled fallbacks on render-hot paths.
-	// The globalThis cast avoids a ReferenceError off-Bun and avoids the direct
-	// Bun-global member access that scripts/check-portable-runtime.mjs rejects.
+	// The globalThis cast avoids a ReferenceError on runtimes without the Bun
+	// global (Node, Deno) and keeps Bun types out of the portable package.
+	// If a native split ever needs real tree-shaking, use package.json export
+	// conditions ("bun" vs "default"), not runtime guards — guards always ship
+	// the fallback in the bundle.
 	return bun?.stringWidth(input, { countAnsiEscapeCodes: false }) ?? stringWidthJs(input);
 }
