@@ -69,9 +69,11 @@ function parseRgb(input: ColorInput): readonly [number, number, number] {
 			) as unknown as readonly [number, number, number];
 		}
 
-		const rgb = /^rgb\(\s*(\d{1,3})\s*(?:,\s*|\s+)(\d{1,3})\s*(?:,\s*|\s+)(\d{1,3})\s*\)$/i.exec(
-			value,
-		);
+		// Comma form and space form are matched separately so mixed separators
+		// like `rgb(1, 2 3)` stay invalid.
+		const rgb =
+			/^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/.exec(value) ??
+			/^rgb\(\s*(\d{1,3})\s+(\d{1,3})\s+(\d{1,3})\s*\)$/.exec(value);
 		if (rgb) {
 			const channels = rgb.slice(1).map(Number);
 			if (channels.every((channel) => channel <= 255))
@@ -82,11 +84,6 @@ function parseRgb(input: ColorInput): readonly [number, number, number] {
 }
 
 function rgbToAnsi256(r: number, g: number, b: number): number {
-	if (r === g && g === b) {
-		if (r < 8) return 16;
-		if (r > 248) return 231;
-		return Math.round((r - 8) / 10) + 232;
-	}
 	const levels = [0, 95, 135, 175, 215, 255];
 	const nearest = (channel: number) =>
 		levels.reduce(
@@ -94,7 +91,17 @@ function rgbToAnsi256(r: number, g: number, b: number): number {
 				Math.abs(value - channel) < Math.abs(levels[best]! - channel) ? index : best,
 			0,
 		);
-	return 16 + 36 * nearest(r) + 6 * nearest(g) + nearest(b);
+	const [ir, ig, ib] = [nearest(r), nearest(g), nearest(b)];
+	// Grayscale ramp candidate: indexes 232–255 cover 8–238 in steps of 10.
+	// Clamping keeps light grays in range; comparing against the cube keeps
+	// near-grays like [120, 121, 122] on the ramp instead of a distant cube entry.
+	const grayIndex = Math.min(23, Math.max(0, Math.round(((r + g + b) / 3 - 8) / 10)));
+	const gray = 8 + grayIndex * 10;
+	const distance = (cr: number, cg: number, cb: number) =>
+		(r - cr) ** 2 + (g - cg) ** 2 + (b - cb) ** 2;
+	return distance(gray, gray, gray) < distance(levels[ir]!, levels[ig]!, levels[ib]!)
+		? 232 + grayIndex
+		: 16 + 36 * ir + 6 * ig + ib;
 }
 
 /**

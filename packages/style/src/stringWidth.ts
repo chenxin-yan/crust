@@ -2,7 +2,10 @@ import { stripVTControlCharacters } from "node:util";
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 const zeroWidth = /[\p{Cc}\p{Cf}\p{Mn}\p{Me}]/u;
-const emoji = /\p{Extended_Pictographic}/u;
+// Wide iff rendered with emoji presentation: default-emoji code points, or
+// any Emoji code point forced emoji by VS16 (covers keycaps like "1\uFE0F\u20E3").
+// Text-presentation pictographs (©, ☺) stay narrow.
+const emoji = /\p{Emoji_Presentation}|\p{Emoji}\uFE0F/u;
 
 function isFullWidth(code: number): boolean {
 	return (
@@ -17,6 +20,11 @@ function isFullWidth(code: number): boolean {
 			(code >= 0xfe30 && code <= 0xfe6f) ||
 			(code >= 0xff00 && code <= 0xff60) ||
 			(code >= 0xffe0 && code <= 0xffe6) ||
+			// ponytail: coarse block spans (Tangut…Kana Extended, Enclosed Ideographic
+			// Supplement) that treat interior unassigned gaps as wide, like the CJK
+			// ranges above; generate from Unicode EastAsianWidth data if it matters.
+			(code >= 0x16fe0 && code <= 0x1b2fb) ||
+			(code >= 0x1f200 && code <= 0x1f2ff) ||
 			(code >= 0x20000 && code <= 0x3fffd))
 	);
 }
@@ -29,10 +37,10 @@ export function stringWidth(input: string): number {
 			width += 2;
 			continue;
 		}
-		for (const character of segment) {
-			const code = character.codePointAt(0)!;
-			if (!zeroWidth.test(character)) width += isFullWidth(code) ? 2 : 1;
-		}
+		// Width of the grapheme's base code point only — spacing combining marks
+		// (Mc) and conjoined jamo grouped into the cluster don't add columns.
+		const code = segment.codePointAt(0)!;
+		if (!zeroWidth.test(String.fromCodePoint(code))) width += isFullWidth(code) ? 2 : 1;
 	}
 	return width;
 }
