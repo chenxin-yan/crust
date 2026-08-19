@@ -1130,9 +1130,10 @@ describe("parseArgs — choices enforcement", () => {
 // ───────────────────────────────────────────────────────────────────────────
 // Default coercion symmetry (PR #129 review follow-up)
 //
-// Argv-supplied values flow through choices → parse | coerce. The default
-// branch must mirror that so omitted-flag behavior is not silently weaker
-// (path defaults left relative, defaults outside `choices` accepted, etc.).
+// Argv-supplied values flow through parse | coerce. The default branch must
+// mirror the coercion so omitted-flag behavior is not silently weaker (path
+// defaults left relative, etc.). Default-vs-choices is compile-time only
+// (FIX_DEFAULT_CHOICE).
 // ───────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs \u2014 default coercion symmetry", () => {
@@ -1178,25 +1179,5 @@ describe("parseArgs \u2014 default coercion symmetry", () => {
 		});
 		const result = parseArgs(cmd, []);
 		expect(result.flags.mode).toBe("a");
-	});
-
-	it("rejects a flag default outside the choices list when argv is absent", () => {
-		// Typed literals are branded (FIX_DEFAULT_CHOICE); this covers dynamically
-		// assembled definitions (hand-written ContextInstances, widened defs).
-		const cmd = makeNode({
-			meta: "test",
-			flags: {
-				mode: { type: "string", choices: ["a", "b"], default: "z" },
-			},
-		});
-		expect(() => parseArgs(cmd, [])).toThrow(/Invalid value "z" for --mode/);
-	});
-
-	it("rejects an arg default outside the choices list when positional is absent", () => {
-		const cmd = makeNode({
-			meta: "test",
-			args: [{ name: "mode", type: "string", choices: ["a", "b"], default: "z" }],
-		});
-		expect(() => parseArgs(cmd, [])).toThrow(/Invalid value "z"/);
 	});
 });

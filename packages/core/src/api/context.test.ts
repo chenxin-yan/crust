@@ -694,36 +694,6 @@ describe("Context dependency runtime boundaries", () => {
 		await expect(app.run([])).resolves.toBeUndefined();
 	});
 
-	it("fails loud when an Extension-contributed command pulls an unprovided declared dependency", async () => {
-		const config = defineContext("config", () => "config");
-		const errors: unknown[] = [];
-		const report = defineCommand("report", { uses: [config] }, (builder) =>
-			builder.action(async ({ ctx }) => void (await (ctx as { config: Promise<string> }).config)),
-		);
-		const reporter = defineExtension(defineExtensionId("reporter"), {
-			commands: [report],
-			hooks: {
-				onError(error) {
-					errors.push(error);
-					return true;
-				},
-			},
-		});
-		// The ValidateDeclaredDeps brand rejects this at the .extend() call site;
-		// the cast exercises the dynamically assembled path, where the declared
-		// `uses` seed the action bag so access fails loud instead of reading undefined.
-		const app = new Crust("cli").extend(reporter as never);
-		const originalExitCode = process.exitCode;
-		try {
-			await app.execute({ argv: ["report"] });
-		} finally {
-			process.exitCode = originalExitCode;
-		}
-		expect(errors[0]).toMatchObject({
-			details: { name: "config", reason: "missing-context" },
-		});
-	});
-
 	it("accepts an Extension dependency provided by an earlier .extend() call", async () => {
 		const logger = defineContext("logger", () => "logger");
 		const providerExtension = defineExtension(defineExtensionId("provider"), {

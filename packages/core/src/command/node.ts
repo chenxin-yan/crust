@@ -1,4 +1,4 @@
-import type { AnyContextFactory, ContextInstance } from "../api/context.ts";
+import type { ContextInstance } from "../api/context.ts";
 import type { Extension } from "../api/extension.ts";
 import type { FlagSpelling } from "../parsing/spellings.ts";
 import type { ArgsDef, CommandMeta, FlagsDef } from "../types.ts";
@@ -32,13 +32,6 @@ export interface CommandNode {
 	subCommands: Record<string, CommandNode>;
 	/** Context instances available to this command in provide order (construction order is pull-driven). */
 	contexts: ContextInstance[];
-	/**
-	 * Dependencies declared by the `defineCommand()` definition this node was
-	 * materialized from. Seeds the action bag so an unprovided declared
-	 * dependency fails loud (`missing-context`) on access instead of reading
-	 * as `undefined` on dynamically assembled (cast/widened) paths.
-	 */
-	uses: readonly AnyContextFactory[];
 	/** Extensions registered via `.extend()` (root builder only) */
 	extensions: Extension[];
 	/** The Command Action */
@@ -66,7 +59,6 @@ export function createCommandNode(name: string): CommandNode {
 		args: undefined,
 		subCommands: {},
 		contexts: [],
-		uses: [],
 		extensions: [],
 		run: undefined,
 	};

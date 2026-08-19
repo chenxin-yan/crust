@@ -61,21 +61,12 @@ function injectExtensionFlag(
 	name: string,
 	def: FlagDef,
 	recursive: boolean,
-	extensionName: string,
 ): void {
-	if (name === "__proto__") {
-		throw new CrustError("DEFINITION", 'Flag spelling "__proto__" is reserved', {
-			subject: "extension",
-			name: extensionName,
-			reason: "reserved-spelling",
-		});
-	}
-	// Reject above before assigning: `__proto__` would mutate this plain record's prototype.
 	node.effectiveFlags[name] = def;
 	addFlagSpellingEntries(node.flagSpellings, name, def);
 	if (!recursive) return;
 	for (const sub of Object.values(node.subCommands)) {
-		injectExtensionFlag(sub, name, def, true, extensionName);
+		injectExtensionFlag(sub, name, def, true);
 	}
 }
 
@@ -95,7 +86,7 @@ function applyExtensionCommands(
 function applyExtensionFlags(root: CommandNode, extension: Extension): void {
 	for (const [name, defWithScope] of Object.entries(extension.flags ?? {})) {
 		const { recursive = true, ...def } = defWithScope;
-		injectExtensionFlag(root, name, def as FlagDef, recursive, extension.id);
+		injectExtensionFlag(root, name, def as FlagDef, recursive);
 	}
 }
 
@@ -131,7 +122,6 @@ export function cloneCommandNode(node: CommandNode): CommandNode {
 		args: node.args ? node.args.map((def) => ({ ...def })) : undefined,
 		subCommands,
 		contexts: [...node.contexts],
-		uses: [...node.uses],
 		extensions: [...node.extensions],
 		run: node.run,
 	};
@@ -179,15 +169,10 @@ function validateSection(section: unknown, owner: SectionOwner): CommandSection 
 		only?: unknown;
 		except?: unknown;
 	};
-	if (
-		!isText(title) ||
-		/[\r\n]/.test(title) ||
-		!isText(body) ||
-		(only !== undefined && except !== undefined)
-	) {
+	if (!isText(title) || /[\r\n]/.test(title) || !isText(body)) {
 		throw invalidSections(owner);
 	}
-	// Cast: the only/except mutual-exclusion check above enforces SectionAudience.
+	// Cast: only/except mutual exclusion is compile-time only (SectionAudience union).
 	return Object.freeze({
 		title,
 		body,
@@ -334,7 +319,7 @@ async function dispatch(
 		const context = {
 			args: validated.args,
 			flags: validated.flags,
-			ctx: resolver.bag([...resolvedNode.uses, ...resolvedNode.contexts]),
+			ctx: resolver.bag(resolvedNode.contexts),
 			rawArgs: parsed.rawArgs,
 			command: extensionContext.command,
 			rootCommand: rootSnapshot,

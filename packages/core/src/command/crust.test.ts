@@ -7,7 +7,7 @@ import type { StandardSchema } from "@crustjs/utils/schema";
 import { getAmbientTerminalIO } from "@crustjs/utils/terminal";
 
 import { defineContext } from "../api/context.ts";
-import { defineExtension, type Extension } from "../api/extension.ts";
+import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
@@ -726,20 +726,6 @@ describe("Extension application at prepare time", () => {
 		expect(runs).toBe(2);
 		expect(stderr.join("\n")).toContain("old");
 		expect(stderr.join("\n")).toContain("-o");
-	});
-
-	it('rejects a dynamic Extension flag named "__proto__" before record mutation', async () => {
-		const flags = Object.create(null) as Record<string, { type: "boolean" }>;
-		flags.__proto__ = { type: "boolean" };
-		const extension = {
-			id: defineExtensionId("dynamic-reserved"),
-			flags,
-		} as Extension;
-
-		await expect(new Crust("cli").extend(extension).run([])).rejects.toMatchObject({
-			code: "DEFINITION",
-			details: { subject: "extension", reason: "reserved-spelling" },
-		});
 	});
 
 	it("non-recursive Extension flags stay on the root", async () => {

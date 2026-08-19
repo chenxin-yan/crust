@@ -250,7 +250,7 @@ const app = new Crust("my-cli").extend(help(), version("1.2.3"));
 
 Added definitions become ordinary command nodes before root Extensions prepare the application, so root Extensions apply to them. Extension-contributed definitions are materialized when the application prepares.
 
-An Extension's `provides` instances are installed on the root immediately and Extension commands and flags are materialized during preparation. Type-expressible Extension definitions are compile-time checked; preparation retains guards for dynamic recipe behavior and reserved `__proto__` flag injection.
+An Extension's `provides` instances are installed on the root immediately and Extension commands and flags are materialized during preparation. Type-expressible Extension definitions are compile-time checked; preparation retains guards only for dynamic recipe behavior.
 
 See [Extensions](/docs/guide/extensions) for authoring custom Extensions.
 

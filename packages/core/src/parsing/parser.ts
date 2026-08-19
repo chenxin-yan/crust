@@ -134,22 +134,12 @@ function resolveDefault(
 	def: {
 		type: ValueType;
 		default?: unknown;
-		choices?: readonly string[];
 		parse?: (raw: string) => unknown;
 	},
 	label: string,
 ): unknown {
-	const { default: defaultValue, choices, parse } = def;
+	const { default: defaultValue, parse } = def;
 	if (defaultValue === undefined) return undefined;
-
-	// Defaults bypass argv, so this is the only place a default meets its
-	// `choices` contract. Typed literals are branded at compile time
-	// (FIX_DEFAULT_CHOICE); this guards dynamically assembled definitions.
-	if (choices) {
-		for (const v of Array.isArray(defaultValue) ? defaultValue : [defaultValue]) {
-			validateChoice(String(v), choices, label);
-		}
-	}
 
 	if (parse) {
 		if (Array.isArray(defaultValue)) {
