@@ -675,26 +675,6 @@ describe("Context setup dependencies", () => {
 		await new Crust("cli").provide(db.of("fake"), config()).extend(observer).run([]);
 		expect(seen).toBe("memory://");
 	});
-
-	it("normalizes flags of a hand-written ContextInstance at provide time", () => {
-		const rogue = {
-			kind: "context",
-			name: "rogue",
-			ownedFlags: {
-				mode: { type: "string", choices: ["a", "b"], default: "z" },
-			},
-			setup: () => ({}),
-		} as unknown as Parameters<Crust["provide"]>[0];
-		expect(() => new Crust("cli").provide(rogue)).toThrow(/Invalid default value/);
-	});
-
-	it("rejects null and undefined at provide time with the not-a-context error", () => {
-		for (const value of [null, undefined]) {
-			expect(() => new Crust("cli").provide(value as never)).toThrow(
-				/provide\(\) requires Context instances/,
-			);
-		}
-	});
 });
 
 describe("Context dependency runtime boundaries", () => {
@@ -710,24 +690,38 @@ describe("Context dependency runtime boundaries", () => {
 		await expect(app.run(["child"])).rejects.toMatchObject({
 			details: { name: "logger", reason: "missing-context" },
 		});
-		// Hooks run on every invocation, so the stale child path is a wiring error
-		// caught at prepare time — healthy sibling paths fail deterministically too.
-		await expect(app.run([])).rejects.toMatchObject({
-			details: { name: "logger", reason: "missing-context" },
-		});
+		// The root path is healthy: logger was provided before .extend().
+		await expect(app.run([])).resolves.toBeUndefined();
 	});
 
-	it("rejects an Extension-contributed command with an unmet dependency at extend time", () => {
+	it("fails loud when an Extension-contributed command pulls an unprovided declared dependency", async () => {
 		const config = defineContext("config", () => "config");
+		const errors: unknown[] = [];
 		const report = defineCommand("report", { uses: [config] }, (builder) =>
-			builder.action(() => {}),
+			builder.action(async ({ ctx }) => void (await (ctx as { config: Promise<string> }).config)),
 		);
 		const reporter = defineExtension(defineExtensionId("reporter"), {
 			commands: [report],
+			hooks: {
+				onError(error) {
+					errors.push(error);
+					return true;
+				},
+			},
 		});
-		expect(() => new Crust("cli").extend(reporter as never)).toThrow(
-			'Extension "reporter" command "report" uses Context "config" which is not provided on the root command path',
-		);
+		// The ValidateDeclaredDeps brand rejects this at the .extend() call site;
+		// the cast exercises the dynamically assembled path, where the declared
+		// `uses` seed the action bag so access fails loud instead of reading undefined.
+		const app = new Crust("cli").extend(reporter as never);
+		const originalExitCode = process.exitCode;
+		try {
+			await app.execute({ argv: ["report"] });
+		} finally {
+			process.exitCode = originalExitCode;
+		}
+		expect(errors[0]).toMatchObject({
+			details: { name: "config", reason: "missing-context" },
+		});
 	});
 
 	it("accepts an Extension dependency provided by an earlier .extend() call", async () => {

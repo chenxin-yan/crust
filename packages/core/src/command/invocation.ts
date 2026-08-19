@@ -131,6 +131,7 @@ export function cloneCommandNode(node: CommandNode): CommandNode {
 		args: node.args ? node.args.map((def) => ({ ...def })) : undefined,
 		subCommands,
 		contexts: [...node.contexts],
+		uses: [...node.uses],
 		extensions: [...node.extensions],
 		run: node.run,
 	};
@@ -333,7 +334,7 @@ async function dispatch(
 		const context = {
 			args: validated.args,
 			flags: validated.flags,
-			ctx: resolver.bag(resolvedNode.contexts),
+			ctx: resolver.bag([...resolvedNode.uses, ...resolvedNode.contexts]),
 			rawArgs: parsed.rawArgs,
 			command: extensionContext.command,
 			rootCommand: rootSnapshot,

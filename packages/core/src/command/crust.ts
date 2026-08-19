@@ -262,6 +262,7 @@ function materializeCommandDefinition(
 
 	const childNode = cloneCommandNode(configured._node);
 	childNode.meta = { name, ...internal.meta };
+	childNode.uses = internal.uses;
 	return childNode;
 }
 

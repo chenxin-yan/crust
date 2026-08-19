@@ -18,7 +18,7 @@ All consumers receive the same `ctx` shape: a readonly bag whose keys are Contex
 - A command definition's action receives its declared dependencies plus Contexts provided on its own builder.
 - Extension hooks receive exactly the Extension's declared dependencies in their type; at runtime all Extensions share one invocation bag, so an undeclared name another Extension declared is reachable but untyped.
 - Root actions receive the Contexts accumulated by `.provide()` and Extension `provides`.
-- `.provide()`, `.add()`, and `.extend()` validate dependency closure at the type level and mirror the check at definition/build time.
+- `.provide()`, `.add()`, and `.extend()` validate dependency closure at the type level only. On dynamically assembled (cast/widened) paths, declared dependencies still seed the lazy bag, so an unprovided dependency fails loud with `missing-context` on access.
 - Dependencies in one `.provide()` or `.extend()` batch are order-independent. Across fluent calls, providers precede consumers so each composition call can be checked locally.
 - `factory.of(value)` carries no dependencies, allowing a double to replace a graph node.
 
@@ -26,7 +26,7 @@ The public `ContextResolver` and `ctx.use()` API are removed. The internal resol
 
 ## Consequences
 
-Dependency contracts are visible in declarations and cannot drift: undeclared property access is a type error, while unsatisfied declarations fail at the composition site. The same declaration supports snapshot/build validation for JavaScript and dynamically assembled inputs.
+Dependency contracts are visible in declarations and cannot drift: undeclared property access is a type error, while unsatisfied declarations fail at the composition site for typed callers and at first access (`missing-context`) for dynamically assembled inputs.
 
 Construction remains lazy, but property access has an effect. Destructuring `ctx` reads the selected properties immediately and therefore starts those Contexts; documentation calls this out as “destructure = eager.” Context names that are not identifier-safe use bracket access, for example `await ctx["remote-config"]`.
 

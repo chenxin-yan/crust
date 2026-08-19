@@ -1179,4 +1179,24 @@ describe("parseArgs \u2014 default coercion symmetry", () => {
 		const result = parseArgs(cmd, []);
 		expect(result.flags.mode).toBe("a");
 	});
+
+	it("rejects a flag default outside the choices list when argv is absent", () => {
+		// Typed literals are branded (FIX_DEFAULT_CHOICE); this covers dynamically
+		// assembled definitions (hand-written ContextInstances, widened defs).
+		const cmd = makeNode({
+			meta: "test",
+			flags: {
+				mode: { type: "string", choices: ["a", "b"], default: "z" },
+			},
+		});
+		expect(() => parseArgs(cmd, [])).toThrow(/Invalid value "z" for --mode/);
+	});
+
+	it("rejects an arg default outside the choices list when positional is absent", () => {
+		const cmd = makeNode({
+			meta: "test",
+			args: [{ name: "mode", type: "string", choices: ["a", "b"], default: "z" }],
+		});
+		expect(() => parseArgs(cmd, [])).toThrow(/Invalid value "z"/);
+	});
 });
