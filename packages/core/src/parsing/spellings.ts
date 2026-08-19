@@ -14,6 +14,9 @@ export function addFlagSpellingEntries(
 	canonicalName: string,
 	def: FlagDef,
 ): void {
+	for (const [spelling, entry] of spellings) {
+		if (entry.canonicalName === canonicalName) spellings.delete(spelling);
+	}
 	const entry = {
 		canonicalName,
 		def,

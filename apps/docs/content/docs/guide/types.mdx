@@ -37,7 +37,7 @@ The Command Action receives the return type. A parser must be synchronous: TypeS
 
 Crust is TypeScript-first: command, flag, argument, Context, and Extension definitions are checked at compile time. `FIX_*` brands let the editor point at collisions, invalid alias shapes, asynchronous parsers, duplicate names, and invalid variadic positions. Core does not repeat these definition checks at runtime.
 
-Argv remains untrusted input. Parsing, built-in conversion, required values, choices, and Standard Schema validation still run for every invocation. Context dependencies are dynamic, so missing providers and dependency cycles are also checked at runtime when a Context is pulled.
+Argv remains untrusted input. Parsing, built-in conversion, required values, choices, and Standard Schema validation still run for every invocation. Context dependency declarations are checked statically; lazy bag access retains runtime guards for missing providers on dynamically assembled paths, dependency cycles, and lifecycle misuse.
 
 ## Schema-backed definitions
 

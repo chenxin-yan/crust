@@ -7,7 +7,7 @@ import type { StandardSchema } from "@crustjs/utils/schema";
 import { getAmbientTerminalIO } from "@crustjs/utils/terminal";
 
 import { defineContext } from "../api/context.ts";
-import { defineExtension } from "../api/extension.ts";
+import { defineExtension, type Extension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
@@ -699,6 +699,47 @@ describe("Extension application at prepare time", () => {
 		await app.execute({ argv: ["sub", "--debug"] });
 
 		expect(seen[0]?.debug).toBe(true);
+	});
+
+	it("replaces stale spellings when an Extension overwrites a flag", async () => {
+		let runs = 0;
+		const replacement = defineExtension(defineExtensionId("replacement"), {
+			flags: [{ name: "mode", type: "boolean", short: "n", aliases: ["new"] }],
+		});
+		const app = new Crust("cli")
+			.flags({ name: "mode", type: "boolean", short: "o", aliases: ["old"] })
+			.extend(replacement)
+			.action(() => {
+				runs++;
+			});
+		const stderr: string[] = [];
+		const originalExitCode = process.exitCode;
+		try {
+			await app.execute({ argv: ["--new"], io: { stderr: (text) => stderr.push(text) } });
+			await app.execute({ argv: ["-n"], io: { stderr: (text) => stderr.push(text) } });
+			await app.execute({ argv: ["--old"], io: { stderr: (text) => stderr.push(text) } });
+			await app.execute({ argv: ["-o"], io: { stderr: (text) => stderr.push(text) } });
+		} finally {
+			process.exitCode = originalExitCode;
+		}
+
+		expect(runs).toBe(2);
+		expect(stderr.join("\n")).toContain("old");
+		expect(stderr.join("\n")).toContain("-o");
+	});
+
+	it('rejects a dynamic Extension flag named "__proto__" before record mutation', async () => {
+		const flags = Object.create(null) as Record<string, { type: "boolean" }>;
+		flags.__proto__ = { type: "boolean" };
+		const extension = {
+			id: defineExtensionId("dynamic-reserved"),
+			flags,
+		} as Extension;
+
+		await expect(new Crust("cli").extend(extension).run([])).rejects.toMatchObject({
+			code: "DEFINITION",
+			details: { subject: "extension", reason: "reserved-spelling" },
+		});
 	});
 
 	it("non-recursive Extension flags stay on the root", async () => {

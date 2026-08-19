@@ -28,6 +28,24 @@ describe("command definitions", () => {
 		expect(snapshot.subCommands.compile?.meta.name).toBe("compile");
 	});
 
+	it("rejects a recipe that returns an unrelated builder", () => {
+		const unrelated = defineCommand("bad", () => new Crust("other") as never);
+
+		expect(() => new Crust("cli").add(unrelated)).toThrow(/same command builder/);
+	});
+
+	it("rejects Extensions registered inside command definitions", () => {
+		const nestedExtension = defineCommand(
+			"bad",
+			(command) =>
+				(command as unknown as Crust).extend(defineExtension(defineExtensionId("nested"))) as never,
+		);
+
+		expect(() => new Crust("cli").add(nestedExtension)).toThrow(
+			/Command "bad" cannot register Extensions inside command definitions/,
+		);
+	});
+
 	it("accumulates chained flags and args on the definition builder", async () => {
 		let received:
 			| {

@@ -56,7 +56,7 @@ const app = new Crust("git").provide(logging(), repository()).add(clone);
 const git = new Crust("git").provide(logging()).provide(repository()).add(clone, clone.as("copy"));
 ```
 
-A missing Context is a type error at `.add()` and a definition-time error for dynamic JavaScript inputs.
+A missing declared Context is a type error at `.add()`. Dynamically assembled paths retain the lazy bag's missing-provider guard when invoked.
 
 ## Nested definitions
 

@@ -61,12 +61,21 @@ function injectExtensionFlag(
 	name: string,
 	def: FlagDef,
 	recursive: boolean,
+	extensionName: string,
 ): void {
+	if (name === "__proto__") {
+		throw new CrustError("DEFINITION", 'Flag spelling "__proto__" is reserved', {
+			subject: "extension",
+			name: extensionName,
+			reason: "reserved-spelling",
+		});
+	}
+	// Reject above before assigning: `__proto__` would mutate this plain record's prototype.
 	node.effectiveFlags[name] = def;
 	addFlagSpellingEntries(node.flagSpellings, name, def);
 	if (!recursive) return;
 	for (const sub of Object.values(node.subCommands)) {
-		injectExtensionFlag(sub, name, def, true);
+		injectExtensionFlag(sub, name, def, true, extensionName);
 	}
 }
 
@@ -86,7 +95,7 @@ function applyExtensionCommands(
 function applyExtensionFlags(root: CommandNode, extension: Extension): void {
 	for (const [name, defWithScope] of Object.entries(extension.flags ?? {})) {
 		const { recursive = true, ...def } = defWithScope;
-		injectExtensionFlag(root, name, def as FlagDef, recursive);
+		injectExtensionFlag(root, name, def as FlagDef, recursive, extension.id);
 	}
 }
 

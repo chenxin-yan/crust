@@ -2,4 +2,4 @@
 "@crustjs/core": minor
 ---
 
-Normalize command definitions exactly once at definition or materialization time. Definition errors now surface earlier, snapshots trust successful materialization instead of re-walking the command tree, error messages use the shared normalization rules, and the type-level Context-cycle brand has been removed in favor of runtime enforcement. A flag default outside its `choices` now reports error code `DEFINITION` (was `PARSE`) and throws at definition time.
+Check developer-authored command definitions once at compile time and let snapshots materialize them without re-walking a runtime validation rulebook. Dynamic Context cycles remain runtime-enforced. A literal flag default outside its literal `choices` now fails typechecking with `FIX_DEFAULT_CHOICE`; runtime parsing continues to report invalid argv choices as `PARSE`.

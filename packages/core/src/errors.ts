@@ -30,9 +30,9 @@ export interface ParseErrorDetails {
 	readonly reason?: string;
 }
 
-/** Details for runtime Context lifecycle and documentation definition failures. */
+/** Details for runtime recipe, Extension, Context, and documentation failures. */
 export interface DefinitionErrorDetails {
-	readonly subject?: "arg" | "command" | "context" | "extension" | "flag";
+	readonly subject?: "command" | "context" | "extension";
 	readonly name?: string;
 	readonly reason?: string;
 }
@@ -47,7 +47,7 @@ export interface CrustErrorDetailsMap {
 /**
  * All possible error codes emitted by Crust.
  *
- * - `DEFINITION` — Runtime Context lifecycle/dependency or documentation definition failure
+ * - `DEFINITION` — Runtime recipe, Extension, Context, or documentation definition failure
  * - `VALIDATION` — Missing required arguments or flags
  * - `PARSE` — Argv parsing failures (unknown flags, type coercion)
  * - `COMMAND_NOT_FOUND` — Unrecognised subcommand at the current level
@@ -79,7 +79,7 @@ export type CrustErrorDetails<C extends CrustErrorCode> = CrustErrorDetailsMap[C
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * A typed error thrown by Crust when command definition or argument parsing fails.
+ * A typed error for runtime recipe, Extension, Context, documentation, argv, and validation failures.
  *
  * Every `CrustError` carries a {@link CrustErrorCode} that identifies the specific
  * failure, enabling programmatic error handling without fragile message parsing.

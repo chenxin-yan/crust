@@ -49,7 +49,7 @@ Ordinary command flags are always local; Context-owned flags are the application
 
 Extension commands are `defineCommand()` definitions attached at the root. `new Crust()` creates only the application root; every contributed command is a definition. Their `.action()` callbacks receive the same typed action context as application commands, including `rootCommand` and the lazy Context bag.
 
-Extension contributions are applied in `.extend()` registration order. When Extension commands, flags, or `provides` Contexts collide with earlier application or Extension contributions, the later contribution wins deterministically. `.extend()` has no compile-time collision brand, so namespace Extension-owned names and aliases to avoid accidental overrides.
+Extension contributions are applied in `.extend()` registration order. When canonical command names, flags, or `provides` Contexts collide with earlier application or Extension contributions, the later contribution wins deterministically. During routing, canonical command names beat aliases; among colliding aliases, the first-registered alias wins. `.extend()` has no compile-time collision brand, so namespace Extension-owned names and aliases to avoid accidental overrides.
 
 ## Command sections
 

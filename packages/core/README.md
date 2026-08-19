@@ -10,7 +10,7 @@ bun add @crustjs/core
 
 ## Validation
 
-Crust is TypeScript-first: application definitions are checked at compile time rather than repeated at runtime. Argv input is still parsed and validated at runtime. Missing Context dependencies and dynamic dependency cycles are also reported at runtime when a Context is pulled.
+Crust is TypeScript-first: type-expressible application definitions, including declared Context dependencies, are checked at compile time rather than repeated at runtime. Argv input, dynamic command-recipe and Extension injection behavior, documentation sections, and Context lazy-bag failures remain runtime-validated where TypeScript cannot express the rule.
 
 ## Documentation
 

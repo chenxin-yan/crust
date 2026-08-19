@@ -222,11 +222,21 @@ export interface CommandDefinition<
 function materializeCommandDefinition(
 	definition: CommandDefinition,
 	parent: CommandNode,
+	extensionName?: string,
 ): CommandNode {
 	const internal = definition[commandDefinitionInternal];
 	const name = definition.name;
+	const owner = extensionName
+		? `Extension "${extensionName}" command "${name}"`
+		: `Command "${name}"`;
+	const definitionDetails = (reason: string) => ({
+		subject: extensionName ? ("extension" as const) : ("command" as const),
+		name: extensionName ?? name,
+		reason,
+	});
 
 	const child = new Crust(name);
+	(child as { _ancestorOwnedFlags: FlagsDef })._ancestorOwnedFlags = parent.ownedFlags;
 	child._node.ownedFlags = { ...parent.ownedFlags };
 	child._node.effectiveFlags = { ...parent.ownedFlags };
 	child._node.flagSpellings = cloneFlagSpellings(parent.flagSpellings, child._node.effectiveFlags);
@@ -235,6 +245,21 @@ function materializeCommandDefinition(
 	const configured = internal.recipe(
 		child as unknown as AnyCommandDefinitionBuilder,
 	) as unknown as Crust;
+	if (configured?._ancestorOwnedFlags !== parent.ownedFlags) {
+		throw new CrustError(
+			"DEFINITION",
+			`${owner} definition must return the same command builder it received`,
+			definitionDetails("foreign-command-builder"),
+		);
+	}
+	if (configured._node.extensions.length > 0) {
+		throw new CrustError(
+			"DEFINITION",
+			`${owner} cannot register Extensions inside command definitions`,
+			definitionDetails("nested-command-extension"),
+		);
+	}
+
 	const childNode = cloneCommandNode(configured._node);
 	childNode.meta = { name, ...internal.meta };
 	return childNode;
@@ -583,6 +608,9 @@ export class Crust<
 	/** @internal */
 	readonly _node: CommandNode;
 
+	/** @internal — Runtime identity anchor for the ancestor-owned flag carrier */
+	readonly _ancestorOwnedFlags: FlagsDef;
+
 	/**
 	 * Create a new root command builder.
 	 *
@@ -596,6 +624,7 @@ export class Crust<
 		if (meta.sections !== undefined) {
 			this._node.meta.sections = meta.sections.map((section) => ({ ...section }));
 		}
+		this._ancestorOwnedFlags = {};
 	}
 
 	/**
@@ -619,6 +648,7 @@ export class Crust<
 			...nodeOverrides,
 		};
 		(cloned as { _node: CommandNode })._node = newNode;
+		(cloned as { _ancestorOwnedFlags: FlagsDef })._ancestorOwnedFlags = this._ancestorOwnedFlags;
 		return cloned;
 	}
 
