@@ -7,7 +7,7 @@ import {
 	defineExtension,
 	defineExtensionId,
 	defineFlag,
-	type ContextResolver,
+	type ContextBag,
 } from "../index.ts";
 
 type Expect<T extends true> = T;
@@ -28,13 +28,13 @@ describe("public beta API", () => {
 		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
 			verbose: flags.verbose === true,
 		}));
-		const deploy = defineCommand("deploy", (cmd) =>
+		const deploy = defineCommand("deploy", { uses: [logging, db] }, (cmd) =>
 			cmd
 				.args({ name: "target", type: "string", required: true })
 				.flags({ name: "env", type: "string", default: "prod" })
 				.action(async ({ args, flags, ctx }) => {
-					const log = await ctx.use(logging);
-					const database = await ctx.use(db);
+					const log = await ctx.logging;
+					const database = await ctx.db;
 					type _target = Expect<Equal<typeof args.target, string>>;
 					type _env = Expect<Equal<typeof flags.env, string>>;
 					type _verbose = Expect<Equal<typeof log.verbose, boolean>>;
@@ -57,11 +57,11 @@ describe("public beta API", () => {
 	it("adds one definition twice via .as()", async () => {
 		const seen: string[] = [];
 		const auth = defineContext("auth", () => ({ user: "chenxin" }));
-		const deploy = defineCommand("deploy", (command) =>
+		const deploy = defineCommand("deploy", { uses: [auth] }, (command) =>
 			command
 				.args({ name: "target", type: "string", required: true })
 				.action(async ({ args, ctx }) => {
-					const identity = await ctx.use(auth);
+					const identity = await ctx.auth;
 					type _target = Expect<Equal<typeof args.target, string>>;
 					type _user = Expect<Equal<typeof identity.user, string>>;
 					seen.push(`${identity.user}:${args.target}`);
@@ -87,7 +87,7 @@ describe("public beta API", () => {
 		});
 
 		const app = new Crust("my-cli").extend(version).action(({ flags, ctx }) => {
-			type _ctx = Expect<Equal<typeof ctx, ContextResolver>>;
+			type _ctx = Expect<Equal<typeof ctx, ContextBag>>;
 			expect((flags as Record<string, unknown>).version).toBe(true);
 		});
 

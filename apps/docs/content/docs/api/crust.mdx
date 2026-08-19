@@ -23,7 +23,7 @@ import {
 
 ## Reusable command definitions
 
-Command actions and Context setup pull provided Contexts with `await ctx.use(factory)`. `use()` infers the value from the factory and reports a missing provider when called.
+Every sealed unit declares consumed Context factories in `uses`. Actions and setup receive a typed lazy bag and await values with `await ctx.<name>`; missing wiring is reported at `.provide()`, `.add()`, or `.extend()`.
 
 ### `CommandDefinitionBuilder`
 
@@ -40,7 +40,7 @@ interface CommandDefinitionBuilder<
   provide(...instances: readonly ContextInstance[]): CommandDefinitionBuilder;
   add(...definitions: readonly CommandDefinition[]): CommandDefinitionBuilder;
   action(
-    action: (ctx: CrustCommandContext<A, Flags>) => void | Promise<void>,
+    action: (ctx: CrustCommandContext<A, Flags, Ctx>) => void | Promise<void>,
   ): CommandDefinitionBuilder;
 }
 ```
@@ -75,7 +75,9 @@ defineCommand<const Name extends string>(
   recipe: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
 ): CommandDefinition<Name>;
 
-interface CommandConfig extends Omit<CommandMeta, "name"> {}
+interface CommandConfig extends Omit<CommandMeta, "name"> {
+  readonly uses?: readonly AnyContextFactory[];
+}
 
 defineCommand<const Name extends string, const C extends CommandConfig>(
   name: Name,
@@ -97,12 +99,12 @@ const auth = defineContext("auth", () => ({ user: "Ada" }));
 
 const deploy = defineCommand(
   "deploy",
-  { description: "Deploy an application", aliases: ["ship"] },
+  { description: "Deploy an application", aliases: ["ship"], uses: [logging, auth] },
   (command) =>
     command
       .args({ name: "target", type: "string", required: true })
       .action(async ({ args, ctx }) => {
-        (await ctx.use(logging)).debug(`${(await ctx.use(auth)).user}:${args.target}`);
+        (await ctx.logging).debug(`${(await ctx.auth).user}:${args.target}`);
       }),
 );
 ```
@@ -199,7 +201,7 @@ const app = new Crust("serve").flags({
 
 ```ts
 provide<const Cs extends readonly ContextInstance[]>(
-  ...instances: ProvideChecks<Sp, Cs> & ValidateContextNames<Ctx, Cs>,
+  ...instances: ProvideChecks<Sp, Cs> & ValidateContextNames<Ctx, Cs> & ValidateContextDeps<Ctx, Cs>,
 ): Crust<
   MergeFlags<Flags, ContextsOwnedFlags<Cs>>,
   A,
@@ -209,7 +211,7 @@ provide<const Cs extends readonly ContextInstance[]>(
 >
 ```
 
-Attaches Contexts produced by invoking `defineContext()` factories. Contexts are inherited by descendants and constructed lazily when an action, Extension, or another Context's setup calls `ctx.use(factory)`. The return type merges every instance's owned `flags` into the builder's accumulated flag type.
+Attaches Contexts produced by invoking `defineContext()` factories. Contexts are inherited by descendants and constructed lazily when their bag property is accessed. The return type merges every instance's owned `flags` into the builder's accumulated flag type.
 
 ```ts
 import { defineContext, Crust } from "@crustjs/core";
@@ -222,11 +224,11 @@ const database = defineContext("database", ({ options }: { options: { url: strin
 const app = new Crust("my-cli")
   .provide(database({ url: "postgres://localhost/app" }))
   .action(async ({ ctx }) => {
-    (await ctx.use(database)).url;
+    (await ctx.database).url;
   });
 ```
 
-Provide order is free: setup discovers dependencies by calling `await ctx.use(factory)`. A missing provider or dynamic dependency cycle throws `DEFINITION` when pulled, with reason `missing-context` or `context-cycle`.
+`uses` declarations are checked at composition time. Dependencies may appear in either order within one `.provide()` call; across calls, provide dependencies first. Runtime guards remain for JavaScript and dynamically assembled inputs.
 
 A Context's top-level `flags` are installed as propagating flags on this builder and later-added descendants, without mutating the original definitions. Dependencies construct recursively on the first pull.
 
@@ -256,7 +258,7 @@ See [Extensions](/docs/guide/extensions) for authoring custom Extensions.
 
 ```ts
 action(
-  action: (ctx: CrustCommandContext<A, Flags>) => void | Promise<void>,
+  action: (ctx: CrustCommandContext<A, Flags, Ctx>) => void | Promise<void>,
 ): Crust
 ```
 
@@ -270,7 +272,7 @@ const app = new Crust("greet")
   });
 ```
 
-The context contains typed `args`, typed effective `flags`, pull-based `ctx.use(factory)`, `rawArgs` after `--`, the resolved `command` and application `rootCommand` snapshots, and injectable `stdout(text)` and `stderr(text)` callbacks from `InvocationIO`. `CrustCommandContext` extends `InvocationIO`; Context setups receive those same callbacks for the invocation.
+The context contains typed `args`, typed effective `flags`, the lazy typed `ctx` bag, `rawArgs` after `--`, the resolved `command` and application `rootCommand` snapshots, and injectable `stdout(text)` and `stderr(text)` callbacks from `InvocationIO`. `CrustCommandContext` extends `InvocationIO`; Context setups receive those same callbacks for the invocation.
 
 ## `.add(...definitions)`
 
@@ -302,7 +304,7 @@ const app = new Crust("my-cli").add(
 
 For TypeScript consumers, statically known sibling name and alias collisions fail at `.add()` with `FIX_COMMAND_COLLISION`; the statically checked alias shape violations listed above fail at `defineCommand()` with `FIX_ALIAS_SHAPE`. Runtime validation throws `CrustError` code `DEFINITION` for the same misuse from plain JavaScript or dynamically built definitions, and for runtime-only cases: empty names, duplicate provided Context names, unrelated recipe returns, values that are not `defineCommand()` definitions, Extensions registered inside definitions, and `.as()` renaming a definition to one of its own aliases.
 
-A definition can add other definitions. Context providers on the materialized command path are available to nested actions through `use()`.
+A definition can add other definitions. Context providers are inherited on the materialized command path; a nested definition accesses one by declaring its factory in `uses` and awaiting the corresponding `ctx` property.
 
 The typed [`run()`](#runpath-input-io) shape of an added definition merges the Context-owned flags already provided on the parent path, matching the runtime parser: descendants accept inherited Context-owned flags, while parent-local flags stay excluded.
 

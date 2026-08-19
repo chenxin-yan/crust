@@ -170,30 +170,35 @@ The same injectable callbacks are passed to the Command Action and every Context
 ### `ContextFactory`
 
 ```ts
-interface ContextFactory<Name extends string, Options, Value, OF> {
-  (options: Options): ContextInstance<Name, Value, OF>;
+interface ContextFactory<Name extends string, Options, Value, OF, Deps> {
+  (options: Options): ContextInstance<Name, Value, OF, Deps>;
   readonly contextName: Name;
-  of(value: Value): ContextInstance<Name, Value, OF>;
+  of(value: Value): ContextInstance<Name, Value, OF, {}>;
 }
 ```
 
-`defineContext(name, setup)` and `defineContext(name, config, setup)` always return a factory. Invoke it even when `Options` is `void`. `contextName` identifies the factory for `ctx.use()`; `.of(value)` produces an instance returning the precomputed value without running setup while retaining its owned flags. `AnyContextFactory` is the shared factory constraint.
+`defineContext(name, setup)` and `defineContext(name, config, setup)` always return a factory. Invoke it even when `Options` is `void`. `contextName` is the bag property name. `.of(value)` creates a precomputed instance with no dependencies while retaining owned flags.
 
-### `ContextConfig` and `ContextSetup`
+### `ContextConfig`, `ContextSetup`, and `ContextBag`
 
 ```ts
 interface ContextConfig {
   readonly flags?: readonly NamedFlagDef[];
+  readonly uses?: readonly AnyContextFactory[];
 }
 
-interface ContextSetup<Options, OF> extends InvocationIO {
+type ContextBag<Deps> = {
+  readonly [K in keyof Deps]: Promise<Deps[K]>;
+};
+
+interface ContextSetup<Options, OF, Deps> extends InvocationIO {
   readonly options: Options;
   readonly flags: InferFlags<OF>;
-  readonly ctx: ContextResolver;
+  readonly ctx: ContextBag<Deps>;
 }
 ```
 
-`ContextConfig.flags` declares propagating flags installed when an instance is provided. `ContextSetup` receives the factory argument, validated values for its owned flags only, the pull-based Context resolver, and the invocation's `stdout` and `stderr` callbacks. See [Contexts](/docs/guide/contexts) for construction and collision rules.
+`flags` declares propagating flags. `uses` declares Context dependencies and determines the exact lazy bag exposed to setup. Reading a property starts memoized construction; destructuring therefore starts construction immediately. Setup also receives the invocation's `stdout` and `stderr` callbacks.
 
 ### `ContextInstance`
 
@@ -202,7 +207,7 @@ interface ContextSetup<Options, OF> extends InvocationIO {
   name="ContextInstance"
 />
 
-Attach an instance with `.provide()`. Core constructs it lazily on the first `ctx.use(factory)` and memoizes the value for the invocation. Setup can recursively pull dependencies with the same resolver.
+Attach an instance with `.provide()`. Core checks its transitive dependency closure at composition time and constructs it lazily when its bag property is accessed.
 
 ### `ContextMap`
 
@@ -210,7 +215,7 @@ Attach an instance with `.provide()`. Core constructs it lazily on the first `ct
 type ContextMap = Record<string, unknown>;
 ```
 
-The name registry shape accumulated by `.provide()`. Command actions and Extension hooks receive the resolver's generic `use(factory)` function, which returns `Promise<FactoryValueOf<typeof factory>>`.
+The name/value registry accumulated by `.provide()` and Extension `provides`. Command actions receive `ContextBag<Ctx>` for that accumulated registry. Reusable command definitions and Extensions expose only Contexts declared in their `uses` contract.
 
 ## Extension types
 
@@ -274,7 +279,7 @@ Infers the syntax-parsed values from an Extension's named-definition array and e
   name="ExtensionHooks"
 />
 
-`preRun` runs in `.extend()` order after routing and syntax parsing, before validation. It can call `ctx.use()` for Contexts whose setup pulls no flag-owning Context anywhere in its chain; pulling a flag-owning Context — directly or through a dependency's setup — rejects before validation, and a later post-validation pull re-executes that Context's setup from the start. Return `ctx.finish()` to end successfully. `onError` is used by `.execute()` only and settles before `postRun`; return `true` after rendering to stop the chain, or a falsy value to continue to Core's renderer. `postRun` is the reverse-`.extend()`-order `finally` hook: it can pull or reuse Contexts, observes any failed-outcome attribution from `onError`, and runs for every Extension after a completed, finished, or failed invocation. Invocation Contexts remain available through these hooks, and disposal follows post-run hooks.
+`preRun` runs in `.extend()` order after routing and syntax parsing, before validation. Its declared Context bag is lazy, but accessing a flag-owning Context directly or transitively rejects before validation; a later post-validation access re-executes that Context's setup from the start. Return `ctx.finish()` to end successfully. `onError` is used by `.execute()` only and settles before `postRun`; return `true` after rendering to stop the chain, or a falsy value to continue to Core's renderer. `postRun` is the reverse-`.extend()`-order `finally` hook: it can pull or reuse Contexts, observes any failed-outcome attribution from `onError`, and runs for every Extension after a completed, finished, or failed invocation. Invocation Contexts remain available through these hooks, and disposal follows post-run hooks.
 
 ### `Finished`
 

@@ -136,9 +136,9 @@ describe("command definitions", () => {
 			apiKey: flags["api-key"],
 		}));
 		const before = defineCommand("before", (command) => command.action(() => {}));
-		const after = defineCommand("after", (command) =>
+		const after = defineCommand("after", { uses: [auth] }, (command) =>
 			command.action(async ({ ctx }) => {
-				calls.push(String((await ctx.use(auth)).apiKey));
+				calls.push(String((await ctx.auth).apiKey));
 			}),
 		);
 		const outer = defineCommand("outer", (command) =>
@@ -160,12 +160,14 @@ describe("command definitions", () => {
 			verbose: flags.verbose === true,
 		}));
 		const db = defineContext("db", () => "database");
-		const status = defineCommand("status", (command) =>
+		const status = defineCommand("status", { uses: [db, logging] }, (command) =>
 			command.action(async ({ ctx }) => {
-				calls.push(`${await ctx.use(db)}:${String((await ctx.use(logging)).verbose)}`);
+				calls.push(`${await ctx.db}:${String((await ctx.logging).verbose)}`);
 			}),
 		);
-		const deploy = defineCommand("deploy", (command) => command.add(status));
+		const deploy = defineCommand("deploy", { uses: [db, logging] }, (command) =>
+			command.add(status),
+		);
 		const app = new Crust("cli").provide(logging(), db()).add(deploy);
 
 		await app.run(["deploy", "status"], { flags: { verbose: true } });
@@ -261,14 +263,14 @@ describe("command definitions", () => {
 	it("infers pulled Context values while preserving fluent action types", () => {
 		const auth = defineContext("auth", () => ({ user: "yan" }));
 		const region = defineContext("region", () => "us-east-1");
-		const definition = defineCommand("deploy", (command) =>
+		const definition = defineCommand("deploy", { uses: [auth] }, (command) =>
 			command
 				.args({ name: "target", type: "string", required: true })
 				.flags({ name: "force", type: "boolean", required: true })
 				.provide(region())
 				.action(async ({ args, flags, ctx }) => {
-					const identity = await ctx.use(auth);
-					const location = await ctx.use(region);
+					const identity = await ctx.auth;
+					const location = await ctx.region;
 					type _Target = Assert<IsEqual<typeof args.target, string>>;
 					type _Force = Assert<IsEqual<typeof flags.force, boolean>>;
 					type _Auth = Assert<IsEqual<typeof identity, { user: string }>>;

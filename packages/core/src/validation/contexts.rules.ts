@@ -1,4 +1,4 @@
-import type { ContextInstance } from "../api/context.ts";
+import type { AnyContextFactory, ContextInstance } from "../api/context.ts";
 import { CrustError } from "../errors.ts";
 
 /** `.provide()` accepts Context instances, not factories or arbitrary values. */
@@ -23,4 +23,37 @@ export function duplicateContext(
 		name: instance.name,
 		reason: "duplicate-context",
 	});
+}
+
+/** `uses` entries are Context factories returned by defineContext(). */
+export function usesProvenance(
+	owner: string,
+	subject: "context" | "command" | "extension",
+	uses: readonly AnyContextFactory[],
+): void {
+	const invalid = uses.some(
+		(factory) => typeof (factory as Partial<AnyContextFactory> | null)?.contextName !== "string",
+	);
+	if (!invalid) return;
+	throw new CrustError(
+		"DEFINITION",
+		`${owner} uses entries must be Context factories returned by defineContext()`,
+		{ subject, reason: "invalid-uses" },
+	);
+}
+
+/** Declared Context dependencies must be available at their composition site. */
+export function missingDependency(
+	owner: string,
+	uses: readonly AnyContextFactory[],
+	available: ReadonlySet<string>,
+	where: string,
+): void {
+	const missing = uses.find((factory) => !available.has(factory.contextName));
+	if (!missing) return;
+	throw new CrustError(
+		"DEFINITION",
+		`${owner} uses Context "${missing.contextName}" which is not provided on ${where}`,
+		{ subject: "context", name: missing.contextName, reason: "missing-context" },
+	);
 }

@@ -1,9 +1,9 @@
 ---
 title: Contexts
-description: Define lazy, typed dependencies with pull-based resolution and native cleanup.
+description: Define lazy, typed dependencies with build-time wiring checks and native cleanup.
 ---
 
-A Context is a named dependency. `defineContext()` returns a factory; invoke it for `.provide()`, then pull its typed value with `await ctx.use(factory)`.
+A Context is a named dependency. `defineContext()` returns a factory; invoke it for `.provide()`, then await its property on `ctx`.
 
 ```ts
 import { Crust, defineContext } from "@crustjs/core";
@@ -15,14 +15,12 @@ const database = defineContext("db", ({ options }: { options: { url: string } })
 const app = new Crust("app")
   .provide(database({ url: "postgres://localhost/app" }))
   .action(async ({ ctx, stdout }) => {
-    const db = await ctx.use(database);
+    const db = await ctx.db;
     stdout(db.query("select 1"));
   });
 ```
 
-The factory passed to `use()` is the token and the type source. Resolution is asynchronous, lazy, and memoized per invocation: unused providers do not run setup, and repeated or concurrent pulls return the same value.
-
-A missing provider fails at the pull site with a `CrustError` whose message identifies the Context and recommends `.provide()`.
+Each property is lazy and memoized per invocation: unused providers do not run setup, and repeated or concurrent accesses return the same value. Accessing or destructuring a property starts construction, so destructure only dependencies you intend to construct eagerly.
 
 ## Owned flags
 
@@ -36,43 +34,45 @@ const api = defineContext("api", { flags: [apiKey] }, ({ flags }) => ({
   get: (path: string) => `${flags["api-key"] ?? "anonymous"}:${path}`,
 }));
 
-const deploy = defineCommand("deploy", (command) =>
+const deploy = defineCommand("deploy", { uses: [api] }, (command) =>
   command.action(async ({ ctx, stdout }) => {
-    stdout((await ctx.use(api)).get("/deploy"));
+    stdout((await ctx.api).get("/deploy"));
   }),
 );
 
 const app = new Crust("app").provide(api()).add(deploy);
 ```
 
-Both `app --api-key secret deploy` and `app deploy --api-key secret` work. Hooks run before validation, so a `preRun` hook cannot pull a Context that owns flags — directly or through a dependency its setup pulls. Pull it from the action or from `postRun` after a validated invocation; `ctx.finish()` skips validation, so its post-run path has the same restriction.
+Both `app --api-key secret deploy` and `app deploy --api-key secret` work. Hooks run before validation, so a `preRun` hook cannot access a Context that owns flags, directly or transitively. Access it from the action or from `postRun` after validation; `ctx.finish()` skips validation, so its post-run path has the same restriction.
 
 ## Context dependencies
 
-Context setup pulls other Contexts with the same typed resolver used by actions. Pull dependencies first, before acquiring resources.
+Declare setup dependencies once with `uses`. Setup receives a bag containing exactly that declared dependency closure; undeclared property access is a type error.
 
 ```ts
 const config = defineContext("config", () => ({ url: "postgres://localhost/app" }));
-const database = defineContext("db", async ({ ctx }) => {
-  const cfg = await ctx.use(config);
+const database = defineContext("db", { uses: [config] }, async ({ ctx }) => {
+  const cfg = await ctx.config;
   return { query: (sql: string) => `${sql} on ${cfg.url}` };
 });
 
 new Crust("app").provide(database(), config());
 ```
 
-Dependencies construct lazily when pulled and are memoized for the invocation. Provide order is free. Missing providers fail at the pull site with `missing-context`; dynamic dependency cycles fail with `context-cycle`.
+Dependencies remain lazy: `config` starts only if setup accesses `ctx.config`. A `.provide()` call verifies the transitive dependency closure at the type level and at definition time. Dependencies may appear in either order within one call; across calls, provide dependencies first so the next call can be checked.
 
-Contexts are inherited by descendants present when the builder is added. Provide Contexts before `.add()`; immutable builder chains do not backfill already-added children.
+Reusable commands and Extensions declare their dependencies with the same `uses: [factory]` field. `.add()` and `.extend()` validate those declarations against Contexts already provided on the builder. Put `.provide()` or provider `.extend()` calls before `.add()`.
+
+Contexts are inherited by descendants present when the builder is added. Immutable builder chains do not backfill already-added children.
 
 ## Test doubles
 
-Every factory has `.of(value)`, which provides a precomputed value with the same name and type. It skips the real setup and its dependency pulls while retaining owned flags.
+Every factory has `.of(value)`, which provides a precomputed value with the same name and type. A double has no dependency graph and retains the factory's owned flags.
 
 ```ts
 const fake = database.of({ query: (sql) => `fake: ${sql}` });
 const app = new Crust("app").provide(fake).action(async ({ ctx, stdout }) => {
-  stdout((await ctx.use(database)).query("select 1"));
+  stdout((await ctx.db).query("select 1"));
 });
 ```
 
@@ -94,4 +94,4 @@ const database = defineContext("db", async ({ options }: { options: { url: strin
 
 ## Collisions
 
-Context names and owned flag spellings must be unique on a command path. Extension `provides` uses the same validation as `.provide()`. TypeScript catches statically known application collisions; dynamically assembled and inherited collisions fail with `CrustError` code `DEFINITION`.
+Context names and owned flag spellings must be unique on a command path. Extension `provides` uses the same validation as `.provide()`. TypeScript catches statically known dependency and collision failures; dynamically assembled JavaScript inputs retain `CrustError` definition guards.

@@ -14,7 +14,11 @@ const runtimeOnly = new Set([
 	"duplicateExtension",
 	"contextFlagPairCollision",
 ]);
-const structuralTypeRules = new Set(["schemaExclusivity", "parserType"]);
+// usesProvenance's compile-time counterpart is the structural
+// `readonly AnyContextFactory[]` constraint on every `uses` config field.
+const structuralTypeRules = new Set(["schemaExclusivity", "parserType", "usesProvenance"]);
+// Brands with no runtime rule by design: value types are erased at runtime.
+const typeOnlyBrands = new Set(["dependencyType"]);
 
 it("keeps runtime rules and FIX brands in parity", async () => {
 	const files = readdirSync(import.meta.dir)
@@ -40,5 +44,5 @@ it("keeps runtime rules and FIX brands in parity", async () => {
 	);
 	expect(
 		[...rules].filter((rule) => !runtimeOnly.has(rule) && !structuralTypeRules.has(rule)).sort(),
-	).toEqual([...brands].sort());
+	).toEqual([...brands].filter((brand) => !typeOnlyBrands.has(brand)).sort());
 });

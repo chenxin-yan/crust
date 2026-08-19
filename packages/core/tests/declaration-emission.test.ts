@@ -15,7 +15,7 @@ const repoRoot = resolve(import.meta.dir, "../../..");
 const corePkg = resolve(import.meta.dir, "..");
 const tscBin = join(repoRoot, "node_modules/.bin/tsc");
 
-const CONSUMER_SOURCE = `import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
+const CONSUMER_SOURCE = `import { Crust, defineCommand, defineContext, defineExtension, defineExtensionId, defineFlag } from "@crustjs/core";
 
 // Inferred defineFlag element type references Simplify
 export const configFlag = defineFlag("config", {
@@ -36,17 +36,26 @@ export const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => ({
 	apiKey: flags["api-key"],
 }));
 
-// Inferred setup input exposes the public ContextResolver type
-export const authenticatedApi = defineContext("authenticated-api", async ({ ctx }) => ({
-	apiKey: (await ctx.use(auth)).apiKey,
+// Inferred setup input exposes the declared lazy Context bag
+export const authenticatedApi = defineContext("authenticated-api", { uses: [auth] }, async ({ ctx }) => ({
+	apiKey: (await ctx.auth).apiKey,
 }));
 
-// Pulling a Context infers its value from the factory argument
-export const deploy = defineCommand("deploy", (cmd) =>
+// A declared Context bag preserves the factory's value type
+export const deploy = defineCommand("deploy", { uses: [auth] }, (cmd) =>
 	cmd.action(async ({ ctx }) => {
-		void (await ctx.use(auth)).apiKey;
+		void (await ctx.auth).apiKey;
 	}),
 );
+
+// An exported Extension carries evaluated dependency intersections and
+// ContextInstance tuples; a TS2742 regression here must fail emission
+export const telemetry = defineExtension(defineExtensionId("telemetry"), {
+	uses: [authenticatedApi],
+	provides: [auth()],
+	commands: [deploy],
+	hooks: { preRun: async ({ ctx }) => void (await ctx.auth) },
+});
 
 // Inferred builder type references accumulated Context-owned flag shapes
 export const app = new Crust("consumer-cli")

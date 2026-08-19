@@ -8,79 +8,87 @@ import type {
 	NamedFlagDef,
 	NamedFlagsRecord,
 } from "../types.ts";
+import { usesProvenance } from "../validation/contexts.rules.ts";
 import type { ValidateNamedFlagDefs } from "../validation/flags.brands.ts";
 import { normalizeFlag } from "../validation/normalize.ts";
 
 export type ContextMap = Record<string, unknown>;
 export type Awaitable<T> = T | Promise<T>;
 export type Simplify<T> = { [K in keyof T]: T[K] };
-// Flat intersection — same rationale as MergeFlags: duplicate context names
-// are branded at compile time (FIX_DUPLICATE_CONTEXT) and throw at .provide()
-// time, so operands never overlap in valid programs, and
-// the intersection keeps chained .provide() calls at constant instantiation
-// depth (Simplify<A & B> and mapped merges nested a layer per call).
 export type MergeContext<A, B> = A & B;
 
-/** Context definition config: flags owned by the Context. */
-export interface ContextConfig {
+/** Lazy, invocation-scoped Context values. Reading a property starts construction. */
+export type ContextBag<Deps extends ContextMap = {}> = {
+	readonly [K in keyof Deps]: Promise<Deps[K]>;
+};
+
+export interface ContextConfig<
+	Uses extends readonly AnyContextFactory[] = readonly AnyContextFactory[],
+> {
 	readonly flags?: readonly NamedFlagDef[];
+	readonly uses?: Uses;
 }
 
-type ValidateContextConfig<R extends ContextConfig> = {
+type ValidateContextConfig<R extends ContextConfig<any>> = {
 	readonly flags?: R["flags"] extends readonly NamedFlagDef[]
 		? ValidateNamedFlagDefs<R["flags"]>
 		: never;
 };
 
-/** The runtime input every Context setup receives (typed per-factory by `defineContext`). */
 interface ContextSetupInput<OF extends FlagsDef = FlagsDef> extends InvocationIO {
 	readonly flags: InferFlags<OF>;
-	readonly ctx: ContextResolver;
+	readonly ctx: ContextBag<ContextMap>;
 }
 
-/**
- * A named command dependency produced by invoking a Context factory.
- * Attach with `.provide()`; the value is constructed only when pulled.
- */
 export interface ContextInstance<
 	Name extends string = string,
 	Value = unknown,
 	OF extends FlagsDef = {},
+	Deps extends ContextMap = {},
 > {
 	readonly kind: "context";
 	readonly name: Name;
-	/** @internal — flags installed by this Context at its provide site */
 	readonly ownedFlags: FlagsDef;
-	/** @internal */
+	/** @internal — declared direct dependency factories */
+	readonly uses: readonly AnyContextFactory[];
 	setup(input: ContextSetupInput<OF>): Awaitable<Value>;
-	/** @internal — phantom carrying flag ownership types */
 	readonly _ownedFlags?: OF;
+	/** @internal — phantom carrying the transitive dependency closure */
+	readonly _deps?: Deps;
 }
 
-/** The typed setup input for one Context factory. */
-export interface ContextSetup<Options, OF extends FlagsDef = {}> extends InvocationIO {
-	/** The factory argument */
+export interface ContextSetup<
+	Options,
+	OF extends FlagsDef = {},
+	Deps extends ContextMap = {},
+> extends InvocationIO {
 	readonly options: Options;
-	/** Validated parsed flags owned by this Context. */
 	readonly flags: InferFlags<OF>;
-	/** Pull-based resolver for provided Contexts. */
-	readonly ctx: ContextResolver;
+	readonly ctx: ContextBag<Deps>;
 }
 
-export interface ContextFactory<Name extends string, Options, Value, OF extends FlagsDef = {}> {
-	(options: Options): ContextInstance<Name, Value, OF>;
-	/** The Context name this factory produces (used by `ctx.use()`). */
+export interface ContextFactory<
+	Name extends string,
+	Options,
+	Value,
+	OF extends FlagsDef = {},
+	Deps extends ContextMap = {},
+> {
+	(options: Options): ContextInstance<Name, Value, OF, Deps>;
 	readonly contextName: Name;
-	/** Produce an instance whose setup returns the precomputed `value` — for test doubles. */
+	/** @internal — declared direct dependency factories */
+	readonly uses: readonly AnyContextFactory[];
 	of(value: Value): ContextInstance<Name, Value, OF>;
+	readonly _deps?: Deps;
 }
 
-export type AnyContextFactory = ContextFactory<string, any, any, any>;
+export type AnyContextFactory = ContextFactory<string, any, any, any, any>;
 
 export type ContextOutput<C> =
-	C extends ContextInstance<infer Name, infer Value, any> ? { [K in Name]: Awaited<Value> } : never;
+	C extends ContextInstance<infer Name, infer Value, any, any>
+		? { [K in Name]: Awaited<Value> }
+		: never;
 
-/** Merged outputs of a tuple of Context instances (as attached by one `.provide()` call). */
 export type ContextsOutput<Cs extends readonly ContextInstance[]> = Cs extends readonly [
 	infer H,
 	...infer T extends readonly ContextInstance[],
@@ -88,7 +96,6 @@ export type ContextsOutput<Cs extends readonly ContextInstance[]> = Cs extends r
 	? ContextOutput<H> & ContextsOutput<T>
 	: {};
 
-/** Merged flags owned by a tuple of Context instances. */
 export type ContextsOwnedFlags<Cs extends readonly ContextInstance[]> = Cs extends readonly [
 	infer H,
 	...infer T extends readonly ContextInstance[],
@@ -96,31 +103,52 @@ export type ContextsOwnedFlags<Cs extends readonly ContextInstance[]> = Cs exten
 	? MergeFlags<ContextOwnedFlags<H>, ContextsOwnedFlags<T>>
 	: {};
 
-type ContextOwnedFlags<C> = C extends ContextInstance<any, any, infer OF> ? OF : {};
+type ContextOwnedFlags<C> = C extends ContextInstance<any, any, infer OF, any> ? OF : {};
 
-/** @internal — flags owned by a Context config, as a record. */
-export type OwnedFlagsOf<R extends ContextConfig> = R extends {
+export type FactoryOutput<F> =
+	F extends ContextFactory<infer Name, any, infer Value, any, any>
+		? { [K in Name]: Awaited<Value> }
+		: never;
+
+export type FactoriesOutput<Fs extends readonly AnyContextFactory[]> = Fs extends readonly [
+	infer H,
+	...infer T extends readonly AnyContextFactory[],
+]
+	? FactoryOutput<H> & FactoriesOutput<T>
+	: {};
+
+type FactoryDeps<F> = F extends ContextFactory<any, any, any, any, infer Deps> ? Deps : {};
+type FactoriesDeps<Fs extends readonly AnyContextFactory[]> = Fs extends readonly [
+	infer H,
+	...infer T extends readonly AnyContextFactory[],
+]
+	? FactoryDeps<H> & FactoriesDeps<T>
+	: {};
+
+export type ContextDependencies<Uses extends readonly AnyContextFactory[]> = FactoriesOutput<Uses> &
+	FactoriesDeps<Uses>;
+
+export type ContextDepsOf<C> = C extends ContextInstance<any, any, any, infer Deps> ? Deps : {};
+export type ContextsDependencies<Cs extends readonly ContextInstance[]> = Cs extends readonly [
+	infer H,
+	...infer T extends readonly ContextInstance[],
+]
+	? ContextDepsOf<H> & ContextsDependencies<T>
+	: {};
+
+export type OwnedFlagsOf<R extends ContextConfig<any>> = R extends {
 	flags: infer F extends readonly NamedFlagDef[];
 }
 	? NamedFlagsRecord<F>
 	: {};
 
-/**
- * Define a Context — a named command dependency.
- *
- * Always returns a factory that must be invoked, including zero-option
- * setups, so the API reads uniformly as
- * `defineContext("db", factory)` → `.provide(db(options))` → `await ctx.use(db)`.
- *
- * With a config argument, `flags` installs flags owned by the Context at
- * `.provide()`. Setup receives the validated owned flags, a pull-based `ctx`
- * resolver, and the invocation's injectable output callbacks. Pull dependencies
- * with `await ctx.use(factory)` before acquiring resources.
- *
- * Cleanup belongs to the value itself: implement `Symbol.dispose` or
- * `Symbol.asyncDispose` and Core disposes constructed values in reverse
- * construction order after success or failure.
- */
+type UsesOf<R extends ContextConfig<any>> = R extends {
+	uses: infer Uses extends readonly AnyContextFactory[];
+}
+	? Uses
+	: readonly [];
+
+/** Define a named, lazy command dependency. Declared `uses` are exposed on `ctx`. */
 export function defineContext<Name extends string, Value, Options = void>(
 	name: Name,
 	setup: (input: ContextSetup<Options>) => Awaitable<Value>,
@@ -133,11 +161,13 @@ export function defineContext<
 >(
 	name: Name,
 	config: R & ValidateContextConfig<R>,
-	setup: (input: ContextSetup<Options, OwnedFlagsOf<R>>) => Awaitable<Value>,
-): ContextFactory<Name, Options, Value, OwnedFlagsOf<R>>;
+	setup: (
+		input: ContextSetup<Options, OwnedFlagsOf<R>, ContextDependencies<UsesOf<R>>>,
+	) => Awaitable<Value>,
+): ContextFactory<Name, Options, Value, OwnedFlagsOf<R>, ContextDependencies<UsesOf<R>>>;
 export function defineContext(
 	name: string,
-	configOrSetup: ContextConfig | ((input: never) => unknown),
+	configOrSetup: ContextConfig<any> | ((input: never) => unknown),
 	maybeSetup?: (input: never) => unknown,
 ): AnyContextFactory {
 	const hasConfig = typeof configOrSetup !== "function";
@@ -163,29 +193,29 @@ export function defineContext(
 		);
 		ownedFlags[flagName] = rest as FlagDef;
 	}
+	usesProvenance(`Context "${name}"`, "context", config.uses ?? []);
+	const uses = Object.freeze([...(config.uses ?? [])]);
 	const factory = (options: unknown): ContextInstance => ({
 		kind: "context",
 		name,
 		ownedFlags,
+		uses,
 		setup: (input) => setup({ options, ...input } as never),
 	});
 	factory.contextName = name;
+	factory.uses = uses;
 	factory.of = (value: unknown): ContextInstance => ({
 		kind: "context",
 		name,
 		ownedFlags,
+		uses: [],
 		setup: () => value,
 	});
 	return factory as AnyContextFactory;
 }
 
 export type FactoryValueOf<F extends AnyContextFactory> =
-	F extends ContextFactory<any, any, infer Value, any> ? Awaited<Value> : never;
-
-/** Pull-based resolver for provided Contexts, exposed to actions, hooks, and Context setup as `ctx`. */
-export interface ContextResolver {
-	readonly use: <F extends AnyContextFactory>(factory: F) => Promise<FactoryValueOf<F>>;
-}
+	F extends ContextFactory<any, any, infer Value, any, any> ? Awaited<Value> : never;
 
 function registerDisposable(
 	value: unknown,
@@ -213,12 +243,15 @@ function registerDisposable(
 	}
 }
 
-/** Create the lazy, invocation-scoped Context resolver used by actions and hooks. */
+/** Internal lazy invocation container. Public consumers receive scoped Context bags. */
 export function createContextResolver(
 	contexts: readonly ContextInstance[],
 	io: InvocationIO,
 	disposal: AsyncDisposableStack,
-): ContextResolver & {
+): {
+	bag<Deps extends ContextMap>(
+		sources: readonly (AnyContextFactory | ContextInstance)[],
+	): ContextBag<Deps>;
 	setValidatedFlags(flags: Record<string, unknown>): void;
 	settle(): Promise<void>;
 } {
@@ -283,13 +316,21 @@ export function createContextResolver(
 		}
 	};
 
-	const makeUse =
-		(origin: Entry | null): ContextResolver["use"] =>
-		<F extends AnyContextFactory>(factory: F): Promise<FactoryValueOf<F>> => {
-			const name = factory.contextName;
+	// Bag getters run under enumeration (spread, JSON.stringify, deep-equal)
+	// where nothing awaits the result; an early rejection must arrive pre-handled
+	// or it crashes the process as an unhandledRejection.
+	function handledRejection(reason: CrustError): Promise<never> {
+		const rejection = Promise.reject(reason);
+		void rejection.catch(() => {});
+		return rejection;
+	}
+
+	const makePull =
+		(origin: Entry | null) =>
+		(name: string): Promise<unknown> => {
 			const originSuffix = origin ? ` (pulled while constructing Context "${origin.name}")` : "";
 			if (disposed) {
-				return Promise.reject(
+				return handledRejection(
 					new CrustError(
 						"DEFINITION",
 						`Context "${name}" cannot be pulled from onError because invocation Contexts have already been disposed.`,
@@ -299,7 +340,7 @@ export function createContextResolver(
 			}
 			const context = byName.get(name);
 			if (!context) {
-				return Promise.reject(
+				return handledRejection(
 					new CrustError(
 						"DEFINITION",
 						`No provider for Context "${name}". Add .provide(${name}(...)) to the app or an ancestor command.${originSuffix}`,
@@ -308,7 +349,7 @@ export function createContextResolver(
 				);
 			}
 			if (validatedFlags === undefined && Object.keys(context.ownedFlags).length > 0) {
-				return Promise.reject(
+				return handledRejection(
 					new CrustError(
 						"DEFINITION",
 						`Context "${name}" owns flags and cannot be pulled before flag validation${originSuffix}. Pull it from an action or a postRun hook after a validated invocation.`,
@@ -340,7 +381,7 @@ export function createContextResolver(
 						);
 						const value = await context.setup({
 							flags: ownedFlags,
-							ctx: { use: makeUse(current) },
+							ctx: makeBag(context.uses, current),
 							...io,
 						});
 						registerDisposable(value, disposal, registered);
@@ -358,7 +399,7 @@ export function createContextResolver(
 				const path = pathTo(entry, origin.name);
 				if (path) {
 					const cycle = [origin.name, ...path].map((part) => `"${part}"`).join(" -> ");
-					return Promise.reject(
+					return handledRejection(
 						new CrustError("DEFINITION", `Context dependency cycle: ${cycle}`, {
 							subject: "context",
 							name: origin.name,
@@ -367,15 +408,34 @@ export function createContextResolver(
 					);
 				}
 				origin.waitingOn.add(name);
-				return entry.promise.finally(() => origin.waitingOn.delete(name)) as Promise<
-					FactoryValueOf<F>
-				>;
+				return entry.promise.finally(() => origin.waitingOn.delete(name));
 			}
-			return entry.promise as Promise<FactoryValueOf<F>>;
+			return entry.promise;
 		};
 
+	const makeBag = <Deps extends ContextMap>(
+		sources: readonly (AnyContextFactory | ContextInstance)[],
+		origin: Entry | null,
+	): ContextBag<Deps> => {
+		const bag: Record<string, Promise<unknown>> = {};
+		const add = (source: AnyContextFactory | ContextInstance): void => {
+			const name = "contextName" in source ? source.contextName : source.name;
+			if (Object.hasOwn(bag, name)) return;
+			Object.defineProperty(bag, name, {
+				enumerable: true,
+				get: () => makePull(origin)(name),
+			});
+			// Follow the source's own declared graph: a provided .of() double cuts the
+			// *instance* uses, but the bag must match the factory-typed closure so a
+			// transitive read fails loud (missing-context) instead of yielding undefined.
+			for (const dependency of source.uses ?? []) add(dependency);
+		};
+		for (const source of sources) add(source);
+		return Object.freeze(bag) as ContextBag<Deps>;
+	};
+
 	return {
-		use: makeUse(null),
+		bag: (sources) => makeBag(sources, null),
 		setValidatedFlags(flags: Record<string, unknown>): void {
 			validatedFlags = flags;
 		},

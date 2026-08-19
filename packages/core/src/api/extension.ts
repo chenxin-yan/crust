@@ -10,9 +10,20 @@ import type {
 	NamedFlagDef,
 	NamedFlagsRecord,
 } from "../types.ts";
+import type { DeclaredDepsOf } from "../validation/contexts.brands.ts";
+import { usesProvenance } from "../validation/contexts.rules.ts";
 import type { ValidateNamedFlagDefs } from "../validation/flags.brands.ts";
 import { normalizeFlag } from "../validation/normalize.ts";
-import type { Awaitable, ContextInstance, ContextResolver } from "./context.ts";
+import type {
+	AnyContextFactory,
+	Awaitable,
+	ContextBag,
+	ContextDependencies,
+	ContextInstance,
+	ContextMap,
+	ContextsDependencies,
+	ContextsOutput,
+} from "./context.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Extension — the public integration contract
@@ -55,6 +66,7 @@ export interface ExtensionBuildContext {
  */
 export interface ExtensionContext<
 	Defs extends readonly NamedExtensionFlagDef[] = [],
+	Deps extends ContextMap = {},
 > extends Readonly<InvocationIO> {
 	/**
 	 * Complete argv passed to the application, including routed command names.
@@ -106,14 +118,8 @@ export interface ExtensionContext<
 	 * @example `["--dry-run"]`
 	 */
 	readonly rawArgs: readonly string[];
-	/**
-	 * Lazily resolve a provided Context for this invocation.
-	 * A pre-run hook cannot pull a Context that owns flags — directly or
-	 * through a dependency pulled during setup. Pull dependencies before
-	 * acquiring resources. Values remain live through post-run hooks and
-	 * are disposed afterwards.
-	 */
-	readonly use: ContextResolver["use"];
+	/** Declared Contexts, constructed lazily on first property access. */
+	readonly ctx: ContextBag<Deps>;
 	/**
 	 * End the invocation successfully before validation, Context construction, and the action.
 	 *
@@ -127,18 +133,24 @@ export interface ExtensionContext<
 	readonly finish: () => Finished;
 }
 
-export interface ExtensionHooks<Defs extends readonly NamedExtensionFlagDef[] = []> {
+export interface ExtensionHooks<
+	Defs extends readonly NamedExtensionFlagDef[] = [],
+	Deps extends ContextMap = {},
+> {
 	/**
 	 * Runs after routing and syntax parsing, before validation, in `.extend()` order.
 	 * Return `ctx.finish()` to end the invocation successfully; later pre-run hooks,
 	 * validation, schemas, Contexts, and the Command Action do not run.
 	 */
-	readonly preRun?: (ctx: ExtensionContext<Defs>) => Awaitable<void | Finished>;
+	readonly preRun?: (ctx: ExtensionContext<Defs, Deps>) => Awaitable<void | Finished>;
 	/**
 	 * Runs after the invocation settles, in reverse `.extend()` order. This is the
 	 * `finally` slot for cleanup and post-run side effects.
 	 */
-	readonly postRun?: (ctx: ExtensionContext<Defs>, outcome: InvocationOutcome) => Awaitable<void>;
+	readonly postRun?: (
+		ctx: ExtensionContext<Defs, Deps>,
+		outcome: InvocationOutcome,
+	) => Awaitable<void>;
 	/**
 	 * Renders a failure in `execute()` only. Return true when rendered to stop the
 	 * chain; falsy values delegate to the next Extension and then Core's renderer.
@@ -148,7 +160,7 @@ export interface ExtensionHooks<Defs extends readonly NamedExtensionFlagDef[] = 
 	 * Receives the base context: routing or syntax-parse failures render with a
 	 * fallback context whose `flags` are empty, so owned-flag inference would lie here.
 	 */
-	readonly onError?: (error: unknown, ctx: ExtensionContext) => Awaitable<boolean | void>;
+	readonly onError?: (error: unknown, ctx: ExtensionContext<[], Deps>) => Awaitable<boolean | void>;
 }
 
 /**
@@ -195,42 +207,62 @@ export type ExtensionSectionContribution = CommandSection & {
 	readonly command: readonly string[];
 };
 
+type CommandDefinitionsDependencies<
+	Commands extends readonly CommandDefinition<any, any, any, any>[],
+> = Commands extends readonly [
+	infer H extends CommandDefinition<any, any, any, any>,
+	...infer T extends readonly CommandDefinition<any, any, any, any>[],
+]
+	? // A `never` element (e.g. a `{} as never` cast) would distribute DeclaredDepsOf
+		// to `never` and poison the whole dependency intersection.
+		([H] extends [never] ? {} : DeclaredDepsOf<H>) & CommandDefinitionsDependencies<T>
+	: {};
+
 export interface ExtensionConfig<
 	Defs extends readonly NamedExtensionFlagDef[] = readonly NamedExtensionFlagDef[],
+	Uses extends readonly AnyContextFactory[] = readonly AnyContextFactory[],
+	Provides extends readonly ContextInstance[] = readonly ContextInstance[],
+	Commands extends readonly CommandDefinition<any, any, any, any>[] = readonly CommandDefinition<
+		any,
+		any,
+		any,
+		any
+	>[],
 > {
-	/** Flags this Extension owns and contributes to the application */
 	readonly flags?: Defs;
-	/** Root command definitions this Extension owns and contributes to the application */
-	readonly commands?: readonly CommandDefinition<any>[];
-	/** Context instances installed on the application root when the Extension is registered. */
-	readonly provides?: readonly ContextInstance[];
-	/** Plain-text sections contributed to commands' `meta.sections` when the application is prepared. */
+	readonly commands?: Commands;
+	readonly uses?: Uses;
+	readonly provides?: Provides;
 	readonly sections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
-	/** Build-time artifact generation, invoked by build tooling (e.g. `crust build`). */
 	readonly build?: (ctx: ExtensionBuildContext) => void | Promise<void>;
-	readonly hooks?: ExtensionHooks<Defs>;
+	readonly hooks?: ExtensionHooks<Defs, ContextDependencies<Uses>>;
 }
 
-// Branding lives on the defineExtension signature, not on ExtensionConfig
-// itself, so docs render the readable array type while duplicate/alias
-// collisions still fail at the call site — mirrors defineContext.
 type ValidateExtensionConfig<Defs extends readonly NamedExtensionFlagDef[]> = {
 	readonly flags?: ValidateNamedFlagDefs<Defs>;
 };
 
-/**
- * An application-wide reusable capability. A plain frozen structural value —
- * see {@link defineExtension}.
- */
-export interface Extension {
+export interface Extension<
+	Deps extends ContextMap = ContextMap,
+	Provides extends readonly ContextInstance[] = readonly ContextInstance[],
+> {
 	readonly id: ExtensionId;
 	readonly flags?: Readonly<Record<string, ExtensionFlagDef>>;
 	readonly commands?: readonly CommandDefinition<any>[];
-	readonly provides?: readonly ContextInstance[];
+	readonly uses: readonly AnyContextFactory[];
+	readonly provides?: Provides;
 	readonly sections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
 	readonly build?: (ctx: ExtensionBuildContext) => void | Promise<void>;
-	readonly hooks?: ExtensionHooks;
+	readonly hooks?: ExtensionHooks<any, Deps>;
+	readonly _deps?: Deps;
 }
+
+export type ExtensionProvidesOutput<E> =
+	E extends Extension<any, infer Provides> ? ContextsOutput<Provides> : {};
+export type ExtensionsProvidesOutput<Es extends readonly Extension<any, any>[]> =
+	Es extends readonly [infer H, ...infer T extends readonly Extension<any, any>[]]
+		? ExtensionProvidesOutput<H> & ExtensionsProvidesOutput<T>
+		: {};
 
 /**
  * Define an Extension.
@@ -241,10 +273,21 @@ export interface Extension {
  * define time; collisions with application or other Extension definitions
  * surface when the application prepares.
  */
-export function defineExtension<const Defs extends readonly NamedExtensionFlagDef[] = []>(
+export function defineExtension<
+	const Defs extends readonly NamedExtensionFlagDef[] = [],
+	const Uses extends readonly AnyContextFactory[] = [],
+	const Provides extends readonly ContextInstance[] = [],
+	const Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
+>(
 	id: ExtensionId,
-	config: ExtensionConfig<Defs> & ValidateExtensionConfig<Defs> = {},
-): Extension {
+	config: ExtensionConfig<Defs, Uses, Provides, Commands> & ValidateExtensionConfig<Defs> = {},
+): Extension<
+	ContextDependencies<Uses> &
+		ContextsDependencies<Provides> &
+		CommandDefinitionsDependencies<Commands>,
+	Provides
+> {
+	usesProvenance(`Extension "${id}"`, "extension", config.uses ?? []);
 	const ownedFlags: FlagsDef = {};
 	const spellings = new Map();
 	for (const def of config.flags ?? []) {
@@ -261,7 +304,13 @@ export function defineExtension<const Defs extends readonly NamedExtensionFlagDe
 	// The runtime registry erases Defs after defineExtension contextually types its own hooks.
 	return Object.freeze({
 		...config,
+		uses: Object.freeze([...(config.uses ?? [])]),
 		...(config.flags === undefined ? {} : { flags: ownedFlags }),
 		id,
-	}) as Extension;
+	}) as Extension<
+		ContextDependencies<Uses> &
+			ContextsDependencies<Provides> &
+			CommandDefinitionsDependencies<Commands>,
+		Provides
+	>;
 }

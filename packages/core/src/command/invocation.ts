@@ -15,6 +15,7 @@ import { applySchemas } from "../parsing/schema.ts";
 import { cloneFlagSpellings } from "../parsing/spellings.ts";
 import { isText } from "../sections.ts";
 import type { CommandSection, FlagDef, FlagsDef, InvocationIO } from "../types.ts";
+import { missingDependency } from "../validation/contexts.rules.ts";
 import { normalizeFlag } from "../validation/normalize.ts";
 import type { CommandDefinition } from "./crust.ts";
 import type { CommandNode } from "./node.ts";
@@ -272,6 +273,23 @@ function prepareInvocation(
 	}
 	for (const extension of extensions) applyExtensionFlags(rootNode, extension);
 
+	// Hooks run on every invocation, so each Extension's `uses` must resolve on
+	// every command path. A child added before a later `.provide()` keeps its
+	// contexts snapshot (no backfill), which extend-time root validation misses.
+	const validateExtensionDependencies = (target: CommandNode): void => {
+		const available = new Set(target.contexts.map((context) => context.name));
+		for (const extension of extensions) {
+			missingDependency(
+				`Extension "${extension.id}"`,
+				extension.uses ?? [],
+				available,
+				`the "${target.meta.name}" command path`,
+			);
+		}
+		for (const child of Object.values(target.subCommands)) validateExtensionDependencies(child);
+	};
+	validateExtensionDependencies(rootNode);
+
 	validateAuthoredSections(rootNode);
 	const authoredSnapshot = snapshotCommand(rootNode);
 	for (const extension of extensions) {
@@ -312,7 +330,7 @@ async function dispatch(
 		args: parsed.args,
 		flags: parsed.flags,
 		rawArgs: parsed.rawArgs,
-		use: resolver.use,
+		ctx: resolver.bag(extensions.flatMap((extension) => extension.uses ?? [])),
 		finish: finishInvocation,
 		stdout: io.stdout,
 		stderr: io.stderr,
@@ -331,7 +349,7 @@ async function dispatch(
 		const context = {
 			args: validated.args,
 			flags: validated.flags,
-			ctx: { use: resolver.use },
+			ctx: resolver.bag(resolvedNode.contexts),
 			rawArgs: parsed.rawArgs,
 			command: extensionContext.command,
 			rootCommand: rootSnapshot,
@@ -406,17 +424,26 @@ async function renderFailure(
 	// set in preRun) survives into onError. During dispatch its Contexts remain
 	// live through postRun; errors raised after cleanup see the closed resolver.
 	// The synthetic fallback exists only for failures before a context was built.
-	const unavailableUse: ExtensionContext["use"] = async (factory) => {
-		throw new CrustError(
-			"DEFINITION",
-			`Context "${factory.contextName}" cannot be pulled from onError because invocation Contexts have already been disposed.`,
-			{
-				subject: "context",
-				name: factory.contextName,
-				reason: "context-after-disposal",
-			},
+	function unavailable(property: PropertyKey): Promise<never> {
+		return Promise.reject(
+			new CrustError(
+				"DEFINITION",
+				`Context "${String(property)}" cannot be pulled from onError because invocation Contexts have already been disposed.`,
+				{
+					subject: "context",
+					name: String(property),
+					reason: "context-after-disposal",
+				},
+			),
 		);
-	};
+	}
+	const unavailableContext = new Proxy(
+		{},
+		{
+			get: (_, property) =>
+				property === "then" || typeof property === "symbol" ? undefined : unavailable(property),
+		},
+	);
 	const context =
 		extensionContext ??
 		Object.freeze({
@@ -430,7 +457,7 @@ async function renderFailure(
 			finish: finishInvocation,
 			stdout: io.stdout,
 			stderr: io.stderr,
-			use: unavailableUse,
+			ctx: unavailableContext,
 		} satisfies ExtensionContext);
 
 	try {

@@ -1,4 +1,4 @@
-import type { ContextInstance, ContextMap } from "../api/context.ts";
+import type { ContextDepsOf, ContextInstance, ContextMap, ContextsOutput } from "../api/context.ts";
 import type { DefName, Overlap } from "./shared.ts";
 
 /** Canonical names claimed by more than one instance in the same `.provide()` call. */
@@ -38,4 +38,85 @@ export type ValidateContextNames<
 	[I in keyof Cs]: Cs[I] & DuplicateContextBrand<Cs[I], Existing | Dups>;
 };
 
-// ────────────────────────────────────────────────────────────────────────────
+// Widened instances (Deps = any, or a string-indexed Deps map) opt out to
+// runtime-only validation, mirroring DeclaredDepsOf below.
+type ProvidedDepsOf<C> =
+	IsAny<C> extends true
+		? {}
+		: IsAny<ContextDepsOf<C>> extends true
+			? {}
+			: string extends keyof ContextDepsOf<C>
+				? {}
+				: ContextDepsOf<C>;
+
+type MissingDependencyBrand<C, Known extends string> =
+	Exclude<keyof ProvidedDepsOf<C> & string, Known> extends infer Missing extends string
+		? [Missing] extends [never]
+			? {}
+			: {
+					readonly FIX_MISSING_DEPENDENCY: `Context "${DefName<C>}" uses Context "${Missing}" which is not provided on this command path`;
+				}
+		: never;
+
+// A same-name provider must also deliver the value type the consumer's
+// declared factory promises; name-only matching would compile-cleanly mistype
+// `ctx.<name>`. `any`-valued providers opt out (runtime-only), and there is no
+// runtime twin because values are opaque until setup runs.
+type MismatchedDependencyNames<Deps, KnownValues> = {
+	[K in keyof Deps & keyof KnownValues & string]: IsAny<KnownValues[K]> extends true
+		? never
+		: IsAny<Deps[K]> extends true
+			? never
+			: KnownValues[K] extends Deps[K]
+				? never
+				: K;
+}[keyof Deps & keyof KnownValues & string];
+
+type MismatchedDependencyBrand<C, KnownValues> =
+	MismatchedDependencyNames<ProvidedDepsOf<C>, KnownValues> extends infer Mismatched extends string
+		? [Mismatched] extends [never]
+			? {}
+			: {
+					readonly FIX_DEPENDENCY_TYPE: `Context "${DefName<C>}" uses Context "${Mismatched}" whose provided value does not satisfy the declared dependency type`;
+				}
+		: never;
+
+/** Brand provided instances whose transitive dependency closure is unsatisfied. */
+export type ValidateContextDeps<
+	Ctx extends ContextMap,
+	Cs extends readonly ContextInstance[],
+	Known extends string =
+		| (string extends keyof Ctx ? never : keyof Ctx & string)
+		| DefName<Cs[number]>,
+	KnownValues extends ContextMap = (string extends keyof Ctx ? {} : Ctx) & ContextsOutput<Cs>,
+> = {
+	[I in keyof Cs]: Cs[I] &
+		MissingDependencyBrand<Cs[I], Known> &
+		MismatchedDependencyBrand<Cs[I], KnownValues>;
+};
+
+/** Dependency closure carried by command definitions and Extensions. */
+type IsAny<T> = 0 extends 1 & T ? true : false;
+export type DeclaredDepsOf<T> =
+	IsAny<T> extends true
+		? {}
+		: T extends { readonly _deps?: infer Deps extends ContextMap }
+			? IsAny<Deps> extends true
+				? {}
+				: string extends keyof Deps
+					? {}
+					: Deps
+			: {};
+
+type MissingDeclaredDependencyBrand<T, Known extends string> =
+	Exclude<keyof DeclaredDepsOf<T> & string, Known> extends infer Missing extends string
+		? [Missing] extends [never]
+			? {}
+			: { readonly FIX_MISSING_DEPENDENCY: `Uses Context "${Missing}" which is not provided` }
+		: never;
+
+/** Brand sealed units whose declared dependencies are absent at a composition site. */
+export type ValidateDeclaredDeps<Ctx extends ContextMap, Items extends readonly unknown[]> = {
+	[I in keyof Items]: Items[I] &
+		MissingDeclaredDependencyBrand<Items[I], string extends keyof Ctx ? never : keyof Ctx & string>;
+};
