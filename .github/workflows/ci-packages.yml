@@ -74,3 +74,31 @@ jobs:
           for package_manager in bun npm pnpm; do
             CRUST_SMOKE_PM="$package_manager" bun test ./packages/crust/tests/package-manager.smoke.test.ts
           done
+
+  deno:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Install dependencies
+        run: bun ci
+
+      - name: Run Deno runtime smoke tests
+        run: bun run test:deno

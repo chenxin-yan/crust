@@ -1,0 +1,14 @@
+{
+	"nodeModulesDir": "auto",
+	"imports": {
+		"@crustjs/core": "../../packages/core/dist/index.js",
+		"@crustjs/core/tooling": "../../packages/core/dist/tooling.js",
+		"@crustjs/create": "../../packages/create/dist/index.js",
+		"@crustjs/progress": "../../packages/progress/dist/index.js",
+		"@crustjs/prompts": "../../packages/prompts/dist/index.js",
+		"@crustjs/skills": "../../packages/skills/dist/index.js",
+		"@crustjs/store": "../../packages/store/dist/index.js",
+		"@crustjs/style": "../../packages/style/dist/index.js",
+		"ultramatter": "npm:ultramatter@^0.0.4"
+	}
+}
