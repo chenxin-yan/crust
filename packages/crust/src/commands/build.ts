@@ -33,6 +33,7 @@ import {
  * @param entry - Resolved entry file path
  * @param cwd - Current working directory
  * @param outdir - Output directory
+ * @param ext - Extension appended to a derived base name (e.g. ".js" for Node)
  * @returns The resolved output file path
  */
 export function resolveOutfile(
@@ -41,6 +42,7 @@ export function resolveOutfile(
 	entry: string,
 	cwd: string,
 	outdir: string,
+	ext = "",
 ): string {
 	// Explicit --outfile takes highest priority
 	if (outfile) {
@@ -48,26 +50,12 @@ export function resolveOutfile(
 	}
 
 	const baseName = resolveBaseName(name, entry, cwd);
-	return resolve(cwd, outdir, baseName);
+	return resolve(cwd, outdir, baseName.endsWith(ext) ? baseName : baseName + ext);
 }
 
-export function resolveNodeOutfile(
-	outfile: string | undefined,
-	name: string | undefined,
-	entry: string,
-	cwd: string,
-	outdir: string,
-): string {
-	if (outfile) return resolve(cwd, outfile);
-	const baseName = resolveBaseName(name, entry, cwd);
-	return resolve(cwd, outdir, baseName.endsWith(".js") ? baseName : `${baseName}.js`);
-}
-
-export function resolveBuildRuntime(cwd: string, override?: string): BuildRuntime {
-	if (override !== undefined) {
-		if ((BUILD_RUNTIMES as readonly string[]).includes(override)) return override as BuildRuntime;
-		throw new Error(`Unknown runtime "${override}". Valid runtimes: ${BUILD_RUNTIMES.join(", ")}`);
-	}
+export function resolveBuildRuntime(cwd: string, override?: BuildRuntime): BuildRuntime {
+	// --runtime is validated by the flag's `choices`; no re-check needed here.
+	if (override !== undefined) return override;
 
 	const packagePath = resolve(cwd, "package.json");
 	if (!existsSync(packagePath)) return "bun";
@@ -558,12 +546,13 @@ export const buildCommand = defineCommand(
 				}
 
 				if (runtime === "node") {
-					const outfilePath = resolveNodeOutfile(
+					const outfilePath = resolveOutfile(
 						flags.outfile,
 						flags.name,
 						entryPath,
 						cwd,
 						flags.outdir,
+						".js",
 					);
 					console.log(`Building ${dim(entryPath)} ${cyan("→")} ${dim(outfilePath)}...`);
 					await execNodeBuild(entryPath, outfilePath, minify, envFiles);
@@ -571,16 +560,19 @@ export const buildCommand = defineCommand(
 					return;
 				}
 
+				const common = {
+					entryPath,
+					outfile: flags.outfile,
+					name: flags.name,
+					cwd,
+					outdir: flags.outdir,
+					resolver: flags.resolver,
+					envFiles,
+				};
 				if (bunTargets) {
 					await buildBinaryOutputs({
-						entryPath,
-						outfile: flags.outfile,
-						name: flags.name,
-						cwd,
-						outdir: flags.outdir,
-						resolver: flags.resolver,
+						...common,
 						targets: bunTargets,
-						envFiles,
 						getFilename: getBinaryFilename,
 						execute: (entry, outfile, target, files) =>
 							execBuild(entry, outfile, minify, target, files),
@@ -588,21 +580,12 @@ export const buildCommand = defineCommand(
 					});
 					return;
 				}
-
-				if (denoTargets) {
-					await buildBinaryOutputs({
-						entryPath,
-						outfile: flags.outfile,
-						name: flags.name,
-						cwd,
-						outdir: flags.outdir,
-						resolver: flags.resolver,
-						targets: denoTargets,
-						envFiles,
-						getFilename: getDenoBinaryFilename,
-						execute: (entry, outfile, target) => execDenoBuild(entry, outfile, target),
-						writeResolver: writeDenoResolver,
-					});
-				}
+				await buildBinaryOutputs({
+					...common,
+					targets: denoTargets!,
+					getFilename: getDenoBinaryFilename,
+					execute: (entry, outfile, target) => execDenoBuild(entry, outfile, target),
+					writeResolver: writeDenoResolver,
+				});
 			}),
 );

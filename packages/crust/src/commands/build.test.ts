@@ -13,7 +13,6 @@ import {
 	generateResolver,
 	resolveBuildRuntime,
 	resolveEnvFilePaths,
-	resolveNodeOutfile,
 	resolveOutfile,
 } from "../../src/commands/build.ts";
 import type { BunTarget } from "../../src/utils/build-helpers.ts";
@@ -280,10 +279,10 @@ describe("resolveOutfile", () => {
 	});
 
 	it("adds .js to implicit Node outputs but respects explicit outfile", () => {
-		expect(resolveNodeOutfile(undefined, "my-tool", entry, cwd, "dist")).toBe(
+		expect(resolveOutfile(undefined, "my-tool", entry, cwd, "dist", ".js")).toBe(
 			resolve(cwd, "dist", "my-tool.js"),
 		);
-		expect(resolveNodeOutfile("bin/custom.mjs", undefined, entry, cwd, "dist")).toBe(
+		expect(resolveOutfile("bin/custom.mjs", undefined, entry, cwd, "dist", ".js")).toBe(
 			resolve(cwd, "bin/custom.mjs"),
 		);
 	});

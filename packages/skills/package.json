@@ -48,8 +48,7 @@
 	"dependencies": {
 		"@crustjs/progress": "workspace:^",
 		"@crustjs/prompts": "workspace:^",
-		"@crustjs/style": "workspace:^",
-		"ultramatter": "^0.0.4"
+		"@crustjs/style": "workspace:^"
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",

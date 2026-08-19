@@ -6,7 +6,6 @@ import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { join, sep } from "node:path";
 
 import { resolveSourceDir } from "@crustjs/utils/source";
-import { parse } from "ultramatter";
 
 import type { RenderedFile } from "./types.ts";
 
@@ -27,37 +26,21 @@ interface BundleFrontmatter {
 	description: string | null;
 }
 
-type FrontmatterProbe = {
-	readonly name?: unknown;
-	readonly description?: unknown;
-};
-
 /**
- * Protects hashes inside quoted scalars from ultramatter's comment stripping.
- * The sentinel cannot collide because it is chosen to be absent from the input.
+ * Parses one single-line YAML scalar: double-quoted, single-quoted, or plain
+ * (trailing ` # comment` stripped per YAML's whitespace-then-hash rule).
  *
- * Known ceiling: quote characters are tracked positionally, not per YAML's
- * scalar-start rule, so an apostrophe inside a plain scalar (`it's ok # note`)
- * opens phantom quote state and preserves what YAML would strip as a comment.
- * Accepted: name/description frontmatter with an apostrophe *and* a trailing
- * comment on the same line is rare, and preserving too much is the safer drift.
+ * Known ceiling: double-quote escapes are unwrapped literally (`\\n` becomes
+ * `n`, not a newline) and multi-line scalars are not supported — name and
+ * description are one-line fields in practice. Grow a real YAML dep if that
+ * ever stops holding.
  */
-function protectQuotedHashes(input: string): { input: string; sentinel: string } {
-	let sentinel = "\uE000";
-	while (input.includes(sentinel)) sentinel += "\uE000";
-
-	let quote: "'" | '"' | null = null;
-	let protectedInput = "";
-	for (let index = 0; index < input.length; index++) {
-		const char = input[index]!;
-		if (quote === '"' && char === "\\") {
-			protectedInput += char + (input[++index] ?? "");
-			continue;
-		}
-		if (char === "'" || char === '"') quote = quote === char ? null : (quote ?? char);
-		protectedInput += char === "#" && quote !== null ? sentinel : char;
-	}
-	return { input: protectedInput, sentinel };
+function parseScalar(raw: string): string {
+	const doubleQuoted = /^"((?:[^"\\]|\\.)*)"/.exec(raw);
+	if (doubleQuoted) return doubleQuoted[1]!.replace(/\\(.)/g, "$1");
+	const singleQuoted = /^'((?:[^']|'')*)'/.exec(raw);
+	if (singleQuoted) return singleQuoted[1]!.replaceAll("''", "'");
+	return raw.replace(/(^|\s)#.*$/, "").trim();
 }
 
 /** Reads top-level `name` and `description` from leading YAML frontmatter. */
@@ -73,25 +56,12 @@ export function probeFrontmatter(content: string): BundleFrontmatter {
 	const closing = lines.findIndex((line, index) => index > opening && /^---\s*$/.test(line));
 	if (closing === -1) return result;
 
-	try {
-		const block = lines.slice(opening + 1, closing).join("\n");
-		const protectedBlock = protectQuotedHashes(block);
-		const parsed = parse(`---\n${protectedBlock.input}\n---`).frontmatter;
-		if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return result;
-		const frontmatter = parsed as FrontmatterProbe;
-		return {
-			name:
-				frontmatter.name == null
-					? null
-					: String(frontmatter.name).replaceAll(protectedBlock.sentinel, "#"),
-			description:
-				frontmatter.description == null
-					? null
-					: String(frontmatter.description).replaceAll(protectedBlock.sentinel, "#"),
-		};
-	} catch {
-		return result;
+	for (const line of lines.slice(opening + 1, closing)) {
+		// Unindented match only — nested keys (e.g. under `metadata:`) don't count.
+		const match = /^(name|description):\s*(.*)$/.exec(line);
+		if (match) result[match[1] as keyof BundleFrontmatter] = parseScalar(match[2]!);
 	}
+	return result;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

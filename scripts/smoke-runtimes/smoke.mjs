@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,10 +18,6 @@ import { loadPackagedSkills } from "../../packages/skills/dist/index.js";
 import { createStore } from "../../packages/store/dist/index.js";
 import { createStyle, fg, stringWidth } from "../../packages/style/dist/index.js";
 import * as testing from "../../packages/testing/dist/index.js";
-
-function assert(condition, message) {
-	if (!condition) throw new Error(message);
-}
 
 const roots = {
 	core: Crust,
@@ -48,13 +45,11 @@ assert(
 	style.fg("#ff0000")("x") === "\x1b[38;2;255;0;0mx\x1b[39m",
 	"expected vendored color parser output",
 );
-let invalidColorRejected = false;
-try {
-	fg("x", "not-a-color");
-} catch (error) {
-	invalidColorRejected = error instanceof TypeError;
-}
-assert(invalidColorRejected, "expected TypeError for invalid color input");
+assert.throws(
+	() => fg("x", "not-a-color"),
+	TypeError,
+	"expected TypeError for invalid color input",
+);
 
 const skillsRoot = await mkdtemp(join(tmpdir(), "crust-runtime-skills-"));
 try {

@@ -7,17 +7,6 @@ import { which } from "@crustjs/utils/process";
 import type { PostScaffoldStep } from "./types.ts";
 import { detectPackageManager } from "./utils.ts";
 
-/**
- * Whether spawning this executable requires `shell: true`.
- *
- * On Windows, package managers resolve to `.cmd`/`.bat` shims, which Node
- * refuses to spawn directly since the CVE-2024-27980 hardening (throws
- * EINVAL). Safe here because all callers pass fixed literal args.
- */
-function needsShell(executable: string): boolean {
-	return /\.(cmd|bat)$/i.test(executable);
-}
-
 // ────────────────────────────────────────────────────────────────────────────
 // Post-Scaffold Step Runner
 // ────────────────────────────────────────────────────────────────────────────
@@ -77,9 +66,12 @@ async function runInstall(cwd: string): Promise<void> {
 		throw new Error(`Package manager "${pm}" was not found on PATH. Install ${pm} and try again.`);
 	}
 
-	// Under shell mode, pass the bare pm name so cmd.exe resolves it — the
-	// resolved path may contain spaces, which an unquoted shell string breaks.
-	const shell = needsShell(executable);
+	// Windows pms resolve to .cmd/.bat shims, which Node refuses to spawn
+	// directly since the CVE-2024-27980 hardening (EINVAL); shell mode is safe
+	// here because the args are fixed literals. Under shell mode, pass the bare
+	// pm name so cmd.exe resolves it — the resolved path may contain spaces,
+	// which an unquoted shell string breaks.
+	const shell = /\.(cmd|bat)$/i.test(executable);
 	const proc = spawn(shell ? pm : executable, ["install"], { cwd, stdio: "inherit", shell });
 	const [exitCode] = await once(proc, "close");
 	if (exitCode !== 0) {
