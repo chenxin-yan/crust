@@ -5,8 +5,8 @@ import { join, resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
 
-import { buildCommand } from "../../src/commands/build.ts";
-import { execDenoBuild, SUPPORTED_TARGETS, TARGET_INFO } from "../../src/utils/build-helpers.ts";
+import { buildCommand } from "../src/commands/build.ts";
+import { execDenoBuild, SUPPORTED_TARGETS, TARGET_INFO } from "../src/utils/build-helpers.ts";
 
 function getHostTarget(): string | null {
 	if (process.platform === "darwin" && process.arch === "arm64") {
@@ -46,7 +46,7 @@ function getHostBunTarget(): string | null {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("Deno compile integration", () => {
-	// OS tmpdir, not import.meta.dir: this repo's tsconfig covers src/ with
+	// OS tmpdir, not import.meta.dir: this repo's tsconfig covers this dir with
 	// lib ESNext + Bun types, and deno compile would apply it to the entry
 	// and fail type-checking on `console`.
 	const tmpDir = mkdtempSync(join(tmpdir(), "crust-deno-build-integration-"));
@@ -76,8 +76,8 @@ describe("Deno compile integration", () => {
 
 describe("crust build integration — single target", () => {
 	const tmpDir = join(import.meta.dir, ".tmp-build-integration");
-	const crustCliPath = resolve(import.meta.dir, "..", "cli.ts");
-	const corePath = resolve(import.meta.dir, "../../../core/src/index.ts");
+	const crustCliPath = resolve(import.meta.dir, "../src/cli.ts");
+	const corePath = resolve(import.meta.dir, "../../core/src/index.ts");
 	const originalCwd = process.cwd;
 
 	beforeAll(() => {

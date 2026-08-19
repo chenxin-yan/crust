@@ -242,7 +242,7 @@ export function resolveEnvFilePaths(cwd: string, envFiles: string[] | undefined)
  *
  * @example
  * ```sh
- * crust build                                 # Build for all platforms + resolver scripts
+ * crust build                                 # Bun default: all platforms + resolver scripts
  * crust build --entry src/main.ts             # Custom entry point
  * crust build --name my-tool                  # Output as dist/my-tool-*
  * crust build --no-minify                     # Disable minification

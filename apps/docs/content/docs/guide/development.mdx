@@ -26,7 +26,7 @@ Use the [Testing guide](/docs/guide/testing) for `captureRun()` and `runInteract
 crust build
 ```
 
-Build validation prepares the complete command graph, including Extension-owned flags and commands, before compilation. It catches collisions and malformed definitions without running Command Actions. Use `--no-validate` only when the snapshot subprocess cannot run in your environment.
+Bun builds validate by preparing the complete command graph, including Extension-owned flags and commands, before compilation. This catches collisions and malformed definitions without running Command Actions. Deno builds currently skip this validation — use `crust build --target bun` to validate. Use `--no-validate` only when the snapshot subprocess cannot run in your environment.
 
 ## Inspect input
 

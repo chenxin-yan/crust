@@ -18,7 +18,7 @@ The **packaged skills directory** is the `skills/` directory shipped in your npm
 - A **generated skill**, rendered from the command tree and its `meta.sections`.
 - Any **authored skills**, included from hand-written skill directories via `extras`.
 
-The `skill()` Extension owns its build output. During `crust build`, configured `extras` are built alongside the generated skill from the prepared Command Snapshot. Without `extras`, the Extension copies the available packaged skills directory wholesale to `<outdir>/skills`, falling back to the generated skill when that directory is unavailable. `crust build --package` includes the resulting directory in the staged root package. No `--skills` build flag is needed; `--no-validate` skips all Extension build hooks.
+The `skill()` Extension owns its build output. During `crust build`, configured `extras` are built alongside the generated skill from the prepared Command Snapshot. Without `extras`, the Extension copies the available packaged skills directory wholesale to `<outdir>/skills`, falling back to the generated skill when that directory is unavailable. `crust build --package` includes the resulting directory in the staged root package. No `--skills` build flag is needed; `--no-validate` skips all Extension build hooks, and Deno builds currently skip them too.
 
 ```ts
 import { writeSkills } from "@crustjs/skills";

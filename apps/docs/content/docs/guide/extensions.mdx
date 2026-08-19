@@ -104,7 +104,7 @@ A renderer exports its own consumer id and selects its sections with `sectionsFo
 
 ## Build hooks
 
-`build(ctx)` generates artifacts when invoked by build tooling such as `crust build`; it does not run during ordinary `run()` or `execute()` dispatch. The snapshot subprocess invokes registered hooks in Extension registration order, so Extension presence is the source of intent. The context contains the frozen root Command Snapshot and a resolved absolute `outDir`. Build hooks may be async; errors propagate with the Extension name. `crust build --no-validate` skips entry preparation and all build hooks.
+`build(ctx)` generates artifacts when invoked by build tooling such as `crust build`; it does not run during ordinary `run()` or `execute()` dispatch. The snapshot subprocess invokes registered hooks in Extension registration order, so Extension presence is the source of intent. The context contains the frozen root Command Snapshot and a resolved absolute `outDir`. Build hooks may be async; errors propagate with the Extension name. `crust build --no-validate` skips entry preparation and all build hooks, and Deno builds currently skip them as well — build with `--target bun` when hook artifacts are required.
 
 ## Dependency injection
 
