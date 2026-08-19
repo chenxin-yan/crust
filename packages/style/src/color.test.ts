@@ -42,6 +42,13 @@ describe("fg", () => {
 
 	it("accepts `rgb()` strings", () => {
 		expect(fg("x", "rgb(0, 128, 255)")).toBe("\x1b[38;2;0;128;255mx\x1b[39m");
+		expect(fg("x", "rgb(0 128 255)")).toBe("\x1b[38;2;0;128;255mx\x1b[39m");
+	});
+
+	it("rejects mixed rgb() separators", () => {
+		for (const input of ["rgb(1, 2 3)", "rgb(1 2, 3)"]) {
+			expect(() => fg("x", input)).toThrow(TypeError);
+		}
 	});
 
 	it("rejects legacy packed, object, alpha, and 8-digit inputs", () => {
@@ -159,6 +166,13 @@ describe("fg — depth fallback", () => {
 
 	it('depth="256" emits ansi-256 sequence', () => {
 		expect(fg("hello", "#ff0000", "256")).toBe("\x1b[38;5;196mhello\x1b[39m");
+	});
+
+	it('depth="256" grayscale stays in range and near-grays use the ramp', () => {
+		// Light grays must not round past the palette (index ≤ 255).
+		expect(fg("x", [244, 244, 244], "256")).toBe("\x1b[38;5;255mx\x1b[39m");
+		// Near-gray picks the closer grayscale entry over a distant cube entry.
+		expect(fg("x", [120, 121, 122], "256")).toBe("\x1b[38;5;243mx\x1b[39m");
 	});
 
 	it('depth="16" quantizes to a standard 16-color SGR (no Bun.color ansi-16)', () => {
