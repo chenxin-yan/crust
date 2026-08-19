@@ -1,8 +1,19 @@
 import { accessSync, constants, statSync } from "node:fs";
-import { delimiter, extname, join } from "node:path";
+import { delimiter, extname, join, sep } from "node:path";
 
-/** Resolve an executable from PATH. */
+/** Resolve a bare executable name from PATH (and PATHEXT on Windows). */
 export function which(command: string): string | null {
+	// Path-containing inputs would produce garbage when joined onto PATH
+	// entries; resolve them directly instead.
+	if (command.includes(sep) || command.includes("/")) {
+		try {
+			accessSync(command, constants.X_OK);
+			if (statSync(command).isFile()) return command;
+		} catch {
+			// Fall through: not executable or missing.
+		}
+		return null;
+	}
 	const extensions =
 		process.platform === "win32" && !extname(command)
 			? (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";")
@@ -44,7 +55,8 @@ export function compareSemver(left: string, right: string): -1 | 0 | 1 {
 	for (let index = 0; index < Math.max(a.prerelease.length, b.prerelease.length); index++) {
 		const x = a.prerelease[index];
 		const y = b.prerelease[index];
-		if (x === undefined || y === undefined) return x === y ? 0 : x === undefined ? -1 : 1;
+		// The loop bound guarantees at most one side is exhausted here.
+		if (x === undefined || y === undefined) return x === undefined ? -1 : 1;
 		if (x === y) continue;
 		const xNumeric = /^\d+$/.test(x);
 		const yNumeric = /^\d+$/.test(y);
