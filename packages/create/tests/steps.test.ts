@@ -81,6 +81,20 @@ describe("runSteps", () => {
 			// At minimum, a successful exit is expected (no throw)
 			expect(existsSync(join(tempDir, "package.json"))).toBe(true);
 		});
+
+		it("reports when the detected package manager is unavailable", async () => {
+			writeFileSync(join(tempDir, "pnpm-lock.yaml"), "");
+			const originalPath = process.env.PATH;
+			process.env.PATH = tempDir;
+
+			try {
+				await expect(runSteps([{ type: "install" }], tempDir)).rejects.toThrow(
+					'Package manager "pnpm" was not found on PATH. Install pnpm and try again.',
+				);
+			} finally {
+				process.env.PATH = originalPath;
+			}
+		});
 	});
 
 	// ────────────────────────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { text } from "node:stream/consumers";
 
-import { $ } from "bun";
+import { which } from "@crustjs/utils/process";
 
 import type { PostScaffoldStep } from "./types.ts";
 import { detectPackageManager } from "./utils.ts";
@@ -61,7 +61,12 @@ export async function runSteps(steps: PostScaffoldStep[], cwd: string): Promise<
  */
 async function runInstall(cwd: string): Promise<void> {
 	const pm = detectPackageManager(cwd);
-	const proc = spawn(pm, ["install"], { cwd, stdio: "inherit" });
+	const executable = which(pm);
+	if (!executable) {
+		throw new Error(`Package manager "${pm}" was not found on PATH. Install ${pm} and try again.`);
+	}
+
+	const proc = spawn(executable, ["install"], { cwd, stdio: "inherit" });
 	const [exitCode] = await once(proc, "close");
 	if (exitCode !== 0) {
 		throw new Error(`"${pm} install" exited with code ${exitCode}`);
@@ -73,15 +78,20 @@ async function runInstall(cwd: string): Promise<void> {
  * stage all files and create an initial commit.
  */
 async function runGitInit(cwd: string, commit?: string): Promise<void> {
-	await spawnChecked(["git", "init"], cwd, "git init");
+	const git = which("git");
+	if (!git) {
+		throw new Error('"git" was not found on PATH. Install Git and try again.');
+	}
+
+	await spawnChecked([git, "init"], cwd, "git init");
 
 	if (commit) {
 		// Ensure git identity is configured for the commit.
 		// CI environments often lack global user.name/user.email config,
 		// so we set local defaults if they are missing.
-		await ensureGitIdentity(cwd);
-		await spawnChecked(["git", "add", "."], cwd, "git add");
-		await spawnChecked(["git", "commit", "-m", commit], cwd, "git commit");
+		await ensureGitIdentity(cwd, git);
+		await spawnChecked([git, "add", "."], cwd, "git add");
+		await spawnChecked([git, "commit", "-m", commit], cwd, "git commit");
 	}
 }
 
@@ -115,15 +125,10 @@ async function runOpenEditor(cwd: string): Promise<void> {
 	}
 }
 
-/**
- * Run an arbitrary Bun Shell command string.
- *
- * Bun Shell is cross-platform and does not depend on `/bin/sh`,
- * so shell features like redirection work on Windows as well.
- */
+/** Run an arbitrary command string through the platform shell. */
 async function runCommand(cmd: string, cwd: string): Promise<void> {
-	const result = await $`${{ raw: cmd }}`.cwd(cwd).nothrow();
-	const exitCode = result.exitCode;
+	const proc = spawn(cmd, { cwd, shell: true, stdio: "inherit" });
+	const [exitCode] = await once(proc, "close");
 	if (exitCode !== 0) {
 		throw new Error(`Command "${cmd}" exited with code ${exitCode}`);
 	}
@@ -140,16 +145,16 @@ async function runCommand(cmd: string, cwd: string): Promise<void> {
  * to fail. This sets sensible local-repo defaults only when the values
  * are not already set at any level (local, global, system).
  */
-async function ensureGitIdentity(cwd: string): Promise<void> {
-	const hasName = spawnSync("git", ["config", "user.name"], { cwd }).status === 0;
-	const hasEmail = spawnSync("git", ["config", "user.email"], { cwd }).status === 0;
+async function ensureGitIdentity(cwd: string, git: string): Promise<void> {
+	const hasName = spawnSync(git, ["config", "user.name"], { cwd }).status === 0;
+	const hasEmail = spawnSync(git, ["config", "user.email"], { cwd }).status === 0;
 
 	if (!hasName) {
-		await spawnChecked(["git", "config", "user.name", "Crust"], cwd, "git config user.name");
+		await spawnChecked([git, "config", "user.name", "Crust"], cwd, "git config user.name");
 	}
 	if (!hasEmail) {
 		await spawnChecked(
-			["git", "config", "user.email", "crust@scaffolded.project"],
+			[git, "config", "user.email", "crust@scaffolded.project"],
 			cwd,
 			"git config user.email",
 		);

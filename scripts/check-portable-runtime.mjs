@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join, sep } from "node:path";
 
-const exemptPackages = new Set(["crust", "create", "create-crust"]);
+const exemptPackages = new Set(["crust"]);
 const violations = [];
 
 for (const relative of await readdir("packages", { recursive: true })) {
