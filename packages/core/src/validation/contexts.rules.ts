@@ -25,6 +25,23 @@ export function duplicateContext(
 	});
 }
 
+/** `uses` entries are Context factories returned by defineContext(). */
+export function usesProvenance(
+	owner: string,
+	subject: "context" | "command" | "extension",
+	uses: readonly AnyContextFactory[],
+): void {
+	const invalid = uses.some(
+		(factory) => typeof (factory as Partial<AnyContextFactory> | null)?.contextName !== "string",
+	);
+	if (!invalid) return;
+	throw new CrustError(
+		"DEFINITION",
+		`${owner} uses entries must be Context factories returned by defineContext()`,
+		{ subject, reason: "invalid-uses" },
+	);
+}
+
 /** Declared Context dependencies must be available at their composition site. */
 export function missingDependency(
 	owner: string,

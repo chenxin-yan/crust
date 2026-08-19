@@ -15,7 +15,7 @@ const repoRoot = resolve(import.meta.dir, "../../..");
 const corePkg = resolve(import.meta.dir, "..");
 const tscBin = join(repoRoot, "node_modules/.bin/tsc");
 
-const CONSUMER_SOURCE = `import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
+const CONSUMER_SOURCE = `import { Crust, defineCommand, defineContext, defineExtension, defineExtensionId, defineFlag } from "@crustjs/core";
 
 // Inferred defineFlag element type references Simplify
 export const configFlag = defineFlag("config", {
@@ -47,6 +47,15 @@ export const deploy = defineCommand("deploy", { uses: [auth] }, (cmd) =>
 		void (await ctx.auth).apiKey;
 	}),
 );
+
+// An exported Extension carries evaluated dependency intersections and
+// ContextInstance tuples; a TS2742 regression here must fail emission
+export const telemetry = defineExtension(defineExtensionId("telemetry"), {
+	uses: [authenticatedApi],
+	provides: [auth()],
+	commands: [deploy],
+	hooks: { preRun: async ({ ctx }) => void (await ctx.auth) },
+});
 
 // Inferred builder type references accumulated Context-owned flag shapes
 export const app = new Crust("consumer-cli")

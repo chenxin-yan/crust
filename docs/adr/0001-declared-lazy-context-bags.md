@@ -16,7 +16,7 @@ All consumers receive the same `ctx` shape: a readonly bag whose keys are Contex
 
 - Context setup receives exactly its declared dependency closure.
 - A command definition's action receives its declared dependencies plus Contexts provided on its own builder.
-- Extension hooks receive exactly the Extension's declared dependencies.
+- Extension hooks receive exactly the Extension's declared dependencies in their type; at runtime all Extensions share one invocation bag, so an undeclared name another Extension declared is reachable but untyped.
 - Root actions receive the Contexts accumulated by `.provide()` and Extension `provides`.
 - `.provide()`, `.add()`, and `.extend()` validate dependency closure at the type level and mirror the check at definition/build time.
 - Dependencies in one `.provide()` or `.extend()` batch are order-independent. Across fluent calls, providers precede consumers so each composition call can be checked locally.
@@ -32,4 +32,4 @@ Construction remains lazy, but property access has an effect. Destructuring `ctx
 
 Reusable nested definitions may repeat an inherited dependency in their own `uses` contract. This is intentional: every sealed definition remains independently checkable, and `.add()` errors stay local rather than being deferred to execution.
 
-A double cuts dependencies for the factory instance it replaces. A downstream factory still carries the original dependency's closure in its own static type, so replacing only that intermediate dependency with `.of()` does not shrink the downstream type-level closure. Provide the downstream factory's own `.of()` double when the entire subgraph must be omitted.
+A double cuts dependencies for the factory instance it replaces: its own setup runs without a graph, and its subtree is not required at provide time on untyped paths. A downstream factory still carries the original dependency's closure in its static type, and downstream bags follow the factory-declared graph, so the closure stays reachable at runtime — an unprovided transitive dependency fails loud with `missing-context` on access rather than reading as `undefined`. Provide the downstream factory's own `.of()` double when the entire subgraph must be omitted.

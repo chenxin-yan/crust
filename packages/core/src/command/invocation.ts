@@ -15,6 +15,7 @@ import { applySchemas } from "../parsing/schema.ts";
 import { cloneFlagSpellings } from "../parsing/spellings.ts";
 import { isText } from "../sections.ts";
 import type { CommandSection, FlagDef, FlagsDef, InvocationIO } from "../types.ts";
+import { missingDependency } from "../validation/contexts.rules.ts";
 import { normalizeFlag } from "../validation/normalize.ts";
 import type { CommandDefinition } from "./crust.ts";
 import type { CommandNode } from "./node.ts";
@@ -271,6 +272,23 @@ function prepareInvocation(
 		applyExtensionCommands(rootNode, extension, materializeCommandDefinition);
 	}
 	for (const extension of extensions) applyExtensionFlags(rootNode, extension);
+
+	// Hooks run on every invocation, so each Extension's `uses` must resolve on
+	// every command path. A child added before a later `.provide()` keeps its
+	// contexts snapshot (no backfill), which extend-time root validation misses.
+	const validateExtensionDependencies = (target: CommandNode): void => {
+		const available = new Set(target.contexts.map((context) => context.name));
+		for (const extension of extensions) {
+			missingDependency(
+				`Extension "${extension.id}"`,
+				extension.uses ?? [],
+				available,
+				`the "${target.meta.name}" command path`,
+			);
+		}
+		for (const child of Object.values(target.subCommands)) validateExtensionDependencies(child);
+	};
+	validateExtensionDependencies(rootNode);
 
 	validateAuthoredSections(rootNode);
 	const authoredSnapshot = snapshotCommand(rootNode);

@@ -125,7 +125,7 @@ Omitting `io` creates no new ambient scope, preserving native TTY detection and 
 | `ContextFactory`    | Factory returned by `defineContext()`, with `contextName` and `.of()`     |
 | `AnyContextFactory` | Shared constraint for factories accepted by `uses`                        |
 | `ContextInstance`   | Named lazy dependency attached with `.provide()`                          |
-| `ContextConfig`     | Flags owned by a Context                                                  |
+| `ContextConfig`     | Flags owned by a Context and its declared `uses` dependencies             |
 | `ContextSetup`      | Typed setup input: `options`, `flags`, lazy bag `ctx`, and invocation I/O |
 | `ContextMap`        | Record shape used by accumulated command Context types                    |
 

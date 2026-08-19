@@ -8,6 +8,7 @@ import type {
 	NamedFlagDef,
 	NamedFlagsRecord,
 } from "../types.ts";
+import { usesProvenance } from "../validation/contexts.rules.ts";
 import type { ValidateNamedFlagDefs } from "../validation/flags.brands.ts";
 import { normalizeFlag } from "../validation/normalize.ts";
 
@@ -75,6 +76,8 @@ export interface ContextFactory<
 > {
 	(options: Options): ContextInstance<Name, Value, OF, Deps>;
 	readonly contextName: Name;
+	/** @internal — declared direct dependency factories */
+	readonly uses: readonly AnyContextFactory[];
 	of(value: Value): ContextInstance<Name, Value, OF>;
 	readonly _deps?: Deps;
 }
@@ -152,7 +155,7 @@ export function defineContext<Name extends string, Value, Options = void>(
 ): ContextFactory<Name, Options, Value>;
 export function defineContext<
 	Name extends string,
-	const R extends ContextConfig<any>,
+	const R extends ContextConfig,
 	Value,
 	Options = void,
 >(
@@ -190,6 +193,7 @@ export function defineContext(
 		);
 		ownedFlags[flagName] = rest as FlagDef;
 	}
+	usesProvenance(`Context "${name}"`, "context", config.uses ?? []);
 	const uses = Object.freeze([...(config.uses ?? [])]);
 	const factory = (options: unknown): ContextInstance => ({
 		kind: "context",
@@ -199,6 +203,7 @@ export function defineContext(
 		setup: (input) => setup({ options, ...input } as never),
 	});
 	factory.contextName = name;
+	factory.uses = uses;
 	factory.of = (value: unknown): ContextInstance => ({
 		kind: "context",
 		name,
@@ -311,12 +316,21 @@ export function createContextResolver(
 		}
 	};
 
+	// Bag getters run under enumeration (spread, JSON.stringify, deep-equal)
+	// where nothing awaits the result; an early rejection must arrive pre-handled
+	// or it crashes the process as an unhandledRejection.
+	function handledRejection(reason: CrustError): Promise<never> {
+		const rejection = Promise.reject(reason);
+		void rejection.catch(() => {});
+		return rejection;
+	}
+
 	const makePull =
 		(origin: Entry | null) =>
 		(name: string): Promise<unknown> => {
 			const originSuffix = origin ? ` (pulled while constructing Context "${origin.name}")` : "";
 			if (disposed) {
-				return Promise.reject(
+				return handledRejection(
 					new CrustError(
 						"DEFINITION",
 						`Context "${name}" cannot be pulled from onError because invocation Contexts have already been disposed.`,
@@ -326,7 +340,7 @@ export function createContextResolver(
 			}
 			const context = byName.get(name);
 			if (!context) {
-				return Promise.reject(
+				return handledRejection(
 					new CrustError(
 						"DEFINITION",
 						`No provider for Context "${name}". Add .provide(${name}(...)) to the app or an ancestor command.${originSuffix}`,
@@ -335,7 +349,7 @@ export function createContextResolver(
 				);
 			}
 			if (validatedFlags === undefined && Object.keys(context.ownedFlags).length > 0) {
-				return Promise.reject(
+				return handledRejection(
 					new CrustError(
 						"DEFINITION",
 						`Context "${name}" owns flags and cannot be pulled before flag validation${originSuffix}. Pull it from an action or a postRun hook after a validated invocation.`,
@@ -385,7 +399,7 @@ export function createContextResolver(
 				const path = pathTo(entry, origin.name);
 				if (path) {
 					const cycle = [origin.name, ...path].map((part) => `"${part}"`).join(" -> ");
-					return Promise.reject(
+					return handledRejection(
 						new CrustError("DEFINITION", `Context dependency cycle: ${cycle}`, {
 							subject: "context",
 							name: origin.name,
@@ -411,7 +425,10 @@ export function createContextResolver(
 				enumerable: true,
 				get: () => makePull(origin)(name),
 			});
-			for (const dependency of byName.get(name)?.uses ?? []) add(dependency);
+			// Follow the source's own declared graph: a provided .of() double cuts the
+			// *instance* uses, but the bag must match the factory-typed closure so a
+			// transitive read fails loud (missing-context) instead of yielding undefined.
+			for (const dependency of source.uses ?? []) add(dependency);
 		};
 		for (const source of sources) add(source);
 		return Object.freeze(bag) as ContextBag<Deps>;

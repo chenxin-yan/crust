@@ -11,6 +11,7 @@ import type {
 	NamedFlagsRecord,
 } from "../types.ts";
 import type { DeclaredDepsOf } from "../validation/contexts.brands.ts";
+import { usesProvenance } from "../validation/contexts.rules.ts";
 import type { ValidateNamedFlagDefs } from "../validation/flags.brands.ts";
 import { normalizeFlag } from "../validation/normalize.ts";
 import type {
@@ -286,6 +287,7 @@ export function defineExtension<
 		CommandDefinitionsDependencies<Commands>,
 	Provides
 > {
+	usesProvenance(`Extension "${id}"`, "extension", config.uses ?? []);
 	const ownedFlags: FlagsDef = {};
 	const spellings = new Map();
 	for (const def of config.flags ?? []) {

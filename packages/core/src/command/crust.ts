@@ -39,7 +39,7 @@ import type {
 	ValidateContextNames,
 	ValidateDeclaredDeps,
 } from "../validation/contexts.brands.ts";
-import { missingDependency } from "../validation/contexts.rules.ts";
+import { missingDependency, usesProvenance } from "../validation/contexts.rules.ts";
 import type {
 	ProvideChecks,
 	SpellingsOf,
@@ -434,6 +434,7 @@ export function defineCommand(
 		});
 	}
 	const { uses = [], ...meta } = config;
+	usesProvenance(`Command definition "${name}"`, "command", uses);
 	const internal: CommandDefinitionInternal = {
 		recipe: recipe as CommandDefinitionInternal["recipe"],
 		uses: Object.freeze([...uses]),

@@ -16,6 +16,7 @@ type Inst<Name extends string, Deps extends Record<string, unknown> = {}> = Cont
 	{},
 	Deps
 >;
+type ValueInst<Name extends string, Value> = ContextInstance<Name, Value>;
 type NameBrandOf<T> = Extract<keyof T, "FIX_DUPLICATE_CONTEXT">;
 
 describe("compile-time Context validation", () => {
@@ -35,6 +36,48 @@ describe("compile-time Context validation", () => {
 
 		expect(true).toBe(true);
 	});
+	it("brands a same-name provider whose value type mismatches the declared dependency", () => {
+		type Consumer = ContextInstance<"db", unknown, {}, { config: { url: string } }>;
+
+		type Mismatch = ValidateContextDeps<{}, readonly [Consumer, ValueInst<"config", number>]>;
+		type _mismatch = Expect<
+			Equal<
+				Mismatch[0]["FIX_DEPENDENCY_TYPE"],
+				'Context "db" uses Context "config" whose provided value does not satisfy the declared dependency type'
+			>
+		>;
+
+		type Satisfied = ValidateContextDeps<
+			{},
+			readonly [Consumer, ValueInst<"config", { url: string; extra: boolean }>]
+		>;
+		type _satisfied = Expect<Equal<Extract<keyof Satisfied[0], "FIX_DEPENDENCY_TYPE">, never>>;
+
+		// Earlier-call providers are checked through the accumulated Ctx values.
+		type CtxMismatch = ValidateContextDeps<{ config: number }, readonly [Consumer]>;
+		type _ctx = Expect<
+			Equal<Extract<keyof CtxMismatch[0], "FIX_DEPENDENCY_TYPE">, "FIX_DEPENDENCY_TYPE">
+		>;
+
+		// any-valued providers and widened registries opt out.
+		type AnyValue = ValidateContextDeps<{}, readonly [Consumer, ValueInst<"config", any>]>;
+		type _any = Expect<Equal<Extract<keyof AnyValue[0], "FIX_DEPENDENCY_TYPE">, never>>;
+		type Widened = ValidateContextDeps<Record<string, unknown>, readonly [Consumer]>;
+		type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_DEPENDENCY_TYPE">, never>>;
+
+		expect(true).toBe(true);
+	});
+
+	it("opts widened instance dependency maps out of the missing-dependency brand", () => {
+		type WidenedDeps = ValidateContextDeps<{}, readonly [Inst<"db", any>]>;
+		type _widened = Expect<Equal<Extract<keyof WidenedDeps[0], "FIX_MISSING_DEPENDENCY">, never>>;
+
+		type IndexedDeps = ValidateContextDeps<{}, readonly [Inst<"db", Record<string, unknown>>]>;
+		type _indexed = Expect<Equal<Extract<keyof IndexedDeps[0], "FIX_MISSING_DEPENDENCY">, never>>;
+
+		expect(true).toBe(true);
+	});
+
 	it("brands sealed-unit dependencies and opts widened contracts out", () => {
 		type Missing = ValidateDeclaredDeps<{}, readonly [{ readonly _deps?: { db: string } }]>;
 		type _missing = Expect<

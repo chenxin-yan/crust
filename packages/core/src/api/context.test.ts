@@ -5,11 +5,12 @@ import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { NamedFlagDef } from "../types.ts";
 import {
-	createContextResolver,
-	defineContext,
+	type AnyContextFactory,
 	type ContextBag,
 	type ContextInstance,
 	type ContextSetup,
+	createContextResolver,
+	defineContext,
 } from "./context.ts";
 import { defineExtension } from "./extension.ts";
 import { defineFlag } from "./flags.ts";
@@ -583,13 +584,30 @@ describe("Context setup dependencies", () => {
 		});
 		new Crust("cli").provide(config(), db()).extend(extension);
 
+		// A factory widened to AnyContextFactory opts out of the compile-time
+		// dependency brand; wiring stays runtime-checked.
+		const widened: AnyContextFactory = config;
+		new Crust("cli").provide(widened(undefined));
+
 		const invalidCompositions = () => {
 			// @ts-expect-error -- db's transitive dependency closure is unsatisfied
 			new Crust("cli").provide(db());
+			// @ts-expect-error -- uses entries must be Context factories
+			defineContext("bad", { uses: [42] }, () => 1);
 			// @ts-expect-error -- command dependencies are checked by .add()
 			new Crust("cli").add(command);
 			// @ts-expect-error -- Extension dependencies are checked by .extend()
 			new Crust("cli").extend(extension);
+			const badProvides = defineExtension(defineExtensionId("bad-provides"), {
+				provides: [db()],
+			});
+			// @ts-expect-error -- Extension provides with unmet transitive deps are checked by .extend()
+			new Crust("cli").extend(badProvides);
+			const badCommand = defineExtension(defineExtensionId("bad-command"), {
+				commands: [command],
+			});
+			// @ts-expect-error -- Extension-contributed command deps are checked by .extend()
+			new Crust("cli").extend(badCommand);
 		};
 		void invalidCompositions;
 	});
@@ -723,11 +741,58 @@ describe("Context setup dependencies", () => {
 		await app.run([], { flags: { token: "x" } });
 	});
 
+	it("exposes the typed transitive closure above an .of() cut", async () => {
+		const config = defineContext("config", () => ({ url: "memory://" }));
+		const db = defineContext("db", { uses: [config] }, async ({ ctx }) => ({
+			url: (await ctx.config).url,
+		}));
+		const report = defineContext("report", { uses: [db] }, async ({ ctx }) => {
+			// The type-level closure includes config even when db is provided as a
+			// .of() double; the runtime bag must match it.
+			const url = (await ctx.config).url;
+			return `report:${url}`;
+		});
+		await new Crust("cli")
+			.provide(db.of({ url: "fake" }), config(), report())
+			.action(async ({ ctx }) => expect(await ctx.report).toBe("report:memory://"))
+			.run([]);
+	});
+
+	it("fails loud when a transitive dependency above an .of() cut is unprovided", async () => {
+		const config = defineContext("config", () => "config");
+		const db = defineContext("db", { uses: [config] }, async ({ ctx }) => await ctx.config);
+		const report = defineContext("report", { uses: [db] }, async ({ ctx }) => await ctx.config);
+		const app = new Crust("cli")
+			.provide(db.of("fake"), report() as never)
+			.action(async ({ ctx }) => void (await (ctx as { report: Promise<string> }).report));
+		await expect(app.run([])).rejects.toMatchObject({
+			details: { name: "config", reason: "missing-context" },
+		});
+	});
+
+	it("builds Extension hook bags from the declared factory graph across an .of() cut", async () => {
+		const config = defineContext("config", () => "memory://");
+		const db = defineContext("db", { uses: [config] }, async ({ ctx }) => await ctx.config);
+		let seen: string | undefined;
+		const observer = defineExtension(defineExtensionId("of-cut-observer"), {
+			uses: [db],
+			hooks: {
+				preRun: async ({ ctx }) => {
+					seen = await ctx.config;
+				},
+			},
+		});
+		await new Crust("cli").provide(db.of("fake"), config()).extend(observer).run([]);
+		expect(seen).toBe("memory://");
+	});
+
 	it("normalizes flags of a hand-written ContextInstance at provide time", () => {
 		const rogue = {
 			kind: "context",
 			name: "rogue",
-			ownedFlags: { mode: { type: "string", choices: ["a", "b"], default: "z" } },
+			ownedFlags: {
+				mode: { type: "string", choices: ["a", "b"], default: "z" },
+			},
 			setup: () => ({}),
 		} as unknown as Parameters<Crust["provide"]>[0];
 		expect(() => new Crust("cli").provide(rogue)).toThrow(/Invalid default value/);
@@ -764,6 +829,43 @@ describe("Context dependency runtime boundaries", () => {
 		await expect(app.run(["child"])).rejects.toMatchObject({
 			details: { name: "logger", reason: "missing-context" },
 		});
+		// Hooks run on every invocation, so the stale child path is a wiring error
+		// caught at prepare time — healthy sibling paths fail deterministically too.
+		await expect(app.run([])).rejects.toMatchObject({
+			details: { name: "logger", reason: "missing-context" },
+		});
+	});
+
+	it("rejects an Extension-contributed command with an unmet dependency at prepare time", async () => {
+		const config = defineContext("config", () => "config");
+		const report = defineCommand("report", { uses: [config] }, (builder) =>
+			builder.action(() => {}),
+		);
+		const reporter = defineExtension(defineExtensionId("reporter"), {
+			commands: [report],
+		});
+		const app = new Crust("cli").extend(reporter as never);
+		await expect(app.run([])).rejects.toThrow(
+			'Extension "reporter" command "report" uses Context "config" which is not provided on the "cli" command path',
+		);
+	});
+
+	it("accepts an Extension dependency provided by an earlier .extend() call", async () => {
+		const logger = defineContext("logger", () => "logger");
+		const providerExtension = defineExtension(defineExtensionId("provider"), {
+			provides: [logger()],
+		});
+		let seen: string | undefined;
+		const consumerExtension = defineExtension(defineExtensionId("consumer"), {
+			uses: [logger],
+			hooks: {
+				preRun: async ({ ctx }) => {
+					seen = await ctx.logger;
+				},
+			},
+		});
+		await new Crust("cli").extend(providerExtension).extend(consumerExtension).run([]);
+		expect(seen).toBe("logger");
 	});
 
 	it("keeps dynamic cycle detection for untyped Context instances", async () => {
@@ -785,7 +887,38 @@ describe("Context dependency runtime boundaries", () => {
 		};
 		const app = new Crust("cli").provide(a, b).action(async ({ ctx }) => void (await ctx.a));
 
-		await expect(app.run([])).rejects.toMatchObject({ details: { reason: "context-cycle" } });
+		await expect(app.run([])).rejects.toMatchObject({
+			details: { reason: "context-cycle" },
+		});
+	});
+
+	it("pre-handles early bag rejections so enumeration cannot crash the process", async () => {
+		const token = defineFlag("token", { type: "string" });
+		const gate = defineContext("gate", { flags: [token] }, () => "gate");
+		let unhandled: unknown;
+		const onUnhandled = (error: unknown) => {
+			unhandled = error;
+		};
+		process.on("unhandledRejection", onUnhandled);
+		try {
+			await using disposal = new AsyncDisposableStack();
+			const resolver = createContextResolver(
+				[gate()],
+				{ stdout: () => {}, stderr: () => {} },
+				disposal,
+			);
+			const bag = resolver.bag<{ gate: string }>([gate]);
+			// Spread invokes every getter without awaiting; before flag validation the
+			// getter returns a rejected promise that must arrive pre-handled.
+			const spread = { ...bag };
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			expect(unhandled).toBeUndefined();
+			await expect(spread.gate).rejects.toMatchObject({
+				details: { reason: "flags-before-validation" },
+			});
+		} finally {
+			process.off("unhandledRejection", onUnhandled);
+		}
 	});
 
 	it("keeps missing and disposed guards on lazy bag getters", async () => {
@@ -814,6 +947,34 @@ describe("Context dependency runtime boundaries", () => {
 });
 
 describe("lazy Context bags", () => {
+	it("memoizes a degraded value a setup returned after catching the flag-phase rejection", async () => {
+		const token = defineFlag("token", { type: "string" });
+		const gate = defineContext("gate", { flags: [token] }, () => "real");
+		let setups = 0;
+		const wrapper = defineContext("wrapper", { uses: [gate] }, async ({ ctx }) => {
+			setups += 1;
+			try {
+				return await ctx.gate;
+			} catch {
+				// Only the flag-phase *rejection* retries after validation; a setup that
+				// swallows it memoizes the degraded value for the whole invocation.
+				return "degraded";
+			}
+		});
+		const observer = defineExtension(defineExtensionId("degraded-observer"), {
+			uses: [wrapper],
+			hooks: { preRun: async ({ ctx }) => void (await ctx.wrapper) },
+		});
+		await new Crust("cli")
+			.provide(gate(), wrapper())
+			.extend(observer)
+			.action(async ({ ctx }) => {
+				expect(await ctx.wrapper).toBe("degraded");
+			})
+			.run([], { flags: { token: "x" } });
+		expect(setups).toBe(1);
+	});
+
 	it("memoizes one value across hooks and the action", async () => {
 		let setups = 0;
 		const service = defineContext("service", () => ({ id: ++setups }));
