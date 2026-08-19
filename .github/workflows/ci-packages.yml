@@ -22,9 +22,16 @@ permissions:
   contents: read
 
 jobs:
-  node-smoke:
+  runtime-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      matrix:
+        include:
+          - runtime: node
+            smoke: node scripts/smoke-runtimes/smoke.mjs
+          - runtime: deno
+            smoke: deno run --allow-env --allow-read --config scripts/smoke-runtimes/deno.json scripts/smoke-runtimes/smoke.mjs
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -32,41 +39,13 @@ jobs:
           persist-credentials: false
 
       - name: Setup Node LTS
+        if: matrix.runtime == 'node'
         uses: actions/setup-node@v6
         with:
           node-version: 24
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-
-      - name: Install dependencies
-        run: bun ci
-
-      - name: Cache Turbo
-        uses: actions/cache@v6
-        with:
-          path: .turbo
-          key: turbo-node-smoke-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            turbo-node-smoke-${{ runner.os }}-
-            turbo-packages-${{ runner.os }}-
-
-      - name: Build packages
-        run: bun turbo run build --filter='./packages/*'
-
-      - name: Smoke built distributions with Node
-        run: node scripts/smoke-runtimes/smoke.mjs
-
-  deno-smoke:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
       - name: Setup Deno
+        if: matrix.runtime == 'deno'
         uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
@@ -81,16 +60,16 @@ jobs:
         uses: actions/cache@v6
         with:
           path: .turbo
-          key: turbo-deno-smoke-${{ runner.os }}-${{ github.sha }}
+          key: turbo-${{ matrix.runtime }}-smoke-${{ runner.os }}-${{ github.sha }}
           restore-keys: |
-            turbo-deno-smoke-${{ runner.os }}-
+            turbo-${{ matrix.runtime }}-smoke-${{ runner.os }}-
             turbo-packages-${{ runner.os }}-
 
       - name: Build packages
         run: bun turbo run build --filter='./packages/*'
 
-      - name: Smoke built distributions with Deno
-        run: deno run --allow-env --allow-read --config scripts/smoke-runtimes/deno.json scripts/smoke-runtimes/smoke.mjs
+      - name: Smoke built distributions with ${{ matrix.runtime }}
+        run: ${{ matrix.smoke }}
 
   ci:
     runs-on: ubuntu-latest

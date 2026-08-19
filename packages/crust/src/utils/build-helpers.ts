@@ -105,47 +105,20 @@ export const TARGET_INFO = {
 	},
 } as const satisfies Record<BunTarget, TargetInfo>;
 
+/** Resolver metadata only; alias/platformKey are Bun-target concerns (npm packaging, host detection). */
 export const DENO_TARGET_INFO = {
-	"x86_64-unknown-linux-gnu": {
-		alias: "linux-x64",
-		platformKey: "linux-x64",
-		unameKey: "Linux-x86_64",
-		os: "linux",
-		cpu: "x64",
-	},
-	"aarch64-unknown-linux-gnu": {
-		alias: "linux-arm64",
-		platformKey: "linux-arm64",
-		unameKey: "Linux-aarch64",
-		os: "linux",
-		cpu: "arm64",
-	},
-	"x86_64-apple-darwin": {
-		alias: "darwin-x64",
-		platformKey: "darwin-x64",
-		unameKey: "Darwin-x86_64",
-		os: "darwin",
-		cpu: "x64",
-	},
-	"aarch64-apple-darwin": {
-		alias: "darwin-arm64",
-		platformKey: "darwin-arm64",
-		unameKey: "Darwin-arm64",
-		os: "darwin",
-		cpu: "arm64",
-	},
-	"x86_64-pc-windows-msvc": {
-		alias: "windows-x64",
-		platformKey: "win32-x64",
-		unameKey: "Windows-x64",
-		os: "win32",
-		cpu: "x64",
-	},
-} as const satisfies Record<DenoTarget, TargetInfo>;
+	"x86_64-unknown-linux-gnu": { unameKey: "Linux-x86_64", os: "linux", cpu: "x64" },
+	"aarch64-unknown-linux-gnu": { unameKey: "Linux-aarch64", os: "linux", cpu: "arm64" },
+	"x86_64-apple-darwin": { unameKey: "Darwin-x86_64", os: "darwin", cpu: "x64" },
+	"aarch64-apple-darwin": { unameKey: "Darwin-arm64", os: "darwin", cpu: "arm64" },
+	"x86_64-pc-windows-msvc": { unameKey: "Windows-x64", os: "win32", cpu: "x64" },
+} as const satisfies Record<DenoTarget, ResolverTargetInfo>;
+
+type ResolverTargetInfo = Pick<TargetInfo, "unameKey" | "os" | "cpu">;
 
 const COMPILE_TARGET_INFO = { ...TARGET_INFO, ...DENO_TARGET_INFO } as const;
 
-export function getTargetInfo(target: CompileTarget): TargetInfo {
+export function getTargetInfo(target: CompileTarget): ResolverTargetInfo {
 	return COMPILE_TARGET_INFO[target];
 }
 
