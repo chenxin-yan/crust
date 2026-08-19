@@ -56,5 +56,7 @@ export function stringWidth(input: string): number {
 	).Bun;
 
 	// Native fast paths are reserved for hand-rolled fallbacks on render-hot paths.
+	// The globalThis cast avoids a ReferenceError off-Bun and avoids the direct
+	// Bun-global member access that scripts/check-portable-runtime.mjs rejects.
 	return bun?.stringWidth(input, { countAnsiEscapeCodes: false }) ?? stringWidthJs(input);
 }

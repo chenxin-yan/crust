@@ -35,6 +35,12 @@ type FrontmatterProbe = {
 /**
  * Protects hashes inside quoted scalars from ultramatter's comment stripping.
  * The sentinel cannot collide because it is chosen to be absent from the input.
+ *
+ * Known ceiling: quote characters are tracked positionally, not per YAML's
+ * scalar-start rule, so an apostrophe inside a plain scalar (`it's ok # note`)
+ * opens phantom quote state and preserves what YAML would strip as a comment.
+ * Accepted: name/description frontmatter with an apostrophe *and* a trailing
+ * comment on the same line is rare, and preserving too much is the safer drift.
  */
 function protectQuotedHashes(input: string): { input: string; sentinel: string } {
 	let sentinel = "\uE000";

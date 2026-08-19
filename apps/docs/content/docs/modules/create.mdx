@@ -149,7 +149,7 @@ Execute an array of post-scaffold steps sequentially. If any step fails, the err
 - `{ type: "install" }` detects the package manager and installs dependencies.
 - `{ type: "git-init", commit?: string }` initializes Git and optionally creates a commit.
 - `{ type: "open-editor" }` opens `$EDITOR` or VS Code and does not fail when neither is found.
-- `{ type: "command", cmd: string, cwd?: string }` runs a Bun Shell command; `cwd` overrides the working directory.
+- `{ type: "command", cmd: string, cwd?: string }` runs a command through the platform shell (`/bin/sh` on POSIX, `cmd.exe` on Windows); `cwd` overrides the working directory.
 
 Use `install` for dependency installation. Prefer `command` for custom post-scaffold automation rather than manually shelling out to `npm install` / `bun install`.
 
