@@ -266,10 +266,7 @@ describe("ValidateNamedFlagDefs", () => {
 		type Batch = ProvideChecks<never, readonly [First, Second]>;
 		type _first = Expect<Equal<Extract<keyof Batch[0], "FIX_ALIAS_COLLISION">, never>>;
 		type _second = Expect<
-			Equal<
-				Batch[1]["FIX_ALIAS_COLLISION"],
-				'Flag spelling "token" collides with an existing flag'
-			>
+			Equal<Batch[1]["FIX_ALIAS_COLLISION"], 'Flag spelling "token" collides with an existing flag'>
 		>;
 
 		expect(true).toBe(true);

@@ -11,7 +11,10 @@ import type {
 	NamedFlagsRecord,
 } from "../types.ts";
 import type { DeclaredDepsOf } from "../validation/contexts.brands.ts";
-import type { ProvidedContextSpellings, ValidateNamedFlagDefs } from "../validation/flags.brands.ts";
+import type {
+	ProvidedContextSpellings,
+	ValidateNamedFlagDefs,
+} from "../validation/flags.brands.ts";
 import type {
 	AnyContextFactory,
 	Awaitable,
