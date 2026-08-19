@@ -12,7 +12,6 @@
 		"@crustjs/skills": "../../packages/skills/dist/index.js",
 		"@crustjs/store": "../../packages/store/dist/index.js",
 		"@crustjs/style": "../../packages/style/dist/index.js",
-		"@crustjs/testing": "../../packages/testing/dist/index.js",
-		"ultramatter": "npm:ultramatter@^0.0.4"
+		"@crustjs/testing": "../../packages/testing/dist/index.js"
 	}
 }
