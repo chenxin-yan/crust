@@ -33,10 +33,6 @@ Two consequences of the root-only model:
 
 Official Extension identities use the `crust:` namespace, reserved by convention for official Crust identities (the prefix is not enforced at runtime). Third-party packages should namespace published Extension ids with their own prefix; application-local ids can remain plain.
 
-## Ordering
-
-Registration order is the default. Set `after: [other.id]` for a soft dependency: registered ids are ordered first, unregistered ids are ignored, and cycles fail preparation with a `DEFINITION` error. The prepared order governs contributions, `preRun`, reverse `postRun`, and `onError`.
-
 ## Owned flags and commands
 
 Extension flags are a readonly array of named definitions. Use `defineFlag()` values for ordinary recursive flags, or write a named definition inline. Extension flags default to `recursive: true`, which contributes them to every command. The documented way to set the Extension-only `recursive` option for a root-only flag is an inline definition:
@@ -82,7 +78,7 @@ const guidance = defineExtension(defineExtensionId("guidance"), {
 });
 ```
 
-`command` is a canonical path relative to the root; `[]` targets the root. Unknown paths and aliases are rejected with a `DEFINITION` error instead of being silently omitted. Contributions are appended after authored `meta.sections`, in prepared Extension order. The callback receives a frozen snapshot containing the fully materialized command tree and authored sections; renderers consume only each target command's merged `meta.sections`.
+`command` is a canonical path relative to the root; `[]` targets the root. Unknown paths and aliases are rejected with a `DEFINITION` error instead of being silently omitted. Contributions are appended after authored `meta.sections`, in Extension registration order. The callback receives a frozen snapshot containing the fully materialized command tree and authored sections; renderers consume only each target command's merged `meta.sections`.
 
 Titles must be non-empty single lines, and bodies are non-empty plain text so the same content is safe for terminal help and mdoc output.
 
@@ -110,7 +106,7 @@ A renderer exposes its identity on its factory and selects sections with `sectio
 
 ## Build hooks
 
-`build(ctx)` generates artifacts when invoked by build tooling such as `crust build`; it does not run during ordinary `run()` or `execute()` dispatch. The snapshot subprocess invokes registered hooks in prepared Extension order, so Extension presence is the source of intent. The context contains the frozen root Command Snapshot and a resolved absolute `outDir`. Build hooks may be async; errors propagate with the Extension name. `crust build --no-validate` skips entry preparation and all build hooks.
+`build(ctx)` generates artifacts when invoked by build tooling such as `crust build`; it does not run during ordinary `run()` or `execute()` dispatch. The snapshot subprocess invokes registered hooks in Extension registration order, so Extension presence is the source of intent. The context contains the frozen root Command Snapshot and a resolved absolute `outDir`. Build hooks may be async; errors propagate with the Extension id. `crust build --no-validate` skips entry preparation and all build hooks.
 
 ## Dependency injection
 
@@ -145,13 +141,13 @@ Hooks run after routing and syntax parsing. Where each hook sits in the invocati
 
 ### `preRun`
 
-`preRun(ctx)` runs before validation and the Command Action, in prepared Extension order. Return `ctx.finish()` to end the invocation successfully and skip the remaining work:
+`preRun(ctx)` runs before validation and the Command Action, in `.extend()` order. Return `ctx.finish()` to end the invocation successfully and skip the remaining work:
 
 <include lang="ts">../../../examples/extensions/hooks.ts#cached</include>
 
 ### `postRun`
 
-`postRun(ctx, outcome)` runs after every invocation that reached the hooks — including failures and `ctx.finish()` short-circuits — in reverse prepared Extension order. It is the cleanup and post-run side-effect slot. `outcome` is frozen:
+`postRun(ctx, outcome)` runs after every invocation that reached the hooks — including failures and `ctx.finish()` short-circuits — in reverse `.extend()` order. It is the cleanup and post-run side-effect slot. `outcome` is frozen:
 
 ```ts
 type InvocationOutcome =
@@ -164,7 +160,7 @@ For a finished invocation, `outcome.by` is the Extension id. A failed outcome ca
 
 ### `onError`
 
-`onError(error, ctx)` presents failures for `execute()` only, in prepared Extension order. Return `true` after rendering to stop presentation; return nothing (or `false`) to delegate to the next Extension and ultimately Core's default renderer.
+`onError(error, ctx)` presents failures for `execute()` only, in `.extend()` order. Return `true` after rendering to stop presentation; return nothing (or `false`) to delegate to the next Extension and ultimately Core's default renderer. A hook that throws ends the chain: remaining hooks are skipped and Core's default renderer reports the original failure.
 
 <include lang="ts">../../../examples/extensions/hooks.ts#service-errors</include>
 

@@ -8,6 +8,10 @@ describe("defineExtensionId", () => {
 		expect(() => defineExtensionId(" \t\n")).toThrow(CrustError);
 	});
 
+	it("rejects untrimmed ids", () => {
+		expect(() => defineExtensionId(" acme:docs ")).toThrow(CrustError);
+	});
+
 	it("remains a plain string across serialization", () => {
 		const id = defineExtensionId("acme:docs");
 		expect(structuredClone(id)).toBe(id);

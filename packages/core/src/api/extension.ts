@@ -142,6 +142,8 @@ export interface ExtensionHooks<Defs extends readonly NamedExtensionFlagDef[] = 
 	/**
 	 * Renders a failure in `execute()` only. Return true when rendered to stop the
 	 * chain; falsy values delegate to the next Extension and then Core's renderer.
+	 * A hook that throws ends the chain: remaining hooks are skipped and Core's
+	 * default renderer reports the original failure.
 	 *
 	 * Receives the base context: routing or syntax-parse failures render with a
 	 * fallback context whose `flags` are empty, so owned-flag inference would lie here.
@@ -206,8 +208,6 @@ export interface ExtensionConfig<
 	readonly sections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
 	/** Build-time artifact generation, invoked by build tooling (e.g. `crust build`). */
 	readonly build?: (ctx: ExtensionBuildContext) => void | Promise<void>;
-	/** Extension ids that should run before this Extension when registered. */
-	readonly after?: readonly ExtensionId[];
 	readonly hooks?: ExtensionHooks<Defs>;
 }
 
@@ -229,7 +229,6 @@ export interface Extension {
 	readonly provides?: readonly ContextInstance[];
 	readonly sections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
 	readonly build?: (ctx: ExtensionBuildContext) => void | Promise<void>;
-	readonly after?: readonly ExtensionId[];
 	readonly hooks?: ExtensionHooks;
 }
 

@@ -830,44 +830,6 @@ describe("Crust .extend()", () => {
 		expect(calls).toEqual(["one", "two", "three"]);
 	});
 
-	it("orders Extensions by after while ignoring absent ids", async () => {
-		const calls: string[] = [];
-		const firstId = defineExtensionId("first");
-		const secondId = defineExtensionId("second");
-		const absentId = defineExtensionId("absent");
-		const first = defineExtension(firstId, {
-			after: [secondId, absentId],
-			hooks: {
-				preRun: () => void calls.push("first"),
-				postRun: () => void calls.push("first:post"),
-			},
-		});
-		const second = defineExtension(secondId, {
-			hooks: {
-				preRun: () => void calls.push("second"),
-				postRun: () => void calls.push("second:post"),
-			},
-		});
-		await new Crust("test")
-			.extend(first, second)
-			.action(() => {})
-			.run([]);
-		expect(calls).toEqual(["second", "first", "first:post", "second:post"]);
-	});
-
-	it("rejects Extension ordering cycles", async () => {
-		const firstId = defineExtensionId("first");
-		const secondId = defineExtensionId("second");
-		const app = new Crust("test").extend(
-			defineExtension(firstId, { after: [secondId] }),
-			defineExtension(secondId, { after: [firstId] }),
-		);
-		await expect(app.snapshot()).rejects.toMatchObject({
-			code: "DEFINITION",
-			message: expect.stringContaining('"first", "second"'),
-		});
-	});
-
 	it("throws CrustError DEFINITION on duplicate Extension names", () => {
 		const first = defineExtension(defineExtensionId("duplicate"));
 		const second = defineExtension(defineExtensionId("duplicate"));
@@ -1665,8 +1627,37 @@ describe("Extension onError hooks", () => {
 		await failing().extend(presenter).execute({ argv: [] });
 		await failing().extend(observer).execute({ argv: [] });
 		expect(handled[0]).toMatchObject({ status: "failed", by: presenterId });
+		expect(Object.isFrozen(handled[0])).toBe(true);
 		expect(unhandled[0]).toMatchObject({ status: "failed" });
 		expect(unhandled[0]).not.toHaveProperty("by");
+	});
+
+	it("falls through to Core's renderer without attribution when an onError hook throws", async () => {
+		let laterRan = false;
+		const outcomes: unknown[] = [];
+		const thrower = defineExtension(defineExtensionId("thrower"), {
+			hooks: {
+				onError: () => {
+					throw new Error("renderer broke");
+				},
+				postRun: (_ctx, outcome) => void outcomes.push(outcome),
+			},
+		});
+		const later = defineExtension(defineExtensionId("later"), {
+			hooks: {
+				onError: () => {
+					laterRan = true;
+					return true;
+				},
+			},
+		});
+
+		await failing().extend(thrower, later).execute({ argv: [] });
+		expect(laterRan).toBe(false);
+		expect(stderrChunks.join("\n")).toContain("Error: boom");
+		expect(outcomes[0]).toMatchObject({ status: "failed" });
+		expect(outcomes[0]).not.toHaveProperty("by");
+		expect(process.exitCode).toBe(1);
 	});
 
 	it("falls through to Core's default renderer and never runs for run()", async () => {

@@ -9,7 +9,7 @@ import {
 	type InvocationOutcome,
 } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
-import type { ExtensionId } from "../identity.ts";
+import { defineExtensionId, type ExtensionId } from "../identity.ts";
 import { parseArgs, validateParsed } from "../parsing/parser.ts";
 import { applySchemas } from "../parsing/schema.ts";
 import { cloneFlagSpellings } from "../parsing/spellings.ts";
@@ -165,7 +165,8 @@ function validateSectionAudienceIds(ids: unknown, owner: SectionOwner): readonly
 	if (!Array.isArray(ids) || ids.length === 0 || !ids.every(isText)) {
 		throw invalidSections(owner);
 	}
-	return Object.freeze([...ids]) as readonly ExtensionId[];
+	// defineExtensionId is the single identity boundary; it rejects untrimmed ids.
+	return Object.freeze(ids.map((id) => defineExtensionId(id)));
 }
 
 function validateSection(section: unknown, owner: SectionOwner): CommandSection {
@@ -253,76 +254,6 @@ function applyExtensionSections(
 	}
 }
 
-function sortExtensions(extensions: readonly Extension[]): readonly Extension[] {
-	const registered = new Map(extensions.map((extension) => [extension.id, extension]));
-	const indegree = new Map(extensions.map((extension) => [extension.id, 0]));
-	const dependents = new Map<ExtensionId, Extension[]>();
-
-	for (const extension of extensions) {
-		for (const id of extension.after ?? []) {
-			if (!registered.has(id)) continue;
-			indegree.set(extension.id, indegree.get(extension.id)! + 1);
-			const values = dependents.get(id) ?? [];
-			values.push(extension);
-			dependents.set(id, values);
-		}
-	}
-
-	const sorted: Extension[] = [];
-	const remaining = new Set(extensions);
-	while (remaining.size > 0) {
-		const next = extensions.find(
-			(extension) => remaining.has(extension) && indegree.get(extension.id) === 0,
-		);
-		if (!next) {
-			const cycle = findExtensionCycle(extensions, registered);
-			throw new CrustError(
-				"DEFINITION",
-				`Extension ordering cycle: ${cycle.map((id) => `"${id}"`).join(", ")}`,
-				{ subject: "extension", reason: "ordering-cycle" },
-			);
-		}
-		remaining.delete(next);
-		sorted.push(next);
-		for (const dependent of dependents.get(next.id) ?? []) {
-			indegree.set(dependent.id, indegree.get(dependent.id)! - 1);
-		}
-	}
-	return Object.freeze(sorted);
-}
-
-function findExtensionCycle(
-	extensions: readonly Extension[],
-	registered: ReadonlyMap<ExtensionId, Extension>,
-): readonly ExtensionId[] {
-	const visited = new Set<ExtensionId>();
-	const path: ExtensionId[] = [];
-	const active = new Set<ExtensionId>();
-	const visit = (extension: Extension): readonly ExtensionId[] | undefined => {
-		visited.add(extension.id);
-		path.push(extension.id);
-		active.add(extension.id);
-		for (const id of extension.after ?? []) {
-			const dependency = registered.get(id);
-			if (!dependency) continue;
-			if (active.has(id)) return path.slice(path.indexOf(id));
-			if (!visited.has(id)) {
-				const cycle = visit(dependency);
-				if (cycle) return cycle;
-			}
-		}
-		path.pop();
-		active.delete(extension.id);
-	};
-	for (const extension of extensions) {
-		if (!visited.has(extension.id)) {
-			const cycle = visit(extension);
-			if (cycle) return cycle;
-		}
-	}
-	return [];
-}
-
 const preparedInvocations = new WeakMap<CommandNode, PreparedInvocation>();
 
 /** Shared prepare step: clone, apply Extensions and sections, freeze once per immutable builder node. */
@@ -334,7 +265,7 @@ function prepareInvocation(
 	if (cached) return cached;
 
 	const rootNode = cloneCommandNode(node);
-	const extensions = sortExtensions(node.extensions);
+	const extensions = Object.freeze([...node.extensions]);
 
 	for (const extension of extensions) {
 		applyExtensionCommands(rootNode, extension, materializeCommandDefinition);
@@ -422,7 +353,6 @@ async function dispatch(
 			}
 			if (outcome.status !== "finished") {
 				await terminal();
-				outcome = { status: "completed" };
 			}
 		} catch (error) {
 			const by = await onFailure?.(error, extensionContext);

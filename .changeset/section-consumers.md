@@ -7,7 +7,7 @@
 
 Add audience filtering for command documentation sections. Sections are visible to every renderer by default; `only` and `except` target branded Extension identities. Help, man pages, and generated agent skills select their own audiences, and application-authored "Agent skills" sections remain preserved in generated skills.
 
-Replace string Extension names and section consumers with branded `ExtensionId` values minted by `defineExtensionId()`. Extensions now expose `id`, accept soft `after` ordering constraints, and attribute handled failures through `InvocationOutcome.by`. Official identities retain their reserved `crust:*` namespace.
+Replace string Extension names and section consumers with branded `ExtensionId` values minted by `defineExtensionId()`. Extensions now expose `id` and attribute handled failures through `InvocationOutcome.by`. Official identities retain their reserved `crust:*` namespace.
 
 Official renderer identities now live on factory statics (`help.id`, `man.id`, and `skill.id`); the `HELP`, `MAN`, and `SKILLS` exports are removed. All official Extension factories expose their identity through `.id`.
 

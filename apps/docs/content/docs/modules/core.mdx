@@ -131,18 +131,18 @@ Omitting `io` creates no new ambient scope, preserving native TTY detection and 
 
 ## Extension types
 
-| Type                    | Description                                                                         |
-| ----------------------- | ----------------------------------------------------------------------------------- |
-| `Extension`             | Identified frozen Extension value                                                   |
-| `ExtensionBuildContext` | Frozen root snapshot and resolved output directory for artifact generation          |
-| `ExtensionConfig`       | Ordering, owned flags, commands, section contributions, build generation, and hooks |
-| `ExtensionFlagDef`      | Extension-owned flag with optional `recursive` scope                                |
-| `ExtensionContext`      | Readonly invocation view with inferred Extension-owned flags and `finish()`         |
-| `ExtensionHooks`        | Typed `preRun`, `postRun`, and `onError` hook slots                                 |
-| `InferExtensionFlags`   | Syntax-parsed values inferred from an Extension's contributed flags                 |
-| `NamedExtensionFlagDef` | Named Extension flag accepted by `ExtensionConfig.flags`                            |
-| `Finished`              | Opaque token returned by `ExtensionContext.finish()`                                |
-| `InvocationOutcome`     | Completed, short-circuited, or failed invocation result                             |
+| Type                    | Description                                                                 |
+| ----------------------- | --------------------------------------------------------------------------- |
+| `Extension`             | Identified frozen Extension value                                           |
+| `ExtensionBuildContext` | Frozen root snapshot and resolved output directory for artifact generation  |
+| `ExtensionConfig`       | Owned flags, commands, section contributions, build generation, and hooks   |
+| `ExtensionFlagDef`      | Extension-owned flag with optional `recursive` scope                        |
+| `ExtensionContext`      | Readonly invocation view with inferred Extension-owned flags and `finish()` |
+| `ExtensionHooks`        | Typed `preRun`, `postRun`, and `onError` hook slots                         |
+| `InferExtensionFlags`   | Syntax-parsed values inferred from an Extension's contributed flags         |
+| `NamedExtensionFlagDef` | Named Extension flag accepted by `ExtensionConfig.flags`                    |
+| `Finished`              | Opaque token returned by `ExtensionContext.finish()`                        |
+| `InvocationOutcome`     | Completed, short-circuited, or failed invocation result                     |
 
 ## Error types
 
