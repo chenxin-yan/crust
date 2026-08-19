@@ -132,7 +132,6 @@ export type ContextsDependencies<Cs extends readonly ContextInstance[]> = Cs ext
 ]
 	? ContextDepsOf<H> & ContextsDependencies<T>
 	: {};
-export type FactoryDepsOf<F> = F extends ContextFactory<any, any, any, any, infer Deps> ? Deps : {};
 
 export type OwnedFlagsOf<R extends ContextConfig<any>> = R extends {
 	flags: infer F extends readonly NamedFlagDef[];

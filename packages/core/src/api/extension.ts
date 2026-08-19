@@ -10,6 +10,7 @@ import type {
 	NamedFlagDef,
 	NamedFlagsRecord,
 } from "../types.ts";
+import type { DeclaredDepsOf } from "../validation/contexts.brands.ts";
 import type { ValidateNamedFlagDefs } from "../validation/flags.brands.ts";
 import { normalizeFlag } from "../validation/normalize.ts";
 import type {
@@ -211,12 +212,9 @@ type CommandDefinitionsDependencies<
 	infer H extends CommandDefinition<any, any, any, any>,
 	...infer T extends readonly CommandDefinition<any, any, any, any>[],
 ]
-	? ([H] extends [never]
-			? {}
-			: H extends { readonly _deps?: infer Deps extends ContextMap }
-				? Deps
-				: {}) &
-			CommandDefinitionsDependencies<T>
+	? // A `never` element (e.g. a `{} as never` cast) would distribute DeclaredDepsOf
+		// to `never` and poison the whole dependency intersection.
+		([H] extends [never] ? {} : DeclaredDepsOf<H>) & CommandDefinitionsDependencies<T>
 	: {};
 
 export interface ExtensionConfig<

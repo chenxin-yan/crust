@@ -81,5 +81,3 @@ export type ValidateDeclaredDeps<Ctx extends ContextMap, Items extends readonly 
 	[I in keyof Items]: Items[I] &
 		MissingDeclaredDependencyBrand<Items[I], string extends keyof Ctx ? never : keyof Ctx & string>;
 };
-
-// ────────────────────────────────────────────────────────────────────────────
