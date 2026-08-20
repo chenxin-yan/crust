@@ -1,5 +1,4 @@
 import {
-	type CommandSection,
 	type CommandSnapshot,
 	type ExtensionId,
 	defineExtensionId,
@@ -65,26 +64,19 @@ function resolveDdLine(explicit?: string): string {
 	});
 }
 
-interface CommandSectionGroup {
-	path: readonly string[];
-	sections: readonly CommandSection[];
-}
-
 function subcommandSectionGroups(
 	command: CommandSnapshot,
 	path: readonly string[] = [],
-): CommandSectionGroup[] {
-	const groups: CommandSectionGroup[] = [];
-	const children = Object.entries(command.subCommands)
+): { path: string[]; sections: ReturnType<typeof sectionsFor> }[] {
+	return Object.entries(command.subCommands)
 		.filter(([, child]) => !child.meta.hidden)
-		.sort(([a], [b]) => a.localeCompare(b));
-	for (const [name, child] of children) {
-		const childPath = [...path, name];
-		const sections = sectionsFor(child.meta.sections, MAN);
-		if (sections.length > 0) groups.push({ path: childPath, sections });
-		groups.push(...subcommandSectionGroups(child, childPath));
-	}
-	return groups;
+		.sort(([a], [b]) => a.localeCompare(b))
+		.flatMap(([name, child]) => {
+			const childPath = [...path, name];
+			const sections = sectionsFor(child.meta.sections, MAN);
+			const descendants = subcommandSectionGroups(child, childPath);
+			return sections.length > 0 ? [{ path: childPath, sections }, ...descendants] : descendants;
+		});
 }
 
 export interface RenderManPageMdocOptions {
