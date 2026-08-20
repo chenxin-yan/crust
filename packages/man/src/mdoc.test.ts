@@ -15,16 +15,24 @@ describe("renderManPageMdoc", () => {
 				),
 			)
 			.add(
-				defineCommand("config", { sections: [{ title: "Overview", body: "config body" }] }, (cmd) =>
-					cmd
-						.add(
-							defineCommand(
-								"set",
-								{ sections: [{ title: "Examples", body: "config set body" }] },
-								(subcommand) => subcommand.action(() => {}),
-							),
-						)
-						.action(() => {}),
+				defineCommand(
+					"config",
+					{
+						sections: [
+							{ title: "Overview", body: "config body" },
+							{ title: "Details", body: "config details" },
+						],
+					},
+					(cmd) =>
+						cmd
+							.add(
+								defineCommand(
+									"set",
+									{ sections: [{ title: "Examples", body: "config set body" }] },
+									(subcommand) => subcommand.action(() => {}),
+								),
+							)
+							.action(() => {}),
 				),
 			)
 			.add(
@@ -36,12 +44,47 @@ describe("renderManPageMdoc", () => {
 		const output = renderManPageMdoc({ root: await app.snapshot(), name: "demo" });
 
 		expect(output).toContain(".Sh COMMANDS");
-		expect(output).toContain(".Ss config set\n.Sy EXAMPLES\nconfig set body");
+		expect(output).toContain(
+			".Ss config\n.Pp\n.Sy OVERVIEW\nconfig body\n.Pp\n.Sy DETAILS\nconfig details",
+		);
+		expect(output).toContain(".Ss config set\n.Pp\n.Sy EXAMPLES\nconfig set body");
 		const paths = ["alpha", "config", "config set", "zeta"].map((path) =>
 			output.indexOf(`.Ss ${path}\n`),
 		);
 		expect(paths.every((index) => index >= 0)).toBe(true);
 		expect(paths).toEqual([...paths].sort((a, b) => a - b));
+	});
+
+	it("omits COMMANDS when subcommands have no sections", async () => {
+		const app = new Crust("demo").add(
+			defineCommand("config", {}, (cmd) =>
+				cmd.add(defineCommand("set", {}, (subcommand) => subcommand.action(() => {}))),
+			),
+		);
+
+		const output = renderManPageMdoc({ root: await app.snapshot(), name: "demo" });
+
+		expect(output).not.toContain(".Sh COMMANDS");
+	});
+
+	it("renders a section-bearing grandchild without a heading for its section-less parent", async () => {
+		const app = new Crust("demo").add(
+			defineCommand("config", {}, (cmd) =>
+				cmd.add(
+					defineCommand(
+						"set",
+						{ sections: [{ title: "Examples", body: "config set body" }] },
+						(subcommand) => subcommand.action(() => {}),
+					),
+				),
+			),
+		);
+
+		const output = renderManPageMdoc({ root: await app.snapshot(), name: "demo" });
+
+		expect(output).toContain(".Sh COMMANDS");
+		expect(output).not.toContain(".Ss config\n");
+		expect(output).toContain(".Ss config set\n.Pp\n.Sy EXAMPLES\nconfig set body");
 	});
 
 	it("filters subcommand sections by audience and omits hidden commands", async () => {
@@ -68,7 +111,7 @@ describe("renderManPageMdoc", () => {
 
 		const output = renderManPageMdoc({ root: await app.snapshot(), name: "demo" });
 
-		expect(output).toContain(".Ss publish\n.Sy MAN NOTES\nman body");
+		expect(output).toContain(".Ss publish\n.Pp\n.Sy MAN NOTES\nman body");
 		expect(output).not.toContain("other body");
 		expect(output).not.toContain("hidden body");
 		expect(output).not.toContain(".Ss internal");

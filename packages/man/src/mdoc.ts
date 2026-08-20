@@ -1,4 +1,5 @@
 import {
+	type CommandSection,
 	type CommandSnapshot,
 	type ExtensionId,
 	defineExtensionId,
@@ -66,7 +67,7 @@ function resolveDdLine(explicit?: string): string {
 
 interface CommandSectionGroup {
 	path: readonly string[];
-	sections: ReturnType<typeof sectionsFor>;
+	sections: readonly CommandSection[];
 }
 
 function subcommandSectionGroups(
@@ -152,7 +153,7 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		for (const group of commandSections) {
 			lines.push(`.Ss ${macroArgument(group.path.join(" "))}`);
 			for (const commandSection of group.sections) {
-				lines.push(`.Sy ${shTitle(commandSection.title)}`);
+				lines.push(".Pp", `.Sy ${shTitle(commandSection.title)}`);
 				for (const line of commandSection.body.split("\n")) lines.push(escapeMdocBodyLine(line));
 			}
 		}
