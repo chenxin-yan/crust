@@ -15,9 +15,11 @@ func Argv() []string {
 	return append([]string{os.Args[0], os.Args[0]}, os.Args[1:]...)
 }
 
-func Index(values []string, index float64) string {
+type undefined struct{}
+
+func Index(values []string, index float64) any {
 	if index < 0 || index >= float64(len(values)) || index != math.Trunc(index) {
-		return "undefined"
+		return undefined{}
 	}
 	return values[int(index)]
 }
@@ -44,7 +46,7 @@ func Slice(values []string, start float64) []string {
 }
 
 func Exit(code float64) {
-	if math.IsNaN(code) || math.IsInf(code, 0) || code != math.Trunc(code) {
+	if math.IsNaN(code) || math.IsInf(code, 0) || code != math.Trunc(code) || math.Abs(code) > 9007199254740991 {
 		fmt.Fprintf(os.Stderr, "RangeError: process.exit code must be an integer. Received %s\n", numberString(code))
 		os.Exit(1)
 	}
@@ -57,6 +59,10 @@ func Length(value any) float64 {
 		return float64(len(utf16.Encode([]rune(value))))
 	case []string:
 		return float64(len(value))
+	case undefined:
+		fmt.Fprintln(os.Stderr, "TypeError: Cannot read properties of undefined (reading 'length')")
+		os.Exit(1)
+		return 0
 	default:
 		panic(fmt.Sprintf("unsupported JavaScript length for %T", value))
 	}
@@ -74,7 +80,7 @@ func Log(values ...any) {
 				fmt.Print(numberString(number))
 			}
 		} else {
-			fmt.Print(value)
+			fmt.Print(String(value))
 		}
 	}
 	fmt.Println()
@@ -102,6 +108,8 @@ func String(value any) string {
 		return numberString(value)
 	case []string:
 		return strings.Join(value, ",")
+	case undefined:
+		return "undefined"
 	default:
 		panic(fmt.Sprintf("unsupported JavaScript string conversion for %T", value))
 	}
