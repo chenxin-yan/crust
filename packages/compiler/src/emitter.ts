@@ -73,7 +73,7 @@ function emitExpression(expression: Expression): string {
 			}
 			return `${goIdentifier(expression.callee)}(${expression.arguments.map(emitExpression).join(", ")})`;
 		case "argv":
-			return "crustRuntime.Argv()";
+			return `crustRuntime.Argv(${goString(expression.entryFile)})`;
 		case "slice":
 			return `crustRuntime.Slice(${emitExpression(expression.value)}, ${emitExpression(expression.start)})`;
 		case "length":

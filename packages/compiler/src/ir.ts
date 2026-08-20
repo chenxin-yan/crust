@@ -35,7 +35,7 @@ export type Expression =
 	| { readonly kind: "unary"; readonly operator: "+" | "-"; readonly operand: Expression }
 	| { readonly kind: "template"; readonly head: string; readonly spans: readonly TemplateSpan[] }
 	| { readonly kind: "call"; readonly callee: string; readonly arguments: readonly Expression[] }
-	| { readonly kind: "argv" }
+	| { readonly kind: "argv"; readonly entryFile: string }
 	| { readonly kind: "slice"; readonly value: Expression; readonly start: Expression }
 	| { readonly kind: "length"; readonly value: Expression }
 	| { readonly kind: "index"; readonly value: Expression; readonly index: Expression };
