@@ -102,7 +102,14 @@ function lowerStatement(
 
 	const call = node.expression;
 	if (isPropertyCall(call, "console", "log")) {
-		if (call.arguments.length === 0) throw unsupported(call, sourceFile);
+		if (
+			call.arguments.length === 0 ||
+			call.arguments.some((argument) =>
+				checkerTypeIsStringArray(checker.getTypeAtLocation(argument)),
+			)
+		) {
+			throw unsupported(call, sourceFile);
+		}
 		return {
 			kind: "log",
 			values: call.arguments.map((argument) => lowerExpression(argument, checker, sourceFile)),
