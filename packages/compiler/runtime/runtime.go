@@ -333,6 +333,7 @@ func inspectStringWidth(value string) int {
 			character >= 0xfe30 && character <= 0xfe6f ||
 			character >= 0xff00 && character <= 0xff60 ||
 			character >= 0xffe0 && character <= 0xffe6 ||
+			character >= 0x1f1e6 && character <= 0x1f1ff ||
 			character >= 0x1f300 && character <= 0x1faff ||
 			character >= 0x20000 && character <= 0x3fffd):
 			width += 2
