@@ -1,1 +1,1 @@
-console.log("crust", 42, true, -3.5);
+console.log("crust", 42, true, -3.5, 1e21);
