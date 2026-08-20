@@ -28,13 +28,6 @@ export class CompilerError extends Error {
 	}
 }
 
-export class TypeScriptCompileError extends CompilerError {
-	public constructor(diagnostics: readonly CompilerDiagnostic[]) {
-		super(diagnostics);
-		this.name = "TypeScriptCompileError";
-	}
-}
-
 export function diagnosticAtNode(
 	sourceFile: ts.SourceFile,
 	node: ts.Node,

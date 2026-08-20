@@ -1,4 +1,4 @@
 function echo(value) {
-	console.log(value);
+	return this ?? value;
 }
 echo("hello");

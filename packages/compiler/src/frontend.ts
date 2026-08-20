@@ -12,9 +12,10 @@ import type { Expression, FunctionDeclaration, Program, Statement, ValueType } f
 
 const anyHint = "Replace `any` with `unknown`, then narrow it with a runtime check before use.";
 
-const implicitAnyCodes = new Set([
-	7005, 7006, 7008, 7010, 7011, 7015, 7017, 7018, 7019, 7022, 7023, 7024, 7031, 7034,
-	7044, 7053, 2683,
+// Codes stay stable in pinned TypeScript releases; rendered messages can vary by locale.
+const implicitAnyDiagnosticCodes = new Set([
+	2602, 2683, 7005, 7006, 7008, 7009, 7010, 7011, 7013, 7014, 7015, 7016, 7017, 7018, 7019, 7020,
+	7022, 7023, 7024, 7026, 7031, 7032, 7033, 7034, 7039, 7052, 7053, 7055, 7057,
 ]);
 
 function fromTypeScriptDiagnostic(
@@ -25,7 +26,7 @@ function fromTypeScriptDiagnostic(
 	const sourceFile = diagnostic.file;
 	const start = diagnostic.start ?? 0;
 	const location = sourceFile?.getLineAndCharacterOfPosition(start) ?? { line: 0, character: 0 };
-	const implicitAny = implicitAnyCodes.has(diagnostic.code);
+	const implicitAny = implicitAnyDiagnosticCodes.has(diagnostic.code);
 	return {
 		code: implicitAny ? DiagnosticCodes.AnyType : DiagnosticCodes.TypeScriptError,
 		file: sourceFile?.fileName ?? fallbackFile,

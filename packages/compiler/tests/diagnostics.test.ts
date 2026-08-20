@@ -49,7 +49,7 @@ describe("compiler diagnostic corpus", () => {
 
 	it("converts noImplicitAny failures to the any diagnostic", async () => {
 		const error = await compileFailure("implicit-any.ts");
-		expect(error.diagnostics[0]?.code).toBe(DiagnosticCodes.AnyType);
+		expect(error.diagnostics.every(({ code }) => code === DiagnosticCodes.AnyType)).toBeTrue();
 		expect(error.diagnostics[0]?.hint).toContain("Replace `any` with `unknown`");
 		expectLocated(error);
 	});
