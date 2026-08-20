@@ -73,7 +73,12 @@ function lowerFunction(
 	return {
 		name: node.name.text,
 		parameters: node.parameters.map((parameter) => {
-			if (!ts.isIdentifier(parameter.name) || parameter.dotDotDotToken || parameter.questionToken) {
+			if (
+				!ts.isIdentifier(parameter.name) ||
+				parameter.dotDotDotToken ||
+				parameter.questionToken ||
+				parameter.initializer
+			) {
 				throw unsupported(parameter, sourceFile);
 			}
 			return {
@@ -139,7 +144,7 @@ function lowerExpression(
 		return { kind: "literal", type: "boolean", value: node.kind === ts.SyntaxKind.TrueKeyword };
 	}
 	if (ts.isIdentifier(node)) return { kind: "identifier", name: node.text };
-	if (ts.isParenthesizedExpression(node)) {
+	if (ts.isParenthesizedExpression(node) || ts.isNonNullExpression(node)) {
 		return lowerExpression(node.expression, checker, sourceFile);
 	}
 	if (ts.isPrefixUnaryExpression(node)) {
@@ -179,9 +184,10 @@ function lowerExpression(
 	}
 	if (isProcessArgv(node)) return { kind: "argv" };
 	if (ts.isPropertyAccessExpression(node) && node.name.text === "length") {
-		const receiver = ts.isNonNullExpression(node.expression)
-			? node.expression.expression
-			: node.expression;
+		let receiver: ts.Expression = node.expression;
+		while (ts.isParenthesizedExpression(receiver) || ts.isNonNullExpression(receiver)) {
+			receiver = receiver.expression;
+		}
 		return {
 			kind: "length",
 			value: lowerExpression(receiver, checker, sourceFile),
