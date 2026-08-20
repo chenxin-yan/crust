@@ -17,6 +17,17 @@ function run(command: string, args: readonly string[] = []) {
 	return { exitCode, stderr, stdout };
 }
 
+const fixtures = [
+	{ name: "hello", args: [] },
+	{ name: "lone-surrogate", args: [] },
+	{ name: "embedded-bom", args: [] },
+	{ name: "literals", args: [] },
+	{ name: "expressions", args: ["Crust"] },
+	{ name: "template", args: ["Crust"] },
+	{ name: "functions", args: [] },
+	{ name: "hello-argv", args: ["Crust", "extra"] },
+] as const;
+
 describe("compiler differential corpus", () => {
 	it("rejects a directory-valued output path", async () => {
 		const fixture = join(import.meta.dir, "fixtures", "hello.ts");
@@ -28,7 +39,7 @@ describe("compiler differential corpus", () => {
 		}
 	});
 
-	for (const name of ["hello", "lone-surrogate", "embedded-bom"]) {
+	for (const { name, args } of fixtures) {
 		it.skipIf(goPath === null)(
 			`matches Node for ${name}`,
 			async () => {
@@ -38,7 +49,7 @@ describe("compiler differential corpus", () => {
 
 				const binary = await compile(fixture);
 				try {
-					expect(run(binary)).toEqual(run(node, [fixture]));
+					expect(run(binary, args)).toEqual(run(node, [fixture, ...args]));
 				} finally {
 					await rm(dirname(binary), { recursive: true, force: true });
 				}
