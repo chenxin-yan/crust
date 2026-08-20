@@ -48,8 +48,9 @@ export const deploy = defineCommand("deploy", { uses: [auth] }, (cmd) =>
 	}),
 );
 
-// An exported Extension carries evaluated dependency intersections and
-// ContextInstance tuples; a TS2742 regression here must fail emission
+// An exported Extension carries evaluated dependency intersections,
+// ContextInstance tuples, and its contributed CommandDefinition tuple; a
+// TS2742 regression here must fail emission.
 export const telemetry = defineExtension(defineExtensionId("telemetry"), {
 	uses: [authenticatedApi],
 	provides: [auth()],

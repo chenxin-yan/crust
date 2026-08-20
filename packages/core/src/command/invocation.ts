@@ -498,6 +498,14 @@ function hasInjectedIO(io: Partial<InvocationIO> | undefined): boolean {
 	return io !== undefined && Object.keys(io).length > 0;
 }
 
+/** Prepare the cached runtime command tree for structured programmatic serialization. */
+export function prepareInvocationRoot(
+	node: CommandNode,
+	materializeCommandDefinition: MaterializeCommandDefinition,
+): CommandNode {
+	return prepareInvocation(node, materializeCommandDefinition).rootNode;
+}
+
 /** Programmatic boundary: throw raw failures and leave process status untouched. */
 export async function runInvocation(
 	node: CommandNode,

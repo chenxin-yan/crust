@@ -128,7 +128,7 @@ export function generateConsumerSource(size: number): string {
 	if (!Number.isInteger(size) || size < 1) throw new Error("size must be a positive integer");
 	const contextCount = Math.max(3, Math.ceil(size / 10));
 	const lines = [
-		'import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";',
+		'import { Crust, defineCommand, defineContext, defineExtension, defineExtensionId, defineFlag } from "@crustjs/core";',
 		"",
 	];
 
@@ -174,10 +174,16 @@ export function generateConsumerSource(size: number): string {
 	}
 
 	lines.push(
+		'const extension = defineExtension(defineExtensionId("type-perf-extension"), {',
+		'\tflags: [{ name: "extension-trace", type: "boolean" }],',
+		'\tcommands: [defineCommand("extension-command", { aliases: ["ext"] }, (command) => command.flags({ name: "extension-mode", type: "string" }).action(() => ({ source: "extension" as const })))],',
+		"});",
+		"",
 		'export const app = new Crust("type-perf-consumer", { description: "Synthetic type-performance fixture" })',
 		'\t.flags({ name: "root-verbose", type: "boolean", short: "v", aliases: ["verbose"] })',
 		'\t.flags({ name: "root-config", type: "string", short: "c", aliases: ["config"] })',
 		`\t.provide(${Array.from({ length: contextCount }, (_, index) => `context${index}()`).join(", ")})`,
+		"\t.extend(extension)",
 	);
 	for (let index = 0; index < size; index++) lines.push(`\t.add(command${index})`);
 	lines.push("\t.action(() => {});", "");

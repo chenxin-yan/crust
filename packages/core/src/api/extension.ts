@@ -261,12 +261,18 @@ export interface Extension<
 	Deps extends ContextMap = ContextMap,
 	Provides extends readonly ContextInstance[] = readonly ContextInstance[],
 	FlagDefs extends readonly NamedExtensionFlagDef[] = readonly NamedExtensionFlagDef[],
+	Commands extends readonly CommandDefinition<any, any, any, any>[] = readonly CommandDefinition<
+		any,
+		any,
+		any,
+		any
+	>[],
 > {
 	readonly id: ExtensionId;
 	readonly flags?: Readonly<Record<string, ExtensionFlagDef>>;
 	/** @internal — phantom carrying declared flag literals for extend-time collision checks */
 	readonly _flagDefs?: FlagDefs;
-	readonly commands?: readonly CommandDefinition<any>[];
+	readonly commands?: Commands;
 	readonly uses: readonly AnyContextFactory[];
 	readonly provides?: Provides;
 	readonly sections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
@@ -302,7 +308,8 @@ export function defineExtension<
 		ContextsDependencies<Provides> &
 		CommandDefinitionsDependencies<Commands>,
 	Provides,
-	Defs
+	Defs,
+	Commands
 > {
 	const ownedFlags: FlagsDef = {};
 	for (const def of config.flags ?? []) {
@@ -324,6 +331,7 @@ export function defineExtension<
 			ContextsDependencies<Provides> &
 			CommandDefinitionsDependencies<Commands>,
 		Provides,
-		Defs
+		Defs,
+		Commands
 	>;
 }

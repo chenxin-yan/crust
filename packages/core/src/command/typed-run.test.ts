@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import type { StandardSchema } from "@crustjs/utils/schema";
 
-import { defineExtension } from "../api/extension.ts";
+import { defineExtension, type Extension } from "../api/extension.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { CommandPath, CommandShapeAt, RunInput, RunOutcome } from "./crust.ts";
 import { Crust, defineCommand } from "./crust.ts";
@@ -49,6 +49,79 @@ describe("typed programmatic invocation", () => {
 			status: "completed",
 			result: { kind: "child", size: 42 },
 		});
+	});
+
+	it("runs statically known Extension commands, aliases, flags, and typed results", async () => {
+		const tools = defineExtension(defineExtensionId("tools"), {
+			flags: [
+				{ name: "trace", type: "boolean" },
+				{ name: "version", type: "boolean", recursive: false },
+			],
+			commands: [
+				defineCommand("inspect", { aliases: ["scan"] }, (command) =>
+					command.action(() => ({ kind: "extension" as const })),
+				),
+			],
+		});
+		const local = defineCommand("local", (command) => command.action(() => {}));
+		const app = new Crust("cli").extend(tools).add(local);
+
+		type RootInput = RunInput<(typeof app)["_types"]["shape"]>;
+		type InspectInput = RunInput<
+			CommandShapeAt<(typeof app)["_types"]["shape"], readonly ["inspect"]>
+		>;
+		type LocalInput = RunInput<CommandShapeAt<(typeof app)["_types"]["shape"], readonly ["local"]>>;
+		const rootFlags: RootInput = { flags: { trace: true, version: true } };
+		const commandFlags: InspectInput = { flags: { trace: true } };
+		const localFlags: LocalInput = { flags: { trace: true } };
+		const rootOnlyOnChild: LocalInput = {
+			flags: {
+				// @ts-expect-error -- recursive:false Extension flags stay on the root input
+				version: true,
+			},
+		};
+		void [rootFlags, commandFlags, localFlags, rootOnlyOnChild];
+
+		const pending = app.run(["scan"], { flags: { trace: true } });
+		type _result = Expect<Equal<typeof pending, Promise<RunOutcome<{ kind: "extension" }>>>>;
+		expect(await pending).toEqual({ status: "completed", result: { kind: "extension" } });
+	});
+
+	it("keeps widened Extension commands runtime-only", async () => {
+		let ran = false;
+		const dynamic: Extension = defineExtension(defineExtensionId("dynamic"), {
+			commands: [
+				defineCommand("generated", (command) =>
+					command.action(() => {
+						ran = true;
+					}),
+				),
+			],
+		});
+		const app = new Crust("cli").extend(dynamic);
+
+		function typecheckHarness() {
+			// @ts-expect-error -- widened Extension commands are not statically known paths
+			void app.run(["generated"]);
+		}
+		void typecheckHarness;
+
+		await app.execute({ argv: ["generated"] });
+		expect(ran).toBe(true);
+	});
+
+	it("surfaces Extension preparation failures before typed dispatch", async () => {
+		const replacement = defineExtension(defineExtensionId("replacement"), {
+			flags: [{ name: "mode", type: "boolean" }],
+		});
+		const app = new Crust("cli")
+			.flags({ name: "mode", type: "string" })
+			.extend(replacement as never)
+			.action(() => {});
+
+		await expect(app.run([])).rejects.toThrow(
+			'Extension flag "mode" collides with a flag already defined on command "cli"',
+		);
 	});
 
 	it("awaits async action results", async () => {

@@ -30,6 +30,27 @@ describe("captureRun", () => {
 		expect(true).toBe(true);
 	});
 
+	it("captures an Extension-contributed command with its typed result", async () => {
+		const tools = defineExtension(defineExtensionId("tools"), {
+			commands: [
+				defineCommand("inspect", (command) =>
+					command.action(({ stdout }) => {
+						stdout("inspected");
+						return { kind: "extension" as const };
+					}),
+				),
+			],
+		});
+		const app = new Crust("test-cli").extend(tools);
+
+		const captured = await captureRun(app, ["inspect"]);
+		if (captured.status !== "completed") throw new Error("expected a completed run");
+		// Compile-time check: the Extension command's result carries the action's type.
+		const result: { kind: "extension" } = captured.result;
+		expect(result).toEqual({ kind: "extension" });
+		expect(captured.stdout).toBe("inspected");
+	});
+
 	it("captures output and the typed action result", async () => {
 		const app = new Crust("test-cli").action(({ stdout, stderr }) => {
 			stdout("first");
