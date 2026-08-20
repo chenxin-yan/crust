@@ -17,20 +17,22 @@ function run(command: string, args: readonly string[] = []) {
 }
 
 describe("compiler differential corpus", () => {
-	it.skipIf(goPath === null)(
-		"matches Node for hello",
-		async () => {
-			const fixture = join(import.meta.dir, "fixtures", "hello.ts");
-			const node = Bun.which("node");
-			if (node === null) throw new Error("Node is required as the corpus reference runtime");
+	for (const name of ["hello", "lone-surrogate"]) {
+		it.skipIf(goPath === null)(
+			`matches Node for ${name}`,
+			async () => {
+				const fixture = join(import.meta.dir, "fixtures", `${name}.ts`);
+				const node = Bun.which("node");
+				if (node === null) throw new Error("Node is required as the corpus reference runtime");
 
-			const binary = await compile(fixture);
-			try {
-				expect(run(binary)).toEqual(run(node, [fixture]));
-			} finally {
-				await rm(dirname(binary), { recursive: true, force: true });
-			}
-		},
-		120_000,
-	);
+				const binary = await compile(fixture);
+				try {
+					expect(run(binary)).toEqual(run(node, [fixture]));
+				} finally {
+					await rm(dirname(binary), { recursive: true, force: true });
+				}
+			},
+			120_000,
+		);
+	}
 });
