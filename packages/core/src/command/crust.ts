@@ -627,15 +627,8 @@ function installExtensionContexts(
 }
 
 function dedupeExtensions(extensions: readonly Extension[]): Extension[] {
-	const seen = new Set<string>();
-	return extensions
-		.toReversed()
-		.filter((extension) => {
-			if (seen.has(extension.id)) return false;
-			seen.add(extension.id);
-			return true;
-		})
-		.toReversed();
+	// ponytail: O(n^2) scan, fine for handfuls of extensions.
+	return extensions.filter((e, i) => extensions.findLastIndex((x) => x.id === e.id) === i);
 }
 
 function serializeInputValue(definition: ArgDef | FlagDef, name: string, value: unknown): string {
