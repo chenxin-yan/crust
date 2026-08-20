@@ -30,16 +30,21 @@ describe("captureRun", () => {
 		expect(true).toBe(true);
 	});
 
-	it("captures output as lines", async () => {
+	it("captures output and the typed action result", async () => {
 		const app = new Crust("test-cli").action(({ stdout, stderr }) => {
 			stdout("first");
 			stdout("second");
 			stderr("warning");
+			return { status: "ok" as const };
 		});
 
-		expect(await captureRun(app, [])).toEqual({
+		const captured = await captureRun(app, []);
+		const result: { status: "ok" } | undefined = captured.result;
+		expect(result).toEqual({ status: "ok" });
+		expect(captured).toEqual({
 			stdout: "first\nsecond",
 			stderr: "warning",
+			result: { status: "ok" },
 		});
 	});
 
@@ -55,6 +60,16 @@ describe("captureRun", () => {
 		expect(result.stdout).toBe("before");
 		expect(result.stderr).toBe("problem");
 		expect(result.error).toBe(error);
+		expect(result.result).toBeUndefined();
+	});
+
+	it("captures undefined when preRun finishes the invocation", async () => {
+		const gate = defineExtension(defineExtensionId("gate"), {
+			hooks: { preRun: (ctx) => ctx.finish() },
+		});
+		const app = new Crust("test-cli").extend(gate).action(() => ({ ran: true }));
+
+		expect(await captureRun(app, [])).toEqual({ stdout: "", stderr: "", result: undefined });
 	});
 });
 

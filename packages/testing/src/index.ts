@@ -17,8 +17,8 @@ import { createPromptIO, type Key } from "@crustjs/prompts/testing";
 export type CaptureIO = Partial<InvocationIO>;
 
 type AppTypes<App extends AnyCrust> =
-	App extends Crust<infer Flags, infer Args, any, any, any, infer Tree>
-		? { shape: CommandShape<Args, Flags, Tree>; tree: Tree }
+	App extends Crust<infer Flags, infer Args, any, any, any, infer Tree, any, any, infer Result>
+		? { shape: CommandShape<Args, Flags, Tree, Result>; tree: Tree }
 		: never;
 type AppTree<App extends AnyCrust> = AppTypes<App>["tree"];
 type ShapeAtPath<App extends AnyCrust, Path extends CommandPath<AppTree<App>>> = CommandShapeAt<
@@ -26,9 +26,10 @@ type ShapeAtPath<App extends AnyCrust, Path extends CommandPath<AppTree<App>>> =
 	Path
 >;
 
-export interface CapturedRun {
+export interface CapturedRun<Result = unknown> {
 	readonly stdout: string;
 	readonly stderr: string;
+	readonly result?: Result;
 	readonly error?: unknown;
 }
 
@@ -36,17 +37,22 @@ export interface CapturedRun {
 export async function captureRun<
 	App extends AnyCrust,
 	const Path extends CommandPath<AppTree<App>>,
->(app: App, path: Path, ...args: RunInputArguments<ShapeAtPath<App, Path>>): Promise<CapturedRun> {
+>(
+	app: App,
+	path: Path,
+	...args: RunInputArguments<ShapeAtPath<App, Path>>
+): Promise<CapturedRun<ShapeAtPath<App, Path>["result"]>> {
 	// Each io callback invocation is one line in a real terminal (core's
 	// defaults are console.log/console.error), so join captured calls with "\n".
 	const stdoutLines: string[] = [];
 	const stderrLines: string[] = [];
 	let failed = false;
+	let result: unknown;
 	let error: unknown;
 
 	try {
 		const [input] = args;
-		await app.run(path as never, input as never, {
+		result = await app.run(path as never, input as never, {
 			stdout: (text) => {
 				stdoutLines.push(text);
 			},
@@ -61,7 +67,7 @@ export async function captureRun<
 
 	const stdout = stdoutLines.join("\n");
 	const stderr = stderrLines.join("\n");
-	return failed ? { stdout, stderr, error } : { stdout, stderr };
+	return failed ? { stdout, stderr, error } : { stdout, stderr, result };
 }
 
 /** Minimal structural surface of `execute()` invoked by {@link captureExecute}. */

@@ -27,7 +27,7 @@ An inert `CommandDefinition` must first be added to a `Crust` application before
 
 ## `captureRun(app, path, input?)`
 
-Run an application with captured output. Each `ctx.stdout()`/`ctx.stderr()` call is one line (matching the terminal defaults), and the returned `stdout` and `stderr` fields join those lines with `"\n"`. If the application throws, `error` contains that value and output written before the failure is retained.
+Run an application with captured output and the selected action's inferred result. Each `ctx.stdout()`/`ctx.stderr()` call is one line (matching the terminal defaults), and the returned `stdout` and `stderr` fields join those lines with `"\n"`. On success, `result` contains the action's awaited return value; it is `undefined` when an Extension `preRun` hook finished first. If the application throws, `error` contains that value, `result` is `undefined`, and output written before the failure is retained.
 
 ```ts
 import { captureRun } from "@crustjs/testing";
@@ -38,7 +38,7 @@ const result = await captureRun(app, ["build"], {
 });
 
 if (result.error) throw result.error;
-console.log(result.stdout);
+console.log(result.stdout, result.result);
 ```
 
 The return type is `CapturedRun`:

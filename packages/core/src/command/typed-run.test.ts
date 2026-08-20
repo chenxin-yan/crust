@@ -2,6 +2,8 @@ import { describe, expect, it } from "bun:test";
 
 import type { StandardSchema } from "@crustjs/utils/schema";
 
+import { defineExtension } from "../api/extension.ts";
+import { defineExtensionId } from "../identity.ts";
 import type { CommandPath, CommandShapeAt, RunInput } from "./crust.ts";
 import { Crust, defineCommand } from "./crust.ts";
 
@@ -10,6 +12,42 @@ type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 describe("typed programmatic invocation", () => {
+	it("returns the selected action result with path-specific types", async () => {
+		const inspect = defineCommand("inspect", (command) =>
+			command.action(() => ({ kind: "child" as const, size: 42 })),
+		);
+		const app = new Crust("cli").action(() => ({ kind: "root" as const })).add(inspect);
+
+		const rootResult = app.run([]);
+		const childResult = app.run(["inspect"]);
+		type _root = Expect<Equal<typeof rootResult, Promise<{ kind: "root" } | undefined>>>;
+		type _child = Expect<
+			Equal<typeof childResult, Promise<{ kind: "child"; size: number } | undefined>>
+		>;
+
+		expect(await rootResult).toEqual({ kind: "root" });
+		expect(await childResult).toEqual({ kind: "child", size: 42 });
+	});
+
+	it("awaits async action results", async () => {
+		const app = new Crust("cli").action(async () => ({ ok: true as const }));
+		const pending = app.run([]);
+		type _result = Expect<Equal<typeof pending, Promise<{ ok: true } | undefined>>>;
+
+		expect(await pending).toEqual({ ok: true });
+	});
+
+	it("returns undefined when preRun finishes before the action", async () => {
+		const gate = defineExtension(defineExtensionId("gate"), {
+			hooks: { preRun: (ctx) => ctx.finish() },
+		});
+		const app = new Crust("cli").extend(gate).action(() => ({ ran: true as const }));
+		const pending = app.run([]);
+		type _result = Expect<Equal<typeof pending, Promise<{ ran: true } | undefined>>>;
+
+		expect(await pending).toBeUndefined();
+	});
+
 	it("serializes structured input through routing and the parser", async () => {
 		let received: unknown;
 		const remoteAdd = defineCommand("remote-add", (command) =>
