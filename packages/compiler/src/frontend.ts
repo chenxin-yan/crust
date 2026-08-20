@@ -107,8 +107,13 @@ function lowerStatement(
 
 	const call = node.expression;
 	if (isPropertyCall(call, "console", "log")) {
+		const firstArgument = call.arguments[0];
 		if (
 			call.arguments.length === 0 ||
+			(call.arguments.length > 1 &&
+				firstArgument &&
+				ts.isStringLiteralLike(firstArgument) &&
+				/%[cdfijoOs%]/.test(firstArgument.text)) ||
 			call.arguments.some((argument) =>
 				checkerTypeIsStringArray(checker.getTypeAtLocation(argument)),
 			)
@@ -138,7 +143,12 @@ function lowerExpression(
 	if (node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword) {
 		return { kind: "literal", type: "boolean", value: node.kind === ts.SyntaxKind.TrueKeyword };
 	}
-	if (ts.isIdentifier(node)) return { kind: "identifier", name: node.text };
+	if (ts.isIdentifier(node)) {
+		if (checker.getTypeAtLocation(node).getCallSignatures().length > 0) {
+			throw unsupported(node, sourceFile);
+		}
+		return { kind: "identifier", name: node.text };
+	}
 	if (ts.isParenthesizedExpression(node) || ts.isNonNullExpression(node)) {
 		return lowerExpression(node.expression, checker, sourceFile);
 	}
