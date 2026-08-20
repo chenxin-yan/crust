@@ -144,10 +144,12 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		lines.push(".Sh COMMANDS");
 		for (const group of commandSections) {
 			lines.push(`.Ss ${macroArgument(group.path.join(" "))}`);
-			for (const commandSection of group.sections) {
-				lines.push(".Pp", `.Sy ${shTitle(commandSection.title)}`);
+			group.sections.forEach((commandSection, index) => {
+				// mandoc -Tlint warns on .Pp directly after .Ss; only separate consecutive sections.
+				if (index > 0) lines.push(".Pp");
+				lines.push(`.Sy ${shTitle(commandSection.title)}`);
 				for (const line of commandSection.body.split("\n")) lines.push(escapeMdocBodyLine(line));
-			}
+			});
 		}
 	}
 	lines.push("");

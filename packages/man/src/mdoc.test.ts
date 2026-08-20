@@ -45,9 +45,9 @@ describe("renderManPageMdoc", () => {
 
 		expect(output).toContain(".Sh COMMANDS");
 		expect(output).toContain(
-			".Ss config\n.Pp\n.Sy OVERVIEW\nconfig body\n.Pp\n.Sy DETAILS\nconfig details",
+			".Ss config\n.Sy OVERVIEW\nconfig body\n.Pp\n.Sy DETAILS\nconfig details",
 		);
-		expect(output).toContain(".Ss config set\n.Pp\n.Sy EXAMPLES\nconfig set body");
+		expect(output).toContain(".Ss config set\n.Sy EXAMPLES\nconfig set body");
 		const paths = ["alpha", "config", "config set", "zeta"].map((path) =>
 			output.indexOf(`.Ss ${path}\n`),
 		);
@@ -84,7 +84,7 @@ describe("renderManPageMdoc", () => {
 
 		expect(output).toContain(".Sh COMMANDS");
 		expect(output).not.toContain(".Ss config\n");
-		expect(output).toContain(".Ss config set\n.Pp\n.Sy EXAMPLES\nconfig set body");
+		expect(output).toContain(".Ss config set\n.Sy EXAMPLES\nconfig set body");
 	});
 
 	it("filters subcommand sections by audience and omits hidden commands", async () => {
@@ -111,7 +111,7 @@ describe("renderManPageMdoc", () => {
 
 		const output = renderManPageMdoc({ root: await app.snapshot(), name: "demo" });
 
-		expect(output).toContain(".Ss publish\n.Pp\n.Sy MAN NOTES\nman body");
+		expect(output).toContain(".Ss publish\n.Sy MAN NOTES\nman body");
 		expect(output).not.toContain("other body");
 		expect(output).not.toContain("hidden body");
 		expect(output).not.toContain(".Ss internal");
