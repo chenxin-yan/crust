@@ -11,8 +11,8 @@ import (
 )
 
 // Argv returns a Node-shaped argv while preserving user arguments from os.Args.
-func Argv() []string {
-	return append([]string{os.Args[0], os.Args[0]}, os.Args[1:]...)
+func Argv(entryFile string) []string {
+	return append([]string{os.Args[0], entryFile}, os.Args[1:]...)
 }
 
 type undefined struct{}

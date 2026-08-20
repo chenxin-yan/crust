@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -32,6 +32,7 @@ const fixtures = [
 	{ name: "identifiers", args: [] },
 	{ name: "indexed-length", args: ["Crust"] },
 	{ name: "parenthesized-indexed-length", args: ["Crust"] },
+	{ name: "argv-prefix", args: [] },
 ] as const;
 
 describe("compiler differential corpus", () => {
@@ -92,6 +93,26 @@ describe("compiler differential corpus", () => {
 	it("rejects default parameters before emission", () => {
 		const fixture = join(import.meta.dir, "fixtures", "default-parameter.ts");
 		expect(() => lower(fixture)).toThrow("Unsupported TypeScript Parameter");
+	});
+
+	it("rejects expressions unsupported by the Go runtime", async () => {
+		const workspace = await mkdtemp(join(tmpdir(), "crust-unsupported-expression-"));
+		const fixture = join(workspace, "fixture.ts");
+		try {
+			for (const source of [
+				'console.log("abc".slice(1));',
+				'console.log("abc"[0]);',
+				'console.log("abc"[0].length);',
+				'console.log(+"42");',
+				"console.log(String(42));",
+				"function f(value: number) { return value; } console.log(f.length);",
+			]) {
+				await writeFile(fixture, source);
+				expect(() => lower(fixture)).toThrow("Unsupported TypeScript");
+			}
+		} finally {
+			await rm(workspace, { recursive: true, force: true });
+		}
 	});
 
 	for (const fixtureName of ["fractional-exit.ts", "non-finite-exit.ts", "large-exit.ts"]) {
