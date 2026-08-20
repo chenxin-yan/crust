@@ -13,6 +13,26 @@ func Argv() []string {
 	return append([]string{os.Args[0], os.Args[0]}, os.Args[1:]...)
 }
 
+func Index(values []string, index float64) string {
+	if index < 0 || index >= float64(len(values)) || index != math.Trunc(index) {
+		return "undefined"
+	}
+	return values[int(index)]
+}
+
+func Slice(values []string, start float64) []string {
+	if math.IsNaN(start) {
+		start = 0
+	}
+	start = math.Trunc(start)
+	if start < 0 {
+		start = math.Max(float64(len(values))+start, 0)
+	} else {
+		start = math.Min(start, float64(len(values)))
+	}
+	return values[int(start):]
+}
+
 func Exit(code float64) {
 	os.Exit(int(code))
 }

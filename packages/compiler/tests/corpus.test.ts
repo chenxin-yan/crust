@@ -27,6 +27,8 @@ const fixtures = [
 	{ name: "template", args: ["Crust"] },
 	{ name: "functions", args: [] },
 	{ name: "hello-argv", args: ["Crust", "extra"] },
+	{ name: "bounds", args: ["Crust"] },
+	{ name: "identifiers", args: [] },
 ] as const;
 
 describe("compiler differential corpus", () => {
