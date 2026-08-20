@@ -1,4 +1,6 @@
 import type { ArgDef, FlagDef } from "../types.ts";
+import type { EmptyArgNameBrand } from "../validation/args.brands.ts";
+import type { EmptyFlagSpellingBrand } from "../validation/flags.brands.ts";
 import type { Simplify } from "./context.ts";
 
 /** Distribute `Omit<_, "name">` over the {@link ArgDef} union. */
@@ -14,7 +16,7 @@ export type UnnamedArgDef = OmitName<ArgDef>;
  * `.flags(...defs)` or owned by a Context.
  */
 export function defineFlag<const N extends string, const D extends FlagDef>(
-	name: N,
+	name: N & EmptyFlagSpellingBrand<N>,
 	def: D,
 ): Simplify<{ readonly name: N } & D> {
 	return { ...def, name } as Simplify<{ readonly name: N } & D>;
@@ -25,7 +27,7 @@ export function defineFlag<const N extends string, const D extends FlagDef>(
  * definition type. Attach with the variadic `.args(...defs)`.
  */
 export function defineArg<const N extends string, const D extends UnnamedArgDef>(
-	name: N,
+	name: N & EmptyArgNameBrand<N>,
 	def: D,
 ): Simplify<{ readonly name: N } & D> {
 	return { ...def, name } as Simplify<{ readonly name: N } & D>;

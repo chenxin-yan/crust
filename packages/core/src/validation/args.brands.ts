@@ -1,5 +1,11 @@
 import type { ArgsDef } from "../types.ts";
-import type { AsyncParseBrand, DefaultWithinChoicesBrand, DefName, Overlap } from "./shared.ts";
+import type {
+	AsyncParseBrand,
+	DefaultWithinChoicesBrand,
+	DefName,
+	EmptyLiteralNameBrand,
+	Overlap,
+} from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Compile-time validation
@@ -16,15 +22,19 @@ type DuplicateArgBrand<A, Existing extends string> =
 				}
 		: never;
 
+type EmptyArgNameError = { readonly FIX_EMPTY_NAME: "Argument names must be non-empty" };
+
+/** Brand a statically known empty argument name while allowing widened and generic names. */
+export type EmptyArgNameBrand<Name extends string> = EmptyLiteralNameBrand<Name, EmptyArgNameError>;
+
 // An empty name renders as "<>" in help/snapshot labels and validation messages.
-type EmptyArgNameBrand<A> =
-	"" extends DefName<A> ? { readonly FIX_EMPTY_NAME: "Argument names must be non-empty" } : {};
+type EmptyArgDefinitionNameBrand<A> = "" extends DefName<A> ? EmptyArgNameError : {};
 
 type ArgChecks<A, Existing extends string> = A &
 	DuplicateArgBrand<A, Existing> &
 	AsyncParseBrand<A> &
 	DefaultWithinChoicesBrand<A> &
-	EmptyArgNameBrand<A>;
+	EmptyArgDefinitionNameBrand<A>;
 
 /**
  * Per-arg validation tuple type. Resolves to `A` when the constraints are

@@ -1,5 +1,11 @@
 import type { FlagsDef, NamedFlagDef, NamedFlagsRecord } from "../types.ts";
-import type { AsyncParseBrand, DefaultWithinChoicesBrand, DefName, Overlap } from "./shared.ts";
+import type {
+	AsyncParseBrand,
+	DefaultWithinChoicesBrand,
+	DefName,
+	EmptyLiteralNameBrand,
+	Overlap,
+} from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Compile-time validation
@@ -27,12 +33,18 @@ type ReservedSpellingBrand<F> = "__proto__" extends DefName<F> | ExtractAllAlias
 		}
 	: {};
 
+type EmptySpellingError = {
+	readonly FIX_EMPTY_SPELLING: "Flag names and aliases must be non-empty strings";
+};
+
+/** Brand a statically known empty flag name while allowing widened and generic names. */
+export type EmptyFlagSpellingBrand<Name extends string> = EmptyLiteralNameBrand<
+	Name,
+	EmptySpellingError
+>;
+
 /** Reject empty spellings: their CLI tokens (`--`, `-`) are unparseable, so the flag can never be supplied. */
-type EmptySpellingBrand<F> = "" extends DefName<F> | ExtractAllAliases<F>
-	? {
-			readonly FIX_EMPTY_SPELLING: "Flag names and aliases must be non-empty strings";
-		}
-	: {};
+type EmptySpellingBrand<F> = "" extends DefName<F> | ExtractAllAliases<F> ? EmptySpellingError : {};
 
 /** Canonical names claimed by more than one definition in the same call. */
 type DuplicateNames<

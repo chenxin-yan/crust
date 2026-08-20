@@ -103,7 +103,7 @@ const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
 const target = defineArg("target", { type: "string", required: true });
 ```
 
-`defineFlag(name, def)` returns a `NamedFlagDef`; `defineArg(name, def)` returns an `ArgDef`. `UnnamedArgDef` is the `defineArg` input shape — an `ArgDef` without its `name`.
+`defineFlag(name, def)` returns a `NamedFlagDef`; `defineArg(name, def)` returns an `ArgDef`. Statically known empty names fail typecheck with `FIX_EMPTY_SPELLING` for flags and `FIX_EMPTY_NAME` for arguments; widened strings remain accepted for dynamic definitions. `UnnamedArgDef` is the `defineArg` input shape — an `ArgDef` without its `name`.
 
 ### `CommandMeta`
 

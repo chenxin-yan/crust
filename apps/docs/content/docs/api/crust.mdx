@@ -61,7 +61,7 @@ interface CommandDefinition<
   Aliases extends readonly string[] = readonly string[],
 > {
   readonly name: Name;
-  as<const N extends string>(name: N): CommandDefinition<N, Aliases>;
+  as<const N extends string>(name: N & EmptyNameBrand<N>): CommandDefinition<N, Aliases>;
 }
 ```
 
@@ -71,7 +71,7 @@ A `CommandDefinition` is a frozen value carrying its name, static config, and co
 
 ```ts
 defineCommand<const Name extends string>(
-  name: Name,
+  name: Name & EmptyNameBrand<Name>,
   recipe: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
 ): CommandDefinition<Name>;
 
@@ -80,7 +80,7 @@ interface CommandConfig extends Omit<CommandMeta, "name"> {
 }
 
 defineCommand<const Name extends string, const C extends CommandConfig>(
-  name: Name,
+  name: Name & EmptyNameBrand<Name>,
   config: C & ValidateCommandConfig<Name, C>,
   recipe: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
 ): CommandDefinition<Name, AliasesOf<C>>;
@@ -109,7 +109,7 @@ const deploy = defineCommand(
 );
 ```
 
-The recipe does not execute when the definition is created. It executes once for each `.add()`, so keep configuration side-effect-free. TypeScript validates the definition shape; materialization checks at runtime that the recipe returns the seeded builder and does not register nested Extensions, because those behaviors are not type-expressible.
+The recipe does not execute when the definition is created. It executes once for each `.add()`, so keep configuration side-effect-free. Statically known empty names passed to `defineCommand()` or `.as()` fail typecheck with `FIX_EMPTY_NAME`; widened and dynamically assembled names retain runtime validation at composition. TypeScript validates the definition shape; materialization checks at runtime that the recipe returns the seeded builder and does not register nested Extensions, because those behaviors are not type-expressible.
 
 ## Constructor
 

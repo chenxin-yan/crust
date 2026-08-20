@@ -1,4 +1,4 @@
-import type { DefName, Overlap } from "./shared.ts";
+import type { DefName, EmptyLiteralNameBrand, Overlap } from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Compile-time validation
@@ -41,15 +41,17 @@ export type ValidateCommandConfig<Name extends string, C> = string extends Name
 		? {}
 		: { readonly FIX_ALIAS_SHAPE: AliasShapeErrors<Name, C> };
 
+type EmptyNameError = { readonly FIX_EMPTY_NAME: "Command name must be a non-empty string" };
+
+/** Brand a statically known empty command name while allowing widened and generic names. */
+export type EmptyNameBrand<Name extends string> = EmptyLiteralNameBrand<Name, EmptyNameError>;
+
 /**
  * Brand a statically known empty command name at the composition site:
  * routing stops at empty argv tokens, so such a command can never dispatch.
  * Widened names opt out (`DefName` yields `never`, which `""` does not extend).
  */
-type EmptyNameBrand<D> =
-	"" extends DefName<D>
-		? { readonly FIX_EMPTY_NAME: "Command name must be a non-empty string" }
-		: {};
+type EmptyDefinitionNameBrand<D> = "" extends DefName<D> ? EmptyNameError : {};
 
 type DefinitionAliases<D> = D extends {
 	readonly _aliases?: infer A extends readonly string[];
@@ -97,7 +99,10 @@ export type ValidateCommandDefinitions<
 	Existing extends string = never,
 > = Ds extends readonly [infer Head, ...infer Tail]
 	? readonly [
-			Head & CommandCollisionBrand<Head, Existing> & EmptyNameBrand<Head> & SelfAliasBrand<Head>,
+			Head &
+				CommandCollisionBrand<Head, Existing> &
+				EmptyDefinitionNameBrand<Head> &
+				SelfAliasBrand<Head>,
 			...ValidateCommandDefinitions<Tail, Existing | CommandDefinitionSpellings<Head>>,
 		]
 	: Ds;
