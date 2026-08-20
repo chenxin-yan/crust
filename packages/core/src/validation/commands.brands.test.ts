@@ -4,6 +4,7 @@ import type {
 	CommandDefinitionSpellings,
 	ValidateCommandConfig,
 	ValidateCommandDefinitions,
+	ValidateExtensionCommands,
 } from "./commands.brands.ts";
 
 type Equal<A, B> =
@@ -49,6 +50,35 @@ describe("compile-time command validation", () => {
 				'Command name or alias "b" collides with a sibling command'
 			>
 		>;
+
+		expect(true).toBe(true);
+	});
+
+	it("brands Extension command collisions and lets widened commands opt out", () => {
+		type Ext<Commands extends readonly unknown[]> = { readonly commands?: Commands };
+		type AppCollision = ValidateExtensionCommands<
+			readonly [Ext<readonly [Def<"inspect", readonly ["scan"]>]>],
+			"scan"
+		>;
+		type CrossExtension = ValidateExtensionCommands<
+			readonly [Ext<readonly [Def<"build", readonly ["b"]>]>, Ext<readonly [Def<"b">]>]
+		>;
+		type Clean = ValidateExtensionCommands<readonly [Ext<readonly [Def<"inspect">]>], "build">;
+		type Widened = ValidateExtensionCommands<readonly [Ext<readonly [Def<string>]>], "build">;
+		type _app = Expect<
+			Equal<
+				AppCollision[0]["FIX_EXTENSION_COLLISION"],
+				'Extension command name or alias "scan" collides with an existing command'
+			>
+		>;
+		type _cross = Expect<
+			Equal<
+				CrossExtension[1]["FIX_EXTENSION_COLLISION"],
+				'Extension command name or alias "b" collides with an existing command'
+			>
+		>;
+		type _clean = Expect<Equal<Extract<keyof Clean[0], "FIX_EXTENSION_COLLISION">, never>>;
+		type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_EXTENSION_COLLISION">, never>>;
 
 		expect(true).toBe(true);
 	});

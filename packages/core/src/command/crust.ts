@@ -271,6 +271,7 @@ function materializeCommandDefinition(
 	child._node.effectiveFlags = { ...parent.ownedFlags };
 	child._node.flagSpellings = cloneFlagSpellings(parent.flagSpellings, child._node.effectiveFlags);
 	(child._node as { contexts: ContextInstance[] }).contexts = [...parent.contexts];
+	child._node.contextExtensionIds = [...parent.contextExtensionIds];
 
 	const configured = internal.recipe(
 		child as unknown as AnyCommandDefinitionBuilder,
@@ -570,36 +571,71 @@ export function defineCommand(
 	return named(name);
 }
 
-function installContexts(node: CommandNode, instances: readonly ContextInstance[]): CommandNode {
-	// cloneCommandNode already deep-clones the subtree, so install by walking the copy.
+function installExtensionContexts(
+	node: CommandNode,
+	extensions: readonly Extension[],
+): CommandNode {
+	// Rebuild Extension providers from the deduplicated list so replacing an id
+	// cannot leave the earlier registration's eager Context installs behind.
 	const cloned = cloneCommandNode(node);
-	const walk = (target: CommandNode, skip: ReadonlySet<string>): void => {
-		const installed = instances.filter((instance) => !skip.has(instance.name));
-		target.contexts.push(...installed);
-		for (const instance of installed) {
-			for (const [name, def] of Object.entries(instance.ownedFlags)) {
-				target.effectiveFlags[name] = def;
-				addFlagSpellingEntries(target.flagSpellings, name, def);
-			}
-			Object.assign(target.ownedFlags, instance.ownedFlags);
+	const reset = (target: CommandNode): void => {
+		const localContexts: ContextInstance[] = [];
+		for (let index = 0; index < target.contexts.length; index++) {
+			if (target.contextExtensionIds[index] === undefined)
+				localContexts.push(target.contexts[index]!);
 		}
-		// A Context provided locally on a descendant is more specific than a
-		// root-wide install: skip same-name instances for that subtree so the
-		// resolver's last-write-wins map cannot hand the descendant's typed
-		// action/setup a root provider's value. Locally provided = present on
-		// the child but not inherited from this node (identity comparison;
-		// clones share Context instance identities).
-		const inherited = new WeakSet(target.contexts);
-		for (const child of Object.values(target.subCommands)) {
-			const childSkip = new Set(skip);
-			for (const context of child.contexts) {
-				if (!inherited.has(context)) childSkip.add(context.name);
-			}
-			walk(child, childSkip);
+		target.contexts = localContexts;
+		target.contextExtensionIds = localContexts.map(() => undefined);
+		target.ownedFlags = Object.assign({}, ...localContexts.map((context) => context.ownedFlags));
+		target.effectiveFlags = { ...target.ownedFlags, ...target.localFlags };
+		target.flagSpellings = new Map();
+		for (const [name, def] of Object.entries(target.effectiveFlags)) {
+			addFlagSpellingEntries(target.flagSpellings, name, def);
 		}
+		for (const child of Object.values(target.subCommands)) reset(child);
 	};
-	walk(cloned, new Set());
+	reset(cloned);
+
+	for (const extension of extensions) {
+		const instances = extension.provides ?? [];
+		if (instances.length === 0) continue;
+		const walk = (target: CommandNode, skip: ReadonlySet<string>): void => {
+			const installed = instances.filter((instance) => !skip.has(instance.name));
+			target.contexts.push(...installed);
+			target.contextExtensionIds.push(...installed.map(() => extension.id));
+			for (const instance of installed) {
+				for (const [name, def] of Object.entries(instance.ownedFlags)) {
+					target.effectiveFlags[name] = def;
+					addFlagSpellingEntries(target.flagSpellings, name, def);
+				}
+				Object.assign(target.ownedFlags, instance.ownedFlags);
+			}
+			// A Context provided locally on a descendant is more specific than a
+			// root-wide install: skip same-name instances for that subtree.
+			const inherited = new WeakSet(target.contexts);
+			for (const child of Object.values(target.subCommands)) {
+				const childSkip = new Set(skip);
+				for (const context of child.contexts) {
+					if (!inherited.has(context)) childSkip.add(context.name);
+				}
+				walk(child, childSkip);
+			}
+		};
+		walk(cloned, new Set());
+	}
 	return cloned;
+}
+
+function dedupeExtensions(extensions: readonly Extension[]): Extension[] {
+	const seen = new Set<string>();
+	return extensions
+		.toReversed()
+		.filter((extension) => {
+			if (seen.has(extension.id)) return false;
+			seen.add(extension.id);
+			return true;
+		})
+		.toReversed();
 }
 
 function serializeInputValue(definition: ArgDef | FlagDef, name: string, value: unknown): string {
@@ -845,6 +881,7 @@ export class Crust<
 			flagSpellings: cloneFlagSpellings(this._node.flagSpellings, effectiveFlags),
 			subCommands: { ...this._node.subCommands },
 			contexts: [...this._node.contexts],
+			contextExtensionIds: [...this._node.contextExtensionIds],
 			extensions: [...this._node.extensions],
 			meta: { ...this._node.meta },
 			args: this._node.args ? [...this._node.args] : undefined,
@@ -1009,6 +1046,10 @@ export class Crust<
 		const effectiveFlags = { ...this._node.effectiveFlags };
 		const flagSpellings = cloneFlagSpellings(this._node.flagSpellings, effectiveFlags);
 		const contexts = [...this._node.contexts, ...instances] as ContextInstance[];
+		const contextExtensionIds = [
+			...this._node.contextExtensionIds,
+			...instances.map(() => undefined),
+		];
 		for (const instance of instances) {
 			for (const [name, definition] of Object.entries(instance.ownedFlags)) {
 				effectiveFlags[name] = definition;
@@ -1016,7 +1057,13 @@ export class Crust<
 			}
 			Object.assign(ownedFlags, instance.ownedFlags);
 		}
-		return this._clone({ contexts, ownedFlags, effectiveFlags, flagSpellings }) as unknown as Crust<
+		return this._clone({
+			contexts,
+			contextExtensionIds,
+			ownedFlags,
+			effectiveFlags,
+			flagSpellings,
+		}) as unknown as Crust<
 			MergeFlags<Flags, ContextsOwnedFlags<Cs>>,
 			A,
 			MergeContext<Ctx, ContextsOutput<Cs>>,
@@ -1083,10 +1130,10 @@ export class Crust<
 		>,
 		Result
 	> {
-		const provided = extensions.flatMap((extension) => extension.provides ?? []);
+		const activeExtensions = dedupeExtensions([...this._node.extensions, ...extensions]);
 		return this._clone({
-			...(provided.length > 0 ? installContexts(this._node, provided) : {}),
-			extensions: [...this._node.extensions, ...extensions],
+			...installExtensionContexts(this._node, activeExtensions),
+			extensions: activeExtensions,
 		}) as unknown as Crust<
 			MergeFlags<Flags, ExtensionFlags<Es>>,
 			A,
