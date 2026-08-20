@@ -39,6 +39,17 @@ describe("Standard Schema on arg definitions", () => {
 		expect(received).toBe(8080);
 	});
 
+	it("delivers a successful schema output of literal undefined to the action", async () => {
+		let received: unknown = "untouched";
+		const toUndefined = schema<string, undefined>(() => ({ value: undefined }));
+		const app = new Crust("cli").args({ name: "port", schema: toUndefined }).action(({ args }) => {
+			received = args.port;
+		});
+
+		await app.run([], { args: { port: "8080" } });
+		expect(received).toBeUndefined();
+	});
+
 	it("schema owns requiredness: a missing arg reaches the schema as undefined", async () => {
 		const app = new Crust("cli").args({ name: "port", schema: port() }).action(() => {});
 

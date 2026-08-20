@@ -13,7 +13,7 @@ async function runSchema(
 	raw: unknown,
 	path: readonly PropertyKey[],
 	issues: ValidationIssue[],
-): Promise<{ ok: boolean; value?: unknown }> {
+): Promise<{ readonly ok: false } | { readonly ok: true; readonly value: unknown }> {
 	let result = schema["~standard"].validate(raw);
 	if (result instanceof Promise) result = await result;
 
