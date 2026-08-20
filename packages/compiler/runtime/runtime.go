@@ -82,13 +82,16 @@ func Log(values ...any) {
 		if index > 0 {
 			fmt.Print(" ")
 		}
-		if number, ok := value.(float64); ok {
-			if number == 0 && math.Signbit(number) {
+		switch value := value.(type) {
+		case float64:
+			if value == 0 && math.Signbit(value) {
 				fmt.Print("-0")
 			} else {
-				fmt.Print(numberString(number))
+				fmt.Print(String(value))
 			}
-		} else {
+		case []string:
+			fmt.Print(inspectStringArray(value))
+		default:
 			fmt.Print(String(value))
 		}
 	}
@@ -154,6 +157,18 @@ func String(value any) string {
 	default:
 		panic(fmt.Sprintf("unsupported JavaScript string conversion for %T", value))
 	}
+}
+
+func inspectStringArray(values []string) string {
+	if len(values) == 0 {
+		return "[]"
+	}
+	quoted := make([]string, len(values))
+	for index, value := range values {
+		value = strings.NewReplacer("\\", "\\\\", "'", "\\'", "\n", "\\n", "\r", "\\r", "\t", "\\t").Replace(value)
+		quoted[index] = "'" + value + "'"
+	}
+	return "[ " + strings.Join(quoted, ", ") + " ]"
 }
 
 func numberString(value float64) string {
