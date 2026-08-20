@@ -2,9 +2,10 @@ import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { emitGo } from "./emitter.js";
+import { emitGo, runtimeModule } from "./emitter.js";
 import { lower } from "./frontend.js";
 
 export { TypeScriptCompileError } from "./frontend.js";
@@ -26,6 +27,7 @@ export async function compile(entryFile: string, options: CompileOptions = {}): 
 	const goFile = join(workspace, "main.go");
 	const defaultName = basename(entryFile, extname(entryFile));
 	const outputPath = resolve(options.outputPath ?? join(workspace, defaultName));
+	const runtimePath = fileURLToPath(new URL("../runtime", import.meta.url)).replaceAll("\\", "/");
 
 	let built = false;
 	try {
@@ -40,9 +42,15 @@ export async function compile(entryFile: string, options: CompileOptions = {}): 
 			}
 		}
 		await mkdir(dirname(outputPath), { recursive: true });
-		await writeFile(goFile, emitGo(ir));
+		await Promise.all([
+			writeFile(goFile, emitGo(ir)),
+			writeFile(
+				join(workspace, "go.mod"),
+				`module crust.generated\n\ngo 1.26\n\nrequire ${runtimeModule} v0.0.0\n\nreplace ${runtimeModule} => ${JSON.stringify(runtimePath)}\n`,
+			),
+		]);
 		try {
-			await promisify(execFile)("go", ["build", "-o", outputPath, goFile]);
+			await promisify(execFile)("go", ["build", "-o", outputPath, "."], { cwd: workspace });
 		} catch (error) {
 			// Only executable absence is actionable here; preserve backend and permission failures.
 			if (error instanceof Error && "code" in error && error.code === "ENOENT") {
