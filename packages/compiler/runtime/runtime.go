@@ -163,14 +163,22 @@ func inspectStringArray(values []string) string {
 	if len(values) == 0 {
 		return "[]"
 	}
-	quoted := make([]string, len(values))
-	for index, value := range values {
+	limit := min(len(values), 100)
+	quoted := make([]string, limit)
+	for index, value := range values[:limit] {
 		quoted[index] = quoteInspectString(value)
 	}
+	remaining := len(values) - limit
 	if len(quoted) > 6 {
 		if grouped := groupInspectStrings(quoted); len(grouped) != len(quoted) {
+			if remaining > 0 {
+				grouped = append(grouped, remainingInspectItems(remaining))
+			}
 			return "[\n  " + strings.Join(grouped, ",\n  ") + "\n]"
 		}
+	}
+	if remaining > 0 {
+		quoted = append(quoted, remainingInspectItems(remaining))
 	}
 	if inspectStringsFitLine(quoted) {
 		return "[ " + strings.Join(quoted, ", ") + " ]"
@@ -178,7 +186,31 @@ func inspectStringArray(values []string) string {
 	return "[\n  " + strings.Join(quoted, ",\n  ") + "\n]"
 }
 
+func remainingInspectItems(count int) string {
+	plural := "s"
+	if count == 1 {
+		plural = ""
+	}
+	return fmt.Sprintf("... %d more item%s", count, plural)
+}
+
 func quoteInspectString(value string) string {
+	if len(utf16.Encode([]rune(value))) > 74 && strings.Contains(value, "\n") {
+		lines := strings.SplitAfter(value, "\n")
+		if lines[len(lines)-1] == "" {
+			lines = lines[:len(lines)-1]
+		}
+		if len(lines) > 1 {
+			for index, line := range lines {
+				lines[index] = quoteInspectStringPart(line)
+			}
+			return strings.Join(lines, " +\n    ")
+		}
+	}
+	return quoteInspectStringPart(value)
+}
+
+func quoteInspectStringPart(value string) string {
 	quote := byte('\'')
 	if strings.Contains(value, "'") {
 		switch {
