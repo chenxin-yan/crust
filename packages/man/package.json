@@ -48,6 +48,7 @@
 		"@crustjs/config": "workspace:*",
 		"@crustjs/core": "workspace:*",
 		"@crustjs/extensions": "workspace:*",
+		"@crustjs/skills": "workspace:*",
 		"tsdown": "catalog:"
 	},
 	"peerDependencies": {

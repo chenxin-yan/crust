@@ -44,8 +44,8 @@ type MaterializeCommandDefinition = (
  * Snapshot subprocess protocol used by first-party build tooling.
  *
  * When set to a non-empty file path, `.execute()` prepares the command tree,
- * validates its documentation sections, writes its JSON snapshot, optionally runs Extension
- * build hooks when the build output directory is set, and exits without dispatching
+ * validates its documentation sections, optionally runs Extension build hooks when the
+ * build output directory is set, writes its final JSON snapshot, and exits without dispatching
  * a Command Action. In-process callers use `Crust.snapshot()`.
  */
 export const SNAPSHOT_PATH_ENV = "CRUST_INTERNAL_SNAPSHOT_PATH";
@@ -275,14 +275,11 @@ function applyExtensionSections(
 
 const preparedInvocations = new WeakMap<CommandNode, PreparedInvocation>();
 
-/** Shared prepare step: clone, apply Extensions and sections, freeze once per immutable builder node. */
-function prepareInvocation(
+/** Clone and apply Extension commands and flags; recipes run exactly once here. */
+function buildExtensionTree(
 	node: CommandNode,
 	materializeCommandDefinition: MaterializeCommandDefinition,
 ): PreparedInvocation {
-	const cached = preparedInvocations.get(node);
-	if (cached) return cached;
-
 	const rootNode = cloneCommandNode(node);
 	const extensions = Object.freeze([...node.extensions]);
 
@@ -292,13 +289,32 @@ function prepareInvocation(
 	for (const extension of extensions) applyExtensionFlags(rootNode, extension);
 
 	validateAuthoredSections(rootNode);
+	return { rootNode, extensions };
+}
+
+/** Evaluate Extension section callbacks against current state and freeze the tree. */
+function applySectionsAndFreeze(
+	rootNode: CommandNode,
+	extensions: readonly Extension[],
+): CommandNode {
 	const authoredSnapshot = snapshotCommand(rootNode);
 	for (const extension of extensions) {
 		applyExtensionSections(rootNode, extension, authoredSnapshot);
 	}
-
 	freezeTree(rootNode);
-	const prepared = { rootNode, extensions };
+	return rootNode;
+}
+
+/** Clone, apply Extensions and sections, freeze, and cache ordinary invocation preparation. */
+function prepareInvocation(
+	node: CommandNode,
+	materializeCommandDefinition: MaterializeCommandDefinition,
+): PreparedInvocation {
+	const cached = preparedInvocations.get(node);
+	if (cached) return cached;
+
+	const prepared = buildExtensionTree(node, materializeCommandDefinition);
+	applySectionsAndFreeze(prepared.rootNode, prepared.extensions);
 	preparedInvocations.set(node, prepared);
 	return prepared;
 }
@@ -508,13 +524,15 @@ export async function executeInvocation(
 
 	if (snapshotPath) {
 		try {
-			const prepared = prepareInvocation(node, materializeCommandDefinition);
-			const snapshot = snapshotCommand(prepared.rootNode);
-			await writeFile(snapshotPath, JSON.stringify(snapshot));
-
+			// Commands and flags materialize once so recipes keep their
+			// once-per-`.add()` lifecycle; only section callbacks re-evaluate.
+			const base = buildExtensionTree(node, materializeCommandDefinition);
+			const takeSnapshot = () =>
+				snapshotCommand(applySectionsAndFreeze(cloneCommandNode(base.rootNode), base.extensions));
+			let snapshot = takeSnapshot();
 			const buildOutDir = process.env[BUILD_OUT_DIR_ENV];
 			if (buildOutDir) {
-				for (const extension of prepared.extensions) {
+				for (const extension of base.extensions) {
 					if (!extension.build) continue;
 					try {
 						await extension.build({ snapshot, outDir: buildOutDir });
@@ -524,8 +542,12 @@ export async function executeInvocation(
 							cause: error,
 						});
 					}
+					// The hook sees the snapshot from before it starts; re-evaluating sections
+					// afterwards lets later hooks observe its outputs without mutating the frozen tree.
+					snapshot = takeSnapshot();
 				}
 			}
+			await writeFile(snapshotPath, JSON.stringify(snapshot));
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			console.error(message);
