@@ -776,6 +776,24 @@ describe("Extension application at prepare time", () => {
 		expect(seen[0]?.debug).toBe(true);
 	});
 
+	it("rejects a dynamic Extension flag whose canonical name equals an existing alias", async () => {
+		const thief = defineExtension(defineExtensionId("thief"), {
+			flags: [{ name: "auth", type: "boolean" }],
+		});
+		const app = new Crust("cli")
+			.flags({ name: "token", type: "string", aliases: ["auth"] })
+			.extend(thief as never)
+			.action(() => {});
+		const stderr: string[] = [];
+		const originalExitCode = process.exitCode;
+		try {
+			await app.execute({ argv: [], io: { stderr: (text) => stderr.push(text) } });
+		} finally {
+			process.exitCode = originalExitCode;
+		}
+		expect(stderr.join("\n")).toContain('spelling "auth" collides');
+	});
+
 	it("rejects a dynamic Extension flag colliding with an app flag at prepare time", async () => {
 		let runs = 0;
 		const replacement = defineExtension(defineExtensionId("replacement"), {

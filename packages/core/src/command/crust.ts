@@ -458,18 +458,32 @@ export function defineCommand(
 function installContexts(node: CommandNode, instances: readonly ContextInstance[]): CommandNode {
 	// cloneCommandNode already deep-clones the subtree, so install by walking the copy.
 	const cloned = cloneCommandNode(node);
-	const walk = (target: CommandNode): void => {
-		target.contexts.push(...instances);
-		for (const instance of instances) {
+	const walk = (target: CommandNode, skip: ReadonlySet<string>): void => {
+		const installed = instances.filter((instance) => !skip.has(instance.name));
+		target.contexts.push(...installed);
+		for (const instance of installed) {
 			for (const [name, def] of Object.entries(instance.ownedFlags)) {
 				target.effectiveFlags[name] = def;
 				addFlagSpellingEntries(target.flagSpellings, name, def);
 			}
 			Object.assign(target.ownedFlags, instance.ownedFlags);
 		}
-		for (const child of Object.values(target.subCommands)) walk(child);
+		// A Context provided locally on a descendant is more specific than a
+		// root-wide install: skip same-name instances for that subtree so the
+		// resolver's last-write-wins map cannot hand the descendant's typed
+		// action/setup a root provider's value. Locally provided = present on
+		// the child but not inherited from this node (identity comparison;
+		// clones share Context instance identities).
+		const inherited = new WeakSet(target.contexts);
+		for (const child of Object.values(target.subCommands)) {
+			const childSkip = new Set(skip);
+			for (const context of child.contexts) {
+				if (!inherited.has(context)) childSkip.add(context.name);
+			}
+			walk(child, childSkip);
+		}
 	};
-	walk(cloned);
+	walk(cloned, new Set());
 	return cloned;
 }
 

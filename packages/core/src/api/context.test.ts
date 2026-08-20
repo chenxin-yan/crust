@@ -697,6 +697,28 @@ describe("Context dependency runtime boundaries", () => {
 		await expect(app.run([])).resolves.toBeUndefined();
 	});
 
+	it("keeps a child's locally provided Context over a root Extension provider", async () => {
+		const service = defineContext("service", () => "extension");
+		const values: string[] = [];
+		const child = defineCommand("child", (builder) =>
+			builder
+				.provide(service.of("local"))
+				.action(async ({ ctx }) => void values.push(await ctx.service)),
+		);
+		const provider = defineExtension(defineExtensionId("provider"), { provides: [service()] });
+		// ValidateExtensionProvides sees only the root Ctx (Tree carries no context
+		// names), so this composition typechecks; the child's local provider is
+		// more specific and must win on its own path.
+		const app = new Crust("cli")
+			.add(child)
+			.extend(provider)
+			.action(async ({ ctx }) => void values.push(await ctx.service));
+
+		await app.run(["child"]);
+		await app.run([]);
+		expect(values).toEqual(["local", "extension"]);
+	});
+
 	it("accepts an Extension dependency provided by an earlier .extend() call", async () => {
 		const logger = defineContext("logger", () => "logger");
 		const providerExtension = defineExtension(defineExtensionId("provider"), {

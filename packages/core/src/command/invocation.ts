@@ -72,7 +72,10 @@ function injectExtensionFlag(
 			{ subject: "extension", name, reason: "flag-collision" },
 		);
 	}
-	for (const spelling of [def.short, ...(def.aliases ?? [])]) {
+	// The canonical name is checked against the spelling table too: an existing
+	// flag's *alias* equal to the incoming canonical would otherwise be silently
+	// stolen (effectiveFlags only has canonical keys).
+	for (const spelling of [name, def.short, ...(def.aliases ?? [])]) {
 		const existing = spelling === undefined ? undefined : node.flagSpellings.get(spelling);
 		if (existing !== undefined && existing.canonicalName !== name) {
 			throw new CrustError(
