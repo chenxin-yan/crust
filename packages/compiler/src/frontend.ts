@@ -170,10 +170,9 @@ function lowerExpression(
 		const receiver = ts.isNonNullExpression(node.expression)
 			? node.expression.expression
 			: node.expression;
-		if (ts.isElementAccessExpression(receiver)) throw unsupported(node, sourceFile);
 		return {
 			kind: "length",
-			value: lowerExpression(node.expression, checker, sourceFile),
+			value: lowerExpression(receiver, checker, sourceFile),
 		};
 	}
 	if (ts.isElementAccessExpression(node) && node.argumentExpression) {

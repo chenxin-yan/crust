@@ -77,6 +77,9 @@ function emitExpression(expression: Expression): string {
 		case "slice":
 			return `crustRuntime.Slice(${emitExpression(expression.value)}, ${emitExpression(expression.start)})`;
 		case "length":
+			if (expression.value.kind === "index") {
+				return `crustRuntime.IndexLength(${emitExpression(expression.value.value)}, ${emitExpression(expression.value.index)})`;
+			}
 			return `crustRuntime.Length(${emitExpression(expression.value)})`;
 		case "index":
 			return `crustRuntime.Index(${emitExpression(expression.value)}, ${emitExpression(expression.index)})`;
