@@ -41,10 +41,11 @@ bun run check:types
 bun run test
 ```
 
-The cross-runtime smoke suite (built distributions executed under Node and
-Deno) runs in CI on every PR. To run it locally after `bun run build`:
+The cross-runtime smoke suite (built distributions executed under Bun, Node,
+and Deno) runs in CI on every PR. To run it locally after `bun run build`:
 
 ```sh
+bun scripts/smoke-runtimes/smoke.mjs
 node scripts/smoke-runtimes/smoke.mjs
 deno run --allow-env --allow-read --allow-write --allow-run --config scripts/smoke-runtimes/deno.json scripts/smoke-runtimes/smoke.mjs
 ```
