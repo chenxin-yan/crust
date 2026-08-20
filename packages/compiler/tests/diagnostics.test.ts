@@ -35,7 +35,7 @@ describe("compiler diagnostic corpus", () => {
 	it("rejects user-written any annotations with a rewrite hint", async () => {
 		const error = await compileFailure("any-annotation.ts");
 		expect(error.diagnostics.map(({ code }) => code)).toContain(DiagnosticCodes.AnyType);
-		expect(error.diagnostics[0]?.hint).toContain("Replace the `any` value");
+		expect(error.diagnostics[0]?.hint).toContain("Rewrite the `any`-typed construct");
 		expectLocated(error);
 	});
 
@@ -56,7 +56,7 @@ describe("compiler diagnostic corpus", () => {
 	it("converts noImplicitAny failures to the any diagnostic", async () => {
 		const error = await compileFailure("implicit-any.ts");
 		expect(error.diagnostics.every(({ code }) => code === DiagnosticCodes.AnyType)).toBeTrue();
-		expect(error.diagnostics[0]?.hint).toContain("Replace the `any` value");
+		expect(error.diagnostics[0]?.hint).toContain("Rewrite the `any`-typed construct");
 		expectLocated(error);
 	});
 

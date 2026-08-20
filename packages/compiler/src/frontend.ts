@@ -11,7 +11,7 @@ import {
 import type { Expression, FunctionDeclaration, Program, Statement, ValueType } from "./ir.js";
 
 const anyHint =
-	"Replace the `any` value with a supported concrete type: string, number, boolean, or string[].";
+	"Rewrite the `any`-typed construct using supported M0 expressions or typed function parameters: string, number, boolean, or string[].";
 const anyCallHint =
 	"Remove the any-producing call and replace it with an expression using a supported concrete type.";
 
