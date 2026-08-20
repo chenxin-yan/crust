@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { lower } from "../src/frontend.js";
 import { compile } from "../src/index.js";
 
 const goPath = Bun.which("go");
@@ -24,7 +25,7 @@ const fixtures = [
 	{ name: "embedded-bom", args: [] },
 	{ name: "literals", args: [] },
 	{ name: "expressions", args: ["Crust"] },
-	{ name: "template", args: ["Crust"] },
+	{ name: "template", args: ["Crust", "extra"] },
 	{ name: "functions", args: [] },
 	{ name: "hello-argv", args: ["Crust", "extra"] },
 	{ name: "bounds", args: ["Crust"] },
@@ -59,4 +60,28 @@ describe("compiler differential corpus", () => {
 			120_000,
 		);
 	}
+
+	it("rejects property access whose undefined behavior cannot be preserved", () => {
+		const fixture = join(import.meta.dir, "fixtures", "unsafe-index-length.ts");
+		expect(() => lower(fixture)).toThrow("Unsupported TypeScript PropertyAccessExpression");
+	});
+
+	it.skipIf(goPath === null)(
+		"rejects fractional process exit codes",
+		async () => {
+			const fixture = join(import.meta.dir, "fixtures", "fractional-exit.ts");
+			if (nodePath === null) throw new Error("Node is required as the corpus reference runtime");
+
+			const binary = await compile(fixture);
+			try {
+				const compiled = run(binary);
+				const reference = run(nodePath, [fixture]);
+				expect(compiled.exitCode).toBe(reference.exitCode);
+				expect(new TextDecoder().decode(compiled.stderr)).toContain("RangeError");
+			} finally {
+				await rm(dirname(binary), { recursive: true, force: true });
+			}
+		},
+		120_000,
+	);
 });
