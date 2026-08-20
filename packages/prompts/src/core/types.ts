@@ -120,6 +120,23 @@ export type ChoiceValue<C extends readonly Choice<unknown>[]> = C[number] extend
  */
 export type ValidateFn<T> = (value: T) => void | Promise<void>;
 
+/**
+ * Mutually exclusive validation options shared by text prompts: a Standard
+ * Schema, a throw-on-failure `validate` function, or neither — never both.
+ */
+export type SchemaOrValidate<Output> =
+	| {
+			/** Standard Schema that owns validation, transformation, defaults, and optionality. */
+			readonly schema: StandardSchema<unknown, Output>;
+			readonly validate?: never;
+	  }
+	| {
+			readonly schema?: never;
+			/** Throw-on-failure validation function. */
+			readonly validate: ValidateFn<string>;
+	  }
+	| { readonly schema?: never; readonly validate?: never };
+
 export async function validateSubmitValue<Output>(
 	value: string,
 	schema: StandardSchema<unknown, Output> | undefined,

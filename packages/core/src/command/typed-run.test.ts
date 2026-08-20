@@ -11,6 +11,25 @@ type Expect<T extends true> = T;
 type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
+// "root" plus 14 "next" segments — a path exactly at the depth-15 cap.
+type FifteenDeep = readonly [
+	"root",
+	"next",
+	"next",
+	"next",
+	"next",
+	"next",
+	"next",
+	"next",
+	"next",
+	"next",
+	"next",
+	"next",
+	"next",
+	"next",
+	"next",
+];
+
 describe("typed programmatic invocation", () => {
 	it("returns the selected action result with path-specific types", async () => {
 		const inspect = defineCommand("inspect", (command) =>
@@ -311,24 +330,9 @@ describe("typed programmatic invocation", () => {
 			Equal<readonly ["root", "nope"] extends Paths ? true : false, false>
 		>;
 		// Segment 16 sits past the cap, so any string is accepted there.
-		type Fifteen = readonly [
-			"root",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-		];
-		type _widenedDeep = Expect<readonly [...Fifteen, "not-a-command"] extends Paths ? true : false>;
+		type _widenedDeep = Expect<
+			readonly [...FifteenDeep, "not-a-command"] extends Paths ? true : false
+		>;
 		expect(true).toBe(true);
 	});
 
@@ -348,25 +352,7 @@ describe("typed programmatic invocation", () => {
 		type Root = { args: []; flags: {}; children: DeepTree; result?: "root-result" };
 		// The depth-15 cap only widens the CommandPath constraint; `const Path` still
 		// infers the literal tuple, and CommandShapeAt (uncapped) resolves it fully.
-		type SeventeenDeep = readonly [
-			"root",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-		];
+		type SeventeenDeep = readonly [...FifteenDeep, "next", "next"];
 		type _deepResult = Expect<
 			Equal<CommandShapeAt<Root, SeventeenDeep>["result"], "deep-result" | undefined>
 		>;

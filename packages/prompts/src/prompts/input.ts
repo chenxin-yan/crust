@@ -13,6 +13,7 @@ import {
 	parseShortCircuit,
 	type PartialPromptTheme,
 	type PromptTheme,
+	type SchemaOrValidate,
 	type ValidateFn,
 } from "../core/types.ts";
 import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
@@ -64,20 +65,7 @@ interface InputBaseOptions {
 	readonly theme?: PartialPromptTheme;
 }
 
-type InputValidation<Output> =
-	| {
-			/** Standard Schema that owns validation, transformation, defaults, and optionality. */
-			readonly schema: StandardSchema<unknown, Output>;
-			readonly validate?: never;
-	  }
-	| {
-			readonly schema?: never;
-			/** Throw-on-failure validation function. */
-			readonly validate: ValidateFn<string>;
-	  }
-	| { readonly schema?: never; readonly validate?: never };
-
-export type InputOptions<Output = string> = InputBaseOptions & InputValidation<Output>;
+export type InputOptions<Output = string> = InputBaseOptions & SchemaOrValidate<Output>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // State
