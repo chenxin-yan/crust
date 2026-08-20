@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
+import { lower } from "../src/frontend.js";
 import { compile } from "../src/index.js";
 
 const goPath = Bun.which("go");

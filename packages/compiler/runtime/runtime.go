@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf16"
 )
 
@@ -261,7 +262,7 @@ func inspectStringsFitLine(values []string) bool {
 		return false
 	}
 	for _, value := range values {
-		length += len(utf16.Encode([]rune(value)))
+		length += inspectStringWidth(value)
 		if length > 80 {
 			return false
 		}
@@ -274,7 +275,7 @@ func groupInspectStrings(values []string) []string {
 	totalLength := 0
 	maxLength := 0
 	for index, value := range values {
-		length := len(utf16.Encode([]rune(value)))
+		length := inspectStringWidth(value)
 		lengths[index] = length
 		totalLength += length + 2
 		maxLength = max(maxLength, length)
@@ -316,6 +317,30 @@ func groupInspectStrings(values []string) []string {
 		lines = append(lines, line.String())
 	}
 	return lines
+}
+
+func inspectStringWidth(value string) int {
+	width := 0
+	for _, character := range value {
+		switch {
+		case unicode.Is(unicode.Mn, character), unicode.Is(unicode.Me, character), character == '\u200d':
+		case character >= 0x1100 && (character <= 0x115f ||
+			character == 0x2329 || character == 0x232a ||
+			character >= 0x2e80 && character <= 0xa4cf && character != 0x303f ||
+			character >= 0xac00 && character <= 0xd7a3 ||
+			character >= 0xf900 && character <= 0xfaff ||
+			character >= 0xfe10 && character <= 0xfe19 ||
+			character >= 0xfe30 && character <= 0xfe6f ||
+			character >= 0xff00 && character <= 0xff60 ||
+			character >= 0xffe0 && character <= 0xffe6 ||
+			character >= 0x1f300 && character <= 0x1faff ||
+			character >= 0x20000 && character <= 0x3fffd):
+			width += 2
+		default:
+			width++
+		}
+	}
+	return width
 }
 
 func numberString(value float64) string {
