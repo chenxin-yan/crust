@@ -22,6 +22,14 @@ func Index(values []string, index float64) string {
 	return values[int(index)]
 }
 
+func IndexLength(values []string, index float64) float64 {
+	if index < 0 || index >= float64(len(values)) || index != math.Trunc(index) {
+		fmt.Fprintln(os.Stderr, "TypeError: Cannot read properties of undefined (reading 'length')")
+		os.Exit(1)
+	}
+	return Length(values[int(index)])
+}
+
 func Slice(values []string, start float64) []string {
 	if math.IsNaN(start) {
 		start = 0
