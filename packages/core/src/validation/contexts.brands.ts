@@ -25,8 +25,8 @@ type DuplicateContextBrand<C, Existing extends string> =
  * separate accumulator is needed. Wrappers generic over the builder type
  * use `any`, which opts out via the
  * `string extends keyof Ctx` guard instead of deferring. Widened names opt
- * out via `DefName`; a parent-provided Context stays runtime-only because it
- * is not in the definition's `Ctx`.
+ * out via `DefName`; a parent-provided Context is not in the definition's
+ * `Ctx` and therefore cannot be checked at this call site.
  */
 export type ValidateContextNames<
 	Ctx extends ContextMap,
@@ -37,6 +37,50 @@ export type ValidateContextNames<
 > = {
 	[I in keyof Cs]: Cs[I] & DuplicateContextBrand<Cs[I], Existing | Dups>;
 };
+
+type InstanceNames<P extends readonly unknown[]> = P extends readonly [
+	infer H,
+	...infer T extends readonly unknown[],
+]
+	? DefName<H> | InstanceNames<T>
+	: never;
+
+/** Statically known names of an Extension's provided Contexts; widened Extensions opt out. */
+type ExtensionProvidedNames<E> = E extends {
+	readonly provides?: infer P extends readonly unknown[];
+}
+	? InstanceNames<P>
+	: never;
+
+type ExtensionContextBrand<E, Existing extends string> =
+	Overlap<ExtensionProvidedNames<E>, Existing> extends infer Duplicate extends string
+		? [Duplicate] extends [never]
+			? {}
+			: {
+					readonly FIX_DUPLICATE_CONTEXT: `Extension-provided Context "${Duplicate}" is already provided on this command path`;
+				}
+		: never;
+
+type ValidateExtensionProvidesWorker<
+	Es extends readonly unknown[],
+	Existing extends string,
+> = Es extends readonly [infer H, ...infer T extends readonly unknown[]]
+	? readonly [
+			H & ExtensionContextBrand<H, Existing>,
+			...ValidateExtensionProvidesWorker<T, Existing | ExtensionProvidedNames<H>>,
+		]
+	: Es;
+
+/**
+ * Brand Extensions whose provided Context names replace one already on the
+ * command path (or one provided by an earlier Extension in the same call).
+ * The resolver is last-write-wins, so a silent replacement would hand actions
+ * bound before `.extend()` a value of a different static type.
+ */
+export type ValidateExtensionProvides<
+	Es extends readonly unknown[],
+	Ctx extends ContextMap,
+> = ValidateExtensionProvidesWorker<Es, string extends keyof Ctx ? never : keyof Ctx & string>;
 
 // Widened instances (Deps = any, or a string-indexed Deps map) opt out to
 // runtime-only validation, mirroring DeclaredDepsOf below.

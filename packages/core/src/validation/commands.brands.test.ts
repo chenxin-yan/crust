@@ -53,11 +53,36 @@ describe("compile-time command validation", () => {
 		expect(true).toBe(true);
 	});
 
+	it("brands empty command names at the composition site and lets widened names opt out", () => {
+		type Empty = ValidateCommandDefinitions<readonly [Def<"">]>;
+		type Valid = ValidateCommandDefinitions<readonly [Def<"issue">]>;
+		type Widened = ValidateCommandDefinitions<readonly [Def<string>]>;
+		type _empty = Expect<
+			Equal<Empty[0]["FIX_EMPTY_NAME"], "Command name must be a non-empty string">
+		>;
+		type _valid = Expect<Equal<Extract<keyof Valid[0], "FIX_EMPTY_NAME">, never>>;
+		type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_EMPTY_NAME">, never>>;
+
+		expect(true).toBe(true);
+	});
+
 	it("brands every statically known invalid alias shape", () => {
 		type Empty = ValidateCommandConfig<"issue", { aliases: readonly [""] }>;
 		type Dash = ValidateCommandConfig<"issue", { aliases: readonly ["-i"] }>;
 		type Space = ValidateCommandConfig<"issue", { aliases: readonly ["my issue"] }>;
 		type Tab = ValidateCommandConfig<"issue", { aliases: readonly ["my\tissue"] }>;
+		type Newline = ValidateCommandConfig<"issue", { aliases: readonly ["my\nissue"] }>;
+		// .as() rename landing on an own alias: composition-site brand
+		type SelfAlias = ValidateCommandDefinitions<
+			readonly [{ name: "i"; _aliases?: readonly ["i", "iss"] }]
+		>;
+		type _selfAlias = Expect<
+			Equal<
+				SelfAlias[0]["FIX_ALIAS_SHAPE"],
+				'Command "i" must not list its own canonical name as an alias'
+			>
+		>;
+		type Carriage = ValidateCommandConfig<"issue", { aliases: readonly ["my\rissue"] }>;
 		type OwnName = ValidateCommandConfig<"issue", { aliases: readonly ["issue"] }>;
 
 		type _empty = Expect<
@@ -82,6 +107,18 @@ describe("compile-time command validation", () => {
 			Equal<
 				Tab["FIX_ALIAS_SHAPE"],
 				'Subcommand "issue" alias "my\tissue" must not contain whitespace'
+			>
+		>;
+		type _newline = Expect<
+			Equal<
+				Newline["FIX_ALIAS_SHAPE"],
+				'Subcommand "issue" alias "my\nissue" must not contain whitespace'
+			>
+		>;
+		type _carriage = Expect<
+			Equal<
+				Carriage["FIX_ALIAS_SHAPE"],
+				'Subcommand "issue" alias "my\rissue" must not contain whitespace'
 			>
 		>;
 		type _ownName = Expect<

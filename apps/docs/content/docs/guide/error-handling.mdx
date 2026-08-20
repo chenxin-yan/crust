@@ -7,12 +7,12 @@ description: Handle Crust failures, application errors, and cancellation.
 
 Crust uses exactly four framework error codes:
 
-| Code                | Meaning                                                                   |
-| ------------------- | ------------------------------------------------------------------------- |
-| `DEFINITION`        | An invalid command, Extension, Context, flag, alias, or schema definition |
-| `PARSE`             | Argv syntax, unknown flag, or built-in conversion failure                 |
-| `VALIDATION`        | Missing/invalid values or aggregated Standard Schema issues               |
-| `COMMAND_NOT_FOUND` | An unknown subcommand at the current command path                         |
+| Code                | Meaning                                                                        |
+| ------------------- | ------------------------------------------------------------------------------ |
+| `DEFINITION`        | A runtime recipe, Extension injection, Context, or documentation-section error |
+| `PARSE`             | Argv syntax, unknown flag, or built-in conversion failure                      |
+| `VALIDATION`        | Missing/invalid values or aggregated Standard Schema issues                    |
+| `COMMAND_NOT_FOUND` | An unknown subcommand at the current command path                              |
 
 ```ts
 import { CrustError } from "@crustjs/core";
@@ -28,14 +28,11 @@ try {
 
 A `CrustError` exposes `code`, `message`, `details`, optional `cause`, `.is(code)`, and `toJSON()`.
 
-## Two trust boundaries
+## Trust boundaries
 
-Crust checks developer-authored definitions and user-authored argv at separate boundaries:
+Crust checks developer-authored definitions at compile time through TypeScript. `FIX_*` brands report malformed definitions and collisions at their call sites; Core does not repeat those checks when the command tree is built.
 
-1. **Definition normalization** turns raw flags, arguments, aliases, Contexts, commands, and Extension contributions into trusted Command Nodes. Invalid definitions throw `DEFINITION` while the builder call or command materialization runs. `snapshot()` materializes every Extension command, so a broken nested definition fails even when no user invokes that command.
-2. **Invocation parsing** accepts argv against an already-normalized Command Node. Invalid tokens and conversions throw `PARSE`; missing values and Standard Schema issues throw `VALIDATION`.
-
-Definition Errors do not wait for `run()` or argv parsing. Conversely, an invalid user value is never reported as a Definition Error. See [Types and Schemas](/docs/guide/types#runtime-rules-and-type-brands) for the runtime-rule ↔ `FIX_*` brand parity table.
+Argv is untrusted and remains runtime-validated. Invalid tokens, choices, and built-in conversions throw `PARSE`; missing values and Standard Schema issues throw `VALIDATION`. Declared Context dependencies are checked statically; lazy bag access retains runtime `DEFINITION` guards for missing providers on dynamically assembled paths, dependency cycles, and lifecycle misuse. Materialization retains runtime checks that a command recipe returns the seeded builder and does not register nested Extensions, because recipe behavior is dynamic. Snapshot preparation also retains runtime checks for authored and Extension-contributed documentation sections.
 
 `COMMAND_NOT_FOUND` details contain `input`, `available`, `commandPath`, and `parentCommand`, a readonly serializable Command Snapshot.
 

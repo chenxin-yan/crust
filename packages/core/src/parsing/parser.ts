@@ -106,13 +106,22 @@ function invokeParse(
 	label: string,
 	index?: number,
 ): unknown {
+	const location = index === undefined ? label : `${label} element [${index}]`;
+	let result: unknown;
 	try {
-		return parse(raw);
+		result = parse(raw);
 	} catch (err) {
-		const location = index === undefined ? label : `${label} element [${index}]`;
 		const reason = err instanceof Error ? err.message : String(err);
 		throw new CrustError("PARSE", `Failed to parse ${location}: ${reason}`).withCause(err);
 	}
+	// AsyncParseBrand owns literal async parsers; this owns the dynamic path.
+	// Without it the pending Promise becomes the flag/arg value, and a rejecting
+	// parser escapes the CrustError pipeline as an unhandled rejection.
+	if (result instanceof Promise) {
+		result.catch(() => {}); // the rejection is reported synchronously below
+		throw new CrustError("PARSE", `Failed to parse ${location}: parse must be synchronous`);
+	}
+	return result;
 }
 
 /**
@@ -122,9 +131,7 @@ function invokeParse(
  *   raw default → parse | coerce → result
  *
  * Without this, `{ type: "path", default: "./dist" }` returns the raw
- * relative string while `--out ./dist` returns an absolute path. Defaults
- * violating `choices` are a Definition Error, rejected during normalization
- * before any invocation runs.
+ * relative string while `--out ./dist` returns an absolute path.
  *
  * `parse` is preferred when present (matches the escape-hatch contract).
  * `type: "path"` defaults are coerced through `coercePath` because their
@@ -136,12 +143,23 @@ function resolveDefault(
 	def: {
 		type: ValueType;
 		default?: unknown;
+		choices?: readonly string[];
 		parse?: (raw: string) => unknown;
 	},
 	label: string,
 ): unknown {
-	const { default: defaultValue, parse } = def;
+	const { default: defaultValue, choices, parse } = def;
 	if (defaultValue === undefined) return undefined;
+
+	// Runtime home for the dynamic path only: choices/defaults widened from
+	// runtime data (config-driven definitions) are invisible to the
+	// FIX_DEFAULT_CHOICE brand, and defaults bypass the argv choices check,
+	// so an out-of-range default would silently reach the action.
+	if (choices) {
+		for (const v of Array.isArray(defaultValue) ? defaultValue : [defaultValue]) {
+			validateChoice(String(v), choices, label);
+		}
+	}
 
 	if (parse) {
 		if (Array.isArray(defaultValue)) {
@@ -411,7 +429,7 @@ function validateNoNegateUsage(argv: string[], spellings: ReadonlyMap<string, Fl
  * @param command - The command whose arg/flag definitions drive the parsing
  * @param argv - The argv array to parse (typically `process.argv.slice(2)`)
  * @returns Parsed args, flags, and rawArgs (everything after `--`)
- * @throws {CrustError} On unknown flags, type coercion failure, or alias collisions
+ * @throws {CrustError} On unknown flags or type coercion failure
  */
 export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
 	command: CommandNode & { args: A | undefined; effectiveFlags: F },

@@ -53,6 +53,6 @@ await app.execute();
 | [`noColor()`](/docs/modules/extensions/no-color)                      | Recursive `--color` / `--no-color` flag           |
 | [`updateNotifier(options)`](/docs/modules/extensions/update-notifier) | Post-action npm update notice                     |
 
-These factories return plain `Extension` values. Contributions are application-wide. Extension-owned command, flag, short-name, or alias collisions with the application or another Extension are `DEFINITION` errors.
+These factories return plain `Extension` values. Contributions are application-wide and applied in `.extend()` registration order. Extension flag spellings must not collide with existing flags, including subcommand-local flags: `.extend()` and `.add()` reject statically known collisions at compile time (`FIX_ALIAS_COLLISION`), and dynamically assembled Extensions fail loud at prepare time. Provided Context names must not replace a Context already on the path (`FIX_DUPLICATE_CONTEXT` for statically known names). Colliding canonical command names use deterministic last-write-wins behavior. During routing, canonical command names beat aliases; among colliding aliases, the alias of the earliest-inserted sibling wins, so namespace custom Extension contributions to avoid accidental overrides.
 
 Use [`defineExtension(id, config)`](/docs/guide/extensions) from `@crustjs/core` to author a custom Extension.

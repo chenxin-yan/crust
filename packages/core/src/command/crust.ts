@@ -10,7 +10,7 @@ import type {
 } from "../api/context.ts";
 import type { Extension, ExtensionsProvidesOutput } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
-import { cloneFlagSpellings } from "../parsing/spellings.ts";
+import { addFlagSpellingEntries, cloneFlagSpellings } from "../parsing/spellings.ts";
 import type {
 	ArgDef,
 	ArgsDef,
@@ -33,19 +33,21 @@ import type {
 	ValidateCommandConfig,
 	ValidateCommandDefinitions,
 } from "../validation/commands.brands.ts";
-import { commandCollision } from "../validation/commands.rules.ts";
 import type {
 	ValidateContextDeps,
 	ValidateContextNames,
 	ValidateDeclaredDeps,
+	ValidateExtensionProvides,
 } from "../validation/contexts.brands.ts";
-import { missingDependency, usesProvenance } from "../validation/contexts.rules.ts";
 import type {
+	ExtensionsSpellings,
 	ProvideChecks,
+	TreeSpellings,
+	ValidateDefinitionFlags,
+	ValidateExtensionFlags,
 	SpellingsOf,
 	ValidateNamedFlagDefs,
 } from "../validation/flags.brands.ts";
-import { normalizeArgs, normalizeContext, normalizeFlag } from "../validation/normalize.ts";
 import {
 	cloneCommandNode,
 	executeInvocation,
@@ -179,9 +181,11 @@ export type RootCommandMeta = Pick<CommandMeta, "description" | "usage" | "secti
 
 type AnyCommandDefinitionBuilder = CommandDefinitionBuilder<any, any, any, any, any, any, any>;
 
-// Child builders start without inherited flags: collisions with ancestor-owned
-// flags are runtime-only, caught while the definition materializes against its
-// parent's normalized flags.
+// Child builders start without inherited flags, so brands cannot see ancestor
+// spellings from inside a sealed recipe. Materialization seeds the child with
+// the parent's owned flags and catches collisions at runtime: `.flags()` hits
+// the seeded spelling table, and recipe-provided Contexts are checked against
+// ancestor owners in `materializeCommandDefinition`.
 type CommandRecipe<
 	Deps extends ContextMap = {},
 	Builder extends AnyCommandDefinitionBuilder = AnyCommandDefinitionBuilder,
@@ -227,20 +231,7 @@ function materializeCommandDefinition(
 	parent: CommandNode,
 	extensionName?: string,
 ): CommandNode {
-	const internal = (definition as Partial<CommandDefinition> | null)?.[commandDefinitionInternal];
-	if (internal === undefined) {
-		const owner = extensionName ? `Extension "${extensionName}"` : "add()";
-		throw new CrustError(
-			"DEFINITION",
-			`${owner} requires a command definition created by defineCommand()`,
-			{
-				subject: extensionName ? "extension" : "command",
-				name: extensionName,
-				reason: "invalid-command-definition",
-			},
-		);
-	}
-
+	const internal = definition[commandDefinitionInternal];
 	const name = definition.name;
 	const owner = extensionName
 		? `Extension "${extensionName}" command "${name}"`
@@ -250,18 +241,6 @@ function materializeCommandDefinition(
 		name: extensionName ?? name,
 		reason,
 	});
-
-	commandCollision(
-		{ canonicalName: name, aliases: internal.meta.aliases },
-		parent.subCommands,
-		owner,
-	);
-	missingDependency(
-		owner,
-		internal.uses,
-		new Set(parent.contexts.map((context) => context.name)),
-		`the "${parent.meta.name}" command path`,
-	);
 
 	const child = new Crust(name);
 	(child as { _ancestorOwnedFlags: FlagsDef })._ancestorOwnedFlags = parent.ownedFlags;
@@ -286,6 +265,36 @@ function materializeCommandDefinition(
 			`${owner} cannot register Extensions inside command definitions`,
 			definitionDetails("nested-command-extension"),
 		);
+	}
+
+	// Recipe-provided Contexts vs ancestor-owned flags. Sealed recipes start
+	// with empty compile-time spellings, so a fully typed recipe can provide a
+	// Context whose owned flag retypes an ancestor Context's parser definition;
+	// the ancestor setup would then receive a value of the wrong type. Same-name
+	// providers are exempt: re-providing a Context (e.g. an `.of()` double)
+	// replaces its flags consistently.
+	const ancestorFlagOwners = new Map<string, string>();
+	for (const instance of parent.contexts) {
+		for (const [flagName, def] of Object.entries(instance.ownedFlags)) {
+			for (const spelling of [flagName, def.short, ...(def.aliases ?? [])]) {
+				if (spelling) ancestorFlagOwners.set(spelling, instance.name);
+			}
+		}
+	}
+	for (const instance of configured._node.contexts.slice(parent.contexts.length)) {
+		for (const [flagName, def] of Object.entries(instance.ownedFlags)) {
+			for (const spelling of [flagName, def.short, ...(def.aliases ?? [])]) {
+				if (!spelling) continue;
+				const ownerName = ancestorFlagOwners.get(spelling);
+				if (ownerName !== undefined && ownerName !== instance.name) {
+					throw new CrustError(
+						"DEFINITION",
+						`${owner} provides Context "${instance.name}" whose flag spelling "${spelling}" collides with a flag owned by ancestor Context "${ownerName}"`,
+						definitionDetails("ancestor-flag-collision"),
+					);
+				}
+			}
+		}
 	}
 
 	const childNode = cloneCommandNode(configured._node);
@@ -426,15 +435,7 @@ export function defineCommand(
 	const hasConfig = typeof configOrRecipe !== "function";
 	const config: CommandConfig = hasConfig ? configOrRecipe : {};
 	const recipe = hasConfig ? maybeRecipe : configOrRecipe;
-	if (typeof recipe !== "function") {
-		throw new CrustError("DEFINITION", `Command definition "${name}" requires a recipe function`, {
-			subject: "command",
-			name,
-			reason: "missing-recipe",
-		});
-	}
 	const { uses = [], ...meta } = config;
-	usesProvenance(`Command definition "${name}"`, "command", uses);
 	const internal: CommandDefinitionInternal = {
 		recipe: recipe as CommandDefinitionInternal["recipe"],
 		uses: Object.freeze([...uses]),
@@ -445,12 +446,6 @@ export function defineCommand(
 		},
 	};
 	const named = <const DefName extends string>(defName: DefName): CommandDefinition<DefName> => {
-		if (!defName.trim()) {
-			throw new CrustError("DEFINITION", "Command name must be a non-empty string", {
-				subject: "command",
-				reason: "empty-name",
-			});
-		}
 		return Object.freeze({
 			name: defName,
 			as: <const NewName extends string>(newName: NewName) => named(newName),
@@ -460,24 +455,35 @@ export function defineCommand(
 	return named(name);
 }
 
-function installExtensionProviders(
-	node: CommandNode,
-	instances: readonly ContextInstance[],
-): CommandNode {
+function installContexts(node: CommandNode, instances: readonly ContextInstance[]): CommandNode {
 	// cloneCommandNode already deep-clones the subtree, so install by walking the copy.
 	const cloned = cloneCommandNode(node);
-	const walk = (target: CommandNode): void => {
-		target.contexts = normalizeContext(
-			instances,
-			target.contexts,
-			target.effectiveFlags,
-			target.flagSpellings,
-			`the "${target.meta.name}" command path`,
-		);
-		for (const instance of instances) Object.assign(target.ownedFlags, instance.ownedFlags);
-		for (const child of Object.values(target.subCommands)) walk(child);
+	const walk = (target: CommandNode, skip: ReadonlySet<string>): void => {
+		const installed = instances.filter((instance) => !skip.has(instance.name));
+		target.contexts.push(...installed);
+		for (const instance of installed) {
+			for (const [name, def] of Object.entries(instance.ownedFlags)) {
+				target.effectiveFlags[name] = def;
+				addFlagSpellingEntries(target.flagSpellings, name, def);
+			}
+			Object.assign(target.ownedFlags, instance.ownedFlags);
+		}
+		// A Context provided locally on a descendant is more specific than a
+		// root-wide install: skip same-name instances for that subtree so the
+		// resolver's last-write-wins map cannot hand the descendant's typed
+		// action/setup a root provider's value. Locally provided = present on
+		// the child but not inherited from this node (identity comparison;
+		// clones share Context instance identities).
+		const inherited = new WeakSet(target.contexts);
+		for (const child of Object.values(target.subCommands)) {
+			const childSkip = new Set(skip);
+			for (const context of child.contexts) {
+				if (!inherited.has(context)) childSkip.add(context.name);
+			}
+			walk(child, childSkip);
+		}
 	};
-	walk(cloned);
+	walk(cloned, new Set());
 	return cloned;
 }
 
@@ -566,8 +572,10 @@ function serializeRunArgv(
 	// of the command the typed path selected.
 	if (firstPositional !== undefined) {
 		const value = firstPositional;
+		// hasOwn, not `in`: a positional spelled "constructor" must not
+		// false-positive on inherited Object.prototype members.
 		const collides =
-			value in command.subCommands ||
+			Object.hasOwn(command.subCommands, value) ||
 			Object.values(command.subCommands).some((child) => child.meta.aliases?.includes(value));
 		if (collides) {
 			throw new CrustError(
@@ -581,7 +589,11 @@ function serializeRunArgv(
 	const flags = input.flags as Record<string, unknown> | undefined;
 	for (const [name, value] of Object.entries(flags ?? {})) {
 		if (value === undefined) continue;
-		const definition = command.effectiveFlags[name];
+		// hasOwn guard: an inherited Object.prototype key must not resolve as a
+		// ghost flag definition.
+		const definition = Object.hasOwn(command.effectiveFlags, name)
+			? command.effectiveFlags[name]
+			: undefined;
 		if (definition === undefined) {
 			throw new CrustError("PARSE", `Unknown flag "--${name}"`, {
 				flag: name,
@@ -630,7 +642,7 @@ function serializeRunArgv(
  * ```
  */
 /** Broad application type for APIs that accept any fully-built Crust application. */
-export type AnyCrust = Crust<any, any, any, any, any, any, any>;
+export type AnyCrust = Crust<any, any, any, any, any, any, any, any>;
 
 export class Crust<
 	Flags extends FlagsDef = {},
@@ -640,6 +652,7 @@ export class Crust<
 	Sp extends string = SpellingsOf<Flags>,
 	Tree extends object = {},
 	CtxFlags extends FlagsDef = {},
+	ExtSp extends string = never,
 > {
 	/** @internal — Phantom property exposing generic parameters for type-level testing */
 	declare readonly _types: {
@@ -661,11 +674,26 @@ export class Crust<
 	 *
 	 * @param name - The command name.
 	 * @param meta - Optional root description, usage, and documentation sections.
-	 * @throws {CrustError} `DEFINITION` if name is empty or whitespace-only
 	 */
 	constructor(name: string, meta: RootCommandMeta = {}) {
-		if (!name.trim()) {
-			throw new CrustError("DEFINITION", "meta.name must be a non-empty string");
+		// Runtime is the single home for this check: constructors cannot carry
+		// type parameters, so no brand can reject a statically known blank name.
+		if (name.trim() === "") {
+			throw new CrustError("DEFINITION", "Command name must be a non-empty string", {
+				subject: "command",
+				name,
+				reason: "empty-name",
+			});
+		}
+		// Prepare-time deep clones assign `subCommands[name] = node`; a
+		// `__proto__` key would become the record's prototype, vanishing from
+		// help/snapshots while ghost-routing every inherited key.
+		if (name === "__proto__") {
+			throw new CrustError("DEFINITION", 'Command name "__proto__" is reserved', {
+				subject: "command",
+				name,
+				reason: "reserved-name",
+			});
 		}
 		this._node = createCommandNode(name);
 		if (meta.description !== undefined) this._node.meta.description = meta.description;
@@ -711,7 +739,6 @@ export class Crust<
 	 *
 	 * @param defs - Named flag definitions
 	 * @returns A new `Crust` instance with the given flags
-	 * @throws {CrustError} `DEFINITION` on duplicate names or spellings, or schema-exclusivity violations
 	 */
 	flags<const Defs extends readonly NamedFlagDef[]>(
 		...defs: ValidateNamedFlagDefs<Defs, Sp>
@@ -722,29 +749,38 @@ export class Crust<
 		Sibs,
 		Sp | SpellingsOf<NamedFlagsRecord<Defs>>,
 		Tree,
-		CtxFlags
+		CtxFlags,
+		ExtSp
 	> {
 		const localFlags: FlagsDef = { ...this._node.localFlags };
 		const effectiveFlags: FlagsDef = { ...this._node.effectiveFlags };
 		const flagSpellings = cloneFlagSpellings(this._node.flagSpellings, effectiveFlags);
 		for (const def of defs) {
 			const { name, ...rest } = def as NamedFlagDef;
-			if (Object.hasOwn(localFlags, name)) {
-				throw new CrustError("DEFINITION", `Flag "--${name}" is already defined`, {
+			const definition = rest as FlagDef;
+			// ValidateNamedFlagDefs owns literal collisions; this owns config-built
+			// defs and sealed-recipe collisions with ancestor-seeded flags, where a
+			// silent overwrite retypes an already-bound consumer's flag.
+			if (Object.hasOwn(effectiveFlags, name)) {
+				throw new CrustError("DEFINITION", `Flag "${name}" is already defined on this command`, {
 					subject: "flag",
 					name,
-					reason: "duplicate-flag",
+					reason: "flag-collision",
 				});
 			}
-			const normalized = rest as FlagDef;
-			normalizeFlag(
-				{ name, def: normalized },
-				effectiveFlags,
-				flagSpellings,
-				`Command "${this._node.meta.name}"`,
-			);
-			localFlags[name] = normalized;
-			effectiveFlags[name] = normalized;
+			for (const spelling of [definition.short, ...(definition.aliases ?? [])]) {
+				const existing = spelling === undefined ? undefined : flagSpellings.get(spelling);
+				if (existing !== undefined && existing.canonicalName !== name) {
+					throw new CrustError(
+						"DEFINITION",
+						`Flag spelling "${spelling}" collides with existing flag "${existing.canonicalName}"`,
+						{ subject: "flag", name, reason: "flag-collision" },
+					);
+				}
+			}
+			localFlags[name] = definition;
+			effectiveFlags[name] = definition;
+			addFlagSpellingEntries(flagSpellings, name, definition);
 		}
 
 		return this._clone({ localFlags, effectiveFlags, flagSpellings }) as unknown as Crust<
@@ -754,7 +790,8 @@ export class Crust<
 			Sibs,
 			Sp | SpellingsOf<NamedFlagsRecord<Defs>>,
 			Tree,
-			CtxFlags
+			CtxFlags,
+			ExtSp
 		>;
 	}
 
@@ -768,14 +805,39 @@ export class Crust<
 	 *
 	 * @param defs - Positional argument definitions, in positional order
 	 * @returns A new `Crust` instance with the combined args
-	 * @throws {CrustError} `DEFINITION` on duplicate names, a non-final variadic arg, or schema-exclusivity violations
 	 */
 	args<const NewA extends ArgsDef>(
 		...defs: NewA & AppendArgsChecks<A, NewA>
-	): Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags> {
+	): Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp> {
+		const combined = [...(this._node.args ?? []), ...defs.map((definition) => ({ ...definition }))];
+		// Brands own literal tuples; this owns config-built defs, where a
+		// duplicate name silently discards a positional and a mid-tuple variadic
+		// swallows every later argument.
+		const seen = new Set<string>();
+		for (const [index, definition] of combined.entries()) {
+			if (seen.has(definition.name)) {
+				throw new CrustError(
+					"DEFINITION",
+					`Argument name "${definition.name}" is already defined`,
+					{
+						subject: "argument",
+						name: definition.name,
+						reason: "duplicate-arg",
+					},
+				);
+			}
+			seen.add(definition.name);
+			if (definition.variadic === true && index !== combined.length - 1) {
+				throw new CrustError(
+					"DEFINITION",
+					`Only the last positional argument can be variadic; "${definition.name}" is not last`,
+					{ subject: "argument", name: definition.name, reason: "variadic-position" },
+				);
+			}
+		}
 		return this._clone({
-			args: normalizeArgs(this._node.args, defs as ArgsDef),
-		}) as unknown as Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags>;
+			args: combined,
+		}) as unknown as Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp>;
 	}
 
 	/**
@@ -786,8 +848,6 @@ export class Crust<
 	 * affect construction. Disposable values are released in
 	 * reverse construction order after post-run hooks.
 	 *
-	 * @throws {CrustError} `DEFINITION` when a name is already provided on
-	 *                      this command path
 	 */
 	provide<const Cs extends readonly ContextInstance[]>(
 		...instances: ProvideChecks<Sp, Cs> &
@@ -800,19 +860,23 @@ export class Crust<
 		Sibs,
 		Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
 		Tree,
-		MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>
+		MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>,
+		ExtSp
 	> {
+		// Positional by design: providers reach only this node and children added
+		// afterwards (flag scoping; see definition.test.ts). Extension `provides`
+		// differ deliberately — they are application-wide and walk the whole tree.
 		const ownedFlags = { ...this._node.ownedFlags };
 		const effectiveFlags = { ...this._node.effectiveFlags };
 		const flagSpellings = cloneFlagSpellings(this._node.flagSpellings, effectiveFlags);
-		const contexts = normalizeContext(
-			instances as readonly ContextInstance[],
-			this._node.contexts,
-			effectiveFlags,
-			flagSpellings,
-			`the "${this._node.meta.name}" command path`,
-		);
-		for (const instance of instances) Object.assign(ownedFlags, instance.ownedFlags);
+		const contexts = [...this._node.contexts, ...instances] as ContextInstance[];
+		for (const instance of instances) {
+			for (const [name, definition] of Object.entries(instance.ownedFlags)) {
+				effectiveFlags[name] = definition;
+				addFlagSpellingEntries(flagSpellings, name, definition);
+			}
+			Object.assign(ownedFlags, instance.ownedFlags);
+		}
 		return this._clone({ contexts, ownedFlags, effectiveFlags, flagSpellings }) as unknown as Crust<
 			MergeFlags<Flags, ContextsOwnedFlags<Cs>>,
 			A,
@@ -820,7 +884,8 @@ export class Crust<
 			Sibs,
 			Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
 			Tree,
-			MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>
+			MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>,
+			ExtSp
 		>;
 	}
 
@@ -831,26 +896,18 @@ export class Crust<
 	 * The action receives a {@link CrustCommandContext} with `args` typed from
 	 * `.args()` and `flags` typed from the accumulated `Flags`.
 	 *
-	 * An action is set once; calling `.action()` again throws rather than
-	 * silently replacing command behavior. The original builder is not mutated.
+	 * Calling `.action()` again replaces the command behavior on the new builder.
+	 * The original builder is not mutated.
 	 *
 	 * @param action - The Command Action function
 	 * @returns A new `Crust` instance with the action registered
-	 * @throws {CrustError} `DEFINITION` when this command already has an action
 	 */
 	action(
 		action: (ctx: NoInfer<CrustCommandContext<A, Flags, Ctx>>) => void | Promise<void>,
-	): Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags> {
-		if (this._node.run) {
-			throw new CrustError(
-				"DEFINITION",
-				`Command "${this._node.meta.name}" already has an action`,
-				{ subject: "command", name: this._node.meta.name, reason: "duplicate-action" },
-			);
-		}
+	): Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp> {
 		return this._clone({
 			run: action as (ctx: unknown) => void | Promise<void>,
-		}) as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags>;
+		}) as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp>;
 	}
 
 	/**
@@ -858,64 +915,36 @@ export class Crust<
 	 *
 	 * Extensions are application-wide: they own the flags and commands they
 	 * contribute. Repeated calls accumulate Extensions in registration order;
-	 * duplicate ids throw. Command definition builders do not expose this method.
-	 *
-	 * @throws {CrustError} `DEFINITION` when an Extension id is already registered
+	 * Command definition builders do not expose this method.
 	 */
-	extend<const Es extends readonly Extension<any, any>[]>(
-		...extensions: Es & ValidateDeclaredDeps<MergeContext<Ctx, ExtensionsProvidesOutput<Es>>, Es>
-	): Crust<Flags, A, MergeContext<Ctx, ExtensionsProvidesOutput<Es>>, Sibs, Sp, Tree, CtxFlags> {
-		const ids = new Set(this._node.extensions.map((extension) => extension.id));
-		for (const extension of extensions) {
-			if (ids.has(extension.id)) {
-				throw new CrustError("DEFINITION", `Extension "${extension.id}" is already registered`, {
-					subject: "extension",
-					name: extension.id,
-					reason: "duplicate-extension",
-				});
-			}
-			ids.add(extension.id);
-		}
+	extend<const Es extends readonly Extension<any, any, any>[]>(
+		...extensions: Es &
+			ValidateDeclaredDeps<MergeContext<Ctx, ExtensionsProvidesOutput<Es>>, Es> &
+			ValidateExtensionFlags<Es, Sp | TreeSpellings<Tree>> &
+			ValidateExtensionProvides<Es, Ctx>
+	): Crust<
+		Flags,
+		A,
+		MergeContext<Ctx, ExtensionsProvidesOutput<Es>>,
+		Sibs,
+		Sp | ExtensionsSpellings<Es>,
+		Tree,
+		CtxFlags,
+		ExtSp | ExtensionsSpellings<Es>
+	> {
 		const provided = extensions.flatMap((extension) => extension.provides ?? []);
-		const available = new Set([
-			...this._node.contexts.map((context) => context.name),
-			...provided.map((context) => context.name),
-		]);
-		for (const extension of extensions) {
-			missingDependency(
-				`Extension "${extension.id}"`,
-				extension.uses ?? [],
-				available,
-				"the root command path",
-			);
-			// Contributed commands carry their own dependency contracts; the typed
-			// brand rejects them at the extend() call site, so the runtime twin must
-			// too instead of deferring to run()/snapshot() materialization.
-			for (const definition of extension.commands ?? []) {
-				const internal = (definition as Partial<CommandDefinition> | null)?.[
-					commandDefinitionInternal
-				];
-				// Non-definitions get the dedicated invalid-command-definition error at prepare time.
-				if (internal === undefined) continue;
-				missingDependency(
-					`Extension "${extension.id}" command "${definition.name}"`,
-					internal.uses,
-					available,
-					"the root command path",
-				);
-			}
-		}
 		return this._clone({
-			...(provided.length > 0 ? installExtensionProviders(this._node, provided) : {}),
+			...(provided.length > 0 ? installContexts(this._node, provided) : {}),
 			extensions: [...this._node.extensions, ...extensions],
 		}) as unknown as Crust<
 			Flags,
 			A,
 			MergeContext<Ctx, ExtensionsProvidesOutput<Es>>,
 			Sibs,
-			Sp,
+			Sp | ExtensionsSpellings<Es>,
 			Tree,
-			CtxFlags
+			CtxFlags,
+			ExtSp | ExtensionsSpellings<Es>
 		>;
 	}
 
@@ -925,7 +954,10 @@ export class Crust<
 	 *
 	 */
 	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
-		...definitions: Ds & ValidateCommandDefinitions<Ds, Sibs> & ValidateDeclaredDeps<Ctx, Ds>
+		...definitions: Ds &
+			ValidateCommandDefinitions<Ds, Sibs> &
+			ValidateDeclaredDeps<Ctx, Ds> &
+			ValidateDefinitionFlags<Ds, ExtSp>
 	): Crust<
 		Flags,
 		A,
@@ -933,9 +965,10 @@ export class Crust<
 		Sibs | CommandDefinitionSpellings<Ds[number]>,
 		Sp,
 		Tree & DefinitionsTree<Ds, CtxFlags>,
-		CtxFlags
+		CtxFlags,
+		ExtSp
 	> {
-		let result = this as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags>;
+		let result = this as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp>;
 		for (const definition of definitions) {
 			result = result._addDefinition(definition as CommandDefinition);
 		}
@@ -946,28 +979,37 @@ export class Crust<
 			Sibs | CommandDefinitionSpellings<Ds[number]>,
 			Sp,
 			Tree & DefinitionsTree<Ds, CtxFlags>,
-			CtxFlags
+			CtxFlags,
+			ExtSp
 		>;
 	}
 
 	private _addDefinition(
 		definition: CommandDefinition,
-	): Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags> {
+	): Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp> {
+		// FIX_COMMAND_COLLISION owns literal names; this owns dynamic `.add()`,
+		// where a silent replacement makes the earlier command unreachable.
+		// Extension-contributed commands keep documented last-write-wins.
+		if (Object.hasOwn(this._node.subCommands, definition.name)) {
+			throw new CrustError(
+				"DEFINITION",
+				`Command name "${definition.name}" is already registered on this command`,
+				{ subject: "command", name: definition.name, reason: "command-collision" },
+			);
+		}
 		const childNode = materializeCommandDefinition(definition, this._node);
 
 		return this._clone({
 			subCommands: { ...this._node.subCommands, [definition.name]: childNode },
-		}) as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags>;
+		}) as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp>;
 	}
 
 	/**
-	 * Prepare a frozen, validated Command Snapshot for tooling such as
-	 * man-page, skill, and build generators.
+	 * Prepare a frozen Command Snapshot for tooling such as man-page, skill,
+	 * and build generators.
 	 *
-	 * Materializes Extension contributions and command definitions. Successful
-	 * materialization means every Command Node was normalized. Does not call
-	 * Command Actions. Rejects with a `CrustError` of code `DEFINITION` when
-	 * materialization fails.
+	 * Materializes Extension contributions and command definitions without
+	 * calling Command Actions.
 	 */
 	async snapshot(): Promise<CommandSnapshot> {
 		return prepareInvocationSnapshot(this._node, materializeCommandDefinition);

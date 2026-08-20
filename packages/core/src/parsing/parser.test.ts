@@ -961,6 +961,29 @@ describe("parseArgs — url/path/json types", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — parse escape hatch", () => {
+	it("rejects an async parse with a PARSE error (dynamic path; brand owns literals)", () => {
+		// Typed `(raw: string) => unknown` accepts an async implementation, so
+		// the AsyncParseBrand never fires; without the runtime guard the pending
+		// Promise becomes the flag value and a rejection escapes the pipeline.
+		const asyncParse: (raw: string) => unknown = async (raw) => raw;
+		const cmd = makeNode({
+			meta: "test",
+			flags: { n: { type: "string", parse: asyncParse } },
+		});
+		expect(() => parseArgs(cmd, ["--n", "42"])).toThrow("parse must be synchronous");
+
+		// Rejecting parser: the guard must throw synchronously, not leak an
+		// unhandled rejection.
+		const rejecting: (raw: string) => unknown = async () => {
+			throw new Error("boom");
+		};
+		const cmd2 = makeNode({
+			meta: "test",
+			flags: { n: { type: "string", parse: rejecting } },
+		});
+		expect(() => parseArgs(cmd2, ["--n", "42"])).toThrow("parse must be synchronous");
+	});
+
 	it("runs parse on the raw argv value", () => {
 		const cmd = makeNode({
 			meta: "test",
@@ -1131,8 +1154,10 @@ describe("parseArgs — choices enforcement", () => {
 // Default coercion symmetry (PR #129 review follow-up)
 //
 // Argv-supplied values flow through choices → parse | coerce. The default
-// branch must mirror that so omitted-flag behavior is not silently weaker
-// (path defaults left relative, defaults outside `choices` accepted, etc.).
+// branch must mirror both so omitted-flag behavior is not silently weaker
+// (path defaults left relative, config-driven defaults outside `choices`
+// accepted, etc.). Literal defaults are also branded (FIX_DEFAULT_CHOICE);
+// the runtime check is the single home for the widened/dynamic path.
 // ───────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs \u2014 default coercion symmetry", () => {
@@ -1178,5 +1203,34 @@ describe("parseArgs \u2014 default coercion symmetry", () => {
 		});
 		const result = parseArgs(cmd, []);
 		expect(result.flags.mode).toBe("a");
+	});
+
+	it("rejects a dynamic flag default outside the choices list when argv is absent", () => {
+		// Widened choices/defaults (e.g. loaded from config) opt out of the
+		// FIX_DEFAULT_CHOICE brand; parse time is their single validation home.
+		const choices: string[] = ["a", "b"];
+		const cmd = makeNode({
+			meta: "test",
+			flags: { mode: { type: "string", choices, default: "z" } },
+		});
+		expect(() => parseArgs(cmd, [])).toThrow(/Invalid value "z" for --mode/);
+	});
+
+	it("rejects each element of a dynamic multiple-flag default outside choices", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: {
+				tags: { type: "string", multiple: true, choices: ["a", "b"], default: ["a", "z"] },
+			},
+		});
+		expect(() => parseArgs(cmd, [])).toThrow(/Invalid value "z" for --tags/);
+	});
+
+	it("rejects a dynamic arg default outside the choices list when positional is absent", () => {
+		const cmd = makeNode({
+			meta: "test",
+			args: [{ name: "mode", type: "string", choices: ["a", "b"], default: "z" }],
+		});
+		expect(() => parseArgs(cmd, [])).toThrow(/Invalid value "z"/);
 	});
 });

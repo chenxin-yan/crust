@@ -94,4 +94,4 @@ const database = defineContext("db", async ({ options }: { options: { url: strin
 
 ## Collisions
 
-Context names and owned flag spellings must be unique on a command path. Extension `provides` uses the same validation as `.provide()`. TypeScript catches statically known dependency and collision failures; dynamically assembled JavaScript inputs retain `CrustError` definition guards.
+Context names, dependencies, and owned flag spellings are checked statically. Dynamically assembled duplicate Contexts and owned-flag collisions use deterministic last-write-wins behavior. Missing providers, cycles, and lifecycle misuse retain runtime `CrustError` guards because they depend on the invocation path.

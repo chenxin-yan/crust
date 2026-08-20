@@ -29,6 +29,19 @@ describe("defineFlag", () => {
 		defineFlag("bad", { type: "not-a-flag" });
 	});
 
+	it("rejects invalid choice defaults and reserved spellings at the builder call", () => {
+		const typecheck = () => {
+			// @ts-expect-error -- default falls outside the literal choices
+			new Crust("cli").flags({ name: "mode", type: "string", choices: ["a", "b"], default: "z" });
+			// @ts-expect-error -- __proto__ would mutate the plain-object flag registry
+			new Crust("cli").flags({ name: "__proto__", type: "boolean" });
+			// @ts-expect-error -- aliases share the same reserved spelling rule
+			new Crust("cli").flags({ name: "safe", type: "boolean", aliases: ["__proto__"] });
+		};
+
+		expect(typecheck).toBeInstanceOf(Function);
+	});
+
 	it("feeds .flags() with the same record typing as an inline literal", async () => {
 		const verbose = defineFlag("verbose", { type: "boolean" });
 		const app = new Crust("cli").flags(verbose, { name: "output", type: "string", short: "o" });
@@ -42,20 +55,6 @@ describe("defineFlag", () => {
 			verbose: { type: "boolean" },
 			output: { type: "string", short: "o" },
 		});
-	});
-
-	it("brands invalid definitions on the offending variadic argument", () => {
-		expect(() =>
-			new Crust("cli").flags(
-				// @ts-expect-error -- alias collision: short "f" is claimed twice (brands both defs)
-				{ name: "force", type: "boolean", short: "f" },
-				{ name: "format", type: "string", short: "f" },
-			),
-		).toThrow(/spelling "f" collides/);
-		expect(() =>
-			// @ts-expect-error -- "no-" prefixed names are reserved for boolean negation
-			new Crust("cli").flags({ name: "no-color", type: "boolean" }),
-		).toThrow(/must not use "no-" prefix/);
 	});
 });
 
@@ -75,6 +74,15 @@ describe("defineArg", () => {
 		defineArg("bad", { type: "number", default: "1" });
 		// @ts-expect-error -- every definition must be an ArgDef
 		defineArg("bad", { type: "not-an-arg" });
+	});
+
+	it("rejects defaults outside literal choices at the builder call", () => {
+		const typecheck = () => {
+			// @ts-expect-error -- default falls outside the literal choices
+			new Crust("cli").args({ name: "mode", type: "string", choices: ["a", "b"], default: "z" });
+		};
+
+		expect(typecheck).toBeInstanceOf(Function);
 	});
 
 	it("feeds .args() with the same tuple typing as an inline literal", async () => {

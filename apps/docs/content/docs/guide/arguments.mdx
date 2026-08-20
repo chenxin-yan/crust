@@ -3,7 +3,7 @@ title: Arguments
 description: Define typed positional inputs for a command.
 ---
 
-`.args(...defs)` maps positional tokens to names in the order the definitions are passed. Repeated `.args()` calls append in call order. For TypeScript consumers, duplicate names within or across calls fail typecheck with `FIX_DUPLICATE_ARG`; runtime normalization throws a `DEFINITION` error at the `.args()` call for plain-JS consumers or dynamically built definitions. Pass values from `defineArg(name, def)` or inline literals:
+`.args(...defs)` maps positional tokens to names in the order the definitions are passed. Repeated `.args()` calls append in call order. Duplicate names within or across calls fail typecheck with `FIX_DUPLICATE_ARG`. Pass values from `defineArg(name, def)` or inline literals:
 
 ```ts
 import { Crust } from "@crustjs/core";
@@ -53,7 +53,7 @@ Use `choices` for a static string set:
 .args({ name: "target", type: "string", choices: ["bun", "node"] })
 ```
 
-A declared default outside the choices is a `DEFINITION` error when `.args()` runs. An argv value outside the choices is a `PARSE` error during invocation.
+When `choices` and `default` are literals, TypeScript reports `FIX_DEFAULT_CHOICE` if the default falls outside the set. Widened `string[]` choices opt out of that compile-time comparison. An argv value outside the choices is a `PARSE` error during invocation.
 
 As with flags, a literal choices tuple narrows the argument's inferred type to the union of those literals (`"bun" | "node"` above); a widened `string[]` keeps it as `string`.
 

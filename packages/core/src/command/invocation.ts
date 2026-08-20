@@ -14,11 +14,9 @@ import { CrustError } from "../errors.ts";
 import { defineExtensionId, type ExtensionId } from "../identity.ts";
 import { parseArgs, validateParsed } from "../parsing/parser.ts";
 import { applySchemas } from "../parsing/schema.ts";
-import { cloneFlagSpellings } from "../parsing/spellings.ts";
+import { addFlagSpellingEntries, cloneFlagSpellings } from "../parsing/spellings.ts";
 import { isText } from "../sections.ts";
 import type { CommandSection, FlagDef, FlagsDef, InvocationIO } from "../types.ts";
-import { missingDependency } from "../validation/contexts.rules.ts";
-import { normalizeFlag } from "../validation/normalize.ts";
 import type { CommandDefinition } from "./crust.ts";
 import type { CommandNode } from "./node.ts";
 import { resolveCommand } from "./router.ts";
@@ -45,8 +43,8 @@ type MaterializeCommandDefinition = (
 /**
  * Snapshot subprocess protocol used by first-party build tooling.
  *
- * When set to a non-empty file path, `.execute()` prepares and validates the
- * command tree, writes its JSON snapshot to that path, optionally runs Extension
+ * When set to a non-empty file path, `.execute()` prepares the command tree,
+ * validates its documentation sections, writes its JSON snapshot, optionally runs Extension
  * build hooks when the build output directory is set, and exits without dispatching
  * a Command Action. In-process callers use `Crust.snapshot()`.
  */
@@ -65,18 +63,35 @@ function injectExtensionFlag(
 	name: string,
 	def: FlagDef,
 	recursive: boolean,
-	extensionName: string,
 ): void {
-	normalizeFlag(
-		{ name, def },
-		node.effectiveFlags,
-		node.flagSpellings,
-		`Extension "${extensionName}" on "${node.meta.name}"`,
-	);
+	// ValidateExtensionFlags owns literal collisions at .extend()/.add(); this
+	// owns dynamic Extensions, where a silent overwrite retypes the owning
+	// command's (or another Extension's) flag at parse time.
+	if (Object.hasOwn(node.effectiveFlags, name)) {
+		throw new CrustError(
+			"DEFINITION",
+			`Extension flag "${name}" collides with a flag already defined on command "${node.meta.name}"`,
+			{ subject: "extension", name, reason: "flag-collision" },
+		);
+	}
+	// The canonical name is checked against the spelling table too: an existing
+	// flag's *alias* equal to the incoming canonical would otherwise be silently
+	// stolen (effectiveFlags only has canonical keys).
+	for (const spelling of [name, def.short, ...(def.aliases ?? [])]) {
+		const existing = spelling === undefined ? undefined : node.flagSpellings.get(spelling);
+		if (existing !== undefined && existing.canonicalName !== name) {
+			throw new CrustError(
+				"DEFINITION",
+				`Extension flag spelling "${spelling}" collides with existing flag "${existing.canonicalName}" on command "${node.meta.name}"`,
+				{ subject: "extension", name, reason: "flag-collision" },
+			);
+		}
+	}
 	node.effectiveFlags[name] = def;
+	addFlagSpellingEntries(node.flagSpellings, name, def);
 	if (!recursive) return;
 	for (const sub of Object.values(node.subCommands)) {
-		injectExtensionFlag(sub, name, def, true, extensionName);
+		injectExtensionFlag(sub, name, def, true);
 	}
 }
 
@@ -96,7 +111,7 @@ function applyExtensionCommands(
 function applyExtensionFlags(root: CommandNode, extension: Extension): void {
 	for (const [name, defWithScope] of Object.entries(extension.flags ?? {})) {
 		const { recursive = true, ...def } = defWithScope;
-		injectExtensionFlag(root, name, def as FlagDef, recursive, extension.id);
+		injectExtensionFlag(root, name, def as FlagDef, recursive);
 	}
 }
 
@@ -179,15 +194,16 @@ function validateSection(section: unknown, owner: SectionOwner): CommandSection 
 		only?: unknown;
 		except?: unknown;
 	};
-	if (
-		!isText(title) ||
-		/[\r\n]/.test(title) ||
-		!isText(body) ||
-		(only !== undefined && except !== undefined)
-	) {
+	if (!isText(title) || /[\r\n]/.test(title) || !isText(body)) {
 		throw invalidSections(owner);
 	}
-	// Cast: the only/except mutual-exclusion check above enforces SectionAudience.
+	// The SectionAudience union owns literals; this runtime branch owns the
+	// dynamic path (Extension `sections` callbacks, config-built objects), where
+	// both fields would otherwise freeze and `sectionsFor()` would silently
+	// ignore `except`.
+	if (only !== undefined && except !== undefined) {
+		throw invalidSections(owner);
+	}
 	return Object.freeze({
 		title,
 		body,
@@ -274,23 +290,6 @@ function prepareInvocation(
 		applyExtensionCommands(rootNode, extension, materializeCommandDefinition);
 	}
 	for (const extension of extensions) applyExtensionFlags(rootNode, extension);
-
-	// Hooks run on every invocation, so each Extension's `uses` must resolve on
-	// every command path. A child added before a later `.provide()` keeps its
-	// contexts snapshot (no backfill), which extend-time root validation misses.
-	const validateExtensionDependencies = (target: CommandNode): void => {
-		const available = new Set(target.contexts.map((context) => context.name));
-		for (const extension of extensions) {
-			missingDependency(
-				`Extension "${extension.id}"`,
-				extension.uses ?? [],
-				available,
-				`the "${target.meta.name}" command path`,
-			);
-		}
-		for (const child of Object.values(target.subCommands)) validateExtensionDependencies(child);
-	};
-	validateExtensionDependencies(rootNode);
 
 	validateAuthoredSections(rootNode);
 	const authoredSnapshot = snapshotCommand(rootNode);

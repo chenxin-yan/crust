@@ -18,9 +18,9 @@ const command = new Crust("serve")
 
 See [`FlagDef`](/docs/api/types#flagdef) for the complete definition.
 
-Repeated `.flags()` calls accumulate: `.flags(a).flags(b)` defines both flags. For TypeScript consumers, a statically known name, short form, or alias collision with an earlier call or an existing Context-owned flag fails typecheck with `FIX_ALIAS_COLLISION` at the call that introduces it. Runtime normalization throws a `DEFINITION` error at the same builder call for plain-JS consumers, dynamically built definitions, and collisions hidden from the type system.
+Repeated `.flags()` calls accumulate: `.flags(a).flags(b)` defines both flags. A statically known name, short form, or alias collision with an earlier call or an existing Context-owned flag fails typecheck with `FIX_ALIAS_COLLISION` at the call that introduces it.
 
-Builder chaining follows the same rule for every variadic method: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` accumulate and reject duplicates. `.action()` is set once and throws if called again.
+Builder chaining follows the same accumulation rule for `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()`. Definition correctness is enforced by TypeScript rather than repeated at runtime.
 
 ## Aliases and negation
 
@@ -30,7 +30,7 @@ Builder chaining follows the same rule for every variadic method: `.flags()`, `.
 .flags({ name: "output", type: "path", short: "o", aliases: ["out"] })
 ```
 
-Boolean flags support `--no-<spelling>` negation for the canonical name and every long alias — an alias is a full synonym, so `--no-out` behaves like `--no-output`. Set `noNegate: true` to reject negation entirely (a `PARSE` error for any spelling). Boolean flags do not accept `--name=true`. Flag names, short forms, and aliases must be unique, and the `no-` prefix is reserved. TypeScript reports statically known violations as `FIX_ALIAS_COLLISION` or `FIX_NO_PREFIX`; runtime validation throws a `DEFINITION` error for plain-JS consumers or dynamically built definitions.
+Boolean flags support `--no-<spelling>` negation for the canonical name and every long alias — an alias is a full synonym, so `--no-out` behaves like `--no-output`. Set `noNegate: true` to reject negation entirely (a `PARSE` error for any spelling). Boolean flags do not accept `--name=true`. Flag names, short forms, and aliases must be unique, and the `no-` prefix is reserved. TypeScript reports statically known violations as `FIX_ALIAS_COLLISION` or `FIX_NO_PREFIX`.
 
 ## Required and defaulted values
 
@@ -57,7 +57,7 @@ Both values are non-optional in the Command Action. Other flags include `undefin
 .flags({ name: "target", type: "string", choices: ["bun", "node"] })
 ```
 
-Choices are supported on string flags. A declared default outside this set is a `DEFINITION` error when `.flags()` runs; an argv value outside it is a `PARSE` error during invocation.
+Choices are supported on string flags. When `choices` and `default` are literals, TypeScript reports `FIX_DEFAULT_CHOICE` if the default falls outside the set. Widened `string[]` choices opt out of that compile-time comparison. An argv value outside the choices is a `PARSE` error during invocation.
 
 When the choices list is a literal tuple (an inline array as above, or a variable declared `as const`), the flag's inferred type narrows to the union of those literals — `"bun" | "node"` here instead of `string`. A widened `string[]` variable keeps the type as plain `string`.
 

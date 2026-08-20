@@ -18,6 +18,15 @@ describe("ValidateVariadicArgs type inference", () => {
 		expect(true).toBe(true);
 	});
 
+	it("brands empty argument names", () => {
+		type Result = ValidateVariadicArgs<readonly [{ name: ""; type: "string" }]>;
+		type _empty = Expect<Equal<Result[0]["FIX_EMPTY_NAME"], "Argument names must be non-empty">>;
+		type Widened = ValidateVariadicArgs<readonly [{ name: string; type: "string" }]>;
+		type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_EMPTY_NAME">, never>>;
+
+		expect(true).toBe(true);
+	});
+
 	it("brands the specific non-last arg that is variadic", () => {
 		type Args = readonly [
 			{ name: "files"; type: "string"; variadic: true },
@@ -74,12 +83,31 @@ describe("ValidateVariadicArgs type inference", () => {
 	});
 
 	it("opts widened definitions out of compile-time checks", () => {
-		// Widened names fall back to runtime validation instead of
-		// false-positive duplicate branding.
+		// Widened names opt out instead of receiving false-positive duplicate
+		// branding.
 		type Defs = readonly [{ name: string; type: "string" }, { name: string; type: "string" }];
 		type Result = ValidateVariadicArgs<Defs, "file">;
 		type _first = Expect<Equal<Extract<keyof Result[0], `FIX_${string}`>, never>>;
 		type _second = Expect<Equal<Extract<keyof Result[1], `FIX_${string}`>, never>>;
+
+		expect(true).toBe(true);
+	});
+
+	it("brands literal defaults outside literal choices", () => {
+		type Invalid = ValidateVariadicArgs<
+			readonly [{ name: "mode"; type: "string"; choices: ["a", "b"]; default: "z" }]
+		>;
+		type Valid = ValidateVariadicArgs<
+			readonly [{ name: "mode"; type: "string"; choices: ["a", "b"]; default: "a" }]
+		>;
+		type Widened = ValidateVariadicArgs<
+			readonly [{ name: "mode"; type: "string"; choices: readonly string[]; default: string }]
+		>;
+		type _invalid = Expect<
+			Equal<Invalid[0]["FIX_DEFAULT_CHOICE"], "default must be one of choices">
+		>;
+		type _valid = Expect<Equal<Extract<keyof Valid[0], "FIX_DEFAULT_CHOICE">, never>>;
+		type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_DEFAULT_CHOICE">, never>>;
 
 		expect(true).toBe(true);
 	});

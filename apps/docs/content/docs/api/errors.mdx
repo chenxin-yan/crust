@@ -51,12 +51,12 @@ try {
 type CrustErrorCode = "DEFINITION" | "PARSE" | "VALIDATION" | "COMMAND_NOT_FOUND";
 ```
 
-| Code                | Meaning                                                                                              |
-| ------------------- | ---------------------------------------------------------------------------------------------------- |
-| `DEFINITION`        | Invalid application definition: empty names, collisions, invalid combinations, or other setup errors |
-| `PARSE`             | Argv syntax or built-in value parsing failed                                                         |
-| `VALIDATION`        | Required-value or Standard Schema validation failed                                                  |
-| `COMMAND_NOT_FOUND` | A token did not match a child command name or alias                                                  |
+| Code                | Meaning                                                                        |
+| ------------------- | ------------------------------------------------------------------------------ |
+| `DEFINITION`        | Runtime recipe, Extension injection, Context, or documentation-section failure |
+| `PARSE`             | Argv syntax or built-in value parsing failed                                   |
+| `VALIDATION`        | Required-value or Standard Schema validation failed                            |
+| `COMMAND_NOT_FOUND` | A token did not match a child command name or alias                            |
 
 ## Details
 

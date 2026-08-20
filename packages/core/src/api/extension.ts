@@ -1,6 +1,7 @@
 import type { CommandDefinition } from "../command/crust.ts";
 import type { CommandSnapshot } from "../command/snapshot.ts";
 import type { ExtensionId } from "../identity.ts";
+import { assertDefinableFlag } from "../parsing/spellings.ts";
 import type {
 	CommandSection,
 	FlagDef,
@@ -11,9 +12,11 @@ import type {
 	NamedFlagsRecord,
 } from "../types.ts";
 import type { DeclaredDepsOf } from "../validation/contexts.brands.ts";
-import { usesProvenance } from "../validation/contexts.rules.ts";
-import type { ValidateNamedFlagDefs } from "../validation/flags.brands.ts";
-import { normalizeFlag } from "../validation/normalize.ts";
+import type {
+	ProvideChecks,
+	ProvidedContextSpellings,
+	ValidateNamedFlagDefs,
+} from "../validation/flags.brands.ts";
 import type {
 	AnyContextFactory,
 	Awaitable,
@@ -238,16 +241,28 @@ export interface ExtensionConfig<
 	readonly hooks?: ExtensionHooks<Defs, ContextDependencies<Uses>>;
 }
 
-type ValidateExtensionConfig<Defs extends readonly NamedExtensionFlagDef[]> = {
-	readonly flags?: ValidateNamedFlagDefs<Defs>;
+type ValidateExtensionConfig<
+	Defs extends readonly NamedExtensionFlagDef[],
+	Provides extends readonly ContextInstance[],
+> = {
+	// Provided Context-owned spellings count as existing: a declared flag
+	// colliding with the same Extension's provided flag would silently retype
+	// the Context's setup flags at parse time.
+	readonly flags?: ValidateNamedFlagDefs<Defs, ProvidedContextSpellings<Provides>>;
+	// Pairwise like `.provide()`: two provided Contexts sharing a spelling would
+	// let the later parser schema feed the earlier Context's static flag types.
+	readonly provides?: ProvideChecks<never, Provides>;
 };
 
 export interface Extension<
 	Deps extends ContextMap = ContextMap,
 	Provides extends readonly ContextInstance[] = readonly ContextInstance[],
+	FlagDefs extends readonly NamedExtensionFlagDef[] = readonly NamedExtensionFlagDef[],
 > {
 	readonly id: ExtensionId;
 	readonly flags?: Readonly<Record<string, ExtensionFlagDef>>;
+	/** @internal — phantom carrying declared flag literals for extend-time collision checks */
+	readonly _flagDefs?: FlagDefs;
 	readonly commands?: readonly CommandDefinition<any>[];
 	readonly uses: readonly AnyContextFactory[];
 	readonly provides?: Provides;
@@ -268,10 +283,7 @@ export type ExtensionsProvidesOutput<Es extends readonly Extension<any, any>[]> 
  * Define an Extension.
  *
  * Extensions apply to the whole application and own the flags and commands
- * they contribute; contributed names must not collide with application or
- * other Extension definitions. Collisions within one Extension throw here at
- * define time; collisions with application or other Extension definitions
- * surface when the application prepares.
+ * they contribute.
  */
 export function defineExtension<
 	const Defs extends readonly NamedExtensionFlagDef[] = [],
@@ -280,24 +292,21 @@ export function defineExtension<
 	const Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
 >(
 	id: ExtensionId,
-	config: ExtensionConfig<Defs, Uses, Provides, Commands> & ValidateExtensionConfig<Defs> = {},
+	config: ExtensionConfig<Defs, Uses, Provides, Commands> &
+		ValidateExtensionConfig<Defs, Provides> = {},
 ): Extension<
 	ContextDependencies<Uses> &
 		ContextsDependencies<Provides> &
 		CommandDefinitionsDependencies<Commands>,
-	Provides
+	Provides,
+	Defs
 > {
-	usesProvenance(`Extension "${id}"`, "extension", config.uses ?? []);
 	const ownedFlags: FlagsDef = {};
-	const spellings = new Map();
 	for (const def of config.flags ?? []) {
 		const { name: flagName, ...rest } = def;
-		normalizeFlag(
-			{ name: flagName, def: rest as FlagDef },
-			ownedFlags,
-			spellings,
-			`Extension "${id}"`,
-		);
+		// Validate before the record assignment: a `__proto__` key would be
+		// silently swallowed as the record's prototype.
+		assertDefinableFlag(flagName, rest as ExtensionFlagDef);
 		ownedFlags[flagName] = rest as ExtensionFlagDef;
 	}
 
@@ -311,6 +320,7 @@ export function defineExtension<
 		ContextDependencies<Uses> &
 			ContextsDependencies<Provides> &
 			CommandDefinitionsDependencies<Commands>,
-		Provides
+		Provides,
+		Defs
 	>;
 }

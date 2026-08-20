@@ -99,6 +99,24 @@ describe("snapshotCommand", () => {
 });
 
 describe("command metadata sections", () => {
+	it("rejects a dynamic section carrying both only and except", async () => {
+		const agentDocs = defineExtensionId("agent-docs");
+		// Dynamic path: the SectionAudience union owns literals, but a
+		// config-built object can carry both fields — runtime must reject it.
+		const section = JSON.parse(
+			JSON.stringify({ title: "T", body: "B", only: [agentDocs], except: [agentDocs] }),
+		) as { title: string; body: string };
+		const app = new Crust("cli", { sections: [section] }).action(() => {});
+		const stderr: string[] = [];
+		const originalExitCode = process.exitCode;
+		try {
+			await app.execute({ argv: [], io: { stderr: (text) => stderr.push(text) } });
+		} finally {
+			process.exitCode = originalExitCode;
+		}
+		expect(stderr.join("\n")).toContain("contains invalid documentation sections");
+	});
+
 	it("appends targeted Extension sections after authored sections in registration order", async () => {
 		const first = defineExtension(defineExtensionId("first"), {
 			sections(snapshot) {
@@ -281,27 +299,5 @@ describe("command metadata sections", () => {
 				reason: "invalid-sections",
 			},
 		});
-	});
-
-	it("validates the complete Extension command tree before running section callbacks", async () => {
-		let called = false;
-		const app = new Crust("cli")
-			.extend(
-				defineExtension(defineExtensionId("docs"), {
-					sections: () => {
-						called = true;
-						return [];
-					},
-				}),
-			)
-			.extend(
-				defineExtension(defineExtensionId("commands"), {
-					commands: [defineCommand("build", (command) => command)],
-				}),
-			)
-			.add(defineCommand("build", (command) => command));
-
-		await expect(app.snapshot()).rejects.toBeInstanceOf(CrustError);
-		expect(called).toBe(false);
 	});
 });

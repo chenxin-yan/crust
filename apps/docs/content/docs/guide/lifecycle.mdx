@@ -30,7 +30,7 @@ It requires an explicit typed command path, serializes structured input through 
 
 ## Successful invocation order
 
-1. **Prepare definitions** — apply Extensions and reject command, flag, and alias collisions, including collisions with Context-owned flags (application and Context-only collisions are rejected earlier by `.flags()` or `.provide()`).
+1. **Prepare definitions** — apply Extensions and validate authored and Extension-contributed documentation sections. Definitions are compile-time checked. Colliding canonical command names, flags, and Context names use last-write-wins; canonical command names beat aliases, and the first-registered alias wins among colliding aliases.
 2. **Route** — resolve the command path.
 3. **Parse syntax** — consume positional and flag tokens.
 4. **Run `preRun` hooks** — invoke Extension hooks in registration order. Hooks may lazily pull flagless Contexts. A hook can return `ctx.finish()` to skip the remaining hooks, validation, schemas, and the Command Action.
@@ -43,7 +43,7 @@ It requires an explicit typed command path, serializes structured input through 
 
 ## Error flow
 
-Definition, routing, and parse failures occur before `preRun` and `postRun`. A failure from `preRun`, validation, schema application, Context construction, or the Command Action still runs every `postRun` hook. The original invocation failure wins over post-run hook failures; after a successful or finished invocation, the first post-run failure fails the invocation after remaining hooks run. Native disposal then follows `AsyncDisposableStack` error aggregation semantics.
+Preparation, routing, and parse failures occur before `preRun` and `postRun`. A failure from `preRun`, validation, schema application, Context construction, or the Command Action still runs every `postRun` hook. The original invocation failure wins over post-run hook failures; after a successful or finished invocation, the first post-run failure fails the invocation after remaining hooks run. Native disposal then follows `AsyncDisposableStack` error aggregation semantics.
 
 With `run()`, the original value is thrown to the caller. Action and Context failures are never wrapped in `CrustError`.
 

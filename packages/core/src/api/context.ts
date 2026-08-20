@@ -1,4 +1,5 @@
 import { CrustError } from "../errors.ts";
+import { assertDefinableFlag } from "../parsing/spellings.ts";
 import type {
 	FlagDef,
 	FlagsDef,
@@ -8,13 +9,12 @@ import type {
 	NamedFlagDef,
 	NamedFlagsRecord,
 } from "../types.ts";
-import { usesProvenance } from "../validation/contexts.rules.ts";
 import type { ValidateNamedFlagDefs } from "../validation/flags.brands.ts";
-import { normalizeFlag } from "../validation/normalize.ts";
 
 export type ContextMap = Record<string, unknown>;
 export type Awaitable<T> = T | Promise<T>;
 export type Simplify<T> = { [K in keyof T]: T[K] };
+// Flat intersections keep chained composition at constant instantiation depth.
 export type MergeContext<A, B> = A & B;
 
 /** Lazy, invocation-scoped Context values. Reading a property starts construction. */
@@ -173,34 +173,21 @@ export function defineContext(
 	const hasConfig = typeof configOrSetup !== "function";
 	const config = hasConfig ? configOrSetup : {};
 	const setup = hasConfig ? maybeSetup : configOrSetup;
-	if (typeof setup !== "function") {
-		throw new CrustError("DEFINITION", `Context "${name}" requires a setup function`, {
-			subject: "context",
-			name,
-			reason: "missing-setup",
-		});
-	}
-
 	const ownedFlags: FlagsDef = {};
-	const spellings = new Map();
 	for (const def of config.flags ?? []) {
 		const { name: flagName, ...rest } = def;
-		normalizeFlag(
-			{ name: flagName, def: rest as FlagDef },
-			ownedFlags,
-			spellings,
-			`Context "${name}"`,
-		);
+		// Validate before the record assignment: a `__proto__` key would be
+		// silently swallowed as the record's prototype.
+		assertDefinableFlag(flagName, rest as FlagDef);
 		ownedFlags[flagName] = rest as FlagDef;
 	}
-	usesProvenance(`Context "${name}"`, "context", config.uses ?? []);
 	const uses = Object.freeze([...(config.uses ?? [])]);
 	const factory = (options: unknown): ContextInstance => ({
 		kind: "context",
 		name,
 		ownedFlags,
 		uses,
-		setup: (input) => setup({ options, ...input } as never),
+		setup: (input) => (setup as (input: never) => unknown)({ options, ...input } as never),
 	});
 	factory.contextName = name;
 	factory.uses = uses;

@@ -35,7 +35,7 @@ $ greet --help
 - **One way to do it.** One starter pattern. `defineCommand()` for every command; `new Crust()` appears exactly once, at the root.
 - **Inference over annotation.** Types flow from definitions to actions. No decorators, no codegen, no manual generics.
 - **Plain values, immutable builders.** Definitions and Extensions are frozen data; every fluent call returns a new builder.
-- **Fail loud at definition time.** Collisions and malformed definitions are `DEFINITION` errors at startup and in `crust build` — never warn-and-skip.
+- **TypeScript-first definitions.** Statically known collisions and malformed definitions fail at their authoring call sites during type checking; argv is still validated at runtime.
 - **Standards over lock-in.** Standard Schema for validation, `NO_COLOR`/`FORCE_COLOR` and OSC 8 conventions, native `Symbol.dispose` cleanup.
 - **Pay only for what you use.** Zero-dependency core, composable modules, Contexts constructed lazily, only when the resolved command requires them.
 

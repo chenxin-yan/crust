@@ -13,7 +13,13 @@ type NarrowAliases<A extends readonly string[]> = string extends A[number] ? nev
 
 type AliasShapeError<Name extends string, Alias extends string> = Alias extends ""
 	? `Subcommand "${Name}" has an invalid alias: must be a non-empty string`
-	: Alias extends `${string} ${string}` | `${string}\t${string}`
+	: Alias extends
+				| `${string} ${string}`
+				| `${string}\t${string}`
+				| `${string}\n${string}`
+				| `${string}\r${string}`
+				| `${string}\v${string}`
+				| `${string}\f${string}`
 		? `Subcommand "${Name}" alias "${Alias}" must not contain whitespace`
 		: Alias extends `-${string}`
 			? `Subcommand "${Name}" alias "${Alias}" must not start with "-" (reserved for flags)`
@@ -35,6 +41,16 @@ export type ValidateCommandConfig<Name extends string, C> = string extends Name
 		? {}
 		: { readonly FIX_ALIAS_SHAPE: AliasShapeErrors<Name, C> };
 
+/**
+ * Brand a statically known empty command name at the composition site:
+ * routing stops at empty argv tokens, so such a command can never dispatch.
+ * Widened names opt out (`DefName` yields `never`, which `""` does not extend).
+ */
+type EmptyNameBrand<D> =
+	"" extends DefName<D>
+		? { readonly FIX_EMPTY_NAME: "Command name must be a non-empty string" }
+		: {};
+
 type DefinitionAliases<D> = D extends {
 	readonly _aliases?: infer A extends readonly string[];
 }
@@ -49,6 +65,17 @@ export type CommandDefinitionSpellings<D> = D extends unknown
 			: Name | NarrowAliases<DefinitionAliases<D>>
 		: never
 	: never;
+
+// Catches `.as()` renames that land on one of the definition's own aliases
+// (config-time AliasShapeError compares aliases against the original name only).
+type SelfAliasBrand<D> =
+	Overlap<DefName<D>, NarrowAliases<DefinitionAliases<D>>> extends infer Dup extends string
+		? [Dup] extends [never]
+			? {}
+			: {
+					readonly FIX_ALIAS_SHAPE: `Command "${Dup}" must not list its own canonical name as an alias`;
+				}
+		: never;
 
 type CommandCollisionBrand<D, Existing extends string> =
 	Overlap<CommandDefinitionSpellings<D>, Existing> extends infer Collision extends string
@@ -70,7 +97,7 @@ export type ValidateCommandDefinitions<
 	Existing extends string = never,
 > = Ds extends readonly [infer Head, ...infer Tail]
 	? readonly [
-			Head & CommandCollisionBrand<Head, Existing>,
+			Head & CommandCollisionBrand<Head, Existing> & EmptyNameBrand<Head> & SelfAliasBrand<Head>,
 			...ValidateCommandDefinitions<Tail, Existing | CommandDefinitionSpellings<Head>>,
 		]
 	: Ds;
