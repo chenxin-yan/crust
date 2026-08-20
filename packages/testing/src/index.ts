@@ -3,9 +3,7 @@ import { setTimeout } from "node:timers/promises";
 import type {
 	AnyCrust,
 	CommandPath,
-	CommandShape,
 	CommandShapeAt,
-	Crust,
 	InvocationIO,
 	RunInputArguments,
 } from "@crustjs/core";
@@ -16,13 +14,12 @@ import { createPromptIO, type Key } from "@crustjs/prompts/testing";
 /** Structural io shape shared by `run()` and `execute()` captures. */
 export type CaptureIO = Partial<InvocationIO>;
 
-type AppTypes<App extends AnyCrust> =
-	App extends Crust<infer Flags, infer Args, any, any, any, infer Tree, any, any, infer Result>
-		? { shape: CommandShape<Args, Flags, Tree, Result>; tree: Tree }
-		: never;
-type AppTree<App extends AnyCrust> = AppTypes<App>["tree"];
+// Indexed access into the `_types` phantom instead of conditionally inferring
+// all nine `Crust` generics — the conditional forced a full structural match
+// (and union distribution) per helper call.
+type AppTree<App extends AnyCrust> = App["_types"]["tree"];
 type ShapeAtPath<App extends AnyCrust, Path extends CommandPath<AppTree<App>>> = CommandShapeAt<
-	AppTypes<App>["shape"],
+	App["_types"]["shape"],
 	Path
 >;
 

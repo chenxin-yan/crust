@@ -7,7 +7,7 @@
  * Uses the real .execute() pipeline from the Crust builder.
  */
 
-import type { Crust } from "../src/command/crust.ts";
+import type { AnyCrust } from "../src/command/crust.ts";
 
 export interface RunResult {
 	stdout: string;
@@ -23,10 +23,7 @@ export interface RunResult {
  *   expect(result.stdout).toContain("expected output");
  *   expect(result.exitCode).toBe(0);
  */
-export async function executeCrust(
-	builder: Crust<any, any, any, any, any>,
-	argv?: string[],
-): Promise<RunResult> {
+export async function executeCrust(builder: AnyCrust, argv?: string[]): Promise<RunResult> {
 	const stdoutChunks: string[] = [];
 	const stderrChunks: string[] = [];
 	let exitCode = 0;
