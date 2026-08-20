@@ -87,6 +87,29 @@ describe("typed programmatic invocation", () => {
 		expect(await pending).toEqual({ status: "completed", result: { kind: "extension" } });
 	});
 
+	it("layers recursive Extension flags onto earlier command trees", () => {
+		const local = defineCommand("local", (command) => command.action(() => {}));
+		const trace = defineExtension(defineExtensionId("trace"), {
+			flags: [{ name: "trace", type: "boolean" }],
+		});
+		const addedThenExtended = new Crust("cli").add(local).extend(trace);
+		type LocalInput = RunInput<
+			CommandShapeAt<(typeof addedThenExtended)["_types"]["shape"], readonly ["local"]>
+		>;
+		type _addedCommandFlags = Expect<Equal<NonNullable<LocalInput["flags"]>, { trace?: boolean }>>;
+
+		const tools = defineExtension(defineExtensionId("tools"), {
+			commands: [defineCommand("inspect", (command) => command.action(() => {}))],
+		});
+		const extendedTwice = new Crust("cli").extend(tools).extend(trace);
+		type InspectInput = RunInput<
+			CommandShapeAt<(typeof extendedTwice)["_types"]["shape"], readonly ["inspect"]>
+		>;
+		type _extensionCommandFlags = Expect<
+			Equal<NonNullable<InspectInput["flags"]>, { trace?: boolean }>
+		>;
+	});
+
 	it("keeps widened Extension commands runtime-only", async () => {
 		let ran = false;
 		const dynamic: Extension = defineExtension(defineExtensionId("dynamic"), {

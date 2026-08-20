@@ -482,7 +482,9 @@ type ExtendedTree<
 	Commands extends readonly CommandDefinition<any, any, any, any>[],
 	RecursiveFlags extends FlagsDef,
 	InheritedFlags extends FlagsDef,
-> = TreeWithInheritedFlags<Tree & DefinitionsTree<Commands, InheritedFlags>, RecursiveFlags>;
+> = {} extends RecursiveFlags
+	? Tree & DefinitionsTree<Commands, InheritedFlags>
+	: TreeWithInheritedFlags<Tree & DefinitionsTree<Commands, InheritedFlags>, RecursiveFlags>;
 
 /**
  * Define a reusable, inert command under a required name.

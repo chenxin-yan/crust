@@ -88,7 +88,7 @@ test("collects a name", async () => {
 
 `done` rejects with the original application error, matching `app.run()`. `waitFor()` never hangs on a failed or finished run: it rethrows the application error, or throws with the current screen when the pattern can no longer match or its timeout (default 5000ms) elapses.
 
-Use `captureExecute(app, argv)` for raw parser behavior such as short-flag bundles, `--flag=value`, invalid spellings, and Extension-contributed commands. Those commands materialize at runtime and cannot appear in the typed `captureRun()` or `runInteractive()` path.
+Use `captureExecute(app, argv)` for raw parser behavior such as short-flag bundles, `--flag=value`, and invalid spellings. Statically declared `defineExtension()` commands appear in the typed `captureRun()` and `runInteractive()` paths; use `captureExecute()` for dynamically assembled or type-widened Extension contributions.
 
 ## For custom prompt authors
 
