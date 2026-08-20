@@ -99,7 +99,8 @@ function emitType(type: ValueType): string {
 }
 
 function emitNumber(value: number): string {
-	return Number.isInteger(value) ? `${value}.0` : String(value);
+	const literal = String(value);
+	return Number.isInteger(value) && !literal.includes("e") ? `${literal}.0` : literal;
 }
 
 function goString(value: string): string {
