@@ -44,7 +44,7 @@ func Slice(values []string, start float64) []string {
 }
 
 func Exit(code float64) {
-	if code != math.Trunc(code) {
+	if math.IsNaN(code) || math.IsInf(code, 0) || code != math.Trunc(code) {
 		fmt.Fprintf(os.Stderr, "RangeError: process.exit code must be an integer. Received %s\n", numberString(code))
 		os.Exit(1)
 	}
@@ -80,8 +80,16 @@ func Log(values ...any) {
 	fmt.Println()
 }
 
+func Infinity() float64 {
+	return math.Inf(1)
+}
+
 func Mod(left, right float64) float64 {
 	return math.Mod(left, right)
+}
+
+func Number(value float64) float64 {
+	return value
 }
 
 func String(value any) string {

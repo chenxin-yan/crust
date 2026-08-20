@@ -106,8 +106,11 @@ function emitType(type: ValueType): string {
 }
 
 function emitNumber(value: number): string {
+	if (!Number.isFinite(value)) {
+		return value < 0 ? "-crustRuntime.Infinity()" : "crustRuntime.Infinity()";
+	}
 	const literal = String(value);
-	return Number.isInteger(value) && !literal.includes("e") ? `${literal}.0` : literal;
+	return `crustRuntime.Number(${Number.isInteger(value) && !literal.includes("e") ? `${literal}.0` : literal})`;
 }
 
 function goString(value: string): string {
