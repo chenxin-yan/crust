@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { lower } from "../src/frontend.js";
 import { compile } from "../src/index.js";
 
 const goPath = Bun.which("go");
@@ -80,22 +81,29 @@ describe("compiler differential corpus", () => {
 		120_000,
 	);
 
-	it.skipIf(goPath === null)(
-		"rejects fractional process exit codes",
-		async () => {
-			const fixture = join(import.meta.dir, "fixtures", "fractional-exit.ts");
-			if (nodePath === null) throw new Error("Node is required as the corpus reference runtime");
+	it("rejects direct array logging before emission", () => {
+		const fixture = join(import.meta.dir, "fixtures", "array-log.ts");
+		expect(() => lower(fixture)).toThrow("Unsupported TypeScript CallExpression");
+	});
 
-			const binary = await compile(fixture);
-			try {
-				const compiled = run(binary);
-				const reference = run(nodePath, [fixture]);
-				expect(compiled.exitCode).toBe(reference.exitCode);
-				expect(new TextDecoder().decode(compiled.stderr)).toContain("RangeError");
-			} finally {
-				await rm(dirname(binary), { recursive: true, force: true });
-			}
-		},
-		120_000,
-	);
+	for (const fixtureName of ["fractional-exit.ts", "non-finite-exit.ts"]) {
+		it.skipIf(goPath === null)(
+			`rejects invalid process exit code from ${fixtureName}`,
+			async () => {
+				const fixture = join(import.meta.dir, "fixtures", fixtureName);
+				if (nodePath === null) throw new Error("Node is required as the corpus reference runtime");
+
+				const binary = await compile(fixture);
+				try {
+					const compiled = run(binary);
+					const reference = run(nodePath, [fixture]);
+					expect(compiled.exitCode).toBe(reference.exitCode);
+					expect(new TextDecoder().decode(compiled.stderr)).toContain("RangeError");
+				} finally {
+					await rm(dirname(binary), { recursive: true, force: true });
+				}
+			},
+			120_000,
+		);
+	}
 });
