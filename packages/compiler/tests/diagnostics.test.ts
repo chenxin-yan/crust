@@ -47,6 +47,12 @@ describe("compiler diagnostic corpus", () => {
 		expectLocated(error);
 	});
 
+	it("does not report unresolved calls as returning any", async () => {
+		const error = await compileFailure("unknown-call.ts");
+		expect(error.diagnostics.map(({ code }) => code)).toEqual([DiagnosticCodes.TypeScriptError]);
+		expectLocated(error);
+	});
+
 	it("converts noImplicitAny failures to the any diagnostic", async () => {
 		const error = await compileFailure("implicit-any.ts");
 		expect(error.diagnostics.every(({ code }) => code === DiagnosticCodes.AnyType)).toBeTrue();
