@@ -33,13 +33,14 @@ export function lower(entryFile: string): Program {
 
 	const sourceFile = program.getSourceFile(absoluteEntry);
 	if (!sourceFile) throw new Error(`TypeScript did not load entry file: ${absoluteEntry}`);
+	const unsupportedStatement = 'The tracer compiler only supports one console.log("...") statement';
 	if (sourceFile.statements.length !== 1) {
-		throw new Error('The tracer compiler only supports one console.log("...") statement');
+		throw new Error(unsupportedStatement);
 	}
 
 	const statement = sourceFile.statements[0];
 	if (!statement || !ts.isExpressionStatement(statement)) {
-		throw new Error('The tracer compiler only supports one console.log("...") statement');
+		throw new Error(unsupportedStatement);
 	}
 	const call = statement.expression;
 	if (
@@ -49,16 +50,11 @@ export function lower(entryFile: string): Program {
 		call.expression.name.text !== "log" ||
 		call.arguments.length !== 1
 	) {
-		throw new Error('The tracer compiler only supports one console.log("...") statement');
+		throw new Error(unsupportedStatement);
 	}
 
 	const argument = call.arguments[0];
-	const checker = program.getTypeChecker();
-	if (
-		!argument ||
-		!ts.isStringLiteral(argument) ||
-		!(checker.getTypeAtLocation(argument).flags & ts.TypeFlags.StringLiteral)
-	) {
+	if (!argument || !ts.isStringLiteral(argument)) {
 		throw new Error("The tracer compiler only supports a string literal console.log argument");
 	}
 
