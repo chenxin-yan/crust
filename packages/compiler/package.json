@@ -5,11 +5,6 @@
 	"type": "module",
 	"sideEffects": false,
 	"license": "MIT",
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/chenxin-yan/crust.git",
-		"directory": "packages/compiler"
-	},
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
