@@ -2131,6 +2131,29 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		});
 	});
 
+	it("runs Extension command recipes once across build hook refreshes", async () => {
+		const path = await snapshotPath();
+		process.env[SNAPSHOT_PATH_ENV] = path;
+		process.env[BUILD_OUT_DIR_ENV] = join(dirname(path), "output");
+		let recipeRuns = 0;
+		const app = new Crust("build-subprocess").extend(
+			defineExtension(defineExtensionId("contributor"), {
+				commands: [
+					defineCommand("generated", (command) => {
+						recipeRuns += 1;
+						return command;
+					}),
+				],
+				build() {},
+			}),
+			defineExtension(defineExtensionId("second-hook"), { build() {} }),
+		);
+
+		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
+
+		expect(recipeRuns).toBe(1);
+	});
+
 	it("attributes build hook failures to the extension", async () => {
 		const path = await snapshotPath();
 		process.env[SNAPSHOT_PATH_ENV] = path;

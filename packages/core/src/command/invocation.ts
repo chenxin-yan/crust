@@ -275,15 +275,11 @@ function applyExtensionSections(
 
 const preparedInvocations = new WeakMap<CommandNode, PreparedInvocation>();
 
-/** Clone, apply Extensions and sections, freeze, and cache ordinary invocation preparation. */
-function prepareInvocation(
+/** Clone and apply Extension commands and flags; recipes run exactly once here. */
+function buildExtensionTree(
 	node: CommandNode,
 	materializeCommandDefinition: MaterializeCommandDefinition,
-	useCache = true,
 ): PreparedInvocation {
-	const cached = useCache ? preparedInvocations.get(node) : undefined;
-	if (cached) return cached;
-
 	const rootNode = cloneCommandNode(node);
 	const extensions = Object.freeze([...node.extensions]);
 
@@ -293,14 +289,33 @@ function prepareInvocation(
 	for (const extension of extensions) applyExtensionFlags(rootNode, extension);
 
 	validateAuthoredSections(rootNode);
+	return { rootNode, extensions };
+}
+
+/** Evaluate Extension section callbacks against current state and freeze the tree. */
+function applySectionsAndFreeze(
+	rootNode: CommandNode,
+	extensions: readonly Extension[],
+): CommandNode {
 	const authoredSnapshot = snapshotCommand(rootNode);
 	for (const extension of extensions) {
 		applyExtensionSections(rootNode, extension, authoredSnapshot);
 	}
-
 	freezeTree(rootNode);
-	const prepared = { rootNode, extensions };
-	if (useCache) preparedInvocations.set(node, prepared);
+	return rootNode;
+}
+
+/** Clone, apply Extensions and sections, freeze, and cache ordinary invocation preparation. */
+function prepareInvocation(
+	node: CommandNode,
+	materializeCommandDefinition: MaterializeCommandDefinition,
+): PreparedInvocation {
+	const cached = preparedInvocations.get(node);
+	if (cached) return cached;
+
+	const prepared = buildExtensionTree(node, materializeCommandDefinition);
+	applySectionsAndFreeze(prepared.rootNode, prepared.extensions);
+	preparedInvocations.set(node, prepared);
 	return prepared;
 }
 
@@ -509,11 +524,15 @@ export async function executeInvocation(
 
 	if (snapshotPath) {
 		try {
-			let prepared = prepareInvocation(node, materializeCommandDefinition);
-			let snapshot = snapshotCommand(prepared.rootNode);
+			// Commands and flags materialize once so recipes keep their
+			// once-per-`.add()` lifecycle; only section callbacks re-evaluate.
+			const base = buildExtensionTree(node, materializeCommandDefinition);
+			const takeSnapshot = () =>
+				snapshotCommand(applySectionsAndFreeze(cloneCommandNode(base.rootNode), base.extensions));
+			let snapshot = takeSnapshot();
 			const buildOutDir = process.env[BUILD_OUT_DIR_ENV];
 			if (buildOutDir) {
-				for (const extension of prepared.extensions) {
+				for (const extension of base.extensions) {
 					if (!extension.build) continue;
 					try {
 						await extension.build({ snapshot, outDir: buildOutDir });
@@ -523,10 +542,9 @@ export async function executeInvocation(
 							cause: error,
 						});
 					}
-					// The hook sees the snapshot from before it starts; refreshing afterwards
-					// lets later hooks observe its outputs without mutating the frozen tree.
-					prepared = prepareInvocation(node, materializeCommandDefinition, false);
-					snapshot = snapshotCommand(prepared.rootNode);
+					// The hook sees the snapshot from before it starts; re-evaluating sections
+					// afterwards lets later hooks observe its outputs without mutating the frozen tree.
+					snapshot = takeSnapshot();
 				}
 			}
 			await writeFile(snapshotPath, JSON.stringify(snapshot));
