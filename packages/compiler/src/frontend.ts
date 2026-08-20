@@ -2,19 +2,71 @@ import { resolve } from "node:path";
 
 import ts from "typescript";
 
+import {
+	CompilerError,
+	DiagnosticCodes,
+	diagnosticAtNode,
+	type CompilerDiagnostic,
+} from "./diagnostics.js";
 import type { Expression, FunctionDeclaration, Program, Statement, ValueType } from "./ir.js";
 
-export class TypeScriptCompileError extends Error {
-	public constructor(public readonly diagnostics: readonly ts.Diagnostic[]) {
-		super(
-			ts.formatDiagnosticsWithColorAndContext(diagnostics, {
-				getCanonicalFileName: (fileName) => fileName,
-				getCurrentDirectory: () => process.cwd(),
-				getNewLine: () => "\n",
-			}),
-		);
-		this.name = "TypeScriptCompileError";
+const anyHint = "Replace `any` with `unknown`, then narrow it with a runtime check before use.";
+
+const implicitAnyCodes = new Set([
+	7005, 7006, 7008, 7010, 7011, 7015, 7017, 7018, 7019, 7022, 7023, 7024, 7031, 7034,
+	7044, 7053, 2683,
+]);
+
+function fromTypeScriptDiagnostic(
+	diagnostic: ts.Diagnostic,
+	fallbackFile: string,
+): CompilerDiagnostic {
+	const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
+	const sourceFile = diagnostic.file;
+	const start = diagnostic.start ?? 0;
+	const location = sourceFile?.getLineAndCharacterOfPosition(start) ?? { line: 0, character: 0 };
+	const implicitAny = implicitAnyCodes.has(diagnostic.code);
+	return {
+		code: implicitAny ? DiagnosticCodes.AnyType : DiagnosticCodes.TypeScriptError,
+		file: sourceFile?.fileName ?? fallbackFile,
+		line: location.line + 1,
+		column: location.character + 1,
+		message: `${message} (TS${diagnostic.code})`,
+		hint: implicitAny ? anyHint : "Fix the TypeScript error before compiling.",
+	};
+}
+
+function findAnyDiagnostics(sourceFile: ts.SourceFile, checker: ts.TypeChecker) {
+	const diagnostics: CompilerDiagnostic[] = [];
+	function visit(node: ts.Node): void {
+		if (node.kind === ts.SyntaxKind.AnyKeyword) {
+			diagnostics.push(
+				diagnosticAtNode(
+					sourceFile,
+					node,
+					DiagnosticCodes.AnyType,
+					"The compiler does not support the `any` type.",
+					anyHint,
+				),
+			);
+		} else if (
+			ts.isCallExpression(node) &&
+			(checker.getTypeAtLocation(node).flags & ts.TypeFlags.Any) !== 0
+		) {
+			diagnostics.push(
+				diagnosticAtNode(
+					sourceFile,
+					node,
+					DiagnosticCodes.AnyType,
+					"This call returns `any`, which the compiler cannot lower safely.",
+					anyHint,
+				),
+			);
+		}
+		ts.forEachChild(node, visit);
 	}
+	visit(sourceFile);
+	return diagnostics;
 }
 
 export function lower(entryFile: string): Program {
@@ -23,16 +75,31 @@ export function lower(entryFile: string): Program {
 		module: ts.ModuleKind.NodeNext,
 		moduleResolution: ts.ModuleResolutionKind.NodeNext,
 		noEmit: true,
+		noImplicitAny: true,
 		skipLibCheck: true,
 		strict: true,
 		target: ts.ScriptTarget.ES2022,
 	};
 	const program = ts.createProgram([absoluteEntry], compilerOptions);
-	const diagnostics = ts.getPreEmitDiagnostics(program);
-	if (diagnostics.length > 0) throw new TypeScriptCompileError(diagnostics);
-
 	const sourceFile = program.getSourceFile(absoluteEntry);
-	if (!sourceFile) throw new Error(`TypeScript did not load entry file: ${absoluteEntry}`);
+	const diagnostics = ts
+		.getPreEmitDiagnostics(program)
+		.map((diagnostic) => fromTypeScriptDiagnostic(diagnostic, absoluteEntry));
+	if (sourceFile) diagnostics.push(...findAnyDiagnostics(sourceFile, program.getTypeChecker()));
+	if (diagnostics.length > 0) throw new CompilerError(diagnostics);
+	if (!sourceFile) {
+		throw new CompilerError([
+			{
+				code: DiagnosticCodes.TypeScriptError,
+				file: absoluteEntry,
+				line: 1,
+				column: 1,
+				message: "TypeScript did not load the entry file.",
+				hint: "Check that the entry path names a readable TypeScript source file.",
+			},
+		]);
+	}
+
 	const checker = program.getTypeChecker();
 	const functions: FunctionDeclaration[] = [];
 	const statements: Statement[] = [];
@@ -380,9 +447,14 @@ function isPropertyCall(node: ts.CallExpression, object: string, property: strin
 	);
 }
 
-function unsupported(node: ts.Node, sourceFile: ts.SourceFile): Error {
-	const { line, character } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
-	return new Error(
-		`Unsupported TypeScript ${ts.SyntaxKind[node.kind]} at ${sourceFile.fileName}:${line + 1}:${character + 1}`,
-	);
+function unsupported(node: ts.Node, sourceFile: ts.SourceFile): CompilerError {
+	return new CompilerError([
+		diagnosticAtNode(
+			sourceFile,
+			node,
+			DiagnosticCodes.UnsupportedConstruct,
+			`Unsupported TypeScript ${ts.SyntaxKind[node.kind]}.`,
+			"Rewrite the program using the supported M0 language surface.",
+		),
+	]);
 }

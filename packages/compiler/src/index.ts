@@ -8,7 +8,13 @@ import { promisify } from "node:util";
 import { emitGo, runtimeModule } from "./emitter.js";
 import { lower } from "./frontend.js";
 
-export { TypeScriptCompileError } from "./frontend.js";
+export {
+	CompilerError,
+	DiagnosticCodes,
+	TypeScriptCompileError,
+	type CompilerDiagnostic,
+	type DiagnosticCode,
+} from "./diagnostics.js";
 
 export interface CompileOptions {
 	readonly outputPath?: string;
