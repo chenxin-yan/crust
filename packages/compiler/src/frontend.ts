@@ -154,7 +154,15 @@ function lowerExpression(
 				: node.operator === ts.SyntaxKind.MinusToken
 					? "-"
 					: undefined;
-		if (!operator) throw unsupported(node, sourceFile);
+		if (
+			!operator ||
+			!(
+				checker.getTypeAtLocation(node.operand).flags &
+				(ts.TypeFlags.Number | ts.TypeFlags.NumberLiteral)
+			)
+		) {
+			throw unsupported(node, sourceFile);
+		}
 		return {
 			kind: "unary",
 			operator,
@@ -182,11 +190,18 @@ function lowerExpression(
 			})),
 		};
 	}
-	if (isProcessArgv(node)) return { kind: "argv" };
+	if (isProcessArgv(node)) return { kind: "argv", entryFile: sourceFile.fileName };
 	if (ts.isPropertyAccessExpression(node) && node.name.text === "length") {
 		let receiver: ts.Expression = node.expression;
 		while (ts.isParenthesizedExpression(receiver) || ts.isNonNullExpression(receiver)) {
 			receiver = receiver.expression;
+		}
+		const receiverType = checker.getTypeAtLocation(receiver);
+		if (
+			!(receiverType.flags & (ts.TypeFlags.String | ts.TypeFlags.StringLiteral)) &&
+			!checkerTypeIsStringArray(receiverType)
+		) {
+			throw unsupported(node, sourceFile);
 		}
 		return {
 			kind: "length",
@@ -194,6 +209,9 @@ function lowerExpression(
 		};
 	}
 	if (ts.isElementAccessExpression(node) && node.argumentExpression) {
+		if (!checkerTypeIsStringArray(checker.getTypeAtLocation(node.expression))) {
+			throw unsupported(node, sourceFile);
+		}
 		return {
 			kind: "index",
 			value: lowerExpression(node.expression, checker, sourceFile),
@@ -204,7 +222,8 @@ function lowerExpression(
 		if (
 			ts.isPropertyAccessExpression(node.expression) &&
 			node.expression.name.text === "slice" &&
-			node.arguments.length === 1
+			node.arguments.length === 1 &&
+			checkerTypeIsStringArray(checker.getTypeAtLocation(node.expression.expression))
 		) {
 			const start = node.arguments[0];
 			if (!start) throw unsupported(node, sourceFile);
@@ -224,6 +243,14 @@ function lowerExpression(
 			};
 		}
 		if (ts.isIdentifier(node.expression)) {
+			const declaration = checker.getSymbolAtLocation(node.expression)?.valueDeclaration;
+			if (
+				!declaration ||
+				!ts.isFunctionDeclaration(declaration) ||
+				declaration.getSourceFile() !== sourceFile
+			) {
+				throw unsupported(node, sourceFile);
+			}
 			return {
 				kind: "call",
 				callee: node.expression.text,
