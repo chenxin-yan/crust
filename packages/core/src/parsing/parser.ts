@@ -134,12 +134,23 @@ function resolveDefault(
 	def: {
 		type: ValueType;
 		default?: unknown;
+		choices?: readonly string[];
 		parse?: (raw: string) => unknown;
 	},
 	label: string,
 ): unknown {
-	const { default: defaultValue, parse } = def;
+	const { default: defaultValue, choices, parse } = def;
 	if (defaultValue === undefined) return undefined;
+
+	// Runtime home for the dynamic path only: choices/defaults widened from
+	// runtime data (config-driven definitions) are invisible to the
+	// FIX_DEFAULT_CHOICE brand, and defaults bypass the argv choices check,
+	// so an out-of-range default would silently reach the action.
+	if (choices) {
+		for (const v of Array.isArray(defaultValue) ? defaultValue : [defaultValue]) {
+			validateChoice(String(v), choices, label);
+		}
+	}
 
 	if (parse) {
 		if (Array.isArray(defaultValue)) {

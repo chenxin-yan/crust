@@ -1130,10 +1130,11 @@ describe("parseArgs — choices enforcement", () => {
 // ───────────────────────────────────────────────────────────────────────────
 // Default coercion symmetry (PR #129 review follow-up)
 //
-// Argv-supplied values flow through parse | coerce. The default branch must
-// mirror the coercion so omitted-flag behavior is not silently weaker (path
-// defaults left relative, etc.). Default-vs-choices is compile-time only
-// (FIX_DEFAULT_CHOICE).
+// Argv-supplied values flow through choices → parse | coerce. The default
+// branch must mirror both so omitted-flag behavior is not silently weaker
+// (path defaults left relative, config-driven defaults outside `choices`
+// accepted, etc.). Literal defaults are also branded (FIX_DEFAULT_CHOICE);
+// the runtime check is the single home for the widened/dynamic path.
 // ───────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs \u2014 default coercion symmetry", () => {
@@ -1179,5 +1180,34 @@ describe("parseArgs \u2014 default coercion symmetry", () => {
 		});
 		const result = parseArgs(cmd, []);
 		expect(result.flags.mode).toBe("a");
+	});
+
+	it("rejects a dynamic flag default outside the choices list when argv is absent", () => {
+		// Widened choices/defaults (e.g. loaded from config) opt out of the
+		// FIX_DEFAULT_CHOICE brand; parse time is their single validation home.
+		const choices: string[] = ["a", "b"];
+		const cmd = makeNode({
+			meta: "test",
+			flags: { mode: { type: "string", choices, default: "z" } },
+		});
+		expect(() => parseArgs(cmd, [])).toThrow(/Invalid value "z" for --mode/);
+	});
+
+	it("rejects each element of a dynamic multiple-flag default outside choices", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: {
+				tags: { type: "string", multiple: true, choices: ["a", "b"], default: ["a", "z"] },
+			},
+		});
+		expect(() => parseArgs(cmd, [])).toThrow(/Invalid value "z" for --tags/);
+	});
+
+	it("rejects a dynamic arg default outside the choices list when positional is absent", () => {
+		const cmd = makeNode({
+			meta: "test",
+			args: [{ name: "mode", type: "string", choices: ["a", "b"], default: "z" }],
+		});
+		expect(() => parseArgs(cmd, [])).toThrow(/Invalid value "z"/);
 	});
 });
