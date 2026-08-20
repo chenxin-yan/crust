@@ -104,7 +104,7 @@ A renderer exposes its identity on its factory and selects sections with `sectio
 
 ## Build hooks
 
-`build(ctx)` generates artifacts when invoked by build tooling such as `crust build`; it does not run during ordinary `run()` or `execute()` dispatch. The snapshot subprocess invokes registered hooks in Extension registration order, so Extension presence is the source of intent. The context contains the frozen root Command Snapshot and a resolved absolute `outDir`. Build hooks may be async; errors propagate with the Extension id. `crust build --no-validate` skips entry preparation and all build hooks.
+`build(ctx)` generates artifacts when invoked by build tooling such as `crust build`; it does not run during ordinary `run()` or `execute()` dispatch. The snapshot subprocess invokes registered hooks in Extension registration order, so Extension presence is the source of intent. The context contains the frozen root Command Snapshot prepared before that hook starts and a resolved absolute `outDir`. After each hook, Crust re-materializes the tree and re-evaluates section callbacks, so later hooks and the final snapshot observe earlier hook outputs. A hook cannot observe its own outputs through its initial `ctx.snapshot`; register a later renderer hook when those outputs must appear in an artifact. Build hooks may be async; errors propagate with the Extension id. `crust build --no-validate` skips entry preparation and all build hooks.
 
 ## Dependency injection
 

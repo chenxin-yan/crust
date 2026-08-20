@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Crust } from "@crustjs/core";
+import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
 
+import { skill } from "../../skills/src/extension.ts";
 import { man } from "./extension.ts";
 
 const directories: string[] = [];
@@ -32,6 +33,47 @@ describe("man Extension", () => {
 		const output = await readFile(join(outDir, "man", "demo.5"), "utf8");
 		expect(output).toContain(".Dt DEMO 5");
 		expect(output).not.toContain(outDir);
+	});
+
+	it("renders skill sources created by an earlier build hook", async () => {
+		const root = await mkdtemp(join(tmpdir(), "crust-man-extension-"));
+		directories.push(root);
+		const source = join(root, "generated-skills");
+		const outDir = join(root, "dist");
+		const snapshotPath = join(root, "snapshot.json");
+		const originalExit = process.exit;
+		process.env.CRUST_INTERNAL_SNAPSHOT_PATH = snapshotPath;
+		process.env.CRUST_INTERNAL_BUILD_OUT_DIR = outDir;
+		process.exit = ((code?: number) => {
+			throw new Error(`process.exit(${code ?? "undefined"}) was called during snapshot`);
+		}) as typeof process.exit;
+		const producer = defineExtension(defineExtensionId("skill-producer"), {
+			async build() {
+				const directory = join(source, "generated");
+				await mkdir(directory, { recursive: true });
+				await writeFile(
+					join(directory, "SKILL.md"),
+					"---\nname: generated\ndescription: Generated during build\n---\n",
+				);
+			},
+		});
+		const app = new Crust("demo", { description: "Demo CLI" }).extend(
+			producer,
+			skill({ distDir: source }),
+			man(),
+		);
+
+		try {
+			await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
+		} finally {
+			process.exit = originalExit;
+			delete process.env.CRUST_INTERNAL_SNAPSHOT_PATH;
+			delete process.env.CRUST_INTERNAL_BUILD_OUT_DIR;
+		}
+
+		const output = await readFile(join(outDir, "man", "demo.1"), "utf8");
+		expect(output).toContain("Generated during build");
+		expect(output).not.toContain("unavailable");
 	});
 
 	it("honors a configured installed name", async () => {

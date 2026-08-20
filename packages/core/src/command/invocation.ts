@@ -44,8 +44,8 @@ type MaterializeCommandDefinition = (
  * Snapshot subprocess protocol used by first-party build tooling.
  *
  * When set to a non-empty file path, `.execute()` prepares the command tree,
- * validates its documentation sections, writes its JSON snapshot, optionally runs Extension
- * build hooks when the build output directory is set, and exits without dispatching
+ * validates its documentation sections, optionally runs Extension build hooks when the
+ * build output directory is set, writes its final JSON snapshot, and exits without dispatching
  * a Command Action. In-process callers use `Crust.snapshot()`.
  */
 export const SNAPSHOT_PATH_ENV = "CRUST_INTERNAL_SNAPSHOT_PATH";
@@ -275,12 +275,13 @@ function applyExtensionSections(
 
 const preparedInvocations = new WeakMap<CommandNode, PreparedInvocation>();
 
-/** Shared prepare step: clone, apply Extensions and sections, freeze once per immutable builder node. */
+/** Clone, apply Extensions and sections, freeze, and cache ordinary invocation preparation. */
 function prepareInvocation(
 	node: CommandNode,
 	materializeCommandDefinition: MaterializeCommandDefinition,
+	useCache = true,
 ): PreparedInvocation {
-	const cached = preparedInvocations.get(node);
+	const cached = useCache ? preparedInvocations.get(node) : undefined;
 	if (cached) return cached;
 
 	const rootNode = cloneCommandNode(node);
@@ -299,7 +300,7 @@ function prepareInvocation(
 
 	freezeTree(rootNode);
 	const prepared = { rootNode, extensions };
-	preparedInvocations.set(node, prepared);
+	if (useCache) preparedInvocations.set(node, prepared);
 	return prepared;
 }
 
@@ -508,10 +509,8 @@ export async function executeInvocation(
 
 	if (snapshotPath) {
 		try {
-			const prepared = prepareInvocation(node, materializeCommandDefinition);
-			const snapshot = snapshotCommand(prepared.rootNode);
-			await writeFile(snapshotPath, JSON.stringify(snapshot));
-
+			let prepared = prepareInvocation(node, materializeCommandDefinition);
+			let snapshot = snapshotCommand(prepared.rootNode);
 			const buildOutDir = process.env[BUILD_OUT_DIR_ENV];
 			if (buildOutDir) {
 				for (const extension of prepared.extensions) {
@@ -524,8 +523,13 @@ export async function executeInvocation(
 							cause: error,
 						});
 					}
+					// The hook sees the snapshot from before it starts; refreshing afterwards
+					// lets later hooks observe its outputs without mutating the frozen tree.
+					prepared = prepareInvocation(node, materializeCommandDefinition, false);
+					snapshot = snapshotCommand(prepared.rootNode);
 				}
 			}
+			await writeFile(snapshotPath, JSON.stringify(snapshot));
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			console.error(message);

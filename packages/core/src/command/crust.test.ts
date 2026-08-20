@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -2084,6 +2085,50 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
 
 		expect(calls).toEqual(["first", "second"]);
+	});
+
+	it("refreshes sections between build hooks", async () => {
+		const path = await snapshotPath();
+		const outDir = join(dirname(path), "output");
+		const source = join(dirname(path), "generated-source");
+		process.env[SNAPSHOT_PATH_ENV] = path;
+		process.env[BUILD_OUT_DIR_ENV] = outDir;
+		const calls: string[] = [];
+		const app = new Crust("build-subprocess").extend(
+			defineExtension(defineExtensionId("producer"), {
+				async build() {
+					expect(existsSync(path)).toBe(false);
+					calls.push("producer");
+					await mkdir(source);
+					await writeFile(join(source, "marker.txt"), "ready");
+				},
+			}),
+			defineExtension(defineExtensionId("consumer"), {
+				sections: () => [
+					{
+						command: [],
+						title: "Generated source",
+						body: existsSync(join(source, "marker.txt"))
+							? readFileSync(join(source, "marker.txt"), "utf8")
+							: "missing",
+					},
+				],
+				build({ snapshot }) {
+					calls.push("consumer");
+					expect(snapshot.meta.sections).toContainEqual({
+						title: "Generated source",
+						body: "ready",
+					});
+				},
+			}),
+		);
+
+		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
+
+		expect(calls).toEqual(["producer", "consumer"]);
+		expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({
+			meta: { sections: [{ title: "Generated source", body: "ready" }] },
+		});
 	});
 
 	it("attributes build hook failures to the extension", async () => {
