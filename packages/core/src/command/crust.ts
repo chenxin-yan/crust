@@ -337,11 +337,11 @@ type AppendedArgs<A extends ArgsDef, NewA extends ArgsDef> = ArgsDef extends A
 export interface CommandDefinitionBuilder<
 	Flags extends FlagsDef = {},
 	A extends ArgsDef = ArgsDef,
-	Ctx extends ContextMap = {},
+	out Ctx extends ContextMap = {},
 	Sibs extends string = never,
 	Sp extends string = SpellingsOf<Flags>,
 	Tree extends object = {},
-	CtxFlags extends FlagsDef = {},
+	out CtxFlags extends FlagsDef = {},
 	Result = void,
 > {
 	flags<const Defs extends readonly NamedFlagDef[]>(
@@ -690,11 +690,11 @@ export type AnyCrust = Crust<any, any, any, any, any, any, any, any, any>;
 export class Crust<
 	Flags extends FlagsDef = {},
 	A extends ArgsDef = ArgsDef,
-	Ctx extends ContextMap = {},
+	out Ctx extends ContextMap = {},
 	Sibs extends string = never,
 	Sp extends string = SpellingsOf<Flags>,
 	Tree extends object = {},
-	CtxFlags extends FlagsDef = {},
+	out CtxFlags extends FlagsDef = {},
 	CollisionSp extends CollisionSpellings = CollisionSpellings,
 	Result = void,
 > {
