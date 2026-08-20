@@ -262,7 +262,7 @@ func inspectStringsFitLine(values []string) bool {
 		return false
 	}
 	for _, value := range values {
-		length += inspectStringWidth(value)
+		length += len(utf16.Encode([]rune(value)))
 		if length > 80 {
 			return false
 		}

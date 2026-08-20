@@ -107,6 +107,7 @@ describe("compiler differential corpus", () => {
 					["x".repeat(90)],
 					Array.from({ length: 10 }, (_, index) => `value${index}`),
 					Array(7).fill("中"),
+					Array(3).fill("中".repeat(10)),
 					Array(8).fill("🇺🇸"),
 					Array.from({ length: 101 }, (_, index) => `value${index}`),
 					Array.from({ length: 105 }, (_, index) => `value${index}`),
