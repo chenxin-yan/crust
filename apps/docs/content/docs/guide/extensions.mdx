@@ -53,7 +53,7 @@ Extension contributions are applied in `.extend()` registration order. Extension
 
 ## Command sections
 
-Sections are named documentation blocks — like man-page sections — that render into `--help`, man pages, and generated agent skills from a single declaration. Commands can declare plain-text documentation sections in their metadata. Help renders them after Options, and man-page generation emits one mdoc section per root-level entry (subcommand sections appear in help only):
+Sections are named documentation blocks — like man-page sections — that render into `--help`, man pages, and generated agent skills from a single declaration. Commands can declare plain-text documentation sections in their metadata. Help renders them after Options. Man-page generation emits root entries as mdoc sections and groups visible subcommand entries under subsections for their canonical command paths:
 
 ```ts
 const deploy = defineCommand(

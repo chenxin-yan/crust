@@ -7,6 +7,73 @@ import { man } from "./extension.ts";
 import { renderManPageMdoc } from "./mdoc.ts";
 
 describe("renderManPageMdoc", () => {
+	it("renders visible subcommand sections in canonical path order", async () => {
+		const app = new Crust("demo")
+			.add(
+				defineCommand("zeta", { sections: [{ title: "Notes", body: "zeta body" }] }, (cmd) =>
+					cmd.action(() => {}),
+				),
+			)
+			.add(
+				defineCommand("config", { sections: [{ title: "Overview", body: "config body" }] }, (cmd) =>
+					cmd
+						.add(
+							defineCommand(
+								"set",
+								{ sections: [{ title: "Examples", body: "config set body" }] },
+								(subcommand) => subcommand.action(() => {}),
+							),
+						)
+						.action(() => {}),
+				),
+			)
+			.add(
+				defineCommand("alpha", { sections: [{ title: "Notes", body: "alpha body" }] }, (cmd) =>
+					cmd.action(() => {}),
+				),
+			);
+
+		const output = renderManPageMdoc({ root: await app.snapshot(), name: "demo" });
+
+		expect(output).toContain(".Sh COMMANDS");
+		expect(output).toContain(".Ss config set\n.Sy EXAMPLES\nconfig set body");
+		const paths = ["alpha", "config", "config set", "zeta"].map((path) =>
+			output.indexOf(`.Ss ${path}\n`),
+		);
+		expect(paths.every((index) => index >= 0)).toBe(true);
+		expect(paths).toEqual([...paths].sort((a, b) => a - b));
+	});
+
+	it("filters subcommand sections by audience and omits hidden commands", async () => {
+		const app = new Crust("demo")
+			.add(
+				defineCommand(
+					"publish",
+					{
+						sections: [
+							{ title: "Man notes", body: "man body", only: [man.id] },
+							{ title: "Other notes", body: "other body", except: [man.id] },
+						],
+					},
+					(cmd) => cmd.action(() => {}),
+				),
+			)
+			.add(
+				defineCommand(
+					"internal",
+					{ hidden: true, sections: [{ title: "Secrets", body: "hidden body" }] },
+					(cmd) => cmd.action(() => {}),
+				),
+			);
+
+		const output = renderManPageMdoc({ root: await app.snapshot(), name: "demo" });
+
+		expect(output).toContain(".Ss publish\n.Sy MAN NOTES\nman body");
+		expect(output).not.toContain("other body");
+		expect(output).not.toContain("hidden body");
+		expect(output).not.toContain(".Ss internal");
+	});
+
 	it("honors only and except audiences", async () => {
 		const other = defineExtensionId("acme:other");
 		const snapshot = await new Crust("demo", {

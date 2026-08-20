@@ -17,9 +17,12 @@ function escapeMdocBodyLine(line: string): string {
 	// Both `.` and `'` start roff control lines.
 	return /^[.']/.test(line) ? `\\&${line}` : line;
 }
+function macroArgument(text: string): string {
+	// Backslashes would otherwise start roff escape sequences inside heading macros.
+	return text.replace(/\\/g, "\\e");
+}
 function shTitle(title: string): string {
-	// Backslashes would otherwise start roff escape sequences inside `.Sh`.
-	return title.toUpperCase().replace(/\\/g, "\\e");
+	return macroArgument(title.toUpperCase());
 }
 function dtTitle(name: string): string {
 	const upper = name.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
@@ -59,6 +62,28 @@ function resolveDdLine(explicit?: string): string {
 		year: "numeric",
 		timeZone: fromEpoch ? "UTC" : undefined,
 	});
+}
+
+interface CommandSectionGroup {
+	path: readonly string[];
+	sections: ReturnType<typeof sectionsFor>;
+}
+
+function subcommandSectionGroups(
+	command: CommandSnapshot,
+	path: readonly string[] = [],
+): CommandSectionGroup[] {
+	const groups: CommandSectionGroup[] = [];
+	const children = Object.entries(command.subCommands)
+		.filter(([, child]) => !child.meta.hidden)
+		.sort(([a], [b]) => a.localeCompare(b));
+	for (const [name, child] of children) {
+		const childPath = [...path, name];
+		const sections = sectionsFor(child.meta.sections, MAN);
+		if (sections.length > 0) groups.push({ path: childPath, sections });
+		groups.push(...subcommandSectionGroups(child, childPath));
+	}
+	return groups;
 }
 
 export interface RenderManPageMdocOptions {
@@ -120,6 +145,17 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 	for (const metadataSection of sectionsFor(root.meta.sections, MAN)) {
 		lines.push(`.Sh ${shTitle(metadataSection.title)}`);
 		for (const line of metadataSection.body.split("\n")) lines.push(escapeMdocBodyLine(line));
+	}
+	const commandSections = subcommandSectionGroups(root);
+	if (commandSections.length > 0) {
+		lines.push(".Sh COMMANDS");
+		for (const group of commandSections) {
+			lines.push(`.Ss ${macroArgument(group.path.join(" "))}`);
+			for (const commandSection of group.sections) {
+				lines.push(`.Sy ${shTitle(commandSection.title)}`);
+				for (const line of commandSection.body.split("\n")) lines.push(escapeMdocBodyLine(line));
+			}
+		}
 	}
 	lines.push("");
 	return lines.join("\n");
