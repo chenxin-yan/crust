@@ -13,6 +13,10 @@
 		"test": {
 			"dependsOn": ["build", "^build"]
 		},
+		"test:corpus": {
+			"dependsOn": ["build", "^build"],
+			"cache": false
+		},
 		"check:types": {
 			"dependsOn": ["^build"]
 		},
