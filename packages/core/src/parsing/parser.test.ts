@@ -961,6 +961,29 @@ describe("parseArgs — url/path/json types", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — parse escape hatch", () => {
+	it("rejects an async parse with a PARSE error (dynamic path; brand owns literals)", () => {
+		// Typed `(raw: string) => unknown` accepts an async implementation, so
+		// the AsyncParseBrand never fires; without the runtime guard the pending
+		// Promise becomes the flag value and a rejection escapes the pipeline.
+		const asyncParse: (raw: string) => unknown = async (raw) => raw;
+		const cmd = makeNode({
+			meta: "test",
+			flags: { n: { type: "string", parse: asyncParse } },
+		});
+		expect(() => parseArgs(cmd, ["--n", "42"])).toThrow("parse must be synchronous");
+
+		// Rejecting parser: the guard must throw synchronously, not leak an
+		// unhandled rejection.
+		const rejecting: (raw: string) => unknown = async () => {
+			throw new Error("boom");
+		};
+		const cmd2 = makeNode({
+			meta: "test",
+			flags: { n: { type: "string", parse: rejecting } },
+		});
+		expect(() => parseArgs(cmd2, ["--n", "42"])).toThrow("parse must be synchronous");
+	});
+
 	it("runs parse on the raw argv value", () => {
 		const cmd = makeNode({
 			meta: "test",

@@ -1,4 +1,5 @@
 import { CrustError } from "../errors.ts";
+import { assertDefinableFlag } from "../parsing/spellings.ts";
 import type {
 	FlagDef,
 	FlagsDef,
@@ -175,6 +176,9 @@ export function defineContext(
 	const ownedFlags: FlagsDef = {};
 	for (const def of config.flags ?? []) {
 		const { name: flagName, ...rest } = def;
+		// Validate before the record assignment: a `__proto__` key would be
+		// silently swallowed as the record's prototype.
+		assertDefinableFlag(flagName, rest as FlagDef);
 		ownedFlags[flagName] = rest as FlagDef;
 	}
 	const uses = Object.freeze([...(config.uses ?? [])]);

@@ -358,6 +358,25 @@ describe("resolveCommand — aliases", () => {
 		expect(caught.details.parentCommand.subCommands.issue?.meta.aliases).toEqual(["issues", "i"]);
 	});
 
+	it("reports COMMAND_NOT_FOUND for inherited Object.prototype keys in argv", () => {
+		const issue = makeChild("issue", ["i"]);
+		const root = createCommandNode("app");
+		root.subCommands = { issue };
+
+		for (const candidate of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
+			let caught: unknown;
+			try {
+				resolveCommand(root, [candidate, "x"]);
+			} catch (err) {
+				caught = err;
+			}
+			// Untrusted argv: an inherited prototype member must not resolve as a
+			// subcommand node (previously a TypeError crash mid-routing).
+			expect(caught).toBeInstanceOf(CrustError);
+			expect((caught as CrustError).is("COMMAND_NOT_FOUND")).toBe(true);
+		}
+	});
+
 	it("prefers a canonical name over an alias when both could match", () => {
 		// Pathological: a sibling's alias happens to equal another sibling's canonical name.
 		// TypeScript rejects this in statically known definitions. The resolver still

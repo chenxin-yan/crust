@@ -106,13 +106,22 @@ function invokeParse(
 	label: string,
 	index?: number,
 ): unknown {
+	const location = index === undefined ? label : `${label} element [${index}]`;
+	let result: unknown;
 	try {
-		return parse(raw);
+		result = parse(raw);
 	} catch (err) {
-		const location = index === undefined ? label : `${label} element [${index}]`;
 		const reason = err instanceof Error ? err.message : String(err);
 		throw new CrustError("PARSE", `Failed to parse ${location}: ${reason}`).withCause(err);
 	}
+	// AsyncParseBrand owns literal async parsers; this owns the dynamic path.
+	// Without it the pending Promise becomes the flag/arg value, and a rejecting
+	// parser escapes the CrustError pipeline as an unhandled rejection.
+	if (result instanceof Promise) {
+		result.catch(() => {}); // the rejection is reported synchronously below
+		throw new CrustError("PARSE", `Failed to parse ${location}: parse must be synchronous`);
+	}
+	return result;
 }
 
 /**

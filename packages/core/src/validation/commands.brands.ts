@@ -66,6 +66,17 @@ export type CommandDefinitionSpellings<D> = D extends unknown
 		: never
 	: never;
 
+// Catches `.as()` renames that land on one of the definition's own aliases
+// (config-time AliasShapeError compares aliases against the original name only).
+type SelfAliasBrand<D> =
+	Overlap<DefName<D>, NarrowAliases<DefinitionAliases<D>>> extends infer Dup extends string
+		? [Dup] extends [never]
+			? {}
+			: {
+					readonly FIX_ALIAS_SHAPE: `Command "${Dup}" must not list its own canonical name as an alias`;
+				}
+		: never;
+
 type CommandCollisionBrand<D, Existing extends string> =
 	Overlap<CommandDefinitionSpellings<D>, Existing> extends infer Collision extends string
 		? [Collision] extends [never]
@@ -86,7 +97,7 @@ export type ValidateCommandDefinitions<
 	Existing extends string = never,
 > = Ds extends readonly [infer Head, ...infer Tail]
 	? readonly [
-			Head & CommandCollisionBrand<Head, Existing> & EmptyNameBrand<Head>,
+			Head & CommandCollisionBrand<Head, Existing> & EmptyNameBrand<Head> & SelfAliasBrand<Head>,
 			...ValidateCommandDefinitions<Tail, Existing | CommandDefinitionSpellings<Head>>,
 		]
 	: Ds;

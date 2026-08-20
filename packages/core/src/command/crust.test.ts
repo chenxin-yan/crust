@@ -693,6 +693,15 @@ describe("Crust .extend()", () => {
 });
 
 describe("Extension application at prepare time", () => {
+	it("rejects an Extension providing a Context name already on the path at compile time", () => {
+		const db = defineContext("db", {}, () => "real");
+		const impostor = defineContext("db", {}, () => 42);
+		const ext = defineExtension(defineExtensionId("impostor"), { provides: [impostor()] });
+		const app = new Crust("cli").provide(db());
+		// @ts-expect-error -- Extension-provided Context "db" is already on the path (FIX_DUPLICATE_CONTEXT)
+		expect(() => app.extend(ext)).not.toThrow();
+	});
+
 	it("rejects an Extension providing two Contexts that share a flag spelling at compile time", () => {
 		const first = defineContext("first", { flags: [{ name: "mode", type: "number" }] }, () => ({}));
 		const second = defineContext(
@@ -767,13 +776,14 @@ describe("Extension application at prepare time", () => {
 		expect(seen[0]?.debug).toBe(true);
 	});
 
-	it("replaces stale spellings when an Extension overwrites a flag", async () => {
+	it("rejects a dynamic Extension flag colliding with an app flag at prepare time", async () => {
 		let runs = 0;
 		const replacement = defineExtension(defineExtensionId("replacement"), {
 			flags: [{ name: "mode", type: "boolean", short: "n", aliases: ["new"] }],
 		});
-		// Typed code is rejected by the .extend() collision brand; the cast
-		// exercises the runtime spelling-table hygiene on the dynamic path.
+		// The .extend() brand owns literal collisions; the cast models a dynamic
+		// Extension, which must fail loud at prepare instead of silently retyping
+		// the app's flag.
 		const app = new Crust("cli")
 			.flags({ name: "mode", type: "boolean", short: "o", aliases: ["old"] })
 			.extend(replacement as never)
@@ -783,17 +793,13 @@ describe("Extension application at prepare time", () => {
 		const stderr: string[] = [];
 		const originalExitCode = process.exitCode;
 		try {
-			await app.execute({ argv: ["--new"], io: { stderr: (text) => stderr.push(text) } });
-			await app.execute({ argv: ["-n"], io: { stderr: (text) => stderr.push(text) } });
 			await app.execute({ argv: ["--old"], io: { stderr: (text) => stderr.push(text) } });
-			await app.execute({ argv: ["-o"], io: { stderr: (text) => stderr.push(text) } });
 		} finally {
 			process.exitCode = originalExitCode;
 		}
 
-		expect(runs).toBe(2);
-		expect(stderr.join("\n")).toContain("old");
-		expect(stderr.join("\n")).toContain("-o");
+		expect(runs).toBe(0);
+		expect(stderr.join("\n")).toContain('Extension flag "mode" collides');
 	});
 
 	it("non-recursive Extension flags stay on the root", async () => {
@@ -2132,5 +2138,104 @@ describe("Crust .add() aliases", () => {
 		await app.run(["issues"]);
 		expect(calls).toBe(1);
 		expect((await app.snapshot()).subCommands.issue?.meta.aliases).toEqual(["issues", "i"]);
+	});
+});
+
+describe("dynamic definition guards (brands own literals; runtime owns config-built defs)", () => {
+	const asDynamic = (value: unknown): never[] => value as never[];
+
+	it("rejects duplicate argument names from dynamic defs", () => {
+		const defs = asDynamic([
+			{ name: "file", type: "string" },
+			{ name: "file", type: "string" },
+		]);
+		expect(() => new Crust("cli").args(...defs)).toThrow(
+			expect.objectContaining({
+				code: "DEFINITION",
+				details: { subject: "argument", name: "file", reason: "duplicate-arg" },
+			}),
+		);
+	});
+
+	it("rejects a mid-tuple variadic from dynamic defs", () => {
+		const defs = asDynamic([
+			{ name: "files", type: "string", variadic: true },
+			{ name: "dest", type: "string", required: true },
+		]);
+		expect(() => new Crust("cli").args(...defs)).toThrow(
+			expect.objectContaining({
+				code: "DEFINITION",
+				details: { subject: "argument", name: "files", reason: "variadic-position" },
+			}),
+		);
+	});
+
+	it("rejects empty, no-prefixed, and __proto__ flag spellings from dynamic defs", () => {
+		const cases: [Record<string, unknown>, string][] = [
+			[{ name: "", type: "string" }, "empty-spelling"],
+			[{ name: "no-color", type: "boolean" }, "reserved-no-prefix"],
+			[{ name: "cache", type: "boolean", aliases: ["no-store"] }, "reserved-no-prefix"],
+			[{ name: "__proto__", type: "string" }, "reserved-spelling"],
+			[{ name: "safe", type: "string", aliases: ["__proto__"] }, "reserved-spelling"],
+		];
+		for (const [def, reason] of cases) {
+			const defs = asDynamic([def]);
+			expect(() => new Crust("cli").flags(...defs)).toThrow(
+				expect.objectContaining({
+					code: "DEFINITION",
+					details: expect.objectContaining({ reason }),
+				}),
+			);
+		}
+	});
+
+	it("rejects __proto__ flags at defineContext/defineExtension time", () => {
+		expect(() =>
+			defineContext(
+				"cfg",
+				{ flags: asDynamic([{ name: "__proto__", type: "string" }]) },
+				() => ({}),
+			),
+		).toThrow(expect.objectContaining({ code: "DEFINITION" }));
+		expect(() =>
+			defineExtension(defineExtensionId("cfg-ext"), {
+				flags: asDynamic([{ name: "__proto__", type: "string" }]),
+			}),
+		).toThrow(expect.objectContaining({ code: "DEFINITION" }));
+	});
+
+	it("rejects dynamic .flags() collisions with existing spellings", () => {
+		const app = new Crust("cli").flags({ name: "mode", type: "string", short: "m" });
+		const sameName = asDynamic([{ name: "mode", type: "boolean" }]);
+		const aliasSteal = asDynamic([{ name: "method", type: "string", short: "m" }]);
+		for (const defs of [sameName, aliasSteal]) {
+			expect(() => app.flags(...defs)).toThrow(
+				expect.objectContaining({
+					code: "DEFINITION",
+					details: expect.objectContaining({ reason: "flag-collision" }),
+				}),
+			);
+		}
+	});
+
+	it("rejects a dynamic .add() replacing an existing sibling", () => {
+		const first = defineCommand("deploy", (cmd) => cmd.action(() => {}));
+		const second = defineCommand("deploy", (cmd) => cmd.action(() => {}));
+		const app = new Crust("cli").add(first);
+		expect(() => app.add(second as never)).toThrow(
+			expect.objectContaining({
+				code: "DEFINITION",
+				details: { subject: "command", name: "deploy", reason: "command-collision" },
+			}),
+		);
+	});
+
+	it("rejects __proto__ as a command name", () => {
+		expect(() => new Crust("__proto__")).toThrow(
+			expect.objectContaining({
+				code: "DEFINITION",
+				details: { subject: "command", name: "__proto__", reason: "reserved-name" },
+			}),
+		);
 	});
 });

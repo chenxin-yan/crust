@@ -32,7 +32,7 @@ export interface ParseErrorDetails {
 
 /** Details for runtime recipe, Extension, Context, and documentation failures. */
 export interface DefinitionErrorDetails {
-	readonly subject?: "command" | "context" | "extension";
+	readonly subject?: "command" | "context" | "extension" | "flag" | "argument";
 	readonly name?: string;
 	readonly reason?: string;
 }

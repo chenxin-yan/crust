@@ -62,6 +62,26 @@ function injectExtensionFlag(
 	def: FlagDef,
 	recursive: boolean,
 ): void {
+	// ValidateExtensionFlags owns literal collisions at .extend()/.add(); this
+	// owns dynamic Extensions, where a silent overwrite retypes the owning
+	// command's (or another Extension's) flag at parse time.
+	if (Object.hasOwn(node.effectiveFlags, name)) {
+		throw new CrustError(
+			"DEFINITION",
+			`Extension flag "${name}" collides with a flag already defined on command "${node.meta.name}"`,
+			{ subject: "extension", name, reason: "flag-collision" },
+		);
+	}
+	for (const spelling of [def.short, ...(def.aliases ?? [])]) {
+		const existing = spelling === undefined ? undefined : node.flagSpellings.get(spelling);
+		if (existing !== undefined && existing.canonicalName !== name) {
+			throw new CrustError(
+				"DEFINITION",
+				`Extension flag spelling "${spelling}" collides with existing flag "${existing.canonicalName}" on command "${node.meta.name}"`,
+				{ subject: "extension", name, reason: "flag-collision" },
+			);
+		}
+	}
 	node.effectiveFlags[name] = def;
 	addFlagSpellingEntries(node.flagSpellings, name, def);
 	if (!recursive) return;
@@ -172,7 +192,13 @@ function validateSection(section: unknown, owner: SectionOwner): CommandSection 
 	if (!isText(title) || /[\r\n]/.test(title) || !isText(body)) {
 		throw invalidSections(owner);
 	}
-	// Cast: only/except mutual exclusion is compile-time only (SectionAudience union).
+	// The SectionAudience union owns literals; this runtime branch owns the
+	// dynamic path (Extension `sections` callbacks, config-built objects), where
+	// both fields would otherwise freeze and `sectionsFor()` would silently
+	// ignore `except`.
+	if (only !== undefined && except !== undefined) {
+		throw invalidSections(owner);
+	}
 	return Object.freeze({
 		title,
 		body,

@@ -162,6 +162,29 @@ describe("command definitions", () => {
 		);
 	});
 
+	it("rejects a recipe-provided Context flag colliding with an ancestor Context's flag", () => {
+		const db = defineContext("db", { flags: [{ name: "conn", type: "string" }] }, () => ({}));
+		const cache = defineContext("cache", { flags: [{ name: "conn", type: "number" }] }, () => ({}));
+		// Fully typed: the sealed recipe cannot see ancestor spellings, so this
+		// compiles — the collision is caught when the definition materializes.
+		const sub = defineCommand("sub", (cmd) => cmd.provide(cache()).action(() => {}));
+		const app = new Crust("cli").provide(db());
+		expect(() => app.add(sub)).toThrow(
+			'flag spelling "conn" collides with a flag owned by ancestor Context "db"',
+		);
+	});
+
+	it("allows re-providing the same-named Context along a child path", async () => {
+		const db = defineContext("db", { flags: [{ name: "conn", type: "string" }] }, () => ({
+			kind: "real",
+		}));
+		const sub = defineCommand("sub", (cmd) =>
+			cmd.provide(db.of({ kind: "double" })).action(() => {}),
+		);
+		// Same-name provider (an .of() double) replaces flags consistently — exempt.
+		expect(() => new Crust("cli").provide(db()).add(sub)).not.toThrow();
+	});
+
 	it("adds multiple definitions in one variadic call", async () => {
 		const ran: string[] = [];
 		const build = defineCommand("build", (command) =>

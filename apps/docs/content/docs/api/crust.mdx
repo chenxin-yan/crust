@@ -140,7 +140,7 @@ Definition aliases must be non-empty, contain no whitespace, not start with `-`,
 
 ## Chaining semantics
 
-Variadic builder methods accumulate across calls: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` preserve earlier registrations. TypeScript reports statically known invalid definitions and collisions, so Core does not repeat those checks at runtime. Dynamic recipe behavior, Extension injection, Context behavior, documentation sections, and argv input retain their runtime checks.
+Variadic builder methods accumulate across calls: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` preserve earlier registrations. Every definition rule has one home per path: TypeScript brands reject statically known invalid definitions and collisions at compile time, and dynamically assembled definitions (config-built flags, args, commands, and Extensions) fail loud with a `DEFINITION` error at the same composition points. Recipe behavior, Context lifecycle, documentation sections, and argv input retain their runtime checks.
 
 ## `.args(...defs)`
 
@@ -228,7 +228,7 @@ const app = new Crust("my-cli")
   });
 ```
 
-`uses` declarations are checked at composition time. Dependencies may appear in either order within one `.provide()` call; across calls, provide dependencies first. Core does not repeat these definition checks at runtime.
+`uses` declarations are checked at composition time. Dependencies may appear in either order within one `.provide()` call; across calls, provide dependencies first. Core does not repeat these dependency checks at runtime; dynamically assembled inputs fail lazily with `missing-context` on first access.
 
 A Context's top-level `flags` are installed as propagating flags on this builder and later-added descendants, without mutating the original definitions. Dependencies construct recursively on the first pull.
 
@@ -302,7 +302,7 @@ const app = new Crust("my-cli").add(
 );
 ```
 
-Statically known sibling name and alias collisions fail at `.add()` with `FIX_COMMAND_COLLISION`; alias shape violations fail at `defineCommand()` with `FIX_ALIAS_SHAPE`. Core does not repeat those checks during materialization. It does retain runtime checks that each recipe returns its seeded builder and does not register nested Extensions.
+Statically known sibling name and alias collisions fail at `.add()` with `FIX_COMMAND_COLLISION`; alias shape violations fail at `defineCommand()` with `FIX_ALIAS_SHAPE`. Dynamically assembled definitions fail loud instead: `.add()` rejects a duplicate sibling name with a `DEFINITION` error. Materialization also checks that each recipe returns its seeded builder, does not register nested Extensions, and does not provide a Context whose owned flags collide with an ancestor Context's.
 
 A definition can add other definitions. Context providers are inherited on the materialized command path; a nested definition accesses one by declaring its factory in `uses` and awaiting the corresponding `ctx` property.
 

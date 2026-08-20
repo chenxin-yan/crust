@@ -1,6 +1,7 @@
 import type { CommandDefinition } from "../command/crust.ts";
 import type { CommandSnapshot } from "../command/snapshot.ts";
 import type { ExtensionId } from "../identity.ts";
+import { assertDefinableFlag } from "../parsing/spellings.ts";
 import type {
 	CommandSection,
 	FlagDef,
@@ -303,6 +304,9 @@ export function defineExtension<
 	const ownedFlags: FlagsDef = {};
 	for (const def of config.flags ?? []) {
 		const { name: flagName, ...rest } = def;
+		// Validate before the record assignment: a `__proto__` key would be
+		// silently swallowed as the record's prototype.
+		assertDefinableFlag(flagName, rest as ExtensionFlagDef);
 		ownedFlags[flagName] = rest as ExtensionFlagDef;
 	}
 

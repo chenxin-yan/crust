@@ -72,6 +72,16 @@ describe("compile-time command validation", () => {
 		type Space = ValidateCommandConfig<"issue", { aliases: readonly ["my issue"] }>;
 		type Tab = ValidateCommandConfig<"issue", { aliases: readonly ["my\tissue"] }>;
 		type Newline = ValidateCommandConfig<"issue", { aliases: readonly ["my\nissue"] }>;
+		// .as() rename landing on an own alias: composition-site brand
+		type SelfAlias = ValidateCommandDefinitions<
+			readonly [{ name: "i"; _aliases?: readonly ["i", "iss"] }]
+		>;
+		type _selfAlias = Expect<
+			Equal<
+				SelfAlias[0]["FIX_ALIAS_SHAPE"],
+				'Command "i" must not list its own canonical name as an alias'
+			>
+		>;
 		type Carriage = ValidateCommandConfig<"issue", { aliases: readonly ["my\rissue"] }>;
 		type OwnName = ValidateCommandConfig<"issue", { aliases: readonly ["issue"] }>;
 

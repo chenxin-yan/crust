@@ -184,8 +184,10 @@ export function resolveCommand(command: CommandNode, argv: string[]): CommandRou
 			continue;
 		}
 
-		// Check if it matches a known subcommand by canonical name
-		if (candidate in subCommands && subCommands[candidate]) {
+		// Check if it matches a known subcommand by canonical name. hasOwn, not
+		// `in`: argv is untrusted, and `mycli constructor` would otherwise resolve
+		// an inherited Object.prototype member and crash routing with a TypeError.
+		if (Object.hasOwn(subCommands, candidate) && subCommands[candidate]) {
 			assertFlagsForwardable(subCommands[candidate], candidate);
 			current = subCommands[candidate];
 			path.push(candidate);
