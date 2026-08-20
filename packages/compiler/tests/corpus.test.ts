@@ -31,6 +31,7 @@ const fixtures = [
 	{ name: "bounds", args: ["Crust"] },
 	{ name: "identifiers", args: [] },
 	{ name: "indexed-length", args: ["Crust"] },
+	{ name: "parenthesized-indexed-length", args: ["Crust"] },
 ] as const;
 
 describe("compiler differential corpus", () => {
@@ -62,31 +63,38 @@ describe("compiler differential corpus", () => {
 		);
 	}
 
-	it.skipIf(goPath === null)(
-		"throws when indexed length reads undefined",
-		async () => {
-			const fixture = join(import.meta.dir, "fixtures", "unsafe-index-length.ts");
-			if (nodePath === null) throw new Error("Node is required as the corpus reference runtime");
+	for (const fixtureName of ["unsafe-index-length.ts", "escaped-undefined.ts"]) {
+		it.skipIf(goPath === null)(
+			`throws when ${fixtureName} reads undefined length`,
+			async () => {
+				const fixture = join(import.meta.dir, "fixtures", fixtureName);
+				if (nodePath === null) throw new Error("Node is required as the corpus reference runtime");
 
-			const binary = await compile(fixture);
-			try {
-				const compiled = run(binary);
-				const reference = run(nodePath, [fixture]);
-				expect(compiled.exitCode).toBe(reference.exitCode);
-				expect(new TextDecoder().decode(compiled.stderr)).toContain("TypeError");
-			} finally {
-				await rm(dirname(binary), { recursive: true, force: true });
-			}
-		},
-		120_000,
-	);
+				const binary = await compile(fixture);
+				try {
+					const compiled = run(binary);
+					const reference = run(nodePath, [fixture]);
+					expect(compiled.exitCode).toBe(reference.exitCode);
+					expect(new TextDecoder().decode(compiled.stderr)).toContain("TypeError");
+				} finally {
+					await rm(dirname(binary), { recursive: true, force: true });
+				}
+			},
+			120_000,
+		);
+	}
 
 	it("rejects direct array logging before emission", () => {
 		const fixture = join(import.meta.dir, "fixtures", "array-log.ts");
 		expect(() => lower(fixture)).toThrow("Unsupported TypeScript CallExpression");
 	});
 
-	for (const fixtureName of ["fractional-exit.ts", "non-finite-exit.ts"]) {
+	it("rejects default parameters before emission", () => {
+		const fixture = join(import.meta.dir, "fixtures", "default-parameter.ts");
+		expect(() => lower(fixture)).toThrow("Unsupported TypeScript Parameter");
+	});
+
+	for (const fixtureName of ["fractional-exit.ts", "non-finite-exit.ts", "large-exit.ts"]) {
 		it.skipIf(goPath === null)(
 			`rejects invalid process exit code from ${fixtureName}`,
 			async () => {
