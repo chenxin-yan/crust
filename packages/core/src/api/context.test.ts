@@ -685,6 +685,9 @@ describe("Context dependency runtime boundaries", () => {
 			uses: [logger],
 			hooks: { preRun: async ({ ctx }) => void (await ctx.logger) },
 		});
+		// .provide() is positional (flag scoping): the child added before it never
+		// inherits logger, so the hook's pull on that path fails loud lazily even
+		// though .extend() typechecked against the root's final Ctx.
 		const app = new Crust("cli").add(child).provide(logger()).extend(observer);
 
 		await expect(app.run(["child"])).rejects.toMatchObject({

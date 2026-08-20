@@ -45,6 +45,17 @@ describe("Crust constructor", () => {
 		});
 	});
 
+	it("rejects blank root command names", () => {
+		for (const name of ["", "   "]) {
+			expect(() => new Crust(name)).toThrow(
+				expect.objectContaining({
+					code: "DEFINITION",
+					details: { subject: "command", name, reason: "empty-name" },
+				}),
+			);
+		}
+	});
+
 	it("does not carry sibling-only metadata onto the root", async () => {
 		const snapshot = await new Crust("my-cli", {
 			// @ts-expect-error -- aliases belong to defineCommand() config

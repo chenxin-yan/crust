@@ -620,6 +620,15 @@ export class Crust<
 	 * @param meta - Optional root description, usage, and documentation sections.
 	 */
 	constructor(name: string, meta: RootCommandMeta = {}) {
+		// Runtime is the single home for this check: constructors cannot carry
+		// type parameters, so no brand can reject a statically known blank name.
+		if (name.trim() === "") {
+			throw new CrustError("DEFINITION", "Root command name must be a non-empty string", {
+				subject: "command",
+				name,
+				reason: "empty-name",
+			});
+		}
 		this._node = createCommandNode(name);
 		if (meta.description !== undefined) this._node.meta.description = meta.description;
 		if (meta.usage !== undefined) this._node.meta.usage = meta.usage;
@@ -739,6 +748,9 @@ export class Crust<
 		Tree,
 		MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>
 	> {
+		// Positional by design: providers reach only this node and children added
+		// afterwards (flag scoping; see definition.test.ts). Extension `provides`
+		// differ deliberately — they are application-wide and walk the whole tree.
 		const ownedFlags = { ...this._node.ownedFlags };
 		const effectiveFlags = { ...this._node.effectiveFlags };
 		const flagSpellings = cloneFlagSpellings(this._node.flagSpellings, effectiveFlags);
