@@ -636,11 +636,15 @@ describe("Crust .extend()", () => {
 	it("keeps the last Extension registration for a shared id", async () => {
 		const id = defineExtensionId("shared");
 		const calls: string[] = [];
-		const firstResource = defineContext("resource", () => {
-			calls.push("first:setup");
-			return { [Symbol.dispose]: () => calls.push("first:dispose") };
-		});
-		const secondResource = defineContext("resource", () => {
+		const firstResource = defineContext(
+			"firstResource",
+			{ flags: [{ name: "legacyProvider", type: "boolean" }] },
+			() => {
+				calls.push("first:setup");
+				return { [Symbol.dispose]: () => calls.push("first:dispose") };
+			},
+		);
+		const secondResource = defineContext("secondResource", () => {
 			calls.push("second:setup");
 			return { [Symbol.dispose]: () => calls.push("second:dispose") };
 		});
@@ -658,15 +662,19 @@ describe("Crust .extend()", () => {
 			sections: () => (calls.push("second:sections"), []),
 			hooks: { preRun: () => void calls.push("second:preRun") },
 		});
-		const base = new Crust("test")
-			.extend(first)
-			.action(async ({ ctx }) => void (await ctx.resource));
 		// Extension ids are branded strings rather than literal types, so id dedup is runtime-only.
-		const app = base.extend(second as never);
+		const app = new Crust("test")
+			.extend(first)
+			.extend(second)
+			.action(async ({ ctx }) => {
+				expect(Object.hasOwn(ctx, "firstResource")).toBe(false);
+				await ctx.secondResource;
+			});
 
 		const snapshot = await app.snapshot();
 		expect(snapshot.flags.current).toBeDefined();
 		expect(snapshot.flags.legacy).toBeUndefined();
+		expect(snapshot.flags.legacyProvider).toBeUndefined();
 		expect(snapshot.subCommands.current).toBeDefined();
 		expect(snapshot.subCommands.legacy).toBeUndefined();
 		await app.run([]);
