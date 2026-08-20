@@ -1,4 +1,4 @@
-import type { DefName, Overlap } from "./shared.ts";
+import type { DefName, EmptyLiteralNameBrand, Overlap } from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Compile-time validation
@@ -44,9 +44,7 @@ export type ValidateCommandConfig<Name extends string, C> = string extends Name
 type EmptyNameError = { readonly FIX_EMPTY_NAME: "Command name must be a non-empty string" };
 
 /** Brand a statically known empty command name while allowing widened and generic names. */
-export type EmptyNameBrand<Name extends string> = ({
-	readonly "": EmptyNameError;
-} & Record<string, unknown>)[Name];
+export type EmptyNameBrand<Name extends string> = EmptyLiteralNameBrand<Name, EmptyNameError>;
 
 /**
  * Brand a statically known empty command name at the composition site:

@@ -21,6 +21,11 @@ export type DefName<T> = T extends { name: infer N extends string }
  */
 export type Overlap<S, Existing extends string> = S & Existing;
 
+/** Brand a statically known empty literal while allowing widened and generic names. */
+export type EmptyLiteralNameBrand<Name extends string, Err> = ({
+	readonly "": Err;
+} & Record<string, unknown>)[Name];
+
 /**
  * Brand a definition whose custom parser can return a Promise — parse results
  * are consumed synchronously during argv parsing. `Extract` keeps the check

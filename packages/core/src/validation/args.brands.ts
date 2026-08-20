@@ -1,5 +1,11 @@
 import type { ArgsDef } from "../types.ts";
-import type { AsyncParseBrand, DefaultWithinChoicesBrand, DefName, Overlap } from "./shared.ts";
+import type {
+	AsyncParseBrand,
+	DefaultWithinChoicesBrand,
+	DefName,
+	EmptyLiteralNameBrand,
+	Overlap,
+} from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Compile-time validation
@@ -19,9 +25,7 @@ type DuplicateArgBrand<A, Existing extends string> =
 type EmptyArgNameError = { readonly FIX_EMPTY_NAME: "Argument names must be non-empty" };
 
 /** Brand a statically known empty argument name while allowing widened and generic names. */
-export type EmptyArgNameBrand<Name extends string> = ({
-	readonly "": EmptyArgNameError;
-} & Record<string, unknown>)[Name];
+export type EmptyArgNameBrand<Name extends string> = EmptyLiteralNameBrand<Name, EmptyArgNameError>;
 
 // An empty name renders as "<>" in help/snapshot labels and validation messages.
 type EmptyArgDefinitionNameBrand<A> = "" extends DefName<A> ? EmptyArgNameError : {};
