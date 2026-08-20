@@ -27,23 +27,27 @@ An inert `CommandDefinition` must first be added to a `Crust` application before
 
 ## `captureRun(app, path, input?)`
 
-Run an application with captured output and the selected action's inferred result. Each `ctx.stdout()`/`ctx.stderr()` call is one line (matching the terminal defaults), and the returned `stdout` and `stderr` fields join those lines with `"\n"`. On success, `result` contains the action's awaited return value; it is `undefined` when an Extension `preRun` hook finished first. If the application throws, `error` contains that value, `result` is `undefined`, and output written before the failure is retained.
+Run an application with captured output and the selected action's inferred result. Each `ctx.stdout()`/`ctx.stderr()` call is one line (matching the terminal defaults), and the returned `stdout` and `stderr` fields join those lines with `"\n"`. On success, the capture is the `result` branch holding the action's awaited return value; the value is `undefined` when an Extension `preRun` hook finished first. If the application throws, the capture is the `error` branch instead — it has no `result` property — and output written before the failure is retained. Narrow with `"error" in captured`; thrown values can be falsy, so property presence is the reliable discriminant.
 
 ```ts
 import { captureRun } from "@crustjs/testing";
 
-const result = await captureRun(app, ["build"], {
+const captured = await captureRun(app, ["build"], {
   args: { entry: "src/cli.ts" },
   flags: { minify: true },
 });
 
-if (result.error) throw result.error;
-console.log(result.stdout, result.result);
+if ("error" in captured) throw captured.error;
+console.log(captured.stdout, captured.result);
 ```
 
-The return type is `CapturedRun`:
+The return type is `CapturedRun`, a union of the success and failure branches:
 
-<auto-type-table path="../../../../../packages/testing/src/index.ts" name="CapturedRun" />
+```ts
+type CapturedRun<Result = unknown> =
+  | { readonly stdout: string; readonly stderr: string; readonly result: Result }
+  | { readonly stdout: string; readonly stderr: string; readonly error: unknown };
+```
 
 ## `captureExecute(app, argv)`
 

@@ -39,6 +39,7 @@ describe("captureRun", () => {
 		});
 
 		const captured = await captureRun(app, []);
+		if ("error" in captured) throw captured.error;
 		const result: { status: "ok" } | undefined = captured.result;
 		expect(result).toEqual({ status: "ok" });
 		expect(captured).toEqual({
@@ -56,11 +57,23 @@ describe("captureRun", () => {
 			throw error;
 		});
 
-		const result = await captureRun(app, []);
-		expect(result.stdout).toBe("before");
-		expect(result.stderr).toBe("problem");
-		expect(result.error).toBe(error);
-		expect(result.result).toBeUndefined();
+		const captured = await captureRun(app, []);
+		expect(captured.stdout).toBe("before");
+		expect(captured.stderr).toBe("problem");
+		if (!("error" in captured)) throw new Error("expected the failure branch");
+		expect(captured.error).toBe(error);
+		expect("result" in captured).toBe(false);
+	});
+
+	it("discriminates a falsy thrown value as the failure branch", async () => {
+		const app = new Crust("test-cli").action(() => {
+			// Deliberately falsy: the union's `"error" in` discriminant must survive it.
+			throw undefined;
+		});
+
+		const captured = await captureRun(app, []);
+		expect("error" in captured).toBe(true);
+		expect("result" in captured).toBe(false);
 	});
 
 	it("captures undefined when preRun finishes the invocation", async () => {

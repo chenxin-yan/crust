@@ -13,7 +13,7 @@ bun add -d @crustjs/testing
 
 ## Capture command output
 
-Use `captureRun()` for commands that write ordinary stdout or stderr or return a value. Each `ctx.stdout()`/`ctx.stderr()` call is captured as one line, joined with `"\n"` (matching the terminal defaults), and the action's awaited return value is available as the inferred `result`. `result` is `undefined` when an Extension `preRun` hook finishes first or the application throws; a thrown value is returned as `error` without discarding earlier output.
+Use `captureRun()` for commands that write ordinary stdout or stderr or return a value. Each `ctx.stdout()`/`ctx.stderr()` call is captured as one line, joined with `"\n"` (matching the terminal defaults). The capture is a union: on success it carries the action's awaited return value as the inferred `result` (`undefined` when an Extension `preRun` hook finishes first); when the application throws it carries the thrown value as `error` instead, without discarding earlier output. Narrow with `"error" in captured`.
 
 ```ts
 import { expect, test } from "bun:test";
@@ -22,11 +22,11 @@ import { captureRun } from "@crustjs/testing";
 import { app } from "./cli.ts";
 
 test("greets a name", async () => {
-  const result = await captureRun(app, [], { args: { name: "Ada" } });
+  const captured = await captureRun(app, [], { args: { name: "Ada" } });
 
-  expect(result.stdout).toBe("Hello, Ada!");
-  expect(result.stderr).toBe("");
-  expect(result.error).toBeUndefined();
+  expect(captured.stdout).toBe("Hello, Ada!");
+  expect(captured.stderr).toBe("");
+  expect("error" in captured).toBe(false);
 });
 ```
 

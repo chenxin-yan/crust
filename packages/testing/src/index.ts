@@ -23,12 +23,16 @@ type ShapeAtPath<App extends AnyCrust, Path extends CommandPath<AppTree<App>>> =
 	Path
 >;
 
-export interface CapturedRun<Result = unknown> {
-	readonly stdout: string;
-	readonly stderr: string;
-	readonly result?: Result;
-	readonly error?: unknown;
-}
+/**
+ * Result of {@link captureRun}: the success branch carries the action's typed
+ * result (present even when its value is `undefined`, e.g. after a `preRun`
+ * finish); the failure branch carries the thrown value instead. Narrow with
+ * `"error" in captured` — thrown values can be falsy, so property presence is
+ * the reliable discriminant.
+ */
+export type CapturedRun<Result = unknown> =
+	| { readonly stdout: string; readonly stderr: string; readonly result: Result }
+	| { readonly stdout: string; readonly stderr: string; readonly error: unknown };
 
 /** Run an application and capture its text output without throwing invocation errors. */
 export async function captureRun<
@@ -43,28 +47,24 @@ export async function captureRun<
 	// defaults are console.log/console.error), so join captured calls with "\n".
 	const stdoutLines: string[] = [];
 	const stderrLines: string[] = [];
-	let failed = false;
-	let result: unknown;
-	let error: unknown;
 
 	try {
 		const [input] = args;
-		result = await app.run(path as never, input as never, {
+		// The `as never` path/input erasure in this call loses the typed link to
+		// the selected shape, so restore it once here.
+		const result = (await app.run(path as never, input as never, {
 			stdout: (text) => {
 				stdoutLines.push(text);
 			},
 			stderr: (text) => {
 				stderrLines.push(text);
 			},
-		});
-	} catch (caught) {
-		failed = true;
-		error = caught;
+		})) as ShapeAtPath<App, Path>["result"];
+		return { stdout: stdoutLines.join("\n"), stderr: stderrLines.join("\n"), result };
+	} catch (error) {
+		// Output written before the failure is retained.
+		return { stdout: stdoutLines.join("\n"), stderr: stderrLines.join("\n"), error };
 	}
-
-	const stdout = stdoutLines.join("\n");
-	const stderr = stderrLines.join("\n");
-	return failed ? { stdout, stderr, error } : { stdout, stderr, result };
 }
 
 /** Minimal structural surface of `execute()` invoked by {@link captureExecute}. */
