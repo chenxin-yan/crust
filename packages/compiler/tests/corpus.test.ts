@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { compile } from "../src/index.js";
 
 const goPath = Bun.which("go");
+const nodePath = Bun.which("node");
 if (goPath === null) {
 	console.warn(
 		"[compiler corpus] SKIPPED: Go is not on PATH; native differential tests did not run",
@@ -44,12 +45,11 @@ describe("compiler differential corpus", () => {
 			`matches Node for ${name}`,
 			async () => {
 				const fixture = join(import.meta.dir, "fixtures", `${name}.ts`);
-				const node = Bun.which("node");
-				if (node === null) throw new Error("Node is required as the corpus reference runtime");
+				if (nodePath === null) throw new Error("Node is required as the corpus reference runtime");
 
 				const binary = await compile(fixture);
 				try {
-					expect(run(binary, args)).toEqual(run(node, [fixture, ...args]));
+					expect(run(binary, args)).toEqual(run(nodePath, [fixture, ...args]));
 				} finally {
 					await rm(dirname(binary), { recursive: true, force: true });
 				}
