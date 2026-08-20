@@ -136,7 +136,7 @@ Snapshots omit schemas and parse functions. `URL` defaults become strings, and a
 
 ## Typed invocation
 
-Types inferred from the application definition that back [`run(path, input?, io?)`](/docs/api/crust#runpath-input-io) and the [`@crustjs/testing`](/docs/modules/testing) helpers. `CommandTree` is the compile-time tree accumulated by `.add()`; `CommandPath` enumerates every valid path through it (including the root path `[]`); `CommandShapeAt` resolves the `CommandShape` a path selects; and `RunInput` is the structured `args`/`flags`/`raw` input for that shape, built from the pre-parse `InputArgs` and `InputFlags` value types. `RunInputArguments` and `RunArguments` are the tuple types that make `input` optional when the selected command requires nothing. `AnyCrust` accepts any fully-built application.
+Types inferred from the application definition that back [`run(path, input?, io?)`](/docs/api/crust#runpath-input-io) and the [`@crustjs/testing`](/docs/modules/testing) helpers. `CommandTree` is the compile-time tree accumulated by `.add()`; `CommandPath` enumerates every valid path through it (including the root path `[]`); `CommandShapeAt` resolves the `CommandShape` a path selects; and `RunInput` is the structured `args`/`flags`/`raw` input for that shape, built from the pre-parse `InputArgs` and `InputFlags` value types. `RunInputArguments` and `RunArguments` are the tuple types that make `input` optional when the selected command requires nothing; `RunOutcome` is the status-discriminated value `run()` resolves to. `AnyCrust` accepts any fully-built application.
 
 ```ts
 import type { CommandPath, CommandShapeAt, RunInput } from "@crustjs/core";

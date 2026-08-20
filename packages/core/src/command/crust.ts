@@ -10,6 +10,7 @@ import type {
 } from "../api/context.ts";
 import type { Extension, ExtensionsProvidesOutput } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
+import type { ExtensionId } from "../identity.ts";
 import { addFlagSpellingEntries, cloneFlagSpellings } from "../parsing/spellings.ts";
 import type {
 	ArgDef,
@@ -109,6 +110,11 @@ export interface CommandShape<
 	readonly children: Children;
 	readonly result?: Result;
 }
+
+/** Result of a successful programmatic invocation. */
+export type RunOutcome<Result> =
+	| { readonly status: "completed"; readonly result: Result }
+	| { readonly status: "finished"; readonly by: ExtensionId };
 
 /** Compile-time command tree accumulated by `.add()`. */
 export type CommandTree = Record<string, CommandShape>;
@@ -1065,10 +1071,11 @@ export class Crust<
 	 * Unlike {@link Crust.execute}, `run()` throws the original definition,
 	 * parse, Context, or action failure without rendering it (Extension
 	 * `onError` hooks are a terminal presentation concern and never run
-	 * here) and without changing process status. It resolves with the selected
-	 * action's return value after successful cleanup. If an Extension `preRun`
-	 * hook finishes the invocation before the action runs, it resolves to
-	 * `undefined`. Prompt cancellation surfaces as a standard `AbortError`.
+	 * here) and without changing process status. It resolves to a `completed`
+	 * outcome carrying the selected action's return value after successful
+	 * cleanup, or a `finished` outcome naming the Extension whose `preRun`
+	 * hook ended the invocation first. Prompt cancellation surfaces as a
+	 * standard `AbortError`.
 	 *
 	 * @param path - Typed path to the command to invoke (`[]` selects the root)
 	 * @param input - Structured argument, flag, and raw values
@@ -1078,7 +1085,7 @@ export class Crust<
 	async run<const Path extends CommandPath<Tree>>(
 		path: Path,
 		...args: RunArguments<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>>
-	): Promise<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"] | undefined> {
+	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>> {
 		const structuredInput = (args[0] ?? {}) as {
 			readonly args?: object;
 			readonly flags?: object;
@@ -1087,9 +1094,9 @@ export class Crust<
 		const io = args[1] as Partial<InvocationIO> | undefined;
 		const argv = serializeRunArgv(this._node, path, structuredInput);
 		// Programmatic calls preserve raw failures and never change process status.
-		return (await runInvocation(this._node, argv, io, materializeCommandDefinition)) as
-			| CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]
-			| undefined;
+		return (await runInvocation(this._node, argv, io, materializeCommandDefinition)) as RunOutcome<
+			CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]
+		>;
 	}
 
 	/**

@@ -39,12 +39,13 @@ describe("captureRun", () => {
 		});
 
 		const captured = await captureRun(app, []);
-		if ("error" in captured) throw captured.error;
+		if (captured.status !== "completed") throw new Error("expected a completed run");
 		const result: { status: "ok" } | undefined = captured.result;
 		expect(result).toEqual({ status: "ok" });
 		expect(captured).toEqual({
 			stdout: "first\nsecond",
 			stderr: "warning",
+			status: "completed",
 			result: { status: "ok" },
 		});
 	});
@@ -60,32 +61,29 @@ describe("captureRun", () => {
 		const captured = await captureRun(app, []);
 		expect(captured.stdout).toBe("before");
 		expect(captured.stderr).toBe("problem");
-		if (!("error" in captured)) throw new Error("expected the failure branch");
+		if (captured.status !== "failed") throw new Error("expected the failed branch");
 		expect(captured.error).toBe(error);
-		expect("result" in captured).toBe(false);
 	});
 
 	it("discriminates a falsy thrown value as the failure branch", async () => {
 		const app = new Crust("test-cli").action(() => {
-			// Deliberately falsy: the union's `"error" in` discriminant must survive it.
 			throw undefined;
 		});
 
 		const captured = await captureRun(app, []);
-		expect("error" in captured).toBe(true);
-		expect("result" in captured).toBe(false);
+		expect(captured.status).toBe("failed");
+		if (captured.status === "failed") expect(captured.error).toBeUndefined();
 	});
 
-	it("captures undefined when preRun finishes the invocation", async () => {
-		const gate = defineExtension(defineExtensionId("gate"), {
+	it("captures the Extension that finishes the invocation", async () => {
+		const gateId = defineExtensionId("gate");
+		const gate = defineExtension(gateId, {
 			hooks: { preRun: (ctx) => ctx.finish() },
 		});
 		const app = new Crust("test-cli").extend(gate).action(() => ({ ran: true }));
 
 		const captured = await captureRun(app, []);
-		expect(captured).toEqual({ stdout: "", stderr: "", result: undefined });
-		// toEqual cannot distinguish a missing key from present-undefined; pin the success-branch contract.
-		expect("result" in captured).toBe(true);
+		expect(captured).toEqual({ stdout: "", stderr: "", status: "finished", by: gateId });
 	});
 });
 

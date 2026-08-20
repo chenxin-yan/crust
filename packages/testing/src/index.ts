@@ -4,8 +4,10 @@ import type {
 	AnyCrust,
 	CommandPath,
 	CommandShapeAt,
+	ExtensionId,
 	InvocationIO,
 	RunInputArguments,
+	RunOutcome,
 } from "@crustjs/core";
 import { type ProgressSink, withProgressSink } from "@crustjs/progress";
 import { withPromptIO } from "@crustjs/prompts";
@@ -24,15 +26,18 @@ type ShapeAtPath<App extends AnyCrust, Path extends CommandPath<AppTree<App>>> =
 >;
 
 /**
- * Result of {@link captureRun}: the success branch carries the action's typed
- * result (present even when its value is `undefined`, e.g. after a `preRun`
- * finish); the failure branch carries the thrown value instead. Narrow with
- * `"error" in captured` — thrown values can be falsy, so property presence is
- * the reliable discriminant.
+ * Result of {@link captureRun}. Completed runs carry the selected action's
+ * typed result, finished runs name the finishing Extension, and failed runs
+ * carry the thrown value. Narrow with the `status` discriminant.
  */
-export type CapturedRun<Result = unknown> =
-	| { readonly stdout: string; readonly stderr: string; readonly result: Result }
-	| { readonly stdout: string; readonly stderr: string; readonly error: unknown };
+export type CapturedRun<Result = unknown> = {
+	readonly stdout: string;
+	readonly stderr: string;
+} & (
+	| { readonly status: "completed"; readonly result: Result }
+	| { readonly status: "finished"; readonly by: ExtensionId }
+	| { readonly status: "failed"; readonly error: unknown }
+);
 
 /** Run an application and capture its text output without throwing invocation errors. */
 export async function captureRun<
@@ -52,18 +57,23 @@ export async function captureRun<
 		const [input] = args;
 		// The `as never` path/input erasure in this call loses the typed link to
 		// the selected shape, so restore it once here.
-		const result = (await app.run(path as never, input as never, {
+		const outcome = (await app.run(path as never, input as never, {
 			stdout: (text) => {
 				stdoutLines.push(text);
 			},
 			stderr: (text) => {
 				stderrLines.push(text);
 			},
-		})) as ShapeAtPath<App, Path>["result"];
-		return { stdout: stdoutLines.join("\n"), stderr: stderrLines.join("\n"), result };
+		})) as RunOutcome<ShapeAtPath<App, Path>["result"]>;
+		return { stdout: stdoutLines.join("\n"), stderr: stderrLines.join("\n"), ...outcome };
 	} catch (error) {
 		// Output written before the failure is retained.
-		return { stdout: stdoutLines.join("\n"), stderr: stderrLines.join("\n"), error };
+		return {
+			stdout: stdoutLines.join("\n"),
+			stderr: stderrLines.join("\n"),
+			status: "failed",
+			error,
+		};
 	}
 }
 
@@ -161,13 +171,15 @@ export function runInteractive<App extends AnyCrust, const Path extends CommandP
 	const [input] = args;
 	const done = withProgressSink(sink, () =>
 		withPromptIO(harness.io, () =>
-			app.run(path as never, input as never, {
-				stdout: () => {},
-				stderr: (text) => {
-					// Line-oriented like core's console.error default.
-					output.write(`${text}\n`);
-				},
-			}),
+			app
+				.run(path as never, input as never, {
+					stdout: () => {},
+					stderr: (text) => {
+						// Line-oriented like core's console.error default.
+						output.write(`${text}\n`);
+					},
+				})
+				.then(() => {}),
 		),
 	);
 

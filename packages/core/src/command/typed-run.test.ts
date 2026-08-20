@@ -4,7 +4,7 @@ import type { StandardSchema } from "@crustjs/utils/schema";
 
 import { defineExtension } from "../api/extension.ts";
 import { defineExtensionId } from "../identity.ts";
-import type { CommandPath, CommandShapeAt, RunInput } from "./crust.ts";
+import type { CommandPath, CommandShapeAt, RunInput, RunOutcome } from "./crust.ts";
 import { Crust, defineCommand } from "./crust.ts";
 
 type Expect<T extends true> = T;
@@ -20,32 +20,38 @@ describe("typed programmatic invocation", () => {
 
 		const rootResult = app.run([]);
 		const childResult = app.run(["inspect"]);
-		type _root = Expect<Equal<typeof rootResult, Promise<{ kind: "root" } | undefined>>>;
+		type _root = Expect<
+			Equal<typeof rootResult, Promise<RunOutcome<{ kind: "root" } | undefined>>>
+		>;
 		type _child = Expect<
-			Equal<typeof childResult, Promise<{ kind: "child"; size: number } | undefined>>
+			Equal<typeof childResult, Promise<RunOutcome<{ kind: "child"; size: number } | undefined>>>
 		>;
 
-		expect(await rootResult).toEqual({ kind: "root" });
-		expect(await childResult).toEqual({ kind: "child", size: 42 });
+		expect(await rootResult).toEqual({ status: "completed", result: { kind: "root" } });
+		expect(await childResult).toEqual({
+			status: "completed",
+			result: { kind: "child", size: 42 },
+		});
 	});
 
 	it("awaits async action results", async () => {
 		const app = new Crust("cli").action(async () => ({ ok: true as const }));
 		const pending = app.run([]);
-		type _result = Expect<Equal<typeof pending, Promise<{ ok: true } | undefined>>>;
+		type _result = Expect<Equal<typeof pending, Promise<RunOutcome<{ ok: true } | undefined>>>>;
 
-		expect(await pending).toEqual({ ok: true });
+		expect(await pending).toEqual({ status: "completed", result: { ok: true } });
 	});
 
-	it("returns undefined when preRun finishes before the action", async () => {
-		const gate = defineExtension(defineExtensionId("gate"), {
+	it("returns the finishing Extension when preRun finishes before the action", async () => {
+		const gateId = defineExtensionId("gate");
+		const gate = defineExtension(gateId, {
 			hooks: { preRun: (ctx) => ctx.finish() },
 		});
 		const app = new Crust("cli").extend(gate).action(() => ({ ran: true as const }));
 		const pending = app.run([]);
-		type _result = Expect<Equal<typeof pending, Promise<{ ran: true } | undefined>>>;
+		type _result = Expect<Equal<typeof pending, Promise<RunOutcome<{ ran: true } | undefined>>>>;
 
-		expect(await pending).toBeUndefined();
+		expect(await pending).toEqual({ status: "finished", by: gateId });
 	});
 
 	it("serializes structured input through routing and the parser", async () => {
@@ -143,7 +149,10 @@ describe("typed programmatic invocation", () => {
 	it("rejects unserializable JSON input values", async () => {
 		const app = new Crust("cli").flags({ name: "config", type: "json" }).action(() => {});
 
-		await expect(app.run([], { flags: { config: undefined } })).resolves.toBeUndefined();
+		await expect(app.run([], { flags: { config: undefined } })).resolves.toEqual({
+			status: "completed",
+			result: undefined,
+		});
 		await expect(app.run([], { flags: { config: (() => {}) as never } })).rejects.toMatchObject({
 			code: "PARSE",
 			details: { reason: "unserializable-json" },

@@ -330,14 +330,14 @@ The `CommandSnapshot` type is exported from `@crustjs/core` and re-exported from
 ## `.run(path, input?, io?)`
 
 ```ts
-run(path, input?, io?): Promise<R | undefined>
+run(path, input?, io?): Promise<RunOutcome<R>>
 ```
 
 Invokes an application programmatically with a command path and structured input inferred from the application. Editors complete command names at each path level plus the selected command's argument and flag names. Required inputs, input value types, and the selected action's awaited return type are inferred by TypeScript.
 
 ```ts
 const stdout: string[] = [];
-const result = await app.run(
+const outcome = await app.run(
   ["greet"],
   { args: { name: "Ada" }, flags: { loud: true } },
   {
@@ -345,8 +345,13 @@ const result = await app.run(
     stderr: (text) => stdout.push(text),
   },
 );
-// result is the awaited return value of the "greet" action, or undefined
-// when an Extension preRun hook finished the invocation first.
+if (outcome.status === "completed") {
+  // outcome.result is the awaited return value of the "greet" action.
+  console.log(outcome.result);
+} else {
+  // outcome.by identifies the Extension whose preRun hook finished first.
+  console.log(`Finished by ${outcome.by}`);
+}
 ```
 
 Structured values are serialized to argv and pass through the normal router, parser, schema, Context, and Command Action pipeline. When `io` contains at least one callback, the resolved callbacks are also ambient for the full invocation: progress indicators and prompt output default to the injected `stderr` callback. Progress uses non-TTY static lines, and prompt input remains a separate `PromptIO` concern.
@@ -359,7 +364,7 @@ await app.run(["exec"], { args: { command: "lint" }, raw: ["--fix", "src"] });
 
 Positional values beginning with `-`, or equal to a subcommand name or alias of the selected command, cannot be represented through `run()` and throw a `PARSE` error; use `execute({ argv })` when testing raw terminal syntax.
 
-`run()` resolves with the selected Command Action's awaited return value after successful cleanup. If an Extension `preRun` hook finishes the invocation before the action runs, `run()` resolves to `undefined` as normal control flow. It does not render errors, run Extension `onError` hooks, or change `process.exitCode`. Definition, parse, Context, Command Action, and cancellation failures are thrown unchanged.
+`run()` resolves to a `RunOutcome`: `{ status: "completed", result }` carries the selected Command Action's awaited return value after successful cleanup (including `undefined` from actionless or `void` actions), while `{ status: "finished", by }` identifies the Extension whose `preRun` hook finished the invocation first. It does not render errors, run Extension `onError` hooks, or change `process.exitCode`. Definition, parse, Context, Command Action, and cancellation failures are thrown unchanged.
 
 Extension-contributed commands and flags are runtime-dynamic and therefore do not appear in the typed command path or input: an Extension flag passed to `run()` throws a `PARSE` error. Invoke those through `execute({ argv })`.
 
