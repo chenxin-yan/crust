@@ -26,10 +26,22 @@ interface BundleFrontmatter {
 	description: string | null;
 }
 
-type FrontmatterProbe = {
-	readonly name?: unknown;
-	readonly description?: unknown;
-};
+/**
+ * Parses one single-line YAML scalar: double-quoted, single-quoted, or plain
+ * (trailing ` # comment` stripped per YAML's whitespace-then-hash rule).
+ *
+ * Known ceiling: double-quote escapes are unwrapped literally (`\\n` becomes
+ * `n`, not a newline) and multi-line scalars are not supported — name and
+ * description are one-line fields in practice. Grow a real YAML dep if that
+ * ever stops holding.
+ */
+function parseScalar(raw: string): string {
+	const doubleQuoted = /^"((?:[^"\\]|\\.)*)"/.exec(raw);
+	if (doubleQuoted) return doubleQuoted[1]!.replace(/\\(.)/g, "$1");
+	const singleQuoted = /^'((?:[^']|'')*)'/.exec(raw);
+	if (singleQuoted) return singleQuoted[1]!.replaceAll("''", "'");
+	return raw.replace(/(^|\s)#.*$/, "").trim();
+}
 
 /** Reads top-level `name` and `description` from leading YAML frontmatter. */
 export function probeFrontmatter(content: string): BundleFrontmatter {
@@ -44,17 +56,12 @@ export function probeFrontmatter(content: string): BundleFrontmatter {
 	const closing = lines.findIndex((line, index) => index > opening && /^---\s*$/.test(line));
 	if (closing === -1) return result;
 
-	try {
-		const parsed = Bun.YAML.parse(lines.slice(opening + 1, closing).join("\n"));
-		if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return result;
-		const frontmatter = parsed as FrontmatterProbe;
-		return {
-			name: frontmatter.name == null ? null : String(frontmatter.name),
-			description: frontmatter.description == null ? null : String(frontmatter.description),
-		};
-	} catch {
-		return result;
+	for (const line of lines.slice(opening + 1, closing)) {
+		// Unindented match only — nested keys (e.g. under `metadata:`) don't count.
+		const match = /^(name|description):\s*(.*)$/.exec(line);
+		if (match) result[match[1] as keyof BundleFrontmatter] = parseScalar(match[2]!);
 	}
+	return result;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

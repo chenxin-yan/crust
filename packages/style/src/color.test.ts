@@ -12,8 +12,6 @@ import type { ColorString } from "./types.ts";
 // Syntax-hint literals and filled-in functional notation are assignable.
 "rgb()" satisfies ColorString;
 "rgb(0, 128, 255)" satisfies ColorString;
-"oklch(70% 0.1 200)" satisfies ColorString;
-"color-mix(in srgb, red, blue)" satisfies ColorString;
 "#ff0000" satisfies ColorString;
 // Dynamic strings still type-check via the open string fallback.
 "dynamic" as string satisfies ColorString;
@@ -35,22 +33,28 @@ describe("fg", () => {
 		expect(fg("hi", "rebeccapurple")).toBe("\x1b[38;2;102;51;153mhi\x1b[39m");
 	});
 
-	it("accepts `hsl()` strings", () => {
-		// hsl(0, 100%, 50%) === pure red
-		expect(fg("x", "hsl(0, 100%, 50%)")).toBe("\x1b[38;2;255;0;0mx\x1b[39m");
+	it("rejects unsupported CSS functional notation", () => {
+		for (const input of ["hsl(0, 100%, 50%)", "lab(50% 30 -20)", "color-mix(in srgb, red, blue)"]) {
+			expect(() => fg("x", input)).toThrow(TypeError);
+		}
 	});
 
 	it("accepts `rgb()` strings", () => {
 		expect(fg("x", "rgb(0, 128, 255)")).toBe("\x1b[38;2;0;128;255mx\x1b[39m");
+		expect(fg("x", "rgb(0 128 255)")).toBe("\x1b[38;2;0;128;255mx\x1b[39m");
 	});
 
-	it("accepts `color-mix()` strings", () => {
-		// color-mix(in srgb, red, blue) === purple #800080
-		expect(fg("x", "color-mix(in srgb, red, blue)")).toBe("\x1b[38;2;128;0;128mx\x1b[39m");
+	it("rejects mixed rgb() separators", () => {
+		for (const input of ["rgb(1, 2 3)", "rgb(1 2, 3)"]) {
+			expect(() => fg("x", input)).toThrow(TypeError);
+		}
 	});
 
-	it("accepts `{ r, g, b }` objects", () => {
-		expect(fg("x", { r: 255, g: 0, b: 0 })).toBe("\x1b[38;2;255;0;0mx\x1b[39m");
+	it("rejects legacy packed, object, alpha, and 8-digit inputs", () => {
+		for (const input of [0xff0000, { r: 255, g: 0, b: 0 }, [255, 0, 0, 128], "#ff000080"]) {
+			// @ts-expect-error — legacy inputs are intentionally unsupported.
+			expect(() => fg("x", input)).toThrow(TypeError);
+		}
 	});
 
 	it("throws TypeError with quoted input embedded in message", () => {
@@ -60,10 +64,6 @@ describe("fg", () => {
 	it("throws TypeError for `null`", () => {
 		// @ts-expect-error — runtime contract test for unsupported inputs
 		expect(() => fg("x", null)).toThrow(TypeError);
-	});
-
-	it("applies truecolor foreground from numeric input", () => {
-		expect(fg("red", 0xff0000)).toBe("\x1b[38;2;255;0;0mred\x1b[39m");
 	});
 
 	it("applies truecolor foreground from `[r, g, b]`", () => {
@@ -143,15 +143,19 @@ describe("edge cases", () => {
 		expect(fg("x", "#aBc")).toBe("\x1b[38;2;170;187;204mx\x1b[39m");
 	});
 
-	it("8-digit hex (with alpha) is accepted; alpha is not encoded into ansi-16m", () => {
-		// Bun.color drops alpha when emitting ansi-16m. The fg open should still
-		// be a valid 24-bit foreground sequence.
-		expect(fg("x", "#ff000080")).toBe("\x1b[38;2;255;0;0mx\x1b[39m");
-	});
-
 	it("boundary RGB values (0 and 255) round-trip", () => {
 		expect(fg("x", [0, 0, 0])).toBe("\x1b[38;2;0;0;0mx\x1b[39m");
 		expect(fg("x", [255, 255, 255])).toBe("\x1b[38;2;255;255;255mx\x1b[39m");
+	});
+
+	it("rejects out-of-range rgb() channels", () => {
+		expect(() => fg("x", "rgb(300, 0, 0)")).toThrow(TypeError);
+		expect(() => fg("x", "rgb(0 0 256)")).toThrow(TypeError);
+	});
+
+	it("rejects 4- and 8-digit hex", () => {
+		expect(() => fg("x", "#f00a")).toThrow(TypeError);
+		expect(() => fg("x", "#ff000080")).toThrow(TypeError);
 	});
 });
 
@@ -160,21 +164,24 @@ describe("edge cases", () => {
 // ────────────────────────────────────────────────────────────────────────────
 //
 // fg/bg accept an optional `depth` parameter that selects the matching
-// `Bun.color()` format. We assert against `Bun.color()`'s output directly
-// rather than hard-coded escape strings so the suite stays tolerant of
-// Bun version-to-version output drift (especially in `ansi-16` mode).
+// terminal color format.
 
 describe("fg — depth fallback", () => {
 	it('depth="truecolor" emits ansi-16m (default)', () => {
-		const expected = `${Bun.color("#ff0000", "ansi-16m")}hello\x1b[39m`;
+		const expected = "\x1b[38;2;255;0;0mhello\x1b[39m";
 		expect(fg("hello", "#ff0000", "truecolor")).toBe(expected);
-		// Default behavior matches `"truecolor"`.
 		expect(fg("hello", "#ff0000")).toBe(expected);
 	});
 
-	it('depth="256" emits ansi-256 sequence from Bun.color', () => {
-		const open = Bun.color("#ff0000", "ansi-256");
-		expect(fg("hello", "#ff0000", "256")).toBe(`${open}hello\x1b[39m`);
+	it('depth="256" emits ansi-256 sequence', () => {
+		expect(fg("hello", "#ff0000", "256")).toBe("\x1b[38;5;196mhello\x1b[39m");
+	});
+
+	it('depth="256" grayscale stays in range and near-grays use the ramp', () => {
+		// Light grays must not round past the palette (index ≤ 255).
+		expect(fg("x", [244, 244, 244], "256")).toBe("\x1b[38;5;255mx\x1b[39m");
+		// Near-gray picks the closer grayscale entry over a distant cube entry.
+		expect(fg("x", [120, 121, 122], "256")).toBe("\x1b[38;5;243mx\x1b[39m");
 	});
 
 	it('depth="16" quantizes to a standard 16-color SGR (no Bun.color ansi-16)', () => {
@@ -209,9 +216,7 @@ describe("fg — depth fallback", () => {
 	});
 
 	it('depth="16" output contains no control characters in SGR params (regression)', () => {
-		// Bun.color(_, "ansi-16") emits a literal TAB (0x09) where a numeric
-		// SGR parameter belongs in some Bun versions (oven-sh/bun#22161). Our
-		// quantizer must never produce one.
+		// The quantizer must never put control characters in an SGR parameter.
 		for (const input of ["#ff0000", "#00ff00", "#abcdef", "rebeccapurple"]) {
 			const out = fg("x", input, "16");
 			expect(/[\t\n\r\v\f]/.test(out)).toBe(false);
@@ -240,15 +245,11 @@ describe("fg — depth fallback", () => {
 
 describe("bg — depth fallback", () => {
 	it('depth="truecolor" emits ansi-16m background', () => {
-		const fgOpen = Bun.color("#00ff88", "ansi-16m") as string;
-		const expectedOpen = fgOpen.replace("\x1b[38;", "\x1b[48;");
-		expect(bg("hello", "#00ff88", "truecolor")).toBe(`${expectedOpen}hello\x1b[49m`);
+		expect(bg("hello", "#00ff88", "truecolor")).toBe("\x1b[48;2;0;255;136mhello\x1b[49m");
 	});
 
 	it('depth="256" emits ansi-256 background (38; → 48; swap)', () => {
-		const fgOpen = Bun.color("#00ff88", "ansi-256") as string;
-		const expectedOpen = fgOpen.replace("\x1b[38;", "\x1b[48;");
-		expect(bg("hello", "#00ff88", "256")).toBe(`${expectedOpen}hello\x1b[49m`);
+		expect(bg("hello", "#00ff88", "256")).toBe("\x1b[48;5;48mhello\x1b[49m");
 		// Invariant: must end in bg close, must start with bg SGR introducer.
 		expect(bg("hello", "#00ff88", "256").startsWith("\x1b[48;")).toBe(true);
 	});

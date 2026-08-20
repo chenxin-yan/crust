@@ -1,0 +1,17 @@
+{
+	"nodeModulesDir": "manual",
+	"imports": {
+		"@crustjs/core": "../../packages/core/dist/index.js",
+		"@crustjs/core/tooling": "../../packages/core/dist/tooling.js",
+		"@crustjs/create": "../../packages/create/dist/index.js",
+		"@crustjs/extensions": "../../packages/extensions/dist/index.js",
+		"@crustjs/man": "../../packages/man/dist/index.js",
+		"@crustjs/progress": "../../packages/progress/dist/index.js",
+		"@crustjs/prompts": "../../packages/prompts/dist/index.js",
+		"@crustjs/prompts/testing": "../../packages/prompts/dist/testing.js",
+		"@crustjs/skills": "../../packages/skills/dist/index.js",
+		"@crustjs/store": "../../packages/store/dist/index.js",
+		"@crustjs/style": "../../packages/style/dist/index.js",
+		"@crustjs/testing": "../../packages/testing/dist/index.js"
+	}
+}

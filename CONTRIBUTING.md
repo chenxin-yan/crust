@@ -12,6 +12,7 @@ Thanks for contributing to Crust. This repository is a Bun-native, TypeScript-fi
 
 - [Bun](https://bun.sh) `1.3.14`
 - Node.js `^22.18 || >=24.11` (package builds run tsdown under Node, which enforces this exact range — Node 23.x and 24.0–24.10 are rejected)
+- [Deno](https://deno.com) `>=2.8` (only needed to run the cross-runtime smoke suite locally; CI runs it on every PR)
 - Git
 
 ## Repository Layout
@@ -38,6 +39,15 @@ bun run format
 bun run check
 bun run check:types
 bun run test
+```
+
+The cross-runtime smoke suite (built distributions executed under Bun, Node,
+and Deno) runs in CI on every PR. To run it locally after `bun run build`:
+
+```sh
+bun scripts/smoke-runtimes/smoke.mjs
+node scripts/smoke-runtimes/smoke.mjs
+deno run --allow-env --allow-read --allow-write --allow-run --config scripts/smoke-runtimes/deno.json scripts/smoke-runtimes/smoke.mjs
 ```
 
 Before opening a pull request, always run:

@@ -11,7 +11,7 @@ import { publishCommand } from "./commands/publish.ts";
  * When invoked without a subcommand, displays help listing available commands.
  *
  * Subcommands:
- * - `crust build` - Compile your CLI to a standalone Bun executable
+ * - `crust build` - Compile your CLI to a standalone executable (Bun, Deno, or Node)
  * - `crust publish` - Publish staged npm packages in manifest order
  */
 export const crustApp = crustBase.add(buildCommand, publishCommand);

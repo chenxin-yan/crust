@@ -5,9 +5,15 @@ Scaffold a new [Crust](https://crustjs.com) CLI project in seconds.
 ## Usage
 
 ```sh
-bunx create-crust my-cli
+npm create crust@latest my-cli
 # or
-bun create crust my-cli
+pnpm create crust@latest my-cli
+# or
+bunx create-crust@latest my-cli
+# or
+bun create crust@latest my-cli
+# or
+deno run -A npm:create-crust@latest my-cli
 ```
 
 This prompts for the project directory, distribution mode (standalone binaries recommended, or Bun runtime package), whether to install dependencies, and optionally whether to initialize a git repository. The package name is inferred from the directory name.

@@ -1,3 +1,5 @@
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -147,17 +149,16 @@ export function buildPublishCommand(args: {
 }
 
 async function defaultSpawnPublish(dir: string, command: string[]): Promise<number> {
-	const proc = Bun.spawn(command, {
+	const proc = spawn(command[0]!, command.slice(1), {
 		cwd: dir,
 		env: {
 			...process.env,
 			BUN_BE_BUN: "1",
 		},
-		stdout: "inherit",
-		stderr: "inherit",
+		stdio: "inherit",
 	});
 
-	return proc.exited;
+	return once(proc, "close").then(([code]) => code ?? 1);
 }
 
 export async function publishStagedPackages(

@@ -9,7 +9,7 @@ export type { ColumnAlignment, TableOptions } from "./blocks/tables.ts";
 export { table } from "./blocks/tables.ts";
 export { createStyle, style } from "./createStyle.ts";
 export type { HyperlinkOptions } from "./hyperlinks.ts";
-export type { NamedColor } from "./namedColors.ts";
+export type { NamedColor } from "./namedColorValues.ts";
 export {
 	bg,
 	// Background
@@ -58,6 +58,7 @@ export {
 	yellow,
 } from "./runtimeExports.ts";
 // Text utilities
+export { stringWidth } from "./stringWidth.ts";
 export { center, padEnd, padStart } from "./text/pad.ts";
 // Capability detection
 export type {

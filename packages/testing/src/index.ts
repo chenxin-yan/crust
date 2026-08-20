@@ -1,3 +1,5 @@
+import { setTimeout } from "node:timers/promises";
+
 import type {
 	AnyCrust,
 	CommandPath,
@@ -201,7 +203,7 @@ export function runInteractive<App extends AnyCrust, const Path extends CommandP
 						`waitFor(${matcher}) timed out after ${timeoutMs}ms. Screen:\n${harness.screen()}`,
 					);
 				}
-				await Bun.sleep(1);
+				await setTimeout(1);
 			}
 		},
 		type: (text) => harness.type(text),

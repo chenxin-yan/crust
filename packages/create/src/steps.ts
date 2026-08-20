@@ -1,4 +1,8 @@
-import { $ } from "bun";
+import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
+import { text } from "node:stream/consumers";
+
+import { which } from "@crustjs/utils/process";
 
 import type { PostScaffoldStep } from "./types.ts";
 import { detectPackageManager } from "./utils.ts";
@@ -57,12 +61,19 @@ export async function runSteps(steps: PostScaffoldStep[], cwd: string): Promise<
  */
 async function runInstall(cwd: string): Promise<void> {
 	const pm = detectPackageManager(cwd);
-	const proc = Bun.spawn([pm, "install"], {
-		cwd,
-		stdout: "inherit",
-		stderr: "inherit",
-	});
-	const exitCode = await proc.exited;
+	const executable = which(pm);
+	if (!executable) {
+		throw new Error(`Package manager "${pm}" was not found on PATH. Install ${pm} and try again.`);
+	}
+
+	// Windows pms resolve to .cmd/.bat shims, which Node refuses to spawn
+	// directly since the CVE-2024-27980 hardening (EINVAL); shell mode is safe
+	// here because the args are fixed literals. Under shell mode, pass the bare
+	// pm name so cmd.exe resolves it — the resolved path may contain spaces,
+	// which an unquoted shell string breaks.
+	const shell = /\.(cmd|bat)$/i.test(executable);
+	const proc = spawn(shell ? pm : executable, ["install"], { cwd, stdio: "inherit", shell });
+	const [exitCode] = await once(proc, "close");
 	if (exitCode !== 0) {
 		throw new Error(`"${pm} install" exited with code ${exitCode}`);
 	}
@@ -73,15 +84,20 @@ async function runInstall(cwd: string): Promise<void> {
  * stage all files and create an initial commit.
  */
 async function runGitInit(cwd: string, commit?: string): Promise<void> {
-	await spawnChecked(["git", "init"], cwd, "git init");
+	const git = which("git");
+	if (!git) {
+		throw new Error('"git" was not found on PATH. Install Git and try again.');
+	}
+
+	await spawnChecked([git, "init"], cwd, "git init");
 
 	if (commit) {
 		// Ensure git identity is configured for the commit.
 		// CI environments often lack global user.name/user.email config,
 		// so we set local defaults if they are missing.
-		await ensureGitIdentity(cwd);
-		await spawnChecked(["git", "add", "."], cwd, "git add");
-		await spawnChecked(["git", "commit", "-m", commit], cwd, "git commit");
+		await ensureGitIdentity(cwd, git);
+		await spawnChecked([git, "add", "."], cwd, "git add");
+		await spawnChecked([git, "commit", "-m", commit], cwd, "git commit");
 	}
 }
 
@@ -95,15 +111,19 @@ async function runOpenEditor(cwd: string): Promise<void> {
 	const editor = process.env.EDITOR || "code";
 
 	try {
-		const proc = Bun.spawn([editor, cwd], {
-			stdout: "ignore",
-			stderr: "ignore",
+		const proc = spawn(editor, [cwd], {
+			stdio: "ignore",
+			// $EDITOR may be a bare name that resolves to a .cmd shim on Windows
+			// (e.g. "code"); shell mode is required to spawn those.
+			shell: process.platform === "win32",
 		});
+		// Don't block the event loop on a long-lived editor process.
+		proc.unref();
 		// Don't wait for the editor to close — it may be a GUI process
 		// Just check that it started without immediately failing
 		// Use a short race to detect spawn failures
 		const raceResult = await Promise.race([
-			proc.exited.then((code) => ({ kind: "exited" as const, code })),
+			once(proc, "close").then(([code]) => ({ kind: "exited" as const, code })),
 			new Promise<{ kind: "timeout" }>((resolve) =>
 				setTimeout(() => resolve({ kind: "timeout" }), 500),
 			),
@@ -118,15 +138,10 @@ async function runOpenEditor(cwd: string): Promise<void> {
 	}
 }
 
-/**
- * Run an arbitrary Bun Shell command string.
- *
- * Bun Shell is cross-platform and does not depend on `/bin/sh`,
- * so shell features like redirection work on Windows as well.
- */
+/** Run an arbitrary command string through the platform shell. */
 async function runCommand(cmd: string, cwd: string): Promise<void> {
-	const result = await $`${{ raw: cmd }}`.cwd(cwd).nothrow();
-	const exitCode = result.exitCode;
+	const proc = spawn(cmd, { cwd, shell: true, stdio: "inherit" });
+	const [exitCode] = await once(proc, "close");
 	if (exitCode !== 0) {
 		throw new Error(`Command "${cmd}" exited with code ${exitCode}`);
 	}
@@ -143,16 +158,16 @@ async function runCommand(cmd: string, cwd: string): Promise<void> {
  * to fail. This sets sensible local-repo defaults only when the values
  * are not already set at any level (local, global, system).
  */
-async function ensureGitIdentity(cwd: string): Promise<void> {
-	const hasName = Bun.spawnSync(["git", "config", "user.name"], { cwd }).exitCode === 0;
-	const hasEmail = Bun.spawnSync(["git", "config", "user.email"], { cwd }).exitCode === 0;
+async function ensureGitIdentity(cwd: string, git: string): Promise<void> {
+	const hasName = spawnSync(git, ["config", "user.name"], { cwd }).status === 0;
+	const hasEmail = spawnSync(git, ["config", "user.email"], { cwd }).status === 0;
 
 	if (!hasName) {
-		await spawnChecked(["git", "config", "user.name", "Crust"], cwd, "git config user.name");
+		await spawnChecked([git, "config", "user.name", "Crust"], cwd, "git config user.name");
 	}
 	if (!hasEmail) {
 		await spawnChecked(
-			["git", "config", "user.email", "crust@scaffolded.project"],
+			[git, "config", "user.email", "crust@scaffolded.project"],
 			cwd,
 			"git config user.email",
 		);
@@ -163,14 +178,9 @@ async function ensureGitIdentity(cwd: string): Promise<void> {
  * Spawn a process and throw a descriptive error if it exits non-zero.
  */
 async function spawnChecked(cmd: string[], cwd: string, label: string): Promise<void> {
-	const proc = Bun.spawn(cmd, {
-		cwd,
-		stdout: "ignore",
-		stderr: "pipe",
-	});
-	const exitCode = await proc.exited;
+	const proc = spawn(cmd[0]!, cmd.slice(1), { cwd, stdio: ["ignore", "ignore", "pipe"] });
+	const [stderr, [exitCode]] = await Promise.all([text(proc.stderr), once(proc, "close")]);
 	if (exitCode !== 0) {
-		const stderr = await new Response(proc.stderr).text();
 		throw new Error(
 			`"${label}" failed with exit code ${exitCode}${stderr ? `: ${stderr.trim()}` : ""}`,
 		);

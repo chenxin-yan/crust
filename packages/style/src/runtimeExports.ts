@@ -52,12 +52,11 @@ export const link: StyleInstance["link"] = style.link;
  *
  * Resolves the active color depth from the runtime style facade (respecting
  * `NO_COLOR`, `FORCE_COLOR`, and TTY detection) and emits the matching
- * `Bun.color()` format — truecolor, 256, 16, or none.
+ * terminal color format — truecolor, 256, 16, or none.
  *
  * @param text - The string to style. Empty input returns `""` after
  *   validating `input` (so invalid colors still throw).
- * @param input - Any {@link ColorInput} (named CSS color, hex, `rgb()`,
- *   `hsl()`, tuple, object, or packed number).
+ * @param input - Any {@link ColorInput} (named CSS color, hex, `rgb()`, or tuple).
  * @param depth - Optional override for the resolved color depth. When
  *   omitted, depth comes from the runtime style. Useful for deterministic
  *   output (e.g. tests, snapshots).
@@ -82,7 +81,7 @@ export function fg(text: string, input: ColorInput, depth?: ColorDepth): string 
  * @example
  * ```ts
  * bg("warning", "#ff8800");
- * bg("info", "hsl(210, 100%, 50%)", "16"); // force 16-color fallback
+ * bg("info", "rgb(0, 128, 255)", "16"); // force 16-color fallback
  * ```
  */
 export function bg(text: string, input: ColorInput, depth?: ColorDepth): string {

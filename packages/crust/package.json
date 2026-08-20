@@ -41,7 +41,8 @@
 		"@crustjs/core": "workspace:*",
 		"@crustjs/extensions": "workspace:*",
 		"@crustjs/style": "workspace:*",
-		"@crustjs/config": "workspace:*"
+		"@crustjs/config": "workspace:*",
+		"@crustjs/utils": "workspace:*"
 	},
 	"engines": {
 		"bun": ">=1.3.14"

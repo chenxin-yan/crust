@@ -1,18 +1,20 @@
 ---
 title: Building & Distribution
-description: Compile your CLI to standalone executables with crust build.
+description: Build your CLI for Bun, Deno, or Node with crust build.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 
-The `crust build` command compiles your CLI entry file into standalone Bun executables by running `bun build --compile` in a subprocess. It prefers the real `bun` binary when available and falls back to the current executable in Bun mode when needed. It also supports cross-platform compilation and generates a platform-detecting shell resolver for multi-target distribution — no runtime (Node.js or Bun) required on the end user's machine.
+The `crust build` command builds CLIs for Bun, Deno, or Node. Bun (the default) and Deno produce standalone executables; Node produces one bundled, executable JavaScript file. Select the runtime with `--runtime` or persist it in `package.json`:
 
-<Callout type="info">
-  Standalone binaries are the recommended distribution strategy for most CLIs. If you intentionally
-  ship a Bun runtime package instead, use a JS build output like `dist/cli.js` and point `bin` to
-  that file.
-</Callout>
+```json title="package.json"
+{
+  "crust": { "runtime": "deno" }
+}
+```
+
+The CLI flag overrides project configuration. Existing projects without `crust.runtime` continue to use Bun. Bun compilation prefers a `bun` executable on `PATH` and otherwise uses the runtime embedded in the packaged Crust executable. Deno builds require `deno` on `PATH`. Node builds use Crust's embedded Bun bundler, so users do not need Bun installed.
 
 ## Basic Usage
 
@@ -23,43 +25,78 @@ crust build
 # Build with a custom entry point
 crust build --entry src/main.ts
 
-# Build for a specific platform
+# Build for a specific Bun platform
 crust build --target bun-darwin-arm64
 
-# Build with explicit env files for build-time constants
+# Build a Deno standalone executable
+crust build --runtime deno --target aarch64-apple-darwin
+
+# Build an executable Node.js bundle at dist/my-cli.js
+crust build --runtime node --name my-cli
+
+# Build with explicit env files
 crust build --env-file .env.production
 ```
 
 ## Flags
 
-| Flag                           | Alias | Type                    | Default       | Description                                                                    |
-| ------------------------------ | ----- | ----------------------- | ------------- | ------------------------------------------------------------------------------ |
-| `--entry`                      | `-e`  | `"string"`              | `src/cli.ts`  | Entry file path                                                                |
-| `--outfile`                    | `-o`  | `"string"`              | —             | Output file path (single-target only)                                          |
-| `--name`                       | `-n`  | `"string"`              | auto-detected | Binary name                                                                    |
-| `--minify`                     | —     | `"boolean"`             | `true`        | Minify the output                                                              |
-| `--target`                     | `-t`  | `"string"` (repeatable) | all platforms | Canonical Bun target(s), e.g. `bun-darwin-arm64`                               |
-| `--outdir`                     | `-d`  | `"string"`              | `dist`        | Output directory for compiled binaries                                         |
-| `--resolver`                   | `-r`  | `"string"`              | `cli`         | Resolver script filename (multi-target only, no extension)                     |
-| `--env-file`                   | —     | `"string"` (repeatable) | —             | Explicit env file(s) used for build-time constants                             |
-| `--validate` / `--no-validate` | —     | `"boolean"`             | `true`        | Materialize command definitions and run Extension build hooks before compiling |
-| `--package`                    | —     | `"boolean"`             | `false`       | Stage npm packages in `dist/npm` instead of raw binaries                       |
-| `--stage-dir`                  | —     | `"string"`              | `dist/npm`    | Package staging directory; only used with `--package`                          |
+| Flag                           | Alias | Type                    | Default           | Description                                                                         |
+| ------------------------------ | ----- | ----------------------- | ----------------- | ----------------------------------------------------------------------------------- |
+| `--entry`                      | `-e`  | `"string"`              | `src/cli.ts`      | Entry file path                                                                     |
+| `--outfile`                    | `-o`  | `"string"`              | —                 | Output file path (single-target only)                                               |
+| `--name`                       | `-n`  | `"string"`              | auto-detected     | Binary name                                                                         |
+| `--minify`                     | —     | `"boolean"`             | `true` (Bun/Node) | Minify Bun and Node output; not applicable to Deno (`deno compile` has no minifier) |
+| `--runtime`                    | —     | `"string"`              | `bun`             | `bun`, `deno`, or `node`; overrides `package.json`                                  |
+| `--target`                     | `-t`  | `"string"` (repeatable) | all platforms     | Canonical Bun or Deno compiler target; unsupported for Node                         |
+| `--outdir`                     | `-d`  | `"string"`              | `dist`            | Output directory for compiled binaries                                              |
+| `--resolver`                   | `-r`  | `"string"`              | `cli`             | Resolver script filename (multi-target only, no extension)                          |
+| `--env-file`                   | —     | `"string"` (repeatable) | —                 | Explicit env file(s) used for build-time constants (Bun and Node only)              |
+| `--validate` / `--no-validate` | —     | `"boolean"`             | `true`            | Materialize command definitions and run Extension build hooks before compiling      |
+| `--package`                    | —     | `"boolean"`             | `false`           | Stage npm packages in `dist/npm` instead of raw binaries                            |
+| `--stage-dir`                  | —     | `"string"`              | `dist/npm`        | Package staging directory; only used with `--package`                               |
 
-## Supported Targets
+## Runtime Outputs
 
-| Canonical Bun Target       | Platform            | Package/dir suffix |
-| -------------------------- | ------------------- | ------------------ |
-| `bun-linux-x64-baseline`   | Linux x86_64        | `linux-x64`        |
-| `bun-linux-arm64`          | Linux ARM64         | `linux-arm64`      |
-| `bun-darwin-x64`           | macOS Intel         | `darwin-x64`       |
-| `bun-darwin-arm64`         | macOS Apple Silicon | `darwin-arm64`     |
-| `bun-windows-x64-baseline` | Windows x86_64      | `windows-x64`      |
-| `bun-windows-arm64`        | Windows ARM64       | `windows-arm64`    |
+| Runtime | Compiler                  | Output                                       | Requirements                   |
+| ------- | ------------------------- | -------------------------------------------- | ------------------------------ |
+| Bun     | `bun build --compile`     | Standalone executable(s)                     | None when using packaged Crust |
+| Deno    | `deno compile`            | Standalone executable(s)                     | Deno on `PATH` while building  |
+| Node    | `bun build --target node` | Bundled `dist/<name>.js` with a Node shebang | Node on the end user's machine |
 
-## Multi-Target Build (Default)
+Node produces a single portable JavaScript artifact, so it rejects `--target` and `--package`; resolver settings do not apply. Publish it as a normal npm package with its output path in `bin`.
 
-When no `--target` is specified (or multiple targets are given), `crust build` produces:
+### Supported Bun targets
+
+| Canonical target           | Platform            |
+| -------------------------- | ------------------- |
+| `bun-linux-x64-baseline`   | Linux x86_64        |
+| `bun-linux-arm64`          | Linux ARM64         |
+| `bun-darwin-x64`           | macOS Intel         |
+| `bun-darwin-arm64`         | macOS Apple Silicon |
+| `bun-windows-x64-baseline` | Windows x86_64      |
+| `bun-windows-arm64`        | Windows ARM64       |
+
+### Supported Deno targets
+
+| Canonical target            | Platform            |
+| --------------------------- | ------------------- |
+| `x86_64-unknown-linux-gnu`  | Linux x86_64        |
+| `aarch64-unknown-linux-gnu` | Linux ARM64         |
+| `x86_64-apple-darwin`       | macOS Intel         |
+| `aarch64-apple-darwin`      | macOS Apple Silicon |
+| `x86_64-pc-windows-msvc`    | Windows x86_64      |
+| `aarch64-pc-windows-msvc`   | Windows ARM64       |
+
+<Callout type="info">
+  Deno binaries are compiled with `-A` (all permissions granted). Crust core reads environment
+  variables before dispatch, so a sandboxed binary would crash on startup — and Bun- and Node-built
+  CLIs have no sandbox either, so this matches the other runtimes. A permission passthrough flag for
+  narrower grants is planned follow-up scope.
+</Callout>
+
+## Multi-Target Build (Bun and Deno)
+
+For Bun or Deno, when no `--target` is specified (or multiple targets are given), `crust build` produces:
 
 1. **A binary for each platform** — named `dist/<name>-<target>` (e.g., `dist/my-cli-bun-darwin-arm64`)
 2. **A shell resolver** — `dist/cli` (customizable via `--resolver`) that detects the host platform and executes the correct binary, plus a `dist/cli.cmd` companion for Windows
@@ -144,7 +181,7 @@ crust build --entry src/main.ts  # Uses "main" as the name
 
 ## Disabling Minification
 
-Minification is enabled by default. Disable it with:
+Minification is enabled by default for Bun and Node. Deno builds never minify (`deno compile` has no minification step), and passing `--minify` explicitly with `--runtime deno` is an error. Disable it for Bun and Node with:
 
 ```sh
 crust build --no-minify
@@ -152,7 +189,7 @@ crust build --no-minify
 
 ## Environment Variables
 
-Only `PUBLIC_*` values are embedded as build-time constants; `--env-file` (repeatable, also with `--package`) selects explicit env files.
+Bun and Node builds embed only `PUBLIC_*` values as build-time constants. `--env-file` is repeatable and uses the same Bun bundler semantics for both runtimes. Deno builds reject `--env-file`: `deno compile` embeds every variable from the file into the binary — secrets included — with no `PUBLIC_*` filter, so Crust refuses rather than leak. Load configuration at runtime instead.
 
 ```sh
 crust build --env-file .env.production
@@ -203,7 +240,7 @@ Use this escape hatch for entries with unavoidable import-time side effects. It 
 
 ## Per-OS Distribution with `--package`
 
-For distributing your CLI via npm with platform-specific packages, use the `--package` flag. This creates a root package with optional dependencies on per-platform packages, enabling npm to install only the binary for the user's platform.
+`--package` currently supports Bun builds only. Deno and Node builds fail with guidance to publish their generated artifact directly. For distributing a Bun CLI via npm with platform-specific packages, use the `--package` flag. This creates a root package with optional dependencies on per-platform packages, enabling npm to install only the binary for the user's platform.
 
 ```sh
 # Build and stage npm distribution packages
@@ -290,7 +327,7 @@ The publish command reads the `manifest.json` and publishes packages in dependen
 
 ### Distribution Package Names
 
-Per-platform packages are named by appending the platform suffix (see [Supported Targets](#supported-targets)) to your package name:
+Per-platform packages are named by appending the platform suffix (see [Supported Bun targets](#supported-bun-targets)) to your package name:
 
 | Root Package    | Platform Package                                              |
 | --------------- | ------------------------------------------------------------- |
@@ -305,8 +342,8 @@ Per-platform packages are named by appending the platform suffix (see [Supported
 
 ## package.json Setup
 
-<Tabs items={["Standalone binaries (recommended)", "Per-OS npm distribution", "Bun runtime package"]}>
-<Tab value="Standalone binaries (recommended)">
+<Tabs items={["Bun standalone", "Deno standalone", "Node runtime package"]}>
+<Tab value="Bun standalone">
 
 ```json title="package.json"
 {
@@ -322,52 +359,43 @@ Per-platform packages are named by appending the platform suffix (see [Supported
 }
 ```
 
-The `bin` field points to the resolver script, which handles platform detection and runs the correct compiled binary.
+The `bin` field points to the resolver script, which handles platform detection and runs the correct compiled binary. Use `crust build --package` when publishing per-OS Bun packages.
 
 </Tab>
-<Tab value="Per-OS npm distribution">
+<Tab value="Deno standalone">
 
 ```json title="package.json"
 {
   "name": "my-cli",
-  "private": true,
-  "scripts": {
-    "package": "crust build --package",
-    "publish": "crust publish --stage-dir dist/npm"
-  }
-}
-```
-
-In this mode the package users install is the **staged root package** (`dist/npm/root/package.json`), which `crust build --package` generates with its own `bin` entry and platform `optionalDependencies` — your local `package.json` needs no `bin`, `files`, or `prepack` wiring. After building and staging, publish all platform packages:
-
-```sh
-# Stage npm packages
-bun run package
-
-# Publish all packages
-crust publish
-```
-
-Users install your CLI normally with `bun add -g my-cli` or `npm install -g my-cli`, and npm automatically installs only the binary for their platform.
-
-</Tab>
-<Tab value="Bun runtime package">
-
-```json title="package.json"
-{
-  "name": "my-cli",
+  "crust": { "runtime": "deno" },
   "files": ["dist"],
-  "bin": {
-    "my-cli": "dist/cli.js"
-  },
+  "bin": { "my-cli": "dist/cli" },
   "scripts": {
-    "build": "bun build src/cli.ts --target bun --outfile dist/cli.js",
-    "prepack": "bun run build"
+    "build": "crust build --target x86_64-unknown-linux-gnu --outfile dist/cli"
   }
 }
 ```
 
-This mode still requires Bun on the end user's machine.
+The generated executable embeds Deno. Building requires Deno on `PATH`; running it does not.
+
+</Tab>
+<Tab value="Node runtime package">
+
+```json title="package.json"
+{
+  "name": "my-cli",
+  "crust": { "runtime": "node" },
+  "type": "module",
+  "files": ["dist"],
+  "bin": { "my-cli": "dist/cli.js" },
+  "scripts": {
+    "build": "crust build --name cli",
+    "prepack": "npm run build"
+  }
+}
+```
+
+The generated JavaScript file has a Node shebang and executable permissions. End users need Node, but not Bun. The bundle is ESM, so set `"type": "module"` in the published package (or rename the artifact to `.mjs`).
 
 </Tab>
 </Tabs>

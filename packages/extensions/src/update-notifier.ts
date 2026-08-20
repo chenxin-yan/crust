@@ -10,7 +10,8 @@ import {
 	defineExtension,
 	defineExtensionId,
 } from "@crustjs/core";
-import { bold, cyan, dim, green, padEnd, yellow } from "@crustjs/style";
+import { bold, cyan, dim, green, padEnd, stringWidth, yellow } from "@crustjs/style";
+import { compareSemver } from "@crustjs/utils/process";
 
 const UPDATE_NOTIFIER: ExtensionId = defineExtensionId("crust:update-notifier");
 
@@ -177,7 +178,7 @@ const DEFAULT_REGISTRY_URL = "https://registry.npmjs.org";
  */
 export function isNewerVersion(current: string, latest: string): boolean {
 	try {
-		return Bun.semver.order(latest, current) === 1;
+		return compareSemver(latest, current) === 1;
 	} catch {
 		return false;
 	}
@@ -562,7 +563,7 @@ function emitUpdateNotice(
 	];
 
 	// Determine content width from the longest visible line
-	const contentWidth = Math.max(...contentLines.map((line) => Bun.stringWidth(line)));
+	const contentWidth = Math.max(...contentLines.map((line) => stringWidth(line)));
 	const innerWidth = contentWidth + PADDING * 2;
 
 	const border = BOX_HORIZONTAL.repeat(innerWidth);

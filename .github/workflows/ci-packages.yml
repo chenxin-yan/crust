@@ -22,6 +22,65 @@ permissions:
   contents: read
 
 jobs:
+  runtime-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        include:
+          - runtime: node
+            smoke: node scripts/smoke-runtimes/smoke.mjs
+          - runtime: deno
+            smoke: deno run --allow-env --allow-read --allow-write --allow-run --config scripts/smoke-runtimes/deno.json scripts/smoke-runtimes/smoke.mjs
+          # Same assertions under Bun exercise the globalThis.Bun fast paths
+          # (e.g. Bun.stringWidth), so native/fallback drift fails the matrix.
+          - runtime: bun
+            smoke: bun scripts/smoke-runtimes/smoke.mjs
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        if: matrix.runtime == 'node'
+        uses: actions/setup-node@v7
+        with:
+          # Documented floor (runtimes.mdx claims Node 22+); smoke the floor, not latest.
+          node-version: 22
+
+      - name: Setup Deno
+        if: matrix.runtime == 'deno'
+        uses: denoland/setup-deno@v2
+        with:
+          # Documented floor (runtimes.mdx claims Deno 2.8+); smoke the floor, not latest.
+          deno-version: v2.8.x
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          # When Bun is the runtime under test, smoke the documented floor
+          # (CONTRIBUTING: Bun 1.3.14), not latest.
+          bun-version: ${{ matrix.runtime == 'bun' && '1.3.14' || 'latest' }}
+
+      - name: Install dependencies
+        run: bun ci
+
+      - name: Cache Turbo
+        uses: actions/cache@v6
+        with:
+          path: .turbo
+          key: turbo-${{ matrix.runtime }}-smoke-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ matrix.runtime }}-smoke-${{ runner.os }}-
+            turbo-packages-${{ runner.os }}-
+
+      - name: Build packages
+        run: bun turbo run build --filter='./packages/*'
+
+      - name: Smoke built distributions with ${{ matrix.runtime }}
+        run: ${{ matrix.smoke }}
+
   ci:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -36,6 +95,12 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
+
+      # Installed so Deno-gated integration tests run instead of skipping.
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
 
       # tsdown's bin runs under Node (engines ^22.18 || >=24.11); don't rely
       # on the runner image's preinstalled Node.
@@ -59,6 +124,14 @@ jobs:
         run: |
           bun turbo run build check:types test --filter='./packages/*'
           bun test scripts
+
+      # Portable packages must not reference Bun APIs: typecheck (@types/bun),
+      # lint, and bun test are all blind to them, and the runtime smoke only
+      # exercises a slice of each package. Feature-detection via globalThis.Bun
+      # (see stringWidth.ts) is the sanctioned escape hatch and doesn't match.
+      - name: Portable-runtime guard (no Bun globals in portable packages)
+        run: |
+          ! git grep -l -e 'Bun\.' -e 'from "bun"' -e '"bun:' -- 'packages/*/src/*.ts*' ':!*.test.ts*' ':!packages/crust/*'
 
       - name: Lint and format check (packages)
         run: |

@@ -110,6 +110,7 @@
         "@crustjs/core": "workspace:*",
         "@crustjs/extensions": "workspace:*",
         "@crustjs/style": "workspace:*",
+        "@crustjs/utils": "workspace:*",
       },
     },
     "packages/extensions": {
@@ -122,6 +123,7 @@
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "@crustjs/core": "workspace:*",
+        "@crustjs/utils": "workspace:*",
         "tsdown": "catalog:",
       },
       "peerDependencies": {

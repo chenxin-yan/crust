@@ -81,6 +81,20 @@ describe("runSteps", () => {
 			// At minimum, a successful exit is expected (no throw)
 			expect(existsSync(join(tempDir, "package.json"))).toBe(true);
 		});
+
+		it("reports when the detected package manager is unavailable", async () => {
+			writeFileSync(join(tempDir, "pnpm-lock.yaml"), "");
+			const originalPath = process.env.PATH;
+			process.env.PATH = tempDir;
+
+			try {
+				await expect(runSteps([{ type: "install" }], tempDir)).rejects.toThrow(
+					'Package manager "pnpm" was not found on PATH. Install pnpm and try again.',
+				);
+			} finally {
+				process.env.PATH = originalPath;
+			}
+		});
 	});
 
 	// ────────────────────────────────────────────────────────────────────────────
@@ -107,7 +121,7 @@ describe("runSteps", () => {
 		});
 
 		it("throws when command exits with non-zero code", async () => {
-			expect(runSteps([{ type: "command", cmd: "exit 1" }], tempDir)).rejects.toThrow(
+			await expect(runSteps([{ type: "command", cmd: "exit 1" }], tempDir)).rejects.toThrow(
 				'Command "exit 1" exited with code 1',
 			);
 		});
@@ -136,7 +150,7 @@ describe("runSteps", () => {
 		});
 
 		it("stops on first failure and does not execute remaining steps", async () => {
-			expect(
+			await expect(
 				runSteps(
 					[
 						{ type: "command", cmd: "exit 1" },
