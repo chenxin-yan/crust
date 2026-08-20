@@ -165,10 +165,125 @@ func inspectStringArray(values []string) string {
 	}
 	quoted := make([]string, len(values))
 	for index, value := range values {
-		value = strings.NewReplacer("\\", "\\\\", "'", "\\'", "\n", "\\n", "\r", "\\r", "\t", "\\t").Replace(value)
-		quoted[index] = "'" + value + "'"
+		quoted[index] = quoteInspectString(value)
 	}
-	return "[ " + strings.Join(quoted, ", ") + " ]"
+	if len(quoted) > 6 {
+		if grouped := groupInspectStrings(quoted); len(grouped) != len(quoted) {
+			return "[\n  " + strings.Join(grouped, ",\n  ") + "\n]"
+		}
+	}
+	if inspectStringsFitLine(quoted) {
+		return "[ " + strings.Join(quoted, ", ") + " ]"
+	}
+	return "[\n  " + strings.Join(quoted, ",\n  ") + "\n]"
+}
+
+func quoteInspectString(value string) string {
+	quote := byte('\'')
+	if strings.Contains(value, "'") {
+		switch {
+		case !strings.Contains(value, "\""):
+			quote = '"'
+		case !strings.Contains(value, "`") && !strings.Contains(value, "${"):
+			quote = '`'
+		}
+	}
+
+	var escaped strings.Builder
+	escaped.WriteByte(quote)
+	for _, character := range value {
+		switch character {
+		case '\\':
+			escaped.WriteString("\\\\")
+		case '\b':
+			escaped.WriteString("\\b")
+		case '\t':
+			escaped.WriteString("\\t")
+		case '\n':
+			escaped.WriteString("\\n")
+		case '\v':
+			escaped.WriteString("\\x0B")
+		case '\f':
+			escaped.WriteString("\\f")
+		case '\r':
+			escaped.WriteString("\\r")
+		case rune(quote):
+			escaped.WriteByte('\\')
+			escaped.WriteRune(character)
+		default:
+			if character < 0x20 || character >= 0x7f && character <= 0x9f {
+				fmt.Fprintf(&escaped, "\\x%02X", character)
+			} else {
+				escaped.WriteRune(character)
+			}
+		}
+	}
+	escaped.WriteByte(quote)
+	return escaped.String()
+}
+
+func inspectStringsFitLine(values []string) bool {
+	count := len(values)
+	length := 2*count + 11
+	if length+count > 80 {
+		return false
+	}
+	for _, value := range values {
+		length += len(utf16.Encode([]rune(value)))
+		if length > 80 {
+			return false
+		}
+	}
+	return true
+}
+
+func groupInspectStrings(values []string) []string {
+	lengths := make([]int, len(values))
+	totalLength := 0
+	maxLength := 0
+	for index, value := range values {
+		length := len(utf16.Encode([]rune(value)))
+		lengths[index] = length
+		totalLength += length + 2
+		maxLength = max(maxLength, length)
+	}
+	actualMax := maxLength + 2
+	if actualMax*3 >= 80 || !(float64(totalLength)/float64(actualMax) > 5 || maxLength <= 6) {
+		return values
+	}
+
+	averageBias := math.Sqrt(float64(actualMax) - float64(totalLength)/float64(len(values)))
+	biasedMax := math.Max(float64(actualMax)-3-averageBias, 1)
+	columns := min(
+		int(math.Round(math.Sqrt(2.5*biasedMax*float64(len(values)))/biasedMax)),
+		80/actualMax,
+		12,
+	)
+	if columns <= 1 {
+		return values
+	}
+
+	columnWidths := make([]int, columns)
+	for column := range columns {
+		for index := column; index < len(values); index += columns {
+			columnWidths[column] = max(columnWidths[column], lengths[index]+2)
+		}
+	}
+
+	lines := make([]string, 0, (len(values)+columns-1)/columns)
+	for start := 0; start < len(values); start += columns {
+		end := min(start+columns, len(values))
+		var line strings.Builder
+		for index := start; index < end; index++ {
+			line.WriteString(values[index])
+			if index < end-1 {
+				line.WriteString(", ")
+				line.WriteString(strings.Repeat(" ", columnWidths[index-start]-lengths[index]-2))
+			}
+		}
+		lines = append(lines, line.String())
+	}
+	return lines
 }
 
 func numberString(value float64) string {
