@@ -10,7 +10,10 @@ import {
 } from "./diagnostics.js";
 import type { Expression, FunctionDeclaration, Program, Statement, ValueType } from "./ir.js";
 
-const anyHint = "Replace `any` with `unknown`, then narrow it with a runtime check before use.";
+const anyHint =
+	"Replace the `any` value with a supported concrete type: string, number, boolean, or string[].";
+const anyCallHint =
+	"Remove the any-producing call and replace it with an expression using a supported concrete type.";
 
 // Codes stay stable in pinned TypeScript releases; rendered messages can vary by locale.
 const implicitAnyDiagnosticCodes = new Set([
@@ -60,7 +63,7 @@ function findAnyDiagnostics(sourceFile: ts.SourceFile, checker: ts.TypeChecker) 
 					node,
 					DiagnosticCodes.AnyType,
 					"This call returns `any`, which the compiler cannot lower safely.",
-					anyHint,
+					anyCallHint,
 				),
 			);
 		}
