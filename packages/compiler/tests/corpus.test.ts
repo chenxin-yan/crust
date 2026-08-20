@@ -105,6 +105,8 @@ describe("compiler differential corpus", () => {
 				'console.log("abc"[0].length);',
 				'console.log(+"42");',
 				"console.log(String(42));",
+				'console.log("%s", "ok");',
+				"function f() { return 1; } console.log(f);",
 				"function f(value: number) { return value; } console.log(f.length);",
 			]) {
 				await writeFile(fixture, source);
