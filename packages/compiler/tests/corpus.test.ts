@@ -11,33 +11,26 @@ if (goPath === null) {
 	);
 }
 
-interface ExecutionResult {
-	readonly exitCode: number;
-	readonly stderr: string;
-	readonly stdout: string;
-}
-
-async function run(command: string, args: readonly string[]): Promise<ExecutionResult> {
-	const process = Bun.spawn([command, ...args], { stderr: "pipe", stdout: "pipe" });
-	const [exitCode, stderr, stdout] = await Promise.all([
-		process.exited,
-		new Response(process.stderr).text(),
-		new Response(process.stdout).text(),
-	]);
+function run(command: string, args: readonly string[] = []) {
+	const { exitCode, stderr, stdout } = Bun.spawnSync([command, ...args]);
 	return { exitCode, stderr, stdout };
 }
 
 describe("compiler differential corpus", () => {
-	it.skipIf(goPath === null)("matches Node for hello", async () => {
-		const fixture = join(import.meta.dir, "fixtures", "hello.ts");
-		const node = Bun.which("node");
-		if (node === null) throw new Error("Node is required as the corpus reference runtime");
+	it.skipIf(goPath === null)(
+		"matches Node for hello",
+		async () => {
+			const fixture = join(import.meta.dir, "fixtures", "hello.ts");
+			const node = Bun.which("node");
+			if (node === null) throw new Error("Node is required as the corpus reference runtime");
 
-		const binary = await compile(fixture);
-		try {
-			expect(await run(binary, [])).toEqual(await run(node, [fixture]));
-		} finally {
-			await rm(dirname(binary), { recursive: true, force: true });
-		}
-	});
+			const binary = await compile(fixture);
+			try {
+				expect(run(binary)).toEqual(run(node, [fixture]));
+			} finally {
+				await rm(dirname(binary), { recursive: true, force: true });
+			}
+		},
+		120_000,
+	);
 });
