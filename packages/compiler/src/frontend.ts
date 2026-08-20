@@ -57,7 +57,7 @@ function lowerFunction(
 		!node.name ||
 		!node.body ||
 		node.asteriskToken ||
-		hasModifier(node, ts.SyntaxKind.AsyncKeyword)
+		node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)
 	) {
 		throw unsupported(node, sourceFile);
 	}
@@ -262,13 +262,6 @@ function isPropertyCall(node: ts.CallExpression, object: string, property: strin
 		ts.isIdentifier(node.expression.expression) &&
 		node.expression.expression.text === object &&
 		node.expression.name.text === property
-	);
-}
-
-function hasModifier(node: ts.Node, kind: ts.SyntaxKind): boolean {
-	return (
-		ts.canHaveModifiers(node) &&
-		ts.getModifiers(node)?.some((modifier) => modifier.kind === kind) === true
 	);
 }
 

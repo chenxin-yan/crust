@@ -20,7 +20,7 @@ export async function compile(entryFile: string, options: CompileOptions = {}): 
 	const goFile = join(workspace, "main.go");
 	const defaultName = basename(entryFile, extname(entryFile));
 	const outputPath = resolve(options.outputPath ?? join(workspace, defaultName));
-	const runtimePath = fileURLToPath(new URL("../runtime", import.meta.url)).replaceAll("\\", "/");
+	const runtimePath = fileURLToPath(new URL("../runtime", import.meta.url));
 
 	let built = false;
 	try {
@@ -32,13 +32,11 @@ export async function compile(entryFile: string, options: CompileOptions = {}): 
 			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
 		}
 		await mkdir(dirname(outputPath), { recursive: true });
-		await Promise.all([
-			writeFile(goFile, emitGo(ir)),
-			writeFile(
-				join(workspace, "go.mod"),
-				`module crust.generated\n\ngo 1.26\n\nrequire ${runtimeModule} v0.0.0\n\nreplace ${runtimeModule} => ${JSON.stringify(runtimePath)}\n`,
-			),
-		]);
+		await writeFile(goFile, emitGo(ir));
+		await writeFile(
+			join(workspace, "go.mod"),
+			`module crust.generated\n\ngo 1.26\n\nrequire ${runtimeModule} v0.0.0\n\nreplace ${runtimeModule} => ${JSON.stringify(runtimePath)}\n`,
+		);
 		await promisify(execFile)("go", ["build", "-o", outputPath, "."], { cwd: workspace });
 		built = true;
 		return outputPath;
