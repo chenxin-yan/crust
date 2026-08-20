@@ -39,3 +39,13 @@ Covered exceptions are undefined `.length` (`TypeError`) and invalid numeric
 `process.exit` codes (`RangeError [ERR_OUT_OF_RANGE]`), including the distinction
 between non-integers and integers outside the safe range. Reference validation uses
 Node 26.8.1; changes to Node's diagnostic format must be reviewed explicitly.
+
+## Diagnostics
+
+Compilation failures throw `CompilerError`. Its `diagnostics` array contains a stable code, source file, one-based line and column, message, and rewrite hint.
+
+| Code        | Meaning                        | Rewrite                                                                                                                                                              |
+| ----------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CRUST1000` | Invalid TypeScript             | Fix the reported TypeScript error before compiling.                                                                                                                  |
+| `CRUST1001` | Unsupported `any` type         | Replace `any` with `unknown`, then narrow it with a runtime check. Calls such as `JSON.parse` that return `any` must likewise be assigned to `unknown` and narrowed. |
+| `CRUST1002` | Unsupported language construct | Use the diagnostic's construct-specific rewrite hint.                                                                                                                |
