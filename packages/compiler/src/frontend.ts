@@ -55,7 +55,7 @@ function findAnyDiagnostics(sourceFile: ts.SourceFile, checker: ts.TypeChecker) 
 			);
 		} else if (
 			ts.isCallExpression(node) &&
-			(checker.getTypeAtLocation(node).flags & ts.TypeFlags.Any) !== 0
+			checker.getTypeAtLocation(node) === checker.getAnyType()
 		) {
 			diagnostics.push(
 				diagnosticAtNode(
