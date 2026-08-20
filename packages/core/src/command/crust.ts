@@ -41,6 +41,8 @@ import type {
 import type {
 	ExtensionsSpellings,
 	ProvideChecks,
+	TreeSpellings,
+	ValidateDefinitionFlags,
 	ValidateExtensionFlags,
 	SpellingsOf,
 	ValidateNamedFlagDefs,
@@ -587,7 +589,7 @@ function serializeRunArgv(
  * ```
  */
 /** Broad application type for APIs that accept any fully-built Crust application. */
-export type AnyCrust = Crust<any, any, any, any, any, any, any>;
+export type AnyCrust = Crust<any, any, any, any, any, any, any, any>;
 
 export class Crust<
 	Flags extends FlagsDef = {},
@@ -597,6 +599,7 @@ export class Crust<
 	Sp extends string = SpellingsOf<Flags>,
 	Tree extends object = {},
 	CtxFlags extends FlagsDef = {},
+	ExtSp extends string = never,
 > {
 	/** @internal — Phantom property exposing generic parameters for type-level testing */
 	declare readonly _types: {
@@ -683,7 +686,8 @@ export class Crust<
 		Sibs,
 		Sp | SpellingsOf<NamedFlagsRecord<Defs>>,
 		Tree,
-		CtxFlags
+		CtxFlags,
+		ExtSp
 	> {
 		const localFlags: FlagsDef = { ...this._node.localFlags };
 		const effectiveFlags: FlagsDef = { ...this._node.effectiveFlags };
@@ -703,7 +707,8 @@ export class Crust<
 			Sibs,
 			Sp | SpellingsOf<NamedFlagsRecord<Defs>>,
 			Tree,
-			CtxFlags
+			CtxFlags,
+			ExtSp
 		>;
 	}
 
@@ -720,10 +725,10 @@ export class Crust<
 	 */
 	args<const NewA extends ArgsDef>(
 		...defs: NewA & AppendArgsChecks<A, NewA>
-	): Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags> {
+	): Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp> {
 		return this._clone({
 			args: [...(this._node.args ?? []), ...defs.map((definition) => ({ ...definition }))],
-		}) as unknown as Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags>;
+		}) as unknown as Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp>;
 	}
 
 	/**
@@ -746,7 +751,8 @@ export class Crust<
 		Sibs,
 		Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
 		Tree,
-		MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>
+		MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>,
+		ExtSp
 	> {
 		// Positional by design: providers reach only this node and children added
 		// afterwards (flag scoping; see definition.test.ts). Extension `provides`
@@ -769,7 +775,8 @@ export class Crust<
 			Sibs,
 			Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
 			Tree,
-			MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>
+			MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>,
+			ExtSp
 		>;
 	}
 
@@ -788,10 +795,10 @@ export class Crust<
 	 */
 	action(
 		action: (ctx: NoInfer<CrustCommandContext<A, Flags, Ctx>>) => void | Promise<void>,
-	): Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags> {
+	): Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp> {
 		return this._clone({
 			run: action as (ctx: unknown) => void | Promise<void>,
-		}) as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags>;
+		}) as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp>;
 	}
 
 	/**
@@ -804,7 +811,7 @@ export class Crust<
 	extend<const Es extends readonly Extension<any, any, any>[]>(
 		...extensions: Es &
 			ValidateDeclaredDeps<MergeContext<Ctx, ExtensionsProvidesOutput<Es>>, Es> &
-			ValidateExtensionFlags<Es, Sp>
+			ValidateExtensionFlags<Es, Sp | TreeSpellings<Tree>>
 	): Crust<
 		Flags,
 		A,
@@ -812,7 +819,8 @@ export class Crust<
 		Sibs,
 		Sp | ExtensionsSpellings<Es>,
 		Tree,
-		CtxFlags
+		CtxFlags,
+		ExtSp | ExtensionsSpellings<Es>
 	> {
 		const provided = extensions.flatMap((extension) => extension.provides ?? []);
 		return this._clone({
@@ -825,7 +833,8 @@ export class Crust<
 			Sibs,
 			Sp | ExtensionsSpellings<Es>,
 			Tree,
-			CtxFlags
+			CtxFlags,
+			ExtSp | ExtensionsSpellings<Es>
 		>;
 	}
 
@@ -835,7 +844,10 @@ export class Crust<
 	 *
 	 */
 	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
-		...definitions: Ds & ValidateCommandDefinitions<Ds, Sibs> & ValidateDeclaredDeps<Ctx, Ds>
+		...definitions: Ds &
+			ValidateCommandDefinitions<Ds, Sibs> &
+			ValidateDeclaredDeps<Ctx, Ds> &
+			ValidateDefinitionFlags<Ds, ExtSp>
 	): Crust<
 		Flags,
 		A,
@@ -843,9 +855,10 @@ export class Crust<
 		Sibs | CommandDefinitionSpellings<Ds[number]>,
 		Sp,
 		Tree & DefinitionsTree<Ds, CtxFlags>,
-		CtxFlags
+		CtxFlags,
+		ExtSp
 	> {
-		let result = this as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags>;
+		let result = this as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp>;
 		for (const definition of definitions) {
 			result = result._addDefinition(definition as CommandDefinition);
 		}
@@ -856,18 +869,19 @@ export class Crust<
 			Sibs | CommandDefinitionSpellings<Ds[number]>,
 			Sp,
 			Tree & DefinitionsTree<Ds, CtxFlags>,
-			CtxFlags
+			CtxFlags,
+			ExtSp
 		>;
 	}
 
 	private _addDefinition(
 		definition: CommandDefinition,
-	): Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags> {
+	): Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp> {
 		const childNode = materializeCommandDefinition(definition, this._node);
 
 		return this._clone({
 			subCommands: { ...this._node.subCommands, [definition.name]: childNode },
-		}) as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags>;
+		}) as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp>;
 	}
 
 	/**

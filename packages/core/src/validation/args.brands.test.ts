@@ -18,6 +18,15 @@ describe("ValidateVariadicArgs type inference", () => {
 		expect(true).toBe(true);
 	});
 
+	it("brands empty argument names", () => {
+		type Result = ValidateVariadicArgs<readonly [{ name: ""; type: "string" }]>;
+		type _empty = Expect<Equal<Result[0]["FIX_EMPTY_NAME"], "Argument names must be non-empty">>;
+		type Widened = ValidateVariadicArgs<readonly [{ name: string; type: "string" }]>;
+		type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_EMPTY_NAME">, never>>;
+
+		expect(true).toBe(true);
+	});
+
 	it("brands the specific non-last arg that is variadic", () => {
 		type Args = readonly [
 			{ name: "files"; type: "string"; variadic: true },

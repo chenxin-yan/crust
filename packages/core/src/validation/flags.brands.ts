@@ -285,6 +285,44 @@ export type ValidateExtensionFlags<
 		]
 	: Es;
 
+// ────────────────────────────────────────────────────────────────────────────
+// Command-tree flag spellings (for Extension-vs-subcommand collision checks)
+// ────────────────────────────────────────────────────────────────────────────
+
+// `0 extends 1 & T` detects `any`: widened definitions opt out instead of recursing.
+type ShapeSpellings<S> = 0 extends 1 & S
+	? never
+	: S extends { readonly flags: infer F extends FlagsDef; readonly children: infer C }
+		? SpellingsOf<F> | TreeSpellings<C>
+		: never;
+
+/** Every flag spelling reachable in a compile-time command tree (`Record<spelling, CommandShape>`), recursively. */
+export type TreeSpellings<Tree> = 0 extends 1 & Tree
+	? never
+	: Tree extends object
+		? { [K in keyof Tree]: ShapeSpellings<Tree[K]> }[keyof Tree]
+		: never;
+
+type DefinitionSpellings<D> = D extends { readonly _shape?: infer S } ? ShapeSpellings<S> : never;
+
+type DefinitionFlagCollisionBrand<D, Ext extends string> =
+	Overlap<DefinitionSpellings<D>, Ext> extends infer Collision extends string
+		? [Collision] extends [never]
+			? {}
+			: {
+					readonly FIX_ALIAS_COLLISION: `Flag spelling "${Collision}" collides with a registered Extension flag`;
+				}
+		: never;
+
+/**
+ * Validate an added definition tree's flag spellings against already-registered
+ * Extension flags. Recursive Extension flags inject into every node at prepare
+ * time, so a colliding local flag would be silently retyped for its action.
+ */
+export type ValidateDefinitionFlags<Ds extends readonly unknown[], Ext extends string> = {
+	[I in keyof Ds]: Ds[I] & DefinitionFlagCollisionBrand<Ds[I], Ext>;
+};
+
 /** Union of every statically known flag spelling contributed by a tuple of Extensions. */
 export type ExtensionsSpellings<Es extends readonly unknown[]> = Es extends readonly [
 	infer H,

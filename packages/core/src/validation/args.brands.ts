@@ -16,10 +16,15 @@ type DuplicateArgBrand<A, Existing extends string> =
 				}
 		: never;
 
+// An empty name renders as "<>" in help/snapshot labels and validation messages.
+type EmptyArgNameBrand<A> =
+	"" extends DefName<A> ? { readonly FIX_EMPTY_NAME: "Argument names must be non-empty" } : {};
+
 type ArgChecks<A, Existing extends string> = A &
 	DuplicateArgBrand<A, Existing> &
 	AsyncParseBrand<A> &
-	DefaultWithinChoicesBrand<A>;
+	DefaultWithinChoicesBrand<A> &
+	EmptyArgNameBrand<A>;
 
 /**
  * Per-arg validation tuple type. Resolves to `A` when the constraints are

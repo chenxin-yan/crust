@@ -693,6 +693,37 @@ describe("Crust .extend()", () => {
 });
 
 describe("Extension application at prepare time", () => {
+	it("rejects an Extension providing two Contexts that share a flag spelling at compile time", () => {
+		const first = defineContext("first", { flags: [{ name: "mode", type: "number" }] }, () => ({}));
+		const second = defineContext(
+			"second",
+			{ flags: [{ name: "mode", type: "string" }] },
+			() => ({}),
+		);
+		expect(() =>
+			defineExtension(defineExtensionId("double-provider"), {
+				// @ts-expect-error -- second Context's owned flag "mode" collides with the first's (FIX_ALIAS_COLLISION)
+				provides: [first(), second()],
+			}),
+		).not.toThrow();
+	});
+
+	it("rejects an Extension flag colliding with a subcommand's local flag at compile time", () => {
+		const themer = defineExtension(defineExtensionId("themer"), {
+			flags: [{ name: "mode", type: "boolean" }],
+		});
+		const sub = defineCommand("sub", (cmd) =>
+			cmd.flags({ name: "mode", type: "string" }).action(() => {}),
+		);
+		const appWithSub = new Crust("cli").add(sub);
+		// @ts-expect-error -- Extension flag "mode" collides with subcommand "sub"'s local flag (FIX_ALIAS_COLLISION)
+		expect(() => appWithSub.extend(themer)).not.toThrow();
+
+		const appWithExt = new Crust("cli").extend(themer);
+		// @ts-expect-error -- subcommand "sub"'s local flag "mode" collides with the registered Extension flag (FIX_ALIAS_COLLISION)
+		expect(() => appWithExt.add(sub)).not.toThrow();
+	});
+
 	it("rejects an Extension flag colliding with its own provided Context's flag at compile time", () => {
 		const modeContext = defineContext(
 			"mode-owner",
