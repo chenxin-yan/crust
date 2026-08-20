@@ -322,4 +322,45 @@ describe("typed programmatic invocation", () => {
 		type _widenedDeep = Expect<readonly [...Fifteen, "not-a-command"] extends Paths ? true : false>;
 		expect(true).toBe(true);
 	});
+
+	it("resolves action results for literal paths past the depth cap", () => {
+		type Nest<
+			Depth extends number,
+			Acc extends readonly unknown[] = [],
+		> = Acc["length"] extends Depth
+			? { args: []; flags: {}; children: {}; result?: "deep-result" }
+			: {
+					args: [];
+					flags: {};
+					children: { next: Nest<Depth, readonly [...Acc, unknown]> };
+					result?: "mid";
+				};
+		type DeepTree = { root: Nest<16> };
+		type Root = { args: []; flags: {}; children: DeepTree; result?: "root-result" };
+		// The depth-15 cap only widens the CommandPath constraint; `const Path` still
+		// infers the literal tuple, and CommandShapeAt (uncapped) resolves it fully.
+		type SeventeenDeep = readonly [
+			"root",
+			"next",
+			"next",
+			"next",
+			"next",
+			"next",
+			"next",
+			"next",
+			"next",
+			"next",
+			"next",
+			"next",
+			"next",
+			"next",
+			"next",
+			"next",
+			"next",
+		];
+		type _deepResult = Expect<
+			Equal<CommandShapeAt<Root, SeventeenDeep>["result"], "deep-result" | undefined>
+		>;
+		expect(true).toBe(true);
+	});
 });
