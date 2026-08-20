@@ -167,6 +167,10 @@ function lowerExpression(
 	}
 	if (isProcessArgv(node)) return { kind: "argv" };
 	if (ts.isPropertyAccessExpression(node) && node.name.text === "length") {
+		const receiver = ts.isNonNullExpression(node.expression)
+			? node.expression.expression
+			: node.expression;
+		if (ts.isElementAccessExpression(receiver)) throw unsupported(node, sourceFile);
 		return {
 			kind: "length",
 			value: lowerExpression(node.expression, checker, sourceFile),
