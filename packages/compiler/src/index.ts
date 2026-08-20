@@ -11,7 +11,6 @@ import { lower } from "./frontend.js";
 export {
 	CompilerError,
 	DiagnosticCodes,
-	TypeScriptCompileError,
 	type CompilerDiagnostic,
 	type DiagnosticCode,
 } from "./diagnostics.js";
