@@ -69,7 +69,10 @@ describe("captureRun", () => {
 		});
 		const app = new Crust("test-cli").extend(gate).action(() => ({ ran: true }));
 
-		expect(await captureRun(app, [])).toEqual({ stdout: "", stderr: "", result: undefined });
+		const captured = await captureRun(app, []);
+		expect(captured).toEqual({ stdout: "", stderr: "", result: undefined });
+		// toEqual cannot distinguish a missing key from present-undefined; pin the success-branch contract.
+		expect("result" in captured).toBe(true);
 	});
 });
 
