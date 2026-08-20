@@ -35,18 +35,10 @@ jobs:
           install_args: go
 
       - name: Verify pinned Go toolchain
-        shell: bash
         run: |
-          if ! command -v go >/dev/null; then
-            echo "::error::Compiler corpus cannot run: mise did not install Go"
-            exit 1
-          fi
-          expected="$(mise current go)"
+          expected="go$(mise current go)"
           actual="$(go env GOVERSION)"
-          if [[ "$actual" != "go$expected" ]]; then
-            echo "::error::Compiler corpus requires Go $expected, found $actual"
-            exit 1
-          fi
+          [[ "$actual" == "$expected" ]] || { echo "::error::Compiler corpus requires $expected, found $actual"; exit 1; }
           echo "Compiler corpus using $actual"
 
       - name: Install dependencies
