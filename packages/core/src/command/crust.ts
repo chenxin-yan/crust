@@ -30,6 +30,7 @@ import type { AppendArgsChecks } from "../validation/args.brands.ts";
 import type {
 	AliasesOf,
 	CommandDefinitionSpellings,
+	EmptyNameBrand,
 	ValidateCommandConfig,
 	ValidateCommandDefinitions,
 } from "../validation/commands.brands.ts";
@@ -215,7 +216,9 @@ export interface CommandDefinition<
 	/** The subcommand name this definition is added under */
 	readonly name: Name;
 	/** The same definition under a different name; configured aliases travel with it. */
-	as<const N extends string>(name: N): CommandDefinition<N, Aliases, Shape, Deps>;
+	as<const N extends string>(
+		name: N & EmptyNameBrand<N>,
+	): CommandDefinition<N, Aliases, Shape, Deps>;
 	/** @internal */
 	readonly [commandDefinitionInternal]: CommandDefinitionInternal;
 	/** @internal — phantom carrying configured alias literals for add-time checks */
@@ -415,7 +418,7 @@ export function defineCommand<
 	const Name extends string,
 	Builder extends AnyCommandDefinitionBuilder,
 >(
-	name: Name,
+	name: Name & EmptyNameBrand<Name>,
 	recipe: CommandRecipe<{}, Builder>,
 ): CommandDefinition<Name, readonly [], ShapeOfBuilder<Builder>>;
 export function defineCommand<
@@ -423,7 +426,7 @@ export function defineCommand<
 	const C extends CommandConfig,
 	Builder extends AnyCommandDefinitionBuilder,
 >(
-	name: Name,
+	name: Name & EmptyNameBrand<Name>,
 	config: C & ValidateCommandConfig<Name, C>,
 	recipe: CommandRecipe<CommandDeps<C>, Builder>,
 ): CommandDefinition<Name, AliasesOf<C>, ShapeOfBuilder<Builder>, CommandDeps<C>>;
