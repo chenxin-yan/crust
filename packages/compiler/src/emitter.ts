@@ -97,7 +97,7 @@ function emitType(type: ValueType): string {
 		case "number":
 			return "float64";
 		case "string":
-			return "string";
+			return "any";
 		case "string-array":
 			return "[]string";
 		case "void":
