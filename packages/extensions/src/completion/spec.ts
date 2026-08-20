@@ -24,8 +24,8 @@
  * the package entrypoint and may change across patch releases.
  */
 
-/** Description of a single named flag attached to a command. */
-export interface CompletionFlag {
+/** Fields shared by every named flag attached to a command. */
+interface CompletionFlagBase {
 	/**
 	 * The canonical long name with **no** leading dashes — the same key used
 	 * in `CommandNode.effectiveFlags`. Templates prepend `--` when emitting.
@@ -41,56 +41,45 @@ export interface CompletionFlag {
 	 * definition declares any. Templates prepend `--` when emitting.
 	 */
 	aliases?: readonly string[];
-	/** Underlying value type — discriminator from `FlagDef.type`. */
-	type: "string" | "number" | "boolean";
 	/** Human-readable description, ANSI-stripped, ready to embed verbatim. */
 	description?: string;
-	/**
-	 * `true` when the flag consumes the next token as a value
-	 * (`string`/`number` flags). `false` for boolean toggles, which never
-	 * take a value (the parser supports `--no-flag` for negation).
-	 */
-	takesValue: boolean;
 	/**
 	 * `true` when the flag is repeatable (`multiple: true` in `FlagDef`).
 	 * Templates use this to relax mutual-exclusion or de-dup logic where
 	 * each shell supports it.
 	 */
 	multiple?: true;
-	/**
-	 * `true` when the boolean flag has explicitly opted out of `--no-`
-	 * negation (mirrors `BooleanFlagDef.noNegate` in core). Only
-	 * meaningful for `type: "boolean"` flags; absent on string/number.
-	 * Templates use this to decide whether to emit the `--no-<name>`
-	 * candidate alongside `--<name>`.
-	 */
-	noNegate?: true;
-	/**
-	 * Static enumeration of valid values, surfaced from the `choices`
-	 * field on `StringFlagDef` / `StringMultiFlagDef`. When present,
-	 * templates emit a fixed value list (`--flag=(a b c)` in zsh,
-	 * `-x -a 'a b c'` in fish, etc.). Only string-typed flags can carry
-	 * choices today; absent on number/boolean.
-	 */
-	choices?: readonly string[];
-	/**
-	 * Derived value-completion intent for `url`/`path`/`json` flags.
-	 * The spec-level `type` is normalised to `"string"` for these three
-	 * (their values are string tokens), so templates branch on this field:
-	 *  - `"files"` (`type: "path"`)  → emit file-completion candidates.
-	 *  - `"none"`  (`type: "url" | "json"`) → suppress the string fallback's
-	 *    file completion.
-	 *  - omitted: generic string — use each shell's default fallback.
-	 */
-	valueCompletion?: "files" | "none";
 }
 
-/** Description of a single positional argument attached to a command. */
-export interface CompletionArg {
+type StringCompletion =
+	| { choices: readonly string[]; valueCompletion?: never }
+	| { choices?: never; valueCompletion: "files" | "none" }
+	| { choices?: never; valueCompletion?: never };
+
+/** Description of a single named flag attached to a command. */
+export type CompletionFlag = CompletionFlagBase &
+	(
+		| {
+				type: "boolean";
+				takesValue: false;
+				noNegate?: true;
+				choices?: never;
+				valueCompletion?: never;
+		  }
+		| {
+				type: "number";
+				takesValue: true;
+				noNegate?: never;
+				choices?: never;
+				valueCompletion?: never;
+		  }
+		| ({ type: "string"; takesValue: true; noNegate?: never } & StringCompletion)
+	);
+
+/** Fields shared by every positional argument attached to a command. */
+interface CompletionArgBase {
 	/** Argument name (used as the key in the parsed result and in help). */
 	name: string;
-	/** Underlying value type — discriminator from `ArgDef.type`. */
-	type: "string" | "number" | "boolean";
 	/** Human-readable description, ANSI-stripped. */
 	description?: string;
 	/** `true` when the argument is required (per `ArgDef.required`). */
@@ -101,14 +90,18 @@ export interface CompletionArg {
 	 * candidates beyond the declared positional slot.
 	 */
 	variadic: boolean;
-	/**
-	 * Static enumeration of valid values, surfaced from the `choices`
-	 * field on `StringArgDef`. Only string-typed args can carry choices.
-	 */
-	choices?: readonly string[];
-	/** Derived value-completion intent — see {@link CompletionFlag.valueCompletion}. */
-	valueCompletion?: "files" | "none";
 }
+
+/** Description of a single positional argument attached to a command. */
+export type CompletionArg = CompletionArgBase &
+	(
+		| {
+				type: "number" | "boolean";
+				choices?: never;
+				valueCompletion?: never;
+		  }
+		| ({ type: "string" } & StringCompletion)
+	);
 
 /** Description of a single command node — recursive via `subCommands`. */
 export interface CompletionCommand {
