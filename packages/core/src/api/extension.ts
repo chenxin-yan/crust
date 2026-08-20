@@ -3,7 +3,7 @@ import type { CommandSnapshot } from "../command/snapshot.ts";
 import type { ExtensionId } from "../identity.ts";
 import { assertDefinableFlag } from "../parsing/spellings.ts";
 import type {
-	CommandSection,
+	CommandSectionInput,
 	FlagDef,
 	FlagsDef,
 	InferFlags,
@@ -210,7 +210,7 @@ export type InferExtensionFlags<Defs extends readonly NamedExtensionFlagDef[]> =
 };
 
 /** A documentation section an Extension contributes to one command path. */
-export type ExtensionSectionContribution = CommandSection & {
+export type ExtensionSectionContribution = CommandSectionInput & {
 	readonly command: readonly string[];
 };
 

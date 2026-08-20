@@ -30,14 +30,14 @@ The renderer includes usage, visible subcommands, positional arguments, effectiv
 
 ## Section consumer
 
-The `help` factory exposes `id` (`crust:help`), the consumer id used by the help renderer. Sections render everywhere by default; target help specifically with `only: [help.id]`, or omit a section from help with `except: [help.id]`:
+The `help` factory carries the `crust:help` consumer id used by the help renderer. Sections render everywhere by default; target help specifically with `only: [help]`, or omit a section from help with `except: [help]`:
 
 ```ts
 import { Crust } from "@crustjs/core";
 import { help } from "@crustjs/extensions";
 
 const documentedApp = new Crust("my-cli", {
-  sections: [{ title: "Terminal example", body: "my-cli deploy", only: [help.id] }],
+  sections: [{ title: "Terminal example", body: "my-cli deploy", only: [help] }],
 });
 ```
 

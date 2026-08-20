@@ -727,16 +727,28 @@ export type InputFlags<F extends FlagsDef> = Simplify<
 // CommandMeta — Command metadata
 // ────────────────────────────────────────────────────────────────────────────
 
+export type SectionConsumer = ExtensionId | { readonly id: ExtensionId };
+
 export type SectionAudience =
+	| { readonly only: readonly SectionConsumer[]; readonly except?: never }
+	| { readonly except: readonly SectionConsumer[]; readonly only?: never }
+	| { readonly only?: never; readonly except?: never };
+
+type ResolvedSectionAudience =
 	| { readonly only: readonly ExtensionId[]; readonly except?: never }
 	| { readonly except: readonly ExtensionId[]; readonly only?: never }
 	| { readonly only?: never; readonly except?: never };
 
-/** A plain-text documentation section rendered after built-in command documentation. */
-export type CommandSection = {
+type SectionContent = {
 	readonly title: string;
 	readonly body: string;
-} & SectionAudience;
+};
+
+/** A plain-text documentation section accepted from command and Extension authors. */
+export type CommandSectionInput = SectionContent & SectionAudience;
+
+/** A validated documentation section rendered after built-in command documentation. */
+export type CommandSection = SectionContent & ResolvedSectionAudience;
 
 /** Metadata describing a CLI command */
 export interface CommandMeta {

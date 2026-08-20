@@ -161,7 +161,7 @@ Omitting `io` creates no new ambient scope, preserving native TTY detection and 
 
 ## Section consumers
 
-A command section without an audience is available to every renderer. Use `only` or `except` with consumer ids exported by renderer packages to narrow it; the two fields are mutually exclusive:
+A command section without an audience is available to every renderer. Use `only` or `except` with section consumers to narrow it; the two fields are mutually exclusive. A `SectionConsumer` is either a branded `ExtensionId` or an Extension/factory object carrying one, so official renderers can be passed directly while custom renderers can use their minted id:
 
 ```ts
 import { defineExtensionId, sectionsFor, type CommandSection } from "@crustjs/core";

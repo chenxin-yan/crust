@@ -182,11 +182,14 @@ function invalidSections({ subject, name }: SectionOwner): CrustError {
 }
 
 function validateSectionAudienceIds(ids: unknown, owner: SectionOwner): readonly ExtensionId[] {
-	if (!Array.isArray(ids) || ids.length === 0 || !ids.every(isText)) {
-		throw invalidSections(owner);
-	}
-	// defineExtensionId is the single identity boundary; it rejects untrimmed ids.
-	return Object.freeze(ids.map((id) => defineExtensionId(id)));
+	if (!Array.isArray(ids) || ids.length === 0) throw invalidSections(owner);
+	return Object.freeze(
+		ids.map((consumer) => {
+			const id = typeof consumer === "string" ? consumer : consumer?.id;
+			if (!isText(id) || id !== id.trim()) throw invalidSections(owner);
+			return defineExtensionId(id);
+		}),
+	);
 }
 
 function validateSection(section: unknown, owner: SectionOwner): CommandSection {

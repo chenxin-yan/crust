@@ -126,7 +126,7 @@ await uninstallSkill({ name: "my-cli" });
 
 ## Command sections
 
-Add agent-facing guidance to a command's metadata. Each section is rendered as a Markdown heading and body in that command's generated documentation. Sections are shared with every renderer by default; use the `skill.id` (`crust:skills`) consumer id for agent-only guidance:
+Add agent-facing guidance to a command's metadata. Each section is rendered as a Markdown heading and body in that command's generated documentation. Sections are shared with every renderer by default; pass the `skill` (`crust:skills`) factory for agent-only guidance:
 
 ```ts
 import { defineCommand } from "@crustjs/core";
@@ -138,7 +138,7 @@ const deploy = defineCommand(
     description: "Deploy",
     sections: [
       { title: "Safety", body: "Use preview mode first." },
-      { title: "Agent procedure", body: "Inspect the preview output.", only: [skill.id] },
+      { title: "Agent procedure", body: "Inspect the preview output.", only: [skill] },
     ],
   },
   (command) => command.action(() => {}),

@@ -16,6 +16,8 @@ import type {
 	ArgDef,
 	ArgsDef,
 	CommandMeta,
+	CommandSection,
+	CommandSectionInput,
 	FlagDef,
 	FlagsDef,
 	InferArgs,
@@ -192,13 +194,23 @@ export type RunArguments<Shape extends CommandShape> = readonly [
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Static configuration for a reusable command definition. */
-export interface CommandConfig extends Omit<CommandMeta, "name"> {
+export interface CommandConfig extends Omit<CommandMeta, "name" | "sections"> {
+	/** Plain-text sections rendered after built-in command documentation. */
+	readonly sections?: readonly CommandSectionInput[];
 	/** Contexts this command consumes. */
 	readonly uses?: readonly AnyContextFactory[];
 }
 
 /** Static metadata accepted by the root command constructor. */
-export type RootCommandMeta = Pick<CommandMeta, "description" | "usage" | "sections">;
+export type RootCommandMeta = Pick<CommandMeta, "description" | "usage"> & {
+	/** Plain-text sections rendered after built-in command documentation. */
+	readonly sections?: readonly CommandSectionInput[];
+};
+
+function copyUnvalidatedSections(sections: readonly CommandSectionInput[]): CommandSection[] {
+	// Preparation replaces these inputs with validated sections before snapshots or renderers see them.
+	return sections.map((section) => ({ ...section })) as CommandSection[];
+}
 
 type AnyCommandDefinitionBuilder = CommandDefinitionBuilder<any, any, any, any, any, any, any, any>;
 
@@ -551,14 +563,14 @@ export function defineCommand(
 	const hasConfig = typeof configOrRecipe !== "function";
 	const config: CommandConfig = hasConfig ? configOrRecipe : {};
 	const recipe = hasConfig ? maybeRecipe : configOrRecipe;
-	const { uses = [], ...meta } = config;
+	const { uses = [], sections, ...meta } = config;
 	const internal: CommandDefinitionInternal = {
 		recipe: recipe as CommandDefinitionInternal["recipe"],
 		uses: Object.freeze([...uses]),
 		meta: {
 			...meta,
 			...(config.aliases ? { aliases: [...config.aliases] } : {}),
-			...(config.sections ? { sections: config.sections.map((section) => ({ ...section })) } : {}),
+			...(sections ? { sections: copyUnvalidatedSections(sections) } : {}),
 		},
 	};
 	const named = <const DefName extends string>(defName: DefName): CommandDefinition<DefName> => {
@@ -875,7 +887,7 @@ export class Crust<
 		if (meta.description !== undefined) this._node.meta.description = meta.description;
 		if (meta.usage !== undefined) this._node.meta.usage = meta.usage;
 		if (meta.sections !== undefined) {
-			this._node.meta.sections = meta.sections.map((section) => ({ ...section }));
+			this._node.meta.sections = copyUnvalidatedSections(meta.sections);
 		}
 		this._ancestorOwnedFlags = {};
 	}
