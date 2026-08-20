@@ -18,14 +18,14 @@ ${statements}
 
 function emitFunction(declaration: FunctionDeclaration): string {
 	const parameters = declaration.parameters
-		.map((parameter) => `${parameter.name} ${emitType(parameter.type)}`)
+		.map((parameter) => `${goIdentifier(parameter.name)} ${emitType(parameter.type)}`)
 		.join(", ");
 	const returnType =
 		declaration.returnType === "void" ? "" : ` ${emitType(declaration.returnType)}`;
 	const statements = declaration.statements
 		.map((statement) => emitStatement(statement, 1))
 		.join("\n");
-	return `func ${declaration.name}(${parameters})${returnType} {\n${statements}\n}`;
+	return `func ${goIdentifier(declaration.name)}(${parameters})${returnType} {\n${statements}\n}`;
 }
 
 function emitStatement(statement: Statement, indentation: number): string {
@@ -45,11 +45,11 @@ function emitStatement(statement: Statement, indentation: number): string {
 function emitExpression(expression: Expression): string {
 	switch (expression.kind) {
 		case "literal":
-			if (expression.type === "string") return goString(expression.value);
+			if (expression.type === "string") return goString(expression.value as string);
 			if (expression.type === "boolean") return String(expression.value);
 			return emitNumber(expression.value as number);
 		case "identifier":
-			return expression.name;
+			return goIdentifier(expression.name);
 		case "binary": {
 			const left = emitExpression(expression.left);
 			const right = emitExpression(expression.right);
@@ -71,16 +71,20 @@ function emitExpression(expression: Expression): string {
 			if (expression.callee === "process.exit") {
 				return `crustRuntime.Exit(${emitExpression(expression.arguments[0]!)})`;
 			}
-			return `${expression.callee}(${expression.arguments.map(emitExpression).join(", ")})`;
+			return `${goIdentifier(expression.callee)}(${expression.arguments.map(emitExpression).join(", ")})`;
 		case "argv":
 			return "crustRuntime.Argv()";
 		case "slice":
-			return `${emitExpression(expression.value)}[int(${emitExpression(expression.start)}):]`;
+			return `crustRuntime.Slice(${emitExpression(expression.value)}, ${emitExpression(expression.start)})`;
 		case "length":
 			return `float64(len(${emitExpression(expression.value)}))`;
 		case "index":
-			return `${emitExpression(expression.value)}[int(${emitExpression(expression.index)})]`;
+			return `crustRuntime.Index(${emitExpression(expression.value)}, ${emitExpression(expression.index)})`;
 	}
+}
+
+function goIdentifier(name: string): string {
+	return `js_${Array.from(name, (character) => character.codePointAt(0)!.toString(16)).join("_")}`;
 }
 
 function emitType(type: ValueType): string {
