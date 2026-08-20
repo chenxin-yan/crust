@@ -4,8 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
+import { BUILD_OUT_DIR_ENV, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
+import { skill } from "@crustjs/skills";
 
-import { skill } from "../../skills/src/extension.ts";
 import { man } from "./extension.ts";
 
 const directories: string[] = [];
@@ -42,8 +43,8 @@ describe("man Extension", () => {
 		const outDir = join(root, "dist");
 		const snapshotPath = join(root, "snapshot.json");
 		const originalExit = process.exit;
-		process.env.CRUST_INTERNAL_SNAPSHOT_PATH = snapshotPath;
-		process.env.CRUST_INTERNAL_BUILD_OUT_DIR = outDir;
+		process.env[SNAPSHOT_PATH_ENV] = snapshotPath;
+		process.env[BUILD_OUT_DIR_ENV] = outDir;
 		process.exit = ((code?: number) => {
 			throw new Error(`process.exit(${code ?? "undefined"}) was called during snapshot`);
 		}) as typeof process.exit;
@@ -67,8 +68,8 @@ describe("man Extension", () => {
 			await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
 		} finally {
 			process.exit = originalExit;
-			delete process.env.CRUST_INTERNAL_SNAPSHOT_PATH;
-			delete process.env.CRUST_INTERNAL_BUILD_OUT_DIR;
+			delete process.env[SNAPSHOT_PATH_ENV];
+			delete process.env[BUILD_OUT_DIR_ENV];
 		}
 
 		const output = await readFile(join(outDir, "man", "demo.1"), "utf8");

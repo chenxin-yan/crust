@@ -513,7 +513,8 @@ export async function executeInvocation(
 			let snapshot = snapshotCommand(prepared.rootNode);
 			const buildOutDir = process.env[BUILD_OUT_DIR_ENV];
 			if (buildOutDir) {
-				for (const extension of prepared.extensions) {
+				const extensions = prepared.extensions;
+				for (const extension of extensions) {
 					if (!extension.build) continue;
 					try {
 						await extension.build({ snapshot, outDir: buildOutDir });

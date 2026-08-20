@@ -53,7 +53,10 @@ export type InvocationOutcome =
 
 /** Build-time context passed to an Extension's artifact generator. */
 export interface ExtensionBuildContext {
-	/** Frozen snapshot of the application root. */
+	/**
+	 * Frozen snapshot prepared before this hook starts. It does not include this hook's own
+	 * outputs; later-registered hooks receive refreshed snapshots.
+	 */
 	readonly snapshot: CommandSnapshot;
 	/** Resolved absolute output directory. */
 	readonly outDir: string;
