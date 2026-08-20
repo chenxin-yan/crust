@@ -169,6 +169,7 @@ func numberString(value float64) string {
 	if value == 0 {
 		return "0"
 	}
+
 	if math.Signbit(value) {
 		return "-" + numberString(math.Abs(value))
 	}
