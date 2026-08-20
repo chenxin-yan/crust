@@ -45,7 +45,7 @@ type NpmRepository = string | { type?: string; url?: string; directory?: string 
 type NpmFundingEntry = { type?: string; url?: string };
 type NpmFunding = string | NpmFundingEntry | NpmFundingEntry[];
 
-type PublishPackageJson = {
+type PublishPackageMetadata = {
 	name: string;
 	version: string;
 	type?: "module";
@@ -53,9 +53,6 @@ type PublishPackageJson = {
 	/** npm man field: paths to man pages, e.g. `./man/mycli.1` */
 	man?: string[];
 	bin?: Record<string, string>;
-	optionalDependencies?: Record<string, string>;
-	os?: [NpmOs];
-	cpu?: [NpmCpu];
 	description?: string;
 	license?: string;
 	author?: NpmPerson;
@@ -68,8 +65,23 @@ type PublishPackageJson = {
 	engines?: Record<string, string>;
 };
 
-type UserPackageJson = Omit<PublishPackageJson, "bin"> & {
+type RootPublishPackageJson = PublishPackageMetadata & {
+	optionalDependencies: Record<string, string>;
+	os?: never;
+	cpu?: never;
+};
+
+type PlatformPublishPackageJson = PublishPackageMetadata & {
+	os: [NpmOs];
+	cpu: [NpmCpu];
+	optionalDependencies?: never;
+};
+
+type UserPackageJson = Omit<PublishPackageMetadata, "bin"> & {
 	bin?: string | Record<string, string>;
+	optionalDependencies?: Record<string, string>;
+	os?: [NpmOs];
+	cpu?: [NpmCpu];
 };
 
 type DistributionMetadata = {
@@ -77,7 +89,7 @@ type DistributionMetadata = {
 	rootPackageName: string;
 	version: string;
 	baseName: string;
-	rootPackageJson: PublishPackageJson;
+	rootPackageJson: PublishPackageMetadata;
 };
 
 type DistributionTarget = {
@@ -171,10 +183,10 @@ export function buildDistributionRootPackageJson(
 	metadata: DistributionMetadata,
 	targets: readonly DistributionTarget[],
 	options?: { artifactDirs?: readonly string[]; manPages?: readonly string[] },
-): PublishPackageJson {
+): RootPublishPackageJson {
 	const artifactDirs = options?.artifactDirs ?? [];
 	const manPages = options?.manPages ?? [];
-	const rootPackageJson: PublishPackageJson = {
+	const rootPackageJson: RootPublishPackageJson = {
 		...metadata.rootPackageJson,
 		name: metadata.rootPackageName,
 		version: metadata.version,
@@ -195,7 +207,7 @@ export function buildDistributionRootPackageJson(
 export function buildDistributionPlatformPackageJson(
 	metadata: DistributionMetadata,
 	target: DistributionTarget,
-): PublishPackageJson {
+): PlatformPublishPackageJson {
 	return {
 		...metadata.rootPackageJson,
 		name: target.packageName,
@@ -209,8 +221,8 @@ export function buildDistributionPlatformPackageJson(
 	};
 }
 
-function pickRootMetadata(pkgJson: UserPackageJson): PublishPackageJson {
-	const metadata: PublishPackageJson = {
+function pickRootMetadata(pkgJson: UserPackageJson): PublishPackageMetadata {
+	const metadata: PublishPackageMetadata = {
 		name: pkgJson.name,
 		version: pkgJson.version,
 	};
