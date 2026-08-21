@@ -217,14 +217,15 @@ function renderSkillMd(manifest: ManifestNode, meta: SkillMeta, allNodes: Manife
 function renderCommandReferenceTable(allNodes: ManifestNode[]): string[] {
 	const lines: string[] = [];
 
-	lines.push("| Command | Type | Documentation |");
-	lines.push("| ------- | ---- | ------------- |");
+	lines.push("| Command | Type | Description | Documentation |");
+	lines.push("| ------- | ---- | ----------- | ------------- |");
 
 	for (const node of allNodes) {
 		const invocation = commandInvocation(node);
 		const filePath = commandFilePath(node);
 		const type = commandType(node);
-		lines.push(`| \`${invocation}\` | ${type} | [${filePath}](${filePath}) |`);
+		const description = escapeTableCell(node.description || "-");
+		lines.push(`| \`${invocation}\` | ${type} | ${description} | [${filePath}](${filePath}) |`);
 	}
 
 	return lines;

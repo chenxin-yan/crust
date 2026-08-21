@@ -171,14 +171,27 @@ describe("renderSkill", () => {
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("SKILL.md command reference content", () => {
-		it("includes a markdown table header", () => {
-			const manifest = buildSimpleManifest();
-			const files = renderSkill(manifest, baseMeta);
+		it("includes command descriptions in the markdown table", () => {
+			const child = makeCommand({
+				meta: { name: "child" },
+				run() {},
+			});
+			const root = makeCommand({
+				meta: { name: "app", description: "Build | deploy" },
+				subCommands: { child },
+			});
+			const files = renderSkill(buildManifest(snapshotCommand(root)), baseMeta);
 			const skill = findFile(files, "SKILL.md");
 
 			expect(skill).toBeDefined();
 			expect(skill?.content).toContain("## Command Reference");
-			expect(skill?.content).toContain("| Command | Type | Documentation |");
+			expect(skill?.content).toContain("| Command | Type | Description | Documentation |");
+			expect(skill?.content).toContain(
+				"| `app` | group | Build \\| deploy | [commands/app.md](commands/app.md) |",
+			);
+			expect(skill?.content).toContain(
+				"| `app child` | runnable | - | [commands/child.md](commands/child.md) |",
+			);
 		});
 
 		it("shows correct type labels for runnable vs group", () => {
