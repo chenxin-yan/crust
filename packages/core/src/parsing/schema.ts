@@ -1,19 +1,27 @@
 import {
 	normalizeStandardIssues,
+	type InferOutput,
 	type StandardSchema,
 	type ValidationIssue,
 } from "@crustjs/utils/schema";
 
 import type { CommandNode } from "../command/node.ts";
 import { CrustError } from "../errors.ts";
-import type { ArgsDef, FlagsDef, InferArgs, InferFlags, ParseResult } from "../types.ts";
+import type {
+	ArgsDef,
+	FlagsDef,
+	ParseResult,
+	ParsedArgValue,
+	ParsedFlagValue,
+	ValidatedInput,
+} from "../types.ts";
 
-async function runSchema(
-	schema: StandardSchema,
-	raw: unknown,
+async function runSchema<S extends StandardSchema>(
+	schema: S,
+	raw: ParsedArgValue | ParsedFlagValue | InferOutput<StandardSchema>,
 	path: readonly PropertyKey[],
 	issues: ValidationIssue[],
-): Promise<{ readonly ok: false } | { readonly ok: true; readonly value: unknown }> {
+): Promise<{ readonly ok: false } | { readonly ok: true; readonly value: InferOutput<S> }> {
 	let result = schema["~standard"].validate(raw);
 	if (result instanceof Promise) result = await result;
 
@@ -38,26 +46,22 @@ async function runSchema(
 export async function applySchemas<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
 	node: CommandNode & { args: A | undefined; effectiveFlags: F },
 	parsed: ParseResult<A, F>,
-): Promise<{ args: InferArgs<A>; flags: InferFlags<F> }> {
+): Promise<ValidatedInput<A, F>> {
+	type SchemaValue = InferOutput<StandardSchema>;
 	const issues: ValidationIssue[] = [];
-	const args: InferArgs<A> = { ...parsed.args };
-	const flags: InferFlags<F> = { ...parsed.flags };
+	const args: Record<string, ParsedArgValue | SchemaValue> = { ...parsed.args };
+	const flags: Record<string, ParsedFlagValue | SchemaValue> = { ...parsed.flags };
 
 	for (const def of node.args ?? []) {
 		if (def.schema === undefined) continue;
-		const result = await runSchema(
-			def.schema,
-			Reflect.get(args, def.name),
-			["args", def.name],
-			issues,
-		);
-		if (result.ok) Reflect.set(args, def.name, result.value);
+		const result = await runSchema(def.schema, args[def.name], ["args", def.name], issues);
+		if (result.ok) args[def.name] = result.value;
 	}
 
 	for (const [name, def] of Object.entries(node.effectiveFlags)) {
 		if (def.schema === undefined) continue;
-		const result = await runSchema(def.schema, Reflect.get(flags, name), ["flags", name], issues);
-		if (result.ok) Reflect.set(flags, name, result.value);
+		const result = await runSchema(def.schema, flags[name], ["flags", name], issues);
+		if (result.ok) flags[name] = result.value;
 	}
 
 	if (issues.length > 0) {
@@ -65,5 +69,6 @@ export async function applySchemas<A extends ArgsDef = ArgsDef, F extends FlagsD
 		throw new CrustError("VALIDATION", `Invalid input:\n${lines.join("\n")}`, { issues });
 	}
 
-	return { args, flags };
+	// SAFETY: schema-backed keys were replaced by schema outputs and required presence was validated.
+	return { args, flags } as ValidatedInput<A, F>;
 }

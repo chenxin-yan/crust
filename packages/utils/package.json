@@ -6,6 +6,7 @@
 	"license": "MIT",
 	"sideEffects": false,
 	"exports": {
+		"./json": "./src/json.ts",
 		"./primitive": "./src/primitive.ts",
 		"./process": "./src/process.ts",
 		"./source": "./src/source.ts",

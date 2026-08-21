@@ -88,7 +88,7 @@ interface ArgDefBase {
 }
 
 /** A positional argument whose value is a string */
-interface StringArgDef extends ArgDefBase {
+interface StringArgDef<ParseOutput = unknown> extends ArgDefBase {
 	type: "string";
 	/** Default string value when the argument is not provided */
 	default?: string;
@@ -113,12 +113,13 @@ interface StringArgDef extends ArgDefBase {
 	 * @example
 	 * { name: "port", type: "string", parse: (s) => Number(s) }
 	 */
-	parse?: (raw: string) => unknown;
+	parse?: (raw: string) => ParseOutput;
 }
 
 /** A positional argument whose value is a number */
 interface NumberArgDef extends ArgDefBase {
 	type: "number";
+	choices?: never;
 	/** Default number value when the argument is not provided */
 	default?: number;
 	/** Not supported on number args — use `type: "string"` with `parse`. */
@@ -128,6 +129,7 @@ interface NumberArgDef extends ArgDefBase {
 /** A positional argument whose value is a boolean */
 interface BooleanArgDef extends ArgDefBase {
 	type: "boolean";
+	choices?: never;
 	/** Default boolean value when the argument is not provided */
 	default?: boolean;
 	/** Not supported on boolean args — use `type: "string"` with `parse`. */
@@ -137,6 +139,7 @@ interface BooleanArgDef extends ArgDefBase {
 /** A positional argument whose value is a {@link URL} */
 interface UrlArgDef extends ArgDefBase {
 	type: "url";
+	choices?: never;
 	/** Default URL value when the argument is not provided */
 	default?: URL;
 	/** Not supported on url args — use `type: "string"` with `parse`. */
@@ -146,6 +149,7 @@ interface UrlArgDef extends ArgDefBase {
 /** A positional argument whose value is an absolute filesystem path */
 interface PathArgDef extends ArgDefBase {
 	type: "path";
+	choices?: never;
 	/** Default path string when the argument is not provided */
 	default?: string;
 	/** Not supported on path args — use `type: "string"` with `parse`. */
@@ -155,6 +159,7 @@ interface PathArgDef extends ArgDefBase {
 /** A positional argument whose value is JSON parsed to `unknown` */
 interface JsonArgDef extends ArgDefBase {
 	type: "json";
+	choices?: never;
 	/** Default parsed JSON value when the argument is not provided */
 	default?: unknown;
 	/** Not supported on json args — use `type: "string"` with `parse`. */
@@ -251,7 +256,7 @@ interface SingleFlagBase extends FlagDefBase {
 }
 
 /** A single-value string flag */
-interface StringFlagDef extends SingleFlagBase {
+interface StringFlagDef<ParseOutput = unknown> extends SingleFlagBase {
 	type: "string";
 	/** Default string value */
 	default?: string;
@@ -288,12 +293,13 @@ interface StringFlagDef extends SingleFlagBase {
 	 * @example
 	 * { type: "string", parse: (s) => Number(s) }
 	 */
-	parse?: (raw: string) => unknown;
+	parse?: (raw: string) => ParseOutput;
 }
 
 /** A single-value number flag */
 interface NumberFlagDef extends SingleFlagBase {
 	type: "number";
+	choices?: never;
 	/** Default number value */
 	default?: number;
 	/** Not supported on number flags — use `type: "string"` with `parse`. */
@@ -303,6 +309,7 @@ interface NumberFlagDef extends SingleFlagBase {
 /** A single-value boolean flag */
 interface BooleanFlagDef extends SingleFlagBase {
 	type: "boolean";
+	choices?: never;
 	/** Default boolean value */
 	default?: boolean;
 	/** When `true`, reject `--no-{name}` (and negated aliases) at parse time and hide the generated help label */
@@ -314,6 +321,7 @@ interface BooleanFlagDef extends SingleFlagBase {
 /** A single-value URL flag (parsed via `new URL()`) */
 interface UrlFlagDef extends SingleFlagBase {
 	type: "url";
+	choices?: never;
 	/** Default URL value */
 	default?: URL;
 	/** Not supported on url flags — use `type: "string"` with `parse`. */
@@ -323,6 +331,7 @@ interface UrlFlagDef extends SingleFlagBase {
 /** A single-value path flag (expanded `~` + resolved against `process.cwd()`) */
 interface PathFlagDef extends SingleFlagBase {
 	type: "path";
+	choices?: never;
 	/** Default path string value */
 	default?: string;
 	/** Not supported on path flags — use `type: "string"` with `parse`. */
@@ -332,6 +341,7 @@ interface PathFlagDef extends SingleFlagBase {
 /** A single-value JSON flag (parsed via `JSON.parse()` to `unknown`) */
 interface JsonFlagDef extends SingleFlagBase {
 	type: "json";
+	choices?: never;
 	/** Default parsed JSON value */
 	default?: unknown;
 	/** Not supported on json flags — use `type: "string"` with `parse`. */
@@ -347,7 +357,7 @@ interface MultiFlagBase extends FlagDefBase {
 }
 
 /** A multi-value string flag (collects repeated values into an array) */
-interface StringMultiFlagDef extends MultiFlagBase {
+interface StringMultiFlagDef<ParseOutput = unknown> extends MultiFlagBase {
 	type: "string";
 	/** Default string array value */
 	default?: string[];
@@ -370,12 +380,13 @@ interface StringMultiFlagDef extends MultiFlagBase {
 	 * See {@link StringFlagDef.parse} for full semantics. Runs once per
 	 * occurrence; the resolved value is `ReturnType<typeof parse>[]`.
 	 */
-	parse?: (raw: string) => unknown;
+	parse?: (raw: string) => ParseOutput;
 }
 
 /** A multi-value number flag (collects repeated values into an array) */
 interface NumberMultiFlagDef extends MultiFlagBase {
 	type: "number";
+	choices?: never;
 	/** Default number array value */
 	default?: number[];
 	/** Not supported — use `type: "string"`, `multiple: true`, with `parse`. */
@@ -385,6 +396,7 @@ interface NumberMultiFlagDef extends MultiFlagBase {
 /** A multi-value boolean flag (collects repeated values into an array) */
 interface BooleanMultiFlagDef extends MultiFlagBase {
 	type: "boolean";
+	choices?: never;
 	/** Default boolean array value */
 	default?: boolean[];
 	/** When `true`, reject `--no-{name}` (and negated aliases) at parse time and hide the generated help label */
@@ -396,6 +408,7 @@ interface BooleanMultiFlagDef extends MultiFlagBase {
 /** A multi-value URL flag (collects repeated URL values into an array) */
 interface UrlMultiFlagDef extends MultiFlagBase {
 	type: "url";
+	choices?: never;
 	/** Default URL array value */
 	default?: URL[];
 	/** Not supported — use `type: "string"`, `multiple: true`, with `parse`. */
@@ -405,6 +418,7 @@ interface UrlMultiFlagDef extends MultiFlagBase {
 /** A multi-value path flag (collects repeated path strings into an array) */
 interface PathMultiFlagDef extends MultiFlagBase {
 	type: "path";
+	choices?: never;
 	/** Default path array value */
 	default?: string[];
 	/** Not supported — use `type: "string"`, `multiple: true`, with `parse`. */
@@ -414,6 +428,7 @@ interface PathMultiFlagDef extends MultiFlagBase {
 /** A multi-value JSON flag (collects repeated parsed JSON values) */
 interface JsonMultiFlagDef extends MultiFlagBase {
 	type: "json";
+	choices?: never;
 	/** Default parsed JSON array value */
 	default?: unknown[];
 	/** Not supported — use `type: "string"`, `multiple: true`, with `parse`. */
@@ -546,7 +561,7 @@ export type MergeFlags<Base extends FlagsDef, Override extends FlagsDef> = Base 
  * `variadic: true` with `required: true` keeps the inferred type as `T[]`;
  * `required` only gates empty-array validation, not the type.
  */
-type InferArgValue<A extends ArgDef> = A extends {
+export type InferArgValue<A extends ArgDef> = A extends {
 	schema: infer S extends StandardSchema;
 }
 	? InferOutput<S>
@@ -627,7 +642,7 @@ export type InferArgs<A> = A extends ArgsDef ? Simplify<InferArgsTuple<A>> : Rec
  * - **required** or **has default** → `primitive` (non-optional)
  * - otherwise → `primitive | undefined`
  */
-type InferFlagValue<F extends FlagDef> = F extends {
+export type InferFlagValue<F extends FlagDef> = F extends {
 	schema: infer S extends StandardSchema;
 }
 	? InferOutput<S>
@@ -674,7 +689,7 @@ type InputBaseValue<D> = D extends { type: "boolean"; noNegate: true }
 			: string
 		: D extends { choices: readonly (infer Choice extends string)[] }
 			? Choice
-			: D extends { parse: (raw: string) => unknown }
+			: D extends { parse: (raw: string) => infer _ParseOutput }
 				? string
 				: D extends { type: infer T extends ValueType }
 					? Resolve<T>
@@ -824,17 +839,45 @@ export interface CommandMeta {
 // ParseResult — Output of parseArgs
 // ────────────────────────────────────────────────────────────────────────────
 
-/**
- * The result of parsing argv against a command's arg/flag definitions.
- *
- * Generic parameters flow from the command definition to provide
- * strongly-typed `args` and `flags` objects.
- */
+/** Raw token shapes a Standard Schema receives before it runs. */
+export type RawSchemaFlagInput = string | boolean | readonly (string | boolean)[] | undefined;
+
+/** One flag value after syntax parsing and before required/schema validation. */
+export type RawFlagValue<D extends FlagDef> = D extends { schema: StandardSchema }
+	? RawSchemaFlagInput
+	: InferFlagValue<D> | undefined;
+
+/** Positional counterpart of {@link RawFlagValue}. */
+export type RawArgValue<D extends ArgDef> = D extends { schema: StandardSchema }
+	? D extends { variadic: true }
+		? string[]
+		: string | undefined
+	: InferArgValue<D> | undefined;
+
+/** Runtime-erased syntax-parsed flag value. */
+export type ParsedFlagValue = RawFlagValue<FlagDef>;
+/** Runtime-erased syntax-parsed positional value. */
+export type ParsedArgValue = RawArgValue<ArgDef>;
+
+export type RawParsedFlags<F extends FlagsDef> = { [K in keyof F]: RawFlagValue<F[K]> };
+export type RawParsedArgs<A extends ArgsDef> = number extends A["length"]
+	? Record<string, ParsedArgValue>
+	: { [D in A[number] as D["name"]]: RawArgValue<D> };
+
+/** A declared default on any argument or flag definition. */
+export type DeclaredDefault = (ArgDef | FlagDef)["default"];
+/** A user-authored value before Core validates its shape. */
+export type Untrusted = unknown;
+
+/** Syntax-parsed input, before required and Standard Schema validation. */
 export interface ParseResult<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef> {
-	/** Resolved positional arguments, keyed by arg name */
-	args: InferArgs<A>;
-	/** Resolved flags, keyed by flag name */
-	flags: InferFlags<F>;
-	/** Raw arguments that appeared after the `--` separator */
+	args: RawParsedArgs<A>;
+	flags: RawParsedFlags<F>;
 	rawArgs: string[];
+}
+
+/** Fully validated input returned by the schema boundary. */
+export interface ValidatedInput<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef> {
+	args: InferArgs<A>;
+	flags: InferFlags<F>;
 }

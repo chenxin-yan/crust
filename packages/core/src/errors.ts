@@ -1,5 +1,8 @@
 import type { CommandSnapshot } from "./command/snapshot.ts";
 
+/** A value thrown by user code crossing a Core error boundary. */
+export type CaughtError = unknown;
+
 // ────────────────────────────────────────────────────────────────────────────
 // CrustErrorCode — Discriminated error codes
 // ────────────────────────────────────────────────────────────────────────────
@@ -74,6 +77,12 @@ export interface CrustErrorDetailsMap {
 export type CrustErrorCode = keyof CrustErrorDetailsMap;
 export type CrustErrorDetails<C extends CrustErrorCode> = CrustErrorDetailsMap[C];
 
+export interface CrustErrorJson<C extends CrustErrorCode> {
+	code: C;
+	message: string;
+	details: CrustErrorDetails<C>;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // CrustError — Custom error class
 // ────────────────────────────────────────────────────────────────────────────
@@ -115,10 +124,12 @@ export class CrustError<C extends CrustErrorCode = CrustErrorCode> extends Error
 		super(message);
 		this.name = "CrustError";
 		this.code = code;
+		// SAFETY: the details tuple is empty only when this error code permits undefined.
 		this.details = details[0] as CrustErrorDetails<C>;
 	}
 
 	is<T extends CrustErrorCode>(code: T): this is CrustError<T> {
+		// SAFETY: every generic code is a CrustErrorCode; widening enables comparison with T.
 		return (this.code as CrustErrorCode) === code;
 	}
 
@@ -127,11 +138,7 @@ export class CrustError<C extends CrustErrorCode = CrustErrorCode> extends Error
 		return this;
 	}
 
-	toJSON(): {
-		code: C;
-		message: string;
-		details: CrustErrorDetails<C>;
-	} {
+	toJSON(): CrustErrorJson<C> {
 		return {
 			code: this.code,
 			message: this.message,

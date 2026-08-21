@@ -1,6 +1,8 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 
+import type { JsonValue } from "@crustjs/utils/json";
+
 import { CrustError } from "../errors.ts";
 
 /**
@@ -55,7 +57,7 @@ export function coercePath(raw: string): string {
  *
  * Note: `JSON.parse` loses precision on integers above `Number.MAX_SAFE_INTEGER`.
  */
-export function coerceJson(raw: string): unknown {
+export function coerceJson(raw: string): JsonValue {
 	try {
 		return JSON.parse(raw);
 	} catch (err) {
