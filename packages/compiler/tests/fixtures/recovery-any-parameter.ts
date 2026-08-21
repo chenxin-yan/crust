@@ -1,3 +1,3 @@
-function f(value = missing) {}
+function f(_value = missing) {}
 
 f();
