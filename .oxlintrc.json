@@ -79,7 +79,8 @@
 				"eslint/no-new": "off",
 				"eslint/no-shadow": "off",
 				"typescript/unbound-method": "off",
-				"typescript/await-thenable": "off"
+				"typescript/await-thenable": "off",
+				"anti-slop/require-safety-comment-for-type-assertion": "off"
 			}
 		}
 	]
