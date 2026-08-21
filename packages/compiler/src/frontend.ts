@@ -114,9 +114,13 @@ function lowerStatement(
 				firstArgument &&
 				ts.isStringLiteralLike(firstArgument) &&
 				/%[cdfijoOs%]/.test(firstArgument.text)) ||
-			call.arguments.some((argument) =>
-				checkerTypeIsStringArray(checker.getTypeAtLocation(argument)),
-			)
+			call.arguments.some((argument) => {
+				const type = checker.getTypeAtLocation(argument);
+				return (
+					checkerTypeIsStringArray(type) ||
+					Boolean(type.flags & (ts.TypeFlags.Void | ts.TypeFlags.Undefined))
+				);
+			})
 		) {
 			throw unsupported(call, sourceFile);
 		}
@@ -144,9 +148,8 @@ function lowerExpression(
 		return { kind: "literal", type: "boolean", value: node.kind === ts.SyntaxKind.TrueKeyword };
 	}
 	if (ts.isIdentifier(node)) {
-		if (checker.getTypeAtLocation(node).getCallSignatures().length > 0) {
-			throw unsupported(node, sourceFile);
-		}
+		const declaration = checker.getSymbolAtLocation(node)?.valueDeclaration;
+		if (!declaration || !ts.isParameter(declaration)) throw unsupported(node, sourceFile);
 		return { kind: "identifier", name: node.text };
 	}
 	if (ts.isParenthesizedExpression(node) || ts.isNonNullExpression(node)) {
@@ -214,7 +217,13 @@ function lowerExpression(
 		};
 	}
 	if (ts.isElementAccessExpression(node) && node.argumentExpression) {
-		if (!checkerTypeIsStringArray(checker.getTypeAtLocation(node.expression))) {
+		if (
+			!checkerTypeIsStringArray(checker.getTypeAtLocation(node.expression)) ||
+			!(
+				checker.getTypeAtLocation(node.argumentExpression).flags &
+				(ts.TypeFlags.Number | ts.TypeFlags.NumberLiteral)
+			)
+		) {
 			throw unsupported(node, sourceFile);
 		}
 		return {
@@ -240,7 +249,15 @@ function lowerExpression(
 		}
 		if (isPropertyCall(node, "process", "exit") && node.arguments.length === 1) {
 			const argument = node.arguments[0];
-			if (!argument) throw unsupported(node, sourceFile);
+			if (
+				!argument ||
+				!(
+					checker.getTypeAtLocation(argument).flags &
+					(ts.TypeFlags.Number | ts.TypeFlags.NumberLiteral)
+				)
+			) {
+				throw unsupported(node, sourceFile);
+			}
 			return {
 				kind: "call",
 				callee: "process.exit",
