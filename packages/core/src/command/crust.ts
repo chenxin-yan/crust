@@ -10,6 +10,7 @@ import type {
 } from "../api/context.ts";
 import type { Extension, ExtensionsProvidesOutput } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
+import type { ExtensionId } from "../identity.ts";
 import { addFlagSpellingEntries, cloneFlagSpellings } from "../parsing/spellings.ts";
 import type {
 	ArgDef,
@@ -97,16 +98,23 @@ export interface CrustCommandContext<
 // Typed programmatic invocation
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Compile-time description of one command's programmatic input. */
+/** Compile-time description of one command's programmatic input and action result. */
 export interface CommandShape<
 	A extends ArgsDef = ArgsDef,
 	F extends FlagsDef = FlagsDef,
 	Children extends object = {},
+	Result = unknown,
 > {
 	readonly args: A;
 	readonly flags: F;
 	readonly children: Children;
+	readonly result: Result;
 }
+
+/** Result of a successful programmatic invocation. */
+export type RunOutcome<Result> =
+	| { readonly status: "completed"; readonly result: Result }
+	| { readonly status: "finished"; readonly by: ExtensionId };
 
 /** Compile-time command tree accumulated by `.add()`. */
 export type CommandTree = Record<string, CommandShape>;
@@ -138,8 +146,16 @@ export type CommandShapeAt<
 		? Shape["children"][Head] extends infer Child extends CommandShape
 			? CommandShapeAt<Child, Tail>
 			: never
-		: never
-	: Shape;
+		: // A non-literal segment (e.g. a hand-annotated `[string, ...string[]]`
+			// tuple) selects a statically unknowable command, not no command.
+			string extends Head
+			? CommandShape
+			: never
+	: Path extends readonly []
+		? Shape
+		: // A tail widened past the CommandPath depth cap selects a statically
+			// unknowable command, so the shape (and its result) widens too.
+			CommandShape;
 
 type RequiredKeys<T> = {
 	[K in keyof T]-?: {} extends Pick<T, K> ? never : K;
@@ -180,7 +196,7 @@ export interface CommandConfig extends Omit<CommandMeta, "name"> {
 /** Static metadata accepted by the root command constructor. */
 export type RootCommandMeta = Pick<CommandMeta, "description" | "usage" | "sections">;
 
-type AnyCommandDefinitionBuilder = CommandDefinitionBuilder<any, any, any, any, any, any, any>;
+type AnyCommandDefinitionBuilder = CommandDefinitionBuilder<any, any, any, any, any, any, any, any>;
 
 // Child builders start without inherited flags, so brands cannot see ancestor
 // spellings from inside a sealed recipe. Materialization seeds the child with
@@ -326,6 +342,7 @@ export interface CommandDefinitionBuilder<
 	Sp extends string = SpellingsOf<Flags>,
 	Tree extends object = {},
 	CtxFlags extends FlagsDef = {},
+	Result = void,
 > {
 	flags<const Defs extends readonly NamedFlagDef[]>(
 		...defs: ValidateNamedFlagDefs<Defs, Sp>
@@ -336,12 +353,13 @@ export interface CommandDefinitionBuilder<
 		Sibs,
 		Sp | SpellingsOf<NamedFlagsRecord<Defs>>,
 		Tree,
-		CtxFlags
+		CtxFlags,
+		Result
 	>;
 
 	args<const NewA extends ArgsDef>(
 		...defs: NewA & AppendArgsChecks<A, NewA>
-	): CommandDefinitionBuilder<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags>;
+	): CommandDefinitionBuilder<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags, Result>;
 
 	provide<const Cs extends readonly ContextInstance[]>(
 		...instances: ProvideChecks<Sp, Cs> &
@@ -354,7 +372,8 @@ export interface CommandDefinitionBuilder<
 		Sibs,
 		Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
 		Tree,
-		MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>
+		MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>,
+		Result
 	>;
 
 	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
@@ -366,17 +385,27 @@ export interface CommandDefinitionBuilder<
 		Sibs | CommandDefinitionSpellings<Ds[number]>,
 		Sp,
 		Tree & DefinitionsTree<Ds, CtxFlags>,
-		CtxFlags
+		CtxFlags,
+		Result
 	>;
 
-	action(
-		action: (ctx: NoInfer<CrustCommandContext<A, Flags, Ctx>>) => void | Promise<void>,
-	): CommandDefinitionBuilder<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags>;
+	action<R>(
+		action: (ctx: NoInfer<CrustCommandContext<A, Flags, Ctx>>) => R,
+	): CommandDefinitionBuilder<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, Awaited<R>>;
 }
 
 type ShapeOfBuilder<B> =
-	B extends CommandDefinitionBuilder<infer Flags, infer A, any, any, any, infer Tree>
-		? CommandShape<A, Flags, Tree>
+	B extends CommandDefinitionBuilder<
+		infer Flags,
+		infer A,
+		any,
+		any,
+		any,
+		infer Tree,
+		any,
+		infer Result
+	>
+		? CommandShape<A, Flags, Tree, Result>
 		: never;
 
 type DefinitionShapeForSpelling<D, Spelling extends string> =
@@ -392,8 +421,13 @@ type DefinitionShapeForSpelling<D, Spelling extends string> =
 // same inherited flag namespace. Local parent flags never inherit and stay out.
 type ShapeWithInheritedFlags<S, CF extends FlagsDef> = {} extends CF
 	? S
-	: S extends CommandShape<infer SA, infer SF, infer SC>
-		? CommandShape<SA, MergeFlags<CF, SF>, { [K in keyof SC]: ShapeWithInheritedFlags<SC[K], CF> }>
+	: S extends CommandShape<infer SA, infer SF, infer SC, infer SR>
+		? CommandShape<
+				SA,
+				MergeFlags<CF, SF>,
+				{ [K in keyof SC]: ShapeWithInheritedFlags<SC[K], CF> },
+				SR
+			>
 		: never;
 
 type DefinitionsTree<
@@ -633,6 +667,7 @@ function serializeRunArgv(
  * - `Tree` — command shapes accumulated by `.add()` for typed `run()`
  * - `CtxFlags` — Context-owned flags accumulated by `.provide()`, inherited by
  *   the shapes of definitions added afterwards
+ * - `Result` — awaited return type of this command's action
  *
  * @example
  * ```ts
@@ -645,7 +680,7 @@ function serializeRunArgv(
  * ```
  */
 /** Broad application type for APIs that accept any fully-built Crust application. */
-export type AnyCrust = Crust<any, any, any, any, any, any, any, any>;
+export type AnyCrust = Crust<any, any, any, any, any, any, any, any, any>;
 
 export class Crust<
 	Flags extends FlagsDef = {},
@@ -656,6 +691,7 @@ export class Crust<
 	Tree extends object = {},
 	CtxFlags extends FlagsDef = {},
 	ExtSp extends string = never,
+	Result = void,
 > {
 	/** @internal — Phantom property exposing generic parameters for type-level testing */
 	declare readonly _types: {
@@ -663,7 +699,7 @@ export class Crust<
 		args: A;
 		ctx: Ctx;
 		tree: Tree;
-		shape: CommandShape<A, Flags, Tree>;
+		shape: CommandShape<A, Flags, Tree, Result>;
 	};
 
 	/** @internal */
@@ -753,7 +789,8 @@ export class Crust<
 		Sp | SpellingsOf<NamedFlagsRecord<Defs>>,
 		Tree,
 		CtxFlags,
-		ExtSp
+		ExtSp,
+		Result
 	> {
 		const localFlags: FlagsDef = { ...this._node.localFlags };
 		const effectiveFlags: FlagsDef = { ...this._node.effectiveFlags };
@@ -794,7 +831,8 @@ export class Crust<
 			Sp | SpellingsOf<NamedFlagsRecord<Defs>>,
 			Tree,
 			CtxFlags,
-			ExtSp
+			ExtSp,
+			Result
 		>;
 	}
 
@@ -811,7 +849,7 @@ export class Crust<
 	 */
 	args<const NewA extends ArgsDef>(
 		...defs: NewA & AppendArgsChecks<A, NewA>
-	): Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp> {
+	): Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp, Result> {
 		const combined = [...(this._node.args ?? []), ...defs.map((definition) => ({ ...definition }))];
 		// Brands own literal tuples; this owns config-built defs, where a
 		// duplicate name silently discards a positional and a mid-tuple variadic
@@ -840,7 +878,17 @@ export class Crust<
 		}
 		return this._clone({
 			args: combined,
-		}) as unknown as Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp>;
+		}) as unknown as Crust<
+			Flags,
+			AppendedArgs<A, NewA>,
+			Ctx,
+			Sibs,
+			Sp,
+			Tree,
+			CtxFlags,
+			ExtSp,
+			Result
+		>;
 	}
 
 	/**
@@ -864,7 +912,8 @@ export class Crust<
 		Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
 		Tree,
 		MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>,
-		ExtSp
+		ExtSp,
+		Result
 	> {
 		// Positional by design: providers reach only this node and children added
 		// afterwards (flag scoping; see definition.test.ts). Extension `provides`
@@ -888,7 +937,8 @@ export class Crust<
 			Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
 			Tree,
 			MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>,
-			ExtSp
+			ExtSp,
+			Result
 		>;
 	}
 
@@ -905,12 +955,12 @@ export class Crust<
 	 * @param action - The Command Action function
 	 * @returns A new `Crust` instance with the action registered
 	 */
-	action(
-		action: (ctx: NoInfer<CrustCommandContext<A, Flags, Ctx>>) => void | Promise<void>,
-	): Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp> {
+	action<R>(
+		action: (ctx: NoInfer<CrustCommandContext<A, Flags, Ctx>>) => R,
+	): Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp, Awaited<R>> {
 		return this._clone({
-			run: action as (ctx: unknown) => void | Promise<void>,
-		}) as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp>;
+			run: action as (ctx: unknown) => unknown,
+		}) as unknown as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp, Awaited<R>>;
 	}
 
 	/**
@@ -933,7 +983,8 @@ export class Crust<
 		Sp | ExtensionsSpellings<Es>,
 		Tree,
 		CtxFlags,
-		ExtSp | ExtensionsSpellings<Es>
+		ExtSp | ExtensionsSpellings<Es>,
+		Result
 	> {
 		const provided = extensions.flatMap((extension) => extension.provides ?? []);
 		return this._clone({
@@ -947,7 +998,8 @@ export class Crust<
 			Sp | ExtensionsSpellings<Es>,
 			Tree,
 			CtxFlags,
-			ExtSp | ExtensionsSpellings<Es>
+			ExtSp | ExtensionsSpellings<Es>,
+			Result
 		>;
 	}
 
@@ -969,9 +1021,10 @@ export class Crust<
 		Sp,
 		Tree & DefinitionsTree<Ds, CtxFlags>,
 		CtxFlags,
-		ExtSp
+		ExtSp,
+		Result
 	> {
-		let result = this as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp>;
+		let result = this as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp, Result>;
 		for (const definition of definitions) {
 			result = result._addDefinition(definition as CommandDefinition);
 		}
@@ -983,13 +1036,14 @@ export class Crust<
 			Sp,
 			Tree & DefinitionsTree<Ds, CtxFlags>,
 			CtxFlags,
-			ExtSp
+			ExtSp,
+			Result
 		>;
 	}
 
 	private _addDefinition(
 		definition: CommandDefinition,
-	): Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp> {
+	): Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp, Result> {
 		// FIX_COMMAND_COLLISION owns literal names; this owns dynamic `.add()`,
 		// where a silent replacement makes the earlier command unreachable.
 		// Extension-contributed commands keep documented last-write-wins.
@@ -1004,7 +1058,7 @@ export class Crust<
 
 		return this._clone({
 			subCommands: { ...this._node.subCommands, [definition.name]: childNode },
-		}) as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp>;
+		}) as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp, Result>;
 	}
 
 	/**
@@ -1025,9 +1079,11 @@ export class Crust<
 	 * Unlike {@link Crust.execute}, `run()` throws the original definition,
 	 * parse, Context, or action failure without rendering it (Extension
 	 * `onError` hooks are a terminal presentation concern and never run
-	 * here) and without changing process status. It resolves with no value
-	 * after successful cleanup. Prompt cancellation surfaces as a standard
-	 * `AbortError`.
+	 * here) and without changing process status. It resolves to a `completed`
+	 * outcome carrying the selected action's return value after successful
+	 * cleanup, or a `finished` outcome naming the Extension whose `preRun`
+	 * hook ended the invocation first. Prompt cancellation surfaces as a
+	 * standard `AbortError`.
 	 *
 	 * @param path - Typed path to the command to invoke (`[]` selects the root)
 	 * @param input - Structured argument, flag, and raw values
@@ -1036,8 +1092,8 @@ export class Crust<
 	 */
 	async run<const Path extends CommandPath<Tree>>(
 		path: Path,
-		...args: RunArguments<CommandShapeAt<CommandShape<A, Flags, Tree>, Path>>
-	): Promise<void> {
+		...args: RunArguments<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>>
+	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>> {
 		const structuredInput = (args[0] ?? {}) as {
 			readonly args?: object;
 			readonly flags?: object;
@@ -1046,7 +1102,9 @@ export class Crust<
 		const io = args[1] as Partial<InvocationIO> | undefined;
 		const argv = serializeRunArgv(this._node, path, structuredInput);
 		// Programmatic calls preserve raw failures and never change process status.
-		await runInvocation(this._node, argv, io, materializeCommandDefinition);
+		return (await runInvocation(this._node, argv, io, materializeCommandDefinition)) as RunOutcome<
+			CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]
+		>;
 	}
 
 	/**

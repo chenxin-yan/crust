@@ -47,6 +47,7 @@ export type {
 	RunArguments,
 	RunInput,
 	RunInputArguments,
+	RunOutcome,
 } from "./command/crust.ts";
 export { Crust, defineCommand } from "./command/crust.ts";
 // Documentation sections

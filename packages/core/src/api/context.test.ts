@@ -695,7 +695,7 @@ describe("Context dependency runtime boundaries", () => {
 			details: { name: "logger", reason: "missing-context" },
 		});
 		// The root path is healthy: logger was provided before .extend().
-		await expect(app.run([])).resolves.toBeUndefined();
+		await expect(app.run([])).resolves.toEqual({ status: "completed", result: undefined });
 	});
 
 	it("keeps a child's locally provided Context over a root Extension provider", async () => {

@@ -27,23 +27,36 @@ An inert `CommandDefinition` must first be added to a `Crust` application before
 
 ## `captureRun(app, path, input?)`
 
-Run an application with captured output. Each `ctx.stdout()`/`ctx.stderr()` call is one line (matching the terminal defaults), and the returned `stdout` and `stderr` fields join those lines with `"\n"`. If the application throws, `error` contains that value and output written before the failure is retained.
+Run an application with captured output and the selected action's inferred result. Each `ctx.stdout()`/`ctx.stderr()` call is one line (matching the terminal defaults), and the returned `stdout` and `stderr` fields join those lines with `"\n"`. The `completed` branch owns the action's awaited `result`, the `finished` branch owns the finishing Extension's `by` identity, and the `failed` branch owns the thrown `error`. Output written before failure is retained. Narrow with `captured.status`.
 
 ```ts
 import { captureRun } from "@crustjs/testing";
 
-const result = await captureRun(app, ["build"], {
+const captured = await captureRun(app, ["build"], {
   args: { entry: "src/cli.ts" },
   flags: { minify: true },
 });
 
-if (result.error) throw result.error;
-console.log(result.stdout);
+if (captured.status === "failed") throw captured.error;
+if (captured.status === "finished") {
+  console.log(`Finished by ${captured.by}`);
+} else {
+  console.log(captured.stdout, captured.result);
+}
 ```
 
-The return type is `CapturedRun`:
+The return type is `CapturedRun`, a union of completed, finished, and failed branches:
 
-<auto-type-table path="../../../../../packages/testing/src/index.ts" name="CapturedRun" />
+```ts
+export type CapturedRun<Result = unknown> = {
+  readonly stdout: string;
+  readonly stderr: string;
+} & (
+  | { readonly status: "completed"; readonly result: Result }
+  | { readonly status: "finished"; readonly by: ExtensionId }
+  | { readonly status: "failed"; readonly error: unknown }
+);
+```
 
 ## `captureExecute(app, argv)`
 

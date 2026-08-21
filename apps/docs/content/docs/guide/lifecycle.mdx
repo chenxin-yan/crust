@@ -26,7 +26,7 @@ await app.run(
 );
 ```
 
-It requires an explicit typed command path, serializes structured input through the normal parser, honors injected writers, throws the original error, does not render it, and does not modify `process.exitCode`. Runtime-dynamic Extension commands use `execute({ argv })` instead.
+It requires an explicit typed command path, serializes structured input through the normal parser, honors injected writers, throws the original error, does not render it, and does not modify `process.exitCode`. It resolves to `{ status: "completed", result }` after an action (including actionless and `void` actions), or `{ status: "finished", by }` when an Extension `preRun` hook finishes first. Runtime-dynamic Extension commands use `execute({ argv })` instead.
 
 ## Successful invocation order
 

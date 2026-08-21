@@ -32,92 +32,71 @@ function walkFlag(name: string, def: FlagSnapshot): CompletionFlag {
 		assertSafeIdentifier(def.short, "flag short alias");
 	}
 
-	// url/path/json all consume a string token at the shell-completion layer.
-	// We normalise them to `"string"` and surface the original kind via a
-	// single `valueCompletion` field so templates can branch on intent
-	// ("files" / "none") rather than the source type literal.
-	const sourceType = def.type;
-	const specType: "string" | "number" | "boolean" =
-		sourceType === "url" || sourceType === "path" || sourceType === "json" ? "string" : sourceType;
-
-	const flag: CompletionFlag = {
+	const description = normaliseDescription(def.description);
+	const common = {
 		name,
-		type: specType,
-		takesValue: sourceType !== "boolean",
+		...(def.short !== undefined && def.short.length > 0 ? { short: def.short } : {}),
+		...(aliases !== undefined && aliases.length > 0 ? { aliases } : {}),
+		...(description === undefined ? {} : { description }),
+		...(def.multiple === true ? { multiple: true as const } : {}),
 	};
 
-	if (sourceType === "path") flag.valueCompletion = "files";
-	else if (sourceType === "url" || sourceType === "json") flag.valueCompletion = "none";
-
-	if (def.short !== undefined && def.short.length > 0) {
-		flag.short = def.short;
+	if (def.type === "boolean") {
+		return {
+			...common,
+			type: "boolean",
+			takesValue: false,
+			...(def.noNegate === true ? { noNegate: true as const } : {}),
+		};
 	}
-	if (aliases !== undefined && aliases.length > 0) {
-		flag.aliases = aliases;
-	}
+	if (def.type === "number") return { ...common, type: "number", takesValue: true };
 
-	const description = normaliseDescription(def.description);
-	if (description !== undefined) {
-		flag.description = description;
+	// url/path/json all consume string tokens; preserve their completion intent.
+	if (def.type === "path") {
+		return { ...common, type: "string", takesValue: true, valueCompletion: "files" };
 	}
-
-	if (def.multiple === true) {
-		flag.multiple = true;
-	}
-
-	// `noNegate` is a `boolean`-flag-only opt-out from auto `--no-<name>`
-	// rendering; it lives on both single and multi boolean variants in
-	// core's `FlagDef` discriminated union.
-	if (def.type === "boolean" && def.noNegate === true) {
-		flag.noNegate = true;
+	if (def.type === "url" || def.type === "json") {
+		return { ...common, type: "string", takesValue: true, valueCompletion: "none" };
 	}
 
-	// `choices` lives only on string-typed flags (see `types.ts`).
-	// We accept the field via discriminated narrowing rather than an `as`
-	// cast to keep the reader honest about which branches actually carry it.
-	if (def.type === "string") {
-		const choices = def.choices;
-		if (choices !== undefined && choices.length > 0) {
-			flag.choices = choices.map(assertSafeChoiceValue);
-		}
+	const choices = def.choices;
+	if (choices !== undefined && choices.length > 0) {
+		return {
+			...common,
+			type: "string",
+			takesValue: true,
+			choices: choices.map(assertSafeChoiceValue),
+		};
 	}
-
-	return flag;
+	return { ...common, type: "string", takesValue: true };
 }
 
 /** Project a single `ArgDef` onto a `CompletionArg`. */
 function walkArg(def: ArgSnapshot): CompletionArg {
 	assertSafeIdentifier(def.name, "arg name");
-	const sourceType = def.type;
-	const specType: "string" | "number" | "boolean" =
-		sourceType === "url" || sourceType === "path" || sourceType === "json"
-			? "string"
-			: (sourceType ?? "string");
-
-	const arg: CompletionArg = {
+	const description = normaliseDescription(def.description);
+	const common = {
 		name: def.name,
-		type: specType,
 		required: def.required === true,
 		variadic: def.variadic === true,
+		...(description === undefined ? {} : { description }),
 	};
 
-	if (sourceType === "path") arg.valueCompletion = "files";
-	else if (sourceType === "url" || sourceType === "json") arg.valueCompletion = "none";
-
-	const description = normaliseDescription(def.description);
-	if (description !== undefined) {
-		arg.description = description;
+	if (def.type === "number" || def.type === "boolean") {
+		return { ...common, type: def.type };
+	}
+	if (def.type === "path") {
+		return { ...common, type: "string", valueCompletion: "files" };
+	}
+	if (def.type === "url" || def.type === "json") {
+		return { ...common, type: "string", valueCompletion: "none" };
 	}
 
-	// `choices` is only present on string-typed args.
-	if (def.type === "string") {
-		const choices = def.choices;
-		if (choices !== undefined && choices.length > 0) {
-			arg.choices = choices.map(assertSafeChoiceValue);
-		}
+	const choices = def.type === "string" ? def.choices : undefined;
+	if (choices !== undefined && choices.length > 0) {
+		return { ...common, type: "string", choices: choices.map(assertSafeChoiceValue) };
 	}
-
-	return arg;
+	return { ...common, type: "string" };
 }
 
 /**

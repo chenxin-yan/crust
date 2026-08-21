@@ -35,7 +35,7 @@ export interface CommandNode {
 	/** Extensions registered via `.extend()` (root builder only) */
 	extensions: Extension[];
 	/** The Command Action */
-	run?: (ctx: unknown) => void | Promise<void>;
+	run?: (ctx: unknown) => unknown;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

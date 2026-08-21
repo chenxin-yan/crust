@@ -2,14 +2,75 @@ import { describe, expect, it } from "bun:test";
 
 import type { StandardSchema } from "@crustjs/utils/schema";
 
-import type { CommandPath, CommandShapeAt, RunInput } from "./crust.ts";
+import { defineExtension } from "../api/extension.ts";
+import { defineExtensionId } from "../identity.ts";
+import type { CommandPath, CommandShapeAt, RunInput, RunOutcome } from "./crust.ts";
 import { Crust, defineCommand } from "./crust.ts";
 
 type Expect<T extends true> = T;
 type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
+// "root" plus 14 "next" segments — a path exactly at the depth-15 cap.
+type FifteenDeep = readonly [
+	"root",
+	"next",
+	"next",
+	"next",
+	"next",
+	"next",
+	"next",
+	"next",
+	"next",
+	"next",
+	"next",
+	"next",
+	"next",
+	"next",
+	"next",
+];
+
 describe("typed programmatic invocation", () => {
+	it("returns the selected action result with path-specific types", async () => {
+		const inspect = defineCommand("inspect", (command) =>
+			command.action(() => ({ kind: "child" as const, size: 42 })),
+		);
+		const app = new Crust("cli").action(() => ({ kind: "root" as const })).add(inspect);
+
+		const rootResult = app.run([]);
+		const childResult = app.run(["inspect"]);
+		type _root = Expect<Equal<typeof rootResult, Promise<RunOutcome<{ kind: "root" }>>>>;
+		type _child = Expect<
+			Equal<typeof childResult, Promise<RunOutcome<{ kind: "child"; size: number }>>>
+		>;
+
+		expect(await rootResult).toEqual({ status: "completed", result: { kind: "root" } });
+		expect(await childResult).toEqual({
+			status: "completed",
+			result: { kind: "child", size: 42 },
+		});
+	});
+
+	it("awaits async action results", async () => {
+		const app = new Crust("cli").action(async () => ({ ok: true as const }));
+		const pending = app.run([]);
+		type _result = Expect<Equal<typeof pending, Promise<RunOutcome<{ ok: true }>>>>;
+
+		expect(await pending).toEqual({ status: "completed", result: { ok: true } });
+	});
+
+	it("returns the finishing Extension when preRun finishes before the action", async () => {
+		const gateId = defineExtensionId("gate");
+		const gate = defineExtension(gateId, {
+			hooks: { preRun: (ctx) => ctx.finish() },
+		});
+		const app = new Crust("cli").extend(gate).action(() => ({ ran: true as const }));
+		const pending = app.run([]);
+		type _result = Expect<Equal<typeof pending, Promise<RunOutcome<{ ran: true }>>>>;
+
+		expect(await pending).toEqual({ status: "finished", by: gateId });
+	});
+
 	it("serializes structured input through routing and the parser", async () => {
 		let received: unknown;
 		const remoteAdd = defineCommand("remote-add", (command) =>
@@ -105,7 +166,10 @@ describe("typed programmatic invocation", () => {
 	it("rejects unserializable JSON input values", async () => {
 		const app = new Crust("cli").flags({ name: "config", type: "json" }).action(() => {});
 
-		await expect(app.run([], { flags: { config: undefined } })).resolves.toBeUndefined();
+		await expect(app.run([], { flags: { config: undefined } })).resolves.toEqual({
+			status: "completed",
+			result: undefined,
+		});
 		await expect(app.run([], { flags: { config: (() => {}) as never } })).rejects.toMatchObject({
 			code: "PARSE",
 			details: { reason: "unserializable-json" },
@@ -239,7 +303,9 @@ describe("typed programmatic invocation", () => {
 			| 28
 			| 29
 			| 30;
-		type WideTree = { [K in `command-${Index}`]: { args: []; flags: {}; children: {} } };
+		type WideTree = {
+			[K in `command-${Index}`]: { args: []; flags: {}; children: {}; result: void };
+		};
 		type Paths = CommandPath<WideTree>;
 		type _includesLast = Expect<readonly ["command-30"] extends Paths ? true : false>;
 		type _rejectsUnknown = Expect<
@@ -253,8 +319,13 @@ describe("typed programmatic invocation", () => {
 			Depth extends number,
 			Acc extends readonly unknown[] = [],
 		> = Acc["length"] extends Depth
-			? { args: []; flags: {}; children: {} }
-			: { args: []; flags: {}; children: { next: Nest<Depth, readonly [...Acc, unknown]> } };
+			? { args: []; flags: {}; children: {}; result: void }
+			: {
+					args: [];
+					flags: {};
+					children: { next: Nest<Depth, readonly [...Acc, unknown]> };
+					result: void;
+				};
 		type DeepTree = { root: Nest<16> };
 		type Paths = CommandPath<DeepTree>;
 		// Below the cap, paths stay exact; at the cap the tail widens to strings
@@ -264,24 +335,42 @@ describe("typed programmatic invocation", () => {
 			Equal<readonly ["root", "nope"] extends Paths ? true : false, false>
 		>;
 		// Segment 16 sits past the cap, so any string is accepted there.
-		type Fifteen = readonly [
-			"root",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-			"next",
-		];
-		type _widenedDeep = Expect<readonly [...Fifteen, "not-a-command"] extends Paths ? true : false>;
+		type _widenedDeep = Expect<
+			readonly [...FifteenDeep, "not-a-command"] extends Paths ? true : false
+		>;
+		expect(true).toBe(true);
+	});
+
+	it("resolves action results for literal paths past the depth cap", () => {
+		type Nest<
+			Depth extends number,
+			Acc extends readonly unknown[] = [],
+		> = Acc["length"] extends Depth
+			? { args: []; flags: {}; children: {}; result: "deep-result" }
+			: {
+					args: [];
+					flags: {};
+					children: { next: Nest<Depth, readonly [...Acc, unknown]> };
+					result: "mid";
+				};
+		type DeepTree = { root: Nest<16> };
+		type Root = { args: []; flags: {}; children: DeepTree; result: "root-result" };
+		// The depth-15 cap only widens the CommandPath constraint; `const Path` still
+		// infers the literal tuple, and CommandShapeAt (uncapped) resolves it fully.
+		type SeventeenDeep = readonly [...FifteenDeep, "next", "next"];
+		type _deepResult = Expect<Equal<CommandShapeAt<Root, SeventeenDeep>["result"], "deep-result">>;
+		// A path variable widened past the cap cannot name its command statically,
+		// so the shape (and its result) widens to unknown instead of an ancestor's.
+		type _widenedResult = Expect<
+			Equal<CommandShapeAt<Root, readonly ["root", ...string[]]>["result"], unknown>
+		>;
+		// A CommandPath<Tree>-typed variable (union of literal tuples and widened
+		// arrays) never resolves to never, and a widened head widens instead.
+		type _pathVariable = CommandShapeAt<Root, CommandPath<DeepTree>>["result"];
+		type _pathVariableSound = Expect<Equal<[_pathVariable] extends [never] ? true : false, false>>;
+		type _widenedHead = Expect<
+			Equal<CommandShapeAt<Root, readonly [string, ...string[]]>["result"], unknown>
+		>;
 		expect(true).toBe(true);
 	});
 });

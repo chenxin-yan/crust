@@ -17,7 +17,7 @@ import { applySchemas } from "../parsing/schema.ts";
 import { addFlagSpellingEntries, cloneFlagSpellings } from "../parsing/spellings.ts";
 import { isText } from "../sections.ts";
 import type { CommandSection, FlagDef, FlagsDef, InvocationIO } from "../types.ts";
-import type { CommandDefinition } from "./crust.ts";
+import type { CommandDefinition, RunOutcome } from "./crust.ts";
 import type { CommandNode } from "./node.ts";
 import { resolveCommand } from "./router.ts";
 import { type CommandSnapshot, snapshotCommand } from "./snapshot.ts";
@@ -326,7 +326,7 @@ async function dispatch(
 	io: InvocationIO,
 	onExtensionContext?: (context: ExtensionContext) => void,
 	onFailure?: (error: unknown, context: ExtensionContext) => Promise<ExtensionId | undefined>,
-): Promise<void> {
+): Promise<RunOutcome<unknown>> {
 	const { rootNode, extensions } = prepared;
 
 	// Routing and syntax parsing — failures flow directly to the caller.
@@ -355,7 +355,7 @@ async function dispatch(
 	});
 	onExtensionContext?.(extensionContext);
 
-	const terminal = async (): Promise<void> => {
+	const terminal = async (): Promise<unknown> => {
 		validateParsed(resolvedNode, parsed);
 
 		// Standard Schemas on arg/flag definitions own value validation and
@@ -375,9 +375,10 @@ async function dispatch(
 			stderr: io.stderr,
 		};
 
-		await resolvedNode.run(context);
+		return await resolvedNode.run(context);
 	};
 
+	let result: unknown;
 	let outcome: InvocationOutcome = { status: "completed" };
 	try {
 		try {
@@ -388,7 +389,7 @@ async function dispatch(
 				}
 			}
 			if (outcome.status !== "finished") {
-				await terminal();
+				result = await terminal();
 			}
 		} catch (error) {
 			const by = await onFailure?.(error, extensionContext);
@@ -419,6 +420,9 @@ async function dispatch(
 		// so its value registers its disposer before the disposal scope exits.
 		await resolver.settle();
 	}
+	return outcome.status === "finished"
+		? { status: "finished", by: outcome.by }
+		: { status: "completed", result };
 }
 
 /** Render one failure through Extension onError hooks, ending in Core's default renderer. */
@@ -500,11 +504,11 @@ export async function runInvocation(
 	argv: readonly string[],
 	io: Partial<InvocationIO> | undefined,
 	materializeCommandDefinition: MaterializeCommandDefinition,
-): Promise<void> {
+): Promise<RunOutcome<unknown>> {
 	const resolvedIO: InvocationIO = { ...DEFAULT_IO, ...io };
 	const prepared = prepareInvocation(node, materializeCommandDefinition);
 	const invoke = () => dispatch(argv, prepared, resolvedIO);
-	await (hasInjectedIO(io) ? withAmbientTerminalIO(resolvedIO, invoke) : invoke());
+	return await (hasInjectedIO(io) ? withAmbientTerminalIO(resolvedIO, invoke) : invoke());
 }
 
 /** Terminal CLI boundary: render failures and set the process exit status. */

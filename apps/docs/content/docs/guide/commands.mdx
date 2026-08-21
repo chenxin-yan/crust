@@ -82,9 +82,10 @@ await app.run(
 );
 ```
 
-`run()` throws the original error. `execute()` presents errors through Extension `onError` hooks, sets `process.exitCode`, and resolves. See [Execution Model](/docs/guide/lifecycle).
+`run()` resolves to a status-discriminated outcome: `completed` carries the action result, while `finished` names the Extension whose `preRun` hook ended the invocation. It throws the original error on failure. `execute()` presents errors through Extension `onError` hooks, sets `process.exitCode`, and resolves. See [Execution Model](/docs/guide/lifecycle).
 
 <Callout type="info">
   A command without a Command Action is valid when it owns subcommands. Invoking it directly
-  resolves without output; register the `help()` Extension to present the container's help instead.
+  resolves to `{ status: "completed", result: undefined }`; register the `help()` Extension to
+  present the container's help instead.
 </Callout>

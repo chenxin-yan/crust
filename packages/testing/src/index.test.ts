@@ -30,16 +30,23 @@ describe("captureRun", () => {
 		expect(true).toBe(true);
 	});
 
-	it("captures output as lines", async () => {
+	it("captures output and the typed action result", async () => {
 		const app = new Crust("test-cli").action(({ stdout, stderr }) => {
 			stdout("first");
 			stdout("second");
 			stderr("warning");
+			return { status: "ok" as const };
 		});
 
-		expect(await captureRun(app, [])).toEqual({
+		const captured = await captureRun(app, []);
+		if (captured.status !== "completed") throw new Error("expected a completed run");
+		// Compile-time check: the captured result carries the action's type.
+		const _result: { status: "ok" } = captured.result;
+		expect(captured).toEqual({
 			stdout: "first\nsecond",
 			stderr: "warning",
+			status: "completed",
+			result: { status: "ok" },
 		});
 	});
 
@@ -51,10 +58,32 @@ describe("captureRun", () => {
 			throw error;
 		});
 
-		const result = await captureRun(app, []);
-		expect(result.stdout).toBe("before");
-		expect(result.stderr).toBe("problem");
-		expect(result.error).toBe(error);
+		const captured = await captureRun(app, []);
+		expect(captured.stdout).toBe("before");
+		expect(captured.stderr).toBe("problem");
+		if (captured.status !== "failed") throw new Error("expected the failed branch");
+		expect(captured.error).toBe(error);
+	});
+
+	it("discriminates a falsy thrown value as the failure branch", async () => {
+		const app = new Crust("test-cli").action(() => {
+			throw undefined;
+		});
+
+		const captured = await captureRun(app, []);
+		expect(captured.status).toBe("failed");
+		if (captured.status === "failed") expect(captured.error).toBeUndefined();
+	});
+
+	it("captures the Extension that finishes the invocation", async () => {
+		const gateId = defineExtensionId("gate");
+		const gate = defineExtension(gateId, {
+			hooks: { preRun: (ctx) => ctx.finish() },
+		});
+		const app = new Crust("test-cli").extend(gate).action(() => ({ ran: true }));
+
+		const captured = await captureRun(app, []);
+		expect(captured).toEqual({ stdout: "", stderr: "", status: "finished", by: gateId });
 	});
 });
 

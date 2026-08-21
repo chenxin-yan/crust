@@ -13,6 +13,7 @@ import {
 	parseShortCircuit,
 	type PartialPromptTheme,
 	type PromptTheme,
+	type SchemaOrValidate,
 	type ValidateFn,
 } from "../core/types.ts";
 import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
@@ -37,7 +38,7 @@ import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
  * });
  * ```
  */
-export interface PasswordOptions<Output = string> {
+interface PasswordBaseOptions {
 	/** The prompt message displayed to the user */
 	readonly message?: string;
 	/**
@@ -46,15 +47,13 @@ export interface PasswordOptions<Output = string> {
 	 * @default "*"
 	 */
 	readonly mask?: string;
-	/** Standard Schema that owns validation, transformation, defaults, and optionality. */
-	readonly schema?: StandardSchema<unknown, Output>;
-	/** Throw-on-failure validation function. Cannot be combined with `schema`. */
-	readonly validate?: ValidateFn<string>;
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
 	readonly initial?: string;
 	/** Per-prompt theme overrides */
 	readonly theme?: PartialPromptTheme;
 }
+
+export type PasswordOptions<Output = string> = PasswordBaseOptions & SchemaOrValidate<Output>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // State (same shape as input)
@@ -161,14 +160,17 @@ function renderSubmitted<Output>(
  * ```
  */
 export function password<Output>(
-	options: Omit<PasswordOptions<Output>, "schema" | "validate"> & {
+	options: PasswordBaseOptions & {
 		readonly schema: StandardSchema<unknown, Output>;
 		readonly validate?: never;
 	},
 	io?: PromptIO,
 ): Promise<Output>;
 export function password(
-	options?: Omit<PasswordOptions, "schema"> & { readonly schema?: never },
+	options?: PasswordBaseOptions & {
+		readonly schema?: never;
+		readonly validate?: ValidateFn<string>;
+	},
 	io?: PromptIO,
 ): Promise<string>;
 export async function password<Output>(

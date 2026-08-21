@@ -13,6 +13,7 @@ import {
 	parseShortCircuit,
 	type PartialPromptTheme,
 	type PromptTheme,
+	type SchemaOrValidate,
 	type ValidateFn,
 } from "../core/types.ts";
 import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
@@ -51,7 +52,7 @@ import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
  * // typeof port === "number"
  * ```
  */
-export interface InputOptions<Output = string> {
+interface InputBaseOptions {
 	/** The prompt message displayed to the user */
 	readonly message?: string;
 	/** Placeholder text shown when the input is empty. Overrides the default value as visual placeholder when both are set. */
@@ -60,13 +61,11 @@ export interface InputOptions<Output = string> {
 	readonly default?: string;
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
 	readonly initial?: string;
-	/** Standard Schema that owns validation, transformation, defaults, and optionality. */
-	readonly schema?: StandardSchema<unknown, Output>;
-	/** Throw-on-failure validation function. Cannot be combined with `schema`. */
-	readonly validate?: ValidateFn<string>;
 	/** Per-prompt theme overrides */
 	readonly theme?: PartialPromptTheme;
 }
+
+export type InputOptions<Output = string> = InputBaseOptions & SchemaOrValidate<Output>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // State
@@ -170,14 +169,17 @@ function renderSubmitted<Output>(
  * ```
  */
 export function input<Output>(
-	options: Omit<InputOptions<Output>, "schema" | "validate"> & {
+	options: InputBaseOptions & {
 		readonly schema: StandardSchema<unknown, Output>;
 		readonly validate?: never;
 	},
 	io?: PromptIO,
 ): Promise<Output>;
 export function input(
-	options?: Omit<InputOptions, "schema"> & { readonly schema?: never },
+	options?: InputBaseOptions & {
+		readonly schema?: never;
+		readonly validate?: ValidateFn<string>;
+	},
 	io?: PromptIO,
 ): Promise<string>;
 export async function input<Output>(

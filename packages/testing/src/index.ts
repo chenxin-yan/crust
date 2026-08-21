@@ -3,11 +3,11 @@ import { setTimeout } from "node:timers/promises";
 import type {
 	AnyCrust,
 	CommandPath,
-	CommandShape,
 	CommandShapeAt,
-	Crust,
+	ExtensionId,
 	InvocationIO,
 	RunInputArguments,
+	RunOutcome,
 } from "@crustjs/core";
 import { type ProgressSink, withProgressSink } from "@crustjs/progress";
 import { withPromptIO } from "@crustjs/prompts";
@@ -16,52 +16,65 @@ import { createPromptIO, type Key } from "@crustjs/prompts/testing";
 /** Structural io shape shared by `run()` and `execute()` captures. */
 export type CaptureIO = Partial<InvocationIO>;
 
-type AppTypes<App extends AnyCrust> =
-	App extends Crust<infer Flags, infer Args, any, any, any, infer Tree>
-		? { shape: CommandShape<Args, Flags, Tree>; tree: Tree }
-		: never;
-type AppTree<App extends AnyCrust> = AppTypes<App>["tree"];
+// Indexed access into the `_types` phantom instead of conditionally inferring
+// all nine `Crust` generics — the conditional forced a full structural match
+// (and union distribution) per helper call.
+type AppTree<App extends AnyCrust> = App["_types"]["tree"];
 type ShapeAtPath<App extends AnyCrust, Path extends CommandPath<AppTree<App>>> = CommandShapeAt<
-	AppTypes<App>["shape"],
+	App["_types"]["shape"],
 	Path
 >;
 
-export interface CapturedRun {
+/**
+ * Result of {@link captureRun}. Completed runs carry the selected action's
+ * typed result, finished runs name the finishing Extension, and failed runs
+ * carry the thrown value. Narrow with the `status` discriminant.
+ */
+export type CapturedRun<Result = unknown> = {
 	readonly stdout: string;
 	readonly stderr: string;
-	readonly error?: unknown;
-}
+} & (
+	| { readonly status: "completed"; readonly result: Result }
+	| { readonly status: "finished"; readonly by: ExtensionId }
+	| { readonly status: "failed"; readonly error: unknown }
+);
 
 /** Run an application and capture its text output without throwing invocation errors. */
 export async function captureRun<
 	App extends AnyCrust,
 	const Path extends CommandPath<AppTree<App>>,
->(app: App, path: Path, ...args: RunInputArguments<ShapeAtPath<App, Path>>): Promise<CapturedRun> {
+>(
+	app: App,
+	path: Path,
+	...args: RunInputArguments<ShapeAtPath<App, Path>>
+): Promise<CapturedRun<ShapeAtPath<App, Path>["result"]>> {
 	// Each io callback invocation is one line in a real terminal (core's
 	// defaults are console.log/console.error), so join captured calls with "\n".
 	const stdoutLines: string[] = [];
 	const stderrLines: string[] = [];
-	let failed = false;
-	let error: unknown;
 
 	try {
 		const [input] = args;
-		await app.run(path as never, input as never, {
+		// The `as never` path/input erasure in this call loses the typed link to
+		// the selected shape, so restore it once here.
+		const outcome = (await app.run(path as never, input as never, {
 			stdout: (text) => {
 				stdoutLines.push(text);
 			},
 			stderr: (text) => {
 				stderrLines.push(text);
 			},
-		});
-	} catch (caught) {
-		failed = true;
-		error = caught;
+		})) as RunOutcome<ShapeAtPath<App, Path>["result"]>;
+		return { stdout: stdoutLines.join("\n"), stderr: stderrLines.join("\n"), ...outcome };
+	} catch (error) {
+		// Output written before the failure is retained.
+		return {
+			stdout: stdoutLines.join("\n"),
+			stderr: stderrLines.join("\n"),
+			status: "failed",
+			error,
+		};
 	}
-
-	const stdout = stdoutLines.join("\n");
-	const stderr = stderrLines.join("\n");
-	return failed ? { stdout, stderr, error } : { stdout, stderr };
 }
 
 /** Minimal structural surface of `execute()` invoked by {@link captureExecute}. */
@@ -158,13 +171,15 @@ export function runInteractive<App extends AnyCrust, const Path extends CommandP
 	const [input] = args;
 	const done = withProgressSink(sink, () =>
 		withPromptIO(harness.io, () =>
-			app.run(path as never, input as never, {
-				stdout: () => {},
-				stderr: (text) => {
-					// Line-oriented like core's console.error default.
-					output.write(`${text}\n`);
-				},
-			}),
+			app
+				.run(path as never, input as never, {
+					stdout: () => {},
+					stderr: (text) => {
+						// Line-oriented like core's console.error default.
+						output.write(`${text}\n`);
+					},
+				})
+				.then(() => {}),
 		),
 	);
 

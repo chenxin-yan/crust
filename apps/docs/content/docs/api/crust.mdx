@@ -39,9 +39,7 @@ interface CommandDefinitionBuilder<
   args(...defs: ArgsDef): CommandDefinitionBuilder;
   provide(...instances: readonly ContextInstance[]): CommandDefinitionBuilder;
   add(...definitions: readonly CommandDefinition[]): CommandDefinitionBuilder;
-  action(
-    action: (ctx: CrustCommandContext<A, Flags, Ctx>) => void | Promise<void>,
-  ): CommandDefinitionBuilder;
+  action<R>(action: (ctx: CrustCommandContext<A, Flags, Ctx>) => R): CommandDefinitionBuilder;
 }
 ```
 
@@ -257,12 +255,12 @@ See [Extensions](/docs/guide/extensions) for authoring custom Extensions.
 ## `.action(action)`
 
 ```ts
-action(
-  action: (ctx: CrustCommandContext<A, Flags, Ctx>) => void | Promise<void>,
+action<R>(
+  action: (ctx: CrustCommandContext<A, Flags, Ctx>) => R,
 ): Crust
 ```
 
-Defines the Command Action. A later `.action()` call replaces the action on the returned immutable builder. The action runs after routing, parsing, `preRun` hooks, and validation; Contexts construct on demand.
+Defines the Command Action. Its awaited return type is carried by the builder for typed `run()` calls. A later `.action()` call replaces both the action and its result type on the returned immutable builder. The action runs after routing, parsing, `preRun` hooks, and validation; Contexts construct on demand.
 
 ```ts
 const app = new Crust("greet")
@@ -332,14 +330,14 @@ The `CommandSnapshot` type is exported from `@crustjs/core` and re-exported from
 ## `.run(path, input?, io?)`
 
 ```ts
-run(path, input?, io?): Promise<void>
+run(path, input?, io?): Promise<RunOutcome<R>>
 ```
 
-Invokes an application programmatically with a command path and structured input inferred from the application. Editors complete command names at each path level plus the selected command's argument and flag names. Required inputs and value types are checked by TypeScript.
+Invokes an application programmatically with a command path and structured input inferred from the application. Editors complete command names at each path level plus the selected command's argument and flag names. Required inputs, input value types, and the selected action's awaited return type are inferred by TypeScript.
 
 ```ts
 const stdout: string[] = [];
-await app.run(
+const outcome = await app.run(
   ["greet"],
   { args: { name: "Ada" }, flags: { loud: true } },
   {
@@ -347,6 +345,13 @@ await app.run(
     stderr: (text) => stdout.push(text),
   },
 );
+if (outcome.status === "completed") {
+  // outcome.result is the awaited return value of the "greet" action.
+  console.log(outcome.result);
+} else {
+  // outcome.by identifies the Extension whose preRun hook finished first.
+  console.log(`Finished by ${outcome.by}`);
+}
 ```
 
 Structured values are serialized to argv and pass through the normal router, parser, schema, Context, and Command Action pipeline. When `io` contains at least one callback, the resolved callbacks are also ambient for the full invocation: progress indicators and prompt output default to the injected `stderr` callback. Progress uses non-TTY static lines, and prompt input remains a separate `PromptIO` concern.
@@ -359,9 +364,9 @@ await app.run(["exec"], { args: { command: "lint" }, raw: ["--fix", "src"] });
 
 Positional values beginning with `-`, or equal to a subcommand name or alias of the selected command, cannot be represented through `run()` and throw a `PARSE` error; use `execute({ argv })` when testing raw terminal syntax.
 
-`run()` resolves after successful cleanup. It does not render errors, run Extension `onError` hooks, or change `process.exitCode`. Definition, parse, Context, Command Action, and cancellation failures are thrown unchanged.
+`run()` resolves to a `RunOutcome`: `{ status: "completed", result }` carries the selected Command Action's awaited return value after successful cleanup (including `undefined` from actionless or `void` actions), while `{ status: "finished", by }` identifies the Extension whose `preRun` hook finished the invocation first. It does not render errors, run Extension `onError` hooks, or change `process.exitCode`. Definition, parse, Context, Command Action, and cancellation failures are thrown unchanged.
 
-Extension-contributed commands and flags are runtime-dynamic and therefore do not appear in the typed command path or input: an Extension flag passed to `run()` throws a `PARSE` error. Invoke those through `execute({ argv })`.
+Extension-contributed commands and flags are runtime-dynamic and therefore do not appear in the typed command path or input: an Extension flag passed to `run()` throws a `PARSE` error. Invoke those through `execute({ argv })`. If an Extension command reuses an authored command's canonical name, routing keeps the documented last-write-wins behavior at runtime while `run()` still types the input and result from the authored command — namespace Extension command names to avoid this mismatch.
 
 ## `.execute(options?)`
 
