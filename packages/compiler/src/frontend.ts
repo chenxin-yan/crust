@@ -112,8 +112,12 @@ function lowerStatement(
 			call.arguments.length === 0 ||
 			(call.arguments.length > 1 &&
 				firstArgument &&
-				ts.isStringLiteralLike(firstArgument) &&
-				/%[cdfijoOs%]/.test(firstArgument.text)) ||
+				(ts.isStringLiteralLike(firstArgument)
+					? /%[cdfijoOs%]/.test(firstArgument.text)
+					: Boolean(
+							checker.getTypeAtLocation(firstArgument).flags &
+							(ts.TypeFlags.String | ts.TypeFlags.StringLiteral),
+						))) ||
 			call.arguments.some((argument) => {
 				const type = checker.getTypeAtLocation(argument);
 				return (
@@ -192,10 +196,18 @@ function lowerExpression(
 		return {
 			kind: "template",
 			head: node.head.text,
-			spans: node.templateSpans.map((span) => ({
-				expression: lowerExpression(span.expression, checker, sourceFile),
-				literal: span.literal.text,
-			})),
+			spans: node.templateSpans.map((span) => {
+				if (
+					checker.getTypeAtLocation(span.expression).flags &
+					(ts.TypeFlags.Void | ts.TypeFlags.Undefined)
+				) {
+					throw unsupported(span.expression, sourceFile);
+				}
+				return {
+					expression: lowerExpression(span.expression, checker, sourceFile),
+					literal: span.literal.text,
+				};
+			}),
 		};
 	}
 	if (isProcessArgv(node)) return { kind: "argv", entryFile: sourceFile.fileName };
