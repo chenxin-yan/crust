@@ -41,7 +41,7 @@ describe("captureRun", () => {
 		const captured = await captureRun(app, []);
 		if (captured.status !== "completed") throw new Error("expected a completed run");
 		// Compile-time check: the captured result carries the action's type.
-		const _result: { status: "ok" } | undefined = captured.result;
+		const _result: { status: "ok" } = captured.result;
 		expect(captured).toEqual({
 			stdout: "first\nsecond",
 			stderr: "warning",

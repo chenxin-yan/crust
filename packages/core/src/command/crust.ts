@@ -108,7 +108,7 @@ export interface CommandShape<
 	readonly args: A;
 	readonly flags: F;
 	readonly children: Children;
-	readonly result?: Result;
+	readonly result: Result;
 }
 
 /** Result of a successful programmatic invocation. */
@@ -147,7 +147,11 @@ export type CommandShapeAt<
 			? CommandShapeAt<Child, Tail>
 			: never
 		: never
-	: Shape;
+	: Path extends readonly []
+		? Shape
+		: // A tail widened past the CommandPath depth cap selects a statically
+			// unknowable command, so the shape (and its result) widens too.
+			CommandShape;
 
 type RequiredKeys<T> = {
 	[K in keyof T]-?: {} extends Pick<T, K> ? never : K;
