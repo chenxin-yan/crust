@@ -45,15 +45,19 @@ function functionReturnsItself(node: ts.FunctionDeclaration, checker: ts.TypeChe
 	if (!symbol || !node.body) return false;
 
 	let found = false;
-	function findReference(child: ts.Node): void {
-		if (ts.isIdentifier(child) && checker.getSymbolAtLocation(child) === symbol) {
+	function findSelfCall(child: ts.Node): void {
+		if (
+			ts.isCallExpression(child) &&
+			ts.isIdentifier(child.expression) &&
+			checker.getSymbolAtLocation(child.expression) === symbol
+		) {
 			found = true;
 			return;
 		}
-		ts.forEachChild(child, findReference);
+		if (!ts.isFunctionLike(child)) ts.forEachChild(child, findSelfCall);
 	}
 	function visit(child: ts.Node): void {
-		if (ts.isReturnStatement(child) && child.expression) findReference(child.expression);
+		if (ts.isReturnStatement(child) && child.expression) findSelfCall(child.expression);
 		else if (!ts.isFunctionLike(child)) ts.forEachChild(child, visit);
 	}
 	visit(node.body);
@@ -65,7 +69,7 @@ function typeContainsAny(
 	checker: ts.TypeChecker,
 	seen = new Set<ts.Type>(),
 ): boolean {
-	if (type.flags & ts.TypeFlags.Any) return true;
+	if (type === checker.getAnyType()) return true;
 	if (seen.has(type)) return false;
 	seen.add(type);
 	if (
@@ -84,7 +88,11 @@ function typeContainsAny(
 	});
 }
 
-function findAnyDiagnostics(sourceFile: ts.SourceFile, checker: ts.TypeChecker) {
+function findAnyDiagnostics(
+	sourceFile: ts.SourceFile,
+	checker: ts.TypeChecker,
+	typescriptDiagnostics: readonly ts.Diagnostic[],
+) {
 	const diagnostics: CompilerDiagnostic[] = [];
 	function visit(node: ts.Node): void {
 		if (node.kind === ts.SyntaxKind.AnyKeyword) {
@@ -100,7 +108,15 @@ function findAnyDiagnostics(sourceFile: ts.SourceFile, checker: ts.TypeChecker) 
 		} else if (
 			ts.isParameter(node) &&
 			!node.type &&
-			typeContainsAny(checker.getTypeAtLocation(node), checker)
+			typeContainsAny(checker.getTypeAtLocation(node), checker) &&
+			!typescriptDiagnostics.some(
+				(diagnostic) =>
+					diagnostic.file === sourceFile &&
+					diagnostic.start !== undefined &&
+					implicitAnyDiagnosticCodes.has(diagnostic.code) &&
+					diagnostic.start >= node.getStart(sourceFile) &&
+					diagnostic.start < node.end,
+			)
 		) {
 			diagnostics.push(
 				diagnosticAtNode(
@@ -174,11 +190,16 @@ export function lower(entryFile: string): Program {
 	};
 	const program = ts.createProgram([absoluteEntry], compilerOptions);
 	const sourceFile = program.getSourceFile(absoluteEntry);
-	const diagnostics = ts
-		.getPreEmitDiagnostics(program)
-		.map((diagnostic) => fromTypeScriptDiagnostic(diagnostic, absoluteEntry));
+	const typescriptDiagnostics = ts.getPreEmitDiagnostics(program);
+	const diagnostics = typescriptDiagnostics.map((diagnostic) =>
+		fromTypeScriptDiagnostic(diagnostic, absoluteEntry),
+	);
 	if (sourceFile) {
-		for (const candidate of findAnyDiagnostics(sourceFile, program.getTypeChecker())) {
+		for (const candidate of findAnyDiagnostics(
+			sourceFile,
+			program.getTypeChecker(),
+			typescriptDiagnostics,
+		)) {
 			if (
 				!diagnostics.some(
 					(diagnostic) =>

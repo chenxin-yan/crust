@@ -67,6 +67,20 @@ describe("compiler diagnostic corpus", () => {
 		expectLocated(error);
 	});
 
+	it("does not classify recovery-any parameters as unsupported any", async () => {
+		const error = await compileFailure("recovery-any-parameter.ts");
+		expect(error.diagnostics.map(({ code }) => code)).toEqual([DiagnosticCodes.TypeScriptError]);
+		expectLocated(error);
+	});
+
+	it("reports an implicit-any binding element once", async () => {
+		const error = await compileFailure("implicit-any-binding.ts");
+		expect(error.diagnostics.filter(({ code }) => code === DiagnosticCodes.AnyType)).toHaveLength(
+			1,
+		);
+		expectLocated(error);
+	});
+
 	it("classifies suppressed implicit-any parameters as unsupported any", async () => {
 		const error = await compileFailure("suppressed-implicit-any.ts");
 		expect(error.diagnostics.map(({ code }) => code)).toContain(DiagnosticCodes.AnyType);
@@ -103,6 +117,12 @@ describe("compiler diagnostic corpus", () => {
 		const error = await compileFailure("inferred-never.ts");
 		expect(error.diagnostics.map(({ code }) => code)).not.toContain(DiagnosticCodes.AnyType);
 		expect(error.diagnostics[0]?.code).toBe(DiagnosticCodes.UnsupportedConstruct);
+		expectLocated(error);
+	});
+
+	it("does not infer circular any from a self-reference passed as an argument", async () => {
+		const error = await compileFailure("inferred-never-self-argument.ts");
+		expect(error.diagnostics.map(({ code }) => code)).not.toContain(DiagnosticCodes.AnyType);
 		expectLocated(error);
 	});
 
