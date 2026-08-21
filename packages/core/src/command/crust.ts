@@ -577,26 +577,43 @@ function installExtensionContexts(
 ): CommandNode {
 	// Rebuild Extension providers from the deduplicated list so replacing an id
 	// cannot leave the earlier registration's eager Context installs behind.
+	// Registrations that survive dedup unchanged stay at their original
+	// positions: Context resolution is last-write-wins and documentation
+	// promises flag definition order, so pruning in place (instead of
+	// regrouping locals before Extensions) keeps both observable orders.
 	const cloned = cloneCommandNode(node);
-	const reset = (target: CommandNode): void => {
-		const localContexts: ContextInstance[] = [];
+	const previous = new Map(node.extensions.map((extension) => [extension.id, extension]));
+	const kept = new Set(
+		extensions.filter((extension) => previous.get(extension.id) === extension).map((e) => e.id),
+	);
+	const prune = (target: CommandNode): void => {
+		const contexts: ContextInstance[] = [];
+		const contextExtensionIds: CommandNode["contextExtensionIds"] = [];
 		for (let index = 0; index < target.contexts.length; index++) {
-			if (target.contextExtensionIds[index] === undefined)
-				localContexts.push(target.contexts[index]!);
+			const id = target.contextExtensionIds[index];
+			if (id !== undefined && !kept.has(id)) continue;
+			contexts.push(target.contexts[index]!);
+			contextExtensionIds.push(id);
 		}
-		target.contexts = localContexts;
-		target.contextExtensionIds = localContexts.map(() => undefined);
-		target.ownedFlags = Object.assign({}, ...localContexts.map((context) => context.ownedFlags));
-		target.effectiveFlags = { ...target.ownedFlags, ...target.localFlags };
+		target.contexts = contexts;
+		target.contextExtensionIds = contextExtensionIds;
+		target.ownedFlags = Object.assign({}, ...contexts.map((context) => context.ownedFlags));
+		const effectiveFlags: FlagsDef = {};
+		for (const [name, def] of Object.entries(target.effectiveFlags)) {
+			if (Object.hasOwn(target.localFlags, name) || Object.hasOwn(target.ownedFlags, name))
+				effectiveFlags[name] = def;
+		}
+		target.effectiveFlags = effectiveFlags;
 		target.flagSpellings = new Map();
 		for (const [name, def] of Object.entries(target.effectiveFlags)) {
 			addFlagSpellingEntries(target.flagSpellings, name, def);
 		}
-		for (const child of Object.values(target.subCommands)) reset(child);
+		for (const child of Object.values(target.subCommands)) prune(child);
 	};
-	reset(cloned);
+	prune(cloned);
 
 	for (const extension of extensions) {
+		if (kept.has(extension.id)) continue;
 		const instances = extension.provides ?? [];
 		if (instances.length === 0) continue;
 		const walk = (target: CommandNode, skip: ReadonlySet<string>): void => {
@@ -1094,7 +1111,13 @@ export class Crust<
 	 * Register one or more CLI Extensions on the application root.
 	 *
 	 * Extensions are application-wide: they own the flags and commands they
-	 * contribute. Repeated calls accumulate Extensions in registration order;
+	 * contribute. Repeated calls accumulate Extensions in registration order,
+	 * except that registering an `ExtensionId` again keeps only the last
+	 * registration — its contributions and providers replace the earlier ones
+	 * and its hooks run once, at the later position. Replacement is
+	 * runtime-only: contributions already merged into the builder's static
+	 * types stay visible, so invoking a replaced literal Extension's commands
+	 * through typed `run()` fails at runtime with `COMMAND_NOT_FOUND`.
 	 * Command definition builders do not expose this method.
 	 */
 	extend<const Es extends readonly Extension<any, any, any, any>[]>(

@@ -682,6 +682,45 @@ describe("Crust .extend()", () => {
 		expect(calls).toEqual(["second:sections", "second:preRun", "second:setup", "second:dispose"]);
 	});
 
+	it("keeps a local provider override across unrelated .extend() calls", async () => {
+		const values: string[] = [];
+		const resource = defineContext("resource", () => "extension");
+		const local = defineContext("resource", () => "local");
+		const providing = defineExtension(defineExtensionId("providing"), {
+			provides: [resource()],
+		});
+		const app = new Crust("test")
+			.extend(providing)
+			// Same-name local re-provide is runtime last-write-wins; the cast
+			// bypasses the duplicate Context brand.
+			.provide(local() as never)
+			.extend(defineExtension(defineExtensionId("unrelated")))
+			.action(async ({ ctx }) => {
+				// The `as never` provide collapses the static Context map; the bag still resolves at runtime.
+				const bag = ctx as { resource: Promise<string> };
+				values.push(await bag.resource);
+			});
+
+		await app.run([]);
+		expect(values).toEqual(["local"]);
+	});
+
+	it("preserves interleaved local and Context flag order across .extend()", async () => {
+		const owner = defineContext(
+			"owner",
+			{ flags: [{ name: "bFlag", type: "boolean" }] },
+			() => ({}),
+		);
+		const app = new Crust("test")
+			.flags({ name: "aFlag", type: "boolean" })
+			.provide(owner())
+			.extend(defineExtension(defineExtensionId("order-noop")))
+			.action(() => {});
+
+		const snapshot = await app.snapshot();
+		expect(Object.keys(snapshot.flags)).toEqual(["aFlag", "bFlag"]);
+	});
+
 	it("defineExtension() returns a frozen plain config", () => {
 		const ext = defineExtension(defineExtensionId("frozen"), {
 			flags: [{ name: "x", type: "boolean" }],
@@ -810,6 +849,33 @@ describe("Extension application at prepare time", () => {
 			void new Crust("cli").extend(first).extend(second);
 			void app.extend(dynamic);
 			void app.extend(clean);
+		}
+		void typecheckHarness;
+		expect(true).toBe(true);
+	});
+
+	it("brands duplicate command spellings within one Extension at defineExtension()", () => {
+		function typecheckHarness() {
+			void defineExtension(defineExtensionId("self-name-collision"), {
+				commands: [
+					defineCommand("dup", (command) => command),
+					// @ts-expect-error -- duplicate canonical name within one Extension (FIX_COMMAND_COLLISION)
+					defineCommand("dup", (command) => command),
+				],
+			});
+			void defineExtension(defineExtensionId("self-alias-collision"), {
+				commands: [
+					defineCommand("deploy", { aliases: ["d"] }, (command) => command),
+					// @ts-expect-error -- canonical name matches an earlier alias within one Extension (FIX_COMMAND_COLLISION)
+					defineCommand("d", (command) => command),
+				],
+			});
+			void defineExtension(defineExtensionId("self-clean"), {
+				commands: [
+					defineCommand("build", (command) => command),
+					defineCommand("deploy", (command) => command),
+				],
+			});
 		}
 		void typecheckHarness;
 		expect(true).toBe(true);

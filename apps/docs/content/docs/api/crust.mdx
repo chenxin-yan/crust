@@ -138,7 +138,7 @@ Definition aliases must be non-empty, contain no whitespace, not start with `-`,
 
 ## Chaining semantics
 
-Variadic builder methods accumulate across calls: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` preserve earlier registrations. Every definition rule has one home per path: TypeScript brands reject statically known invalid definitions and collisions at compile time, and dynamically assembled definitions (config-built flags, args, commands, and Extensions) fail loud with a `DEFINITION` error at the same composition points. Recipe behavior, Context lifecycle, documentation sections, and argv input retain their runtime checks.
+Variadic builder methods accumulate across calls: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` preserve earlier registrations — with one exception: `.extend()` deduplicates by `ExtensionId`, keeping only the last registration for a given id. Every definition rule has one home per path: TypeScript brands reject statically known invalid definitions and collisions at compile time, and dynamically assembled definitions (config-built flags, args, commands, and Extensions) fail loud with a `DEFINITION` error at the same composition points. Recipe behavior, Context lifecycle, documentation sections, and argv input retain their runtime checks.
 
 ## `.args(...defs)`
 
