@@ -19,16 +19,18 @@ type UnionToIntersection<U> = (U extends unknown ? (x: U) => void : never) exten
 	? I
 	: never;
 
-type IsUnion<T> = [T] extends [UnionToIntersection<T>] ? false : true;
+export type IsUnion<T> = [T] extends [UnionToIntersection<T>] ? false : true;
 
 /**
- * `true` only for a single statically known tuple whose members are not
- * unions. A conditionally assembled collection (`cond ? [a] : [b]` or
- * `[cond ? a : b]`) infers as a union at the tuple or member level; only one
- * branch exists at runtime, so such contributions must stay runtime-only.
+ * `true` only for a single statically known fixed-length tuple whose members
+ * are not unions. A conditionally assembled collection (`cond ? [a] : [b]` or
+ * `[cond ? a : b]`) infers as a union at the tuple or member level, and a
+ * variable-length array (`const xs: (typeof a)[]`) may be empty or partially
+ * populated at runtime; such contributions must stay runtime-only.
  */
-export type IsStaticTuple<Cs extends readonly unknown[]> =
-	IsUnion<Cs> extends true
+export type IsStaticTuple<Cs extends readonly unknown[]> = number extends Cs["length"]
+	? false
+	: IsUnion<Cs> extends true
 		? false
 		: true extends { [I in keyof Cs]: IsUnion<Cs[I]> }[number]
 			? false

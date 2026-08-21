@@ -196,6 +196,87 @@ describe("typed programmatic invocation", () => {
 		void typecheckHarness;
 	});
 
+	it("keeps dynamically assembled Extensions and contribution arrays runtime-only", () => {
+		const foo = defineCommand("foo", (command) => command.action(() => "foo" as const));
+		const bar = defineCommand("bar", (command) => command.action(() => "bar" as const));
+		const condition = (globalThis as { __never?: boolean }).__never === true;
+
+		// Homogeneous variable-length contribution arrays may be empty at runtime.
+		const homoCommands: (typeof foo)[] = condition ? [foo] : [];
+		const homoExt = defineExtension(defineExtensionId("homo"), { commands: homoCommands });
+		const homoApp = new Crust("cli").extend(homoExt);
+
+		// A conditionally selected Extension installs only one branch.
+		const extFoo = defineExtension(defineExtensionId("extfoo"), { commands: [foo] });
+		const extBar = defineExtension(defineExtensionId("extbar"), { commands: [bar] });
+		const unionApp = new Crust("cli").extend(condition ? extFoo : extBar);
+		const bothApp = new Crust("cli").extend(extFoo, extBar);
+
+		// A variable-length Extension list may install nothing.
+		const extensionList: (typeof extFoo)[] = condition ? [extFoo] : [];
+		const spreadApp = new Crust("cli").extend(...extensionList);
+
+		function typecheckHarness() {
+			// @ts-expect-error -- a variable-length commands array is runtime-only
+			void homoApp.run(["foo"]);
+			// @ts-expect-error -- a conditionally selected Extension is runtime-only
+			void unionApp.run(["foo"]);
+			// @ts-expect-error -- a conditionally selected Extension is runtime-only
+			void unionApp.run(["bar"]);
+			// Separate static Extensions in one call still publish both paths.
+			void bothApp.run(["foo"]);
+			void bothApp.run(["bar"]);
+			// @ts-expect-error -- a variable-length Extension list is runtime-only
+			void spreadApp.run(["foo"]);
+			// A runtime-only list must not pollute sibling spellings for later adds.
+			void spreadApp.add(foo);
+		}
+		void typecheckHarness;
+	});
+
+	it("rejects command collisions inside one Extension's tuple", () => {
+		const foo = defineCommand("foo", (command) => command.action(() => "a" as const));
+		const fooDup = defineCommand("foo", (command) => command.action(() => "b" as const));
+		const aliasA = defineCommand("alpha", { aliases: ["shared"] }, (command) =>
+			command.action(() => {}),
+		);
+		const aliasB = defineCommand("beta", { aliases: ["shared"] }, (command) =>
+			command.action(() => {}),
+		);
+
+		function typecheckHarness() {
+			// @ts-expect-error -- duplicate canonical names resolve last-write-wins at prepare
+			void defineExtension(defineExtensionId("dup"), { commands: [foo, fooDup] });
+			// @ts-expect-error -- a shared alias would union both shapes under one path
+			void defineExtension(defineExtensionId("alias"), { commands: [aliasA, aliasB] });
+			// Distinct spellings pass.
+			void defineExtension(defineExtensionId("ok"), { commands: [foo, aliasA] });
+		}
+		void typecheckHarness;
+	});
+
+	it("rejects Extension flags colliding with contributed command flags", () => {
+		const scan = defineCommand("scan", (command) =>
+			command.flags({ name: "trace", type: "boolean" }).action(() => {}),
+		);
+		const extension = defineExtension(defineExtensionId("tracing"), {
+			flags: [{ name: "trace", type: "string" as const }],
+			commands: [scan],
+		});
+		const clean = defineExtension(defineExtensionId("clean"), {
+			flags: [{ name: "other", type: "string" as const }],
+			commands: [scan],
+		});
+
+		function typecheckHarness() {
+			// @ts-expect-error -- prepare injects the flag into the contributed command and throws
+			void new Crust("cli").extend(extension);
+			// Disjoint spellings pass.
+			void new Crust("cli").extend(clean);
+		}
+		void typecheckHarness;
+	});
+
 	it("keeps widened recursive flag scopes off descendant typed inputs", () => {
 		const dynamicScope = (globalThis as { __never?: boolean }).__never === true;
 		const scoped = defineExtension(defineExtensionId("scoped"), {

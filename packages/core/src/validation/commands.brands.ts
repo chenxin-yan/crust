@@ -1,4 +1,4 @@
-import type { DefName, EmptyLiteralNameBrand, IsStaticTuple, Overlap } from "./shared.ts";
+import type { DefName, EmptyLiteralNameBrand, IsStaticTuple, IsUnion, Overlap } from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Compile-time validation
@@ -109,13 +109,19 @@ export type ValidateCommandDefinitions<
 		: never
 	: Ds;
 
-type ExtensionCommandDefs<E> = E extends {
-	readonly commands?: infer Cs extends readonly unknown[];
-}
-	? IsStaticTuple<Cs> extends true
-		? Cs
-		: readonly []
-	: readonly [];
+// The IsUnion guard keeps a conditionally selected Extension
+// (`cond ? extA : extB`) runtime-only: a naked conditional would distribute
+// and accept each branch's commands independently.
+type ExtensionCommandDefs<E> =
+	IsUnion<E> extends true
+		? readonly []
+		: E extends {
+					readonly commands?: infer Cs extends readonly unknown[];
+			  }
+			? IsStaticTuple<Cs> extends true
+				? Cs
+				: readonly []
+			: readonly [];
 
 /**
  * Statically known command spellings contributed by one Extension. Widened
@@ -126,10 +132,16 @@ export type ExtensionCommandSpellings<E> = CommandDefinitionSpellings<
 	ExtensionCommandDefs<E>[number]
 >;
 
-/** Command spellings contributed by a tuple of Extensions. */
-export type ExtensionsCommandSpellings<Es extends readonly unknown[]> = ExtensionCommandSpellings<
-	Es[number]
->;
+/**
+ * Command spellings contributed by a tuple of Extensions. Mapped per slot
+ * because `Es[number]` cannot distinguish `.extend(a, b)` from
+ * `.extend(cond ? a : b)` — both index to the same union; only the per-slot
+ * view keeps a conditional Extension runtime-only while separate static
+ * Extensions still contribute. Variable-length lists contribute nothing.
+ */
+export type ExtensionsCommandSpellings<Es extends readonly unknown[]> = number extends Es["length"]
+	? never
+	: { [I in keyof Es]: ExtensionCommandSpellings<Es[I]> }[number];
 
 type ExtensionCommandCollisionBrand<E, Existing extends string> =
 	Overlap<ExtensionCommandSpellings<E>, Existing> extends infer Collision extends string

@@ -52,7 +52,7 @@ import type {
 	SpellingsOf,
 	ValidateNamedFlagDefs,
 } from "../validation/flags.brands.ts";
-import type { IsStaticTuple } from "../validation/shared.ts";
+import type { IsStaticTuple, IsUnion } from "../validation/shared.ts";
 import {
 	cloneCommandNode,
 	executeInvocation,
@@ -447,32 +447,46 @@ type DefinitionsTree<
 	>;
 };
 
-// Conditionally assembled contributions (union-typed tuples or members) stay
-// runtime-only: only one branch is installed at prepare time, so publishing
-// both as guaranteed typed paths would let run() dispatch a missing command.
-// Widened contributions also pass through here, but their spellings resolve to
-// `never` (see CommandDefinitionSpellings), so they contribute no typed paths.
+// Conditionally assembled contributions (union-typed tuples or members) and
+// variable-length arrays stay runtime-only: only what prepare actually
+// installs may become a guaranteed typed path, or run() could dispatch a
+// missing command. The IsUnion guard keeps a conditionally selected Extension
+// (`cond ? extA : extB`) runtime-only too — a naked conditional would
+// distribute and accept each branch independently. Widened contributions also
+// pass through here, but their spellings resolve to `never` (see
+// CommandDefinitionSpellings), so they contribute no typed paths.
 type StaticExtensionCommands<E> =
-	E extends Extension<any, any, any, infer Commands>
-		? IsStaticTuple<Commands> extends true
-			? Commands
-			: readonly []
-		: readonly [];
+	IsUnion<E> extends true
+		? readonly []
+		: E extends Extension<any, any, any, infer Commands>
+			? IsStaticTuple<Commands> extends true
+				? Commands
+				: readonly []
+			: readonly [];
 
+// Mapped per slot: `Es[number]` cannot distinguish `.extend(a, b)` from
+// `.extend(cond ? a : b)` — both index to the same union. Variable-length
+// Extension lists (`.extend(...dynamicList)`) contribute nothing.
 type ExtensionCommands<Es extends readonly Extension<any, any, any, any>[]> =
-	StaticExtensionCommands<Es[number]>;
+	number extends Es["length"]
+		? readonly []
+		: { [I in keyof Es]: StaticExtensionCommands<Es[I]> }[number];
 
 type StaticExtensionFlagDefs<E> =
-	E extends Extension<any, any, infer Defs, any>
-		? IsStaticTuple<Defs> extends true
-			? string extends Defs[number]["name"]
-				? readonly []
-				: Defs
-			: readonly []
-		: readonly [];
+	IsUnion<E> extends true
+		? readonly []
+		: E extends Extension<any, any, infer Defs, any>
+			? IsStaticTuple<Defs> extends true
+				? string extends Defs[number]["name"]
+					? readonly []
+					: Defs
+				: readonly []
+			: readonly [];
 
 type ExtensionFlagDefs<Es extends readonly Extension<any, any, any, any>[]> =
-	StaticExtensionFlagDefs<Es[number]>;
+	number extends Es["length"]
+		? readonly []
+		: { [I in keyof Es]: StaticExtensionFlagDefs<Es[I]> }[number];
 
 type ExtensionFlags<Es extends readonly Extension<any, any, any, any>[]> = NamedFlagsRecord<
 	ExtensionFlagDefs<Es>
@@ -1046,7 +1060,13 @@ export class Crust<
 	extend<const Es extends readonly Extension<any, any, any, any>[]>(
 		...extensions: Es &
 			ValidateDeclaredDeps<MergeContext<Ctx, ExtensionsProvidesOutput<Es>>, Es> &
-			ValidateExtensionFlags<Es, Sp | CollisionSp["tree"]> &
+			// Contributed command trees count as existing spellings: prepare
+			// materializes commands before injecting Extension flags, so a shared
+			// spelling makes injectExtensionFlag throw on every invocation.
+			ValidateExtensionFlags<
+				Es,
+				Sp | CollisionSp["tree"] | DefinitionTreeSpellings<ExtensionCommands<Es>>
+			> &
 			ValidateExtensionCommands<Es, Sibs> &
 			ValidateExtensionProvides<Es, Ctx>
 	): Crust<
@@ -1057,7 +1077,10 @@ export class Crust<
 		Sp | ExtensionsSpellings<Es>,
 		ExtendedTree<Tree, ExtensionCommands<Es>, RecursiveExtensionFlags<Es>, CtxFlags>,
 		MergeFlags<CtxFlags, RecursiveExtensionFlags<Es>>,
-		CollisionSpellings<CollisionSp["extension"] | ExtensionsSpellings<Es>, CollisionSp["tree"]>,
+		CollisionSpellings<
+			CollisionSp["extension"] | ExtensionsSpellings<Es>,
+			CollisionSp["tree"] | DefinitionTreeSpellings<ExtensionCommands<Es>>
+		>,
 		Result
 	> {
 		const provided = extensions.flatMap((extension) => extension.provides ?? []);
@@ -1072,7 +1095,10 @@ export class Crust<
 			Sp | ExtensionsSpellings<Es>,
 			ExtendedTree<Tree, ExtensionCommands<Es>, RecursiveExtensionFlags<Es>, CtxFlags>,
 			MergeFlags<CtxFlags, RecursiveExtensionFlags<Es>>,
-			CollisionSpellings<CollisionSp["extension"] | ExtensionsSpellings<Es>, CollisionSp["tree"]>,
+			CollisionSpellings<
+				CollisionSp["extension"] | ExtensionsSpellings<Es>,
+				CollisionSp["tree"] | DefinitionTreeSpellings<ExtensionCommands<Es>>
+			>,
 			Result
 		>;
 	}
