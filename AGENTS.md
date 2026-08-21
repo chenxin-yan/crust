@@ -23,7 +23,7 @@ Before submitting:
 
 ## Changesets
 
-Do not edit `CHANGELOG.md` manually. Run `bunx changeset` to record user-visible changes; release tooling consumes them.
+Do not edit `CHANGELOG.md` manually. Run `bunx changeset` to record user-visible changes; release tooling consumes them. Skip changesets for changes with no end-user behavior impact (internal refactors, tests, docs, CI, tooling).
 
 ## Agent skills
 
