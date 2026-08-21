@@ -20,5 +20,5 @@ function goString(value: string): string {
 		Array.from(value, (character) =>
 			character.length === 1 && /[\uD800-\uDFFF]/.test(character) ? "\uFFFD" : character,
 		).join(""),
-	);
+	).replaceAll("\uFEFF", "\\ufeff");
 }
