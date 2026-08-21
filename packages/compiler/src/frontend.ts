@@ -68,17 +68,19 @@ function lowerFunction(
 	return {
 		name: node.name.text,
 		parameters: node.parameters.map((parameter) => {
+			const type = checker.getTypeAtLocation(parameter);
 			if (
 				!ts.isIdentifier(parameter.name) ||
 				parameter.dotDotDotToken ||
 				parameter.questionToken ||
-				parameter.initializer
+				parameter.initializer ||
+				Boolean(type.flags & (ts.TypeFlags.Void | ts.TypeFlags.Undefined))
 			) {
 				throw unsupported(parameter, sourceFile);
 			}
 			return {
 				name: parameter.name.text,
-				type: lowerType(checker.getTypeAtLocation(parameter), parameter, sourceFile),
+				type: lowerType(type, parameter, sourceFile),
 			};
 		}),
 		returnType: lowerType(checker.getReturnTypeOfSignature(signature), node, sourceFile),
@@ -94,6 +96,15 @@ function lowerStatement(
 	sourceFile: ts.SourceFile,
 ): Statement {
 	if (ts.isReturnStatement(node)) {
+		if (
+			node.expression &&
+			Boolean(
+				checker.getTypeAtLocation(node.expression).flags &
+				(ts.TypeFlags.Never | ts.TypeFlags.Void | ts.TypeFlags.Undefined),
+			)
+		) {
+			throw unsupported(node.expression, sourceFile);
+		}
 		return {
 			kind: "return",
 			expression: node.expression
@@ -122,7 +133,7 @@ function lowerStatement(
 				const type = checker.getTypeAtLocation(argument);
 				return (
 					checkerTypeIsStringArray(type) ||
-					Boolean(type.flags & (ts.TypeFlags.Void | ts.TypeFlags.Undefined))
+					Boolean(type.flags & (ts.TypeFlags.Never | ts.TypeFlags.Void | ts.TypeFlags.Undefined))
 				);
 			})
 		) {

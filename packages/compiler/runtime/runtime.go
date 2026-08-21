@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"unicode/utf16"
@@ -12,7 +13,15 @@ import (
 
 // Argv returns a Node-shaped argv while preserving user arguments from os.Args.
 func Argv(entryFile string) []string {
-	return append([]string{os.Args[0], entryFile}, os.Args[1:]...)
+	executable, err := os.Executable()
+	if err != nil {
+		panic(err)
+	}
+	executable, err = filepath.EvalSymlinks(executable)
+	if err != nil {
+		panic(err)
+	}
+	return append([]string{executable, entryFile}, os.Args[1:]...)
 }
 
 type undefined struct{}
@@ -88,6 +97,38 @@ func Log(values ...any) {
 
 func Infinity() float64 {
 	return math.Inf(1)
+}
+
+func Add(left, right any) any {
+	if values, ok := left.([]string); ok {
+		left = String(values)
+	}
+	if values, ok := right.([]string); ok {
+		right = String(values)
+	}
+	if _, ok := left.(string); ok {
+		return String(left) + String(right)
+	}
+	if _, ok := right.(string); ok {
+		return String(left) + String(right)
+	}
+	return numericValue(left) + numericValue(right)
+}
+
+func numericValue(value any) float64 {
+	switch value := value.(type) {
+	case bool:
+		if value {
+			return 1
+		}
+		return 0
+	case float64:
+		return value
+	case undefined:
+		return math.NaN()
+	default:
+		panic(fmt.Sprintf("unsupported JavaScript number conversion for %T", value))
+	}
 }
 
 func Mod(left, right float64) float64 {

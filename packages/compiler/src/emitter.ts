@@ -54,7 +54,7 @@ function emitExpression(expression: Expression): string {
 			const left = emitExpression(expression.left);
 			const right = emitExpression(expression.right);
 			if (expression.type === "string") {
-				return `(crustRuntime.String(${left}) + crustRuntime.String(${right}))`;
+				return `crustRuntime.Add(${left}, ${right})`;
 			}
 			if (expression.operator === "%") return `crustRuntime.Mod(${left}, ${right})`;
 			return `(${left} ${expression.operator} ${right})`;
