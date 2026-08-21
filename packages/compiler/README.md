@@ -4,7 +4,7 @@ Experimental TypeScript-to-Go compiler for Crust command-line programs.
 
 ## Diagnostics
 
-Compilation failures throw `CompilerError`. Its `diagnostics` array contains a stable code, source file, one-based line and column, message, and rewrite hint.
+TypeScript validation and lowering failures throw `CompilerError`. Its `diagnostics` array contains a stable code, source file, one-based line and column, message, and rewrite hint.
 
 | Code        | Meaning                        | Rewrite                                                                                                                                              |
 | ----------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |

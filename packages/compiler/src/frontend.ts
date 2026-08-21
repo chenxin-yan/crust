@@ -53,6 +53,16 @@ function findAnyDiagnostics(sourceFile: ts.SourceFile, checker: ts.TypeChecker) 
 					anyHint,
 				),
 			);
+		} else if (ts.isParameter(node) && checker.getTypeAtLocation(node) === checker.getAnyType()) {
+			diagnostics.push(
+				diagnosticAtNode(
+					sourceFile,
+					node,
+					DiagnosticCodes.AnyType,
+					"This parameter has an implicit `any` type, which the compiler cannot lower safely.",
+					anyHint,
+				),
+			);
 		} else if (
 			ts.isCallExpression(node) &&
 			checker.getTypeAtLocation(node) === checker.getAnyType()
