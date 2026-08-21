@@ -2,6 +2,7 @@ import {
 	type CommandSnapshot,
 	type ExtensionId,
 	defineExtensionId,
+	sectionsFor,
 	visibleSectionsFor,
 } from "@crustjs/core";
 import {
@@ -75,7 +76,6 @@ export interface RenderManPageMdocOptions {
 export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 	const { root, name, section = 1, date } = options;
 	const model = buildCommandDocumentation(root);
-	const sectionGroups = visibleSectionsFor(root, MAN);
 	const description = model.description?.trim() || "No description provided.";
 	const lines = [
 		`.Dd ${resolveDdLine(date)}`,
@@ -121,12 +121,11 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		}
 		lines.push(".El");
 	}
-	for (const metadataSection of sectionGroups.find(({ path }) => path.length === 0)?.sections ??
-		[]) {
+	for (const metadataSection of sectionsFor(root.meta.sections, MAN)) {
 		lines.push(`.Sh ${shTitle(metadataSection.title)}`);
 		for (const line of metadataSection.body.split("\n")) lines.push(escapeMdocBodyLine(line));
 	}
-	const commandSections = sectionGroups.filter(({ path }) => path.length > 0);
+	const commandSections = visibleSectionsFor(root, MAN).filter(({ path }) => path.length > 0);
 	if (commandSections.length > 0) {
 		lines.push(".Sh COMMANDS");
 		for (const group of commandSections) {

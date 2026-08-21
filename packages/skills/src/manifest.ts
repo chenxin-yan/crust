@@ -1,9 +1,8 @@
 import {
-	type CommandSection,
 	type CommandSnapshot,
 	type ExtensionId,
 	defineExtensionId,
-	visibleSectionsFor,
+	sectionsFor,
 } from "@crustjs/core";
 import {
 	buildCommandDocumentation,
@@ -17,24 +16,15 @@ import type { ManifestArg, ManifestFlag, ManifestNode } from "./types.ts";
 export const SKILLS: ExtensionId = defineExtensionId("crust:skills");
 
 export function buildManifest(command: CommandSnapshot): ManifestNode {
-	const sectionsByPath = new Map<string, readonly CommandSection[]>(
-		visibleSectionsFor(command, SKILLS).map(
-			({ path, sections }) => [JSON.stringify(path), sections] as const,
-		),
-	);
-	return buildNode(buildCommandDocumentation(command), [], sectionsByPath);
+	return buildNode(buildCommandDocumentation(command), command);
 }
-function buildNode(
-	model: CommandDocumentation,
-	path: readonly string[],
-	sectionsByPath: ReadonlyMap<string, readonly CommandSection[]>,
-): ManifestNode {
+function buildNode(model: CommandDocumentation, source: CommandSnapshot): ManifestNode {
 	return {
 		name: normalizeName(model.name),
 		path: model.path.map(normalizeName),
 		description: model.description,
 		usage: model.usage,
-		sections: (sectionsByPath.get(JSON.stringify(path)) ?? []).map(({ title, body }) => ({
+		sections: sectionsFor(source.meta.sections, SKILLS).map(({ title, body }) => ({
 			title,
 			body,
 		})),
@@ -43,7 +33,7 @@ function buildNode(
 		flags: [...model.flags].sort((a, b) => a.name.localeCompare(b.name)).map(normalizeFlag),
 		children: [...model.children]
 			.sort((a, b) => a.name.localeCompare(b.name))
-			.map((child) => buildNode(child, [...path, child.name], sectionsByPath)),
+			.map((child) => buildNode(child, source.subCommands[child.name]!)),
 	};
 }
 function normalizeName(raw: string): string {
