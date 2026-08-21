@@ -61,20 +61,21 @@ describe("compile-time command validation", () => {
 			"scan"
 		>;
 		type CrossExtension = ValidateExtensionCommands<
-			readonly [Ext<readonly [Def<"build", readonly ["b"]>]>, Ext<readonly [Def<"b">]>]
+			readonly [Ext<readonly [Def<"build", readonly ["b"]>]>, Ext<readonly [Def<"b">]>],
+			never
 		>;
 		type Clean = ValidateExtensionCommands<readonly [Ext<readonly [Def<"inspect">]>], "build">;
 		type Widened = ValidateExtensionCommands<readonly [Ext<readonly [Def<string>]>], "build">;
 		type _app = Expect<
 			Equal<
-				AppCollision[0]["FIX_EXTENSION_COLLISION"],
-				'Extension command name or alias "scan" collides with an existing command'
+				AppCollision[0]["FIX_COMMAND_COLLISION"],
+				'Extension command "scan" collides with an existing command'
 			>
 		>;
 		type _cross = Expect<
 			Equal<
-				CrossExtension[1]["FIX_EXTENSION_COLLISION"],
-				'Extension command name or alias "b" collides with an existing command'
+				CrossExtension[1]["FIX_COMMAND_COLLISION"],
+				'Extension command "b" collides with an existing command'
 			>
 		>;
 		type _clean = Expect<Equal<Extract<keyof Clean[0], "FIX_EXTENSION_COLLISION">, never>>;

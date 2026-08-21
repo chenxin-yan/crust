@@ -259,10 +259,6 @@ type ValidateExtensionConfig<
 	// colliding with the same Extension's provided flag would silently retype
 	// the Context's setup flags at parse time.
 	readonly flags?: ValidateNamedFlagDefs<Defs, ProvidedContextSpellings<Provides>>;
-	// Pairwise like `.add()`: within one Extension, a duplicate canonical name
-	// silently overwrites at prepare and a canonical matching an earlier alias
-	// makes that alias unreachable.
-	readonly commands?: ValidateCommandDefinitions<Commands>;
 	// Pairwise like `.provide()`: two provided Contexts sharing a spelling would
 	// let the later parser schema feed the earlier Context's static flag types.
 	readonly provides?: ProvideChecks<never, Provides>;
