@@ -1,4 +1,4 @@
-import type { DefName, EmptyLiteralNameBrand, Overlap } from "./shared.ts";
+import type { DefName, EmptyLiteralNameBrand, IsStaticTuple, IsUnion, Overlap } from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Compile-time validation
@@ -108,5 +108,65 @@ export type ValidateCommandDefinitions<
 			]
 		: never
 	: Ds;
+
+// The IsUnion guard keeps a conditionally selected Extension
+// (`cond ? extA : extB`) runtime-only: a naked conditional would distribute
+// and accept each branch's commands independently.
+type ExtensionCommandDefs<E> =
+	IsUnion<E> extends true
+		? readonly []
+		: E extends {
+					readonly commands?: infer Cs extends readonly unknown[];
+			  }
+			? IsStaticTuple<Cs> extends true
+				? Cs
+				: readonly []
+			: readonly [];
+
+/**
+ * Statically known command spellings contributed by one Extension. Widened
+ * and conditionally assembled contributions opt out; they stay runtime-only
+ * and resolve last-write-wins at prepare time.
+ */
+export type ExtensionCommandSpellings<E> = CommandDefinitionSpellings<
+	ExtensionCommandDefs<E>[number]
+>;
+
+/**
+ * Command spellings contributed by a tuple of Extensions. Mapped per slot
+ * because `Es[number]` cannot distinguish `.extend(a, b)` from
+ * `.extend(cond ? a : b)` — both index to the same union; only the per-slot
+ * view keeps a conditional Extension runtime-only while separate static
+ * Extensions still contribute. Variable-length lists contribute nothing.
+ */
+export type ExtensionsCommandSpellings<Es extends readonly unknown[]> = number extends Es["length"]
+	? never
+	: { [I in keyof Es]: ExtensionCommandSpellings<Es[I]> }[number];
+
+type ExtensionCommandCollisionBrand<E, Existing extends string> =
+	Overlap<ExtensionCommandSpellings<E>, Existing> extends infer Collision extends string
+		? [Collision] extends [never]
+			? {}
+			: {
+					readonly FIX_COMMAND_COLLISION: `Extension command "${Collision}" collides with an existing command`;
+				}
+		: never;
+
+/**
+ * Validate each Extension's contributed command spellings against existing
+ * root commands and against Extensions earlier in the same `.extend()` call.
+ * Runtime preparation resolves collisions last-write-wins, so a statically
+ * known collision would silently retype `run()` against a command that
+ * dispatch replaces.
+ */
+export type ValidateExtensionCommands<
+	Es extends readonly unknown[],
+	Existing extends string,
+> = Es extends readonly [infer H, ...infer T extends readonly unknown[]]
+	? readonly [
+			H & ExtensionCommandCollisionBrand<H, Existing>,
+			...ValidateExtensionCommands<T, Existing | ExtensionCommandSpellings<H>>,
+		]
+	: Es;
 
 // ────────────────────────────────────────────────────────────────────────────

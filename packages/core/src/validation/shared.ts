@@ -13,6 +13,29 @@ export type DefName<T> = T extends { name: infer N extends string }
 		: N
 	: never;
 
+type UnionToIntersection<U> = (U extends unknown ? (x: U) => void : never) extends (
+	x: infer I,
+) => void
+	? I
+	: never;
+
+export type IsUnion<T> = [T] extends [UnionToIntersection<T>] ? false : true;
+
+/**
+ * `true` only for a single statically known fixed-length tuple whose members
+ * are not unions. A conditionally assembled collection (`cond ? [a] : [b]` or
+ * `[cond ? a : b]`) infers as a union at the tuple or member level, and a
+ * variable-length array (`const xs: (typeof a)[]`) may be empty or partially
+ * populated at runtime; such contributions must stay runtime-only.
+ */
+export type IsStaticTuple<Cs extends readonly unknown[]> = number extends Cs["length"]
+	? false
+	: IsUnion<Cs> extends true
+		? false
+		: true extends { [I in keyof Cs]: IsUnion<Cs[I]> }[number]
+			? false
+			: true;
+
 /**
  * The members of union `S` that overlap with `Existing`, or `never` when
  * disjoint. Callers pattern-match the result with their own

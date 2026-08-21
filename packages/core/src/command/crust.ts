@@ -32,8 +32,10 @@ import type {
 	AliasesOf,
 	CommandDefinitionSpellings,
 	EmptyNameBrand,
+	ExtensionsCommandSpellings,
 	ValidateCommandConfig,
 	ValidateCommandDefinitions,
+	ValidateExtensionCommands,
 } from "../validation/commands.brands.ts";
 import type {
 	ValidateContextDeps,
@@ -50,9 +52,11 @@ import type {
 	SpellingsOf,
 	ValidateNamedFlagDefs,
 } from "../validation/flags.brands.ts";
+import type { IsStaticTuple, IsUnion } from "../validation/shared.ts";
 import {
 	cloneCommandNode,
 	executeInvocation,
+	prepareInvocationRoot,
 	prepareInvocationSnapshot,
 	runInvocation,
 } from "./invocation.ts";
@@ -408,9 +412,12 @@ type ShapeOfBuilder<B> =
 		? CommandShape<A, Flags, Tree, Result>
 		: never;
 
+// Matching against CommandDefinitionSpellings (never for widened names) keeps a
+// widened definition in the same tuple or union from degrading a literal
+// sibling's shape: a widened `Name` would otherwise match every spelling.
 type DefinitionShapeForSpelling<D, Spelling extends string> =
-	D extends CommandDefinition<infer Name, infer Aliases, infer Shape, any>
-		? Spelling extends Name | (string extends Aliases[number] ? never : Aliases[number])
+	D extends CommandDefinition<any, any, infer Shape, any>
+		? Spelling extends CommandDefinitionSpellings<D>
 			? Shape
 			: never
 		: never;
@@ -439,6 +446,77 @@ type DefinitionsTree<
 		CtxFlags
 	>;
 };
+
+// Conditionally assembled contributions (union-typed tuples or members) and
+// variable-length arrays stay runtime-only: only what prepare actually
+// installs may become a guaranteed typed path, or run() could dispatch a
+// missing command. The IsUnion guard keeps a conditionally selected Extension
+// (`cond ? extA : extB`) runtime-only too — a naked conditional would
+// distribute and accept each branch independently. Widened contributions also
+// pass through here, but their spellings resolve to `never` (see
+// CommandDefinitionSpellings), so they contribute no typed paths.
+type StaticExtensionCommands<E> =
+	IsUnion<E> extends true
+		? readonly []
+		: E extends Extension<any, any, any, infer Commands>
+			? IsStaticTuple<Commands> extends true
+				? Commands
+				: readonly []
+			: readonly [];
+
+// Mapped per slot: `Es[number]` cannot distinguish `.extend(a, b)` from
+// `.extend(cond ? a : b)` — both index to the same union. Variable-length
+// Extension lists (`.extend(...dynamicList)`) contribute nothing.
+type ExtensionCommands<Es extends readonly Extension<any, any, any, any>[]> =
+	number extends Es["length"]
+		? readonly []
+		: { [I in keyof Es]: StaticExtensionCommands<Es[I]> }[number];
+
+type StaticExtensionFlagDefs<E> =
+	IsUnion<E> extends true
+		? readonly []
+		: E extends Extension<any, any, infer Defs, any>
+			? IsStaticTuple<Defs> extends true
+				? string extends Defs[number]["name"]
+					? readonly []
+					: Defs
+				: readonly []
+			: readonly [];
+
+type ExtensionFlagDefs<Es extends readonly Extension<any, any, any, any>[]> =
+	number extends Es["length"]
+		? readonly []
+		: { [I in keyof Es]: StaticExtensionFlagDefs<Es[I]> }[number];
+
+type ExtensionFlags<Es extends readonly Extension<any, any, any, any>[]> = NamedFlagsRecord<
+	ExtensionFlagDefs<Es>
+>;
+
+// Only a statically `true` (or omitted — the runtime default) `recursive` scope
+// promotes a flag onto descendant inputs: a widened `boolean` scope may be
+// `false` at runtime, which installs the flag on the root only.
+type RecursiveExtensionFlags<Es extends readonly Extension<any, any, any, any>[]> = {
+	[D in ExtensionFlagDefs<Es>[number] as D extends { readonly recursive: infer R }
+		? [R] extends [true]
+			? D["name"]
+			: never
+		: D["name"]]: Omit<D, "name">;
+} extends infer F extends FlagsDef
+	? F
+	: never;
+
+type TreeWithInheritedFlags<Tree, F extends FlagsDef> = {
+	[K in keyof Tree]: ShapeWithInheritedFlags<Tree[K], F>;
+};
+
+type ExtendedTree<
+	Tree,
+	Commands extends readonly CommandDefinition<any, any, any, any>[],
+	RecursiveFlags extends FlagsDef,
+	InheritedFlags extends FlagsDef,
+> = {} extends RecursiveFlags
+	? Tree & DefinitionsTree<Commands, InheritedFlags>
+	: TreeWithInheritedFlags<Tree & DefinitionsTree<Commands, InheritedFlags>, RecursiveFlags>;
 
 /**
  * Define a reusable, inert command under a required name.
@@ -548,7 +626,6 @@ function serializeRunArgv(
 	path: readonly string[],
 	input: { readonly args?: object; readonly flags?: object; readonly raw?: readonly string[] },
 ): string[] {
-	// Typed paths deliberately exclude Extension commands because Extensions materialize later.
 	const route = resolveCommand(root, [...path]);
 	if (route.argv.length > 0) {
 		// A path element the router could not consume must fail here; letting it
@@ -665,8 +742,9 @@ function serializeRunArgv(
  * - `Sibs` — sibling command names and aliases already registered
  * - `Sp` — accumulated flag spellings used for collision checks
  * - `Tree` — command shapes accumulated by `.add()` for typed `run()`
- * - `CtxFlags` — Context-owned flags accumulated by `.provide()`, inherited by
- *   the shapes of definitions added afterwards
+ * - `CtxFlags` — Context-owned flags accumulated by `.provide()` and recursive
+ *   Extension flags accumulated by `.extend()`, inherited by the shapes of
+ *   definitions added afterwards
  * - `Result` — awaited return type of this command's action
  *
  * @example
@@ -979,20 +1057,30 @@ export class Crust<
 	 * contribute. Repeated calls accumulate Extensions in registration order;
 	 * Command definition builders do not expose this method.
 	 */
-	extend<const Es extends readonly Extension<any, any, any>[]>(
+	extend<const Es extends readonly Extension<any, any, any, any>[]>(
 		...extensions: Es &
 			ValidateDeclaredDeps<MergeContext<Ctx, ExtensionsProvidesOutput<Es>>, Es> &
-			ValidateExtensionFlags<Es, Sp | CollisionSp["tree"]> &
+			// Contributed command trees count as existing spellings: prepare
+			// materializes commands before injecting Extension flags, so a shared
+			// spelling makes injectExtensionFlag throw on every invocation.
+			ValidateExtensionFlags<
+				Es,
+				Sp | CollisionSp["tree"] | DefinitionTreeSpellings<ExtensionCommands<Es>>
+			> &
+			ValidateExtensionCommands<Es, Sibs> &
 			ValidateExtensionProvides<Es, Ctx>
 	): Crust<
-		Flags,
+		MergeFlags<Flags, ExtensionFlags<Es>>,
 		A,
 		MergeContext<Ctx, ExtensionsProvidesOutput<Es>>,
-		Sibs,
+		Sibs | ExtensionsCommandSpellings<Es>,
 		Sp | ExtensionsSpellings<Es>,
-		Tree,
-		CtxFlags,
-		CollisionSpellings<CollisionSp["extension"] | ExtensionsSpellings<Es>, CollisionSp["tree"]>,
+		ExtendedTree<Tree, ExtensionCommands<Es>, RecursiveExtensionFlags<Es>, CtxFlags>,
+		MergeFlags<CtxFlags, RecursiveExtensionFlags<Es>>,
+		CollisionSpellings<
+			CollisionSp["extension"] | ExtensionsSpellings<Es>,
+			CollisionSp["tree"] | DefinitionTreeSpellings<ExtensionCommands<Es>>
+		>,
 		Result
 	> {
 		const provided = extensions.flatMap((extension) => extension.provides ?? []);
@@ -1000,14 +1088,17 @@ export class Crust<
 			...(provided.length > 0 ? installContexts(this._node, provided) : {}),
 			extensions: [...this._node.extensions, ...extensions],
 		}) as unknown as Crust<
-			Flags,
+			MergeFlags<Flags, ExtensionFlags<Es>>,
 			A,
 			MergeContext<Ctx, ExtensionsProvidesOutput<Es>>,
-			Sibs,
+			Sibs | ExtensionsCommandSpellings<Es>,
 			Sp | ExtensionsSpellings<Es>,
-			Tree,
-			CtxFlags,
-			CollisionSpellings<CollisionSp["extension"] | ExtensionsSpellings<Es>, CollisionSp["tree"]>,
+			ExtendedTree<Tree, ExtensionCommands<Es>, RecursiveExtensionFlags<Es>, CtxFlags>,
+			MergeFlags<CtxFlags, RecursiveExtensionFlags<Es>>,
+			CollisionSpellings<
+				CollisionSp["extension"] | ExtensionsSpellings<Es>,
+				CollisionSp["tree"] | DefinitionTreeSpellings<ExtensionCommands<Es>>
+			>,
 			Result
 		>;
 	}
@@ -1112,7 +1203,8 @@ export class Crust<
 			readonly raw?: readonly string[];
 		};
 		const io = args[1] as Partial<InvocationIO> | undefined;
-		const argv = serializeRunArgv(this._node, path, structuredInput);
+		const root = prepareInvocationRoot(this._node, materializeCommandDefinition);
+		const argv = serializeRunArgv(root, path, structuredInput);
 		// Programmatic calls preserve raw failures and never change process status.
 		return (await runInvocation(this._node, argv, io, materializeCommandDefinition)) as RunOutcome<
 			CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]

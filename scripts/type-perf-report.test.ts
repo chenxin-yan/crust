@@ -59,6 +59,7 @@ describe("type performance report", () => {
 	it("generates deterministic scaling fixtures", () => {
 		expect(generateConsumerSource(10)).toBe(generateConsumerSource(10));
 		expect(generateConsumerSource(10)).toContain(".flags(");
+		expect(generateConsumerSource(10)).toContain(".extend(extension)");
 		expect(generateConsumerSource(10).match(/const command\d+ = defineCommand/g)).toHaveLength(10);
 	});
 

@@ -71,7 +71,7 @@ expect(result.exitCode).toBe(1);
 expect(result.stderr).toContain("Unknown flag");
 ```
 
-Use this raw-argv path for parser syntax such as short bundles and misspellings, and for Extension-contributed commands. Extensions materialize at runtime, so their commands cannot appear in the typed `captureRun()` or `runInteractive()` path.
+Use this raw-argv path for parser syntax such as short bundles and misspellings. Statically declared `defineExtension()` commands appear in the typed `captureRun()` and `runInteractive()` paths; use `captureExecute()` for dynamically assembled or type-widened Extension contributions.
 
 The return type is `CapturedExecute`:
 
