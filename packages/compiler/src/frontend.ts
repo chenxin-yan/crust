@@ -210,7 +210,7 @@ function lowerExpression(
 			spans: node.templateSpans.map((span) => {
 				if (
 					checker.getTypeAtLocation(span.expression).flags &
-					(ts.TypeFlags.Void | ts.TypeFlags.Undefined)
+					(ts.TypeFlags.Never | ts.TypeFlags.Void | ts.TypeFlags.Undefined)
 				) {
 					throw unsupported(span.expression, sourceFile);
 				}

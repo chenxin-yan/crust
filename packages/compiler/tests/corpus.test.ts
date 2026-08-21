@@ -33,6 +33,7 @@ const fixtures = [
 	{ name: "indexed-length", args: ["Crust"] },
 	{ name: "parenthesized-indexed-length", args: ["Crust"] },
 	{ name: "argv-prefix", args: [] },
+	{ name: "runtime-free", args: [] },
 ] as const;
 
 describe("compiler differential corpus", () => {
@@ -115,6 +116,7 @@ describe("compiler differential corpus", () => {
 				'console.log("%s", "ok");',
 				'function format(): string { return "%s"; } console.log(format(), "ok");',
 				"function f(): void {} console.log(`${f()}`);",
+				"console.log(`${process.exit(0)}`);",
 				"function f() { return 1; } console.log(f);",
 				"function f(value: number) { return value; } console.log(f.length);",
 			]) {
