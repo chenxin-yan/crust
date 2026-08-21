@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import type { ContextInstance } from "../api/context.ts";
+import type { ContextInstance, ContextMap, ContextValue } from "../api/context.ts";
 import type {
 	ValidateContextDeps,
 	ValidateContextNames,
@@ -10,7 +10,7 @@ import type {
 type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type Expect<T extends true> = T;
-type Inst<Name extends string, Deps extends Record<string, unknown> = {}> = ContextInstance<
+type Inst<Name extends string, Deps extends ContextMap = {}> = ContextInstance<
 	Name,
 	unknown,
 	{},
@@ -62,7 +62,7 @@ describe("compile-time Context validation", () => {
 		// any-valued providers and widened registries opt out.
 		type AnyValue = ValidateContextDeps<{}, readonly [Consumer, ValueInst<"config", any>]>;
 		type _any = Expect<Equal<Extract<keyof AnyValue[0], "FIX_DEPENDENCY_TYPE">, never>>;
-		type Widened = ValidateContextDeps<Record<string, unknown>, readonly [Consumer]>;
+		type Widened = ValidateContextDeps<Record<string, ContextValue>, readonly [Consumer]>;
 		type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_DEPENDENCY_TYPE">, never>>;
 
 		expect(true).toBe(true);
@@ -72,7 +72,7 @@ describe("compile-time Context validation", () => {
 		type WidenedDeps = ValidateContextDeps<{}, readonly [Inst<"db", any>]>;
 		type _widened = Expect<Equal<Extract<keyof WidenedDeps[0], "FIX_MISSING_DEPENDENCY">, never>>;
 
-		type IndexedDeps = ValidateContextDeps<{}, readonly [Inst<"db", Record<string, unknown>>]>;
+		type IndexedDeps = ValidateContextDeps<{}, readonly [Inst<"db", Record<string, ContextValue>>]>;
 		type _indexed = Expect<Equal<Extract<keyof IndexedDeps[0], "FIX_MISSING_DEPENDENCY">, never>>;
 
 		expect(true).toBe(true);
@@ -83,7 +83,10 @@ describe("compile-time Context validation", () => {
 		type _missing = Expect<
 			Equal<Missing[0]["FIX_MISSING_DEPENDENCY"], 'Uses Context "db" which is not provided'>
 		>;
-		type Broad = ValidateDeclaredDeps<{}, readonly [{ readonly _deps?: Record<string, unknown> }]>;
+		type Broad = ValidateDeclaredDeps<
+			{},
+			readonly [{ readonly _deps?: Record<string, ContextValue> }]
+		>;
 		type _broad = Expect<Equal<Extract<keyof Broad[0], "FIX_MISSING_DEPENDENCY">, never>>;
 
 		expect(true).toBe(true);
@@ -131,7 +134,10 @@ describe("compile-time Context validation", () => {
 		type WidenedName = ValidateContextNames<{ db: number }, readonly [Inst<string>]>;
 		type _name = Expect<Equal<NameBrandOf<WidenedName[0]>, never>>;
 
-		type WidenedRegistry = ValidateContextNames<Record<string, unknown>, readonly [Inst<"db">]>;
+		type WidenedRegistry = ValidateContextNames<
+			Record<string, ContextValue>,
+			readonly [Inst<"db">]
+		>;
 		type _registry = Expect<Equal<NameBrandOf<WidenedRegistry[0]>, never>>;
 
 		expect(true).toBe(true);

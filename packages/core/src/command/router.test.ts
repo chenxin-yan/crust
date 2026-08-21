@@ -3,10 +3,14 @@ import { describe, expect, it } from "bun:test";
 import { CrustError } from "../errors.ts";
 import { addFlagSpellingEntries } from "../parsing/spellings.ts";
 import type { ArgsDef, CommandMeta, FlagsDef } from "../types.ts";
-import type { CommandNode } from "./node.ts";
+import type { CommandAction, CommandNode } from "./node.ts";
 import { createCommandNode } from "./node.ts";
 import { resolveCommand } from "./router.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
+
+function isString<T>(value: T): value is T & string {
+	return typeof value === "string";
+}
 
 /**
  * Test helper: creates a CommandNode from a config object for test fixtures.
@@ -16,9 +20,9 @@ function makeNode(config: {
 	args?: ArgsDef;
 	flags?: FlagsDef;
 	subCommands?: Record<string, CommandNode>;
-	run?: (ctx: unknown) => void | Promise<void>;
+	run?: CommandAction;
 }): CommandNode {
-	const meta = typeof config.meta === "string" ? { name: config.meta } : config.meta;
+	const meta = isString(config.meta) ? { name: config.meta } : config.meta;
 	const node = createCommandNode(meta.name);
 	if (meta.description) node.meta.description = meta.description;
 	if (meta.usage) node.meta.usage = meta.usage;

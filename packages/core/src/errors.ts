@@ -1,6 +1,7 @@
 import type { CommandSnapshot } from "./command/snapshot.ts";
 
 /** A value thrown by user code crossing a Core error boundary. */
+// oxlint-disable-next-line anti-slop/no-unknown-type-aliases -- JavaScript permits throwing any value; this alias is only for caught-error plumbing.
 export type CaughtError = unknown;
 
 // ────────────────────────────────────────────────────────────────────────────

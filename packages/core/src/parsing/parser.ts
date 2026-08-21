@@ -199,10 +199,13 @@ function coerceFlagValue(
 		if (def.type === "boolean") {
 			return parsedValue.filter(isBooleanToken);
 		}
-		return (parsedValue as string[]).map((v, i) => {
-			if (choices) validateChoice(v, choices, label);
-			if (parse) return invokeParse(parse, v, label, i);
-			return coerceValue(v, def.type, label);
+		return parsedValue.map((value, i) => {
+			if (!isStringToken(value)) {
+				throw new CrustError("PARSE", `Internal: unexpected non-string value for flag "${label}"`);
+			}
+			if (choices) validateChoice(value, choices, label);
+			if (parse) return invokeParse(parse, value, label, i);
+			return coerceValue(value, def.type, label);
 		});
 	}
 
@@ -499,6 +502,7 @@ export function validateParsed<A extends ArgsDef = ArgsDef, F extends FlagsDef =
 		for (const def of argsDef) {
 			const { name } = def;
 			const label = `argument "<${name}>"`;
+			// SAFETY: name comes from the same argument definitions that produced this mapped result.
 			const value = args[name as keyof typeof args];
 
 			if (def.required === true && def.default === undefined) {

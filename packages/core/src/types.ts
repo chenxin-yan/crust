@@ -1,3 +1,4 @@
+import type { JsonValue } from "@crustjs/utils/json";
 import type { BaseValueType } from "@crustjs/utils/primitive";
 import type { InferOutput, StandardSchema } from "@crustjs/utils/schema";
 
@@ -687,13 +688,15 @@ type InputBaseValue<D> = D extends { type: "boolean"; noNegate: true }
 		? D extends { type: "boolean" }
 			? boolean
 			: string
-		: D extends { choices: readonly (infer Choice extends string)[] }
-			? Choice
-			: D extends { parse: (raw: string) => infer _ParseOutput }
-				? string
-				: D extends { type: infer T extends ValueType }
-					? Resolve<T>
-					: string;
+		: D extends { type: "json" }
+			? JsonValue
+			: D extends { choices: readonly (infer Choice extends string)[] }
+				? Choice
+				: D extends { parse: (raw: string) => infer _ParseOutput }
+					? string
+					: D extends { type: infer T extends ValueType }
+						? Resolve<T>
+						: string;
 
 type InputArgValue<D> = D extends { variadic: true } ? InputBaseValue<D>[] : InputBaseValue<D>;
 type InputFlagValue<D> = D extends { multiple: true } ? InputBaseValue<D>[] : InputBaseValue<D>;
@@ -866,9 +869,6 @@ export type RawParsedArgs<A extends ArgsDef> = number extends A["length"]
 
 /** A declared default on any argument or flag definition. */
 export type DeclaredDefault = (ArgDef | FlagDef)["default"];
-/** A user-authored value before Core validates its shape. */
-export type Untrusted = unknown;
-
 /** Syntax-parsed input, before required and Standard Schema validation. */
 export interface ParseResult<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef> {
 	args: RawParsedArgs<A>;

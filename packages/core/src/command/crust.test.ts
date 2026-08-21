@@ -12,11 +12,11 @@ import { defineExtension, type Extension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
+import type { ParsedFlagValue } from "../types.ts";
 import {
 	type CommandDefinitionBuilder,
 	Crust,
 	defineCommand,
-	type CrustCommandContext,
 	BUILD_OUT_DIR_ENV,
 	SNAPSHOT_PATH_ENV,
 } from "./crust.ts";
@@ -26,6 +26,24 @@ import {
 // ────────────────────────────────────────────────────────────────────────────
 
 type Expect<T extends true> = T;
+
+interface BasicReceivedContext {
+	args: { file: string };
+	flags: { verbose: boolean | undefined };
+}
+interface ExecuteReceivedContext {
+	args: { dir: string };
+	flags: { port: number };
+}
+
+function isString<T>(value: T): value is T & string {
+	return typeof value === "string";
+}
+
+function stringifyConsoleArg<T>(value: T): string {
+	return isString(value) ? value : String(value);
+}
+
 type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
@@ -378,7 +396,7 @@ describe("Crust .add() with inline definitions", () => {
 
 		expect(receivedBuilder).toBeDefined();
 		expect(receivedBuilder).not.toBe(app);
-		const runtimeBuilder = receivedBuilder as unknown as Crust;
+		const runtimeBuilder: Crust = receivedBuilder as never;
 		expect(await runtimeBuilder.snapshot()).toMatchObject({
 			meta: { name: "sub" },
 			flags: {},
@@ -483,12 +501,12 @@ describe("Crust .add() type-level tests", () => {
 
 describe("Crust .action()", () => {
 	it("runs the action with parsed context", async () => {
-		let receivedCtx: CrustCommandContext | undefined;
+		let receivedCtx: BasicReceivedContext | undefined;
 		const app = new Crust("test")
 			.flags({ name: "verbose", type: "boolean" })
 			.args({ name: "file", type: "string", required: true })
 			.action((context) => {
-				receivedCtx = context as unknown as CrustCommandContext;
+				receivedCtx = context;
 			});
 
 		await app.run([], { args: { file: "test.txt" }, flags: { verbose: true } });
@@ -1003,7 +1021,7 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("recursive Extension flags reach every command, including Extension commands", async () => {
-		const seen: Record<string, unknown>[] = [];
+		const seen: Record<string, ParsedFlagValue>[] = [];
 		const debug = defineExtension(defineExtensionId("debug"), {
 			flags: [{ name: "debug", type: "boolean" }],
 		});
@@ -1075,7 +1093,7 @@ describe("Extension application at prepare time", () => {
 			.extend(version)
 			.add(defineCommand("sub", (cmd) => cmd.action(() => {})))
 			.action(({ flags }) => {
-				ran = (flags as Record<string, unknown>).version === true;
+				ran = (flags as Record<string, ParsedFlagValue>).version === true;
 			});
 
 		// Extension flags only exist on the prepared tree, so this must go through
@@ -1110,7 +1128,7 @@ describe("Extension application at prepare time", () => {
 						})
 						.action(({ args, flags, rootCommand }) => {
 							lines.push(
-								`completion:${args.shell}:${(flags as Record<string, unknown>).verbose}:${rootCommand.meta.name}`,
+								`completion:${args.shell}:${(flags as Record<string, ParsedFlagValue>).verbose}:${rootCommand.meta.name}`,
 							);
 						}),
 				),
@@ -1154,7 +1172,7 @@ describe("Extension application at prepare time", () => {
 			},
 		});
 		const app = new Crust("repeat").extend(debug).action(({ flags }) => {
-			if ((flags as Record<string, unknown>).debug) calls.push("action");
+			if ((flags as Record<string, ParsedFlagValue>).debug) calls.push("action");
 		});
 
 		await app.execute({ argv: ["--debug"] });
@@ -1733,13 +1751,13 @@ describe("Crust .execute()", () => {
 		stdoutChunks = [];
 		stderrChunks = [];
 		console.log = (...args: unknown[]) => {
-			stdoutChunks.push(args.map((a) => (typeof a === "string" ? a : String(a))).join(" "));
+			stdoutChunks.push(args.map(stringifyConsoleArg).join(" "));
 		};
 		console.error = (...args: unknown[]) => {
-			stderrChunks.push(args.map((a) => (typeof a === "string" ? a : String(a))).join(" "));
+			stderrChunks.push(args.map(stringifyConsoleArg).join(" "));
 		};
 		console.warn = (...args: unknown[]) => {
-			stderrChunks.push(args.map((a) => (typeof a === "string" ? a : String(a))).join(" "));
+			stderrChunks.push(args.map(stringifyConsoleArg).join(" "));
 		};
 		// Reset exitCode — setting to 0 then deleting clears the value
 		process.exitCode = 0;
@@ -1754,20 +1772,20 @@ describe("Crust .execute()", () => {
 	});
 
 	it("runs root action with flags and args combined", async () => {
-		let receivedCtx: CrustCommandContext | undefined;
+		let receivedCtx: ExecuteReceivedContext | undefined;
 
 		const app = new Crust("test")
 			.flags({ name: "port", type: "number", default: 3000 }, { name: "verbose", type: "boolean" })
 			.args({ name: "dir", type: "string", default: "." })
 			.action((ctx) => {
-				receivedCtx = ctx as unknown as CrustCommandContext;
+				receivedCtx = ctx;
 			});
 
 		await app.execute({ argv: ["public", "--port", "8080"] });
 
 		expect(receivedCtx).toBeDefined();
-		expect((receivedCtx as unknown as { args: Record<string, unknown> }).args.dir).toBe("public");
-		expect((receivedCtx as unknown as { flags: Record<string, unknown> }).flags.port).toBe(8080);
+		expect(receivedCtx?.args.dir).toBe("public");
+		expect(receivedCtx?.flags.port).toBe(8080);
 	});
 
 	it("routes to subcommand", async () => {
@@ -1791,7 +1809,7 @@ describe("Crust .execute()", () => {
 	});
 
 	it("passes Context-owned flags but not parent-local flags to subcommand actions", async () => {
-		let subFlags: Record<string, unknown> = {};
+		let subFlags: Record<string, ParsedFlagValue> = {};
 		const verbose = defineFlag("verbose", { type: "boolean" });
 		const logging = defineContext("logging", { flags: [verbose] }, () => ({}));
 
@@ -1814,7 +1832,7 @@ describe("Crust .execute()", () => {
 	});
 
 	it("dispatches a Context-owned flag written before the subcommand", async () => {
-		let subFlags: Record<string, unknown> = {};
+		let subFlags: Record<string, ParsedFlagValue> = {};
 		const verbose = defineFlag("verbose", { type: "boolean" });
 		const logging = defineContext("logging", { flags: [verbose] }, () => ({}));
 
@@ -1976,7 +1994,7 @@ describe("Crust .execute()", () => {
 	});
 
 	it("Extension-owned command trees receive other Extensions' recursive flags", async () => {
-		let receivedFlags: Record<string, unknown> = {};
+		let receivedFlags: Record<string, ParsedFlagValue> = {};
 
 		const helpLike = defineExtension(defineExtensionId("help-like"), {
 			flags: [{ name: "help", type: "boolean" }],
@@ -1987,7 +2005,7 @@ describe("Crust .execute()", () => {
 					command.add(
 						defineCommand("update", (cmd) =>
 							cmd.action((runCtx) => {
-								receivedFlags = runCtx.flags as Record<string, unknown>;
+								receivedFlags = runCtx.flags as Record<string, ParsedFlagValue>;
 							}),
 						),
 					),
@@ -2043,7 +2061,7 @@ describe("Crust .execute()", () => {
 
 	it("pre-run receives the resolved command and parsed input", async () => {
 		let preRunName = "";
-		let preRunFlags: Record<string, unknown> = {};
+		let preRunFlags: Record<string, ParsedFlagValue> | undefined;
 
 		const inspect = defineExtension(defineExtensionId("inspect"), {
 			hooks: {
@@ -2065,7 +2083,7 @@ describe("Crust .execute()", () => {
 		await app.execute({ argv: ["sub", "--output", "file.txt"] });
 
 		expect(preRunName).toBe("sub");
-		expect(preRunFlags.output).toBe("file.txt");
+		expect(preRunFlags?.output).toBe("file.txt");
 	});
 
 	it("Context capabilities work across file-boundary pattern", async () => {
@@ -2224,7 +2242,7 @@ describe("Crust .execute()", () => {
 		const snapshot = receivedCommand as {
 			meta: { name: string };
 			hasAction: boolean;
-			flags: Record<string, unknown>;
+			flags: Record<string, ParsedFlagValue>;
 		};
 		expect(snapshot.meta.name).toBe("test");
 		expect(snapshot.hasAction).toBe(true);
@@ -2487,7 +2505,7 @@ describe("Crust .add() aliases", () => {
 });
 
 describe("dynamic definition guards (brands own literals; runtime owns config-built defs)", () => {
-	const asDynamic = (value: unknown): never[] => value as never[];
+	const asDynamic = <T>(value: T): never[] => value as never[];
 
 	it("rejects duplicate argument names from dynamic defs", () => {
 		const defs = asDynamic([
@@ -2516,7 +2534,7 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 	});
 
 	it("rejects empty, no-prefixed, and __proto__ flag spellings from dynamic defs", () => {
-		const cases: [Record<string, unknown>, string][] = [
+		const cases: [Record<string, ParsedFlagValue>, string][] = [
 			[{ name: "", type: "string" }, "empty-spelling"],
 			[{ name: "no-color", type: "boolean" }, "reserved-no-prefix"],
 			[{ name: "cache", type: "boolean", aliases: ["no-store"] }, "reserved-no-prefix"],

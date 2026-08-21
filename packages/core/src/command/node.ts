@@ -3,6 +3,11 @@ import type { Extension } from "../api/extension.ts";
 import type { ExtensionId } from "../identity.ts";
 import type { FlagSpelling } from "../parsing/spellings.ts";
 import type { ArgsDef, CommandMeta, FlagsDef } from "../types.ts";
+import type { CrustCommandContext } from "./crust.ts";
+
+/** Runtime-erased Command Action; typed builders and run() own the specific result contract. */
+// oxlint-disable-next-line anti-slop/no-unknown-returns -- runtime nodes erase each command's result generic; typed run() re-derives it.
+export type CommandAction = (ctx: CrustCommandContext) => unknown;
 
 // ────────────────────────────────────────────────────────────────────────────
 // CommandNode — Internal command tree node
@@ -38,7 +43,7 @@ export interface CommandNode {
 	/** Extensions registered via `.extend()` (root builder only) */
 	extensions: Extension[];
 	/** The Command Action */
-	run?: (ctx: unknown) => unknown;
+	run?: CommandAction;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

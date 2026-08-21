@@ -13,8 +13,26 @@ import type {
 	ParseResult,
 	ParsedArgValue,
 	ParsedFlagValue,
+	RawParsedArgs,
+	RawParsedFlags,
 	ValidatedInput,
 } from "../types.ts";
+
+type SchemaValue = InferOutput<StandardSchema>;
+class ParsedArgsBuffer {
+	[name: string]: ParsedArgValue | SchemaValue;
+}
+class ParsedFlagsBuffer {
+	[name: string]: ParsedFlagValue | SchemaValue;
+}
+
+function copyParsedArgs<A extends ArgsDef>(value: RawParsedArgs<A>): ParsedArgsBuffer {
+	return Object.assign(new ParsedArgsBuffer(), value);
+}
+
+function copyParsedFlags<F extends FlagsDef>(value: RawParsedFlags<F>): ParsedFlagsBuffer {
+	return Object.assign(new ParsedFlagsBuffer(), value);
+}
 
 async function runSchema<S extends StandardSchema>(
 	schema: S,
@@ -47,10 +65,9 @@ export async function applySchemas<A extends ArgsDef = ArgsDef, F extends FlagsD
 	node: CommandNode & { args: A | undefined; effectiveFlags: F },
 	parsed: ParseResult<A, F>,
 ): Promise<ValidatedInput<A, F>> {
-	type SchemaValue = InferOutput<StandardSchema>;
 	const issues: ValidationIssue[] = [];
-	const args: Record<string, ParsedArgValue | SchemaValue> = { ...parsed.args };
-	const flags: Record<string, ParsedFlagValue | SchemaValue> = { ...parsed.flags };
+	const args = copyParsedArgs(parsed.args);
+	const flags = copyParsedFlags(parsed.flags);
 
 	for (const def of node.args ?? []) {
 		if (def.schema === undefined) continue;
@@ -70,5 +87,5 @@ export async function applySchemas<A extends ArgsDef = ArgsDef, F extends FlagsD
 	}
 
 	// SAFETY: schema-backed keys were replaced by schema outputs and required presence was validated.
-	return { args, flags } as ValidatedInput<A, F>;
+	return { args, flags } as never;
 }

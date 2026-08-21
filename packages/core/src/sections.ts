@@ -2,7 +2,7 @@ import type { CommandSnapshot } from "./command/snapshot.ts";
 import type { ExtensionId } from "./identity.ts";
 import type { CommandSection } from "./types.ts";
 
-export function isText(value: unknown): value is string {
+export function isText<T>(value: T): value is T & string {
 	return typeof value === "string" && !!value.trim();
 }
 

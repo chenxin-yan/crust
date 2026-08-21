@@ -8,6 +8,23 @@ import type { CommandPath, CommandContractAtPath, RunInput, RunOutcome } from ".
 import { Crust, defineCommand } from "./crust.ts";
 
 type Expect<T extends true> = T;
+interface CyclicFixture {
+	self?: CyclicFixture;
+}
+interface StructuredRunCapture {
+	args: { name: string; count: number; files: string[] };
+	flags: {
+		fetch: boolean | undefined;
+		tag: string[] | undefined;
+		config: unknown;
+		offset: number | undefined;
+	};
+	rawArgs: string[];
+}
+interface JsonRunCapture {
+	args: { payload: unknown };
+	flags: { config: unknown };
+}
 type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
@@ -334,7 +351,7 @@ describe("typed programmatic invocation", () => {
 	});
 
 	it("serializes structured input through routing and the parser", async () => {
-		let received: unknown;
+		let received: StructuredRunCapture | undefined;
 		const remoteAdd = defineCommand("remote-add", (command) =>
 			command
 				.args(
@@ -412,7 +429,7 @@ describe("typed programmatic invocation", () => {
 	});
 
 	it("keeps arrays scalar for non-multiple json flags and non-variadic json args", async () => {
-		let received: unknown;
+		let received: JsonRunCapture | undefined;
 		const app = new Crust("cli")
 			.args({ name: "payload", type: "json" })
 			.flags({ name: "config", type: "json" })
@@ -441,9 +458,9 @@ describe("typed programmatic invocation", () => {
 			code: "PARSE",
 			details: { reason: "unserializable-json" },
 		});
-		const cyclic: Record<string, unknown> = {};
+		const cyclic: CyclicFixture = {};
 		cyclic.self = cyclic;
-		await expect(app.run([], { flags: { config: cyclic } })).rejects.toMatchObject({
+		await expect(app.run([], { flags: { config: cyclic as never } })).rejects.toMatchObject({
 			code: "PARSE",
 			details: { reason: "unserializable-json" },
 		});
