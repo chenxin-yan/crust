@@ -117,6 +117,9 @@ describe("compiler differential corpus", () => {
 				'function format(): string { return "%s"; } console.log(format(), "ok");',
 				"function f(): void {} console.log(`${f()}`);",
 				"console.log(`${process.exit(0)}`);",
+				"console.log(process.exit(0) + 1);",
+				"console.log((process.argv[99] + 1).length);",
+				"function f(): number { process.exit(0); } f();",
 				"function f() { return 1; } console.log(f);",
 				"function f(value: number) { return value; } console.log(f.length);",
 			]) {
