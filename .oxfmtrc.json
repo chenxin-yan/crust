@@ -9,6 +9,7 @@
 		".pi/",
 		"**/tests/fixtures/",
 		".worktrees/",
+		"tools/oxlint/anti-slop/",
 		"apps/docs/.source/",
 		"apps/docs/src/routeTree.gen.ts"
 	],
