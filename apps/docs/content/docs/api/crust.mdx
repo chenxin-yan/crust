@@ -73,7 +73,8 @@ defineCommand<const Name extends string>(
   recipe: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
 ): CommandDefinition<Name>;
 
-interface CommandConfig extends Omit<CommandMeta, "name"> {
+interface CommandConfig extends Omit<CommandMeta, "name" | "sections"> {
+  readonly sections?: readonly CommandSectionInput[];
   readonly uses?: readonly AnyContextFactory[];
 }
 
@@ -112,7 +113,9 @@ The recipe does not execute when the definition is created. It executes once for
 ## Constructor
 
 ```ts
-type RootCommandMeta = Pick<CommandMeta, "description" | "usage" | "sections">;
+type RootCommandMeta = Pick<CommandMeta, "description" | "usage"> & {
+  readonly sections?: readonly CommandSectionInput[];
+};
 
 class Crust<
   Flags,

@@ -84,7 +84,7 @@ const guidance = defineExtension(defineExtensionId("guidance"), {
 
 Titles must be non-empty single lines, and bodies are non-empty plain text so the same content is safe for terminal help and mdoc output.
 
-Sections are visible to every renderer by default. Renderer packages export consumer ids that let authors narrow a section with mutually exclusive `only` or `except` fields:
+Sections are visible to every renderer by default. Pass renderer factories to the mutually exclusive `only` or `except` fields to narrow a section:
 
 ```ts
 import { defineCommand } from "@crustjs/core";
@@ -96,15 +96,15 @@ const deploy = defineCommand(
   {
     sections: [
       { title: "Safety", body: "Use preview mode first." },
-      { title: "Agent notes", body: "Inspect the plan before deploying.", only: [skill.id] },
-      { title: "Examples", body: "deploy production", only: [help.id, skill.id] },
+      { title: "Agent notes", body: "Inspect the plan before deploying.", only: [skill] },
+      { title: "Examples", body: "deploy production", only: [help, skill] },
     ],
   },
   (command) => command.action(() => {}),
 );
 ```
 
-A renderer exposes its identity on its factory and selects sections with `sectionsFor()`. Use official factory statics such as `help.id`, `man.id`, and `skill.id` rather than raw strings. Core does not maintain a fixed list of identities.
+A renderer exposes its identity on its factory and selects sections with `sectionsFor()`. Section audiences accept the factory itself, such as `only: [help]`, while renderer integrations can still pass a branded `ExtensionId` such as `help.id`. Raw strings are not accepted, and core does not maintain a fixed list of identities.
 
 ## Build hooks
 

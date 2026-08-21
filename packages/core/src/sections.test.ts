@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { defineExtensionId } from "./identity.ts";
 import { sectionsFor } from "./sections.ts";
-import type { CommandSection } from "./types.ts";
+import type { CommandSection, CommandSectionInput } from "./types.ts";
 
 const universal = { title: "Universal", body: "Everywhere" } as const;
 const agentDocs = defineExtensionId("agent-docs");
@@ -10,8 +10,12 @@ const terminal = defineExtensionId("terminal");
 
 describe("sectionsFor", () => {
 	it("requires minted Extension ids in section audiences", () => {
-		// @ts-expect-error section audiences reject raw strings
-		const invalid: CommandSection = { title: "Invalid", body: "Invalid", only: ["raw"] };
+		const invalid: CommandSectionInput = {
+			title: "Invalid",
+			body: "Invalid",
+			// @ts-expect-error section audiences reject raw strings
+			only: ["raw"],
+		};
 		void invalid;
 	});
 

@@ -128,9 +128,9 @@ describe("built-in extensions", () => {
 		const other = defineExtensionId("acme:other");
 		const snapshot = await new Crust("demo", {
 			sections: [
-				{ title: "Help only", body: "visible", only: [help.id] },
+				{ title: "Help only", body: "visible", only: [help] },
 				{ title: "Other only", body: "hidden", only: [other] },
-				{ title: "Not help", body: "hidden", except: [help.id] },
+				{ title: "Not help", body: "hidden", except: [help] },
 			],
 		}).snapshot();
 		const output = stripAnsi(renderHelp(snapshot));

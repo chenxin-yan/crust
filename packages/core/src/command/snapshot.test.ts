@@ -170,34 +170,43 @@ describe("command metadata sections", () => {
 		expect(() => structuredClone(snapshot)).not.toThrow();
 	});
 
-	it("preserves authored and contributed section audiences", async () => {
-		const agentDocs = defineExtensionId("agent-docs");
+	it("normalizes object and mixed section consumers for authored and contributed sections", async () => {
+		const agentDocs = defineExtension(defineExtensionId("agent-docs"), {});
 		const terminal = defineExtensionId("terminal");
-		const app = new Crust("cli", {
-			sections: [{ title: "Agent notes", body: "Agent body", only: [agentDocs] }],
-		}).extend(
-			defineExtension(defineExtensionId("docs"), {
-				sections: () => [
+		const app = new Crust("cli")
+			.add(
+				defineCommand(
+					"build",
 					{
-						command: [],
-						title: "Human notes",
-						body: "Human body",
-						except: [agentDocs, terminal],
+						sections: [{ title: "Agent notes", body: "Agent body", only: [agentDocs] }],
 					},
-				],
-			}),
-		);
+					(command) => command,
+				),
+			)
+			.extend(
+				defineExtension(defineExtensionId("docs"), {
+					sections: () => [
+						{
+							command: ["build"],
+							title: "Human notes",
+							body: "Human body",
+							except: [agentDocs.id, { id: terminal }],
+						},
+					],
+				}),
+			);
 
 		const snapshot = await app.snapshot();
+		const sections = snapshot.subCommands.build?.meta.sections;
 
-		expect(snapshot.meta.sections).toEqual([
-			{ title: "Agent notes", body: "Agent body", only: [agentDocs] },
-			{ title: "Human notes", body: "Human body", except: [agentDocs, terminal] },
+		expect(sections).toEqual([
+			{ title: "Agent notes", body: "Agent body", only: [agentDocs.id] },
+			{ title: "Human notes", body: "Human body", except: [agentDocs.id, terminal] },
 		]);
-		expect(Object.isFrozen(snapshot.meta.sections?.[0]?.only)).toBe(true);
-		const clonedSections = structuredClone(snapshot).meta.sections;
-		expect(clonedSections?.[0]?.only).toEqual([agentDocs]);
-		expect(clonedSections?.[1]?.except).toEqual([agentDocs, terminal]);
+		expect(Object.isFrozen(sections?.[0]?.only)).toBe(true);
+		const clonedSections = structuredClone(snapshot).subCommands.build?.meta.sections;
+		expect(clonedSections?.[0]?.only).toEqual([agentDocs.id]);
+		expect(clonedSections?.[1]?.except).toEqual([agentDocs.id, terminal]);
 	});
 
 	it("rejects unknown and aliased contribution paths", async () => {
@@ -232,7 +241,9 @@ describe("command metadata sections", () => {
 			[{ title: "Notes", body: "Body", only: "terminal" }],
 			[{ title: "Notes", body: "Body", only: [] }],
 			[{ title: "Notes", body: "Body", except: [] }],
-			[{ title: "Notes", body: "Body", only: [{ id: "terminal" }] }],
+			[{ title: "Notes", body: "Body", only: [{}] }],
+			[{ title: "Notes", body: "Body", only: [{ id: "" }] }],
+			[{ title: "Notes", body: "Body", only: [{ id: " terminal " }] }],
 			[{ title: "Notes", body: "Body", except: [1] }],
 			[{ title: "Notes", body: "Body", only: ["   "] }],
 			[null],
@@ -262,6 +273,7 @@ describe("command metadata sections", () => {
 			[{ command: [], title: "Notes", body: "Body", only: "terminal" }],
 			[{ command: [], title: "Notes", body: "Body", only: [] }],
 			[{ command: [], title: "Notes", body: "Body", only: [null] }],
+			[{ command: [], title: "Notes", body: "Body", only: [{ id: 1 }] }],
 		];
 		for (const contributions of badReturns) {
 			const app = new Crust("cli").extend(
