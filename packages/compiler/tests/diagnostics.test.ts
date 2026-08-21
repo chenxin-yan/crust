@@ -79,6 +79,13 @@ describe("compiler diagnostic corpus", () => {
 		expectLocated(error);
 	});
 
+	it("does not classify inferred never returns as any", async () => {
+		const error = await compileFailure("inferred-never.ts");
+		expect(error.diagnostics.map(({ code }) => code)).not.toContain(DiagnosticCodes.AnyType);
+		expect(error.diagnostics[0]?.code).toBe(DiagnosticCodes.UnsupportedConstruct);
+		expectLocated(error);
+	});
+
 	it("reports unsupported constructs with a rewrite hint", async () => {
 		const error = await compileFailure("unsupported.ts");
 		expect(error.diagnostics[0]?.code).toBe(DiagnosticCodes.UnsupportedConstruct);

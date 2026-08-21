@@ -40,6 +40,22 @@ function fromTypeScriptDiagnostic(
 	};
 }
 
+function functionReferencesItself(node: ts.FunctionDeclaration, checker: ts.TypeChecker): boolean {
+	const symbol = node.name && checker.getSymbolAtLocation(node.name);
+	if (!symbol || !node.body) return false;
+
+	let found = false;
+	function visit(child: ts.Node): void {
+		if (ts.isIdentifier(child) && checker.getSymbolAtLocation(child) === symbol) {
+			found = true;
+			return;
+		}
+		ts.forEachChild(child, visit);
+	}
+	visit(node.body);
+	return found;
+}
+
 function findAnyDiagnostics(sourceFile: ts.SourceFile, checker: ts.TypeChecker) {
 	const diagnostics: CompilerDiagnostic[] = [];
 	function visit(node: ts.Node): void {
@@ -63,7 +79,11 @@ function findAnyDiagnostics(sourceFile: ts.SourceFile, checker: ts.TypeChecker) 
 					anyHint,
 				),
 			);
-		} else if (ts.isFunctionDeclaration(node) && !node.type) {
+		} else if (
+			ts.isFunctionDeclaration(node) &&
+			!node.type &&
+			functionReferencesItself(node, checker)
+		) {
 			const signature = checker.getSignatureFromDeclaration(node);
 			if (signature && checker.getReturnTypeOfSignature(signature).flags & ts.TypeFlags.Never) {
 				diagnostics.push(
