@@ -326,7 +326,9 @@ func inspectStringWidth(value string) int {
 		case unicode.Is(unicode.Mn, character), unicode.Is(unicode.Me, character), character == '\u200d':
 		case character >= 0x1100 && (character <= 0x115f ||
 			character == 0x2329 || character == 0x232a ||
-			character >= 0x2e80 && character <= 0xa4cf && character != 0x303f ||
+			character >= 0x2e80 && character <= 0x3247 && character != 0x303f ||
+			character >= 0x3250 && character <= 0x4dbf ||
+			character >= 0x4e00 && character <= 0xa4c6 ||
 			character >= 0xac00 && character <= 0xd7a3 ||
 			character >= 0xf900 && character <= 0xfaff ||
 			character >= 0xfe10 && character <= 0xfe19 ||
