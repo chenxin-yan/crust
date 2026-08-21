@@ -682,6 +682,44 @@ describe("Crust .extend()", () => {
 		expect(calls).toEqual(["second:sections", "second:preRun", "second:setup", "second:dispose"]);
 	});
 
+	it("moves re-registered Extension providers to the last registration", async () => {
+		let value: string | undefined;
+		const fromA = defineContext("sharedProvider", () => "A");
+		const fromB = defineContext("sharedProvider", () => "B");
+		const a = defineExtension(defineExtensionId("provider-a"), { provides: [fromA()] });
+		const b = defineExtension(defineExtensionId("provider-b"), { provides: [fromB()] });
+		const app = new Crust("test")
+			.extend(a)
+			.extend(b as never)
+			.extend(a as never)
+			.action(async ({ ctx }) => {
+				const bag = ctx as { sharedProvider: Promise<string> };
+				value = await bag.sharedProvider;
+			});
+
+		await app.run([]);
+		expect(value).toBe("A");
+	});
+
+	it("restores a surviving local flag definition after provider replacement", async () => {
+		const id = defineExtensionId("flag-provider");
+		const provider = defineContext(
+			"flagProvider",
+			{ flags: [{ name: "mode", type: "number", aliases: ["extension-mode"] }] },
+			() => ({}),
+		);
+		const first: Extension = defineExtension(id, { provides: [provider()] });
+		const replacement: Extension = defineExtension(id);
+		const app = new Crust("test")
+			.flags({ name: "mode", type: "string", aliases: ["local-mode"] })
+			.extend(first)
+			.extend(replacement)
+			.action(() => {});
+
+		const snapshot = await app.snapshot();
+		expect(snapshot.flags.mode).toEqual({ type: "string", aliases: ["local-mode"] });
+	});
+
 	it("keeps a local provider override across unrelated .extend() calls", async () => {
 		let value: string | undefined;
 		const resource = defineContext("resource", () => "extension");
@@ -841,11 +879,11 @@ describe("Extension application at prepare time", () => {
 
 		function typecheckHarness() {
 			const app = new Crust("cli").add(build);
-			// @ts-expect-error -- command name collides with an app sibling (FIX_EXTENSION_COLLISION)
+			// @ts-expect-error -- command name collides with an app sibling (FIX_COMMAND_COLLISION)
 			void app.extend(collidingName);
-			// @ts-expect-error -- command alias collides with an app sibling (FIX_EXTENSION_COLLISION)
+			// @ts-expect-error -- command alias collides with an app sibling (FIX_COMMAND_COLLISION)
 			void app.extend(collidingAlias);
-			// @ts-expect-error -- command name collides with an earlier Extension alias (FIX_EXTENSION_COLLISION)
+			// @ts-expect-error -- command name collides with an earlier Extension alias (FIX_COMMAND_COLLISION)
 			void new Crust("cli").extend(first).extend(second);
 			void app.extend(dynamic);
 			void app.extend(clean);

@@ -574,6 +574,7 @@ export function defineCommand(
 function installExtensionContexts(
 	node: CommandNode,
 	extensions: readonly Extension[],
+	reRegisteredIds: ReadonlySet<Extension["id"]>,
 ): CommandNode {
 	// Rebuild Extension providers from the deduplicated list so replacing an id
 	// cannot leave the earlier registration's eager Context installs behind.
@@ -583,7 +584,11 @@ function installExtensionContexts(
 	// regrouping locals before Extensions) keeps both observable orders.
 	const cloned = cloneCommandNode(node);
 	// ponytail: O(n²) includes over an already-deduped list, fine for handfuls of extensions.
-	const kept = new Set(extensions.filter((e) => node.extensions.includes(e)).map((e) => e.id));
+	const kept = new Set(
+		extensions
+			.filter((e) => !reRegisteredIds.has(e.id) && node.extensions.includes(e))
+			.map((e) => e.id),
+	);
 	const prune = (target: CommandNode): void => {
 		const contexts: ContextInstance[] = [];
 		const contextExtensionIds: CommandNode["contextExtensionIds"] = [];
@@ -598,9 +603,10 @@ function installExtensionContexts(
 		target.ownedFlags = Object.assign({}, ...contexts.map((context) => context.ownedFlags));
 		const effectiveFlags: FlagsDef = {};
 		target.flagSpellings = new Map();
-		for (const [name, def] of Object.entries(target.effectiveFlags)) {
-			if (!Object.hasOwn(target.localFlags, name) && !Object.hasOwn(target.ownedFlags, name))
-				continue;
+		for (const name of Object.keys(target.effectiveFlags)) {
+			const source = Object.hasOwn(target.localFlags, name) ? target.localFlags : target.ownedFlags;
+			if (!Object.hasOwn(source, name)) continue;
+			const def = source[name]!;
 			effectiveFlags[name] = def;
 			addFlagSpellingEntries(target.flagSpellings, name, def);
 		}
@@ -1145,7 +1151,11 @@ export class Crust<
 	> {
 		const activeExtensions = dedupeExtensions([...this._node.extensions, ...extensions]);
 		return this._clone({
-			...installExtensionContexts(this._node, activeExtensions),
+			...installExtensionContexts(
+				this._node,
+				activeExtensions,
+				new Set(extensions.map((extension) => extension.id)),
+			),
 			extensions: activeExtensions,
 		}) as unknown as Crust<
 			MergeFlags<Flags, ExtensionFlags<Es>>,
