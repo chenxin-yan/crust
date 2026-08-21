@@ -1,5 +1,30 @@
 # @crustjs/store
 
+## 0.3.0
+
+### Minor Changes
+
+- [#307](https://github.com/chenxin-yan/crust/pull/307) [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Modernize the runtime support matrix and package builds.
+  
+  - Supported runtimes: Bun 1.3.14+, Node.js 22+, and Deno 2.8+. Package runtime code is portable across all three — Bun globals are replaced with Node-compatible built-ins, and process spawning uses `node:child_process`. On runtimes without `AsyncDisposableStack` (Node 22/23), invocations fall back to an in-package disposal stack.
+  - Package builds migrate to tsdown (Rolldown) and modules are marked side-effect free. Internal `@crustjs/utils` imports are inlined, fixing `@crustjs/store` installs that previously required `@crustjs/utils` at runtime. Consumers bundling with Bun 1.3.10–1.3.13 may encounter oven-sh/bun#27709 when tree-shaking packages with `sideEffects: false`.
+  - All packages that ship type declarations declare an optional `typescript: "^7.0.0"` peerDependency. Builder inference performance is measured and supported against the native TypeScript 7 compiler; plain-JavaScript consumers are unaffected.
+
+- [#307](https://github.com/chenxin-yan/crust/pull/307) [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Tighten the store definition and error surface (breaking).
+  
+  - `name` is required when creating a store; the implicit `config.json` filename is removed. Pass `name: "config"` to preserve the previous file path.
+  - Schema-backed fields standardize on the plain `{ schema }` shape; the `field()` factory is removed. Migrate `field(Port, { default: 3000 })` to `{ schema: Port.default(3000) }`. Standard Schemas exclusively own validation, transformation, defaults, and optionality — `default` and `validate` cannot be mixed with `schema`, and `type` metadata no longer coerces persisted strings before validation (move coercion into the schema, e.g. `z.coerce.number()`). Schema-backed field types follow the schema's `InferOutput` exactly.
+  - Field validators accept only the documented `void` or exact `{ value }` result contracts; explicit migration errors for legacy validator result shapes are removed.
+  - `CrustStoreError.withCause()` is replaced by the constructor's optional final `cause` argument, `DEFINITION` error details are optional, and the `DefinitionErrorDetails` type export is removed.
+  - A persisted config file with a non-object JSON root (string, number, array, or `null`) now throws a `PARSE` `CrustStoreError`; previously a string or number root crashed with a raw `TypeError`, while an array or `null` root silently reset the store to defaults.
+
+### Patch Changes
+
+- [#307](https://github.com/chenxin-yan/crust/pull/307) [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Faster startup and type-checking.
+  
+  - Core reuses its prepared invocation tree across repeated dispatches, and completion renderers and skill implementation modules are deferred until first use. Extension command recipes materialize once per builder instance instead of on every run — recipes must stay inert, per the documented contract.
+  - Long `.flags()` chains hit `TS2589` about 3x later, the `.provide()` chain ceiling is removed, and `ctx` inference no longer silently degrades on long `.provide()` chains.
+
 ## 0.2.0
 
 ### Minor Changes
