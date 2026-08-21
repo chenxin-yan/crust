@@ -362,7 +362,7 @@ describe("ValidateNamedFlagDefs", () => {
 
 	it("brands a definition whose nested child flag collides with an Extension flag", () => {
 		type Def = {
-			readonly _shape?: {
+			readonly _contract?: {
 				readonly flags: {};
 				readonly children: {
 					prod: {
@@ -386,7 +386,7 @@ describe("ValidateNamedFlagDefs", () => {
 		type _clean = Expect<Equal<Extract<keyof Clean[0], "FIX_ALIAS_COLLISION">, never>>;
 
 		// Widened shapes opt out via the `0 extends 1 & S` any-guard.
-		type Widened = ValidateDefinitionFlags<readonly [{ readonly _shape?: any }], "force">;
+		type Widened = ValidateDefinitionFlags<readonly [{ readonly _contract?: any }], "force">;
 		type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_ALIAS_COLLISION">, never>>;
 
 		expect(true).toBe(true);

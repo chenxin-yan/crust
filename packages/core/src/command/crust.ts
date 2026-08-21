@@ -105,7 +105,7 @@ export interface CrustCommandContext<
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Compile-time description of one command's programmatic input and action result. */
-export interface CommandShape<
+export interface CommandContract<
 	A extends ArgsDef = ArgsDef,
 	F extends FlagsDef = FlagsDef,
 	Children extends object = {},
@@ -123,7 +123,7 @@ export type RunOutcome<Result> =
 	| { readonly status: "finished"; readonly by: ExtensionId };
 
 /** Compile-time command tree accumulated by `.add()`. */
-export type CommandTree = Record<string, CommandShape>;
+export type CommandTree = Record<string, CommandContract>;
 
 /** Every valid path through a command tree, including the root path (`[]`). */
 export type CommandPath<
@@ -138,30 +138,30 @@ export type CommandPath<
 		:
 				| readonly []
 				| {
-						[K in keyof Tree & string]: Tree[K] extends CommandShape
+						[K in keyof Tree & string]: Tree[K] extends CommandContract
 							? readonly [K, ...CommandPath<Tree[K]["children"], readonly [...Depth, unknown]>]
 							: never;
 				  }[keyof Tree & string];
 
-/** Resolve the command shape at a typed path. */
-export type CommandShapeAt<
-	Shape extends CommandShape,
+/** Resolve the command contract at a typed path. */
+export type CommandContractAtPath<
+	Contract extends CommandContract,
 	Path extends readonly string[],
 > = Path extends readonly [infer Head, ...infer Tail extends readonly string[]]
-	? Head extends keyof Shape["children"]
-		? Shape["children"][Head] extends infer Child extends CommandShape
-			? CommandShapeAt<Child, Tail>
+	? Head extends keyof Contract["children"]
+		? Contract["children"][Head] extends infer Child extends CommandContract
+			? CommandContractAtPath<Child, Tail>
 			: never
 		: // A non-literal segment (e.g. a hand-annotated `[string, ...string[]]`
 			// tuple) selects a statically unknowable command, not no command.
 			string extends Head
-			? CommandShape
+			? CommandContract
 			: never
 	: Path extends readonly []
-		? Shape
+		? Contract
 		: // A tail widened past the CommandPath depth cap selects a statically
-			// unknowable command, so the shape (and its result) widens too.
-			CommandShape;
+			// unknowable command, so the contract (and its result) widens too.
+			CommandContract;
 
 type RequiredKeys<T> = {
 	[K in keyof T]-?: {} extends Pick<T, K> ? never : K;
@@ -174,18 +174,21 @@ type RunSection<Name extends string, Values> = keyof Values extends never
 		: { [K in Name]: Values };
 
 /** Structured values serialized to argv before the normal parser pipeline runs. */
-export type RunInput<Shape extends CommandShape> = RunSection<"args", InputArgs<Shape["args"]>> &
-	RunSection<"flags", InputFlags<Shape["flags"]>> & {
+export type RunInput<Contract extends CommandContract> = RunSection<
+	"args",
+	InputArgs<Contract["args"]>
+> &
+	RunSection<"flags", InputFlags<Contract["flags"]>> & {
 		readonly raw?: readonly string[];
 	};
 
-export type RunInputArguments<Shape extends CommandShape> =
-	RequiredKeys<RunInput<Shape>> extends never
-		? readonly [input?: RunInput<Shape>]
-		: readonly [input: RunInput<Shape>];
+export type RunInputArguments<Contract extends CommandContract> =
+	RequiredKeys<RunInput<Contract>> extends never
+		? readonly [input?: RunInput<Contract>]
+		: readonly [input: RunInput<Contract>];
 
-export type RunArguments<Shape extends CommandShape> = readonly [
-	...RunInputArguments<Shape>,
+export type RunArguments<Contract extends CommandContract> = readonly [
+	...RunInputArguments<Contract>,
 	io?: Partial<InvocationIO>,
 ];
 
@@ -242,7 +245,7 @@ interface CommandDefinitionInternal {
 export interface CommandDefinition<
 	Name extends string = string,
 	Aliases extends readonly string[] = readonly string[],
-	Shape extends CommandShape = CommandShape,
+	Contract extends CommandContract = CommandContract,
 	Deps extends ContextMap = {},
 > {
 	/** The subcommand name this definition is added under */
@@ -250,13 +253,13 @@ export interface CommandDefinition<
 	/** The same definition under a different name; configured aliases travel with it. */
 	as<const N extends string>(
 		name: N & EmptyNameBrand<N>,
-	): CommandDefinition<N, Aliases, Shape, Deps>;
+	): CommandDefinition<N, Aliases, Contract, Deps>;
 	/** @internal */
 	readonly [commandDefinitionInternal]: CommandDefinitionInternal;
 	/** @internal — phantom carrying configured alias literals for add-time checks */
 	readonly _aliases?: Aliases;
 	/** @internal — phantom carrying args, flags, and descendants for typed invocation */
-	readonly _shape?: Shape;
+	readonly _contract?: Contract;
 	/** @internal — phantom carrying the declared dependency closure */
 	readonly _deps?: Deps;
 }
@@ -411,7 +414,7 @@ export interface CommandDefinitionBuilder<
 	): CommandDefinitionBuilder<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, Awaited<R>>;
 }
 
-type ShapeOfBuilder<B> =
+type ContractOfBuilder<B> =
 	B extends CommandDefinitionBuilder<
 		infer Flags,
 		infer A,
@@ -422,30 +425,30 @@ type ShapeOfBuilder<B> =
 		any,
 		infer Result
 	>
-		? CommandShape<A, Flags, Tree, Result>
+		? CommandContract<A, Flags, Tree, Result>
 		: never;
 
 // Matching against CommandDefinitionSpellings (never for widened names) keeps a
 // widened definition in the same tuple or union from degrading a literal
-// sibling's shape: a widened `Name` would otherwise match every spelling.
-type DefinitionShapeForSpelling<D, Spelling extends string> =
-	D extends CommandDefinition<any, any, infer Shape, any>
+// sibling's contract: a widened `Name` would otherwise match every spelling.
+type DefinitionContractForSpelling<D, Spelling extends string> =
+	D extends CommandDefinition<any, any, infer Contract, any>
 		? Spelling extends CommandDefinitionSpellings<D>
-			? Shape
+			? Contract
 			: never
 		: never;
 
 // Added definitions inherit the parent path's Context-owned flags at runtime
-// (materialization seeds the child with `parent.ownedFlags`), so the typed shape
+// (materialization seeds the child with `parent.ownedFlags`), so the typed contract
 // merges them too — deeply, because nested definitions materialize against the
 // same inherited flag namespace. Local parent flags never inherit and stay out.
-type ShapeWithInheritedFlags<S, CF extends FlagsDef> = {} extends CF
+type ContractWithInheritedFlags<S, CF extends FlagsDef> = {} extends CF
 	? S
-	: S extends CommandShape<infer SA, infer SF, infer SC, infer SR>
-		? CommandShape<
+	: S extends CommandContract<infer SA, infer SF, infer SC, infer SR>
+		? CommandContract<
 				SA,
 				MergeFlags<CF, SF>,
-				{ [K in keyof SC]: ShapeWithInheritedFlags<SC[K], CF> },
+				{ [K in keyof SC]: ContractWithInheritedFlags<SC[K], CF> },
 				SR
 			>
 		: never;
@@ -454,8 +457,8 @@ type DefinitionsTree<
 	Ds extends readonly CommandDefinition<any, any, any, any>[],
 	CtxFlags extends FlagsDef = {},
 > = {
-	[K in CommandDefinitionSpellings<Ds[number]>]: ShapeWithInheritedFlags<
-		DefinitionShapeForSpelling<Ds[number], K>,
+	[K in CommandDefinitionSpellings<Ds[number]>]: ContractWithInheritedFlags<
+		DefinitionContractForSpelling<Ds[number], K>,
 		CtxFlags
 	>;
 };
@@ -521,7 +524,7 @@ type RecursiveExtensionFlags<Es extends readonly Extension<any, any, any, any>[]
 	: never;
 
 type TreeWithInheritedFlags<Tree, F extends FlagsDef> = {
-	[K in keyof Tree]: ShapeWithInheritedFlags<Tree[K], F>;
+	[K in keyof Tree]: ContractWithInheritedFlags<Tree[K], F>;
 };
 
 type ExtendedTree<
@@ -547,7 +550,7 @@ export function defineCommand<
 >(
 	name: Name & EmptyNameBrand<Name>,
 	recipe: CommandRecipe<{}, Builder>,
-): CommandDefinition<Name, readonly [], ShapeOfBuilder<Builder>>;
+): CommandDefinition<Name, readonly [], ContractOfBuilder<Builder>>;
 export function defineCommand<
 	const Name extends string,
 	const C extends CommandConfig,
@@ -556,7 +559,7 @@ export function defineCommand<
 	name: Name & EmptyNameBrand<Name>,
 	config: C & ValidateCommandConfig<Name, C>,
 	recipe: CommandRecipe<CommandDeps<C>, Builder>,
-): CommandDefinition<Name, AliasesOf<C>, ShapeOfBuilder<Builder>, CommandDeps<C>>;
+): CommandDefinition<Name, AliasesOf<C>, ContractOfBuilder<Builder>, CommandDeps<C>>;
 export function defineCommand(
 	name: string,
 	configOrRecipe: CommandConfig | CommandRecipe,
@@ -850,7 +853,7 @@ export class Crust<
 		args: A;
 		ctx: Ctx;
 		tree: Tree;
-		shape: CommandShape<A, Flags, Tree, Result>;
+		contract: CommandContract<A, Flags, Tree, Result>;
 	};
 
 	/** @internal */
@@ -1280,8 +1283,10 @@ export class Crust<
 	 */
 	async run<const Path extends CommandPath<Tree>>(
 		path: Path,
-		...args: RunArguments<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>>
-	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>> {
+		...args: RunArguments<CommandContractAtPath<CommandContract<A, Flags, Tree, Result>, Path>>
+	): Promise<
+		RunOutcome<CommandContractAtPath<CommandContract<A, Flags, Tree, Result>, Path>["result"]>
+	> {
 		const structuredInput = (args[0] ?? {}) as {
 			readonly args?: object;
 			readonly flags?: object;
@@ -1292,7 +1297,7 @@ export class Crust<
 		const argv = serializeRunArgv(root, path, structuredInput);
 		// Programmatic calls preserve raw failures and never change process status.
 		return (await runInvocation(this._node, argv, io, materializeCommandDefinition)) as RunOutcome<
-			CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]
+			CommandContractAtPath<CommandContract<A, Flags, Tree, Result>, Path>["result"]
 		>;
 	}
 

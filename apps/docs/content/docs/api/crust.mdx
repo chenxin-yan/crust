@@ -137,7 +137,7 @@ const app = new Crust("my-cli", {
 });
 ```
 
-Definition aliases must be non-empty, contain no whitespace, not start with `-`, differ from their command's canonical name, and not collide with sibling names or aliases. TypeScript reports known alias-shape violations at `defineCommand()` with `FIX_ALIAS_SHAPE` and sibling collisions at `.add()` with `FIX_COMMAND_COLLISION`.
+Definition aliases must be non-empty, contain no whitespace, not start with `-`, differ from their command's canonical name, and not collide with sibling names or aliases. TypeScript reports known invalid-alias violations at `defineCommand()` with `FIX_INVALID_ALIAS` and sibling collisions at `.add()` with `FIX_COMMAND_COLLISION`.
 
 ## Chaining semantics
 
@@ -303,7 +303,7 @@ const app = new Crust("my-cli").add(
 );
 ```
 
-Statically known sibling name and alias collisions fail at `.add()` with `FIX_COMMAND_COLLISION`; alias shape violations fail at `defineCommand()` with `FIX_ALIAS_SHAPE`. Dynamically assembled definitions fail loud instead: `.add()` rejects a duplicate sibling name with a `DEFINITION` error. Materialization also checks that each recipe returns its seeded builder, does not register nested Extensions, and does not provide a Context whose owned flags collide with an ancestor Context's.
+Statically known sibling name and alias collisions fail at `.add()` with `FIX_COMMAND_COLLISION`; invalid-alias violations fail at `defineCommand()` with `FIX_INVALID_ALIAS`. Dynamically assembled definitions fail loud instead: `.add()` rejects a duplicate sibling name with a `DEFINITION` error. Materialization also checks that each recipe returns its seeded builder, does not register nested Extensions, and does not provide a Context whose owned flags collide with an ancestor Context's.
 
 A definition can add other definitions. Context providers are inherited on the materialized command path; a nested definition accesses one by declaring its factory in `uses` and awaiting the corresponding `ctx` property.
 

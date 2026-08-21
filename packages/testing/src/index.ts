@@ -3,7 +3,7 @@ import { setTimeout } from "node:timers/promises";
 import type {
 	AnyCrust,
 	CommandPath,
-	CommandShapeAt,
+	CommandContractAtPath,
 	ExtensionId,
 	InvocationIO,
 	RunInputArguments,
@@ -13,17 +13,17 @@ import { type ProgressSink, withProgressSink } from "@crustjs/progress";
 import { withPromptIO } from "@crustjs/prompts";
 import { createPromptIO, type Key } from "@crustjs/prompts/testing";
 
-/** Structural io shape shared by `run()` and `execute()` captures. */
+/** Structural io contract shared by `run()` and `execute()` captures. */
 export type CaptureIO = Partial<InvocationIO>;
 
 // Indexed access into the `_types` phantom instead of conditionally inferring
 // all nine `Crust` generics — the conditional forced a full structural match
 // (and union distribution) per helper call.
 type AppTree<App extends AnyCrust> = App["_types"]["tree"];
-type ShapeAtPath<App extends AnyCrust, Path extends CommandPath<AppTree<App>>> = CommandShapeAt<
-	App["_types"]["shape"],
-	Path
->;
+type ContractAtPath<
+	App extends AnyCrust,
+	Path extends CommandPath<AppTree<App>>,
+> = CommandContractAtPath<App["_types"]["contract"], Path>;
 
 /**
  * Result of {@link captureRun}. Completed runs carry the selected action's
@@ -46,8 +46,8 @@ export async function captureRun<
 >(
 	app: App,
 	path: Path,
-	...args: RunInputArguments<ShapeAtPath<App, Path>>
-): Promise<CapturedRun<ShapeAtPath<App, Path>["result"]>> {
+	...args: RunInputArguments<ContractAtPath<App, Path>>
+): Promise<CapturedRun<ContractAtPath<App, Path>["result"]>> {
 	// Each io callback invocation is one line in a real terminal (core's
 	// defaults are console.log/console.error), so join captured calls with "\n".
 	const stdoutLines: string[] = [];
@@ -56,7 +56,7 @@ export async function captureRun<
 	try {
 		const [input] = args;
 		// The `as never` path/input erasure in this call loses the typed link to
-		// the selected shape, so restore it once here.
+		// the selected contract, so restore it once here.
 		const outcome = (await app.run(path as never, input as never, {
 			stdout: (text) => {
 				stdoutLines.push(text);
@@ -64,7 +64,7 @@ export async function captureRun<
 			stderr: (text) => {
 				stderrLines.push(text);
 			},
-		})) as RunOutcome<ShapeAtPath<App, Path>["result"]>;
+		})) as RunOutcome<ContractAtPath<App, Path>["result"]>;
 		return { stdout: stdoutLines.join("\n"), stderr: stderrLines.join("\n"), ...outcome };
 	} catch (error) {
 		// Output written before the failure is retained.
@@ -156,7 +156,7 @@ export interface InteractiveRun {
 export function runInteractive<App extends AnyCrust, const Path extends CommandPath<AppTree<App>>>(
 	app: App,
 	path: Path,
-	...args: RunInputArguments<ShapeAtPath<App, Path>>
+	...args: RunInputArguments<ContractAtPath<App, Path>>
 ): InteractiveRun {
 	const harness = createPromptIO();
 	const output = harness.io.output;

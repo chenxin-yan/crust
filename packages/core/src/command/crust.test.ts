@@ -430,7 +430,7 @@ describe("Crust .add() type-level tests", () => {
 	});
 
 	it("rejects invalid command alias shapes at defineCommand()", () => {
-		const typecheckAliasShapes = () => {
+		const typecheckInvalidAliases = () => {
 			// @ts-expect-error -- aliases must be non-empty
 			defineCommand("issue", { aliases: [""] }, (command) => command);
 			// @ts-expect-error -- aliases must not start with a dash
@@ -442,7 +442,7 @@ describe("Crust .add() type-level tests", () => {
 			// @ts-expect-error -- aliases must differ from their own canonical name
 			defineCommand("issue", { aliases: ["issue"] }, (command) => command);
 		};
-		void typecheckAliasShapes;
+		void typecheckInvalidAliases;
 
 		expect(true).toBe(true);
 	});
