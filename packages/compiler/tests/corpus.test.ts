@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import { lower } from "../src/frontend.js";
 import { compile } from "../src/index.js";
@@ -107,6 +107,9 @@ describe("compiler differential corpus", () => {
 				"console.log(String(42));",
 				"console.log(undefined);",
 				"function f(): void {} console.log(f());",
+				"console.log(process.exit(0));",
+				"function f(value: void): number { return 1; } f();",
+				"function f(): void {} function g(): void { return f(); } g();",
 				'console.log(process.argv["0"]);',
 				'process.exit("2");',
 				'console.log("%s", "ok");',
@@ -122,6 +125,44 @@ describe("compiler differential corpus", () => {
 			await rm(workspace, { recursive: true, force: true });
 		}
 	}, 120_000);
+
+	it.skipIf(goPath === null)(
+		"uses runtime operands for addition",
+		async () => {
+			if (nodePath === null) throw new Error("Node is required as the corpus reference runtime");
+			const workspace = await mkdtemp(join(tmpdir(), "crust-addition-"));
+			const fixture = join(workspace, "fixture.ts");
+			let binary: string | undefined;
+			try {
+				await writeFile(fixture, "console.log(process.argv[99] + 1);");
+				binary = await compile(fixture);
+				expect(run(binary)).toEqual(run(nodePath, [fixture]));
+			} finally {
+				if (binary) await rm(dirname(binary), { recursive: true, force: true });
+				await rm(workspace, { recursive: true, force: true });
+			}
+		},
+		120_000,
+	);
+
+	it.skipIf(goPath === null)(
+		"canonicalizes process.argv[0] for relative invocation",
+		async () => {
+			const workspace = await mkdtemp(join(tmpdir(), "crust-argv0-"));
+			const fixture = join(workspace, "fixture.ts");
+			let binary: string | undefined;
+			try {
+				await writeFile(fixture, "console.log(process.argv[0]);");
+				binary = await compile(fixture);
+				const result = Bun.spawnSync([`./${basename(binary)}`], { cwd: dirname(binary) });
+				expect(new TextDecoder().decode(result.stdout).trim()).toBe(binary);
+			} finally {
+				if (binary) await rm(dirname(binary), { recursive: true, force: true });
+				await rm(workspace, { recursive: true, force: true });
+			}
+		},
+		120_000,
+	);
 
 	for (const fixtureName of ["fractional-exit.ts", "non-finite-exit.ts", "large-exit.ts"]) {
 		it.skipIf(goPath === null)(
