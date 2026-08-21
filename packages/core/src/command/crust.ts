@@ -690,6 +690,10 @@ export type AnyCrust = Crust<any, any, any, any, any, any, any, any, any>;
 export class Crust<
 	Flags extends FlagsDef = {},
 	A extends ArgsDef = ArgsDef,
+	// `out` forces covariance over the contravariant brand positions in
+	// provide()/extend(); those brands are best-effort lints (already bypassable
+	// via widening), and the annotation skips a full structural comparison per
+	// assignment. Do not "fix" it back to inferred variance.
 	out Ctx extends ContextMap = {},
 	Sibs extends string = never,
 	Sp extends string = SpellingsOf<Flags>,

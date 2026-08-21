@@ -592,7 +592,13 @@ type InferDuplicateArgs<A extends readonly ArgDef[]> = A extends readonly [
 	? { [K in Head["name"]]: InferArgValue<Head> } & InferDuplicateArgs<Tail>
 	: {};
 
-/** Convert a literal ArgsDef tuple into resolved values keyed by argument name. */
+/**
+ * Convert a literal ArgsDef tuple into resolved values keyed by argument name.
+ *
+ * Two shapes opt out of per-element inference: tuples with rest elements map
+ * to `{}` (the builder only produces fixed tuples), and unions of tuples are
+ * merged into one record by `InferArgs`'s non-distributive `[A]` check.
+ */
 type InferArgsTuple<A extends readonly ArgDef[]> = number extends A["length"]
 	? {}
 	: [DuplicateArgNames<A>] extends [never]
