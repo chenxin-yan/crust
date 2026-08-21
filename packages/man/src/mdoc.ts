@@ -3,6 +3,7 @@ import {
 	type ExtensionId,
 	defineExtensionId,
 	sectionsFor,
+	visibleSectionsFor,
 } from "@crustjs/core";
 import {
 	buildCommandDocumentation,
@@ -62,21 +63,6 @@ function resolveDdLine(explicit?: string): string {
 		year: "numeric",
 		timeZone: fromEpoch ? "UTC" : undefined,
 	});
-}
-
-function subcommandSectionGroups(
-	command: CommandSnapshot,
-	path: readonly string[] = [],
-): { path: string[]; sections: ReturnType<typeof sectionsFor> }[] {
-	return Object.entries(command.subCommands)
-		.filter(([, child]) => !child.meta.hidden)
-		.sort(([a], [b]) => a.localeCompare(b))
-		.flatMap(([name, child]) => {
-			const childPath = [...path, name];
-			const sections = sectionsFor(child.meta.sections, MAN);
-			const descendants = subcommandSectionGroups(child, childPath);
-			return sections.length > 0 ? [{ path: childPath, sections }, ...descendants] : descendants;
-		});
 }
 
 export interface RenderManPageMdocOptions {
@@ -139,7 +125,7 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		lines.push(`.Sh ${shTitle(metadataSection.title)}`);
 		for (const line of metadataSection.body.split("\n")) lines.push(escapeMdocBodyLine(line));
 	}
-	const commandSections = subcommandSectionGroups(root);
+	const commandSections = visibleSectionsFor(root, MAN).filter(({ path }) => path.length > 0);
 	if (commandSections.length > 0) {
 		lines.push(".Sh COMMANDS");
 		for (const group of commandSections) {

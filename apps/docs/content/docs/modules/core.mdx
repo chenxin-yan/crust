@@ -52,17 +52,18 @@ Downstream commands and other Context setups call `await ctx.api`. See [Contexts
 
 ## Runtime exports
 
-| Export                                | Description                                                                                                                                         |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`Crust`](/docs/api/crust)            | Immutable command builder with Context `.provide()`, `.add()`, `.action()`, tooling `.snapshot()`, programmatic `.run()`, and terminal `.execute()` |
-| [`defineCommand`](/docs/api/crust)    | Create a named, inert reusable command definition                                                                                                   |
-| `defineContext(name, config?, setup)` | Define a named Context factory with optional owned flags; setup receives its declared lazy Context bag and invocation I/O                           |
-| `defineExtension(id, config)`         | Define a frozen, application-wide Extension value                                                                                                   |
-| `defineExtensionId(id)`               | Mint a branded Extension identity from any non-blank string                                                                                         |
-| `defineFlag(name, definition)`        | Define one named flag, preserving its literal definition                                                                                            |
-| `defineArg(name, definition)`         | Define one named positional argument, preserving its literal definition                                                                             |
-| `sectionsFor(sections, consumer)`     | Select sections visible to the given consumer id                                                                                                    |
-| [`CrustError`](/docs/api/errors)      | Framework error for definition, routing, parsing, and validation failures                                                                           |
+| Export                                   | Description                                                                                                                                         |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`Crust`](/docs/api/crust)               | Immutable command builder with Context `.provide()`, `.add()`, `.action()`, tooling `.snapshot()`, programmatic `.run()`, and terminal `.execute()` |
+| [`defineCommand`](/docs/api/crust)       | Create a named, inert reusable command definition                                                                                                   |
+| `defineContext(name, config?, setup)`    | Define a named Context factory with optional owned flags; setup receives its declared lazy Context bag and invocation I/O                           |
+| `defineExtension(id, config)`            | Define a frozen, application-wide Extension value                                                                                                   |
+| `defineExtensionId(id)`                  | Mint a branded Extension identity from any non-blank string                                                                                         |
+| `defineFlag(name, definition)`           | Define one named flag, preserving its literal definition                                                                                            |
+| `defineArg(name, definition)`            | Define one named positional argument, preserving its literal definition                                                                             |
+| `sectionsFor(sections, consumer)`        | Select sections visible to the given consumer id                                                                                                    |
+| `visibleSectionsFor(snapshot, consumer)` | Collect audience-filtered sections across the visible command tree                                                                                  |
+| [`CrustError`](/docs/api/errors)         | Framework error for definition, routing, parsing, and validation failures                                                                           |
 
 ## Definition types
 
@@ -164,7 +165,13 @@ Omitting `io` creates no new ambient scope, preserving native TTY detection and 
 A command section without an audience is available to every renderer. Use `only` or `except` with section consumers to narrow it; the two fields are mutually exclusive. A `SectionConsumer` is either a branded `ExtensionId` or an Extension/factory object carrying one, so official renderers can be passed directly while custom renderers can use their minted id:
 
 ```ts
-import { defineExtensionId, sectionsFor, type CommandSection } from "@crustjs/core";
+import {
+  defineExtensionId,
+  sectionsFor,
+  visibleSectionsFor,
+  type CommandSection,
+  type CommandSnapshot,
+} from "@crustjs/core";
 
 export const WEB_DOCS = defineExtensionId("acme:web-docs");
 
@@ -174,9 +181,13 @@ const sections: readonly CommandSection[] = [
 ];
 
 const webSections = sectionsFor(sections, WEB_DOCS);
+
+function collectWebSections(snapshot: CommandSnapshot) {
+  return visibleSectionsFor(snapshot, WEB_DOCS);
+}
 ```
 
-Extension identities remain plain strings at runtime and match by value, so targeting remains stable when snapshots are cloned or serialized. Renderer packages expose their ids on factory statics; core has no built-in consumer registry. Official consumer ids use the `crust:` namespace, reserved by convention for official Crust identities. Third-party packages should namespace published ids with their own prefix, as in `acme:web-docs` above.
+`visibleSectionsFor()` returns only section-bearing visible commands in canonical path order. The root path is `[]`; hidden commands and their descendants are skipped. Extension identities remain plain strings at runtime and match by value, so targeting remains stable when snapshots are cloned or serialized. Renderer packages expose their ids on factory statics; core has no built-in consumer registry. Official consumer ids use the `crust:` namespace, reserved by convention for official Crust identities. Third-party packages should namespace published ids with their own prefix, as in `acme:web-docs` above.
 
 ## Tooling subpath
 

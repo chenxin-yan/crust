@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import type { ArgDef, FlagDef } from "@crustjs/core";
+import type { ArgDef, CommandSection, FlagDef } from "@crustjs/core";
 import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
 type CommandNode = Parameters<typeof snapshotCommand>[0];
@@ -18,7 +18,7 @@ function makeCommand(opts: {
 		name: string;
 		description?: string;
 		usage?: string;
-		sections?: readonly { title: string; body: string }[];
+		sections?: readonly Pick<CommandSection, "title" | "body">[];
 	};
 	args?: readonly ArgDef[];
 	flags?: Record<string, FlagDef>;
