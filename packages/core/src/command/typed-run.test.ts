@@ -364,6 +364,13 @@ describe("typed programmatic invocation", () => {
 		type _widenedResult = Expect<
 			Equal<CommandShapeAt<Root, readonly ["root", ...string[]]>["result"], unknown>
 		>;
+		// A CommandPath<Tree>-typed variable (union of literal tuples and widened
+		// arrays) never resolves to never, and a widened head widens instead.
+		type _pathVariable = CommandShapeAt<Root, CommandPath<DeepTree>>["result"];
+		type _pathVariableSound = Expect<Equal<[_pathVariable] extends [never] ? true : false, false>>;
+		type _widenedHead = Expect<
+			Equal<CommandShapeAt<Root, readonly [string, ...string[]]>["result"], unknown>
+		>;
 		expect(true).toBe(true);
 	});
 });

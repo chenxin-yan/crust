@@ -146,7 +146,11 @@ export type CommandShapeAt<
 		? Shape["children"][Head] extends infer Child extends CommandShape
 			? CommandShapeAt<Child, Tail>
 			: never
-		: never
+		: // A non-literal segment (e.g. a hand-annotated `[string, ...string[]]`
+			// tuple) selects a statically unknowable command, not no command.
+			string extends Head
+			? CommandShape
+			: never
 	: Path extends readonly []
 		? Shape
 		: // A tail widened past the CommandPath depth cap selects a statically
