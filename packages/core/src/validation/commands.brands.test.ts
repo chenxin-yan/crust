@@ -78,8 +78,8 @@ describe("compile-time command validation", () => {
 				'Extension command "b" collides with an existing command'
 			>
 		>;
-		type _clean = Expect<Equal<Extract<keyof Clean[0], "FIX_EXTENSION_COLLISION">, never>>;
-		type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_EXTENSION_COLLISION">, never>>;
+		type _clean = Expect<Equal<Extract<keyof Clean[0], "FIX_COMMAND_COLLISION">, never>>;
+		type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_COMMAND_COLLISION">, never>>;
 
 		expect(true).toBe(true);
 	});
