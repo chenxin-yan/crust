@@ -695,13 +695,13 @@ type RequiredArgNames<A extends ArgsDef> = A[number] extends infer D
 /** Values accepted by typed programmatic invocation before argv parsing. */
 export type InputArgs<A extends ArgsDef> = Simplify<
 	{
-		[D in A[number] as D["name"] extends RequiredArgNames<A>
-			? D["name"]
-			: never]-?: InputArgValue<D>;
+		[
+			D in A[number] as D["name"] extends RequiredArgNames<A> ? D["name"] : never
+		]-?: InputArgValue<D>;
 	} & {
-		[D in A[number] as D["name"] extends RequiredArgNames<A>
-			? never
-			: D["name"]]?: InputArgValue<D>;
+		[
+			D in A[number] as D["name"] extends RequiredArgNames<A> ? never : D["name"]
+		]?: InputArgValue<D>;
 	}
 >;
 

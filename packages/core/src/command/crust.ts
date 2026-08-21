@@ -509,11 +509,13 @@ type ExtensionFlags<Es extends readonly Extension<any, any, any, any>[]> = Named
 // promotes a flag onto descendant inputs: a widened `boolean` scope may be
 // `false` at runtime, which installs the flag on the root only.
 type RecursiveExtensionFlags<Es extends readonly Extension<any, any, any, any>[]> = {
-	[D in ExtensionFlagDefs<Es>[number] as D extends { readonly recursive: infer R }
-		? [R] extends [true]
-			? D["name"]
-			: never
-		: D["name"]]: Omit<D, "name">;
+	[
+		D in ExtensionFlagDefs<Es>[number] as D extends { readonly recursive: infer R }
+			? [R] extends [true]
+				? D["name"]
+				: never
+			: D["name"]
+	]: Omit<D, "name">;
 } extends infer F extends FlagsDef
 	? F
 	: never;

@@ -106,7 +106,9 @@ describe("spinner — terminal sink", () => {
 			handler?.("SIGINT");
 		} finally {
 			process.kill = realKill;
-			process.removeListener("SIGINT", hostListener);
+			// TODO: drop cast once https://github.com/oven-sh/bun/issues/40003 is fixed.
+			// Cast: bun-types 1.4.0's memoryPressure override shadows the generic overload.
+			(process as NodeJS.EventEmitter).removeListener("SIGINT", hostListener);
 		}
 		expect(kills).toEqual([]);
 		expect(writes.at(-1)).toBe("\x1B[?25h");

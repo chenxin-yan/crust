@@ -195,7 +195,7 @@ type InferPreSchemaExtensionFlag<F extends ExtensionFlagDef> = F extends {
 		? F extends { default: unknown }
 			? InferFlags<{ value: F }>["value"]
 			: // Hooks run before validation enforces `required`, so the value may be absent.
-					InferFlags<{ value: F }>["value"] | undefined
+				InferFlags<{ value: F }>["value"] | undefined
 		: InferFlags<{ value: F }>["value"];
 
 type InferExtensionFlag<F> = F extends ExtensionFlagDef
