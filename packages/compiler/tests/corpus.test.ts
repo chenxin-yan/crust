@@ -110,6 +110,8 @@ describe("compiler differential corpus", () => {
 				'console.log(process.argv["0"]);',
 				'process.exit("2");',
 				'console.log("%s", "ok");',
+				'function format(): string { return "%s"; } console.log(format(), "ok");',
+				"function f(): void {} console.log(`${f()}`);",
 				"function f() { return 1; } console.log(f);",
 				"function f(value: number) { return value; } console.log(f.length);",
 			]) {
@@ -119,7 +121,7 @@ describe("compiler differential corpus", () => {
 		} finally {
 			await rm(workspace, { recursive: true, force: true });
 		}
-	});
+	}, 120_000);
 
 	for (const fixtureName of ["fractional-exit.ts", "non-finite-exit.ts", "large-exit.ts"]) {
 		it.skipIf(goPath === null)(
