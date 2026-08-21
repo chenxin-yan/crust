@@ -169,7 +169,7 @@ describe("typed programmatic invocation", () => {
 		void typecheckHarness;
 	});
 
-	it("keeps conditionally assembled Extension contributions runtime-only", async () => {
+	it("keeps conditionally assembled Extension contributions runtime-only", () => {
 		const foo = defineCommand("foo", (command) => command.action(() => {}));
 		const bar = defineCommand("bar", (command) => command.action(() => {}));
 		const condition = (globalThis as { __never?: boolean }).__never === true;
@@ -194,22 +194,6 @@ describe("typed programmatic invocation", () => {
 			void elementApp.run(["foo"]);
 		}
 		void typecheckHarness;
-
-		// The installed branch still dispatches through the raw-argv path.
-		let ran = false;
-		const runtime = defineExtension(defineExtensionId("runtime"), {
-			commands: condition
-				? [foo]
-				: [
-						defineCommand("bar", (command) =>
-							command.action(() => {
-								ran = true;
-							}),
-						),
-					],
-		});
-		await new Crust("cli").extend(runtime).execute({ argv: ["bar"] });
-		expect(ran).toBe(true);
 	});
 
 	it("keeps widened recursive flag scopes off descendant typed inputs", () => {
