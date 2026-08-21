@@ -73,6 +73,26 @@ describe("compiler diagnostic corpus", () => {
 		expectLocated(error);
 	});
 
+	it("classifies suppressed structured implicit-any parameters as unsupported any", async () => {
+		const error = await compileFailure("suppressed-structured-any.ts");
+		expect(error.diagnostics.map(({ code }) => code)).toContain(DiagnosticCodes.AnyType);
+		expectLocated(error);
+	});
+
+	it("classifies suppressed implicit-any expressions as unsupported any", async () => {
+		const error = await compileFailure("suppressed-this-any.ts");
+		expect(error.diagnostics.map(({ code }) => code)).toContain(DiagnosticCodes.AnyType);
+		expectLocated(error);
+	});
+
+	it("reports an annotated any parameter once", async () => {
+		const error = await compileFailure("annotated-any-parameter.ts");
+		expect(error.diagnostics.filter(({ code }) => code === DiagnosticCodes.AnyType)).toHaveLength(
+			1,
+		);
+		expectLocated(error);
+	});
+
 	it("classifies suppressed inferred-any returns as unsupported any", async () => {
 		const error = await compileFailure("suppressed-implicit-any-return.ts");
 		expect(error.diagnostics.map(({ code }) => code)).toContain(DiagnosticCodes.AnyType);
@@ -86,10 +106,17 @@ describe("compiler diagnostic corpus", () => {
 		expectLocated(error);
 	});
 
+	it("does not infer circular any from unrelated recursion", async () => {
+		const error = await compileFailure("inferred-never-unrelated-recursion.ts");
+		expect(error.diagnostics.map(({ code }) => code)).not.toContain(DiagnosticCodes.AnyType);
+		expect(error.diagnostics[0]?.code).toBe(DiagnosticCodes.UnsupportedConstruct);
+		expectLocated(error);
+	});
+
 	it("reports unsupported constructs with a rewrite hint", async () => {
 		const error = await compileFailure("unsupported.ts");
 		expect(error.diagnostics[0]?.code).toBe(DiagnosticCodes.UnsupportedConstruct);
-		expect(error.diagnostics[0]?.hint).toContain("Rewrite the program");
+		expect(error.diagnostics[0]?.hint).toContain("Rewrite the CallExpression");
 		expectLocated(error);
 	});
 });

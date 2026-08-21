@@ -10,4 +10,4 @@ TypeScript validation and lowering failures throw `CompilerError`. Its `diagnost
 | ----------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `CRUST1000` | Invalid TypeScript             | Fix the reported TypeScript error before compiling.                                                                                                  |
 | `CRUST1001` | Unsupported `any` type         | Rewrite the `any`-typed construct using supported M0 expressions or typed function parameters. Remove calls such as `JSON.parse` that produce `any`. |
-| `CRUST1002` | Unsupported language construct | Rewrite the program using the supported M0 language surface named by the diagnostic.                                                                 |
+| `CRUST1002` | Unsupported language construct | Rewrite the construct named by the diagnostic using the supported M0 language surface.                                                               |

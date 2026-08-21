@@ -40,20 +40,48 @@ function fromTypeScriptDiagnostic(
 	};
 }
 
-function functionReferencesItself(node: ts.FunctionDeclaration, checker: ts.TypeChecker): boolean {
+function functionReturnsItself(node: ts.FunctionDeclaration, checker: ts.TypeChecker): boolean {
 	const symbol = node.name && checker.getSymbolAtLocation(node.name);
 	if (!symbol || !node.body) return false;
 
 	let found = false;
-	function visit(child: ts.Node): void {
+	function findReference(child: ts.Node): void {
 		if (ts.isIdentifier(child) && checker.getSymbolAtLocation(child) === symbol) {
 			found = true;
 			return;
 		}
-		ts.forEachChild(child, visit);
+		ts.forEachChild(child, findReference);
+	}
+	function visit(child: ts.Node): void {
+		if (ts.isReturnStatement(child) && child.expression) findReference(child.expression);
+		else if (!ts.isFunctionLike(child)) ts.forEachChild(child, visit);
 	}
 	visit(node.body);
 	return found;
+}
+
+function typeContainsAny(
+	type: ts.Type,
+	checker: ts.TypeChecker,
+	seen = new Set<ts.Type>(),
+): boolean {
+	if (type.flags & ts.TypeFlags.Any) return true;
+	if (seen.has(type)) return false;
+	seen.add(type);
+	if (
+		type.isUnionOrIntersection() &&
+		type.types.some((member) => typeContainsAny(member, checker, seen))
+	)
+		return true;
+	for (const indexType of [type.getNumberIndexType(), type.getStringIndexType()]) {
+		if (indexType && typeContainsAny(indexType, checker, seen)) return true;
+	}
+	return type.getProperties().some((property) => {
+		const declaration = property.valueDeclaration ?? property.declarations?.[0];
+		return declaration
+			? typeContainsAny(checker.getTypeOfSymbolAtLocation(property, declaration), checker, seen)
+			: false;
+	});
 }
 
 function findAnyDiagnostics(sourceFile: ts.SourceFile, checker: ts.TypeChecker) {
@@ -69,7 +97,11 @@ function findAnyDiagnostics(sourceFile: ts.SourceFile, checker: ts.TypeChecker) 
 					anyHint,
 				),
 			);
-		} else if (ts.isParameter(node) && checker.getTypeAtLocation(node) === checker.getAnyType()) {
+		} else if (
+			ts.isParameter(node) &&
+			!node.type &&
+			typeContainsAny(checker.getTypeAtLocation(node), checker)
+		) {
 			diagnostics.push(
 				diagnosticAtNode(
 					sourceFile,
@@ -82,7 +114,7 @@ function findAnyDiagnostics(sourceFile: ts.SourceFile, checker: ts.TypeChecker) 
 		} else if (
 			ts.isFunctionDeclaration(node) &&
 			!node.type &&
-			functionReferencesItself(node, checker)
+			functionReturnsItself(node, checker)
 		) {
 			const signature = checker.getSignatureFromDeclaration(node);
 			if (signature && checker.getReturnTypeOfSignature(signature).flags & ts.TypeFlags.Never) {
@@ -96,6 +128,19 @@ function findAnyDiagnostics(sourceFile: ts.SourceFile, checker: ts.TypeChecker) 
 					),
 				);
 			}
+		} else if (
+			node.kind === ts.SyntaxKind.ThisKeyword &&
+			checker.getTypeAtLocation(node) === checker.getAnyType()
+		) {
+			diagnostics.push(
+				diagnosticAtNode(
+					sourceFile,
+					node,
+					DiagnosticCodes.AnyType,
+					"This expression has an implicit `any` type, which the compiler cannot lower safely.",
+					anyHint,
+				),
+			);
 		} else if (
 			ts.isCallExpression(node) &&
 			checker.getTypeAtLocation(node) === checker.getAnyType()
@@ -509,13 +554,14 @@ function isPropertyCall(node: ts.CallExpression, object: string, property: strin
 }
 
 function unsupported(node: ts.Node, sourceFile: ts.SourceFile): CompilerError {
+	const construct = ts.SyntaxKind[node.kind];
 	return new CompilerError([
 		diagnosticAtNode(
 			sourceFile,
 			node,
 			DiagnosticCodes.UnsupportedConstruct,
-			`Unsupported TypeScript ${ts.SyntaxKind[node.kind]}.`,
-			"Rewrite the program using the supported M0 language surface.",
+			`Unsupported TypeScript ${construct}.`,
+			`Rewrite the ${construct} using the supported M0 language surface.`,
 		),
 	]);
 }
