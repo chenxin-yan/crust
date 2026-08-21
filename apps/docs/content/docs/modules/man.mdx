@@ -76,7 +76,7 @@ const source = renderManPageMdoc({
 });
 ```
 
-The renderer uses semantic mdoc(7) flag and argument macros. Its subcommand summary lists only the root command's immediate visible children. Root `meta.sections` visible to the `man` (`crust:man`) consumer are appended after the built-in sections as mdoc `.Sh` sections. Sections on visible subcommands are collected recursively under `.Sh COMMANDS`, with one `.Ss` subsection per canonical command path.
+The renderer uses semantic mdoc(7) flag and argument macros. Its subcommand summary lists only the root command's immediate visible children. Root `meta.sections` visible to the `man` (`crust:man`) consumer are appended after the built-in sections as mdoc `.Sh` sections. Sections on visible subcommands are collected recursively with Core's `visibleSectionsFor()` helper under `.Sh COMMANDS`, with one `.Ss` subsection per canonical command path.
 
 Target a section to man pages with `only: [man]`, or exclude it with `except: [man]`:
 

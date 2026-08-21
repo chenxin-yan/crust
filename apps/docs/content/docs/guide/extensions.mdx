@@ -104,7 +104,7 @@ const deploy = defineCommand(
 );
 ```
 
-A renderer exposes its identity on its factory and selects sections with `sectionsFor()`. Section audiences accept the factory itself, such as `only: [help]`, while renderer integrations can still pass a branded `ExtensionId` such as `help.id`. Raw strings are not accepted, and core does not maintain a fixed list of identities.
+A renderer exposes its identity on its factory. A single-command renderer selects from that command with `sectionsFor()`. A full-tree renderer uses `visibleSectionsFor(snapshot, consumer)`, which returns section-bearing visible commands in canonical path order, represents the root as `[]`, skips hidden command trees, and applies audience filtering. Section audiences accept the factory itself, such as `only: [help]`, while renderer integrations pass a branded `ExtensionId` such as `help.id`. Raw strings are not accepted, and core does not maintain a fixed list of identities.
 
 ## Build hooks
 

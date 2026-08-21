@@ -1,3 +1,5 @@
+import type { CommandSection } from "@crustjs/core";
+
 /** Metadata used to render a generated skill. */
 export interface SkillMeta {
 	name: string;
@@ -112,7 +114,7 @@ export interface ManifestNode {
 	description?: string;
 	usage: string;
 	/** Plain-text command sections rendered into the command's markdown file. */
-	sections?: readonly { readonly title: string; readonly body: string }[];
+	sections?: readonly Pick<CommandSection, "title" | "body">[];
 	runnable: boolean;
 	args: ManifestArg[];
 	flags: ManifestFlag[];

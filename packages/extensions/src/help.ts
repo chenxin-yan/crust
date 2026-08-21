@@ -94,6 +94,7 @@ export function renderHelp(command: CommandSnapshot, path?: readonly string[]): 
 	]) {
 		if (section.length > 0) lines.push("", ...section);
 	}
+	// Help renders only the routed command, so a full-tree visibleSectionsFor() walk is unnecessary.
 	for (const section of sectionsFor(command.meta.sections, HELP)) {
 		lines.push(
 			"",
