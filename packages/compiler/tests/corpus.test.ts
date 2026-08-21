@@ -117,6 +117,7 @@ describe("compiler differential corpus", () => {
 					Array(7).fill("\u0600"),
 					Array(10).fill("😀‍中"),
 					Array(10).fill("🀄"),
+					Array(10).fill("✅"),
 					Array.from({ length: 101 }, (_, index) => `value${index}`),
 					Array.from({ length: 105 }, (_, index) => `value${index}`),
 				]) {

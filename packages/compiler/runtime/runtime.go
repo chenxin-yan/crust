@@ -343,6 +343,7 @@ func inspectStringWidth(value string) int {
 		case unicode.Is(unicode.Cf, character) && character != '\u00ad':
 		case character >= 0x1100 && (character <= 0x115f ||
 			character == 0x2329 || character == 0x232a ||
+			isWideBMPEmoji(character) ||
 			character >= 0x2e80 && character <= 0x3247 && character != 0x303f ||
 			character >= 0x3250 && character <= 0x4dbf ||
 			character >= 0x4e00 && character <= 0xa4c6 ||
@@ -360,6 +361,35 @@ func inspectStringWidth(value string) int {
 		}
 	}
 	return width
+}
+
+func isWideBMPEmoji(character rune) bool {
+	switch {
+	case character >= 0x231a && character <= 0x231b,
+		character >= 0x23e9 && character <= 0x23ec,
+		character == 0x23f0 || character == 0x23f3,
+		character >= 0x25fd && character <= 0x25fe,
+		character >= 0x2614 && character <= 0x2615,
+		character >= 0x2648 && character <= 0x2653,
+		character == 0x267f || character == 0x2693 || character == 0x26a1,
+		character >= 0x26aa && character <= 0x26ab,
+		character >= 0x26bd && character <= 0x26be,
+		character == 0x26c4 || character == 0x26c5 || character == 0x26ce,
+		character == 0x26d4 || character == 0x26ea,
+		character >= 0x26f2 && character <= 0x26f3,
+		character == 0x26f5 || character == 0x26fa || character == 0x26fd,
+		character == 0x2705 || character == 0x270a || character == 0x270b,
+		character == 0x2728 || character == 0x274c || character == 0x274e,
+		character >= 0x2753 && character <= 0x2755,
+		character == 0x2757,
+		character >= 0x2795 && character <= 0x2797,
+		character == 0x27b0 || character == 0x27bf,
+		character >= 0x2b1b && character <= 0x2b1c,
+		character == 0x2b50 || character == 0x2b55:
+		return true
+	default:
+		return false
+	}
 }
 
 func numberString(value float64) string {
