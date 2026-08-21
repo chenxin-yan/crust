@@ -17,7 +17,7 @@ function run(command: string, args: readonly string[] = []) {
 }
 
 describe("compiler differential corpus", () => {
-	for (const name of ["hello", "lone-surrogate"]) {
+	for (const name of ["hello", "lone-surrogate", "embedded-bom"]) {
 		it.skipIf(goPath === null)(
 			`matches Node for ${name}`,
 			async () => {
