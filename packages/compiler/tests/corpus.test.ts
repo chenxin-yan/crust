@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { compile } from "../src/index.js";
@@ -17,6 +18,16 @@ function run(command: string, args: readonly string[] = []) {
 }
 
 describe("compiler differential corpus", () => {
+	it("rejects a directory-valued output path", async () => {
+		const fixture = join(import.meta.dir, "fixtures", "hello.ts");
+		const outputPath = await mkdtemp(join(tmpdir(), "crust-compiler-output-"));
+		try {
+			await expect(compile(fixture, { outputPath })).rejects.toThrow("must not be a directory");
+		} finally {
+			await rm(outputPath, { recursive: true, force: true });
+		}
+	});
+
 	for (const name of ["hello", "lone-surrogate", "embedded-bom"]) {
 		it.skipIf(goPath === null)(
 			`matches Node for ${name}`,

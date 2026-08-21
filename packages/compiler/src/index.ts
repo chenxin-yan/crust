@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -22,6 +22,13 @@ export async function compile(entryFile: string, options: CompileOptions = {}): 
 
 	let built = false;
 	try {
+		try {
+			if ((await stat(outputPath)).isDirectory()) {
+				throw new Error(`Compiler output path must not be a directory: ${outputPath}`);
+			}
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+		}
 		await mkdir(dirname(outputPath), { recursive: true });
 		await writeFile(goFile, emitGo(ir));
 		await promisify(execFile)("go", ["build", "-o", outputPath, goFile]);
