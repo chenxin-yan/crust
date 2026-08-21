@@ -595,9 +595,9 @@ type InferDuplicateArgs<A extends readonly ArgDef[]> = A extends readonly [
 /**
  * Convert a literal ArgsDef tuple into resolved values keyed by argument name.
  *
- * Two shapes opt out of per-element inference: tuples with rest elements map
- * to `{}` (the builder only produces fixed tuples), and unions of tuples are
- * merged into one record by `InferArgs`'s non-distributive `[A]` check.
+ * Tuples with rest elements (`number extends A["length"]`) opt out to `{}`;
+ * the builder only produces fixed tuples. Unions of tuples distribute through
+ * `InferArgs`'s naked conditional, so each member is inferred separately.
  */
 type InferArgsTuple<A extends readonly ArgDef[]> = number extends A["length"]
 	? {}
@@ -618,9 +618,7 @@ type InferArgsTuple<A extends readonly ArgDef[]> = number extends A["length"]
  * // Result = { port: number; name: string; files: string[] }
  * ```
  */
-export type InferArgs<A> = [A] extends [ArgsDef]
-	? Simplify<InferArgsTuple<A>>
-	: Record<string, never>;
+export type InferArgs<A> = A extends ArgsDef ? Simplify<InferArgsTuple<A>> : Record<string, never>;
 
 /**
  * Infer the resolved type for a single FlagDef:
