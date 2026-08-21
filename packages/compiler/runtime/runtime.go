@@ -321,9 +321,24 @@ func groupInspectStrings(values []string) []string {
 
 func inspectStringWidth(value string) int {
 	width := 0
+	emojiSequence := false
+	joined := false
 	for _, character := range value {
+		if character == '\u200d' {
+			joined = emojiSequence
+			continue
+		}
+		if unicode.Is(unicode.Mn, character) || unicode.Is(unicode.Me, character) {
+			continue
+		}
+		if joined {
+			joined = false
+			emojiSequence = true
+			continue
+		}
+		emojiSequence = character >= 0x1f300 && character <= 0x1faff
 		switch {
-		case unicode.Is(unicode.Mn, character), unicode.Is(unicode.Me, character), unicode.Is(unicode.Cf, character):
+		case character >= '\u200b' && character <= '\u200f':
 		case character >= 0x1100 && (character <= 0x115f ||
 			character == 0x2329 || character == 0x232a ||
 			character >= 0x2e80 && character <= 0x3247 && character != 0x303f ||
