@@ -70,6 +70,12 @@ function lowerFunction(
 	const signature = checker.getSignatureFromDeclaration(node);
 	if (!signature) throw unsupported(node, sourceFile);
 
+	const returnType = lowerType(checker.getReturnTypeOfSignature(signature), node, sourceFile);
+	const lastStatement = node.body.statements.at(-1);
+	if (returnType !== "void" && (!lastStatement || !ts.isReturnStatement(lastStatement))) {
+		throw unsupported(lastStatement ?? node, sourceFile);
+	}
+
 	return {
 		name: node.name.text,
 		parameters: node.parameters.map((parameter) => {
@@ -88,7 +94,7 @@ function lowerFunction(
 				type: lowerType(type, parameter, sourceFile),
 			};
 		}),
-		returnType: lowerType(checker.getReturnTypeOfSignature(signature), node, sourceFile),
+		returnType,
 		statements: node.body.statements.map((statement) =>
 			lowerStatement(statement, checker, sourceFile),
 		),
@@ -113,7 +119,7 @@ function lowerStatement(
 		return {
 			kind: "return",
 			expression: node.expression
-				? lowerExpression(node.expression, checker, sourceFile)
+				? lowerValueExpression(node.expression, checker, sourceFile)
 				: undefined,
 		};
 	}
@@ -146,11 +152,25 @@ function lowerStatement(
 		}
 		return {
 			kind: "log",
-			values: call.arguments.map((argument) => lowerExpression(argument, checker, sourceFile)),
+			values: call.arguments.map((argument) => lowerValueExpression(argument, checker, sourceFile)),
 		};
 	}
 
 	return { kind: "expression", expression: lowerExpression(call, checker, sourceFile) };
+}
+
+function lowerValueExpression(
+	node: ts.Expression,
+	checker: ts.TypeChecker,
+	sourceFile: ts.SourceFile,
+): Expression {
+	if (
+		checker.getTypeAtLocation(node).flags &
+		(ts.TypeFlags.Never | ts.TypeFlags.Void | ts.TypeFlags.Undefined)
+	) {
+		throw unsupported(node, sourceFile);
+	}
+	return lowerExpression(node, checker, sourceFile);
 }
 
 function lowerExpression(
@@ -173,7 +193,7 @@ function lowerExpression(
 		return { kind: "identifier", name: node.text };
 	}
 	if (ts.isParenthesizedExpression(node) || ts.isNonNullExpression(node)) {
-		return lowerExpression(node.expression, checker, sourceFile);
+		return lowerValueExpression(node.expression, checker, sourceFile);
 	}
 	if (ts.isPrefixUnaryExpression(node)) {
 		const operator =
@@ -194,7 +214,7 @@ function lowerExpression(
 		return {
 			kind: "unary",
 			operator,
-			operand: lowerExpression(node.operand, checker, sourceFile),
+			operand: lowerValueExpression(node.operand, checker, sourceFile),
 		};
 	}
 	if (ts.isBinaryExpression(node)) {
@@ -202,9 +222,9 @@ function lowerExpression(
 		if (!operator) throw unsupported(node, sourceFile);
 		return {
 			kind: "binary",
-			left: lowerExpression(node.left, checker, sourceFile),
+			left: lowerValueExpression(node.left, checker, sourceFile),
 			operator,
-			right: lowerExpression(node.right, checker, sourceFile),
+			right: lowerValueExpression(node.right, checker, sourceFile),
 			type: lowerType(checker.getTypeAtLocation(node), node, sourceFile),
 		};
 	}
@@ -220,7 +240,7 @@ function lowerExpression(
 					throw unsupported(span.expression, sourceFile);
 				}
 				return {
-					expression: lowerExpression(span.expression, checker, sourceFile),
+					expression: lowerValueExpression(span.expression, checker, sourceFile),
 					literal: span.literal.text,
 				};
 			}),
@@ -234,14 +254,15 @@ function lowerExpression(
 		}
 		const receiverType = checker.getTypeAtLocation(receiver);
 		if (
-			!(receiverType.flags & (ts.TypeFlags.String | ts.TypeFlags.StringLiteral)) &&
-			!checkerTypeIsStringArray(receiverType)
+			ts.isBinaryExpression(receiver) ||
+			(!(receiverType.flags & (ts.TypeFlags.String | ts.TypeFlags.StringLiteral)) &&
+				!checkerTypeIsStringArray(receiverType))
 		) {
 			throw unsupported(node, sourceFile);
 		}
 		return {
 			kind: "length",
-			value: lowerExpression(receiver, checker, sourceFile),
+			value: lowerValueExpression(receiver, checker, sourceFile),
 		};
 	}
 	if (ts.isElementAccessExpression(node) && node.argumentExpression) {
@@ -256,8 +277,8 @@ function lowerExpression(
 		}
 		return {
 			kind: "index",
-			value: lowerExpression(node.expression, checker, sourceFile),
-			index: lowerExpression(node.argumentExpression, checker, sourceFile),
+			value: lowerValueExpression(node.expression, checker, sourceFile),
+			index: lowerValueExpression(node.argumentExpression, checker, sourceFile),
 		};
 	}
 	if (ts.isCallExpression(node)) {
@@ -271,8 +292,8 @@ function lowerExpression(
 			if (!start) throw unsupported(node, sourceFile);
 			return {
 				kind: "slice",
-				value: lowerExpression(node.expression.expression, checker, sourceFile),
-				start: lowerExpression(start, checker, sourceFile),
+				value: lowerValueExpression(node.expression.expression, checker, sourceFile),
+				start: lowerValueExpression(start, checker, sourceFile),
 			};
 		}
 		if (isPropertyCall(node, "process", "exit") && node.arguments.length === 1) {
@@ -289,7 +310,7 @@ function lowerExpression(
 			return {
 				kind: "call",
 				callee: "process.exit",
-				arguments: [lowerExpression(argument, checker, sourceFile)],
+				arguments: [lowerValueExpression(argument, checker, sourceFile)],
 			};
 		}
 		if (ts.isIdentifier(node.expression)) {
@@ -304,7 +325,9 @@ function lowerExpression(
 			return {
 				kind: "call",
 				callee: node.expression.text,
-				arguments: node.arguments.map((argument) => lowerExpression(argument, checker, sourceFile)),
+				arguments: node.arguments.map((argument) =>
+					lowerValueExpression(argument, checker, sourceFile),
+				),
 			};
 		}
 	}
