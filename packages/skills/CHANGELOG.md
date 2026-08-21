@@ -1,5 +1,65 @@
 # @crustjs/skills
 
+## 0.2.0
+
+### Minor Changes
+
+- [#139](https://github.com/chenxin-yan/crust/pull/139) [`0ce45f4`](https://github.com/chenxin-yan/crust/commit/0ce45f4cd41cc4c9ef4181a23ea6360fd756b49b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Ship the 0.2 API revamp for the framework spine (see `docs/adr/`). This is a hard cut from the 0.1 API with no compatibility shims; each removed name's replacement is listed below.
+  
+  - **Extensions replace plugins**: `defineExtension(id, config)` in `@crustjs/core` (ids minted by `defineExtensionId()`) returns a plain frozen config; `.use()` is removed. Extension behavior lives in named `hooks` — `preRun(ctx)` (return `ctx.finish()` to short-circuit successfully), `postRun(ctx, outcome)` (runs in reverse extension order after every settled invocation), and `onError(error, ctx)` (return `true` after rendering an `execute()` failure). Extension-contributed commands are `defineCommand()` definitions (`ExtensionCommand` is removed), and `execute()` offers `AbortError` cancellation to `onError` hooks for central rendering (exit code stays `130`, silent when unclaimed).
+  - **`define*` helpers name every definition**: `defineCommand`, `defineContext`, `defineExtension`, `defineFlag`, `defineArg`. Builder methods are variadic and accumulative — `.flags(...defs)` replaces `.flags(record)`, `.args(...defs)` replaces `.args(tuple)` — with statically known duplicate names, spellings, and aliases rejected at compile time through `FIX_*` brands. Runtime checks remain for dynamic command-recipe behavior, Context dependencies, documentation sections, and argv input. Repeating `.action()` replaces the prior action.
+  - **Commands are inert reusable definitions**: `defineCommand(name, { description, usage, aliases, hidden }, recipe)` attached with the checked variadic `.add(...definitions)`; use `.as(newName)` to reuse one definition under multiple names. `.sub()`, `.command()`, `.meta()`, and `ChildCrust` are removed; root metadata moves to `new Crust(name, { description, usage })`.
+  - **Contexts are declared lazy command dependencies**: `defineContext(name, { flags?, uses? }, setup)` returns a factory attached with `.provide(...instances)` and consumed through lazy `ctx` properties. Contexts, reusable commands, and Extensions declare dependencies with `uses`; composition sites check the graph. Context-owned flags are the only flag-propagation mechanism (`FlagDef.inherit` and `FlagSnapshot.inherit` are removed); `.of(value)` creates dependency-free test doubles; Context values are disposed via `Symbol.dispose`/`Symbol.asyncDispose` in reverse construction order.
+  - **Actions and execution**: `.action(action)` replaces `.handle()` and defines the Command Action; `.run(path, input, { stdout, stderr })` throws for programmatic embedding; `.execute()` renders and sets `process.exitCode`. Builder-level `preRun`/`postRun` are removed — lifecycle work moves to Extension hooks.
+  - **Errors**: `CrustError` keeps four stable codes (`DEFINITION`, `PARSE`, `VALIDATION`, `COMMAND_NOT_FOUND`); `_tag`, `CONFIG`, and `EXECUTION` are removed; action and Context errors pass through unwrapped.
+  - **Validation**: Standard Schema is supported directly on arg/flag definitions; `@crustjs/validate` is removed.
+  - **Tooling**: `Crust.snapshot()` is the supported API for frozen, validated Command Snapshots; public `CommandNode`/`prepareCommandTree()` are removed, and man/crust/skills render help, man pages, and Agent Skills from one shared command documentation model.
+  - **Generics**: the generic parameters on `Crust`, `CommandDefinitionBuilder`, and the Context types were reordered and re-purposed; prefer inference over positional annotations.
+  - `create-crust` ships a single minimal template.
+
+- [#307](https://github.com/chenxin-yan/crust/pull/307) [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Unify build-time artifact generation behind Extension build hooks and a single snapshot protocol.
+  
+  - Extensions can expose a `build(ctx)` hook for build-time artifact generation. The context carries the frozen root Command Snapshot and a resolved absolute output directory; snapshots are refreshed between hooks so later generators see sections derived from earlier hooks' outputs.
+  - `crust build` runs build hooks from every registered Extension in registration order. Extension presence is the source of intent — the `--man` flag is removed, and `--no-validate` is the single opt-out that skips entry preparation and all build hooks. npm package staging includes every top-level artifact directory emitted by hooks; the name `bin` is reserved for the generated npm executables.
+  - Build validation and artifact generation share one subprocess-only snapshot-file protocol. `@crustjs/core/tooling` exports `SNAPSHOT_PATH_ENV` (replacing `VALIDATION_MODE_ENV` and `VALIDATION_FORCE_EXIT_ENV`), and man-page generation no longer requires the entry module to export its app. Entries that never call `await app.execute()` previously passed validation vacuously; they now fail with an actionable missing-snapshot error (use `--no-validate` if intentional).
+  - New `man(options?)` in `@crustjs/man`: a build-only Extension that writes an mdoc page under the build output's `man` directory. Section 1 is the default; `man({ section })` selects another section and `man({ name })` sets the installed command name. `writeManPage()` remains for custom pipelines and now accepts a prepared Command Snapshot as `root` instead of a live app.
+  - The `skill()` Extension in `@crustjs/skills` contributes a build hook that writes packaged skills under the build output's `skills` directory: it copies an available packaged source wholesale and otherwise renders from the prepared Command Snapshot.
+
+- [#307](https://github.com/chenxin-yan/crust/pull/307) [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Add a shared documentation-section model with audience filtering.
+  
+  - Commands can define plain-text `meta.sections`, and Extensions can append sections to canonical command paths during application preparation. Help and man-page output render the merged per-command sections after their built-in content, and generated man pages include sections from visible subcommands.
+  - Sections are visible to every renderer by default; `only` and `except` select audiences. Audiences accept Extension and renderer factory objects directly (`only: [skill]`), branded `ExtensionId` values minted by `defineExtensionId()` for custom renderers, and official renderer identities on factory statics (`help.id`, `man.id`, `skill.id`). The `crust:*` id namespace is reserved for official Extensions.
+  - Extensions are identified by branded ids: `defineExtension(defineExtensionId("acme:feature"), config)` — and expose that identity as `.id`. Handled `execute()` failures are attributed through `InvocationOutcome.by`; compare with factory statics, e.g. `outcome.by === help.id`. Core fallback rendering leaves `outcome.by` undefined.
+  - For `execute()` failures reached during dispatch, `onError` now settles before `postRun`. Invocation Contexts remain pullable through `onError` and `postRun` before disposal.
+  - Application-authored "Agent skills" sections are preserved in generated skills.
+
+- [#307](https://github.com/chenxin-yan/crust/pull/307) [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Modernize the runtime support matrix and package builds.
+  
+  - Supported runtimes: Bun 1.3.14+, Node.js 22+, and Deno 2.8+. Package runtime code is portable across all three — Bun globals are replaced with Node-compatible built-ins, and process spawning uses `node:child_process`. On runtimes without `AsyncDisposableStack` (Node 22/23), invocations fall back to an in-package disposal stack.
+  - Package builds migrate to tsdown (Rolldown) and modules are marked side-effect free. Internal `@crustjs/utils` imports are inlined, fixing `@crustjs/store` installs that previously required `@crustjs/utils` at runtime. Consumers bundling with Bun 1.3.10–1.3.13 may encounter oven-sh/bun#27709 when tree-shaking packages with `sideEffects: false`.
+  - All packages that ship type declarations declare an optional `typescript: "^7.0.0"` peerDependency. Builder inference performance is measured and supported against the native TypeScript 7 compiler; plain-JavaScript consumers are unaffected.
+
+- [#307](https://github.com/chenxin-yan/crust/pull/307) [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Rework `@crustjs/skills` around a package-as-source model (breaking).
+  
+  - Build time: `writeSkills()` renders generated and authored skills into a self-describing, package-ready skill source without installing them. Hand-authored skill directories are included via `extras`; `version` is optional and only recorded in the generated SKILL.md `metadata` block. The `skill()` Extension takes the packaged source as `distDir` and can build authored extras alongside generated command documentation.
+  - Install time: packaged skills install through symlinks only. Project links use relative, logical package paths verified across npm, pnpm, and Bun; global links use absolute paths; installation fails clearly when the environment cannot create symlinks. Packaged skills are discovered from required `name` and `description` fields in `SKILL.md` frontmatter (frontmatter without a closing `---` fence is rejected). Ownership comes from symlink targets ending in `skills/<name>`; the pre-run hook repairs owned dangling or stale-target links, and uninstall unlinks owned entries. `crust.json` ownership/version manifests and version-based synchronization are removed.
+  - `getSkillStatus()` (formerly `skillStatus()`) reports `linked`, `dangling`, `conflict`, or `absent`. Install results replace `updated` with `repaired`; `PackagedSkill` no longer includes `version`; the `SkillKind` export is removed.
+  - Removed runtime generation APIs: `annotate()`, `generateSkill()`, `installSkillBundle()`, `resolveSkillName()`, and their option/result types. Command guidance belongs in `meta.sections`; use `writeSkills()` at build time and `installSkill()` for opt-in installation.
+  - `detectInstalledAgents()` drops its string form and the unused `scope` and `home` options.
+  - Agent matrix: Warp and Zed are new universal targets, and `pi` is reclassified as universal (it discovers `~/.agents/skills/` and project `.agents/skills/` natively). Antigravity and Mistral Vibe installation paths follow their current conventions. Existing links in old locations — Pi's `~/.pi/agent/skills/` and `.pi/skills/`, Antigravity's `.agent/skills/` and `~/.gemini/antigravity/skills/`, and `~/.vibe/skills/` when `VIBE_HOME` points elsewhere — are no longer managed; remove them manually if present.
+  - Generated content: every packaged skill is advertised in root help and generated man pages with its description and resolved source path, and SKILL.md command reference tables include command descriptions.
+
+### Patch Changes
+
+- [#307](https://github.com/chenxin-yan/crust/pull/307) [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Faster startup and type-checking.
+  
+  - Core reuses its prepared invocation tree across repeated dispatches, and completion renderers and skill implementation modules are deferred until first use. Extension command recipes materialize once per builder instance instead of on every run — recipes must stay inert, per the documented contract.
+  - Long `.flags()` chains hit `TS2589` about 3x later, the `.provide()` chain ceiling is removed, and `ctx` inference no longer silently degrades on long `.provide()` chains.
+- Updated dependencies [[`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce), [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce), [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce), [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce)]:
+  - @crustjs/progress@0.1.0
+  - @crustjs/prompts@0.2.0
+  - @crustjs/style@0.3.0
+
 ## 0.1.2
 
 ### Patch Changes
