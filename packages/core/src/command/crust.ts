@@ -44,7 +44,7 @@ import type {
 import type {
 	ExtensionsSpellings,
 	ProvideChecks,
-	TreeSpellings,
+	DefinitionTreeSpellings,
 	ValidateDefinitionFlags,
 	ValidateExtensionFlags,
 	SpellingsOf,
@@ -337,11 +337,11 @@ type AppendedArgs<A extends ArgsDef, NewA extends ArgsDef> = ArgsDef extends A
 export interface CommandDefinitionBuilder<
 	Flags extends FlagsDef = {},
 	A extends ArgsDef = ArgsDef,
-	Ctx extends ContextMap = {},
+	out Ctx extends ContextMap = {},
 	Sibs extends string = never,
 	Sp extends string = SpellingsOf<Flags>,
 	Tree extends object = {},
-	CtxFlags extends FlagsDef = {},
+	out CtxFlags extends FlagsDef = {},
 	Result = void,
 > {
 	flags<const Defs extends readonly NamedFlagDef[]>(
@@ -679,18 +679,27 @@ function serializeRunArgv(
  *   });
  * ```
  */
+type CollisionSpellings<Extensions extends string = never, Tree extends string = never> = {
+	readonly extension: Extensions;
+	readonly tree: Tree;
+};
+
 /** Broad application type for APIs that accept any fully-built Crust application. */
 export type AnyCrust = Crust<any, any, any, any, any, any, any, any, any>;
 
 export class Crust<
 	Flags extends FlagsDef = {},
 	A extends ArgsDef = ArgsDef,
-	Ctx extends ContextMap = {},
+	// `out` forces covariance over the contravariant brand positions in
+	// provide()/extend(); those brands are best-effort lints (already bypassable
+	// via widening), and the annotation skips a full structural comparison per
+	// assignment. Do not "fix" it back to inferred variance.
+	out Ctx extends ContextMap = {},
 	Sibs extends string = never,
 	Sp extends string = SpellingsOf<Flags>,
 	Tree extends object = {},
-	CtxFlags extends FlagsDef = {},
-	ExtSp extends string = never,
+	out CtxFlags extends FlagsDef = {},
+	CollisionSp extends CollisionSpellings = CollisionSpellings,
 	Result = void,
 > {
 	/** @internal — Phantom property exposing generic parameters for type-level testing */
@@ -789,7 +798,7 @@ export class Crust<
 		Sp | SpellingsOf<NamedFlagsRecord<Defs>>,
 		Tree,
 		CtxFlags,
-		ExtSp,
+		CollisionSp,
 		Result
 	> {
 		const localFlags: FlagsDef = { ...this._node.localFlags };
@@ -831,7 +840,7 @@ export class Crust<
 			Sp | SpellingsOf<NamedFlagsRecord<Defs>>,
 			Tree,
 			CtxFlags,
-			ExtSp,
+			CollisionSp,
 			Result
 		>;
 	}
@@ -849,7 +858,7 @@ export class Crust<
 	 */
 	args<const NewA extends ArgsDef>(
 		...defs: NewA & AppendArgsChecks<A, NewA>
-	): Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp, Result> {
+	): Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result> {
 		const combined = [...(this._node.args ?? []), ...defs.map((definition) => ({ ...definition }))];
 		// Brands own literal tuples; this owns config-built defs, where a
 		// duplicate name silently discards a positional and a mid-tuple variadic
@@ -886,7 +895,7 @@ export class Crust<
 			Sp,
 			Tree,
 			CtxFlags,
-			ExtSp,
+			CollisionSp,
 			Result
 		>;
 	}
@@ -912,7 +921,7 @@ export class Crust<
 		Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
 		Tree,
 		MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>,
-		ExtSp,
+		CollisionSp,
 		Result
 	> {
 		// Positional by design: providers reach only this node and children added
@@ -937,7 +946,7 @@ export class Crust<
 			Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
 			Tree,
 			MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>,
-			ExtSp,
+			CollisionSp,
 			Result
 		>;
 	}
@@ -957,10 +966,10 @@ export class Crust<
 	 */
 	action<R>(
 		action: (ctx: NoInfer<CrustCommandContext<A, Flags, Ctx>>) => R,
-	): Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp, Awaited<R>> {
+	): Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Awaited<R>> {
 		return this._clone({
 			run: action as (ctx: unknown) => unknown,
-		}) as unknown as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp, Awaited<R>>;
+		}) as unknown as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Awaited<R>>;
 	}
 
 	/**
@@ -973,7 +982,7 @@ export class Crust<
 	extend<const Es extends readonly Extension<any, any, any>[]>(
 		...extensions: Es &
 			ValidateDeclaredDeps<MergeContext<Ctx, ExtensionsProvidesOutput<Es>>, Es> &
-			ValidateExtensionFlags<Es, Sp | TreeSpellings<Tree>> &
+			ValidateExtensionFlags<Es, Sp | CollisionSp["tree"]> &
 			ValidateExtensionProvides<Es, Ctx>
 	): Crust<
 		Flags,
@@ -983,7 +992,7 @@ export class Crust<
 		Sp | ExtensionsSpellings<Es>,
 		Tree,
 		CtxFlags,
-		ExtSp | ExtensionsSpellings<Es>,
+		CollisionSpellings<CollisionSp["extension"] | ExtensionsSpellings<Es>, CollisionSp["tree"]>,
 		Result
 	> {
 		const provided = extensions.flatMap((extension) => extension.provides ?? []);
@@ -998,7 +1007,7 @@ export class Crust<
 			Sp | ExtensionsSpellings<Es>,
 			Tree,
 			CtxFlags,
-			ExtSp | ExtensionsSpellings<Es>,
+			CollisionSpellings<CollisionSp["extension"] | ExtensionsSpellings<Es>, CollisionSp["tree"]>,
 			Result
 		>;
 	}
@@ -1012,7 +1021,7 @@ export class Crust<
 		...definitions: Ds &
 			ValidateCommandDefinitions<Ds, Sibs> &
 			ValidateDeclaredDeps<Ctx, Ds> &
-			ValidateDefinitionFlags<Ds, ExtSp>
+			ValidateDefinitionFlags<Ds, CollisionSp["extension"]>
 	): Crust<
 		Flags,
 		A,
@@ -1021,10 +1030,10 @@ export class Crust<
 		Sp,
 		Tree & DefinitionsTree<Ds, CtxFlags>,
 		CtxFlags,
-		ExtSp,
+		CollisionSpellings<CollisionSp["extension"], CollisionSp["tree"] | DefinitionTreeSpellings<Ds>>,
 		Result
 	> {
-		let result = this as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp, Result>;
+		let result = this as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result>;
 		for (const definition of definitions) {
 			result = result._addDefinition(definition as CommandDefinition);
 		}
@@ -1036,14 +1045,17 @@ export class Crust<
 			Sp,
 			Tree & DefinitionsTree<Ds, CtxFlags>,
 			CtxFlags,
-			ExtSp,
+			CollisionSpellings<
+				CollisionSp["extension"],
+				CollisionSp["tree"] | DefinitionTreeSpellings<Ds>
+			>,
 			Result
 		>;
 	}
 
 	private _addDefinition(
 		definition: CommandDefinition,
-	): Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp, Result> {
+	): Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result> {
 		// FIX_COMMAND_COLLISION owns literal names; this owns dynamic `.add()`,
 		// where a silent replacement makes the earlier command unreachable.
 		// Extension-contributed commands keep documented last-write-wins.
@@ -1058,7 +1070,7 @@ export class Crust<
 
 		return this._clone({
 			subCommands: { ...this._node.subCommands, [definition.name]: childNode },
-		}) as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, ExtSp, Result>;
+		}) as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result>;
 	}
 
 	/**

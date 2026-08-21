@@ -115,6 +115,15 @@ describe("InferArgs type inference", () => {
 		expect(true).toBe(true);
 	});
 
+	it("distributes over a union of arg tuples instead of merging members", () => {
+		type Result = InferArgs<
+			| readonly [{ name: "x"; type: "string"; required: true }]
+			| readonly [{ name: "y"; type: "number"; required: true }]
+		>;
+		type _check = Expect<Equal<Result, { x: string } | { y: number }>>;
+		expect(true).toBe(true);
+	});
+
 	it("turns duplicate arg names with conflicting types into never", () => {
 		// The inferred conflict signal complements the builder's runtime
 		// duplicate-name check.

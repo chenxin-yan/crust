@@ -578,23 +578,32 @@ type InferArgValue<A extends ArgDef> = A extends {
 /** Base type of a raw arg: the literal `choices` union when present, else `unknown`. */
 type RawArgBase<A> = A extends { choices: readonly (infer C extends string)[] } ? C : unknown;
 
-/**
- * Recursively converts an ArgsDef tuple into a named object type.
- *
- * Each element's `name` literal becomes a key, and its value is resolved
- * via {@link InferArgValue}. Uses intersection + `Simplify` to flatten.
- *
- * Deliberately recursive rather than key-remapped over `A[number]`:
- * intersection turns duplicate arg names with conflicting types into
- * `never`. A widened non-tuple `ArgsDef` resolves to `{}` instead of a
- * string-indexed record.
- */
-type InferArgsTuple<A extends readonly ArgDef[]> = A extends readonly [
+type DuplicateArgNames<
+	A extends readonly ArgDef[],
+	Seen extends string = never,
+> = A extends readonly [infer Head extends ArgDef, ...infer Tail extends readonly ArgDef[]]
+	? (Head["name"] & Seen) | DuplicateArgNames<Tail, Seen | Head["name"]>
+	: never;
+
+type InferDuplicateArgs<A extends readonly ArgDef[]> = A extends readonly [
 	infer Head extends ArgDef,
 	...infer Tail extends readonly ArgDef[],
 ]
-	? { [K in Head["name"]]: InferArgValue<Head> } & InferArgsTuple<Tail>
+	? { [K in Head["name"]]: InferArgValue<Head> } & InferDuplicateArgs<Tail>
 	: {};
+
+/**
+ * Convert a literal ArgsDef tuple into resolved values keyed by argument name.
+ *
+ * Tuples with rest elements (`number extends A["length"]`) opt out to `{}`;
+ * the builder only produces fixed tuples. Unions of tuples distribute through
+ * `InferArgs`'s naked conditional, so each member is inferred separately.
+ */
+type InferArgsTuple<A extends readonly ArgDef[]> = number extends A["length"]
+	? {}
+	: [DuplicateArgNames<A>] extends [never]
+		? { [D in A[number] as D["name"]]: InferArgValue<D> }
+		: InferDuplicateArgs<A>;
 
 /**
  * Maps an ArgsDef tuple to resolved arg types keyed by each arg's `name`.

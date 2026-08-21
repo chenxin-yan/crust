@@ -2,8 +2,11 @@ import { describe, expect, it } from "bun:test";
 
 import type { FlagsDef, NamedFlagDef } from "../types.ts";
 import type {
+	DefinitionTreeSpellings,
 	ProvideChecks,
 	SpellingsOf,
+	TreeSpellings,
+	ValidateDefinitionFlags,
 	ValidateExtensionFlags,
 	ValidateNamedFlagDefs,
 } from "./flags.brands.ts";
@@ -335,6 +338,56 @@ describe("ValidateNamedFlagDefs", () => {
 			Equal<Alias[0]["FIX_EMPTY_SPELLING"], "Flag names and aliases must be non-empty strings">
 		>;
 		type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_EMPTY_SPELLING">, never>>;
+
+		expect(true).toBe(true);
+	});
+
+	it("recurses flag spellings through nested subcommand shapes", () => {
+		type Tree = {
+			deploy: {
+				readonly flags: {};
+				readonly children: {
+					prod: {
+						readonly flags: { force: { type: "boolean"; short: "f" } };
+						readonly children: {};
+					};
+				};
+			};
+		};
+		type _nested = Expect<Equal<TreeSpellings<Tree>, "force" | "f">>;
+		type _any = Expect<Equal<TreeSpellings<any>, never>>;
+
+		expect(true).toBe(true);
+	});
+
+	it("brands a definition whose nested child flag collides with an Extension flag", () => {
+		type Def = {
+			readonly _shape?: {
+				readonly flags: {};
+				readonly children: {
+					prod: {
+						readonly flags: { force: { type: "boolean" } };
+						readonly children: {};
+					};
+				};
+			};
+		};
+		type _spellings = Expect<Equal<DefinitionTreeSpellings<readonly [Def]>, "force">>;
+
+		type Branded = ValidateDefinitionFlags<readonly [Def], "force">;
+		type _collision = Expect<
+			Equal<
+				Branded[0]["FIX_ALIAS_COLLISION"],
+				'Flag spelling "force" collides with a registered Extension flag'
+			>
+		>;
+
+		type Clean = ValidateDefinitionFlags<readonly [Def], "verbose">;
+		type _clean = Expect<Equal<Extract<keyof Clean[0], "FIX_ALIAS_COLLISION">, never>>;
+
+		// Widened shapes opt out via the `0 extends 1 & S` any-guard.
+		type Widened = ValidateDefinitionFlags<readonly [{ readonly _shape?: any }], "force">;
+		type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_ALIAS_COLLISION">, never>>;
 
 		expect(true).toBe(true);
 	});

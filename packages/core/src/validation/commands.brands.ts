@@ -79,8 +79,8 @@ type SelfAliasBrand<D> =
 				}
 		: never;
 
-type CommandCollisionBrand<D, Existing extends string> =
-	Overlap<CommandDefinitionSpellings<D>, Existing> extends infer Collision extends string
+type CommandCollisionBrand<Spellings extends string, Existing extends string> =
+	Overlap<Spellings, Existing> extends infer Collision extends string
 		? [Collision] extends [never]
 			? {}
 			: {
@@ -98,13 +98,15 @@ export type ValidateCommandDefinitions<
 	Ds extends readonly unknown[],
 	Existing extends string = never,
 > = Ds extends readonly [infer Head, ...infer Tail]
-	? readonly [
-			Head &
-				CommandCollisionBrand<Head, Existing> &
-				EmptyDefinitionNameBrand<Head> &
-				SelfAliasBrand<Head>,
-			...ValidateCommandDefinitions<Tail, Existing | CommandDefinitionSpellings<Head>>,
-		]
+	? CommandDefinitionSpellings<Head> extends infer Spellings extends string
+		? readonly [
+				Head &
+					CommandCollisionBrand<Spellings, Existing> &
+					EmptyDefinitionNameBrand<Head> &
+					SelfAliasBrand<Head>,
+				...ValidateCommandDefinitions<Tail, Existing | Spellings>,
+			]
+		: never
 	: Ds;
 
 // ────────────────────────────────────────────────────────────────────────────

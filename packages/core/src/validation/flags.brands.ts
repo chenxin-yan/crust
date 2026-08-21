@@ -317,6 +317,11 @@ export type TreeSpellings<Tree> = 0 extends 1 & Tree
 
 type DefinitionSpellings<D> = D extends { readonly _shape?: infer S } ? ShapeSpellings<S> : never;
 
+/** Flag spellings contributed by a tuple of command definitions. */
+export type DefinitionTreeSpellings<Ds extends readonly unknown[]> = DefinitionSpellings<
+	Ds[number]
+>;
+
 type DefinitionFlagCollisionBrand<D, Ext extends string> =
 	Overlap<DefinitionSpellings<D>, Ext> extends infer Collision extends string
 		? [Collision] extends [never]
