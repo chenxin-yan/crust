@@ -720,6 +720,25 @@ describe("Crust .extend()", () => {
 		expect(snapshot.flags.mode).toEqual({ type: "string", aliases: ["local-mode"] });
 	});
 
+	it("keeps a surviving provider flag definition across unrelated .extend() calls", async () => {
+		const provider = defineContext(
+			"flagProvider",
+			{ flags: [{ name: "mode", type: "number", aliases: ["extension-mode"] }] },
+			() => ({}),
+		);
+		const extension: Extension = defineExtension(defineExtensionId("flag-provider"), {
+			provides: [provider()],
+		});
+		const app = new Crust("test")
+			.flags({ name: "mode", type: "string", aliases: ["local-mode"] })
+			.extend(extension)
+			.extend(defineExtension(defineExtensionId("unrelated")))
+			.action(() => {});
+
+		const snapshot = await app.snapshot();
+		expect(snapshot.flags.mode).toEqual({ type: "number", aliases: ["extension-mode"] });
+	});
+
 	it("keeps a local provider override across unrelated .extend() calls", async () => {
 		let value: string | undefined;
 		const resource = defineContext("resource", () => "extension");

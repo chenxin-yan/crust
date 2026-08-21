@@ -604,7 +604,8 @@ function installExtensionContexts(
 		const effectiveFlags: FlagsDef = {};
 		target.flagSpellings = new Map();
 		for (const name of Object.keys(target.effectiveFlags)) {
-			const source = Object.hasOwn(target.localFlags, name) ? target.localFlags : target.ownedFlags;
+			// Context flags can only collide dynamically after a local flag and therefore win.
+			const source = Object.hasOwn(target.ownedFlags, name) ? target.ownedFlags : target.localFlags;
 			if (!Object.hasOwn(source, name)) continue;
 			const def = source[name]!;
 			effectiveFlags[name] = def;
