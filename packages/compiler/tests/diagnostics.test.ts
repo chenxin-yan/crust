@@ -60,8 +60,21 @@ describe("compiler diagnostic corpus", () => {
 		expectLocated(error);
 	});
 
+	it("reports an implicit-any parameter once", async () => {
+		const error = await compileFailure("implicit-any-parameter.ts");
+		expect(error.diagnostics).toHaveLength(1);
+		expect(error.diagnostics[0]?.code).toBe(DiagnosticCodes.AnyType);
+		expectLocated(error);
+	});
+
 	it("classifies suppressed implicit-any parameters as unsupported any", async () => {
 		const error = await compileFailure("suppressed-implicit-any.ts");
+		expect(error.diagnostics.map(({ code }) => code)).toContain(DiagnosticCodes.AnyType);
+		expectLocated(error);
+	});
+
+	it("classifies suppressed inferred-any returns as unsupported any", async () => {
+		const error = await compileFailure("suppressed-implicit-any-return.ts");
 		expect(error.diagnostics.map(({ code }) => code)).toContain(DiagnosticCodes.AnyType);
 		expectLocated(error);
 	});
