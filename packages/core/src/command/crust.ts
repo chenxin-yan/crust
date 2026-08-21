@@ -582,10 +582,8 @@ function installExtensionContexts(
 	// promises flag definition order, so pruning in place (instead of
 	// regrouping locals before Extensions) keeps both observable orders.
 	const cloned = cloneCommandNode(node);
-	const previous = new Map(node.extensions.map((extension) => [extension.id, extension]));
-	const kept = new Set(
-		extensions.filter((extension) => previous.get(extension.id) === extension).map((e) => e.id),
-	);
+	// ponytail: O(n²) includes over an already-deduped list, fine for handfuls of extensions.
+	const kept = new Set(extensions.filter((e) => node.extensions.includes(e)).map((e) => e.id));
 	const prune = (target: CommandNode): void => {
 		const contexts: ContextInstance[] = [];
 		const contextExtensionIds: CommandNode["contextExtensionIds"] = [];
@@ -599,15 +597,14 @@ function installExtensionContexts(
 		target.contextExtensionIds = contextExtensionIds;
 		target.ownedFlags = Object.assign({}, ...contexts.map((context) => context.ownedFlags));
 		const effectiveFlags: FlagsDef = {};
-		for (const [name, def] of Object.entries(target.effectiveFlags)) {
-			if (Object.hasOwn(target.localFlags, name) || Object.hasOwn(target.ownedFlags, name))
-				effectiveFlags[name] = def;
-		}
-		target.effectiveFlags = effectiveFlags;
 		target.flagSpellings = new Map();
 		for (const [name, def] of Object.entries(target.effectiveFlags)) {
+			if (!Object.hasOwn(target.localFlags, name) && !Object.hasOwn(target.ownedFlags, name))
+				continue;
+			effectiveFlags[name] = def;
 			addFlagSpellingEntries(target.flagSpellings, name, def);
 		}
+		target.effectiveFlags = effectiveFlags;
 		for (const child of Object.values(target.subCommands)) prune(child);
 	};
 	prune(cloned);

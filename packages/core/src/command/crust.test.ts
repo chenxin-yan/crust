@@ -683,7 +683,7 @@ describe("Crust .extend()", () => {
 	});
 
 	it("keeps a local provider override across unrelated .extend() calls", async () => {
-		const values: string[] = [];
+		let value: string | undefined;
 		const resource = defineContext("resource", () => "extension");
 		const local = defineContext("resource", () => "local");
 		const providing = defineExtension(defineExtensionId("providing"), {
@@ -698,11 +698,11 @@ describe("Crust .extend()", () => {
 			.action(async ({ ctx }) => {
 				// The `as never` provide collapses the static Context map; the bag still resolves at runtime.
 				const bag = ctx as { resource: Promise<string> };
-				values.push(await bag.resource);
+				value = await bag.resource;
 			});
 
 		await app.run([]);
-		expect(values).toEqual(["local"]);
+		expect(value).toBe("local");
 	});
 
 	it("preserves interleaved local and Context flag order across .extend()", async () => {
