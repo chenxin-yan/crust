@@ -60,6 +60,12 @@ describe("compiler diagnostic corpus", () => {
 		expectLocated(error);
 	});
 
+	it("classifies suppressed implicit-any parameters as unsupported any", async () => {
+		const error = await compileFailure("suppressed-implicit-any.ts");
+		expect(error.diagnostics.map(({ code }) => code)).toContain(DiagnosticCodes.AnyType);
+		expectLocated(error);
+	});
+
 	it("reports unsupported constructs with a rewrite hint", async () => {
 		const error = await compileFailure("unsupported.ts");
 		expect(error.diagnostics[0]?.code).toBe(DiagnosticCodes.UnsupportedConstruct);
