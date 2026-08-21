@@ -333,12 +333,14 @@ func inspectStringWidth(value string) int {
 		}
 		if joined {
 			joined = false
-			emojiSequence = true
-			continue
+			if character >= 0x1f000 && character <= 0x1faff {
+				emojiSequence = true
+				continue
+			}
 		}
-		emojiSequence = character >= 0x1f300 && character <= 0x1faff
+		emojiSequence = character >= 0x1f000 && character <= 0x1faff
 		switch {
-		case character >= '\u200b' && character <= '\u200f':
+		case unicode.Is(unicode.Cf, character) && character != '\u00ad':
 		case character >= 0x1100 && (character <= 0x115f ||
 			character == 0x2329 || character == 0x232a ||
 			character >= 0x2e80 && character <= 0x3247 && character != 0x303f ||
@@ -350,8 +352,7 @@ func inspectStringWidth(value string) int {
 			character >= 0xfe30 && character <= 0xfe6f ||
 			character >= 0xff00 && character <= 0xff60 ||
 			character >= 0xffe0 && character <= 0xffe6 ||
-			character >= 0x1f1e6 && character <= 0x1f1ff ||
-			character >= 0x1f300 && character <= 0x1faff ||
+			character >= 0x1f000 && character <= 0x1faff ||
 			character >= 0x20000 && character <= 0x3fffd):
 			width += 2
 		default:
