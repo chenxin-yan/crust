@@ -323,7 +323,7 @@ func inspectStringWidth(value string) int {
 	width := 0
 	for _, character := range value {
 		switch {
-		case unicode.Is(unicode.Mn, character), unicode.Is(unicode.Me, character), character == '\u200d':
+		case unicode.Is(unicode.Mn, character), unicode.Is(unicode.Me, character), unicode.Is(unicode.Cf, character):
 		case character >= 0x1100 && (character <= 0x115f ||
 			character == 0x2329 || character == 0x232a ||
 			character >= 0x2e80 && character <= 0x3247 && character != 0x303f ||
