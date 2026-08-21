@@ -9,6 +9,8 @@ export function emitGo(program: Program): string {
 	return `package main
 
 import crustRuntime ${JSON.stringify(runtimeModule)}
+
+var _ = crustRuntime.Number
 ${functions ? `\n${functions}\n` : ""}
 func main() {
 ${statements}
