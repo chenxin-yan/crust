@@ -133,6 +133,105 @@ describe("typed programmatic invocation", () => {
 		expect(ran).toBe(true);
 	});
 
+	it("keeps a widened Extension from degrading a literal sibling's typed shape", async () => {
+		const lit = defineExtension(defineExtensionId("lit"), {
+			commands: [
+				defineCommand("inspect", (command) => command.action(() => ({ kind: "lit" as const }))),
+			],
+		});
+		const widened: Extension = defineExtension(defineExtensionId("dyn"), {
+			commands: [defineCommand("generated", (command) => command.action(() => {}))],
+		});
+		const app = new Crust("cli").extend(lit, widened);
+
+		const pending = app.run(["inspect"]);
+		type _result = Expect<Equal<typeof pending, Promise<RunOutcome<{ kind: "lit" }>>>>;
+		expect(await pending).toEqual({ status: "completed", result: { kind: "lit" } });
+	});
+
+	it("rejects statically known Extension command collisions", () => {
+		const extFoo = defineExtension(defineExtensionId("extfoo"), {
+			commands: [defineCommand("foo", (command) => command.action(() => "ext" as const))],
+		});
+		const appFoo = defineCommand("foo", (command) => command.action(() => 42 as const));
+
+		function typecheckHarness() {
+			// @ts-expect-error -- Extension command collides with an existing app command
+			void new Crust("cli").add(appFoo).extend(extFoo);
+			// @ts-expect-error -- added command collides with a registered Extension command
+			void new Crust("cli").extend(extFoo).add(appFoo);
+			const otherFoo = defineExtension(defineExtensionId("other"), {
+				commands: [defineCommand("foo", (command) => command.action(() => {}))],
+			});
+			// @ts-expect-error -- Extensions in the same call must not collide
+			void new Crust("cli").extend(extFoo, otherFoo);
+		}
+		void typecheckHarness;
+	});
+
+	it("keeps conditionally assembled Extension contributions runtime-only", async () => {
+		const foo = defineCommand("foo", (command) => command.action(() => {}));
+		const bar = defineCommand("bar", (command) => command.action(() => {}));
+		const condition = (globalThis as { __never?: boolean }).__never === true;
+		const conditional = defineExtension(defineExtensionId("conditional"), {
+			commands: condition ? [foo] : [bar],
+			flags: condition
+				? [{ name: "fa", type: "boolean" as const }]
+				: [{ name: "fb", type: "boolean" as const }],
+		});
+		const app = new Crust("cli").action(() => {}).extend(conditional);
+		const elementConditional = defineExtension(defineExtensionId("element"), {
+			commands: [condition ? foo : bar],
+		});
+		const elementApp = new Crust("cli").extend(elementConditional);
+
+		function typecheckHarness() {
+			// @ts-expect-error -- only one branch of a conditional commands array is installed
+			void app.run(["foo"]);
+			// @ts-expect-error -- only one branch of a conditional flags array is installed
+			void app.run([], { flags: { fa: true } });
+			// @ts-expect-error -- a union-typed tuple member is not a guaranteed path
+			void elementApp.run(["foo"]);
+		}
+		void typecheckHarness;
+
+		// The installed branch still dispatches through the raw-argv path.
+		let ran = false;
+		const runtime = defineExtension(defineExtensionId("runtime"), {
+			commands: condition
+				? [foo]
+				: [
+						defineCommand("bar", (command) =>
+							command.action(() => {
+								ran = true;
+							}),
+						),
+					],
+		});
+		await new Crust("cli").extend(runtime).execute({ argv: ["bar"] });
+		expect(ran).toBe(true);
+	});
+
+	it("keeps widened recursive flag scopes off descendant typed inputs", () => {
+		const dynamicScope = (globalThis as { __never?: boolean }).__never === true;
+		const scoped = defineExtension(defineExtensionId("scoped"), {
+			flags: [{ name: "trace", type: "boolean", recursive: dynamicScope }],
+		});
+		const child = defineCommand("child", (command) => command.action(() => {}));
+		const app = new Crust("cli")
+			.action(() => {})
+			.extend(scoped)
+			.add(child);
+
+		function typecheckHarness() {
+			// The flag is always installed on the root, so the root input keeps it.
+			void app.run([], { flags: { trace: true } });
+			// @ts-expect-error -- a runtime-false scope installs the flag on the root only
+			void app.run(["child"], { flags: { trace: true } });
+		}
+		void typecheckHarness;
+	});
+
 	it("surfaces Extension preparation failures before typed dispatch", async () => {
 		const replacement = defineExtension(defineExtensionId("replacement"), {
 			flags: [{ name: "mode", type: "boolean" }],

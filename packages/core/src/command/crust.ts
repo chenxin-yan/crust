@@ -32,8 +32,10 @@ import type {
 	AliasesOf,
 	CommandDefinitionSpellings,
 	EmptyNameBrand,
+	ExtensionsCommandSpellings,
 	ValidateCommandConfig,
 	ValidateCommandDefinitions,
+	ValidateExtensionCommands,
 } from "../validation/commands.brands.ts";
 import type {
 	ValidateContextDeps,
@@ -50,6 +52,7 @@ import type {
 	SpellingsOf,
 	ValidateNamedFlagDefs,
 } from "../validation/flags.brands.ts";
+import type { IsStaticTuple } from "../validation/shared.ts";
 import {
 	cloneCommandNode,
 	executeInvocation,
@@ -409,9 +412,12 @@ type ShapeOfBuilder<B> =
 		? CommandShape<A, Flags, Tree, Result>
 		: never;
 
+// Matching against CommandDefinitionSpellings (never for widened names) keeps a
+// widened definition in the same tuple or union from degrading a literal
+// sibling's shape: a widened `Name` would otherwise match every spelling.
 type DefinitionShapeForSpelling<D, Spelling extends string> =
-	D extends CommandDefinition<infer Name, infer Aliases, infer Shape, any>
-		? Spelling extends Name | (string extends Aliases[number] ? never : Aliases[number])
+	D extends CommandDefinition<any, any, infer Shape, any>
+		? Spelling extends CommandDefinitionSpellings<D>
 			? Shape
 			: never
 		: never;
@@ -441,11 +447,16 @@ type DefinitionsTree<
 	>;
 };
 
+// Conditionally assembled contributions (union-typed tuples or members) stay
+// runtime-only: only one branch is installed at prepare time, so publishing
+// both as guaranteed typed paths would let run() dispatch a missing command.
+// Widened contributions also pass through here, but their spellings resolve to
+// `never` (see CommandDefinitionSpellings), so they contribute no typed paths.
 type StaticExtensionCommands<E> =
 	E extends Extension<any, any, any, infer Commands>
-		? string extends CommandDefinitionSpellings<Commands[number]>
-			? readonly []
-			: Commands
+		? IsStaticTuple<Commands> extends true
+			? Commands
+			: readonly []
 		: readonly [];
 
 type ExtensionCommands<Es extends readonly Extension<any, any, any, any>[]> =
@@ -453,9 +464,11 @@ type ExtensionCommands<Es extends readonly Extension<any, any, any, any>[]> =
 
 type StaticExtensionFlagDefs<E> =
 	E extends Extension<any, any, infer Defs, any>
-		? string extends Defs[number]["name"]
-			? readonly []
-			: Defs
+		? IsStaticTuple<Defs> extends true
+			? string extends Defs[number]["name"]
+				? readonly []
+				: Defs
+			: readonly []
 		: readonly [];
 
 type ExtensionFlagDefs<Es extends readonly Extension<any, any, any, any>[]> =
@@ -465,9 +478,14 @@ type ExtensionFlags<Es extends readonly Extension<any, any, any, any>[]> = Named
 	ExtensionFlagDefs<Es>
 >;
 
+// Only a statically `true` (or omitted — the runtime default) `recursive` scope
+// promotes a flag onto descendant inputs: a widened `boolean` scope may be
+// `false` at runtime, which installs the flag on the root only.
 type RecursiveExtensionFlags<Es extends readonly Extension<any, any, any, any>[]> = {
-	[D in ExtensionFlagDefs<Es>[number] as D extends { readonly recursive: false }
-		? never
+	[D in ExtensionFlagDefs<Es>[number] as D extends { readonly recursive: infer R }
+		? [R] extends [true]
+			? D["name"]
+			: never
 		: D["name"]]: Omit<D, "name">;
 } extends infer F extends FlagsDef
 	? F
@@ -1056,12 +1074,13 @@ export class Crust<
 		...extensions: Es &
 			ValidateDeclaredDeps<MergeContext<Ctx, ExtensionsProvidesOutput<Es>>, Es> &
 			ValidateExtensionFlags<Es, Sp | CollisionSp["tree"]> &
+			ValidateExtensionCommands<Es, Sibs> &
 			ValidateExtensionProvides<Es, Ctx>
 	): Crust<
 		MergeFlags<Flags, ExtensionFlags<Es>>,
 		A,
 		MergeContext<Ctx, ExtensionsProvidesOutput<Es>>,
-		Sibs,
+		Sibs | ExtensionsCommandSpellings<Es>,
 		Sp | ExtensionsSpellings<Es>,
 		ExtendedTree<
 			Tree,
@@ -1082,7 +1101,7 @@ export class Crust<
 			MergeFlags<Flags, ExtensionFlags<Es>>,
 			A,
 			MergeContext<Ctx, ExtensionsProvidesOutput<Es>>,
-			Sibs,
+			Sibs | ExtensionsCommandSpellings<Es>,
 			Sp | ExtensionsSpellings<Es>,
 			ExtendedTree<
 				Tree,
