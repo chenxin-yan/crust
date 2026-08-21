@@ -1,5 +1,6 @@
 import type { ContextInstance } from "../api/context.ts";
 import type { Extension } from "../api/extension.ts";
+import type { ExtensionId } from "../identity.ts";
 import type { FlagSpelling } from "../parsing/spellings.ts";
 import type { ArgsDef, CommandMeta, FlagsDef } from "../types.ts";
 
@@ -32,6 +33,8 @@ export interface CommandNode {
 	subCommands: Record<string, CommandNode>;
 	/** Context instances available to this command in provide order (construction order is pull-driven). */
 	contexts: ContextInstance[];
+	/** Source Extension for each Context, aligned with `contexts`; local providers use undefined. */
+	contextExtensionIds: (ExtensionId | undefined)[];
 	/** Extensions registered via `.extend()` (root builder only) */
 	extensions: Extension[];
 	/** The Command Action */
@@ -59,6 +62,7 @@ export function createCommandNode(name: string): CommandNode {
 		args: undefined,
 		subCommands: {},
 		contexts: [],
+		contextExtensionIds: [],
 		extensions: [],
 		run: undefined,
 	};

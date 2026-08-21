@@ -8,7 +8,7 @@ import type { StandardSchema } from "@crustjs/utils/schema";
 import { getAmbientTerminalIO } from "@crustjs/utils/terminal";
 
 import { defineContext } from "../api/context.ts";
-import { defineExtension } from "../api/extension.ts";
+import { defineExtension, type Extension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
@@ -595,6 +595,189 @@ describe("Crust .extend()", () => {
 		expect(calls).toEqual(["one", "two", "three"]);
 	});
 
+	it("deduplicates the same Extension object before hooks and Context setup", async () => {
+		let preRuns = 0;
+		let sections = 0;
+		let setups = 0;
+		let disposals = 0;
+		const resource = defineContext("resource", () => {
+			setups++;
+			return {
+				[Symbol.dispose]() {
+					disposals++;
+				},
+			};
+		});
+		const extension = defineExtension(defineExtensionId("deduplicated"), {
+			provides: [resource()],
+			sections: () => {
+				sections++;
+				return [];
+			},
+			hooks: { preRun: () => void preRuns++ },
+		});
+		const base = new Crust("test")
+			.extend(extension)
+			.action(async ({ ctx }) => void (await ctx.resource));
+		// Duplicate ids are runtime-only; the cast bypasses the duplicate Context brand.
+		const app = base.extend(extension as never);
+
+		await app.snapshot();
+		await app.run([]);
+
+		expect({ preRuns, sections, setups, disposals }).toEqual({
+			preRuns: 1,
+			sections: 1,
+			setups: 1,
+			disposals: 1,
+		});
+	});
+
+	it("keeps the last Extension registration for a shared id", async () => {
+		const id = defineExtensionId("shared");
+		const calls: string[] = [];
+		const firstResource = defineContext(
+			"firstResource",
+			{ flags: [{ name: "legacyProvider", type: "boolean" }] },
+			() => {
+				calls.push("first:setup");
+				return { [Symbol.dispose]: () => calls.push("first:dispose") };
+			},
+		);
+		const secondResource = defineContext("secondResource", () => {
+			calls.push("second:setup");
+			return { [Symbol.dispose]: () => calls.push("second:dispose") };
+		});
+		const first = defineExtension(id, {
+			flags: [{ name: "legacy", type: "boolean" }],
+			commands: [defineCommand("legacy", (command) => command)],
+			provides: [firstResource()],
+			sections: () => (calls.push("first:sections"), []),
+			hooks: { preRun: () => void calls.push("first:preRun") },
+		});
+		const second = defineExtension(id, {
+			flags: [{ name: "current", type: "boolean" }],
+			commands: [defineCommand("current", (command) => command)],
+			provides: [secondResource()],
+			sections: () => (calls.push("second:sections"), []),
+			hooks: { preRun: () => void calls.push("second:preRun") },
+		});
+		// Extension ids are branded strings rather than literal types, so id dedup is runtime-only.
+		const app = new Crust("test")
+			.extend(first)
+			.extend(second)
+			.action(async ({ ctx }) => {
+				expect(Object.hasOwn(ctx, "firstResource")).toBe(false);
+				await ctx.secondResource;
+			});
+
+		const snapshot = await app.snapshot();
+		expect(snapshot.flags.current).toBeDefined();
+		expect(snapshot.flags.legacy).toBeUndefined();
+		expect(snapshot.flags.legacyProvider).toBeUndefined();
+		expect(snapshot.subCommands.current).toBeDefined();
+		expect(snapshot.subCommands.legacy).toBeUndefined();
+		await app.run([]);
+
+		expect(calls).toEqual(["second:sections", "second:preRun", "second:setup", "second:dispose"]);
+	});
+
+	it("moves re-registered Extension providers to the last registration", async () => {
+		let value: string | undefined;
+		const fromA = defineContext("sharedProvider", () => "A");
+		const fromB = defineContext("sharedProvider", () => "B");
+		const a = defineExtension(defineExtensionId("provider-a"), { provides: [fromA()] });
+		const b = defineExtension(defineExtensionId("provider-b"), { provides: [fromB()] });
+		const app = new Crust("test")
+			.extend(a)
+			.extend(b as never)
+			.extend(a as never)
+			.action(async ({ ctx }) => {
+				const bag = ctx as { sharedProvider: Promise<string> };
+				value = await bag.sharedProvider;
+			});
+
+		await app.run([]);
+		expect(value).toBe("A");
+	});
+
+	it("restores a surviving local flag definition after provider replacement", async () => {
+		const id = defineExtensionId("flag-provider");
+		const provider = defineContext(
+			"flagProvider",
+			{ flags: [{ name: "mode", type: "number", aliases: ["extension-mode"] }] },
+			() => ({}),
+		);
+		const first: Extension = defineExtension(id, { provides: [provider()] });
+		const replacement: Extension = defineExtension(id);
+		const app = new Crust("test")
+			.flags({ name: "mode", type: "string", aliases: ["local-mode"] })
+			.extend(first)
+			.extend(replacement)
+			.action(() => {});
+
+		const snapshot = await app.snapshot();
+		expect(snapshot.flags.mode).toEqual({ type: "string", aliases: ["local-mode"] });
+	});
+
+	it("keeps a surviving provider flag definition across unrelated .extend() calls", async () => {
+		const provider = defineContext(
+			"flagProvider",
+			{ flags: [{ name: "mode", type: "number", aliases: ["extension-mode"] }] },
+			() => ({}),
+		);
+		const extension: Extension = defineExtension(defineExtensionId("flag-provider"), {
+			provides: [provider()],
+		});
+		const app = new Crust("test")
+			.flags({ name: "mode", type: "string", aliases: ["local-mode"] })
+			.extend(extension)
+			.extend(defineExtension(defineExtensionId("unrelated")))
+			.action(() => {});
+
+		const snapshot = await app.snapshot();
+		expect(snapshot.flags.mode).toEqual({ type: "number", aliases: ["extension-mode"] });
+	});
+
+	it("keeps a local provider override across unrelated .extend() calls", async () => {
+		let value: string | undefined;
+		const resource = defineContext("resource", () => "extension");
+		const local = defineContext("resource", () => "local");
+		const providing = defineExtension(defineExtensionId("providing"), {
+			provides: [resource()],
+		});
+		const app = new Crust("test")
+			.extend(providing)
+			// Same-name local re-provide is runtime last-write-wins; the cast
+			// bypasses the duplicate Context brand.
+			.provide(local() as never)
+			.extend(defineExtension(defineExtensionId("unrelated")))
+			.action(async ({ ctx }) => {
+				// The `as never` provide collapses the static Context map; the bag still resolves at runtime.
+				const bag = ctx as { resource: Promise<string> };
+				value = await bag.resource;
+			});
+
+		await app.run([]);
+		expect(value).toBe("local");
+	});
+
+	it("preserves interleaved local and Context flag order across .extend()", async () => {
+		const owner = defineContext(
+			"owner",
+			{ flags: [{ name: "bFlag", type: "boolean" }] },
+			() => ({}),
+		);
+		const app = new Crust("test")
+			.flags({ name: "aFlag", type: "boolean" })
+			.provide(owner())
+			.extend(defineExtension(defineExtensionId("order-noop")))
+			.action(() => {});
+
+		const snapshot = await app.snapshot();
+		expect(Object.keys(snapshot.flags)).toEqual(["aFlag", "bFlag"]);
+	});
+
 	it("defineExtension() returns a frozen plain config", () => {
 		const ext = defineExtension(defineExtensionId("frozen"), {
 			flags: [{ name: "x", type: "boolean" }],
@@ -694,6 +877,67 @@ describe("Crust .extend()", () => {
 });
 
 describe("Extension application at prepare time", () => {
+	it("brands statically known Extension command collisions at .extend()", () => {
+		const build = defineCommand("build", (command) => command);
+		const collidingName = defineExtension(defineExtensionId("name-collision"), {
+			commands: [defineCommand("build", (command) => command)],
+		});
+		const collidingAlias = defineExtension(defineExtensionId("alias-collision"), {
+			commands: [defineCommand("inspect", { aliases: ["build"] }, (command) => command)],
+		});
+		const first = defineExtension(defineExtensionId("first-command"), {
+			commands: [defineCommand("deploy", { aliases: ["d"] }, (command) => command)],
+		});
+		const second = defineExtension(defineExtensionId("second-command"), {
+			commands: [defineCommand("d", (command) => command)],
+		});
+		const dynamic: Extension = collidingName;
+		const clean = defineExtension(defineExtensionId("clean-command"), {
+			commands: [defineCommand("inspect", (command) => command)],
+		});
+
+		function typecheckHarness() {
+			const app = new Crust("cli").add(build);
+			// @ts-expect-error -- command name collides with an app sibling (FIX_COMMAND_COLLISION)
+			void app.extend(collidingName);
+			// @ts-expect-error -- command alias collides with an app sibling (FIX_COMMAND_COLLISION)
+			void app.extend(collidingAlias);
+			// @ts-expect-error -- command name collides with an earlier Extension alias (FIX_COMMAND_COLLISION)
+			void new Crust("cli").extend(first).extend(second);
+			void app.extend(dynamic);
+			void app.extend(clean);
+		}
+		void typecheckHarness;
+		expect(true).toBe(true);
+	});
+
+	it("brands duplicate command spellings within one Extension at defineExtension()", () => {
+		function typecheckHarness() {
+			void defineExtension(defineExtensionId("self-name-collision"), {
+				commands: [
+					defineCommand("dup", (command) => command),
+					// @ts-expect-error -- duplicate canonical name within one Extension (FIX_COMMAND_COLLISION)
+					defineCommand("dup", (command) => command),
+				],
+			});
+			void defineExtension(defineExtensionId("self-alias-collision"), {
+				commands: [
+					defineCommand("deploy", { aliases: ["d"] }, (command) => command),
+					// @ts-expect-error -- canonical name matches an earlier alias within one Extension (FIX_COMMAND_COLLISION)
+					defineCommand("d", (command) => command),
+				],
+			});
+			void defineExtension(defineExtensionId("self-clean"), {
+				commands: [
+					defineCommand("build", (command) => command),
+					defineCommand("deploy", (command) => command),
+				],
+			});
+		}
+		void typecheckHarness;
+		expect(true).toBe(true);
+	});
+
 	it("rejects an Extension providing a Context name already on the path at compile time", () => {
 		const db = defineContext("db", {}, () => "real");
 		const impostor = defineContext("db", {}, () => 42);
@@ -2085,6 +2329,21 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
 
 		expect(calls).toEqual(["first", "second"]);
+	});
+
+	it("runs only the last build hook for a duplicate Extension id", async () => {
+		const path = await snapshotPath();
+		process.env[SNAPSHOT_PATH_ENV] = path;
+		process.env[BUILD_OUT_DIR_ENV] = dirname(path);
+		const calls: string[] = [];
+		const id = defineExtensionId("duplicate-build");
+		const first = defineExtension(id, { build: () => void calls.push("first") });
+		const second = defineExtension(id, { build: () => void calls.push("second") });
+		const app = new Crust("build-subprocess").extend(first).extend(second);
+
+		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
+
+		expect(calls).toEqual(["second"]);
 	});
 
 	it("refreshes sections between build hooks", async () => {

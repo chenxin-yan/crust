@@ -147,6 +147,7 @@ export function cloneCommandNode(node: CommandNode): CommandNode {
 		args: node.args ? node.args.map((def) => ({ ...def })) : undefined,
 		subCommands,
 		contexts: [...node.contexts],
+		contextExtensionIds: [...node.contextExtensionIds],
 		extensions: [...node.extensions],
 		run: node.run,
 	};
@@ -161,6 +162,7 @@ function freezeTree(node: CommandNode): void {
 	if (node.meta.sections) Object.freeze(node.meta.sections);
 	Object.freeze(node.meta);
 	Object.freeze(node.contexts);
+	Object.freeze(node.contextExtensionIds);
 	Object.freeze(node.extensions);
 	if (node.args) Object.freeze(node.args);
 	for (const sub of Object.values(node.subCommands)) freezeTree(sub);
