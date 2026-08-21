@@ -42,7 +42,7 @@ Node 26.8.1; changes to Node's diagnostic format must be reviewed explicitly.
 
 ## Diagnostics
 
-Compilation failures throw `CompilerError`. Its `diagnostics` array contains a stable code, source file, one-based line and column, message, and rewrite hint.
+TypeScript validation and lowering failures throw `CompilerError`. Its `diagnostics` array contains a stable code, source file, one-based line and column, message, and rewrite hint.
 
 | Code        | Meaning                        | Rewrite                                                                                                                                              |
 | ----------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
