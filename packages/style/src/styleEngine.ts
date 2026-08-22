@@ -3,6 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { AnsiPair } from "./ansiCodes.ts";
+import type { StyleInput } from "./types.ts";
 
 /**
  * Apply an ANSI style pair to a string with nesting-safe composition.
@@ -28,7 +29,7 @@ import type { AnsiPair } from "./ansiCodes.ts";
  * applyStyle(`hello ${inner}!`, bold);
  * ```
  */
-export function applyStyle(text: string, style: AnsiPair): string {
+export function applyStyle(text: StyleInput, style: AnsiPair): string {
 	// Defensive: coerce nullish/non-string inputs to "" so styled output is
 	// safe to capture in logs and pipe into files. JS callers ignoring our
 	// types still get correct behavior — no crashes, no `"undefined"` ANSI
@@ -36,10 +37,8 @@ export function applyStyle(text: string, style: AnsiPair): string {
 	if (text == null) {
 		return "";
 	}
-	if (typeof text !== "string") {
-		text = String(text);
-	}
-	if (text === "") {
+	let result = String(text);
+	if (result === "") {
 		return "";
 	}
 
@@ -50,9 +49,9 @@ export function applyStyle(text: string, style: AnsiPair): string {
 	// 1. Nested styles that share the same close code (e.g. bold + dim both
 	//    close with \x1b[22m).
 	// 2. Text that was pre-styled and already contains matching close codes.
-	if (text.includes(close)) {
-		text = text.replaceAll(close, close + open);
+	if (result.includes(close)) {
+		result = result.replaceAll(close, close + open);
 	}
 
-	return open + text + close;
+	return open + result + close;
 }
