@@ -539,7 +539,7 @@ describe("input — non-TTY", () => {
 
 describe("input — schema validation", () => {
 	it("rejects combining schema with a function validator", async () => {
-		await expect(input({ schema: z.string(), validate: () => {} } as any)).rejects.toThrow(
+		await expect(input({ schema: z.string(), validate: () => {} } as never)).rejects.toThrow(
 			'input() cannot combine "schema" with "validate"',
 		);
 	});

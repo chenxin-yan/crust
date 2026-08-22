@@ -269,7 +269,7 @@ describe("password — non-TTY", () => {
 
 describe("password — schema validation", () => {
 	it("rejects combining schema with a function validator", async () => {
-		await expect(password({ schema: z.string(), validate: () => {} } as any)).rejects.toThrow(
+		await expect(password({ schema: z.string(), validate: () => {} } as never)).rejects.toThrow(
 			'password() cannot combine "schema" with "validate"',
 		);
 	});

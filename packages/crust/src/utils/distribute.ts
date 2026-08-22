@@ -11,6 +11,7 @@ import {
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { bold, cyan, dim, green } from "@crustjs/style";
+import type { JsonValue } from "@crustjs/utils/json";
 
 import {
 	type BunTarget,
@@ -44,7 +45,6 @@ type NpmBugs = string | { url?: string; email?: string };
 type NpmRepository = string | { type?: string; url?: string; directory?: string };
 type NpmFundingEntry = { type?: string; url?: string };
 type NpmFunding = string | NpmFundingEntry | NpmFundingEntry[];
-type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
 type PublishPackageMetadata = {
 	name: string;

@@ -35,7 +35,7 @@ export type Key = NamedKey | `ctrl+${string}` | (string & {});
  * key name (e.g. `"pageup"`) into the prompt would corrupt the test input.
  */
 function isNamedKey(key: Key): key is NamedKey {
-	return key in namedKeys;
+	return Object.hasOwn(namedKeys, key);
 }
 
 export function encodeKey(key: Key): string {

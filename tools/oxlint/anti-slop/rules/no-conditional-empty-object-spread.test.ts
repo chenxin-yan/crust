@@ -24,5 +24,9 @@ tester.run("anti-slop/no-conditional-empty-object-spread", noConditionalEmptyObj
 			code: "const result = { ...(condition ? {} : { value }) };",
 			errors: [error],
 		},
+		{
+			code: "const result = { ...(condition ? ({}) : { value }) };",
+			errors: [error],
+		},
 	],
 });

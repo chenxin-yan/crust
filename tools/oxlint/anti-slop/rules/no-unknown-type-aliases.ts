@@ -31,6 +31,9 @@ export const noUnknownTypeAliasesRule = defineRule({
 			if (type.type === "TSUnknownKeyword") return true;
 			if (type.type === "TSParenthesizedType")
 				return resolvesToUnknown(type.typeAnnotation, visited);
+			if (type.type === "TSUnionType") {
+				return type.types.some((member) => resolvesToUnknown(member, visited));
+			}
 			const name = referencedAliasName(type);
 			if (name === null || visited.has(name)) return false;
 			const alias = aliases.get(name);

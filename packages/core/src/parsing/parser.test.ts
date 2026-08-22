@@ -1196,6 +1196,26 @@ describe("parseArgs \u2014 default coercion symmetry", () => {
 		expect(result.args.out).toBe(`${process.cwd()}/dist`);
 	});
 
+	it("stringifies runtime-configured defaults before parsing", () => {
+		let received: string | undefined;
+		const cmd = makeNode({
+			meta: "test",
+			flags: {
+				value: {
+					type: "string",
+					// SAFETY: Deliberately simulates runtime configuration that violates the static default contract.
+					default: 42 as never,
+					parse: (raw) => {
+						received = raw;
+						return raw;
+					},
+				},
+			},
+		});
+		expect(parseArgs(cmd, []).flags.value).toBe("42");
+		expect(received).toBe("42");
+	});
+
 	it("accepts a default that is in the choices list (no false positive)", () => {
 		const cmd = makeNode({
 			meta: "test",

@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 
 import { defineCommand } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
+import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
 
 import {
 	BUILD_RUNTIMES,
@@ -51,12 +52,6 @@ export function resolveOutfile(
 
 	const baseName = resolveBaseName(name, entry, cwd);
 	return resolve(cwd, outdir, baseName.endsWith(ext) ? baseName : baseName + ext);
-}
-
-type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
-
-function isJsonObject(value: JsonValue): value is { [key: string]: JsonValue } {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function getConfiguredRuntime(pkg: JsonValue): JsonValue | undefined {

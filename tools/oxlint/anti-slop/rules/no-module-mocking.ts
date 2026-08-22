@@ -1,22 +1,11 @@
 import { defineRule } from "@oxlint/plugins";
-import type { ESTree, Scope, SourceCode, Variable } from "@oxlint/plugins";
+import type { ESTree, SourceCode, Variable } from "@oxlint/plugins";
 
-const moduleMockMethods = new Set(["doMock", "mock", "unstable_mockModule"]);
+import { resolveVariable } from "../shared/scope.ts";
+
+const moduleMockMethods = new Set(["doMock", "mock", "setMock", "unstable_mockModule"]);
 
 type TestFramework = "bun" | "jest" | "vitest";
-
-function resolveVariable(
-	sourceCode: SourceCode,
-	identifier: ESTree.IdentifierReference,
-): Variable | null {
-	let scope: Scope | null = sourceCode.getScope(identifier);
-	while (scope !== null) {
-		const variable = scope.set.get(identifier.name);
-		if (variable !== undefined) return variable;
-		scope = scope.upper;
-	}
-	return null;
-}
 
 function importedName(node: ESTree.Node): string | null {
 	if (node.type !== "ImportSpecifier") return null;

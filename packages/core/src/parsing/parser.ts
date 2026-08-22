@@ -157,9 +157,11 @@ function resolveDefault(def: ArgDef | FlagDef, label: string) {
 
 	if (parse) {
 		if (Array.isArray(defaultValue)) {
-			return defaultValue.map((v, i) => invokeParse(parse, v, label, i));
+			// oxlint-disable-next-line typescript/no-unnecessary-type-conversion -- runtime-configured definitions can violate the static string-default contract
+			return defaultValue.map((v, i) => invokeParse(parse, String(v), label, i));
 		}
-		return invokeParse(parse, defaultValue, label);
+		// oxlint-disable-next-line typescript/no-unnecessary-type-conversion -- runtime-configured definitions can violate the static string-default contract
+		return invokeParse(parse, String(defaultValue), label);
 	}
 
 	if (def.type === "path") {

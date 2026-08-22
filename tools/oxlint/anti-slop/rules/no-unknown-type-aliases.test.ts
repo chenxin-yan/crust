@@ -10,6 +10,7 @@ tester.run("anti-slop/no-unknown-type-aliases", noUnknownTypeAliasesRule, {
 	invalid: [
 		{ code: "type Alias = unknown;", errors: [error] },
 		{ code: "type Current = unknown;", errors: [error] },
+		{ code: "type Current = string | unknown;", errors: [error] },
 		{ code: "type UnknownValue = unknown; type Alias = UnknownValue;", errors: [error, error] },
 	],
 });

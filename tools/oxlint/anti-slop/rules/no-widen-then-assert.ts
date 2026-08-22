@@ -1,5 +1,7 @@
 import { defineRule } from "@oxlint/plugins";
-import type { ESTree, Scope, SourceCode, Variable } from "@oxlint/plugins";
+import type { ESTree, SourceCode, Variable } from "@oxlint/plugins";
+
+import { resolveVariable } from "../shared/scope.ts";
 
 type BroadTypeKind = "top" | "object" | "record";
 
@@ -143,7 +145,12 @@ function isDefinitelyObjectType(type: ESTree.TSType): boolean {
 function isDefinitelyNarrowerRecordType(type: ESTree.TSType): boolean {
 	const unwrapped = unwrapTypeParentheses(type);
 	if (unwrapped.type === "TSTypeLiteral") {
-		return unwrapped.members.some((member) => member.type !== "TSIndexSignature");
+		return unwrapped.members.some(
+			(member) =>
+				member.type !== "TSIndexSignature" ||
+				(member.typeAnnotation !== null &&
+					!isUnknownOrAnyType(member.typeAnnotation.typeAnnotation)),
+		);
 	}
 
 	if (unwrapped.type !== "TSTypeReference") return false;
@@ -164,19 +171,6 @@ function functionBoundary(node: ESTree.Node): ESTree.Node | null {
 	while (current !== null && current.type !== "Program") {
 		if (functionBoundaryTypes.has(current.type)) return current;
 		current = current.parent;
-	}
-	return null;
-}
-
-function resolvedVariableForIdentifier(
-	sourceCode: SourceCode,
-	identifier: ESTree.IdentifierReference,
-): Variable | null {
-	let scope: Scope | null = sourceCode.getScope(identifier);
-	while (scope !== null) {
-		const variable = scope.set.get(identifier.name);
-		if (variable !== undefined) return variable;
-		scope = scope.upper;
 	}
 	return null;
 }
@@ -219,7 +213,7 @@ function knownValueEvidence(
 	}
 
 	if (unwrapped.type !== "Identifier") return null;
-	const variable = resolvedVariableForIdentifier(sourceCode, unwrapped);
+	const variable = resolveVariable(sourceCode, unwrapped);
 	if (variable === null || visitedVariables.has(variable)) return null;
 
 	const annotatedIdentifier = variable.identifiers.find(
@@ -280,7 +274,7 @@ function widenedBinding(
 	const initializerBroadKind =
 		initializerAssertion === null ? null : broadTypeKind(initializerAssertion.typeAnnotation);
 	const declaredBroadKind = declaredType === undefined ? null : broadTypeKind(declaredType);
-	const broadKind = declaredBroadKind ?? initializerBroadKind;
+	const broadKind = declaredBroadKind ?? (declaredType === undefined ? initializerBroadKind : null);
 	if (broadKind === null) return null;
 
 	const originalExpression =
@@ -327,7 +321,7 @@ export const noWidenThenAssertRule = defineRule({
 			const expression = assertedExpression(node);
 			if (expression.type !== "Identifier") return;
 
-			const variable = resolvedVariableForIdentifier(context.sourceCode, expression);
+			const variable = resolveVariable(context.sourceCode, expression);
 			if (variable === null) return;
 			const widened = widenedBinding(variable, context.sourceCode);
 			if (

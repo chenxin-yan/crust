@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { resolveSourceDir } from "@crustjs/utils/source";
 
 import { probeFrontmatter } from "./bundle.ts";
+import { isErrnoException } from "./errno.ts";
 
 export class SkillSourceUnavailableError extends Error {
 	override readonly name = "SkillSourceUnavailableError";
@@ -61,12 +62,6 @@ export interface PackagedSkill {
 	readonly sourceDir: string;
 	readonly name: string;
 	readonly description: string;
-}
-
-function isErrnoException<ErrorValue>(
-	error: ErrorValue,
-): error is ErrorValue & NodeJS.ErrnoException {
-	return error instanceof Error && "code" in error;
 }
 
 export function readSkillFrontmatter(

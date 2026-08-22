@@ -8,6 +8,7 @@ import { text } from "node:stream/consumers";
 
 import { BUILD_OUT_DIR_ENV, type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
 import { yellow } from "@crustjs/style";
+import type { JsonValue } from "@crustjs/utils/json";
 import { which } from "@crustjs/utils/process";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -229,8 +230,6 @@ export function getDenoBinaryFilename(baseName: string, target: DenoTarget): str
 	const ext = DENO_TARGET_INFO[target].os === "win32" ? ".exe" : "";
 	return `${baseName}-${target}${ext}`;
 }
-
-type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
 function hasStringName(value: JsonValue): value is { name: string } {
 	return (

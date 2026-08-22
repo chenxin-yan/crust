@@ -69,7 +69,12 @@ function isInsideTypeAliasDeclaration(node: ESTree.Node): boolean {
 function isPlainAliasConsumerUse(node: ESTree.TSType, environment: TypeEnvironment): boolean {
 	if (node.type !== "TSTypeReference" || node.typeArguments?.params.length) return false;
 	const name = typeReferenceName(node);
-	return name !== null && environment.aliases.has(name) && !isInsideTypeAliasDeclaration(node);
+	const alias = name === null ? undefined : environment.aliases.get(name);
+	return (
+		alias !== undefined &&
+		(alias.typeParameters?.params.length ?? 0) === 0 &&
+		!isInsideTypeAliasDeclaration(node)
+	);
 }
 
 function shouldReportType(
@@ -81,6 +86,13 @@ function shouldReportType(
 	let current: ESTree.Node | null = node.parent;
 	while (current !== null && current.type !== "Program") {
 		if (isTypeNode(current) && classify(current) !== null) return false;
+		if (
+			current.type === "TSIndexSignature" &&
+			current.typeAnnotation !== null &&
+			classifyUnsafeDictionaryValue(current.typeAnnotation.typeAnnotation, environment) !== null
+		) {
+			return false;
+		}
 		current = current.parent;
 	}
 	return true;

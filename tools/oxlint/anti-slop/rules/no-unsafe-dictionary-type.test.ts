@@ -18,6 +18,7 @@ tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
 		"type AlsoAllowed = Record<string, Result<Data, unknown>>;",
 		"type Index<T> = Record<string, T>; type EntityIndex<T extends Entity> = Record<string, T>;",
 		"type Safe = Index<Command>; type Index<T> = Record<string, T>;",
+		"interface Index<T> { [key: string]: T } type Safe = Index<Command>;",
 		"type A = Map<string, unknown>; type B = ReadonlyMap<string, unknown>; type C = WeakMap<object, unknown>;",
 		"import { Record } from './local'; type A = Record<string, unknown>;",
 		"type Record<K, V> = { key: K; value: V }; type A = Record<string, unknown>;",
@@ -36,6 +37,10 @@ tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
 		{ code: "type A = Record<string, unknown>;", errors: [error] },
 		{ code: "type A = { [key: string]: any };", errors: [error] },
 		{ code: "type A = { [index: number]: Command; [key: string]: unknown | Command };", errors: 1 },
+		{
+			code: "interface A { [key: string]: unknown | Record<string, unknown> }",
+			errors: 1,
+		},
 		{ code: "type A = { [K in PropertyKey]: object };", errors: [error] },
 		{ code: "type A = { [K in PropertyKey]: NonNullable<unknown> };", errors: [error] },
 		{ code: "type A = { [key: string]: NonNullable<unknown> };", errors: [error] },
@@ -65,6 +70,11 @@ tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
 		{ code: "type Source = Record<string, unknown>; type A = Pick<Source, string>;", errors: 2 },
 		{ code: "type Source = Record<string, unknown>; type A = Omit<Source, never>;", errors: 2 },
 		{ code: "type Index<T> = Record<string, T>; type A = Index<unknown>;", errors: 1 },
+		{
+			code: "type Index<T = unknown> = Record<string, T>; declare const value: Index;",
+			errors: 1,
+		},
+		{ code: "interface Index<T> { [key: string]: T } type A = Index<unknown>;", errors: 1 },
 		{ code: "interface A { [key: string]: unknown }", errors: [error] },
 		{ code: "type A = Readonly<Record<string, unknown>>;", errors: 1 },
 		{ code: "type A = Record<string, Readonly<unknown>>;", errors: [error] },
@@ -76,6 +86,7 @@ tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
 			errors: 1,
 		},
 		{ code: "type A = Record<string, NonNullable<unknown>>;", errors: [error] },
+		{ code: "function Record() {} type A = Record<string, unknown>;", errors: [error] },
 		{ code: "type Escape = NonNullable<unknown>; type A = Record<string, Escape>;", errors: 1 },
 		{
 			code: "type Unsafe = Record<string, unknown>; const x: Unsafe = {}; const y: Unsafe = {};",

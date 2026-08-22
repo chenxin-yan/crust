@@ -20,6 +20,7 @@ import {
 	resolveEffectiveScope,
 } from "./agents.ts";
 import { writeSkillsFromSnapshot } from "./build.ts";
+import { isErrnoException } from "./errno.ts";
 import { SkillConflictError } from "./errors.ts";
 import {
 	getSkillStatus,
@@ -189,12 +190,6 @@ function formatSkillDocumentation(
 function isWithin(parent: string, child: string): boolean {
 	const path = relative(parent, child);
 	return path === "" || (!isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`));
-}
-
-function isErrnoException<ErrorValue>(
-	error: ErrorValue,
-): error is ErrorValue & NodeJS.ErrnoException {
-	return error instanceof Error && "code" in error;
 }
 
 function hasPackageVersion<Value>(value: Value): value is Value & { version: string } {
