@@ -9,11 +9,15 @@ const originalStderrIsTTY = process.stderr.isTTY;
 
 let stderrOutput: string;
 
+function isStringChunk(chunk: string | Uint8Array): chunk is string {
+	return typeof chunk === "string";
+}
+
 function setupMocks(): void {
 	stderrOutput = "";
 
 	process.stderr.write = (chunk: string | Uint8Array) => {
-		if (typeof chunk === "string") {
+		if (isStringChunk(chunk)) {
 			stderrOutput += chunk;
 		}
 		return true;
@@ -391,6 +395,12 @@ describe("spinner — animation", () => {
 		});
 
 		expect(stderrOutput).toContain("A");
+	});
+
+	it("rejects an empty custom frame set", () => {
+		expect(() => spinner({ message: "Empty", spinner: { frames: [], interval: 50 } })).toThrow(
+			"requires at least one frame",
+		);
 	});
 });
 

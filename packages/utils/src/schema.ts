@@ -9,9 +9,9 @@ interface StandardSchemaTypes<Input = unknown, Output = Input> {
 	readonly output: Output;
 }
 
-interface StandardSchemaOptions {
+interface StandardSchemaOptions<LibraryOptions extends object = object> {
 	/** Explicit support for additional vendor-specific parameters, if needed. */
-	readonly libraryOptions?: Record<string, unknown> | undefined;
+	readonly libraryOptions?: LibraryOptions | undefined;
 }
 
 /** The result interface if validation succeeds. */
@@ -57,7 +57,7 @@ interface StandardSchemaProps<Input = unknown, Output = Input> {
 	readonly types?: StandardSchemaTypes<Input, Output> | undefined;
 	/** Validates unknown input values. */
 	readonly validate: (
-		value: unknown,
+		value: StandardSchemaTypes["input"],
 		options?: StandardSchemaOptions,
 	) => StandardSchemaResult<Output> | Promise<StandardSchemaResult<Output>>;
 }
@@ -130,10 +130,14 @@ export interface ValidationIssue {
  * // => ""
  * ```
  */
+function isNumericPathSegment(segment: PropertyKey): segment is number {
+	return typeof segment === "number";
+}
+
 function formatPath(path: readonly PropertyKey[]): string {
 	return path
 		.map((segment, index) =>
-			typeof segment === "number"
+			isNumericPathSegment(segment)
 				? `[${segment}]`
 				: index > 0
 					? `.${String(segment)}`
@@ -154,13 +158,17 @@ function formatPath(path: readonly PropertyKey[]): string {
  * plain `PropertyKey`. Returns an empty array for a root-level issue
  * (`undefined`).
  */
+function isStandardPathSegment(
+	segment: PropertyKey | StandardSchemaPathSegment,
+): segment is StandardSchemaPathSegment {
+	return typeof segment === "object" && segment !== null && "key" in segment;
+}
+
 function normalizeStandardPath(
 	path: ReadonlyArray<PropertyKey | StandardSchemaPathSegment> | undefined,
 ): PropertyKey[] {
 	if (!path) return [];
-	return path.map((segment) =>
-		typeof segment === "object" && segment !== null && "key" in segment ? segment.key : segment,
-	);
+	return path.map((segment) => (isStandardPathSegment(segment) ? segment.key : segment));
 }
 
 // ────────────────────────────────────────────────────────────────────────────

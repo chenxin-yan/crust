@@ -63,6 +63,12 @@ export interface PackagedSkill {
 	readonly description: string;
 }
 
+function isErrnoException<ErrorValue>(
+	error: ErrorValue,
+): error is ErrorValue & NodeJS.ErrnoException {
+	return error instanceof Error && "code" in error;
+}
+
 export function readSkillFrontmatter(
 	sourceDir: string,
 ): Pick<PackagedSkill, "name" | "description"> {
@@ -71,7 +77,7 @@ export function readSkillFrontmatter(
 		content = readFileSync(join(sourceDir, "SKILL.md"), "utf8");
 	} catch (error) {
 		// ENOENT: the directory is not a skill; anything else (EACCES, EISDIR) is unexpected.
-		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+		if (!isErrnoException(error) || error.code !== "ENOENT") throw error;
 		throw new Error(`Skill source directory "${sourceDir}" is missing SKILL.md.`, { cause: error });
 	}
 	const frontmatter = probeFrontmatter(content);

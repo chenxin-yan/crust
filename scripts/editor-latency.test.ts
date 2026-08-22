@@ -23,6 +23,7 @@ describe("editor latency helpers", () => {
 	it("computes medians for odd and even sample counts", () => {
 		expect(median([3, 1, 2])).toBe(2);
 		expect(median([1, 2, 3, 4])).toBe(2.5);
+		expect(() => median([])).toThrow("at least one sample");
 	});
 
 	it("appends the probe idempotently and locates cursor positions", () => {

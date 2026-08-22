@@ -55,8 +55,9 @@ export async function captureRun<
 
 	try {
 		const [input] = args;
-		// The `as never` path/input erasure in this call loses the typed link to
-		// the selected contract, so restore it once here.
+		// The selected path and input are linked by ContractAtPath, while run's generic
+		// implementation signature cannot express that link through this wrapper.
+		// SAFETY: Path and input were constrained together by RunInputArguments above.
 		const outcome = (await app.run(path as never, input as never, {
 			stdout: (text) => {
 				stdoutLines.push(text);
@@ -169,6 +170,7 @@ export function runInteractive<App extends AnyCrust, const Path extends CommandP
 		},
 	};
 	const [input] = args;
+	// SAFETY: Path and input were constrained together by RunInputArguments above.
 	const done = withProgressSink(sink, () =>
 		withPromptIO(harness.io, () =>
 			app
@@ -188,16 +190,14 @@ export function runInteractive<App extends AnyCrust, const Path extends CommandP
 	let settled = false;
 	let failed = false;
 	let failure: unknown;
-	done.then(
-		() => {
-			settled = true;
-		},
-		(caught: unknown) => {
-			settled = true;
-			failed = true;
-			failure = caught;
-		},
-	);
+	const recordFailure = <Failure>(caught: Failure): void => {
+		settled = true;
+		failed = true;
+		failure = caught;
+	};
+	done.then(() => {
+		settled = true;
+	}, recordFailure);
 
 	return {
 		waitFor: async (pattern, timeoutMs = 5000) => {

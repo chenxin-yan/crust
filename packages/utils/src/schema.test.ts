@@ -13,7 +13,9 @@ describe("schema types", () => {
 				version: 1 as const,
 				vendor: "crust-test",
 				types: undefined as { input: string; output: number } | undefined,
-				validate: (value: unknown) => ({ value: Number(value) }),
+				validate: (value: NonNullable<StandardSchema["~standard"]["types"]>["input"]) => ({
+					value: Number(value),
+				}),
 			},
 		};
 		const compatible: StandardSchema<string, number> = schema;

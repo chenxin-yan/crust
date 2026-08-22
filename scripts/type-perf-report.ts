@@ -28,17 +28,22 @@ const metricPatterns = {
 	checkTimeSeconds: /^Check time:\s+([\d.]+)s$/m,
 } as const;
 
+function parseMetric(output: string, name: keyof typeof metricPatterns): number {
+	const value = output.match(metricPatterns[name])?.[1];
+	if (value === undefined) throw new Error(`Missing ${name} in TypeScript extended diagnostics`);
+	return Number(value);
+}
+
 export function parseExtendedDiagnostics(
 	output: string,
 	typescriptVersion: string,
 ): TypePerfMetrics {
-	const parsed: Record<string, number | string> = { typescriptVersion };
-	for (const [name, pattern] of Object.entries(metricPatterns)) {
-		const match = output.match(pattern);
-		if (!match) throw new Error(`Missing ${name} in TypeScript extended diagnostics`);
-		parsed[name] = Number(match[1]);
-	}
-	return parsed as unknown as TypePerfMetrics;
+	return {
+		typescriptVersion,
+		instantiations: parseMetric(output, "instantiations"),
+		types: parseMetric(output, "types"),
+		checkTimeSeconds: parseMetric(output, "checkTimeSeconds"),
+	};
 }
 
 const number = new Intl.NumberFormat("en-US");
@@ -51,18 +56,18 @@ const percentage = (base: number, head: number) =>
 const delta = (base: number, head: number, digits = 0) =>
 	`${signed(head - base, digits)} (${percentage(base, head)})`;
 
-const editorLatencyLabels: Record<keyof EditorLatencyMetrics, string> = {
-	coldCompletionMs: "Cold first completion",
-	completionMs: "Completion (warm, median)",
-	hoverMs: "Hover (warm, median)",
-	editCompletionMs: "Completion after edit (median)",
-};
+const editorLatencyLabels = [
+	["coldCompletionMs", "Cold first completion"],
+	["completionMs", "Completion (warm, median)"],
+	["hoverMs", "Hover (warm, median)"],
+	["editCompletionMs", "Completion after edit (median)"],
+] as const satisfies ReadonlyArray<readonly [keyof EditorLatencyMetrics, string]>;
 
 function editorLatencyRows(
 	base: EditorLatencyMetrics | null,
 	head: EditorLatencyMetrics | null,
 ): string[] {
-	return (Object.entries(editorLatencyLabels) as [keyof EditorLatencyMetrics, string][]).map(
+	return editorLatencyLabels.map(
 		([key, label]) =>
 			`| ${label} | ${base ? `${base[key].toFixed(1)}ms` : "n/a"} | ${head ? `${head[key].toFixed(1)}ms` : "n/a"} |`,
 	);
@@ -234,6 +239,58 @@ function run(command: string[], cwd: string): string {
 	return result.stdout.toString().trim();
 }
 
+function isTypePerfMetrics<Value>(value: Value): value is Value & TypePerfMetrics {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		"typescriptVersion" in value &&
+		typeof value.typescriptVersion === "string" &&
+		"instantiations" in value &&
+		typeof value.instantiations === "number" &&
+		"types" in value &&
+		typeof value.types === "number" &&
+		"checkTimeSeconds" in value &&
+		typeof value.checkTimeSeconds === "number"
+	);
+}
+
+function isEditorLatencyMetrics<Value>(value: Value): value is Value & EditorLatencyMetrics {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		"coldCompletionMs" in value &&
+		typeof value.coldCompletionMs === "number" &&
+		"completionMs" in value &&
+		typeof value.completionMs === "number" &&
+		"hoverMs" in value &&
+		typeof value.hoverMs === "number" &&
+		"editCompletionMs" in value &&
+		typeof value.editCompletionMs === "number"
+	);
+}
+
+function isTypePerfReport<Value>(value: Value): value is Value & TypePerfReport {
+	if (!isTypePerfMetrics(value) || !("scaling" in value) || !("editor" in value)) return false;
+	const scaling = value.scaling;
+	return (
+		typeof scaling === "object" &&
+		scaling !== null &&
+		"10" in scaling &&
+		(scaling[10] === null || isTypePerfMetrics(scaling[10])) &&
+		"50" in scaling &&
+		(scaling[50] === null || isTypePerfMetrics(scaling[50])) &&
+		"100" in scaling &&
+		(scaling[100] === null || isTypePerfMetrics(scaling[100])) &&
+		(value.editor === null || isEditorLatencyMetrics(value.editor))
+	);
+}
+
+function parseTypePerfReport(content: string): TypePerfReport {
+	const parsed: unknown = JSON.parse(content);
+	if (!isTypePerfReport(parsed)) throw new Error("Invalid type-performance report JSON");
+	return parsed;
+}
+
 async function measure(outputPath: string, rootDir = "."): Promise<void> {
 	const root = resolve(rootDir);
 	const tsc = join(root, "node_modules/.bin/tsc");
@@ -242,10 +299,11 @@ async function measure(outputPath: string, rootDir = "."): Promise<void> {
 		[tsc, "--noEmit", "--incremental", "false", "--extendedDiagnostics", "-p", "packages/core"],
 		root,
 	);
-	const report = parseExtendedDiagnostics(diagnostics, version) as TypePerfReport;
+	const metrics = parseExtendedDiagnostics(diagnostics, version);
+	const scaling: TypePerfReport["scaling"] = { 10: null, 50: null, 100: null };
+	let editor: EditorLatencyMetrics | null = null;
 	const fixtureRoot = mkdtempSync(join(tmpdir(), "crust-type-perf-"));
 	try {
-		report.scaling = {} as Record<ScalingSize, TypePerfMetrics | null>;
 		for (const size of scalingSizes) {
 			const fixtureDir = join(fixtureRoot, String(size));
 			generateConsumerFixture(fixtureDir, join(root, "packages/core"), size);
@@ -254,28 +312,27 @@ async function measure(outputPath: string, rootDir = "."): Promise<void> {
 					[tsc, "--noEmit", "--incremental", "false", "--extendedDiagnostics", "-p", fixtureDir],
 					root,
 				);
-				report.scaling[size] = parseExtendedDiagnostics(fixtureDiagnostics, version);
+				scaling[size] = parseExtendedDiagnostics(fixtureDiagnostics, version);
 			} catch (error) {
 				// Fixture compile failure: expected when the PR changed the public API, so
 				// head's generated fixture can't compile against base dist. Report "n/a"
 				// rather than failing a report-only job.
 				console.error(`scaling fixture (size ${size}) failed:\n${error}`);
-				report.scaling[size] = null;
 			}
 		}
 		try {
 			const editorFixtureDir = join(fixtureRoot, "editor");
 			generateConsumerFixture(editorFixtureDir, join(root, "packages/core"), 50);
-			report.editor = await measureEditorLatency(editorFixtureDir, tsc);
+			editor = await measureEditorLatency(editorFixtureDir, tsc);
 		} catch (error) {
 			// Same policy as scaling fixtures: a report-only job never fails on a
 			// fixture/LSP problem, it reports "n/a".
 			console.error(`editor latency measurement failed:\n${error}`);
-			report.editor = null;
 		}
 	} finally {
 		rmSync(fixtureRoot, { recursive: true, force: true });
 	}
+	const report: TypePerfReport = { ...metrics, scaling, editor };
 	mkdirSync(dirname(resolve(outputPath)), { recursive: true });
 	writeFileSync(resolve(outputPath), `${JSON.stringify(report, null, 2)}\n`);
 }
@@ -286,7 +343,10 @@ if (import.meta.main) {
 		if (mode === "measure" && args[0]) {
 			await measure(args[0], args[1]);
 		} else if (mode === "compare" && args.length === 2) {
-			const [base, head] = args.map((path) => JSON.parse(readFileSync(path, "utf8")));
+			const reports = args.map((path) => parseTypePerfReport(readFileSync(path, "utf8")));
+			const base = reports[0];
+			const head = reports[1];
+			if (!base || !head) throw new Error("compare requires base and head reports");
 			console.log(formatComparison(base, head));
 		} else {
 			throw new Error(

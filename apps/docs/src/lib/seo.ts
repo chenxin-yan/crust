@@ -1,13 +1,6 @@
 // Shared SEO configuration for CrustJS docs
-import type { MetaDescriptor } from "@tanstack/react-router";
 import type * as React from "react";
 
-/**
- * TanStack Router's `head()` meta array is typed as React's HTMLMetaElement
- * props, but `MetaDescriptor` is a broader union that also covers `property`,
- * `title`, etc. — all supported at runtime. This type alias + single cast in
- * `buildPageMeta` keeps the workaround in one place.
- */
 type HeadMeta = Array<React.JSX.IntrinsicElements["meta"]>;
 type HeadScript = React.JSX.IntrinsicElements["script"];
 
@@ -44,7 +37,7 @@ export function buildPageMeta({
   const resolvedTitle = siteConfig.titleTemplate(title);
   const resolvedDescription = description ?? siteConfig.defaultDescription;
   const resolvedCanonical = canonical ? absoluteUrl(canonical) : undefined;
-  const meta: Array<MetaDescriptor> = [
+  const meta: HeadMeta = [
     { title: resolvedTitle },
     { name: "description", content: resolvedDescription },
     // Open Graph
@@ -68,7 +61,7 @@ export function buildPageMeta({
     links.push({ rel: "canonical", href: resolvedCanonical });
   }
 
-  return { meta: meta as unknown as HeadMeta, links };
+  return { meta, links };
 }
 
 /** JSON-LD structured data for the site root */

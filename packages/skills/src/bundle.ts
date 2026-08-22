@@ -36,10 +36,10 @@ interface BundleFrontmatter {
  * ever stops holding.
  */
 function parseScalar(raw: string): string {
-	const doubleQuoted = /^"((?:[^"\\]|\\.)*)"/.exec(raw);
-	if (doubleQuoted) return doubleQuoted[1]!.replace(/\\(.)/g, "$1");
-	const singleQuoted = /^'((?:[^']|'')*)'/.exec(raw);
-	if (singleQuoted) return singleQuoted[1]!.replaceAll("''", "'");
+	const doubleQuoted = /^"((?:[^"\\]|\\.)*)"/.exec(raw)?.[1];
+	if (doubleQuoted !== undefined) return doubleQuoted.replace(/\\(.)/g, "$1");
+	const singleQuoted = /^'((?:[^']|'')*)'/.exec(raw)?.[1];
+	if (singleQuoted !== undefined) return singleQuoted.replaceAll("''", "'");
 	return raw.replace(/(^|\s)#.*$/, "").trim();
 }
 
@@ -59,7 +59,11 @@ export function probeFrontmatter(content: string): BundleFrontmatter {
 	for (const line of lines.slice(opening + 1, closing)) {
 		// Unindented match only — nested keys (e.g. under `metadata:`) don't count.
 		const match = /^(name|description):\s*(.*)$/.exec(line);
-		if (match) result[match[1] as keyof BundleFrontmatter] = parseScalar(match[2]!);
+		const key = match?.[1];
+		const value = match?.[2];
+		if ((key === "name" || key === "description") && value !== undefined) {
+			result[key] = parseScalar(value);
+		}
 	}
 	return result;
 }
