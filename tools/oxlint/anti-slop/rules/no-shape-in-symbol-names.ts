@@ -1,22 +1,12 @@
 import { defineRule } from "@oxlint/plugins";
-import type { ESTree, Scope, SourceCode, Variable } from "@oxlint/plugins";
+import type { ESTree, SourceCode } from "@oxlint/plugins";
+
+import { resolveVariable, type NamedNode } from "../shared/scope.ts";
 
 const FORBIDDEN_SYMBOL_NAME = /shape/iu;
 
 function containsForbiddenSymbolName(name: string): boolean {
 	return FORBIDDEN_SYMBOL_NAME.test(name);
-}
-
-type NamedNode = ESTree.Node & { readonly name: string };
-
-function resolveVariable(sourceCode: SourceCode, identifier: NamedNode): Variable | null {
-	let scope: Scope | null = sourceCode.getScope(identifier);
-	while (scope !== null) {
-		const variable = scope.set.get(identifier.name);
-		if (variable !== undefined) return variable;
-		scope = scope.upper;
-	}
-	return null;
 }
 
 function isImportedIdentifier(sourceCode: SourceCode, node: NamedNode): boolean {

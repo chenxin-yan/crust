@@ -25,8 +25,6 @@ import type {
 	UninstallSkillResult,
 } from "./types.ts";
 
-export { isValidSkillName } from "./skill-name.ts";
-
 /** @internal */
 export function groupAgentsByOutputDir(
 	agents: readonly AgentTarget[],

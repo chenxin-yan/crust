@@ -11,6 +11,7 @@ import {
 import { spinner } from "@crustjs/progress";
 import { confirm, multiselect, select } from "@crustjs/prompts";
 import { bold, dim, yellow } from "@crustjs/style";
+import { isErrnoException } from "@crustjs/utils/error";
 
 import {
 	AGENT_LABELS,
@@ -20,7 +21,6 @@ import {
 	resolveEffectiveScope,
 } from "./agents.ts";
 import { writeSkillsFromSnapshot } from "./build.ts";
-import { isErrnoException } from "./errno.ts";
 import { SkillConflictError } from "./errors.ts";
 import {
 	getSkillStatus,

@@ -3,6 +3,7 @@ import type { ESTree, SourceCode } from "@oxlint/plugins";
 
 import { lexicalTypeParameterNames } from "../shared/lexical-type-parameters.ts";
 import { parameterAnnotation, type Parameter, type ParameterOwner } from "../shared/parameters.ts";
+import { resolvesToKeyword } from "../shared/type-aliases.ts";
 
 function parameterName(parameter: Parameter, sourceCode: SourceCode): string {
 	return parameter.type === "Identifier"
@@ -24,36 +25,10 @@ export const noObjectParametersRule = defineRule({
 		},
 	},
 	createOnce(context) {
-		const aliases = new Map<string, ESTree.TSType>();
+		const aliases = new Map<string, ESTree.TSTypeAliasDeclaration>();
 
-		const resolvesToObject = (
-			type: ESTree.TSType,
-			shadowedAliases: ReadonlySet<string>,
-			visited = new Set<string>(),
-		): boolean => {
-			if (type.type === "TSObjectKeyword") return true;
-			if (type.type === "TSParenthesizedType")
-				return resolvesToObject(type.typeAnnotation, shadowedAliases, visited);
-			if (type.type === "TSUnionType") {
-				return type.types.some((member) => resolvesToObject(member, shadowedAliases, visited));
-			}
-			if (
-				type.type !== "TSTypeReference" ||
-				type.typeName.type !== "Identifier" ||
-				(type.typeArguments !== null &&
-					type.typeArguments !== undefined &&
-					type.typeArguments.params.length > 0) ||
-				visited.has(type.typeName.name) ||
-				shadowedAliases.has(type.typeName.name)
-			) {
-				return false;
-			}
-			const alias = aliases.get(type.typeName.name);
-			if (alias === undefined) return false;
-			const nextVisited = new Set(visited);
-			nextVisited.add(type.typeName.name);
-			return resolvesToObject(alias, shadowedAliases, nextVisited);
-		};
+		const resolvesToObject = (type: ESTree.TSType, shadowedAliases: ReadonlySet<string>): boolean =>
+			resolvesToKeyword(type, aliases, "TSObjectKeyword", { shadowedAliases });
 
 		const checkParameters = (node: ParameterOwner) => {
 			let shadowedAliases: ReadonlySet<string> | null = null;
@@ -81,7 +56,7 @@ export const noObjectParametersRule = defineRule({
 						declaration?.type === "TSTypeAliasDeclaration" &&
 						(declaration.typeParameters === null || declaration.typeParameters === undefined)
 					) {
-						aliases.set(declaration.id.name, declaration.typeAnnotation);
+						aliases.set(declaration.id.name, declaration);
 					}
 				}
 			},

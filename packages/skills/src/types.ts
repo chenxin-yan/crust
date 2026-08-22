@@ -1,4 +1,5 @@
 import type { CommandSection } from "@crustjs/core";
+import type { BaseValueType } from "@crustjs/utils/primitive";
 
 /** Metadata used to render a generated skill. */
 export interface SkillMeta {
@@ -66,7 +67,7 @@ export type Scope = "global" | "project";
  */
 export interface ManifestArg {
 	name: string;
-	type: "string" | "number" | "boolean";
+	type: BaseValueType;
 	description?: string;
 	required: boolean;
 	variadic: boolean;
@@ -77,7 +78,7 @@ export interface ManifestFlag {
 	name: string;
 	/** All accepted CLI spellings in documentation order — the sole source for rendered flag labels */
 	spellings: readonly string[];
-	type: "string" | "number" | "boolean";
+	type: BaseValueType;
 	description?: string;
 	required: boolean;
 	multiple: boolean;

@@ -16,6 +16,24 @@
 		"unicorn/no-useless-spread": "off",
 
 		"eslint/no-underscore-dangle": "off",
+		"eslint/no-restricted-properties": [
+			"error",
+			{
+				"object": "Reflect",
+				"property": "apply",
+				"message": "Replace `Reflect.apply` with a typed function call. Model dynamic dispatch behind a named interface."
+			},
+			{
+				"object": "Reflect",
+				"property": "get",
+				"message": "Replace `Reflect.get` with typed property access. Parse dynamic input into a named domain type before reading it."
+			},
+			{
+				"object": "Reflect",
+				"property": "set",
+				"message": "Replace `Reflect.set` with typed property assignment. Parse dynamic input into a named domain type before writing it."
+			}
+		],
 		"unicorn/no-array-sort": "off",
 		"unicorn/consistent-function-scoping": "off",
 		"typescript/no-unsafe-type-assertion": "off",
@@ -44,9 +62,6 @@
 		"anti-slop/no-known-value-widening": "error",
 		"anti-slop/no-module-mocking": "error",
 		"anti-slop/no-object-parameters": "error",
-		"anti-slop/no-reflect-apply": "error",
-		"anti-slop/no-reflect-get": "error",
-		"anti-slop/no-reflect-set": "error",
 		"anti-slop/no-runtime-typeof": ["error", { "allowInTypeGuards": true }],
 		"anti-slop/no-shape-in-symbol-names": "error",
 		"anti-slop/no-unknown-parameters": ["error", { "allowInBoundaryFunctions": true }],

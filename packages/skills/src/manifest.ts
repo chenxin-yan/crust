@@ -10,6 +10,7 @@ import {
 	type DocumentationArg,
 	type DocumentationFlag,
 } from "@crustjs/core/tooling";
+import type { BaseValueType } from "@crustjs/utils/primitive";
 
 import type { ManifestArg, ManifestFlag, ManifestNode } from "./types.ts";
 
@@ -64,7 +65,7 @@ function normalizeFlag(flag: DocumentationFlag): ManifestFlag {
 	if (flag.default !== undefined) result.default = serializeDefault(flag.default);
 	return result;
 }
-function manifestType(type: string | undefined): "string" | "number" | "boolean" {
+function manifestType(type: string | undefined): BaseValueType {
 	return type === "number" || type === "boolean" ? type : "string";
 }
 function serializeDefault<Value>(value: Value): string {

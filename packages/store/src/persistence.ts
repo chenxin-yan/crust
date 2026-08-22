@@ -5,6 +5,7 @@
 import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
+import { isErrnoException } from "@crustjs/utils/error";
 import type { JsonValue } from "@crustjs/utils/json";
 
 import { CrustStoreError } from "./errors.ts";
@@ -236,6 +237,5 @@ export async function deleteJson(filePath: string): Promise<void> {
  * Checks whether a thrown error is a filesystem "file not found" error.
  */
 function isEnoent(cause: unknown): boolean {
-	// SAFETY: caught filesystem errors expose `code`; the optional probe is only compared with ENOENT.
-	return (cause as NodeJS.ErrnoException | null)?.code === "ENOENT";
+	return isErrnoException(cause) && cause.code === "ENOENT";
 }

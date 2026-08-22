@@ -8,6 +8,7 @@ import { text } from "node:stream/consumers";
 
 import { BUILD_OUT_DIR_ENV, type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
 import { yellow } from "@crustjs/style";
+import { isErrnoException } from "@crustjs/utils/error";
 import type { JsonValue } from "@crustjs/utils/json";
 import { which } from "@crustjs/utils/process";
 
@@ -520,7 +521,7 @@ export async function buildEntrypoint(
 		try {
 			serialized = await readFile(snapshotPath, "utf8");
 		} catch (error) {
-			if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+			if (isErrnoException(error) && error.code === "ENOENT") {
 				throw new Error(
 					`Entry exited without producing a Command Snapshot.\n  Ensure ${absoluteEntry} calls await app.execute() and uses a compatible @crustjs/core version.`,
 					{ cause: error },

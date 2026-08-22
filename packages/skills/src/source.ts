@@ -2,10 +2,10 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { isErrnoException } from "@crustjs/utils/error";
 import { resolveSourceDir } from "@crustjs/utils/source";
 
 import { probeFrontmatter } from "./bundle.ts";
-import { isErrnoException } from "./errno.ts";
 
 export class SkillSourceUnavailableError extends Error {
 	override readonly name = "SkillSourceUnavailableError";
