@@ -10,6 +10,10 @@ const VERSION: ExtensionId = defineExtensionId("crust:version");
 
 export type VersionValue = string | (() => string);
 
+function isVersionResolver(value: VersionValue): value is () => string {
+	return typeof value === "function";
+}
+
 export interface VersionOptions {
 	/**
 	 * Output format. `"plain"` prints the bare version (script-friendly:
@@ -43,7 +47,7 @@ function versionFactory(
 				// Root invocation with --version only
 				if (context.commandPath.length !== 1 || context.flags.version !== true) return;
 
-				const resolvedVersion = typeof versionValue === "function" ? versionValue() : versionValue;
+				const resolvedVersion = isVersionResolver(versionValue) ? versionValue() : versionValue;
 				const line =
 					format === "plain"
 						? resolvedVersion

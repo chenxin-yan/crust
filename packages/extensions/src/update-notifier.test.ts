@@ -134,7 +134,7 @@ describe("fetchLatestVersion", () => {
 	it("constructs correct URL with encoded package name", async () => {
 		let capturedUrl = "";
 		mockFetch((input) => {
-			capturedUrl = typeof input === "string" ? input : input.toString();
+			capturedUrl = input.toString();
 			return Promise.resolve(
 				new Response(JSON.stringify({ "dist-tags": { latest: "1.0.0" } }), {
 					status: 200,
@@ -149,7 +149,7 @@ describe("fetchLatestVersion", () => {
 	it("strips trailing slashes from registry URL", async () => {
 		let capturedUrl = "";
 		mockFetch((input) => {
-			capturedUrl = typeof input === "string" ? input : input.toString();
+			capturedUrl = input.toString();
 			return Promise.resolve(
 				new Response(JSON.stringify({ "dist-tags": { latest: "1.0.0" } }), {
 					status: 200,
@@ -1085,7 +1085,7 @@ describe("updateNotifier post-run hook", () => {
 			const pkgName = uniquePackageName("explicit-pkg");
 			let capturedUrl = "";
 			mockFetch((input) => {
-				capturedUrl = typeof input === "string" ? input : input.toString();
+				capturedUrl = input.toString();
 				return Promise.resolve(
 					new Response(JSON.stringify({ "dist-tags": { latest: "2.0.0" } }), {
 						status: 200,
@@ -1110,7 +1110,7 @@ describe("updateNotifier post-run hook", () => {
 			const pkgName = uniquePackageName("custom-registry");
 			let capturedUrl = "";
 			mockFetch((input) => {
-				capturedUrl = typeof input === "string" ? input : input.toString();
+				capturedUrl = input.toString();
 				return Promise.resolve(
 					new Response(JSON.stringify({ "dist-tags": { latest: "2.0.0" } }), {
 						status: 200,

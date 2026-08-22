@@ -166,9 +166,8 @@ export const DENO_TARGET_INFO = {
  * @throws {Error} If the target is not recognized
  */
 export function resolveTarget(input: string): BunTarget {
-	if ((SUPPORTED_TARGETS as readonly string[]).includes(input)) {
-		return input as BunTarget;
-	}
+	const exact = SUPPORTED_TARGETS.find((target) => target === input);
+	if (exact) return exact;
 
 	const canonical = SUPPORTED_TARGETS.find((target) => TARGET_INFO[target].alias === input);
 	const hint = canonical ? ` Did you mean "${canonical}"?` : "";
@@ -197,9 +196,8 @@ export function resolveTargets(targetFlags: string[] | undefined): BunTarget[] {
 }
 
 export function resolveDenoTarget(input: string): DenoTarget {
-	if ((SUPPORTED_DENO_TARGETS as readonly string[]).includes(input)) {
-		return input as DenoTarget;
-	}
+	const exact = SUPPORTED_DENO_TARGETS.find((target) => target === input);
+	if (exact) return exact;
 
 	const canonical = SUPPORTED_DENO_TARGETS.find(
 		(target) => DENO_TARGET_INFO[target].alias === input,
@@ -232,6 +230,17 @@ export function getDenoBinaryFilename(baseName: string, target: DenoTarget): str
 	return `${baseName}-${target}${ext}`;
 }
 
+type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+
+function hasStringName(value: JsonValue): value is { name: string } {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		!Array.isArray(value) &&
+		typeof value.name === "string"
+	);
+}
+
 /** Resolve the base binary name from an explicit name, package name, or entry filename. */
 export function resolveBaseName(name: string | undefined, entry: string, cwd: string): string {
 	if (name) return name;
@@ -239,8 +248,8 @@ export function resolveBaseName(name: string | undefined, entry: string, cwd: st
 	const pkgPath = join(cwd, "package.json");
 	if (existsSync(pkgPath)) {
 		try {
-			const pkgJson = JSON.parse(readFileSync(pkgPath, "utf-8")) as { name?: string };
-			if (typeof pkgJson.name === "string") return pkgJson.name.replace(/^@[^/]+\//, "");
+			const pkgJson: JsonValue = JSON.parse(readFileSync(pkgPath, "utf-8"));
+			if (hasStringName(pkgJson)) return pkgJson.name.replace(/^@[^/]+\//, "");
 		} catch {
 			// Ignore parse errors, fall through to entry filename
 		}
@@ -255,7 +264,7 @@ function toBunEnvFileArgs(envFiles: readonly string[]): string[] {
 
 export type BuildRunner = {
 	command: string;
-	env: Record<string, string | undefined>;
+	env: NodeJS.ProcessEnv;
 };
 
 /**
@@ -383,7 +392,7 @@ async function runBuildProcess(
 	outfilePath: string,
 ): Promise<void> {
 	const proc = spawn(runner.command, args, {
-		env: runner.env as NodeJS.ProcessEnv,
+		env: runner.env,
 		cwd: process.cwd(),
 		stdio: ["ignore", "pipe", "pipe"],
 	});
@@ -512,7 +521,7 @@ export async function buildEntrypoint(
 		try {
 			serialized = await readFile(snapshotPath, "utf8");
 		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+			if (error instanceof Error && "code" in error && error.code === "ENOENT") {
 				throw new Error(
 					`Entry exited without producing a Command Snapshot.\n  Ensure ${absoluteEntry} calls await app.execute() and uses a compatible @crustjs/core version.`,
 					{ cause: error },
@@ -521,6 +530,7 @@ export async function buildEntrypoint(
 			throw error;
 		}
 		try {
+			// SAFETY: the paired core snapshot writer serializes a prepared CommandSnapshot to this private path.
 			return JSON.parse(serialized) as CommandSnapshot;
 		} catch (error) {
 			throw new Error(
