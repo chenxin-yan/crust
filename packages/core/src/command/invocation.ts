@@ -7,7 +7,6 @@ import {
 	finishInvocation,
 	type Extension,
 	type ExtensionContext,
-	type ExtensionSectionContribution,
 	type InvocationOutcome,
 } from "../api/extension.ts";
 import { CrustError, type CaughtError } from "../errors.ts";
@@ -182,8 +181,10 @@ function invalidSections({ subject, name }: SectionOwner): CrustError {
 	);
 }
 
-function hasId<T>(value: T): value is T & { id?: T } {
-	return typeof value === "object" && value !== null && "id" in value;
+function hasId<T>(value: T): value is T & { readonly id?: unknown } {
+	return (
+		((typeof value === "object" && value !== null) || typeof value === "function") && "id" in value
+	);
 }
 
 function isString<T>(value: T): value is T & string {

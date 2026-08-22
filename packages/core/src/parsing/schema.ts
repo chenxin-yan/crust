@@ -7,36 +7,11 @@ import {
 
 import type { CommandNode } from "../command/node.ts";
 import { CrustError } from "../errors.ts";
-import type {
-	ArgsDef,
-	FlagsDef,
-	ParseResult,
-	ParsedArgValue,
-	ParsedFlagValue,
-	RawParsedArgs,
-	RawParsedFlags,
-	ValidatedInput,
-} from "../types.ts";
+import type { ArgsDef, FlagsDef, ParseResult, ValidatedInput } from "../types.ts";
 
-type SchemaValue = InferOutput<StandardSchema>;
-class ParsedArgsBuffer {
-	[name: string]: ParsedArgValue | SchemaValue;
-}
-class ParsedFlagsBuffer {
-	[name: string]: ParsedFlagValue | SchemaValue;
-}
-
-function copyParsedArgs<A extends ArgsDef>(value: RawParsedArgs<A>): ParsedArgsBuffer {
-	return Object.assign(new ParsedArgsBuffer(), value);
-}
-
-function copyParsedFlags<F extends FlagsDef>(value: RawParsedFlags<F>): ParsedFlagsBuffer {
-	return Object.assign(new ParsedFlagsBuffer(), value);
-}
-
-async function runSchema<S extends StandardSchema>(
+async function runSchema<S extends StandardSchema, Raw>(
 	schema: S,
-	raw: ParsedArgValue | ParsedFlagValue | InferOutput<StandardSchema>,
+	raw: Raw,
 	path: readonly PropertyKey[],
 	issues: ValidationIssue[],
 ): Promise<{ readonly ok: false } | { readonly ok: true; readonly value: InferOutput<S> }> {
@@ -66,19 +41,19 @@ export async function applySchemas<A extends ArgsDef = ArgsDef, F extends FlagsD
 	parsed: ParseResult<A, F>,
 ): Promise<ValidatedInput<A, F>> {
 	const issues: ValidationIssue[] = [];
-	const args = copyParsedArgs(parsed.args);
-	const flags = copyParsedFlags(parsed.flags);
+	const args = new Map<string, unknown>(Object.entries(parsed.args));
+	const flags = new Map<string, unknown>(Object.entries(parsed.flags));
 
 	for (const def of node.args ?? []) {
 		if (def.schema === undefined) continue;
-		const result = await runSchema(def.schema, args[def.name], ["args", def.name], issues);
-		if (result.ok) args[def.name] = result.value;
+		const result = await runSchema(def.schema, args.get(def.name), ["args", def.name], issues);
+		if (result.ok) args.set(def.name, result.value);
 	}
 
 	for (const [name, def] of Object.entries(node.effectiveFlags)) {
 		if (def.schema === undefined) continue;
-		const result = await runSchema(def.schema, flags[name], ["flags", name], issues);
-		if (result.ok) flags[name] = result.value;
+		const result = await runSchema(def.schema, flags.get(name), ["flags", name], issues);
+		if (result.ok) flags.set(name, result.value);
 	}
 
 	if (issues.length > 0) {
@@ -87,5 +62,5 @@ export async function applySchemas<A extends ArgsDef = ArgsDef, F extends FlagsD
 	}
 
 	// SAFETY: schema-backed keys were replaced by schema outputs and required presence was validated.
-	return { args, flags } as never;
+	return { args: Object.fromEntries(args), flags: Object.fromEntries(flags) } as never;
 }

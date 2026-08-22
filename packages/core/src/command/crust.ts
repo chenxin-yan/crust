@@ -675,7 +675,7 @@ function dedupeExtensions(extensions: readonly Extension[]): Extension[] {
 	return extensions.filter((e, i) => extensions.findLastIndex((x) => x.id === e.id) === i);
 }
 
-type RunInputValue = string | number | boolean | URL | JsonValue | readonly RunInputValue[];
+type RunInputValue = URL | JsonValue | readonly RunInputValue[];
 
 interface RunInputPayload {
 	readonly args?: Readonly<Record<string, RunInputValue>>;
@@ -1227,7 +1227,9 @@ export class Crust<
 		CollisionSpellings<CollisionSp["extension"], CollisionSp["tree"] | DefinitionTreeSpellings<Ds>>,
 		Result
 	> {
-		let result: Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result> = this;
+		let result = this._clone<Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result>>(
+			{},
+		);
 		for (const definition of definitions) {
 			result = result._addDefinition(definition);
 		}

@@ -1,5 +1,6 @@
-// These structural types mirror @standard-schema/spec v1.1.0 per the
-// specification's recommendation that implementers copy the protocol types.
+// This structural consumer subset mirrors @standard-schema/spec v1.1.0.
+// Validation options are omitted because Crust never passes them; requiring
+// their vendor-specific shape would reject otherwise compatible schemas.
 
 /** The Standard Typed types interface. */
 interface StandardSchemaTypes<Input = unknown, Output = Input> {
@@ -7,11 +8,6 @@ interface StandardSchemaTypes<Input = unknown, Output = Input> {
 	readonly input: Input;
 	/** The output type of the schema. */
 	readonly output: Output;
-}
-
-interface StandardSchemaOptions<LibraryOptions extends object = object> {
-	/** Explicit support for additional vendor-specific parameters, if needed. */
-	readonly libraryOptions?: LibraryOptions | undefined;
 }
 
 /** The result interface if validation succeeds. */
@@ -58,7 +54,6 @@ interface StandardSchemaProps<Input = unknown, Output = Input> {
 	/** Validates unknown input values. */
 	readonly validate: (
 		value: StandardSchemaTypes["input"],
-		options?: StandardSchemaOptions,
 	) => StandardSchemaResult<Output> | Promise<StandardSchemaResult<Output>>;
 }
 
