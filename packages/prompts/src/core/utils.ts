@@ -120,6 +120,11 @@ export function calculateScrollOffset(
 	return scrollOffset;
 }
 
+interface CursorPosition {
+	readonly cursor: number;
+	readonly scrollOffset: number;
+}
+
 /** @internal Move a list cursor with wrapping and keep it visible. */
 export function moveCursor(
 	cursor: number,
@@ -127,7 +132,7 @@ export function moveCursor(
 	delta: -1 | 1,
 	scrollOffset: number,
 	maxVisible: number,
-): { cursor: number; scrollOffset: number } {
+): CursorPosition {
 	const nextCursor =
 		delta === -1
 			? cursor <= 0
@@ -197,11 +202,14 @@ export interface NormalizedChoice<T> {
  * // => [{ label: "HTTP", value: 80 }]
  * ```
  */
-export function normalizeChoices<T>(choices: readonly Choice<T>[]): NormalizedChoice<T>[] {
+function isStringChoice(choice: Choice<unknown>): choice is string {
+	return typeof choice === "string";
+}
+
+export function normalizeChoices<T>(choices: readonly Choice<T>[]): NormalizedChoice<T>[];
+export function normalizeChoices(choices: readonly Choice<unknown>[]): NormalizedChoice<unknown>[] {
 	return choices.map((choice) => {
-		if (typeof choice === "string") {
-			return { label: choice, value: choice as T };
-		}
+		if (isStringChoice(choice)) return { label: choice, value: choice };
 		return choice;
 	});
 }

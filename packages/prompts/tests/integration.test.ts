@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 // Integration tests — exercise @crustjs/prompts through its public barrel
 // ────────────────────────────────────────────────────────────────────────────
 
-import { fuzzyFilter } from "../src/index.ts";
+import { createPrompts, fuzzyFilter } from "../src/index.ts";
 
 describe("fuzzy matching integration", () => {
 	it("fuzzyFilter returns sorted results", () => {
@@ -133,8 +133,14 @@ describe("type exports", () => {
 		// Factory types resolve, and bound prompts preserve the bare-export
 		// overloads: schema-aware input infers the schema output type.
 		const _createOpts: CreatePromptsOptions = { theme: {} };
-		const p: PromptsInstance = null as unknown as PromptsInstance;
-		const numberSchema = null as unknown as StandardSchema<unknown, number>;
+		const p: PromptsInstance = createPrompts();
+		const numberSchema: StandardSchema<unknown, number> = {
+			"~standard": {
+				version: 1,
+				vendor: "test",
+				validate: () => ({ value: 1 }),
+			},
+		};
 		const assertInput = (): Promise<number> => p.input({ message: "m", schema: numberSchema });
 		const assertInputPlain = (): Promise<string> => p.input({ message: "m" });
 		void assertInput;

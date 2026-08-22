@@ -34,8 +34,12 @@ export type Key = NamedKey | `ctrl+${string}` | (string & {});
  * printable characters. Anything else throws — silently typing a misspelled
  * key name (e.g. `"pageup"`) into the prompt would corrupt the test input.
  */
+function isNamedKey(key: Key): key is NamedKey {
+	return key in namedKeys;
+}
+
 export function encodeKey(key: Key): string {
-	if (key in namedKeys) return namedKeys[key as NamedKey];
+	if (isNamedKey(key)) return namedKeys[key];
 
 	const ctrl = /^ctrl\+([a-z])$/i.exec(key);
 	if (ctrl?.[1]) return String.fromCharCode(ctrl[1].toUpperCase().charCodeAt(0) & 0x1f);
@@ -122,31 +126,38 @@ export interface PromptTestIO {
 	output(): string;
 }
 
+class TestInput extends PassThrough {
+	readonly isTTY: boolean;
+	isRaw = false;
+
+	constructor(isTTY: boolean) {
+		super();
+		this.isTTY = isTTY;
+	}
+
+	setRawMode(mode: boolean): this {
+		this.isRaw = mode;
+		return this;
+	}
+}
+
 /** Create fake TTY streams for testing prompts or applications that render prompts. */
 export function createPromptIO({ isTTY = true }: { isTTY?: boolean } = {}): PromptTestIO {
-	const input = new PassThrough() as PassThrough & {
-		isTTY: boolean;
-		isRaw: boolean;
-		setRawMode: (mode: boolean) => PassThrough;
-	};
-	input.isTTY = isTTY;
-	input.isRaw = false;
-	input.setRawMode = (mode) => {
-		input.isRaw = mode;
-		return input;
-	};
+	const input = new TestInput(isTTY);
 
 	const terminal = new FakeTerminal();
 	let transcript = "";
-	const output = new Writable({
-		write(chunk, _encoding, callback) {
-			const text = chunk.toString();
-			transcript += text;
-			terminal.write(text);
-			callback();
-		},
-	}) as Writable & { columns: number };
-	output.columns = 80;
+	const output = Object.assign(
+		new Writable({
+			write(chunk, _encoding, callback) {
+				const text = chunk.toString();
+				transcript += text;
+				terminal.write(text);
+				callback();
+			},
+		}),
+		{ columns: 80 },
+	);
 
 	return {
 		io: { input, output },

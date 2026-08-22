@@ -21,7 +21,7 @@ import type { PartialPromptTheme, PromptTheme } from "./types.ts";
 export type PromptInput = Readable & {
 	readonly isTTY?: boolean;
 	readonly isRaw?: boolean;
-	setRawMode?: (mode: boolean) => unknown;
+	setRawMode?: (mode: boolean) => void;
 };
 
 export type PromptOutput = Writable & {
@@ -49,7 +49,7 @@ function ambientTerminalWritable(): PromptOutput | undefined {
 	return new Writable({
 		decodeStrings: false,
 		write(chunk, _encoding, callback) {
-			pending += typeof chunk === "string" ? chunk : chunk.toString();
+			pending += chunk.toString();
 			let newline = pending.indexOf("\n");
 			while (newline !== -1) {
 				io.stderr(pending.slice(0, newline));

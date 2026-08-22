@@ -72,8 +72,10 @@ export function createPrompts(options: CreatePromptsOptions = {}): PromptsInstan
 	});
 	return {
 		theme: { ...defaultTheme, ...overrides },
+		// SAFETY: adding an optional theme preserves every input overload's options and return type.
 		input: ((opts?: InputOptions<unknown>, io?: PromptIO) =>
 			input(themed(opts ?? {}) as never, io)) as typeof input,
+		// SAFETY: adding an optional theme preserves every password overload's options and return type.
 		password: ((opts?: PasswordOptions<unknown>, io?: PromptIO) =>
 			password(themed(opts ?? {}) as never, io)) as typeof password,
 		confirm: (opts: ConfirmOptions, io?: PromptIO) => confirm(themed(opts), io),
