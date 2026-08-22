@@ -67,6 +67,6 @@ function normalizeFlag(flag: DocumentationFlag): ManifestFlag {
 function manifestType(type: string | undefined): "string" | "number" | "boolean" {
 	return type === "number" || type === "boolean" ? type : "string";
 }
-function serializeDefault(value: unknown): string {
+function serializeDefault<Value>(value: Value): string {
 	return Array.isArray(value) ? JSON.stringify(value) : String(value);
 }

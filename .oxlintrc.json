@@ -5,6 +5,7 @@
 		"reportUnusedDisableDirectives": "deny"
 	},
 	"plugins": ["unicorn", "typescript", "oxc", "import", "promise", "node"],
+	"jsPlugins": [{ "name": "anti-slop", "specifier": "./tools/oxlint/anti-slop/index.ts" }],
 	"categories": {
 		"correctness": "error",
 		"suspicious": "error"
@@ -36,7 +37,23 @@
 			{ "considerDefaultExhaustiveForUnions": true }
 		],
 
-		"promise/always-return": "off"
+		"promise/always-return": "off",
+
+		"anti-slop/no-chained-type-assertions": "error",
+		"anti-slop/no-conditional-empty-object-spread": "error",
+		"anti-slop/no-known-value-widening": "error",
+		"anti-slop/no-module-mocking": "error",
+		"anti-slop/no-object-parameters": "error",
+		"anti-slop/no-reflect-apply": "error",
+		"anti-slop/no-reflect-get": "error",
+		"anti-slop/no-runtime-typeof": ["error", { "allowInTypeGuards": true }],
+		"anti-slop/no-shape-in-symbol-names": "error",
+		"anti-slop/no-unknown-parameters": "error",
+		"anti-slop/no-unknown-returns": "error",
+		"anti-slop/no-unknown-type-aliases": "error",
+		"anti-slop/no-unsafe-dictionary-type": "error",
+		"anti-slop/no-widen-then-assert": "error",
+		"anti-slop/require-safety-comment-for-type-assertion": "error"
 	},
 	"ignorePatterns": [
 		"**/node_modules/",
@@ -45,7 +62,8 @@
 		".changeset/",
 		"**/CHANGELOG.md",
 		".pi/",
-		".worktrees/"
+		".worktrees/",
+		"tools/oxlint/anti-slop/"
 	],
 	"overrides": [
 		{
@@ -61,7 +79,8 @@
 				"eslint/no-new": "off",
 				"eslint/no-shadow": "off",
 				"typescript/unbound-method": "off",
-				"typescript/await-thenable": "off"
+				"typescript/await-thenable": "off",
+				"anti-slop/require-safety-comment-for-type-assertion": "off"
 			}
 		}
 	]

@@ -2,6 +2,7 @@
 // @crustjs/store — Public type contracts
 // ────────────────────────────────────────────────────────────────────────────
 
+import type { JsonValue } from "@crustjs/utils/json";
 import type { BaseValueType, ResolvePrimitive } from "@crustjs/utils/primitive";
 import type { InferOutput, StandardSchema } from "@crustjs/utils/schema";
 
@@ -33,10 +34,8 @@ interface FieldDefBase<V> {
 	 * - `void` (or `Promise<void>`) — validation-only; the input value is
 	 *   persisted as-is. This is the contract for hand-rolled validators.
 	 * - `{ value }` (or `Promise<{ value }>`) — the schema (or transform)
-	 *   produced an output value (typed as `unknown` because schema
-	 *   transforms may emit a value of a different runtime type than
-	 *   `V`; the read-stability guard enforces shape correctness at
-	 *   write time). On `write` / `update` / `patch`, the transformed
+	 *   produced a JSON-compatible output value. On `write` / `update` /
+	 *   `patch`, the transformed
 	 *   value replaces the input before persistence and is re-validated
 	 *   once to catch read-unstable transforms (cross-type transforms
 	 *   whose output would fail the schema on the next read). On `read`,
@@ -47,7 +46,9 @@ interface FieldDefBase<V> {
 	 *
 	 * @param value - The field value to validate.
 	 */
-	validate?: (value: V) => void | Promise<void> | { value: unknown } | Promise<{ value: unknown }>;
+	validate?: (
+		value: V,
+	) => void | Promise<void> | { value: JsonValue } | Promise<{ value: JsonValue }>;
 }
 
 // ── Scalar fields ─────────────────────────────────────────────────────────
@@ -111,7 +112,7 @@ interface BooleanArrayFieldDef extends ArrayFieldBase<boolean[]> {
 /** A field whose Standard Schema exclusively owns its value semantics. */
 interface SchemaFieldDef {
 	/** Standard Schema that owns validation, transformation, defaults, and optionality. */
-	schema: StandardSchema;
+	schema: StandardSchema<unknown, JsonValue | undefined>;
 	/** Human-readable description for documentation and tooling. */
 	description?: string;
 	/** Optional primitive metadata for tooling; the schema still owns coercion. */
@@ -137,14 +138,14 @@ interface SchemaFieldDef {
  * } satisfies FieldsDef;
  * ```
  */
-interface RawScalarFieldDef extends ScalarFieldBase<unknown> {
+interface RawScalarFieldDef extends ScalarFieldBase<JsonValue> {
 	type?: never;
-	default?: unknown;
+	default?: JsonValue;
 }
 
-interface RawArrayFieldDef extends ArrayFieldBase<unknown[]> {
+interface RawArrayFieldDef extends ArrayFieldBase<JsonValue[]> {
 	type?: never;
-	default?: readonly unknown[];
+	default?: readonly JsonValue[];
 }
 
 export type FieldDef =
@@ -160,6 +161,9 @@ export type FieldDef =
 
 /** Record mapping field names to their definitions. */
 export type FieldsDef = Record<string, FieldDef>;
+
+/** The store's in-memory JSON document keyed by field name. */
+export type StoreDocument = Record<string, JsonValue | undefined>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // InferStoreConfig — Type inference from field definitions

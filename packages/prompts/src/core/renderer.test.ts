@@ -94,9 +94,7 @@ describe("runPrompt", () => {
 
 		// Mock stderr to capture output
 		process.stderr.write = (chunk: string | Uint8Array) => {
-			if (typeof chunk === "string") {
-				stderrOutput += chunk;
-			}
+			stderrOutput += chunk.toString();
 			return true;
 		};
 

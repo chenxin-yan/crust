@@ -191,17 +191,32 @@ function isWithin(parent: string, child: string): boolean {
 	return path === "" || (!isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`));
 }
 
+function isErrnoException<ErrorValue>(
+	error: ErrorValue,
+): error is ErrorValue & NodeJS.ErrnoException {
+	return error instanceof Error && "code" in error;
+}
+
+function hasPackageVersion<Value>(value: Value): value is Value & { version: string } {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		"version" in value &&
+		typeof value.version === "string"
+	);
+}
+
 async function readPackageVersion(): Promise<string | undefined> {
 	const path = resolve(process.cwd(), "package.json");
 	let content: string;
 	try {
 		content = await readFile(path, "utf8");
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+		if (isErrnoException(error) && error.code === "ENOENT") return undefined;
 		throw error;
 	}
-	const { version } = JSON.parse(content) as Record<string, unknown>;
-	return typeof version === "string" && version.length > 0 ? version : undefined;
+	const manifest: unknown = JSON.parse(content);
+	return hasPackageVersion(manifest) && manifest.version.length > 0 ? manifest.version : undefined;
 }
 
 async function buildSkills(options: SkillOptions, context: ExtensionBuildContext): Promise<void> {

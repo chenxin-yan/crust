@@ -151,8 +151,9 @@ const table = {
 	yellowgreen: [154, 205, 50],
 } as const;
 
-export const namedColorValues: Readonly<Record<NamedColor, readonly [number, number, number]>> =
-	table;
+export const namedColorValues: typeof table = table satisfies Readonly<
+	Record<NamedColor, readonly [number, number, number]>
+>;
 
 /**
  * The 148 CSS named colors recognized by the portable color parser.

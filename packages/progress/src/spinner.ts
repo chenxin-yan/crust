@@ -20,7 +20,7 @@ interface SpinnerFrameSet {
 	readonly interval: number;
 }
 
-const BUILTIN_SPINNERS: Record<"dots" | "line" | "arc" | "bounce", SpinnerFrameSet> = {
+const BUILTIN_SPINNERS = {
 	dots: {
 		frames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
 		interval: 80,
@@ -37,7 +37,7 @@ const BUILTIN_SPINNERS: Record<"dots" | "line" | "arc" | "bounce", SpinnerFrameS
 		frames: ["⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈"],
 		interval: 120,
 	},
-};
+} satisfies Record<"dots" | "line" | "arc" | "bounce", SpinnerFrameSet>;
 
 const SUCCESS_SYMBOL = "✓";
 const ERROR_SYMBOL = "✗";
@@ -111,14 +111,26 @@ export interface SpinnerOptions<T> extends SpinnerHandleOptions {
 	readonly task: (controller: Pick<SpinnerHandle, "updateMessage">) => Promise<T>;
 }
 
+function isBuiltinSpinner(spinnerType: SpinnerType): spinnerType is keyof typeof BUILTIN_SPINNERS {
+	return typeof spinnerType === "string";
+}
+
 function resolveSpinner(spinnerType: SpinnerType | undefined): SpinnerFrameSet {
 	if (spinnerType === undefined) {
 		return BUILTIN_SPINNERS.dots;
 	}
-	if (typeof spinnerType === "string") {
+	if (isBuiltinSpinner(spinnerType)) {
 		return BUILTIN_SPINNERS[spinnerType];
 	}
+	if (spinnerType.frames.length === 0)
+		throw new Error("A custom spinner requires at least one frame");
 	return spinnerType;
+}
+
+function frameAt(frames: readonly string[], index: number): string {
+	const frame = frames[index];
+	if (frame === undefined) throw new Error("Spinner frame index is out of bounds");
+	return frame;
 }
 
 function renderFrame(frame: string, message: string, theme: ProgressTheme): string {
@@ -198,6 +210,7 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 			// TODO: drop cast once https://github.com/oven-sh/bun/issues/40003 is fixed.
 			// bun-types 1.4.0's Process override (memoryPressure) shadows the generic
 			// EventEmitter removeListener overload, so cast back to the base type.
+			// SAFETY: Node's Process implements EventEmitter; only Bun's declaration shadows this overload.
 			(process as NodeJS.EventEmitter).removeListener("SIGINT", sigintHandler);
 			sigintHandler = undefined;
 		}
@@ -210,11 +223,11 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 			if (!isInteractive) return;
 
 			sink.write(HIDE_CURSOR);
-			sink.write(renderFrame(frames[0] as string, currentMessage, theme));
+			sink.write(renderFrame(frameAt(frames, 0), currentMessage, theme));
 
 			timerId = setInterval(() => {
 				frameIndex = (frameIndex + 1) % frames.length;
-				sink.write(renderFrame(frames[frameIndex] as string, currentMessage, theme));
+				sink.write(renderFrame(frameAt(frames, frameIndex), currentMessage, theme));
 			}, interval);
 
 			if (sigint === "exit") {
@@ -239,7 +252,7 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 			if (finished) return;
 			currentMessage = message;
 			if (started && isInteractive) {
-				sink.write(renderFrame(frames[frameIndex] as string, currentMessage, theme));
+				sink.write(renderFrame(frameAt(frames, frameIndex), currentMessage, theme));
 			}
 		},
 

@@ -34,13 +34,13 @@ beforeEach(() => {
 	originalExitCode = process.exitCode;
 
 	console.log = (...args: unknown[]) => {
-		stdoutChunks.push(args.map((a) => (typeof a === "string" ? a : String(a))).join(" "));
+		stdoutChunks.push(args.map(String).join(" "));
 	};
 	console.error = (...args: unknown[]) => {
-		stderrChunks.push(args.map((a) => (typeof a === "string" ? a : String(a))).join(" "));
+		stderrChunks.push(args.map(String).join(" "));
 	};
 	console.warn = (...args: unknown[]) => {
-		stderrChunks.push(args.map((a) => (typeof a === "string" ? a : String(a))).join(" "));
+		stderrChunks.push(args.map(String).join(" "));
 	};
 });
 

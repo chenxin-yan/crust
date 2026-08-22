@@ -302,20 +302,22 @@ export type ValidateExtensionFlags<
 // ────────────────────────────────────────────────────────────────────────────
 
 // `0 extends 1 & T` detects `any`: widened definitions opt out instead of recursing.
-type ShapeSpellings<S> = 0 extends 1 & S
+type TreeFlagSpellings<S> = 0 extends 1 & S
 	? never
 	: S extends { readonly flags: infer F extends FlagsDef; readonly children: infer C }
 		? SpellingsOf<F> | TreeSpellings<C>
 		: never;
 
-/** Every flag spelling reachable in a compile-time command tree (`Record<spelling, CommandShape>`), recursively. */
+/** Every flag spelling reachable in a compile-time command tree (`Record<spelling, CommandContract>`), recursively. */
 export type TreeSpellings<Tree> = 0 extends 1 & Tree
 	? never
 	: Tree extends object
-		? { [K in keyof Tree]: ShapeSpellings<Tree[K]> }[keyof Tree]
+		? { [K in keyof Tree]: TreeFlagSpellings<Tree[K]> }[keyof Tree]
 		: never;
 
-type DefinitionSpellings<D> = D extends { readonly _shape?: infer S } ? ShapeSpellings<S> : never;
+type DefinitionSpellings<D> = D extends { readonly _contract?: infer S }
+	? TreeFlagSpellings<S>
+	: never;
 
 /** Flag spellings contributed by a tuple of command definitions. */
 export type DefinitionTreeSpellings<Ds extends readonly unknown[]> = DefinitionSpellings<

@@ -1,5 +1,6 @@
-// These structural types mirror @standard-schema/spec v1.1.0 per the
-// specification's recommendation that implementers copy the protocol types.
+// This structural consumer subset mirrors @standard-schema/spec v1.1.0.
+// Validation options are omitted because Crust never passes them; requiring
+// their vendor-specific shape would reject otherwise compatible schemas.
 
 /** The Standard Typed types interface. */
 interface StandardSchemaTypes<Input = unknown, Output = Input> {
@@ -7,11 +8,6 @@ interface StandardSchemaTypes<Input = unknown, Output = Input> {
 	readonly input: Input;
 	/** The output type of the schema. */
 	readonly output: Output;
-}
-
-interface StandardSchemaOptions {
-	/** Explicit support for additional vendor-specific parameters, if needed. */
-	readonly libraryOptions?: Record<string, unknown> | undefined;
 }
 
 /** The result interface if validation succeeds. */
@@ -57,8 +53,7 @@ interface StandardSchemaProps<Input = unknown, Output = Input> {
 	readonly types?: StandardSchemaTypes<Input, Output> | undefined;
 	/** Validates unknown input values. */
 	readonly validate: (
-		value: unknown,
-		options?: StandardSchemaOptions,
+		value: StandardSchemaTypes["input"],
 	) => StandardSchemaResult<Output> | Promise<StandardSchemaResult<Output>>;
 }
 
@@ -130,10 +125,14 @@ export interface ValidationIssue {
  * // => ""
  * ```
  */
+function isNumericPathSegment(segment: PropertyKey): segment is number {
+	return typeof segment === "number";
+}
+
 function formatPath(path: readonly PropertyKey[]): string {
 	return path
 		.map((segment, index) =>
-			typeof segment === "number"
+			isNumericPathSegment(segment)
 				? `[${segment}]`
 				: index > 0
 					? `.${String(segment)}`
@@ -154,13 +153,17 @@ function formatPath(path: readonly PropertyKey[]): string {
  * plain `PropertyKey`. Returns an empty array for a root-level issue
  * (`undefined`).
  */
+function isStandardPathSegment(
+	segment: PropertyKey | StandardSchemaPathSegment,
+): segment is StandardSchemaPathSegment {
+	return typeof segment === "object" && segment !== null && "key" in segment;
+}
+
 function normalizeStandardPath(
 	path: ReadonlyArray<PropertyKey | StandardSchemaPathSegment> | undefined,
 ): PropertyKey[] {
 	if (!path) return [];
-	return path.map((segment) =>
-		typeof segment === "object" && segment !== null && "key" in segment ? segment.key : segment,
-	);
+	return path.map((segment) => (isStandardPathSegment(segment) ? segment.key : segment));
 }
 
 // ────────────────────────────────────────────────────────────────────────────

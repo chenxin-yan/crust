@@ -117,7 +117,7 @@ describe("applyFieldDefaults", () => {
 		};
 		const result = applyFieldDefaults(persisted, BASIC_FIELDS, false);
 
-		expect(result as Record<string, unknown>).toEqual({
+		expect(result).toEqual({
 			theme: "dark",
 			verbose: true,
 			retries: 5,
@@ -129,7 +129,7 @@ describe("applyFieldDefaults", () => {
 		const persisted = { theme: "dark", extra: "kept" };
 		const result = applyFieldDefaults(persisted, BASIC_FIELDS, false);
 
-		expect(result as Record<string, unknown>).toEqual({
+		expect(result).toEqual({
 			theme: "dark",
 			verbose: false,
 			retries: 3,
@@ -179,6 +179,7 @@ describe("applyFieldDefaults", () => {
 		const result1 = applyFieldDefaults(undefined, fields);
 		const result2 = applyFieldDefaults(undefined, fields);
 
+		if (!Array.isArray(result1.tags)) expect.unreachable("expected the array default");
 		result1.tags.push("c");
 		expect(result2.tags).toEqual(["a", "b"]);
 	});

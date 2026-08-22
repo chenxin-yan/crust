@@ -2,7 +2,19 @@
 // @crustjs/store — Field-based defaults application
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { FieldsDef, InferStoreConfig } from "./types.ts";
+import type { JsonValue } from "@crustjs/utils/json";
+
+import type { FieldsDef, StoreDocument } from "./types.ts";
+
+function isReadonlyJsonArray(
+	value: JsonValue | readonly JsonValue[],
+): value is readonly JsonValue[] {
+	return Array.isArray(value);
+}
+
+function copyDefault(value: JsonValue | readonly JsonValue[]): JsonValue {
+	return isReadonlyJsonArray(value) ? [...value] : value;
+}
 
 /**
  * Applies field defaults to a persisted config object.
@@ -23,18 +35,17 @@ import type { FieldsDef, InferStoreConfig } from "./types.ts";
  * @returns A new object with field defaults applied.
  */
 export function applyFieldDefaults<F extends FieldsDef>(
-	persisted: Readonly<Record<string, unknown>> | undefined,
+	persisted: Readonly<StoreDocument> | undefined,
 	fields: F,
 	pruneUnknown = true,
-): InferStoreConfig<F> {
-	const result: Record<string, unknown> = {};
+): StoreDocument {
+	const result: StoreDocument = {};
 
 	for (const [key, def] of Object.entries(fields)) {
 		if (persisted && key in persisted) {
 			result[key] = persisted[key];
 		} else if ("default" in def && def.default !== undefined) {
-			// Shallow-copy array defaults to prevent shared mutation
-			result[key] = Array.isArray(def.default) ? [...def.default] : def.default;
+			result[key] = copyDefault(def.default);
 		}
 		// else: no persisted value and no default → key not set (field is T | undefined)
 	}
@@ -48,5 +59,5 @@ export function applyFieldDefaults<F extends FieldsDef>(
 		}
 	}
 
-	return result as InferStoreConfig<F>;
+	return result;
 }

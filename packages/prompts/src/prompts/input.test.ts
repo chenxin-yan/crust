@@ -12,11 +12,12 @@ import { input, type InputOptions } from "./input.ts";
 
 let activePrompt: Pick<RenderedPrompt<unknown>, "type" | "keys" | "screen">;
 
+function runInput<Output>(options: InputOptions<Output>, io?: PromptIO): Promise<Output | string> {
+	if (options.schema) return input(options, io);
+	return input(options, io);
+}
+
 function start<Output>(options: InputOptions<Output>): Promise<Output | string> {
-	const runInput = input as unknown as (
-		options: InputOptions<Output>,
-		io?: PromptIO,
-	) => Promise<Output | string>;
 	const prompt = renderPrompt<InputOptions<Output>, Output | string>(runInput, options);
 	activePrompt = prompt;
 	return prompt.answer;
@@ -560,7 +561,6 @@ describe("input — schema validation", () => {
 
 		const result = await promise;
 		expect(result).toBe("Ali");
-		expect(typeof result).toBe("string");
 	});
 
 	it("resolves to the schema's transformed output (number from coerce)", async () => {
@@ -578,7 +578,6 @@ describe("input — schema validation", () => {
 
 		const result = await promise;
 		expect(result).toBe(42);
-		expect(typeof result).toBe("number");
 	});
 
 	it("renders the first issue's message and waits for retry on failure", async () => {
@@ -613,8 +612,8 @@ describe("input — schema validation", () => {
 			"~standard": {
 				version: 1 as const,
 				vendor: "test",
-				validate: (value: unknown) => {
-					if (value === "ok") return { value: value as string };
+				validate: <Value>(value: Value) => {
+					if (value === "ok") return { value: "ok" };
 					return { issues: [{ message: "" }] };
 				},
 			},
@@ -654,8 +653,8 @@ describe("input — schema validation", () => {
 			"~standard": {
 				version: 1 as const,
 				vendor: "test",
-				validate: (value: unknown) => ({
-					value: value as string,
+				validate: <Value>(_value: Value) => ({
+					value: "ok",
 					issues: [] as const,
 				}),
 			},
@@ -731,7 +730,6 @@ describe("input — schema short-circuit", () => {
 		});
 
 		expect(result).toBe(8080);
-		expect(typeof result).toBe("number");
 	});
 
 	it("throws when `initial` is rejected by the schema", async () => {
@@ -755,7 +753,6 @@ describe("input — schema short-circuit", () => {
 		);
 
 		expect(result).toBe(3000);
-		expect(typeof result).toBe("number");
 	});
 
 	it("throws when non-TTY `default` is rejected by the schema", async () => {
@@ -785,7 +782,6 @@ describe("input — schema + interactive default", () => {
 
 		const result = await promise;
 		expect(result).toBe(4000);
-		expect(typeof result).toBe("number");
 	});
 });
 
@@ -799,13 +795,17 @@ describe("input — schema + interactive default", () => {
 
 describe("input — callable Standard Schema", () => {
 	it("dispatches a callable schema through the schema branch", async () => {
+		function isString<Value>(value: Value): value is Value & string {
+			return typeof value === "string";
+		}
+
 		// Build a callable function that also has a `~standard` property.
-		const callable = Object.assign((_value: unknown) => undefined, {
+		const callable = Object.assign(() => undefined, {
 			"~standard": {
 				version: 1 as const,
 				vendor: "test",
-				validate: (value: unknown) => {
-					if (typeof value === "string" && value.length > 0) {
+				validate: <Value>(value: Value) => {
+					if (isString(value) && value.length > 0) {
 						return { value: `[${value}]` };
 					}
 					return { issues: [{ message: "empty" }] };

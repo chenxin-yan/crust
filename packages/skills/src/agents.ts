@@ -37,7 +37,7 @@ export function resolveEffectiveScope(scope: Scope): Scope {
 	return scope === "project" && process.cwd() === homedir() ? "global" : scope;
 }
 
-const AGENTS: Record<AgentTarget, AgentConfig> = {
+const AGENTS = {
 	amp: {
 		label: "Amp",
 		class: "universal",
@@ -321,23 +321,31 @@ const AGENTS: Record<AgentTarget, AgentConfig> = {
 		globalSkillsDir: (home) => join(home, ".zencoder", "skills"),
 		detectCommands: ["zencoder"],
 	},
-};
+} satisfies Record<AgentTarget, AgentConfig>;
+
+const agentKeys = Object.keys(AGENTS);
 
 /**
  * All agent targets supported by `@crustjs/skills`.
  *
  * @internal
  */
-export const ALL_AGENTS = Object.keys(AGENTS) as AgentTarget[];
+export const ALL_AGENTS =
+	// SAFETY: AGENTS is checked above to contain exactly every AgentTarget key.
+	agentKeys as AgentTarget[];
+
+const agentLabelEntries = Object.fromEntries(
+	ALL_AGENTS.map((agent) => [agent, AGENTS[agent].label]),
+);
 
 /**
  * Human-readable labels for each agent target.
  *
  * @internal
  */
-export const AGENT_LABELS: Record<AgentTarget, string> = Object.fromEntries(
-	ALL_AGENTS.map((agent) => [agent, AGENTS[agent].label]),
-) as Record<AgentTarget, string>;
+export const AGENT_LABELS =
+	// SAFETY: ALL_AGENTS contains every AgentTarget, so the mapped entries are exhaustive.
+	agentLabelEntries as Record<AgentTarget, string>;
 
 /** Returns agents that use the canonical `.agents/skills` layout. */
 export function getUniversalAgents(): AgentTarget[] {
@@ -364,7 +372,8 @@ export async function detectInstalledAgents(): Promise<AgentTarget[]> {
 	const detected: AgentTarget[] = [];
 
 	for (const agent of getAdditionalAgents()) {
-		const commands = AGENTS[agent].detectCommands ?? [];
+		const config: AgentConfig = AGENTS[agent];
+		const commands = config.detectCommands ?? [];
 		let installed = false;
 
 		for (const command of commands) {

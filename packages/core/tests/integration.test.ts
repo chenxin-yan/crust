@@ -118,7 +118,7 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 		const deploy = defineCommand("deploy", { uses: [auth] }, (command) =>
 			command.action(async ({ ctx }) => {
 				const identity = await ctx.auth;
-				console.log(`${typeof identity.credential}:${identity.credential}`);
+				console.log(`${identity.credential.constructor.name.toLowerCase()}:${identity.credential}`);
 			}),
 		);
 		const app = new Crust("cli").provide(auth()).add(deploy);
@@ -219,7 +219,7 @@ describe("integration: Extension adds flag visible to subcommand action", () => 
 		});
 
 		const app = new Crust("cli").extend(versionFlag).action((ctx) => {
-			if ((ctx.flags as Record<string, unknown>).version) {
+			if (ctx.flags.version) {
 				console.log("v1.0.0");
 			} else {
 				console.log("running");

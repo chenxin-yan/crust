@@ -187,6 +187,15 @@ function getReleaseChannel(version: string): ReleaseChannel | null {
   return null;
 }
 
+function hasVersion<Value>(value: Value): value is Value & { version: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "version" in value &&
+    typeof value.version === "string"
+  );
+}
+
 async function fetchNpmVersion(pkg: string): Promise<string | null> {
   try {
     const res = await fetch(`https://registry.npmjs.org/${pkg}/latest`, {
@@ -194,8 +203,8 @@ async function fetchNpmVersion(pkg: string): Promise<string | null> {
       signal: AbortSignal.timeout(3000),
     });
     if (!res.ok) return null;
-    const data = (await res.json()) as { version?: string };
-    return data.version ?? null;
+    const data: unknown = await res.json();
+    return hasVersion(data) ? data.version : null;
   } catch {
     return null;
   }

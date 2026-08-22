@@ -373,7 +373,7 @@ describe("store.write", () => {
 				type: "number",
 				default: 3000,
 				validate: (v: number) => {
-					expect(typeof v).toBe("number");
+					expect(v).toBe(8080);
 					if (v < 1 || v > 65535) throw new Error("invalid port");
 				},
 			},
@@ -385,7 +385,8 @@ describe("store.write", () => {
 			fields,
 		});
 
-		await store.write({ port: "8080" as unknown as number });
+		const malformedConfig: { port: number } = JSON.parse('{"port":"8080"}');
+		await store.write(malformedConfig);
 
 		const raw = await readFile(join(tempDir, "config.json"), "utf-8");
 		expect(JSON.parse(raw)).toEqual({ port: 8080 });
@@ -883,10 +884,12 @@ describe("schema transform persistence", () => {
 		]) {
 			let caught: unknown;
 			try {
+				const malformedFields: FieldsDef = {};
+				Object.assign(malformedFields, { name: field });
 				createStore({
 					dirPath: tempDir,
 					name: "config",
-					fields: { name: field } as unknown as FieldsDef,
+					fields: malformedFields,
 				});
 			} catch (error) {
 				caught = error;
@@ -971,7 +974,8 @@ describe("schema transform persistence", () => {
 
 		let caught: unknown;
 		try {
-			await store.write({ x: "hello" as unknown as number });
+			const malformedConfig: { x: number } = JSON.parse('{"x":"hello"}');
+			await store.write(malformedConfig);
 			expect.unreachable("should have thrown");
 		} catch (err) {
 			caught = err;

@@ -35,6 +35,7 @@ export function readPublishManifest(stageDir: string): DistributionManifest {
 		);
 	}
 
+	// SAFETY: validatePublishManifest checks every manifest field used before publishing unless verification is explicitly disabled.
 	return JSON.parse(readFileSync(manifestPath, "utf-8")) as DistributionManifest;
 }
 
@@ -44,6 +45,7 @@ function readStagedPackageJson(stageDir: string, dir: string): PublishPackageJso
 		throw new Error(`Missing staged package.json: ${packageJsonPath}`);
 	}
 
+	// SAFETY: validatePublishManifest checks each optional field before using it as publish metadata.
 	return JSON.parse(readFileSync(packageJsonPath, "utf-8")) as PublishPackageJson;
 }
 

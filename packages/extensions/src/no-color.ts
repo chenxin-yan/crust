@@ -48,7 +48,7 @@ function noColorFactory(): Extension {
 		hooks: {
 			preRun(context) {
 				const flagValue = context.flags.color;
-				if (typeof flagValue !== "boolean") return;
+				if (flagValue !== true && flagValue !== false) return;
 
 				if (activeRuns === 0) {
 					baseForceColor = process.env.FORCE_COLOR;

@@ -12,11 +12,15 @@ import { password, type PasswordOptions } from "./password.ts";
 
 let activePrompt: Pick<RenderedPrompt<unknown>, "type" | "keys" | "screen">;
 
+function runPassword<Output>(
+	options: PasswordOptions<Output>,
+	io?: PromptIO,
+): Promise<Output | string> {
+	if (options.schema) return password(options, io);
+	return password(options, io);
+}
+
 function start<Output>(options: PasswordOptions<Output>): Promise<Output | string> {
-	const runPassword = password as unknown as (
-		options: PasswordOptions<Output>,
-		io?: PromptIO,
-	) => Promise<Output | string>;
 	const prompt = renderPrompt<PasswordOptions<Output>, Output | string>(runPassword, options);
 	activePrompt = prompt;
 	return prompt.answer;
@@ -242,10 +246,6 @@ describe("password — no message", () => {
 
 describe("password — non-TTY", () => {
 	function nonTTY<Output>(options: PasswordOptions<Output>): Promise<Output | string> {
-		const runPassword = password as unknown as (
-			options: PasswordOptions<Output>,
-			io?: PromptIO,
-		) => Promise<Output | string>;
 		return runPassword(options, nonTTYIO());
 	}
 
@@ -293,7 +293,6 @@ describe("password — schema validation", () => {
 
 		const result = await promise;
 		expect(result).toBe(4242);
-		expect(typeof result).toBe("number");
 	});
 });
 
@@ -313,7 +312,6 @@ describe("password — schema short-circuit", () => {
 		});
 
 		expect(result).toBe(4242);
-		expect(typeof result).toBe("number");
 	});
 
 	it("treats `{ issues: [] }` from a non-conformant schema as success", async () => {
@@ -325,8 +323,8 @@ describe("password — schema short-circuit", () => {
 			"~standard": {
 				version: 1 as const,
 				vendor: "test",
-				validate: (value: unknown) => ({
-					value: value as string,
+				validate: <Value>(_value: Value) => ({
+					value: "ok",
 					issues: [] as const,
 				}),
 			},

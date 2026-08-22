@@ -1,4 +1,4 @@
-import type { ArgDef, CommandMeta, FlagDef, ValueType } from "../types.ts";
+import type { ArgDef, CommandMeta, DeclaredDefault, FlagDef, ValueType } from "../types.ts";
 import type { CommandNode } from "./node.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -111,6 +111,7 @@ export interface CommandSnapshot {
 
 /** Drop keys with `undefined` values so snapshots serialize cleanly, then freeze. */
 function freezeCompact<T extends object>(obj: T): T {
+	// SAFETY: Object.keys returns exactly the enumerable string keys of T.
 	for (const key of Object.keys(obj) as (keyof T)[]) {
 		if (obj[key] === undefined) delete obj[key];
 	}
@@ -122,55 +123,37 @@ function freezeCompact<T extends object>(obj: T): T {
  * strings. Array defaults (multi-value flags, variadic args) are copied and
  * frozen so the snapshot cannot observe later mutation of the source def.
  */
-function serializableDefault(value: unknown): unknown {
+type SerializableDefault = (ArgSnapshot | FlagSnapshot)["default"];
+
+function serializableDefault(value: DeclaredDefault): SerializableDefault {
 	if (value instanceof URL) return value.href;
 	if (Array.isArray(value)) return Object.freeze(value.map(serializableDefault));
 	return value;
 }
 
 function snapshotArg(def: ArgDef): ArgSnapshot {
-	const d = def as {
-		name: string;
-		type?: ValueType;
-		description?: string;
-		required?: boolean;
-		variadic?: boolean;
-		choices?: readonly string[];
-		default?: unknown;
-	};
 	return freezeCompact({
-		name: d.name,
-		type: d.type,
-		description: d.description,
-		required: d.required,
-		variadic: d.variadic,
-		choices: d.choices ? Object.freeze([...d.choices]) : undefined,
-		default: serializableDefault(d.default),
+		name: def.name,
+		type: def.type,
+		description: def.description,
+		required: def.required,
+		variadic: def.variadic,
+		choices: def.choices ? Object.freeze([...def.choices]) : undefined,
+		default: serializableDefault(def.default),
 	});
 }
 
 function snapshotFlag(def: FlagDef): FlagSnapshot {
-	const d = def as {
-		type: ValueType;
-		description?: string;
-		short?: string;
-		aliases?: readonly string[];
-		required?: boolean;
-		multiple?: boolean;
-		noNegate?: boolean;
-		choices?: readonly string[];
-		default?: unknown;
-	};
 	return freezeCompact({
-		type: d.type,
-		description: d.description,
-		short: d.short,
-		aliases: d.aliases ? Object.freeze([...d.aliases]) : undefined,
-		required: d.required,
-		multiple: d.multiple,
-		noNegate: d.noNegate,
-		choices: d.choices ? Object.freeze([...d.choices]) : undefined,
-		default: serializableDefault(d.default),
+		type: def.type,
+		description: def.description,
+		short: def.short,
+		aliases: def.aliases ? Object.freeze([...def.aliases]) : undefined,
+		required: def.required,
+		multiple: def.multiple,
+		noNegate: "noNegate" in def ? def.noNegate : undefined,
+		choices: def.choices ? Object.freeze([...def.choices]) : undefined,
+		default: serializableDefault(def.default),
 	});
 }
 
@@ -192,12 +175,15 @@ export function snapshotCommand(node: CommandNode): CommandSnapshot {
 	// Enumerable symbol-keyed annotations (e.g. skills' command annotations)
 	// pass through so annotation-driven tooling can read them off snapshots.
 	// JSON/structuredClone ignore symbol keys, so serializability holds.
+	/* oxlint-disable anti-slop/no-unsafe-dictionary-type, anti-slop/no-chained-type-assertions -- open symbol annotations are owned by ecosystem packages and intentionally pass through unchanged. */
 	const annotations: Record<symbol, unknown> = {};
 	for (const sym of Object.getOwnPropertySymbols(node)) {
 		if (Object.getOwnPropertyDescriptor(node, sym)?.enumerable) {
+			// SAFETY: sym was enumerated from node and this open annotation value passes through unchanged.
 			annotations[sym] = (node as unknown as Record<symbol, unknown>)[sym];
 		}
 	}
+	/* oxlint-enable anti-slop/no-unsafe-dictionary-type, anti-slop/no-chained-type-assertions */
 
 	return Object.freeze({
 		...annotations,

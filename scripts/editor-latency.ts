@@ -44,6 +44,12 @@ interface Position {
 	character: number;
 }
 
+interface ProbePositions {
+	completion: Position;
+	hover: Position;
+	editInsert: Position;
+}
+
 export function offsetToPosition(text: string, offset: number): Position {
 	let line = 0;
 	let lineStart = 0;
@@ -57,11 +63,7 @@ export function offsetToPosition(text: string, offset: number): Position {
 }
 
 /** Cursor positions inside the probe snippet, computed from file content. */
-export function probePositions(text: string): {
-	completion: Position;
-	hover: Position;
-	editInsert: Position;
-} {
+export function probePositions(text: string): ProbePositions {
 	const completionAnchor = "void flags.";
 	const completionIndex = text.lastIndexOf(completionAnchor);
 	const hoverAnchor = "= editorProbeBuilder";
@@ -79,9 +81,13 @@ export function probePositions(text: string): {
 }
 
 export function median(samples: readonly number[]): number {
+	if (samples.length === 0) throw new Error("median requires at least one sample");
 	const sorted = [...samples].sort((a, b) => a - b);
 	const mid = Math.floor(sorted.length / 2);
-	const value = sorted.length % 2 === 0 ? (sorted[mid - 1]! + sorted[mid]!) / 2 : sorted[mid]!;
+	const upper = sorted[mid];
+	if (upper === undefined) throw new Error("median sample index is out of bounds");
+	const lower = sorted[mid - 1] ?? upper;
+	const value = sorted.length % 2 === 0 ? (lower + upper) / 2 : upper;
 	return Math.round(value * 10) / 10;
 }
 
@@ -91,6 +97,45 @@ interface LspMessage {
 	params?: unknown;
 	result?: unknown;
 	error?: { code: number; message: string };
+}
+
+function isLspMessage<Value>(value: Value): value is Value & LspMessage {
+	if (typeof value !== "object" || value === null) return false;
+	if (
+		"id" in value &&
+		value.id !== undefined &&
+		typeof value.id !== "number" &&
+		typeof value.id !== "string"
+	) {
+		return false;
+	}
+	if ("method" in value && value.method !== undefined && typeof value.method !== "string") {
+		return false;
+	}
+	if ("error" in value && value.error !== undefined) {
+		const error = value.error;
+		if (
+			typeof error !== "object" ||
+			error === null ||
+			!("code" in error) ||
+			typeof error.code !== "number" ||
+			!("message" in error) ||
+			typeof error.message !== "string"
+		) {
+			return false;
+		}
+	}
+	return true;
+}
+
+function hasConfigurationItems<Value>(value: Value): value is Value & { items: unknown[] } {
+	return (
+		typeof value === "object" && value !== null && "items" in value && Array.isArray(value.items)
+	);
+}
+
+function hasNumericId(message: LspMessage): message is LspMessage & { id: number } {
+	return typeof message.id === "number";
 }
 
 /** Minimal JSON-RPC/LSP client over stdio with Content-Length framing. */
@@ -107,6 +152,7 @@ class LspClient {
 
 	private async readLoop(): Promise<void> {
 		const decoder = new TextDecoder();
+		// SAFETY: stdout is configured as "pipe", so Bun exposes it as a byte stream.
 		for await (const chunk of this.proc.stdout as ReadableStream<Uint8Array>) {
 			const merged = new Uint8Array(this.buffer.length + chunk.length);
 			merged.set(this.buffer);
@@ -123,7 +169,9 @@ class LspClient {
 				if (this.buffer.length < bodyStart + bodyLength) break;
 				const body = decoder.decode(this.buffer.slice(bodyStart, bodyStart + bodyLength));
 				this.buffer = this.buffer.slice(bodyStart + bodyLength);
-				this.dispatch(JSON.parse(body) as LspMessage);
+				const message: unknown = JSON.parse(body);
+				if (!isLspMessage(message)) throw new Error("LSP returned an invalid JSON-RPC message");
+				this.dispatch(message);
 			}
 		}
 	}
@@ -132,34 +180,33 @@ class LspClient {
 		if (message.id !== undefined && message.method !== undefined) {
 			// Server → client request. Answer generically so the session
 			// proceeds; workspace/configuration expects one entry per item.
-			const items = (message.params as { items?: unknown[] } | undefined)?.items;
+			const items = hasConfigurationItems(message.params) ? message.params.items : undefined;
 			const result =
-				message.method === "workspace/configuration" && Array.isArray(items)
-					? items.map(() => null)
-					: null;
+				message.method === "workspace/configuration" && items ? items.map(() => null) : null;
 			void this.send({ jsonrpc: "2.0", id: message.id, result });
 			return;
 		}
-		if (message.id !== undefined) {
-			const resolver = this.pending.get(message.id as number);
+		if (hasNumericId(message)) {
+			const resolver = this.pending.get(message.id);
 			if (resolver) {
-				this.pending.delete(message.id as number);
+				this.pending.delete(message.id);
 				resolver(message);
 			}
 		}
 		// Notifications (diagnostics, logs) are irrelevant to timing; drop them.
 	}
 
-	private async send(payload: unknown): Promise<void> {
+	private async send<Payload>(payload: Payload): Promise<void> {
 		const body = new TextEncoder().encode(JSON.stringify(payload));
 		const header = new TextEncoder().encode(`Content-Length: ${body.length}\r\n\r\n`);
+		// SAFETY: stdin is configured as "pipe", so Bun exposes it as a FileSink.
 		const stdin = this.proc.stdin as import("bun").FileSink;
 		void stdin.write(header);
 		void stdin.write(body);
 		await stdin.flush();
 	}
 
-	async request(method: string, params: unknown, timeoutMs = 30_000): Promise<LspMessage> {
+	async request<Params>(method: string, params: Params, timeoutMs = 30_000): Promise<LspMessage> {
 		const id = this.nextId++;
 		const response = new Promise<LspMessage>((resolvePromise, reject) => {
 			this.pending.set(id, resolvePromise);
@@ -172,7 +219,7 @@ class LspClient {
 		return response;
 	}
 
-	async notify(method: string, params: unknown): Promise<void> {
+	async notify<Params>(method: string, params: Params): Promise<void> {
 		await this.send({ jsonrpc: "2.0", method, params });
 	}
 
@@ -204,7 +251,7 @@ export async function measureEditorLatency(
 	const uri = pathToFileURL(file).href;
 	const client = new LspClient([tscPath, "--lsp", "--stdio"], resolve(fixtureDir));
 
-	const timed = async (method: string, params: unknown): Promise<number> => {
+	const timed = async <Params>(method: string, params: Params): Promise<number> => {
 		const start = performance.now();
 		const response = await client.request(method, params);
 		const elapsed = performance.now() - start;

@@ -15,5 +15,6 @@ export function defineExtensionId(id: string): ExtensionId {
 			reason: "empty-id",
 		});
 	}
+	// SAFETY: brand mint after validating the id is non-blank and trimmed.
 	return id as ExtensionId;
 }

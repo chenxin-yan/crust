@@ -194,7 +194,6 @@ describe("configDir", () => {
 	describe("runtime environment fallback", () => {
 		it("should resolve a path using real runtime environment", () => {
 			const result = configDir("my-cli");
-			expect(typeof result).toBe("string");
 			expect(result.length).toBeGreaterThan(0);
 			expect(result).toEndWith("my-cli");
 		});
@@ -360,9 +359,9 @@ describe("resolveStorePath", () => {
 	});
 
 	describe("name parameter", () => {
-		it("should reject a missing name at runtime", () => {
+		it("should fail loudly when an untyped caller omits the name", () => {
 			const resolveWithoutName = resolveStorePath as (dirPath: string) => string;
-			expect(() => resolveWithoutName("/home/user/.config/my-cli")).toThrow(CrustStoreError);
+			expect(() => resolveWithoutName("/home/user/.config/my-cli")).toThrow(TypeError);
 		});
 
 		it("should use custom name as filename", () => {

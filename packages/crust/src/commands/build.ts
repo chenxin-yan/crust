@@ -53,15 +53,31 @@ export function resolveOutfile(
 	return resolve(cwd, outdir, baseName.endsWith(ext) ? baseName : baseName + ext);
 }
 
+type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+
+function isJsonObject(value: JsonValue): value is { [key: string]: JsonValue } {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getConfiguredRuntime(pkg: JsonValue): JsonValue | undefined {
+	if (!isJsonObject(pkg)) return undefined;
+	const crust = pkg.crust;
+	return crust !== undefined && isJsonObject(crust) ? crust.runtime : undefined;
+}
+
+function isBuildRuntime(value: JsonValue): value is BuildRuntime {
+	return typeof value === "string" && BUILD_RUNTIMES.some((runtime) => runtime === value);
+}
+
 export function resolveBuildRuntime(cwd: string, override?: BuildRuntime): BuildRuntime {
 	// --runtime is validated by the flag's `choices`; no re-check needed here.
 	if (override !== undefined) return override;
 
 	const packagePath = resolve(cwd, "package.json");
 	if (!existsSync(packagePath)) return "bun";
-	let pkg: { crust?: { runtime?: unknown } };
+	let pkg: JsonValue;
 	try {
-		pkg = JSON.parse(readFileSync(packagePath, "utf8")) as { crust?: { runtime?: unknown } };
+		pkg = JSON.parse(readFileSync(packagePath, "utf8"));
 	} catch {
 		// Malformed package.json: legacy builds tolerated this (resolveBaseName falls
 		// through), so keep default-bun builds working — but say so, since a
@@ -69,14 +85,9 @@ export function resolveBuildRuntime(cwd: string, override?: BuildRuntime): Build
 		console.warn(`Warning: could not parse ${packagePath}; defaulting to the bun runtime.`);
 		return "bun";
 	}
-	const configured = pkg.crust?.runtime;
+	const configured = getConfiguredRuntime(pkg);
 	if (configured === undefined) return "bun";
-	if (
-		typeof configured === "string" &&
-		(BUILD_RUNTIMES as readonly string[]).includes(configured)
-	) {
-		return configured as BuildRuntime;
-	}
+	if (isBuildRuntime(configured)) return configured;
 	throw new Error(
 		`Invalid package.json crust.runtime ${JSON.stringify(configured)}. Valid runtimes: ${BUILD_RUNTIMES.join(", ")}`,
 	);

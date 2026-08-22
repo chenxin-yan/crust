@@ -109,7 +109,7 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 						? "Current directory is not empty. Overwrite conflicting files?"
 						: `Directory "${dirName}" already exists. Overwrite?`,
 				default: false,
-				...(flags.overwrite !== undefined ? { initial: flags.overwrite } : {}),
+				initial: flags.overwrite,
 			});
 			if (!overwrite) {
 				console.log("Aborted.");
@@ -132,12 +132,12 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 				},
 			],
 			default: "binary",
-			...(distributionInitial !== undefined ? { initial: distributionInitial } : {}),
+			initial: distributionInitial,
 		});
 		const installDeps = await confirm({
 			message: "Install dependencies?",
 			default: true,
-			...(flags.install !== undefined ? { initial: flags.install } : {}),
+			initial: flags.install,
 		});
 
 		// Skip git init prompt if already inside a git repository.
@@ -150,7 +150,7 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 			: await confirm({
 					message: "Initialize a git repository?",
 					default: true,
-					...(flags.git !== undefined ? { initial: flags.git } : {}),
+					initial: flags.git,
 				});
 
 		// ── Execute all file operations after prompts are done ──────────
@@ -167,7 +167,7 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 					template: "templates/base",
 					dest: resolvedDir,
 					context,
-					...(overwrite ? { conflict: "overwrite" } : {}),
+					conflict: overwrite ? "overwrite" : undefined,
 				});
 				await scaffold({
 					template: "templates/minimal",

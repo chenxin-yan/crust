@@ -4,10 +4,27 @@ import type { StandardSchema } from "@crustjs/utils/schema";
 
 import { defineExtension, type Extension } from "../api/extension.ts";
 import { defineExtensionId } from "../identity.ts";
-import type { CommandPath, CommandShapeAt, RunInput, RunOutcome } from "./crust.ts";
+import type { CommandPath, CommandContractAtPath, RunInput, RunOutcome } from "./crust.ts";
 import { Crust, defineCommand } from "./crust.ts";
 
 type Expect<T extends true> = T;
+interface CyclicFixture {
+	self?: CyclicFixture;
+}
+interface StructuredRunCapture {
+	args: { name: string; count: number; files: string[] };
+	flags: {
+		fetch: boolean | undefined;
+		tag: string[] | undefined;
+		config: unknown;
+		offset: number | undefined;
+	};
+	rawArgs: string[];
+}
+interface JsonRunCapture {
+	args: { payload: unknown };
+	flags: { config: unknown };
+}
 type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
@@ -66,11 +83,13 @@ describe("typed programmatic invocation", () => {
 		const local = defineCommand("local", (command) => command.action(() => {}));
 		const app = new Crust("cli").extend(tools).add(local);
 
-		type RootInput = RunInput<(typeof app)["_types"]["shape"]>;
+		type RootInput = RunInput<(typeof app)["_types"]["contract"]>;
 		type InspectInput = RunInput<
-			CommandShapeAt<(typeof app)["_types"]["shape"], readonly ["inspect"]>
+			CommandContractAtPath<(typeof app)["_types"]["contract"], readonly ["inspect"]>
 		>;
-		type LocalInput = RunInput<CommandShapeAt<(typeof app)["_types"]["shape"], readonly ["local"]>>;
+		type LocalInput = RunInput<
+			CommandContractAtPath<(typeof app)["_types"]["contract"], readonly ["local"]>
+		>;
 		const rootFlags: RootInput = { flags: { trace: true, version: true } };
 		const commandFlags: InspectInput = { flags: { trace: true } };
 		const localFlags: LocalInput = { flags: { trace: true } };
@@ -94,7 +113,7 @@ describe("typed programmatic invocation", () => {
 		});
 		const addedThenExtended = new Crust("cli").add(local).extend(trace);
 		type LocalInput = RunInput<
-			CommandShapeAt<(typeof addedThenExtended)["_types"]["shape"], readonly ["local"]>
+			CommandContractAtPath<(typeof addedThenExtended)["_types"]["contract"], readonly ["local"]>
 		>;
 		type _addedCommandFlags = Expect<Equal<NonNullable<LocalInput["flags"]>, { trace?: boolean }>>;
 
@@ -103,7 +122,7 @@ describe("typed programmatic invocation", () => {
 		});
 		const extendedTwice = new Crust("cli").extend(tools).extend(trace);
 		type InspectInput = RunInput<
-			CommandShapeAt<(typeof extendedTwice)["_types"]["shape"], readonly ["inspect"]>
+			CommandContractAtPath<(typeof extendedTwice)["_types"]["contract"], readonly ["inspect"]>
 		>;
 		type _extensionCommandFlags = Expect<
 			Equal<NonNullable<InspectInput["flags"]>, { trace?: boolean }>
@@ -332,7 +351,7 @@ describe("typed programmatic invocation", () => {
 	});
 
 	it("serializes structured input through routing and the parser", async () => {
-		let received: unknown;
+		let received: StructuredRunCapture | undefined;
 		const remoteAdd = defineCommand("remote-add", (command) =>
 			command
 				.args(
@@ -410,7 +429,7 @@ describe("typed programmatic invocation", () => {
 	});
 
 	it("keeps arrays scalar for non-multiple json flags and non-variadic json args", async () => {
-		let received: unknown;
+		let received: JsonRunCapture | undefined;
 		const app = new Crust("cli")
 			.args({ name: "payload", type: "json" })
 			.flags({ name: "config", type: "json" })
@@ -439,9 +458,9 @@ describe("typed programmatic invocation", () => {
 			code: "PARSE",
 			details: { reason: "unserializable-json" },
 		});
-		const cyclic: Record<string, unknown> = {};
+		const cyclic: CyclicFixture = {};
 		cyclic.self = cyclic;
-		await expect(app.run([], { flags: { config: cyclic } })).rejects.toMatchObject({
+		await expect(app.run([], { flags: { config: cyclic as never } })).rejects.toMatchObject({
 			code: "PARSE",
 			details: { reason: "unserializable-json" },
 		});
@@ -500,11 +519,11 @@ describe("typed programmatic invocation", () => {
 		type _nestedPath = Expect<readonly ["release-now", "deploy"] extends Path ? true : false>;
 		type _aliasPath = Expect<readonly ["release-now", "ship"] extends Path ? true : false>;
 		type _kebabPath = Expect<readonly ["release-now"] extends Path ? true : false>;
-		type DeployShape = CommandShapeAt<
-			(typeof app)["_types"]["shape"],
+		type DeployContract = CommandContractAtPath<
+			(typeof app)["_types"]["contract"],
 			readonly ["release-now", "deploy"]
 		>;
-		type DeployInput = RunInput<DeployShape>;
+		type DeployInput = RunInput<DeployContract>;
 		const valid: DeployInput = {
 			args: { target: "prod", port: "8080" },
 			flags: { mode: "prod", retries: "2", version: true },
@@ -616,20 +635,22 @@ describe("typed programmatic invocation", () => {
 		type DeepTree = { root: Nest<16> };
 		type Root = { args: []; flags: {}; children: DeepTree; result: "root-result" };
 		// The depth-15 cap only widens the CommandPath constraint; `const Path` still
-		// infers the literal tuple, and CommandShapeAt (uncapped) resolves it fully.
+		// infers the literal tuple, and CommandContractAtPath (uncapped) resolves it fully.
 		type SeventeenDeep = readonly [...FifteenDeep, "next", "next"];
-		type _deepResult = Expect<Equal<CommandShapeAt<Root, SeventeenDeep>["result"], "deep-result">>;
+		type _deepResult = Expect<
+			Equal<CommandContractAtPath<Root, SeventeenDeep>["result"], "deep-result">
+		>;
 		// A path variable widened past the cap cannot name its command statically,
 		// so the shape (and its result) widens to unknown instead of an ancestor's.
 		type _widenedResult = Expect<
-			Equal<CommandShapeAt<Root, readonly ["root", ...string[]]>["result"], unknown>
+			Equal<CommandContractAtPath<Root, readonly ["root", ...string[]]>["result"], unknown>
 		>;
 		// A CommandPath<Tree>-typed variable (union of literal tuples and widened
 		// arrays) never resolves to never, and a widened head widens instead.
-		type _pathVariable = CommandShapeAt<Root, CommandPath<DeepTree>>["result"];
+		type _pathVariable = CommandContractAtPath<Root, CommandPath<DeepTree>>["result"];
 		type _pathVariableSound = Expect<Equal<[_pathVariable] extends [never] ? true : false, false>>;
 		type _widenedHead = Expect<
-			Equal<CommandShapeAt<Root, readonly [string, ...string[]]>["result"], unknown>
+			Equal<CommandContractAtPath<Root, readonly [string, ...string[]]>["result"], unknown>
 		>;
 		expect(true).toBe(true);
 	});

@@ -15,6 +15,12 @@ let originalLog: typeof console.log;
 let originalError: typeof console.error;
 let originalExitCode: typeof process.exitCode;
 
+type StdoutChunk = Parameters<typeof process.stdout.write>[0];
+
+function isStringChunk(chunk: StdoutChunk): chunk is string {
+	return typeof chunk === "string";
+}
+
 beforeEach(() => {
 	stdoutBuf = [];
 	processStdoutBuf = [];
@@ -24,8 +30,8 @@ beforeEach(() => {
 	originalError = console.error;
 	originalExitCode = process.exitCode;
 
-	process.stdout.write = (chunk: unknown) => {
-		if (typeof chunk === "string") {
+	process.stdout.write = (chunk: StdoutChunk) => {
+		if (isStringChunk(chunk)) {
 			processStdoutBuf.push(Buffer.from(chunk, "utf8"));
 		} else if (chunk instanceof Uint8Array) {
 			processStdoutBuf.push(Buffer.from(chunk));

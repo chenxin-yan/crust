@@ -121,13 +121,13 @@ describe("fg/bg as chain methods", () => {
 
 describe("Defensive nullish handling", () => {
 	it("red(undefined) returns '' (no styled \"undefined\")", () => {
-		expect(red(undefined as unknown as string)).toBe("");
-		expect(always.red(undefined as unknown as string)).toBe("");
+		expect(red(undefined)).toBe("");
+		expect(always.red(undefined)).toBe("");
 	});
 
 	it("red(null) returns '' (no styled \"null\")", () => {
-		expect(red(null as unknown as string)).toBe("");
-		expect(always.red(null as unknown as string)).toBe("");
+		expect(red(null)).toBe("");
+		expect(always.red(null)).toBe("");
 	});
 
 	it("red('') returns '' (no escape codes for empty content)", () => {
@@ -136,13 +136,13 @@ describe("Defensive nullish handling", () => {
 	});
 
 	it("chain(undefined) does not crash and returns ''", () => {
-		expect(always.bold.red(undefined as unknown as string)).toBe("");
-		expect(always.bold.red.bgYellow(null as unknown as string)).toBe("");
+		expect(always.bold.red(undefined)).toBe("");
+		expect(always.bold.red.bgYellow(null)).toBe("");
 	});
 
 	it("applyStyle is null-safe (matches chain behavior)", () => {
-		expect(applyStyle(undefined as unknown as string, always.bold)).toBe("");
-		expect(applyStyle(null as unknown as string, always.red)).toBe("");
+		expect(applyStyle(undefined, always.bold)).toBe("");
+		expect(applyStyle(null, always.red)).toBe("");
 	});
 });
 

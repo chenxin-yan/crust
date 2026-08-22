@@ -391,10 +391,10 @@ describe("FlagDef choices field", () => {
 		// @ts-expect-error — `choices` is only supported on string-typed flags
 		const _bad1: FlagDef = { type: "number", choices: ["a", "b"] };
 
+		// @ts-expect-error — `choices` is only supported on string-typed flags
 		const _bad2: FlagDef = {
 			type: "number",
 			multiple: true,
-			// @ts-expect-error — `choices` is only supported on string-typed flags
 			choices: ["a", "b"],
 		};
 
@@ -415,20 +415,20 @@ describe("ArgDef choices field", () => {
 	});
 
 	it("rejects choices on a boolean positional arg", () => {
+		// @ts-expect-error — `choices` is only supported on string-typed args
 		const _bad: ArgDef = {
 			name: "flag",
 			type: "boolean",
-			// @ts-expect-error — `choices` is only supported on string-typed args
 			choices: ["a", "b"],
 		};
 		expect(_bad.type).toBe("boolean");
 	});
 
 	it("rejects choices on a number positional arg", () => {
+		// @ts-expect-error — `choices` is only supported on string-typed args
 		const _bad: ArgDef = {
 			name: "port",
 			type: "number",
-			// @ts-expect-error — `choices` is only supported on string-typed args
 			choices: ["a", "b"],
 		};
 		expect(_bad.type).toBe("number");

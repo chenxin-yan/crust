@@ -8,9 +8,9 @@ const styleMethodPairs: typeof codes = codes;
 
 export type StyleMethodName = keyof typeof styleMethodPairs;
 
-export const styleMethodNames: readonly StyleMethodName[] = Object.freeze(
-	Object.keys(styleMethodPairs) as StyleMethodName[],
-);
+// SAFETY: styleMethodPairs is the closed ANSI-code module namespace, so Object.keys returns its keys.
+const styleMethodNameList = Object.keys(styleMethodPairs) as StyleMethodName[];
+export const styleMethodNames: readonly StyleMethodName[] = Object.freeze(styleMethodNameList);
 
 export function stylePairFor(name: StyleMethodName): AnsiPair {
 	return styleMethodPairs[name];

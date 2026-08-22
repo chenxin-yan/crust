@@ -7,17 +7,16 @@ import {
 	finishInvocation,
 	type Extension,
 	type ExtensionContext,
-	type ExtensionSectionContribution,
 	type InvocationOutcome,
 } from "../api/extension.ts";
-import { CrustError } from "../errors.ts";
+import { CrustError, type CaughtError } from "../errors.ts";
 import { defineExtensionId, type ExtensionId } from "../identity.ts";
 import { parseArgs, validateParsed } from "../parsing/parser.ts";
 import { applySchemas } from "../parsing/schema.ts";
 import { addFlagSpellingEntries, cloneFlagSpellings } from "../parsing/spellings.ts";
 import { isText } from "../sections.ts";
 import type { CommandSection, FlagDef, FlagsDef, InvocationIO } from "../types.ts";
-import type { CommandDefinition, RunOutcome } from "./crust.ts";
+import type { CommandDefinition, CrustCommandContext, RunOutcome } from "./crust.ts";
 import type { CommandNode } from "./node.ts";
 import { resolveCommand } from "./router.ts";
 import { type CommandSnapshot, snapshotCommand } from "./snapshot.ts";
@@ -52,7 +51,7 @@ export const SNAPSHOT_PATH_ENV = "CRUST_INTERNAL_SNAPSHOT_PATH";
 export const BUILD_OUT_DIR_ENV = "CRUST_INTERNAL_BUILD_OUT_DIR";
 const EXIT_CODE_CANCELLED = 130;
 
-function isAbortError(error: unknown): boolean {
+function isAbortError(error: CaughtError): boolean {
 	if (!(error instanceof Error)) return false;
 	return error.name === "AbortError";
 }
@@ -111,6 +110,7 @@ function applyExtensionCommands(
 function applyExtensionFlags(root: CommandNode, extension: Extension): void {
 	for (const [name, defWithScope] of Object.entries(extension.flags ?? {})) {
 		const { recursive = true, ...def } = defWithScope;
+		// SAFETY: recursive is the sole Extension-only field removed from the discriminated flag.
 		injectExtensionFlag(root, name, def as FlagDef, recursive);
 	}
 }
@@ -181,23 +181,38 @@ function invalidSections({ subject, name }: SectionOwner): CrustError {
 	);
 }
 
-function validateSectionAudienceIds(ids: unknown, owner: SectionOwner): readonly ExtensionId[] {
-	if (!Array.isArray(ids) || ids.length === 0) throw invalidSections(owner);
-	return Object.freeze(
-		ids.map((consumer) => {
-			const id = typeof consumer === "string" ? consumer : consumer?.id;
-			if (!isText(id) || id !== id.trim()) throw invalidSections(owner);
-			return defineExtensionId(id);
-		}),
+function hasId<T>(value: T): value is T & { readonly id?: unknown } {
+	return (
+		((typeof value === "object" && value !== null) || typeof value === "function") && "id" in value
 	);
 }
 
-function validateSection(section: unknown, owner: SectionOwner): CommandSection {
+function isString<T>(value: T): value is T & string {
+	return typeof value === "string";
+}
+
+function isSymbol<T>(value: T): value is T & symbol {
+	return typeof value === "symbol";
+}
+
+function extensionIdFrom<T>(consumer: T, owner: SectionOwner): ExtensionId {
+	const id = isString(consumer) ? consumer : hasId(consumer) ? consumer.id : undefined;
+	if (!isText(id) || id !== id.trim()) throw invalidSections(owner);
+	return defineExtensionId(id);
+}
+
+function validateSectionAudienceIds<T>(ids: T, owner: SectionOwner): readonly ExtensionId[] {
+	if (!Array.isArray(ids) || ids.length === 0) throw invalidSections(owner);
+	return Object.freeze(ids.map((consumer) => extensionIdFrom(consumer, owner)));
+}
+
+function validateSection<T>(section: T, owner: SectionOwner): CommandSection {
+	// SAFETY: optional-field probe of an unvalidated section; every field is checked below.
 	const { title, body, only, except } = (section ?? {}) as {
-		title?: unknown;
-		body?: unknown;
-		only?: unknown;
-		except?: unknown;
+		title?: T;
+		body?: T;
+		only?: T;
+		except?: T;
 	};
 	if (!isText(title) || /[\r\n]/.test(title) || !isText(body)) {
 		throw invalidSections(owner);
@@ -209,12 +224,13 @@ function validateSection(section: unknown, owner: SectionOwner): CommandSection 
 	if (only !== undefined && except !== undefined) {
 		throw invalidSections(owner);
 	}
-	return Object.freeze({
-		title,
-		body,
-		...(only !== undefined && { only: validateSectionAudienceIds(only, owner) }),
-		...(except !== undefined && { except: validateSectionAudienceIds(except, owner) }),
-	}) as CommandSection;
+	if (only !== undefined) {
+		return Object.freeze({ title, body, only: validateSectionAudienceIds(only, owner) });
+	}
+	if (except !== undefined) {
+		return Object.freeze({ title, body, except: validateSectionAudienceIds(except, owner) });
+	}
+	return Object.freeze({ title, body });
 }
 
 function validateAuthoredSections(node: CommandNode): void {
@@ -263,14 +279,11 @@ function applyExtensionSections(
 	const owner: SectionOwner = { subject: "extension", name: extension.id };
 	const contributions = extension.sections(snapshot);
 	if (!Array.isArray(contributions)) throw invalidSections(owner);
-	for (const contribution of contributions as readonly ExtensionSectionContribution[]) {
+	for (const contribution of contributions) {
 		// validateSection rejects null/non-object contributions, so reading
 		// `.command` afterwards is safe.
 		const section = validateSection(contribution, owner);
-		if (
-			!Array.isArray(contribution.command) ||
-			!contribution.command.every((segment) => typeof segment === "string")
-		) {
+		if (!Array.isArray(contribution.command) || !contribution.command.every(isString)) {
 			throw invalidSections(owner);
 		}
 		const target = contributionTarget(root, contribution.command, extension);
@@ -330,7 +343,7 @@ async function dispatch(
 	prepared: PreparedInvocation,
 	io: InvocationIO,
 	onExtensionContext?: (context: ExtensionContext) => void,
-	onFailure?: (error: unknown, context: ExtensionContext) => Promise<ExtensionId | undefined>,
+	onFailure?: (error: CaughtError, context: ExtensionContext) => Promise<ExtensionId | undefined>,
 ): Promise<RunOutcome<unknown>> {
 	const { rootNode, extensions } = prepared;
 
@@ -360,13 +373,13 @@ async function dispatch(
 	});
 	onExtensionContext?.(extensionContext);
 
-	const terminal = async (): Promise<unknown> => {
+	const terminal = async () => {
 		validateParsed(resolvedNode, parsed);
 
 		// Standard Schemas on arg/flag definitions own value validation and
 		// transformation; actions and flag-owning Contexts receive schema outputs.
 		const validated = await applySchemas(resolvedNode, parsed);
-		resolver.setValidatedFlags(validated.flags as Record<string, unknown>);
+		resolver.setValidatedFlags(validated.flags);
 		if (!resolvedNode.run) return;
 
 		const context = {
@@ -378,7 +391,7 @@ async function dispatch(
 			rootCommand: rootSnapshot,
 			stdout: io.stdout,
 			stderr: io.stderr,
-		};
+		} satisfies CrustCommandContext;
 
 		return await resolvedNode.run(context);
 	};
@@ -398,7 +411,7 @@ async function dispatch(
 			}
 		} catch (error) {
 			const by = await onFailure?.(error, extensionContext);
-			outcome = { status: "failed", error, ...(by === undefined ? {} : { by }) };
+			outcome = by === undefined ? { status: "failed", error } : { status: "failed", error, by };
 		}
 
 		// Frozen so a mutating post-run hook cannot rewrite the outcome Core
@@ -406,7 +419,7 @@ async function dispatch(
 		Object.freeze(outcome);
 
 		let postRunFailed = false;
-		let postRunError: unknown;
+		let postRunError: CaughtError;
 		for (const extension of extensions.toReversed()) {
 			try {
 				await extension.hooks?.postRun?.(extensionContext, outcome);
@@ -432,7 +445,7 @@ async function dispatch(
 
 /** Render one failure through Extension onError hooks, ending in Core's default renderer. */
 async function renderFailure(
-	error: unknown,
+	error: CaughtError,
 	argv: readonly string[],
 	prepared: PreparedInvocation,
 	io: InvocationIO,
@@ -468,13 +481,13 @@ async function renderFailure(
 		{},
 		{
 			get: (_, property) =>
-				property === "then" || typeof property === "symbol" ? undefined : unavailable(property),
+				property === "then" || isSymbol(property) ? undefined : unavailable(property),
 		},
 	);
 	const context =
 		extensionContext ??
 		Object.freeze({
-			argv: [...argv] as readonly string[],
+			argv: [...argv],
 			rootCommand: snapshotCommand(prepared.rootNode),
 			command: snapshotCommand(prepared.rootNode),
 			commandPath: Object.freeze([prepared.rootNode.meta.name]),

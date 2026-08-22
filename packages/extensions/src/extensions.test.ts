@@ -331,12 +331,12 @@ describe("built-in extensions", () => {
 		const rootOnly = defineExtension(defineExtensionId("root-only"), {
 			flags: [{ name: "root", type: "boolean", recursive: false }],
 		});
-		let rootSaw: unknown;
+		let rootSaw = false;
 		const app = new Crust("app")
 			.extend(rootOnly)
 			.add(defineCommand("build", (build) => build.action(() => {})))
 			.action(({ flags }) => {
-				rootSaw = (flags as Record<string, unknown>).root;
+				rootSaw = flags.root === true;
 			});
 
 		// Extension flags only exist on the prepared tree, so scoping must be

@@ -1,4 +1,4 @@
-import { CrustError } from "../errors.ts";
+import { CrustError, type CaughtError } from "../errors.ts";
 import { assertDefinableFlag } from "../parsing/spellings.ts";
 import type {
 	FlagDef,
@@ -11,7 +11,8 @@ import type {
 } from "../types.ts";
 import type { ValidateNamedFlagDefs } from "../validation/flags.brands.ts";
 
-export type ContextMap = Record<string, unknown>;
+/** Upper bound for phantom name-to-value context maps. */
+export type ContextMap = object;
 export type Awaitable<T> = T | Promise<T>;
 export type Simplify<T> = { [K in keyof T]: T[K] };
 // Flat intersections keep chained composition at constant instantiation depth.
@@ -56,6 +57,9 @@ export interface ContextInstance<
 	/** @internal — phantom carrying the transitive dependency closure */
 	readonly _deps?: Deps;
 }
+
+/** Whatever a Context setup produces, erased at the runtime registry. */
+export type ContextValue = Awaited<ReturnType<ContextInstance["setup"]>>;
 
 export interface ContextSetup<
 	Options,
@@ -148,6 +152,16 @@ type UsesOf<R extends ContextConfig<any>> = R extends {
 	? Uses
 	: readonly [];
 
+type ErasedContextSetup = (
+	input: ContextSetup<never, FlagsDef, ContextMap>,
+) => Awaitable<ContextValue>;
+
+function isContextSetup(
+	value: ContextConfig<any> | ErasedContextSetup,
+): value is ErasedContextSetup {
+	return typeof value === "function";
+}
+
 /** Define a named, lazy command dependency. Declared `uses` are exposed on `ctx`. */
 export function defineContext<Name extends string, Value, Options = void>(
 	name: Name,
@@ -160,44 +174,51 @@ export function defineContext<
 	Options = void,
 >(
 	name: Name,
-	config: R & ValidateContextConfig<R>,
+	config: R & ValidateContextConfig<R> & ContextConfig,
 	setup: (
 		input: ContextSetup<Options, OwnedFlagsOf<R>, ContextDependencies<UsesOf<R>>>,
 	) => Awaitable<Value>,
 ): ContextFactory<Name, Options, Value, OwnedFlagsOf<R>, ContextDependencies<UsesOf<R>>>;
 export function defineContext(
 	name: string,
-	configOrSetup: ContextConfig<any> | ((input: never) => unknown),
-	maybeSetup?: (input: never) => unknown,
+	configOrSetup: ContextConfig<any> | ErasedContextSetup,
+	maybeSetup?: ErasedContextSetup,
 ): AnyContextFactory {
-	const hasConfig = typeof configOrSetup !== "function";
+	const hasConfig = !isContextSetup(configOrSetup);
 	const config = hasConfig ? configOrSetup : {};
 	const setup = hasConfig ? maybeSetup : configOrSetup;
+	if (!setup) throw new CrustError("DEFINITION", `Context "${name}" requires a setup function`);
 	const ownedFlags: FlagsDef = {};
 	for (const def of config.flags ?? []) {
 		const { name: flagName, ...rest } = def;
 		// Validate before the record assignment: a `__proto__` key would be
 		// silently swallowed as the record's prototype.
-		assertDefinableFlag(flagName, rest as FlagDef);
-		ownedFlags[flagName] = rest as FlagDef;
+		// SAFETY: removing name from a NamedFlagDef leaves its discriminated FlagDef.
+		const flag = rest as FlagDef;
+		assertDefinableFlag(flagName, flag);
+		ownedFlags[flagName] = flag;
 	}
 	const uses = Object.freeze([...(config.uses ?? [])]);
-	const factory = (options: unknown): ContextInstance => ({
+	const factory = (options: Parameters<AnyContextFactory>[0]): ContextInstance => ({
 		kind: "context",
 		name,
 		ownedFlags,
 		uses,
-		setup: (input) => (setup as (input: never) => unknown)({ options, ...input } as never),
+		setup: (input) => {
+			// SAFETY: public overloads pair the stored setup with this exact merged input shape.
+			return setup({ options, ...input } as never);
+		},
 	});
 	factory.contextName = name;
 	factory.uses = uses;
-	factory.of = (value: unknown): ContextInstance => ({
+	factory.of = (value: ContextValue): ContextInstance => ({
 		kind: "context",
 		name,
 		ownedFlags,
 		uses: [],
 		setup: () => value,
 	});
+	// SAFETY: the mutable factory is fully populated before widening to the runtime registry type.
 	return factory as AnyContextFactory;
 }
 
@@ -231,9 +252,7 @@ export class FallbackAsyncDisposableStack implements DisposalScope, AsyncDisposa
 	#entries: (() => void | PromiseLike<void>)[] = [];
 
 	use<T extends Disposable | AsyncDisposable>(value: T): T {
-		const dispose =
-			(value as Partial<AsyncDisposable>)[Symbol.asyncDispose] ??
-			(value as Disposable)[Symbol.dispose];
+		const dispose = hasAsyncDispose(value) ? value[Symbol.asyncDispose] : value[Symbol.dispose];
 		this.#entries.push(() => dispose.call(value));
 		return value;
 	}
@@ -260,34 +279,49 @@ export class FallbackAsyncDisposableStack implements DisposalScope, AsyncDisposa
  * Disposal-stack constructor for the current runtime: the native
  * `AsyncDisposableStack` when the global exists, else the fallback.
  */
+// SAFETY: this platform feature has the TC39 constructor shape when present; older runtimes use the fallback.
+const NativeDisposalStack = (
+	globalThis as { AsyncDisposableStack?: new () => DisposalScope & AsyncDisposable }
+).AsyncDisposableStack;
 export const DisposalStack: new () => DisposalScope & AsyncDisposable =
-	(globalThis as { AsyncDisposableStack?: new () => DisposalScope & AsyncDisposable })
-		.AsyncDisposableStack ?? FallbackAsyncDisposableStack;
+	NativeDisposalStack ?? FallbackAsyncDisposableStack;
+
+function hasAsyncDispose(value: Disposable | AsyncDisposable): value is AsyncDisposable {
+	// SAFETY: structural property probe; the result is checked before use.
+	return typeof (value as Partial<AsyncDisposable>)[Symbol.asyncDispose] === "function";
+}
+
+function isDisposableValue(value: ContextValue): value is Disposable | AsyncDisposable {
+	if (value === null || (typeof value !== "object" && typeof value !== "function")) return false;
+	// SAFETY: structural property probe on an object; both properties are checked below.
+	const candidate = value as Partial<Disposable & AsyncDisposable>;
+	return (
+		typeof candidate[Symbol.asyncDispose] === "function" ||
+		typeof candidate[Symbol.dispose] === "function"
+	);
+}
 
 function registerDisposable(
-	value: unknown,
+	value: ContextValue,
 	disposal: DisposalScope,
 	registered: WeakSet<object>,
 ): void {
-	if (value === null || (typeof value !== "object" && typeof value !== "function")) {
-		return;
-	}
-	// An alias setup can resolve to another Context's value; registering it twice
-	// would double-dispose a non-idempotent Symbol.(async)Dispose.
-	if (registered.has(value)) return;
-	const candidate = value as {
-		[Symbol.dispose]?: () => void;
-		[Symbol.asyncDispose]?: () => PromiseLike<void>;
-	};
-	if (
-		typeof candidate[Symbol.asyncDispose] === "function" ||
-		typeof candidate[Symbol.dispose] === "function"
-	) {
-		// Marked only on actual registration: a bare value returned first must not
-		// block disposal when a later setup decorates the same object and returns it.
-		registered.add(value);
-		disposal.use(candidate as Disposable | AsyncDisposable);
-	}
+	if (!isDisposableValue(value) || registered.has(value)) return;
+	// Marked only on actual registration: a bare value returned first must not
+	// block disposal when a later setup decorates the same object and returns it.
+	registered.add(value);
+	disposal.use(value);
+}
+
+/** Validated flag values for one invocation, erased to the resolver. */
+type ValidatedFlags = InferFlags<FlagsDef>;
+
+export interface ContextResolver {
+	bag<Deps extends ContextMap>(
+		sources: readonly (AnyContextFactory | ContextInstance)[],
+	): ContextBag<Deps>;
+	setValidatedFlags(flags: ValidatedFlags): void;
+	settle(): Promise<void>;
 }
 
 /** Internal lazy invocation container. Public consumers receive scoped Context bags. */
@@ -295,18 +329,12 @@ export function createContextResolver(
 	contexts: readonly ContextInstance[],
 	io: InvocationIO,
 	disposal: DisposalScope,
-): {
-	bag<Deps extends ContextMap>(
-		sources: readonly (AnyContextFactory | ContextInstance)[],
-	): ContextBag<Deps>;
-	setValidatedFlags(flags: Record<string, unknown>): void;
-	settle(): Promise<void>;
-} {
+): ContextResolver {
 	interface Entry {
 		readonly name: string;
-		readonly promise: Promise<unknown>;
-		readonly resolve: (value: unknown) => void;
-		readonly reject: (reason?: unknown) => void;
+		readonly promise: Promise<ContextValue>;
+		readonly resolve: (value: ContextValue) => void;
+		readonly reject: (reason?: CaughtError) => void;
 		readonly waitingOn: Set<string>;
 		settled: boolean;
 	}
@@ -314,7 +342,7 @@ export function createContextResolver(
 	const byName = new Map(contexts.map((context) => [context.name, context]));
 	const entries = new Map<string, Entry>();
 	const registered = new WeakSet<object>();
-	let validatedFlags: Record<string, unknown> | undefined;
+	let validatedFlags: ValidatedFlags | undefined;
 	let disposed = false;
 	// Registered first so it runs last (LIFO): the flag flips only after every
 	// Context value has been disposed. onError hooks receiving the same frozen
@@ -340,14 +368,15 @@ export function createContextResolver(
 		return undefined;
 	};
 
-	const isFlagValidationError = (error: unknown): boolean => {
+	const isFlagValidationError = (error: CaughtError): boolean => {
 		// Setups may wrap the pull rejection (e.g. new Error("...", { cause })); walk
 		// the cause chain so the retry-after-validation marker survives wrapping.
 		// A throwing `cause` getter must not escape: this runs while settling the
 		// entry, and an escape would leave the promise pending for every puller.
 		try {
 			const seen = new Set<unknown>();
-			for (let e = error; e != null && !seen.has(e); e = (e as { cause?: unknown }).cause) {
+			// SAFETY: structural probe of an arbitrary thrown value; the getter is protected by this try block.
+			for (let e = error; e != null && !seen.has(e); e = (e as Partial<{ cause: unknown }>).cause) {
 				seen.add(e);
 				if (
 					e instanceof CrustError &&
@@ -372,99 +401,97 @@ export function createContextResolver(
 		return rejection;
 	}
 
-	const makePull =
-		(origin: Entry | null) =>
-		(name: string): Promise<unknown> => {
-			const originSuffix = origin ? ` (pulled while constructing Context "${origin.name}")` : "";
-			if (disposed) {
-				return handledRejection(
-					new CrustError(
-						"DEFINITION",
-						`Context "${name}" cannot be pulled from onError because invocation Contexts have already been disposed.`,
-						{ subject: "context", name, reason: "context-after-disposal" },
-					),
-				);
-			}
-			const context = byName.get(name);
-			if (!context) {
-				return handledRejection(
-					new CrustError(
-						"DEFINITION",
-						`No provider for Context "${name}". Add .provide(${name}(...)) to the app or an ancestor command.${originSuffix}`,
-						{ subject: "context", name, reason: "missing-context" },
-					),
-				);
-			}
-			if (validatedFlags === undefined && Object.keys(context.ownedFlags).length > 0) {
-				return handledRejection(
-					new CrustError(
-						"DEFINITION",
-						`Context "${name}" owns flags and cannot be pulled before flag validation${originSuffix}. Pull it from an action or a postRun hook after a validated invocation.`,
-						{ subject: "context", name, reason: "flags-before-validation" },
-					),
-				);
-			}
+	const makePull = (origin: Entry | null) => (name: string) => {
+		const originSuffix = origin ? ` (pulled while constructing Context "${origin.name}")` : "";
+		if (disposed) {
+			return handledRejection(
+				new CrustError(
+					"DEFINITION",
+					`Context "${name}" cannot be pulled from onError because invocation Contexts have already been disposed.`,
+					{ subject: "context", name, reason: "context-after-disposal" },
+				),
+			);
+		}
+		const context = byName.get(name);
+		if (!context) {
+			return handledRejection(
+				new CrustError(
+					"DEFINITION",
+					`No provider for Context "${name}". Add .provide(${name}(...)) to the app or an ancestor command.${originSuffix}`,
+					{ subject: "context", name, reason: "missing-context" },
+				),
+			);
+		}
+		if (validatedFlags === undefined && Object.keys(context.ownedFlags).length > 0) {
+			return handledRejection(
+				new CrustError(
+					"DEFINITION",
+					`Context "${name}" owns flags and cannot be pulled before flag validation${originSuffix}. Pull it from an action or a postRun hook after a validated invocation.`,
+					{ subject: "context", name, reason: "flags-before-validation" },
+				),
+			);
+		}
 
-			let entry = entries.get(name);
-			if (!entry) {
-				const deferred = Promise.withResolvers<unknown>();
-				// Transitive cycle failures can reject an internal entry before a caller
-				// observes its derived wait promise; keep the raw deferred rejection handled.
-				void deferred.promise.catch(() => {});
-				entry = {
-					name,
-					promise: deferred.promise,
-					resolve: deferred.resolve,
-					reject: deferred.reject,
-					waitingOn: new Set(),
-					settled: false,
-				};
-				entries.set(name, entry);
-				const current = entry;
-				void (async () => {
-					try {
-						const ownedFlags = Object.fromEntries(
-							Object.keys(context.ownedFlags).map((flag) => [flag, validatedFlags?.[flag]]),
-						);
-						const value = await context.setup({
-							flags: ownedFlags,
-							ctx: makeBag(context.uses, current),
-							...io,
-						});
-						registerDisposable(value, disposal, registered);
-						current.resolve(value);
-					} catch (error) {
-						if (isFlagValidationError(error)) entries.delete(name);
-						current.reject(error);
-					} finally {
-						current.settled = true;
-					}
-				})();
-			}
-
-			if (origin && !entry.settled) {
-				const path = pathTo(entry, origin.name);
-				if (path) {
-					const cycle = [origin.name, ...path].map((part) => `"${part}"`).join(" -> ");
-					return handledRejection(
-						new CrustError("DEFINITION", `Context dependency cycle: ${cycle}`, {
-							subject: "context",
-							name: origin.name,
-							reason: "context-cycle",
-						}),
+		let entry = entries.get(name);
+		if (!entry) {
+			const deferred = Promise.withResolvers<ContextValue>();
+			// Transitive cycle failures can reject an internal entry before a caller
+			// observes its derived wait promise; keep the raw deferred rejection handled.
+			void deferred.promise.catch(() => {});
+			entry = {
+				name,
+				promise: deferred.promise,
+				resolve: deferred.resolve,
+				reject: deferred.reject,
+				waitingOn: new Set(),
+				settled: false,
+			};
+			entries.set(name, entry);
+			const current = entry;
+			void (async () => {
+				try {
+					const ownedFlags = Object.fromEntries(
+						Object.keys(context.ownedFlags).map((flag) => [flag, validatedFlags?.[flag]]),
 					);
+					const value = await context.setup({
+						flags: ownedFlags,
+						ctx: makeBag(context.uses, current),
+						...io,
+					});
+					registerDisposable(value, disposal, registered);
+					current.resolve(value);
+				} catch (error) {
+					if (isFlagValidationError(error)) entries.delete(name);
+					current.reject(error);
+				} finally {
+					current.settled = true;
 				}
-				origin.waitingOn.add(name);
-				return entry.promise.finally(() => origin.waitingOn.delete(name));
+			})();
+		}
+
+		if (origin && !entry.settled) {
+			const path = pathTo(entry, origin.name);
+			if (path) {
+				const cycle = [origin.name, ...path].map((part) => `"${part}"`).join(" -> ");
+				return handledRejection(
+					new CrustError("DEFINITION", `Context dependency cycle: ${cycle}`, {
+						subject: "context",
+						name: origin.name,
+						reason: "context-cycle",
+					}),
+				);
 			}
-			return entry.promise;
-		};
+			origin.waitingOn.add(name);
+			return entry.promise.finally(() => origin.waitingOn.delete(name));
+		}
+		return entry.promise;
+	};
 
 	const makeBag = <Deps extends ContextMap>(
 		sources: readonly (AnyContextFactory | ContextInstance)[],
 		origin: Entry | null,
 	): ContextBag<Deps> => {
-		const bag: Record<string, Promise<unknown>> = {};
+		const bag: Record<string, Promise<ContextValue>> = {};
 		const add = (source: AnyContextFactory | ContextInstance): void => {
 			const name = "contextName" in source ? source.contextName : source.name;
 			if (Object.hasOwn(bag, name)) return;
@@ -478,12 +505,13 @@ export function createContextResolver(
 			for (const dependency of source.uses ?? []) add(dependency);
 		};
 		for (const source of sources) add(source);
+		// SAFETY: the loop defines every name reachable from the source dependency closure inferred as Deps.
 		return Object.freeze(bag) as ContextBag<Deps>;
 	};
 
 	return {
 		bag: (sources) => makeBag(sources, null),
-		setValidatedFlags(flags: Record<string, unknown>): void {
+		setValidatedFlags(flags: ValidatedFlags): void {
 			validatedFlags = flags;
 		},
 		// Structured teardown: a rejected sibling pull must not abandon an in-flight

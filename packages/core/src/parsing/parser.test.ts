@@ -1,11 +1,17 @@
 import { describe, expect, it } from "bun:test";
 
-import type { CommandNode } from "../command/node.ts";
+import type { CommandAction, CommandNode } from "../command/node.ts";
 import { createCommandNode } from "../command/node.ts";
 import { CrustError } from "../errors.ts";
-import type { ArgsDef, CommandMeta, FlagsDef } from "../types.ts";
+import type { ArgDef, ArgsDef, CommandMeta, FlagsDef } from "../types.ts";
 import { parseArgs, validateParsed } from "./parser.ts";
 import { addFlagSpellingEntries } from "./spellings.ts";
+
+type DynamicParser = NonNullable<Extract<ArgDef, { type: "string" }>["parse"]>;
+
+function isString<T>(value: T): value is T & string {
+	return typeof value === "string";
+}
 
 /**
  * Test helper: creates a CommandNode from a config object for test fixtures.
@@ -15,9 +21,9 @@ function makeNode<const A extends ArgsDef = ArgsDef, const F extends FlagsDef = 
 	args?: A;
 	flags?: F;
 	subCommands?: Record<string, CommandNode>;
-	run?: (ctx: unknown) => void | Promise<void>;
+	run?: CommandAction;
 }): CommandNode & { args: A | undefined; effectiveFlags: F } {
-	const meta = typeof config.meta === "string" ? { name: config.meta } : config.meta;
+	const meta = isString(config.meta) ? { name: config.meta } : config.meta;
 	const node = createCommandNode(meta.name);
 	if (meta.description) node.meta.description = meta.description;
 	if (meta.usage) node.meta.usage = meta.usage;
@@ -943,7 +949,7 @@ describe("parseArgs — url/path/json types", () => {
 			flags: { out: { type: "path" } },
 		});
 		const result = parseArgs(cmd, ["--out", "./dist"]);
-		expect(typeof result.flags.out).toBe("string");
+		expect(result.flags.out).toEqual(expect.any(String));
 	});
 
 	it("parses a json flag into the corresponding value", () => {
@@ -965,7 +971,7 @@ describe("parseArgs — parse escape hatch", () => {
 		// Typed `(raw: string) => unknown` accepts an async implementation, so
 		// the AsyncParseBrand never fires; without the runtime guard the pending
 		// Promise becomes the flag value and a rejection escapes the pipeline.
-		const asyncParse: (raw: string) => unknown = async (raw) => raw;
+		const asyncParse: DynamicParser = async (raw) => raw;
 		const cmd = makeNode({
 			meta: "test",
 			flags: { n: { type: "string", parse: asyncParse } },
@@ -974,7 +980,7 @@ describe("parseArgs — parse escape hatch", () => {
 
 		// Rejecting parser: the guard must throw synchronously, not leak an
 		// unhandled rejection.
-		const rejecting: (raw: string) => unknown = async () => {
+		const rejecting: DynamicParser = async () => {
 			throw new Error("boom");
 		};
 		const cmd2 = makeNode({

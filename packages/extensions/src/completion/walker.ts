@@ -33,21 +33,18 @@ function walkFlag(name: string, def: FlagSnapshot): CompletionFlag {
 	}
 
 	const description = normaliseDescription(def.description);
-	const common = {
+	const common: Pick<CompletionFlag, "name" | "short" | "aliases" | "description" | "multiple"> = {
 		name,
-		...(def.short !== undefined && def.short.length > 0 ? { short: def.short } : {}),
-		...(aliases !== undefined && aliases.length > 0 ? { aliases } : {}),
-		...(description === undefined ? {} : { description }),
-		...(def.multiple === true ? { multiple: true as const } : {}),
 	};
+	if (def.short !== undefined && def.short.length > 0) common.short = def.short;
+	if (aliases !== undefined && aliases.length > 0) common.aliases = aliases;
+	if (description !== undefined) common.description = description;
+	if (def.multiple === true) common.multiple = true;
 
 	if (def.type === "boolean") {
-		return {
-			...common,
-			type: "boolean",
-			takesValue: false,
-			...(def.noNegate === true ? { noNegate: true as const } : {}),
-		};
+		const flag: CompletionFlag = { ...common, type: "boolean", takesValue: false };
+		if (def.noNegate === true) flag.noNegate = true;
+		return flag;
 	}
 	if (def.type === "number") return { ...common, type: "number", takesValue: true };
 
@@ -75,12 +72,12 @@ function walkFlag(name: string, def: FlagSnapshot): CompletionFlag {
 function walkArg(def: ArgSnapshot): CompletionArg {
 	assertSafeIdentifier(def.name, "arg name");
 	const description = normaliseDescription(def.description);
-	const common = {
+	const common: Pick<CompletionArg, "name" | "required" | "variadic" | "description"> = {
 		name: def.name,
 		required: def.required === true,
 		variadic: def.variadic === true,
-		...(description === undefined ? {} : { description }),
 	};
+	if (description !== undefined) common.description = description;
 
 	if (def.type === "number" || def.type === "boolean") {
 		return { ...common, type: def.type };

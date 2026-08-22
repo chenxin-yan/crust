@@ -43,7 +43,7 @@ function workspacePackages(root) {
 async function bundleEntries(pkgDir, pkg) {
 	const entries = {};
 	for (const [entry, target] of Object.entries(pkg.exports ?? {})) {
-		const file = typeof target === "string" ? target : target.import;
+		const file = target?.import ?? target;
 		if (!file || !/\.(js|mjs|cjs)$/.test(file)) continue;
 		const result = await Bun.build({
 			entrypoints: [resolve(pkgDir, file)],
