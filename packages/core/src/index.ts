@@ -78,5 +78,9 @@ export type {
 	InputFlags,
 	InvocationIO,
 	NamedFlagDef,
+	ParsedArgValue,
+	ParsedFlagValue,
+	ParseResult,
+	ValidatedInput,
 	ValueType,
 } from "./types.ts";

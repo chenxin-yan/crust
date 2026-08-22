@@ -47,7 +47,7 @@ export function coercePath(raw: string): string {
 }
 
 /**
- * Coerce a raw argv string into a parsed JSON value (`unknown`) via
+ * Coerce a raw argv string into a parsed JSON value (`JsonValue`) via
  * `JSON.parse`. Any valid JSON document is accepted — objects, arrays,
  * strings, numbers, booleans, null.
  *

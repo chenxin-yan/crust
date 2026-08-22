@@ -127,7 +127,9 @@ export function createStore<const F extends FieldsDef>(
 			}
 			validators.set(key, makeSchemaValidator(def.schema));
 		} else if (def.validate !== undefined) {
-			// SAFETY: each validator is only called for its own field after that field's declared coercion.
+			// SAFETY: each validator is only called for its own field. Coercion does not guarantee the
+			// persisted value matches the validator's declared parameter type: corrupt files can hand a
+			// wrong-typed value to it, which surfaces as a validator throw → VALIDATION issue.
 			validators.set(key, def.validate as FieldValidator);
 		}
 	}

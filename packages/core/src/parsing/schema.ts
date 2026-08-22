@@ -61,6 +61,10 @@ export async function applySchemas<A extends ArgsDef = ArgsDef, F extends FlagsD
 		throw new CrustError("VALIDATION", `Invalid input:\n${lines.join("\n")}`, { issues });
 	}
 
-	// SAFETY: schema-backed keys were replaced by schema outputs and required presence was validated.
-	return { args: Object.fromEntries(args), flags: Object.fromEntries(flags) } as never;
+	// SAFETY: schema-backed keys were replaced by schema outputs above; callers run
+	// validateParsed before this boundary (dispatch ordering), which owns requiredness.
+	return { args: Object.fromEntries(args), flags: Object.fromEntries(flags) } as ValidatedInput<
+		A,
+		F
+	>;
 }

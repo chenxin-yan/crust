@@ -9,6 +9,7 @@ on:
       - ".changeset/**"
       - "packages/**"
       - "scripts/**"
+      - "tools/**"
       - "package.json"
       - "bun.lock"
       - "turbo.json"
