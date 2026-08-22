@@ -1,4 +1,5 @@
 import { defineRule } from "@oxlint/plugins";
+import type { ESTree, Scope, SourceCode, Variable } from "@oxlint/plugins";
 
 import {
 	classifyWideningTarget,
@@ -7,8 +8,6 @@ import {
 	type TypeEnvironment,
 	type WideningTarget,
 } from "../shared/dictionary-types.ts";
-
-import type { ESTree, Scope, SourceCode, Variable } from "@oxlint/plugins";
 
 type FunctionExpression = ESTree.ArrowFunctionExpression | ESTree.Function;
 
@@ -152,10 +151,7 @@ export const noKnownValueWideningRule = defineRule({
 			subject: string,
 		) => {
 			if (destination === null) return;
-			if (
-				isDictionaryAccumulatorTarget(destination) &&
-				isEmptyObjectExpression(expression)
-			) {
+			if (isDictionaryAccumulatorTarget(destination) && isEmptyObjectExpression(expression)) {
 				return;
 			}
 			if (!hasKnownEvidence(context.sourceCode, expression)) return;

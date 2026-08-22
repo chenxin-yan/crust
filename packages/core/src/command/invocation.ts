@@ -195,24 +195,24 @@ function isSymbol<T>(value: T): value is T & symbol {
 	return typeof value === "symbol";
 }
 
-function extensionIdFrom<T>(consumer: T, owner: SectionOwner): ExtensionId {
+function parseExtensionId(consumer: unknown, owner: SectionOwner): ExtensionId {
 	const id = isString(consumer) ? consumer : hasId(consumer) ? consumer.id : undefined;
 	if (!isText(id) || id !== id.trim()) throw invalidSections(owner);
 	return defineExtensionId(id);
 }
 
-function validateSectionAudienceIds<T>(ids: T, owner: SectionOwner): readonly ExtensionId[] {
+function validateSectionAudienceIds(ids: unknown, owner: SectionOwner): readonly ExtensionId[] {
 	if (!Array.isArray(ids) || ids.length === 0) throw invalidSections(owner);
-	return Object.freeze(ids.map((consumer) => extensionIdFrom(consumer, owner)));
+	return Object.freeze(ids.map((consumer) => parseExtensionId(consumer, owner)));
 }
 
-function validateSection<T>(section: T, owner: SectionOwner): CommandSection {
+function validateSection(section: unknown, owner: SectionOwner): CommandSection {
 	// SAFETY: optional-field probe of an unvalidated section; every field is checked below.
 	const { title, body, only, except } = (section ?? {}) as {
-		title?: T;
-		body?: T;
-		only?: T;
-		except?: T;
+		title?: unknown;
+		body?: unknown;
+		only?: unknown;
+		except?: unknown;
 	};
 	if (!isText(title) || /[\r\n]/.test(title) || !isText(body)) {
 		throw invalidSections(owner);

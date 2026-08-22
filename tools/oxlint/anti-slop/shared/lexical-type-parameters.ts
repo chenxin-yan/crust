@@ -4,10 +4,7 @@ type VisitorKeys = Readonly<Record<string, readonly string[]>>;
 
 function isNode(value: unknown): value is ESTree.Node {
 	return (
-		typeof value === "object" &&
-		value !== null &&
-		"type" in value &&
-		typeof value.type === "string"
+		typeof value === "object" && value !== null && "type" in value && typeof value.type === "string"
 	);
 }
 
@@ -17,7 +14,10 @@ function collectInferTypeParameterNames(
 	names: Set<string>,
 ): void {
 	if (node.type === "TSInferType") names.add(node.typeParameter.name.name);
-	const record = node as unknown as Readonly<Record<string, unknown>>;
+	// SAFETY: visitor keys only name ESTree child-node fields for this node kind.
+	const record = node as Readonly<
+		Record<string, ESTree.Node | readonly ESTree.Node[] | null | undefined>
+	>;
 	for (const key of visitorKeys[node.type] ?? []) {
 		const value = record[key];
 		if (isNode(value)) {

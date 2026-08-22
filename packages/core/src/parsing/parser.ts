@@ -297,11 +297,11 @@ function resolveFlags<F extends FlagsDef>(
 			const parsedValue = canonical[name];
 
 			if (parsedValue !== undefined) {
-				Reflect.set(resolved, name, coerceFlagValue(name, def, parsedValue));
+				resolved[name] = coerceFlagValue(name, def, parsedValue);
 				continue;
 			}
 
-			Reflect.set(resolved, name, resolveDefault(def, `--${name}`));
+			resolved[name] = resolveDefault(def, `--${name}`);
 		}
 	}
 
@@ -353,18 +353,14 @@ function resolveArgs<A extends ArgsDef>(
 
 		if (def.variadic) {
 			const remaining = positionals.slice(index);
-			Reflect.set(
-				resolved,
-				name,
-				remaining.map((v, i) => coerceOne(v, i)),
-			);
+			resolved[name] = remaining.map((v, i) => coerceOne(v, i));
 			index = positionals.length;
 		} else if (index < positionals.length) {
 			// SAFETY: the bounds check above proves this positional exists.
-			Reflect.set(resolved, name, coerceOne(positionals[index] as string));
+			resolved[name] = coerceOne(positionals[index] as string);
 			index++;
 		} else {
-			Reflect.set(resolved, name, resolveDefault(def, label));
+			resolved[name] = resolveDefault(def, label);
 		}
 	}
 

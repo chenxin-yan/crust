@@ -1,5 +1,4 @@
 import { defineRule } from "@oxlint/plugins";
-
 import type { ESTree, SourceCode } from "@oxlint/plugins";
 
 import { lexicalTypeParameterNames } from "../shared/lexical-type-parameters.ts";
@@ -58,9 +57,7 @@ export const noObjectParametersRule = defineRule({
 			if (type.type === "TSParenthesizedType")
 				return resolvesToObject(type.typeAnnotation, shadowedAliases, visited);
 			if (type.type === "TSUnionType") {
-				return type.types.some((member) =>
-					resolvesToObject(member, shadowedAliases, visited),
-				);
+				return type.types.some((member) => resolvesToObject(member, shadowedAliases, visited));
 			}
 			if (
 				type.type !== "TSTypeReference" ||
@@ -81,13 +78,12 @@ export const noObjectParametersRule = defineRule({
 		};
 
 		const checkParameters = (node: ParameterOwner) => {
-			const shadowedAliases = lexicalTypeParameterNames(
-				node,
-				context.sourceCode.visitorKeys,
-			);
+			let shadowedAliases: ReadonlySet<string> | null = null;
 			for (const parameter of node.params) {
 				const annotation = parameterAnnotation(parameter);
 				if (annotation === null || annotation === undefined) continue;
+				if (!resolvesToObject(annotation.typeAnnotation, new Set())) continue;
+				shadowedAliases ??= lexicalTypeParameterNames(node, context.sourceCode.visitorKeys);
 				if (!resolvesToObject(annotation.typeAnnotation, shadowedAliases)) continue;
 				context.report({
 					node: annotation.typeAnnotation,

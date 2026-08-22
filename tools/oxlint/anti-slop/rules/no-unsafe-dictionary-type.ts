@@ -1,13 +1,13 @@
 import { defineRule } from "@oxlint/plugins";
+import type { ESTree } from "@oxlint/plugins";
 
 import {
 	classifyUnsafeDictionary,
 	classifyUnsafeDictionaryValue,
 	createTypeEnvironment,
 	type TypeEnvironment,
+	type UnsafeDictionary,
 } from "../shared/dictionary-types.ts";
-
-import type { ESTree } from "@oxlint/plugins";
 
 const typeNodeKinds: ReadonlySet<string> = new Set([
 	"JSDocNonNullableType",
@@ -72,13 +72,15 @@ function isPlainAliasConsumerUse(node: ESTree.TSType, environment: TypeEnvironme
 	return name !== null && environment.aliases.has(name) && !isInsideTypeAliasDeclaration(node);
 }
 
-function shouldReportType(node: ESTree.TSType, environment: TypeEnvironment): boolean {
+function shouldReportType(
+	node: ESTree.TSType,
+	environment: TypeEnvironment,
+	classify: (type: ESTree.TSType) => UnsafeDictionary | null,
+): boolean {
 	if (isPlainAliasConsumerUse(node, environment)) return false;
-	if (classifyUnsafeDictionary(node, environment) === null) return false;
 	let current: ESTree.Node | null = node.parent;
 	while (current !== null && current.type !== "Program") {
-		if (isTypeNode(current) && classifyUnsafeDictionary(current, environment) !== null)
-			return false;
+		if (isTypeNode(current) && classify(current) !== null) return false;
 		current = current.parent;
 	}
 	return true;
@@ -99,18 +101,27 @@ export const noUnsafeDictionaryTypeRule = defineRule({
 	},
 	createOnce(context) {
 		let environment: TypeEnvironment | null = null;
+		const classifications = new Map<ESTree.TSType, UnsafeDictionary | null>();
+		const classify = (node: ESTree.TSType): UnsafeDictionary | null => {
+			const cached = classifications.get(node);
+			if (cached !== undefined || classifications.has(node)) return cached ?? null;
+			const result = environment === null ? null : classifyUnsafeDictionary(node, environment);
+			classifications.set(node, result);
+			return result;
+		};
 		const report = (node: ESTree.Node, value: string) => {
 			context.report({ node, messageId: "unsafeDictionary", data: { value } });
 		};
 		const reportIfUnsafe = (node: ESTree.TSType) => {
-			if (environment === null || !shouldReportType(node, environment)) return;
-			const unsafe = classifyUnsafeDictionary(node, environment);
-			if (unsafe === null) return;
+			if (environment === null) return;
+			const unsafe = classify(node);
+			if (unsafe === null || !shouldReportType(node, environment, classify)) return;
 			report(node, unsafe.unsafeValue);
 		};
 
 		return {
 			Program(node) {
+				classifications.clear();
 				environment = createTypeEnvironment(node);
 			},
 			TSTypeReference: reportIfUnsafe,
