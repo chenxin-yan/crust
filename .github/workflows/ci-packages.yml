@@ -125,6 +125,8 @@ jobs:
         run: |
           bun turbo run build check:types test --filter='./packages/*'
           bun test scripts
+          # oxlint's RuleTester requires Node >=22 raw transfer and is unsupported under Bun.
+          node --test "tools/oxlint/anti-slop/rules/*.test.ts"
 
       # Portable packages must not reference Bun APIs: typecheck (@types/bun),
       # lint, and bun test are all blind to them, and the runtime smoke only
