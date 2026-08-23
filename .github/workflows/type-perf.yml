@@ -11,6 +11,7 @@ on:
       - "bun.lock"
       - "scripts/type-perf-report.ts"
       - "scripts/editor-latency.ts"
+      - "scripts/upsert-pr-comment.sh"
       - ".github/workflows/type-perf.yml"
 
 concurrency:

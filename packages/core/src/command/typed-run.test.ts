@@ -435,7 +435,10 @@ describe("typed programmatic invocation", () => {
 				received = { args, flags };
 			});
 
-		await app.run([], { args: { payload: [1, 2] }, flags: { config: [3, 4] } });
+		await app.run([], {
+			args: { payload: [1, 2] as const },
+			flags: { config: [3, 4] as const },
+		});
 
 		expect(received).toEqual({ args: { payload: [1, 2] }, flags: { config: [3, 4] } });
 	});

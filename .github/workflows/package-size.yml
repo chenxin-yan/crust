@@ -10,6 +10,7 @@ on:
       - "bun.lock"
       - "turbo.json"
       - "scripts/package-size-report.mjs"
+      - "scripts/upsert-pr-comment.sh"
       - ".github/workflows/package-size.yml"
 
 concurrency:

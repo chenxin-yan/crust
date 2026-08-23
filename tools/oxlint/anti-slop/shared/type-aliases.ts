@@ -29,7 +29,7 @@ export function resolvesToKeyword(
 	}
 	if (type.type !== "TSTypeReference" || type.typeName.type !== "Identifier") return false;
 	const name = type.typeName.name;
-	if (wrapperNames.has(name)) {
+	if (wrapperNames.has(name) && !aliases.has(name) && !shadowedAliases.has(name)) {
 		const wrapped = type.typeArguments?.params[0];
 		return wrapped !== undefined && resolvesToKeyword(wrapped, aliases, keyword, options);
 	}

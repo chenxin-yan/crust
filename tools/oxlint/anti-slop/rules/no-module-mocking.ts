@@ -30,11 +30,37 @@ function importedFrameworkObject(variable: Variable): TestFramework | null {
 	return null;
 }
 
+function importedNamespaceFrameworkObject(
+	variable: Variable,
+	member: string | null,
+): TestFramework | null {
+	for (const definition of variable.defs) {
+		if (
+			definition.type !== "ImportBinding" ||
+			definition.node.type !== "ImportNamespaceSpecifier" ||
+			definition.parent?.type !== "ImportDeclaration"
+		) {
+			continue;
+		}
+		const source = definition.parent.source.value;
+		if (source === "vitest" && member === "vi") return "vitest";
+		if (source === "@jest/globals" && member === "jest") return "jest";
+		if (source === "bun:test" && member === "mock") return "bun";
+	}
+	return null;
+}
+
 function testFrameworkObject(
 	sourceCode: SourceCode,
 	expression: ESTree.Expression,
 ): TestFramework | null {
-	if (expression.type !== "Identifier") return null;
+	if (expression.type !== "Identifier") {
+		if (!("object" in expression) || expression.object.type !== "Identifier") return null;
+		const variable = resolveVariable(sourceCode, expression.object);
+		return variable === null
+			? null
+			: importedNamespaceFrameworkObject(variable, memberMethod(expression));
+	}
 	if (
 		(expression.name === "vi" || expression.name === "jest") &&
 		sourceCode.isGlobalReference(expression)

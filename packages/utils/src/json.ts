@@ -1,5 +1,5 @@
 /** Any value representable in a JSON document. */
-export type JsonValue = string | number | boolean | null | JsonValue[] | JsonObject;
+export type JsonValue = string | number | boolean | null | readonly JsonValue[] | JsonObject;
 
 export interface JsonObject {
 	[key: string]: JsonValue;

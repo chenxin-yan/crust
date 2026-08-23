@@ -9,7 +9,7 @@ import { text } from "node:stream/consumers";
 import { BUILD_OUT_DIR_ENV, type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
 import { yellow } from "@crustjs/style";
 import { isErrnoException } from "@crustjs/utils/error";
-import type { JsonValue } from "@crustjs/utils/json";
+import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
 import { which } from "@crustjs/utils/process";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -233,12 +233,7 @@ export function getDenoBinaryFilename(baseName: string, target: DenoTarget): str
 }
 
 function hasStringName(value: JsonValue): value is { name: string } {
-	return (
-		typeof value === "object" &&
-		value !== null &&
-		!Array.isArray(value) &&
-		typeof value.name === "string"
-	);
+	return isJsonObject(value) && typeof value.name === "string";
 }
 
 /** Resolve the base binary name from an explicit name, package name, or entry filename. */

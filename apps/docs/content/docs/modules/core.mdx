@@ -105,6 +105,12 @@ These types back [`run(path, input?, io?)`](/docs/api/crust) and the [`@crustjs/
 | `RunArguments`      | Full `run()` rest tuple: input plus optional invocation I/O                   |
 | `InputArgs`         | Pre-parse structured argument values for an argument definition list          |
 | `InputFlags`        | Pre-parse structured flag values for a flag definition record                 |
+| `ParseResult`       | Syntax-parsed arguments, flags, and raw tokens before schema validation       |
+| `ValidatedInput`    | Fully validated argument and flag values passed beyond the parser boundary    |
+| `ParsedArgValue`    | Runtime-erased syntax-parsed positional value                                 |
+| `ParsedFlagValue`   | Runtime-erased syntax-parsed flag value                                       |
+
+JSON arguments and flags in `RunInput` accept JSON primitives, objects, and mutable or readonly arrays/tuples. Non-JSON values such as `Date`, `bigint`, and functions are rejected before the invocation reaches the parser.
 
 `run()` resolves to `RunOutcome<R>`: the `completed` branch owns the selected action's typed `result`, while the `finished` branch owns the `ExtensionId` of the Extension whose `preRun` hook ended the invocation.
 

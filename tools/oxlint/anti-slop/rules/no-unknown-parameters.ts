@@ -3,7 +3,7 @@ import type { ESTree } from "@oxlint/plugins";
 
 import { parameterAnnotation, type Parameter, type ParameterOwner } from "../shared/parameters.ts";
 
-const BOUNDARY_FUNCTION_NAME = /^(?:has|is|parse|validate)(?:[A-Z0-9_]|$)/u;
+const BOUNDARY_FUNCTION_NAME = /^(?:parse|validate)(?:[A-Z0-9_]|$)/u;
 
 function parameterName(parameter: Parameter, sourceText: string): string {
 	if (parameter.type === "TSParameterProperty") {
@@ -42,7 +42,11 @@ function functionName(node: ParameterOwner): string | null {
 	if (parent.type === "VariableDeclarator" && parent.id.type === "Identifier") {
 		return parent.id.name;
 	}
-	if (parent.type === "MethodDefinition" || parent.type === "Property") {
+	if (
+		parent.type === "MethodDefinition" ||
+		parent.type === "Property" ||
+		parent.type === "PropertyDefinition"
+	) {
 		return propertyName(parent.key);
 	}
 	return null;

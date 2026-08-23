@@ -19,6 +19,10 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
 			options: allowBoundaries,
 		},
 		{
+			code: "class Decoder { parseUser = (value: unknown): User => decode(value); }",
+			options: allowBoundaries,
+		},
+		{
 			code: "function isUser(value: unknown): value is User { return check(value); }",
 			options: allowBoundaries,
 		},
@@ -32,6 +36,11 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
 		{ code: "function parseUser(value: unknown): User { return decode(value); }", errors: [error] },
 		{
 			code: "const consume = (value: unknown) => value;",
+			options: allowBoundaries,
+			errors: [error],
+		},
+		{
+			code: "function isReady(value: unknown): boolean { return Boolean(value); }",
 			options: allowBoundaries,
 			errors: [error],
 		},
