@@ -335,15 +335,13 @@ export function defineExtension<
 		ownedFlags[flagName] = flag;
 	}
 
-	const extension = {
+	// SAFETY: the runtime registry erases Defs after this function contextually typed every hook.
+	return Object.freeze({
 		...config,
 		uses: Object.freeze([...(config.uses ?? [])]),
 		id,
-	};
-	if (config.flags !== undefined) Object.assign(extension, { flags: ownedFlags });
-
-	// SAFETY: the runtime registry erases Defs after this function contextually typed every hook.
-	return Object.freeze(extension) as Extension<
+		...(config.flags === undefined ? {} : { flags: ownedFlags }),
+	}) as Extension<
 		ContextDependencies<Uses> &
 			ContextsDependencies<Provides> &
 			CommandDefinitionsDependencies<Commands>,

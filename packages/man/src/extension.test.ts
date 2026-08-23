@@ -45,9 +45,9 @@ describe("man Extension", () => {
 		const originalExit = process.exit;
 		process.env[SNAPSHOT_PATH_ENV] = snapshotPath;
 		process.env[BUILD_OUT_DIR_ENV] = outDir;
-		process.exit = ((code?: number) => {
+		process.exit = (code?: number) => {
 			throw new Error(`process.exit(${code ?? "undefined"}) was called during snapshot`);
-		}) as typeof process.exit;
+		};
 		const producer = defineExtension(defineExtensionId("skill-producer"), {
 			async build() {
 				const directory = join(source, "generated");

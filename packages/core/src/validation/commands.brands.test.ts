@@ -109,7 +109,7 @@ describe("compile-time command validation", () => {
 		>;
 		type _selfAlias = Expect<
 			Equal<
-				SelfAlias[0]["FIX_INVALID_ALIAS"],
+				SelfAlias[0]["FIX_ALIAS_SHAPE"],
 				'Command "i" must not list its own canonical name as an alias'
 			>
 		>;
@@ -118,43 +118,43 @@ describe("compile-time command validation", () => {
 
 		type _empty = Expect<
 			Equal<
-				Empty["FIX_INVALID_ALIAS"],
+				Empty["FIX_ALIAS_SHAPE"],
 				'Subcommand "issue" has an invalid alias: must be a non-empty string'
 			>
 		>;
 		type _dash = Expect<
 			Equal<
-				Dash["FIX_INVALID_ALIAS"],
+				Dash["FIX_ALIAS_SHAPE"],
 				'Subcommand "issue" alias "-i" must not start with "-" (reserved for flags)'
 			>
 		>;
 		type _space = Expect<
 			Equal<
-				Space["FIX_INVALID_ALIAS"],
+				Space["FIX_ALIAS_SHAPE"],
 				'Subcommand "issue" alias "my issue" must not contain whitespace'
 			>
 		>;
 		type _tab = Expect<
 			Equal<
-				Tab["FIX_INVALID_ALIAS"],
+				Tab["FIX_ALIAS_SHAPE"],
 				'Subcommand "issue" alias "my\tissue" must not contain whitespace'
 			>
 		>;
 		type _newline = Expect<
 			Equal<
-				Newline["FIX_INVALID_ALIAS"],
+				Newline["FIX_ALIAS_SHAPE"],
 				'Subcommand "issue" alias "my\nissue" must not contain whitespace'
 			>
 		>;
 		type _carriage = Expect<
 			Equal<
-				Carriage["FIX_INVALID_ALIAS"],
+				Carriage["FIX_ALIAS_SHAPE"],
 				'Subcommand "issue" alias "my\rissue" must not contain whitespace'
 			>
 		>;
 		type _ownName = Expect<
 			Equal<
-				OwnName["FIX_INVALID_ALIAS"],
+				OwnName["FIX_ALIAS_SHAPE"],
 				'Subcommand "issue" alias "issue" must not equal its own canonical name'
 			>
 		>;

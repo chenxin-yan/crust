@@ -92,17 +92,17 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 	type BuilderCase = readonly [name: string, apply: (app: Crust) => Crust];
 
 	const builderCases: readonly BuilderCase[] = [
-		[".flags()", (app) => app.flags({ name: "verbose", type: "boolean" }) as Crust],
-		[".args()", (app) => app.args({ name: "file", type: "string" }) as Crust],
+		[".flags()", (app) => app.flags({ name: "verbose", type: "boolean" })],
+		[".args()", (app) => app.args({ name: "file", type: "string" })],
 		[
 			".provide()",
 			(app) =>
 				app.provide(
 					defineContext("auth", { flags: [{ name: "api-key", type: "string" }] }, () => ({}))(),
-				) as Crust,
+				),
 		],
-		[".add()", (app) => app.add(defineCommand("sub", (command) => command)) as Crust],
-		[".action()", (app) => app.action(() => {}) as Crust],
+		[".add()", (app) => app.add(defineCommand("sub", (command) => command))],
+		[".action()", (app) => app.action(() => {})],
 	];
 
 	it.each(builderCases)("%s returns a new instance", (_name, apply) => {
@@ -448,7 +448,7 @@ describe("Crust .add() type-level tests", () => {
 	});
 
 	it("rejects invalid command alias shapes at defineCommand()", () => {
-		const typecheckInvalidAliases = () => {
+		const typecheckAliasShapes = () => {
 			// @ts-expect-error -- aliases must be non-empty
 			defineCommand("issue", { aliases: [""] }, (command) => command);
 			// @ts-expect-error -- aliases must not start with a dash
@@ -460,7 +460,7 @@ describe("Crust .add() type-level tests", () => {
 			// @ts-expect-error -- aliases must differ from their own canonical name
 			defineCommand("issue", { aliases: ["issue"] }, (command) => command);
 		};
-		void typecheckInvalidAliases;
+		void typecheckAliasShapes;
 
 		expect(true).toBe(true);
 	});
@@ -1768,7 +1768,7 @@ describe("Crust .execute()", () => {
 		console.error = originalError;
 		console.warn = originalWarn;
 		// Restore original exit code (0 acts as "no error")
-		process.exitCode = (originalExitCode as number) ?? 0;
+		process.exitCode = originalExitCode ?? 0;
 	});
 
 	it("runs root action with flags and args combined", async () => {
@@ -2005,7 +2005,7 @@ describe("Crust .execute()", () => {
 					command.add(
 						defineCommand("update", (cmd) =>
 							cmd.action((runCtx) => {
-								receivedFlags = runCtx.flags as Record<string, ParsedFlagValue>;
+								receivedFlags = runCtx.flags;
 							}),
 						),
 					),
@@ -2267,10 +2267,10 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		exitCalls = [];
 		errorCalls = [];
 		tempDirs = [];
-		process.exit = ((code?: number) => {
+		process.exit = (code?: number) => {
 			exitCalls.push(code);
 			throw new Error(`process.exit(${code ?? "undefined"}) was called during snapshot`);
-		}) as typeof process.exit;
+		};
 		console.error = (...values: unknown[]) => errorCalls.push(values.map(String).join(" "));
 	});
 

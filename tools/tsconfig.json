@@ -1,0 +1,4 @@
+{
+	"extends": "../packages/config/tsconfig.base.json",
+	"include": ["oxlint/**/*.ts"]
+}

@@ -3,7 +3,7 @@ import { setTimeout } from "node:timers/promises";
 import type {
 	AnyCrust,
 	CommandPath,
-	CommandContractAtPath,
+	CommandShapeAt,
 	ExtensionId,
 	InvocationIO,
 	RunInputArguments,
@@ -13,17 +13,17 @@ import { type ProgressSink, withProgressSink } from "@crustjs/progress";
 import { withPromptIO } from "@crustjs/prompts";
 import { createPromptIO, type Key } from "@crustjs/prompts/testing";
 
-/** Structural io contract shared by `run()` and `execute()` captures. */
+/** Structural io shape shared by `run()` and `execute()` captures. */
 export type CaptureIO = Partial<InvocationIO>;
 
 // Indexed access into the `_types` phantom instead of conditionally inferring
 // all nine `Crust` generics — the conditional forced a full structural match
 // (and union distribution) per helper call.
 type AppTree<App extends AnyCrust> = App["_types"]["tree"];
-type ContractAtPath<
-	App extends AnyCrust,
-	Path extends CommandPath<AppTree<App>>,
-> = CommandContractAtPath<App["_types"]["contract"], Path>;
+type ShapeAtPath<App extends AnyCrust, Path extends CommandPath<AppTree<App>>> = CommandShapeAt<
+	App["_types"]["shape"],
+	Path
+>;
 
 /**
  * Result of {@link captureRun}. Completed runs carry the selected action's
@@ -46,8 +46,8 @@ export async function captureRun<
 >(
 	app: App,
 	path: Path,
-	...args: RunInputArguments<ContractAtPath<App, Path>>
-): Promise<CapturedRun<ContractAtPath<App, Path>["result"]>> {
+	...args: RunInputArguments<ShapeAtPath<App, Path>>
+): Promise<CapturedRun<ShapeAtPath<App, Path>["result"]>> {
 	// Each io callback invocation is one line in a real terminal (core's
 	// defaults are console.log/console.error), so join captured calls with "\n".
 	const stdoutLines: string[] = [];
@@ -55,17 +55,19 @@ export async function captureRun<
 
 	try {
 		const [input] = args;
-		// The selected path and input are linked by ContractAtPath, while run's generic
+		// The selected path and input are linked by ShapeAt, while run's generic
 		// implementation signature cannot express that link through this wrapper.
-		// SAFETY: Path and input were constrained together by RunInputArguments above.
-		const outcome = (await app.run(path as never, input as never, {
+		// SAFETY: Path was constrained by CommandPath above; erasure bridges the generic wrapper.
+		const erasedPath = path as never;
+		// SAFETY: input was constrained for Path by RunInputArguments above.
+		const outcome = (await app.run(erasedPath, input as never, {
 			stdout: (text) => {
 				stdoutLines.push(text);
 			},
 			stderr: (text) => {
 				stderrLines.push(text);
 			},
-		})) as RunOutcome<ContractAtPath<App, Path>["result"]>;
+		})) as RunOutcome<ShapeAtPath<App, Path>["result"]>;
 		return { stdout: stdoutLines.join("\n"), stderr: stderrLines.join("\n"), ...outcome };
 	} catch (error) {
 		// Output written before the failure is retained.
@@ -157,7 +159,7 @@ export interface InteractiveRun {
 export function runInteractive<App extends AnyCrust, const Path extends CommandPath<AppTree<App>>>(
 	app: App,
 	path: Path,
-	...args: RunInputArguments<ContractAtPath<App, Path>>
+	...args: RunInputArguments<ShapeAtPath<App, Path>>
 ): InteractiveRun {
 	const harness = createPromptIO();
 	const output = harness.io.output;

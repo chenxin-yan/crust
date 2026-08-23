@@ -112,5 +112,21 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
 		},
 		{ code: "const value: unknown = 1;", errors: [error] },
 		{ code: "const value: object = [];", errors: [error] },
+		{
+			code: "const source = { id: 'second' }; const widened: unknown = source;",
+			errors: [error],
+		},
+		{
+			code: "const source = { id: 'second' }; const widened: object = source;",
+			errors: [error],
+		},
+		{
+			code: "const source = { id: 'second' }; const widened: Record<string, unknown> = source;",
+			errors: [error],
+		},
+		{
+			code: "const source = { id: 'second' }; const widened = source as unknown;",
+			errors: [error],
+		},
 	],
 });

@@ -125,6 +125,7 @@ jobs:
         run: |
           bun turbo run build check:types test --filter='./packages/*'
           bun test scripts
+          bunx tsc -p tools/tsconfig.json
           # oxlint's RuleTester requires Node >=22 raw transfer and is unsupported under Bun.
           node --test "tools/oxlint/anti-slop/rules/*.test.ts"
 

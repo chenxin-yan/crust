@@ -107,6 +107,10 @@ export interface CrustErrorJson<C extends CrustErrorCode> {
  * }
  * ```
  */
+function sameCrustErrorCode(left: CrustErrorCode, right: CrustErrorCode): boolean {
+	return left === right;
+}
+
 export class CrustError<C extends CrustErrorCode = CrustErrorCode> extends Error {
 	/** Machine-readable error code for programmatic handling */
 	readonly code: C;
@@ -130,8 +134,7 @@ export class CrustError<C extends CrustErrorCode = CrustErrorCode> extends Error
 	}
 
 	is<T extends CrustErrorCode>(code: T): this is CrustError<T> {
-		// SAFETY: every generic code is a CrustErrorCode; widening enables comparison with T.
-		return (this.code as CrustErrorCode) === code;
+		return sameCrustErrorCode(this.code, code);
 	}
 
 	withCause(cause: unknown): this {

@@ -1,7 +1,6 @@
 import { CrustError, type CaughtError } from "../errors.ts";
 import { assertDefinableFlag } from "../parsing/spellings.ts";
 import type {
-	FlagDef,
 	FlagsDef,
 	InferFlags,
 	InvocationIO,
@@ -193,8 +192,7 @@ export function defineContext(
 		const { name: flagName, ...rest } = def;
 		// Validate before the record assignment: a `__proto__` key would be
 		// silently swallowed as the record's prototype.
-		// SAFETY: removing name from a NamedFlagDef leaves its discriminated FlagDef.
-		const flag = rest as FlagDef;
+		const flag = rest;
 		assertDefinableFlag(flagName, flag);
 		ownedFlags[flagName] = flag;
 	}

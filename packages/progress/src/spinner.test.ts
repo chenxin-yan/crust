@@ -77,10 +77,10 @@ describe("spinner — terminal sink", () => {
 		// Stub the re-raise — a real one would terminate the test run.
 		const realKill = process.kill;
 		const kills: (string | number | undefined)[] = [];
-		process.kill = ((pid: number, signal?: string | number) => {
+		process.kill = (pid: number, signal?: string | number) => {
 			kills.push(signal);
 			return true;
-		}) as typeof process.kill;
+		};
 		try {
 			handler?.("SIGINT");
 		} finally {
@@ -102,10 +102,10 @@ describe("spinner — terminal sink", () => {
 
 		const realKill = process.kill;
 		const kills: (string | number | undefined)[] = [];
-		process.kill = ((pid: number, signal?: string | number) => {
+		process.kill = (pid: number, signal?: string | number) => {
 			kills.push(signal);
 			return true;
-		}) as typeof process.kill;
+		};
 		try {
 			handler?.("SIGINT");
 		} finally {

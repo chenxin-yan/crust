@@ -34,7 +34,13 @@ function buildNode(model: CommandDocumentation, source: CommandSnapshot): Manife
 		flags: [...model.flags].sort((a, b) => a.name.localeCompare(b.name)).map(normalizeFlag),
 		children: [...model.children]
 			.sort((a, b) => a.name.localeCompare(b.name))
-			.map((child) => buildNode(child, source.subCommands[child.name]!)),
+			.map((child) => {
+				const snapshot = source.subCommands[child.name];
+				if (snapshot === undefined) {
+					throw new Error(`Missing command snapshot for documented child "${child.name}".`);
+				}
+				return buildNode(child, snapshot);
+			}),
 	};
 }
 function normalizeName(raw: string): string {
@@ -59,7 +65,7 @@ function normalizeFlag(flag: DocumentationFlag): ManifestFlag {
 		required: flag.required,
 		multiple: flag.multiple,
 		short: flag.short,
-		aliases: [...flag.aliases].sort(),
+		aliases: [...flag.aliases].sort((a, b) => a.localeCompare(b)),
 	};
 	if (flag.description !== undefined) result.description = flag.description;
 	if (flag.default !== undefined) result.default = serializeDefault(flag.default);

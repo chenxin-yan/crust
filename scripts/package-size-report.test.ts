@@ -50,7 +50,7 @@ function run(errorCode?: string) {
 			...process.env,
 			PATH: `${fakeBin}:${process.env.PATH}`,
 			NPM_ARGS_FILE: installArgs,
-			FAKE_NPM_ERROR: errorCode,
+			...(errorCode ? { FAKE_NPM_ERROR: errorCode } : {}),
 		},
 		stdout: "pipe",
 		stderr: "pipe",

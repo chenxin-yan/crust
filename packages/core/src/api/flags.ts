@@ -19,8 +19,7 @@ export function defineFlag<const N extends string, const D extends FlagDef>(
 	name: N & EmptyFlagSpellingBrand<N>,
 	def: D,
 ): Simplify<{ readonly name: N } & D> {
-	// SAFETY: spreading D and adding its validated name is exactly the declared intersection.
-	return { ...def, name } as Simplify<{ readonly name: N } & D>;
+	return { ...def, name };
 }
 
 /**
@@ -31,6 +30,5 @@ export function defineArg<const N extends string, const D extends UnnamedArgDef>
 	name: N & EmptyArgNameBrand<N>,
 	def: D,
 ): Simplify<{ readonly name: N } & D> {
-	// SAFETY: spreading D and adding its validated name is exactly the declared intersection.
-	return { ...def, name } as Simplify<{ readonly name: N } & D>;
+	return { ...def, name };
 }

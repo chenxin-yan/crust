@@ -273,7 +273,7 @@ describe("bg — depth fallback", () => {
 			"rebeccapurple",
 			[128, 128, 128] as const,
 		]) {
-			const out = bg("x", input as never, "16");
+			const out = bg("x", input, "16");
 			expect(bgSgr.test(out)).toBe(true);
 			expect(out.endsWith("\x1b[49m")).toBe(true);
 			expect(/[\t\n\r\v\f]/.test(out)).toBe(false);

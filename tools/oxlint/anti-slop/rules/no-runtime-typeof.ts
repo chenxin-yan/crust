@@ -11,6 +11,10 @@ function isRuntimeFunction(node: ESTree.Node): node is RuntimeFunction {
 	);
 }
 
+function isRuleOptions(value: unknown): value is { readonly allowInTypeGuards?: boolean } {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function isInsideTypeGuard(node: ESTree.Node): boolean {
 	let current: ESTree.Node | null = node.parent;
 	while (current !== null && current.type !== "Program") {
@@ -50,7 +54,8 @@ export const noRuntimeTypeofRule = defineRule({
 
 		return {
 			Program() {
-				allowInTypeGuards = context.options?.[0]?.allowInTypeGuards === true;
+				const options = context.options?.[0];
+				allowInTypeGuards = isRuleOptions(options) && options.allowInTypeGuards === true;
 			},
 			UnaryExpression(node) {
 				if (node.operator === "typeof" && (!allowInTypeGuards || !isInsideTypeGuard(node))) {

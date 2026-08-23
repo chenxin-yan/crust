@@ -110,8 +110,7 @@ function applyExtensionCommands(
 function applyExtensionFlags(root: CommandNode, extension: Extension): void {
 	for (const [name, defWithScope] of Object.entries(extension.flags ?? {})) {
 		const { recursive = true, ...def } = defWithScope;
-		// SAFETY: recursive is the sole Extension-only field removed from the discriminated flag.
-		injectExtensionFlag(root, name, def as FlagDef, recursive);
+		injectExtensionFlag(root, name, def, recursive);
 	}
 }
 
@@ -411,7 +410,7 @@ async function dispatch(
 			}
 		} catch (error) {
 			const by = await onFailure?.(error, extensionContext);
-			outcome = by === undefined ? { status: "failed", error } : { status: "failed", error, by };
+			outcome = { status: "failed", error, ...(by === undefined ? {} : { by }) };
 		}
 
 		// Frozen so a mutating post-run hook cannot rewrite the outcome Core

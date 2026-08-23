@@ -11,7 +11,7 @@ export type AliasesOf<C> = C extends { readonly aliases: infer A extends readonl
 
 type NarrowAliases<A extends readonly string[]> = string extends A[number] ? never : A[number];
 
-type InvalidAliasError<Name extends string, Alias extends string> = Alias extends ""
+type AliasShapeError<Name extends string, Alias extends string> = Alias extends ""
 	? `Subcommand "${Name}" has an invalid alias: must be a non-empty string`
 	: Alias extends
 				| `${string} ${string}`
@@ -27,19 +27,19 @@ type InvalidAliasError<Name extends string, Alias extends string> = Alias extend
 				? `Subcommand "${Name}" alias "${Alias}" must not equal its own canonical name`
 				: never;
 
-type InvalidAliasErrors<Name extends string, C> =
+type AliasShapeErrors<Name extends string, C> =
 	NarrowAliases<AliasesOf<C>> extends infer Alias
 		? Alias extends string
-			? InvalidAliasError<Name, Alias>
+			? AliasShapeError<Name, Alias>
 			: never
 		: never;
 
 /** Brand command config containing a statically known invalid alias. */
 export type ValidateCommandConfig<Name extends string, C> = string extends Name
 	? {}
-	: [InvalidAliasErrors<Name, C>] extends [never]
+	: [AliasShapeErrors<Name, C>] extends [never]
 		? {}
-		: { readonly FIX_INVALID_ALIAS: InvalidAliasErrors<Name, C> };
+		: { readonly FIX_ALIAS_SHAPE: AliasShapeErrors<Name, C> };
 
 type EmptyNameError = { readonly FIX_EMPTY_NAME: "Command name must be a non-empty string" };
 
@@ -69,13 +69,13 @@ export type CommandDefinitionSpellings<D> = D extends unknown
 	: never;
 
 // Catches `.as()` renames that land on one of the definition's own aliases
-// (config-time InvalidAliasError compares aliases against the original name only).
+// (config-time AliasShapeError compares aliases against the original name only).
 type SelfAliasBrand<D> =
 	Overlap<DefName<D>, NarrowAliases<DefinitionAliases<D>>> extends infer Dup extends string
 		? [Dup] extends [never]
 			? {}
 			: {
-					readonly FIX_INVALID_ALIAS: `Command "${Dup}" must not list its own canonical name as an alias`;
+					readonly FIX_ALIAS_SHAPE: `Command "${Dup}" must not list its own canonical name as an alias`;
 				}
 		: never;
 

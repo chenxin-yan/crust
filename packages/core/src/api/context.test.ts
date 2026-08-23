@@ -300,7 +300,7 @@ describe("Context-owned flags", () => {
 			type _ActionApiKey = Assert<IsEqual<(typeof flags)["api-key"], string | undefined>>;
 			seen.push((await ctx.auth).apiKey);
 		});
-		await app.run([], { flags: { "api-key": "secret" } } as never);
+		await app.run([], { flags: { "api-key": "secret" } });
 
 		expect(seen).toEqual(["secret", "secret"]);
 	});
@@ -388,7 +388,7 @@ describe("Context-owned flags", () => {
 		await new Crust("cli")
 			.provide(auth())
 			.add(deploy)
-			.run(["deploy"], { flags: { "api-key": "secret" } } as never);
+			.run(["deploy"], { flags: { "api-key": "secret" } });
 		expect(seen).toEqual(["secret"]);
 	});
 

@@ -83,6 +83,12 @@ export const noUnknownParametersRule = defineRule({
 	createOnce(context) {
 		let allowInBoundaryFunctions = false;
 
+		function isRuleOptions(
+			value: unknown,
+		): value is { readonly allowInBoundaryFunctions?: boolean } {
+			return typeof value === "object" && value !== null && !Array.isArray(value);
+		}
+
 		const checkParameters = (node: ParameterOwner) => {
 			if (allowInBoundaryFunctions && isBoundaryFunction(node)) return;
 			for (const parameter of node.params) {
@@ -100,7 +106,9 @@ export const noUnknownParametersRule = defineRule({
 
 		return {
 			Program() {
-				allowInBoundaryFunctions = context.options?.[0]?.allowInBoundaryFunctions === true;
+				const options = context.options?.[0];
+				allowInBoundaryFunctions =
+					isRuleOptions(options) && options.allowInBoundaryFunctions === true;
 			},
 			ArrowFunctionExpression: checkParameters,
 			FunctionDeclaration: checkParameters,

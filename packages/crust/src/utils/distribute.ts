@@ -204,8 +204,8 @@ export function buildDistributionRootPackageJson(
 		optionalDependencies: Object.fromEntries(
 			targets.map((target) => [target.packageName, metadata.version]),
 		),
+		...(manPages.length > 0 ? { man: manPages.map((page) => `./man/${page}`) } : {}),
 	};
-	if (manPages.length > 0) rootPackageJson.man = manPages.map((page) => `./man/${page}`);
 
 	return rootPackageJson;
 }

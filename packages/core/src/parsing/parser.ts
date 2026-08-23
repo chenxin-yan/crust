@@ -433,7 +433,6 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 	let parsed: ReturnType<typeof nodeParseArgs> & { tokens: ParseArgsToken[] };
 
 	try {
-		// SAFETY: tokens:true is unconditional; the dynamic options record prevents Node's declaration from inferring it.
 		parsed = nodeParseArgs({
 			args: argv,
 			options: parseOptions,
@@ -441,7 +440,7 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 			allowPositionals: true,
 			allowNegative: true,
 			tokens: true,
-		}) as typeof parsed;
+		});
 	} catch (error) {
 		if (error instanceof Error) {
 			const unknownMatch = error.message.match(/Unknown option '(.+?)'/);

@@ -28,13 +28,13 @@ import { walkCommandNode } from "./walker.ts";
 describe("walker · validation", () => {
 	it("rejects command names containing whitespace", () => {
 		const cli = new Crust("bad")
-			.add(defineCommand("two words" as string, (c) => c.action(() => {})))
+			.add(defineCommand("two words", (c) => c.action(() => {})))
 			.action(() => {});
 		expect(() => walkCommandNode(snapshotCommand(cli._node))).toThrow(/invalid command name/);
 	});
 
 	it("rejects flag names with shell metacharacters", () => {
-		const cli = new Crust("bad").flags({ name: "a;rm", type: "boolean" } as never).action(() => {});
+		const cli = new Crust("bad").flags({ name: "a;rm", type: "boolean" }).action(() => {});
 		expect(() => walkCommandNode(snapshotCommand(cli._node))).toThrow(/invalid flag name/);
 	});
 

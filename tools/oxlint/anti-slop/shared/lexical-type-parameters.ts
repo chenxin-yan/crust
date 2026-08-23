@@ -14,8 +14,9 @@ function collectInferTypeParameterNames(
 	names: Set<string>,
 ): void {
 	if (node.type === "TSInferType") names.add(node.typeParameter.name.name);
+	const untypedNode: unknown = node;
 	// SAFETY: visitor keys only name ESTree child-node fields for this node kind.
-	const record = node as Readonly<
+	const record = untypedNode as Readonly<
 		Record<string, ESTree.Node | readonly ESTree.Node[] | null | undefined>
 	>;
 	for (const key of visitorKeys[node.type] ?? []) {
