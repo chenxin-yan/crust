@@ -136,7 +136,7 @@ Snapshots omit schemas and parse functions. `URL` defaults become strings, and a
 
 ## Typed invocation
 
-Types inferred from the application definition that back [`run(path, input?, io?)`](/docs/api/crust#runpath-input-io) and the [`@crustjs/testing`](/docs/modules/testing) helpers. `CommandTree` is the compile-time tree accumulated by `.add()`; `CommandPath` enumerates every valid path through it (including the root path `[]`); `CommandShapeAt` resolves the `CommandShape` a path selects; and `RunInput` is the structured `args`/`flags`/`raw` input for that shape, built from the pre-parse `InputArgs` and `InputFlags` value types. JSON inputs accept JSON primitives, objects, and mutable or readonly arrays/tuples; `Date`, `bigint`, functions, and other non-JSON values are rejected. `RunInputArguments` and `RunArguments` are the tuple types that make `input` optional when the selected command requires nothing; `RunOutcome` is the status-discriminated value `run()` resolves to. `AnyCrust` accepts any fully-built application.
+Types inferred from the application definition that back [`run(path, input?, io?)`](/docs/api/crust#runpath-input-io) and the [`@crustjs/testing`](/docs/modules/testing) helpers. `CommandTree` is the compile-time tree accumulated by `.add()`; `CommandPath` enumerates every valid path through it (including the root path `[]`); `CommandShapeAt` resolves the `CommandShape` a path selects; and `RunInput` is the structured `args`/`flags`/`raw` input for that shape, built from the pre-parse `InputArgs` and `InputFlags` value types. Scalar JSON inputs accept JSON primitives, objects, and mutable or readonly arrays/tuples; variadic arguments and multiple flags use a mutable array whose items are JSON values. `Date`, `bigint`, functions, and other non-JSON values are excluded by the typed API. `RunInputArguments` and `RunArguments` are the tuple types that make `input` optional when the selected command requires nothing; `RunOutcome` is the status-discriminated value `run()` resolves to. `AnyCrust` accepts any fully-built application.
 
 ```ts
 import type { CommandPath, CommandShapeAt, RunInput } from "@crustjs/core";
@@ -148,7 +148,7 @@ type GreetInput = RunInput<CommandShapeAt<(typeof app)["_types"]["shape"], reado
 
 ## Parser boundary types
 
-`ParseResult<A, F>` is the syntax-parsed result before required-value and Standard Schema validation. Its `args` and `flags` use the runtime-erased `ParsedArgValue` and `ParsedFlagValue` unions, and its `rawArgs` holds tokens after `--`. `ValidatedInput<A, F>` is the validated boundary passed onward to Command Actions, with `InferArgs<A>` and `InferFlags<F>` applied.
+`ParseResult<A, F>` is the syntax-parsed result before required-value and Standard Schema validation. Its generic `args` and `flags` preserve definition-specific raw value types; `ParsedArgValue` and `ParsedFlagValue` are the runtime-erased fallbacks for widened definitions. Its `rawArgs` holds tokens after `--`. `ValidatedInput<A, F>` is the validated boundary passed onward to Command Actions, with `InferArgs<A>` and `InferFlags<F>` applied.
 
 Most application authors consume the inferred Action context rather than naming these types directly. They are exported for parser integrations and tooling that need to distinguish syntax parsing from schema-validated values.
 
@@ -218,10 +218,10 @@ Attach an instance with `.provide()`. Core checks its transitive dependency clos
 ### `ContextMap`
 
 ```ts
-type ContextMap = Record<string, unknown>;
+type ContextMap = object;
 ```
 
-The name/value registry accumulated by `.provide()` and Extension `provides`. Command actions receive `ContextBag<Ctx>` for that accumulated registry. Reusable command definitions and Extensions expose only Contexts declared in their `uses` contract.
+The upper bound for the name/value registry accumulated by `.provide()` and Extension `provides`. It is a phantom constraint: the builder infers the concrete property map, so consumer-defined context shapes do not need a string index signature. Command actions receive `ContextBag<Ctx>` for that inferred registry. Reusable command definitions and Extensions expose only Contexts declared in their `uses` contract.
 
 ## Extension types
 

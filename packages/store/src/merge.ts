@@ -6,14 +6,8 @@ import type { JsonValue } from "@crustjs/utils/json";
 
 import type { FieldsDef, StoreDocument } from "./types.ts";
 
-function isReadonlyJsonArray(
-	value: JsonValue | readonly JsonValue[],
-): value is readonly JsonValue[] {
-	return Array.isArray(value);
-}
-
 function copyDefault(value: JsonValue | readonly JsonValue[]): JsonValue {
-	return isReadonlyJsonArray(value) ? [...value] : value;
+	return structuredClone(value);
 }
 
 /**
@@ -22,7 +16,7 @@ function copyDefault(value: JsonValue | readonly JsonValue[]): JsonValue {
  * For each field defined in `fields`:
  * - If the key exists in `persisted`, the persisted value is used.
  * - If the key is missing and the field has a `default`, the default is used.
- *   Array defaults are shallow-copied to prevent shared mutation.
+ *   Defaults are deep-copied to prevent shared nested mutation.
  * - If the key is missing and no default exists, the field is omitted
  *   (typed as `T | undefined` in the output).
  *

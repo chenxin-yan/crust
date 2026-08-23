@@ -47,7 +47,7 @@ bold.red.bgYellow("chained"); // open left-to-right, close right-to-left
 
 ### Styles as values
 
-Chainables are plain `(text: StyleInput) => string` functions — passing a style around is just passing the chainable. `StyleInput` accepts stringifiable values plus `null` and `undefined`; nullish values become `""`, while other values are converted with `String(value)`. The `StyleFn` type names this contract:
+Chainables are plain `(text: StyleInput) => string` functions — passing a style around is just passing the chainable. `StyleInput` accepts stringifiable values plus `null` and `undefined`; nullish values become `""`, while other values are converted with `String(value)`. The narrower `StyleFn` type names the `(text: string) => string` callback contract; every chainable is assignable to it:
 
 ```ts
 import { style, type StyleFn } from "@crustjs/style";
@@ -168,7 +168,7 @@ Use the exported `stringWidth(text)` helper for ANSI-, CJK-, combining-mark-, an
 | Layout         | `padStart`, `padEnd`, `center`, `table`, `stringWidth`                                                                                                                                                                   |
 | Types          | `AnsiPair`, `ColorInput`, `ColorString`, `NamedColor`, `ColorMode`, `ColorDepth`, `StyleInput`, `StyleFn`, `StyleInstance`, `StyleOptions`, `CapabilityOverrides`, `HyperlinkOptions`, `TableOptions`, `ColumnAlignment` |
 
-Scalar types in prose: `ColorMode` is `"auto" | "always" | "never"`; `ColorDepth` is `"truecolor" | "256" | "16" | "none"`; `StyleInput` is `{ toString(): string } | null | undefined`; `StyleFn` is `(text: StyleInput) => string`; `ColumnAlignment` is `"left" | "right" | "center"`.
+Scalar types in prose: `ColorMode` is `"auto" | "always" | "never"`; `ColorDepth` is `"truecolor" | "256" | "16" | "none"`; `StyleInput` is `{ toString(): string } | null | undefined`; `StyleFn` is `(text: string) => string`; `ColumnAlignment` is `"left" | "right" | "center"`.
 
 ```ts
 type ColorInput =

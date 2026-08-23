@@ -271,9 +271,10 @@ function interfaceDictionaryValueTypes(
 				? [{ type: member.typeAnnotation.typeAnnotation, substitutions: nextSubstitutions }]
 				: [],
 		);
-		const inherited = declaration.extends.flatMap((heritage): readonly ResolvedType[] =>
+		if (direct.length > 0) return direct;
+		return declaration.extends.flatMap((heritage): readonly ResolvedType[] =>
 			heritage.expression.type === "Identifier"
-				? interfaceDictionaryValueTypes(
+				? inheritedDictionaryValueTypes(
 						heritage.expression.name,
 						heritage.typeArguments?.params ?? [],
 						environment,
@@ -282,8 +283,36 @@ function interfaceDictionaryValueTypes(
 					)
 				: [],
 		);
-		return [...direct, ...inherited];
 	});
+}
+
+function inheritedDictionaryValueTypes(
+	name: string,
+	arguments_: readonly ESTree.TSType[],
+	environment: TypeEnvironment,
+	substitutions: TypeAliasEnvironment,
+	resolvingAliases: ReadonlySet<string>,
+): readonly ResolvedType[] {
+	if (environment.interfaces.has(name)) {
+		return interfaceDictionaryValueTypes(
+			name,
+			arguments_,
+			environment,
+			substitutions,
+			resolvingAliases,
+		);
+	}
+	const alias = environment.aliases.get(name);
+	if (alias === undefined || resolvingAliases.has(name)) return [];
+	const nextSubstitutions = typeParameterSubstitution(
+		alias.typeParameters?.params ?? [],
+		arguments_,
+		substitutions,
+	);
+	if (nextSubstitutions === null) return [];
+	const nextResolving = new Set(resolvingAliases);
+	nextResolving.add(name);
+	return dictionaryValueTypes(alias.typeAnnotation, environment, nextSubstitutions, nextResolving);
 }
 
 function dictionaryValueTypes(

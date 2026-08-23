@@ -20,6 +20,8 @@ tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
 		"type Safe = Index<Command>; type Index<T> = Record<string, T>;",
 		"interface Index<T> { [key: string]: T } type Safe = Index<Command>;",
 		"interface Base<T> { [key: string]: T } interface Index<T> extends Base<T> {} type Safe = Index<Command>;",
+		"interface Base<T> { [key: string]: T } interface Safe extends Base<unknown> { [key: string]: Command } type A = Safe;",
+		"type Base<T> = { [key: string]: T }; interface Safe<T> extends Base<T> {} type A = Safe<Command>;",
 		"type A = Map<string, unknown>; type B = ReadonlyMap<string, unknown>; type C = WeakMap<object, unknown>;",
 		"import { Record } from './local'; type A = Record<string, unknown>;",
 		"type Record<K, V> = { key: K; value: V }; type A = Record<string, unknown>;",
@@ -78,6 +80,10 @@ tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
 		{ code: "interface Index<T> { [key: string]: T } type A = Index<unknown>;", errors: 1 },
 		{
 			code: "interface Base<T> { [key: string]: T } interface Index<T> extends Base<T> {} type A = Index<unknown>;",
+			errors: 1,
+		},
+		{
+			code: "type Base<T> = { [key: string]: T }; interface Index<T> extends Base<T> {} type A = Index<unknown>;",
 			errors: 1,
 		},
 		{ code: "interface A { [key: string]: unknown }", errors: [error] },

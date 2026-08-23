@@ -110,7 +110,7 @@ These types back [`run(path, input?, io?)`](/docs/api/crust) and the [`@crustjs/
 | `ParsedArgValue`    | Runtime-erased syntax-parsed positional value                                 |
 | `ParsedFlagValue`   | Runtime-erased syntax-parsed flag value                                       |
 
-JSON arguments and flags in `RunInput` accept JSON primitives, objects, and mutable or readonly arrays/tuples. Non-JSON values such as `Date`, `bigint`, and functions are rejected before the invocation reaches the parser.
+Scalar JSON arguments and flags in `RunInput` accept JSON primitives, objects, and mutable or readonly arrays/tuples; variadic arguments and multiple flags use a mutable occurrence array of JSON values. The typed API excludes `Date`, `bigint`, functions, and other non-JSON values. At runtime, `run()` reports unserializable values when `JSON.stringify` throws or returns `undefined`; untyped inputs otherwise follow JSON serialization semantics (for example, a `Date` serializes to a string).
 
 `run()` resolves to `RunOutcome<R>`: the `completed` branch owns the selected action's typed `result`, while the `finished` branch owns the `ExtensionId` of the Extension whose `preRun` hook ended the invocation.
 
@@ -137,7 +137,7 @@ Omitting `io` creates no new ambient scope, preserving native TTY detection and 
 | `ContextInstance`   | Named lazy dependency attached with `.provide()`                          |
 | `ContextConfig`     | Flags owned by a Context and its declared `uses` dependencies             |
 | `ContextSetup`      | Typed setup input: `options`, `flags`, lazy bag `ctx`, and invocation I/O |
-| `ContextMap`        | Record shape used by accumulated command Context types                    |
+| `ContextMap`        | Upper bound for accumulated command Context registries                    |
 
 ## Extension types
 
