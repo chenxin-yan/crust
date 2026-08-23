@@ -45,7 +45,7 @@ jobs:
             turbo-docs-${{ runner.os }}-
 
       - name: Type check (docs)
-        run: bun run check:types --filter=./apps/docs
+        run: bun turbo run check:types --filter=./apps/docs
 
       - name: Lint and format check (docs)
         run: |
