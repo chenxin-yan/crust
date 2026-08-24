@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, join, relative } from "node:path";
 
 import { getWindowsShimCommand, runProcess, which } from "./process.ts";
 
@@ -133,6 +133,16 @@ describe("which", () => {
 			chmodSync(join(dir, "crust-which-probe"), 0o755);
 			expect(which("crust-which-probe")).toBe(join(dir, "crust-which-probe"));
 		});
+
+		it.skipIf(process.platform === "win32")(
+			"returns absolute paths for relative PATH entries",
+			() => {
+				writeFileSync(join(dir, "crust-relative-probe"), "#!/bin/sh\n");
+				chmodSync(join(dir, "crust-relative-probe"), 0o755);
+				process.env.PATH = relative(process.cwd(), dir);
+				expect(which("crust-relative-probe")).toBe(join(dir, "crust-relative-probe"));
+			},
+		);
 
 		it.skipIf(process.platform === "win32")("resolves path-containing inputs directly", () => {
 			const probe = join(dir, "crust-path-probe");

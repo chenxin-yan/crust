@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { accessSync, constants, statSync } from "node:fs";
-import { delimiter, extname, join, sep, win32 } from "node:path";
+import { delimiter, extname, join, resolve, sep, win32 } from "node:path";
 import { text } from "node:stream/consumers";
 
 export type RunProcessOptions = {
@@ -119,7 +119,9 @@ export function which(command: string): string | null {
 			: [""];
 	for (const directory of process.env.PATH?.split(delimiter) ?? []) {
 		for (const extension of extensions) {
-			const candidate = join(directory, command + extension);
+			// Resolve relative PATH entries against the current cwd; a relative
+			// result would be re-resolved against the child's cwd when spawned.
+			const candidate = resolve(join(directory, command + extension));
 			try {
 				accessSync(candidate, constants.X_OK);
 				if (statSync(candidate).isFile()) return candidate;
