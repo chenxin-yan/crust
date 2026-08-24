@@ -1205,7 +1205,7 @@ describe("core validator transform type enforcement", () => {
 		const store = createStore({
 			dirPath: tempDir,
 			name: "config",
-			fields: { name: { type: "string", validate: (value: string) => ({ value: value.trim() }) } },
+			fields: { name: { type: "string", validate: (value) => ({ value: value.trim() }) } },
 		});
 
 		await expect(store.write({ name: "  hi  " })).resolves.toEqual({ name: "hi" });

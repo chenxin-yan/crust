@@ -108,6 +108,9 @@ interface BooleanArrayFieldDef extends ArrayFieldBase<boolean[]> {
 interface SchemaFieldDef {
 	/** Standard Schema that owns validation, transformation, defaults, and optionality. */
 	schema: StandardSchema<unknown, unknown>;
+	// Keep these discriminants so core-field validate callbacks retain contextual typing.
+	type?: BaseValueType;
+	array?: true;
 	default?: never;
 	validate?: never;
 }

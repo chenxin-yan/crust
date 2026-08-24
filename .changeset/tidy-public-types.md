@@ -1,7 +1,7 @@
 ---
-"@crustjs/core": patch
-"@crustjs/prompts": patch
-"@crustjs/store": patch
+"@crustjs/core": minor
+"@crustjs/prompts": minor
+"@crustjs/store": minor
 ---
 
 Remove unused generic, prompt transcript, and field metadata APIs.
