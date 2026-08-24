@@ -1,0 +1,12 @@
+{
+	"name": "oxlint-plugin-anti-slop",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"check:types": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@oxlint/plugins": "^1.79.0"
+	}
+}

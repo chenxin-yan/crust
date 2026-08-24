@@ -13,7 +13,7 @@
 		"format:fix": "oxfmt",
 		"check": "turbo run build --filter='./packages/*' && turbo run //#lint //#format",
 		"check:fix": "turbo run build --filter='./packages/*' && oxlint --fix && oxfmt",
-		"check:types": "turbo run check:types && tsc -p tools/tsconfig.json",
+		"check:types": "turbo run check:types",
 		"test": "turbo run test --filter='./packages/*'",
 		"changeset": "changeset",
 		"packages:version": "changeset version && bun install",
@@ -22,7 +22,6 @@
 	"devDependencies": {
 		"@changesets/changelog-github": "^1.0.0",
 		"@changesets/cli": "^3.0.1",
-		"@oxlint/plugins": "^1.79.0",
 		"@types/bun": "^1.4.0",
 		"oxfmt": "^0.64.0",
 		"oxlint": "^1.79.0",
@@ -39,7 +38,8 @@
 	"packageManager": "bun@1.4.0",
 	"workspaces": [
 		"apps/*",
-		"packages/*"
+		"packages/*",
+		"tools"
 	],
 	"overrides": {
 		"@types/node": "^24"

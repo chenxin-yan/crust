@@ -97,7 +97,7 @@ bun run build:docs
 bun run lint apps/docs
 bun run format apps/docs
 bun run build:docs
-bun turbo run check:types --filter=./apps/docs
+bun run check:types --filter=./apps/docs
 ```
 
 Update docs when you change public APIs, commands, flags, generated output, or release behavior.
