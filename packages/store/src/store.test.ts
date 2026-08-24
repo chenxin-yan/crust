@@ -816,6 +816,29 @@ describe("field validation", () => {
 		}
 	});
 
+	it("should reject non-finite mutation values before persistence", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: { amount: { type: "number", default: 0 } },
+		});
+
+		await expect(store.write({ amount: Number.NaN })).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: { operation: "write" },
+		});
+		await expect(store.update(() => ({ amount: Number.POSITIVE_INFINITY }))).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: { operation: "update" },
+		});
+		const malformedPatch: { amount?: number } = JSON.parse('{"amount":"Infinity"}');
+		await expect(store.patch(malformedPatch)).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: { operation: "patch" },
+		});
+		expect(existsSync(join(tempDir, "config.json"))).toBe(false);
+	});
+
 	it("should support async field validators", async () => {
 		const fields = {
 			token: {

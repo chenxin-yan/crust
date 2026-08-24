@@ -59,7 +59,7 @@ function isString(value: JsonValue | undefined): value is string {
 }
 
 function isNumber(value: JsonValue | undefined): value is number {
-	return typeof value === "number";
+	return typeof value === "number" && Number.isFinite(value);
 }
 
 function isBoolean(value: JsonValue | undefined): value is boolean {
