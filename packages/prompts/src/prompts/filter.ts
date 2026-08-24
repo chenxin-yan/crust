@@ -3,23 +3,15 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { FuzzyFilterResult } from "../core/fuzzy.ts";
-import { fuzzyFilter, highlightMatches, refilter } from "../core/fuzzy.ts";
+import { fuzzyFilter, highlightMatches } from "../core/fuzzy.ts";
+import { refilter, setupListPrompt } from "../core/list.ts";
 import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
-import { isTTY, resolvePromptIO, runPrompt, submit } from "../core/renderer.ts";
+import { runPrompt, submit } from "../core/renderer.ts";
 import { CURSOR_INDICATOR, PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import { handleTextEdit, renderTextWithCursor } from "../core/textEdit.ts";
-import { resolveTheme } from "../core/theme.ts";
 import type { Choice, ChoiceValue, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
-import {
-	calculateScrollOffset,
-	DEFAULT_MAX_VISIBLE,
-	formatPromptLine,
-	formatSubmitted,
-	moveCursor,
-	normalizeChoices,
-	renderChoiceList,
-} from "../core/utils.ts";
+import { formatPromptLine, formatSubmitted, moveCursor, renderChoiceList } from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -33,7 +25,7 @@ export interface FilterOptions<T> {
 	readonly choices: readonly Choice<T>[];
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
 	readonly initial?: T;
-	/** Default value — sets the initial cursor position to the matching choice. In non-interactive environments, this value is returned automatically */
+	/** Default value — matches a choice using reference equality for object values. Returned automatically in non-interactive environments. */
 	readonly default?: T;
 	/** Placeholder text shown when the query input is empty */
 	readonly placeholder?: string;
@@ -235,55 +227,23 @@ export function filter(
 ): Promise<string>;
 export function filter<T>(options: FilterOptions<T>, io?: PromptIO): Promise<T>;
 export async function filter<T>(options: FilterOptions<T>, io?: PromptIO): Promise<T> {
-	// Short-circuit: return initial value immediately without rendering
-	if (options.initial !== undefined) {
-		return options.initial;
-	}
+	const setup = setupListPrompt<T, T>(options, io, options.default);
+	if (setup.shortCircuited) return setup.value;
 
-	const promptIO = resolvePromptIO(io);
-
-	// Non-interactive fallback: return default value when stdin is not a TTY
-	if (!isTTY(promptIO.input) && options.default !== undefined) {
-		return options.default;
-	}
-
-	const theme = resolveTheme(options.theme);
-	const maxVisible = options.maxVisible ?? DEFAULT_MAX_VISIBLE;
-	const choices = normalizeChoices(options.choices);
-
-	// Initial results: all items (empty query matches everything)
-	const initialResults = fuzzyFilter("", choices);
-
-	// Find initial cursor position from default value
-	let initialListCursor = 0;
-	if (options.default !== undefined) {
-		const idx = initialResults.findIndex((result) => result.item.value === options.default);
-		if (idx !== -1) {
-			initialListCursor = idx;
-		}
-	}
-
-	// Calculate initial scroll offset to keep cursor visible
-	const initialScrollOffset = calculateScrollOffset(
-		initialListCursor,
-		0,
-		initialResults.length,
-		maxVisible,
-	);
-
+	const { choices, cursor, maxVisible, promptIO, scrollOffset } = setup;
 	const initialState: FilterState<T> = {
 		query: "",
 		cursorPos: 0,
 		choices,
-		results: initialResults,
-		listCursor: initialListCursor,
-		scrollOffset: initialScrollOffset,
+		results: fuzzyFilter("", choices),
+		listCursor: cursor,
+		scrollOffset,
 	};
 
 	return runPrompt<FilterState<T>, T>(
 		{
 			initialState,
-			theme,
+			theme: options.theme,
 			render: (state, resolvedTheme) =>
 				renderFilter(state, resolvedTheme, options.message, options.placeholder, maxVisible),
 			handleKey: createHandleKey<T>(maxVisible),

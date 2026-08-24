@@ -3,9 +3,10 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { FuzzyFilterResult } from "../core/fuzzy.ts";
-import { fuzzyFilter, highlightMatches, refilter } from "../core/fuzzy.ts";
+import { fuzzyFilter, highlightMatches } from "../core/fuzzy.ts";
+import { refilter, setupListPrompt } from "../core/list.ts";
 import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
-import { isTTY, resolvePromptIO, runPrompt, submit } from "../core/renderer.ts";
+import { runPrompt, submit } from "../core/renderer.ts";
 import {
 	CHECKBOX_CHECKED,
 	CHECKBOX_UNCHECKED,
@@ -14,16 +15,12 @@ import {
 	PREFIX_SYMBOL,
 } from "../core/symbols.ts";
 import { handleTextEdit, renderTextWithCursor } from "../core/textEdit.ts";
-import { resolveTheme } from "../core/theme.ts";
 import type { Choice, ChoiceValue, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
 import {
-	calculateScrollOffset,
-	DEFAULT_MAX_VISIBLE,
 	formatPromptLine,
 	formatSubmitted,
 	moveCursor,
-	normalizeChoices,
 	renderChoiceList,
 	validateSelection,
 } from "../core/utils.ts";
@@ -96,17 +93,6 @@ interface MultifilterState<T> {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ────────────────────────────────────────────────────────────────────────────
-
-function choiceIndex<T>(
-	choices: readonly NormalizedChoice<T>[],
-	item: { readonly label: string; readonly value: T },
-): number {
-	return choices.findIndex((choice) => choice.label === item.label && choice.value === item.value);
-}
-
-// ────────────────────────────────────────────────────────────────────────────
 // Keypress handler
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -133,7 +119,7 @@ function createHandleKey<T>(
 			const result = state.results[state.listCursor];
 			if (!result) return state;
 
-			const selectedIndex = choiceIndex(state.choices, result.item);
+			const selectedIndex = state.choices.indexOf(result.item);
 			if (selectedIndex === -1) return state;
 
 			const selected = new Set(state.selected);
@@ -167,7 +153,7 @@ function createHandleKey<T>(
 				query: edit.text,
 				cursorPos: edit.cursorPos,
 			};
-			return queryChanged ? refilter(nextState, maxVisible) : nextState;
+			return queryChanged ? { ...refilter(nextState, maxVisible), error: null } : nextState;
 		}
 
 		return state;
@@ -207,7 +193,7 @@ function renderMultifilter<T>(
 			state.scrollOffset,
 			maxVisible,
 			(result, resultIndex) => {
-				const choiceIdx = choiceIndex(state.choices, result.item);
+				const choiceIdx = state.choices.indexOf(result.item);
 				const choice = choiceIdx === -1 ? undefined : state.choices[choiceIdx];
 				const checkbox =
 					choiceIdx !== -1 && state.selected.has(choiceIdx)
@@ -274,19 +260,15 @@ export function multifilter(
 ): Promise<string[]>;
 export function multifilter<T>(options: MultifilterOptions<T>, io?: PromptIO): Promise<T[]>;
 export async function multifilter<T>(options: MultifilterOptions<T>, io?: PromptIO): Promise<T[]> {
-	if (options.initial !== undefined) {
-		return [...options.initial];
-	}
+	const setup = setupListPrompt<T, readonly T[]>(
+		options,
+		io,
+		options.default?.[0],
+		(options.default?.length ?? 0) > 0,
+	);
+	if (setup.shortCircuited) return [...setup.value];
 
-	const promptIO = resolvePromptIO(io);
-
-	if (!isTTY(promptIO.input) && options.default !== undefined) {
-		return [...options.default];
-	}
-
-	const theme = resolveTheme(options.theme);
-	const maxVisible = options.maxVisible ?? DEFAULT_MAX_VISIBLE;
-	const choices = normalizeChoices(options.choices);
+	const { choices, cursor, maxVisible, promptIO, scrollOffset } = setup;
 	const results = fuzzyFilter("", choices);
 
 	const selected = new Set<number>();
@@ -299,22 +281,12 @@ export async function multifilter<T>(options: MultifilterOptions<T>, io?: Prompt
 		}
 	}
 
-	let listCursor = 0;
-	if (options.default && options.default.length > 0) {
-		const idx = results.findIndex((result) => result.item.value === options.default?.[0]);
-		if (idx !== -1) {
-			listCursor = idx;
-		}
-	}
-
-	const scrollOffset = calculateScrollOffset(listCursor, 0, results.length, maxVisible);
-
 	const initialState: MultifilterState<T> = {
 		query: "",
 		cursorPos: 0,
 		choices,
 		results,
-		listCursor,
+		listCursor: cursor,
 		scrollOffset,
 		selected,
 		error: null,
@@ -323,7 +295,7 @@ export async function multifilter<T>(options: MultifilterOptions<T>, io?: Prompt
 	return runPrompt<MultifilterState<T>, T[]>(
 		{
 			initialState,
-			theme,
+			theme: options.theme,
 			render: (state, resolvedTheme) =>
 				renderMultifilter(state, resolvedTheme, options.message, options.placeholder, maxVisible),
 			handleKey: createHandleKey<T>(maxVisible, options.required, options.min, options.max),

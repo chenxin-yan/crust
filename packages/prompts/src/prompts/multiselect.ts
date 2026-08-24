@@ -2,8 +2,9 @@
 // Multiselect — Checkbox-style multi selection from a list for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
+import { setupListPrompt } from "../core/list.ts";
 import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
-import { isTTY, resolvePromptIO, runPrompt, submit } from "../core/renderer.ts";
+import { runPrompt, submit } from "../core/renderer.ts";
 import {
 	CHECKBOX_CHECKED,
 	CHECKBOX_UNCHECKED,
@@ -11,17 +12,9 @@ import {
 	PREFIX_SUBMITTED,
 	PREFIX_SYMBOL,
 } from "../core/symbols.ts";
-import { resolveTheme } from "../core/theme.ts";
 import type { Choice, ChoiceValue, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
-import {
-	DEFAULT_MAX_VISIBLE,
-	formatSubmitted,
-	moveCursor,
-	normalizeChoices,
-	renderChoiceList,
-	validateSelection,
-} from "../core/utils.ts";
+import { formatSubmitted, moveCursor, renderChoiceList, validateSelection } from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -57,7 +50,7 @@ export interface MultiselectOptions<T> {
 	readonly message?: string;
 	/** List of choices — strings or `{ label, value, hint? }` objects */
 	readonly choices: readonly Choice<T>[];
-	/** Default selected values — pre-selects matching choices */
+	/** Default selected values — matches choices using reference equality for object values. */
 	readonly default?: readonly T[];
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
 	readonly initial?: readonly T[];
@@ -299,21 +292,10 @@ export function multiselect(
 ): Promise<string[]>;
 export function multiselect<T>(options: MultiselectOptions<T>, io?: PromptIO): Promise<T[]>;
 export async function multiselect<T>(options: MultiselectOptions<T>, io?: PromptIO): Promise<T[]> {
-	// Short-circuit: return initial value immediately without rendering
-	if (options.initial !== undefined) {
-		return [...options.initial];
-	}
+	const setup = setupListPrompt<T, readonly T[]>(options, io);
+	if (setup.shortCircuited) return [...setup.value];
 
-	const promptIO = resolvePromptIO(io);
-
-	// Non-interactive fallback: return default values when stdin is not a TTY
-	if (!isTTY(promptIO.input) && options.default !== undefined) {
-		return [...options.default];
-	}
-
-	const theme = resolveTheme(options.theme);
-	const maxVisible = options.maxVisible ?? DEFAULT_MAX_VISIBLE;
-	const choices = normalizeChoices(options.choices);
+	const { choices, cursor, maxVisible, promptIO, scrollOffset } = setup;
 
 	// Pre-select items matching default values
 	const initialSelected = new Set<number>();
@@ -327,17 +309,17 @@ export async function multiselect<T>(options: MultiselectOptions<T>, io?: Prompt
 	}
 
 	const initialState: MultiselectState<T> = {
-		cursor: 0,
+		cursor,
 		choices,
 		selected: initialSelected,
-		scrollOffset: 0,
+		scrollOffset,
 		error: null,
 	};
 
 	return runPrompt<MultiselectState<T>, T[]>(
 		{
 			initialState,
-			theme,
+			theme: options.theme,
 			render: (state, t) => renderMultiselect(state, t, options.message, maxVisible),
 			handleKey: createHandleKey<T>(maxVisible, options.required, options.min, options.max),
 			renderSubmitted: (state, value, t) => renderSubmitted(state, value, t, options.message),

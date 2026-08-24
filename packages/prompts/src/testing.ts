@@ -1,7 +1,7 @@
 import { PassThrough, Writable } from "node:stream";
 import { stripVTControlCharacters } from "node:util";
 
-import type { PromptIO } from "./core/renderer.ts";
+import type { KeypressEvent, PromptIO } from "./core/renderer.ts";
 
 const namedKeys = {
 	return: "\r",
@@ -175,6 +175,21 @@ export interface RenderedPrompt<Answer> {
 	keys(...namedKeys: Key[]): void;
 	screen(): string;
 	readonly answer: Promise<Answer>;
+}
+
+/** Drive one keypress through a rendered prompt test harness. */
+export function pressKey(
+	prompt: Pick<RenderedPrompt<unknown>, "type" | "keys">,
+	char: string,
+	key?: Partial<Pick<KeypressEvent, "name" | "ctrl" | "meta" | "shift">>,
+): void {
+	if (key?.ctrl) {
+		prompt.keys(`ctrl+${key.name ?? char}`);
+	} else if (char === "") {
+		prompt.keys(key?.name ?? "");
+	} else {
+		prompt.type(char);
+	}
 }
 
 /** Run a prompt function against fake TTY streams and expose terminal-style controls. */

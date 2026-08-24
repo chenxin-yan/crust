@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { createPromptIO, renderPrompt, type RenderedPrompt } from "../testing.ts";
+import { createPromptIO, pressKey, renderPrompt, type RenderedPrompt } from "../testing.ts";
 import { multifilter, type MultifilterOptions } from "./multifilter.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -13,19 +13,6 @@ function start<T>(options: MultifilterOptions<T>): Promise<T[]> {
 	const prompt = renderPrompt<MultifilterOptions<T>, T[]>(multifilter, options);
 	activePrompt = prompt;
 	return prompt.answer;
-}
-
-function pressKey(
-	char: string,
-	key?: Partial<{ name: string; ctrl: boolean; meta: boolean; shift: boolean }>,
-): void {
-	if (key?.ctrl) {
-		activePrompt.keys(`ctrl+${key.name ?? char}`);
-	} else if (char === "") {
-		activePrompt.keys(key?.name ?? "");
-	} else {
-		activePrompt.type(char);
-	}
 }
 
 function screen(): string {
@@ -109,16 +96,41 @@ describe("multifilter — interactive", () => {
 		});
 
 		await tick();
-		pressKey("", { name: "space" });
+		pressKey(activePrompt, "", { name: "space" });
 		await tick();
-		pressKey("", { name: "down" });
+		pressKey(activePrompt, "", { name: "down" });
 		await tick();
-		pressKey("", { name: "space" });
+		pressKey(activePrompt, "", { name: "space" });
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toEqual(["alpha", "beta"]);
+	});
+
+	it("toggles the highlighted choice when duplicate choices share a label and value", async () => {
+		const value = { id: 1 };
+		const promise = start({
+			message: "Search",
+			choices: [
+				{ label: "duplicate", value },
+				{ label: "duplicate", value },
+			],
+		});
+
+		await tick();
+		pressKey(activePrompt, "", { name: "down" });
+		await tick();
+		pressKey(activePrompt, "", { name: "space" });
+		await tick();
+
+		const duplicateLines = screen()
+			.split("\n")
+			.filter((line) => line.includes("duplicate"));
+		expect(duplicateLines.map((line) => line.includes("●"))).toEqual([false, true]);
+
+		pressKey(activePrompt, "", { name: "return" });
+		expect(await promise).toEqual([value]);
 	});
 
 	it("pre-selects from default", async () => {
@@ -130,10 +142,28 @@ describe("multifilter — interactive", () => {
 
 		await tick();
 		expect(screen()).toContain("●");
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toEqual(["c"]);
+	});
+
+	it("positions the cursor on an undefined default value", async () => {
+		const promise = start<string | undefined>({
+			message: "Search",
+			choices: [
+				{ label: "first", value: "first" },
+				{ label: "unset", value: undefined },
+			],
+			default: [undefined],
+		});
+
+		await tick();
+		pressKey(activePrompt, "", { name: "space" });
+		await tick();
+		pressKey(activePrompt, "", { name: "return" });
+
+		expect(await promise).toEqual([]);
 	});
 
 	it("Enter with required and no selection shows error", async () => {
@@ -144,14 +174,14 @@ describe("multifilter — interactive", () => {
 		});
 
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await tick();
 
 		expect(screen()).toContain("At least one");
 
-		pressKey("", { name: "space" });
+		pressKey(activePrompt, "", { name: "space" });
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toEqual(["x"]);
@@ -164,21 +194,21 @@ describe("multifilter — interactive", () => {
 		});
 
 		await tick();
-		pressKey("", { name: "down" });
+		pressKey(activePrompt, "", { name: "down" });
 		await tick();
-		pressKey("", { name: "down" });
+		pressKey(activePrompt, "", { name: "down" });
 		await tick();
-		pressKey("", { name: "space" });
+		pressKey(activePrompt, "", { name: "space" });
 		await tick();
-		pressKey("g", { name: "g" });
+		pressKey(activePrompt, "g", { name: "g" });
 		await tick();
-		pressKey("a", { name: "a" });
+		pressKey(activePrompt, "a", { name: "a" });
 		await tick();
-		pressKey("m", { name: "m" });
+		pressKey(activePrompt, "m", { name: "m" });
 		await tick();
 
 		expect(screen()).toContain("gamma");
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toEqual(["gamma"]);

@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { z } from "zod";
 
 import type { PromptIO } from "../core/renderer.ts";
-import { createPromptIO, renderPrompt, type RenderedPrompt } from "../testing.ts";
+import { createPromptIO, pressKey, renderPrompt, type RenderedPrompt } from "../testing.ts";
 import { input, type InputOptions } from "./input.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -21,19 +21,6 @@ function start<Output>(options: InputOptions<Output>): Promise<Output | string> 
 	const prompt = renderPrompt<InputOptions<Output>, Output | string>(runInput, options);
 	activePrompt = prompt;
 	return prompt.answer;
-}
-
-function pressKey(
-	char: string,
-	key?: Partial<{ name: string; ctrl: boolean; meta: boolean; shift: boolean }>,
-): void {
-	if (key?.ctrl) {
-		activePrompt.keys(`ctrl+${key.name ?? char}`);
-	} else if (char === "") {
-		activePrompt.keys(key?.name ?? "");
-	} else {
-		activePrompt.type(char);
-	}
 }
 
 function screen(): string {
@@ -91,7 +78,7 @@ describe("input — interactive", () => {
 		expect(screen()).toContain("Your name?");
 
 		// Submit empty to resolve
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await promise;
 	});
 
@@ -104,7 +91,7 @@ describe("input — interactive", () => {
 		await tick();
 		expect(screen()).toContain("Enter your name");
 
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await promise;
 	});
 
@@ -119,7 +106,7 @@ describe("input — interactive", () => {
 		expect(screen()).toContain("World");
 		expect(screen()).not.toContain("(World)");
 
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await promise;
 	});
 
@@ -134,7 +121,7 @@ describe("input — interactive", () => {
 		expect(screen()).toContain("Enter your name");
 		expect(screen()).toContain("(World)");
 
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await promise;
 	});
 
@@ -142,13 +129,13 @@ describe("input — interactive", () => {
 		const promise = start({ message: "Name?" });
 
 		await tick();
-		pressKey("A", { name: "a" });
+		pressKey(activePrompt, "A", { name: "a" });
 		await tick();
-		pressKey("B", { name: "b" });
+		pressKey(activePrompt, "B", { name: "b" });
 		await tick();
-		pressKey("C", { name: "c" });
+		pressKey(activePrompt, "C", { name: "c" });
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("ABC");
@@ -161,7 +148,7 @@ describe("input — interactive", () => {
 		});
 
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("DefaultName");
@@ -174,9 +161,9 @@ describe("input — interactive", () => {
 		});
 
 		await tick();
-		pressKey("X", { name: "x" });
+		pressKey(activePrompt, "X", { name: "x" });
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("X");
@@ -186,11 +173,11 @@ describe("input — interactive", () => {
 		const promise = start({ message: "Name?" });
 
 		await tick();
-		pressKey("O", { name: "o" });
+		pressKey(activePrompt, "O", { name: "o" });
 		await tick();
-		pressKey("K", { name: "k" });
+		pressKey(activePrompt, "K", { name: "k" });
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		await promise;
 		// After submission, the confirmed value should appear in output
@@ -207,13 +194,13 @@ describe("input — keypress editing", () => {
 		const promise = start({ message: "Name?" });
 
 		await tick();
-		pressKey("A");
+		pressKey(activePrompt, "A");
 		await tick();
-		pressKey("B");
+		pressKey(activePrompt, "B");
 		await tick();
-		pressKey("", { name: "backspace" });
+		pressKey(activePrompt, "", { name: "backspace" });
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("A");
@@ -223,11 +210,11 @@ describe("input — keypress editing", () => {
 		const promise = start({ message: "Name?" });
 
 		await tick();
-		pressKey("", { name: "backspace" });
+		pressKey(activePrompt, "", { name: "backspace" });
 		await tick();
-		pressKey("A");
+		pressKey(activePrompt, "A");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("A");
@@ -237,21 +224,21 @@ describe("input — keypress editing", () => {
 		const promise = start({ message: "Name?" });
 
 		await tick();
-		pressKey("A");
+		pressKey(activePrompt, "A");
 		await tick();
-		pressKey("B");
+		pressKey(activePrompt, "B");
 		await tick();
-		pressKey("C");
+		pressKey(activePrompt, "C");
 		await tick();
 		// Move cursor left to position before C
-		pressKey("", { name: "left" });
+		pressKey(activePrompt, "", { name: "left" });
 		await tick();
-		pressKey("", { name: "left" });
+		pressKey(activePrompt, "", { name: "left" });
 		await tick();
 		// Delete the character at cursor (B)
-		pressKey("", { name: "delete" });
+		pressKey(activePrompt, "", { name: "delete" });
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("AC");
@@ -261,16 +248,16 @@ describe("input — keypress editing", () => {
 		const promise = start({ message: "Name?" });
 
 		await tick();
-		pressKey("A");
+		pressKey(activePrompt, "A");
 		await tick();
-		pressKey("B");
+		pressKey(activePrompt, "B");
 		await tick();
 		// Move left, then type C — inserts before B
-		pressKey("", { name: "left" });
+		pressKey(activePrompt, "", { name: "left" });
 		await tick();
-		pressKey("C");
+		pressKey(activePrompt, "C");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("ACB");
@@ -280,20 +267,20 @@ describe("input — keypress editing", () => {
 		const promise = start({ message: "Name?" });
 
 		await tick();
-		pressKey("A");
+		pressKey(activePrompt, "A");
 		await tick();
-		pressKey("B");
+		pressKey(activePrompt, "B");
 		await tick();
 		// Move left twice, then right once — cursor is between A and B
-		pressKey("", { name: "left" });
+		pressKey(activePrompt, "", { name: "left" });
 		await tick();
-		pressKey("", { name: "left" });
+		pressKey(activePrompt, "", { name: "left" });
 		await tick();
-		pressKey("", { name: "right" });
+		pressKey(activePrompt, "", { name: "right" });
 		await tick();
-		pressKey("C");
+		pressKey(activePrompt, "C");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("ACB");
@@ -303,15 +290,15 @@ describe("input — keypress editing", () => {
 		const promise = start({ message: "Name?" });
 
 		await tick();
-		pressKey("A");
+		pressKey(activePrompt, "A");
 		await tick();
-		pressKey("B");
+		pressKey(activePrompt, "B");
 		await tick();
-		pressKey("", { name: "home" });
+		pressKey(activePrompt, "", { name: "home" });
 		await tick();
-		pressKey("C");
+		pressKey(activePrompt, "C");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("CAB");
@@ -321,17 +308,17 @@ describe("input — keypress editing", () => {
 		const promise = start({ message: "Name?" });
 
 		await tick();
-		pressKey("A");
+		pressKey(activePrompt, "A");
 		await tick();
-		pressKey("B");
+		pressKey(activePrompt, "B");
 		await tick();
-		pressKey("", { name: "home" });
+		pressKey(activePrompt, "", { name: "home" });
 		await tick();
-		pressKey("", { name: "end" });
+		pressKey(activePrompt, "", { name: "end" });
 		await tick();
-		pressKey("C");
+		pressKey(activePrompt, "C");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("ABC");
@@ -341,12 +328,12 @@ describe("input — keypress editing", () => {
 		const promise = start({ message: "Name?" });
 
 		await tick();
-		pressKey("A");
+		pressKey(activePrompt, "A");
 		await tick();
 		// Ctrl+A should be ignored (not inserted)
-		pressKey("a", { name: "a", ctrl: true });
+		pressKey(activePrompt, "a", { name: "a", ctrl: true });
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("A");
@@ -367,21 +354,21 @@ describe("input — validation", () => {
 		});
 
 		await tick();
-		pressKey("a");
+		pressKey(activePrompt, "a");
 		await tick();
-		pressKey("b");
+		pressKey(activePrompt, "b");
 		await tick();
 		// Try to submit invalid value
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await tick();
 
 		// Error should be displayed
 		expect(screen()).toContain("Must contain @");
 
 		// Now type valid input and resubmit
-		pressKey("@");
+		pressKey(activePrompt, "@");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("ab@");
@@ -399,18 +386,18 @@ describe("input — validation", () => {
 		});
 
 		await tick();
-		pressKey("A");
+		pressKey(activePrompt, "A");
 		await tick();
 		// Submit too-short value
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await tick();
 
 		expect(screen()).toContain("Too short");
 
 		// Add more text and resubmit
-		pressKey("B");
+		pressKey(activePrompt, "B");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("AB");
@@ -427,15 +414,15 @@ describe("input — validation", () => {
 		});
 
 		await tick();
-		pressKey("1");
+		pressKey(activePrompt, "1");
 		await tick();
-		pressKey("2");
+		pressKey(activePrompt, "2");
 		await tick();
-		pressKey("3");
+		pressKey(activePrompt, "3");
 		await tick();
-		pressKey("4");
+		pressKey(activePrompt, "4");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("1234");
@@ -452,15 +439,15 @@ describe("input — validation", () => {
 
 		await tick();
 		// Submit empty — default is "" which should fail validation
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await tick();
 
 		expect(screen()).toContain("Required");
 
 		// Type something and submit
-		pressKey("X");
+		pressKey(activePrompt, "X");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("X");
@@ -479,9 +466,9 @@ describe("input — no message", () => {
 		expect(screen()).toContain("Enter a value");
 		expect(screen()).not.toContain("undefined");
 
-		pressKey("A");
+		pressKey(activePrompt, "A");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("A");
@@ -491,9 +478,9 @@ describe("input — no message", () => {
 		const promise = start({});
 
 		await tick();
-		pressKey("X");
+		pressKey(activePrompt, "X");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		await promise;
 		expect(screen()).toContain("Enter a value");
@@ -551,13 +538,13 @@ describe("input — schema validation", () => {
 		});
 
 		await tick();
-		pressKey("A");
+		pressKey(activePrompt, "A");
 		await tick();
-		pressKey("l");
+		pressKey(activePrompt, "l");
 		await tick();
-		pressKey("i");
+		pressKey(activePrompt, "i");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("Ali");
@@ -570,11 +557,11 @@ describe("input — schema validation", () => {
 		});
 
 		await tick();
-		pressKey("4");
+		pressKey(activePrompt, "4");
 		await tick();
-		pressKey("2");
+		pressKey(activePrompt, "2");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe(42);
@@ -587,20 +574,20 @@ describe("input — schema validation", () => {
 		});
 
 		await tick();
-		pressKey("A");
+		pressKey(activePrompt, "A");
 		await tick();
 		// Submit too-short value
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await tick();
 
 		expect(screen()).toContain("Too short");
 
 		// Add more characters and retry
-		pressKey("l");
+		pressKey(activePrompt, "l");
 		await tick();
-		pressKey("i");
+		pressKey(activePrompt, "i");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("Ali");
@@ -625,21 +612,21 @@ describe("input — schema validation", () => {
 		});
 
 		await tick();
-		pressKey("x");
+		pressKey(activePrompt, "x");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await tick();
 
 		expect(screen()).toContain("Validation failed");
 
 		// Clear field, type valid value, submit
-		pressKey("", { name: "backspace" });
+		pressKey(activePrompt, "", { name: "backspace" });
 		await tick();
-		pressKey("o");
+		pressKey(activePrompt, "o");
 		await tick();
-		pressKey("k");
+		pressKey(activePrompt, "k");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("ok");
@@ -663,11 +650,11 @@ describe("input — schema validation", () => {
 		const promise = start({ message: "Word?", schema: emptyIssuesSchema });
 
 		await tick();
-		pressKey("o");
+		pressKey(activePrompt, "o");
 		await tick();
-		pressKey("k");
+		pressKey(activePrompt, "k");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("ok");
@@ -686,27 +673,27 @@ describe("input — schema validation", () => {
 		const promise = start({ message: "Confirm?", schema: asyncSchema });
 
 		await tick();
-		pressKey("n");
+		pressKey(activePrompt, "n");
 		await tick();
-		pressKey("o");
+		pressKey(activePrompt, "o");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await waitForScreen("must be yes");
 
 		expect(screen()).toContain("must be yes");
 
 		// Clear and type valid value
-		pressKey("", { name: "backspace" });
+		pressKey(activePrompt, "", { name: "backspace" });
 		await tick();
-		pressKey("", { name: "backspace" });
+		pressKey(activePrompt, "", { name: "backspace" });
 		await tick();
-		pressKey("y");
+		pressKey(activePrompt, "y");
 		await tick();
-		pressKey("e");
+		pressKey(activePrompt, "e");
 		await tick();
-		pressKey("s");
+		pressKey(activePrompt, "s");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("yes");
@@ -778,7 +765,7 @@ describe("input — schema + interactive default", () => {
 		});
 
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe(4000);
@@ -816,13 +803,13 @@ describe("input — callable Standard Schema", () => {
 		const promise = start({ message: "Word?", schema: callable });
 
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await tick();
 		expect(screen()).toContain("empty");
 
-		pressKey("a");
+		pressKey(activePrompt, "a");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("[a]");

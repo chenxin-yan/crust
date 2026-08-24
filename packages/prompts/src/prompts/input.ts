@@ -8,15 +8,14 @@ import type { PromptIO } from "../core/renderer.ts";
 import { isTTY, resolvePromptIO, runPrompt } from "../core/renderer.ts";
 import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import { createTextSubmitHandler, renderTextWithCursor } from "../core/textEdit.ts";
-import { resolveTheme } from "../core/theme.ts";
-import {
-	parseShortCircuit,
-	type PartialPromptTheme,
-	type PromptTheme,
-	type SchemaOrValidate,
-	type ValidateFn,
+import type {
+	PartialPromptTheme,
+	PromptTheme,
+	SchemaOrValidate,
+	ValidateFn,
 } from "../core/types.ts";
 import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
+import { parseShortCircuit } from "../core/validate.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -204,8 +203,6 @@ export async function input<Output>(
 		return options.default;
 	}
 
-	const theme = resolveTheme(options.theme);
-
 	const initialState: InputState = {
 		value: "",
 		cursorPos: 0,
@@ -215,7 +212,7 @@ export async function input<Output>(
 	return runPrompt<InputState, Output | string>(
 		{
 			initialState,
-			theme,
+			theme: options.theme,
 			render: (state, t) =>
 				renderInput(state, t, options.message, options.placeholder, options.default),
 			handleKey: createTextSubmitHandler<Output>(options.schema, options.validate, options.default),

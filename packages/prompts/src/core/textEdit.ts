@@ -7,7 +7,7 @@ import type { StandardSchema } from "@crustjs/utils/schema";
 import type { KeypressEvent, SubmitResult } from "./renderer.ts";
 import { submit } from "./renderer.ts";
 import type { PromptTheme, ValidateFn } from "./types.ts";
-import { validateSubmitValue } from "./types.ts";
+import { validateSubmitValue } from "./validate.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Constants

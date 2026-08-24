@@ -257,12 +257,12 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 		},
 
 		stop(outcome: SpinnerOutcome = "success", message?: string) {
-			if (!started || finished) return;
+			if (finished) return;
 			finished = true;
 			if (message !== undefined) currentMessage = message;
 			cleanup();
-			sink.write(renderFinal(currentMessage, theme, outcome, isInteractive));
-			if (isInteractive) {
+			sink.write(renderFinal(currentMessage, theme, outcome, started && isInteractive));
+			if (started && isInteractive) {
 				sink.write(SHOW_CURSOR);
 			}
 		},

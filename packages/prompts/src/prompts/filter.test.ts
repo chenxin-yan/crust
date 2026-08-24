@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { createPromptIO, renderPrompt, type RenderedPrompt } from "../testing.ts";
+import { createPromptIO, pressKey, renderPrompt, type RenderedPrompt } from "../testing.ts";
 import { filter, type FilterOptions } from "./filter.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -13,19 +13,6 @@ function start<T>(options: FilterOptions<T>): Promise<T> {
 	const prompt = renderPrompt<FilterOptions<T>, T>(filter, options);
 	activePrompt = prompt;
 	return prompt.answer;
-}
-
-function pressKey(
-	char: string,
-	key?: Partial<{ name: string; ctrl: boolean; meta: boolean; shift: boolean }>,
-): void {
-	if (key?.ctrl) {
-		activePrompt.keys(`ctrl+${key.name ?? char}`);
-	} else if (char === "") {
-		activePrompt.keys(key?.name ?? "");
-	} else {
-		activePrompt.type(char);
-	}
 }
 
 function screen(): string {
@@ -74,7 +61,7 @@ describe("filter — default value", () => {
 
 		await tick();
 		// Submit immediately — should select "Rust" (cursor at matching index)
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("Rust");
@@ -87,7 +74,7 @@ describe("filter — default value", () => {
 		});
 
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("TypeScript");
@@ -101,7 +88,7 @@ describe("filter — default value", () => {
 		});
 
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("TypeScript");
@@ -124,7 +111,7 @@ describe("filter — typing filters the list", () => {
 		expect(screen()).toContain("JavaScript");
 		expect(screen()).toContain("Rust");
 
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await promise;
 	});
 
@@ -136,15 +123,15 @@ describe("filter — typing filters the list", () => {
 
 		await tick();
 		// Type "py" to filter
-		pressKey("p", { name: "p" });
+		pressKey(activePrompt, "p", { name: "p" });
 		await tick();
-		pressKey("y", { name: "y" });
+		pressKey(activePrompt, "y", { name: "y" });
 		await tick();
 
 		// "Python" should be visible, "Go" should not
 		expect(screen()).toContain("Python");
 
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		const result = await promise;
 		expect(result).toBe("Python");
 	});
@@ -157,23 +144,23 @@ describe("filter — typing filters the list", () => {
 
 		await tick();
 		// Type something that won't match anything
-		pressKey("z", { name: "z" });
+		pressKey(activePrompt, "z", { name: "z" });
 		await tick();
-		pressKey("z", { name: "z" });
+		pressKey(activePrompt, "z", { name: "z" });
 		await tick();
-		pressKey("z", { name: "z" });
+		pressKey(activePrompt, "z", { name: "z" });
 		await tick();
 
 		expect(screen()).toContain("No matches");
 
 		// Backspace to clear and get matches again, then submit
-		pressKey("", { name: "backspace" });
+		pressKey(activePrompt, "", { name: "backspace" });
 		await tick();
-		pressKey("", { name: "backspace" });
+		pressKey(activePrompt, "", { name: "backspace" });
 		await tick();
-		pressKey("", { name: "backspace" });
+		pressKey(activePrompt, "", { name: "backspace" });
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await promise;
 	});
 });
@@ -190,9 +177,9 @@ describe("filter — navigation", () => {
 		});
 
 		await tick();
-		pressKey("", { name: "down" });
+		pressKey(activePrompt, "", { name: "down" });
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("beta");
@@ -205,13 +192,13 @@ describe("filter — navigation", () => {
 		});
 
 		await tick();
-		pressKey("", { name: "down" });
+		pressKey(activePrompt, "", { name: "down" });
 		await tick();
-		pressKey("", { name: "down" });
+		pressKey(activePrompt, "", { name: "down" });
 		await tick();
-		pressKey("", { name: "up" });
+		pressKey(activePrompt, "", { name: "up" });
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("beta");
@@ -224,9 +211,9 @@ describe("filter — navigation", () => {
 		});
 
 		await tick();
-		pressKey("", { name: "up" });
+		pressKey(activePrompt, "", { name: "up" });
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("gamma");
@@ -240,27 +227,27 @@ describe("filter — navigation", () => {
 
 		await tick();
 		// Type something that won't match
-		pressKey("z", { name: "z" });
+		pressKey(activePrompt, "z", { name: "z" });
 		await tick();
-		pressKey("z", { name: "z" });
+		pressKey(activePrompt, "z", { name: "z" });
 		await tick();
-		pressKey("z", { name: "z" });
+		pressKey(activePrompt, "z", { name: "z" });
 		await tick();
 
 		// Navigation should be ignored (no crash)
-		pressKey("", { name: "down" });
+		pressKey(activePrompt, "", { name: "down" });
 		await tick();
-		pressKey("", { name: "up" });
+		pressKey(activePrompt, "", { name: "up" });
 		await tick();
 
 		// Clear query and submit
-		pressKey("", { name: "backspace" });
+		pressKey(activePrompt, "", { name: "backspace" });
 		await tick();
-		pressKey("", { name: "backspace" });
+		pressKey(activePrompt, "", { name: "backspace" });
 		await tick();
-		pressKey("", { name: "backspace" });
+		pressKey(activePrompt, "", { name: "backspace" });
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await promise;
 	});
 });
@@ -278,19 +265,19 @@ describe("filter — query editing", () => {
 
 		await tick();
 		// Type "ac"
-		pressKey("a", { name: "a" });
+		pressKey(activePrompt, "a", { name: "a" });
 		await tick();
-		pressKey("c", { name: "c" });
+		pressKey(activePrompt, "c", { name: "c" });
 		await tick();
 
 		// Move cursor left and insert "b" to make "abc"
-		pressKey("", { name: "left" });
+		pressKey(activePrompt, "", { name: "left" });
 		await tick();
-		pressKey("b", { name: "b" });
+		pressKey(activePrompt, "b", { name: "b" });
 		await tick();
 
 		// "abc" should now match
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		const result = await promise;
 		expect(result).toBe("abc");
 	});
@@ -310,7 +297,7 @@ describe("filter — rendering", () => {
 		await tick();
 		expect(screen()).toContain("Find a language");
 
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await promise;
 	});
 
@@ -324,7 +311,7 @@ describe("filter — rendering", () => {
 		await tick();
 		expect(screen()).toContain("Type to filter...");
 
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await promise;
 	});
 
@@ -335,9 +322,9 @@ describe("filter — rendering", () => {
 		});
 
 		await tick();
-		pressKey("", { name: "down" });
+		pressKey(activePrompt, "", { name: "down" });
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		await promise;
 		expect(screen()).toContain("banana");
@@ -356,7 +343,7 @@ describe("filter — rendering", () => {
 		expect(screen()).toContain("Option A");
 		expect(screen()).toContain("Option B");
 
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await promise;
 	});
 });
@@ -380,7 +367,7 @@ describe("filter — viewport scrolling", () => {
 		expect(screen()).toContain("item-4");
 		expect(screen()).not.toContain("item-5");
 
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await promise;
 	});
 
@@ -394,17 +381,17 @@ describe("filter — viewport scrolling", () => {
 
 		await tick();
 		// Move down 3 times to scroll past the initial viewport
-		pressKey("", { name: "down" });
+		pressKey(activePrompt, "", { name: "down" });
 		await tick();
-		pressKey("", { name: "down" });
+		pressKey(activePrompt, "", { name: "down" });
 		await tick();
-		pressKey("", { name: "down" });
+		pressKey(activePrompt, "", { name: "down" });
 		await tick();
 
 		// item-3 should now be visible
 		expect(screen()).toContain("item-3");
 
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		const result = await promise;
 		expect(result).toBe("item-3");
 	});
@@ -425,7 +412,7 @@ describe("filter — no message", () => {
 		expect(screen()).not.toContain("undefined");
 		expect(screen()).toContain("apple");
 
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		const result = await promise;
 		expect(result).toBe("apple");
 	});
@@ -436,7 +423,7 @@ describe("filter — no message", () => {
 		});
 
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		await promise;
 		expect(screen()).toContain("Search and select");

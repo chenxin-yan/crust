@@ -17,7 +17,7 @@ export interface ProgressOptions extends SpinnerHandleOptions {
 export interface ProgressHandle {
 	/** Begin rendering at `(0/total)`. */
 	start: () => void;
-	/** Advance by `amount` units and repaint, optionally with a new message. */
+	/** Advance by `amount` units and repaint, optionally with a new message. Before `start()`, this mutates the count without repainting. */
 	advance: (amount?: number, message?: string) => void;
 	/**
 	 * Finish: render the final `✓`/`✗` line with the last `(current/total)`.
