@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { once } from "node:events";
 
 import { runProcess, which } from "@crustjs/utils/process";
@@ -153,8 +153,8 @@ async function runCommand(cmd: string, cwd: string): Promise<void> {
  * are not already set at any level (local, global, system).
  */
 async function ensureGitIdentity(cwd: string, git: string): Promise<void> {
-	const hasName = spawnSync(git, ["config", "user.name"], { cwd }).status === 0;
-	const hasEmail = spawnSync(git, ["config", "user.email"], { cwd }).status === 0;
+	const hasName = (await gitConfigExitCode(git, "user.name", cwd)) === 0;
+	const hasEmail = (await gitConfigExitCode(git, "user.email", cwd)) === 0;
 
 	if (!hasName) {
 		await spawnChecked([git, "config", "user.name", "Crust"], cwd, "git config user.name");
@@ -166,6 +166,16 @@ async function ensureGitIdentity(cwd: string, git: string): Promise<void> {
 			"git config user.email",
 		);
 	}
+}
+
+/** Probe a git config key; non-zero exit means it is unset. */
+async function gitConfigExitCode(git: string, key: string, cwd: string): Promise<number | null> {
+	const { exitCode } = await runProcess(git, ["config", key], {
+		cwd,
+		stdio: "collect",
+		stdout: "ignore",
+	});
+	return exitCode;
 }
 
 /**
