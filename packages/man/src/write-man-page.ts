@@ -1,25 +1,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
-import type { CommandSnapshot } from "@crustjs/core/tooling";
+import { renderManPageMdoc, type RenderManPageMdocOptions } from "./mdoc.ts";
 
-import { renderManPageMdoc } from "./mdoc.ts";
-
-export interface WriteManPageOptions {
-	/** Prepared, validated Command Snapshot for the CLI. */
-	root: CommandSnapshot;
-	/** Name for `.Nm` / `man <name>` (usually the installed binary name). */
-	name: string;
+export interface WriteManPageOptions extends RenderManPageMdocOptions {
 	/** Output path (e.g. `man/mycli.1`). Parent directories are created. */
 	outfile: string;
-	/**
-	 * Manual section.
-	 *
-	 * @default 1
-	 */
-	section?: number;
-	/** Override `.Dd` in the mdoc output (see `renderManPageMdoc` `date`). */
-	date?: string;
 }
 
 /** Render an mdoc(7) manual page from a Command Snapshot and write it to `outfile`. */

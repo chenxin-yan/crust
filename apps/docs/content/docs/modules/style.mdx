@@ -153,7 +153,7 @@ table(
 );
 ```
 
-`padStart` / `padEnd` / `center` measure visible width — unlike `String.prototype.padStart`, which counts code units and ANSI escapes. `table` supports per-column alignment, padding, separators, and styled cells.
+`padStart` / `padEnd` / `center` measure visible width — unlike `String.prototype.padStart`, which counts code units and ANSI escapes. `table` supports per-column alignment, padding, separators, and styled cells. Headers define its column count, so extra row cells beyond the last header are dropped.
 
 Use the exported `stringWidth(text)` helper for ANSI-, CJK-, combining-mark-, and emoji-aware terminal width measurement.
 
