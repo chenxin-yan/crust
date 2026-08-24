@@ -1,5 +1,5 @@
 import { cp, mkdir, readFile, rm } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 
 import {
 	type Extension,
@@ -29,6 +29,8 @@ import {
 	uninstallSkill,
 } from "./generate.ts";
 import { SKILLS } from "./manifest.ts";
+import { isWithin } from "./path.ts";
+import { planReconcile, UNIVERSAL_GROUP, type ReconcileChoice } from "./reconcile.ts";
 import {
 	SkillSourceUnavailableError,
 	loadPackagedSkills,
@@ -40,7 +42,6 @@ import type { AgentTarget, InstallSkillResult, Scope, SkillOptions } from "./typ
 const DEFAULT_SKILL_COMMAND_NAME = "skill";
 const SKILLS_SECTION_TITLE = "Agent skills";
 const DEFAULT_SKILL_SCOPE = "global";
-const UNIVERSAL_GROUP = "__universal__";
 
 function parseScopeFlag(value: string | undefined): Scope | undefined {
 	if (value === undefined) return undefined;
@@ -187,11 +188,6 @@ function formatSkillDocumentation(
 	}
 }
 
-function isWithin(parent: string, child: string): boolean {
-	const path = relative(parent, child);
-	return path === "" || (!isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`));
-}
-
 function hasPackageVersion<Value>(value: Value): value is Value & { version: string } {
 	return (
 		typeof value === "object" &&
@@ -295,11 +291,7 @@ async function reconcileSkill(opts: {
 	const additional = getAdditionalAgents().filter(
 		(agent) => detected.has(agent) || installed.has(agent),
 	);
-	const choices: Array<{
-		label: string;
-		value: AgentTarget | typeof UNIVERSAL_GROUP;
-		hint: string;
-	}> = [];
+	const choices: Array<ReconcileChoice & { hint: string }> = [];
 	if (universal.length > 0) {
 		choices.push({
 			label: "Universal",
@@ -334,27 +326,18 @@ async function reconcileSkill(opts: {
 		if (values.includes(UNIVERSAL_GROUP)) selected.push(...universal);
 	}
 
-	const toInstall = selected.filter((agent) => statusMap.get(agent)?.status !== "linked");
-	// Agents can share one resolved output directory (e.g. Antigravity and the
-	// universal group at project scope); removing a deselected agent's link there
-	// would also uninstall the retained agents.
-	const keptDirs = new Set(selected.map((agent) => statusMap.get(agent)?.outputDir));
-	const toUninstall = [...installed].filter(
-		(agent) => !selected.includes(agent) && !keptDirs.has(statusMap.get(agent)?.outputDir),
-	);
-	// Warn per offered choice (not per installed agent) so a fresh shared install
-	// also explains why a deselected agent still discovers the skill.
-	for (const choice of choices) {
-		const agent = choice.value === UNIVERSAL_GROUP ? universal[0]! : choice.value;
-		if (selected.includes(agent)) continue;
-		const entry = statusMap.get(agent);
-		if (entry && keptDirs.has(entry.outputDir)) {
-			console.warn(
-				yellow(
-					`${choice.label} [${packagedSkill.name}]: "${entry.outputDir}" is shared with a selected agent, so the skill stays available to it.`,
-				),
-			);
-		}
+	const { toInstall, toUninstall, sharedDirWarnings } = planReconcile({
+		statusMap,
+		choices,
+		selected,
+		universal,
+	});
+	for (const warning of sharedDirWarnings) {
+		console.warn(
+			yellow(
+				`${warning.label} [${packagedSkill.name}]: "${warning.outputDir}" is shared with a selected agent, so the skill stays available to it.`,
+			),
+		);
 	}
 
 	if (toInstall.length > 0) {

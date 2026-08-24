@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,18 +21,11 @@ const FIXTURE_DIR = join(
 let tmpDir: string;
 
 beforeEach(async () => {
-	const base = join(import.meta.dirname ?? ".", ".tmp-test");
-	const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-	tmpDir = join(base, id);
-	await mkdir(tmpDir, { recursive: true });
+	tmpDir = await mkdtemp(join(tmpdir(), "crust-skill-bundle-"));
 });
 
 afterEach(async () => {
-	try {
-		await rm(tmpDir, { recursive: true });
-	} catch {
-		// Ignore cleanup errors
-	}
+	await rm(tmpDir, { recursive: true, force: true });
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -132,6 +126,13 @@ describe("loadBundleFiles", () => {
 		await mkdir(dir, { recursive: true });
 		await writeFile(join(dir, "SKILL.md"), '---\nname: ""\ndescription: ""\n---\n');
 		await expect(loadBundleFiles(dir)).rejects.toThrow(/`name:`/);
+	});
+
+	it("rejects whitespace-only frontmatter values", async () => {
+		const dir = join(tmpDir, "whitespace-values");
+		await mkdir(dir, { recursive: true });
+		await writeFile(join(dir, "SKILL.md"), '---\nname: skill\ndescription: "   "\n---\n');
+		await expect(loadBundleFiles(dir)).rejects.toThrow(/`description:`/);
 	});
 
 	it("strips a leading UTF-8 BOM before locating the opening fence", async () => {

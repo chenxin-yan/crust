@@ -83,9 +83,7 @@ describe("packaged skill sources", () => {
 		const dir = join(root, "demo");
 		await mkdir(dir, { recursive: true });
 		await writeFile(join(dir, "SKILL.md"), "---\nname: demo\n---\n");
-		expect(() => loadPackagedSkills(root)).toThrow(
-			"requires name and description in SKILL.md frontmatter",
-		);
+		expect(() => loadPackagedSkills(root)).toThrow("requires a description");
 	});
 
 	it("skips directories without SKILL.md instead of failing valid skills", async () => {

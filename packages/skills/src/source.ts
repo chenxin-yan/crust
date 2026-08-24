@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { isErrnoException } from "@crustjs/utils/error";
 import { resolveSourceDir } from "@crustjs/utils/source";
 
-import { probeFrontmatter } from "./bundle.ts";
+import { probeFrontmatter, requireSkillFrontmatter } from "./bundle.ts";
 
 export class SkillSourceUnavailableError extends Error {
 	override readonly name = "SkillSourceUnavailableError";
@@ -75,13 +75,10 @@ export function readSkillFrontmatter(
 		if (!isErrnoException(error) || error.code !== "ENOENT") throw error;
 		throw new Error(`Skill source directory "${sourceDir}" is missing SKILL.md.`, { cause: error });
 	}
-	const frontmatter = probeFrontmatter(content);
-	if (!frontmatter.name || !frontmatter.description) {
-		throw new Error(
-			`Skill source directory "${sourceDir}" requires name and description in SKILL.md frontmatter.`,
-		);
-	}
-	return { name: frontmatter.name, description: frontmatter.description };
+	return requireSkillFrontmatter(
+		probeFrontmatter(content),
+		`Skill source directory "${sourceDir}"`,
+	);
 }
 
 /** Reads every self-describing skill directory in a packaged skill source. */
