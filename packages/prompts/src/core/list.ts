@@ -29,6 +29,7 @@ export function setupListPrompt<T, Answer>(
 	options: ListPromptOptions<T, Answer>,
 	io?: PromptIO,
 	defaultCursorValue?: T,
+	hasDefaultCursor = defaultCursorValue !== undefined,
 ): ListPromptSetup<T, Answer> {
 	if (options.initial !== undefined) return { shortCircuited: true, value: options.initial };
 
@@ -39,10 +40,9 @@ export function setupListPrompt<T, Answer>(
 
 	const choices = normalizeChoices(options.choices);
 	const maxVisible = options.maxVisible ?? DEFAULT_MAX_VISIBLE;
-	const defaultCursor =
-		defaultCursorValue === undefined
-			? -1
-			: choices.findIndex((choice) => choice.value === defaultCursorValue);
+	const defaultCursor = hasDefaultCursor
+		? choices.findIndex((choice) => choice.value === defaultCursorValue)
+		: -1;
 	const cursor = defaultCursor === -1 ? 0 : defaultCursor;
 
 	return {

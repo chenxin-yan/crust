@@ -148,6 +148,24 @@ describe("multifilter — interactive", () => {
 		expect(result).toEqual(["c"]);
 	});
 
+	it("positions the cursor on an undefined default value", async () => {
+		const promise = start<string | undefined>({
+			message: "Search",
+			choices: [
+				{ label: "first", value: "first" },
+				{ label: "unset", value: undefined },
+			],
+			default: [undefined],
+		});
+
+		await tick();
+		pressKey(activePrompt, "", { name: "space" });
+		await tick();
+		pressKey(activePrompt, "", { name: "return" });
+
+		expect(await promise).toEqual([]);
+	});
+
 	it("Enter with required and no selection shows error", async () => {
 		const promise = start({
 			message: "Search",
