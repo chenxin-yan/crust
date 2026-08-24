@@ -145,6 +145,7 @@ function formatSeparator(
  * Format tabular data as an aligned, bordered table string.
  *
  * The table includes a header row, a separator row, and data rows.
+ * Headers define the column count; row cells beyond the last header are dropped.
  * Column widths are computed from the visible width of all cell content
  * (ANSI escape sequences are excluded from width calculations), so styled
  * cell values align correctly.

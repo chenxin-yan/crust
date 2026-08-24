@@ -21,18 +21,13 @@ import type {
 
 // A single step in a chainable style. Either a registered method (looked
 // up by name in the style registry) or an ad-hoc `AnsiPair` produced by a
-// dynamic-color call like `style.bold.fg("#f00")`. The `isModifier` flag on
-// pair-steps is `false` for dynamic colors (currently the only producers).
+// dynamic-color call like `style.bold.fg("#f00")`.
 type ChainStep =
 	| { readonly kind: "named"; readonly name: StyleMethodName }
-	| {
-			readonly kind: "pair";
-			readonly pair: AnsiPair;
-			readonly isModifier: boolean;
-	  };
+	| { readonly kind: "pair"; readonly pair: AnsiPair };
 
 function stepIsModifier(step: ChainStep): boolean {
-	return step.kind === "named" ? isModifierName(step.name) : step.isModifier;
+	return step.kind === "named" && isModifierName(step.name);
 }
 
 function stepPair(step: ChainStep): AnsiPair {
@@ -44,7 +39,6 @@ interface ResolvedStyleCapabilities {
 	readonly colorDepth: ColorDepth;
 	readonly colorsEnabled: boolean;
 	readonly trueColorEnabled: boolean;
-	readonly hyperlinksEnabled: boolean;
 }
 
 function applyChain(
@@ -88,6 +82,8 @@ function buildChainableStyleFactory(
 	resolveCapabilities: () => ResolvedStyleCapabilities,
 	runtime: boolean,
 ) {
+	// ponytail: unbounded for CLI lifetimes; add eviction if long-running processes build
+	// chains from unbounded user-provided colors.
 	const cache = new Map<string, ChainableStyleFn>();
 
 	function makeKey(
@@ -162,7 +158,6 @@ function buildChainableStyleFactory(
 						{
 							kind: "pair",
 							pair: fgPairAtDepth(input, resolved.colorDepth),
-							isModifier: false,
 						},
 					],
 					false,
@@ -182,7 +177,6 @@ function buildChainableStyleFactory(
 						{
 							kind: "pair",
 							pair: bgPairAtDepth(input, resolved.colorDepth),
-							isModifier: false,
 						},
 					],
 					false,
@@ -279,7 +273,6 @@ function resolveStyleCapabilities(options?: StyleOptions): ResolvedStyleCapabili
 		colorDepth,
 		colorsEnabled: colorDepth !== "none",
 		trueColorEnabled: colorDepth === "truecolor",
-		hyperlinksEnabled: resolveModifierCapability(mode, options?.overrides),
 	};
 }
 
@@ -305,7 +298,6 @@ function createStyleInstance(options: StyleOptions | undefined, runtime: boolean
 					{
 						kind: "pair",
 						pair: fgPairAtDepth(args[0], resolved.colorDepth),
-						isModifier: false,
 					},
 				],
 				false,
@@ -327,7 +319,6 @@ function createStyleInstance(options: StyleOptions | undefined, runtime: boolean
 					{
 						kind: "pair",
 						pair: bgPairAtDepth(args[0], resolved.colorDepth),
-						isModifier: false,
 					},
 				],
 				false,
@@ -353,7 +344,7 @@ function createStyleInstance(options: StyleOptions | undefined, runtime: boolean
 		},
 
 		link(text, url, hyperlinkOptions) {
-			if (resolveCapabilities().hyperlinksEnabled) {
+			if (resolveCapabilities().modifiersEnabled) {
 				return linkDirect(text, url, hyperlinkOptions);
 			}
 			// Validate even when emission is disabled so malformed URLs and IDs

@@ -43,8 +43,9 @@ export type ColorInput = ColorString | readonly [r: number, g: number, b: number
  *
  * The default `style` facade and top-level helpers always run in
  * `"auto"` mode — to influence them globally, set the standard
- * environment variables (`NO_COLOR`, `FORCE_COLOR`); they re-resolve on
- * every call.
+ * environment variables (`NO_COLOR`, `FORCE_COLOR`). The facade and helpers
+ * re-resolve capabilities on every direct call; stored sub-chains capture them
+ * when accessed (see {@link ChainableStyleFn}).
  *
  * @example
  * ```ts
@@ -139,6 +140,11 @@ export type StyleMethodMap = {
  *
  * Every chainable is simultaneously a function, a chain root, and an
  * ANSI pair. Chains compose `open` left-to-right and `close` right-to-left.
+ *
+ * On the default runtime facade, a first-level chainable such as `style.bold`
+ * re-resolves terminal capabilities when called. Extending it freezes the
+ * current capabilities, so a stored sub-chain such as `style.bold.red` keeps
+ * the environment state from when the property was accessed.
  *
  * To pass a style around as a value, pass the chainable itself — it is
  * already a `(text: string) => string` function (see {@link StyleFn}).
