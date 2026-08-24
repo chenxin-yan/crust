@@ -115,9 +115,10 @@ describe("renderBash · behavioural · -- and --name=value", () => {
 						name: "target",
 						type: "string",
 						takesValue: true,
+						negatable: false,
 						choices: ["browser", "node"],
 					},
-					{ name: "out", type: "string", takesValue: true },
+					{ name: "out", type: "string", takesValue: true, negatable: false },
 				],
 				args: [],
 				subCommands: [],
@@ -269,7 +270,7 @@ describe("renderFish · ordered subcommand predicate", () => {
 				subCommands: [
 					{
 						name: "deploy", // same word at depth 2 and depth 1 below
-						flags: [{ name: "fast", type: "boolean", takesValue: false }],
+						flags: [{ name: "fast", type: "boolean", takesValue: false, negatable: false }],
 						args: [],
 						subCommands: [],
 					},
@@ -277,7 +278,7 @@ describe("renderFish · ordered subcommand predicate", () => {
 			},
 			{
 				name: "deploy", // depth-1 deploy
-				flags: [{ name: "slow", type: "boolean", takesValue: false }],
+				flags: [{ name: "slow", type: "boolean", takesValue: false, negatable: false }],
 				args: [],
 				subCommands: [],
 			},

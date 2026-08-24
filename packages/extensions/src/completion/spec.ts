@@ -44,7 +44,7 @@ interface CompletionFlagBase {
 	/** Human-readable description, ANSI-stripped, ready to embed verbatim. */
 	description?: string;
 	/** `true` when the flag accepts generated `--no-<name>` spellings. */
-	negatable?: boolean;
+	negatable: boolean;
 	/**
 	 * `true` when the flag is repeatable (`multiple: true` in `FlagDef`).
 	 * Templates use this to relax mutual-exclusion or de-dup logic where
