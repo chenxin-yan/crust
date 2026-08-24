@@ -1,10 +1,9 @@
-import { spawn } from "node:child_process";
-import { once } from "node:events";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { defineCommand } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
+import { runProcess } from "@crustjs/utils/process";
 
 import type { DistributionManifest } from "../utils/distribute.ts";
 
@@ -151,7 +150,7 @@ export function buildPublishCommand(args: {
 }
 
 async function defaultSpawnPublish(dir: string, command: string[]): Promise<number> {
-	const proc = spawn(command[0]!, command.slice(1), {
+	const { exitCode } = await runProcess(command[0]!, command.slice(1), {
 		cwd: dir,
 		env: {
 			...process.env,
@@ -160,7 +159,7 @@ async function defaultSpawnPublish(dir: string, command: string[]): Promise<numb
 		stdio: "inherit",
 	});
 
-	return once(proc, "close").then(([code]) => code ?? 1);
+	return exitCode ?? 1;
 }
 
 export async function publishStagedPackages(
