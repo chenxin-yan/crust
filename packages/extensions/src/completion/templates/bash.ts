@@ -1,4 +1,4 @@
-import { bashDoubleQuoteInner, bashSingleQuote } from "../escape.ts";
+import { bashDoubleQuoteInner, bashSingleQuote, toShellIdent } from "../escape.ts";
 import type { CompletionArg, CompletionCommand, CompletionFlag } from "../spec.ts";
 
 /**
@@ -33,16 +33,6 @@ import type { CompletionArg, CompletionCommand, CompletionFlag } from "../spec.t
  */
 
 /**
- * Convert a (validated) command name into a bash identifier. Bash
- * function names cannot contain `-` or `.`; we map the validated
- * identifier set down to `[A-Za-z0-9_]` so generated function names are
- * always valid even when names contain `-` or `.`.
- */
-function toShellIdent(name: string): string {
-	return name.replace(/[^A-Za-z0-9_]/g, "_");
-}
-
-/**
  * Render the wordlist of subcommand candidates for a single command —
  * each candidate as a bash-quoted shell word so values containing
  * spaces (theoretical: identifier validation rejects them) or shell
@@ -68,7 +58,7 @@ function subcmdWordlist(node: CompletionCommand): string {
 /**
  * Render the wordlist of flag candidates for a single command. Includes
  * long names, short alias, extra long aliases, and `--no-<name>` for
- * boolean flags that haven't opted out via `noNegate`.
+ * boolean flags whose snapshot marks them as negatable.
  */
 function flagWordlist(node: CompletionCommand): string {
 	const words: string[] = [];
@@ -78,10 +68,7 @@ function flagWordlist(node: CompletionCommand): string {
 		if (flag.aliases !== undefined) {
 			for (const alias of flag.aliases) words.push(`--${alias}`);
 		}
-		// `--no-<name>` for boolean toggles. Mirrors the parser's
-		// negation-acceptance contract (core/parser.ts) so users can tab
-		// to either spelling. Boolean multi-flags also support negation.
-		if (flag.type === "boolean" && flag.noNegate !== true) {
+		if (flag.negatable) {
 			words.push(`--no-${flag.name}`);
 			if (flag.aliases !== undefined) {
 				for (const alias of flag.aliases) words.push(`--no-${alias}`);

@@ -11,12 +11,15 @@ import {
 	defineExtensionId,
 } from "@crustjs/core";
 import { bold, cyan, dim, green, padEnd, stringWidth, yellow } from "@crustjs/style";
-import { compareSemver } from "@crustjs/utils/process";
 
 const UPDATE_NOTIFIER: ExtensionId = defineExtensionId("crust:update-notifier");
 
 export type UpdateNotifierPackageManager = "npm" | "pnpm" | "yarn" | "bun";
-export type UpdateNotifierInstallScope = "local" | "global";
+
+type UpdateCommandResolver = (info: {
+	packageName: string;
+	packageManager: UpdateNotifierPackageManager;
+}) => string;
 
 export interface UpdateNotifierState {
 	lastCheckedAt: number;
@@ -105,33 +108,14 @@ export interface UpdateNotifierOptions {
 	registryUrl?: string;
 
 	/**
-	 * Package manager used to generate the suggested upgrade command.
-	 * Set to `"auto"` to infer from the runtime environment.
+	 * Upgrade command shown in the notice.
 	 *
-	 * @default "auto"
+	 * Pass a string for a fixed command, a callback to build one from the
+	 * package name and detected package manager, or a scope to generate the
+	 * package manager's standard local/global command. When omitted, the notice
+	 * does not suggest a command.
 	 */
-	packageManager?: UpdateNotifierPackageManager | "auto";
-
-	/**
-	 * Install scope used to generate the suggested upgrade command.
-	 *
-	 * When omitted with no `updateCommand`, the notice does not suggest a command.
-	 */
-	installScope?: UpdateNotifierInstallScope;
-
-	/**
-	 * Override the upgrade command shown in the notice.
-	 *
-	 * Useful when users install the CLI globally or through channels other than
-	 * npm-style package managers (e.g. Homebrew, custom installers).
-	 */
-	updateCommand?:
-		| string
-		| ((
-				packageName: string,
-				packageManager: UpdateNotifierPackageManager,
-				installScope: UpdateNotifierInstallScope | undefined,
-		  ) => string);
+	updateCommand?: string | UpdateCommandResolver | { scope: "global" | "local" };
 
 	/**
 	 * Documentation URL shown after the update notice.
@@ -170,6 +154,39 @@ const DEFAULT_REGISTRY_URL = "https://registry.npmjs.org";
 // ────────────────────────────────────────────────────────────────────────────
 // Internal utilities — version comparison
 // ────────────────────────────────────────────────────────────────────────────
+
+function compareSemver(left: string, right: string): -1 | 0 | 1 {
+	const parse = (version: string) => {
+		const match = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(
+			version,
+		);
+		if (!match) throw new TypeError(`Invalid semantic version: ${version}`);
+		return {
+			core: match.slice(1, 4).map(Number),
+			prerelease: match[4]?.split(".") ?? [],
+		};
+	};
+	const a = parse(left);
+	const b = parse(right);
+	for (let index = 0; index < 3; index++) {
+		if (a.core[index] !== b.core[index]) return a.core[index]! < b.core[index]! ? -1 : 1;
+	}
+	if (a.prerelease.length === 0 || b.prerelease.length === 0) {
+		return a.prerelease.length === b.prerelease.length ? 0 : a.prerelease.length === 0 ? 1 : -1;
+	}
+	for (let index = 0; index < Math.max(a.prerelease.length, b.prerelease.length); index++) {
+		const x = a.prerelease[index];
+		const y = b.prerelease[index];
+		if (x === undefined || y === undefined) return x === undefined ? -1 : 1;
+		if (x === y) continue;
+		const xNumeric = /^\d+$/.test(x);
+		const yNumeric = /^\d+$/.test(y);
+		if (xNumeric && yNumeric) return Number(x) < Number(y) ? -1 : 1;
+		if (xNumeric !== yNumeric) return xNumeric ? -1 : 1;
+		return x < y ? -1 : 1;
+	}
+	return 0;
+}
 
 /**
  * Returns whether `latest` is newer, or false when either version is invalid.
@@ -274,6 +291,47 @@ const NO_CACHE_ADAPTER: UpdateNotifierCacheAdapter = {
 	write: async () => {},
 };
 
+/** @internal */
+export async function createStoreCacheAdapter(
+	packageName: string,
+	registryUrl: string,
+): Promise<UpdateNotifierCacheAdapter> {
+	const { createStore, stateDir } = await import("@crustjs/store");
+	const store = createStore({
+		// stateDir rejects path separators; encodeURIComponent is injective
+		// (@scope/cli → %40scope%2Fcli), so distinct packages never collide
+		dirPath: stateDir(encodeURIComponent(packageName)),
+		name: "update-notifier",
+		fields: {
+			lastCheckedAt: { type: "number", default: 0 },
+			latestVersion: { type: "string" },
+			lastNotifiedVersion: { type: "string" },
+			registryUrl: { type: "string" },
+		},
+	});
+	return {
+		// State cached from a different registry is stale, not reusable
+		read: async () => {
+			const state = await store.read();
+			if (state.registryUrl !== registryUrl) return null;
+			return {
+				lastCheckedAt: state.lastCheckedAt,
+				latestVersion: state.latestVersion,
+				lastNotifiedVersion: state.lastNotifiedVersion,
+			};
+		},
+		// Explicit keys: the store's write type requires every field present
+		write: async (state) => {
+			await store.write({
+				lastCheckedAt: state.lastCheckedAt,
+				latestVersion: state.latestVersion,
+				lastNotifiedVersion: state.lastNotifiedVersion,
+				registryUrl,
+			});
+		},
+	};
+}
+
 function detectPackageManager(): UpdateNotifierPackageManager {
 	const userAgent = process.env.npm_config_user_agent;
 	if (userAgent) {
@@ -308,24 +366,24 @@ function detectPackageManagerFromExecPath(
 function defaultUpdateCommand(
 	packageName: string,
 	packageManager: UpdateNotifierPackageManager,
-	installScope: UpdateNotifierInstallScope,
+	scope: "global" | "local",
 ): string {
 	if (packageManager === "pnpm") {
-		return installScope === "global"
+		return scope === "global"
 			? `pnpm add -g ${packageName}@latest`
 			: `pnpm add ${packageName}@latest`;
 	}
 	if (packageManager === "yarn") {
-		return installScope === "global"
+		return scope === "global"
 			? `npm install -g ${packageName}@latest`
 			: `yarn add ${packageName}@latest`;
 	}
 	if (packageManager === "bun") {
-		return installScope === "global"
+		return scope === "global"
 			? `bun add -g ${packageName}@latest`
 			: `bun add ${packageName}@latest`;
 	}
-	return installScope === "global"
+	return scope === "global"
 		? `npm install -g ${packageName}@latest`
 		: `npm install ${packageName}@latest`;
 }
@@ -336,38 +394,21 @@ function isStringUpdateCommand(value: UpdateNotifierOptions["updateCommand"]): v
 
 function isUpdateCommandResolver(
 	value: UpdateNotifierOptions["updateCommand"],
-): value is Exclude<UpdateNotifierOptions["updateCommand"], string | undefined> {
+): value is UpdateCommandResolver {
 	return typeof value === "function";
 }
 
 function resolveUpdateCommand(
 	packageName: string,
-	packageManagerOption: UpdateNotifierPackageManager | "auto" | undefined,
-	installScopeOption: UpdateNotifierInstallScope | undefined,
-	override:
-		| string
-		| ((
-				packageName: string,
-				packageManager: UpdateNotifierPackageManager,
-				installScope: UpdateNotifierInstallScope | undefined,
-		  ) => string)
-		| undefined,
+	updateCommand: UpdateNotifierOptions["updateCommand"],
 ): string | undefined {
-	if (isStringUpdateCommand(override)) return override;
+	if (updateCommand === undefined || isStringUpdateCommand(updateCommand)) return updateCommand;
 
-	if (!isUpdateCommandResolver(override) && installScopeOption === undefined) return undefined;
-
-	const detectedPackageManager =
-		packageManagerOption && packageManagerOption !== "auto"
-			? packageManagerOption
-			: detectPackageManager();
-
-	if (isUpdateCommandResolver(override)) {
-		return override(packageName, detectedPackageManager, installScopeOption);
+	const packageManager = detectPackageManager();
+	if (isUpdateCommandResolver(updateCommand)) {
+		return updateCommand({ packageName, packageManager });
 	}
-	return installScopeOption
-		? defaultUpdateCommand(packageName, detectedPackageManager, installScopeOption)
-		: undefined;
+	return defaultUpdateCommand(packageName, packageManager, updateCommand.scope);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -383,7 +424,7 @@ function resolveUpdateCommand(
  * - By default, checks are cached for 24 hours in the package's state directory.
  * - `cache: false` disables cross-run persistence.
  * - A custom cache adapter can override the built-in persistence.
- * - The notice is command-less unless `installScope` or `updateCommand` is configured.
+ * - The notice is command-less unless `updateCommand` is configured.
  * - The network check is non-blocking — it never delays command execution.
  * - All internal errors (network, cache, parsing) are silently swallowed.
  * - The update notice is emitted *after* the command action completes.
@@ -413,8 +454,6 @@ function updateNotifierFactory(options: UpdateNotifierOptions): Extension {
 		packageName,
 		timeoutMs = DEFAULT_TIMEOUT_MS,
 		registryUrl = DEFAULT_REGISTRY_URL,
-		packageManager = "auto",
-		installScope,
 		updateCommand,
 		updateDocsUrl,
 		cache,
@@ -432,35 +471,7 @@ function updateNotifierFactory(options: UpdateNotifierOptions): Extension {
 						if (cache?.adapter) {
 							cacheAdapter = cache.adapter;
 						} else {
-							const { createStore, stateDir } = await import("@crustjs/store");
-							const store = createStore({
-								// stateDir rejects path separators; encodeURIComponent is injective
-								// (@scope/cli → %40scope%2Fcli), so distinct packages never collide
-								dirPath: stateDir(encodeURIComponent(packageName)),
-								name: "update-notifier",
-								fields: {
-									lastCheckedAt: { type: "number", default: 0 },
-									latestVersion: { type: "string" },
-									lastNotifiedVersion: { type: "string" },
-									registryUrl: { type: "string" },
-								},
-							});
-							cacheAdapter = {
-								// State cached from a different registry is stale, not reusable
-								read: async () => {
-									const state = await store.read();
-									return state.registryUrl === registryUrl ? state : null;
-								},
-								// Explicit keys: the store's write type requires every field present
-								write: async (state) => {
-									await store.write({
-										lastCheckedAt: state.lastCheckedAt,
-										latestVersion: state.latestVersion,
-										lastNotifiedVersion: state.lastNotifiedVersion,
-										registryUrl,
-									});
-								},
-							};
+							cacheAdapter = await createStoreCacheAdapter(packageName, registryUrl);
 						}
 					}
 
@@ -468,12 +479,7 @@ function updateNotifierFactory(options: UpdateNotifierOptions): Extension {
 					// so the next successful write repairs the file instead of permanently
 					// disabling the notifier.
 					const state = normalizeNotifierState(await cacheAdapter.read().catch(() => null));
-					const resolvedUpdateCommand = resolveUpdateCommand(
-						packageName,
-						packageManager,
-						installScope,
-						updateCommand,
-					);
+					const resolvedUpdateCommand = resolveUpdateCommand(packageName, updateCommand);
 
 					// ── Cache gate: skip network if within interval ──────────
 					const now = Date.now();

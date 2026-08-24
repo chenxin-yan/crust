@@ -1,4 +1,4 @@
-import { zshArgsDescription, zshDescribeField, zshSingleQuote } from "../escape.ts";
+import { toShellIdent, zshArgsDescription, zshDescribeField, zshSingleQuote } from "../escape.ts";
 import type { CompletionCommand, CompletionFlag } from "../spec.ts";
 
 /**
@@ -22,10 +22,6 @@ import type { CompletionCommand, CompletionFlag } from "../spec.ts";
  * (for `_arguments` description brackets) and {@link zshDescribeField}
  * (for the colon-separated `_describe` items).
  */
-
-function toShellIdent(name: string): string {
-	return name.replace(/[^A-Za-z0-9_]/g, "_");
-}
 
 /**
  * Render the `_arguments` specs for every flag on a given command. Each
@@ -120,7 +116,7 @@ function flagSpecs(flag: CompletionFlag): string[] {
 	// `--no-<name>` for boolean toggles (matches the parser's
 	// negation-acceptance contract). Emitted as a separate spec so it
 	// shows up alongside `--<name>` in the menu.
-	if (flag.type === "boolean" && flag.noNegate !== true) {
+	if (flag.negatable) {
 		const negDesc = `[${zshArgsDescription(`disable: ${desc}`.trim())}]`;
 		const negNames = allLong.map((l) => `--no-${l}`);
 		if (negNames.length === 1) {

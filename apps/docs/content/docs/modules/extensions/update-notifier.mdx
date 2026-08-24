@@ -37,7 +37,31 @@ const updateNotifier: ((options: UpdateNotifierOptions) => Extension) & {
 
 The `postRun` hook checks for an update only after a Command Action completes successfully. Network, registry, cache, and response failures are swallowed so the notifier does not fail a successful command. It does not check after `ctx.finish()` short-circuits such as `--help`. The notice is written through the invocation's stderr callback (process stderr under `execute()`). Version comparison follows SemVer precedence, so a stable release is considered newer than its prerelease.
 
-By default, notifier state is persisted at `stateDir(packageName)` using `@crustjs/store`; package names are URL-encoded for the state directory (`@scope/cli` → `%40scope%2Fcli`) so distinct packages never share state, and cached state from a different `registryUrl` is discarded. A fresh cached result is reused for 24 hours and duplicate notices for the same version are suppressed across sequential process invocations (best-effort: concurrent invocations may race and double-notice). A corrupt state file is treated as empty and repaired on the next successful check. Set `cache: false` to opt out, pass `cache: { intervalMs }` to tune the built-in cache interval, or provide a custom adapter to control persistence. By default, the notice reports only the available version. Set `installScope` to generate a package-manager-specific update command, provide `updateCommand` for a custom command, or set `updateDocsUrl` to link to update instructions. Automatic package-manager detection uses `npm_config_user_agent` when available. An `updateCommand` callback receives `undefined` for `installScope` unless the scope was explicitly configured.
+By default, notifier state is persisted at `stateDir(packageName)` using `@crustjs/store`; package names are URL-encoded for the state directory (`@scope/cli` → `%40scope%2Fcli`) so distinct packages never share state, and cached state from a different `registryUrl` is discarded. A fresh cached result is reused for 24 hours and duplicate notices for the same version are suppressed across sequential process invocations (best-effort: concurrent invocations may race and double-notice). A corrupt state file is treated as empty and repaired on the next successful check. Set `cache: false` to opt out, pass `cache: { intervalMs }` to tune the built-in cache interval, or provide a custom adapter to control persistence.
+
+By default, the notice reports only the available version. Configure `updateCommand` with a fixed string, a `{ scope: "global" | "local" }` object that generates a command for the detected package manager, or a callback receiving `{ packageName, packageManager }`. Set `updateDocsUrl` to link to update instructions. Automatic package-manager detection uses `npm_config_user_agent` when available.
+
+## Update command
+
+Generate the standard global update command for the detected package manager:
+
+```ts
+updateNotifier({
+  packageName: "my-cli",
+  currentVersion: "1.2.3",
+  updateCommand: { scope: "global" },
+});
+```
+
+Use a fixed command or generate one from package information:
+
+```ts
+updateNotifier({
+  packageName: "my-cli",
+  currentVersion: "1.2.3",
+  updateCommand: ({ packageName, packageManager }) => `${packageManager} run update-${packageName}`,
+});
+```
 
 ## Cache
 
@@ -89,7 +113,7 @@ The adapter reads and writes the exported `UpdateNotifierState` shape:
   name="UpdateNotifierState"
 />
 
-The package exports `UpdateNotifierCacheAdapter`, `UpdateNotifierCacheConfig`, `UpdateNotifierInstallScope`, `UpdateNotifierPackageManager`, and `UpdateNotifierState` alongside `UpdateNotifierOptions`.
+The package exports `UpdateNotifierCacheAdapter`, `UpdateNotifierCacheConfig`, `UpdateNotifierPackageManager`, and `UpdateNotifierState` alongside `UpdateNotifierOptions`.
 
 ```ts
 import {

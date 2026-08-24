@@ -76,6 +76,7 @@ describe("walkCommandNode", () => {
 			short: "v",
 			description: "Verbose output",
 			takesValue: false,
+			negatable: true,
 		});
 		expect(byName.name).toEqual({
 			name: "name",
@@ -83,12 +84,14 @@ describe("walkCommandNode", () => {
 			aliases: ["nm"],
 			description: "Name to greet",
 			takesValue: true,
+			negatable: false,
 		});
 		expect(byName.tag).toEqual({
 			name: "tag",
 			type: "string",
 			takesValue: true,
 			multiple: true,
+			negatable: false,
 		});
 	});
 

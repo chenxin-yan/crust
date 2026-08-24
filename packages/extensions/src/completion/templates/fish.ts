@@ -1,4 +1,4 @@
-import { fishSingleQuote } from "../escape.ts";
+import { fishSingleQuote, toShellIdent } from "../escape.ts";
 import type { CompletionCommand } from "../spec.ts";
 
 /**
@@ -18,10 +18,6 @@ import type { CompletionCommand } from "../spec.ts";
  * `__fish_seen_subcommand_from` chain (which is order-insensitive and
  * misroutes when the same name appears at different depths).
  */
-
-function toShellIdent(name: string): string {
-	return name.replace(/[^A-Za-z0-9_]/g, "_");
-}
 
 /** Build the space-joined spelling list for a command (canonical + aliases). */
 function spellingsOf(node: CompletionCommand): string {
@@ -229,7 +225,7 @@ function emitRules(
 		}
 
 		// `--no-<name>` for boolean toggles.
-		if (flag.type === "boolean" && flag.noNegate !== true) {
+		if (flag.negatable) {
 			const negDesc = `disable: ${desc}`.trim();
 			out.push(
 				renderRule(binName, {

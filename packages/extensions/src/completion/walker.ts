@@ -1,6 +1,7 @@
 import { stripVTControlCharacters } from "node:util";
 
 import type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "@crustjs/core";
+import { isListed } from "@crustjs/core/tooling";
 
 import { assertSafeChoiceValue, assertSafeIdentifier, sanitizeFreeText } from "./escape.ts";
 import type { CompletionArg, CompletionCommand, CompletionFlag } from "./spec.ts";
@@ -39,6 +40,7 @@ function walkFlag(name: string, def: FlagSnapshot): CompletionFlag {
 		...(aliases !== undefined && aliases.length > 0 ? { aliases } : {}),
 		...(description === undefined ? {} : { description }),
 		...(def.multiple === true ? { multiple: true as const } : {}),
+		negatable: def.negatable,
 	};
 
 	if (def.type === "boolean") {
@@ -46,7 +48,6 @@ function walkFlag(name: string, def: FlagSnapshot): CompletionFlag {
 			...common,
 			type: "boolean",
 			takesValue: false,
-			...(def.noNegate === true ? { noNegate: true as const } : {}),
 		};
 	}
 	if (def.type === "number") return { ...common, type: "number", takesValue: true };
@@ -123,10 +124,7 @@ export function walkCommandNode(node: CommandSnapshot): CompletionCommand {
 
 	const subCommands: CompletionCommand[] = [];
 	for (const subNode of Object.values(node.subCommands)) {
-		// Mirror the help renderer's contract: skip listing-hidden nodes.
-		// Routing in `packages/core/src/command/router.ts` still resolves them by
-		// direct name — they are only invisible to enumeration.
-		if (subNode.meta.hidden === true) continue;
+		if (!isListed(subNode)) continue;
 		subCommands.push(walkCommandNode(subNode));
 	}
 

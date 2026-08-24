@@ -68,12 +68,12 @@ describe("--no- negation", () => {
 	const spec: CompletionCommand = {
 		name: "mycli",
 		flags: [
-			{ name: "force", type: "boolean", takesValue: false },
+			{ name: "force", type: "boolean", takesValue: false, negatable: true },
 			{
 				name: "color",
 				type: "boolean",
 				takesValue: false,
-				noNegate: true,
+				negatable: false,
 			},
 		],
 		args: [],
@@ -83,7 +83,7 @@ describe("--no- negation", () => {
 	it("bash: emits --no-<name> for negatable boolean flags", () => {
 		const out = renderBash(spec, "mycli", "1");
 		expect(out).toContain("--no-force");
-		// `noNegate` flag has its negation suppressed.
+		// Core's snapshot-derived negation policy suppresses the color spelling.
 		expect(out).not.toContain("--no-color");
 	});
 
@@ -115,9 +115,10 @@ describe("renderBash · behavioural · -- and --name=value", () => {
 						name: "target",
 						type: "string",
 						takesValue: true,
+						negatable: false,
 						choices: ["browser", "node"],
 					},
-					{ name: "out", type: "string", takesValue: true },
+					{ name: "out", type: "string", takesValue: true, negatable: false },
 				],
 				args: [],
 				subCommands: [],
@@ -269,7 +270,7 @@ describe("renderFish · ordered subcommand predicate", () => {
 				subCommands: [
 					{
 						name: "deploy", // same word at depth 2 and depth 1 below
-						flags: [{ name: "fast", type: "boolean", takesValue: false }],
+						flags: [{ name: "fast", type: "boolean", takesValue: false, negatable: false }],
 						args: [],
 						subCommands: [],
 					},
@@ -277,7 +278,7 @@ describe("renderFish · ordered subcommand predicate", () => {
 			},
 			{
 				name: "deploy", // depth-1 deploy
-				flags: [{ name: "slow", type: "boolean", takesValue: false }],
+				flags: [{ name: "slow", type: "boolean", takesValue: false, negatable: false }],
 				args: [],
 				subCommands: [],
 			},

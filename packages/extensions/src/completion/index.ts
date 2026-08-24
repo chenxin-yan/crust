@@ -10,6 +10,9 @@ import {
 } from "@crustjs/core";
 
 import { assertSafeBinName, sanitizeFreeText } from "./escape.ts";
+import { renderBash } from "./templates/bash.ts";
+import { renderFish } from "./templates/fish.ts";
+import { renderZsh } from "./templates/zsh.ts";
 import { walkCommandNode } from "./walker.ts";
 
 const COMPLETION: ExtensionId = defineExtensionId("crust:completion");
@@ -61,22 +64,19 @@ function filenameForShell(shell: CompletionShell, binName: string): string {
 	}
 }
 
-async function renderForShell(
-	shell: string,
+const SHELL_RENDERERS = {
+	bash: renderBash,
+	zsh: renderZsh,
+	fish: renderFish,
+} satisfies Record<CompletionShell, typeof renderBash>;
+
+function renderForShell(
+	shell: CompletionShell,
 	spec: ReturnType<typeof walkCommandNode>,
 	binName: string,
 	version: string,
-): Promise<string> {
-	if (shell === "bash") {
-		const { renderBash } = await import("./templates/bash.ts");
-		return renderBash(spec, binName, version);
-	}
-	if (shell === "zsh") {
-		const { renderZsh } = await import("./templates/zsh.ts");
-		return renderZsh(spec, binName, version);
-	}
-	const { renderFish } = await import("./templates/fish.ts");
-	return renderFish(spec, binName, version);
+): string {
+	return SHELL_RENDERERS[shell](spec, binName, version);
 }
 
 /**
@@ -139,7 +139,7 @@ function completionFactory(options: CompletionOptions = {}): Extension {
 					const outputDir = context.flags["output-dir"];
 
 					if (outputDir === undefined) {
-						const script = await renderForShell(requestedShell, spec, binName, safeVersion);
+						const script = renderForShell(requestedShell, spec, binName, safeVersion);
 						context.stdout(script);
 						return;
 					}
@@ -152,7 +152,7 @@ function completionFactory(options: CompletionOptions = {}): Extension {
 					await mkdir(targetDir, { recursive: true });
 					for (const shell of SUPPORTED_SHELLS) {
 						const filename = filenameForShell(shell, binName);
-						const script = await renderForShell(shell, spec, binName, safeVersion);
+						const script = renderForShell(shell, spec, binName, safeVersion);
 						await writeFile(resolvePath(targetDir, filename), script, "utf8");
 					}
 				}),

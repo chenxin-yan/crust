@@ -6,6 +6,7 @@ import {
 	defineExtension,
 	defineExtensionId,
 } from "@crustjs/core";
+import { isListed } from "@crustjs/core/tooling";
 
 import { renderHelp } from "./help.ts";
 
@@ -87,7 +88,7 @@ function findSuggestions(
 	};
 
 	for (const [name, node] of Object.entries(subCommands)) {
-		if (node.meta.hidden === true) continue;
+		if (!isListed(node)) continue;
 		const d = score(name);
 		if (d !== null) record(name, d);
 		for (const alias of node.meta.aliases ?? []) {
@@ -130,8 +131,8 @@ function didYouMeanFactory(options: DidYouMeanOptions = {}): Extension {
 				// those marked `meta.hidden: true`. The error message is user-
 				// facing, so filter the same way `findSuggestions` does — internal
 				// commands stay invocable but never surface in this list.
-				const visibleAvailable = details.available.filter(
-					(canonical) => details.parentCommand.subCommands[canonical]?.meta.hidden !== true,
+				const visibleAvailable = details.available.filter((canonical) =>
+					isListed(details.parentCommand.subCommands[canonical]!),
 				);
 				if (visibleAvailable.length > 0) {
 					message += `\n\nAvailable commands: ${visibleAvailable.join(", ")}`;

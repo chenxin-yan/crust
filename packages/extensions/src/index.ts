@@ -8,7 +8,6 @@ export { updateNotifier } from "./update-notifier.ts";
 export type {
 	UpdateNotifierCacheAdapter,
 	UpdateNotifierCacheConfig,
-	UpdateNotifierInstallScope,
 	UpdateNotifierPackageManager,
 	UpdateNotifierOptions,
 	UpdateNotifierState,
