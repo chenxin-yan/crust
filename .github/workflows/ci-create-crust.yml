@@ -35,9 +35,7 @@ jobs:
         os:
           - ubuntu-latest
           - macos-latest
-          # TODO: windows-latest disabled: Bun panics when package builds traverse
-          # workspace deps through node_modules on Windows. Re-enable once fixed:
-          # https://github.com/oven-sh/bun/issues/26798
+          - windows-latest
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
