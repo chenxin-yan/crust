@@ -64,7 +64,7 @@ Downstream commands and other Context setups call `await ctx.api`. See [Contexts
 | [`CommandConfig`](/docs/api/crust)            | Static metadata for a reusable definition                                 |
 | `CommandMeta`                                 | Name, description, usage, sections, aliases, and visibility               |
 | `CommandSection`                              | A titled documentation block with an optional consumer audience           |
-| `CommandSectionInput`                         | Section entry accepted by command metadata (string or `CommandSection`)   |
+| `CommandSectionInput`                         | Plain-text section (`title`, `body`) with an optional consumer audience   |
 | `SectionAudience`                             | Mutually exclusive `only`/`except` consumer lists on a section            |
 | `ExtensionId`                                 | Branded identity minted by `defineExtensionId()`                          |
 | `ContextBag` / `FactoryValueOf`               | Lazy Context property bag and factory-value helper types                  |
