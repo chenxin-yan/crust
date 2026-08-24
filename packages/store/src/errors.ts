@@ -125,10 +125,6 @@ export type StoreErrorDetails<C extends StoreErrorCode> = StoreErrorDetailsMap[C
  * }
  * ```
  */
-function sameStoreErrorCode(left: StoreErrorCode, right: StoreErrorCode): boolean {
-	return left === right;
-}
-
 export class CrustStoreError<C extends StoreErrorCode = StoreErrorCode> extends Error {
 	/** Machine-readable error code for programmatic handling. */
 	readonly code: C;
@@ -165,6 +161,6 @@ export class CrustStoreError<C extends StoreErrorCode = StoreErrorCode> extends 
 	 * ```
 	 */
 	is<T extends StoreErrorCode>(code: T): this is CrustStoreError<T> {
-		return sameStoreErrorCode(this.code, code);
+		return Object.is(this.code, code);
 	}
 }

@@ -58,6 +58,21 @@ function isString(value: JsonValue | undefined): value is string {
 	return typeof value === "string";
 }
 
+function isNumber(value: JsonValue | undefined): value is number {
+	return typeof value === "number";
+}
+
+function isBoolean(value: JsonValue | undefined): value is boolean {
+	return typeof value === "boolean";
+}
+
+function matchesValueType(value: JsonValue, type: FieldDef["type"]): boolean {
+	if (type === "string") return isString(value);
+	if (type === "number") return isNumber(value);
+	if (type === "boolean") return isBoolean(value);
+	return true;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // createStore — Public factory
 // ────────────────────────────────────────────────────────────────────────────
@@ -126,9 +141,7 @@ export function createStore<const F extends FieldsDef>(
 			}
 			validators.set(key, makeSchemaValidator(def.schema));
 		} else if (def.validate !== undefined) {
-			// SAFETY: each validator is only called for its own field. Coercion does not guarantee the
-			// persisted value matches the validator's declared parameter type: corrupt files can hand a
-			// wrong-typed value to it, which surfaces as a validator throw → VALIDATION issue.
+			// SAFETY: each validator is only called for its own field after coercion and type checking.
 			validators.set(key, def.validate as FieldValidator);
 		}
 	}
@@ -195,12 +208,26 @@ export function createStore<const F extends FieldsDef>(
 		const issues: StoreValidatorIssue[] = [];
 
 		for (const [key, def] of Object.entries(fields)) {
-			const validator = validators.get(key);
-			if (!validator) continue;
-
 			const value = mutableState[key];
 
 			if (value === undefined && def.schema === undefined) continue;
+
+			if (value !== undefined && def.schema === undefined && def.type !== undefined) {
+				const matches =
+					def.array === true
+						? Array.isArray(value) && value.every((item) => matchesValueType(item, def.type))
+						: matchesValueType(value, def.type);
+				if (!matches) {
+					issues.push({
+						message: `Expected ${def.type}${def.array === true ? "[]" : ""}`,
+						path: key,
+					});
+					continue;
+				}
+			}
+
+			const validator = validators.get(key);
+			if (!validator) continue;
 
 			let result: Awaited<ReturnType<FieldValidator>>;
 			try {
@@ -308,33 +335,36 @@ export function createStore<const F extends FieldsDef>(
 	// write — Validate then atomically persist full config
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function write(config: Config): Promise<void> {
+	async function write(config: Config): Promise<Config> {
 		const normalized = normalizeStateTypes(documentFromConfig(config));
 		await runFieldValidators(normalized, "write");
 		await writeJson(filePath, normalized, writeOptions);
+		return configFromDocument(normalized);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
 	// update — Read current (raw), apply updater, validate, persist
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function update(updater: StoreUpdater<Config>): Promise<void> {
+	async function update(updater: StoreUpdater<Config>): Promise<Config> {
 		const current = await readRaw();
 		const updated = updater(configFromDocument(current));
 		const normalized = normalizeStateTypes(documentFromConfig(updated));
 		await runFieldValidators(normalized, "update");
 		await writeJson(filePath, normalized, writeOptions);
+		return configFromDocument(normalized);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
 	// patch — Shallow merge into current config, validate, persist
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function patch(partial: Partial<Config>): Promise<void> {
+	async function patch(partial: Partial<Config>): Promise<Config> {
 		const current = await readRaw();
 		const normalized = normalizeStateTypes({ ...current, ...partial });
 		await runFieldValidators(normalized, "patch");
 		await writeJson(filePath, normalized, writeOptions);
+		return configFromDocument(normalized);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────

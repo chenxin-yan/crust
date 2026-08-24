@@ -338,7 +338,7 @@ export interface CreateStoreOptions<F extends FieldsDef> {
 /**
  * Receives the current effective config and returns an updated config.
  *
- * Used by {@link Store.update} to apply mutations atomically.
+ * Used by {@link Store.update} to calculate the next config in process.
  *
  * @example
  * ```ts
@@ -404,20 +404,25 @@ export interface Store<TConfig> {
 	 * persistence.
 	 *
 	 * @param config - The complete config to persist.
+	 * @returns The persisted config, including schema transformations.
 	 * @throws {CrustStoreError} `VALIDATION` if field validation fails.
 	 * @throws {CrustStoreError} `IO` on filesystem write failures.
 	 */
-	write(config: NoInfer<TConfig>): Promise<void>;
+	write(config: NoInfer<TConfig>): Promise<TConfig>;
 
 	/**
 	 * Reads current effective config, applies the updater, and persists.
 	 *
+	 * The final file replacement is atomic, but the read-modify-write sequence
+	 * is not locked across processes; concurrent updates can overwrite each other.
+	 *
 	 * @param updater - Function receiving current config and returning updated config.
+	 * @returns The persisted config, including schema transformations.
 	 * @throws {CrustStoreError} `PARSE` if persisted JSON is malformed.
 	 * @throws {CrustStoreError} `VALIDATION` if field validation fails.
 	 * @throws {CrustStoreError} `IO` on filesystem failures.
 	 */
-	update(updater: StoreUpdater<TConfig>): Promise<void>;
+	update(updater: StoreUpdater<TConfig>): Promise<TConfig>;
 
 	/**
 	 * Applies a partial update to the current config and persists.
@@ -425,11 +430,12 @@ export interface Store<TConfig> {
 	 * Only the provided keys are updated; everything else is preserved.
 	 *
 	 * @param partial - A partial subset of the config to merge in.
+	 * @returns The persisted config, including schema transformations.
 	 * @throws {CrustStoreError} `VALIDATION` if field validation fails.
 	 * @throws {CrustStoreError} `PARSE` if persisted JSON is malformed.
 	 * @throws {CrustStoreError} `IO` on filesystem failures.
 	 */
-	patch(partial: Partial<NoInfer<TConfig>>): Promise<void>;
+	patch(partial: Partial<NoInfer<TConfig>>): Promise<TConfig>;
 
 	/**
 	 * Removes the persisted config file, returning the store to

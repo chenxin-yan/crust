@@ -297,6 +297,25 @@ describe("store.read", () => {
 		const result = await store.read();
 		expect(result.ports).toEqual([3000, 8080]);
 	});
+
+	it("should reject persisted values that do not match their declared type", async () => {
+		const filePath = join(tempDir, "config.json");
+		await writeFile(filePath, JSON.stringify({ port: "abc" }));
+
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: { port: { type: "number" } },
+		});
+
+		await expect(store.read()).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: {
+				operation: "read",
+				issues: [{ path: "port" }],
+			},
+		});
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -906,11 +925,12 @@ describe("schema transform persistence", () => {
 
 		const store = createStore({ dirPath: tempDir, name: "config", fields });
 
-		await store.write({ name: "  hi  " });
+		const persisted = await store.write({ name: "  hi  " });
 
+		expect(persisted).toEqual({ name: "hi" });
 		const filePath = join(tempDir, "config.json");
 		const raw = await readFile(filePath, "utf-8");
-		expect(JSON.parse(raw)).toEqual({ name: "hi" });
+		expect(JSON.parse(raw)).toEqual(persisted);
 	});
 
 	it("persists Zod transform output on update", async () => {
@@ -920,11 +940,12 @@ describe("schema transform persistence", () => {
 
 		const store = createStore({ dirPath: tempDir, name: "config", fields });
 
-		await store.update(() => ({ name: "  spaced  " }));
+		const persisted = await store.update(() => ({ name: "  spaced  " }));
 
+		expect(persisted).toEqual({ name: "spaced" });
 		const filePath = join(tempDir, "config.json");
 		const raw = await readFile(filePath, "utf-8");
-		expect(JSON.parse(raw)).toEqual({ name: "spaced" });
+		expect(JSON.parse(raw)).toEqual(persisted);
 	});
 
 	it("persists Zod transform output on patch", async () => {
@@ -934,11 +955,12 @@ describe("schema transform persistence", () => {
 
 		const store = createStore({ dirPath: tempDir, name: "config", fields });
 
-		await store.patch({ name: "  patched  " });
+		const persisted = await store.patch({ name: "  patched  " });
 
+		expect(persisted).toEqual({ name: "patched" });
 		const filePath = join(tempDir, "config.json");
 		const raw = await readFile(filePath, "utf-8");
-		expect(JSON.parse(raw)).toEqual({ name: "patched" });
+		expect(JSON.parse(raw)).toEqual(persisted);
 	});
 
 	// Pin: reads MUST NOT mutate on-disk state, even when the schema would
