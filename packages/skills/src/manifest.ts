@@ -1,11 +1,7 @@
-import {
-	type CommandSnapshot,
-	type ExtensionId,
-	defineExtensionId,
-	sectionsFor,
-} from "@crustjs/core";
+import { type CommandSnapshot, type ExtensionId, defineExtensionId } from "@crustjs/core";
 import {
 	buildCommandDocumentation,
+	sectionsFor,
 	type CommandDocumentation,
 	type DocumentationArg,
 	type DocumentationFlag,

@@ -50,7 +50,9 @@ describe("snapshotCommand", () => {
 			type: "boolean",
 			short: "v",
 			description: "Verbose output",
+			negatable: true,
 		});
+		expect(snapshot.flags.endpoint?.negatable).toBe(false);
 		expect(snapshot.subCommands.build?.meta.aliases).toEqual(["b"]);
 		expect(snapshot.subCommands.build?.meta.hidden).toBe(true);
 		expect(snapshot.subCommands.build?.hasAction).toBe(false);
@@ -79,6 +81,7 @@ describe("snapshotCommand", () => {
 		expect(snapshot.flags["api-key"]).toEqual({
 			type: "string",
 			short: "k",
+			negatable: false,
 		});
 		expect(snapshot.subCommands.deploy?.flags["api-key"]).toEqual(snapshot.flags["api-key"]);
 		expect(Object.isFrozen(snapshot.subCommands.deploy?.flags["api-key"])).toBe(true);

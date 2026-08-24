@@ -248,7 +248,7 @@ interface FlagDefBase {
 	schema?: never;
 }
 
-// ── Single-value flags ────────────────────────────────────────────────────
+// ── Core-value flags ─────────────────────────────────────────────────────
 
 /** Base for single-value flags — `multiple` must be omitted */
 interface SingleFlagBase extends FlagDefBase {
@@ -256,185 +256,57 @@ interface SingleFlagBase extends FlagDefBase {
 	multiple?: never;
 }
 
-/** A single-value string flag */
-interface StringFlagDef<ParseOutput = unknown> extends SingleFlagBase {
-	type: "string";
-	/** Default string value */
-	default?: string;
-	/**
-	 * Static enum of valid values for this flag.
-	 *
-	 * Validated at parse time before `parse` runs. Passing a value outside
-	 * `choices` throws `CrustError("PARSE", …)` before any `parse` transform
-	 * is applied. Also consumed by shell-completion extensions
-	 * (e.g. `@crustjs/extensions`) to emit value candidates.
-	 *
-	 * Only available on string-typed flags; not supported on number/boolean.
-	 *
-	 * @example
-	 * { type: "string", choices: ["browser", "bun", "node"] }
-	 */
-	choices?: readonly string[];
-	/**
-	 * Custom synchronous parser for the raw argv string.
-	 *
-	 * Receives the raw token as it appeared on the command line (after
-	 * `choices` validation, when present) and returns the resolved value
-	 * that flows to the `run` action. The return type is inferred and
-	 * becomes the flag's runtime type.
-	 *
-	 * Constraints:
-	 * - Synchronous only. TypeScript rejects Promise-returning parsers.
-	 * - Only allowed on `type: "string"` (single + multi) and string args.
-	 *   `parse?: never` on every non-string variant prevents misuse at
-	 *   compile time.
-	 * - When `default` is set and argv is absent, `parse(String(default))`
-	 *   runs so the runtime value matches the inferred type.
-	 *
-	 * @example
-	 * { type: "string", parse: (s) => Number(s) }
-	 */
-	parse?: (raw: string) => ParseOutput;
-}
-
-/** A single-value number flag */
-interface NumberFlagDef extends SingleFlagBase {
-	type: "number";
-	choices?: never;
-	/** Default number value */
-	default?: number;
-	/** Not supported on number flags — use `type: "string"` with `parse`. */
-	parse?: never;
-}
-
-/** A single-value boolean flag */
-interface BooleanFlagDef extends SingleFlagBase {
-	type: "boolean";
-	choices?: never;
-	/** Default boolean value */
-	default?: boolean;
-	/** When `true`, reject `--no-{name}` (and negated aliases) at parse time and hide the generated help label */
-	noNegate?: true;
-	/** Not supported on boolean flags — use `type: "string"` with `parse`. */
-	parse?: never;
-}
-
-/** A single-value URL flag (parsed via `new URL()`) */
-interface UrlFlagDef extends SingleFlagBase {
-	type: "url";
-	choices?: never;
-	/** Default URL value */
-	default?: URL;
-	/** Not supported on url flags — use `type: "string"` with `parse`. */
-	parse?: never;
-}
-
-/** A single-value path flag (expanded `~` + resolved against `process.cwd()`) */
-interface PathFlagDef extends SingleFlagBase {
-	type: "path";
-	choices?: never;
-	/** Default path string value */
-	default?: string;
-	/** Not supported on path flags — use `type: "string"` with `parse`. */
-	parse?: never;
-}
-
-/** A single-value JSON flag (parsed via `JSON.parse()` to `unknown`) */
-interface JsonFlagDef extends SingleFlagBase {
-	type: "json";
-	choices?: never;
-	/** Default parsed JSON value */
-	default?: unknown;
-	/** Not supported on json flags — use `type: "string"` with `parse`. */
-	parse?: never;
-}
-
-// ── Multi-value flags ─────────────────────────────────────────────────────
-
 /** Base for multi-value flags — `multiple` is required as `true` */
 interface MultiFlagBase extends FlagDefBase {
 	/** Collect repeated values into an array */
 	multiple: true;
 }
 
-/** A multi-value string flag (collects repeated values into an array) */
-interface StringMultiFlagDef<ParseOutput = unknown> extends MultiFlagBase {
-	type: "string";
-	/** Default string array value */
-	default?: string[];
+type StringFlagFields<Default, ParseOutput> = {
+	/** Default string value, or string array for a multi-value flag. */
+	default?: Default;
 	/**
-	 * Static enum of valid values for each occurrence of this flag.
+	 * Static enum of valid values for this flag.
 	 *
-	 * Each element is validated at parse time before `parse` runs. Passing
-	 * a value outside `choices` throws `CrustError("PARSE", …)` before any
-	 * `parse` transform is applied. Also consumed by shell-completion
-	 * extensions (e.g. `@crustjs/extensions`) to emit value candidates.
-	 *
-	 * Only available on string-typed multi-flags; not supported on number/boolean.
-	 *
-	 * @example
-	 * { type: "string", multiple: true, choices: ["unit", "integration"] }
+	 * Validated at parse time before `parse` runs. Passing a value outside
+	 * `choices` throws `CrustError("PARSE", …)` before any `parse` transform
+	 * is applied. Also consumed by shell-completion extensions.
 	 */
 	choices?: readonly string[];
 	/**
-	 * Custom synchronous per-element parser for each raw argv string.
-	 * See {@link StringFlagDef.parse} for full semantics. Runs once per
-	 * occurrence; the resolved value is `ReturnType<typeof parse>[]`.
+	 * Custom synchronous parser for the raw argv string. For multi-value
+	 * flags it runs once per occurrence. The return type becomes the flag's
+	 * inferred runtime value type.
 	 */
 	parse?: (raw: string) => ParseOutput;
-}
+	noNegate?: never;
+};
 
-/** A multi-value number flag (collects repeated values into an array) */
-interface NumberMultiFlagDef extends MultiFlagBase {
-	type: "number";
+type TypedFlagFields<T extends Exclude<ValueType, "string">, Default> = {
+	/** Default value, or value array for a multi-value flag. */
+	default?: Default;
 	choices?: never;
-	/** Default number array value */
-	default?: number[];
-	/** Not supported — use `type: "string"`, `multiple: true`, with `parse`. */
+	/** Only boolean flags support generated-negation opt-out. */
+	noNegate?: T extends "boolean" ? true : never;
+	/** Use `type: "string"` with `parse` for custom parsing. */
 	parse?: never;
-}
+};
 
-/** A multi-value boolean flag (collects repeated values into an array) */
-interface BooleanMultiFlagDef extends MultiFlagBase {
-	type: "boolean";
-	choices?: never;
-	/** Default boolean array value */
-	default?: boolean[];
-	/** When `true`, reject `--no-{name}` (and negated aliases) at parse time and hide the generated help label */
-	noNegate?: true;
-	/** Not supported — use `type: "string"`, `multiple: true`, with `parse`. */
-	parse?: never;
-}
+type CoreFlagFields<T extends ValueType, Default, ParseOutput> = T extends "string"
+	? StringFlagFields<Default, ParseOutput>
+	: T extends Exclude<ValueType, "string">
+		? TypedFlagFields<T, Default>
+		: never;
 
-/** A multi-value URL flag (collects repeated URL values into an array) */
-interface UrlMultiFlagDef extends MultiFlagBase {
-	type: "url";
-	choices?: never;
-	/** Default URL array value */
-	default?: URL[];
-	/** Not supported — use `type: "string"`, `multiple: true`, with `parse`. */
-	parse?: never;
-}
+/** A single-value core flag for the declared value type. */
+type TypedFlagDef<T extends ValueType, ParseOutput = unknown> = SingleFlagBase & {
+	type: T;
+} & CoreFlagFields<T, Resolve<T>, ParseOutput>;
 
-/** A multi-value path flag (collects repeated path strings into an array) */
-interface PathMultiFlagDef extends MultiFlagBase {
-	type: "path";
-	choices?: never;
-	/** Default path array value */
-	default?: string[];
-	/** Not supported — use `type: "string"`, `multiple: true`, with `parse`. */
-	parse?: never;
-}
-
-/** A multi-value JSON flag (collects repeated parsed JSON values) */
-interface JsonMultiFlagDef extends MultiFlagBase {
-	type: "json";
-	choices?: never;
-	/** Default parsed JSON array value */
-	default?: unknown[];
-	/** Not supported — use `type: "string"`, `multiple: true`, with `parse`. */
-	parse?: never;
-}
+/** A repeatable core flag for the declared value type. */
+type TypedMultiFlagDef<T extends ValueType, ParseOutput = unknown> = MultiFlagBase & {
+	type: T;
+} & CoreFlagFields<T, Resolve<T>[], ParseOutput>;
 
 /** Shared fields for schema-backed flags (exclusive mode) */
 interface SchemaFlagBase extends Omit<FlagDefBase, "schema" | "required"> {
@@ -487,20 +359,9 @@ interface SchemaBooleanFlagDef extends SchemaFlagBase {
  * ```
  */
 export type FlagDef =
-	| StringFlagDef
-	| NumberFlagDef
-	| BooleanFlagDef
-	| UrlFlagDef
-	| PathFlagDef
-	| JsonFlagDef
+	| { [T in ValueType]: TypedFlagDef<T> | TypedMultiFlagDef<T> }[ValueType]
 	| SchemaStringFlagDef
-	| SchemaBooleanFlagDef
-	| StringMultiFlagDef
-	| NumberMultiFlagDef
-	| BooleanMultiFlagDef
-	| UrlMultiFlagDef
-	| PathMultiFlagDef
-	| JsonMultiFlagDef;
+	| SchemaBooleanFlagDef;
 
 /** Record mapping flag names to their definitions */
 export type FlagsDef = Record<string, FlagDef>;

@@ -1,3 +1,4 @@
+import { isFlagNegatable } from "../parsing/spellings.ts";
 import type { ArgDef, CommandMeta, DeclaredDefault, FlagDef, ValueType } from "../types.ts";
 import type { CommandNode } from "./node.ts";
 
@@ -62,6 +63,8 @@ export interface FlagSnapshot {
 	readonly required?: boolean;
 	/** `true` when the flag can repeat and collects values into an array. */
 	readonly multiple?: boolean;
+	/** `true` when the flag accepts generated `--no-<name>` spellings. */
+	readonly negatable: boolean;
 	/** `true` when a boolean flag opted out of the `--no-<name>` spelling. */
 	readonly noNegate?: boolean;
 	/** Static enum of accepted values, e.g. `["debug", "info", "error"]`. */
@@ -91,7 +94,7 @@ export interface FlagSnapshot {
  * //   meta: { name: "add" },
  * //   hasAction: true,
  * //   args: [{ name: "name", type: "string", required: true }],
- * //   flags: { force: { type: "boolean", short: "f" } },
+ * //   flags: { force: { type: "boolean", short: "f", negatable: true } },
  * //   subCommands: {},
  * // }
  * ```
@@ -151,6 +154,7 @@ function snapshotFlag(def: FlagDef): FlagSnapshot {
 		aliases: def.aliases ? Object.freeze([...def.aliases]) : undefined,
 		required: def.required,
 		multiple: def.multiple,
+		negatable: isFlagNegatable(def),
 		noNegate: "noNegate" in def ? def.noNegate : undefined,
 		choices: def.choices ? Object.freeze([...def.choices]) : undefined,
 		default: serializableDefault(def.default),
