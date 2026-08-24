@@ -388,7 +388,7 @@ export interface CommandDefinitionBuilder<
 	Result = void,
 > {
 	flags<const Defs extends readonly NamedFlagDef[]>(
-		...defs: Defs & ValidateNamedFlagDefs<Defs, Sp>
+		...defs: ValidateNamedFlagDefs<Defs, Sp>
 	): CommandDefinitionBuilder<
 		MergeFlags<Flags, NamedFlagsRecord<Defs>>,
 		A,
@@ -982,7 +982,7 @@ export class Crust<
 	 * @returns A new `Crust` instance with the given flags
 	 */
 	flags<const Defs extends readonly NamedFlagDef[]>(
-		...defs: Defs & ValidateNamedFlagDefs<Defs, Sp>
+		...defs: ValidateNamedFlagDefs<Defs, Sp>
 	): Crust<
 		MergeFlags<Flags, NamedFlagsRecord<Defs>>,
 		A,
