@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
+import { styleMethodNames } from "./ansiCodes.ts";
 import * as runtimeExports from "./runtimeExports.ts";
-import { styleMethodNames } from "./styleMethodRegistry.ts";
 
 describe("runtime exports", () => {
 	it("exports every registered style method", () => {

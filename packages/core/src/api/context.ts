@@ -22,14 +22,12 @@ export type ContextBag<Deps extends ContextMap = {}> = {
 	readonly [K in keyof Deps]: Promise<Deps[K]>;
 };
 
-export interface ContextConfig<
-	Uses extends readonly AnyContextFactory[] = readonly AnyContextFactory[],
-> {
+export interface ContextConfig {
 	readonly flags?: readonly NamedFlagDef[];
-	readonly uses?: Uses;
+	readonly uses?: readonly AnyContextFactory[];
 }
 
-type ValidateContextConfig<R extends ContextConfig<any>> = {
+type ValidateContextConfig<R extends ContextConfig> = {
 	readonly flags?: R["flags"] extends readonly NamedFlagDef[]
 		? ValidateNamedFlagDefs<R["flags"]>
 		: never;
@@ -139,13 +137,13 @@ export type ContextsDependencies<Cs extends readonly ContextInstance[]> = Cs ext
 	? ContextDepsOf<H> & ContextsDependencies<T>
 	: {};
 
-export type OwnedFlagsOf<R extends ContextConfig<any>> = R extends {
+export type OwnedFlagsOf<R extends ContextConfig> = R extends {
 	flags: infer F extends readonly NamedFlagDef[];
 }
 	? NamedFlagsRecord<F>
 	: {};
 
-type UsesOf<R extends ContextConfig<any>> = R extends {
+export type UsesOf<R extends ContextConfig> = R extends {
 	uses: infer Uses extends readonly AnyContextFactory[];
 }
 	? Uses
@@ -155,9 +153,7 @@ type ErasedContextSetup = (
 	input: ContextSetup<never, FlagsDef, ContextMap>,
 ) => Awaitable<ContextValue>;
 
-function isContextSetup(
-	value: ContextConfig<any> | ErasedContextSetup,
-): value is ErasedContextSetup {
+function isContextSetup(value: ContextConfig | ErasedContextSetup): value is ErasedContextSetup {
 	return typeof value === "function";
 }
 
@@ -180,7 +176,7 @@ export function defineContext<
 ): ContextFactory<Name, Options, Value, OwnedFlagsOf<R>, ContextDependencies<UsesOf<R>>>;
 export function defineContext(
 	name: string,
-	configOrSetup: ContextConfig<any> | ErasedContextSetup,
+	configOrSetup: ContextConfig | ErasedContextSetup,
 	maybeSetup?: ErasedContextSetup,
 ): AnyContextFactory {
 	const hasConfig = !isContextSetup(configOrSetup);

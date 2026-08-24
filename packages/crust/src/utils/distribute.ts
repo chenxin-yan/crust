@@ -40,12 +40,6 @@ const METADATA_KEYS = [
 type NpmOs = TargetInfo["os"];
 type NpmCpu = TargetInfo["cpu"];
 type PlatformKey = (typeof TARGET_INFO)[BunTarget]["platformKey"];
-type NpmPerson = string | { name?: string; email?: string; url?: string };
-type NpmBugs = string | { url?: string; email?: string };
-type NpmRepository = string | { type?: string; url?: string; directory?: string };
-type NpmFundingEntry = { type?: string; url?: string };
-type NpmFunding = string | NpmFundingEntry | NpmFundingEntry[];
-
 type PublishPackageMetadata = {
 	name: string;
 	version: string;
@@ -56,13 +50,13 @@ type PublishPackageMetadata = {
 	bin?: Record<string, string>;
 	description?: string;
 	license?: string;
-	author?: NpmPerson;
+	author?: JsonValue;
 	homepage?: string;
-	bugs?: NpmBugs;
-	repository?: NpmRepository;
+	bugs?: JsonValue;
+	repository?: JsonValue;
 	keywords?: string[];
 	publishConfig?: Record<string, JsonValue>;
-	funding?: NpmFunding;
+	funding?: JsonValue;
 	engines?: Record<string, string>;
 };
 

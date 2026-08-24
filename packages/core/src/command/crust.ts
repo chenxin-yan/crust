@@ -9,6 +9,7 @@ import type {
 	ContextsOutput,
 	ContextsOwnedFlags,
 	MergeContext,
+	UsesOf,
 } from "../api/context.ts";
 import type { Extension, ExtensionsProvidesOutput } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
@@ -36,6 +37,7 @@ import type {
 	AliasesOf,
 	CommandDefinitionSpellings,
 	EmptyNameBrand,
+	ExtensionCommandDefs,
 	ExtensionsCommandSpellings,
 	ValidateCommandConfig,
 	ValidateCommandDefinitions,
@@ -68,8 +70,6 @@ import { type CommandAction, type CommandNode, createCommandNode } from "./node.
 import { resolveCommand } from "./router.ts";
 import { snapshotCommand } from "./snapshot.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
-
-export { BUILD_OUT_DIR_ENV, SNAPSHOT_PATH_ENV } from "./invocation.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // CrustCommandContext — Runtime context for lifecycle hooks
@@ -251,12 +251,7 @@ type CommandRecipe<
 	Builder extends AnyCommandDefinitionBuilder = AnyCommandDefinitionBuilder,
 > = (command: CommandDefinitionBuilder<{}, [], Deps, never, never>) => Builder;
 
-type ConfigUses<C extends CommandConfig> = C extends {
-	uses: infer Uses extends readonly AnyContextFactory[];
-}
-	? Uses
-	: readonly [];
-type CommandDeps<C extends CommandConfig> = ContextDependencies<ConfigUses<C>>;
+type CommandDeps<C extends CommandConfig> = ContextDependencies<UsesOf<C>>;
 
 const commandDefinitionInternal: unique symbol = Symbol.for("crust.commandDefinition");
 
@@ -489,30 +484,13 @@ type DefinitionsTree<
 	>;
 };
 
-// Conditionally assembled contributions (union-typed tuples or members) and
-// variable-length arrays stay runtime-only: only what prepare actually
-// installs may become a guaranteed typed path, or run() could dispatch a
-// missing command. The IsUnion guard keeps a conditionally selected Extension
-// (`cond ? extA : extB`) runtime-only too — a naked conditional would
-// distribute and accept each branch independently. Widened contributions also
-// pass through here, but their spellings resolve to `never` (see
-// CommandDefinitionSpellings), so they contribute no typed paths.
-type StaticExtensionCommands<E> =
-	IsUnion<E> extends true
-		? readonly []
-		: E extends Extension<any, any, any, infer Commands>
-			? IsStaticTuple<Commands> extends true
-				? Commands
-				: readonly []
-			: readonly [];
-
 // Mapped per slot: `Es[number]` cannot distinguish `.extend(a, b)` from
 // `.extend(cond ? a : b)` — both index to the same union. Variable-length
 // Extension lists (`.extend(...dynamicList)`) contribute nothing.
 type ExtensionCommands<Es extends readonly Extension<any, any, any, any>[]> =
 	number extends Es["length"]
 		? readonly []
-		: { [I in keyof Es]: StaticExtensionCommands<Es[I]> }[number];
+		: { [I in keyof Es]: ExtensionCommandDefs<Es[I]> }[number];
 
 type StaticExtensionFlagDefs<E> =
 	IsUnion<E> extends true
@@ -666,8 +644,8 @@ function serializeRunArgv(
 	if (route.argv.length > 0) {
 		// A path element the router could not consume must fail here; letting it
 		// fall through would serialize it ahead of the real positionals.
-		const candidate = route.argv[0];
-		if (candidate === undefined) throw new Error("unreachable: non-empty route argv");
+		// SAFETY: the enclosing length check proves the first element exists.
+		const candidate = route.argv[0]!;
 		throw new CrustError("COMMAND_NOT_FOUND", `Unknown command "${candidate}".`, {
 			input: candidate,
 			available: Object.keys(route.command.subCommands),

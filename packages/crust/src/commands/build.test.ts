@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -24,7 +24,6 @@ import {
 	generateDenoResolver,
 	generateResolver,
 	planBuild,
-	resolveBuildRuntime,
 	resolveEnvFilePaths,
 	type BuildFlags,
 } from "./build.ts";
@@ -55,40 +54,6 @@ describe("env file helpers", () => {
 	});
 });
 
-describe("runtime build configuration", () => {
-	const tmpDir = join(import.meta.dir, ".tmp-runtime-config");
-
-	beforeAll(() => {
-		rmSync(tmpDir, { recursive: true, force: true });
-		mkdirSync(tmpDir, { recursive: true });
-	});
-
-	afterAll(() => rmSync(tmpDir, { recursive: true, force: true }));
-
-	it("defaults to Bun without project configuration", () => {
-		expect(resolveBuildRuntime(tmpDir)).toBe("bun");
-	});
-
-	it("reads package.json crust.runtime and lets --runtime override it", () => {
-		writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ crust: { runtime: "deno" } }));
-		expect(resolveBuildRuntime(tmpDir)).toBe("deno");
-		expect(resolveBuildRuntime(tmpDir, "node")).toBe("node");
-	});
-
-	it("rejects an invalid configured runtime", () => {
-		writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ crust: { runtime: "python" } }));
-		expect(() => resolveBuildRuntime(tmpDir)).toThrow(/Invalid package.json crust.runtime/);
-	});
-
-	it("uses one parse-error policy for runtime and output-name resolution", () => {
-		writeFileSync(join(tmpDir, "package.json"), "not json");
-		expect(() => resolveBuildRuntime(tmpDir)).toThrow(`Failed to parse package.json in ${tmpDir}`);
-		expect(() => resolveBaseName(undefined, join(tmpDir, "src/cli.ts"), tmpDir)).toThrow(
-			`Failed to parse package.json in ${tmpDir}`,
-		);
-	});
-});
-
 describe("planBuild", () => {
 	const tmpDir = join(import.meta.dir, ".tmp-build-plan");
 	const baseFlags: BuildFlags = {
@@ -108,6 +73,30 @@ describe("planBuild", () => {
 	});
 
 	afterAll(() => rmSync(tmpDir, { recursive: true, force: true }));
+	afterEach(() => rmSync(join(tmpDir, "package.json"), { force: true }));
+
+	it("defaults to Bun without project configuration", () => {
+		expect(planBuild(baseFlags, tmpDir).runtime).toBe("bun");
+	});
+
+	it("reads package.json crust.runtime and lets --runtime override it", () => {
+		writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ crust: { runtime: "deno" } }));
+		expect(planBuild(baseFlags, tmpDir).runtime).toBe("deno");
+		expect(planBuild({ ...baseFlags, runtime: "node" }, tmpDir).runtime).toBe("node");
+	});
+
+	it("rejects an invalid configured runtime", () => {
+		writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ crust: { runtime: "python" } }));
+		expect(() => planBuild(baseFlags, tmpDir)).toThrow(/Invalid package.json crust.runtime/);
+	});
+
+	it("uses one parse-error policy for runtime and output-name resolution", () => {
+		writeFileSync(join(tmpDir, "package.json"), "not json");
+		expect(() => planBuild(baseFlags, tmpDir)).toThrow(`Failed to parse package.json in ${tmpDir}`);
+		expect(() => resolveBaseName(undefined, join(tmpDir, "src/cli.ts"), tmpDir)).toThrow(
+			`Failed to parse package.json in ${tmpDir}`,
+		);
+	});
 
 	for (const testCase of [
 		{

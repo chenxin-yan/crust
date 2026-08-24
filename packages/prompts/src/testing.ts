@@ -123,7 +123,6 @@ export interface PromptTestIO {
 	type(text: string): void;
 	keys(...namedKeys: Key[]): void;
 	screen(): string;
-	output(): string;
 }
 
 class TestInput extends PassThrough {
@@ -146,13 +145,10 @@ export function createPromptIO({ isTTY = true }: { isTTY?: boolean } = {}): Prom
 	const input = new TestInput(isTTY);
 
 	const terminal = new FakeTerminal();
-	let transcript = "";
 	const output = Object.assign(
 		new Writable({
 			write(chunk, _encoding, callback) {
-				const text = chunk.toString();
-				transcript += text;
-				terminal.write(text);
+				terminal.write(chunk.toString());
 				callback();
 			},
 		}),
@@ -166,7 +162,6 @@ export function createPromptIO({ isTTY = true }: { isTTY?: boolean } = {}): Prom
 			for (const key of keys) input.write(encodeKey(key));
 		},
 		screen: () => stripVTControlCharacters(terminal.screen()),
-		output: () => transcript,
 	};
 }
 

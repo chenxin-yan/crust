@@ -91,3 +91,64 @@ export const bgBrightBlue: AnsiPair = pair(104, 49);
 export const bgBrightMagenta: AnsiPair = pair(105, 49);
 export const bgBrightCyan: AnsiPair = pair(106, 49);
 export const bgBrightWhite: AnsiPair = pair(107, 49);
+
+const styleMethodNameList = [
+	"bold",
+	"dim",
+	"italic",
+	"underline",
+	"inverse",
+	"hidden",
+	"strikethrough",
+	"black",
+	"red",
+	"green",
+	"yellow",
+	"blue",
+	"magenta",
+	"cyan",
+	"white",
+	"gray",
+	"brightRed",
+	"brightGreen",
+	"brightYellow",
+	"brightBlue",
+	"brightMagenta",
+	"brightCyan",
+	"brightWhite",
+	"bgBlack",
+	"bgRed",
+	"bgGreen",
+	"bgYellow",
+	"bgBlue",
+	"bgMagenta",
+	"bgCyan",
+	"bgWhite",
+	"bgBrightBlack",
+	"bgBrightRed",
+	"bgBrightGreen",
+	"bgBrightYellow",
+	"bgBrightBlue",
+	"bgBrightMagenta",
+	"bgBrightCyan",
+	"bgBrightWhite",
+] as const;
+
+export type StyleMethodName = (typeof styleMethodNameList)[number];
+export const styleMethodNames: readonly StyleMethodName[] = Object.freeze(styleMethodNameList);
+
+const modifierNames: readonly StyleMethodName[] = [
+	"bold",
+	"dim",
+	"italic",
+	"underline",
+	"inverse",
+	"hidden",
+	"strikethrough",
+];
+
+const modifierNameSet: ReadonlySet<StyleMethodName> = new Set(modifierNames);
+
+export function isModifierName(name: StyleMethodName): boolean {
+	return modifierNameSet.has(name);
+}

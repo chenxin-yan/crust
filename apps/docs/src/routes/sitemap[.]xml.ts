@@ -12,10 +12,6 @@ function escapeXml(str: string): string {
     .replaceAll('"', "&quot;");
 }
 
-function formatDate(date: Date): string {
-  return date.toISOString().split("T")[0];
-}
-
 export const Route = createFileRoute("/sitemap.xml")({
   server: {
     handlers: {
@@ -38,7 +34,7 @@ export const Route = createFileRoute("/sitemap.xml")({
           ...pages.map((page) => {
             const lastmod =
               "lastModified" in page.data && page.data.lastModified instanceof Date
-                ? `\n    <lastmod>${formatDate(page.data.lastModified)}</lastmod>`
+                ? `\n    <lastmod>${page.data.lastModified.toISOString().slice(0, 10)}</lastmod>`
                 : "";
             return `  <url>
     <loc>${escapeXml(absoluteUrl(page.url))}</loc>${lastmod}

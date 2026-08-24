@@ -81,10 +81,6 @@ function resolveBuildRuntimeFromPackageJson(
 	);
 }
 
-export function resolveBuildRuntime(cwd: string, override?: BuildRuntime): BuildRuntime {
-	return resolveBuildRuntimeFromPackageJson(readUserPackageJson(cwd), override);
-}
-
 // ────────────────────────────────────────────────────────────────────────────
 // Shell resolver generator (Unix + Windows)
 // ────────────────────────────────────────────────────────────────────────────
@@ -415,6 +411,10 @@ function planBinaryOutputs<T extends string>(options: {
 		options.cwd,
 		options.packageJson,
 	);
+	const resolver = {
+		path: resolve(options.cwd, options.flags.outdir, options.flags.resolver),
+		baseName,
+	};
 	if (options.targets.length === 1) {
 		const target = options.targets[0]!;
 		const ext = options.getFilename("x", target).endsWith(".exe") ? ".exe" : "";
@@ -431,10 +431,7 @@ function planBinaryOutputs<T extends string>(options: {
 			outputs: [
 				{ target, outfilePath: ext && !resolved.endsWith(ext) ? resolved + ext : resolved },
 			],
-			resolver: {
-				path: resolve(options.cwd, options.flags.outdir, options.flags.resolver),
-				baseName,
-			},
+			resolver,
 		};
 	}
 
@@ -447,10 +444,7 @@ function planBinaryOutputs<T extends string>(options: {
 				options.getFilename(baseName, target),
 			),
 		})),
-		resolver: {
-			path: resolve(options.cwd, options.flags.outdir, options.flags.resolver),
-			baseName,
-		},
+		resolver,
 	};
 }
 

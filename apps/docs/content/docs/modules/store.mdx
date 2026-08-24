@@ -398,8 +398,6 @@ const fields = {
 
 The inferred store type follows the schema's exact output type (`InferOutput`), constrained to JSON-compatible values. A schema default therefore narrows automatically; no separate Crust default is needed or allowed. Mixing `schema` with `default` or a hand-written `validate` callback is rejected with `CrustStoreError("DEFINITION")`.
 
-Optional `type` and `array` fields remain available as tooling metadata on schema definitions. They do not replace the schema as the source of value semantics.
-
 Hand-written `validate` callbacks on non-schema definitions throw to reject and return `void` to accept. They may also return `{ value }` to transform the input, as long as the output stays within the field's declared type — a wrong-typed output is rejected with `VALIDATION`.
 
 Mutations return exactly what the next `read()` sees, so `write`, `update`, and `patch` reject values that JSON serialization would alter: `NaN`, `Infinity`, `-0`, sparse arrays, and objects with `undefined` properties all fail with `VALIDATION` instead of silently persisting something different.

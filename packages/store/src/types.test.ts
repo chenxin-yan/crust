@@ -92,15 +92,6 @@ describe("InferStoreConfig", () => {
 		type _Optional = Expect<Equal<Config["optional"], string | undefined>>;
 		type _Required = Expect<Equal<Config["required"], string>>;
 	});
-
-	it("schema branch wins over tooling metadata in inference", () => {
-		const fields = {
-			tags: { schema: z.array(z.number()), type: "string", array: true },
-		} as const satisfies FieldsDef;
-
-		type Config = InferStoreConfig<typeof fields>;
-		type _SchemaWins = Expect<Equal<Config["tags"], number[]>>;
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
