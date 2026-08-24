@@ -52,8 +52,8 @@ describe("defineFlag", () => {
 			IsEqual<Flags["output"], { readonly type: "string"; readonly short: "o" }>
 		>;
 		expect((await app.snapshot()).flags).toEqual({
-			verbose: { type: "boolean" },
-			output: { type: "string", short: "o" },
+			verbose: { type: "boolean", negatable: true },
+			output: { type: "string", short: "o", negatable: false },
 		});
 	});
 });

@@ -132,8 +132,8 @@ describe("Crust .flags()", () => {
 
 		const snapshot = await withFlags.snapshot();
 		expect(snapshot.flags).toEqual({
-			verbose: { type: "boolean", short: "v" },
-			port: { type: "number", default: 3000 },
+			verbose: { type: "boolean", short: "v", negatable: true },
+			port: { type: "number", default: 3000, negatable: false },
 		});
 	});
 
@@ -165,8 +165,8 @@ describe("Crust .flags()", () => {
 		await app.run([], { flags: { first: true, second: "value" } });
 		expect(received).toEqual({ first: true, second: "value" });
 		expect((await app.snapshot()).flags).toEqual({
-			first: { type: "boolean" },
-			second: { type: "string" },
+			first: { type: "boolean", negatable: true },
+			second: { type: "string", negatable: false },
 		});
 	});
 });
@@ -366,7 +366,7 @@ describe("Crust .add() with inline definitions", () => {
 		);
 
 		expect((await app.snapshot()).subCommands.sub?.flags).toEqual({
-			output: { type: "string" },
+			output: { type: "string", negatable: false },
 		});
 	});
 
@@ -379,8 +379,8 @@ describe("Crust .add() with inline definitions", () => {
 			.add(defineCommand("sub", (cmd) => cmd.flags({ name: "output", type: "string" })));
 
 		expect((await app.snapshot()).subCommands.sub?.flags).toEqual({
-			verbose: { type: "boolean" },
-			output: { type: "string" },
+			verbose: { type: "boolean", negatable: true },
+			output: { type: "string", negatable: false },
 		});
 	});
 
@@ -735,7 +735,11 @@ describe("Crust .extend()", () => {
 			.action(() => {});
 
 		const snapshot = await app.snapshot();
-		expect(snapshot.flags.mode).toEqual({ type: "string", aliases: ["local-mode"] });
+		expect(snapshot.flags.mode).toEqual({
+			type: "string",
+			aliases: ["local-mode"],
+			negatable: false,
+		});
 	});
 
 	it("keeps a surviving provider flag definition across unrelated .extend() calls", async () => {
@@ -754,7 +758,11 @@ describe("Crust .extend()", () => {
 			.action(() => {});
 
 		const snapshot = await app.snapshot();
-		expect(snapshot.flags.mode).toEqual({ type: "number", aliases: ["extension-mode"] });
+		expect(snapshot.flags.mode).toEqual({
+			type: "number",
+			aliases: ["extension-mode"],
+			negatable: false,
+		});
 	});
 
 	it("keeps a local provider override across unrelated .extend() calls", async () => {

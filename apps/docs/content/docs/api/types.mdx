@@ -7,10 +7,6 @@ All types on this page are exported from `@crustjs/core`.
 
 ## Definition types
 
-### `Simplify<T>`
-
-An object-type simplification helper used by inferred public builder and flag types; see the [core module reference](/docs/modules/core).
-
 ### `ValueType`
 
 ```ts
@@ -132,7 +128,7 @@ Command Snapshots are readonly, serializable descriptions. They contain no Comma
 
 <auto-type-table path="../../../../../packages/core/src/command/snapshot.ts" name="FlagSnapshot" />
 
-Snapshots omit schemas and parse functions. `URL` defaults become strings, and array defaults are copied and frozen.
+Snapshots omit schemas and parse functions. Every flag snapshot includes `negatable`, derived from the parser's spelling policy. `URL` defaults become strings, and array defaults are copied and frozen.
 
 ## Typed invocation
 

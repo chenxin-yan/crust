@@ -5,10 +5,9 @@ import { join, resolve } from "node:path";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Declaration emission — a consumer with `declaration: true` must be able to
-// export values with inferred builder types. If a type used in a public
-// inferred signature (e.g. `Simplify` in defineFlag's return type) is not
-// re-exported from the package root, tsc fails with TS2742 ("cannot be
-// named") because the private dist chunk is not an importable specifier.
+// export values with inferred builder types. Public signatures must remain
+// nameable without relying on private dist-chunk types, or tsc fails with
+// TS2742 ("cannot be named").
 // ────────────────────────────────────────────────────────────────────────────
 
 const repoRoot = resolve(import.meta.dir, "../../..");
@@ -17,7 +16,7 @@ const tscBin = join(repoRoot, "node_modules/.bin/tsc");
 
 const CONSUMER_SOURCE = `import { Crust, defineCommand, defineContext, defineExtension, defineExtensionId, defineFlag } from "@crustjs/core";
 
-// Inferred defineFlag element type references Simplify
+// Inferred defineFlag element type remains structurally nameable
 export const configFlag = defineFlag("config", {
 	type: "string",
 	description: "Path to config file",

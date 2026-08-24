@@ -1,3 +1,4 @@
+import { isListed } from "../sections.ts";
 import type { DeclaredDefault } from "../types.ts";
 import type { CommandSnapshot, FlagSnapshot } from "./snapshot.ts";
 
@@ -151,17 +152,16 @@ function argToken(arg: CommandSnapshot["args"][number]): string {
 function documentationFlags(flags: CommandSnapshot["flags"]): readonly DocumentationFlag[] {
 	return Object.entries(flags).map(([name, def]) => {
 		const long = [name, ...(def.aliases ?? [])];
-		const negatable = def.type === "boolean" && def.noNegate !== true;
 		return Object.freeze({
 			name,
 			spellings: Object.freeze([
 				...(def.short ? [`-${def.short}`] : []),
 				...long.map((spelling) => `--${spelling}`),
-				...(negatable ? long.map((spelling) => `--no-${spelling}`) : []),
+				...(def.negatable ? long.map((spelling) => `--no-${spelling}`) : []),
 			]),
 			short: def.short,
 			aliases: Object.freeze([...(def.aliases ?? [])]),
-			negatable,
+			negatable: def.negatable,
 			type: def.type,
 			description: def.description,
 			required: def.required === true,
@@ -182,7 +182,7 @@ function buildNode(command: CommandSnapshot, path: readonly string[]): CommandDo
 		}),
 	);
 	const children = Object.entries(command.subCommands)
-		.filter(([, child]) => child.meta.hidden !== true)
+		.filter(([, child]) => isListed(child))
 		.map(([name, child]) => buildNode(child, [...path, name]));
 	const flags = documentationFlags(command.flags);
 	const usageSegments: UsageSegment[] = command.meta.usage

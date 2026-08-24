@@ -57,8 +57,8 @@ import type {
 	ValidateNamedFlagDefs,
 } from "../validation/flags.brands.ts";
 import type { IsStaticTuple, IsUnion } from "../validation/shared.ts";
+import { cloneCommandNode, installExtensionContexts } from "./extensions-install.ts";
 import {
-	cloneCommandNode,
 	executeInvocation,
 	prepareInvocationRoot,
 	prepareInvocationSnapshot,
@@ -312,7 +312,10 @@ function materializeCommandDefinition(
 	child._node.contexts = [...parent.contexts];
 	child._node.contextExtensionIds = [...parent.contextExtensionIds];
 
-	// SAFETY: Crust implements the recipe builder surface; runtime validation below requires its return identity.
+	// SAFETY: Keep this cast aligned with the recipe-builder surface to avoid silent drift.
+	// A compile-time check is structurally impossible: branded generic method parameters compare
+	// recursively, while Crust transitions return Crust and recipe-builder transitions return the
+	// restricted builder type. Runtime validation below still requires Crust return identity.
 	const configured = internal.recipe(child as AnyCommandDefinitionBuilder);
 	if (!(configured instanceof Crust) || configured._ancestorOwnedFlags !== parent.ownedFlags) {
 		throw new CrustError(
@@ -618,82 +621,6 @@ export function defineCommand(
 	return named(name);
 }
 
-function installExtensionContexts(
-	node: CommandNode,
-	extensions: readonly Extension[],
-	reRegisteredIds: ReadonlySet<Extension["id"]>,
-): CommandNode {
-	// Rebuild Extension providers from the deduplicated list so replacing an id
-	// cannot leave the earlier registration's eager Context installs behind.
-	// Registrations that survive dedup unchanged stay at their original
-	// positions: Context resolution is last-write-wins and documentation
-	// promises flag definition order, so pruning in place (instead of
-	// regrouping locals before Extensions) keeps both observable orders.
-	const cloned = cloneCommandNode(node);
-	// ponytail: O(n²) includes over an already-deduped list, fine for handfuls of extensions.
-	const kept = new Set(
-		extensions
-			.filter((e) => !reRegisteredIds.has(e.id) && node.extensions.includes(e))
-			.map((e) => e.id),
-	);
-	const prune = (target: CommandNode): void => {
-		const contexts: ContextInstance[] = [];
-		const contextExtensionIds: CommandNode["contextExtensionIds"] = [];
-		for (let index = 0; index < target.contexts.length; index++) {
-			const id = target.contextExtensionIds[index];
-			if (id !== undefined && !kept.has(id)) continue;
-			contexts.push(target.contexts[index]!);
-			contextExtensionIds.push(id);
-		}
-		target.contexts = contexts;
-		target.contextExtensionIds = contextExtensionIds;
-		target.ownedFlags = Object.assign({}, ...contexts.map((context) => context.ownedFlags));
-		const effectiveFlags: FlagsDef = {};
-		target.flagSpellings = new Map();
-		for (const name of Object.keys(target.effectiveFlags)) {
-			// Context flags can only collide dynamically after a local flag and therefore win.
-			const source = Object.hasOwn(target.ownedFlags, name) ? target.ownedFlags : target.localFlags;
-			if (!Object.hasOwn(source, name)) continue;
-			const def = source[name]!;
-			effectiveFlags[name] = def;
-			addFlagSpellingEntries(target.flagSpellings, name, def);
-		}
-		target.effectiveFlags = effectiveFlags;
-		for (const child of Object.values(target.subCommands)) prune(child);
-	};
-	prune(cloned);
-
-	for (const extension of extensions) {
-		if (kept.has(extension.id)) continue;
-		const instances = extension.provides ?? [];
-		if (instances.length === 0) continue;
-		const walk = (target: CommandNode, skip: ReadonlySet<string>): void => {
-			const installed = instances.filter((instance) => !skip.has(instance.name));
-			target.contexts.push(...installed);
-			target.contextExtensionIds.push(...installed.map(() => extension.id));
-			for (const instance of installed) {
-				for (const [name, def] of Object.entries(instance.ownedFlags)) {
-					target.effectiveFlags[name] = def;
-					addFlagSpellingEntries(target.flagSpellings, name, def);
-				}
-				Object.assign(target.ownedFlags, instance.ownedFlags);
-			}
-			// A Context provided locally on a descendant is more specific than a
-			// root-wide install: skip same-name instances for that subtree.
-			const inherited = new WeakSet(target.contexts);
-			for (const child of Object.values(target.subCommands)) {
-				const childSkip = new Set(skip);
-				for (const context of child.contexts) {
-					if (!inherited.has(context)) childSkip.add(context.name);
-				}
-				walk(child, childSkip);
-			}
-		};
-		walk(cloned, new Set());
-	}
-	return cloned;
-}
-
 function dedupeExtensions(extensions: readonly Extension[]): Extension[] {
 	// ponytail: O(n^2) scan, fine for handfuls of extensions.
 	return extensions.filter((e, i) => extensions.findLastIndex((x) => x.id === e.id) === i);
@@ -872,6 +799,126 @@ type CollisionSpellings<Extensions extends string = never, Tree extends string =
 	readonly tree: Tree;
 };
 
+type AfterFlags<
+	Flags extends FlagsDef,
+	A extends ArgsDef,
+	Ctx extends ContextMap,
+	Sibs extends string,
+	Sp extends string,
+	Tree extends object,
+	CtxFlags extends FlagsDef,
+	CollisionSp extends CollisionSpellings,
+	Result,
+	Defs extends readonly NamedFlagDef[],
+> = Crust<
+	MergeFlags<Flags, NamedFlagsRecord<Defs>>,
+	A,
+	Ctx,
+	Sibs,
+	Sp | SpellingsOf<NamedFlagsRecord<Defs>>,
+	Tree,
+	CtxFlags,
+	CollisionSp,
+	Result
+>;
+
+type AfterArgs<
+	Flags extends FlagsDef,
+	A extends ArgsDef,
+	Ctx extends ContextMap,
+	Sibs extends string,
+	Sp extends string,
+	Tree extends object,
+	CtxFlags extends FlagsDef,
+	CollisionSp extends CollisionSpellings,
+	Result,
+	NewA extends ArgsDef,
+> = Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result>;
+
+type AfterProvide<
+	Flags extends FlagsDef,
+	A extends ArgsDef,
+	Ctx extends ContextMap,
+	Sibs extends string,
+	Sp extends string,
+	Tree extends object,
+	CtxFlags extends FlagsDef,
+	CollisionSp extends CollisionSpellings,
+	Result,
+	Cs extends readonly ContextInstance[],
+> = Crust<
+	MergeFlags<Flags, ContextsOwnedFlags<Cs>>,
+	A,
+	MergeContext<Ctx, ContextsOutput<Cs>>,
+	Sibs,
+	Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
+	Tree,
+	MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>,
+	CollisionSp,
+	Result
+>;
+
+type AfterAction<
+	Flags extends FlagsDef,
+	A extends ArgsDef,
+	Ctx extends ContextMap,
+	Sibs extends string,
+	Sp extends string,
+	Tree extends object,
+	CtxFlags extends FlagsDef,
+	CollisionSp extends CollisionSpellings,
+	R,
+> = Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Awaited<R>>;
+
+type AfterExtend<
+	Flags extends FlagsDef,
+	A extends ArgsDef,
+	Ctx extends ContextMap,
+	Sibs extends string,
+	Sp extends string,
+	Tree extends object,
+	CtxFlags extends FlagsDef,
+	CollisionSp extends CollisionSpellings,
+	Result,
+	Es extends readonly Extension<any, any, any, any>[],
+> = Crust<
+	MergeFlags<Flags, ExtensionFlags<Es>>,
+	A,
+	MergeContext<Ctx, ExtensionsProvidesOutput<Es>>,
+	Sibs | ExtensionsCommandSpellings<Es>,
+	Sp | ExtensionsSpellings<Es>,
+	ExtendedTree<Tree, ExtensionCommands<Es>, RecursiveExtensionFlags<Es>, CtxFlags>,
+	MergeFlags<CtxFlags, RecursiveExtensionFlags<Es>>,
+	CollisionSpellings<
+		CollisionSp["extension"] | ExtensionsSpellings<Es>,
+		CollisionSp["tree"] | DefinitionTreeSpellings<ExtensionCommands<Es>>
+	>,
+	Result
+>;
+
+type AfterAdd<
+	Flags extends FlagsDef,
+	A extends ArgsDef,
+	Ctx extends ContextMap,
+	Sibs extends string,
+	Sp extends string,
+	Tree extends object,
+	CtxFlags extends FlagsDef,
+	CollisionSp extends CollisionSpellings,
+	Result,
+	Ds extends readonly CommandDefinition<any, any, any, any>[],
+> = Crust<
+	Flags,
+	A,
+	Ctx,
+	Sibs | CommandDefinitionSpellings<Ds[number]>,
+	Sp,
+	Tree & DefinitionsTree<Ds, CtxFlags>,
+	CtxFlags,
+	CollisionSpellings<CollisionSp["extension"], CollisionSp["tree"] | DefinitionTreeSpellings<Ds>>,
+	Result
+>;
+
 /** Broad application type for APIs that accept any fully-built Crust application. */
 export type AnyCrust = Crust<any, any, any, any, any, any, any, any, any>;
 
@@ -983,17 +1030,7 @@ export class Crust<
 	 */
 	flags<const Defs extends readonly NamedFlagDef[]>(
 		...defs: ValidateNamedFlagDefs<Defs, Sp>
-	): Crust<
-		MergeFlags<Flags, NamedFlagsRecord<Defs>>,
-		A,
-		Ctx,
-		Sibs,
-		Sp | SpellingsOf<NamedFlagsRecord<Defs>>,
-		Tree,
-		CtxFlags,
-		CollisionSp,
-		Result
-	> {
+	): AfterFlags<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Defs> {
 		const localFlags: FlagsDef = { ...this._node.localFlags };
 		const effectiveFlags: FlagsDef = { ...this._node.effectiveFlags };
 		const flagSpellings = cloneFlagSpellings(this._node.flagSpellings, effectiveFlags);
@@ -1027,17 +1064,7 @@ export class Crust<
 		}
 
 		return this._clone<
-			Crust<
-				MergeFlags<Flags, NamedFlagsRecord<Defs>>,
-				A,
-				Ctx,
-				Sibs,
-				Sp | SpellingsOf<NamedFlagsRecord<Defs>>,
-				Tree,
-				CtxFlags,
-				CollisionSp,
-				Result
-			>
+			AfterFlags<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Defs>
 		>({ localFlags, effectiveFlags, flagSpellings });
 	}
 
@@ -1054,7 +1081,7 @@ export class Crust<
 	 */
 	args<const NewA extends ArgsDef>(
 		...defs: NewA & AppendArgsChecks<A, NewA>
-	): Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result> {
+	): AfterArgs<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, NewA> {
 		const combined = [...(this._node.args ?? []), ...defs.map((definition) => ({ ...definition }))];
 		// Brands own literal tuples; this owns config-built defs, where a
 		// duplicate name silently discards a positional and a mid-tuple variadic
@@ -1082,7 +1109,7 @@ export class Crust<
 			}
 		}
 		return this._clone<
-			Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result>
+			AfterArgs<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, NewA>
 		>({ args: combined });
 	}
 
@@ -1099,17 +1126,7 @@ export class Crust<
 		...instances: ProvideChecks<Sp, Cs> &
 			ValidateContextNames<Ctx, Cs> &
 			ValidateContextDeps<Ctx, Cs>
-	): Crust<
-		MergeFlags<Flags, ContextsOwnedFlags<Cs>>,
-		A,
-		MergeContext<Ctx, ContextsOutput<Cs>>,
-		Sibs,
-		Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
-		Tree,
-		MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>,
-		CollisionSp,
-		Result
-	> {
+	): AfterProvide<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Cs> {
 		// Positional by design: providers reach only this node and children added
 		// afterwards (flag scoping; see definition.test.ts). Extension `provides`
 		// differ deliberately — they are application-wide and walk the whole tree.
@@ -1129,17 +1146,7 @@ export class Crust<
 			Object.assign(ownedFlags, instance.ownedFlags);
 		}
 		return this._clone<
-			Crust<
-				MergeFlags<Flags, ContextsOwnedFlags<Cs>>,
-				A,
-				MergeContext<Ctx, ContextsOutput<Cs>>,
-				Sibs,
-				Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
-				Tree,
-				MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>,
-				CollisionSp,
-				Result
-			>
+			AfterProvide<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Cs>
 		>({ contexts, contextExtensionIds, ownedFlags, effectiveFlags, flagSpellings });
 	}
 
@@ -1158,9 +1165,9 @@ export class Crust<
 	 */
 	action<R>(
 		action: (ctx: NoInfer<CrustCommandContext<A, Flags, Ctx>>) => R,
-	): Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Awaited<R>> {
+	): AfterAction<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, R> {
 		// SAFETY: dispatch reconstructs this node's context from its own validated definitions.
-		return this._clone<Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Awaited<R>>>({
+		return this._clone<AfterAction<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, R>>({
 			run: action as CommandAction,
 		});
 	}
@@ -1190,36 +1197,10 @@ export class Crust<
 			> &
 			ValidateExtensionCommands<Es, Sibs> &
 			ValidateExtensionProvides<Es, Ctx>
-	): Crust<
-		MergeFlags<Flags, ExtensionFlags<Es>>,
-		A,
-		MergeContext<Ctx, ExtensionsProvidesOutput<Es>>,
-		Sibs | ExtensionsCommandSpellings<Es>,
-		Sp | ExtensionsSpellings<Es>,
-		ExtendedTree<Tree, ExtensionCommands<Es>, RecursiveExtensionFlags<Es>, CtxFlags>,
-		MergeFlags<CtxFlags, RecursiveExtensionFlags<Es>>,
-		CollisionSpellings<
-			CollisionSp["extension"] | ExtensionsSpellings<Es>,
-			CollisionSp["tree"] | DefinitionTreeSpellings<ExtensionCommands<Es>>
-		>,
-		Result
-	> {
+	): AfterExtend<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Es> {
 		const activeExtensions = dedupeExtensions([...this._node.extensions, ...extensions]);
 		return this._clone<
-			Crust<
-				MergeFlags<Flags, ExtensionFlags<Es>>,
-				A,
-				MergeContext<Ctx, ExtensionsProvidesOutput<Es>>,
-				Sibs | ExtensionsCommandSpellings<Es>,
-				Sp | ExtensionsSpellings<Es>,
-				ExtendedTree<Tree, ExtensionCommands<Es>, RecursiveExtensionFlags<Es>, CtxFlags>,
-				MergeFlags<CtxFlags, RecursiveExtensionFlags<Es>>,
-				CollisionSpellings<
-					CollisionSp["extension"] | ExtensionsSpellings<Es>,
-					CollisionSp["tree"] | DefinitionTreeSpellings<ExtensionCommands<Es>>
-				>,
-				Result
-			>
+			AfterExtend<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Es>
 		>({
 			...installExtensionContexts(
 				this._node,
@@ -1240,17 +1221,7 @@ export class Crust<
 			ValidateCommandDefinitions<Ds, Sibs> &
 			ValidateDeclaredDeps<Ctx, Ds> &
 			ValidateDefinitionFlags<Ds, CollisionSp["extension"]>
-	): Crust<
-		Flags,
-		A,
-		Ctx,
-		Sibs | CommandDefinitionSpellings<Ds[number]>,
-		Sp,
-		Tree & DefinitionsTree<Ds, CtxFlags>,
-		CtxFlags,
-		CollisionSpellings<CollisionSp["extension"], CollisionSp["tree"] | DefinitionTreeSpellings<Ds>>,
-		Result
-	> {
+	): AfterAdd<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Ds> {
 		let result = this._clone<Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result>>(
 			{},
 		);
@@ -1258,20 +1229,7 @@ export class Crust<
 			result = result._addDefinition(definition);
 		}
 		return result._clone<
-			Crust<
-				Flags,
-				A,
-				Ctx,
-				Sibs | CommandDefinitionSpellings<Ds[number]>,
-				Sp,
-				Tree & DefinitionsTree<Ds, CtxFlags>,
-				CtxFlags,
-				CollisionSpellings<
-					CollisionSp["extension"],
-					CollisionSp["tree"] | DefinitionTreeSpellings<Ds>
-				>,
-				Result
-			>
+			AfterAdd<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Ds>
 		>({});
 	}
 

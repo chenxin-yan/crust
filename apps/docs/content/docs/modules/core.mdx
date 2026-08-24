@@ -14,21 +14,11 @@ bun add @crustjs/core
 ## Quick example
 
 ```ts
-import { defineContext, Crust } from "@crustjs/core";
-import { help } from "@crustjs/extensions";
+import { Crust } from "@crustjs/core";
 
-const config = defineContext(
-  "config",
-  ({ options }: { options: { environment: string } }) => options,
-);
-
-const app = new Crust("deploy")
-  .extend(help())
+const app = new Crust("hello")
   .flags({ name: "verbose", type: "boolean", short: "v" })
-  .provide(config({ environment: "production" }))
-  .action(async ({ flags, ctx, stdout }) => {
-    stdout(`${(await ctx.config).environment}: verbose=${flags.verbose ?? false}`);
-  });
+  .action(({ flags, stdout }) => stdout(flags.verbose ? "hello!" : "hello"));
 
 await app.execute();
 ```
@@ -52,39 +42,36 @@ Downstream commands and other Context setups call `await ctx.api`. See [Contexts
 
 ## Runtime exports
 
-| Export                                   | Description                                                                                                                                         |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`Crust`](/docs/api/crust)               | Immutable command builder with Context `.provide()`, `.add()`, `.action()`, tooling `.snapshot()`, programmatic `.run()`, and terminal `.execute()` |
-| [`defineCommand`](/docs/api/crust)       | Create a named, inert reusable command definition                                                                                                   |
-| `defineContext(name, config?, setup)`    | Define a named Context factory with optional owned flags; setup receives its declared lazy Context bag and invocation I/O                           |
-| `defineExtension(id, config)`            | Define a frozen, application-wide Extension value                                                                                                   |
-| `defineExtensionId(id)`                  | Mint a branded Extension identity from any non-blank string                                                                                         |
-| `defineFlag(name, definition)`           | Define one named flag, preserving its literal definition                                                                                            |
-| `defineArg(name, definition)`            | Define one named positional argument, preserving its literal definition                                                                             |
-| `sectionsFor(sections, consumer)`        | Select sections visible to the given consumer id                                                                                                    |
-| `visibleSectionsFor(snapshot, consumer)` | Collect audience-filtered sections across the visible command tree                                                                                  |
-| [`CrustError`](/docs/api/errors)         | Framework error for definition, routing, parsing, and validation failures                                                                           |
+| Export                                | Description                                                                                                                                         |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`Crust`](/docs/api/crust)            | Immutable command builder with Context `.provide()`, `.add()`, `.action()`, tooling `.snapshot()`, programmatic `.run()`, and terminal `.execute()` |
+| [`defineCommand`](/docs/api/crust)    | Create a named, inert reusable command definition                                                                                                   |
+| `defineContext(name, config?, setup)` | Define a named Context factory with optional owned flags; setup receives its declared lazy Context bag and invocation I/O                           |
+| `defineExtension(id, config)`         | Define a frozen, application-wide Extension value                                                                                                   |
+| `defineExtensionId(id)`               | Mint a branded Extension identity from any non-blank string                                                                                         |
+| `defineFlag(name, definition)`        | Define one named flag, preserving its literal definition                                                                                            |
+| `defineArg(name, definition)`         | Define one named positional argument, preserving its literal definition                                                                             |
+| [`CrustError`](/docs/api/errors)      | Framework error for definition, routing, parsing, and validation failures                                                                           |
 
 ## Definition types
 
-| Type                                          | Description                                                                      |
-| --------------------------------------------- | -------------------------------------------------------------------------------- |
-| `ArgDef`                                      | Core-value, raw, or Standard Schema positional argument definition               |
-| `ArgsDef`                                     | Readonly ordered argument definitions                                            |
-| [`CommandDefinition`](/docs/api/crust)        | Opaque inert command recipe                                                      |
-| [`CommandDefinitionBuilder`](/docs/api/crust) | Configure-only builder used by command definitions                               |
-| [`CommandConfig`](/docs/api/crust)            | Static metadata for a reusable definition                                        |
-| `CommandMeta`                                 | Name, description, usage, sections, aliases, and visibility                      |
-| `CommandSection`                              | A titled documentation block with an optional consumer audience                  |
-| `ExtensionId`                                 | Branded identity minted by `defineExtensionId()`                                 |
-| `ContextBag` / `FactoryValueOf`               | Lazy Context property bag and factory-value helper types                         |
-| [`RootCommandMeta`](/docs/api/crust)          | Root description, usage, and sections accepted by the `Crust` constructor        |
-| `FlagDef`                                     | Core-value or Standard Schema flag definition                                    |
-| `FlagsDef`                                    | Flag-name-to-definition record                                                   |
-| `NamedFlagDef`                                | Flag definition carrying its `name` (the `.flags()` input shape)                 |
-| `Simplify<T>`                                 | Object-type simplification helper used by inferred public builder and flag types |
-| `UnnamedArgDef`                               | Argument definition without its `name` (the `defineArg` input)                   |
-| `ValueType`                                   | String, number, boolean, URL, path, or JSON value literal                        |
+| Type                                          | Description                                                               |
+| --------------------------------------------- | ------------------------------------------------------------------------- |
+| `ArgDef`                                      | Core-value, raw, or Standard Schema positional argument definition        |
+| `ArgsDef`                                     | Readonly ordered argument definitions                                     |
+| [`CommandDefinition`](/docs/api/crust)        | Opaque inert command recipe                                               |
+| [`CommandDefinitionBuilder`](/docs/api/crust) | Configure-only builder used by command definitions                        |
+| [`CommandConfig`](/docs/api/crust)            | Static metadata for a reusable definition                                 |
+| `CommandMeta`                                 | Name, description, usage, sections, aliases, and visibility               |
+| `CommandSection`                              | A titled documentation block with an optional consumer audience           |
+| `ExtensionId`                                 | Branded identity minted by `defineExtensionId()`                          |
+| `ContextBag` / `FactoryValueOf`               | Lazy Context property bag and factory-value helper types                  |
+| [`RootCommandMeta`](/docs/api/crust)          | Root description, usage, and sections accepted by the `Crust` constructor |
+| `FlagDef`                                     | Core-value or Standard Schema flag definition                             |
+| `FlagsDef`                                    | Flag-name-to-definition record                                            |
+| `NamedFlagDef`                                | Flag definition carrying its `name` (the `.flags()` input shape)          |
+| `UnnamedArgDef`                               | Argument definition without its `name` (the `defineArg` input)            |
+| `ValueType`                                   | String, number, boolean, URL, path, or JSON value literal                 |
 
 See [Types](/docs/api/types) for field-level definitions.
 
@@ -171,13 +158,8 @@ Omitting `io` creates no new ambient scope, preserving native TTY detection and 
 A command section without an audience is available to every renderer. Use `only` or `except` with section consumers to narrow it; the two fields are mutually exclusive. A `SectionConsumer` is either a branded `ExtensionId` or an Extension/factory object carrying one, so official renderers can be passed directly while custom renderers can use their minted id:
 
 ```ts
-import {
-  defineExtensionId,
-  sectionsFor,
-  visibleSectionsFor,
-  type CommandSection,
-  type CommandSnapshot,
-} from "@crustjs/core";
+import { defineExtensionId, type CommandSection, type CommandSnapshot } from "@crustjs/core";
+import { sectionsFor, visibleSectionsFor } from "@crustjs/core/tooling";
 
 export const WEB_DOCS = defineExtensionId("acme:web-docs");
 
@@ -199,6 +181,6 @@ function collectWebSections(snapshot: CommandSnapshot) {
 
 Call `app.snapshot()` to prepare a frozen Command Snapshot for man-page, skill, and build generators. It materializes Extension contributions and command definitions and validates documentation sections without calling Command Actions. Authored and Extension-contributed documentation is available on each command under `meta.sections`.
 
-`@crustjs/core/tooling` exports the `CommandSnapshot` type plus `snapshotCommand`, `buildCommandDocumentation`, `formatDescription`, its documentation model types, and the lockstep first-party subprocess protocol constants: `SNAPSHOT_PATH_ENV` for snapshot preparation, plus `BUILD_OUT_DIR_ENV`, which build tooling sets alongside it to run registered Extension `build` hooks in the app's process. `buildCommandDocumentation()` turns a Command Snapshot into a full, presentation-neutral tree with resolved usage (plain and as colorable segments), visible children, argument tokens, and every accepted flag spelling. Except for the `CommandSnapshot` type consumed by `app.snapshot()`, helpers on this subpath are intended for first-party tooling that moves in lockstep with core.
+The package root contains invocation-time authoring and execution APIs. Build- and render-time helpers live under `@crustjs/core/tooling`, which exports the `CommandSnapshot` type plus `snapshotCommand`, `buildCommandDocumentation`, `formatDescription`, `isListed`, `sectionsFor`, `visibleSectionsFor`, its documentation model types, and the lockstep first-party subprocess protocol constants: `SNAPSHOT_PATH_ENV` for snapshot preparation, plus `BUILD_OUT_DIR_ENV`, which build tooling sets alongside it to run registered Extension `build` hooks in the app's process. `buildCommandDocumentation()` turns a Command Snapshot into a full, presentation-neutral tree with resolved usage (plain and as colorable segments), visible children, argument tokens, and every accepted flag spelling. Except for the `CommandSnapshot` type consumed by `app.snapshot()`, helpers on this subpath are intended for first-party tooling that moves in lockstep with core.
 
 Use [`@crustjs/extensions`](/docs/modules/extensions) for the official Extensions and [`@crustjs/crust`](/docs/modules/crust) as a development dependency for build tooling.

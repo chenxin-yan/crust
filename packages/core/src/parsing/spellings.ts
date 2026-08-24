@@ -51,6 +51,11 @@ export interface FlagSpelling {
 	negatable: boolean;
 }
 
+/** Whether a flag accepts generated `--no-` spellings. */
+export function isFlagNegatable(def: FlagDef): boolean {
+	return def.type === "boolean" && def.noNegate !== true;
+}
+
 /** Add one flag to a command's cached spelling table. */
 export function addFlagSpellingEntries(
 	spellings: Map<string, FlagSpelling>,
@@ -64,7 +69,7 @@ export function addFlagSpellingEntries(
 	const entry = {
 		canonicalName,
 		def,
-		negatable: def.type === "boolean" && def.noNegate !== true,
+		negatable: isFlagNegatable(def),
 	} as const;
 	spellings.set(canonicalName, { ...entry, spelling: canonicalName, kind: "canonical" });
 	if (def.short) {

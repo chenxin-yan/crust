@@ -2,12 +2,24 @@ import { describe, expect, it } from "bun:test";
 
 import { defineCommand, Crust } from "./command/crust.ts";
 import { defineExtensionId } from "./identity.ts";
-import { sectionsFor, visibleSectionsFor } from "./sections.ts";
+import { isListed, sectionsFor, visibleSectionsFor } from "./tooling.ts";
 import type { CommandSection, CommandSectionInput } from "./types.ts";
 
 const universal = { title: "Universal", body: "Everywhere" } as const;
 const agentDocs = defineExtensionId("agent-docs");
 const terminal = defineExtensionId("terminal");
+
+describe("isListed", () => {
+	it("excludes only explicitly hidden commands", async () => {
+		const visible = await new Crust("visible").snapshot();
+		const hidden = await new Crust("hidden")
+			.add(defineCommand("child", { hidden: true }, (command) => command))
+			.snapshot();
+
+		expect(isListed(visible)).toBe(true);
+		expect(isListed(hidden.subCommands.child!)).toBe(false);
+	});
+});
 
 describe("sectionsFor", () => {
 	it("requires minted Extension ids in section audiences", () => {

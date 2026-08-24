@@ -6,6 +6,11 @@ export function isText<T>(value: T): value is T & string {
 	return typeof value === "string" && !!value.trim();
 }
 
+/** Whether a command belongs in user-facing listings. */
+export function isListed(command: CommandSnapshot): boolean {
+	return command.meta.hidden !== true;
+}
+
 /** Select sections visible to the given consumer. */
 export function sectionsFor(
 	sections: readonly CommandSection[] | undefined,
@@ -33,7 +38,7 @@ export function visibleSectionsFor(
 		for (const [name, child] of Object.entries(command.subCommands).sort(([a], [b]) =>
 			a.localeCompare(b),
 		)) {
-			if (child.meta.hidden !== true) visit(child, [...path, name]);
+			if (isListed(child)) visit(child, [...path, name]);
 		}
 	}
 	visit(snapshot, []);

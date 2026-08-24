@@ -8,7 +8,6 @@ export type {
 	ContextMap,
 	ContextSetup,
 	FactoryValueOf,
-	Simplify,
 } from "./api/context.ts";
 export { defineContext } from "./api/context.ts";
 export type {
@@ -50,8 +49,6 @@ export type {
 	RunOutcome,
 } from "./command/crust.ts";
 export { Crust, defineCommand } from "./command/crust.ts";
-// Documentation sections
-export { sectionsFor, visibleSectionsFor } from "./sections.ts";
 // Errors
 export type {
 	CommandNotFoundErrorDetails,

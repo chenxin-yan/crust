@@ -4,11 +4,11 @@ import {
 	type ExtensionId,
 	defineExtension,
 	defineExtensionId,
-	sectionsFor,
 } from "@crustjs/core";
 import {
 	buildCommandDocumentation,
 	formatDescription,
+	sectionsFor,
 	type CommandDocumentation,
 	type DocumentationArg,
 	type DocumentationFlag,
