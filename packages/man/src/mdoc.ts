@@ -63,9 +63,17 @@ function resolveDdLine(explicit?: string): string {
 }
 
 export interface RenderManPageMdocOptions {
+	/** Prepared, validated Command Snapshot for the CLI. */
 	root: CommandSnapshot;
+	/** Name for `.Nm` / `man <name>` (usually the installed binary name). */
 	name: string;
+	/**
+	 * Manual section.
+	 *
+	 * @default 1
+	 */
 	section?: number;
+	/** Override `.Dd` in the mdoc output (see `renderManPageMdoc` `date`). */
 	date?: string;
 }
 

@@ -43,8 +43,9 @@ export type ColorInput = ColorString | readonly [r: number, g: number, b: number
  *
  * The default `style` facade and top-level helpers always run in
  * `"auto"` mode — to influence them globally, set the standard
- * environment variables (`NO_COLOR`, `FORCE_COLOR`); they re-resolve on
- * every call.
+ * environment variables (`NO_COLOR`, `FORCE_COLOR`). The facade and helpers
+ * re-resolve capabilities on every direct call; stored sub-chains capture them
+ * when accessed (see {@link ChainableStyleFn}).
  *
  * @example
  * ```ts
