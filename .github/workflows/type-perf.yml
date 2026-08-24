@@ -11,7 +11,6 @@ on:
       - "bun.lock"
       - "scripts/type-perf-report.ts"
       - "scripts/editor-latency.ts"
-      - "scripts/upsert-pr-comment.sh"
       - ".github/workflows/type-perf.yml"
 
 concurrency:
@@ -78,4 +77,10 @@ jobs:
             echo "Fork PR: skipping PR comment (read-only token)."
             exit 0
           fi
-          scripts/upsert-pr-comment.sh "$marker" "$PR" "$RUNNER_TEMP/comment.md"
+          comment_id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+            --jq "[.[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\")))][0].id // empty")
+          if [ -n "$comment_id" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$comment_id" -F "body=@$RUNNER_TEMP/comment.md"
+          else
+            gh api "repos/$REPO/issues/$PR/comments" -F "body=@$RUNNER_TEMP/comment.md"
+          fi

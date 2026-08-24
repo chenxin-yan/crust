@@ -57,9 +57,9 @@ jobs:
       - name: Install dependencies
         run: bun ci
 
-      # Split restore/save again if Windows returns; its tar/zstd post-step can fail.
-      - name: Cache Turbo
-        uses: actions/cache@v6
+      - name: Restore Turbo cache
+        id: turbo-cache
+        uses: actions/cache/restore@v6
         with:
           path: .turbo
           key: turbo-create-crust-${{ runner.os }}-${{ github.sha }}
@@ -90,3 +90,14 @@ jobs:
           name: create-crust-smoke-${{ matrix.os }}
           path: ${{ runner.temp }}/create-crust-smoke
           if-no-files-found: ignore
+
+      # Cache save runs as a normal step (not a post-step) so a Windows
+      # tar/zstd flake during compression is contained by continue-on-error
+      # and cannot fail the job. The cache is purely a perf optimization.
+      - name: Save Turbo cache
+        if: always() && steps.turbo-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: .turbo
+          key: turbo-create-crust-${{ runner.os }}-${{ github.sha }}
