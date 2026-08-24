@@ -3,7 +3,36 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
-import { runProcess, which } from "./process.ts";
+import { getWindowsShimCommand, runProcess, which } from "./process.ts";
+
+describe("getWindowsShimCommand", () => {
+	it("only selects command shims on Windows when shell mode was not requested", () => {
+		expect(getWindowsShimCommand("C:/tools/bun.CMD", ["install"], false, "win32")).toBe("bun");
+		expect(getWindowsShimCommand("tools\\gen.bat", [], true, "win32")).toBeNull();
+		expect(getWindowsShimCommand("tools/gen.bat", [], false, "linux")).toBeNull();
+		expect(getWindowsShimCommand("tools/gen.exe", [], false, "win32")).toBeNull();
+	});
+
+	it("rejects shell metacharacters before selecting a command shim", () => {
+		expect(() =>
+			getWindowsShimCommand(
+				"C:/tools/bun.cmd",
+				["build", "--outfile", "C:/project & echo owned/out.js"],
+				false,
+				"win32",
+			),
+		).toThrow('Windows command shim argument 3 "C:/project & echo owned/out.js"');
+		for (const value of ["unsafe value", "left&right", "left^right", "100%"] as const) {
+			expect(() => getWindowsShimCommand("C:/tools/bun.cmd", [value], false, "win32")).toThrow(
+				`Windows command shim argument 1 ${JSON.stringify(value)}`,
+			);
+		}
+		expect(() => getWindowsShimCommand("C:/bad tools/bun.cmd", [], false, "win32")).not.toThrow();
+		expect(() => getWindowsShimCommand("C:/tools/bad name.cmd", [], false, "win32")).toThrow(
+			'Windows command shim command "bad name"',
+		);
+	});
+});
 
 describe("runProcess", () => {
 	it("collects output and forwards cwd and env", async () => {

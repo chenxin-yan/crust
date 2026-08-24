@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { accessSync, constants, statSync } from "node:fs";
-import { basename, delimiter, extname, join, sep } from "node:path";
+import { delimiter, extname, join, sep, win32 } from "node:path";
 import { text } from "node:stream/consumers";
 
 export type RunProcessOptions = {
@@ -20,7 +20,36 @@ export type RunProcessResult = {
 	stderr: string;
 };
 
-/** Spawn a process and wait for it to exit without imposing an error policy. */
+const WINDOWS_SHELL_LITERAL = /^[A-Za-z0-9._/:=@+-]+$/;
+
+/** @internal Select and validate Node's Windows command-shim workaround. */
+export function getWindowsShimCommand(
+	command: string,
+	args: readonly string[],
+	shell: boolean | undefined,
+	platform: NodeJS.Platform = process.platform,
+): string | null {
+	if (shell || platform !== "win32" || !/\.(cmd|bat)$/i.test(command)) return null;
+
+	const shimCommand = win32.basename(command, win32.extname(command));
+	for (const [index, value] of [shimCommand, ...args].entries()) {
+		if (!WINDOWS_SHELL_LITERAL.test(value)) {
+			const label = index === 0 ? "command" : `argument ${index}`;
+			throw new Error(
+				`Windows command shim ${label} ${JSON.stringify(value)} contains unsafe shell characters`,
+			);
+		}
+	}
+	return shimCommand;
+}
+
+/**
+ * Spawn a process and wait for it to exit without imposing an error policy.
+ *
+ * On Windows, the automatic `.cmd`/`.bat` shell workaround accepts only literal
+ * command and argument characters; unsafe values throw before spawning. Explicit
+ * `shell: true` calls are passed through unchanged and own their shell escaping.
+ */
 export async function runProcess(
 	command: string,
 	args: readonly string[] = [],
@@ -28,14 +57,13 @@ export async function runProcess(
 ): Promise<RunProcessResult> {
 	// Node's CVE-2024-27980 hardening rejects direct .cmd/.bat spawning. The
 	// basename remains safe here because these shims are resolved through PATH.
-	const windowsShim = process.platform === "win32" && /\.(cmd|bat)$/i.test(command);
-	const spawnCommand = windowsShim ? basename(command, extname(command)) : command;
+	const windowsShimCommand = getWindowsShimCommand(command, args, options.shell);
 	const collect = (options.stdio ?? "collect") === "collect";
 	const collectStdout = collect && options.stdout !== "ignore";
-	const proc = spawn(spawnCommand, args, {
+	const proc = spawn(windowsShimCommand ?? command, args, {
 		cwd: options.cwd,
 		env: options.env,
-		shell: windowsShim || options.shell,
+		shell: windowsShimCommand !== null || options.shell,
 		stdio: collect ? ["ignore", collectStdout ? "pipe" : "ignore", "pipe"] : "inherit",
 	});
 
