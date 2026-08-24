@@ -13,7 +13,7 @@ describe("getWindowsShimCommand", () => {
 		expect(getWindowsShimCommand("tools/gen.exe", [], false, "win32")).toBeNull();
 	});
 
-	it("escapes ordinary Windows paths for command shims", () => {
+	it("preserves the resolved shim path and escapes ordinary Windows paths", () => {
 		const invocation = getWindowsShimCommand(
 			"C:/tools/bun.cmd",
 			["build", "--env=PUBLIC_*", "C:\\work\\my app\\dist\\crust.exe"],
@@ -27,10 +27,15 @@ describe("getWindowsShimCommand", () => {
 				"/d",
 				"/s",
 				"/c",
-				'"bun ^^^"build^^^" ^^^"--env=PUBLIC_^^^*^^^" ^^^"C:\\work\\my^^^ app\\dist\\crust.exe^^^""',
+				'"C:\\tools\\bun.cmd ^^^"build^^^" ^^^"--env=PUBLIC_^^^*^^^" ^^^"C:\\work\\my^^^ app\\dist\\crust.exe^^^""',
 			],
 			windowsVerbatimArguments: true,
 		});
+	});
+
+	it("caret-escapes spaces in the resolved shim path", () => {
+		const invocation = getWindowsShimCommand("C:\\bad tools\\bun.cmd", [], false, "win32");
+		expect(invocation?.args[3]).toBe('"C:\\bad^ tools\\bun.cmd"');
 	});
 
 	it("rejects unsafe shell characters before selecting a command shim", () => {

@@ -27,7 +27,10 @@ function escapeWindowsShellArgument(value: string): string {
 	let escaped = value.replace(/(?=(\\+?)?)\1"/g, '$1$1\\"');
 	escaped = escaped.replace(/(?=(\\+?)?)\1$/g, "$1$1");
 	escaped = `"${escaped}"`.replace(WINDOWS_SHELL_META, "^$1");
-	// Command shims parse their arguments once more than cmd.exe does.
+	// Command shims (npm/bun/cmd-shim style) re-expand `%*`, so cmd.exe parses
+	// the arguments once more than for a plain executable — hence the second
+	// caret layer. ponytail: a generic .bat consuming %1 directly would receive
+	// that extra layer; gate this per-shim if such a caller ever appears.
 	return escaped.replace(WINDOWS_SHELL_META, "^$1");
 }
 
@@ -40,7 +43,10 @@ export function getWindowsShimCommand(
 ): { command: string; args: string[]; windowsVerbatimArguments: true } | null {
 	if (shell || platform !== "win32" || !/\.(cmd|bat)$/i.test(command)) return null;
 
-	const shimCommand = win32.basename(command, win32.extname(command));
+	// Preserve the exact executable the caller resolved (e.g. via which());
+	// passing a bare name would let cmd.exe re-resolve it from cwd/PATH and
+	// potentially run a different same-named command.
+	const shimCommand = win32.normalize(command);
 	for (const [index, value] of [shimCommand, ...args].entries()) {
 		if (WINDOWS_SHELL_UNSAFE.test(value)) {
 			const label = index === 0 ? "command" : `argument ${index}`;
