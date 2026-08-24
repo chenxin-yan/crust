@@ -138,16 +138,6 @@ interface SchemaFieldDef {
  * } satisfies FieldsDef;
  * ```
  */
-interface RawScalarFieldDef extends ScalarFieldBase<JsonValue> {
-	type?: never;
-	default?: JsonValue;
-}
-
-interface RawArrayFieldDef extends ArrayFieldBase<JsonValue[]> {
-	type?: never;
-	default?: readonly JsonValue[];
-}
-
 export type FieldDef =
 	| StringFieldDef
 	| NumberFieldDef
@@ -155,8 +145,6 @@ export type FieldDef =
 	| StringArrayFieldDef
 	| NumberArrayFieldDef
 	| BooleanArrayFieldDef
-	| RawScalarFieldDef
-	| RawArrayFieldDef
 	| SchemaFieldDef;
 
 /** Record mapping field names to their definitions. */
@@ -197,9 +185,7 @@ type InferFieldValue<F extends FieldDef> = F extends {
 			: F extends { default: ResolvePrimitive<F["type"]> }
 				? ResolvePrimitive<F["type"]>
 				: ResolvePrimitive<F["type"]> | undefined
-		: F extends { default: infer D }
-			? D
-			: unknown;
+		: never;
 
 /**
  * Maps a full {@link FieldsDef} record to the inferred config object type.

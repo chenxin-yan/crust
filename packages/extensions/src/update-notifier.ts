@@ -452,13 +452,14 @@ function updateNotifierFactory(options: UpdateNotifierOptions): Extension {
 									return state.registryUrl === registryUrl ? state : null;
 								},
 								// Explicit keys: the store's write type requires every field present
-								write: (state) =>
-									store.write({
+								write: async (state) => {
+									await store.write({
 										lastCheckedAt: state.lastCheckedAt,
 										latestVersion: state.latestVersion,
 										lastNotifiedVersion: state.lastNotifiedVersion,
 										registryUrl,
-									}),
+									});
+								},
 							};
 						}
 					}

@@ -13,13 +13,13 @@ import { resolveStorePath } from "./path.ts";
 import { deleteJson, readJson, type WriteJsonOptions, writeJson } from "./persistence.ts";
 import type {
 	CreateStoreOptions,
-	FieldDef,
 	FieldsDef,
 	InferStoreConfig,
 	Store,
 	StoreDocument,
 	StoreUpdater,
 	StoreValidatorIssue,
+	ValueType,
 } from "./types.ts";
 
 type FieldValidationResult = void | { value: JsonValue | undefined };
@@ -66,11 +66,10 @@ function isBoolean(value: JsonValue | undefined): value is boolean {
 	return typeof value === "boolean";
 }
 
-function matchesValueType(value: JsonValue, type: FieldDef["type"]): boolean {
+function matchesValueType(value: JsonValue, type: ValueType): boolean {
 	if (type === "string") return isString(value);
 	if (type === "number") return isNumber(value);
-	if (type === "boolean") return isBoolean(value);
-	return true;
+	return isBoolean(value);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -164,8 +163,7 @@ export function createStore<const F extends FieldsDef>(
 	// normalizeStateTypes — Coerce values by field `type`
 	// ──────────────────────────────────────────────────────────────────────
 
-	function coerceByType(value: JsonValue, type: FieldDef["type"]): JsonValue {
-		if (type === undefined) return value;
+	function coerceByType(value: JsonValue, type: ValueType): JsonValue {
 		if (type === "number" && isString(value)) {
 			return tryCoerceNumber(value) ?? value;
 		}
@@ -212,7 +210,7 @@ export function createStore<const F extends FieldsDef>(
 
 			if (value === undefined && def.schema === undefined) continue;
 
-			if (value !== undefined && def.schema === undefined && def.type !== undefined) {
+			if (value !== undefined && def.schema === undefined) {
 				const matches =
 					def.array === true
 						? Array.isArray(value) && value.every((item) => matchesValueType(item, def.type))

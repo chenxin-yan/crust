@@ -316,6 +316,28 @@ describe("store.read", () => {
 			},
 		});
 	});
+
+	it.each([
+		["a non-array value", "not-an-array"],
+		["an element with the wrong type", ["valid", 1]],
+	])("should reject %s for an array field", async (_case, tags) => {
+		const filePath = join(tempDir, "config.json");
+		await writeFile(filePath, JSON.stringify({ tags }));
+
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: { tags: { type: "string", array: true } },
+		});
+
+		await expect(store.read()).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: {
+				operation: "read",
+				issues: [{ message: "Expected string[]", path: "tags" }],
+			},
+		});
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────

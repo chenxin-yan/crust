@@ -315,8 +315,8 @@ const state = await store.read();
 - Persisted values override defaults.
 - Missing keys fall back to defaults.
 - Unknown persisted keys are dropped by default (`pruneUnknown: true`). Set `pruneUnknown: false` to preserve them.
-- Array defaults are shallow-copied to prevent shared mutation from defaults.
-- Falsy values (`null`, `0`, `""`, `false`) in the persisted file are preserved — only truly missing keys trigger defaults.
+- Array defaults are deep-copied to prevent shared mutation from defaults.
+- Falsy values (`0`, `""`, `false`) in the persisted file are preserved — only truly missing keys trigger defaults. Typed fields reject `null` with `VALIDATION`.
 
 <Callout>
   Merged defaults exist only in memory. The persisted file remains unchanged until you explicitly
@@ -496,7 +496,7 @@ if (err instanceof CrustStoreError) {
 
 ### Types
 
-`FieldDef` accepts core value definitions and schema-backed `{ schema }` definitions. The schema-backed branch carries the Standard Schema output type directly; `createStore` requires the output to be recursively JSON-compatible, including named interfaces whose properties are JSON data.
+`FieldDef` accepts typed primitive scalar/array definitions and schema-backed `{ schema }` definitions. The schema-backed branch carries the Standard Schema output type directly; `createStore` requires the output to be recursively JSON-compatible, including named interfaces whose properties are JSON data.
 
 #### `FieldDef`
 

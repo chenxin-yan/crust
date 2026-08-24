@@ -1,7 +1,5 @@
 import { describe, expect, it } from "bun:test";
 
-import { isJsonObject } from "@crustjs/utils/json";
-
 import { applyFieldDefaults } from "./merge.ts";
 import type { FieldsDef } from "./types.ts";
 
@@ -173,34 +171,18 @@ describe("applyFieldDefaults", () => {
 	// Immutability — cloned defaults
 	// ──────────────────────────────────────────────────────────────────────
 
-	it("should deep-copy JSON defaults to prevent shared nested mutation", () => {
+	it("should copy array defaults to prevent shared mutation", () => {
 		const fields = {
-			settings: { default: { nested: { enabled: true } } },
-			groups: { array: true, default: [{ names: ["default"] }] },
+			tags: { type: "string", array: true, default: ["default"] },
 		} as const satisfies FieldsDef;
 
 		const result1 = applyFieldDefaults(undefined, fields);
 		const result2 = applyFieldDefaults(undefined, fields);
 
-		if (result1.settings === undefined || !isJsonObject(result1.settings)) {
-			expect.unreachable("expected the object default");
-		}
-		const nested = result1.settings.nested;
-		if (nested === undefined || !isJsonObject(nested)) {
-			expect.unreachable("expected a nested object");
-		}
-		nested.enabled = false;
+		if (!Array.isArray(result1.tags)) expect.unreachable("expected the array default");
+		result1.tags.push("mutated");
 
-		if (!Array.isArray(result1.groups)) expect.unreachable("expected the array default");
-		const group = result1.groups[0];
-		if (!isJsonObject(group)) expect.unreachable("expected a nested group");
-		if (!Array.isArray(group.names)) expect.unreachable("expected nested names");
-		group.names.push("mutated");
-
-		expect(result2).toEqual({
-			settings: { nested: { enabled: true } },
-			groups: [{ names: ["default"] }],
-		});
+		expect(result2).toEqual({ tags: ["default"] });
 	});
 
 	it("should handle pruneUnknown=false with no persisted data", () => {
