@@ -32,23 +32,20 @@ interface FieldDefBase<V> {
 	 *
 	 * Return shapes:
 	 * - `void` (or `Promise<void>`) — validation-only; the input value is
-	 *   persisted as-is. This is the contract for hand-rolled validators.
-	 * - `{ value }` (or `Promise<{ value }>`) — the schema (or transform)
-	 *   produced a JSON-compatible output value. On `write` / `update` /
-	 *   `patch`, the transformed
-	 *   value replaces the input before persistence and is re-validated
-	 *   once to catch read-unstable transforms (cross-type transforms
-	 *   whose output would fail the schema on the next read). On `read`,
-	 *   the transformed value is discarded — reads always return the
-	 *   on-disk value verbatim.
+	 *   persisted as-is.
+	 * - `{ value }` (or `Promise<{ value }>`) — a transform produced an
+	 *   output within the field's declared type. On `write` / `update` /
+	 *   `patch`, the transformed value replaces the input before
+	 *   persistence and is re-validated once to catch read-unstable
+	 *   transforms. Outputs outside the declared type are rejected with
+	 *   `VALIDATION`. On `read`, the transformed value is discarded —
+	 *   reads always return the on-disk value verbatim.
 	 * - Throwing an error — the value is rejected; the error message is
 	 *   captured as a validation issue with the field name as `path`.
 	 *
 	 * @param value - The field value to validate.
 	 */
-	validate?: (
-		value: V,
-	) => void | Promise<void> | { value: JsonValue } | Promise<{ value: JsonValue }>;
+	validate?: (value: V) => void | Promise<void> | { value: V } | Promise<{ value: V }>;
 }
 
 // ── Scalar fields ─────────────────────────────────────────────────────────
@@ -138,16 +135,6 @@ interface SchemaFieldDef {
  * } satisfies FieldsDef;
  * ```
  */
-interface RawScalarFieldDef extends ScalarFieldBase<JsonValue> {
-	type?: never;
-	default?: JsonValue;
-}
-
-interface RawArrayFieldDef extends ArrayFieldBase<JsonValue[]> {
-	type?: never;
-	default?: readonly JsonValue[];
-}
-
 export type FieldDef =
 	| StringFieldDef
 	| NumberFieldDef
@@ -155,8 +142,6 @@ export type FieldDef =
 	| StringArrayFieldDef
 	| NumberArrayFieldDef
 	| BooleanArrayFieldDef
-	| RawScalarFieldDef
-	| RawArrayFieldDef
 	| SchemaFieldDef;
 
 /** Record mapping field names to their definitions. */
@@ -197,9 +182,7 @@ type InferFieldValue<F extends FieldDef> = F extends {
 			: F extends { default: ResolvePrimitive<F["type"]> }
 				? ResolvePrimitive<F["type"]>
 				: ResolvePrimitive<F["type"]> | undefined
-		: F extends { default: infer D }
-			? D
-			: unknown;
+		: never;
 
 /**
  * Maps a full {@link FieldsDef} record to the inferred config object type.
@@ -338,7 +321,7 @@ export interface CreateStoreOptions<F extends FieldsDef> {
 /**
  * Receives the current effective config and returns an updated config.
  *
- * Used by {@link Store.update} to apply mutations atomically.
+ * Used by {@link Store.update} to calculate the next config in process.
  *
  * @example
  * ```ts
@@ -404,20 +387,25 @@ export interface Store<TConfig> {
 	 * persistence.
 	 *
 	 * @param config - The complete config to persist.
+	 * @returns The persisted config, including schema transformations.
 	 * @throws {CrustStoreError} `VALIDATION` if field validation fails.
 	 * @throws {CrustStoreError} `IO` on filesystem write failures.
 	 */
-	write(config: NoInfer<TConfig>): Promise<void>;
+	write(config: NoInfer<TConfig>): Promise<TConfig>;
 
 	/**
 	 * Reads current effective config, applies the updater, and persists.
 	 *
+	 * The final file replacement is atomic, but the read-modify-write sequence
+	 * is not locked across processes; concurrent updates can overwrite each other.
+	 *
 	 * @param updater - Function receiving current config and returning updated config.
+	 * @returns The persisted config, including schema transformations.
 	 * @throws {CrustStoreError} `PARSE` if persisted JSON is malformed.
 	 * @throws {CrustStoreError} `VALIDATION` if field validation fails.
 	 * @throws {CrustStoreError} `IO` on filesystem failures.
 	 */
-	update(updater: StoreUpdater<TConfig>): Promise<void>;
+	update(updater: StoreUpdater<TConfig>): Promise<TConfig>;
 
 	/**
 	 * Applies a partial update to the current config and persists.
@@ -425,11 +413,12 @@ export interface Store<TConfig> {
 	 * Only the provided keys are updated; everything else is preserved.
 	 *
 	 * @param partial - A partial subset of the config to merge in.
+	 * @returns The persisted config, including schema transformations.
 	 * @throws {CrustStoreError} `VALIDATION` if field validation fails.
 	 * @throws {CrustStoreError} `PARSE` if persisted JSON is malformed.
 	 * @throws {CrustStoreError} `IO` on filesystem failures.
 	 */
-	patch(partial: Partial<NoInfer<TConfig>>): Promise<void>;
+	patch(partial: Partial<NoInfer<TConfig>>): Promise<TConfig>;
 
 	/**
 	 * Removes the persisted config file, returning the store to

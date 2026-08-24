@@ -32,14 +32,14 @@ const store = createStore({
 const state = await store.read();
 // → { theme: "light", fontSize: 14, verbose: false }
 
-// Write a full state object
-await store.write({ theme: "dark", fontSize: 16, verbose: true });
+// Mutations return the state that was persisted
+const written = await store.write({ theme: "dark", fontSize: 16, verbose: true });
 
 // Update with a function
-await store.update((current) => ({ ...current, verbose: false }));
+const updated = await store.update((current) => ({ ...current, verbose: false }));
 
 // Patch only specific keys
-await store.patch({ theme: "solarized" });
+const patched = await store.patch({ theme: "solarized" });
 
 // Reset to defaults (removes persisted file)
 await store.reset();
@@ -52,9 +52,9 @@ No explicit generics needed — types are inferred from your `fields` definition
 1. Pick a path helper (`configDir`, `dataDir`, `stateDir`, `cacheDir`) to resolve a platform-standard directory.
 2. `createStore()` resolves the file path once (`<dirPath>/<name>.json`) and returns a typed store instance.
 3. `read()` loads persisted JSON, applies field defaults for missing keys, and returns the complete state.
-4. `write()` atomically persists the full state (temp file + rename — no partial writes on crash).
-5. `update()` reads the current state, applies an updater function, and persists the result.
-6. `patch()` shallow-merges a partial update into the current state and persists.
+4. `write()` atomically persists the full state (temp file + rename — no partial writes on crash) and returns it.
+5. `update()` reads the current state, applies an updater function, persists the result, and returns it.
+6. `patch()` shallow-merges a partial update into the current state, persists it, and returns it.
 7. `reset()` deletes the persisted file, reverting to defaults-on-read behavior.
 
 ## Storage Intent
@@ -127,7 +127,7 @@ All four helpers follow XDG conventions on Linux and macOS, and Windows-native c
   `~/Library/...` paths.
 </Callout>
 
-The optional `env` parameter on each helper accepts a `PlatformEnv` object for deterministic testing without mutating `process.env`.
+The optional `env` parameter on each helper accepts a structural test environment (`platform`, `env`, and `homedir`) for deterministic testing without mutating `process.env`.
 
 ### Multiple Stores
 
@@ -233,7 +233,7 @@ const state = await store.read();
 
 Always returns the inferred store shape. Fields with defaults are guaranteed present; fields without defaults may be `undefined`. Does not write merged defaults back to disk.
 
-When per-field `validate` functions are configured, each field is validated after defaults are applied. Invalid persisted config fails loudly.
+After coercion, every core field is checked against its declared primitive and array type. Per-field `validate` functions then run after defaults are applied. Invalid persisted config fails loudly with `VALIDATION`.
 
 **Throws:** `CrustStoreError` with `PARSE` code on malformed JSON, `VALIDATION` if the config fails validation, `IO` code on filesystem failure.
 
@@ -242,8 +242,10 @@ When per-field `validate` functions are configured, each field is validated afte
 Atomically persists a full state object. The entire previous state is replaced. Parent directories are created if missing.
 
 ```ts
-await store.write({ theme: "dark", fontSize: 14, verbose: true });
+const persisted = await store.write({ theme: "dark", fontSize: 14, verbose: true });
 ```
+
+Returns the persisted state, including schema transformations.
 
 **Throws:** `CrustStoreError` with `VALIDATION` if field validators reject, `IO` on filesystem failure.
 
@@ -252,13 +254,15 @@ await store.write({ theme: "dark", fontSize: 14, verbose: true });
 Reads the current effective state, applies the updater function, and atomically persists the result.
 
 ```ts
-await store.update((current) => ({
+const persisted = await store.update((current) => ({
   ...current,
   theme: "dark",
 }));
 ```
 
-When no persisted file exists, the updater receives field `defaults` as the current value.
+When no persisted file exists, the updater receives field `defaults` as the current value. The method returns the persisted state, including schema transformations.
+
+The final file replacement is atomic, but the read-modify-write sequence is not locked across processes. Concurrent updates can overwrite each other.
 
 **Throws:** `CrustStoreError` with `VALIDATION` if field validators reject, `PARSE` on malformed JSON, `IO` on filesystem failure.
 
@@ -267,8 +271,10 @@ When no persisted file exists, the updater receives field `defaults` as the curr
 Applies a shallow partial update to the current state and persists. Only the provided keys are updated; everything else is preserved.
 
 ```ts
-await store.patch({ theme: "solarized" });
+const persisted = await store.patch({ theme: "solarized" });
 ```
+
+Returns the persisted state, including schema transformations.
 
 **Throws:** `CrustStoreError` with `VALIDATION` if field validators reject, `PARSE` on malformed JSON, `IO` on filesystem failure.
 
@@ -309,8 +315,8 @@ const state = await store.read();
 - Persisted values override defaults.
 - Missing keys fall back to defaults.
 - Unknown persisted keys are dropped by default (`pruneUnknown: true`). Set `pruneUnknown: false` to preserve them.
-- Array defaults are shallow-copied to prevent shared mutation from defaults.
-- Falsy values (`null`, `0`, `""`, `false`) in the persisted file are preserved — only truly missing keys trigger defaults.
+- Array defaults are deep-copied to prevent shared mutation from defaults.
+- Falsy values (`0`, `""`, `false`) in the persisted file are preserved — only truly missing keys trigger defaults. Typed fields reject `null` with `VALIDATION`.
 
 <Callout>
   Merged defaults exist only in memory. The persisted file remains unchanged until you explicitly
@@ -394,11 +400,13 @@ The inferred store type follows the schema's exact output type (`InferOutput`), 
 
 Optional `type` and `array` fields remain available as tooling metadata on schema definitions. They do not replace the schema as the source of value semantics.
 
-Hand-written `validate` callbacks on non-schema definitions remain validation-only: throw to reject and return `void` to accept.
+Hand-written `validate` callbacks on non-schema definitions throw to reject and return `void` to accept. They may also return `{ value }` to transform the input, as long as the output stays within the field's declared type — a wrong-typed output is rejected with `VALIDATION`.
+
+Mutations return exactly what the next `read()` sees, so `write`, `update`, and `patch` reject values that JSON serialization would alter: `NaN`, `Infinity`, `-0`, sparse arrays, and objects with `undefined` properties all fail with `VALIDATION` instead of silently persisting something different.
 
 ### Operation behavior
 
-- **Write:** validates each field before persisting. Schema transforms replace the input value; hand-written validators cannot transform it.
+- **Write:** validates each field before persisting. Schema and validator transforms replace the input value.
 - **Read:** applies defaults, then validates. Schema transform output is discarded so the returned value matches the persisted value.
 - **Update:** reads the current config, applies the updater, validates, then persists any schema-transformed output.
 - **Patch:** shallow-merges the partial input, validates, then persists any schema-transformed output.
@@ -490,7 +498,7 @@ if (err instanceof CrustStoreError) {
 
 ### Types
 
-`FieldDef` accepts core value definitions and schema-backed `{ schema }` definitions. The schema-backed branch carries the Standard Schema output type directly; `createStore` requires the output to be recursively JSON-compatible, including named interfaces whose properties are JSON data.
+`FieldDef` accepts typed primitive scalar/array definitions and schema-backed `{ schema }` definitions. The schema-backed branch carries the Standard Schema output type directly; `createStore` requires the output to be recursively JSON-compatible, including named interfaces whose properties are JSON data.
 
 #### `FieldDef`
 
@@ -509,10 +517,6 @@ if (err instanceof CrustStoreError) {
 #### Validation issues
 
 <auto-type-table path="../../../../../packages/store/src/types.ts" name="StoreValidatorIssue" />
-
-#### Platform environment
-
-<auto-type-table path="../../../../../packages/store/src/path.ts" name="PlatformEnv" />
 
 The package also exports `CreateStoreOptions`, `StoreUpdater`, `FieldsDef`, `InferStoreConfig`, `ValidationErrorDetails`, `StoreErrorCode`, `ValueType`, and the `CrustStoreError` class.
 

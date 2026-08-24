@@ -297,6 +297,47 @@ describe("store.read", () => {
 		const result = await store.read();
 		expect(result.ports).toEqual([3000, 8080]);
 	});
+
+	it("should reject persisted values that do not match their declared type", async () => {
+		const filePath = join(tempDir, "config.json");
+		await writeFile(filePath, JSON.stringify({ port: "abc" }));
+
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: { port: { type: "number" } },
+		});
+
+		await expect(store.read()).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: {
+				operation: "read",
+				issues: [{ path: "port" }],
+			},
+		});
+	});
+
+	it.each([
+		["a non-array value", "not-an-array"],
+		["an element with the wrong type", ["valid", 1]],
+	])("should reject %s for an array field", async (_case, tags) => {
+		const filePath = join(tempDir, "config.json");
+		await writeFile(filePath, JSON.stringify({ tags }));
+
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: { tags: { type: "string", array: true } },
+		});
+
+		await expect(store.read()).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: {
+				operation: "read",
+				issues: [{ message: "Expected string[]", path: "tags" }],
+			},
+		});
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -775,6 +816,29 @@ describe("field validation", () => {
 		}
 	});
 
+	it("should reject non-finite mutation values before persistence", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: { amount: { type: "number", default: 0 } },
+		});
+
+		await expect(store.write({ amount: Number.NaN })).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: { operation: "write" },
+		});
+		await expect(store.update(() => ({ amount: Number.POSITIVE_INFINITY }))).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: { operation: "update" },
+		});
+		const malformedPatch: { amount?: number } = JSON.parse('{"amount":"Infinity"}');
+		await expect(store.patch(malformedPatch)).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: { operation: "patch" },
+		});
+		expect(existsSync(join(tempDir, "config.json"))).toBe(false);
+	});
+
 	it("should support async field validators", async () => {
 		const fields = {
 			token: {
@@ -906,11 +970,12 @@ describe("schema transform persistence", () => {
 
 		const store = createStore({ dirPath: tempDir, name: "config", fields });
 
-		await store.write({ name: "  hi  " });
+		const persisted = await store.write({ name: "  hi  " });
 
+		expect(persisted).toEqual({ name: "hi" });
 		const filePath = join(tempDir, "config.json");
 		const raw = await readFile(filePath, "utf-8");
-		expect(JSON.parse(raw)).toEqual({ name: "hi" });
+		expect(JSON.parse(raw)).toEqual(persisted);
 	});
 
 	it("persists Zod transform output on update", async () => {
@@ -920,11 +985,12 @@ describe("schema transform persistence", () => {
 
 		const store = createStore({ dirPath: tempDir, name: "config", fields });
 
-		await store.update(() => ({ name: "  spaced  " }));
+		const persisted = await store.update(() => ({ name: "  spaced  " }));
 
+		expect(persisted).toEqual({ name: "spaced" });
 		const filePath = join(tempDir, "config.json");
 		const raw = await readFile(filePath, "utf-8");
-		expect(JSON.parse(raw)).toEqual({ name: "spaced" });
+		expect(JSON.parse(raw)).toEqual(persisted);
 	});
 
 	it("persists Zod transform output on patch", async () => {
@@ -934,11 +1000,12 @@ describe("schema transform persistence", () => {
 
 		const store = createStore({ dirPath: tempDir, name: "config", fields });
 
-		await store.patch({ name: "  patched  " });
+		const persisted = await store.patch({ name: "  patched  " });
 
+		expect(persisted).toEqual({ name: "patched" });
 		const filePath = join(tempDir, "config.json");
 		const raw = await readFile(filePath, "utf-8");
-		expect(JSON.parse(raw)).toEqual({ name: "patched" });
+		expect(JSON.parse(raw)).toEqual(persisted);
 	});
 
 	// Pin: reads MUST NOT mutate on-disk state, even when the schema would
@@ -1030,5 +1097,117 @@ describe("schema transform persistence", () => {
 		const filePath = join(tempDir, "config.json");
 		const raw = await readFile(filePath, "utf-8");
 		expect(JSON.parse(raw)).toEqual({ tags: ["a", "b"] });
+	});
+});
+
+describe("JSON serialization stability", () => {
+	let tempDir: string;
+
+	beforeEach(async () => {
+		tempDir = createTempDir();
+		await mkdir(tempDir, { recursive: true });
+	});
+
+	afterEach(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
+
+	it("rejects schema values that JSON serialization would corrupt", async () => {
+		// z.custom accepts NaN, which the built-in number check never sees.
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: { amount: { schema: z.custom<number>(() => true) } },
+		});
+
+		await expect(store.write({ amount: Number.NaN })).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: { operation: "write", issues: [{ path: "amount" }] },
+		});
+		expect(existsSync(join(tempDir, "config.json"))).toBe(false);
+	});
+
+	it("rejects sparse arrays whose holes would persist as null", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: { nums: { type: "number", array: true } },
+		});
+
+		await expect(store.write({ nums: new Array<number>(1) })).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: { operation: "write", issues: [{ path: "nums" }] },
+		});
+	});
+
+	it("rejects negative zero, which JSON persists as 0", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: { amount: { type: "number", default: 0 } },
+		});
+
+		await expect(store.patch({ amount: -0 })).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: { operation: "patch", issues: [{ path: "amount" }] },
+		});
+	});
+
+	it("rejects undefined object properties that JSON serialization drops", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: { payload: { schema: z.custom<{ note: string }>(() => true) } },
+		});
+
+		// Object.assign sneaks the undefined property past the schema's declared
+		// output type — locks the runtime guard against schema outputs whose own
+		// keys would change across persistence.
+		const withUndefined = Object.assign({ note: "x" }, { note: undefined });
+		await expect(store.write({ payload: withUndefined })).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: { operation: "write", issues: [{ path: "payload" }] },
+		});
+	});
+});
+
+describe("core validator transform type enforcement", () => {
+	let tempDir: string;
+
+	beforeEach(async () => {
+		tempDir = createTempDir();
+		await mkdir(tempDir, { recursive: true });
+	});
+
+	afterEach(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
+
+	it("rejects core transforms that leave the declared type", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			// JSON.parse hides the wrong-typed output — a JS caller can return any JSON value.
+			fields: { name: { type: "string", validate: () => ({ value: JSON.parse("1") }) } },
+		});
+
+		await expect(store.write({ name: "hi" })).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: {
+				operation: "write",
+				issues: [{ message: "Expected string", path: "name" }],
+			},
+		});
+		expect(existsSync(join(tempDir, "config.json"))).toBe(false);
+	});
+
+	it("still accepts core transforms within the declared type", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: { name: { type: "string", validate: (value) => ({ value: value.trim() }) } },
+		});
+
+		await expect(store.write({ name: "  hi  " })).resolves.toEqual({ name: "hi" });
 	});
 });

@@ -29,7 +29,7 @@ export function setupListPrompt<T, Answer>(
 	options: ListPromptOptions<T, Answer>,
 	io?: PromptIO,
 	defaultCursorValue?: T,
-	hasDefaultCursor = defaultCursorValue !== undefined,
+	hasDefaultCursor: boolean = defaultCursorValue !== undefined,
 ): ListPromptSetup<T, Answer> {
 	if (options.initial !== undefined) return { shortCircuited: true, value: options.initial };
 

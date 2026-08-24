@@ -13,13 +13,13 @@ import { resolveStorePath } from "./path.ts";
 import { deleteJson, readJson, type WriteJsonOptions, writeJson } from "./persistence.ts";
 import type {
 	CreateStoreOptions,
-	FieldDef,
 	FieldsDef,
 	InferStoreConfig,
 	Store,
 	StoreDocument,
 	StoreUpdater,
 	StoreValidatorIssue,
+	ValueType,
 } from "./types.ts";
 
 type FieldValidationResult = void | { value: JsonValue | undefined };
@@ -56,6 +56,33 @@ function isFieldValueResult(
 
 function isString(value: JsonValue | undefined): value is string {
 	return typeof value === "string";
+}
+
+function isNumber(value: JsonValue | undefined): value is number {
+	return typeof value === "number" && Number.isFinite(value);
+}
+
+function isBoolean(value: JsonValue | undefined): value is boolean {
+	return typeof value === "boolean";
+}
+
+function matchesValueType(value: JsonValue | undefined, type: ValueType): boolean {
+	if (type === "string") return isString(value);
+	if (type === "number") return isNumber(value);
+	return isBoolean(value);
+}
+
+function matchesDeclaredType(
+	def: { type: ValueType; array?: true },
+	value: JsonValue | undefined,
+): boolean {
+	return def.array === true
+		? Array.isArray(value) && value.every((item) => matchesValueType(item, def.type))
+		: matchesValueType(value, def.type);
+}
+
+function expectedTypeMessage(def: { type: ValueType; array?: true }): string {
+	return `Expected ${def.type}${def.array === true ? "[]" : ""}`;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -126,9 +153,7 @@ export function createStore<const F extends FieldsDef>(
 			}
 			validators.set(key, makeSchemaValidator(def.schema));
 		} else if (def.validate !== undefined) {
-			// SAFETY: each validator is only called for its own field. Coercion does not guarantee the
-			// persisted value matches the validator's declared parameter type: corrupt files can hand a
-			// wrong-typed value to it, which surfaces as a validator throw → VALIDATION issue.
+			// SAFETY: each validator is only called for its own field after coercion and type checking.
 			validators.set(key, def.validate as FieldValidator);
 		}
 	}
@@ -151,8 +176,7 @@ export function createStore<const F extends FieldsDef>(
 	// normalizeStateTypes — Coerce values by field `type`
 	// ──────────────────────────────────────────────────────────────────────
 
-	function coerceByType(value: JsonValue, type: FieldDef["type"]): JsonValue {
-		if (type === undefined) return value;
+	function coerceByType(value: JsonValue, type: ValueType): JsonValue {
 		if (type === "number" && isString(value)) {
 			return tryCoerceNumber(value) ?? value;
 		}
@@ -195,12 +219,17 @@ export function createStore<const F extends FieldsDef>(
 		const issues: StoreValidatorIssue[] = [];
 
 		for (const [key, def] of Object.entries(fields)) {
-			const validator = validators.get(key);
-			if (!validator) continue;
-
 			const value = mutableState[key];
 
 			if (value === undefined && def.schema === undefined) continue;
+
+			if (value !== undefined && def.schema === undefined && !matchesDeclaredType(def, value)) {
+				issues.push({ message: expectedTypeMessage(def), path: key });
+				continue;
+			}
+
+			const validator = validators.get(key);
+			if (!validator) continue;
 
 			let result: Awaited<ReturnType<FieldValidator>>;
 			try {
@@ -222,6 +251,13 @@ export function createStore<const F extends FieldsDef>(
 				// materialize missing values by validating `undefined` (e.g. defaults).
 				if (operation === "read") {
 					if (value === undefined) mutableState[key] = transformed;
+					continue;
+				}
+
+				// Core transforms must stay within the declared type; a wrong-typed
+				// output would persist a value the next read() rejects.
+				if (def.schema === undefined && !matchesDeclaredType(def, transformed)) {
+					issues.push({ message: expectedTypeMessage(def), path: key });
 					continue;
 				}
 
@@ -261,6 +297,23 @@ export function createStore<const F extends FieldsDef>(
 					}
 
 					mutableState[key] = transformed;
+				}
+			}
+		}
+
+		// Mutations promise to return exactly what the next read() sees, so any
+		// value JSON serialization would alter (NaN/Infinity → null, -0 → 0,
+		// array holes → null, dropped undefined object properties) is rejected.
+		if (operation !== "read") {
+			for (const [key, value] of Object.entries(mutableState)) {
+				// A dropped undefined key is harmless: the next read reapplies defaults identically.
+				if (value === undefined) continue;
+				if (!isDeepStrictEqual(JSON.parse(JSON.stringify(value)), value)) {
+					issues.push({
+						message:
+							"value does not survive JSON serialization (NaN, Infinity, -0, sparse arrays, or undefined properties)",
+						path: key,
+					});
 				}
 			}
 		}
@@ -308,33 +361,36 @@ export function createStore<const F extends FieldsDef>(
 	// write — Validate then atomically persist full config
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function write(config: Config): Promise<void> {
+	async function write(config: Config): Promise<Config> {
 		const normalized = normalizeStateTypes(documentFromConfig(config));
 		await runFieldValidators(normalized, "write");
 		await writeJson(filePath, normalized, writeOptions);
+		return configFromDocument(normalized);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
 	// update — Read current (raw), apply updater, validate, persist
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function update(updater: StoreUpdater<Config>): Promise<void> {
+	async function update(updater: StoreUpdater<Config>): Promise<Config> {
 		const current = await readRaw();
 		const updated = updater(configFromDocument(current));
 		const normalized = normalizeStateTypes(documentFromConfig(updated));
 		await runFieldValidators(normalized, "update");
 		await writeJson(filePath, normalized, writeOptions);
+		return configFromDocument(normalized);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
 	// patch — Shallow merge into current config, validate, persist
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function patch(partial: Partial<Config>): Promise<void> {
+	async function patch(partial: Partial<Config>): Promise<Config> {
 		const current = await readRaw();
 		const normalized = normalizeStateTypes({ ...current, ...partial });
 		await runFieldValidators(normalized, "patch");
 		await writeJson(filePath, normalized, writeOptions);
+		return configFromDocument(normalized);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
