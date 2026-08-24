@@ -3,7 +3,57 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
-import { which } from "./process.ts";
+import { runProcess, which } from "./process.ts";
+
+describe("runProcess", () => {
+	it("collects output and forwards cwd and env", async () => {
+		const cwd = tmpdir();
+		const result = await runProcess(
+			process.execPath,
+			[
+				"-e",
+				'process.stdout.write(process.cwd()); process.stderr.write(process.env.CRUST_PROCESS_TEST ?? ""); process.exit(7)',
+			],
+			{
+				cwd,
+				env: { ...process.env, CRUST_PROCESS_TEST: "forwarded" },
+				stdio: "collect",
+			},
+		);
+
+		expect(result).toEqual({ exitCode: 7, stdout: cwd, stderr: "forwarded" });
+	});
+
+	it("can ignore stdout while collecting stderr", async () => {
+		const result = await runProcess(
+			process.execPath,
+			["-e", 'process.stdout.write("ignored"); process.stderr.write("collected")'],
+			{ stdio: "collect", stdout: "ignore" },
+		);
+
+		expect(result).toEqual({ exitCode: 0, stdout: "", stderr: "collected" });
+	});
+
+	it.skipIf(process.platform !== "win32")(
+		"runs Windows command shims through the shell",
+		async () => {
+			const dir = mkdtempSync(join(tmpdir(), "run-process-test-"));
+			const shim = join(dir, "crust-process-probe.cmd");
+			writeFileSync(shim, "@echo off\r\necho shim-output\r\n");
+
+			try {
+				const result = await runProcess(shim, [], {
+					env: { ...process.env, PATH: `${dir}${delimiter}${process.env.PATH ?? ""}` },
+					stdio: "collect",
+				});
+				expect(result.exitCode).toBe(0);
+				expect(result.stdout.trim()).toBe("shim-output");
+			} finally {
+				rmSync(dir, { recursive: true, force: true });
+			}
+		},
+	);
+});
 
 describe("which", () => {
 	it("finds executables on PATH and returns null otherwise", () => {

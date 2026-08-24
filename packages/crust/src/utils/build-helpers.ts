@@ -10,7 +10,7 @@ import { BUILD_OUT_DIR_ENV, type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@cru
 import { yellow } from "@crustjs/style";
 import { isErrnoException } from "@crustjs/utils/error";
 import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
-import { which } from "@crustjs/utils/process";
+import { runProcess, which } from "@crustjs/utils/process";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Build runtimes and compile targets
@@ -401,17 +401,11 @@ async function runBuildProcess(
 	args: readonly string[],
 	outfilePath: string,
 ): Promise<void> {
-	const proc = spawn(runner.command, args, {
+	const { exitCode, stdout, stderr } = await runProcess(runner.command, args, {
 		env: runner.env,
 		cwd: process.cwd(),
-		stdio: ["ignore", "pipe", "pipe"],
+		stdio: "collect",
 	});
-
-	const [stdout, stderr, [exitCode]] = await Promise.all([
-		text(proc.stdout),
-		text(proc.stderr),
-		once(proc, "close"),
-	]);
 
 	if (exitCode !== 0) {
 		const output = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");

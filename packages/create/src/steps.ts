@@ -1,8 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { text } from "node:stream/consumers";
 
-import { which } from "@crustjs/utils/process";
+import { runProcess, which } from "@crustjs/utils/process";
 
 import type { PostScaffoldStep } from "./types.ts";
 import { detectPackageManager } from "./utils.ts";
@@ -66,14 +65,10 @@ async function runInstall(cwd: string): Promise<void> {
 		throw new Error(`Package manager "${pm}" was not found on PATH. Install ${pm} and try again.`);
 	}
 
-	// Windows pms resolve to .cmd/.bat shims, which Node refuses to spawn
-	// directly since the CVE-2024-27980 hardening (EINVAL); shell mode is safe
-	// here because the args are fixed literals. Under shell mode, pass the bare
-	// pm name so cmd.exe resolves it — the resolved path may contain spaces,
-	// which an unquoted shell string breaks.
-	const shell = /\.(cmd|bat)$/i.test(executable);
-	const proc = spawn(shell ? pm : executable, ["install"], { cwd, stdio: "inherit", shell });
-	const [exitCode] = await once(proc, "close");
+	const { exitCode } = await runProcess(executable, ["install"], {
+		cwd,
+		stdio: "inherit",
+	});
 	if (exitCode !== 0) {
 		throw new Error(`"${pm} install" exited with code ${exitCode}`);
 	}
@@ -140,8 +135,7 @@ async function runOpenEditor(cwd: string): Promise<void> {
 
 /** Run an arbitrary command string through the platform shell. */
 async function runCommand(cmd: string, cwd: string): Promise<void> {
-	const proc = spawn(cmd, { cwd, shell: true, stdio: "inherit" });
-	const [exitCode] = await once(proc, "close");
+	const { exitCode } = await runProcess(cmd, [], { cwd, shell: true, stdio: "inherit" });
 	if (exitCode !== 0) {
 		throw new Error(`Command "${cmd}" exited with code ${exitCode}`);
 	}
@@ -178,8 +172,11 @@ async function ensureGitIdentity(cwd: string, git: string): Promise<void> {
  * Spawn a process and throw a descriptive error if it exits non-zero.
  */
 async function spawnChecked(cmd: string[], cwd: string, label: string): Promise<void> {
-	const proc = spawn(cmd[0]!, cmd.slice(1), { cwd, stdio: ["ignore", "ignore", "pipe"] });
-	const [stderr, [exitCode]] = await Promise.all([text(proc.stderr), once(proc, "close")]);
+	const { exitCode, stderr } = await runProcess(cmd[0]!, cmd.slice(1), {
+		cwd,
+		stdio: "collect",
+		stdout: "ignore",
+	});
 	if (exitCode !== 0) {
 		throw new Error(
 			`"${label}" failed with exit code ${exitCode}${stderr ? `: ${stderr.trim()}` : ""}`,
