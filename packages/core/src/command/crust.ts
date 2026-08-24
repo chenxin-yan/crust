@@ -312,7 +312,10 @@ function materializeCommandDefinition(
 	child._node.contexts = [...parent.contexts];
 	child._node.contextExtensionIds = [...parent.contextExtensionIds];
 
-	// SAFETY: Crust implements the recipe builder surface; runtime validation below requires its return identity.
+	// SAFETY: Keep this cast aligned with the recipe-builder surface to avoid silent drift.
+	// A compile-time check is structurally impossible: branded generic method parameters compare
+	// recursively, while Crust transitions return Crust and recipe-builder transitions return the
+	// restricted builder type. Runtime validation below still requires Crust return identity.
 	const configured = internal.recipe(child as AnyCommandDefinitionBuilder);
 	if (!(configured instanceof Crust) || configured._ancestorOwnedFlags !== parent.ownedFlags) {
 		throw new CrustError(
