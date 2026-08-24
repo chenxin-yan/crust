@@ -13,13 +13,8 @@ import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { ParsedFlagValue } from "../types.ts";
-import {
-	type CommandDefinitionBuilder,
-	Crust,
-	defineCommand,
-	BUILD_OUT_DIR_ENV,
-	SNAPSHOT_PATH_ENV,
-} from "./crust.ts";
+import { type CommandDefinitionBuilder, Crust, defineCommand } from "./crust.ts";
+import { BUILD_OUT_DIR_ENV, SNAPSHOT_PATH_ENV } from "./invocation.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Type-level test utilities

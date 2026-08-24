@@ -3,11 +3,12 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { AnsiPair } from "./ansiCodes.ts";
+import { isModifierName, styleMethodNames } from "./ansiCodes.ts";
+import * as codes from "./ansiCodes.ts";
 import { resolveColorDepth, resolveModifierCapability } from "./capability.ts";
 import { bg as bgDirect, bgPairAtDepth, fg as fgDirect, fgPairAtDepth } from "./color.ts";
 import { linkCode, link as linkDirect } from "./hyperlinks.ts";
 import { applyStyle } from "./styleEngine.ts";
-import { isModifierName, styleMethodNames, stylePairFor } from "./styleMethodRegistry.ts";
 import type {
 	ChainableStyleFn,
 	ColorDepth,
@@ -18,6 +19,9 @@ import type {
 	StyleMethodName,
 	StyleOptions,
 } from "./types.ts";
+
+// Computed namespace access is safe because StyleMethodName contains only ANSI-pair exports.
+const styleMethodPairs = codes;
 
 // A single step in a chainable style. Either a registered method (looked
 // up by name in the style registry) or an ad-hoc `AnsiPair` produced by a
@@ -31,7 +35,7 @@ function stepIsModifier(step: ChainStep): boolean {
 }
 
 function stepPair(step: ChainStep): AnsiPair {
-	return step.kind === "named" ? stylePairFor(step.name) : step.pair;
+	return step.kind === "named" ? styleMethodPairs[step.name] : step.pair;
 }
 
 interface ResolvedStyleCapabilities {

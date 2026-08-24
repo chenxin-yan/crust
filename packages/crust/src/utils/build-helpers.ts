@@ -251,18 +251,16 @@ function hasStringName(value: JsonValue | undefined): value is { name: string } 
 	return value !== undefined && isJsonObject(value) && typeof value.name === "string";
 }
 
-const READ_USER_PACKAGE_JSON = Symbol("read-user-package-json");
-
 /** Resolve the base binary name from an explicit name, package name, or entry filename. */
 export function resolveBaseName(
 	name: string | undefined,
 	entry: string,
 	cwd: string,
-	packageJson: JsonValue | undefined | typeof READ_USER_PACKAGE_JSON = READ_USER_PACKAGE_JSON,
+	packageJson?: JsonValue,
 ): string {
 	if (name) return name;
 
-	const pkgJson = packageJson === READ_USER_PACKAGE_JSON ? readUserPackageJson(cwd) : packageJson;
+	const pkgJson = packageJson ?? readUserPackageJson(cwd);
 	if (hasStringName(pkgJson)) return pkgJson.name.replace(/^@[^/]+\//, "");
 
 	return basename(entry).replace(/\.[^.]+$/, "");

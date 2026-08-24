@@ -19,8 +19,6 @@ export type ValueType = BaseValueType;
 
 /** Shared fields present on every store field definition. */
 interface FieldDefBase<V> {
-	/** Human-readable description for documentation and tooling. */
-	description?: string;
 	/** Standard Schemas are an exclusive definition mode. */
 	schema?: never;
 
@@ -110,12 +108,6 @@ interface BooleanArrayFieldDef extends ArrayFieldBase<boolean[]> {
 interface SchemaFieldDef {
 	/** Standard Schema that owns validation, transformation, defaults, and optionality. */
 	schema: StandardSchema<unknown, unknown>;
-	/** Human-readable description for documentation and tooling. */
-	description?: string;
-	/** Optional primitive metadata for tooling; the schema still owns coercion. */
-	type?: BaseValueType;
-	/** Optional array metadata for tooling; the schema's output type remains authoritative. */
-	array?: true;
 	default?: never;
 	validate?: never;
 }

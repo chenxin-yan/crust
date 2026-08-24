@@ -30,10 +30,8 @@ export async function parseShortCircuit<Output>(
 	value: string,
 	source: "initial" | "default",
 ): Promise<Output> {
-	const result = await schema["~standard"].validate(value);
-	const issue = result.issues?.[0];
-	if (issue)
-		throw new Error(`${source} value rejected by schema: ${issue.message || "Validation failed"}`);
-	if ("value" in result) return result.value;
-	throw new Error(`${source} value rejected by schema: Validation failed`);
+	const result = await validateSubmitValue(value, schema, undefined);
+	if (!result.ok) throw new Error(`${source} value rejected by schema: ${result.error}`);
+	// SAFETY: a provided schema makes validateSubmitValue return only that schema's output.
+	return result.value as Output;
 }

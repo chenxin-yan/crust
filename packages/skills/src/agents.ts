@@ -372,26 +372,9 @@ export function isUniversalAgent(agent: AgentTarget): boolean {
  * present them as a single optional "Universal" install target.
  */
 export async function detectInstalledAgents(): Promise<AgentTarget[]> {
-	const detected: AgentTarget[] = [];
-
-	for (const agent of getAdditionalAgents()) {
-		const config: AgentConfig = AGENTS[agent];
-		const commands = config.detectCommands ?? [];
-		let installed = false;
-
-		for (const command of commands) {
-			if (which(command) !== null) {
-				installed = true;
-				break;
-			}
-		}
-
-		if (installed) {
-			detected.push(agent);
-		}
-	}
-
-	return detected;
+	return getAdditionalAgents().filter((agent) =>
+		(AGENTS[agent].detectCommands ?? []).some((command) => which(command) !== null),
+	);
 }
 
 /**

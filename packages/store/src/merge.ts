@@ -2,13 +2,7 @@
 // @crustjs/store — Field-based defaults application
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { JsonValue } from "@crustjs/utils/json";
-
 import type { FieldsDef, StoreDocument } from "./types.ts";
-
-function copyDefault(value: JsonValue | readonly JsonValue[]): JsonValue {
-	return structuredClone(value);
-}
 
 /**
  * Applies field defaults to a persisted config object.
@@ -39,7 +33,7 @@ export function applyFieldDefaults<F extends FieldsDef>(
 		if (persisted && key in persisted) {
 			result[key] = persisted[key];
 		} else if ("default" in def && def.default !== undefined) {
-			result[key] = copyDefault(def.default);
+			result[key] = structuredClone(def.default);
 		}
 		// else: no persisted value and no default → key not set (field is T | undefined)
 	}

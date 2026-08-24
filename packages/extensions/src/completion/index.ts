@@ -70,15 +70,6 @@ const SHELL_RENDERERS = {
 	fish: renderFish,
 } satisfies Record<CompletionShell, typeof renderBash>;
 
-function renderForShell(
-	shell: CompletionShell,
-	spec: ReturnType<typeof walkCommandNode>,
-	binName: string,
-	version: string,
-): string {
-	return SHELL_RENDERERS[shell](spec, binName, version);
-}
-
 /**
  * Build an Extension that contributes a `completion <shell>` command
  * which emits a tab-completion script for bash, zsh, or fish.
@@ -139,7 +130,7 @@ function completionFactory(options: CompletionOptions = {}): Extension {
 					const outputDir = context.flags["output-dir"];
 
 					if (outputDir === undefined) {
-						const script = renderForShell(requestedShell, spec, binName, safeVersion);
+						const script = SHELL_RENDERERS[requestedShell](spec, binName, safeVersion);
 						context.stdout(script);
 						return;
 					}
@@ -152,7 +143,7 @@ function completionFactory(options: CompletionOptions = {}): Extension {
 					await mkdir(targetDir, { recursive: true });
 					for (const shell of SUPPORTED_SHELLS) {
 						const filename = filenameForShell(shell, binName);
-						const script = renderForShell(shell, spec, binName, safeVersion);
+						const script = SHELL_RENDERERS[shell](spec, binName, safeVersion);
 						await writeFile(resolvePath(targetDir, filename), script, "utf8");
 					}
 				}),

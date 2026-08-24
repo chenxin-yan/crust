@@ -112,7 +112,7 @@ export type ValidateCommandDefinitions<
 // The IsUnion guard keeps a conditionally selected Extension
 // (`cond ? extA : extB`) runtime-only: a naked conditional would distribute
 // and accept each branch's commands independently.
-type ExtensionCommandDefs<E> =
+export type ExtensionCommandDefs<E> =
 	IsUnion<E> extends true
 		? readonly []
 		: E extends {

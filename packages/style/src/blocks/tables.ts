@@ -66,19 +66,10 @@ function computeColumnWidths(headers: string[], rows: string[][], minWidth: numb
 	const columnCount = headers.length;
 	const widths = Array<number>(columnCount).fill(minWidth);
 
-	for (let col = 0; col < columnCount; col++) {
-		const header = headers[col];
-		if (header !== undefined) {
-			widths[col] = Math.max(widths[col] ?? 0, stringWidth(header));
-		}
-	}
-
-	for (const row of rows) {
+	for (const row of [headers, ...rows]) {
 		for (let col = 0; col < columnCount; col++) {
 			const cell = row[col];
-			if (cell !== undefined) {
-				widths[col] = Math.max(widths[col] ?? 0, stringWidth(cell));
-			}
+			if (cell !== undefined) widths[col] = Math.max(widths[col]!, stringWidth(cell));
 		}
 	}
 
