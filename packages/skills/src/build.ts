@@ -1,12 +1,13 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, join, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 import type { CommandSnapshot } from "@crustjs/core";
 import { resolveSourceDir } from "@crustjs/utils/source";
 
-import { loadBundleFiles } from "./bundle.ts";
+import { loadBundleFiles, requireSkillFrontmatter } from "./bundle.ts";
 import { SkillSourceConflictError } from "./errors.ts";
 import { buildManifest } from "./manifest.ts";
+import { isWithin } from "./path.ts";
 import { renderSkill } from "./render.ts";
 import { isValidSkillName } from "./skill-name.ts";
 import type { RenderedFile, SkillMeta } from "./types.ts";
@@ -46,11 +47,7 @@ export async function writeSkillsFromSnapshot(
 		version: options.version,
 	};
 	validateSkillName(generatedMeta.name);
-	if (generatedMeta.description.trim() === "") {
-		throw new Error(
-			`Skill "${generatedMeta.name}" requires a description for SKILL.md frontmatter.`,
-		);
-	}
+	requireSkillFrontmatter(generatedMeta, `Skill "${generatedMeta.name}"`);
 
 	const outDir = resolve(options.outDir);
 	if (basename(outDir) !== "skills") {
@@ -64,7 +61,7 @@ export async function writeSkillsFromSnapshot(
 	for (const sourceDir of options.extras ?? []) {
 		const resolved = resolveSourceDir(sourceDir);
 		// outDir is replaced wholesale below; an extra nested inside it would be destroyed.
-		if (resolved === outDir || resolved.startsWith(outDir + sep)) {
+		if (isWithin(outDir, resolved)) {
 			throw new Error(
 				`Extra skill directory "${resolved}" is inside outDir "${outDir}", which is replaced on every build. Move authored skills outside the build output.`,
 			);
@@ -79,7 +76,7 @@ export async function writeSkillsFromSnapshot(
 
 	const cwd = resolve(".");
 	// outDir is replaced wholesale below; refuse targets that would delete the caller's project.
-	if (outDir === dirname(outDir) || outDir === cwd || cwd.startsWith(outDir + sep)) {
+	if (outDir === dirname(outDir) || isWithin(outDir, cwd)) {
 		throw new Error(
 			`Refusing to replace "${outDir}": outDir must be a dedicated directory, not the filesystem root, the working directory, or an ancestor of it.`,
 		);

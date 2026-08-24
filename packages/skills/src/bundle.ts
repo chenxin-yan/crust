@@ -26,6 +26,11 @@ interface BundleFrontmatter {
 	description: string | null;
 }
 
+interface RequiredSkillFrontmatter {
+	readonly name: string;
+	readonly description: string;
+}
+
 /**
  * Parses one single-line YAML scalar: double-quoted, single-quoted, or plain
  * (trailing ` # comment` stripped per YAML's whitespace-then-hash rule).
@@ -66,6 +71,22 @@ export function probeFrontmatter(content: string): BundleFrontmatter {
 		}
 	}
 	return result;
+}
+
+/** Requires non-empty Agent Skills frontmatter fields. */
+export function requireSkillFrontmatter(
+	frontmatter: BundleFrontmatter,
+	subject: string,
+): RequiredSkillFrontmatter {
+	if (frontmatter.name === null || frontmatter.name.trim() === "") {
+		throw new Error(`${subject} requires a name (\`name:\`) field in SKILL.md frontmatter.`);
+	}
+	if (frontmatter.description === null || frontmatter.description.trim() === "") {
+		throw new Error(
+			`${subject} requires a description (\`description:\`) field in SKILL.md frontmatter.`,
+		);
+	}
+	return { name: frontmatter.name, description: frontmatter.description };
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -212,25 +233,10 @@ export async function loadBundleFiles(sourceDir: string | URL): Promise<LoadedBu
 	);
 
 	const skillContent = await readFile(skillMd.absPath, "utf-8");
-	const probed = probeFrontmatter(skillContent);
+	const frontmatter = requireSkillFrontmatter(
+		probeFrontmatter(skillContent),
+		`Extra skill SKILL.md at "${join(canonicalRoot, SKILL_MD)}"`,
+	);
 
-	if (probed.name === null || probed.name === "") {
-		throw new Error(
-			`Extra skill SKILL.md is missing a top-level \`name:\` field in its YAML frontmatter ` +
-				`(at "${join(canonicalRoot, SKILL_MD)}"). ` +
-				`Add \`name: <skill-name>\` to the frontmatter block.`,
-		);
-	}
-	if (probed.description === null || probed.description === "") {
-		throw new Error(
-			`Extra skill SKILL.md is missing a top-level \`description:\` field in its YAML frontmatter ` +
-				`(at "${join(canonicalRoot, SKILL_MD)}"). ` +
-				`Add \`description: <one-line summary>\` to the frontmatter block.`,
-		);
-	}
-
-	return {
-		files,
-		frontmatter: { name: probed.name, description: probed.description },
-	};
+	return { files, frontmatter };
 }
