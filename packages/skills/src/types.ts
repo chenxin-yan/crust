@@ -1,57 +1,16 @@
 import type { CommandSection } from "@crustjs/core";
 import type { BaseValueType } from "@crustjs/utils/primitive";
 
+import type { AgentTarget } from "./agents.ts";
+
+export type { AgentTarget };
+
 /** Metadata used to render a generated skill. */
 export interface SkillMeta {
 	name: string;
 	description: string;
 	version?: string;
 }
-
-/** Supported agent targets for skill installation. */
-export type AgentTarget =
-	| "amp"
-	| "adal"
-	| "antigravity"
-	| "augment"
-	| "claude-code"
-	| "cline"
-	| "codebuddy"
-	| "codex"
-	| "command-code"
-	| "continue"
-	| "cortex"
-	| "crush"
-	| "cursor"
-	| "droid"
-	| "gemini-cli"
-	| "github-copilot"
-	| "goose"
-	| "iflow-cli"
-	| "junie"
-	| "kilo"
-	| "kimi-cli"
-	| "kiro-cli"
-	| "kode"
-	| "mcpjam"
-	| "mistral-vibe"
-	| "mux"
-	| "neovate"
-	| "opencode"
-	| "openclaw"
-	| "openhands"
-	| "pi"
-	| "pochi"
-	| "qoder"
-	| "qwen-code"
-	| "replit"
-	| "roo"
-	| "trae"
-	| "trae-cn"
-	| "warp"
-	| "windsurf"
-	| "zed"
-	| "zencoder";
 
 export type AgentClass = "universal" | "additional";
 export type Scope = "global" | "project";
