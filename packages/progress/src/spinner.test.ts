@@ -144,6 +144,15 @@ describe("spinner — terminal sink", () => {
 		expect(writes).toEqual(finalOutput);
 	});
 
+	it("renders the final line when stopped before starting", () => {
+		const { sink, writes } = createFakeSink(false);
+		const handle = spinner({ message: "Working", sink });
+
+		handle.stop("error", "Failed");
+
+		expect(writes).toEqual(["✗ Failed\n"]);
+	});
+
 	it("leaves SIGINT to the application when disabled", () => {
 		const { sink } = createFakeSink(true);
 		const previousHandlers = process.listeners("SIGINT");

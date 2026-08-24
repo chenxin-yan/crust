@@ -67,7 +67,7 @@ if (failed) {
 }
 ```
 
-`stop()` is idempotent; the default outcome is `"success"`. `SpinnerOutcome` is the union `"success" | "error"`.
+`stop()` is idempotent; the default outcome is `"success"`. Calling it before `start()` still renders the final line. `SpinnerOutcome` is the union `"success" | "error"`.
 
 <auto-type-table
   path="../../../../../packages/progress/src/spinner.ts"
@@ -95,7 +95,7 @@ bar.stop("success", "All files translated");
   name="ProgressOptions"
 />
 
-`progress()` returns a `ProgressHandle`:
+`progress()` returns a `ProgressHandle`. Calling `advance()` before `start()` mutates the current count but does not repaint; the updated count appears after starting or on the final line.
 
 <auto-type-table
   path="../../../../../packages/progress/src/progress.ts"
