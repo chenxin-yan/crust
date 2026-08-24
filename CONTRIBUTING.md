@@ -96,7 +96,6 @@ bun run dev:docs
 bun run build:docs
 bun run lint apps/docs
 bun run format apps/docs
-bun run build:docs
 bun run check:types --filter=./apps/docs
 ```
 

@@ -49,7 +49,7 @@ interface CommandDefinitionBuilder<
   for the exact signatures.
 </Callout>
 
-This is the configure-only builder passed to a `defineCommand()` recipe. Its fluent methods preserve and refine argument, accumulated flag, and provided Context types. `Sibs` accumulates the sibling command names and aliases registered through `.add()`, and `Sp` caches the known flag spellings accumulated through `.flags()` and `.provide()`. Both are trailing defaulted parameters. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
+This is the configure-only builder passed to a `defineCommand()` recipe. Its fluent methods preserve and refine argument, accumulated flag, and provided Context types. `Sibs` accumulates the sibling command names and aliases registered through `.add()`, and `Sp` caches the known flag spellings accumulated through `.flags()` and `.provide()`. Both are defaulted parameters. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
 
 ### `CommandDefinition`
 
@@ -123,6 +123,10 @@ class Crust<
   Ctx,
   Sibs extends string = never,
   Sp extends string = SpellingsOf<Flags>,
+  Tree = {},
+  CtxFlags = {},
+  CollisionSp = CollisionSpellings,
+  Result = void,
 >
 
 new Crust(name: string, meta?: RootCommandMeta)
@@ -184,7 +188,7 @@ const app = new Crust("serve").flags(
 );
 ```
 
-Repeated `.flags()` calls accumulate local flags and cache their statically known spellings — the union of flag names and aliases that `SpellingsOf` computes — in the `Sp` parameter. Statically known spelling collisions fail typecheck with `FIX_ALIAS_COLLISION`. Generic wrapper functions that keep the flag parameter bounded (e.g. `<F extends FlagsDef>(app: Crust<F, A, Ctx>)`) defer the default `Sp = SpellingsOf<F>` and will not typecheck further `.flags()` calls; type wrapper parameters as `Crust<any, any, any, any, any>` instead. A spelling typed as a union of literals (e.g. `short: cond ? "a" : "b"`) is conservatively rejected when any member collides. Promise-returning custom `parse` functions similarly fail with `FIX_ASYNC_PARSE` because parsing consumes their result synchronously.
+Repeated `.flags()` calls accumulate local flags and cache their statically known spellings — the union of flag names and aliases that `SpellingsOf` computes — in the `Sp` parameter. Statically known spelling collisions fail typecheck with `FIX_ALIAS_COLLISION`. Generic wrapper functions that keep the flag parameter bounded (e.g. `<F extends FlagsDef>(app: Crust<F, A, Ctx>)`) defer the default `Sp = SpellingsOf<F>` and will not typecheck further `.flags()` calls; type wrapper parameters as the exported `AnyCrust` instead. A spelling typed as a union of literals (e.g. `short: cond ? "a" : "b"`) is conservatively rejected when any member collides. Promise-returning custom `parse` functions similarly fail with `FIX_ASYNC_PARSE` because parsing consumes their result synchronously.
 
 Flags declared here are local to this command. Context-owned flags are the propagation mechanism for descendant parsers; downstream code receives their derived Context capability. Boolean flags support generated `--no-<spelling>` negation for the canonical name and every long alias; `noNegate: true` rejects negation with a `PARSE` error and hides the generated label from help, completion, and man output. Names and aliases beginning with `no-` are reserved.
 
