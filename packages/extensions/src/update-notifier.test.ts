@@ -7,9 +7,11 @@ import { Crust } from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
 
 import {
+	createStoreCacheAdapter,
 	fetchLatestVersion,
 	isNewerVersion,
 	type UpdateNotifierCacheAdapter,
+	type UpdateNotifierOptions,
 	type UpdateNotifierState,
 	updateNotifier,
 } from "./update-notifier.ts";
@@ -92,6 +94,13 @@ describe("isNewerVersion", () => {
 
 	it("handles prerelease latest versions", () => {
 		expect(isNewerVersion("1.2.3", "1.2.4-rc.1")).toBe(true);
+	});
+
+	it("orders prerelease identifiers per SemVer precedence", () => {
+		expect(isNewerVersion("1.0.0-alpha.2", "1.0.0-alpha.10")).toBe(true);
+		expect(isNewerVersion("1.0.0-alpha", "1.0.0-alpha.1")).toBe(true);
+		expect(isNewerVersion("1.0.0-1", "1.0.0-alpha")).toBe(true);
+		expect(isNewerVersion("1.0.0+build.1", "1.0.0+build.2")).toBe(false);
 	});
 
 	it("handles v-prefixed versions", () => {
@@ -362,22 +371,8 @@ describe("updateNotifier post-run hook", () => {
 
 	/** Helper to invoke the extension post-run hook with a completed outcome. */
 	async function runExtensionMiddleware(
-		options: {
-			currentVersion: string;
-			packageName: string;
+		options: Omit<UpdateNotifierOptions, "cache"> & {
 			intervalMs?: number;
-			timeoutMs?: number;
-			registryUrl?: string;
-			packageManager?: "npm" | "pnpm" | "yarn" | "bun" | "auto";
-			installScope?: "local" | "global";
-			updateCommand?:
-				| string
-				| ((
-						packageName: string,
-						packageManager: "npm" | "pnpm" | "yarn" | "bun",
-						installScope: "local" | "global" | undefined,
-				  ) => string);
-			updateDocsUrl?: string;
 			cache?: UpdateNotifierCacheAdapter | false;
 		},
 		overrides?: {
@@ -422,6 +417,39 @@ describe("updateNotifier post-run hook", () => {
 		return { extension };
 	}
 
+	describe("built-in cache adapter", () => {
+		it("round-trips notifier state at the adapter seam", async () => {
+			const adapter = await createStoreCacheAdapter(
+				uniquePackageName("adapter-round-trip"),
+				"https://registry.npmjs.org",
+			);
+			const state: UpdateNotifierState = {
+				lastCheckedAt: 123,
+				latestVersion: "2.0.0",
+				lastNotifiedVersion: "2.0.0",
+			};
+
+			expect(await adapter.read()).toBeNull();
+			await adapter.write(state);
+			expect(await adapter.read()).toEqual(state);
+		});
+
+		it("rejects state written for another registry", async () => {
+			const packageName = uniquePackageName("adapter-registry");
+			const publicRegistry = await createStoreCacheAdapter(
+				packageName,
+				"https://registry.npmjs.org",
+			);
+			await publicRegistry.write({ lastCheckedAt: 123, latestVersion: "2.0.0" });
+
+			const privateRegistry = await createStoreCacheAdapter(
+				packageName,
+				"https://registry.example.com",
+			);
+			expect(await privateRegistry.read()).toBeNull();
+		});
+	});
+
 	// ── Update available flow ─────────────────────────────────────────────
 
 	describe("update available flow", () => {
@@ -441,13 +469,13 @@ describe("updateNotifier post-run hook", () => {
 
 		it("includes upgrade instruction in update notice", async () => {
 			const pkgName = uniquePackageName("upgrade-instr");
+			process.env.npm_config_user_agent = "npm/10.0.0 node/v22";
 			mockRegistryResponse("3.0.0");
 
 			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
-				packageManager: "npm",
-				installScope: "local",
+				updateCommand: { scope: "local" },
 			});
 
 			expect(getOutput()).toContain(`npm install ${pkgName}@latest`);
@@ -804,29 +832,29 @@ describe("updateNotifier post-run hook", () => {
 	// ── Option behavior ───────────────────────────────────────────────────
 
 	describe("option behavior", () => {
-		it("uses global commands when installScope is explicitly global", async () => {
+		it("uses global commands when updateCommand scope is global", async () => {
 			const pkgName = uniquePackageName("explicit-global");
+			process.env.npm_config_user_agent = "bun/1.3.0";
 			mockRegistryResponse("2.0.0");
 
 			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
-				packageManager: "bun",
-				installScope: "global",
+				updateCommand: { scope: "global" },
 			});
 
 			expect(getOutput()).toContain(`bun add -g ${pkgName}@latest`);
 		});
 
-		it("uses local commands when installScope is explicitly local", async () => {
+		it("uses local commands when updateCommand scope is local", async () => {
 			const pkgName = uniquePackageName("explicit-local");
+			process.env.npm_config_user_agent = "npm/10.0.0 node/v22";
 			mockRegistryResponse("2.0.0");
 
 			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
-				packageManager: "npm",
-				installScope: "local",
+				updateCommand: { scope: "local" },
 			});
 
 			expect(getOutput()).toContain(`npm install ${pkgName}@latest`);
@@ -841,13 +869,13 @@ describe("updateNotifier post-run hook", () => {
 			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
-				installScope: "global",
+				updateCommand: { scope: "global" },
 			});
 
 			expect(getOutput()).toContain(`bun add -g ${pkgName}@latest`);
 		});
 
-		it("omits the update command when installScope and updateCommand are unset", async () => {
+		it("omits the update command when updateCommand is unset", async () => {
 			const pkgName = uniquePackageName("commandless-default");
 			mockRegistryResponse("2.0.0");
 
@@ -876,36 +904,22 @@ describe("updateNotifier post-run hook", () => {
 			expect(getOutput()).not.toContain("Run ");
 		});
 
-		it("passes only an explicitly configured installScope to updateCommand callbacks", async () => {
-			const unsetPkgName = uniquePackageName("callback-unset-scope");
-			const receivedScopes: Array<"local" | "global" | undefined> = [];
-			process.env.npm_config_user_agent = "npm/10.0.0 node/v22";
+		it("passes package information to updateCommand callbacks", async () => {
+			const pkgName = uniquePackageName("callback-info");
+			const received: Array<{ packageName: string; packageManager: string }> = [];
+			process.env.npm_config_user_agent = "pnpm/10.0.0 node/v22";
 			mockRegistryResponse("2.0.0");
 
 			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
-				packageName: unsetPkgName,
-				packageManager: "npm",
-				updateCommand: (_name, _packageManager, installScope) => {
-					receivedScopes.push(installScope);
+				packageName: pkgName,
+				updateCommand: (info) => {
+					received.push(info);
 					return "custom update";
 				},
 			});
 
-			const explicitPkgName = uniquePackageName("callback-explicit-scope");
-			mockRegistryResponse("2.0.0");
-			await runExtensionMiddleware({
-				currentVersion: "1.0.0",
-				packageName: explicitPkgName,
-				packageManager: "npm",
-				installScope: "local",
-				updateCommand: (_name, _packageManager, installScope) => {
-					receivedScopes.push(installScope);
-					return "custom update";
-				},
-			});
-
-			expect(receivedScopes).toEqual([undefined, "local"]);
+			expect(received).toEqual([{ packageName: pkgName, packageManager: "pnpm" }]);
 		});
 
 		it("persists and deduplicates with the built-in cache by default", async () => {

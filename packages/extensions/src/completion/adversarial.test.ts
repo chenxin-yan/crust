@@ -68,12 +68,12 @@ describe("--no- negation", () => {
 	const spec: CompletionCommand = {
 		name: "mycli",
 		flags: [
-			{ name: "force", type: "boolean", takesValue: false },
+			{ name: "force", type: "boolean", takesValue: false, negatable: true },
 			{
 				name: "color",
 				type: "boolean",
 				takesValue: false,
-				noNegate: true,
+				negatable: false,
 			},
 		],
 		args: [],
@@ -83,7 +83,7 @@ describe("--no- negation", () => {
 	it("bash: emits --no-<name> for negatable boolean flags", () => {
 		const out = renderBash(spec, "mycli", "1");
 		expect(out).toContain("--no-force");
-		// `noNegate` flag has its negation suppressed.
+		// Core's snapshot-derived negation policy suppresses the color spelling.
 		expect(out).not.toContain("--no-color");
 	});
 

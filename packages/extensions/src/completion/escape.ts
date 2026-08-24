@@ -92,6 +92,11 @@ export function assertSafeIdentifier(name: string, kind: string): string {
  * becomes a filename and a `complete -F`/`compdef` argument that's
  * easier to break than option names.
  */
+/** Map a validated CLI identifier to a shell function identifier. */
+export function toShellIdent(name: string): string {
+	return name.replace(/[^A-Za-z0-9_]/g, "_");
+}
+
 export function assertSafeBinName(binName: string): string {
 	if (binName.length === 0) {
 		throw new Error("completion extension: binName must not be empty");

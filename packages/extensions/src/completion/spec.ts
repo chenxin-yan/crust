@@ -43,6 +43,8 @@ interface CompletionFlagBase {
 	aliases?: readonly string[];
 	/** Human-readable description, ANSI-stripped, ready to embed verbatim. */
 	description?: string;
+	/** `true` when the flag accepts generated `--no-<name>` spellings. */
+	negatable?: boolean;
 	/**
 	 * `true` when the flag is repeatable (`multiple: true` in `FlagDef`).
 	 * Templates use this to relax mutual-exclusion or de-dup logic where
@@ -62,18 +64,16 @@ export type CompletionFlag = CompletionFlagBase &
 		| {
 				type: "boolean";
 				takesValue: false;
-				noNegate?: true;
 				choices?: never;
 				valueCompletion?: never;
 		  }
 		| {
 				type: "number";
 				takesValue: true;
-				noNegate?: never;
 				choices?: never;
 				valueCompletion?: never;
 		  }
-		| ({ type: "string"; takesValue: true; noNegate?: never } & StringCompletion)
+		| ({ type: "string"; takesValue: true } & StringCompletion)
 	);
 
 /** Fields shared by every positional argument attached to a command. */
