@@ -3,7 +3,6 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { PromptTheme } from "./types.ts";
-import { calculateScrollOffset } from "./utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -178,28 +177,6 @@ export function fuzzyFilter<T>(
 	results.sort((a, b) => b.score - a.score);
 
 	return results;
-}
-
-/** @internal Re-filter a list prompt after its query changes. */
-export function refilter<
-	T,
-	S extends {
-		readonly query: string;
-		readonly choices: readonly { readonly label: string; readonly value: T }[];
-	},
->(
-	state: S,
-	maxVisible: number,
-): S & {
-	readonly results: FuzzyFilterResult<T>[];
-	readonly listCursor: number;
-	readonly scrollOffset: number;
-	readonly error: null;
-} {
-	const results = fuzzyFilter(state.query, state.choices);
-	const listCursor = 0;
-	const scrollOffset = calculateScrollOffset(listCursor, 0, results.length, maxVisible);
-	return { ...state, results, listCursor, scrollOffset, error: null };
 }
 
 /** @internal Apply the filter-match style to matched runs in a label. */

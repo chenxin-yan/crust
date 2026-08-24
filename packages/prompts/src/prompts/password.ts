@@ -8,15 +8,14 @@ import type { PromptIO } from "../core/renderer.ts";
 import { resolvePromptIO, runPrompt } from "../core/renderer.ts";
 import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import { createTextSubmitHandler, CURSOR_CHAR } from "../core/textEdit.ts";
-import { resolveTheme } from "../core/theme.ts";
-import {
-	parseShortCircuit,
-	type PartialPromptTheme,
-	type PromptTheme,
-	type SchemaOrValidate,
-	type ValidateFn,
+import type {
+	PartialPromptTheme,
+	PromptTheme,
+	SchemaOrValidate,
+	ValidateFn,
 } from "../core/types.ts";
 import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
+import { parseShortCircuit } from "../core/validate.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -189,7 +188,6 @@ export async function password<Output>(
 
 	const promptIO = resolvePromptIO(io);
 
-	const theme = resolveTheme(options.theme);
 	const mask = options.mask ?? "*";
 
 	const initialState: PasswordState = {
@@ -201,7 +199,7 @@ export async function password<Output>(
 	return runPrompt<PasswordState, Output | string>(
 		{
 			initialState,
-			theme,
+			theme: options.theme,
 			render: (state, t) => renderPassword(state, t, options.message, mask),
 			handleKey: createTextSubmitHandler<Output>(options.schema, options.validate),
 			renderSubmitted: (state, value, t) => renderSubmitted(state, value, t, options.message, mask),

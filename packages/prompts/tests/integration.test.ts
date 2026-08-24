@@ -44,7 +44,6 @@ import type {
 	KeypressEvent,
 	MultifilterOptions,
 	MultiselectOptions,
-	NormalizedChoice,
 	PartialPromptTheme,
 	PasswordOptions,
 	PromptConfig,
@@ -103,10 +102,6 @@ describe("type exports", () => {
 		// ValidateFn<T> is throw-on-fail / void-on-success.
 		const _validateFn: ValidateFn<string> = () => {};
 		const _partialTheme: PartialPromptTheme = {};
-		const _normalized: NormalizedChoice<string> = {
-			label: "a",
-			value: "a",
-		};
 		const _fuzzyMatch: FuzzyMatchResult = {
 			match: true,
 			score: 1,

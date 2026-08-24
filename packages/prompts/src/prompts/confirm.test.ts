@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { createPromptIO, renderPrompt, type RenderedPrompt } from "../testing.ts";
+import { createPromptIO, pressKey, renderPrompt, type RenderedPrompt } from "../testing.ts";
 import { confirm, type ConfirmOptions } from "./confirm.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -13,19 +13,6 @@ function start(options: ConfirmOptions): Promise<boolean> {
 	const prompt = renderPrompt<ConfirmOptions, boolean>(confirm, options);
 	activePrompt = prompt;
 	return prompt.answer;
-}
-
-function pressKey(
-	char: string,
-	key?: Partial<{ name: string; ctrl: boolean; meta: boolean; shift: boolean }>,
-): void {
-	if (key?.ctrl) {
-		activePrompt.keys(`ctrl+${key.name ?? char}`);
-	} else if (char === "") {
-		activePrompt.keys(key?.name ?? "");
-	} else {
-		activePrompt.type(char);
-	}
 }
 
 function screen(): string {
@@ -48,7 +35,7 @@ describe("confirm — default value", () => {
 		const promise = start({ message: "Continue?" });
 
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe(true);
@@ -61,7 +48,7 @@ describe("confirm — default value", () => {
 		});
 
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe(false);
@@ -78,9 +65,9 @@ describe("confirm — toggle", () => {
 
 		await tick();
 		// Default is true, left should toggle to false
-		pressKey("", { name: "left" });
+		pressKey(activePrompt, "", { name: "left" });
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe(false);
@@ -91,9 +78,9 @@ describe("confirm — toggle", () => {
 
 		await tick();
 		// Default is true, right should toggle to false
-		pressKey("", { name: "right" });
+		pressKey(activePrompt, "", { name: "right" });
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe(false);
@@ -104,9 +91,9 @@ describe("confirm — toggle", () => {
 
 		await tick();
 		// Default is true, tab should toggle to false
-		pressKey("", { name: "tab" });
+		pressKey(activePrompt, "", { name: "tab" });
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe(false);
@@ -117,11 +104,11 @@ describe("confirm — toggle", () => {
 
 		await tick();
 		// Toggle twice — should be back to true
-		pressKey("", { name: "left" });
+		pressKey(activePrompt, "", { name: "left" });
 		await tick();
-		pressKey("", { name: "right" });
+		pressKey(activePrompt, "", { name: "right" });
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe(true);
@@ -140,9 +127,9 @@ describe("confirm — shortcuts", () => {
 		});
 
 		await tick();
-		pressKey("y");
+		pressKey(activePrompt, "y");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe(true);
@@ -155,9 +142,9 @@ describe("confirm — shortcuts", () => {
 		});
 
 		await tick();
-		pressKey("Y", { name: "y", shift: true });
+		pressKey(activePrompt, "Y", { name: "y", shift: true });
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe(true);
@@ -167,9 +154,9 @@ describe("confirm — shortcuts", () => {
 		const promise = start({ message: "Continue?" });
 
 		await tick();
-		pressKey("n");
+		pressKey(activePrompt, "n");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe(false);
@@ -179,9 +166,9 @@ describe("confirm — shortcuts", () => {
 		const promise = start({ message: "Continue?" });
 
 		await tick();
-		pressKey("N", { name: "n", shift: true });
+		pressKey(activePrompt, "N", { name: "n", shift: true });
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe(false);
@@ -194,9 +181,9 @@ describe("confirm — shortcuts", () => {
 		});
 
 		await tick();
-		pressKey("h", { name: "h" });
+		pressKey(activePrompt, "h", { name: "h" });
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe(true);
@@ -206,9 +193,9 @@ describe("confirm — shortcuts", () => {
 		const promise = start({ message: "Continue?" });
 
 		await tick();
-		pressKey("l", { name: "l" });
+		pressKey(activePrompt, "l", { name: "l" });
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe(false);
@@ -231,7 +218,7 @@ describe("confirm — custom labels", () => {
 		expect(screen()).toContain("Agree");
 		expect(screen()).toContain("Decline");
 
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await promise;
 	});
 
@@ -245,9 +232,9 @@ describe("confirm — custom labels", () => {
 
 		await tick();
 		// Toggle to true (Accept)
-		pressKey("y");
+		pressKey(activePrompt, "y");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		await promise;
 		expect(screen()).toContain("Accept");
@@ -265,7 +252,7 @@ describe("confirm — rendering", () => {
 		await tick();
 		expect(screen()).toContain("Deploy to production?");
 
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await promise;
 	});
 
@@ -273,9 +260,9 @@ describe("confirm — rendering", () => {
 		const promise = start({ message: "Continue?" });
 
 		await tick();
-		pressKey("n");
+		pressKey(activePrompt, "n");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		await promise;
 		// After submission, the selected answer should appear
@@ -297,7 +284,7 @@ describe("confirm — no message", () => {
 		expect(screen()).toContain("Yes");
 		expect(screen()).toContain("No");
 
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		const result = await promise;
 		expect(result).toBe(true);
 	});
@@ -306,7 +293,7 @@ describe("confirm — no message", () => {
 		const promise = start({});
 
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		await promise;
 		expect(screen()).toContain("Are you sure?");

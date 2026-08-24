@@ -92,7 +92,7 @@ test("accepts a name", async () => {
 });
 ```
 
-Custom prompt functions passed to `renderPrompt` must accept `(options, io?)`, like the built-in prompt functions. For lower-level setup, `createPromptIO({ isTTY: false })` provides fake non-interactive streams for testing `default` fallbacks. The subpath also exports `encodeKey` and the types `Key`, `NamedKey`, `PromptTestIO`, and `RenderedPrompt`; `keys()` autocompletes named key names while still accepting `ctrl+<letter>` and single characters.
+Custom prompt functions passed to `renderPrompt` must accept `(options, io?)`, like the built-in prompt functions. For lower-level setup, `createPromptIO({ isTTY: false })` provides fake non-interactive streams for testing `default` fallbacks. The subpath also exports `encodeKey`, `pressKey`, and the types `Key`, `NamedKey`, `PromptTestIO`, and `RenderedPrompt`; `keys()` autocompletes named key names while still accepting `ctrl+<letter>` and single characters.
 
 ## Prompts
 
@@ -200,6 +200,8 @@ const port = await select({
 
 When the choices list is written inline (or declared `as const`), the result narrows to the union of the choice values — `80 | 443` above, or `"react" | "vue" | "svelte"` for string choices. A widened `string[]` keeps `string`. The same applies to `multiselect`, `filter`, and `multifilter` (element type of the returned array).
 
+For object-valued choices, `default` matches by reference equality. Pass the same object instance used in `choices`.
+
 <auto-type-table
   path="../../../../../packages/prompts/src/prompts/select.ts"
   name="SelectOptions"
@@ -209,7 +211,7 @@ When the choices list is written inline (or declared `as const`), the result nar
 
 Checkbox-style multi-selection. Use Space to toggle, `a` to toggle all, `i` to invert, and Enter to confirm.
 
-When `max` is set, toggle-all and invert respect the constraint.
+When `max` is set, toggle-all and invert respect the constraint. Object values in `default` match choices by reference equality.
 
 ```ts
 const features = await multiselect({
@@ -234,7 +236,7 @@ const features = await multiselect({
 
 Fuzzy-search selection. Type to filter, navigate with Up/Down, and confirm with Enter. Matched characters are highlighted in results.
 
-Use `filter` when users should choose a single item from a long list and need search to narrow it quickly. For fuzzy multi-selection, use `multifilter`.
+Use `filter` when users should choose a single item from a long list and need search to narrow it quickly. For fuzzy multi-selection, use `multifilter`. Object values in `default` match choices by reference equality.
 
 ```ts
 const lang = await filter({
@@ -379,7 +381,7 @@ const result = await runPrompt<CounterState, number>({
 For custom prompts that need text input, use the shared `handleTextEdit` helper instead of reimplementing cursor editing logic.
 
 ```ts
-import { handleTextEdit, CURSOR_CHAR } from "@crustjs/prompts";
+import { handleTextEdit } from "@crustjs/prompts";
 
 const edit = handleTextEdit(key, currentText, cursorPos);
 if (edit) {
@@ -428,16 +430,11 @@ Ctrl+C cancellation rejects with a standard `DOMException` named `"AbortError"` 
 
 ### Utilities
 
-| Export                  | Description                                     |
-| ----------------------- | ----------------------------------------------- |
-| `handleTextEdit`        | Shared text-editing keypress handler            |
-| `CURSOR_CHAR`           | Cursor indicator character (`│`)                |
-| `fuzzyMatch`            | Score a query against a single candidate string |
-| `fuzzyFilter`           | Filter and rank choices by fuzzy query          |
-| `normalizeChoices`      | Normalize choices to `{ label, value }`         |
-| `formatPromptLine`      | Format prompt header with inline content        |
-| `formatSubmitted`       | Format submitted line for a prompt              |
-| `calculateScrollOffset` | Calculate viewport scroll offset for lists      |
+| Export           | Description                                     |
+| ---------------- | ----------------------------------------------- |
+| `handleTextEdit` | Shared text-editing keypress handler            |
+| `fuzzyMatch`     | Score a query against a single candidate string |
+| `fuzzyFilter`    | Filter and rank choices by fuzzy query          |
 
 ### Types
 
@@ -463,7 +460,6 @@ Ctrl+C cancellation rejects with a standard `DOMException` named `"AbortError"` 
 | `PromptConfig<S,T>`       | Configuration for `runPrompt()`                                                     |
 | `SubmitResult<T>`         | Submit action type                                                                  |
 | `HandleKeyResult<S,T>`    | Return type of keypress handlers                                                    |
-| `NormalizedChoice<T>`     | Normalized choice with explicit label and value                                     |
 | `FuzzyMatchResult`        | Single fuzzy match result with score and indices                                    |
 | `FuzzyFilterResult<T>`    | Fuzzy filter result with item and match data                                        |
 | `TextEditState`           | Text plus cursor position for `handleTextEdit`                                      |

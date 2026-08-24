@@ -2,20 +2,13 @@
 // Select — Single selection from a list of choices for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
+import { setupListPrompt } from "../core/list.ts";
 import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
-import { isTTY, resolvePromptIO, runPrompt, submit } from "../core/renderer.ts";
+import { runPrompt, submit } from "../core/renderer.ts";
 import { CURSOR_INDICATOR, PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
-import { resolveTheme } from "../core/theme.ts";
 import type { Choice, ChoiceValue, PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import type { NormalizedChoice } from "../core/utils.ts";
-import {
-	calculateScrollOffset,
-	DEFAULT_MAX_VISIBLE,
-	formatSubmitted,
-	moveCursor,
-	normalizeChoices,
-	renderChoiceList,
-} from "../core/utils.ts";
+import { formatSubmitted, moveCursor, renderChoiceList } from "../core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -49,7 +42,7 @@ export interface SelectOptions<T> {
 	readonly message?: string;
 	/** List of choices — strings or `{ label, value, hint? }` objects */
 	readonly choices: readonly Choice<T>[];
-	/** Default value — sets the initial cursor position to the matching choice */
+	/** Default value — sets the initial cursor position using reference equality for object values. */
 	readonly default?: T;
 	/** Initial value — if provided, the prompt is skipped and this value is returned immediately */
 	readonly initial?: T;
@@ -215,44 +208,16 @@ export function select(
 ): Promise<string>;
 export function select<T>(options: SelectOptions<T>, io?: PromptIO): Promise<T>;
 export async function select<T>(options: SelectOptions<T>, io?: PromptIO): Promise<T> {
-	// Short-circuit: return initial value immediately without rendering
-	if (options.initial !== undefined) {
-		return options.initial;
-	}
+	const setup = setupListPrompt<T, T>(options, io, options.default);
+	if (setup.shortCircuited) return setup.value;
 
-	const promptIO = resolvePromptIO(io);
-
-	// Non-interactive fallback: return default value when stdin is not a TTY
-	if (!isTTY(promptIO.input) && options.default !== undefined) {
-		return options.default;
-	}
-
-	const theme = resolveTheme(options.theme);
-	const maxVisible = options.maxVisible ?? DEFAULT_MAX_VISIBLE;
-	const choices = normalizeChoices(options.choices);
-
-	// Find initial cursor position from default value
-	let initialCursor = 0;
-	if (options.default !== undefined) {
-		const idx = choices.findIndex((c) => c.value === options.default);
-		if (idx !== -1) {
-			initialCursor = idx;
-		}
-	}
-
-	// Calculate initial scroll offset to keep cursor visible
-	const initialScrollOffset = calculateScrollOffset(initialCursor, 0, choices.length, maxVisible);
-
-	const initialState: SelectState<T> = {
-		cursor: initialCursor,
-		choices,
-		scrollOffset: initialScrollOffset,
-	};
+	const { choices, cursor, maxVisible, promptIO, scrollOffset } = setup;
+	const initialState: SelectState<T> = { cursor, choices, scrollOffset };
 
 	return runPrompt<SelectState<T>, T>(
 		{
 			initialState,
-			theme,
+			theme: options.theme,
 			render: (state, t) => renderSelect(state, t, options.message, maxVisible),
 			handleKey: createHandleKey<T>(maxVisible),
 			renderSubmitted: (state, value, t) => renderSubmitted(state, value, t, options.message),

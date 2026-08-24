@@ -5,7 +5,6 @@
 import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
 import { isTTY, resolvePromptIO, runPrompt, submit } from "../core/renderer.ts";
 import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
-import { resolveTheme } from "../core/theme.ts";
 import type { PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
 
@@ -196,7 +195,6 @@ export async function confirm(options: ConfirmOptions, io?: PromptIO): Promise<b
 		return options.default;
 	}
 
-	const theme = resolveTheme(options.theme);
 	const activeLabel = options.active ?? "Yes";
 	const inactiveLabel = options.inactive ?? "No";
 	const defaultValue = options.default ?? true;
@@ -208,7 +206,7 @@ export async function confirm(options: ConfirmOptions, io?: PromptIO): Promise<b
 	return runPrompt<ConfirmState, boolean>(
 		{
 			initialState,
-			theme,
+			theme: options.theme,
 			render: (state, t) => renderConfirm(state, t, options.message, activeLabel, inactiveLabel),
 			handleKey,
 			renderSubmitted: (state, value, t) =>

@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { z } from "zod";
 
 import type { PromptIO } from "../core/renderer.ts";
-import { createPromptIO, renderPrompt, type RenderedPrompt } from "../testing.ts";
+import { createPromptIO, pressKey, renderPrompt, type RenderedPrompt } from "../testing.ts";
 import { password, type PasswordOptions } from "./password.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -24,19 +24,6 @@ function start<Output>(options: PasswordOptions<Output>): Promise<Output | strin
 	const prompt = renderPrompt<PasswordOptions<Output>, Output | string>(runPassword, options);
 	activePrompt = prompt;
 	return prompt.answer;
-}
-
-function pressKey(
-	char: string,
-	key?: Partial<{ name: string; ctrl: boolean; meta: boolean; shift: boolean }>,
-): void {
-	if (key?.ctrl) {
-		activePrompt.keys(`ctrl+${key.name ?? char}`);
-	} else if (char === "") {
-		activePrompt.keys(key?.name ?? "");
-	} else {
-		activePrompt.type(char);
-	}
 }
 
 function screen(): string {
@@ -93,7 +80,7 @@ describe("password — masked rendering", () => {
 		await tick();
 		expect(screen()).toContain("Enter password:");
 
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await promise;
 	});
 
@@ -101,11 +88,11 @@ describe("password — masked rendering", () => {
 		const promise = start({ message: "Password?" });
 
 		await tick();
-		pressKey("a");
+		pressKey(activePrompt, "a");
 		await tick();
-		pressKey("b");
+		pressKey(activePrompt, "b");
 		await tick();
-		pressKey("c");
+		pressKey(activePrompt, "c");
 		await tick();
 
 		// Should see mask characters (***) but NOT the actual value "abc"
@@ -113,7 +100,7 @@ describe("password — masked rendering", () => {
 		// The actual characters should not appear in output
 		// (except potentially in keypress event data, not in rendered output)
 
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		const result = await promise;
 		// The actual value is returned, even though it was masked in display
 		expect(result).toBe("abc");
@@ -123,15 +110,15 @@ describe("password — masked rendering", () => {
 		const promise = start({ message: "Password?", mask: "●" });
 
 		await tick();
-		pressKey("x");
+		pressKey(activePrompt, "x");
 		await tick();
-		pressKey("y");
+		pressKey(activePrompt, "y");
 		await tick();
 
 		// Custom mask character should appear in output
 		expect(screen()).toContain("●");
 
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		const result = await promise;
 		expect(result).toBe("xy");
 	});
@@ -142,11 +129,11 @@ describe("password — masked rendering", () => {
 		await tick();
 		// Type a 10-character password
 		for (const ch of "abcdefghij") {
-			pressKey(ch);
+			pressKey(activePrompt, ch);
 			await tick();
 		}
 
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await promise;
 
 		// After submission, should show exactly 4 mask characters (SUBMITTED_MASK_LENGTH)
@@ -161,7 +148,7 @@ describe("password — masked rendering", () => {
 		// U+2502 (│) is the cursor character
 		expect(screen()).toContain("\u2502");
 
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await promise;
 	});
 });
@@ -180,22 +167,22 @@ describe("password — validation", () => {
 		});
 
 		await tick();
-		pressKey("a");
+		pressKey(activePrompt, "a");
 		await tick();
-		pressKey("b");
+		pressKey(activePrompt, "b");
 		await tick();
 		// Try to submit invalid value (too short)
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await tick();
 
 		expect(screen()).toContain("Password must be at least 4 characters");
 
 		// Type more and resubmit
-		pressKey("c");
+		pressKey(activePrompt, "c");
 		await tick();
-		pressKey("d");
+		pressKey(activePrompt, "d");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("abcd");
@@ -214,13 +201,13 @@ describe("password — no message", () => {
 		expect(screen()).toContain("Enter a password");
 		expect(screen()).not.toContain("undefined");
 
-		pressKey("s");
+		pressKey(activePrompt, "s");
 		await tick();
-		pressKey("e");
+		pressKey(activePrompt, "e");
 		await tick();
-		pressKey("c");
+		pressKey(activePrompt, "c");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe("sec");
@@ -230,9 +217,9 @@ describe("password — no message", () => {
 		const promise = start({});
 
 		await tick();
-		pressKey("x");
+		pressKey(activePrompt, "x");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		await promise;
 		expect(screen()).toContain("Enter a password");
@@ -281,15 +268,15 @@ describe("password — schema validation", () => {
 		});
 
 		await tick();
-		pressKey("4");
+		pressKey(activePrompt, "4");
 		await tick();
-		pressKey("2");
+		pressKey(activePrompt, "2");
 		await tick();
-		pressKey("4");
+		pressKey(activePrompt, "4");
 		await tick();
-		pressKey("2");
+		pressKey(activePrompt, "2");
 		await tick();
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 
 		const result = await promise;
 		expect(result).toBe(4242);
@@ -358,10 +345,10 @@ describe("password — secrecy", () => {
 
 		await tick();
 		for (const ch of SECRET) {
-			pressKey(ch);
+			pressKey(activePrompt, ch);
 			await tick();
 		}
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await promise;
 
 		expect(screen()).not.toContain(SECRET);
@@ -375,10 +362,10 @@ describe("password — secrecy", () => {
 
 		await tick();
 		for (const ch of SECRET) {
-			pressKey(ch);
+			pressKey(activePrompt, ch);
 			await tick();
 		}
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		// Schema validation is async; a fixed tick races the error render on slow runners.
 		await waitForScreen("too short");
 
@@ -387,14 +374,14 @@ describe("password — secrecy", () => {
 
 		// Resolve the prompt cleanly with a long-enough valid value.
 		for (let i = 0; i < SECRET.length; i++) {
-			pressKey("", { name: "backspace" });
+			pressKey(activePrompt, "", { name: "backspace" });
 			await tick();
 		}
 		for (const ch of "x".repeat(64)) {
-			pressKey(ch);
+			pressKey(activePrompt, ch);
 			await tick();
 		}
-		pressKey("", { name: "return" });
+		pressKey(activePrompt, "", { name: "return" });
 		await promise;
 	});
 });

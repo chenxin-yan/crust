@@ -14,7 +14,6 @@ export type {
 	PromptTheme,
 	ValidateFn,
 } from "./core/types.ts";
-export type { NormalizedChoice } from "./core/utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Theme
@@ -71,10 +70,4 @@ export { select } from "./prompts/select.ts";
 
 export { fuzzyFilter, fuzzyMatch } from "./core/fuzzy.ts";
 export type { TextEditResult, TextEditState } from "./core/textEdit.ts";
-export { CURSOR_CHAR, handleTextEdit } from "./core/textEdit.ts";
-export {
-	calculateScrollOffset,
-	formatPromptLine,
-	formatSubmitted,
-	normalizeChoices,
-} from "./core/utils.ts";
+export { handleTextEdit } from "./core/textEdit.ts";
