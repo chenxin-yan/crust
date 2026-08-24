@@ -88,7 +88,7 @@ describe("public beta API", () => {
 
 		const app = new Crust("my-cli").extend(version).action(({ flags, ctx }) => {
 			type _ctx = Expect<Equal<typeof ctx, ContextBag>>;
-			expect((flags as Record<string, unknown>).version).toBe(true);
+			expect(flags.version).toBe(true);
 		});
 
 		await app.execute({ argv: ["--version"] });
@@ -102,7 +102,7 @@ describe("public beta API", () => {
 			flags: [{ name: "debug", type: "boolean" }],
 		});
 		const app = new Crust("repeat").extend(debug).action(({ flags }) => {
-			if ((flags as Record<string, unknown>).debug) {
+			if (flags.debug) {
 				runCount++;
 			}
 		});

@@ -8,10 +8,14 @@ const originalStderrIsTTY = process.stderr.isTTY;
 
 let stderrOutput: string;
 
+function isStringChunk(chunk: string | Uint8Array): chunk is string {
+	return typeof chunk === "string";
+}
+
 beforeEach(() => {
 	stderrOutput = "";
 	process.stderr.write = (chunk: string | Uint8Array) => {
-		if (typeof chunk === "string") stderrOutput += chunk;
+		if (isStringChunk(chunk)) stderrOutput += chunk;
 		return true;
 	};
 	Object.defineProperty(process.stderr, "isTTY", {

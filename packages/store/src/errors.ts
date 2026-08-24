@@ -125,6 +125,10 @@ export type StoreErrorDetails<C extends StoreErrorCode> = StoreErrorDetailsMap[C
  * }
  * ```
  */
+function sameStoreErrorCode(left: StoreErrorCode, right: StoreErrorCode): boolean {
+	return left === right;
+}
+
 export class CrustStoreError<C extends StoreErrorCode = StoreErrorCode> extends Error {
 	/** Machine-readable error code for programmatic handling. */
 	readonly code: C;
@@ -142,6 +146,7 @@ export class CrustStoreError<C extends StoreErrorCode = StoreErrorCode> extends 
 		super(message, { cause });
 		this.name = "CrustStoreError";
 		this.code = code;
+		// SAFETY: the conditional details tuple requires a value exactly when this error code owns details.
 		this.details = details as StoreErrorDetails<C>;
 	}
 
@@ -160,6 +165,6 @@ export class CrustStoreError<C extends StoreErrorCode = StoreErrorCode> extends 
 	 * ```
 	 */
 	is<T extends StoreErrorCode>(code: T): this is CrustStoreError<T> {
-		return (this.code as StoreErrorCode) === code;
+		return sameStoreErrorCode(this.code, code);
 	}
 }

@@ -11,6 +11,7 @@ import {
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { bold, cyan, dim, green } from "@crustjs/style";
+import type { JsonValue } from "@crustjs/utils/json";
 
 import {
 	type BunTarget,
@@ -60,7 +61,7 @@ type PublishPackageMetadata = {
 	bugs?: NpmBugs;
 	repository?: NpmRepository;
 	keywords?: string[];
-	publishConfig?: Record<string, unknown>;
+	publishConfig?: Record<string, JsonValue>;
 	funding?: NpmFunding;
 	engines?: Record<string, string>;
 };
@@ -132,6 +133,7 @@ function readPackageJson(cwd: string): UserPackageJson {
 	}
 
 	try {
+		// SAFETY: required identity fields are validated before use; optional npm metadata is copied without interpretation.
 		return JSON.parse(readFileSync(packageJsonPath, "utf-8")) as UserPackageJson;
 	} catch (error) {
 		throw new Error(
@@ -153,6 +155,10 @@ export function getPackagePathSegment(packageName: string): string {
 	return packageName.startsWith("@") ? (packageName.split("/")[1] ?? packageName) : packageName;
 }
 
+function isBinPath(bin: UserPackageJson["bin"]): bin is string {
+	return typeof bin === "string";
+}
+
 export function inferCommandName(
 	rootPackageName: string,
 	bin: UserPackageJson["bin"],
@@ -160,7 +166,7 @@ export function inferCommandName(
 ): string {
 	if (!bin) return baseName;
 
-	if (typeof bin === "string") {
+	if (isBinPath(bin)) {
 		return rootPackageName.replace(/^@[^/]+\//, "");
 	}
 
@@ -192,13 +198,13 @@ export function buildDistributionRootPackageJson(
 		version: metadata.version,
 		type: "module",
 		files: ["bin", ...artifactDirs],
-		...(manPages.length > 0 ? { man: manPages.map((page) => `./man/${page}`) } : {}),
 		bin: {
 			[metadata.commandName]: `bin/${metadata.commandName}.js`,
 		},
 		optionalDependencies: Object.fromEntries(
 			targets.map((target) => [target.packageName, metadata.version]),
 		),
+		...(manPages.length > 0 ? { man: manPages.map((page) => `./man/${page}`) } : {}),
 	};
 
 	return rootPackageJson;
@@ -401,7 +407,7 @@ child.on("exit", (code, signal) => {
 `;
 }
 
-function writeJson(path: string, value: unknown): void {
+function writeJson<T>(path: string, value: T): void {
 	writeFileSync(path, `${JSON.stringify(value, null, "\t")}\n`);
 }
 
@@ -563,10 +569,12 @@ function isWithin(parent: string, child: string): boolean {
 	return path === "" || (!isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`));
 }
 
+type CollectedArtifacts = { names: string[]; manPages: string[] };
+
 function collectArtifacts(
 	artifactOutDir: string | undefined,
 	stageDir: string,
-): { names: string[]; manPages: string[] } {
+): CollectedArtifacts {
 	if (!artifactOutDir || !existsSync(artifactOutDir)) {
 		return { names: [], manPages: [] };
 	}

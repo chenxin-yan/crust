@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { Crust, defineCommand } from "../command/crust.ts";
+import type { CaughtError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
 import {
 	type AnyContextFactory,
@@ -15,6 +16,7 @@ import { defineExtension } from "./extension.ts";
 import { defineFlag } from "./flags.ts";
 
 type Assert<T extends true> = T;
+type MutableDisposable = Partial<Disposable>;
 type IsEqual<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
@@ -23,7 +25,7 @@ describe("defineContext()", () => {
 		const auth = defineContext("auth", () => ({ user: "chenxin" }));
 
 		// The definition itself is a factory, not an instance
-		expect(typeof auth).toBe("function");
+		expect(auth).toBeInstanceOf(Function);
 		expect(auth.contextName).toBe("auth");
 
 		const instance = auth();
@@ -298,7 +300,7 @@ describe("Context-owned flags", () => {
 			type _ActionApiKey = Assert<IsEqual<(typeof flags)["api-key"], string | undefined>>;
 			seen.push((await ctx.auth).apiKey);
 		});
-		await app.run([], { flags: { "api-key": "secret" } } as never);
+		await app.run([], { flags: { "api-key": "secret" } });
 
 		expect(seen).toEqual(["secret", "secret"]);
 	});
@@ -386,7 +388,7 @@ describe("Context-owned flags", () => {
 		await new Crust("cli")
 			.provide(auth())
 			.add(deploy)
-			.run(["deploy"], { flags: { "api-key": "secret" } } as never);
+			.run(["deploy"], { flags: { "api-key": "secret" } });
 		expect(seen).toEqual(["secret"]);
 	});
 
@@ -746,14 +748,20 @@ describe("Context dependency runtime boundaries", () => {
 			name: "a",
 			ownedFlags: {},
 			uses: [bFactory],
-			setup: async ({ ctx }) => await ctx.b,
+			setup: async ({ ctx }) => {
+				// SAFETY: this malformed dynamic cycle fixture declares b through uses.
+				return await (ctx as ContextBag<{ b: string }>).b;
+			},
 		};
 		const b: ContextInstance<"b"> = {
 			kind: "context",
 			name: "b",
 			ownedFlags: {},
 			uses: [aFactory],
-			setup: async ({ ctx }) => await ctx.a,
+			setup: async ({ ctx }) => {
+				// SAFETY: this malformed dynamic cycle fixture declares a through uses.
+				return await (ctx as ContextBag<{ a: string }>).a;
+			},
 		};
 		const app = new Crust("cli").provide(a, b).action(async ({ ctx }) => void (await ctx.a));
 
@@ -765,8 +773,8 @@ describe("Context dependency runtime boundaries", () => {
 	it("pre-handles early bag rejections so enumeration cannot crash the process", async () => {
 		const token = defineFlag("token", { type: "string" });
 		const gate = defineContext("gate", { flags: [token] }, () => "gate");
-		let unhandled: unknown;
-		const onUnhandled = (error: unknown) => {
+		let unhandled: CaughtError;
+		const onUnhandled = (error: CaughtError) => {
 			unhandled = error;
 		};
 		process.on("unhandledRejection", onUnhandled);
@@ -1165,7 +1173,7 @@ describe("Context disposal", () => {
 
 	it("disposes a shared value decorated with a disposer after first being returned bare", async () => {
 		let disposals = 0;
-		const shared: Record<PropertyKey, unknown> = {};
+		const shared: MutableDisposable = {};
 		const bare = defineContext("bare", () => shared);
 		const decorated = defineContext("decorated", { uses: [bare] }, async ({ ctx }) => {
 			const value = await ctx.bare;

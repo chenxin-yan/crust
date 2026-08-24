@@ -28,13 +28,13 @@ import { walkCommandNode } from "./walker.ts";
 describe("walker · validation", () => {
 	it("rejects command names containing whitespace", () => {
 		const cli = new Crust("bad")
-			.add(defineCommand("two words" as string, (c) => c.action(() => {})))
+			.add(defineCommand("two words", (c) => c.action(() => {})))
 			.action(() => {});
 		expect(() => walkCommandNode(snapshotCommand(cli._node))).toThrow(/invalid command name/);
 	});
 
 	it("rejects flag names with shell metacharacters", () => {
-		const cli = new Crust("bad").flags({ name: "a;rm", type: "boolean" } as never).action(() => {});
+		const cli = new Crust("bad").flags({ name: "a;rm", type: "boolean" }).action(() => {});
 		expect(() => walkCommandNode(snapshotCommand(cli._node))).toThrow(/invalid flag name/);
 	});
 
@@ -200,6 +200,12 @@ for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
 // ── --output-dir traversal ───────────────────────────────────────────────
 
 describe("completion · --output-dir traversal", () => {
+	type StdoutChunk = Parameters<typeof process.stdout.write>[0];
+
+	function isStringChunk(chunk: StdoutChunk): chunk is string {
+		return typeof chunk === "string";
+	}
+
 	let stdoutBuf: Buffer[];
 	let originalWrite: typeof process.stdout.write;
 	let originalError: typeof console.error;
@@ -210,8 +216,8 @@ describe("completion · --output-dir traversal", () => {
 		originalWrite = process.stdout.write.bind(process.stdout);
 		originalError = console.error;
 		originalExitCode = process.exitCode;
-		process.stdout.write = (chunk: unknown) => {
-			if (typeof chunk === "string") {
+		process.stdout.write = (chunk: StdoutChunk) => {
+			if (isStringChunk(chunk)) {
 				stdoutBuf.push(Buffer.from(chunk, "utf8"));
 			} else if (chunk instanceof Uint8Array) {
 				stdoutBuf.push(Buffer.from(chunk));

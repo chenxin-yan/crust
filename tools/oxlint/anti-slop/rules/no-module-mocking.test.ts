@@ -1,0 +1,55 @@
+import { RuleTester } from "oxlint/plugins-dev";
+
+import { noModuleMockingRule } from "./no-module-mocking.ts";
+
+const tester = new RuleTester({ languageOptions: { parserOptions: { lang: "ts" } } });
+const error = { messageId: "moduleMock" };
+
+tester.run("anti-slop/no-module-mocking", noModuleMockingRule, {
+	valid: [
+		"const store = new InMemoryUserStore();",
+		"vi.spyOn(store, 'save');",
+		"const vi = { mock() {} }; vi.mock();",
+		"function test(jest: { mock(): void }) { jest.mock(); }",
+		"import { vi as localVi } from './helpers'; localVi.mock('./module');",
+		"const mock = { module() {} }; mock.module('./module');",
+		"import { mock } from 'bun:test'; mock.restore();",
+		"import * as bunTest from './bun-test'; bunTest.mock.module('./module');",
+	],
+	invalid: [
+		{ code: "vi.mock('./user-store');", errors: [error] },
+		{ code: "jest.mock('./user-store');", errors: [error] },
+		{ code: "jest.setMock('./user-store', {});", errors: [error] },
+		{ code: "vi['doMock']('./user-store');", errors: [error] },
+		{ code: "jest.unstable_mockModule('./user-store');", errors: [error] },
+		{ code: "import { vi } from 'vitest'; vi.mock('./user-store');", errors: [error] },
+		{
+			code: "import { vi as testApi } from 'vitest'; testApi.mock('./user-store');",
+			errors: [error],
+		},
+		{
+			code: "import { jest } from '@jest/globals'; jest.mock('./user-store');",
+			errors: [error],
+		},
+		{
+			code: "import { mock } from 'bun:test'; mock.module('./user-store', () => ({}));",
+			errors: [error],
+		},
+		{
+			code: "import { mock as bunMock } from 'bun:test'; bunMock['module']('./user-store', () => ({}));",
+			errors: [error],
+		},
+		{
+			code: "import * as bunTest from 'bun:test'; bunTest.mock.module('./user-store', () => ({}));",
+			errors: [error],
+		},
+		{
+			code: "import * as vitest from 'vitest'; vitest.vi.mock('./user-store');",
+			errors: [error],
+		},
+		{
+			code: "import * as jestGlobals from '@jest/globals'; jestGlobals.jest.mock('./user-store');",
+			errors: [error],
+		},
+	],
+});

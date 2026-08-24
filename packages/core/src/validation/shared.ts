@@ -45,9 +45,11 @@ export type IsStaticTuple<Cs extends readonly unknown[]> = number extends Cs["le
 export type Overlap<S, Existing extends string> = S & Existing;
 
 /** Brand a statically known empty literal while allowing widened and generic names. */
+/* oxlint-disable anti-slop/no-unsafe-dictionary-type -- indexed type preserves deferred generic-name behavior while unknown means unbranded. */
 export type EmptyLiteralNameBrand<Name extends string, Err> = ({
 	readonly "": Err;
 } & Record<string, unknown>)[Name];
+/* oxlint-enable anti-slop/no-unsafe-dictionary-type */
 
 /**
  * Brand a definition whose custom parser can return a Promise — parse results

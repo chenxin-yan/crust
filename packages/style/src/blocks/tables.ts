@@ -64,7 +64,7 @@ export interface TableOptions {
  */
 function computeColumnWidths(headers: string[], rows: string[][], minWidth: number): number[] {
 	const columnCount = headers.length;
-	const widths: number[] = new Array(columnCount).fill(minWidth) as number[];
+	const widths = Array<number>(columnCount).fill(minWidth);
 
 	for (let col = 0; col < columnCount; col++) {
 		const header = headers[col];

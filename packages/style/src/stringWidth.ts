@@ -47,6 +47,7 @@ export function stringWidthJs(input: string): number {
 
 /** Measure terminal columns, ignoring ANSI escapes. */
 export function stringWidth(input: string): number {
+	// SAFETY: this only describes the optional Bun global; optional access preserves portability.
 	const bun = (
 		globalThis as {
 			Bun?: {

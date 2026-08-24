@@ -5,6 +5,7 @@
 
 import type { AnsiPair } from "./ansiCodes.ts";
 import { namedColorValues } from "./namedColorValues.ts";
+import type { NamedColor } from "./namedColorValues.ts";
 import { applyStyle } from "./styleEngine.ts";
 import type { ColorDepth, ColorInput } from "./types.ts";
 
@@ -28,16 +29,21 @@ const BG_INTRODUCER = "\x1b[48;";
 // Internal helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Quote strings, JSON-stringify objects, fall back to `String()`. */
-function describeInput(input: unknown): string {
-	if (typeof input === "string" || (input !== null && typeof input === "object")) {
-		try {
-			return JSON.stringify(input);
-		} catch {
-			return String(input);
-		}
+/** Quote supported inputs, falling back to `String()` for hostile runtime values. */
+function describeInput(input: ColorInput): string {
+	try {
+		return JSON.stringify(input) ?? String(input);
+	} catch {
+		return String(input);
 	}
-	return String(input);
+}
+
+function isColorString(input: ColorInput): input is string {
+	return typeof input === "string";
+}
+
+function isNamedColor(value: string): value is NamedColor {
+	return Object.hasOwn(namedColorValues, value);
 }
 
 /** Parse a supported color into an RGB triple. */
@@ -47,12 +53,12 @@ function parseRgb(input: ColorInput): readonly [number, number, number] {
 			input.length === 3 &&
 			input.every((channel) => Number.isInteger(channel) && channel >= 0 && channel <= 255)
 		) {
-			return input as readonly [number, number, number];
+			return [input[0], input[1], input[2]];
 		}
-	} else if (typeof input === "string") {
+	} else if (isColorString(input)) {
 		const value = input.toLowerCase();
-		if (Object.hasOwn(namedColorValues, value)) {
-			return namedColorValues[value as keyof typeof namedColorValues];
+		if (isNamedColor(value)) {
+			return namedColorValues[value];
 		}
 
 		const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(value)?.[1];
@@ -64,9 +70,11 @@ function parseRgb(input: ColorInput): readonly [number, number, number] {
 							.map((digit) => digit + digit)
 							.join("")
 					: hex;
-			return [0, 2, 4].map((offset) =>
-				Number.parseInt(expanded.slice(offset, offset + 2), 16),
-			) as unknown as readonly [number, number, number];
+			return [
+				Number.parseInt(expanded.slice(0, 2), 16),
+				Number.parseInt(expanded.slice(2, 4), 16),
+				Number.parseInt(expanded.slice(4, 6), 16),
+			];
 		}
 
 		// Comma form and space form are matched separately so mixed separators
@@ -75,9 +83,8 @@ function parseRgb(input: ColorInput): readonly [number, number, number] {
 			/^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/.exec(value) ??
 			/^rgb\(\s*(\d{1,3})\s+(\d{1,3})\s+(\d{1,3})\s*\)$/.exec(value);
 		if (rgb) {
-			const channels = rgb.slice(1).map(Number);
-			if (channels.every((channel) => channel <= 255))
-				return channels as unknown as readonly [number, number, number];
+			const channels = [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])] as const;
+			if (channels.every((channel) => channel <= 255)) return channels;
 		}
 	}
 	throw new TypeError(`Invalid color input: ${describeInput(input)}`);

@@ -9,6 +9,7 @@ on:
       - ".changeset/**"
       - "packages/**"
       - "scripts/**"
+      - "tools/**"
       - "package.json"
       - "bun.lock"
       - "turbo.json"
@@ -122,7 +123,7 @@ jobs:
 
       - name: Build, type check, and test
         run: |
-          bun turbo run build check:types test --filter='./packages/*'
+          bun turbo run build check:types test --filter='./packages/*' --filter='./tools'
           bun test scripts
 
       # Portable packages must not reference Bun APIs: typecheck (@types/bun),

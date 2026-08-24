@@ -13,6 +13,7 @@ describe("encodeKey", () => {
 
 	it("throws on unsupported key names instead of typing them", () => {
 		expect(() => encodeKey("pageup")).toThrow("Unsupported key name");
+		expect(() => encodeKey("constructor")).toThrow("Unsupported key name");
 		expect(() => encodeKey("")).toThrow("Unsupported key name");
 	});
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
+import type { StandardSchema } from "@crustjs/utils/schema";
 import { z } from "zod";
 
 import type { CreateStoreOptions, FieldsDef, InferStoreConfig } from "./types.ts";
@@ -107,6 +108,31 @@ describe("InferStoreConfig", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("FieldDef", () => {
+	it("accepts schemas that output structurally JSON-compatible named interfaces", () => {
+		interface Payload {
+			name: string;
+			nested: { enabled: boolean };
+		}
+		const schema = {} as StandardSchema<unknown, Payload>;
+		const fields = { payload: { schema } } as const satisfies FieldsDef;
+		const options: CreateStoreOptions<typeof fields> = {
+			dirPath: "/tmp",
+			name: "named-json",
+			fields,
+		};
+		expect(options.fields).toBe(fields);
+
+		const dateSchema = {} as StandardSchema<unknown, { createdAt: Date }>;
+		const invalidFields = { payload: { schema: dateSchema } } as const satisfies FieldsDef;
+		const invalidOptions: CreateStoreOptions<typeof invalidFields> = {
+			dirPath: "/tmp",
+			name: "non-json",
+			// @ts-expect-error -- schema outputs remain recursively constrained to JSON data
+			fields: invalidFields,
+		};
+		void invalidOptions;
+	});
+
 	it("rejects mixing schema with core value options", () => {
 		const fields: FieldsDef = {
 			// @ts-expect-error — schema exclusively owns defaults

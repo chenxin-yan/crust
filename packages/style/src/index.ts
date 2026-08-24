@@ -68,6 +68,7 @@ export type {
 	ColorMode,
 	ColorString,
 	StyleFn,
+	StyleInput,
 	StyleInstance,
 	StyleOptions,
 } from "./types.ts";

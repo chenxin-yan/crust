@@ -144,10 +144,10 @@ export async function validateSubmitValue<Output>(
 ): Promise<{ ok: true; value: Output | string } | { ok: false; error: string }> {
 	if (schema) {
 		const result = await schema["~standard"].validate(value);
-		if (result.issues?.length) {
-			return { ok: false, error: result.issues[0]?.message || "Validation failed" };
-		}
-		return { ok: true, value: (result as { value: Output }).value };
+		const issue = result.issues?.[0];
+		if (issue) return { ok: false, error: issue.message || "Validation failed" };
+		if ("value" in result) return { ok: true, value: result.value };
+		return { ok: false, error: "Validation failed" };
 	}
 	if (validate) {
 		try {
@@ -166,9 +166,9 @@ export async function parseShortCircuit<Output>(
 	source: "initial" | "default",
 ): Promise<Output> {
 	const result = await schema["~standard"].validate(value);
-	if (result.issues?.length) {
-		const message = result.issues[0]?.message || "Validation failed";
-		throw new Error(`${source} value rejected by schema: ${message}`);
-	}
-	return (result as { value: Output }).value;
+	const issue = result.issues?.[0];
+	if (issue)
+		throw new Error(`${source} value rejected by schema: ${issue.message || "Validation failed"}`);
+	if ("value" in result) return result.value;
+	throw new Error(`${source} value rejected by schema: Validation failed`);
 }

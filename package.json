@@ -24,9 +24,9 @@
 		"@changesets/cli": "^3.0.1",
 		"@types/bun": "^1.4.0",
 		"oxfmt": "^0.64.0",
-		"publint": "^0.3.24",
 		"oxlint": "^1.79.0",
 		"oxlint-tsgolint": "^7.0.2001",
+		"publint": "^0.3.24",
 		"tsdown": "^0.22.14",
 		"turbo": "^2.10.11",
 		"typescript": "^7.0.2"
@@ -38,7 +38,8 @@
 	"packageManager": "bun@1.4.0",
 	"workspaces": [
 		"apps/*",
-		"packages/*"
+		"packages/*",
+		"tools"
 	],
 	"overrides": {
 		"@types/node": "^24"

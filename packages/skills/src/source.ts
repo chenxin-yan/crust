@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { isErrnoException } from "@crustjs/utils/error";
 import { resolveSourceDir } from "@crustjs/utils/source";
 
 import { probeFrontmatter } from "./bundle.ts";
@@ -71,7 +72,7 @@ export function readSkillFrontmatter(
 		content = readFileSync(join(sourceDir, "SKILL.md"), "utf8");
 	} catch (error) {
 		// ENOENT: the directory is not a skill; anything else (EACCES, EISDIR) is unexpected.
-		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+		if (!isErrnoException(error) || error.code !== "ENOENT") throw error;
 		throw new Error(`Skill source directory "${sourceDir}" is missing SKILL.md.`, { cause: error });
 	}
 	const frontmatter = probeFrontmatter(content);

@@ -55,10 +55,17 @@ function findFile(files: RenderedFile[], path: string): RenderedFile | undefined
 	return files.find((f) => f.path === path);
 }
 
+function hasTextContent(
+	file: RenderedFile | undefined,
+): file is RenderedFile & { content: string } {
+	return typeof file?.content === "string";
+}
+
 function expectTextContent(file: RenderedFile | undefined): string {
 	expect(file).toBeDefined();
-	expect(typeof file?.content).toBe("string");
-	return file?.content as string;
+	expect(hasTextContent(file)).toBe(true);
+	if (!hasTextContent(file)) throw new Error("Expected rendered text content");
+	return file.content;
 }
 
 /**

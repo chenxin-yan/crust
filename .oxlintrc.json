@@ -5,6 +5,7 @@
 		"reportUnusedDisableDirectives": "deny"
 	},
 	"plugins": ["unicorn", "typescript", "oxc", "import", "promise", "node"],
+	"jsPlugins": [{ "name": "anti-slop", "specifier": "./tools/oxlint/anti-slop/index.ts" }],
 	"categories": {
 		"correctness": "error",
 		"suspicious": "error"
@@ -15,12 +16,30 @@
 		"unicorn/no-useless-spread": "off",
 
 		"eslint/no-underscore-dangle": "off",
+		"eslint/no-restricted-properties": [
+			"error",
+			{
+				"object": "Reflect",
+				"property": "apply",
+				"message": "Replace `Reflect.apply` with a typed function call. Model dynamic dispatch behind a named interface."
+			},
+			{
+				"object": "Reflect",
+				"property": "get",
+				"message": "Replace `Reflect.get` with typed property access. Parse dynamic input into a named domain type before reading it."
+			},
+			{
+				"object": "Reflect",
+				"property": "set",
+				"message": "Replace `Reflect.set` with typed property assignment. Parse dynamic input into a named domain type before writing it."
+			}
+		],
 		"unicorn/no-array-sort": "off",
 		"unicorn/consistent-function-scoping": "off",
 		"typescript/no-unsafe-type-assertion": "off",
 		"typescript/no-base-to-string": "off",
 		"typescript/consistent-return": "off",
-		"typescript/no-unnecessary-type-assertion": "off",
+		"typescript/no-unnecessary-type-assertion": "error",
 		"typescript/no-unnecessary-type-parameters": "off",
 		"typescript/restrict-template-expressions": "off",
 
@@ -36,7 +55,18 @@
 			{ "considerDefaultExhaustiveForUnions": true }
 		],
 
-		"promise/always-return": "off"
+		"promise/always-return": "off",
+
+		"anti-slop/no-chained-type-assertions": "error",
+		"anti-slop/no-known-value-widening": "error",
+		"anti-slop/no-module-mocking": "error",
+		"anti-slop/no-object-parameters": "error",
+		"anti-slop/no-runtime-typeof": ["error", { "allowInTypeGuards": true }],
+		"anti-slop/no-unknown-parameters": ["error", { "allowInBoundaryFunctions": true }],
+		"anti-slop/no-unknown-returns": "error",
+		"anti-slop/no-unknown-type-aliases": "error",
+		"anti-slop/no-unsafe-dictionary-type": "error",
+		"anti-slop/require-safety-comment-for-type-assertion": "error"
 	},
 	"ignorePatterns": [
 		"**/node_modules/",
@@ -61,7 +91,8 @@
 				"eslint/no-new": "off",
 				"eslint/no-shadow": "off",
 				"typescript/unbound-method": "off",
-				"typescript/await-thenable": "off"
+				"typescript/await-thenable": "off",
+				"anti-slop/require-safety-comment-for-type-assertion": "off"
 			}
 		}
 	]

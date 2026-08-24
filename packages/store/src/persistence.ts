@@ -5,7 +5,11 @@
 import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
+import { isErrnoException } from "@crustjs/utils/error";
+import type { JsonValue } from "@crustjs/utils/json";
+
 import { CrustStoreError } from "./errors.ts";
+import type { StoreDocument } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // WriteJsonOptions — File/directory permission control
@@ -53,7 +57,7 @@ export interface WriteJsonOptions {
  * @throws {CrustStoreError} `PARSE` if the file contains malformed JSON.
  * @throws {CrustStoreError} `IO` on filesystem read failures other than ENOENT.
  */
-export async function readJson(filePath: string): Promise<unknown> {
+export async function readJson(filePath: string): Promise<JsonValue | undefined> {
 	let raw: string;
 
 	try {
@@ -111,7 +115,7 @@ export async function readJson(filePath: string): Promise<unknown> {
  */
 export async function writeJson(
 	filePath: string,
-	data: unknown,
+	data: Readonly<StoreDocument>,
 	options: WriteJsonOptions = {},
 ): Promise<void> {
 	// Unix permission bits are meaningless on Windows (it uses ACLs, not POSIX
@@ -232,6 +236,6 @@ export async function deleteJson(filePath: string): Promise<void> {
 /**
  * Checks whether a thrown error is a filesystem "file not found" error.
  */
-function isEnoent(err: unknown): boolean {
-	return (err as NodeJS.ErrnoException | null)?.code === "ENOENT";
+function isEnoent(cause: unknown): boolean {
+	return isErrnoException(cause) && cause.code === "ENOENT";
 }

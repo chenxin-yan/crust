@@ -115,6 +115,9 @@ export interface StyleOptions {
 	readonly overrides?: CapabilityOverrides;
 }
 
+/** Input accepted by style functions. Nullish values become an empty string; others are stringified. */
+export type StyleInput = { toString(): string } | null | undefined;
+
 /**
  * A style function that applies an ANSI style pair to text,
  * respecting the configured color mode.
@@ -161,7 +164,7 @@ export interface ChainableStyleFn extends StyleMethodMap, AnsiPair {
 	 * Apply the chain to a string. `null` / `undefined` return `""`;
 	 * other non-string inputs are stringified via `String(value)`.
 	 */
-	(text: string): string;
+	(text: StyleInput): string;
 	/**
 	 * Apply the chain to a tagged template literal. Interpolated values
 	 * are coerced via `String(...)`; nested chain calls inside `${...}`

@@ -9,6 +9,14 @@
 
 import type { AnyCrust } from "../src/command/crust.ts";
 
+function isString<T>(value: T): value is T & string {
+	return typeof value === "string";
+}
+
+function stringifyConsoleArg<T>(value: T): string {
+	return isString(value) ? value : String(value);
+}
+
 export interface RunResult {
 	stdout: string;
 	stderr: string;
@@ -36,13 +44,13 @@ export async function executeCrust(builder: AnyCrust, argv?: string[]): Promise<
 
 	// Mock console to capture output
 	console.log = (...args: unknown[]) => {
-		stdoutChunks.push(args.map((a) => (typeof a === "string" ? a : String(a))).join(" "));
+		stdoutChunks.push(args.map(stringifyConsoleArg).join(" "));
 	};
 	console.error = (...args: unknown[]) => {
-		stderrChunks.push(args.map((a) => (typeof a === "string" ? a : String(a))).join(" "));
+		stderrChunks.push(args.map(stringifyConsoleArg).join(" "));
 	};
 	console.warn = (...args: unknown[]) => {
-		stderrChunks.push(args.map((a) => (typeof a === "string" ? a : String(a))).join(" "));
+		stderrChunks.push(args.map(stringifyConsoleArg).join(" "));
 	};
 
 	try {
@@ -63,7 +71,7 @@ export async function executeCrust(builder: AnyCrust, argv?: string[]): Promise<
 			process.exitCode !== null &&
 			process.exitCode !== originalExitCode
 		) {
-			exitCode = process.exitCode as number;
+			exitCode = Number(process.exitCode);
 		}
 
 		// Restore original exit code

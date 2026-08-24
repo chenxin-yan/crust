@@ -188,6 +188,30 @@ export function isNewerVersion(current: string, latest: string): boolean {
 // Internal utilities — npm registry fetch
 // ────────────────────────────────────────────────────────────────────────────
 
+type RegistryResponseBody = Awaited<ReturnType<Response["json"]>>;
+
+function hasLatestDistTag(
+	value: RegistryResponseBody,
+): value is { "dist-tags": { latest: string } } {
+	if (
+		typeof value !== "object" ||
+		value === null ||
+		Array.isArray(value) ||
+		!("dist-tags" in value)
+	) {
+		return false;
+	}
+	const tags = value["dist-tags"];
+	return (
+		typeof tags === "object" &&
+		tags !== null &&
+		!Array.isArray(tags) &&
+		"latest" in tags &&
+		typeof tags.latest === "string" &&
+		tags.latest.length > 0
+	);
+}
+
 /**
  * Fetch the `dist-tags.latest` version string for a package from an npm
  * registry.
@@ -213,14 +237,10 @@ export async function fetchLatestVersion(
 
 		if (!response.ok) return null;
 
-		const data = (await response.json()) as {
-			"dist-tags"?: Record<string, string>;
-		};
+		const data = await response.json();
+		if (!hasLatestDistTag(data)) return null;
 
-		const latest = data?.["dist-tags"]?.latest;
-		if (typeof latest !== "string" || latest.length === 0) return null;
-
-		return latest;
+		return data["dist-tags"].latest;
 	} catch {
 		// Network error, abort, JSON parse failure — all soft failures
 		return null;
@@ -234,20 +254,13 @@ export async function fetchLatestVersion(
 function normalizeNotifierState(
 	input: UpdateNotifierState | null | undefined,
 ): UpdateNotifierState {
-	if (!input || typeof input !== "object") return { lastCheckedAt: 0 };
+	if (!input) return { lastCheckedAt: 0 };
 
-	const lastCheckedAt =
-		typeof input.lastCheckedAt === "number" && Number.isFinite(input.lastCheckedAt)
-			? input.lastCheckedAt
-			: 0;
-	const latestVersion =
-		typeof input.latestVersion === "string" && input.latestVersion.length > 0
-			? input.latestVersion
-			: undefined;
-	const lastNotifiedVersion =
-		typeof input.lastNotifiedVersion === "string" && input.lastNotifiedVersion.length > 0
-			? input.lastNotifiedVersion
-			: undefined;
+	const lastCheckedAt = Number.isFinite(input.lastCheckedAt) ? input.lastCheckedAt : 0;
+	const latestVersion = input.latestVersion?.length ? input.latestVersion : undefined;
+	const lastNotifiedVersion = input.lastNotifiedVersion?.length
+		? input.lastNotifiedVersion
+		: undefined;
 
 	return {
 		lastCheckedAt,
@@ -317,6 +330,16 @@ function defaultUpdateCommand(
 		: `npm install ${packageName}@latest`;
 }
 
+function isStringUpdateCommand(value: UpdateNotifierOptions["updateCommand"]): value is string {
+	return typeof value === "string";
+}
+
+function isUpdateCommandResolver(
+	value: UpdateNotifierOptions["updateCommand"],
+): value is Exclude<UpdateNotifierOptions["updateCommand"], string | undefined> {
+	return typeof value === "function";
+}
+
 function resolveUpdateCommand(
 	packageName: string,
 	packageManagerOption: UpdateNotifierPackageManager | "auto" | undefined,
@@ -330,16 +353,16 @@ function resolveUpdateCommand(
 		  ) => string)
 		| undefined,
 ): string | undefined {
-	if (typeof override === "string") return override;
+	if (isStringUpdateCommand(override)) return override;
 
-	if (typeof override !== "function" && installScopeOption === undefined) return undefined;
+	if (!isUpdateCommandResolver(override) && installScopeOption === undefined) return undefined;
 
 	const detectedPackageManager =
 		packageManagerOption && packageManagerOption !== "auto"
 			? packageManagerOption
 			: detectPackageManager();
 
-	if (typeof override === "function") {
+	if (isUpdateCommandResolver(override)) {
 		return override(packageName, detectedPackageManager, installScopeOption);
 	}
 	return installScopeOption

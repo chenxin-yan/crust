@@ -1,3 +1,5 @@
+import type { JsonCompatible, JsonValue } from "@crustjs/utils/json";
+
 import type {
 	AnyContextFactory,
 	ContextBag,
@@ -62,7 +64,7 @@ import {
 	prepareInvocationSnapshot,
 	runInvocation,
 } from "./invocation.ts";
-import { type CommandNode, createCommandNode } from "./node.ts";
+import { type CommandAction, type CommandNode, createCommandNode } from "./node.ts";
 import { resolveCommand } from "./router.ts";
 import { snapshotCommand } from "./snapshot.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
@@ -179,6 +181,31 @@ export type RunInput<Shape extends CommandShape> = RunSection<"args", InputArgs<
 		readonly raw?: readonly string[];
 	};
 
+type CompatibleRunValue<Expected, Actual> = Actual extends Expected
+	? Actual
+	: JsonValue extends Expected
+		? Actual extends JsonCompatible<Actual>
+			? Actual
+			: never
+		: Expected extends readonly (infer Item)[]
+			? JsonValue extends Item
+				? Actual extends JsonCompatible<Actual>
+					? Actual
+					: never
+				: never
+			: Actual extends object
+				? {
+						[K in keyof Expected]: K extends keyof Actual
+							? CompatibleRunValue<Exclude<Expected[K], undefined>, Actual[K]>
+							: Expected[K];
+					} & { [K in Exclude<keyof Actual, keyof Expected>]: never }
+				: never;
+
+type CompatibleRunInput<Shape extends CommandShape, Input> = CompatibleRunValue<
+	RunInput<Shape>,
+	Input
+>;
+
 export type RunInputArguments<Shape extends CommandShape> =
 	RequiredKeys<RunInput<Shape>> extends never
 		? readonly [input?: RunInput<Shape>]
@@ -208,7 +235,7 @@ export type RootCommandMeta = Pick<CommandMeta, "description" | "usage"> & {
 };
 
 function copyUnvalidatedSections(sections: readonly CommandSectionInput[]): CommandSection[] {
-	// Preparation replaces these inputs with validated sections before snapshots or renderers see them.
+	// SAFETY: preparation validates and replaces these author inputs before any consumer observes them.
 	return sections.map((section) => ({ ...section })) as CommandSection[];
 }
 
@@ -278,17 +305,16 @@ function materializeCommandDefinition(
 	});
 
 	const child = new Crust(name);
-	(child as { _ancestorOwnedFlags: FlagsDef })._ancestorOwnedFlags = parent.ownedFlags;
+	child._ancestorOwnedFlags = parent.ownedFlags;
 	child._node.ownedFlags = { ...parent.ownedFlags };
 	child._node.effectiveFlags = { ...parent.ownedFlags };
 	child._node.flagSpellings = cloneFlagSpellings(parent.flagSpellings, child._node.effectiveFlags);
-	(child._node as { contexts: ContextInstance[] }).contexts = [...parent.contexts];
+	child._node.contexts = [...parent.contexts];
 	child._node.contextExtensionIds = [...parent.contextExtensionIds];
 
-	const configured = internal.recipe(
-		child as unknown as AnyCommandDefinitionBuilder,
-	) as unknown as Crust;
-	if (configured?._ancestorOwnedFlags !== parent.ownedFlags) {
+	// SAFETY: Crust implements the recipe builder surface; runtime validation below requires its return identity.
+	const configured = internal.recipe(child as AnyCommandDefinitionBuilder);
+	if (!(configured instanceof Crust) || configured._ancestorOwnedFlags !== parent.ownedFlags) {
 		throw new CrustError(
 			"DEFINITION",
 			`${owner} definition must return the same command builder it received`,
@@ -533,6 +559,10 @@ type ExtendedTree<
 	? Tree & DefinitionsTree<Commands, InheritedFlags>
 	: TreeWithInheritedFlags<Tree & DefinitionsTree<Commands, InheritedFlags>, RecursiveFlags>;
 
+function isCommandRecipe(value: CommandConfig | CommandRecipe): value is CommandRecipe {
+	return typeof value === "function";
+}
+
 /**
  * Define a reusable, inert command under a required name.
  *
@@ -562,18 +592,21 @@ export function defineCommand(
 	configOrRecipe: CommandConfig | CommandRecipe,
 	maybeRecipe?: CommandRecipe,
 ): CommandDefinition {
-	const hasConfig = typeof configOrRecipe !== "function";
+	const hasConfig = !isCommandRecipe(configOrRecipe);
 	const config: CommandConfig = hasConfig ? configOrRecipe : {};
 	const recipe = hasConfig ? maybeRecipe : configOrRecipe;
-	const { uses = [], sections, ...meta } = config;
+	if (!recipe) throw new CrustError("DEFINITION", `Command "${name}" requires a recipe`);
+	const { uses = [], sections, ...metaRest } = config;
+	const meta: Omit<CommandMeta, "name"> = {
+		...metaRest,
+		...(config.aliases ? { aliases: [...config.aliases] } : {}),
+		...(sections ? { sections: copyUnvalidatedSections(sections) } : {}),
+	};
 	const internal: CommandDefinitionInternal = {
+		// SAFETY: overloads pair each recipe with its declared dependency context; storage erases it.
 		recipe: recipe as CommandDefinitionInternal["recipe"],
 		uses: Object.freeze([...uses]),
-		meta: {
-			...meta,
-			...(config.aliases ? { aliases: [...config.aliases] } : {}),
-			...(sections ? { sections: copyUnvalidatedSections(sections) } : {}),
-		},
+		meta,
 	};
 	const named = <const DefName extends string>(defName: DefName): CommandDefinition<DefName> => {
 		return Object.freeze({
@@ -666,7 +699,19 @@ function dedupeExtensions(extensions: readonly Extension[]): Extension[] {
 	return extensions.filter((e, i) => extensions.findLastIndex((x) => x.id === e.id) === i);
 }
 
-function serializeInputValue(definition: ArgDef | FlagDef, name: string, value: unknown): string {
+type RunInputValue = URL | JsonValue | readonly RunInputValue[];
+
+interface RunInputPayload {
+	readonly args?: Readonly<Record<string, RunInputValue>>;
+	readonly flags?: Readonly<Record<string, RunInputValue>>;
+	readonly raw?: readonly string[];
+}
+
+function serializeInputValue(
+	definition: ArgDef | FlagDef,
+	name: string,
+	value: RunInputValue,
+): string {
 	if (definition.type !== "json") return String(value);
 	let serialized: string | undefined;
 	try {
@@ -688,13 +733,14 @@ function serializeInputValue(definition: ArgDef | FlagDef, name: string, value: 
 function serializeRunArgv(
 	root: CommandNode,
 	path: readonly string[],
-	input: { readonly args?: object; readonly flags?: object; readonly raw?: readonly string[] },
+	input: RunInputPayload,
 ): string[] {
 	const route = resolveCommand(root, [...path]);
 	if (route.argv.length > 0) {
 		// A path element the router could not consume must fail here; letting it
 		// fall through would serialize it ahead of the real positionals.
-		const candidate = route.argv[0] as string;
+		const candidate = route.argv[0];
+		if (candidate === undefined) throw new Error("unreachable: non-empty route argv");
 		throw new CrustError("COMMAND_NOT_FOUND", `Unknown command "${candidate}".`, {
 			input: candidate,
 			available: Object.keys(route.command.subCommands),
@@ -704,7 +750,7 @@ function serializeRunArgv(
 	}
 	const command = route.command;
 	const argv = [...path];
-	const args = input.args as Record<string, unknown> | undefined;
+	const args = input.args;
 	let omittedArgument: string | undefined;
 	let firstPositional: string | undefined;
 	for (const definition of command.args ?? []) {
@@ -764,7 +810,7 @@ function serializeRunArgv(
 		}
 	}
 
-	const flags = input.flags as Record<string, unknown> | undefined;
+	const flags = input.flags;
 	for (const [name, value] of Object.entries(flags ?? {})) {
 		if (value === undefined) continue;
 		// hasOwn guard: an inherited Object.prototype key must not resolve as a
@@ -854,10 +900,10 @@ export class Crust<
 	};
 
 	/** @internal */
-	readonly _node: CommandNode;
+	_node: CommandNode;
 
 	/** @internal — Runtime identity anchor for the ancestor-owned flag carrier */
-	readonly _ancestorOwnedFlags: FlagsDef;
+	_ancestorOwnedFlags: FlagsDef;
 
 	/**
 	 * Create a new root command builder.
@@ -897,7 +943,8 @@ export class Crust<
 	/**
 	 * @internal — Clone this builder with a new node, preserving generics.
 	 */
-	private _clone(nodeOverrides: Partial<CommandNode>): this {
+	private _clone<Out = this>(nodeOverrides: Partial<CommandNode>): Out {
+		// SAFETY: the clone uses the same prototype and receives every instance field below.
 		const cloned = Object.create(Object.getPrototypeOf(this)) as this;
 		const effectiveFlags = { ...this._node.effectiveFlags };
 		const newNode: CommandNode = {
@@ -915,9 +962,12 @@ export class Crust<
 			args: this._node.args ? [...this._node.args] : undefined,
 			...nodeOverrides,
 		};
-		(cloned as { _node: CommandNode })._node = newNode;
-		(cloned as { _ancestorOwnedFlags: FlagsDef })._ancestorOwnedFlags = this._ancestorOwnedFlags;
-		return cloned;
+		cloned._node = newNode;
+		cloned._ancestorOwnedFlags = this._ancestorOwnedFlags;
+		/* oxlint-disable anti-slop/no-chained-type-assertions -- one runtime builder shape is re-parameterized after each matching mutation. */
+		// SAFETY: every caller pairs this generic transition with the matching runtime node mutation.
+		return cloned as unknown as Out;
+		/* oxlint-enable anti-slop/no-chained-type-assertions */
 	}
 
 	/**
@@ -948,7 +998,8 @@ export class Crust<
 		const effectiveFlags: FlagsDef = { ...this._node.effectiveFlags };
 		const flagSpellings = cloneFlagSpellings(this._node.flagSpellings, effectiveFlags);
 		for (const def of defs) {
-			const { name, ...rest } = def as NamedFlagDef;
+			const { name, ...rest } = def;
+			// SAFETY: removing name from a NamedFlagDef leaves its discriminated FlagDef.
 			const definition = rest as FlagDef;
 			// ValidateNamedFlagDefs owns literal collisions; this owns config-built
 			// defs and sealed-recipe collisions with ancestor-seeded flags, where a
@@ -975,17 +1026,19 @@ export class Crust<
 			addFlagSpellingEntries(flagSpellings, name, definition);
 		}
 
-		return this._clone({ localFlags, effectiveFlags, flagSpellings }) as unknown as Crust<
-			MergeFlags<Flags, NamedFlagsRecord<Defs>>,
-			A,
-			Ctx,
-			Sibs,
-			Sp | SpellingsOf<NamedFlagsRecord<Defs>>,
-			Tree,
-			CtxFlags,
-			CollisionSp,
-			Result
-		>;
+		return this._clone<
+			Crust<
+				MergeFlags<Flags, NamedFlagsRecord<Defs>>,
+				A,
+				Ctx,
+				Sibs,
+				Sp | SpellingsOf<NamedFlagsRecord<Defs>>,
+				Tree,
+				CtxFlags,
+				CollisionSp,
+				Result
+			>
+		>({ localFlags, effectiveFlags, flagSpellings });
 	}
 
 	/**
@@ -1028,19 +1081,9 @@ export class Crust<
 				);
 			}
 		}
-		return this._clone({
-			args: combined,
-		}) as unknown as Crust<
-			Flags,
-			AppendedArgs<A, NewA>,
-			Ctx,
-			Sibs,
-			Sp,
-			Tree,
-			CtxFlags,
-			CollisionSp,
-			Result
-		>;
+		return this._clone<
+			Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result>
+		>({ args: combined });
 	}
 
 	/**
@@ -1073,7 +1116,7 @@ export class Crust<
 		const ownedFlags = { ...this._node.ownedFlags };
 		const effectiveFlags = { ...this._node.effectiveFlags };
 		const flagSpellings = cloneFlagSpellings(this._node.flagSpellings, effectiveFlags);
-		const contexts = [...this._node.contexts, ...instances] as ContextInstance[];
+		const contexts: ContextInstance[] = [...this._node.contexts, ...instances];
 		const contextExtensionIds = [
 			...this._node.contextExtensionIds,
 			...instances.map(() => undefined),
@@ -1085,23 +1128,19 @@ export class Crust<
 			}
 			Object.assign(ownedFlags, instance.ownedFlags);
 		}
-		return this._clone({
-			contexts,
-			contextExtensionIds,
-			ownedFlags,
-			effectiveFlags,
-			flagSpellings,
-		}) as unknown as Crust<
-			MergeFlags<Flags, ContextsOwnedFlags<Cs>>,
-			A,
-			MergeContext<Ctx, ContextsOutput<Cs>>,
-			Sibs,
-			Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
-			Tree,
-			MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>,
-			CollisionSp,
-			Result
-		>;
+		return this._clone<
+			Crust<
+				MergeFlags<Flags, ContextsOwnedFlags<Cs>>,
+				A,
+				MergeContext<Ctx, ContextsOutput<Cs>>,
+				Sibs,
+				Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
+				Tree,
+				MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>,
+				CollisionSp,
+				Result
+			>
+		>({ contexts, contextExtensionIds, ownedFlags, effectiveFlags, flagSpellings });
 	}
 
 	/**
@@ -1120,9 +1159,10 @@ export class Crust<
 	action<R>(
 		action: (ctx: NoInfer<CrustCommandContext<A, Flags, Ctx>>) => R,
 	): Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Awaited<R>> {
-		return this._clone({
-			run: action as (ctx: unknown) => unknown,
-		}) as unknown as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Awaited<R>>;
+		// SAFETY: dispatch reconstructs this node's context from its own validated definitions.
+		return this._clone<Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Awaited<R>>>({
+			run: action as CommandAction,
+		});
 	}
 
 	/**
@@ -1165,27 +1205,29 @@ export class Crust<
 		Result
 	> {
 		const activeExtensions = dedupeExtensions([...this._node.extensions, ...extensions]);
-		return this._clone({
+		return this._clone<
+			Crust<
+				MergeFlags<Flags, ExtensionFlags<Es>>,
+				A,
+				MergeContext<Ctx, ExtensionsProvidesOutput<Es>>,
+				Sibs | ExtensionsCommandSpellings<Es>,
+				Sp | ExtensionsSpellings<Es>,
+				ExtendedTree<Tree, ExtensionCommands<Es>, RecursiveExtensionFlags<Es>, CtxFlags>,
+				MergeFlags<CtxFlags, RecursiveExtensionFlags<Es>>,
+				CollisionSpellings<
+					CollisionSp["extension"] | ExtensionsSpellings<Es>,
+					CollisionSp["tree"] | DefinitionTreeSpellings<ExtensionCommands<Es>>
+				>,
+				Result
+			>
+		>({
 			...installExtensionContexts(
 				this._node,
 				activeExtensions,
 				new Set(extensions.map((extension) => extension.id)),
 			),
 			extensions: activeExtensions,
-		}) as unknown as Crust<
-			MergeFlags<Flags, ExtensionFlags<Es>>,
-			A,
-			MergeContext<Ctx, ExtensionsProvidesOutput<Es>>,
-			Sibs | ExtensionsCommandSpellings<Es>,
-			Sp | ExtensionsSpellings<Es>,
-			ExtendedTree<Tree, ExtensionCommands<Es>, RecursiveExtensionFlags<Es>, CtxFlags>,
-			MergeFlags<CtxFlags, RecursiveExtensionFlags<Es>>,
-			CollisionSpellings<
-				CollisionSp["extension"] | ExtensionsSpellings<Es>,
-				CollisionSp["tree"] | DefinitionTreeSpellings<ExtensionCommands<Es>>
-			>,
-			Result
-		>;
+		});
 	}
 
 	/**
@@ -1209,24 +1251,28 @@ export class Crust<
 		CollisionSpellings<CollisionSp["extension"], CollisionSp["tree"] | DefinitionTreeSpellings<Ds>>,
 		Result
 	> {
-		let result = this as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result>;
+		let result = this._clone<Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result>>(
+			{},
+		);
 		for (const definition of definitions) {
-			result = result._addDefinition(definition as CommandDefinition);
+			result = result._addDefinition(definition);
 		}
-		return result as unknown as Crust<
-			Flags,
-			A,
-			Ctx,
-			Sibs | CommandDefinitionSpellings<Ds[number]>,
-			Sp,
-			Tree & DefinitionsTree<Ds, CtxFlags>,
-			CtxFlags,
-			CollisionSpellings<
-				CollisionSp["extension"],
-				CollisionSp["tree"] | DefinitionTreeSpellings<Ds>
-			>,
-			Result
-		>;
+		return result._clone<
+			Crust<
+				Flags,
+				A,
+				Ctx,
+				Sibs | CommandDefinitionSpellings<Ds[number]>,
+				Sp,
+				Tree & DefinitionsTree<Ds, CtxFlags>,
+				CtxFlags,
+				CollisionSpellings<
+					CollisionSp["extension"],
+					CollisionSp["tree"] | DefinitionTreeSpellings<Ds>
+				>,
+				Result
+			>
+		>({});
 	}
 
 	private _addDefinition(
@@ -1244,9 +1290,9 @@ export class Crust<
 		}
 		const childNode = materializeCommandDefinition(definition, this._node);
 
-		return this._clone({
+		return this._clone<Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result>>({
 			subCommands: { ...this._node.subCommands, [definition.name]: childNode },
-		}) as Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result>;
+		});
 	}
 
 	/**
@@ -1278,22 +1324,29 @@ export class Crust<
 	 * @param io - Optional `stdout(text)` / `stderr(text)` callbacks, also
 	 *             exposed to Command Actions and Extensions
 	 */
+	async run<const Path extends CommandPath<Tree>, const Input>(
+		path: Path,
+		input: Input,
+		...validation: Input extends CompatibleRunInput<
+			CommandShapeAt<CommandShape<A, Flags, Tree, Result>, NoInfer<Path>>,
+			Input
+		>
+			? readonly [io?: Partial<InvocationIO>]
+			: readonly [invalidInput: never]
+	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>>;
 	async run<const Path extends CommandPath<Tree>>(
 		path: Path,
 		...args: RunArguments<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>>
-	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>> {
-		const structuredInput = (args[0] ?? {}) as {
-			readonly args?: object;
-			readonly flags?: object;
-			readonly raw?: readonly string[];
-		};
+	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>>;
+	async run(path: readonly string[], ...args: readonly unknown[]): Promise<RunOutcome<unknown>> {
+		// SAFETY: the public overloads constrain structured input to this runtime value union.
+		const structuredInput = (args[0] ?? {}) as RunInputPayload;
+		// SAFETY: the public overloads constrain the second argument to invocation IO.
 		const io = args[1] as Partial<InvocationIO> | undefined;
 		const root = prepareInvocationRoot(this._node, materializeCommandDefinition);
 		const argv = serializeRunArgv(root, path, structuredInput);
 		// Programmatic calls preserve raw failures and never change process status.
-		return (await runInvocation(this._node, argv, io, materializeCommandDefinition)) as RunOutcome<
-			CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]
-		>;
+		return await runInvocation(this._node, argv, io, materializeCommandDefinition);
 	}
 
 	/**

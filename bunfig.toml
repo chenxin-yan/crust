@@ -1,0 +1,2 @@
+[test]
+pathIgnorePatterns = ["tools/oxlint/anti-slop/rules"]

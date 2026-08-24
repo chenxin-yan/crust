@@ -2,6 +2,8 @@ import { describe, expect, it } from "bun:test";
 
 import type { StandardSchema } from "@crustjs/utils/schema";
 
+type StandardInput = Parameters<StandardSchema["~standard"]["validate"]>[0];
+
 import { Crust } from "../command/crust.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
@@ -14,7 +16,7 @@ function schema<Input, Output>(
 		"~standard": {
 			version: 1,
 			vendor: "crust-test",
-			validate: (value: unknown) => validate(value as Input),
+			validate: (value: StandardInput) => validate(value as Input),
 		},
 	};
 }
@@ -30,7 +32,7 @@ const port = () =>
 
 describe("Standard Schema on arg definitions", () => {
 	it("passes the raw string token to the schema and hands the output to the action", async () => {
-		let received: unknown;
+		let received: number | undefined;
 		const app = new Crust("cli").args({ name: "port", schema: port() }).action(({ args }) => {
 			received = args.port;
 		});
@@ -40,7 +42,7 @@ describe("Standard Schema on arg definitions", () => {
 	});
 
 	it("delivers a successful schema output of literal undefined to the action", async () => {
-		let received: unknown = "untouched";
+		let received: string | undefined = "untouched";
 		const toUndefined = schema<string, undefined>(() => ({ value: undefined }));
 		const app = new Crust("cli").args({ name: "port", schema: toUndefined }).action(({ args }) => {
 			received = args.port;
@@ -60,7 +62,7 @@ describe("Standard Schema on arg definitions", () => {
 	});
 
 	it("variadic schema args receive the raw string array", async () => {
-		let received: unknown;
+		let received: string[] | undefined;
 		const upper = schema<string[], string[]>((raw) => ({
 			value: raw.map((s) => s.toUpperCase()),
 		}));
@@ -76,7 +78,7 @@ describe("Standard Schema on arg definitions", () => {
 	});
 
 	it("supports async schema validation", async () => {
-		let received: unknown;
+		let received: string | undefined;
 		const asyncUpper = schema<string | undefined, string>((raw) => ({
 			value: String(raw).toUpperCase(),
 		}));
@@ -84,7 +86,7 @@ describe("Standard Schema on arg definitions", () => {
 			"~standard": {
 				version: 1,
 				vendor: "crust-test",
-				validate: async (value: unknown) => asyncUpper["~standard"].validate(value),
+				validate: async (value: StandardInput) => asyncUpper["~standard"].validate(value),
 			},
 		};
 
@@ -99,7 +101,7 @@ describe("Standard Schema on arg definitions", () => {
 
 describe("Standard Schema on flag definitions", () => {
 	it("string flags consume a token and pass the raw string to the schema", async () => {
-		let received: unknown;
+		let received: number | undefined;
 		const app = new Crust("cli")
 			.flags({ name: "port", type: "string", schema: port() })
 			.action(({ flags }) => {
@@ -111,7 +113,7 @@ describe("Standard Schema on flag definitions", () => {
 	});
 
 	it("boolean flags do not consume a token and pass the raw boolean to the schema", async () => {
-		let received: unknown;
+		let received: "on" | "off" | undefined;
 		const onOff = schema<boolean | undefined, "on" | "off">((raw) => ({
 			value: raw === true ? "on" : "off",
 		}));
@@ -149,7 +151,7 @@ describe("Standard Schema on flag definitions", () => {
 	});
 
 	it("--no-<name> negation delivers raw false to a schema boolean flag", async () => {
-		let received: unknown;
+		let received: string | undefined;
 		const probe = schema<boolean | undefined, string>((raw) => ({ value: String(raw) }));
 		const app = new Crust("cli")
 			.flags({ name: "loud", type: "boolean", schema: probe })
@@ -162,7 +164,7 @@ describe("Standard Schema on flag definitions", () => {
 	});
 
 	it("multiple schema flags receive the raw value array", async () => {
-		let received: unknown;
+		let received: string | undefined;
 		const csv = schema<string[] | undefined, string>((raw) => ({
 			value: (raw ?? []).join(","),
 		}));

@@ -123,7 +123,7 @@ Put semantic defaults in the schema everywhere:
 const Port = z.coerce.number().default(3000);
 ```
 
-Core arguments and flags and store fields do not accept an outer `default` beside `schema`. Prompt `initial` and `default` remain raw UI fallback values rather than schema defaults; Crust passes either value through `schema` before returning it.
+Core arguments and flags and store fields do not accept an outer `default` beside `schema`. Prompt `initial` and `default` remain raw UI fallback values rather than schema defaults; Crust passes either value through `schema` before returning it. Store fields additionally require the schema's output to be recursively JSON-compatible (named interfaces are accepted; non-JSON properties are not) because values persist to JSON.
 
 ## Choosing an approach
 

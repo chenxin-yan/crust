@@ -1,5 +1,6 @@
 import type { CommandDefinition } from "../command/crust.ts";
 import type { CommandSnapshot } from "../command/snapshot.ts";
+import type { CaughtError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
 import { assertDefinableFlag } from "../parsing/spellings.ts";
 import type {
@@ -10,6 +11,8 @@ import type {
 	InvocationIO,
 	NamedFlagDef,
 	NamedFlagsRecord,
+	ParsedArgValue,
+	ParsedFlagValue,
 } from "../types.ts";
 import type { ValidateCommandDefinitions } from "../validation/commands.brands.ts";
 import type { DeclaredDepsOf } from "../validation/contexts.brands.ts";
@@ -112,13 +115,13 @@ export interface ExtensionContext<
 	 *
 	 * @example `{ target: "api" }`
 	 */
-	readonly args: Readonly<Record<string, unknown>>;
+	readonly args: Readonly<Record<string, ParsedArgValue>>;
 	/**
 	 * Syntax-parsed own flags plus unknown flags from the resolved command, before validation.
 	 *
 	 * @example `{ trace: true }`
 	 */
-	readonly flags: Readonly<InferExtensionFlags<Defs> & Record<string, unknown>>;
+	readonly flags: Readonly<InferExtensionFlags<Defs> & Record<string, ParsedFlagValue>>;
 	/**
 	 * Positional values that appeared after the `--` separator.
 	 *
@@ -167,7 +170,10 @@ export interface ExtensionHooks<
 	 * Receives the base context: routing or syntax-parse failures render with a
 	 * fallback context whose `flags` are empty, so owned-flag inference would lie here.
 	 */
-	readonly onError?: (error: unknown, ctx: ExtensionContext<[], Deps>) => Awaitable<boolean | void>;
+	readonly onError?: (
+		error: CaughtError,
+		ctx: ExtensionContext<[], Deps>,
+	) => Awaitable<boolean | void>;
 }
 
 /**
@@ -323,16 +329,18 @@ export function defineExtension<
 		const { name: flagName, ...rest } = def;
 		// Validate before the record assignment: a `__proto__` key would be
 		// silently swallowed as the record's prototype.
-		assertDefinableFlag(flagName, rest as ExtensionFlagDef);
-		ownedFlags[flagName] = rest as ExtensionFlagDef;
+		// SAFETY: removing name from a NamedExtensionFlagDef leaves its runtime ExtensionFlagDef.
+		const flag = rest as ExtensionFlagDef;
+		assertDefinableFlag(flagName, flag);
+		ownedFlags[flagName] = flag;
 	}
 
-	// The runtime registry erases Defs after defineExtension contextually types its own hooks.
+	// SAFETY: the runtime registry erases Defs after this function contextually typed every hook.
 	return Object.freeze({
 		...config,
 		uses: Object.freeze([...(config.uses ?? [])]),
-		...(config.flags === undefined ? {} : { flags: ownedFlags }),
 		id,
+		...(config.flags === undefined ? {} : { flags: ownedFlags }),
 	}) as Extension<
 		ContextDependencies<Uses> &
 			ContextsDependencies<Provides> &

@@ -105,6 +105,12 @@ These types back [`run(path, input?, io?)`](/docs/api/crust) and the [`@crustjs/
 | `RunArguments`      | Full `run()` rest tuple: input plus optional invocation I/O                   |
 | `InputArgs`         | Pre-parse structured argument values for an argument definition list          |
 | `InputFlags`        | Pre-parse structured flag values for a flag definition record                 |
+| `ParseResult`       | Syntax-parsed arguments, flags, and raw tokens before schema validation       |
+| `ValidatedInput`    | Fully validated argument and flag values passed beyond the parser boundary    |
+| `ParsedArgValue`    | Runtime-erased syntax-parsed positional value                                 |
+| `ParsedFlagValue`   | Runtime-erased syntax-parsed flag value                                       |
+
+When calling `run()`, scalar JSON arguments and flags accept JSON primitives, structurally JSON-compatible object types (including named interfaces), and mutable or readonly arrays/tuples (the exported `RunInput` type itself requires `JsonValue` leaves); variadic JSON arguments and multiple JSON flags use a mutable occurrence array of JSON values. URL definitions instead accept `URL` values or mutable occurrence arrays of them. The typed API excludes `Date`, `bigint`, functions, and other non-JSON values from JSON inputs. At runtime, `run()` reports unserializable non-`undefined` values when `JSON.stringify` throws or returns `undefined`; `undefined` omits an optional input, while other untyped inputs follow JSON serialization semantics (for example, a `Date` serializes to a string).
 
 `run()` resolves to `RunOutcome<R>`: the `completed` branch owns the selected action's typed `result`, while the `finished` branch owns the `ExtensionId` of the Extension whose `preRun` hook ended the invocation.
 
@@ -131,7 +137,7 @@ Omitting `io` creates no new ambient scope, preserving native TTY detection and 
 | `ContextInstance`   | Named lazy dependency attached with `.provide()`                          |
 | `ContextConfig`     | Flags owned by a Context and its declared `uses` dependencies             |
 | `ContextSetup`      | Typed setup input: `options`, `flags`, lazy bag `ctx`, and invocation I/O |
-| `ContextMap`        | Record shape used by accumulated command Context types                    |
+| `ContextMap`        | Upper bound for accumulated command Context registries                    |
 
 ## Extension types
 

@@ -12,6 +12,7 @@ import type {
 	ChainableStyleFn,
 	ColorDepth,
 	ColorInput,
+	StyleInput,
 	StyleInstance,
 	StyleMethodMap,
 	StyleMethodName,
@@ -47,7 +48,7 @@ interface ResolvedStyleCapabilities {
 }
 
 function applyChain(
-	text: string,
+	text: StyleInput,
 	steps: readonly ChainStep[],
 	resolveCapabilities: () => ResolvedStyleCapabilities,
 ): string {
@@ -57,15 +58,12 @@ function applyChain(
 	if (text == null) {
 		return "";
 	}
-	if (typeof text !== "string") {
-		text = String(text);
-	}
-	if (text === "") {
-		return text;
+	let result = String(text);
+	if (result === "") {
+		return result;
 	}
 
 	const { modifiersEnabled, colorsEnabled } = resolveCapabilities();
-	let result = text;
 	for (let i = steps.length - 1; i >= 0; i--) {
 		const step = steps[i];
 		if (step === undefined) {
@@ -78,6 +76,12 @@ function applyChain(
 	}
 
 	return result;
+}
+
+function isTemplateStringsArray(
+	value: StyleInput | TemplateStringsArray,
+): value is TemplateStringsArray {
+	return Array.isArray(value) && "raw" in value && Array.isArray(value.raw);
 }
 
 function buildChainableStyleFactory(
@@ -116,23 +120,17 @@ function buildChainableStyleFactory(
 		//   chain(text)                          — direct
 		//   chain`tagged ${value} template`      — tagged template
 		//   chain(undefined | null)               — defensive (returns "")
-		const styleFn = ((first?: string | TemplateStringsArray, ...rest: unknown[]) => {
-			// Tagged template: first arg is a TemplateStringsArray (array-like
-			// with a `.raw` property). Interleave with `${...}` values.
-			if (
-				Array.isArray(first) &&
-				"raw" in (first as object) &&
-				Array.isArray((first as { raw: unknown }).raw)
-			) {
-				const strings = first as unknown as TemplateStringsArray;
+		// SAFETY: every ChainableStyleFn property is defined below before the frozen function is returned.
+		const styleFn = ((first?: StyleInput | TemplateStringsArray, ...rest: unknown[]) => {
+			if (isTemplateStringsArray(first)) {
 				let text = "";
-				for (let i = 0; i < strings.length; i++) {
-					text += strings[i] ?? "";
+				for (let i = 0; i < first.length; i++) {
+					text += first[i] ?? "";
 					if (i < rest.length) text += String(rest[i]);
 				}
 				return applyChain(text, steps, capabilitiesForCall);
 			}
-			return applyChain(first as string, steps, capabilitiesForCall);
+			return applyChain(first, steps, capabilitiesForCall);
 		}) as ChainableStyleFn;
 
 		cache.set(key, styleFn);
@@ -227,6 +225,7 @@ function buildChainableStyleFactory(
 function buildStyleMethods(
 	createChainableStyle: (steps: readonly ChainStep[]) => ChainableStyleFn,
 ): StyleMethodMap {
+	// SAFETY: the loop assigns every name from the registry before methods is returned.
 	const methods = {} as { [K in StyleMethodName]: ChainableStyleFn };
 
 	for (const methodName of styleMethodNames) {
@@ -285,12 +284,58 @@ function resolveStyleCapabilities(options?: StyleOptions): ResolvedStyleCapabili
 }
 
 function createStyleInstance(options: StyleOptions | undefined, runtime: boolean): StyleInstance {
-	const fixedCapabilities = runtime ? undefined : resolveStyleCapabilities(options);
 	const resolveCapabilities = runtime
 		? resolveStyleCapabilities
-		: () => fixedCapabilities as ResolvedStyleCapabilities;
+		: (() => {
+				const capabilities = resolveStyleCapabilities(options);
+				return () => capabilities;
+			})();
 	const createChainableStyle = buildChainableStyleFactory(resolveCapabilities, runtime);
 	const methods = buildStyleMethods(createChainableStyle);
+
+	function foreground(input: ColorInput): ChainableStyleFn;
+	function foreground(text: string, input: ColorInput): string;
+	function foreground(
+		...args: [input: ColorInput] | [text: string, input: ColorInput]
+	): string | ChainableStyleFn {
+		const resolved = resolveCapabilities();
+		if (args.length === 1) {
+			return createChainableStyle(
+				[
+					{
+						kind: "pair",
+						pair: fgPairAtDepth(args[0], resolved.colorDepth),
+						isModifier: false,
+					},
+				],
+				false,
+				resolved,
+			);
+		}
+		return fgDirect(args[0], args[1], resolved.colorDepth);
+	}
+
+	function background(input: ColorInput): ChainableStyleFn;
+	function background(text: string, input: ColorInput): string;
+	function background(
+		...args: [input: ColorInput] | [text: string, input: ColorInput]
+	): string | ChainableStyleFn {
+		const resolved = resolveCapabilities();
+		if (args.length === 1) {
+			return createChainableStyle(
+				[
+					{
+						kind: "pair",
+						pair: bgPairAtDepth(args[0], resolved.colorDepth),
+						isModifier: false,
+					},
+				],
+				false,
+				resolved,
+			);
+		}
+		return bgDirect(args[0], args[1], resolved.colorDepth);
+	}
 
 	const instance: StyleInstance = {
 		get enabled() {
@@ -317,44 +362,8 @@ function createStyleInstance(options: StyleOptions | undefined, runtime: boolean
 			return text;
 		},
 
-		// Two call shapes (see StyleInstance.fg JSDoc):
-		//   fg(input)        → ChainableStyleFn (chain root)
-		//   fg(text, input)  → string (direct)
-		fg: ((textOrInput: ColorInput, maybeInput?: ColorInput): string | ChainableStyleFn => {
-			const resolved = resolveCapabilities();
-			if (maybeInput === undefined) {
-				return createChainableStyle(
-					[
-						{
-							kind: "pair",
-							pair: fgPairAtDepth(textOrInput, resolved.colorDepth),
-							isModifier: false,
-						},
-					],
-					false,
-					resolved,
-				);
-			}
-			return fgDirect(textOrInput as string, maybeInput, resolved.colorDepth);
-		}) as StyleInstance["fg"],
-
-		bg: ((textOrInput: ColorInput, maybeInput?: ColorInput): string | ChainableStyleFn => {
-			const resolved = resolveCapabilities();
-			if (maybeInput === undefined) {
-				return createChainableStyle(
-					[
-						{
-							kind: "pair",
-							pair: bgPairAtDepth(textOrInput, resolved.colorDepth),
-							isModifier: false,
-						},
-					],
-					false,
-					resolved,
-				);
-			}
-			return bgDirect(textOrInput as string, maybeInput, resolved.colorDepth);
-		}) as StyleInstance["bg"],
+		fg: foreground,
+		bg: background,
 
 		...methods,
 	};

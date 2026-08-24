@@ -35,11 +35,10 @@ describe("command definitions", () => {
 	});
 
 	it("rejects Extensions registered inside command definitions", () => {
-		const nestedExtension = defineCommand(
-			"bad",
-			(command) =>
-				(command as unknown as Crust).extend(defineExtension(defineExtensionId("nested"))) as never,
-		);
+		const nestedExtension = defineCommand("bad", (command) => {
+			// SAFETY: deliberately escape the sealed recipe surface to verify its runtime guard.
+			return (command as Crust).extend(defineExtension(defineExtensionId("nested"))) as never;
+		});
 
 		expect(() => new Crust("cli").add(nestedExtension)).toThrow(
 			/Command "bad" cannot register Extensions inside command definitions/,
@@ -137,18 +136,21 @@ describe("command definitions", () => {
 	it("clones annotations and isolates materializations across parents", async () => {
 		const annotation = Symbol("annotation");
 		const definition = defineCommand("one", { description: "Reusable" }, (command) => {
-			((command as unknown as Crust)._node as unknown as Record<symbol, unknown>)[annotation] =
-				"preserved";
+			// SAFETY: this fixture attaches an ecosystem annotation to the runtime node.
+			Object.defineProperty((command as Crust)._node, annotation, {
+				value: "preserved",
+				enumerable: true,
+			});
 			return command;
 		});
 
 		const first = await new Crust("first").add(definition).snapshot();
 		const second = await new Crust("second").add(definition.as("two")).snapshot();
 
-		expect((first.subCommands.one as unknown as Record<symbol, unknown>)[annotation]).toBe(
+		expect(Object.getOwnPropertyDescriptor(first.subCommands.one!, annotation)?.value).toBe(
 			"preserved",
 		);
-		expect((second.subCommands.two as unknown as Record<symbol, unknown>)[annotation]).toBe(
+		expect(Object.getOwnPropertyDescriptor(second.subCommands.two!, annotation)?.value).toBe(
 			"preserved",
 		);
 	});

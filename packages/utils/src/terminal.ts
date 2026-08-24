@@ -7,6 +7,7 @@ export interface AmbientTerminalIO {
 }
 
 const STORAGE_KEY = Symbol.for("crustjs.terminal.ambient-io");
+// SAFETY: This intersection only declares the optional symbol slot read and initialized below.
 const globalWithStorage = globalThis as typeof globalThis & {
 	[key: symbol]: AsyncLocalStorage<AmbientTerminalIO> | undefined;
 };

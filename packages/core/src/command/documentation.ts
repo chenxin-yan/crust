@@ -1,20 +1,24 @@
+import type { DeclaredDefault } from "../types.ts";
 import type { CommandSnapshot, FlagSnapshot } from "./snapshot.ts";
+
+function isNonFiniteNumber(value: DeclaredDefault): value is number {
+	return typeof value === "number" && !Number.isFinite(value);
+}
 
 /** Format a definition's description and optional default/choice annotations. */
 export function formatDescription(
 	description: string | undefined,
-	defaultValue: unknown,
+	defaultValue: DeclaredDefault,
 	choices: readonly string[] | undefined,
 	formatAnnotation: (annotation: string) => string = (annotation) => annotation,
 ): string {
 	const parts = description ? [description] : [];
 	if (defaultValue !== undefined) {
-		const value =
-			typeof defaultValue === "number" && !Number.isFinite(defaultValue)
-				? String(defaultValue)
-				: Array.isArray(defaultValue)
-					? defaultValue.map(String).join(", ")
-					: JSON.stringify(defaultValue);
+		const value = isNonFiniteNumber(defaultValue)
+			? String(defaultValue)
+			: Array.isArray(defaultValue)
+				? defaultValue.map(String).join(", ")
+				: JSON.stringify(defaultValue);
 		parts.push(formatAnnotation(`[default: ${value}]`));
 	}
 	if (choices?.length) parts.push(formatAnnotation(`[choices: ${choices.join(", ")}]`));

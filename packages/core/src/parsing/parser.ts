@@ -9,9 +9,11 @@ import type {
 	ArgsDef,
 	FlagDef,
 	FlagsDef,
-	InferArgs,
-	InferFlags,
 	ParseResult,
+	ParsedArgValue,
+	ParsedFlagValue,
+	RawParsedArgs,
+	RawParsedFlags,
 	ValueType,
 } from "../types.ts";
 import { coerceJson, coercePath, coerceUrl } from "./coercers.ts";
@@ -26,7 +28,7 @@ import type { FlagSpelling } from "./spellings.ts";
  * single option when the config is constructed dynamically at runtime.
  * Not exported by `@types/node`, so we define it here.
  */
-type ParsedFlagValue = string | boolean | (string | boolean)[] | undefined;
+type OptionTokenValue = string | boolean | (string | boolean)[] | undefined;
 
 /** Element type of `parseArgs(...).tokens` — not exported by `@types/node`. */
 type ParseArgsToken = NonNullable<ReturnType<typeof nodeParseArgs>["tokens"]>[number];
@@ -100,14 +102,14 @@ function validateChoice(raw: string, choices: readonly string[], label: string):
 }
 
 /** Invoke a user `parse` function on a raw token, wrapping errors. */
-function invokeParse(
-	parse: (raw: string) => unknown,
+function invokeParse<ParseOutput>(
+	parse: (raw: string) => ParseOutput,
 	raw: string,
 	label: string,
 	index?: number,
-): unknown {
+): ParseOutput {
 	const location = index === undefined ? label : `${label} element [${index}]`;
-	let result: unknown;
+	let result: ParseOutput;
 	try {
 		result = parse(raw);
 	} catch (err) {
@@ -139,15 +141,7 @@ function invokeParse(
  * `json` defaults are already in their resolved form (`URL` / `unknown`)
  * per the variant interfaces, so they pass through unchanged.
  */
-function resolveDefault(
-	def: {
-		type: ValueType;
-		default?: unknown;
-		choices?: readonly string[];
-		parse?: (raw: string) => unknown;
-	},
-	label: string,
-): unknown {
+function resolveDefault(def: ArgDef | FlagDef, label: string) {
 	const { default: defaultValue, choices, parse } = def;
 	if (defaultValue === undefined) return undefined;
 
@@ -163,8 +157,10 @@ function resolveDefault(
 
 	if (parse) {
 		if (Array.isArray(defaultValue)) {
+			// oxlint-disable-next-line typescript/no-unnecessary-type-conversion -- runtime-configured definitions can violate the static string-default contract
 			return defaultValue.map((v, i) => invokeParse(parse, String(v), label, i));
 		}
+		// oxlint-disable-next-line typescript/no-unnecessary-type-conversion -- runtime-configured definitions can violate the static string-default contract
 		return invokeParse(parse, String(defaultValue), label);
 	}
 
@@ -185,39 +181,49 @@ function resolveDefault(
  *   raw token → choices validation → parse transform (if set) → result.
  * For multi-value flags both steps run per element.
  */
+function isBooleanToken(value: OptionTokenValue): value is boolean {
+	return typeof value === "boolean";
+}
+
+function isStringToken(value: OptionTokenValue): value is string {
+	return typeof value === "string";
+}
+
 function coerceFlagValue(
 	name: string,
 	def: FlagDef,
 	parsedValue: string | boolean | (string | boolean)[],
-): unknown {
+) {
 	const label = `--${name}`;
-	const choices = (def as { choices?: readonly string[] }).choices;
-	const parse = (def as { parse?: (raw: string) => unknown }).parse;
+	const { choices, parse } = def;
 
 	if (def.multiple && Array.isArray(parsedValue)) {
 		if (def.type === "boolean") {
-			return parsedValue.filter((v): v is boolean => typeof v === "boolean");
+			return parsedValue.filter(isBooleanToken);
 		}
-		return (parsedValue as string[]).map((v, i) => {
-			if (choices) validateChoice(v, choices, label);
-			if (parse) return invokeParse(parse, v, label, i);
-			return coerceValue(v, def.type, label);
+		return parsedValue.map((value, i) => {
+			if (!isStringToken(value)) {
+				throw new CrustError("PARSE", `Internal: unexpected non-string value for flag "${label}"`);
+			}
+			if (choices) validateChoice(value, choices, label);
+			if (parse) return invokeParse(parse, value, label, i);
+			return coerceValue(value, def.type, label);
 		});
 	}
 
 	if (def.type === "boolean") {
 		// Strict: only accept actual boolean values from the parser.
 		// --flag produces true, --no-flag produces false.
-		if (typeof parsedValue === "boolean") {
+		if (isBooleanToken(parsedValue)) {
 			return parsedValue;
 		}
 		throw new CrustError(
 			"PARSE",
-			`Expected boolean value for flag "${label}", got ${typeof parsedValue}`,
+			`Expected boolean value for flag "${label}", got non-boolean token`,
 		);
 	}
 
-	if (typeof parsedValue === "string") {
+	if (isStringToken(parsedValue)) {
 		if (choices) validateChoice(parsedValue, choices, label);
 		if (parse) return invokeParse(parse, parsedValue, label);
 		return coerceValue(parsedValue, def.type, label);
@@ -228,10 +234,7 @@ function coerceFlagValue(
 	// `strict: true`, so a non-boolean flag can never see a boolean or
 	// array `parsedValue` here. Fail loud rather than silently returning a
 	// default value, which would mask a parser-configuration bug.
-	throw new CrustError(
-		"PARSE",
-		`Internal: unexpected value shape for flag "${label}" (got ${typeof parsedValue})`,
-	);
+	throw new CrustError("PARSE", `Internal: unexpected value shape for flag "${label}"`);
 }
 
 /**
@@ -247,8 +250,8 @@ function resolveAliases(
 	tokens: ParseArgsToken[],
 	aliasToName: Record<string, string>,
 	flagsDef: FlagsDef,
-): Record<string, ParsedFlagValue> {
-	const canonical: Record<string, ParsedFlagValue> = {};
+) {
+	const canonical: Record<string, OptionTokenValue> = {};
 
 	for (const token of tokens) {
 		if (token.kind !== "option") continue;
@@ -259,6 +262,7 @@ function resolveAliases(
 
 		// Booleans carry no token value; a `--no-` spelling means false
 		// (allowNegative). Non-booleans always have a string value in strict mode.
+		// SAFETY: strict-mode parseArgs guarantees string values on non-boolean option tokens.
 		const value: string | boolean =
 			def.type === "boolean" ? !token.rawName.startsWith("--no-") : (token.value as string);
 
@@ -285,8 +289,8 @@ function resolveFlags<F extends FlagsDef>(
 	flagsDef: F | undefined,
 	tokens: ParseArgsToken[],
 	aliasToName: Record<string, string>,
-): InferFlags<F> {
-	const resolved: Partial<InferFlags<F>> = {};
+): RawParsedFlags<F> {
+	const resolved: Record<string, ParsedFlagValue> = {};
 
 	if (flagsDef) {
 		const canonical = resolveAliases(tokens, aliasToName, flagsDef);
@@ -295,22 +299,16 @@ function resolveFlags<F extends FlagsDef>(
 			const parsedValue = canonical[name];
 
 			if (parsedValue !== undefined) {
-				Reflect.set(resolved, name, coerceFlagValue(name, def, parsedValue));
+				resolved[name] = coerceFlagValue(name, def, parsedValue);
 				continue;
 			}
 
-			Reflect.set(
-				resolved,
-				name,
-				resolveDefault(def as Parameters<typeof resolveDefault>[0], `--${name}`),
-			);
+			resolved[name] = resolveDefault(def, `--${name}`);
 		}
 	}
 
-	// Definitions are runtime keys, so TypeScript cannot correlate each write with InferFlags<F>.
-	// The asserted type is also ahead of runtime here: required-without-default flags may still be
-	// `undefined` until validateParsed, and schema-backed flags hold raw tokens until applySchemas.
-	return resolved as InferFlags<F>;
+	// SAFETY: the loop writes exactly every key from flagsDef; mapped generic keys cannot be correlated at runtime.
+	return resolved as RawParsedFlags<F>;
 }
 
 /**
@@ -318,13 +316,13 @@ function resolveFlags<F extends FlagsDef>(
  */
 function validateRequiredFlags<F extends FlagsDef>(
 	flagsDef: F | undefined,
-	resolvedFlags: InferFlags<F>,
+	resolvedFlags: RawParsedFlags<F>,
 ): void {
 	if (!flagsDef) return;
 
 	for (const [name, def] of Object.entries(flagsDef)) {
 		if (def.required === true && def.default === undefined) {
-			if (resolvedFlags[name as keyof InferFlags<F>] === undefined) {
+			if (resolvedFlags[name] === undefined) {
 				throw new CrustError("VALIDATION", `Missing required flag "--${name}"`);
 			}
 		}
@@ -341,15 +339,13 @@ function validateRequiredFlags<F extends FlagsDef>(
 function resolveArgs<A extends ArgsDef>(
 	argsDef: A | undefined,
 	positionals: string[],
-): InferArgs<A> {
-	const resolved: Partial<InferArgs<A>> = {};
+): RawParsedArgs<A> {
+	const resolved: Record<string, ParsedArgValue> = {};
 	let index = 0;
 
 	for (const def of argsDef ?? []) {
-		const { name } = def as ArgDef;
+		const { name, choices, parse } = def;
 		const label = `<${name}>`;
-		const choices = (def as { choices?: readonly string[] }).choices;
-		const parse = (def as { parse?: (raw: string) => unknown }).parse;
 
 		const coerceOne = (raw: string, i?: number) => {
 			if (choices) validateChoice(raw, choices, label);
@@ -359,28 +355,19 @@ function resolveArgs<A extends ArgsDef>(
 
 		if (def.variadic) {
 			const remaining = positionals.slice(index);
-			Reflect.set(
-				resolved,
-				name,
-				remaining.map((v, i) => coerceOne(v, i)),
-			);
+			resolved[name] = remaining.map((v, i) => coerceOne(v, i));
 			index = positionals.length;
 		} else if (index < positionals.length) {
-			Reflect.set(resolved, name, coerceOne(positionals[index] as string));
+			// SAFETY: the bounds check above proves this positional exists.
+			resolved[name] = coerceOne(positionals[index] as string);
 			index++;
 		} else {
-			Reflect.set(
-				resolved,
-				name,
-				resolveDefault(def as Parameters<typeof resolveDefault>[0], label),
-			);
+			resolved[name] = resolveDefault(def, label);
 		}
 	}
 
-	// Definitions are runtime keys, so TypeScript cannot correlate each write with InferArgs<A>.
-	// The asserted type is also ahead of runtime here: required-without-default args may still be
-	// `undefined` until validateParsed, and schema-backed args hold raw tokens until applySchemas.
-	return resolved as InferArgs<A>;
+	// SAFETY: the loop writes exactly every declared argument name; mapped generic keys cannot be correlated at runtime.
+	return resolved as RawParsedArgs<A>;
 }
 
 /**
@@ -453,7 +440,7 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 			allowPositionals: true,
 			allowNegative: true,
 			tokens: true,
-		}) as typeof parsed;
+		});
 	} catch (error) {
 		if (error instanceof Error) {
 			const unknownMatch = error.message.match(/Unknown option '(.+?)'/);
@@ -512,7 +499,8 @@ export function validateParsed<A extends ArgsDef = ArgsDef, F extends FlagsDef =
 		for (const def of argsDef) {
 			const { name } = def;
 			const label = `argument "<${name}>"`;
-			const value = args[name as keyof InferArgs<A>];
+			// SAFETY: name comes from the same argument definitions that produced this mapped result.
+			const value = args[name as keyof typeof args];
 
 			if (def.required === true && def.default === undefined) {
 				if (def.variadic) {

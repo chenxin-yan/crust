@@ -45,10 +45,8 @@ function getRuntimeEnv(): PlatformEnv {
 
 /** Validates a path input according to its role. */
 function validatePath(value: string, field: "appName" | "name" | "dirPath"): void {
-	if (typeof value !== "string" || !value.trim()) {
-		throw new CrustStoreError("PATH", `${field} must be a non-empty string`, {
-			path: typeof value === "string" ? value : "",
-		});
+	if (!value.trim()) {
+		throw new CrustStoreError("PATH", `${field} must be a non-empty string`, { path: value });
 	}
 
 	if (field !== "dirPath" && (value.includes("/") || value.includes("\\"))) {
