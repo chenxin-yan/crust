@@ -7,13 +7,33 @@ import { getWindowsShimCommand, runProcess, which } from "./process.ts";
 
 describe("getWindowsShimCommand", () => {
 	it("only selects command shims on Windows when shell mode was not requested", () => {
-		expect(getWindowsShimCommand("C:/tools/bun.CMD", ["install"], false, "win32")).toBe("bun");
+		expect(getWindowsShimCommand("C:/tools/bun.CMD", ["install"], false, "win32")).not.toBeNull();
 		expect(getWindowsShimCommand("tools\\gen.bat", [], true, "win32")).toBeNull();
 		expect(getWindowsShimCommand("tools/gen.bat", [], false, "linux")).toBeNull();
 		expect(getWindowsShimCommand("tools/gen.exe", [], false, "win32")).toBeNull();
 	});
 
-	it("rejects shell metacharacters before selecting a command shim", () => {
+	it("escapes ordinary Windows paths for command shims", () => {
+		const invocation = getWindowsShimCommand(
+			"C:/tools/bun.cmd",
+			["build", "--env=PUBLIC_*", "C:\\work\\my app\\dist\\crust.exe"],
+			false,
+			"win32",
+		);
+
+		expect(invocation).toEqual({
+			command: process.env.ComSpec ?? "cmd.exe",
+			args: [
+				"/d",
+				"/s",
+				"/c",
+				'"bun ^^^"build^^^" ^^^"--env=PUBLIC_^^^*^^^" ^^^"C:\\work\\my^^^ app\\dist\\crust.exe^^^""',
+			],
+			windowsVerbatimArguments: true,
+		});
+	});
+
+	it("rejects unsafe shell characters before selecting a command shim", () => {
 		expect(() =>
 			getWindowsShimCommand(
 				"C:/tools/bun.cmd",
@@ -22,15 +42,12 @@ describe("getWindowsShimCommand", () => {
 				"win32",
 			),
 		).toThrow('Windows command shim argument 3 "C:/project & echo owned/out.js"');
-		for (const value of ["unsafe value", "left&right", "left^right", "100%"] as const) {
+		for (const value of ["left&right", "left^right", "100%"] as const) {
 			expect(() => getWindowsShimCommand("C:/tools/bun.cmd", [value], false, "win32")).toThrow(
 				`Windows command shim argument 1 ${JSON.stringify(value)}`,
 			);
 		}
 		expect(() => getWindowsShimCommand("C:/bad tools/bun.cmd", [], false, "win32")).not.toThrow();
-		expect(() => getWindowsShimCommand("C:/tools/bad name.cmd", [], false, "win32")).toThrow(
-			'Windows command shim command "bad name"',
-		);
 	});
 });
 

@@ -20,34 +20,52 @@ export type RunProcessResult = {
 	stderr: string;
 };
 
-const WINDOWS_SHELL_LITERAL = /^[A-Za-z0-9._/:=@+-]+$/;
+const WINDOWS_SHELL_UNSAFE = /[\0\r\n"%!^`<>&|]/;
+const WINDOWS_SHELL_META = /([()\][%!^"`<>&|;, *?])/g;
 
-/** @internal Select and validate Node's Windows command-shim workaround. */
+function escapeWindowsShellArgument(value: string): string {
+	let escaped = value.replace(/(?=(\\+?)?)\1"/g, '$1$1\\"');
+	escaped = escaped.replace(/(?=(\\+?)?)\1$/g, "$1$1");
+	escaped = `"${escaped}"`.replace(WINDOWS_SHELL_META, "^$1");
+	// Command shims parse their arguments once more than cmd.exe does.
+	return escaped.replace(WINDOWS_SHELL_META, "^$1");
+}
+
+/** @internal Build Node's escaped Windows command-shim workaround. */
 export function getWindowsShimCommand(
 	command: string,
 	args: readonly string[],
 	shell: boolean | undefined,
 	platform: NodeJS.Platform = process.platform,
-): string | null {
+): { command: string; args: string[]; windowsVerbatimArguments: true } | null {
 	if (shell || platform !== "win32" || !/\.(cmd|bat)$/i.test(command)) return null;
 
 	const shimCommand = win32.basename(command, win32.extname(command));
 	for (const [index, value] of [shimCommand, ...args].entries()) {
-		if (!WINDOWS_SHELL_LITERAL.test(value)) {
+		if (WINDOWS_SHELL_UNSAFE.test(value)) {
 			const label = index === 0 ? "command" : `argument ${index}`;
 			throw new Error(
 				`Windows command shim ${label} ${JSON.stringify(value)} contains unsafe shell characters`,
 			);
 		}
 	}
-	return shimCommand;
+
+	const commandLine = [
+		shimCommand.replace(WINDOWS_SHELL_META, "^$1"),
+		...args.map(escapeWindowsShellArgument),
+	].join(" ");
+	return {
+		command: process.env.ComSpec ?? "cmd.exe",
+		args: ["/d", "/s", "/c", `"${commandLine}"`],
+		windowsVerbatimArguments: true,
+	};
 }
 
 /**
  * Spawn a process and wait for it to exit without imposing an error policy.
  *
- * On Windows, the automatic `.cmd`/`.bat` shell workaround accepts only literal
- * command and argument characters; unsafe values throw before spawning. Explicit
+ * On Windows, the automatic `.cmd`/`.bat` workaround escapes arguments for
+ * `cmd.exe`; unsafe shell-expansion characters throw before spawning. Explicit
  * `shell: true` calls are passed through unchanged and own their shell escaping.
  */
 export async function runProcess(
@@ -55,16 +73,16 @@ export async function runProcess(
 	args: readonly string[] = [],
 	options: RunProcessOptions = {},
 ): Promise<RunProcessResult> {
-	// Node's CVE-2024-27980 hardening rejects direct .cmd/.bat spawning. The
-	// basename remains safe here because these shims are resolved through PATH.
+	// Node's CVE-2024-27980 hardening rejects direct .cmd/.bat spawning.
 	const windowsShimCommand = getWindowsShimCommand(command, args, options.shell);
 	const collect = (options.stdio ?? "collect") === "collect";
 	const collectStdout = collect && options.stdout !== "ignore";
-	const proc = spawn(windowsShimCommand ?? command, args, {
+	const proc = spawn(windowsShimCommand?.command ?? command, windowsShimCommand?.args ?? args, {
 		cwd: options.cwd,
 		env: options.env,
-		shell: windowsShimCommand !== null || options.shell,
+		shell: options.shell,
 		stdio: collect ? ["ignore", collectStdout ? "pipe" : "ignore", "pipe"] : "inherit",
+		windowsVerbatimArguments: windowsShimCommand?.windowsVerbatimArguments,
 	});
 
 	const [stdout, stderr, [exitCode]] = await Promise.all([
