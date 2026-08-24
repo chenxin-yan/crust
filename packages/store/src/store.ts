@@ -66,10 +66,23 @@ function isBoolean(value: JsonValue | undefined): value is boolean {
 	return typeof value === "boolean";
 }
 
-function matchesValueType(value: JsonValue, type: ValueType): boolean {
+function matchesValueType(value: JsonValue | undefined, type: ValueType): boolean {
 	if (type === "string") return isString(value);
 	if (type === "number") return isNumber(value);
 	return isBoolean(value);
+}
+
+function matchesDeclaredType(
+	def: { type: ValueType; array?: true },
+	value: JsonValue | undefined,
+): boolean {
+	return def.array === true
+		? Array.isArray(value) && value.every((item) => matchesValueType(item, def.type))
+		: matchesValueType(value, def.type);
+}
+
+function expectedTypeMessage(def: { type: ValueType; array?: true }): string {
+	return `Expected ${def.type}${def.array === true ? "[]" : ""}`;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -210,18 +223,9 @@ export function createStore<const F extends FieldsDef>(
 
 			if (value === undefined && def.schema === undefined) continue;
 
-			if (value !== undefined && def.schema === undefined) {
-				const matches =
-					def.array === true
-						? Array.isArray(value) && value.every((item) => matchesValueType(item, def.type))
-						: matchesValueType(value, def.type);
-				if (!matches) {
-					issues.push({
-						message: `Expected ${def.type}${def.array === true ? "[]" : ""}`,
-						path: key,
-					});
-					continue;
-				}
+			if (value !== undefined && def.schema === undefined && !matchesDeclaredType(def, value)) {
+				issues.push({ message: expectedTypeMessage(def), path: key });
+				continue;
 			}
 
 			const validator = validators.get(key);
@@ -247,6 +251,13 @@ export function createStore<const F extends FieldsDef>(
 				// materialize missing values by validating `undefined` (e.g. defaults).
 				if (operation === "read") {
 					if (value === undefined) mutableState[key] = transformed;
+					continue;
+				}
+
+				// Core transforms must stay within the declared type; a wrong-typed
+				// output would persist a value the next read() rejects.
+				if (def.schema === undefined && !matchesDeclaredType(def, transformed)) {
+					issues.push({ message: expectedTypeMessage(def), path: key });
 					continue;
 				}
 
@@ -286,6 +297,23 @@ export function createStore<const F extends FieldsDef>(
 					}
 
 					mutableState[key] = transformed;
+				}
+			}
+		}
+
+		// Mutations promise to return exactly what the next read() sees, so any
+		// value JSON serialization would alter (NaN/Infinity → null, -0 → 0,
+		// array holes → null, dropped undefined object properties) is rejected.
+		if (operation !== "read") {
+			for (const [key, value] of Object.entries(mutableState)) {
+				// A dropped undefined key is harmless: the next read reapplies defaults identically.
+				if (value === undefined) continue;
+				if (!isDeepStrictEqual(JSON.parse(JSON.stringify(value)), value)) {
+					issues.push({
+						message:
+							"value does not survive JSON serialization (NaN, Infinity, -0, sparse arrays, or undefined properties)",
+						path: key,
+					});
 				}
 			}
 		}

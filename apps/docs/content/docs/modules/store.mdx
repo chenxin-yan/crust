@@ -400,11 +400,13 @@ The inferred store type follows the schema's exact output type (`InferOutput`), 
 
 Optional `type` and `array` fields remain available as tooling metadata on schema definitions. They do not replace the schema as the source of value semantics.
 
-Hand-written `validate` callbacks on non-schema definitions remain validation-only: throw to reject and return `void` to accept.
+Hand-written `validate` callbacks on non-schema definitions throw to reject and return `void` to accept. They may also return `{ value }` to transform the input, as long as the output stays within the field's declared type — a wrong-typed output is rejected with `VALIDATION`.
+
+Mutations return exactly what the next `read()` sees, so `write`, `update`, and `patch` reject values that JSON serialization would alter: `NaN`, `Infinity`, `-0`, sparse arrays, and objects with `undefined` properties all fail with `VALIDATION` instead of silently persisting something different.
 
 ### Operation behavior
 
-- **Write:** validates each field before persisting. Schema transforms replace the input value; hand-written validators cannot transform it.
+- **Write:** validates each field before persisting. Schema and validator transforms replace the input value.
 - **Read:** applies defaults, then validates. Schema transform output is discarded so the returned value matches the persisted value.
 - **Update:** reads the current config, applies the updater, validates, then persists any schema-transformed output.
 - **Patch:** shallow-merges the partial input, validates, then persists any schema-transformed output.

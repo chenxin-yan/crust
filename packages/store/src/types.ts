@@ -32,23 +32,20 @@ interface FieldDefBase<V> {
 	 *
 	 * Return shapes:
 	 * - `void` (or `Promise<void>`) — validation-only; the input value is
-	 *   persisted as-is. This is the contract for hand-rolled validators.
-	 * - `{ value }` (or `Promise<{ value }>`) — the schema (or transform)
-	 *   produced a JSON-compatible output value. On `write` / `update` /
-	 *   `patch`, the transformed
-	 *   value replaces the input before persistence and is re-validated
-	 *   once to catch read-unstable transforms (cross-type transforms
-	 *   whose output would fail the schema on the next read). On `read`,
-	 *   the transformed value is discarded — reads always return the
-	 *   on-disk value verbatim.
+	 *   persisted as-is.
+	 * - `{ value }` (or `Promise<{ value }>`) — a transform produced an
+	 *   output within the field's declared type. On `write` / `update` /
+	 *   `patch`, the transformed value replaces the input before
+	 *   persistence and is re-validated once to catch read-unstable
+	 *   transforms. Outputs outside the declared type are rejected with
+	 *   `VALIDATION`. On `read`, the transformed value is discarded —
+	 *   reads always return the on-disk value verbatim.
 	 * - Throwing an error — the value is rejected; the error message is
 	 *   captured as a validation issue with the field name as `path`.
 	 *
 	 * @param value - The field value to validate.
 	 */
-	validate?: (
-		value: V,
-	) => void | Promise<void> | { value: JsonValue } | Promise<{ value: JsonValue }>;
+	validate?: (value: V) => void | Promise<void> | { value: V } | Promise<{ value: V }>;
 }
 
 // ── Scalar fields ─────────────────────────────────────────────────────────
