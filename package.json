@@ -20,6 +20,7 @@
 		"packages:publish": "bun ./scripts/publish-packages.mjs"
 	},
 	"devDependencies": {
+		"@arethetypeswrong/core": "^0.18.5",
 		"@changesets/changelog-github": "^1.0.0",
 		"@changesets/cli": "^3.0.1",
 		"@types/bun": "^1.4.0",
