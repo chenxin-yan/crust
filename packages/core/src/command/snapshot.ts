@@ -47,7 +47,7 @@ export interface ArgSnapshot {
  * For `{ verbose: { type: "boolean", short: "v", default: false } }`:
  * ```ts
  * snapshot.flags.verbose
- * // => { type: "boolean", short: "v", default: false }
+ * // => { type: "boolean", short: "v", default: false, negatable: true }
  * ```
  */
 export interface FlagSnapshot {

@@ -108,8 +108,9 @@ interface StringArgDef<ParseOutput = unknown> extends ArgDefBase {
 	 */
 	choices?: readonly string[];
 	/**
-	 * Custom synchronous parser for the raw argv string. Runs per element
-	 * for variadic args. See {@link StringFlagDef.parse} for full semantics.
+	 * Custom synchronous parser for the raw argv string. Runs after `choices`
+	 * validation and per element for variadic args. Its return type becomes the
+	 * argument's inferred runtime type; declared defaults are parsed too.
 	 *
 	 * @example
 	 * { name: "port", type: "string", parse: (s) => Number(s) }
