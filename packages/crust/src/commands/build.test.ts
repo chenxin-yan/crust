@@ -3,35 +3,31 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
-import { which } from "@crustjs/utils/process";
 
+import type { BunTarget } from "../utils/build-helpers.ts";
 import {
-	buildCommand,
-	generateCmdResolver,
-	generateDenoCmdResolver,
-	generateDenoResolver,
-	generateResolver,
-	resolveBuildRuntime,
-	resolveEnvFilePaths,
-	resolveOutfile,
-} from "../../src/commands/build.ts";
-import type { BunTarget } from "../../src/utils/build-helpers.ts";
-import {
-	createBunCompileArgs,
-	createDenoCompileArgs,
-	createNodeBuildArgs,
 	DENO_TARGET_INFO,
 	getBinaryFilename,
 	getDenoBinaryFilename,
 	resolveBaseName,
-	resolveBunBuildRunner,
 	resolveDenoTarget,
 	resolveDenoTargets,
 	resolveTarget,
 	SUPPORTED_DENO_TARGETS,
 	SUPPORTED_TARGETS,
 	TARGET_INFO,
-} from "../../src/utils/build-helpers.ts";
+} from "../utils/build-helpers.ts";
+import {
+	buildCommand,
+	generateCmdResolver,
+	generateDenoCmdResolver,
+	generateDenoResolver,
+	generateResolver,
+	planBuild,
+	resolveBuildRuntime,
+	resolveEnvFilePaths,
+	type BuildFlags,
+} from "./build.ts";
 
 describe("env file helpers", () => {
 	const tmpDir = join(import.meta.dir, ".tmp-env-files");
@@ -83,78 +79,99 @@ describe("runtime build configuration", () => {
 		writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ crust: { runtime: "python" } }));
 		expect(() => resolveBuildRuntime(tmpDir)).toThrow(/Invalid package.json crust.runtime/);
 	});
-});
 
-describe("build argument construction", () => {
-	it("constructs a Node bundle with portable env embedding", () => {
-		expect(createNodeBuildArgs("/src/cli.ts", "/dist/cli.js", true, ["/src/.env"])).toEqual([
-			"build",
-			"--env-file",
-			"/src/.env",
-			"--env=PUBLIC_*",
-			"--target",
-			"node",
-			"--format",
-			"esm",
-			"--outfile",
-			"/dist/cli.js",
-			"--minify",
-			"/src/cli.ts",
-		]);
-	});
-
-	it("constructs a Bun compile with the legacy argument sequence", () => {
-		expect(
-			createBunCompileArgs("/src/cli.ts", "/dist/cli", true, "bun-linux-x64-baseline", [
-				"/src/.env",
-			]),
-		).toEqual([
-			"build",
-			"--compile",
-			"--env-file",
-			"/src/.env",
-			"--env=PUBLIC_*",
-			"--outfile",
-			"/dist/cli",
-			"--minify",
-			"--target",
-			"bun-linux-x64-baseline",
-			"/src/cli.ts",
-		]);
-	});
-
-	it("constructs a Deno compile with its canonical target", () => {
-		expect(createDenoCompileArgs("/src/cli.ts", "/dist/cli", "x86_64-unknown-linux-gnu")).toEqual([
-			"compile",
-			"-A",
-			"--output",
-			"/dist/cli",
-			"--target",
-			"x86_64-unknown-linux-gnu",
-			"/src/cli.ts",
-		]);
+	it("uses one parse-error policy for runtime and output-name resolution", () => {
+		writeFileSync(join(tmpDir, "package.json"), "not json");
+		expect(() => resolveBuildRuntime(tmpDir)).toThrow(`Failed to parse package.json in ${tmpDir}`);
+		expect(() => resolveBaseName(undefined, join(tmpDir, "src/cli.ts"), tmpDir)).toThrow(
+			`Failed to parse package.json in ${tmpDir}`,
+		);
 	});
 });
 
-describe("resolveBunBuildRunner", () => {
-	it("prefers the real bun binary when available", () => {
-		const bunPath = which("bun");
-		expect(bunPath).not.toBeNull();
-		const runner = resolveBunBuildRunner();
-		expect(runner.command).toBe(bunPath!);
-		expect(runner.env.BUN_BE_BUN).toBe(process.env.BUN_BE_BUN);
+describe("planBuild", () => {
+	const tmpDir = join(import.meta.dir, ".tmp-build-plan");
+	const baseFlags: BuildFlags = {
+		entry: "src/cli.ts",
+		outdir: "dist",
+		resolver: "cli",
+		validate: true,
+		package: false,
+		"stage-dir": "dist/npm",
+	};
+
+	beforeAll(() => {
+		rmSync(tmpDir, { recursive: true, force: true });
+		mkdirSync(join(tmpDir, "src"), { recursive: true });
+		writeFileSync(join(tmpDir, "src", "cli.ts"), "export {};\n");
+		writeFileSync(join(tmpDir, ".env"), "PUBLIC_TEST=1\n");
 	});
 
-	it("falls back to the current executable when bun is unavailable", () => {
-		const originalPath = process.env.PATH;
-		process.env.PATH = "";
-		try {
-			const runner = resolveBunBuildRunner();
-			expect(runner.command).toBe(process.execPath);
-			expect(runner.env.BUN_BE_BUN).toBe("1");
-		} finally {
-			process.env.PATH = originalPath;
-		}
+	afterAll(() => rmSync(tmpDir, { recursive: true, force: true }));
+
+	for (const testCase of [
+		{
+			name: "Deno package builds",
+			flags: { runtime: "deno", package: true },
+			error: "--package does not yet support Deno builds",
+		},
+		{
+			name: "Node package builds",
+			flags: { runtime: "node", package: true },
+			error: "--package does not apply to Node builds",
+		},
+		{
+			name: "package builds with outfile",
+			flags: { package: true, outfile: "dist/cli" },
+			error: "--outfile cannot be used with --package",
+		},
+		{
+			name: "Node builds with targets",
+			flags: { runtime: "node", target: ["bun-linux-x64-baseline"] },
+			error: "--target cannot be used with --runtime node",
+		},
+		{
+			name: "minified Deno builds",
+			flags: { runtime: "deno", minify: true },
+			error: "--minify is not supported with --runtime deno",
+		},
+		{
+			name: "Deno builds with env files",
+			flags: { runtime: "deno", "env-file": [".env"] },
+			error: "--env-file is not supported with --runtime deno",
+		},
+		{
+			name: "multi-target builds with outfile",
+			flags: { outfile: "dist/cli" },
+			error: "--outfile cannot be used when building for multiple targets",
+		},
+	] as const) {
+		it(`rejects ${testCase.name}`, () => {
+			expect(() => planBuild({ ...baseFlags, ...testCase.flags } as BuildFlags, tmpDir)).toThrow(
+				testCase.error,
+			);
+		});
+	}
+
+	it("plans runtime-specific outputs without executing a build", () => {
+		const plan = planBuild(
+			{
+				...baseFlags,
+				runtime: "node",
+				name: "my-tool",
+				outdir: "out",
+				resolver: "ignored",
+			},
+			tmpDir,
+		);
+
+		expect(plan).toMatchObject({
+			runtime: "node",
+			mode: "node",
+			minify: true,
+			outfilePath: resolve(tmpDir, "out", "my-tool.js"),
+		});
+		expect(plan.warnings).toHaveLength(1);
 	});
 });
 
@@ -246,44 +263,6 @@ describe("resolveBaseName", () => {
 	it("strips file extension from entry filename", () => {
 		expect(resolveBaseName(undefined, "/nonexistent/src/app.cli.ts", "/nonexistent")).toBe(
 			"app.cli",
-		);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Unit tests for resolveOutfile
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("resolveOutfile", () => {
-	const cwd = "/test/project";
-	const entry = "/test/project/src/cli.ts";
-
-	it("uses --outfile when provided", () => {
-		const result = resolveOutfile("./my-cli", undefined, entry, cwd, "dist");
-		expect(result).toBe(resolve(cwd, "./my-cli"));
-	});
-
-	it("uses --name as dist/<name> when --outfile not provided", () => {
-		const result = resolveOutfile(undefined, "my-tool", entry, cwd, "dist");
-		expect(result).toBe(resolve(cwd, "dist", "my-tool"));
-	});
-
-	it("prefers --outfile over --name", () => {
-		const result = resolveOutfile("./custom", "my-tool", entry, cwd, "dist");
-		expect(result).toBe(resolve(cwd, "./custom"));
-	});
-
-	it("uses custom outdir when provided", () => {
-		const result = resolveOutfile(undefined, "my-tool", entry, cwd, "out");
-		expect(result).toBe(resolve(cwd, "out", "my-tool"));
-	});
-
-	it("adds .js to implicit Node outputs but respects explicit outfile", () => {
-		expect(resolveOutfile(undefined, "my-tool", entry, cwd, "dist", ".js")).toBe(
-			resolve(cwd, "dist", "my-tool.js"),
-		);
-		expect(resolveOutfile("bin/custom.mjs", undefined, entry, cwd, "dist", ".js")).toBe(
-			resolve(cwd, "bin/custom.mjs"),
 		);
 	});
 });

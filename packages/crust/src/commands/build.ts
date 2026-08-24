@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 import { defineCommand } from "@crustjs/core";
@@ -18,6 +18,7 @@ import {
 	getDenoBinaryFilename,
 	resolveBaseName,
 	resolveDenoTargets,
+	readUserPackageJson,
 	resolveTargets,
 	TARGET_INFO,
 	buildEntrypoint,
@@ -37,20 +38,21 @@ import {
  * @param ext - Extension appended to a derived base name (e.g. ".js" for Node)
  * @returns The resolved output file path
  */
-export function resolveOutfile(
+function resolveOutfile(
 	outfile: string | undefined,
 	name: string | undefined,
 	entry: string,
 	cwd: string,
 	outdir: string,
-	ext = "",
+	ext: string,
+	packageJson: JsonValue | undefined,
 ): string {
 	// Explicit --outfile takes highest priority
 	if (outfile) {
 		return resolve(cwd, outfile);
 	}
 
-	const baseName = resolveBaseName(name, entry, cwd);
+	const baseName = resolveBaseName(name, entry, cwd, packageJson);
 	return resolve(cwd, outdir, baseName.endsWith(ext) ? baseName : baseName + ext);
 }
 
@@ -64,28 +66,23 @@ function isBuildRuntime(value: JsonValue): value is BuildRuntime {
 	return typeof value === "string" && BUILD_RUNTIMES.some((runtime) => runtime === value);
 }
 
-export function resolveBuildRuntime(cwd: string, override?: BuildRuntime): BuildRuntime {
+function resolveBuildRuntimeFromPackageJson(
+	pkg: JsonValue | undefined,
+	override?: BuildRuntime,
+): BuildRuntime {
 	// --runtime is validated by the flag's `choices`; no re-check needed here.
 	if (override !== undefined) return override;
-
-	const packagePath = resolve(cwd, "package.json");
-	if (!existsSync(packagePath)) return "bun";
-	let pkg: JsonValue;
-	try {
-		pkg = JSON.parse(readFileSync(packagePath, "utf8"));
-	} catch {
-		// Malformed package.json: legacy builds tolerated this (resolveBaseName falls
-		// through), so keep default-bun builds working — but say so, since a
-		// configured crust.runtime in that file would be silently ignored.
-		console.warn(`Warning: could not parse ${packagePath}; defaulting to the bun runtime.`);
-		return "bun";
-	}
+	if (pkg === undefined) return "bun";
 	const configured = getConfiguredRuntime(pkg);
 	if (configured === undefined) return "bun";
 	if (isBuildRuntime(configured)) return configured;
 	throw new Error(
 		`Invalid package.json crust.runtime ${JSON.stringify(configured)}. Valid runtimes: ${BUILD_RUNTIMES.join(", ")}`,
 	);
+}
+
+export function resolveBuildRuntime(cwd: string, override?: BuildRuntime): BuildRuntime {
+	return resolveBuildRuntimeFromPackageJson(readUserPackageJson(cwd), override);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -279,16 +276,14 @@ function writeDenoResolver(
 	writeFileSync(`${resolverPath}.cmd`, generateDenoCmdResolver(baseName, targets));
 }
 
-type BinaryBuildOptions<T extends string> = {
-	entryPath: string;
-	outfile?: string;
-	name?: string;
-	cwd: string;
-	outdir: string;
-	resolver: string;
-	targets: readonly T[];
-	envFiles: readonly string[];
-	getFilename: (baseName: string, target: T) => string;
+type BinaryOutput<T extends string> = { target: T; outfilePath: string };
+type ResolverPlan = { path: string; baseName: string };
+type PlannedBinaryOutputs<T extends string> = {
+	outputs: Array<BinaryOutput<T>>;
+	resolver: ResolverPlan;
+};
+
+type BinaryExecutor<T extends string> = {
 	execute: (
 		entry: string,
 		outfile: string,
@@ -298,47 +293,35 @@ type BinaryBuildOptions<T extends string> = {
 	writeResolver: (path: string, baseName: string, targets: readonly T[]) => void;
 };
 
-async function buildBinaryOutputs<T extends string>(options: BinaryBuildOptions<T>): Promise<void> {
-	if (options.targets.length === 1) {
-		const target = options.targets[0]!;
-		// Windows targets produce `.exe` files; suffix the outfile so the path we
-		// print (and pass to the compiler) matches the artifact on disk.
-		const ext = options.getFilename("x", target).endsWith(".exe") ? ".exe" : "";
-		const resolved = resolveOutfile(
-			options.outfile,
-			options.name,
-			options.entryPath,
-			options.cwd,
-			options.outdir,
-		);
-		const outfilePath = ext && !resolved.endsWith(ext) ? resolved + ext : resolved;
-		console.log(`Building ${dim(options.entryPath)} ${cyan("→")} ${dim(outfilePath)}...`);
-		await options.execute(options.entryPath, outfilePath, target, options.envFiles);
-		console.log(`${green("✓")} Built successfully: ${outfilePath}`);
+async function buildBinaryOutputs<T extends string>(
+	plan: {
+		entryPath: string;
+		envFiles: readonly string[];
+		outputs: readonly BinaryOutput<T>[];
+		resolver: ResolverPlan;
+	},
+	executor: BinaryExecutor<T>,
+): Promise<void> {
+	if (plan.outputs.length === 1) {
+		const output = plan.outputs[0]!;
+		console.log(`Building ${dim(plan.entryPath)} ${cyan("→")} ${dim(output.outfilePath)}...`);
+		await executor.execute(plan.entryPath, output.outfilePath, output.target, plan.envFiles);
+		console.log(`${green("✓")} Built successfully: ${output.outfilePath}`);
 		return;
 	}
 
-	const baseName = resolveBaseName(options.name, options.entryPath, options.cwd);
-	console.log(
-		`Building ${dim(options.entryPath)} for ${bold(`${options.targets.length}`)} target(s)...`,
-	);
-	const results: string[] = [];
-	for (const target of options.targets) {
-		const targetOutfile = resolve(
-			options.cwd,
-			options.outdir,
-			options.getFilename(baseName, target),
-		);
-		console.log(`  ${cyan("→")} ${bold(target)}: ${dim(targetOutfile)}`);
-		await options.execute(options.entryPath, targetOutfile, target, options.envFiles);
-		results.push(targetOutfile);
+	console.log(`Building ${dim(plan.entryPath)} for ${bold(`${plan.outputs.length}`)} target(s)...`);
+	for (const output of plan.outputs) {
+		console.log(`  ${cyan("→")} ${bold(output.target)}: ${dim(output.outfilePath)}`);
+		await executor.execute(plan.entryPath, output.outfilePath, output.target, plan.envFiles);
 	}
 
-	const resolverPath = resolve(options.cwd, options.outdir, options.resolver);
-	options.writeResolver(resolverPath, baseName, options.targets);
-	console.log(`\n${green("✓")} Built ${bold(`${results.length}`)} target(s) successfully:`);
-	for (const result of results) console.log(`  ${result}`);
-	console.log(`\n${dim("Resolver:")} ${resolverPath} ${dim(`(+ ${resolverPath}.cmd)`)}`);
+	const resolver = plan.resolver;
+	const targets = plan.outputs.map((output) => output.target);
+	executor.writeResolver(resolver.path, resolver.baseName, targets);
+	console.log(`\n${green("✓")} Built ${bold(`${plan.outputs.length}`)} target(s) successfully:`);
+	for (const output of plan.outputs) console.log(`  ${output.outfilePath}`);
+	console.log(`\n${dim("Resolver:")} ${resolver.path} ${dim(`(+ ${resolver.path}.cmd)`)}`);
 }
 
 export function resolveEnvFilePaths(cwd: string, envFiles: string[] | undefined): string[] {
@@ -355,6 +338,254 @@ export function resolveEnvFilePaths(cwd: string, envFiles: string[] | undefined)
 		}
 		return envPath;
 	});
+}
+
+export type BuildFlags = {
+	entry: string;
+	outfile?: string;
+	name?: string;
+	minify?: boolean;
+	runtime?: BuildRuntime;
+	target?: string[];
+	outdir: string;
+	resolver: string;
+	validate: boolean;
+	"env-file"?: string[];
+	package: boolean;
+	"stage-dir": string;
+};
+
+type CommonBuildPlan = {
+	cwd: string;
+	userPackageJson: JsonValue | undefined;
+	entryPath: string;
+	envFiles: string[];
+	outDir: string;
+	validate: boolean;
+	minify: boolean;
+	warnings: string[];
+};
+
+type BunBuildPlan = CommonBuildPlan &
+	(
+		| {
+				runtime: "bun";
+				mode: "package";
+				staging: {
+					entry: string;
+					name?: string;
+					targets: BunTarget[];
+					stageDir: string;
+				};
+		  }
+		| {
+				runtime: "bun";
+				mode: "binary";
+				outputs: Array<BinaryOutput<BunTarget>>;
+				resolver: ResolverPlan;
+		  }
+	);
+
+type DenoBuildPlan = CommonBuildPlan & {
+	runtime: "deno";
+	mode: "binary";
+	outputs: Array<BinaryOutput<DenoTarget>>;
+	resolver: ResolverPlan;
+};
+
+type NodeBuildPlan = CommonBuildPlan & {
+	runtime: "node";
+	mode: "node";
+	outfilePath: string;
+};
+
+export type BuildPlan = BunBuildPlan | DenoBuildPlan | NodeBuildPlan;
+
+function planBinaryOutputs<T extends string>(options: {
+	targets: T[];
+	getFilename: (baseName: string, target: T) => string;
+	flags: BuildFlags;
+	cwd: string;
+	entryPath: string;
+	packageJson: JsonValue | undefined;
+}): PlannedBinaryOutputs<T> {
+	const baseName = resolveBaseName(
+		options.flags.name,
+		options.entryPath,
+		options.cwd,
+		options.packageJson,
+	);
+	if (options.targets.length === 1) {
+		const target = options.targets[0]!;
+		const ext = options.getFilename("x", target).endsWith(".exe") ? ".exe" : "";
+		const resolved = resolveOutfile(
+			options.flags.outfile,
+			options.flags.name,
+			options.entryPath,
+			options.cwd,
+			options.flags.outdir,
+			"",
+			options.packageJson,
+		);
+		return {
+			outputs: [
+				{ target, outfilePath: ext && !resolved.endsWith(ext) ? resolved + ext : resolved },
+			],
+			resolver: {
+				path: resolve(options.cwd, options.flags.outdir, options.flags.resolver),
+				baseName,
+			},
+		};
+	}
+
+	return {
+		outputs: options.targets.map((target) => ({
+			target,
+			outfilePath: resolve(
+				options.cwd,
+				options.flags.outdir,
+				options.getFilename(baseName, target),
+			),
+		})),
+		resolver: {
+			path: resolve(options.cwd, options.flags.outdir, options.flags.resolver),
+			baseName,
+		},
+	};
+}
+
+export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
+	const userPackageJson = readUserPackageJson(cwd);
+	const runtime = resolveBuildRuntimeFromPackageJson(userPackageJson, flags.runtime);
+	const entryPath = resolve(cwd, flags.entry);
+	const envFiles = resolveEnvFilePaths(cwd, flags["env-file"]);
+
+	if (!existsSync(entryPath)) {
+		throw new Error(
+			`Entry file not found: ${entryPath}\n  Specify a valid entry file with --entry <path>`,
+		);
+	}
+	if (flags.package && runtime === "deno") {
+		throw new Error(
+			"--package does not yet support Deno builds.\n  Deno per-platform npm staging is reserved for a follow-up; build a specific target without --package for now.",
+		);
+	}
+	if (flags.package && runtime === "node") {
+		throw new Error(
+			"--package does not apply to Node builds.\n  Publish the generated JavaScript artifact as a normal npm package.",
+		);
+	}
+	if (flags.package && flags.outfile) {
+		throw new Error(
+			"--outfile cannot be used with --package.\n  Use --stage-dir to control the staged npm output directory.",
+		);
+	}
+	if (runtime === "node" && flags.target?.length) {
+		throw new Error(
+			"--target cannot be used with --runtime node.\n  Node builds produce one portable JavaScript artifact.",
+		);
+	}
+	if (runtime === "deno" && flags.minify) {
+		throw new Error(
+			"--minify is not supported with --runtime deno.\n  deno compile has no minification step; drop the flag.",
+		);
+	}
+	if (runtime === "deno" && envFiles.length > 0) {
+		throw new Error(
+			"--env-file is not supported with --runtime deno.\n" +
+				"  deno compile embeds every variable from the file into the binary — secrets included —\n" +
+				"  with no PUBLIC_* filter. Load configuration at runtime instead (e.g. deno run --env-file).",
+		);
+	}
+
+	const minify = runtime === "deno" ? false : (flags.minify ?? true);
+	const outDir = flags.outfile ? dirname(resolve(cwd, flags.outfile)) : resolve(cwd, flags.outdir);
+	const common = {
+		cwd,
+		userPackageJson,
+		entryPath,
+		envFiles,
+		outDir,
+		validate: flags.validate,
+		minify,
+		warnings:
+			runtime === "node" && flags.resolver !== "cli"
+				? [
+						"Warning: --resolver is ignored with --runtime node; Node builds produce a single JavaScript artifact.",
+					]
+				: [],
+	};
+
+	if (runtime === "node") {
+		return {
+			...common,
+			runtime,
+			mode: "node",
+			outfilePath: resolveOutfile(
+				flags.outfile,
+				flags.name,
+				entryPath,
+				cwd,
+				flags.outdir,
+				".js",
+				userPackageJson,
+			),
+		};
+	}
+	if (runtime === "bun") {
+		const targets = resolveTargets(flags.target);
+		if (!flags.package && flags.outfile && targets.length > 1) {
+			throw new Error(
+				"--outfile cannot be used when building for multiple targets.\n  Use --name to set the base binary name instead.",
+			);
+		}
+		if (flags.package) {
+			return {
+				...common,
+				runtime,
+				mode: "package",
+				staging: {
+					entry: flags.entry,
+					...(flags.name === undefined ? {} : { name: flags.name }),
+					targets,
+					stageDir: resolve(cwd, flags["stage-dir"]),
+				},
+			};
+		}
+		return {
+			...common,
+			runtime,
+			mode: "binary",
+			...planBinaryOutputs({
+				targets,
+				getFilename: getBinaryFilename,
+				flags,
+				cwd,
+				entryPath,
+				packageJson: userPackageJson,
+			}),
+		};
+	}
+
+	const targets = resolveDenoTargets(flags.target);
+	if (flags.outfile && targets.length > 1) {
+		throw new Error(
+			"--outfile cannot be used when building for multiple targets.\n  Use --name to set the base binary name instead.",
+		);
+	}
+	return {
+		...common,
+		runtime,
+		mode: "binary",
+		...planBinaryOutputs({
+			targets,
+			getFilename: getDenoBinaryFilename,
+			flags,
+			cwd,
+			entryPath,
+			packageJson: userPackageJson,
+		}),
+	};
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -467,129 +698,44 @@ export const buildCommand = defineCommand(
 				},
 			)
 			.action(async ({ flags }) => {
-				const cwd = process.cwd();
-				const runtime = resolveBuildRuntime(cwd, flags.runtime);
-				const entryPath = resolve(cwd, flags.entry);
-				const envFiles = resolveEnvFilePaths(cwd, flags["env-file"]);
-
-				if (!existsSync(entryPath)) {
-					throw new Error(
-						`Entry file not found: ${entryPath}\n  Specify a valid entry file with --entry <path>`,
-					);
-				}
-
-				if (flags.package && runtime === "deno") {
-					throw new Error(
-						"--package does not yet support Deno builds.\n  Deno per-platform npm staging is reserved for a follow-up; build a specific target without --package for now.",
-					);
-				}
-				if (flags.package && runtime === "node") {
-					throw new Error(
-						"--package does not apply to Node builds.\n  Publish the generated JavaScript artifact as a normal npm package.",
-					);
-				}
-				if (flags.package && flags.outfile) {
-					throw new Error(
-						"--outfile cannot be used with --package.\n  Use --stage-dir to control the staged npm output directory.",
-					);
-				}
-				if (runtime === "node" && flags.target?.length) {
-					throw new Error(
-						"--target cannot be used with --runtime node.\n  Node builds produce one portable JavaScript artifact.",
-					);
-				}
-				// Warn (not error): "cli" is the flag default, so only a non-default
-				// value signals explicit — and ignored — user intent.
-				if (runtime === "node" && flags.resolver !== "cli") {
-					console.warn(
-						"Warning: --resolver is ignored with --runtime node; Node builds produce a single JavaScript artifact.",
-					);
-				}
-				if (runtime === "deno" && flags.minify) {
-					throw new Error(
-						"--minify is not supported with --runtime deno.\n  deno compile has no minification step; drop the flag.",
-					);
-				}
-				if (runtime === "deno" && envFiles.length > 0) {
-					throw new Error(
-						"--env-file is not supported with --runtime deno.\n" +
-							"  deno compile embeds every variable from the file into the binary — secrets included —\n" +
-							"  with no PUBLIC_* filter. Load configuration at runtime instead (e.g. deno run --env-file).",
-					);
-				}
-				// deno compile has no minifier; bun/node bundling minifies unless --no-minify.
-				const minify = runtime === "deno" ? false : (flags.minify ?? true);
-
-				const bunTargets = runtime === "bun" ? resolveTargets(flags.target) : undefined;
-				const denoTargets = runtime === "deno" ? resolveDenoTargets(flags.target) : undefined;
-				const targetCount = bunTargets?.length ?? denoTargets?.length ?? 0;
-				if (!flags.package && flags.outfile && targetCount > 1) {
-					throw new Error(
-						"--outfile cannot be used when building for multiple targets.\n  Use --name to set the base binary name instead.",
-					);
-				}
-
-				const outDir = flags.outfile
-					? dirname(resolve(cwd, flags.outfile))
-					: resolve(cwd, flags.outdir);
-				const prepared = flags.validate
-					? await buildEntrypoint(entryPath, outDir, envFiles)
+				const plan = planBuild(flags, process.cwd());
+				for (const warning of plan.warnings) console.warn(warning);
+				const prepared = plan.validate
+					? await buildEntrypoint(plan.entryPath, plan.outDir, plan.envFiles)
 					: undefined;
 
-				if (flags.package) {
+				if (plan.runtime === "bun" && plan.mode === "package") {
 					const { runDistributeBuild } = await import("../utils/distribute.ts");
 					await runDistributeBuild({
-						cwd,
-						entry: flags.entry,
-						name: flags.name,
-						minify,
-						target: flags.target,
-						stageDir: flags["stage-dir"],
-						envFiles,
-						artifactOutDir: prepared ? outDir : undefined,
+						cwd: plan.cwd,
+						entry: plan.staging.entry,
+						name: plan.staging.name,
+						stageDir: plan.staging.stageDir,
+						minify: plan.minify,
+						target: plan.staging.targets,
+						envFiles: plan.envFiles,
+						artifactOutDir: prepared ? plan.outDir : undefined,
+						userPackageJson: plan.userPackageJson,
 					});
 					return;
 				}
 
-				if (runtime === "node") {
-					const outfilePath = resolveOutfile(
-						flags.outfile,
-						flags.name,
-						entryPath,
-						cwd,
-						flags.outdir,
-						".js",
-					);
-					console.log(`Building ${dim(entryPath)} ${cyan("→")} ${dim(outfilePath)}...`);
-					await execNodeBuild(entryPath, outfilePath, minify, envFiles);
-					console.log(`${green("✓")} Built successfully: ${outfilePath}`);
+				if (plan.runtime === "node") {
+					console.log(`Building ${dim(plan.entryPath)} ${cyan("→")} ${dim(plan.outfilePath)}...`);
+					await execNodeBuild(plan.entryPath, plan.outfilePath, plan.minify, plan.envFiles);
+					console.log(`${green("✓")} Built successfully: ${plan.outfilePath}`);
 					return;
 				}
 
-				const common = {
-					entryPath,
-					outfile: flags.outfile,
-					name: flags.name,
-					cwd,
-					outdir: flags.outdir,
-					resolver: flags.resolver,
-					envFiles,
-				};
-				if (bunTargets) {
-					await buildBinaryOutputs({
-						...common,
-						targets: bunTargets,
-						getFilename: getBinaryFilename,
-						execute: (entry, outfile, target, files) =>
-							execBuild(entry, outfile, minify, target, files),
+				if (plan.runtime === "bun") {
+					await buildBinaryOutputs(plan, {
+						execute: (entry, outfile, target, envFiles) =>
+							execBuild(entry, outfile, plan.minify, target, envFiles),
 						writeResolver,
 					});
 					return;
 				}
-				await buildBinaryOutputs({
-					...common,
-					targets: denoTargets!,
-					getFilename: getDenoBinaryFilename,
+				await buildBinaryOutputs(plan, {
 					execute: (entry, outfile, target) => execDenoBuild(entry, outfile, target),
 					writeResolver: writeDenoResolver,
 				});

@@ -232,23 +232,38 @@ export function getDenoBinaryFilename(baseName: string, target: DenoTarget): str
 	return `${baseName}-${target}${ext}`;
 }
 
-function hasStringName(value: JsonValue): value is { name: string } {
-	return isJsonObject(value) && typeof value.name === "string";
+export function readUserPackageJson(cwd: string): JsonValue | undefined {
+	const packageJsonPath = join(cwd, "package.json");
+	if (!existsSync(packageJsonPath)) return undefined;
+
+	try {
+		// SAFETY: JSON.parse returns only JSON-compatible values for a valid JSON document.
+		return JSON.parse(readFileSync(packageJsonPath, "utf8")) as JsonValue;
+	} catch (error) {
+		throw new Error(
+			`Failed to parse package.json in ${cwd}: ${error instanceof Error ? error.message : String(error)}`,
+			{ cause: error },
+		);
+	}
 }
 
+function hasStringName(value: JsonValue | undefined): value is { name: string } {
+	return value !== undefined && isJsonObject(value) && typeof value.name === "string";
+}
+
+const READ_USER_PACKAGE_JSON = Symbol("read-user-package-json");
+
 /** Resolve the base binary name from an explicit name, package name, or entry filename. */
-export function resolveBaseName(name: string | undefined, entry: string, cwd: string): string {
+export function resolveBaseName(
+	name: string | undefined,
+	entry: string,
+	cwd: string,
+	packageJson: JsonValue | undefined | typeof READ_USER_PACKAGE_JSON = READ_USER_PACKAGE_JSON,
+): string {
 	if (name) return name;
 
-	const pkgPath = join(cwd, "package.json");
-	if (existsSync(pkgPath)) {
-		try {
-			const pkgJson: JsonValue = JSON.parse(readFileSync(pkgPath, "utf-8"));
-			if (hasStringName(pkgJson)) return pkgJson.name.replace(/^@[^/]+\//, "");
-		} catch {
-			// Ignore parse errors, fall through to entry filename
-		}
-	}
+	const pkgJson = packageJson === READ_USER_PACKAGE_JSON ? readUserPackageJson(cwd) : packageJson;
+	if (hasStringName(pkgJson)) return pkgJson.name.replace(/^@[^/]+\//, "");
 
 	return basename(entry).replace(/\.[^.]+$/, "");
 }
@@ -272,7 +287,7 @@ export type BuildRunner = {
  * Fall back to the current executable with `BUN_BE_BUN=1` so packaged Crust
  * binaries still work in environments without a separate Bun install.
  */
-export function resolveBunBuildRunner(): BuildRunner {
+function resolveBunBuildRunner(): BuildRunner {
 	const bunPath = which("bun");
 	if (bunPath) {
 		return {
@@ -317,7 +332,7 @@ export async function execBuild(
 	await runBuildProcess(runner, args, outfilePath);
 }
 
-export function createBunCompileArgs(
+function createBunCompileArgs(
 	entryPath: string,
 	outfilePath: string,
 	minify: boolean,
@@ -337,7 +352,7 @@ export function createBunCompileArgs(
 	];
 }
 
-export function createNodeBuildArgs(
+function createNodeBuildArgs(
 	entryPath: string,
 	outfilePath: string,
 	minify: boolean,
@@ -358,7 +373,7 @@ export function createNodeBuildArgs(
 	];
 }
 
-export function createDenoCompileArgs(
+function createDenoCompileArgs(
 	entryPath: string,
 	outfilePath: string,
 	target: DenoTarget,
