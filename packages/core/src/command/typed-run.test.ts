@@ -25,6 +25,13 @@ interface JsonRunCapture {
 	args: { payload: unknown };
 	flags: { config: unknown };
 }
+interface NamedJsonPayload {
+	name: string;
+	nested: { enabled: boolean };
+}
+interface NonJsonPayload {
+	createdAt: Date;
+}
 type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
@@ -426,6 +433,15 @@ describe("typed programmatic invocation", () => {
 		expect(ran).toBe("root");
 	});
 
+	it("accepts structurally JSON-compatible named interfaces", () => {
+		const app = new Crust("cli").flags({ name: "config", type: "json" }).action(() => {});
+		const payload: NamedJsonPayload = { name: "demo", nested: { enabled: true } };
+		void app.run([], { flags: { config: payload } });
+		const invalid: NonJsonPayload = { createdAt: new Date() };
+		// @ts-expect-error -- named interfaces still reject recursively non-JSON properties
+		void app.run([], { flags: { config: invalid } });
+	});
+
 	it("keeps arrays scalar for non-multiple json flags and non-variadic json args", async () => {
 		let received: JsonRunCapture | undefined;
 		const app = new Crust("cli")
@@ -547,7 +563,17 @@ describe("typed programmatic invocation", () => {
 			// @ts-expect-error -- noNegate booleans accept only true
 			flags: { mode: "dev", version: false },
 		};
+		function typecheckRunInput() {
+			// @ts-expect-error -- the structural JSON overload does not bypass required arguments
+			void app.run(["release-now", "deploy"] as const, { flags: { mode: "dev" } });
+			void app.run(["release-now", "deploy"], {
+				args: { target: "prod" },
+				// @ts-expect-error -- the structural JSON overload preserves non-JSON literal contracts
+				flags: { mode: "staging" },
+			});
+		}
 		void [valid, withoutDefault, missingArg, unknownArg, invalidChoice, invalidNegation];
+		void typecheckRunInput;
 		expect(true).toBe(true);
 	});
 

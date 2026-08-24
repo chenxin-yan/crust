@@ -27,9 +27,7 @@ type FieldValidator = (
 	value: JsonValue | undefined,
 ) => FieldValidationResult | Promise<FieldValidationResult>;
 
-function makeSchemaValidator(
-	schema: StandardSchema<unknown, JsonValue | undefined>,
-): FieldValidator {
+function makeSchemaValidator(schema: StandardSchema<unknown, unknown>): FieldValidator {
 	return async (value) => {
 		const result = await schema["~standard"].validate(value);
 		if (result.issues) {
@@ -39,7 +37,8 @@ function makeSchemaValidator(
 			);
 			throw new Error(messages.join("; "));
 		}
-		return { value: result.value };
+		// SAFETY: createStore's field constraint only admits recursively JSON-compatible schema outputs.
+		return { value: result.value as JsonValue | undefined };
 	};
 }
 

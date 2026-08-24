@@ -2,7 +2,7 @@
 // @crustjs/store — Public type contracts
 // ────────────────────────────────────────────────────────────────────────────
 
-import type { JsonValue } from "@crustjs/utils/json";
+import type { JsonCompatible, JsonValue } from "@crustjs/utils/json";
 import type { BaseValueType, ResolvePrimitive } from "@crustjs/utils/primitive";
 import type { InferOutput, StandardSchema } from "@crustjs/utils/schema";
 
@@ -112,7 +112,7 @@ interface BooleanArrayFieldDef extends ArrayFieldBase<boolean[]> {
 /** A field whose Standard Schema exclusively owns its value semantics. */
 interface SchemaFieldDef {
 	/** Standard Schema that owns validation, transformation, defaults, and optionality. */
-	schema: StandardSchema<unknown, JsonValue | undefined>;
+	schema: StandardSchema<unknown, unknown>;
 	/** Human-readable description for documentation and tooling. */
 	description?: string;
 	/** Optional primitive metadata for tooling; the schema still owns coercion. */
@@ -161,6 +161,14 @@ export type FieldDef =
 
 /** Record mapping field names to their definitions. */
 export type FieldsDef = Record<string, FieldDef>;
+
+type JsonCompatibleFields<F extends FieldsDef> = {
+	[K in keyof F]: F[K] extends { schema: StandardSchema<unknown, infer Output> }
+		? Exclude<Output, undefined> extends JsonCompatible<Exclude<Output, undefined>>
+			? F[K]
+			: never
+		: F[K];
+};
 
 /** The store's in-memory JSON document keyed by field name. */
 export type StoreDocument = Record<string, JsonValue | undefined>;
@@ -292,7 +300,7 @@ export interface CreateStoreOptions<F extends FieldsDef> {
 	 * schema-backed definition. Core fields without `default` are optional;
 	 * schema fields use the schema's exact output type.
 	 */
-	fields: F;
+	fields: F & JsonCompatibleFields<F>;
 
 	/**
 	 * When `true` (the default), persisted keys not present in `fields`

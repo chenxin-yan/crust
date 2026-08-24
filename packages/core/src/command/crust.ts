@@ -1,4 +1,4 @@
-import type { JsonValue } from "@crustjs/utils/json";
+import type { JsonCompatible, JsonValue } from "@crustjs/utils/json";
 
 import type {
 	AnyContextFactory,
@@ -180,6 +180,31 @@ export type RunInput<Shape extends CommandShape> = RunSection<"args", InputArgs<
 	RunSection<"flags", InputFlags<Shape["flags"]>> & {
 		readonly raw?: readonly string[];
 	};
+
+type CompatibleRunValue<Expected, Actual> = Actual extends Expected
+	? Actual
+	: JsonValue extends Expected
+		? Actual extends JsonCompatible<Actual>
+			? Actual
+			: never
+		: Expected extends readonly (infer Item)[]
+			? JsonValue extends Item
+				? Actual extends JsonCompatible<Actual>
+					? Actual
+					: never
+				: never
+			: Actual extends object
+				? {
+						[K in keyof Expected]: K extends keyof Actual
+							? CompatibleRunValue<Exclude<Expected[K], undefined>, Actual[K]>
+							: Expected[K];
+					} & { [K in Exclude<keyof Actual, keyof Expected>]: never }
+				: never;
+
+type CompatibleRunInput<Shape extends CommandShape, Input> = CompatibleRunValue<
+	RunInput<Shape>,
+	Input
+>;
 
 export type RunInputArguments<Shape extends CommandShape> =
 	RequiredKeys<RunInput<Shape>> extends never
@@ -1299,13 +1324,24 @@ export class Crust<
 	 * @param io - Optional `stdout(text)` / `stderr(text)` callbacks, also
 	 *             exposed to Command Actions and Extensions
 	 */
+	async run<const Path extends CommandPath<Tree>, const Input>(
+		path: Path,
+		input: Input,
+		...validation: Input extends CompatibleRunInput<
+			CommandShapeAt<CommandShape<A, Flags, Tree, Result>, NoInfer<Path>>,
+			Input
+		>
+			? readonly [io?: Partial<InvocationIO>]
+			: readonly [invalidInput: never]
+	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>>;
 	async run<const Path extends CommandPath<Tree>>(
 		path: Path,
 		...args: RunArguments<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>>
-	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>> {
-		// SAFETY: RunArguments constrains the generic structured input to this runtime value union.
+	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>>;
+	async run(path: readonly string[], ...args: readonly unknown[]): Promise<RunOutcome<unknown>> {
+		// SAFETY: the public overloads constrain structured input to this runtime value union.
 		const structuredInput = (args[0] ?? {}) as RunInputPayload;
-		// SAFETY: the second variadic tuple slot is the optional invocation IO shape.
+		// SAFETY: the public overloads constrain the second argument to invocation IO.
 		const io = args[1] as Partial<InvocationIO> | undefined;
 		const root = prepareInvocationRoot(this._node, materializeCommandDefinition);
 		const argv = serializeRunArgv(root, path, structuredInput);

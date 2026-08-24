@@ -271,18 +271,26 @@ function interfaceDictionaryValueTypes(
 				? [{ type: member.typeAnnotation.typeAnnotation, substitutions: nextSubstitutions }]
 				: [],
 		);
-		if (direct.length > 0) return direct;
-		return declaration.extends.flatMap((heritage): readonly ResolvedType[] =>
-			heritage.expression.type === "Identifier"
-				? inheritedDictionaryValueTypes(
-						heritage.expression.name,
-						heritage.typeArguments?.params ?? [],
-						environment,
-						nextSubstitutions,
-						nextResolving,
-					)
-				: [],
-		);
+		const shadowsInheritedStringIndex = declaration.body.body.some((member) => {
+			if (member.type !== "TSIndexSignature") return false;
+			const parameter = member.parameters[0];
+			return parameter?.typeAnnotation?.typeAnnotation.type === "TSStringKeyword";
+		});
+		if (shadowsInheritedStringIndex) return direct;
+		return [
+			...direct,
+			...declaration.extends.flatMap((heritage): readonly ResolvedType[] =>
+				heritage.expression.type === "Identifier"
+					? inheritedDictionaryValueTypes(
+							heritage.expression.name,
+							heritage.typeArguments?.params ?? [],
+							environment,
+							nextSubstitutions,
+							nextResolving,
+						)
+					: [],
+			),
+		];
 	});
 }
 

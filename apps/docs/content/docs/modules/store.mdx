@@ -345,7 +345,7 @@ await store.write({ port: 0, host: "localhost" });
 
 ### Schema-driven validation
 
-Put a [Standard Schema v1](https://standardschema.dev/) object directly on a field definition's `schema` key. The schema exclusively owns validation, transformation, defaults, and optionality. Because the store persists to JSON, the schema's output type must be JSON-compatible (`JsonValue | undefined`); a schema producing a non-JSON value such as `Date` is rejected at the type level.
+Put a [Standard Schema v1](https://standardschema.dev/) object directly on a field definition's `schema` key. The schema exclusively owns validation, transformation, defaults, and optionality. Because the store persists to JSON, the schema's output type must be recursively JSON-compatible; named interfaces are accepted when all properties are JSON data, while a schema producing a non-JSON value such as `Date` is rejected at the type level.
 
 ```ts
 import { configDir, createStore } from "@crustjs/store";
@@ -490,7 +490,7 @@ if (err instanceof CrustStoreError) {
 
 ### Types
 
-`FieldDef` accepts core value definitions and schema-backed `{ schema }` definitions. The schema-backed branch carries the Standard Schema output type directly; the output must be JSON-compatible (`JsonValue | undefined`).
+`FieldDef` accepts core value definitions and schema-backed `{ schema }` definitions. The schema-backed branch carries the Standard Schema output type directly; `createStore` requires the output to be recursively JSON-compatible, including named interfaces whose properties are JSON data.
 
 #### `FieldDef`
 

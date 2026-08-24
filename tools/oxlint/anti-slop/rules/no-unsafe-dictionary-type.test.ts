@@ -83,6 +83,10 @@ tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
 			errors: 1,
 		},
 		{
+			code: "interface Base { [key: string]: unknown } interface Child extends Base { [index: number]: string } type A = Child;",
+			errors: 2,
+		},
+		{
 			code: "type Base<T> = { [key: string]: T }; interface Index<T> extends Base<T> {} type A = Index<unknown>;",
 			errors: 1,
 		},
