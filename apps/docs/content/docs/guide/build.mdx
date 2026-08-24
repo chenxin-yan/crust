@@ -6,7 +6,7 @@ description: Build your CLI for Bun, Deno, or Node with crust build.
 import { Callout } from "fumadocs-ui/components/callout";
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 
-The `crust build` command builds CLIs for Bun, Deno, or Node. Bun (the default) and Deno produce standalone executables; Node produces one bundled, executable JavaScript file. Select the runtime with `--runtime` or persist it in `package.json`:
+The `crust build` command builds CLIs for Bun, Deno, or Node. Bun (the default) and Deno produce standalone executables; Node produces one bundled, executable JavaScript file. Select the runtime with `--runtime` or persist it in `package.json`. A malformed project `package.json` fails the build before output planning begins.
 
 ```json title="package.json"
 {

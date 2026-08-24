@@ -92,7 +92,7 @@ describe("create-crust CLI", () => {
 
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain(
-			'Error: Invalid distribution "invalid". Expected "binary" or "runtime".',
+			'Error: Invalid value "invalid" for --distribution. Expected one of: binary, runtime',
 		);
 		expect(existsSync(projectDir)).toBe(false);
 	}, 30_000);
@@ -144,6 +144,7 @@ describe("create-crust CLI", () => {
 
 		expect(result.exitCode).toBe(0);
 		expect(result.stderr).not.toContain("Error:");
+		expect(result.stdout).not.toContain("overwriting (--overwrite)");
 		expect(existsSync(join(tempRoot, "src", "cli.ts"))).toBe(true);
 		const pkg = JSON.parse(readFileSync(join(tempRoot, "package.json"), "utf-8"));
 		expect(pkg.name).not.toBe("old");

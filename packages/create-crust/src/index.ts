@@ -8,16 +8,16 @@ import { isInGitRepo, runSteps, scaffold } from "@crustjs/create";
 import { spinner } from "@crustjs/progress";
 import { confirm, input, select } from "@crustjs/prompts";
 
-import corePackage from "../../core/package.json";
-import crustPackage from "../../crust/package.json";
-import extensionsPackage from "../../extensions/package.json";
+declare const CRUST_CORE_VERSION: string;
+declare const CRUST_CLI_VERSION: string;
+declare const CRUST_EXTENSIONS_VERSION: string;
 
 type DistributionMode = "binary" | "runtime";
 
 const CRUST_TEMPLATE_VERSION_CONTEXT = {
-	crustCoreVersion: corePackage.version,
-	crustExtensionsVersion: extensionsPackage.version,
-	crustCliVersion: crustPackage.version,
+	crustCoreVersion: CRUST_CORE_VERSION,
+	crustExtensionsVersion: CRUST_EXTENSIONS_VERSION,
+	crustCliVersion: CRUST_CLI_VERSION,
 } satisfies Record<string, string>;
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -34,16 +34,6 @@ function validateProjectName(name: string): void {
 	}
 }
 
-function parseDistributionMode(value: string | undefined): DistributionMode | undefined {
-	if (value === undefined) {
-		return undefined;
-	}
-	if (value === "binary" || value === "runtime") {
-		return value;
-	}
-	throw new Error(`Invalid distribution "${value}". Expected "binary" or "runtime".`);
-}
-
 // ────────────────────────────────────────────────────────────────────────────
 // Command definition
 // ────────────────────────────────────────────────────────────────────────────
@@ -53,6 +43,7 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 		{
 			name: "distribution",
 			type: "string",
+			choices: ["binary", "runtime"],
 			description: 'Distribution mode ("binary" or "runtime")',
 		},
 		{
@@ -91,7 +82,7 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 
 		const resolvedDir = resolve(process.cwd(), targetDir);
 		const dirName = basename(resolvedDir);
-		const distributionInitial = parseDistributionMode(flags.distribution);
+		const distributionInitial = flags.distribution;
 
 		// Ask before writing into an existing destination. The cwd (".") always
 		// exists, so it only needs confirmation when non-empty; a named directory
@@ -100,9 +91,6 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 			targetDir === "." ? readdirSync(resolvedDir).length > 0 : existsSync(resolvedDir);
 		let overwrite = false;
 		if (needsOverwriteConfirm) {
-			if (flags.overwrite === true) {
-				console.log(`Directory "${dirName}" already exists; overwriting (--overwrite).`);
-			}
 			overwrite = await confirm({
 				message:
 					targetDir === "."

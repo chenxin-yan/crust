@@ -52,6 +52,8 @@
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
+		"@crustjs/crust": "workspace:*",
+		"@crustjs/extensions": "workspace:*",
 		"tsdown": "catalog:"
 	},
 	"engines": {

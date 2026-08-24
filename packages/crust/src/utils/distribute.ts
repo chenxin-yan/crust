@@ -4,14 +4,13 @@ import {
 	existsSync,
 	mkdirSync,
 	readdirSync,
-	readFileSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { bold, cyan, dim, green } from "@crustjs/style";
-import type { JsonValue } from "@crustjs/utils/json";
+import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
 
 import {
 	type BunTarget,
@@ -19,6 +18,7 @@ import {
 	getBinaryFilename,
 	resolveBaseName,
 	resolveTargets,
+	readUserPackageJson,
 	TARGET_INFO,
 	type TargetInfo,
 } from "./build-helpers.ts";
@@ -124,23 +124,18 @@ export type DistributionManifest = {
 	publishOrder: string[];
 };
 
-function readPackageJson(cwd: string): UserPackageJson {
-	const packageJsonPath = join(cwd, "package.json");
-	if (!existsSync(packageJsonPath)) {
+function readPackageJson(cwd: string, packageJson: JsonValue | undefined): UserPackageJson {
+	if (packageJson === undefined) {
 		throw new Error(
 			`package.json not found in ${cwd}\n  crust build --package requires a package.json with name and version fields.`,
 		);
 	}
-
-	try {
-		// SAFETY: required identity fields are validated before use; optional npm metadata is copied without interpretation.
-		return JSON.parse(readFileSync(packageJsonPath, "utf-8")) as UserPackageJson;
-	} catch (error) {
-		throw new Error(
-			`Failed to parse package.json in ${cwd}: ${error instanceof Error ? error.message : String(error)}`,
-			{ cause: error },
-		);
+	if (!isJsonObject(packageJson)) {
+		throw new Error(`package.json in ${cwd} must contain a JSON object.`);
 	}
+
+	// SAFETY: required identity fields are validated before use; optional npm metadata is copied without interpretation.
+	return packageJson as UserPackageJson;
 }
 
 export function derivePlatformPackageName(rootPackageName: string, targetAlias: string): string {
@@ -255,8 +250,9 @@ function resolveDistributionMetadata(
 	cwd: string,
 	entryPath: string,
 	name: string | undefined,
+	userPackageJson: JsonValue | undefined,
 ): DistributionMetadata {
-	const pkgJson = readPackageJson(cwd);
+	const pkgJson = readPackageJson(cwd, userPackageJson);
 	if (!pkgJson.name) {
 		throw new Error("package.json is missing a name field.");
 	}
@@ -266,7 +262,7 @@ function resolveDistributionMetadata(
 
 	validatePackageNameLength(pkgJson.name);
 
-	const baseName = resolveBaseName(name, entryPath, cwd);
+	const baseName = resolveBaseName(name, entryPath, cwd, userPackageJson);
 	const commandName = inferCommandName(pkgJson.name, pkgJson.bin, baseName);
 	const rootPackageJson = pickRootMetadata(pkgJson);
 
@@ -506,6 +502,8 @@ export async function runDistributeBuild(options: {
 	envFiles?: readonly string[];
 	/** Directory whose Extension-emitted artifact subdirectories are staged in the root package. */
 	artifactOutDir?: string;
+	/** Pre-read by build planning so package metadata is parsed once per build. */
+	userPackageJson?: JsonValue;
 }): Promise<void> {
 	const cwd = options.cwd ?? process.cwd();
 	const entryPath = resolve(cwd, options.entry);
@@ -518,7 +516,10 @@ export async function runDistributeBuild(options: {
 
 	const stageDir = resolve(cwd, options.stageDir);
 	const targets = resolveTargets(options.target);
-	const metadata = resolveDistributionMetadata(cwd, entryPath, options.name);
+	const userPackageJson = Object.hasOwn(options, "userPackageJson")
+		? options.userPackageJson
+		: readUserPackageJson(cwd);
+	const metadata = resolveDistributionMetadata(cwd, entryPath, options.name, userPackageJson);
 
 	const distributionTargets = targets.map((target) =>
 		resolveDistributionTarget(stageDir, metadata.baseName, metadata.rootPackageName, target),
