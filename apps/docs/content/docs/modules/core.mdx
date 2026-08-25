@@ -64,6 +64,8 @@ Downstream commands and other Context setups call `await ctx.api`. See [Contexts
 | [`CommandConfig`](/docs/api/crust)            | Static metadata for a reusable definition                                 |
 | `CommandMeta`                                 | Name, description, usage, sections, aliases, and visibility               |
 | `CommandSection`                              | A titled documentation block with an optional consumer audience           |
+| `CommandSectionInput`                         | Plain-text section (`title`, `body`) with an optional consumer audience   |
+| `SectionAudience`                             | Mutually exclusive `only`/`except` consumer lists on a section            |
 | `ExtensionId`                                 | Branded identity minted by `defineExtensionId()`                          |
 | `ContextBag` / `FactoryValueOf`               | Lazy Context property bag and factory-value helper types                  |
 | [`RootCommandMeta`](/docs/api/crust)          | Root description, usage, and sections accepted by the `Crust` constructor |
@@ -128,18 +130,19 @@ Omitting `io` creates no new ambient scope, preserving native TTY detection and 
 
 ## Extension types
 
-| Type                    | Description                                                                 |
-| ----------------------- | --------------------------------------------------------------------------- |
-| `Extension`             | Identified frozen Extension value                                           |
-| `ExtensionBuildContext` | Frozen root snapshot and resolved output directory for artifact generation  |
-| `ExtensionConfig`       | Owned flags, commands, section contributions, build generation, and hooks   |
-| `ExtensionFlagDef`      | Extension-owned flag with optional `recursive` scope                        |
-| `ExtensionContext`      | Readonly invocation view with inferred Extension-owned flags and `finish()` |
-| `ExtensionHooks`        | Typed `preRun`, `postRun`, and `onError` hook slots                         |
-| `InferExtensionFlags`   | Syntax-parsed values inferred from an Extension's contributed flags         |
-| `NamedExtensionFlagDef` | Named Extension flag accepted by `ExtensionConfig.flags`                    |
-| `Finished`              | Opaque token returned by `ExtensionContext.finish()`                        |
-| `InvocationOutcome`     | Completed, short-circuited, or failed invocation result                     |
+| Type                           | Description                                                                 |
+| ------------------------------ | --------------------------------------------------------------------------- |
+| `Extension`                    | Identified frozen Extension value                                           |
+| `ExtensionBuildContext`        | Frozen root snapshot and resolved output directory for artifact generation  |
+| `ExtensionConfig`              | Owned flags, commands, section contributions, build generation, and hooks   |
+| `ExtensionFlagDef`             | Extension-owned flag with optional `recursive` scope                        |
+| `ExtensionContext`             | Readonly invocation view with inferred Extension-owned flags and `finish()` |
+| `ExtensionHooks`               | Typed `preRun`, `postRun`, and `onError` hook slots                         |
+| `InferExtensionFlags`          | Syntax-parsed values inferred from an Extension's contributed flags         |
+| `NamedExtensionFlagDef`        | Named Extension flag accepted by `ExtensionConfig.flags`                    |
+| `ExtensionSectionContribution` | Section contributed by an Extension to command documentation                |
+| `Finished`                     | Opaque token returned by `ExtensionContext.finish()`                        |
+| `InvocationOutcome`            | Completed, short-circuited, or failed invocation result                     |
 
 ## Error types
 

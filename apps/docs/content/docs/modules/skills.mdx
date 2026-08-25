@@ -66,7 +66,7 @@ When `extras` is non-empty, the build regenerates current command documentation 
 
 The extension registers `my-cli skill` and `my-cli skill update`. It also contributes an **Agent skills** section to root help and generated man pages. Each shipped skill is listed by name and description with its logical source path — relative to the working directory when the packaged directory is inside it, absolute otherwise — so agents can discover and load skills without installing them first. Run builds from the project root containing the packaged skills directory to keep absolute build-machine paths out of generated artifacts.
 
-The management command reads every skill in `distDir` and creates links in selected agent directories. `--scope project|global` selects project or user locations; `--all` installs for universal and detected agents without prompting.
+The management command reads every skill in `distDir` and reconciles links against your selection: agents that already have links installed are preselected, selected agents get links created, and deselecting a previously installed agent removes its links (a warning is shown when the directory is shared with a still-selected agent). `--scope project|global` selects project or user locations; `--all` installs for universal and detected agents without prompting.
 
 ```sh
 my-cli skill

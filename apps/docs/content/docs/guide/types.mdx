@@ -35,7 +35,7 @@ The Command Action receives the return type. A parser must be synchronous: TypeS
 
 ## Compile-time definition checks
 
-Crust is TypeScript-first: command, flag, argument, Context, and Extension definitions are checked at compile time. `FIX_*` brands let the editor point at collisions, invalid alias shapes, asynchronous parsers, duplicate names, and invalid variadic positions. Core does not repeat these definition checks at runtime.
+Crust is TypeScript-first: command, flag, argument, Context, and Extension definitions are checked at compile time. `FIX_*` brands let the editor point at collisions, invalid alias shapes, asynchronous parsers, duplicate names, and invalid variadic positions. For definitions TypeScript cannot see — flags built from config objects, duplicate or misplaced arguments, dynamic `.add()` name collisions — core repeats the checks at runtime and throws `DEFINITION` errors.
 
 Argv remains untrusted input. Parsing, built-in conversion, required values, choices, and Standard Schema validation still run for every invocation. Context dependency declarations are checked statically; lazy bag access retains runtime guards for missing providers on dynamically assembled paths, dependency cycles, and lifecycle misuse.
 

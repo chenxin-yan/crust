@@ -20,7 +20,7 @@ See [`FlagDef`](/docs/api/types#flagdef) for the complete definition.
 
 Repeated `.flags()` calls accumulate: `.flags(a).flags(b)` defines both flags. A statically known name, short form, or alias collision with an earlier call or an existing Context-owned flag fails typecheck with `FIX_ALIAS_COLLISION` at the call that introduces it.
 
-Builder chaining follows the same accumulation rule for `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` (except duplicate `ExtensionId`s, where `.extend()` keeps only the last registration). Definition correctness is enforced by TypeScript rather than repeated at runtime.
+Builder chaining follows the same accumulation rule for `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` (except duplicate `ExtensionId`s, where `.extend()` keeps only the last registration). Definition correctness is enforced by TypeScript for statically known definitions; inputs the type system cannot see — flags built from config objects, duplicate or misplaced arguments, and dynamic `.add()` name collisions — throw runtime `DEFINITION` errors instead.
 
 ## Aliases and negation
 
