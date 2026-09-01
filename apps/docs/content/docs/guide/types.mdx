@@ -72,11 +72,9 @@ All schema failures in an invocation are aggregated into one `CrustError` with c
 ```ts
 import { CrustError } from "@crustjs/core";
 
-const path = [] as const;
-const input = { args: { port: "not-a-number" } };
-
 try {
-  await command.run(path, input);
+  // `command` is the schema-backed "serve" example above.
+  await command.run([] as const, { args: { port: "not-a-number" } });
 } catch (error) {
   if (error instanceof CrustError && error.is("VALIDATION")) {
     for (const issue of error.details?.issues ?? []) {
