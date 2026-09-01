@@ -72,6 +72,9 @@ await app.execute();
 Use `run()` from tests or another program:
 
 ```ts
+const output: string[] = [];
+const diagnostics: string[] = [];
+
 await app.run(
   [],
   { args: { name: "Ada" } },

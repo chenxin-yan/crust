@@ -69,9 +69,11 @@ Use this lower-level function when you want to render mdoc without writing a fil
 
 ```ts
 import { renderManPageMdoc } from "@crustjs/man";
+import { app } from "./cli.ts";
 
+const root = await app.snapshot();
 const source = renderManPageMdoc({
-  root: snapshot,
+  root,
   name: "my-cli",
 });
 ```

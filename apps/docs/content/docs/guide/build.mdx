@@ -203,7 +203,7 @@ See [Environment Variables](/docs/guide/environment) for the full env model, inc
 
 ## Pre-compile snapshot preparation
 
-By default, `crust build` materializes your full command tree before compiling. It runs the entry file in a subprocess to prepare a Command Snapshot, forcing all command recipes and Extensions. Definition correctness is enforced by TypeScript during compilation rather than repeated during this runtime materialization.
+By default, `crust build` materializes your full command tree before compiling. It runs the entry file in a subprocess to prepare a Command Snapshot, forcing all command recipes and Extensions. TypeScript reports statically representable definition errors during compilation. Runtime materialization still validates dynamic or config-built definitions, materialized command recipes, and authored and Extension-contributed documentation sections.
 
 `crust build` sets `CRUST_INTERNAL_SNAPSHOT_PATH` in the subprocess environment, pointing at a temporary file. `.execute()` materializes the full command graph, including nested subcommands and Extension-owned flags and commands, validates documentation sections, runs Extension build hooks, writes the final JSON snapshot, and exits without executing Command Actions or code after `await app.execute()`.
 

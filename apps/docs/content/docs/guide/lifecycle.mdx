@@ -11,11 +11,14 @@ Use `execute()` at a CLI entrypoint:
 await app.execute();
 ```
 
-It reads `process.argv.slice(2)` by default, presents failures through Extension `onError` hooks, sets `process.exitCode` to `1` (or `130` for cancellation), and resolves.
+It reads `process.argv.slice(2)` by default, presents dispatch failures through Extension `onError` hooks, sets `process.exitCode` to `1` (or `130` for cancellation), and resolves. Preparation failures render directly to `stderr` because the Extensions that would handle them have not been applied successfully.
 
 Use `run()` for programmatic invocation:
 
 ```ts
+const output: string[] = [];
+const diagnostics: string[] = [];
+
 await app.run(
   ["deploy"],
   { flags: { "dry-run": true } },
@@ -30,7 +33,7 @@ It requires an explicit typed command path, serializes structured input through 
 
 ## Successful invocation order
 
-1. **Prepare definitions** — apply Extensions and validate authored and Extension-contributed documentation sections. Definitions are compile-time checked. Colliding canonical command names, flags, and Context names use last-write-wins; canonical command names beat aliases, and the first-registered alias wins among colliding aliases.
+1. **Prepare definitions** — apply Extensions and validate authored and Extension-contributed documentation sections. Definitions are compile-time checked, with runtime guards for dynamic definitions. `.flags()`, `.add()`, and Extension-contributed flags reject duplicate canonical names or colliding spellings with a `DEFINITION` error. Extension-contributed commands replace existing commands with the same canonical name, while duplicate Context names use last-write-wins. Canonical command names beat aliases, and the first-registered alias wins among colliding aliases.
 2. **Route** — resolve the command path.
 3. **Parse syntax** — consume positional and flag tokens.
 4. **Run `preRun` hooks** — invoke Extension hooks in registration order. Hooks may lazily pull flagless Contexts. A hook can return `ctx.finish()` to skip the remaining hooks, validation, schemas, and the Command Action.
@@ -43,7 +46,7 @@ It requires an explicit typed command path, serializes structured input through 
 
 ## Error flow
 
-Preparation, routing, and parse failures occur before `preRun` and `postRun`. A failure from `preRun`, validation, schema application, Context construction, or the Command Action still runs every `postRun` hook. The original invocation failure wins over post-run hook failures; after a successful or finished invocation, the first post-run failure fails the invocation after remaining hooks run. Native disposal then follows `AsyncDisposableStack` error aggregation semantics.
+Preparation, routing, and parse failures occur before `preRun` and `postRun`. A failure from `preRun`, validation, schema application, Context construction, or the Command Action still runs every `postRun` hook. The original invocation failure wins over post-run hook failures; after a successful or finished invocation, the first post-run failure fails the invocation after remaining hooks run. Context disposal is LIFO. Crust uses native `AsyncDisposableStack` semantics where available; on Node 22, its fallback aggregates multiple disposal failures in an `AggregateError` rather than a native `SuppressedError` chain.
 
 With `run()`, the original value is thrown to the caller. Action and Context failures are never wrapped in `CrustError`.
 
