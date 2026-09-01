@@ -41,8 +41,8 @@ The composition root imports both sides:
   ../../../examples/split-files/cli.ts
 </include>
 
-Because `.provide(logger())` precedes `.add()`, the logger and its owned `--verbose` flag are available on the command path. The `uses: [logger]` contract is checked when the definition is added. [How `.add()` and `.as()` renaming work](/docs/guide/subcommands) — including the finalize-before-adding rule — is covered in Subcommands.
+Because `.provide(logger())` precedes `.add()`, the logger and its owned `--verbose` flag are available on the command path. The `.use(logger)` contract is checked when the definition is added. [How `.add()` and `.as()` renaming work](/docs/guide/subcommands) — including the finalize-before-adding rule — is covered in Subcommands.
 
 ## Inline or split?
 
-Add `defineCommand(name, recipe)` inline when the implementation is short and local. Move the definition to its own file when that improves readability or when the same command should be added more than once; the `uses` contract keeps its dependencies explicit and type-checkable.
+Use inline `.command(name, recipe)` on the root for app-local leaf commands that stay short. Extract to `defineCommand` when a command needs its own file, reuse, or a package; the `.use()` contract keeps its dependencies explicit and type-checkable either way.

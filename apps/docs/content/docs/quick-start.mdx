@@ -28,7 +28,7 @@ bun run src/cli.ts Ada --greet Welcome
 
 <include lang="ts">../../examples/quick-start/subcommand.ts</include>
 
-Use [the split-file pattern](/docs/guide/split-files) when the command tree grows.
+Inline `.command()` suits app-local leaf commands. Extract to `defineCommand` and [the split-file pattern](/docs/guide/split-files) when a command needs its own file, reuse, or a package.
 
 ## Invoke from code
 

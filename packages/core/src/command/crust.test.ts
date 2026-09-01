@@ -469,10 +469,11 @@ describe("Crust .add() type-level tests", () => {
 			.flags({ name: "rootOnly", type: "string" })
 			.provide(logging())
 			.add(
-				defineCommand("level1", { uses: [logging] }, (command) =>
-					command.add(
-						defineCommand("level2", { uses: [logging] }, (child) =>
+				defineCommand("level1", (command) =>
+					command.use(logging).add(
+						defineCommand("level2", (child) =>
 							child
+								.use(logging)
 								.args({ name: "target", type: "string", required: true })
 								.action(async ({ args, flags, ctx }) => {
 									const log = await ctx.logging;
@@ -2095,8 +2096,8 @@ describe("Crust .execute()", () => {
 		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
 			verbose: flags.verbose === true,
 		}));
-		const sub = defineCommand("sub", { uses: [logging] }, (command) =>
-			command.action(async ({ ctx }) => {
+		const sub = defineCommand("sub", (command) =>
+			command.use(logging).action(async ({ ctx }) => {
 				receivedVerbose = (await ctx.logging).verbose;
 			}),
 		);
@@ -2115,8 +2116,8 @@ describe("Crust .execute()", () => {
 			port: flags.port,
 		}));
 		const app = new Crust("cli").provide(ports()).add(
-			defineCommand("sub", { uses: [ports] }, (cmd) =>
-				cmd.action(async ({ ctx }) => {
+			defineCommand("sub", (cmd) =>
+				cmd.use(ports).action(async ({ ctx }) => {
 					receivedPort = (await ctx.ports).port;
 				}),
 			),
@@ -2135,8 +2136,8 @@ describe("Crust .execute()", () => {
 			verbose: flags.verbose,
 		}));
 		const app = new Crust("cli").provide(logging()).add(
-			defineCommand("sub", { uses: [logging] }, (cmd) =>
-				cmd.action(async ({ ctx }) => {
+			defineCommand("sub", (cmd) =>
+				cmd.use(logging).action(async ({ ctx }) => {
 					receivedVerbose = (await ctx.logging).verbose;
 				}),
 			),

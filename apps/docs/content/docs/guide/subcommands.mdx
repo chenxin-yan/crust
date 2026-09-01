@@ -23,7 +23,7 @@ Routing consumes command names before parsing the resolved command's arguments a
 
 ## Requirements
 
-A definition declares Context capabilities in `uses` and awaits them from its typed `ctx` bag. The app decides where to provide them:
+A definition declares Context capabilities with chained `.use(factory)` calls and awaits them from its typed `ctx` bag. The app decides where to provide them:
 
 ```ts
 import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
@@ -38,8 +38,10 @@ const repository = defineContext("repository", () => ({
   defaultBranch: "main",
 }));
 
-const clone = defineCommand("clone", { uses: [logging, repository] }, (command) =>
+const clone = defineCommand("clone", (command) =>
   command
+    .use(logging)
+    .use(repository)
     .args({ name: "url", type: "url", required: true })
     .action(async ({ args, ctx, stdout }) => {
       (await ctx.logging).debug(`cloning ${args.url}`);
@@ -66,14 +68,17 @@ Definitions can add other definitions. Providers available on that command path 
 const environment = defineFlag("environment", { type: "string" });
 const deployment = defineContext("deployment", { flags: [environment] }, ({ flags }) => flags);
 
-const status = defineCommand("status", { uses: [logging, deployment] }, (command) =>
-  command.action(async ({ ctx }) => {
-    (await ctx.logging).debug(`environment: ${(await ctx.deployment).environment}`);
-  }),
+const status = defineCommand("status", (command) =>
+  command
+    .use(logging)
+    .use(deployment)
+    .action(async ({ ctx }) => {
+      (await ctx.logging).debug(`environment: ${(await ctx.deployment).environment}`);
+    }),
 );
 
-const deploy = defineCommand("deploy", { uses: [logging] }, (command) =>
-  command.provide(deployment()).add(status),
+const deploy = defineCommand("deploy", (command) =>
+  command.use(logging).provide(deployment()).add(status),
 );
 
 const app = new Crust("app").provide(logging()).add(deploy);
@@ -81,7 +86,7 @@ const app = new Crust("app").provide(logging()).add(deploy);
 
 ## Context inheritance
 
-Adding materializes a fresh command scope seeded with the parent's current Context path. Nested definitions declare inherited providers in `uses`; the corresponding lazy bag property carries the factory's value type.
+Adding materializes a fresh command scope seeded with the parent's current Context path. Nested definitions declare inherited providers with `.use()`; the corresponding lazy bag property carries the factory's value type.
 
 Finalize `.provide()` calls on the parent builder before `.add()`. [Flags owned by a provided Context](/docs/guide/contexts#owned-flags) propagate only into descendants added later. Later fluent calls return a new builder and do not backfill a definition that was already added.
 

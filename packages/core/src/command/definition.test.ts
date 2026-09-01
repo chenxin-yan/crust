@@ -37,7 +37,10 @@ describe("command definitions", () => {
 	it("rejects Extensions registered inside command definitions", () => {
 		const nestedExtension = defineCommand("bad", (command) => {
 			// SAFETY: deliberately escape the sealed recipe surface to verify its runtime guard.
-			return (command as Crust).extend(defineExtension(defineExtensionId("nested"))) as never;
+			// oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Crust's declared type omits the builder-only `.use()`, so the escape must pass through unknown.
+			return (command as unknown as Crust).extend(
+				defineExtension(defineExtensionId("nested")),
+			) as never;
 		});
 
 		expect(() => new Crust("cli").add(nestedExtension)).toThrow(
@@ -94,8 +97,8 @@ describe("command definitions", () => {
 			apiKey: flags["api-key"],
 		}));
 		const before = defineCommand("before", (command) => command.action(() => {}));
-		const after = defineCommand("after", { uses: [auth] }, (command) =>
-			command.action(async ({ ctx }) => {
+		const after = defineCommand("after", (command) =>
+			command.use(auth).action(async ({ ctx }) => {
 				calls.push(String((await ctx.auth).apiKey));
 			}),
 		);
@@ -118,14 +121,15 @@ describe("command definitions", () => {
 			verbose: flags.verbose === true,
 		}));
 		const db = defineContext("db", () => "database");
-		const status = defineCommand("status", { uses: [db, logging] }, (command) =>
-			command.action(async ({ ctx }) => {
-				calls.push(`${await ctx.db}:${String((await ctx.logging).verbose)}`);
-			}),
+		const status = defineCommand("status", (command) =>
+			command
+				.use(db)
+				.use(logging)
+				.action(async ({ ctx }) => {
+					calls.push(`${await ctx.db}:${String((await ctx.logging).verbose)}`);
+				}),
 		);
-		const deploy = defineCommand("deploy", { uses: [db, logging] }, (command) =>
-			command.add(status),
-		);
+		const deploy = defineCommand("deploy", (command) => command.use(db).use(logging).add(status));
 		const app = new Crust("cli").provide(logging(), db()).add(deploy);
 
 		await app.run(["deploy", "status"], { flags: { verbose: true } });
@@ -137,7 +141,8 @@ describe("command definitions", () => {
 		const annotation = Symbol("annotation");
 		const definition = defineCommand("one", { description: "Reusable" }, (command) => {
 			// SAFETY: this fixture attaches an ecosystem annotation to the runtime node.
-			Object.defineProperty((command as Crust)._node, annotation, {
+			// oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Crust's declared type omits the builder-only `.use()`, so the escape must pass through unknown.
+			Object.defineProperty((command as unknown as Crust)._node, annotation, {
 				value: "preserved",
 				enumerable: true,
 			});
@@ -210,8 +215,9 @@ describe("command definitions", () => {
 	it("infers pulled Context values while preserving fluent action types", () => {
 		const auth = defineContext("auth", () => ({ user: "yan" }));
 		const region = defineContext("region", () => "us-east-1");
-		const definition = defineCommand("deploy", { uses: [auth] }, (command) =>
+		const definition = defineCommand("deploy", (command) =>
 			command
+				.use(auth)
 				.args({ name: "target", type: "string", required: true })
 				.flags({ name: "force", type: "boolean", required: true })
 				.provide(region())
@@ -238,6 +244,13 @@ describe("command definitions", () => {
 		type _NoDerive = Assert<
 			IsEqual<"derive" extends keyof CommandDefinitionBuilder ? true : false, false>
 		>;
+		// `.use()` is a recipe-builder surface; Crust's declared type omits it.
+		type _HasUse = Assert<
+			IsEqual<"use" extends keyof CommandDefinitionBuilder ? true : false, true>
+		>;
+		type _NoCrustUse = Assert<IsEqual<"use" extends keyof Crust ? true : false, false>>;
+		// `.command()` is root-only: on Crust, not on the definition builder.
+		type _CrustCommand = Assert<IsEqual<"command" extends keyof Crust ? true : false, true>>;
 
 		defineCommand("configured", (command) => {
 			// @ts-expect-error -- Extensions are root-only

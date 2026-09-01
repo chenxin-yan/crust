@@ -156,8 +156,9 @@ export function generateConsumerSource(size: number): string {
 	for (let index = 0; index < size; index++) {
 		const contextIndex = index % contextCount;
 		lines.push(
-			`const command${index} = defineCommand("command-${index}", { aliases: ["cmd-${index}", "c-${index}"], uses: [context${contextIndex}] }, (command) =>`,
-			"\tcommand",
+			`const command${index} = defineCommand("command-${index}", { aliases: ["cmd-${index}", "c-${index}"] }, (command) =>`,
+			`\tcommand`,
+			`\t\t.use(context${contextIndex})`,
 			`\t\t.flags({ name: "command-${index}-verbose", type: "boolean", short: "v", aliases: ["verbose-${index}"] })`,
 			`\t\t.flags({ name: "command-${index}-output", type: "string", short: "o", aliases: ["output-${index}"] })`,
 			`\t\t.flags({ name: "command-${index}-force", type: "boolean", short: "f", aliases: ["force-${index}"] })`,
@@ -166,8 +167,8 @@ export function generateConsumerSource(size: number): string {
 		);
 		if (index % 10 === 0) {
 			lines.push(
-				`\t\t.add(defineCommand("nested-${index}", { aliases: ["n-${index}"], uses: [context${contextIndex}] }, (nested) =>`,
-				`\t\t\tnested.flags({ name: "nested-${index}-mode", type: "string", short: "m", aliases: ["mode-${index}"] }).action(async ({ flags, ctx }) => { void flags["nested-${index}-mode"]; void await ctx["context-${contextIndex}"]; }),`,
+				`\t\t.add(defineCommand("nested-${index}", { aliases: ["n-${index}"] }, (nested) =>`,
+				`\t\t\tnested.use(context${contextIndex}).flags({ name: "nested-${index}-mode", type: "string", short: "m", aliases: ["mode-${index}"] }).action(async ({ flags, ctx }) => { void flags["nested-${index}-mode"]; void await ctx["context-${contextIndex}"]; }),`,
 				"\t\t))",
 			);
 		}
