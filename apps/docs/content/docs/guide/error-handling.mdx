@@ -38,7 +38,7 @@ Argv is untrusted and remains runtime-validated. Invalid tokens, choices, and bu
 
 ## Application errors pass through
 
-Errors from Command Actions and Context construction or disposal are not wrapped:
+Errors from Command Actions and Context construction are not converted to `CrustError`. A single disposal failure is likewise rethrown unchanged; disposal stacks combine multiple failures as a native `SuppressedError` chain or, on the Node 22 fallback, an `AggregateError`:
 
 ```ts
 const failure = new Error("service unavailable");
@@ -57,11 +57,13 @@ Use ordinary application error classes when callers need to distinguish domain f
 
 ## Terminal presentation
 
-Extension `onError` hooks present failures for `execute()`:
+Extension `onError` hooks present failures reached during `execute()` dispatch:
 
 <include lang="ts">../../../examples/extensions/hooks.ts#service-errors</include>
 
 A hook returns `true` after rendering, or a falsy value to delegate to the next hook. Core's default renderer is last. Core establishes a nonzero status before invoking the chain, so presentation cannot turn a failure into success.
+
+Failures before dispatch bypass the hook chain. Extension application and command-tree materialization failures render directly to `io.stderr`; snapshot preparation and build-hook failures are printed directly.
 
 `run()` never invokes these hooks. It throws the original error and leaves rendering and exit status to its caller.
 

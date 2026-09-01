@@ -107,6 +107,21 @@ const target = defineArg("target", { type: "string", required: true });
 
 `sections` is an ordered list of plain-text `{ title, body }` entries, optionally scoped to renderer identities with `only` or `except` audiences. Declare it in the metadata passed to `new Crust()` or `defineCommand()`; help and man render the entries after their built-in sections. `hidden` removes a command from user-facing help, completion, man-page, typo-suggestion, and skill listings without disabling direct routing.
 
+### `SectionConsumer`, `SectionAudience`, `CommandSectionInput`, and `CommandSection`
+
+```ts
+type SectionConsumer = ExtensionId | { readonly id: ExtensionId };
+
+type SectionAudience =
+  | { readonly only: readonly SectionConsumer[]; readonly except?: never }
+  | { readonly except: readonly SectionConsumer[]; readonly only?: never }
+  | { readonly only?: never; readonly except?: never };
+
+type CommandSectionInput = { readonly title: string; readonly body: string } & SectionAudience;
+```
+
+`SectionConsumer` identifies a renderer: a branded `ExtensionId`, or any value exposing one at `.id` (such as the help, man, and skills Extension factory values). `SectionAudience` is the optional `only`/`except` scoping accepted on authored sections, and `CommandSectionInput` is the authoring shape accepted from command and Extension authors. `CommandSection` is the validated section stored on snapshot `meta.sections`, with its audience consumers resolved to plain `ExtensionId` arrays.
+
 ## Command Snapshots
 
 Command Snapshots are readonly, serializable descriptions. They contain no Command Action, parser, schema, or Context functions and are deeply frozen at public boundaries.
@@ -158,14 +173,14 @@ The same injectable callbacks are passed to the Command Action and every Context
 
 ## Command Action context
 
-### `CrustCommandContext<A, F>`
+### `CrustCommandContext<A, F, Ctx>`
 
 <auto-type-table
   path="../../../../../packages/core/src/command/crust.ts"
   name="CrustCommandContext"
 />
 
-`rootCommand` is the readonly serializable snapshot of the application root, including Extension contributions. `InferArgs` and `InferFlags` are internal type plumbing, not root exports. `.args()`, `.flags()`, and `.provide()` infer these fields without explicit generic arguments.
+`Ctx` (default `{}`) is the inferred Context registry for the command path; it backs the lazy `ctx` bag as `ContextBag<Ctx>`. `rootCommand` is the readonly serializable snapshot of the application root, including Extension contributions. `InferArgs` and `InferFlags` are internal type plumbing, not root exports. `.args()`, `.flags()`, and `.provide()` infer these fields without explicit generic arguments.
 
 ## Context types
 
@@ -211,6 +226,14 @@ interface ContextSetup<Options, OF, Deps> extends InvocationIO {
 
 Attach an instance with `.provide()`. Core checks its transitive dependency closure at composition time and constructs it lazily when its bag property is accessed.
 
+### `FactoryValueOf<F>`
+
+```ts
+type FactoryValueOf<F extends AnyContextFactory> = /* awaited Context value */;
+```
+
+Extracts the awaited value type a Context factory produces: `FactoryValueOf<typeof config>` is the value `await ctx.config` resolves to. Useful when typing helpers that consume a Context value outside an inferred bag.
+
 ### `ContextMap`
 
 ```ts
@@ -229,6 +252,16 @@ The upper bound for the name/value registry accumulated by `.provide()` and Exte
 />
 
 `commands` entries are `defineCommand()` definitions contributed at the application root. `sections(snapshot)` returns plain-text sections targeted by canonical command paths relative to that root; contributions append to each target's `meta.sections` in Extension registration order. `build(ctx)` generates artifacts in Extension registration order when invoked by build tooling and may be async; its errors propagate to the caller. See [Extensions](/docs/guide/extensions).
+
+### `ExtensionSectionContribution`
+
+```ts
+type ExtensionSectionContribution = CommandSectionInput & {
+  readonly command: readonly string[];
+};
+```
+
+The entry shape returned by `ExtensionConfig.sections(snapshot)`: a plain-text section plus the required canonical `command` path it targets, relative to the application root (`[]` targets the root command).
 
 ### `ExtensionBuildContext`
 

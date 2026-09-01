@@ -2,6 +2,7 @@ import { defineExtension, defineExtensionId } from "@crustjs/core";
 
 //#region cached
 export const cached = defineExtension(defineExtensionId("cached"), {
+  flags: [{ name: "cached", type: "boolean" }],
   hooks: {
     preRun(ctx) {
       if (ctx.flags.cached !== true) return;
