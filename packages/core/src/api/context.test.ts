@@ -1451,6 +1451,44 @@ describe("inline .command()", () => {
 		void invalidCompositions;
 	});
 
+	it("demands the union of branch deps from a conditionally-returned recipe", async () => {
+		const a = defineContext("a", () => "a-value");
+		const b = defineContext("b", () => "b-value");
+		const choose: boolean = false;
+		const either = defineCommand("either", (cmd) =>
+			choose
+				? cmd.use(a).action(async ({ ctx }) => await ctx.a)
+				: cmd.use(b).action(async ({ ctx }) => await ctx.b),
+		);
+
+		// Supplying both branches' demands composes cleanly.
+		new Crust("cli").provide(a(), b()).add(either);
+
+		const invalidCompositions = () => {
+			// @ts-expect-error -- neither branch's demand is provided
+			new Crust("cli").add(either);
+			// @ts-expect-error -- inline recipe: union of branch demands is unmet
+			new Crust("cli").command("either", (cmd) =>
+				choose
+					? cmd.use(a).action(async ({ ctx }) => void (await ctx.a))
+					: cmd.use(b).action(async ({ ctx }) => void (await ctx.b)),
+			);
+		};
+		void invalidCompositions;
+
+		// Why the union is demanded: `.use()` records nothing at runtime, so a
+		// branch whose Context was never provided silently reads `undefined` off
+		// the bag instead of failing loud.
+		const app = new Crust("cli")
+			.provide(a())
+			// @ts-expect-error -- deliberately supply only the unchosen branch's demand
+			.add(either);
+		const outcome = await app.run(["either"]);
+		expect(outcome.status).toBe("completed");
+		// The action's `string`-typed result is actually `undefined` — the hole made real.
+		expect(outcome.status === "completed" && outcome.result).toBeUndefined();
+	});
+
 	it("brands inline flags that collide with registered Extension flags, matching .add()", () => {
 		const tracer = defineExtension(defineExtensionId("tracer"), {
 			flags: [{ name: "trace", type: "boolean" }],

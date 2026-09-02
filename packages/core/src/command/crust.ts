@@ -59,7 +59,7 @@ import type {
 	SpellingsOf,
 	ValidateNamedFlagDefs,
 } from "../validation/flags.brands.ts";
-import type { IsStaticTuple, IsUnion } from "../validation/shared.ts";
+import type { IsStaticTuple, IsUnion, UnionToIntersection } from "../validation/shared.ts";
 import { cloneCommandNode, installExtensionContexts } from "./extensions-install.ts";
 import {
 	executeInvocation,
@@ -496,9 +496,19 @@ type ShapeOfBuilder<B> =
 
 // Deps accumulated by `.use()` calls inside the recipe; `defineCommand` and
 // `Crust.command()` extract them from the recipe's returned builder type.
+// A conditionally-returning recipe (`cond ? cmd.use(a)... : cmd.use(b)...`)
+// infers `B` as a union; the naked-`B` conditional distributes, so without
+// merging, `Deps` would be a union whose `keyof` is the branches'
+// INTERSECTION — disjoint demands would validate as demanding nothing. A
+// conditional recipe demands the UNION of its branches' keys, so merge before
+// any key extraction.
 type DepsOfBuilder<B> =
-	B extends CommandDefinitionBuilder<any, any, any, any, any, any, any, any, infer Deps>
-		? Deps
+	UnionToIntersection<
+		B extends CommandDefinitionBuilder<any, any, any, any, any, any, any, any, infer Deps>
+			? Deps
+			: {}
+	> extends infer Merged extends ContextMap
+		? Merged
 		: {};
 
 // Matching against CommandDefinitionSpellings (never for widened names) keeps a
