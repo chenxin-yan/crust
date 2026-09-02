@@ -13,6 +13,12 @@ import type { ManifestArg, ManifestFlag, ManifestNode } from "./types.ts";
 export const SKILLS: ExtensionId = defineExtensionId("crust:skills");
 
 export function buildManifest(command: CommandSnapshot): ManifestNode {
+	const rootName = normalizeName(command.meta.name);
+	if (Object.values(command.subCommands).some((child) => normalizeName(child.meta.name) === rootName)) {
+		throw new Error(
+			`Cannot generate skills when a direct subcommand has the root command name "${rootName}".`,
+		);
+	}
 	return buildNode(buildCommandDocumentation(command), command);
 }
 function buildNode(model: CommandDocumentation, source: CommandSnapshot): ManifestNode {
