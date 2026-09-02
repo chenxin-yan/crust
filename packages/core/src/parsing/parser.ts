@@ -336,10 +336,15 @@ function validateRequiredFlags<F extends FlagsDef>(
  * This is a pure parse+coerce function — it never throws for missing required
  * values. Use {@link validateParsed} to enforce required constraints.
  */
+interface ResolvedArgs<A extends ArgsDef> {
+	args: RawParsedArgs<A>;
+	consumed: number;
+}
+
 function resolveArgs<A extends ArgsDef>(
 	argsDef: A | undefined,
 	positionals: string[],
-): RawParsedArgs<A> {
+): ResolvedArgs<A> {
 	const resolved: Record<string, ParsedArgValue> = {};
 	let index = 0;
 
@@ -367,7 +372,7 @@ function resolveArgs<A extends ArgsDef>(
 	}
 
 	// SAFETY: the loop writes exactly every declared argument name; mapped generic keys cannot be correlated at runtime.
-	return resolved as RawParsedArgs<A>;
+	return { args: resolved as RawParsedArgs<A>, consumed: index };
 }
 
 /**
@@ -468,8 +473,9 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 	const resolvedArgs = resolveArgs(argsDef, preSeparatorPositionals);
 
 	return {
-		args: resolvedArgs,
+		args: resolvedArgs.args,
 		flags: resolvedFlags,
+		excessArgs: preSeparatorPositionals.slice(resolvedArgs.consumed),
 		rawArgs,
 	};
 }
@@ -493,6 +499,13 @@ export function validateParsed<A extends ArgsDef = ArgsDef, F extends FlagsDef =
 
 	const args = parsed.args;
 	const flags = parsed.flags;
+
+	if (parsed.excessArgs.length > 0 && command.meta.allowExcessPositionals !== true) {
+		throw new CrustError(
+			"VALIDATION",
+			`Unexpected positional argument${parsed.excessArgs.length === 1 ? "" : "s"}: ${parsed.excessArgs.map((arg) => JSON.stringify(arg)).join(", ")}`,
+		);
+	}
 
 	// Re-validate args: check for required args that are undefined
 	if (argsDef) {

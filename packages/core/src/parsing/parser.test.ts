@@ -27,6 +27,7 @@ function makeNode<const A extends ArgsDef = ArgsDef, const F extends FlagsDef = 
 	const node = createCommandNode(meta.name);
 	if (meta.description) node.meta.description = meta.description;
 	if (meta.usage) node.meta.usage = meta.usage;
+	if (meta.allowExcessPositionals) node.meta.allowExcessPositionals = true;
 	if (config.flags) {
 		node.localFlags = { ...config.flags };
 		node.effectiveFlags = { ...config.flags };
@@ -837,6 +838,26 @@ describe("parseArgs — CommandNode with effective flags", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("validateParsed", () => {
+	it("rejects positionals not consumed by declared arguments", () => {
+		const cmd = makeNode({ meta: { name: "gyst" }, run: () => {} });
+		const parsed = parseArgs(cmd, ["sesion", "status"]);
+
+		expect(parsed.excessArgs).toEqual(["sesion", "status"]);
+		expect(() => validateParsed(cmd, parsed)).toThrow(
+			'Unexpected positional arguments: "sesion", "status"',
+		);
+	});
+
+	it("allows an explicit opt-out for loose positional handling", () => {
+		const cmd = makeNode({
+			meta: { name: "proxy", allowExcessPositionals: true },
+			run: () => {},
+		});
+		const parsed = parseArgs(cmd, ["forwarded", "values"]);
+
+		expect(() => validateParsed(cmd, parsed)).not.toThrow();
+	});
+
 	it("throws for missing required arg", () => {
 		const cmd = makeNode({
 			meta: { name: "test" },

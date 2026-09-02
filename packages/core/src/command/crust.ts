@@ -228,7 +228,10 @@ export interface CommandConfig extends Omit<CommandMeta, "name" | "sections"> {
 }
 
 /** Static metadata accepted by the root command constructor. */
-export type RootCommandMeta = Pick<CommandMeta, "description" | "usage"> & {
+export type RootCommandMeta = Pick<
+	CommandMeta,
+	"description" | "usage" | "allowExcessPositionals"
+> & {
 	/** Plain-text sections rendered after built-in command documentation. */
 	readonly sections?: readonly CommandSectionInput[];
 };

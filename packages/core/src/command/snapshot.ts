@@ -100,7 +100,7 @@ export interface FlagSnapshot {
  * ```
  */
 export interface CommandSnapshot {
-	/** Command metadata: `name`, `description`, `usage`, `sections`, `aliases`, `hidden`. */
+	/** Command metadata, including routing and presentation options. */
 	readonly meta: Readonly<CommandMeta>;
 	/** Whether the command defines a Command Action */
 	readonly hasAction: boolean;
@@ -195,6 +195,7 @@ export function snapshotCommand(node: CommandNode): CommandSnapshot {
 			name: node.meta.name,
 			description: node.meta.description,
 			usage: node.meta.usage,
+			allowExcessPositionals: node.meta.allowExcessPositionals,
 			sections: node.meta.sections
 				? Object.freeze(node.meta.sections.map((section) => Object.freeze({ ...section })))
 				: undefined,

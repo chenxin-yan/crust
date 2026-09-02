@@ -1988,6 +1988,22 @@ describe("Crust .execute()", () => {
 		expect(stderrChunks.join("\n")).toContain("Unknown command");
 	});
 
+	it("does not run a runnable parent for a typoed subcommand", async () => {
+		let ran = false;
+		const app = new Crust("gyst")
+			.add(defineCommand("session", (cmd) => cmd.action(() => {})))
+			.action(() => {
+				ran = true;
+			});
+
+		await app.execute({ argv: ["sesion", "status"] });
+
+		expect(ran).toBe(false);
+		expect(process.exitCode).toBe(1);
+		expect(stderrChunks.join("\n")).toContain("Unexpected positional arguments");
+		process.exitCode = 0;
+	});
+
 	it("no action is a no-op (no error)", async () => {
 		const app = new Crust("test").flags({ name: "verbose", type: "boolean" });
 

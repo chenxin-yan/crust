@@ -638,6 +638,8 @@ export interface CommandMeta {
 	description?: string;
 	/** Custom usage string (overrides auto-generated usage) */
 	usage?: string;
+	/** Allow undeclared positional arguments to be ignored. @default false */
+	allowExcessPositionals?: boolean;
 	/** Plain-text sections rendered after built-in command documentation. */
 	sections?: readonly CommandSection[];
 	/**
@@ -735,6 +737,9 @@ export type DeclaredDefault = (ArgDef | FlagDef)["default"];
 export interface ParseResult<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef> {
 	args: RawParsedArgs<A>;
 	flags: RawParsedFlags<F>;
+	/** Positionals before `--` that were not consumed by a declared argument. */
+	excessArgs: string[];
+	/** Arguments after the `--` separator. */
 	rawArgs: string[];
 }
 

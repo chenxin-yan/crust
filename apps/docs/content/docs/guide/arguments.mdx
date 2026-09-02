@@ -73,7 +73,9 @@ new Crust("serve")
 
 A schema cannot be combined with core value options — see [Schema-backed definitions](/docs/guide/types#schema-backed-definitions) for the full rule.
 
-## Forwarding raw tokens
+## Excess and raw tokens
+
+Positionals before `--` must match a declared argument; excess values fail with a `VALIDATION` error. Commands that intentionally implement loose positional handling can set `allowExcessPositionals: true` in their command metadata, though declaring a variadic argument is preferable when the values belong to the command.
 
 Tokens after `--` bypass argument and flag parsing and appear in `rawArgs`:
 
