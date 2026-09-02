@@ -16,8 +16,8 @@ import { dirname, join, resolve } from "node:path";
 import { Crust } from "@crustjs/core";
 import { renderHelp } from "@crustjs/extensions";
 import { withPromptIO } from "@crustjs/prompts";
-import { captureExecute } from "@crustjs/testing";
 import { createPromptIO } from "@crustjs/prompts/testing";
+import { captureExecute } from "@crustjs/testing";
 
 import { skill } from "./extension.ts";
 import { installSkill } from "./generate.ts";
@@ -167,9 +167,9 @@ describe("skill extension packaged directory", () => {
 		await extension.build?.({ snapshot, outDir });
 
 		expect((await readdir(join(outDir, "skills"))).sort()).toEqual(["gyst", "gyst-reference"]);
-		expect(
-			await readFile(join(outDir, "skills", "gyst-reference", "SKILL.md"), "utf8"),
-		).toContain("description: Generated command reference");
+		expect(await readFile(join(outDir, "skills", "gyst-reference", "SKILL.md"), "utf8")).toContain(
+			"description: Generated command reference",
+		);
 	});
 
 	it("copies packaged sources when extras is empty", async () => {

@@ -105,10 +105,7 @@ describe("writeSkills", () => {
 		const first = await createBundle("guide", "First guide");
 		const second = join(tempRoot, "other", "guide");
 		await mkdir(second, { recursive: true });
-		await writeFile(
-			join(second, "SKILL.md"),
-			"---\nname: guide\ndescription: Second guide\n---\n",
-		);
+		await writeFile(join(second, "SKILL.md"), "---\nname: guide\ndescription: Second guide\n---\n");
 		const result = writeSkills(createApp(), {
 			outDir: join(tempRoot, "skills"),
 			extras: [first, second],

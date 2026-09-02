@@ -14,7 +14,9 @@ export const SKILLS: ExtensionId = defineExtensionId("crust:skills");
 
 export function buildManifest(command: CommandSnapshot): ManifestNode {
 	const rootName = normalizeName(command.meta.name);
-	if (Object.values(command.subCommands).some((child) => normalizeName(child.meta.name) === rootName)) {
+	if (
+		Object.values(command.subCommands).some((child) => normalizeName(child.meta.name) === rootName)
+	) {
 		throw new Error(
 			`Cannot generate skills when a direct subcommand has the root command name "${rootName}".`,
 		);
