@@ -32,8 +32,7 @@ jobs:
     timeout-minutes: 15
     outputs:
       published: ${{ steps.changesets.outputs.published }}
-      # camelCase in changesets/action v1 (renamed to pr-number in v2)
-      prNumber: ${{ steps.changesets.outputs.pullRequestNumber }}
+      prNumber: ${{ steps.changesets.outputs.pr-number }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -67,12 +66,11 @@ jobs:
         id: changesets
         uses: changesets/action@v2
         with:
-          title: "chore: release packages"
-          commit: "chore: version packages"
-          version: bun run packages:version
-          publish: bun run packages:publish
+          pr-title: "chore: release packages"
+          commit-message: "chore: version packages"
+          version-script: bun run packages:version
+          publish-script: bun run packages:publish
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   release-pr-size:
