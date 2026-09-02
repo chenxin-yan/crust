@@ -37,7 +37,7 @@ interface CommandDefinitionBuilder<
 > {
   flags(...defs: readonly NamedFlagDef[]): CommandDefinitionBuilder;
   args(...defs: ArgsDef): CommandDefinitionBuilder;
-  use(factory: AnyContextFactory): CommandDefinitionBuilder;
+  use(...factories: readonly AnyContextFactory[]): CommandDefinitionBuilder;
   provide(...instances: readonly ContextInstance[]): CommandDefinitionBuilder;
   add(...definitions: readonly CommandDefinition[]): CommandDefinitionBuilder;
   action<R>(action: (ctx: CrustCommandContext<A, Flags, Ctx>) => R): CommandDefinitionBuilder;
