@@ -28,8 +28,10 @@ describe("public beta API", () => {
 		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
 			verbose: flags.verbose === true,
 		}));
-		const deploy = defineCommand("deploy", { uses: [logging, db] }, (cmd) =>
+		const deploy = defineCommand("deploy", (cmd) =>
 			cmd
+				.use(logging)
+				.use(db)
 				.args({ name: "target", type: "string", required: true })
 				.flags({ name: "env", type: "string", default: "prod" })
 				.action(async ({ args, flags, ctx }) => {
@@ -57,8 +59,9 @@ describe("public beta API", () => {
 	it("adds one definition twice via .as()", async () => {
 		const seen: string[] = [];
 		const auth = defineContext("auth", () => ({ user: "chenxin" }));
-		const deploy = defineCommand("deploy", { uses: [auth] }, (command) =>
+		const deploy = defineCommand("deploy", (command) =>
 			command
+				.use(auth)
 				.args({ name: "target", type: "string", required: true })
 				.action(async ({ args, ctx }) => {
 					const identity = await ctx.auth;

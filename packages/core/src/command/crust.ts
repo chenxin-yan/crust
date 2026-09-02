@@ -9,7 +9,6 @@ import type {
 	ContextsOutput,
 	ContextsOwnedFlags,
 	MergeContext,
-	UsesOf,
 } from "../api/context.ts";
 import type { Extension, ExtensionsProvidesOutput } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
@@ -44,6 +43,7 @@ import type {
 	ValidateExtensionCommands,
 } from "../validation/commands.brands.ts";
 import type {
+	MissingDeclaredDependencyBrand,
 	ValidateContextDeps,
 	ValidateContextNames,
 	ValidateDeclaredDeps,
@@ -53,12 +53,13 @@ import type {
 	ExtensionsSpellings,
 	ProvideChecks,
 	DefinitionTreeSpellings,
+	ShapeFlagCollisionBrand,
 	ValidateDefinitionFlags,
 	ValidateExtensionFlags,
 	SpellingsOf,
 	ValidateNamedFlagDefs,
 } from "../validation/flags.brands.ts";
-import type { IsStaticTuple, IsUnion } from "../validation/shared.ts";
+import type { IsStaticTuple, IsUnion, UnionToIntersection } from "../validation/shared.ts";
 import { cloneCommandNode, installExtensionContexts } from "./extensions-install.ts";
 import {
 	executeInvocation,
@@ -224,8 +225,6 @@ export type RunArguments<Shape extends CommandShape> = readonly [
 export interface CommandConfig extends Omit<CommandMeta, "name" | "sections"> {
 	/** Plain-text sections rendered after built-in command documentation. */
 	readonly sections?: readonly CommandSectionInput[];
-	/** Contexts this command consumes. */
-	readonly uses?: readonly AnyContextFactory[];
 }
 
 /** Static metadata accepted by the root command constructor. */
@@ -239,26 +238,32 @@ function copyUnvalidatedSections(sections: readonly CommandSectionInput[]): Comm
 	return sections.map((section) => ({ ...section })) as CommandSection[];
 }
 
-type AnyCommandDefinitionBuilder = CommandDefinitionBuilder<any, any, any, any, any, any, any, any>;
+type AnyCommandDefinitionBuilder = CommandDefinitionBuilder<
+	any,
+	any,
+	any,
+	any,
+	any,
+	any,
+	any,
+	any,
+	any
+>;
 
 // Child builders start without inherited flags, so brands cannot see ancestor
 // spellings from inside a sealed recipe. Materialization seeds the child with
 // the parent's owned flags and catches collisions at runtime: `.flags()` hits
 // the seeded spelling table, and recipe-provided Contexts are checked against
 // ancestor owners in `materializeCommandDefinition`.
-type CommandRecipe<
-	Deps extends ContextMap = {},
-	Builder extends AnyCommandDefinitionBuilder = AnyCommandDefinitionBuilder,
-> = (command: CommandDefinitionBuilder<{}, [], Deps, never, never>) => Builder;
-
-type CommandDeps<C extends CommandConfig> = ContextDependencies<UsesOf<C>>;
+type CommandRecipe<Builder extends AnyCommandDefinitionBuilder = AnyCommandDefinitionBuilder> = (
+	command: CommandDefinitionBuilder<{}, [], {}, never, never>,
+) => Builder;
 
 const commandDefinitionInternal: unique symbol = Symbol.for("crust.commandDefinition");
 
 interface CommandDefinitionInternal {
 	readonly recipe: (command: AnyCommandDefinitionBuilder) => AnyCommandDefinitionBuilder;
 	readonly meta: Omit<CommandMeta, "name">;
-	readonly uses: readonly AnyContextFactory[];
 }
 
 export interface CommandDefinition<
@@ -311,7 +316,9 @@ function materializeCommandDefinition(
 	// A compile-time check is structurally impossible: branded generic method parameters compare
 	// recursively, while Crust transitions return Crust and recipe-builder transitions return the
 	// restricted builder type. Runtime validation below still requires Crust return identity.
-	const configured = internal.recipe(child as AnyCommandDefinitionBuilder);
+	/* oxlint-disable anti-slop/no-chained-type-assertions -- Crust's declared type omits the builder-only `.use()` (implemented on its prototype), so the cast must pass through unknown. */
+	const configured = internal.recipe(child as unknown as AnyCommandDefinitionBuilder);
+	/* oxlint-enable anti-slop/no-chained-type-assertions */
 	if (!(configured instanceof Crust) || configured._ancestorOwnedFlags !== parent.ownedFlags) {
 		throw new CrustError(
 			"DEFINITION",
@@ -384,6 +391,7 @@ export interface CommandDefinitionBuilder<
 	Tree extends object = {},
 	out CtxFlags extends FlagsDef = {},
 	Result = void,
+	out Deps extends ContextMap = {},
 > {
 	flags<const Defs extends readonly NamedFlagDef[]>(
 		...defs: ValidateNamedFlagDefs<Defs, Sp>
@@ -395,12 +403,46 @@ export interface CommandDefinitionBuilder<
 		Sp | SpellingsOf<NamedFlagsRecord<Defs>>,
 		Tree,
 		CtxFlags,
-		Result
+		Result,
+		Deps
 	>;
 
 	args<const NewA extends ArgsDef>(
 		...defs: NewA & AppendArgsChecks<A, NewA>
-	): CommandDefinitionBuilder<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags, Result>;
+	): CommandDefinitionBuilder<
+		Flags,
+		AppendedArgs<A, NewA>,
+		Ctx,
+		Sibs,
+		Sp,
+		Tree,
+		CtxFlags,
+		Result,
+		Deps
+	>;
+
+	/**
+	 * Declare a Context this command consumes without supplying its value.
+	 *
+	 * `.use(logger)` is demand (a factory); `.provide(logger())` is supply (an
+	 * instance). Each call accumulates the factory's value and transitive
+	 * dependency closure into the action's typed `ctx`, and into the sealed
+	 * definition's declared dependencies checked at `.provide()`/`.add()`/`.extend()`
+	 * composition sites.
+	 */
+	use<const F extends AnyContextFactory>(
+		factory: F,
+	): CommandDefinitionBuilder<
+		Flags,
+		A,
+		MergeContext<Ctx, ContextDependencies<readonly [F]>>,
+		Sibs,
+		Sp,
+		Tree,
+		CtxFlags,
+		Result,
+		MergeContext<Deps, ContextDependencies<readonly [F]>>
+	>;
 
 	provide<const Cs extends readonly ContextInstance[]>(
 		...instances: ProvideChecks<Sp, Cs> &
@@ -414,7 +456,8 @@ export interface CommandDefinitionBuilder<
 		Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
 		Tree,
 		MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>,
-		Result
+		Result,
+		Deps
 	>;
 
 	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
@@ -427,12 +470,13 @@ export interface CommandDefinitionBuilder<
 		Sp,
 		Tree & DefinitionsTree<Ds, CtxFlags>,
 		CtxFlags,
-		Result
+		Result,
+		Deps
 	>;
 
 	action<R>(
 		action: (ctx: NoInfer<CrustCommandContext<A, Flags, Ctx>>) => R,
-	): CommandDefinitionBuilder<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, Awaited<R>>;
+	): CommandDefinitionBuilder<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, Awaited<R>, Deps>;
 }
 
 type ShapeOfBuilder<B> =
@@ -444,10 +488,28 @@ type ShapeOfBuilder<B> =
 		any,
 		infer Tree,
 		any,
-		infer Result
+		infer Result,
+		any
 	>
 		? CommandShape<A, Flags, Tree, Result>
 		: never;
+
+// Deps accumulated by `.use()` calls inside the recipe; `defineCommand` and
+// `Crust.command()` extract them from the recipe's returned builder type.
+// A conditionally-returning recipe (`cond ? cmd.use(a)... : cmd.use(b)...`)
+// infers `B` as a union; the naked-`B` conditional distributes, so without
+// merging, `Deps` would be a union whose `keyof` is the branches'
+// INTERSECTION — disjoint demands would validate as demanding nothing. A
+// conditional recipe demands the UNION of its branches' keys, so merge before
+// any key extraction.
+type DepsOfBuilder<B> =
+	UnionToIntersection<
+		B extends CommandDefinitionBuilder<any, any, any, any, any, any, any, any, infer Deps>
+			? Deps
+			: {}
+	> extends infer Merged extends ContextMap
+		? Merged
+		: {};
 
 // Matching against CommandDefinitionSpellings (never for widened names) keeps a
 // widened definition in the same tuple or union from degrading a literal
@@ -557,8 +619,8 @@ export function defineCommand<
 	Builder extends AnyCommandDefinitionBuilder,
 >(
 	name: Name & EmptyNameBrand<Name>,
-	recipe: CommandRecipe<{}, Builder>,
-): CommandDefinition<Name, readonly [], ShapeOfBuilder<Builder>>;
+	recipe: CommandRecipe<Builder>,
+): CommandDefinition<Name, readonly [], ShapeOfBuilder<Builder>, DepsOfBuilder<Builder>>;
 export function defineCommand<
 	const Name extends string,
 	const C extends CommandConfig,
@@ -566,8 +628,8 @@ export function defineCommand<
 >(
 	name: Name & EmptyNameBrand<Name>,
 	config: C & ValidateCommandConfig<Name, C>,
-	recipe: CommandRecipe<CommandDeps<C>, Builder>,
-): CommandDefinition<Name, AliasesOf<C>, ShapeOfBuilder<Builder>, CommandDeps<C>>;
+	recipe: CommandRecipe<Builder>,
+): CommandDefinition<Name, AliasesOf<C>, ShapeOfBuilder<Builder>, DepsOfBuilder<Builder>>;
 export function defineCommand(
 	name: string,
 	configOrRecipe: CommandConfig | CommandRecipe,
@@ -577,7 +639,7 @@ export function defineCommand(
 	const config: CommandConfig = hasConfig ? configOrRecipe : {};
 	const recipe = hasConfig ? maybeRecipe : configOrRecipe;
 	if (!recipe) throw new CrustError("DEFINITION", `Command "${name}" requires a recipe`);
-	const { uses = [], sections, ...metaRest } = config;
+	const { sections, ...metaRest } = config;
 	const meta: Omit<CommandMeta, "name"> = {
 		...metaRest,
 		...(config.aliases ? { aliases: [...config.aliases] } : {}),
@@ -586,7 +648,6 @@ export function defineCommand(
 	const internal: CommandDefinitionInternal = {
 		// SAFETY: overloads pair each recipe with its declared dependency context; storage erases it.
 		recipe: recipe as CommandDefinitionInternal["recipe"],
-		uses: Object.freeze([...uses]),
 		meta,
 	};
 	const named = <const DefName extends string>(defName: DefName): CommandDefinition<DefName> => {
@@ -895,6 +956,14 @@ type AfterAdd<
 	CtxFlags,
 	CollisionSpellings<CollisionSp["extension"], CollisionSp["tree"] | DefinitionTreeSpellings<Ds>>,
 	Result
+>;
+
+// Missing-dependency brand for inline `.command()`: parity with
+// `ValidateDeclaredDeps` at `.add()`, attached to the name parameter because
+// the builder type `B` is inferred from the recipe argument itself.
+type ValidateInlineCommandDeps<Ctx extends ContextMap, B> = MissingDeclaredDependencyBrand<
+	{ readonly _deps?: DepsOfBuilder<B> },
+	string extends keyof Ctx ? never : keyof Ctx & string
 >;
 
 /** Broad application type for APIs that accept any fully-built Crust application. */
@@ -1211,6 +1280,66 @@ export class Crust<
 		>({});
 	}
 
+	/**
+	 * Define an app-local leaf subcommand inline (root-only sugar for
+	 * `.add(defineCommand(name, recipe))`).
+	 *
+	 * The recipe builder is seeded with the Contexts and Context-owned flags
+	 * accumulated on this builder so far — the call site. Contexts provided
+	 * after `.command()` are not visible to it, matching the positional runtime
+	 * semantics of `.provide()`. Extract to `defineCommand` when a command needs
+	 * its own file, reuse, or a package. Command definition builders do not
+	 * expose this method.
+	 */
+	command<const N extends string, B extends AnyCommandDefinitionBuilder>(
+		// ShapeFlagCollisionBrand keeps parity with `.add()`'s ValidateDefinitionFlags:
+		// the recipe's whole tree (including nested `.add()` children, which the seeded
+		// `Sp` cannot see) is checked against registered Extension flag spellings.
+		name: N &
+			EmptyNameBrand<N> &
+			ValidateInlineCommandDeps<Ctx, B> &
+			ShapeFlagCollisionBrand<ShapeOfBuilder<B>, CollisionSp["extension"]>,
+		recipe: (
+			command: CommandDefinitionBuilder<{}, [], Ctx, never, SpellingsOf<CtxFlags>, {}, CtxFlags>,
+		) => B,
+	): AfterAdd<
+		Flags,
+		A,
+		Ctx,
+		Sibs,
+		Sp,
+		Tree,
+		CtxFlags,
+		CollisionSp,
+		Result,
+		readonly [CommandDefinition<N, readonly [], ShapeOfBuilder<B>, DepsOfBuilder<B>>]
+	> {
+		/* oxlint-disable anti-slop/no-chained-type-assertions -- inline sugar erases the call-site-seeded recipe generics before delegating to the defineCommand + add runtime. */
+		// SAFETY: the seeded recipe generics restate runtime facts — materialization
+		// seeds the child node from this node's contexts and owned flags.
+		const define = defineCommand as unknown as (
+			name: string,
+			recipe: CommandRecipe,
+		) => CommandDefinition;
+		// SAFETY: the erased recipe still returns the builder it receives; materialization re-validates that at runtime.
+		const definition = define(name, recipe as unknown as CommandRecipe);
+		/* oxlint-enable anti-slop/no-chained-type-assertions */
+		return this._addDefinition(definition)._clone<
+			AfterAdd<
+				Flags,
+				A,
+				Ctx,
+				Sibs,
+				Sp,
+				Tree,
+				CtxFlags,
+				CollisionSp,
+				Result,
+				readonly [CommandDefinition<N, readonly [], ShapeOfBuilder<B>, DepsOfBuilder<B>>]
+			>
+		>({});
+	}
+
 	private _addDefinition(
 		definition: CommandDefinition,
 	): Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result> {
@@ -1303,3 +1432,26 @@ export class Crust<
 		await executeInvocation(this._node, options, materializeCommandDefinition);
 	}
 }
+
+// `.use()` is a compile-time demand: it feeds the recipe builder's `Deps`
+// generic and the sealed definition's `_deps` phantom, while invocation
+// resolves values from the provided path contexts, so nothing is recorded at
+// runtime. The implementation lives on the prototype because recipes execute
+// against Crust instances, while Crust's declared type omits it — root
+// applications supply Contexts with `.provide()`.
+function useContextDemand(this: AnyCrust, factory: AnyContextFactory): AnyCrust {
+	// oxlint-disable-next-line anti-slop/no-runtime-typeof -- recipes are an authoring boundary: the demand/supply mixup (`.use(logger())`) must fail loud here, not lazily at invocation.
+	if (typeof factory !== "function" || typeof factory.contextName !== "string") {
+		throw new CrustError(
+			"DEFINITION",
+			`.use() expects a Context factory (e.g. \`.use(logger)\`); call \`.provide(logger())\` to supply a Context value`,
+			{ subject: "context", name: String(factory), reason: "use-expects-factory" },
+		);
+	}
+	return this;
+}
+Object.defineProperty(Crust.prototype, "use", {
+	value: useContextDemand,
+	writable: true,
+	configurable: true,
+});

@@ -13,7 +13,7 @@ export type DefName<T> = T extends { name: infer N extends string }
 		: N
 	: never;
 
-type UnionToIntersection<U> = (U extends unknown ? (x: U) => void : never) extends (
+export type UnionToIntersection<U> = (U extends unknown ? (x: U) => void : never) extends (
 	x: infer I,
 ) => void
 	? I

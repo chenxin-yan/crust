@@ -13,7 +13,6 @@ Doc surfaces:
 - `apps/docs/content/docs/guide/*.mdx` — conceptual guides
 - `apps/docs/content/docs/modules/*.mdx` — per-package reference
 - `apps/docs/content/docs/api/*.mdx` — public API reference
-- `packages/<pkg>/README.md` — npm landing page
 
 Before submitting:
 

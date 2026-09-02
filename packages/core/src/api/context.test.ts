@@ -117,10 +117,10 @@ describe("Crust .provide()", () => {
 	it("seeds added descendants with the parent Context path", async () => {
 		const seen: string[] = [];
 		const db = defineContext("db", () => "root-db");
-		const sub = defineCommand("sub", { uses: [db] }, (command) =>
-			command.add(
-				defineCommand("g", { uses: [db] }, (child) =>
-					child.action(async ({ ctx }) => {
+		const sub = defineCommand("sub", (command) =>
+			command.use(db).add(
+				defineCommand("g", (child) =>
+					child.use(db).action(async ({ ctx }) => {
 						seen.push(await ctx.db);
 					}),
 				),
@@ -177,8 +177,8 @@ describe("Crust .provide()", () => {
 
 		const seen: string[] = [];
 		const app = new Crust("cli").provide(base(), mid(), db(), unrelated()).add(
-			defineCommand("query", { uses: [db] }, (cmd) =>
-				cmd.action(async ({ ctx }) => {
+			defineCommand("query", (cmd) =>
+				cmd.use(db).action(async ({ ctx }) => {
 					seen.push(await ctx.db);
 				}),
 			),
@@ -215,11 +215,7 @@ describe("Crust .provide()", () => {
 
 		const app = new Crust("cli")
 			.provide(a(), b(), c(), d())
-			.add(
-				defineCommand("go", { uses: [d] }, (cmd) =>
-					cmd.action(async ({ ctx }) => void (await ctx.d)),
-				),
-			);
+			.add(defineCommand("go", (cmd) => cmd.use(d).action(async ({ ctx }) => void (await ctx.d))));
 
 		await app.run(["go"]);
 
@@ -246,10 +242,13 @@ describe("Crust .provide()", () => {
 
 		const seen: string[] = [];
 		const app = new Crust("cli").provide(session(), unrelated()).add(
-			defineCommand("account", { uses: [session] }, (cmd) =>
-				cmd.provide(user()).action(async ({ ctx }) => {
-					seen.push(await ctx.user);
-				}),
+			defineCommand("account", (cmd) =>
+				cmd
+					.use(session)
+					.provide(user())
+					.action(async ({ ctx }) => {
+						seen.push(await ctx.user);
+					}),
 			),
 		);
 
@@ -379,8 +378,8 @@ describe("Context-owned flags", () => {
 		const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => ({
 			apiKey: flags["api-key"],
 		}));
-		const deploy = defineCommand("deploy", { uses: [auth] }, (command) =>
-			command.action(async ({ ctx }) => {
+		const deploy = defineCommand("deploy", (command) =>
+			command.use(auth).action(async ({ ctx }) => {
 				seen.push(String((await ctx.auth).apiKey));
 			}),
 		);
@@ -462,8 +461,8 @@ describe("Context setup dependencies", () => {
 		new Crust("cli").provide(fake);
 		new Crust("cli").provide(db(), config());
 
-		const command = defineCommand("run", { uses: [db] }, (builder) =>
-			builder.action(async ({ ctx }) => {
+		const command = defineCommand("run", (builder) =>
+			builder.use(db).action(async ({ ctx }) => {
 				void (await ctx.db);
 				// @ts-expect-error -- action bags expose only declared Contexts
 				void ctx.logger;
@@ -900,8 +899,8 @@ describe("lazy Context bags", () => {
 			uses: [logger],
 			hooks: { preRun: async (ctx) => void events.push((await ctx.ctx.logger).label) },
 		});
-		const command = defineCommand("run", { uses: [logger] }, (builder) =>
-			builder.action(async ({ ctx }) => void events.push((await ctx.logger).label)),
+		const command = defineCommand("run", (builder) =>
+			builder.use(logger).action(async ({ ctx }) => void events.push((await ctx.logger).label)),
 		);
 		const app = new Crust("cli").extend(provider, consumer).add(command);
 
@@ -1367,5 +1366,171 @@ describe("FallbackAsyncDisposableStack", () => {
 		};
 		await expect(run()).rejects.toThrow("boom");
 		expect(order).toEqual(["last", "first"]);
+	});
+});
+
+describe("inline .command()", () => {
+	it("seeds the recipe with call-site Contexts and types the inline action", async () => {
+		const auth = defineContext("auth", () => ({ user: "chenxin" }));
+		const app = new Crust("cli").provide(auth()).command("whoami", (cmd) =>
+			cmd
+				.flags({ name: "loud", type: "boolean" })
+				.args({ name: "suffix", type: "string" })
+				.action(async ({ args, flags, ctx }) => {
+					type _Suffix = Assert<IsEqual<typeof args.suffix, string | undefined>>;
+					type _Loud = Assert<IsEqual<typeof flags.loud, boolean | undefined>>;
+					const identity = await ctx.auth;
+					type _Auth = Assert<IsEqual<typeof identity, { user: string }>>;
+					// @ts-expect-error -- undeclared Contexts are absent from the inline bag
+					void ctx.missing;
+					return `${identity.user}${args.suffix ?? ""}`;
+				}),
+		);
+
+		const outcome = await app.run(["whoami"], { args: { suffix: "!" } });
+		expect(outcome).toEqual({ status: "completed", result: "chenxin!" });
+	});
+
+	it("does not see Contexts provided after the .command() call site", async () => {
+		const logger = defineContext("logger", () => "logger");
+		const app = new Crust("cli")
+			.command("early", (cmd) =>
+				cmd.action(({ ctx }) => {
+					// @ts-expect-error -- .provide() is positional; a later Context never reaches an earlier .command()
+					void ctx.logger;
+					// Runtime matches the types: the earlier child path never inherits
+					// the later Context, so its bag has no such member.
+					return "logger" in ctx;
+				}),
+			)
+			.provide(logger())
+			.action(async ({ ctx }) => "logger" in ctx && (await ctx.logger));
+
+		expect(await app.run(["early"])).toEqual({ status: "completed", result: false });
+		// The root path itself sees the Context it provided.
+		expect(await app.run([])).toEqual({ status: "completed", result: "logger" });
+	});
+
+	it("brands inline .use() demands that the call site does not provide", () => {
+		const config = defineContext("config", () => ({ url: "memory://" }));
+		const db = defineContext("db", { uses: [config] }, async ({ ctx }) => await ctx.config);
+
+		// Satisfied demand (including db's transitive closure) composes cleanly.
+		new Crust("cli")
+			.provide(config(), db())
+			.command("query", (cmd) => cmd.use(db).action(async ({ ctx }) => void (await ctx.db)));
+
+		const invalidCompositions = () => {
+			// @ts-expect-error -- inline .use(db) demand is unmet at the call site
+			new Crust("cli").command("query", (cmd) => cmd.use(db).action(() => {}));
+			new Crust("cli")
+				.provide(db.of({ url: "fake" }))
+				// @ts-expect-error -- db's transitive config dependency is still unmet
+				.command("query", (cmd) => cmd.use(db).action(() => {}));
+		};
+		void invalidCompositions;
+	});
+
+	it("keeps .use() brand parity for defineCommand at .add() and .extend()", () => {
+		const config = defineContext("config", () => ({ url: "memory://" }));
+		const db = defineContext("db", { uses: [config] }, async ({ ctx }) => await ctx.config);
+		const query = defineCommand("query", (cmd) =>
+			cmd.use(db).action(async ({ ctx }) => void (await ctx.db)),
+		);
+		const carrier = defineExtension(defineExtensionId("carrier"), { commands: [query] });
+
+		new Crust("cli").provide(config(), db()).add(query);
+		new Crust("cli").provide(config(), db()).extend(carrier);
+
+		const invalidCompositions = () => {
+			// @ts-expect-error -- db's transitive config dependency is unmet at .add()
+			new Crust("cli").provide(db.of({ url: "fake" })).add(query);
+			// @ts-expect-error -- db's transitive config dependency is unmet at .extend()
+			new Crust("cli").provide(db.of({ url: "fake" })).extend(carrier);
+		};
+		void invalidCompositions;
+	});
+
+	it("demands the union of branch deps from a conditionally-returned recipe", async () => {
+		const a = defineContext("a", () => "a-value");
+		const b = defineContext("b", () => "b-value");
+		const choose: boolean = false;
+		const either = defineCommand("either", (cmd) =>
+			choose
+				? cmd.use(a).action(async ({ ctx }) => await ctx.a)
+				: cmd.use(b).action(async ({ ctx }) => await ctx.b),
+		);
+
+		// Supplying both branches' demands composes cleanly.
+		new Crust("cli").provide(a(), b()).add(either);
+
+		const invalidCompositions = () => {
+			// @ts-expect-error -- neither branch's demand is provided
+			new Crust("cli").add(either);
+			// @ts-expect-error -- inline recipe: union of branch demands is unmet
+			new Crust("cli").command("either", (cmd) =>
+				choose
+					? cmd.use(a).action(async ({ ctx }) => void (await ctx.a))
+					: cmd.use(b).action(async ({ ctx }) => void (await ctx.b)),
+			);
+		};
+		void invalidCompositions;
+
+		// Why the union is demanded: `.use()` records nothing at runtime, so a
+		// branch whose Context was never provided silently reads `undefined` off
+		// the bag instead of failing loud.
+		const app = new Crust("cli")
+			.provide(a())
+			// @ts-expect-error -- deliberately supply only the unchosen branch's demand
+			.add(either);
+		const outcome = await app.run(["either"]);
+		expect(outcome.status).toBe("completed");
+		// The action's `string`-typed result is actually `undefined` — the hole made real.
+		expect(outcome.status === "completed" && outcome.result).toBeUndefined();
+	});
+
+	it("brands inline flags that collide with registered Extension flags, matching .add()", () => {
+		const tracer = defineExtension(defineExtensionId("tracer"), {
+			flags: [{ name: "trace", type: "boolean" }],
+		});
+		const rootOnly = defineExtension(defineExtensionId("root-only"), {
+			flags: [{ name: "depth", type: "string", recursive: false }],
+		});
+		const nestedColliding = defineCommand("child", (cmd) =>
+			cmd.flags({ name: "trace", type: "boolean" }).action(() => {}),
+		);
+
+		// Collision-free recipes compose cleanly after .extend().
+		new Crust("cli").extend(tracer).command("ok", (cmd) => cmd.action(() => {}));
+
+		const invalidCompositions = () => {
+			new Crust("cli")
+				.extend(tracer)
+				// @ts-expect-error -- nested child's "trace" collides with tracer's recursive flag (parity with .add())
+				.command("query", (cmd) => cmd.add(nestedColliding).action(() => {}));
+			new Crust("cli")
+				.extend(rootOnly)
+				// @ts-expect-error -- inline "depth" collides with a registered Extension flag (parity with .add())
+				.command("query", (cmd) => cmd.flags({ name: "depth", type: "string" }).action(() => {}));
+		};
+		void invalidCompositions;
+	});
+
+	it("rejects a Context instance passed to .use() at runtime", () => {
+		const logger = defineContext("logger", () => "logger");
+		expect(() =>
+			new Crust("cli").command("sub", (cmd) =>
+				// SAFETY: deliberately bypass the factory-only signature to verify the runtime guard.
+				(cmd.use as (instance: ContextInstance) => never)(logger()),
+			),
+		).toThrow(/expects a Context factory/);
+	});
+
+	it("rejects an inline command name that is already registered", () => {
+		expect(() =>
+			new Crust("cli")
+				.command("dup", (cmd) => cmd.action(() => {}))
+				.command("dup", (cmd) => cmd.action(() => {})),
+		).toThrow(/already registered/);
 	});
 });

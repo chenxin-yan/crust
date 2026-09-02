@@ -23,7 +23,7 @@ import {
 
 ## Reusable command definitions
 
-Every sealed unit declares consumed Context factories in `uses`. Actions and setup receive a typed lazy bag and await values with `await ctx.<name>`; missing wiring is reported at `.provide()`, `.add()`, or `.extend()`.
+A sealed command declares consumed Context factories with chained `.use(factory)` calls — `.use(logger)` is demand (a factory), `.provide(logger())` is supply (an instance). Actions and setup receive a typed lazy bag and await values with `await ctx.<name>`; missing wiring is reported at `.provide()`, `.add()`, or `.extend()`.
 
 ### `CommandDefinitionBuilder`
 
@@ -37,6 +37,7 @@ interface CommandDefinitionBuilder<
 > {
   flags(...defs: readonly NamedFlagDef[]): CommandDefinitionBuilder;
   args(...defs: ArgsDef): CommandDefinitionBuilder;
+  use(factory: AnyContextFactory): CommandDefinitionBuilder;
   provide(...instances: readonly ContextInstance[]): CommandDefinitionBuilder;
   add(...definitions: readonly CommandDefinition[]): CommandDefinitionBuilder;
   action<R>(action: (ctx: CrustCommandContext<A, Flags, Ctx>) => R): CommandDefinitionBuilder;
@@ -49,7 +50,7 @@ interface CommandDefinitionBuilder<
   for the exact signatures.
 </Callout>
 
-This is the configure-only builder passed to a `defineCommand()` recipe. Its fluent methods preserve and refine argument, accumulated flag, and provided Context types. `Sibs` accumulates the sibling command names and aliases registered through `.add()`, and `Sp` caches the known flag spellings accumulated through `.flags()` and `.provide()`. Both are defaulted parameters. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
+This is the configure-only builder passed to a `defineCommand()` recipe. Its fluent methods preserve and refine argument, accumulated flag, and provided Context types. Each `.use(factory)` call accumulates the factory's value and transitive dependency closure into the action's typed `ctx` and into the sealed definition's declared dependencies. `Sibs` accumulates the sibling command names and aliases registered through `.add()`, and `Sp` caches the known flag spellings accumulated through `.flags()` and `.provide()`. Both are defaulted parameters. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
 
 ### `CommandDefinition`
 
@@ -75,7 +76,6 @@ defineCommand<const Name extends string>(
 
 interface CommandConfig extends Omit<CommandMeta, "name" | "sections"> {
   readonly sections?: readonly CommandSectionInput[];
-  readonly uses?: readonly AnyContextFactory[];
 }
 
 defineCommand<const Name extends string, const C extends CommandConfig>(
@@ -98,9 +98,11 @@ const auth = defineContext("auth", () => ({ user: "Ada" }));
 
 const deploy = defineCommand(
   "deploy",
-  { description: "Deploy an application", aliases: ["ship"], uses: [logging, auth] },
+  { description: "Deploy an application", aliases: ["ship"] },
   (command) =>
     command
+      .use(logging)
+      .use(auth)
       .args({ name: "target", type: "string", required: true })
       .action(async ({ args, ctx }) => {
         (await ctx.logging).debug(`${(await ctx.auth).user}:${args.target}`);
@@ -233,7 +235,7 @@ const app = new Crust("my-cli")
   });
 ```
 
-`uses` declarations are checked at composition time. Dependencies may appear in either order within one `.provide()` call; across calls, provide dependencies first. Core does not repeat these dependency checks at runtime; dynamically assembled inputs fail lazily with `missing-context` on first access.
+Declared dependencies (Context `uses`, command `.use()`, Extension `uses`) are checked at composition time. Dependencies may appear in either order within one `.provide()` call; across calls, provide dependencies first. Core does not repeat these dependency checks at runtime; dynamically assembled inputs fail lazily with `missing-context` on first access.
 
 A Context's top-level `flags` are installed as propagating flags on this builder and later-added descendants, without mutating the original definitions. Dependencies construct recursively on the first pull.
 
@@ -309,7 +311,7 @@ const app = new Crust("my-cli").add(
 
 Statically known sibling name and alias collisions fail at `.add()` with `FIX_COMMAND_COLLISION`; alias shape violations fail at `defineCommand()` with `FIX_ALIAS_SHAPE`. Dynamically assembled definitions fail loud instead: `.add()` rejects a duplicate sibling name with a `DEFINITION` error. Materialization also checks that each recipe returns its seeded builder, does not register nested Extensions, and does not provide a Context whose owned flags collide with an ancestor Context's.
 
-A definition can add other definitions. Context providers are inherited on the materialized command path; a nested definition accesses one by declaring its factory in `uses` and awaiting the corresponding `ctx` property.
+A definition can add other definitions. Context providers are inherited on the materialized command path; a nested definition accesses one by declaring its factory with `.use()` and awaiting the corresponding `ctx` property.
 
 The typed [`run()`](#runpath-input-io) shape of an added definition merges the Context-owned flags already provided on the parent path, matching the runtime parser: descendants accept inherited Context-owned flags, while parent-local flags stay excluded.
 
@@ -317,6 +319,30 @@ The typed [`run()`](#runpath-input-io) shape of an added definition merges the C
   Finalize Contexts on the builder used for `.add()`. Later fluent calls create a new builder and do
   not backfill a definition that was already added.
 </Callout>
+
+## `.command(name, recipe)`
+
+```ts
+command<const N extends string, B extends CommandDefinitionBuilder>(
+  name: N & EmptyNameBrand<N>,
+  recipe: (command: CommandDefinitionBuilder) => B,
+): Crust
+```
+
+Defines an app-local leaf subcommand inline — root-only sugar for `.add(defineCommand(name, recipe))`:
+
+```ts
+const app = new Crust("my-cli").provide(logging()).command("up", (command) =>
+  command.flags({ name: "detach", type: "boolean" }).action(async ({ flags, ctx, stdout }) => {
+    (await ctx.logging).debug(`detach: ${String(flags.detach)}`);
+    stdout("up");
+  }),
+);
+```
+
+The recipe builder is seeded with the Contexts and Context-owned flags accumulated on the builder so far — the call site — so the inline action's `ctx` is typed without `.use()` declarations. Contexts provided after the `.command()` call are not visible to it, matching the positional semantics of `.provide()`. Inline `.use()` demands that the call site does not satisfy fail typecheck with `FIX_MISSING_DEPENDENCY`.
+
+Use `.command()` for short, app-local leaf commands; extract to `defineCommand` when a command needs its own file, reuse, or a package. `.command()` exists on `Crust` roots and is intentionally absent from `CommandDefinitionBuilder`.
 
 ## `.snapshot()`
 

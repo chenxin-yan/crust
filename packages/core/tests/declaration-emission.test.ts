@@ -40,11 +40,16 @@ export const authenticatedApi = defineContext("authenticated-api", { uses: [auth
 	apiKey: (await ctx.auth).apiKey,
 }));
 
-// A declared Context bag preserves the factory's value type
-export const deploy = defineCommand("deploy", { uses: [auth] }, (cmd) =>
-	cmd.action(async ({ ctx }) => {
-		void (await ctx.auth).apiKey;
-	}),
+// A declared Context bag preserves the factory's value type; .use() chains
+// accumulate demand and the transitive dependency closure
+export const deploy = defineCommand("deploy", (cmd) =>
+	cmd
+		.use(auth)
+		.use(authenticatedApi)
+		.action(async ({ ctx }) => {
+			void (await ctx.auth).apiKey;
+			void (await ctx["authenticated-api"]).apiKey;
+		}),
 );
 
 // An exported Extension carries evaluated dependency intersections,
@@ -63,6 +68,29 @@ export const app = new Crust("consumer-cli")
 	.provide(auth(), authenticatedApi())
 	.add(defineCommand("build", (cmd) => cmd.action(() => {})))
 	.add(deploy);
+
+// ~30 chained inline commands with chained .use() demands: generic depth
+// must stay bounded (no TS2589) and every intermediate builder type must
+// remain nameable in the emitted declarations.
+export const inlineApp = new Crust("inline-cli")
+	.provide(auth(), authenticatedApi())
+${Array.from(
+	{ length: 30 },
+	(_, index) => `	.command("inline-${index}", (cmd) =>
+		cmd
+			.use(auth)
+			.use(authenticatedApi)
+			.flags({ name: "inline-${index}-verbose", type: "boolean" })
+			.args({ name: "inline-${index}-target", type: "string" })
+			.action(async ({ args, flags, ctx }) => {
+				void args["inline-${index}-target"];
+				void flags["inline-${index}-verbose"];
+				void (await ctx.auth).apiKey;
+				return ${index};
+			}),
+	)`,
+).join("\n")}
+;
 `;
 
 let fixtureDir: string;

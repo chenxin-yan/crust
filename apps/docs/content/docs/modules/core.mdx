@@ -18,10 +18,13 @@ import { Crust } from "@crustjs/core";
 
 const app = new Crust("hello")
   .flags({ name: "verbose", type: "boolean", short: "v" })
-  .action(({ flags, stdout }) => stdout(flags.verbose ? "hello!" : "hello"));
+  .action(({ flags, stdout }) => stdout(flags.verbose ? "hello!" : "hello"))
+  .command("wave", (command) => command.action(({ stdout }) => stdout("o/")));
 
 await app.execute();
 ```
+
+Inline `.command()` defines app-local leaf subcommands; extract to [`defineCommand`](/docs/api/crust) when a command needs its own file, reuse, or a package. Commands declare Context demand with `.use(factory)` and applications supply values with `.provide(instance)`.
 
 ## Context-owned flags
 
@@ -42,16 +45,16 @@ Downstream commands and other Context setups call `await ctx.api`. See [Contexts
 
 ## Runtime exports
 
-| Export                                | Description                                                                                                                                         |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`Crust`](/docs/api/crust)            | Immutable command builder with Context `.provide()`, `.add()`, `.action()`, tooling `.snapshot()`, programmatic `.run()`, and terminal `.execute()` |
-| [`defineCommand`](/docs/api/crust)    | Create a named, inert reusable command definition                                                                                                   |
-| `defineContext(name, config?, setup)` | Define a named Context factory with optional owned flags; setup receives its declared lazy Context bag and invocation I/O                           |
-| `defineExtension(id, config)`         | Define a frozen, application-wide Extension value                                                                                                   |
-| `defineExtensionId(id)`               | Mint a branded Extension identity from any non-blank string                                                                                         |
-| `defineFlag(name, definition)`        | Define one named flag, preserving its literal definition                                                                                            |
-| `defineArg(name, definition)`         | Define one named positional argument, preserving its literal definition                                                                             |
-| [`CrustError`](/docs/api/errors)      | Framework error for definition, routing, parsing, and validation failures                                                                           |
+| Export                                | Description                                                                                                                                                              |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`Crust`](/docs/api/crust)            | Immutable command builder with Context `.provide()`, inline `.command()`, `.add()`, `.action()`, tooling `.snapshot()`, programmatic `.run()`, and terminal `.execute()` |
+| [`defineCommand`](/docs/api/crust)    | Create a named, inert reusable command definition; its builder declares Context demand with chained `.use()`                                                             |
+| `defineContext(name, config?, setup)` | Define a named Context factory with optional owned flags; setup receives its declared lazy Context bag and invocation I/O                                                |
+| `defineExtension(id, config)`         | Define a frozen, application-wide Extension value                                                                                                                        |
+| `defineExtensionId(id)`               | Mint a branded Extension identity from any non-blank string                                                                                                              |
+| `defineFlag(name, definition)`        | Define one named flag, preserving its literal definition                                                                                                                 |
+| `defineArg(name, definition)`         | Define one named positional argument, preserving its literal definition                                                                                                  |
+| [`CrustError`](/docs/api/errors)      | Framework error for definition, routing, parsing, and validation failures                                                                                                |
 
 ## Definition types
 
