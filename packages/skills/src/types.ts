@@ -153,11 +153,11 @@ export interface SkillOptions {
 	 * includes only these authored skills instead of copying `distDir`.
 	 */
 	extras?: readonly (string | URL)[];
-	/** Generated command skill name. Defaults to the root command name. */
+	/** Generated command skill name. Used when regenerating because `distDir` is unavailable or `extras` is non-empty. Defaults to the root command name. */
 	name?: string;
-	/** Generated command skill description. Defaults to the root command description. */
+	/** Generated command skill description. Used when regenerating because `distDir` is unavailable or `extras` is non-empty. Defaults to the root command description. */
 	description?: string;
-	/** Whether to emit the generated command skill. @default true */
+	/** Whether to emit the generated command skill when regenerating because `distDir` is unavailable or `extras` is non-empty. @default true */
 	generated?: boolean;
 	/** Default agent-directory scope. */
 	defaultScope?: Scope;
