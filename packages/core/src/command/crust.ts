@@ -43,7 +43,7 @@ import type {
 	ValidateExtensionCommands,
 } from "../validation/commands.brands.ts";
 import type {
-	DeclaredDepsOf,
+	MissingDeclaredDependencyBrand,
 	ValidateContextDeps,
 	ValidateContextNames,
 	ValidateDeclaredDeps,
@@ -961,15 +961,10 @@ type AfterAdd<
 // Missing-dependency brand for inline `.command()`: parity with
 // `ValidateDeclaredDeps` at `.add()`, attached to the name parameter because
 // the builder type `B` is inferred from the recipe argument itself.
-type ValidateInlineCommandDeps<Ctx extends ContextMap, B> =
-	Exclude<
-		keyof DeclaredDepsOf<{ readonly _deps?: DepsOfBuilder<B> }> & string,
-		string extends keyof Ctx ? never : keyof Ctx & string
-	> extends infer Missing extends string
-		? [Missing] extends [never]
-			? unknown
-			: { readonly FIX_MISSING_DEPENDENCY: `Uses Context "${Missing}" which is not provided` }
-		: never;
+type ValidateInlineCommandDeps<Ctx extends ContextMap, B> = MissingDeclaredDependencyBrand<
+	{ readonly _deps?: DepsOfBuilder<B> },
+	string extends keyof Ctx ? never : keyof Ctx & string
+>;
 
 /** Broad application type for APIs that accept any fully-built Crust application. */
 export type AnyCrust = Crust<any, any, any, any, any, any, any, any, any>;

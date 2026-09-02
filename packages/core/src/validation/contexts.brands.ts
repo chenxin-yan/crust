@@ -152,7 +152,8 @@ export type DeclaredDepsOf<T> =
 					: Deps
 			: {};
 
-type MissingDeclaredDependencyBrand<T, Known extends string> =
+/** Missing-dependency brand shared by `ValidateDeclaredDeps` and inline `.command()`. */
+export type MissingDeclaredDependencyBrand<T, Known extends string> =
 	Exclude<keyof DeclaredDepsOf<T> & string, Known> extends infer Missing extends string
 		? [Missing] extends [never]
 			? {}

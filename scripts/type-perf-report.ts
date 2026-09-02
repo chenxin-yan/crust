@@ -139,6 +139,7 @@ export function formatComparison(base: TypePerfReport, head: TypePerfReport): st
  * the dist it compiles against: `.use()` chains on trees that ship it, the
  * removed `uses:` config on older base revisions.
  */
+// ponytail: one-release compat shim — delete this probe and every builderUse=false branch once released base trees ship builder `.use()`.
 export function distSupportsBuilderUse(corePackageDir: string): boolean {
 	const distDir = join(corePackageDir, "dist");
 	return readdirSync(distDir).some(
@@ -186,7 +187,7 @@ export function generateConsumerSource(size: number, builderUse = true): string 
 			: `{ aliases: ["cmd-${index}", "c-${index}"], uses: [context${contextIndex}] }`;
 		lines.push(
 			`const command${index} = defineCommand("command-${index}", ${commandConfig}, (command) =>`,
-			`\tcommand`,
+			"\tcommand",
 			...(builderUse ? [`\t\t.use(context${contextIndex})`] : []),
 			`\t\t.flags({ name: "command-${index}-verbose", type: "boolean", short: "v", aliases: ["verbose-${index}"] })`,
 			`\t\t.flags({ name: "command-${index}-output", type: "string", short: "o", aliases: ["output-${index}"] })`,
