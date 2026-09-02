@@ -409,11 +409,14 @@ function copyRootReadme(cwd: string, rootDir: string): void {
 }
 
 function copyLicense(cwd: string, packageDirs: readonly string[]): void {
-	const licensePath = join(cwd, "LICENSE");
-	if (!existsSync(licensePath)) return;
+	const licenseName = ["LICENSE", "LICENSE.md", "LICENCE", "LICENCE.md"].find((name) =>
+		existsSync(join(cwd, name)),
+	);
+	if (!licenseName) return;
+	const licensePath = join(cwd, licenseName);
 
 	for (const packageDir of packageDirs) {
-		copyFileSync(licensePath, join(packageDir, "LICENSE"));
+		copyFileSync(licensePath, join(packageDir, licenseName));
 	}
 }
 

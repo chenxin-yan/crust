@@ -239,6 +239,26 @@ describe("runDistributeBuild", () => {
 			"test license\n",
 		);
 	});
+
+	it("copies common license filename variants", async () => {
+		rmSync(join(tmpDir, "LICENSE"));
+		writeFileSync(join(tmpDir, "LICENCE.md"), "variant license\n");
+		process.cwd = () => tmpDir;
+
+		await runDistributeBuild({
+			entry: "src/cli.ts",
+			minify: true,
+			target: ["bun-darwin-arm64"],
+			stageDir: ".stage",
+		});
+
+		expect(readFileSync(join(tmpDir, ".stage", "root", "LICENCE.md"), "utf-8")).toBe(
+			"variant license\n",
+		);
+		expect(readFileSync(join(tmpDir, ".stage", "darwin-arm64", "LICENCE.md"), "utf-8")).toBe(
+			"variant license\n",
+		);
+	});
 });
 
 describe("runDistributeBuild Extension artifact staging", () => {
