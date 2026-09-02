@@ -297,13 +297,16 @@ describe("skill extension packaged directory", () => {
 		expect(captured).toEqual({ stdout: "", stderr: "", exitCode: 0 });
 	});
 
-	it("rejects an invalid --scope value", async () => {
+	it("rejects an invalid --scope value during parsing", async () => {
 		const source = await writeSource("demo");
-		await withCwd(tempRoot, () =>
-			createApp(source).execute({ argv: ["skill", "update", "--scope", "bogus"] }),
+		const captured = await withCwd(tempRoot, () =>
+			captureExecute(createApp(source), ["skill", "update", "--scope", "bogus"]),
 		);
-		expect(process.exitCode).toBe(1);
-		process.exitCode = 0;
+
+		expect(captured.exitCode).toBe(1);
+		expect(captured.stderr).toContain("Expected one of");
+		expect(captured.stderr).toContain("project");
+		expect(captured.stderr).toContain("global");
 	});
 
 	it("still advertises and runs valid skills when the source contains a cruft directory", async () => {

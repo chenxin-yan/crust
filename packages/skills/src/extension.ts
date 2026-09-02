@@ -421,6 +421,7 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 					{
 						name: "scope",
 						type: "string",
+						choices: ["project", "global"],
 						description: "Install scope (project or global)",
 					},
 					{
@@ -435,6 +436,7 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 							.flags({
 								name: "scope",
 								type: "string",
+								choices: ["project", "global"],
 								description: "Update scope (project or global)",
 							})
 							.action(async (context) => {
