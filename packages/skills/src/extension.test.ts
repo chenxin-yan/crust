@@ -3,6 +3,7 @@ import {
 	lstat,
 	mkdir,
 	mkdtemp,
+	readdir,
 	readFile,
 	readlink,
 	rm,
@@ -143,6 +144,31 @@ describe("skill extension packaged directory", () => {
 			"authored\n",
 		);
 		await expect(lstat(join(outDir, "skills", "stale"))).rejects.toThrow();
+	});
+
+	it("forwards generated skill overrides to the build", async () => {
+		const source = await writeSource("stale", "stale");
+		const authored = join(tempRoot, "authored", "gyst");
+		await mkdir(authored, { recursive: true });
+		await writeFile(
+			join(authored, "SKILL.md"),
+			"---\nname: gyst\ndescription: Authored co-review workflow\n---\n",
+		);
+		const extension = skill({
+			distDir: source,
+			extras: [authored],
+			name: "gyst-reference",
+			description: "Generated command reference",
+		});
+		const snapshot = await new Crust("gyst", { description: "Gyst" }).extend(extension).snapshot();
+		const outDir = join(tempRoot, "dist");
+
+		await extension.build?.({ snapshot, outDir });
+
+		expect((await readdir(join(outDir, "skills"))).sort()).toEqual(["gyst", "gyst-reference"]);
+		expect(
+			await readFile(join(outDir, "skills", "gyst-reference", "SKILL.md"), "utf8"),
+		).toContain("description: Generated command reference");
 	});
 
 	it("copies packaged sources when extras is empty", async () => {

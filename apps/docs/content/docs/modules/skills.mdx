@@ -62,7 +62,7 @@ export const app = new Crust("my-cli", { description: "My CLI" })
   .action(() => {});
 ```
 
-When `extras` is non-empty, the build regenerates current command documentation and copies each authored skill into the output instead of copying the existing packaged skills directory. `distDir` remains the directory used for runtime discovery and installation. Keep authored skill directories outside the build output; the build refuses an extra nested inside it.
+When `extras` is non-empty, the build regenerates current command documentation and copies each authored skill into the output instead of copying the existing packaged skills directory. An authored extra with the generated skill's name replaces that generated skill; duplicate names between authored extras remain an error. Use `name` and `description` to customize the generated skill, or `generated: false` to omit it. `distDir` remains the directory used for runtime discovery and installation. Keep authored skill directories outside the build output; the build refuses an extra nested inside it.
 
 The extension registers `my-cli skill` and `my-cli skill update`. It also contributes an **Agent skills** section to root help and generated man pages. Each shipped skill is listed by name and description with its logical source path — relative to the working directory when the packaged directory is inside it, absolute otherwise — so agents can discover and load skills without installing them first. Run builds from the project root containing the packaged skills directory to keep absolute build-machine paths out of generated artifacts.
 

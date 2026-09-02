@@ -89,18 +89,42 @@ describe("writeSkills", () => {
 		expect(skillMd).toContain("description: Complete demo reference");
 	});
 
-	it("rejects a generated and authored skill name collision before writing", async () => {
-		const bundleDir = await createBundle("demo", "Authored demo guidance");
+	it("lets an authored skill replace the same-named generated skill", async () => {
+		const bundleDir = await createBundle("gyst", "Authored co-review workflow");
+		const outDir = join(tempRoot, "skills");
+		const app = new Crust("gyst", { description: "Generated command reference" }).action(() => {});
+
+		await writeSkills(app, { outDir, version: "1.0.0", extras: [bundleDir] });
+
+		const skill = await readFile(join(outDir, "gyst", "SKILL.md"), "utf8");
+		expect(skill).toContain("description: Authored co-review workflow");
+		expect(skill).not.toContain("Generated command reference");
+	});
+
+	it("rejects duplicate authored skill names", async () => {
+		const first = await createBundle("guide", "First guide");
+		const second = join(tempRoot, "other", "guide");
+		await mkdir(second, { recursive: true });
+		await writeFile(
+			join(second, "SKILL.md"),
+			"---\nname: guide\ndescription: Second guide\n---\n",
+		);
+		const result = writeSkills(createApp(), {
+			outDir: join(tempRoot, "skills"),
+			extras: [first, second],
+		});
+
+		await expect(result).rejects.toBeInstanceOf(SkillSourceConflictError);
+		await expect(result).rejects.toMatchObject({ skillName: "guide" });
+	});
+
+	it("can omit the generated command skill", async () => {
+		const bundleDir = await createBundle("guide", "Authored guidance");
 		const outDir = join(tempRoot, "skills");
 
-		const result = writeSkills(createApp(), {
-			outDir,
-			version: "1.0.0",
-			extras: [bundleDir],
-		});
-		await expect(result).rejects.toBeInstanceOf(SkillSourceConflictError);
-		await expect(result).rejects.toMatchObject({ skillName: "demo" });
-		await expect(readdir(outDir)).rejects.toThrow();
+		await writeSkills(createApp(), { outDir, generated: false, extras: [bundleDir] });
+
+		expect(await readdir(outDir)).toEqual(["guide"]);
 	});
 
 	it("rejects an extra skill directory nested inside outDir", async () => {

@@ -153,6 +153,12 @@ export interface SkillOptions {
 	 * includes only these authored skills instead of copying `distDir`.
 	 */
 	extras?: readonly (string | URL)[];
+	/** Generated command skill name. Defaults to the root command name. */
+	name?: string;
+	/** Generated command skill description. Defaults to the root command description. */
+	description?: string;
+	/** Whether to emit the generated command skill. @default true */
+	generated?: boolean;
 	/** Default agent-directory scope. */
 	defaultScope?: Scope;
 	/** Repair stale or dangling owned links before commands run. @default true */

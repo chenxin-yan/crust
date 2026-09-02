@@ -22,6 +22,8 @@ export interface WriteSkillsOptions {
 	readonly name?: string;
 	/** Generated skill description. Defaults to the root command description. */
 	readonly description?: string;
+	/** Whether to emit the generated command skill. @default true */
+	readonly generated?: boolean;
 	/** Hand-authored skill directories included alongside the generated skill. */
 	readonly extras?: readonly (string | URL)[];
 }
@@ -46,17 +48,21 @@ export async function writeSkillsFromSnapshot(
 		description: options.description ?? snapshot.meta.description ?? "",
 		version: options.version,
 	};
-	validateSkillName(generatedMeta.name);
-	requireSkillFrontmatter(generatedMeta, `Skill "${generatedMeta.name}"`);
+	if (options.generated !== false) {
+		validateSkillName(generatedMeta.name);
+		requireSkillFrontmatter(generatedMeta, `Skill "${generatedMeta.name}"`);
+	}
 
 	const outDir = resolve(options.outDir);
 	if (basename(outDir) !== "skills") {
 		throw new Error(`Skill source outDir "${outDir}" must be named "skills".`);
 	}
 
-	const skills = new Map<string, readonly RenderedFile[]>([
-		[generatedMeta.name, renderSkill(buildManifest(snapshot), generatedMeta)],
-	]);
+	const skills = new Map<string, readonly RenderedFile[]>();
+	if (options.generated !== false) {
+		skills.set(generatedMeta.name, renderSkill(buildManifest(snapshot), generatedMeta));
+	}
+	const authoredNames = new Set<string>();
 
 	for (const sourceDir of options.extras ?? []) {
 		const resolved = resolveSourceDir(sourceDir);
@@ -68,9 +74,11 @@ export async function writeSkillsFromSnapshot(
 		}
 		const bundle = await loadBundleFiles(sourceDir);
 		validateSkillName(bundle.frontmatter.name);
-		if (skills.has(bundle.frontmatter.name)) {
+		if (authoredNames.has(bundle.frontmatter.name)) {
 			throw new SkillSourceConflictError(bundle.frontmatter.name);
 		}
+		authoredNames.add(bundle.frontmatter.name);
+		// An authored skill may intentionally replace the same-named generated command skill.
 		skills.set(bundle.frontmatter.name, bundle.files);
 	}
 

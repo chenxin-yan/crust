@@ -224,6 +224,9 @@ async function buildSkills(options: SkillOptions, context: ExtensionBuildContext
 		await writeSkillsFromSnapshot(context.snapshot, {
 			outDir,
 			version: await readPackageVersion(),
+			name: options.name,
+			description: options.description,
+			generated: options.generated,
 			extras: options.extras,
 		});
 		return;
