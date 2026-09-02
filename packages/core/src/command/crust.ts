@@ -429,8 +429,12 @@ export interface CommandDefinitionBuilder<
 	 * closure into the action's typed `ctx`, and into the sealed definition's
 	 * declared dependencies checked at `.provide()`/`.add()`/`.extend()`
 	 * composition sites.
+	 *
+	 * Declarations are type-only — nothing is recorded at runtime — so the
+	 * signature requires a statically known, non-empty factory tuple: a widened
+	 * or empty spread would contribute nothing and is rejected at compile time.
 	 */
-	use<const Fs extends readonly AnyContextFactory[]>(
+	use<const Fs extends readonly [AnyContextFactory, ...AnyContextFactory[]]>(
 		...factories: Fs
 	): CommandDefinitionBuilder<
 		Flags,

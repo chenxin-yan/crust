@@ -159,6 +159,20 @@ describe("command definitions", () => {
 			new Crust("cli").provide(logging()).add(status);
 		};
 		void missingDep;
+
+		// .use() is type-only, so calls that contribute no types are compile errors:
+		const rejectedForms = () => {
+			const widened = [db, logging];
+			defineCommand("w", (command) =>
+				// @ts-expect-error -- widened spreads lose the factory tuple and would declare nothing
+				command.use(...widened).action(() => {}),
+			);
+			defineCommand("e", (command) =>
+				// @ts-expect-error -- empty .use() would be a silent no-op
+				command.use().action(() => {}),
+			);
+		};
+		void rejectedForms;
 	});
 
 	it("clones annotations and isolates materializations across parents", async () => {

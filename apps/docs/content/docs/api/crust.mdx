@@ -23,7 +23,7 @@ import {
 
 ## Reusable command definitions
 
-A sealed command declares consumed Context factories with `.use(...factories)` — `.use(logger)` is demand (a factory), `.provide(logger())` is supply (an instance). Like the other builder methods, `.use()` is variadic and accumulates across calls. Actions and setup receive a typed lazy bag and await values with `await ctx.<name>`; missing wiring is reported at `.provide()`, `.add()`, or `.extend()`.
+A sealed command declares consumed Context factories with `.use(...factories)` — `.use(logger)` is demand (a factory), `.provide(logger())` is supply (an instance). Like the other builder methods, `.use()` is variadic and accumulates across calls. Because declarations are type-only, `.use()` requires a statically known, non-empty factory tuple — an empty call or a widened array spread would declare nothing and fails typecheck. Actions and setup receive a typed lazy bag and await values with `await ctx.<name>`; missing wiring is reported at `.provide()`, `.add()`, or `.extend()`.
 
 ### `CommandDefinitionBuilder`
 
@@ -37,7 +37,7 @@ interface CommandDefinitionBuilder<
 > {
   flags(...defs: readonly NamedFlagDef[]): CommandDefinitionBuilder;
   args(...defs: ArgsDef): CommandDefinitionBuilder;
-  use(...factories: readonly AnyContextFactory[]): CommandDefinitionBuilder;
+  use(...factories: readonly [AnyContextFactory, ...AnyContextFactory[]]): CommandDefinitionBuilder;
   provide(...instances: readonly ContextInstance[]): CommandDefinitionBuilder;
   add(...definitions: readonly CommandDefinition[]): CommandDefinitionBuilder;
   action<R>(action: (ctx: CrustCommandContext<A, Flags, Ctx>) => R): CommandDefinitionBuilder;
@@ -234,7 +234,7 @@ const app = new Crust("my-cli")
   });
 ```
 
-Declared dependencies (Context `uses`, command `.use()`, Extension `uses`) are checked at composition time. Dependencies may appear in either order within one `.provide()` call; across calls, provide dependencies first. Core does not repeat these dependency checks at runtime; dynamically assembled inputs fail lazily with `missing-context` on first access.
+Declared dependencies (Context `uses`, command `.use()`, Extension `uses`) are checked at composition time. Dependencies may appear in either order within one `.provide()` call; across calls, provide dependencies first. Core does not repeat these dependency checks at runtime; dynamically assembled `.provide()` and `uses` inputs fail lazily with `missing-context` on first access, while `.use()` rejects widened input at compile time because its declarations are type-only.
 
 A Context's top-level `flags` are installed as propagating flags on this builder and later-added descendants, without mutating the original definitions. Dependencies construct recursively on the first pull.
 
