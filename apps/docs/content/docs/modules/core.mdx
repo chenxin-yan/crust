@@ -24,7 +24,7 @@ const app = new Crust("hello")
 await app.execute();
 ```
 
-Inline `.command()` defines app-local leaf subcommands; extract to [`defineCommand`](/docs/api/crust) when a command needs its own file, reuse, or a package. Commands declare Context demand with `.use(factory)` and applications supply values with `.provide(instance)`.
+Inline `.command()` defines app-local leaf subcommands; extract to [`defineCommand`](/docs/api/crust) when a command needs its own file, reuse, or a package. Commands declare Context demand with `.use(...factories)` and applications supply values with `.provide(...instances)`.
 
 ## Context-owned flags
 
@@ -48,7 +48,7 @@ Downstream commands and other Context setups call `await ctx.api`. See [Contexts
 | Export                                | Description                                                                                                                                                              |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | [`Crust`](/docs/api/crust)            | Immutable command builder with Context `.provide()`, inline `.command()`, `.add()`, `.action()`, tooling `.snapshot()`, programmatic `.run()`, and terminal `.execute()` |
-| [`defineCommand`](/docs/api/crust)    | Create a named, inert reusable command definition; its builder declares Context demand with chained `.use()`                                                             |
+| [`defineCommand`](/docs/api/crust)    | Create a named, inert reusable command definition; its builder declares Context demand with variadic `.use()`                                                            |
 | `defineContext(name, config?, setup)` | Define a named Context factory with optional owned flags; setup receives its declared lazy Context bag and invocation I/O                                                |
 | `defineExtension(id, config)`         | Define a frozen, application-wide Extension value                                                                                                                        |
 | `defineExtensionId(id)`               | Mint a branded Extension identity from any non-blank string                                                                                                              |

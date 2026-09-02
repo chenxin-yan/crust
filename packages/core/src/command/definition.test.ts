@@ -137,6 +137,30 @@ describe("command definitions", () => {
 		expect(calls).toEqual(["database:true"]);
 	});
 
+	it("accepts multiple factories in one variadic .use() call", async () => {
+		const calls: string[] = [];
+		const logging = defineContext("logging", () => ({ verbose: true }));
+		const db = defineContext("db", () => "database");
+		const status = defineCommand("status", (command) =>
+			command.use(db, logging).action(async ({ ctx }) => {
+				const database = await ctx.db;
+				type _Db = Assert<IsEqual<typeof database, string>>;
+				calls.push(`${database}:${String((await ctx.logging).verbose)}`);
+			}),
+		);
+		const app = new Crust("cli").provide(logging(), db()).add(status);
+
+		await app.run(["status"]);
+
+		expect(calls).toEqual(["database:true"]);
+
+		const missingDep = () => {
+			// @ts-expect-error -- variadic .use() declares every factory as a dependency; "db" is not provided
+			new Crust("cli").provide(logging()).add(status);
+		};
+		void missingDep;
+	});
+
 	it("clones annotations and isolates materializations across parents", async () => {
 		const annotation = Symbol("annotation");
 		const definition = defineCommand("one", { description: "Reusable" }, (command) => {

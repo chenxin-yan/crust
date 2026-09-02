@@ -240,7 +240,7 @@ Extracts the awaited value type a Context factory produces: `FactoryValueOf<type
 type ContextMap = object;
 ```
 
-The upper bound for the name/value registry accumulated by `.provide()` and Extension `provides`. It is a phantom constraint: the builder infers the concrete property map, so consumer-defined context shapes do not need a string index signature. Command actions receive `ContextBag<Ctx>` for that inferred registry. Reusable command definitions and Extensions expose only Contexts declared through chained `.use()` calls (command definitions) or the `uses` config field (Extensions).
+The upper bound for the name/value registry accumulated by `.provide()` and Extension `provides`. It is a phantom constraint: the builder infers the concrete property map, so consumer-defined context shapes do not need a string index signature. Command actions receive `ContextBag<Ctx>` for that inferred registry. Reusable command definitions and Extensions expose only Contexts declared through `.use()` (command definitions) or the `uses` config field (Extensions).
 
 ## Extension types
 

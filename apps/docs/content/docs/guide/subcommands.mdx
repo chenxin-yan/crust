@@ -23,7 +23,7 @@ Routing consumes command names before parsing the resolved command's arguments a
 
 ## Requirements
 
-A definition declares Context capabilities with chained `.use(factory)` calls and awaits them from its typed `ctx` bag. The app decides where to provide them:
+A definition declares Context capabilities with `.use(...factories)` — variadic, accumulating across calls — and awaits them from its typed `ctx` bag. The app decides where to provide them:
 
 ```ts
 import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
@@ -40,8 +40,7 @@ const repository = defineContext("repository", () => ({
 
 const clone = defineCommand("clone", (command) =>
   command
-    .use(logging)
-    .use(repository)
+    .use(logging, repository)
     .args({ name: "url", type: "url", required: true })
     .action(async ({ args, ctx, stdout }) => {
       (await ctx.logging).debug(`cloning ${args.url}`);
