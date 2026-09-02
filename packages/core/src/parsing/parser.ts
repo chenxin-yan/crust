@@ -452,6 +452,13 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 			if (unknownMatch) {
 				throw new CrustError("PARSE", `Unknown flag "${unknownMatch[1]}"`).withCause(error);
 			}
+			if (
+				"code" in error &&
+				error.code === "ERR_PARSE_ARGS_INVALID_OPTION_VALUE" &&
+				error.message.length > 0
+			) {
+				throw new CrustError("PARSE", error.message).withCause(error);
+			}
 		}
 		throw new CrustError("PARSE", "Failed to parse command arguments").withCause(error);
 	}

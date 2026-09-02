@@ -560,6 +560,22 @@ describe("parseArgs — strict mode (unknown flags)", () => {
 			expect((err as CrustError).message).toContain("Unknown flag");
 		}
 	});
+
+	it("preserves the flag name when its value is missing", () => {
+		const valued = makeNode({
+			meta: { name: "test" },
+			flags: { output: { type: "string" } },
+		});
+
+		try {
+			parseArgs(valued, ["--output"]);
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustError);
+			expect((err as CrustError).code).toBe("PARSE");
+			expect((err as CrustError).message).toContain("--output");
+		}
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -683,7 +699,7 @@ describe("parseArgs — boolean flag value assignment", () => {
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
 			expect((err as CrustError).code).toBe("PARSE");
-			expect((err as CrustError).message).toBe("Failed to parse command arguments");
+			expect((err as CrustError).message).toContain("--verbose");
 			expect((err as CrustError).cause).toBeInstanceOf(Error);
 			expect(((err as CrustError).cause as Error).message).toContain(
 				"Option '--verbose' does not take an argument",
