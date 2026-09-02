@@ -61,7 +61,7 @@ new Crust("app").provide(database(), config());
 
 Dependencies remain lazy: `config` starts only if setup accesses `ctx.config`. A `.provide()` call verifies the transitive dependency closure at the type level and at definition time. Dependencies may appear in either order within one call; across calls, provide dependencies first so the next call can be checked.
 
-Reusable commands declare demand with chained `.use(factory)` calls — `.use(logger)` demands (a factory), `.provide(logger())` supplies (an instance) — and Extensions declare theirs with the `uses` config field. `.add()` and `.extend()` validate those declarations against Contexts already provided on the builder. Put `.provide()` or provider `.extend()` calls before `.add()`.
+Reusable commands declare demand with `.use(...factories)` — `.use(logger)` demands (a factory), `.provide(logger())` supplies (an instance) — and Extensions declare theirs with the `uses` config field. `.add()` and `.extend()` validate those declarations against Contexts already provided on the builder. Put `.provide()` or provider `.extend()` calls before `.add()`.
 
 Contexts are inherited by descendants present when the builder is added. Immutable builder chains do not backfill already-added children.
 

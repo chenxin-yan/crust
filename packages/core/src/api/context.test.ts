@@ -1523,7 +1523,7 @@ describe("inline .command()", () => {
 				// SAFETY: deliberately bypass the factory-only signature to verify the runtime guard.
 				(cmd.use as (instance: ContextInstance) => never)(logger()),
 			),
-		).toThrow(/expects a Context factory/);
+		).toThrow(/expects Context factories/);
 	});
 
 	it("rejects an inline command name that is already registered", () => {

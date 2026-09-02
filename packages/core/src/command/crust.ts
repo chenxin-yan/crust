@@ -422,26 +422,30 @@ export interface CommandDefinitionBuilder<
 	>;
 
 	/**
-	 * Declare a Context this command consumes without supplying its value.
+	 * Declare Contexts this command consumes without supplying their values.
 	 *
-	 * `.use(logger)` is demand (a factory); `.provide(logger())` is supply (an
-	 * instance). Each call accumulates the factory's value and transitive
-	 * dependency closure into the action's typed `ctx`, and into the sealed
-	 * definition's declared dependencies checked at `.provide()`/`.add()`/`.extend()`
+	 * `.use(logger, tracer)` is demand (factories); `.provide(logger())` is supply
+	 * (an instance). Each factory accumulates its value and transitive dependency
+	 * closure into the action's typed `ctx`, and into the sealed definition's
+	 * declared dependencies checked at `.provide()`/`.add()`/`.extend()`
 	 * composition sites.
+	 *
+	 * Declarations are type-only — nothing is recorded at runtime — so the
+	 * signature requires a statically known, non-empty factory tuple: a widened
+	 * or empty spread would contribute nothing and is rejected at compile time.
 	 */
-	use<const F extends AnyContextFactory>(
-		factory: F,
+	use<const Fs extends readonly [AnyContextFactory, ...AnyContextFactory[]]>(
+		...factories: Fs
 	): CommandDefinitionBuilder<
 		Flags,
 		A,
-		MergeContext<Ctx, ContextDependencies<readonly [F]>>,
+		MergeContext<Ctx, ContextDependencies<Fs>>,
 		Sibs,
 		Sp,
 		Tree,
 		CtxFlags,
 		Result,
-		MergeContext<Deps, ContextDependencies<readonly [F]>>
+		MergeContext<Deps, ContextDependencies<Fs>>
 	>;
 
 	provide<const Cs extends readonly ContextInstance[]>(
@@ -1439,14 +1443,16 @@ export class Crust<
 // runtime. The implementation lives on the prototype because recipes execute
 // against Crust instances, while Crust's declared type omits it — root
 // applications supply Contexts with `.provide()`.
-function useContextDemand(this: AnyCrust, factory: AnyContextFactory): AnyCrust {
-	// oxlint-disable-next-line anti-slop/no-runtime-typeof -- recipes are an authoring boundary: the demand/supply mixup (`.use(logger())`) must fail loud here, not lazily at invocation.
-	if (typeof factory !== "function" || typeof factory.contextName !== "string") {
-		throw new CrustError(
-			"DEFINITION",
-			`.use() expects a Context factory (e.g. \`.use(logger)\`); call \`.provide(logger())\` to supply a Context value`,
-			{ subject: "context", name: String(factory), reason: "use-expects-factory" },
-		);
+function useContextDemand(this: AnyCrust, ...factories: AnyContextFactory[]): AnyCrust {
+	for (const factory of factories) {
+		// oxlint-disable-next-line anti-slop/no-runtime-typeof -- recipes are an authoring boundary: the demand/supply mixup (`.use(logger())`) must fail loud here, not lazily at invocation.
+		if (typeof factory !== "function" || typeof factory.contextName !== "string") {
+			throw new CrustError(
+				"DEFINITION",
+				`.use() expects Context factories (e.g. \`.use(logger)\`); call \`.provide(logger())\` to supply a Context value`,
+				{ subject: "context", name: String(factory), reason: "use-expects-factory" },
+			);
+		}
 	}
 	return this;
 }
