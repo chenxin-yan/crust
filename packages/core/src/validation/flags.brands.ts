@@ -322,14 +322,25 @@ export type DefinitionTreeSpellings<Ds extends readonly unknown[]> = DefinitionS
 	Ds[number]
 >;
 
-type DefinitionFlagCollisionBrand<D, Ext extends string> =
-	Overlap<DefinitionSpellings<D>, Ext> extends infer Collision extends string
+/**
+ * Extension-collision brand over a built command shape. Shared by `.add()`
+ * (via {@link ValidateDefinitionFlags}) and inline `.command()`, whose recipe
+ * builder exposes a shape instead of a definition tuple.
+ */
+export type ShapeFlagCollisionBrand<S, Ext extends string> =
+	Overlap<ShapeSpellings<S>, Ext> extends infer Collision extends string
 		? [Collision] extends [never]
 			? {}
 			: {
 					readonly FIX_ALIAS_COLLISION: `Flag spelling "${Collision}" collides with a registered Extension flag`;
 				}
 		: never;
+
+type DefinitionFlagCollisionBrand<D, Ext extends string> = D extends {
+	readonly _shape?: infer S;
+}
+	? ShapeFlagCollisionBrand<S, Ext>
+	: {};
 
 /**
  * Validate an added definition tree's flag spellings against already-registered

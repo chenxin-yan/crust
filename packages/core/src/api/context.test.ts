@@ -1451,6 +1451,33 @@ describe("inline .command()", () => {
 		void invalidCompositions;
 	});
 
+	it("brands inline flags that collide with registered Extension flags, matching .add()", () => {
+		const tracer = defineExtension(defineExtensionId("tracer"), {
+			flags: [{ name: "trace", type: "boolean" }],
+		});
+		const rootOnly = defineExtension(defineExtensionId("root-only"), {
+			flags: [{ name: "depth", type: "string", recursive: false }],
+		});
+		const nestedColliding = defineCommand("child", (cmd) =>
+			cmd.flags({ name: "trace", type: "boolean" }).action(() => {}),
+		);
+
+		// Collision-free recipes compose cleanly after .extend().
+		new Crust("cli").extend(tracer).command("ok", (cmd) => cmd.action(() => {}));
+
+		const invalidCompositions = () => {
+			new Crust("cli")
+				.extend(tracer)
+				// @ts-expect-error -- nested child's "trace" collides with tracer's recursive flag (parity with .add())
+				.command("query", (cmd) => cmd.add(nestedColliding).action(() => {}));
+			new Crust("cli")
+				.extend(rootOnly)
+				// @ts-expect-error -- inline "depth" collides with a registered Extension flag (parity with .add())
+				.command("query", (cmd) => cmd.flags({ name: "depth", type: "string" }).action(() => {}));
+		};
+		void invalidCompositions;
+	});
+
 	it("rejects a Context instance passed to .use() at runtime", () => {
 		const logger = defineContext("logger", () => "logger");
 		expect(() =>

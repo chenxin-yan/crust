@@ -53,6 +53,7 @@ import type {
 	ExtensionsSpellings,
 	ProvideChecks,
 	DefinitionTreeSpellings,
+	ShapeFlagCollisionBrand,
 	ValidateDefinitionFlags,
 	ValidateExtensionFlags,
 	SpellingsOf,
@@ -1286,7 +1287,13 @@ export class Crust<
 	 * expose this method.
 	 */
 	command<const N extends string, B extends AnyCommandDefinitionBuilder>(
-		name: N & EmptyNameBrand<N> & ValidateInlineCommandDeps<Ctx, B>,
+		// ShapeFlagCollisionBrand keeps parity with `.add()`'s ValidateDefinitionFlags:
+		// the recipe's whole tree (including nested `.add()` children, which the seeded
+		// `Sp` cannot see) is checked against registered Extension flag spellings.
+		name: N &
+			EmptyNameBrand<N> &
+			ValidateInlineCommandDeps<Ctx, B> &
+			ShapeFlagCollisionBrand<ShapeOfBuilder<B>, CollisionSp["extension"]>,
 		recipe: (
 			command: CommandDefinitionBuilder<{}, [], Ctx, never, SpellingsOf<CtxFlags>, {}, CtxFlags>,
 		) => B,
