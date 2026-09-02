@@ -32,7 +32,7 @@ $ greet --help
 
 ## Philosophy
 
-- **One way to do it.** One starter pattern. `defineCommand()` for every command; `new Crust()` appears exactly once, at the root.
+- **One way to do it.** One starter pattern. Inline `.command()` for app-local commands, `defineCommand()` when a command needs its own file, reuse, or a package; `new Crust()` appears exactly once, at the root.
 - **Inference over annotation.** Types flow from definitions to actions. No decorators, no codegen, no manual generics.
 - **Plain values, immutable builders.** Definitions and Extensions are frozen data; every fluent call returns a new builder.
 - **TypeScript-first definitions.** Statically known collisions and malformed definitions fail at their authoring call sites during type checking; argv is still validated at runtime.
