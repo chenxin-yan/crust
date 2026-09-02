@@ -133,11 +133,6 @@ export function formatComparison(base: TypePerfReport, head: TypePerfReport): st
 }
 
 /**
- * Generate a deterministic downstream app with `size` top-level sibling commands.
- * Each command has three chained flags and two chained args. Context count is
- * max(3, ceil(size / 10)); every tenth command also owns one nested subcommand.
- */
-/**
  * Whether a core package's built declarations expose the chainable builder
  * `.use()`. The head copy of this script measures both trees (type-perf.yml:
  * "Head's script measures both trees"), so the fixture must speak the API of
@@ -155,6 +150,11 @@ export function distSupportsBuilderUse(corePackageDir: string): boolean {
 	);
 }
 
+/**
+ * Generate a deterministic downstream app with `size` top-level sibling commands.
+ * Each command has three chained flags and two chained args. Context count is
+ * max(3, ceil(size / 10)); every tenth command also owns one nested subcommand.
+ */
 export function generateConsumerSource(size: number, builderUse = true): string {
 	if (!Number.isInteger(size) || size < 1) throw new Error("size must be a positive integer");
 	const contextCount = Math.max(3, Math.ceil(size / 10));
@@ -343,8 +343,10 @@ async function measure(outputPath: string, rootDir = "."): Promise<void> {
 	try {
 		for (const size of scalingSizes) {
 			const fixtureDir = join(fixtureRoot, String(size));
-			generateConsumerFixture(fixtureDir, join(root, "packages/core"), size);
 			try {
+				// Inside the catch so fixture *generation* failures (e.g. missing dist
+				// during the .use() probe) follow the same n/a policy as compile failures.
+				generateConsumerFixture(fixtureDir, join(root, "packages/core"), size);
 				const fixtureDiagnostics = run(
 					[tsc, "--noEmit", "--incremental", "false", "--extendedDiagnostics", "-p", fixtureDir],
 					root,
