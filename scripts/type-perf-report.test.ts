@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import {
+	distSupportsBuilderUse,
 	formatComparison,
 	generateConsumerFixture,
 	generateConsumerSource,
@@ -63,6 +64,12 @@ describe("type performance report", () => {
 		expect(generateConsumerSource(10).match(/const command\d+ = defineCommand/g)).toHaveLength(10);
 	});
 
+	it("emits the pre-.use() config API for base trees that predate builder .use()", () => {
+		const source = generateConsumerSource(10, false);
+		expect(source).toContain("uses: [context");
+		expect(source).not.toContain(".use(");
+	});
+
 	it("compiles the size-10 consumer fixture against built dist declarations", () => {
 		const build = Bun.spawnSync(["bun", "run", "build"], {
 			cwd: corePackage,
@@ -74,6 +81,8 @@ describe("type performance report", () => {
 		}
 		const fixtureDir = mkdtempSync(join(tmpdir(), "crust-type-perf-test-"));
 		try {
+			// This repo's dist is a head tree: the probe must pick the .use() fixture.
+			expect(distSupportsBuilderUse(corePackage)).toBe(true);
 			const consumerDir = join(fixtureDir, "consumer-10");
 			generateConsumerFixture(consumerDir, corePackage, 10);
 			const result = Bun.spawnSync([tsc, "--noEmit", "--incremental", "false", "-p", consumerDir], {

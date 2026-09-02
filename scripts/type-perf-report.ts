@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
@@ -129,7 +137,25 @@ export function formatComparison(base: TypePerfReport, head: TypePerfReport): st
  * Each command has three chained flags and two chained args. Context count is
  * max(3, ceil(size / 10)); every tenth command also owns one nested subcommand.
  */
-export function generateConsumerSource(size: number): string {
+/**
+ * Whether a core package's built declarations expose the chainable builder
+ * `.use()`. The head copy of this script measures both trees (type-perf.yml:
+ * "Head's script measures both trees"), so the fixture must speak the API of
+ * the dist it compiles against: `.use()` chains on trees that ship it, the
+ * removed `uses:` config on older base revisions.
+ */
+export function distSupportsBuilderUse(corePackageDir: string): boolean {
+	const distDir = join(corePackageDir, "dist");
+	return readdirSync(distDir).some(
+		(file) =>
+			file.endsWith(".d.ts") &&
+			/\buse<[\s\S]{0,200}?\)\s*:\s*CommandDefinitionBuilder</.test(
+				readFileSync(join(distDir, file), "utf8"),
+			),
+	);
+}
+
+export function generateConsumerSource(size: number, builderUse = true): string {
 	if (!Number.isInteger(size) || size < 1) throw new Error("size must be a positive integer");
 	const contextCount = Math.max(3, Math.ceil(size / 10));
 	const lines = [
@@ -155,10 +181,13 @@ export function generateConsumerSource(size: number): string {
 
 	for (let index = 0; index < size; index++) {
 		const contextIndex = index % contextCount;
+		const commandConfig = builderUse
+			? `{ aliases: ["cmd-${index}", "c-${index}"] }`
+			: `{ aliases: ["cmd-${index}", "c-${index}"], uses: [context${contextIndex}] }`;
 		lines.push(
-			`const command${index} = defineCommand("command-${index}", { aliases: ["cmd-${index}", "c-${index}"] }, (command) =>`,
+			`const command${index} = defineCommand("command-${index}", ${commandConfig}, (command) =>`,
 			`\tcommand`,
-			`\t\t.use(context${contextIndex})`,
+			...(builderUse ? [`\t\t.use(context${contextIndex})`] : []),
 			`\t\t.flags({ name: "command-${index}-verbose", type: "boolean", short: "v", aliases: ["verbose-${index}"] })`,
 			`\t\t.flags({ name: "command-${index}-output", type: "string", short: "o", aliases: ["output-${index}"] })`,
 			`\t\t.flags({ name: "command-${index}-force", type: "boolean", short: "f", aliases: ["force-${index}"] })`,
@@ -166,9 +195,13 @@ export function generateConsumerSource(size: number): string {
 			`\t\t.args({ name: "destination-${index}", type: "string" })`,
 		);
 		if (index % 10 === 0) {
+			const nestedConfig = builderUse
+				? `{ aliases: ["n-${index}"] }`
+				: `{ aliases: ["n-${index}"], uses: [context${contextIndex}] }`;
+			const nestedUse = builderUse ? `.use(context${contextIndex})` : "";
 			lines.push(
-				`\t\t.add(defineCommand("nested-${index}", { aliases: ["n-${index}"] }, (nested) =>`,
-				`\t\t\tnested.use(context${contextIndex}).flags({ name: "nested-${index}-mode", type: "string", short: "m", aliases: ["mode-${index}"] }).action(async ({ flags, ctx }) => { void flags["nested-${index}-mode"]; void await ctx["context-${contextIndex}"]; }),`,
+				`\t\t.add(defineCommand("nested-${index}", ${nestedConfig}, (nested) =>`,
+				`\t\t\tnested${nestedUse}.flags({ name: "nested-${index}-mode", type: "string", short: "m", aliases: ["mode-${index}"] }).action(async ({ flags, ctx }) => { void flags["nested-${index}-mode"]; void await ctx["context-${contextIndex}"]; }),`,
 				"\t\t))",
 			);
 		}
@@ -205,7 +238,10 @@ export function generateConsumerFixture(
 	const packageDir = resolve(corePackageDir);
 	mkdirSync(join(fixtureDir, "node_modules/@crustjs"), { recursive: true });
 	symlinkSync(packageDir, join(fixtureDir, "node_modules/@crustjs/core"), "dir");
-	writeFileSync(join(fixtureDir, "consumer.ts"), generateConsumerSource(size));
+	writeFileSync(
+		join(fixtureDir, "consumer.ts"),
+		generateConsumerSource(size, distSupportsBuilderUse(packageDir)),
+	);
 	writeFileSync(
 		join(fixtureDir, "tsconfig.json"),
 		`${JSON.stringify(
