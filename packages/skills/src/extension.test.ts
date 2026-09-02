@@ -16,6 +16,7 @@ import { dirname, join, resolve } from "node:path";
 import { Crust } from "@crustjs/core";
 import { renderHelp } from "@crustjs/extensions";
 import { withPromptIO } from "@crustjs/prompts";
+import { captureExecute } from "@crustjs/testing";
 import { createPromptIO } from "@crustjs/prompts/testing";
 
 import { skill } from "./extension.ts";
@@ -268,14 +269,32 @@ describe("skill extension packaged directory", () => {
 		expect(await readlink(installed)).toBe(stale);
 	});
 
-	it("leaves conflicts untouched during preRun repair", async () => {
+	it("reports preRun conflicts through injected stderr", async () => {
 		const source = await writeSource("demo");
-		const installed = join(tempRoot, ".claude", "skills", "demo");
+		const installed = target();
 		await mkdir(installed, { recursive: true });
 		await writeFile(join(installed, "manual.md"), "keep\n");
-
-		await withCwd(tempRoot, () => createApp(source).execute({ argv: [] }));
+		const originalWarn = console.warn;
+		const ambientWarnings: unknown[] = [];
+		console.warn = (...args) => ambientWarnings.push(...args);
+		try {
+			const captured = await withCwd(tempRoot, () => captureExecute(createApp(source), []));
+			expect(captured.exitCode).toBe(0);
+			expect(captured.stderr).toContain("Skill conflict [demo]");
+			expect(ambientWarnings).toEqual([]);
+		} finally {
+			console.warn = originalWarn;
+		}
 		expect(await readFile(join(installed, "manual.md"), "utf8")).toBe("keep\n");
+	});
+
+	it("quietly skips preRun repair for an empty packaged source", async () => {
+		const source = join(tempRoot, "package", "skills");
+		await mkdir(source, { recursive: true });
+
+		const captured = await withCwd(tempRoot, () => captureExecute(createApp(source), []));
+
+		expect(captured).toEqual({ stdout: "", stderr: "", exitCode: 0 });
 	});
 
 	it("rejects an invalid --scope value", async () => {
