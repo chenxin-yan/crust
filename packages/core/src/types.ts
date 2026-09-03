@@ -638,8 +638,6 @@ export interface CommandMeta {
 	description?: string;
 	/** Custom usage string (overrides auto-generated usage) */
 	usage?: string;
-	/** Allow undeclared positional arguments to be ignored. @default false */
-	allowExcessPositionals?: boolean;
 	/** Plain-text sections rendered after built-in command documentation. */
 	sections?: readonly CommandSection[];
 	/**

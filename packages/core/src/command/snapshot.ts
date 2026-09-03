@@ -195,7 +195,6 @@ export function snapshotCommand(node: CommandNode): CommandSnapshot {
 			name: node.meta.name,
 			description: node.meta.description,
 			usage: node.meta.usage,
-			allowExcessPositionals: node.meta.allowExcessPositionals,
 			sections: node.meta.sections
 				? Object.freeze(node.meta.sections.map((section) => Object.freeze({ ...section })))
 				: undefined,

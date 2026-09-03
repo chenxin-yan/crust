@@ -507,7 +507,7 @@ export function validateParsed<A extends ArgsDef = ArgsDef, F extends FlagsDef =
 	const args = parsed.args;
 	const flags = parsed.flags;
 
-	if (parsed.excessArgs.length > 0 && command.meta.allowExcessPositionals !== true) {
+	if (parsed.excessArgs.length > 0) {
 		throw new CrustError(
 			"VALIDATION",
 			`Unexpected positional argument${parsed.excessArgs.length === 1 ? "" : "s"}: ${parsed.excessArgs.map((arg) => JSON.stringify(arg)).join(", ")}`,

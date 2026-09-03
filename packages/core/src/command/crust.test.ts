@@ -253,12 +253,6 @@ describe("command metadata", () => {
 		});
 	});
 
-	it("copies allowExcessPositionals into the root node", async () => {
-		const app = new Crust("proxy", { allowExcessPositionals: true });
-
-		expect((await app.snapshot()).meta.allowExcessPositionals).toBe(true);
-	});
-
 	it("applies definition metadata from config", async () => {
 		const app = new Crust("cli").add(
 			defineCommand(
