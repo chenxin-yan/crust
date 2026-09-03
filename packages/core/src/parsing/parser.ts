@@ -420,7 +420,7 @@ function validateNoNegateUsage(argv: string[], spellings: ReadonlyMap<string, Fl
  *
  * @param command - The command whose arg/flag definitions drive the parsing
  * @param argv - The argv array to parse (typically `process.argv.slice(2)`)
- * @returns Parsed args, flags, and rawArgs (everything after `--`)
+ * @returns Parsed args, flags, excessArgs (positionals before `--` not consumed by a declared argument), and rawArgs (everything after `--`)
  * @throws {CrustError} On unknown flags or type coercion failure
  */
 export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(

@@ -159,7 +159,7 @@ type GreetInput = RunInput<CommandShapeAt<(typeof app)["_types"]["shape"], reado
 
 ## Parser boundary types
 
-`ParseResult<A, F>` is the syntax-parsed result before required-value and Standard Schema validation. Its generic `args` and `flags` preserve definition-specific raw value types; `ParsedArgValue` and `ParsedFlagValue` are the runtime-erased fallbacks for widened definitions. Its `rawArgs` holds tokens after `--`. `ValidatedInput<A, F>` is the validated boundary passed onward to Command Actions, with `InferArgs<A>` and `InferFlags<F>` applied.
+`ParseResult<A, F>` is the syntax-parsed result before required-value and Standard Schema validation. Its generic `args` and `flags` preserve definition-specific raw value types; `ParsedArgValue` and `ParsedFlagValue` are the runtime-erased fallbacks for widened definitions. Its `excessArgs` holds positionals before `--` that no declared argument consumed (validation rejects them); its `rawArgs` holds tokens after `--`. `ValidatedInput<A, F>` is the validated boundary passed onward to Command Actions, with `InferArgs<A>` and `InferFlags<F>` applied.
 
 Most application authors consume the inferred Action context rather than naming these types directly. They are exported for parser integrations and tooling that need to distinguish syntax parsing from schema-validated values.
 
