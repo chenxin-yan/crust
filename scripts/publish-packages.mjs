@@ -205,7 +205,7 @@ async function main() {
 
 	// Tag the whole cohort, not just this run's publishes: after a partial
 	// failure, a retry must still tag packages that the failed run published.
-	await runCommand([process.execPath, "x", "changeset", "tag"], ROOT_DIR);
+	await runCommand([process.execPath, "x", "changeset", "git-tag"], ROOT_DIR);
 }
 
 await main();
