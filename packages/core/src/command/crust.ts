@@ -1035,6 +1035,9 @@ export class Crust<
 		this._node = createCommandNode(name);
 		if (meta.description !== undefined) this._node.meta.description = meta.description;
 		if (meta.usage !== undefined) this._node.meta.usage = meta.usage;
+		if (meta.allowExcessPositionals !== undefined) {
+			this._node.meta.allowExcessPositionals = meta.allowExcessPositionals;
+		}
 		if (meta.sections !== undefined) {
 			this._node.meta.sections = copyUnvalidatedSections(meta.sections);
 		}
