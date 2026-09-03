@@ -43,25 +43,12 @@ export async function writeSkillsFromSnapshot(
 	snapshot: CommandSnapshot,
 	options: WriteSkillsOptions,
 ): Promise<void> {
-	const generatedMeta: SkillMeta = {
-		name: options.name ?? snapshot.meta.name,
-		description: options.description ?? snapshot.meta.description ?? "",
-		version: options.version,
-	};
-	if (options.generated !== false) {
-		validateSkillName(generatedMeta.name);
-		requireSkillFrontmatter(generatedMeta, `Skill "${generatedMeta.name}"`);
-	}
-
 	const outDir = resolve(options.outDir);
 	if (basename(outDir) !== "skills") {
 		throw new Error(`Skill source outDir "${outDir}" must be named "skills".`);
 	}
 
 	const skills = new Map<string, readonly RenderedFile[]>();
-	if (options.generated !== false) {
-		skills.set(generatedMeta.name, renderSkill(buildManifest(snapshot), generatedMeta));
-	}
 	const authoredNames = new Set<string>();
 
 	for (const sourceDir of options.extras ?? []) {
@@ -78,8 +65,20 @@ export async function writeSkillsFromSnapshot(
 			throw new SkillSourceConflictError(bundle.frontmatter.name);
 		}
 		authoredNames.add(bundle.frontmatter.name);
-		// An authored skill may intentionally replace the same-named generated command skill.
 		skills.set(bundle.frontmatter.name, bundle.files);
+	}
+
+	const generatedMeta: SkillMeta = {
+		name: options.name ?? snapshot.meta.name,
+		description: options.description ?? snapshot.meta.description ?? "",
+		version: options.version,
+	};
+	// An authored skill may intentionally replace the same-named generated command skill;
+	// a replaced skill is neither validated nor rendered.
+	if (options.generated !== false && !authoredNames.has(generatedMeta.name)) {
+		validateSkillName(generatedMeta.name);
+		requireSkillFrontmatter(generatedMeta, `Skill "${generatedMeta.name}"`);
+		skills.set(generatedMeta.name, renderSkill(buildManifest(snapshot), generatedMeta));
 	}
 
 	const cwd = resolve(".");

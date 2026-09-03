@@ -101,6 +101,18 @@ describe("writeSkills", () => {
 		expect(skill).not.toContain("Generated command reference");
 	});
 
+	it("does not validate a generated skill that an authored skill replaces", async () => {
+		const bundleDir = await createBundle("gyst", "Authored co-review workflow");
+		const outDir = join(tempRoot, "skills");
+		// No root description: generating this skill would fail, but it is replaced.
+		const app = new Crust("gyst").action(() => {});
+
+		await writeSkills(app, { outDir, extras: [bundleDir] });
+
+		const skill = await readFile(join(outDir, "gyst", "SKILL.md"), "utf8");
+		expect(skill).toContain("description: Authored co-review workflow");
+	});
+
 	it("rejects duplicate authored skill names", async () => {
 		const first = await createBundle("guide", "First guide");
 		const second = join(tempRoot, "other", "guide");
