@@ -1,6 +1,7 @@
 import { type CommandSnapshot, type ExtensionId, defineExtensionId } from "@crustjs/core";
 import {
 	buildCommandDocumentation,
+	isListed,
 	sectionsFor,
 	type CommandDocumentation,
 	type DocumentationArg,
@@ -15,7 +16,9 @@ export const SKILLS: ExtensionId = defineExtensionId("crust:skills");
 export function buildManifest(command: CommandSnapshot): ManifestNode {
 	const rootName = normalizeName(command.meta.name);
 	if (
-		Object.values(command.subCommands).some((child) => normalizeName(child.meta.name) === rootName)
+		Object.values(command.subCommands).some(
+			(child) => isListed(child) && normalizeName(child.meta.name) === rootName,
+		)
 	) {
 		throw new Error(
 			`Cannot generate skills when a direct subcommand has the root command name "${rootName}".`,
