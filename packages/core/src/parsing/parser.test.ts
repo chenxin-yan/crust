@@ -1,22 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
 import { makeNode } from "../../tests/helpers.ts";
-import type { CommandNode } from "../command/node.ts";
-import { createCommandNode } from "../command/node.ts";
+import { createCommandNode, registerFlag } from "../command/node.ts";
 import { CrustError } from "../errors.ts";
-import type { ArgDef, FlagsDef } from "../types.ts";
+import type { ArgDef } from "../types.ts";
 import { parseArgs, validateParsed } from "./parser.ts";
-import { addFlagSpellingEntries } from "./spellings.ts";
 
 type DynamicParser = NonNullable<Extract<ArgDef, { type: "string" }>["parse"]>;
-
-function setEffectiveFlags(node: CommandNode, flags: FlagsDef): void {
-	node.effectiveFlags = flags;
-	node.flagSpellings.clear();
-	for (const [name, def] of Object.entries(flags)) {
-		addFlagSpellingEntries(node.flagSpellings, name, def);
-	}
-}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Boolean flags
@@ -773,9 +763,10 @@ describe("parseArgs — CommandNode with effective flags", () => {
 		};
 
 		const node = createCommandNode("child");
-		node.localFlags = localFlags;
-		node.effectiveFlags = { ...localFlags, ...ancestorOwnedFlags };
-		setEffectiveFlags(node, node.effectiveFlags);
+		for (const [name, def] of Object.entries(localFlags)) registerFlag(node, name, def, "local");
+		for (const [name, def] of Object.entries(ancestorOwnedFlags)) {
+			registerFlag(node, name, def, "owned");
+		}
 
 		const result = parseArgs(node, ["--verbose", "--output", "./dist"]);
 		expect(result.flags.verbose).toBe(true);
@@ -789,12 +780,10 @@ describe("parseArgs — CommandNode with effective flags", () => {
 				required: true as const,
 			},
 		};
-		const localFlags = {};
-
 		const node = createCommandNode("child");
-		node.localFlags = localFlags;
-		node.effectiveFlags = { ...localFlags, ...ancestorOwnedFlags };
-		setEffectiveFlags(node, node.effectiveFlags);
+		for (const [name, def] of Object.entries(ancestorOwnedFlags)) {
+			registerFlag(node, name, def, "owned");
+		}
 
 		// parseArgs does not throw — validation is separate
 		const parsed = parseArgs(node, []);

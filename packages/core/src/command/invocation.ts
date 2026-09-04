@@ -21,7 +21,6 @@ import {
 	applyExtensionSections,
 	cloneCommandNode,
 	type MaterializeCommandDefinition,
-	validateAuthoredSections,
 } from "./extensions-install.ts";
 import type { CommandNode } from "./node.ts";
 import { resolveCommand } from "./router.ts";
@@ -65,7 +64,6 @@ function freezeTree(node: CommandNode): void {
 	if (node.meta.sections) Object.freeze(node.meta.sections);
 	Object.freeze(node.meta);
 	Object.freeze(node.contexts);
-	Object.freeze(node.contextExtensionIds);
 	Object.freeze(node.extensions);
 	Object.freeze(node.args);
 	for (const sub of Object.values(node.subCommands)) freezeTree(sub);
@@ -91,7 +89,6 @@ function buildExtensionTree(
 	}
 	for (const extension of extensions) applyExtensionFlags(rootNode, extension);
 
-	validateAuthoredSections(rootNode);
 	return { rootNode, extensions };
 }
 
@@ -140,7 +137,8 @@ async function dispatch(
 	// One resource scope and resolver span pre-run, the action, and post-run.
 	// DisposalStack (not the bare global): Node 22 has no AsyncDisposableStack.
 	await using disposal = new DisposalStack();
-	const resolver = createContextResolver(resolvedNode.contexts, io, disposal);
+	const contexts = resolvedNode.contexts.map(({ instance }) => instance);
+	const resolver = createContextResolver(contexts, io, disposal);
 
 	const rootSnapshot = snapshotCommand(rootNode);
 	const extensionContext: ExtensionContext = Object.freeze({
@@ -170,7 +168,7 @@ async function dispatch(
 		const context = {
 			args: validated.args,
 			flags: validated.flags,
-			ctx: resolver.bag(resolvedNode.contexts),
+			ctx: resolver.bag(contexts),
 			rawArgs: parsed.rawArgs,
 			command: extensionContext.command,
 			rootCommand: rootSnapshot,
@@ -324,7 +322,7 @@ export async function executeInvocation(
 		  }
 		| undefined,
 	materializeCommandDefinition: MaterializeCommandDefinition,
-): Promise<void> {
+): Promise<number> {
 	const argv = options?.argv ?? process.argv.slice(2);
 	const io: InvocationIO = { ...DEFAULT_IO, ...options?.io };
 	const snapshotPath = process.env[SNAPSHOT_PATH_ENV];
@@ -363,7 +361,7 @@ export async function executeInvocation(
 		return process.exit(0);
 	}
 
-	const invoke = async (): Promise<void> => {
+	const invoke = async (): Promise<number> => {
 		let prepared: PreparedInvocation;
 		try {
 			prepared = prepareInvocation(node, materializeCommandDefinition);
@@ -372,12 +370,12 @@ export async function executeInvocation(
 			// Extensions that just failed to apply.
 			if (isAbortError(error)) {
 				process.exitCode = EXIT_CODE_CANCELLED;
-				return;
+				return EXIT_CODE_CANCELLED;
 			}
 			const message = error instanceof Error ? error.message : String(error);
 			io.stderr(`Error: ${message}`);
 			process.exitCode = 1;
-			return;
+			return 1;
 		}
 
 		let extensionContext: ExtensionContext | undefined;
@@ -405,14 +403,16 @@ export async function executeInvocation(
 					await renderFailure(error, argv, prepared, io, extensionContext, true);
 				}
 				process.exitCode = EXIT_CODE_CANCELLED;
-				return;
+				return EXIT_CODE_CANCELLED;
 			}
 			// Core always preserves a nonzero failure outcome, regardless of
 			// what Extension onError hooks do.
 			process.exitCode = 1;
 			if (!renderedInDispatch) await renderFailure(error, argv, prepared, io, extensionContext);
+			return 1;
 		}
+		return 0;
 	};
 
-	await (hasInjectedIO(options?.io) ? withAmbientTerminalIO(io, invoke) : invoke());
+	return await (hasInjectedIO(options?.io) ? withAmbientTerminalIO(io, invoke) : invoke());
 }

@@ -94,4 +94,4 @@ const database = defineContext("db", async ({ options }: { options: { url: strin
 
 ## Collisions
 
-Context names, dependencies, and owned flag spellings are checked statically. Dynamically assembled duplicate Contexts and owned-flag collisions use deterministic last-write-wins behavior. Missing providers, cycles, and lifecycle misuse retain runtime `CrustError` guards because they depend on the invocation path.
+Context names, dependencies, and owned flag spellings are checked statically. Dynamically assembled owned-flag collisions throw a `DEFINITION` error from `.provide()` rather than overwriting an existing flag. Duplicate Context names without owned-flag collisions remain last-write-wins. Missing providers, cycles, and lifecycle misuse retain runtime `CrustError` guards because they depend on the invocation path.

@@ -2,19 +2,11 @@ import { describe, expect, it } from "bun:test";
 
 import { makeNode } from "../../tests/helpers.ts";
 import { CrustError } from "../errors.ts";
-import { addFlagSpellingEntries } from "../parsing/spellings.ts";
 import type { FlagsDef } from "../types.ts";
 import type { CommandNode } from "./node.ts";
-import { createCommandNode } from "./node.ts";
+import { createCommandNode, registerFlag } from "./node.ts";
 import { resolveCommand } from "./router.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
-
-function cacheFlagSpellings(node: CommandNode): void {
-	node.flagSpellings.clear();
-	for (const [name, def] of Object.entries(node.effectiveFlags)) {
-		addFlagSpellingEntries(node.flagSpellings, name, def);
-	}
-}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test fixtures
@@ -34,26 +26,24 @@ function createLeafCommand(name: string, hasRun = true): CommandNode {
 function createRootWithSubcommands(hasRun = false): CommandNode {
 	const buildNode = createCommandNode("build");
 	buildNode.meta.description = "Build the project";
-	buildNode.localFlags = {
-		entry: {
-			type: "string",
-			description: "Entry file",
-			default: "src/cli.ts",
-		},
-	};
-	buildNode.effectiveFlags = { ...buildNode.localFlags };
-	cacheFlagSpellings(buildNode);
+	registerFlag(
+		buildNode,
+		"entry",
+		{ type: "string", description: "Entry file", default: "src/cli.ts" },
+		"local",
+	);
 	buildNode.run = () => {
 		/* noop */
 	};
 
 	const devNode = createCommandNode("dev");
 	devNode.meta.description = "Start dev server";
-	devNode.localFlags = {
-		port: { type: "number", description: "Port number", default: 3000 },
-	};
-	devNode.effectiveFlags = { ...devNode.localFlags };
-	cacheFlagSpellings(devNode);
+	registerFlag(
+		devNode,
+		"port",
+		{ type: "number", description: "Port number", default: 3000 },
+		"local",
+	);
 	devNode.run = () => {
 		/* noop */
 	};
@@ -463,11 +453,9 @@ describe("resolveCommand — known-flag skipping", () => {
 		const root = makeRoot();
 		// add a second short boolean for bundling (on both levels, like propagation)
 		const force: FlagsDef[string] = { type: "boolean", short: "f", description: "force" };
-		root.effectiveFlags = { ...root.effectiveFlags, force };
-		cacheFlagSpellings(root);
+		registerFlag(root, "force", force, "owned");
 		const translate = root.subCommands.translate as CommandNode;
-		translate.effectiveFlags = { ...translate.effectiveFlags, force };
-		cacheFlagSpellings(translate);
+		registerFlag(translate, "force", force, "owned");
 		const result = resolveCommand(root, ["-qf", "translate"]);
 		expect(result.commandPath).toEqual(["app", "translate"]);
 		expect(result.argv).toEqual(["-qf"]);

@@ -9,7 +9,6 @@ import {
 	defineExtensionId,
 	defineFlag,
 } from "@crustjs/core";
-import { snapshotCommand } from "@crustjs/core/tooling";
 
 import { completion } from "./completion/index.ts";
 import { didYouMean } from "./did-you-mean.ts";
@@ -92,7 +91,7 @@ function lateSkillExtension() {
 }
 
 describe("built-in extensions", () => {
-	it("exposes reserved identities on official factories", () => {
+	it("exposes reserved identities on official factories", async () => {
 		expect(
 			[help.id, version.id, completion.id, didYouMean.id, noColor.id, updateNotifier.id].map(
 				String,
@@ -139,7 +138,7 @@ describe("built-in extensions", () => {
 		expect(output).not.toContain("Not help:");
 	});
 
-	it("renderHelp styles sections and preserves plain-text structure", () => {
+	it("renderHelp styles sections and preserves plain-text structure", async () => {
 		// Force colors on so the ANSI assertion is deterministic in non-TTY
 		// test environments (e.g. CI). Reset via afterEach.
 		process.env.FORCE_COLOR = "3";
@@ -166,9 +165,9 @@ describe("built-in extensions", () => {
 				description: "Output directory",
 				default: ".",
 			})
-			.add(defineCommand("build", { description: "Build the project" }, (cmd) => cmd))._node;
+			.add(defineCommand("build", { description: "Build the project" }, (cmd) => cmd));
 
-		const output = renderHelp(snapshotCommand(command));
+		const output = renderHelp(await command.snapshot());
 		const plain = stripAnsi(output);
 
 		expect(output).toContain("\x1b[");
@@ -190,32 +189,32 @@ describe("built-in extensions", () => {
 		expect(usageLine).toContain("[dir]"); // arg token present, yellow+dim
 	});
 
-	it("renderHelp shows every callable alias and negation", () => {
+	it("renderHelp shows every callable alias and negation", async () => {
 		const command = new Crust("app").flags({
 			name: "verbose",
 			type: "boolean",
 			aliases: ["loud"],
-		})._node;
+		});
 
-		const output = stripAnsi(renderHelp(snapshotCommand(command)));
+		const output = stripAnsi(renderHelp(await command.snapshot()));
 		// Convention audit H2: disclose every callable long-form negation.
 		expect(output).toContain("--verbose, --loud, --no-verbose, --no-loud");
 	});
 
-	it("renderHelp hides negation labels when noNegate is set", () => {
+	it("renderHelp hides negation labels when noNegate is set", async () => {
 		const command = new Crust("app").flags({
 			name: "help",
 			type: "boolean",
 			short: "h",
 			noNegate: true,
-		})._node;
+		});
 
-		const output = stripAnsi(renderHelp(snapshotCommand(command)));
+		const output = stripAnsi(renderHelp(await command.snapshot()));
 		expect(output).toContain("-h, --help");
 		expect(output).not.toContain("--no-help");
 	});
 
-	it("renderHelp keeps stripped columns aligned with styled labels", () => {
+	it("renderHelp keeps stripped columns aligned with styled labels", async () => {
 		const command = new Crust("app")
 			.flags(
 				{
@@ -238,9 +237,9 @@ describe("built-in extensions", () => {
 				type: "string",
 				description: "Output directory",
 				default: ".",
-			})._node;
+			});
 
-		const lines = stripAnsi(renderHelp(snapshotCommand(command))).split("\n");
+		const lines = stripAnsi(renderHelp(await command.snapshot())).split("\n");
 
 		const verboseLine = lines.find((line) => line.includes("--verbose"));
 		const portLine = lines.find((line) => line.includes("--port"));
@@ -251,14 +250,14 @@ describe("built-in extensions", () => {
 		expect(lines).toContain('  [dir]              Output directory [default: "."]');
 	});
 
-	it("renderHelp preserves non-finite numeric defaults", () => {
+	it("renderHelp preserves non-finite numeric defaults", async () => {
 		const command = new Crust("app").flags({
 			name: "timeout",
 			type: "number",
 			default: Infinity,
-		})._node;
+		});
 
-		const output = stripAnsi(renderHelp(snapshotCommand(command)));
+		const output = stripAnsi(renderHelp(await command.snapshot()));
 		expect(output).toContain("[default: Infinity]");
 		expect(output).not.toContain("[default: null]");
 	});
@@ -708,7 +707,7 @@ describe("built-in extensions", () => {
 	// help alias rendering
 	// ──────────────────────────────────────────────────────────────────────────────
 
-	it("renderHelp renders aliases inline next to the canonical command name", () => {
+	it("renderHelp renders aliases inline next to the canonical command name", async () => {
 		const command = new Crust("app").add(
 			defineCommand(
 				"issue",
@@ -718,27 +717,27 @@ describe("built-in extensions", () => {
 				},
 				(cmd) => cmd.action(() => {}),
 			),
-		)._node;
+		);
 
-		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
+		const plain = stripAnsi(renderHelp(await command.snapshot()));
 		expect(plain).toContain("Commands:");
 		expect(plain).toContain("issue (issues, i)");
 		expect(plain).toContain("Manage issues");
 	});
 
-	it("renderHelp renders unchanged for a command without aliases", () => {
+	it("renderHelp renders unchanged for a command without aliases", async () => {
 		const command = new Crust("app").add(
 			defineCommand("build", { description: "Build the project" }, (cmd) => cmd.action(() => {})),
-		)._node;
+		);
 
-		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
+		const plain = stripAnsi(renderHelp(await command.snapshot()));
 		expect(plain).toContain("Commands:");
 		expect(plain).toContain("build");
 		// No parens means no aliases were rendered.
 		expect(plain).not.toMatch(/build\s*\(/);
 	});
 
-	it("renderHelp keeps description column aligned when aliases overflow the column", () => {
+	it("renderHelp keeps description column aligned when aliases overflow the column", async () => {
 		const command = new Crust("app")
 			.add(
 				defineCommand(
@@ -752,9 +751,9 @@ describe("built-in extensions", () => {
 			)
 			.add(
 				defineCommand("build", { description: "Build the project" }, (cmd) => cmd.action(() => {})),
-			)._node;
+			);
 
-		const lines = stripAnsi(renderHelp(snapshotCommand(command))).split("\n");
+		const lines = stripAnsi(renderHelp(await command.snapshot())).split("\n");
 		const issueLine = lines.find((line) => line.includes("issue (issues, i)"));
 		const buildLine = lines.find((line) => line.match(/^\s+build\s+Build the project$/));
 
@@ -768,7 +767,7 @@ describe("built-in extensions", () => {
 	// help hidden subcommand filtering
 	// ──────────────────────────────────────────────────────────────────────
 
-	it("renderHelp omits subcommands marked meta.hidden: true", () => {
+	it("renderHelp omits subcommands marked meta.hidden: true", async () => {
 		const command = new Crust("app")
 			.add(
 				defineCommand("build", { description: "Build the project" }, (cmd) => cmd.action(() => {})),
@@ -782,30 +781,30 @@ describe("built-in extensions", () => {
 					},
 					(cmd) => cmd.action(() => {}),
 				),
-			)._node;
+			);
 
-		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
+		const plain = stripAnsi(renderHelp(await command.snapshot()));
 		expect(plain).toContain("Commands:");
 		expect(plain).toContain("build");
 		expect(plain).not.toContain("__complete");
 		expect(plain).not.toContain("Internal completion entrypoint");
 	});
 
-	it("renderHelp omits the COMMANDS section when every subcommand is hidden", () => {
+	it("renderHelp omits the COMMANDS section when every subcommand is hidden", async () => {
 		const command = new Crust("app")
 			.add(
 				defineCommand("__complete", { hidden: true, description: "Internal" }, (cmd) =>
 					cmd.action(() => {}),
 				),
 			)
-			.action(() => {})._node;
+			.action(() => {});
 
-		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
+		const plain = stripAnsi(renderHelp(await command.snapshot()));
 		expect(plain).not.toContain("Commands:");
 		expect(plain).not.toContain("__complete");
 	});
 
-	it("renderHelp omits the `<command>` USAGE token when every subcommand is hidden and parent has no action", () => {
+	it("renderHelp omits the `<command>` USAGE token when every subcommand is hidden and parent has no action", async () => {
 		// Regression: formatUsage previously counted hidden subcommands when
 		// deciding whether to emit `<command>`, producing the incoherent
 		// `Usage: app <command>` with no COMMANDS section below it.
@@ -813,9 +812,9 @@ describe("built-in extensions", () => {
 			defineCommand("__complete", { hidden: true, description: "Internal" }, (cmd) =>
 				cmd.action(() => {}),
 			),
-		)._node;
+		);
 
-		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
+		const plain = stripAnsi(renderHelp(await command.snapshot()));
 		expect(plain).toContain("Usage:");
 		expect(plain).not.toMatch(/Usage:\s+app\s+<command>/);
 		expect(plain).not.toContain("Commands:");
@@ -841,7 +840,7 @@ describe("built-in extensions", () => {
 		expect(didRun).toBe(true);
 	});
 
-	it("renderHelp surfaces flag `choices` as a `[choices: ...]` suffix", () => {
+	it("renderHelp surfaces flag `choices` as a `[choices: ...]` suffix", async () => {
 		// The choices list is declared on the flag definition;
 		// `help` must surface it so users can discover the valid
 		// values from `--help` without resorting to shell completion or
@@ -853,14 +852,14 @@ describe("built-in extensions", () => {
 				choices: ["browser", "bun", "node"],
 				description: "Build target",
 			})
-			.action(() => {})._node;
-		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
+			.action(() => {});
+		const plain = stripAnsi(renderHelp(await command.snapshot()));
 		expect(plain).toContain("--target");
 		expect(plain).toContain("Build target");
 		expect(plain).toContain("[choices: browser, bun, node]");
 	});
 
-	it("renderHelp surfaces positional-arg `choices` in the ARGS section", () => {
+	it("renderHelp surfaces positional-arg `choices` in the ARGS section", async () => {
 		const command = new Crust("app", { description: "Deploy to an env" })
 			.args({
 				name: "env",
@@ -869,8 +868,8 @@ describe("built-in extensions", () => {
 				choices: ["dev", "staging", "prod"],
 				description: "Target environment",
 			})
-			.action(() => {})._node;
-		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
+			.action(() => {});
+		const plain = stripAnsi(renderHelp(await command.snapshot()));
 		// The ARGS section heading is the marker the rest of the
 		// assertions hang off; without it the test would silently miss
 		// rendering bugs that drop the section entirely.
@@ -879,7 +878,7 @@ describe("built-in extensions", () => {
 		expect(plain).toContain("[choices: dev, staging, prod]");
 	});
 
-	it("renderHelp composes `[default: ...]` and `[choices: ...]` when both are present", () => {
+	it("renderHelp composes `[default: ...]` and `[choices: ...]` when both are present", async () => {
 		const command = new Crust("app")
 			.flags({
 				name: "target",
@@ -888,8 +887,8 @@ describe("built-in extensions", () => {
 				default: "a",
 				description: "Build target",
 			})
-			.action(() => {})._node;
-		const plain = stripAnsi(renderHelp(snapshotCommand(command)));
+			.action(() => {});
+		const plain = stripAnsi(renderHelp(await command.snapshot()));
 		// Both suffixes appear on the same flag line, in this order, so the
 		// `[default: ...]` reads before `[choices: ...]`.
 		const targetLine = plain.split("\n").find((l) => l.includes("--target"));

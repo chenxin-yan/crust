@@ -133,7 +133,7 @@ class Crust<
 new Crust(name: string, meta?: RootCommandMeta)
 ```
 
-Creates a root command builder. Root metadata is declared at construction because aliases and hidden state only apply to subcommands. `sections` accepts the same ordered plain-text entries as subcommand metadata.
+Creates a root command builder. Root metadata is declared at construction because aliases and hidden state only apply to subcommands. `sections` accepts the same ordered plain-text entries as subcommand metadata and is validated immediately.
 
 ```ts
 const app = new Crust("my-cli", {
@@ -238,7 +238,7 @@ Declared dependencies (Context `uses`, command `.use()`, Extension `uses`) are c
 
 A Context's top-level `flags` are installed as propagating flags on this builder and later-added descendants, without mutating the original definitions. Dependencies construct recursively on the first pull.
 
-Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in reverse construction order after post-run hooks. Context names, dependencies, and owned-flag collisions are checked by TypeScript. Lazy bag access retains runtime `DEFINITION` guards for missing providers on dynamically assembled paths, dependency cycles, and lifecycle misuse.
+Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in reverse construction order after post-run hooks. Context names, dependencies, and owned-flag collisions are checked by TypeScript; dynamically assembled owned-flag collisions throw a `DEFINITION` error from `.provide()`. Lazy bag access retains runtime `DEFINITION` guards for missing providers on dynamically assembled paths, dependency cycles, and lifecycle misuse.
 
 ## `.extend(...extensions)`
 
@@ -349,7 +349,7 @@ Use `.command()` for short, app-local leaf commands; extract to `defineCommand` 
 snapshot(): Promise<CommandSnapshot>
 ```
 
-Prepares a frozen Command Snapshot for tooling such as man-page, skill, and build generators. It materializes Extension contributions and command definitions and validates documentation sections. It does not call Command Actions.
+Prepares a frozen Command Snapshot for tooling such as man-page, skill, and build generators. It materializes Extension contributions and validates sections returned by Extension callbacks. Command-authored sections are validated when defined. It does not call Command Actions.
 
 ```ts
 import type { CommandSnapshot } from "@crustjs/core";
@@ -406,7 +406,7 @@ Commands and flags declared directly in `defineExtension()` participate in typed
 execute(options?: {
   argv?: string[];
   io?: Partial<InvocationIO>;
-}): Promise<void>
+}): Promise<number>
 ```
 
 Runs the terminal boundary. By default it parses `process.argv.slice(2)`; `options.argv` overrides it, while `options.io` captures rendered output in tests. Explicit IO also captures default `@crustjs/progress` output and `@crustjs/prompts` output for the full invocation; it does not provide prompt input.
@@ -415,7 +415,7 @@ Runs the terminal boundary. By default it parses `process.argv.slice(2)`; `optio
 await app.execute();
 ```
 
-`execute()` renders a failure once through Extension `onError` hooks ending in Core's renderer, sets `process.exitCode` to `1`, and resolves. A standard `AbortError` cancellation sets exit code `130` and is offered to `onError` hooks; it renders nothing when no hook claims it.
+`execute()` resolves to the terminal exit code: `0` on success, `1` on failure, or `130` for cancellation. It still renders a failure once through Extension `onError` hooks ending in Core's renderer and sets `process.exitCode` on failure. A standard `AbortError` is offered to `onError` hooks and renders nothing when no hook claims it.
 
 <Callout type="warn">
   Use `.action(action)` to define behavior. `.run(path, input, io)` is only programmatic invocation;

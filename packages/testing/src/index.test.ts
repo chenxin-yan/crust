@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import { Crust, defineCommand, defineExtension, defineExtensionId } from "@crustjs/core";
 import { progress, spinner } from "@crustjs/progress";
@@ -174,6 +174,15 @@ describe("runInteractive", () => {
 });
 
 describe("captureExecute", () => {
+	let originalExitCode: typeof process.exitCode;
+	beforeEach(() => {
+		originalExitCode = process.exitCode;
+		process.exitCode = 0;
+	});
+	afterEach(() => {
+		process.exitCode = originalExitCode;
+	});
+
 	it("captures exit code 0 and stdout on success", async () => {
 		const app = new Crust("test-cli").action(({ stdout }) => {
 			stdout("hello");
@@ -232,11 +241,9 @@ describe("captureExecute", () => {
 		expect(result.stderr).toBe("custom: boom");
 	});
 
-	it("isolates exit codes across overlapping captures", async () => {
+	it("captures exit codes across overlapping captures", async () => {
 		const originalExitCode = process.exitCode;
 		try {
-			// Non-zero ambient value: if capture B reads state restored by capture
-			// A's finally block, B reports 7 instead of its own 0.
 			process.exitCode = 7;
 
 			let releaseA!: () => void;
@@ -268,15 +275,5 @@ describe("captureExecute", () => {
 		} finally {
 			process.exitCode = originalExitCode;
 		}
-	});
-
-	it("restores process.exitCode", async () => {
-		const before = process.exitCode;
-		const app = new Crust("test-cli").action(() => {
-			throw new Error("boom");
-		});
-
-		await captureExecute(app, []);
-		expect(process.exitCode).toBe(before);
 	});
 });

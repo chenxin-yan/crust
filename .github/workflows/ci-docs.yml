@@ -2,8 +2,6 @@ name: CI Docs
 
 on:
   pull_request:
-    branches:
-      - main
     paths:
       - "apps/docs/**"
       - "package.json"

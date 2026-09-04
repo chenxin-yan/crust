@@ -2,8 +2,6 @@ import { describe, expect, it } from "bun:test";
 
 import type { ArgDef, CommandSection, FlagDef } from "@crustjs/core";
 import { Crust, defineCommand, defineExtensionId } from "@crustjs/core";
-import { snapshotCommand } from "@crustjs/core/tooling";
-type CommandNode = Parameters<typeof snapshotCommand>[0];
 
 import { SKILLS } from "./extension.ts";
 import { buildManifest } from "./manifest.ts";
@@ -23,20 +21,41 @@ function makeCommand(opts: {
 	args?: readonly ArgDef[];
 	flags?: Record<string, FlagDef>;
 	run?: () => void;
-	subCommands?: Record<string, CommandNode>;
-}): CommandNode {
-	const node = new Crust(opts.meta.name)._node;
-	Object.assign(node.meta, opts.meta);
-	if (opts.args) node.args = opts.args;
-	if (opts.flags) {
-		node.localFlags = { ...opts.flags };
-		node.effectiveFlags = { ...opts.flags };
+	subCommands?: Record<string, CommandFixture>;
+}): CommandFixture {
+	return opts;
+}
+
+type CommandFixture = Parameters<typeof makeCommand>[0];
+
+function configureFixture(command: Crust, fixture: CommandFixture): Crust {
+	let configured = command;
+	if (fixture.args) configured = configured.args(...fixture.args);
+	if (fixture.flags) {
+		const flags = Object.entries(fixture.flags).map(([name, def]) => ({ name, ...def }));
+		configured = configured.flags(...(flags as never[]));
 	}
-	if (opts.run) node.run = opts.run;
-	if (opts.subCommands) {
-		node.subCommands = opts.subCommands;
+	if (fixture.run) configured = configured.action(fixture.run);
+	for (const child of Object.values(fixture.subCommands ?? {})) {
+		const { name, ...meta } = child.meta;
+		configured = configured.add(
+			defineCommand(
+				name as never,
+				meta as never,
+				(builder) =>
+					// SAFETY: command recipes receive Crust's configure-only runtime builder.
+					// oxlint-disable-next-line anti-slop/no-chained-type-assertions -- the public recipe interface intentionally hides the Crust class identity.
+					configureFixture(builder as unknown as Crust, child) as never,
+			),
+		);
 	}
-	return node;
+	return configured;
+}
+
+async function snapshotFixture(fixture: CommandFixture | Crust) {
+	if (fixture instanceof Crust) return await fixture.snapshot();
+	const { name, ...meta } = fixture.meta;
+	return await configureFixture(new Crust(name, meta), fixture).snapshot();
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -45,79 +64,80 @@ function makeCommand(opts: {
 
 describe("buildManifest", () => {
 	describe("root command basics", () => {
-		it("rejects a direct subcommand that would overwrite the root command file", () => {
+		it("rejects a direct subcommand that would overwrite the root command file", async () => {
 			const child = makeCommand({ meta: { name: "demo" }, run: () => {} });
 			const root = makeCommand({ meta: { name: "demo" }, subCommands: { demo: child } });
 
-			expect(() => buildManifest(snapshotCommand(root))).toThrow(
+			const snapshot = await snapshotFixture(root);
+			expect(() => buildManifest(snapshot)).toThrow(
 				'Cannot generate skills when a direct subcommand has the root command name "demo"',
 			);
 		});
 
-		it("ignores hidden same-named children, which are never rendered", () => {
+		it("ignores hidden same-named children, which are never rendered", async () => {
 			const child = makeCommand({ meta: { name: "demo", hidden: true }, run: () => {} });
 			const root = makeCommand({ meta: { name: "demo" }, subCommands: { demo: child } });
 
-			expect(buildManifest(snapshotCommand(root)).children).toEqual([]);
+			expect(buildManifest(await snapshotFixture(root)).children).toEqual([]);
 		});
 
-		it("returns a ManifestNode with name and path from meta", () => {
+		it("returns a ManifestNode with name and path from meta", async () => {
 			const cmd = makeCommand({
 				meta: { name: "my-cli", description: "A test CLI" },
 			});
 
-			const node = buildManifest(snapshotCommand(cmd));
+			const node = buildManifest(await snapshotFixture(cmd));
 
 			expect(node.name).toBe("my-cli");
 			expect(node.path).toEqual(["my-cli"]);
 			expect(node.description).toBe("A test CLI");
 		});
 
-		it("normalizes command name to lowercase and trimmed", () => {
+		it("normalizes command name to lowercase and trimmed", async () => {
 			const cmd = makeCommand({
 				meta: { name: "  My-CLI  " },
 			});
 
-			const node = buildManifest(snapshotCommand(cmd));
+			const node = buildManifest(await snapshotFixture(cmd));
 
 			expect(node.name).toBe("my-cli");
 			expect(node.path).toEqual(["my-cli"]);
 		});
 
-		it("includes usage when provided", () => {
+		it("includes usage when provided", async () => {
 			const cmd = makeCommand({
 				meta: { name: "build", usage: "build [options] <entry>" },
 			});
 
-			const node = buildManifest(snapshotCommand(cmd));
+			const node = buildManifest(await snapshotFixture(cmd));
 
 			expect(node.usage).toBe("build [options] <entry>");
 		});
 
-		it("resolves generated usage when custom usage is not provided", () => {
+		it("resolves generated usage when custom usage is not provided", async () => {
 			const cmd = makeCommand({
 				meta: { name: "app" },
 			});
 
-			const node = buildManifest(snapshotCommand(cmd));
+			const node = buildManifest(await snapshotFixture(cmd));
 
 			expect(node.description).toBeUndefined();
 			expect(node.usage).toBe("app");
 		});
 
-		it("returns empty args and flags arrays when none defined", () => {
+		it("returns empty args and flags arrays when none defined", async () => {
 			const cmd = makeCommand({
 				meta: { name: "app" },
 			});
 
-			const node = buildManifest(snapshotCommand(cmd));
+			const node = buildManifest(await snapshotFixture(cmd));
 
 			expect(node.args).toEqual([]);
 			expect(node.flags).toEqual([]);
 			expect(node.children).toEqual([]);
 		});
 
-		it("includes command metadata sections", () => {
+		it("includes command metadata sections", async () => {
 			const cmd = makeCommand({
 				meta: {
 					name: "deploy",
@@ -129,7 +149,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(snapshotCommand(cmd));
+			const node = buildManifest(await snapshotFixture(cmd));
 
 			expect(node.sections).toEqual([
 				{ title: "Safety", body: "Confirm destructive operations before execution." },
@@ -137,7 +157,7 @@ describe("buildManifest", () => {
 			]);
 		});
 
-		it("honors only and except section audiences", () => {
+		it("honors only and except section audiences", async () => {
 			const other = defineExtensionId("acme:other");
 			const cmd = makeCommand({
 				meta: {
@@ -150,7 +170,7 @@ describe("buildManifest", () => {
 				},
 			});
 
-			expect(buildManifest(snapshotCommand(cmd)).sections).toEqual([
+			expect(buildManifest(await snapshotFixture(cmd)).sections).toEqual([
 				{ title: "Skills only", body: "visible" },
 			]);
 		});
@@ -161,7 +181,7 @@ describe("buildManifest", () => {
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("positional arguments", () => {
-		it("normalizes a required string arg", () => {
+		it("normalizes a required string arg", async () => {
 			const cmd = makeCommand({
 				meta: { name: "greet" },
 				args: [
@@ -175,7 +195,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(snapshotCommand(cmd));
+			const node = buildManifest(await snapshotFixture(cmd));
 
 			expect(node.args).toEqual([
 				{
@@ -188,7 +208,7 @@ describe("buildManifest", () => {
 			]);
 		});
 
-		it("normalizes an optional arg with default value", () => {
+		it("normalizes an optional arg with default value", async () => {
 			const cmd = makeCommand({
 				meta: { name: "serve" },
 				args: [
@@ -201,7 +221,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(snapshotCommand(cmd));
+			const node = buildManifest(await snapshotFixture(cmd));
 			const [arg] = node.args;
 
 			expect(node.args).toHaveLength(1);
@@ -212,7 +232,7 @@ describe("buildManifest", () => {
 			expect(arg?.default).toBe("3000");
 		});
 
-		it("normalizes a variadic arg", () => {
+		it("normalizes a variadic arg", async () => {
 			const cmd = makeCommand({
 				meta: { name: "install" },
 				args: [
@@ -226,7 +246,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(snapshotCommand(cmd));
+			const node = buildManifest(await snapshotFixture(cmd));
 			const [arg] = node.args;
 
 			expect(node.args).toHaveLength(1);
@@ -235,14 +255,14 @@ describe("buildManifest", () => {
 			expect(arg?.required).toBe(false);
 		});
 
-		it("omits description when not provided on arg", () => {
+		it("omits description when not provided on arg", async () => {
 			const cmd = makeCommand({
 				meta: { name: "test" },
 				args: [{ name: "file", type: "string" }] as ArgDef[],
 				run() {},
 			});
 
-			const node = buildManifest(snapshotCommand(cmd));
+			const node = buildManifest(await snapshotFixture(cmd));
 			const [arg] = node.args;
 
 			expect(arg?.description).toBeUndefined();
@@ -254,7 +274,7 @@ describe("buildManifest", () => {
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("named flags", () => {
-		it("normalizes a simple boolean flag", () => {
+		it("normalizes a simple boolean flag", async () => {
 			const cmd = makeCommand({
 				meta: { name: "build" },
 				flags: {
@@ -266,7 +286,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(snapshotCommand(cmd));
+			const node = buildManifest(await snapshotFixture(cmd));
 
 			expect(node.flags).toEqual([
 				{
@@ -280,7 +300,7 @@ describe("buildManifest", () => {
 			]);
 		});
 
-		it("omits negation spellings for a noNegate boolean flag", () => {
+		it("omits negation spellings for a noNegate boolean flag", async () => {
 			const cmd = makeCommand({
 				meta: { name: "test" },
 				flags: {
@@ -289,12 +309,12 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(snapshotCommand(cmd));
+			const node = buildManifest(await snapshotFixture(cmd));
 
 			expect(node.flags[0]?.spellings).toEqual(["--quiet"]);
 		});
 
-		it("normalizes a required string flag with short alias", () => {
+		it("normalizes a required string flag with short alias", async () => {
 			const cmd = makeCommand({
 				meta: { name: "deploy" },
 				flags: {
@@ -308,14 +328,14 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(snapshotCommand(cmd));
+			const node = buildManifest(await snapshotFixture(cmd));
 			const [flag] = node.flags;
 
 			expect(flag?.name).toBe("target");
 			expect(flag?.required).toBe(true);
 		});
 
-		it("preserves documentation-order flag spellings", () => {
+		it("preserves documentation-order flag spellings", async () => {
 			const cmd = makeCommand({
 				meta: { name: "run" },
 				flags: {
@@ -328,13 +348,13 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(snapshotCommand(cmd));
+			const node = buildManifest(await snapshotFixture(cmd));
 			const [flag] = node.flags;
 
 			expect(flag?.spellings).toEqual(["-o", "--output", "--out", "--dest"]);
 		});
 
-		it("normalizes a multiple flag", () => {
+		it("normalizes a multiple flag", async () => {
 			const cmd = makeCommand({
 				meta: { name: "lint" },
 				flags: {
@@ -347,14 +367,14 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(snapshotCommand(cmd));
+			const node = buildManifest(await snapshotFixture(cmd));
 			const [flag] = node.flags;
 
 			expect(flag?.name).toBe("ignore");
 			expect(flag?.multiple).toBe(true);
 		});
 
-		it("serializes flag default values as strings", () => {
+		it("serializes flag default values as strings", async () => {
 			const cmd = makeCommand({
 				meta: { name: "serve" },
 				flags: {
@@ -374,7 +394,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(snapshotCommand(cmd));
+			const node = buildManifest(await snapshotFixture(cmd));
 			const flagMap = Object.fromEntries(node.flags.map((f) => [f.name, f]));
 
 			expect(flagMap.port?.default).toBe("8080");
@@ -382,7 +402,7 @@ describe("buildManifest", () => {
 			expect(flagMap.watch?.default).toBe("true");
 		});
 
-		it("serializes multiple flag array defaults as JSON", () => {
+		it("serializes multiple flag array defaults as JSON", async () => {
 			const cmd = makeCommand({
 				meta: { name: "build" },
 				flags: {
@@ -395,13 +415,13 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(snapshotCommand(cmd));
+			const node = buildManifest(await snapshotFixture(cmd));
 			const [flag] = node.flags;
 
 			expect(flag?.default).toBe('["src/index.ts","src/cli.ts"]');
 		});
 
-		it("omits description and default when not provided on flag", () => {
+		it("omits description and default when not provided on flag", async () => {
 			const cmd = makeCommand({
 				meta: { name: "test" },
 				flags: {
@@ -410,7 +430,7 @@ describe("buildManifest", () => {
 				run() {},
 			});
 
-			const node = buildManifest(snapshotCommand(cmd));
+			const node = buildManifest(await snapshotFixture(cmd));
 			const [flag] = node.flags;
 
 			expect(flag?.description).toBeUndefined();
@@ -423,7 +443,7 @@ describe("buildManifest", () => {
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("subcommand tree traversal", () => {
-		it("omits hidden commands from generated agent documentation", () => {
+		it("omits hidden commands from generated agent documentation", async () => {
 			const root = makeCommand({
 				meta: { name: "app" },
 				subCommands: {
@@ -431,12 +451,12 @@ describe("buildManifest", () => {
 					hidden: makeCommand({ meta: { name: "hidden", hidden: true }, run() {} }),
 				},
 			});
-			expect(buildManifest(snapshotCommand(root)).children.map((child) => child.name)).toEqual([
-				"visible",
-			]);
+			expect(
+				buildManifest(await snapshotFixture(root)).children.map((child) => child.name),
+			).toEqual(["visible"]);
 		});
 
-		it("sorts children alphabetically at every level", () => {
+		it("sorts children alphabetically at every level", async () => {
 			const zeta = makeCommand({
 				meta: { name: "zeta" },
 				run() {},
@@ -460,13 +480,13 @@ describe("buildManifest", () => {
 				subCommands: { group },
 			});
 
-			const node = buildManifest(snapshotCommand(root));
+			const node = buildManifest(await snapshotFixture(root));
 			const groupNode = node.children[0];
 
 			expect(groupNode?.children.map((c) => c.name)).toEqual(["alpha", "beta", "zeta"]);
 		});
 
-		it("correctly marks runnable vs group commands in deep trees", () => {
+		it("correctly marks runnable vs group commands in deep trees", async () => {
 			const leaf = makeCommand({
 				meta: { name: "leaf" },
 				run() {},
@@ -482,7 +502,7 @@ describe("buildManifest", () => {
 				subCommands: { middle },
 			});
 
-			const node = buildManifest(snapshotCommand(root));
+			const node = buildManifest(await snapshotFixture(root));
 			const middleNode = node.children[0];
 			const leafNode = middleNode?.children[0];
 
@@ -491,7 +511,7 @@ describe("buildManifest", () => {
 			expect(leafNode?.runnable).toBe(true);
 		});
 
-		it("preserves metadata sections on nested commands", () => {
+		it("preserves metadata sections on nested commands", async () => {
 			const deploy = makeCommand({
 				meta: {
 					name: "deploy",
@@ -507,7 +527,7 @@ describe("buildManifest", () => {
 				subCommands: { deploy },
 			});
 
-			const node = buildManifest(snapshotCommand(root));
+			const node = buildManifest(await snapshotFixture(root));
 			const child = node.children[0];
 
 			expect(child?.sections).toEqual([
@@ -515,7 +535,7 @@ describe("buildManifest", () => {
 			]);
 		});
 
-		it("preserves metadata sections across Crust builder cloning", () => {
+		it("preserves metadata sections across Crust builder cloning", async () => {
 			const deploy = defineCommand(
 				"deploy",
 				{
@@ -528,7 +548,7 @@ describe("buildManifest", () => {
 			);
 			const root = new Crust("app").add(deploy);
 
-			const node = buildManifest(snapshotCommand(root._node));
+			const node = buildManifest(await snapshotFixture(root));
 			const child = node.children[0];
 
 			expect(child?.sections).toEqual([
@@ -542,7 +562,7 @@ describe("buildManifest", () => {
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("complex command tree fixture", () => {
-		it("builds a full manifest from a realistic command tree", () => {
+		it("builds a full manifest from a realistic command tree", async () => {
 			// Simulate a git-like CLI
 			const clone = makeCommand({
 				meta: { name: "clone", description: "Clone a repository" },
@@ -609,7 +629,7 @@ describe("buildManifest", () => {
 				subCommands: { clone, remote },
 			});
 
-			const manifest = buildManifest(snapshotCommand(root));
+			const manifest = buildManifest(await snapshotFixture(root));
 
 			// Root
 			expect(manifest.name).toBe("git");
@@ -650,7 +670,7 @@ describe("buildManifest", () => {
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("edge cases", () => {
-		it("handles deeply nested commands (4 levels)", () => {
+		it("handles deeply nested commands (4 levels)", async () => {
 			const deep = makeCommand({
 				meta: { name: "deep" },
 				run() {},
@@ -668,7 +688,7 @@ describe("buildManifest", () => {
 				subCommands: { level2 },
 			});
 
-			const node = buildManifest(snapshotCommand(root));
+			const node = buildManifest(await snapshotFixture(root));
 			const deepNode = node.children[0]?.children[0]?.children[0];
 
 			expect(deepNode?.name).toBe("deep");

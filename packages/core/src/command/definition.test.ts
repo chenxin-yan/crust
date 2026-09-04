@@ -189,19 +189,23 @@ describe("command definitions", () => {
 		const sub = defineCommand("sub", (cmd) => cmd.provide(cache()).action(() => {}));
 		const app = new Crust("cli").provide(db());
 		expect(() => app.add(sub)).toThrow(
-			'flag spelling "conn" collides with a flag owned by ancestor Context "db"',
+			'Flag "conn" collides with existing flag "conn" on command "sub"',
 		);
 	});
 
-	it("allows re-providing the same-named Context along a child path", async () => {
+	it("rejects re-providing a colliding owned flag along a child path", () => {
 		const db = defineContext("db", { flags: [{ name: "conn", type: "string" }] }, () => ({
 			kind: "real",
 		}));
 		const sub = defineCommand("sub", (cmd) =>
 			cmd.provide(db.of({ kind: "double" })).action(() => {}),
 		);
-		// Same-name provider (an .of() double) replaces flags consistently — exempt.
-		expect(() => new Crust("cli").provide(db()).add(sub)).not.toThrow();
+		expect(() => new Crust("cli").provide(db()).add(sub)).toThrow(
+			expect.objectContaining({
+				code: "DEFINITION",
+				details: { subject: "flag", name: "conn", reason: "flag-collision" },
+			}),
+		);
 	});
 
 	it("adds multiple definitions in one variadic call", async () => {

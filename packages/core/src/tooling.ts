@@ -14,6 +14,5 @@ export type {
 	DocumentationFlag,
 	UsageSegment,
 } from "./command/documentation.ts";
-export { snapshotCommand } from "./command/snapshot.ts";
 export type { CommandSnapshot } from "./command/snapshot.ts";
 export { isListed, sectionsFor, visibleSectionsFor } from "./sections.ts";

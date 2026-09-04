@@ -74,6 +74,7 @@ export type {
 	InputArgs,
 	InputFlags,
 	InvocationIO,
+	MergeFlags,
 	NamedFlagDef,
 	ParsedArgValue,
 	ParsedFlagValue,
@@ -81,3 +82,4 @@ export type {
 	ValidatedInput,
 	ValueType,
 } from "./types.ts";
+export type { MergeContext } from "./validation/shared.ts";
