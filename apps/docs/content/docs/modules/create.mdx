@@ -129,7 +129,9 @@ when `process.argv[1]` is unavailable for a relative path, or when no enclosing
 
 #### Throws
 
-When `conflict` is `"abort"` (default) and the destination is a non-empty directory.
+- When the template URL does not use the `file:` protocol or a relative template cannot resolve from a package source.
+- When the resolved template does not exist or is not a directory.
+- When `conflict` is `"abort"` (default) and the destination is a non-empty directory.
 
 ### `runSteps(steps, cwd)`
 

@@ -479,6 +479,21 @@ describe("store.update", () => {
 		expect(JSON.parse(raw)).toEqual({ theme: "light", verbose: true });
 	});
 
+	it("should materialize schema defaults before calling the updater", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: { theme: { schema: z.enum(["light", "dark"]).default("light") } },
+		});
+
+		await expect(
+			store.update((current) => {
+				expect(current.theme).toBe("light");
+				return { theme: "dark" };
+			}),
+		).resolves.toEqual({ theme: "dark" });
+	});
+
 	it("should run field validators on update", async () => {
 		const store = createStore({
 			dirPath: tempDir,
@@ -578,6 +593,22 @@ describe("store.patch", () => {
 		const result = await store.read();
 		expect(result.theme).toBe("dark");
 		expect(result.verbose).toBe(false);
+	});
+
+	it("should preserve schema defaults when patching another field", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: {
+				theme: { schema: z.enum(["light", "dark"]).default("light") },
+				verbose: { type: "boolean", default: false },
+			},
+		});
+
+		await expect(store.patch({ verbose: true })).resolves.toEqual({
+			theme: "light",
+			verbose: true,
+		});
 	});
 });
 
@@ -911,14 +942,14 @@ describe("schema transform persistence", () => {
 		await rm(tempDir, { recursive: true, force: true });
 	});
 
-	it("materializes schema defaults from missing persisted values", async () => {
+	it("materializes transformed schema defaults from missing persisted values", async () => {
 		const store = createStore({
 			dirPath: tempDir,
 			name: "config",
-			fields: { name: { schema: z.string().default("x") } },
+			fields: { count: { schema: z.string().default("123").transform(Number) } },
 		});
 
-		await expect(store.read()).resolves.toEqual({ name: "x" });
+		await expect(store.read()).resolves.toEqual({ count: 123 });
 	});
 
 	it("preserves optional schema output for missing persisted values", async () => {
@@ -931,14 +962,23 @@ describe("schema transform persistence", () => {
 		await expect(store.read()).resolves.toEqual({ name: undefined });
 	});
 
-	it("rejects missing values when the schema requires a value", async () => {
+	it("rejects missing values after validating a required schema once", async () => {
+		let validationCalls = 0;
 		const store = createStore({
 			dirPath: tempDir,
 			name: "config",
-			fields: { name: { schema: z.string() } },
+			fields: {
+				name: {
+					schema: z.preprocess((value) => {
+						validationCalls++;
+						return value;
+					}, z.string()),
+				},
+			},
 		});
 
 		await expect(store.read()).rejects.toMatchObject({ code: "VALIDATION" });
+		expect(validationCalls).toBe(1);
 	});
 
 	it("rejects schema definitions mixed with defaults or validators", () => {

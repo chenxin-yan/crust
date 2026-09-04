@@ -306,10 +306,10 @@ export function createStore<const F extends FieldsDef>(
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
-	// readRaw — Load persisted config, apply field defaults (no validation)
+	// readRaw — Load persisted config and optionally materialize schema defaults
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function readRaw(): Promise<StoreDocument> {
+	async function readRaw(materializeSchemaDefaults = false): Promise<StoreDocument> {
 		const persisted = await readJson(filePath);
 		const persistedObject =
 			persisted !== undefined && isJsonObject(persisted) ? persisted : undefined;
@@ -320,6 +320,17 @@ export function createStore<const F extends FieldsDef>(
 			});
 		}
 		const merged = applyFieldDefaults(persistedObject, fields, shouldPrune);
+		if (materializeSchemaDefaults) {
+			for (const [key, def] of Object.entries(fields)) {
+				if (merged[key] !== undefined || def.schema === undefined) continue;
+				try {
+					const result = await validators.get(key)?.(undefined);
+					if (result !== undefined && isFieldValueResult(result)) merged[key] = result.value;
+				} catch {
+					// Required schemas are validated after the updater or patch can supply a value.
+				}
+			}
+		}
 		return normalizeStateTypes(merged);
 	}
 
@@ -348,11 +359,11 @@ export function createStore<const F extends FieldsDef>(
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
-	// update — Read current (raw), apply updater, validate, persist
+	// update — Read current effective state, apply updater, validate, persist
 	// ──────────────────────────────────────────────────────────────────────
 
 	async function update(updater: StoreUpdater<Config>): Promise<Config> {
-		const current = await readRaw();
+		const current = await readRaw(true);
 		// SAFETY: readRaw normalizes the current document against the field definitions.
 		const updated = updater(current as Config);
 		// SAFETY: field definitions constrain updater output to JSON-compatible values.
@@ -368,7 +379,7 @@ export function createStore<const F extends FieldsDef>(
 	// ──────────────────────────────────────────────────────────────────────
 
 	async function patch(partial: Partial<Config>): Promise<Config> {
-		const current = await readRaw();
+		const current = await readRaw(true);
 		const normalized = normalizeStateTypes({ ...current, ...partial });
 		await runFieldValidators(normalized, "patch");
 		await writeJson(filePath, normalized, writeOptions);
