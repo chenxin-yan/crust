@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
+import type { Equal, Expect } from "../../tests/helpers.ts";
 import {
 	Crust,
 	defineCommand,
@@ -9,10 +10,6 @@ import {
 	defineFlag,
 	type ContextBag,
 } from "../index.ts";
-
-type Expect<T extends true> = T;
-type Equal<A, B> =
-	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 describe("public beta API", () => {
 	it("infers pulled Context values in added definitions", async () => {

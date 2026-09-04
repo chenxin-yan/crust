@@ -2,6 +2,8 @@ import { describe, expect, it } from "bun:test";
 
 import type { StandardSchema } from "@crustjs/utils/schema";
 
+import type { Equal, Expect } from "../../tests/helpers.ts";
+
 type StandardInput = Parameters<StandardSchema["~standard"]["validate"]>[0];
 
 import { Crust } from "../command/crust.ts";
@@ -228,10 +230,6 @@ describe("schema interaction with Extensions", () => {
 });
 
 describe("schema type inference", () => {
-	type Expect<T extends true> = T;
-	type Equal<A, B> =
-		(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
-
 	it("the schema output type reaches the Command Action", () => {
 		new Crust("cli")
 			.args({ name: "port", schema: port() })

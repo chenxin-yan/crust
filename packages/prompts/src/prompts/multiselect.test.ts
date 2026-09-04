@@ -1,31 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
-import { createPromptIO, pressKey, renderPrompt, type RenderedPrompt } from "../testing.ts";
+import { pressKey, renderPrompt } from "../testing.ts";
 import { multiselect, type MultiselectOptions } from "./multiselect.ts";
+import { nonTTYIO, tick } from "./test-helpers.ts";
 
-// ────────────────────────────────────────────────────────────────────────────
-// Test helpers
-// ────────────────────────────────────────────────────────────────────────────
-
-let activePrompt: Pick<RenderedPrompt<unknown>, "type" | "keys" | "screen">;
-
-function start<T>(options: MultiselectOptions<T>): Promise<T[]> {
-	const prompt = renderPrompt<MultiselectOptions<T>, T[]>(multiselect, options);
-	activePrompt = prompt;
-	return prompt.answer;
-}
-
-function screen(): string {
-	return activePrompt.screen();
-}
-
-function tick(ms = 10): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function nonTTYIO() {
-	return createPromptIO({ isTTY: false }).io;
-}
 // ────────────────────────────────────────────────────────────────────────────
 // Initial value — object-choice numeric values
 // ────────────────────────────────────────────────────────────────────────────
@@ -53,7 +31,7 @@ describe("multiselect — initial value", () => {
 
 describe("multiselect — default value", () => {
 	it("pre-selects items matching default values", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select toppings",
 			choices: ["cheese", "pepperoni", "mushrooms"],
 			default: ["cheese", "mushrooms"],
@@ -61,36 +39,36 @@ describe("multiselect — default value", () => {
 
 		await tick();
 		// Submit immediately — should return pre-selected items
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toEqual(["cheese", "mushrooms"]);
 	});
 
 	it("returns empty array when no defaults and nothing selected", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select toppings",
 			choices: ["cheese", "pepperoni", "mushrooms"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toEqual([]);
 	});
 
 	it("ignores default values that don't match any choice", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select toppings",
 			choices: ["cheese", "pepperoni", "mushrooms"],
 			default: ["cheese", "nonexistent"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toEqual(["cheese"]);
 	});
 });
@@ -101,23 +79,23 @@ describe("multiselect — default value", () => {
 
 describe("multiselect — Space toggle", () => {
 	it("Space toggles selection on current item", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select",
 			choices: ["a", "b", "c"],
 		});
 
 		await tick();
 		// Toggle first item on
-		pressKey(activePrompt, " ", { name: "space" });
+		pressKey(prompt, " ", { name: "space" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toEqual(["a"]);
 	});
 
 	it("Space toggles off a selected item", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select",
 			choices: ["a", "b", "c"],
 			default: ["a"],
@@ -125,32 +103,32 @@ describe("multiselect — Space toggle", () => {
 
 		await tick();
 		// Toggle first item off (it was pre-selected)
-		pressKey(activePrompt, " ", { name: "space" });
+		pressKey(prompt, " ", { name: "space" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toEqual([]);
 	});
 
 	it("can select multiple items", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select",
 			choices: ["a", "b", "c"],
 		});
 
 		await tick();
 		// Select first item
-		pressKey(activePrompt, " ", { name: "space" });
+		pressKey(prompt, " ", { name: "space" });
 		await tick();
 		// Move down and select second
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
-		pressKey(activePrompt, " ", { name: "space" });
+		pressKey(prompt, " ", { name: "space" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toEqual(["a", "b"]);
 	});
 });
@@ -161,92 +139,92 @@ describe("multiselect — Space toggle", () => {
 
 describe("multiselect — navigation", () => {
 	it("down arrow moves cursor down", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select",
 			choices: ["a", "b", "c"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
-		pressKey(activePrompt, " ", { name: "space" });
+		pressKey(prompt, " ", { name: "space" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toEqual(["b"]);
 	});
 
 	it("up arrow moves cursor up", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select",
 			choices: ["a", "b", "c"],
 		});
 
 		await tick();
 		// Move down to b, then up back to a
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
-		pressKey(activePrompt, "", { name: "up" });
+		pressKey(prompt, "", { name: "up" });
 		await tick();
-		pressKey(activePrompt, " ", { name: "space" });
+		pressKey(prompt, " ", { name: "space" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toEqual(["a"]);
 	});
 
 	it("j moves cursor down (vim)", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select",
 			choices: ["a", "b", "c"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "j", { name: "j" });
+		pressKey(prompt, "j", { name: "j" });
 		await tick();
-		pressKey(activePrompt, " ", { name: "space" });
+		pressKey(prompt, " ", { name: "space" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toEqual(["b"]);
 	});
 
 	it("k moves cursor up (vim)", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select",
 			choices: ["a", "b", "c"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
-		pressKey(activePrompt, "k", { name: "k" });
+		pressKey(prompt, "k", { name: "k" });
 		await tick();
-		pressKey(activePrompt, " ", { name: "space" });
+		pressKey(prompt, " ", { name: "space" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toEqual(["a"]);
 	});
 
 	it("wraps to last item when moving up from first", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select",
 			choices: ["a", "b", "c"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "up" });
+		pressKey(prompt, "", { name: "up" });
 		await tick();
-		pressKey(activePrompt, " ", { name: "space" });
+		pressKey(prompt, " ", { name: "space" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toEqual(["c"]);
 	});
 });
@@ -257,65 +235,65 @@ describe("multiselect — navigation", () => {
 
 describe("multiselect — toggle all / invert", () => {
 	it("'a' selects all items when none are selected", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select",
 			choices: ["a", "b", "c"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "a", { name: "a" });
+		pressKey(prompt, "a", { name: "a" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toEqual(["a", "b", "c"]);
 	});
 
 	it("'a' deselects all items when all are selected", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select",
 			choices: ["a", "b", "c"],
 			default: ["a", "b", "c"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "a", { name: "a" });
+		pressKey(prompt, "a", { name: "a" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toEqual([]);
 	});
 
 	it("'a' selects all when some are selected (not all)", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select",
 			choices: ["a", "b", "c"],
 			default: ["a"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "a", { name: "a" });
+		pressKey(prompt, "a", { name: "a" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toEqual(["a", "b", "c"]);
 	});
 
 	it("'i' inverts selection", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select",
 			choices: ["a", "b", "c"],
 			default: ["a"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "i", { name: "i" });
+		pressKey(prompt, "i", { name: "i" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toEqual(["b", "c"]);
 	});
 });
@@ -326,7 +304,7 @@ describe("multiselect — toggle all / invert", () => {
 
 describe("multiselect — validation", () => {
 	it("required blocks empty submit", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select",
 			choices: ["a", "b", "c"],
 			required: true,
@@ -334,23 +312,23 @@ describe("multiselect — validation", () => {
 
 		await tick();
 		// Try to submit with nothing selected
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 		await tick();
 
 		// Error should be shown
-		expect(screen()).toContain("At least one item must be selected");
+		expect(prompt.screen()).toContain("At least one item must be selected");
 
 		// Select something and submit
-		pressKey(activePrompt, " ", { name: "space" });
+		pressKey(prompt, " ", { name: "space" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toEqual(["a"]);
 	});
 
 	it("min validation blocks submit when too few selected", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select",
 			choices: ["a", "b", "c"],
 			min: 2,
@@ -358,27 +336,27 @@ describe("multiselect — validation", () => {
 
 		await tick();
 		// Select only 1 item
-		pressKey(activePrompt, " ", { name: "space" });
+		pressKey(prompt, " ", { name: "space" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 		await tick();
 
 		// Error should be shown
-		expect(screen()).toContain("Select at least 2 items");
+		expect(prompt.screen()).toContain("Select at least 2 items");
 
 		// Select another item and submit
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
-		pressKey(activePrompt, " ", { name: "space" });
+		pressKey(prompt, " ", { name: "space" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toEqual(["a", "b"]);
 	});
 
 	it("max validation blocks submit when too many selected", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select",
 			choices: ["a", "b", "c"],
 			max: 1,
@@ -386,23 +364,23 @@ describe("multiselect — validation", () => {
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 		await tick();
 
 		// Error should be shown
-		expect(screen()).toContain("Select at most 1 item");
+		expect(prompt.screen()).toContain("Select at most 1 item");
 
 		// Deselect one and submit
-		pressKey(activePrompt, " ", { name: "space" });
+		pressKey(prompt, " ", { name: "space" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toEqual(["b"]);
 	});
 
 	it("error clears when user navigates", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select",
 			choices: ["a", "b", "c"],
 			required: true,
@@ -410,24 +388,24 @@ describe("multiselect — validation", () => {
 
 		await tick();
 		// Submit with nothing — triggers error
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 		await tick();
-		expect(screen()).toContain("At least one item must be selected");
+		expect(prompt.screen()).toContain("At least one item must be selected");
 
 		// Navigate — error should clear
 
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
 
 		// The error should no longer appear in new output
-		expect(screen()).not.toContain("At least one item must be selected");
+		expect(prompt.screen()).not.toContain("At least one item must be selected");
 
 		// Select and submit
-		pressKey(activePrompt, " ", { name: "space" });
+		pressKey(prompt, " ", { name: "space" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toEqual(["b"]);
 	});
 });
@@ -438,65 +416,65 @@ describe("multiselect — validation", () => {
 
 describe("multiselect — rendering", () => {
 	it("renders message on initial display", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select toppings",
 			choices: ["cheese", "pepperoni", "mushrooms"],
 		});
 
 		await tick();
-		expect(screen()).toContain("Select toppings");
+		expect(prompt.screen()).toContain("Select toppings");
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 
 	it("renders all choices with checkboxes", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select",
 			choices: ["alpha", "beta", "gamma"],
 		});
 
 		await tick();
-		expect(screen()).toContain("alpha");
-		expect(screen()).toContain("beta");
-		expect(screen()).toContain("gamma");
-		expect(screen()).toContain("○");
+		expect(prompt.screen()).toContain("alpha");
+		expect(prompt.screen()).toContain("beta");
+		expect(prompt.screen()).toContain("gamma");
+		expect(prompt.screen()).toContain("○");
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 
 	it("renders checked boxes for selected items", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select",
 			choices: ["alpha", "beta", "gamma"],
 			default: ["alpha"],
 		});
 
 		await tick();
-		expect(screen()).toContain("●");
+		expect(prompt.screen()).toContain("●");
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 
 	it("renders submitted answer with comma-separated labels", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select toppings",
 			choices: ["cheese", "pepperoni", "mushrooms"],
 			default: ["cheese", "mushrooms"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		await promise;
+		await prompt.answer;
 		// After submit, should show comma-separated labels
-		expect(screen()).toContain("cheese, mushrooms");
+		expect(prompt.screen()).toContain("cheese, mushrooms");
 	});
 
 	it("renders hints for object choices", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select features",
 			choices: [
 				{ label: "TypeScript", value: "ts", hint: "recommended" },
@@ -505,10 +483,10 @@ describe("multiselect — rendering", () => {
 		});
 
 		await tick();
-		expect(screen()).toContain("recommended");
+		expect(prompt.screen()).toContain("recommended");
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 });
 
@@ -519,24 +497,24 @@ describe("multiselect — rendering", () => {
 describe("multiselect — viewport scrolling", () => {
 	it("limits visible choices to maxVisible", async () => {
 		const choices = Array.from({ length: 20 }, (_, i) => `item-${i}`);
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select",
 			choices,
 			maxVisible: 5,
 		});
 
 		await tick();
-		expect(screen()).toContain("item-0");
-		expect(screen()).toContain("item-4");
-		expect(screen()).not.toContain("item-5");
+		expect(prompt.screen()).toContain("item-0");
+		expect(prompt.screen()).toContain("item-4");
+		expect(prompt.screen()).not.toContain("item-5");
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 
 	it("scrolls down when navigating past visible items", async () => {
 		const choices = Array.from({ length: 10 }, (_, i) => `item-${i}`);
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			message: "Select",
 			choices,
 			maxVisible: 3,
@@ -544,18 +522,18 @@ describe("multiselect — viewport scrolling", () => {
 
 		await tick();
 		// Move down 3 times to scroll past the initial viewport
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
 
 		// item-3 should now be visible
-		expect(screen()).toContain("item-3");
+		expect(prompt.screen()).toContain("item-3");
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 });
 
@@ -565,37 +543,37 @@ describe("multiselect — viewport scrolling", () => {
 
 describe("multiselect — no message", () => {
 	it("renders default message when message is omitted", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			choices: ["a", "b", "c"],
 		});
 
 		await tick();
-		expect(screen()).toContain("Pick one or more");
-		expect(screen()).not.toContain("undefined");
-		expect(screen()).toContain("a");
+		expect(prompt.screen()).toContain("Pick one or more");
+		expect(prompt.screen()).not.toContain("undefined");
+		expect(prompt.screen()).toContain("a");
 
 		// Select first item and submit
-		pressKey(activePrompt, "", { name: "space" });
+		pressKey(prompt, "", { name: "space" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toEqual(["a"]);
 	});
 
 	it("submitted output shows default message", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multiselect, {
 			choices: ["a", "b", "c"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "space" });
+		pressKey(prompt, "", { name: "space" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		await promise;
-		expect(screen()).toContain("Pick one or more");
-		expect(screen()).not.toContain("undefined");
+		await prompt.answer;
+		expect(prompt.screen()).toContain("Pick one or more");
+		expect(prompt.screen()).not.toContain("undefined");
 	});
 });
 

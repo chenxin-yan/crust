@@ -6,6 +6,8 @@ import { pathToFileURL } from "node:url";
 
 import { buildEntrypoint } from "./build-helpers.ts";
 
+const coreUrl = import.meta.resolve("@crustjs/core");
+
 describe("buildEntrypoint", () => {
 	const tempDirs: string[] = [];
 
@@ -18,7 +20,6 @@ describe("buildEntrypoint", () => {
 		tempDirs.push(directory);
 		const entry = join(directory, "cli.ts");
 		const trailingMarker = join(directory, "trailing-code-ran");
-		const coreUrl = pathToFileURL(resolve(import.meta.dir, "../../../core/src/index.ts")).href;
 		await writeFile(
 			entry,
 			`import { Crust } from ${JSON.stringify(coreUrl)};\n` +
@@ -39,7 +40,6 @@ describe("buildEntrypoint", () => {
 		tempDirs.push(directory);
 		const entry = join(directory, "cli.ts");
 		const outDir = join(directory, "dist");
-		const coreUrl = pathToFileURL(resolve(import.meta.dir, "../../../core/src/index.ts")).href;
 		await writeFile(
 			entry,
 			`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(coreUrl)};\n` +
@@ -64,7 +64,6 @@ describe("buildEntrypoint", () => {
 			join(source, "demo", "SKILL.md"),
 			"---\nname: demo\ndescription: Demo workflows\n---\n",
 		);
-		const coreUrl = pathToFileURL(resolve(import.meta.dir, "../../../core/src/index.ts")).href;
 		const skillsUrl = pathToFileURL(resolve(import.meta.dir, "../../../skills/src/index.ts")).href;
 		const manUrl = pathToFileURL(resolve(import.meta.dir, "../../../man/src/index.ts")).href;
 		await writeFile(
@@ -95,7 +94,6 @@ describe("buildEntrypoint", () => {
 		const directory = await mkdtemp(join(tmpdir(), "crust-entry-build-test-"));
 		tempDirs.push(directory);
 		const entry = join(directory, "cli.ts");
-		const coreUrl = pathToFileURL(resolve(import.meta.dir, "../../../core/src/index.ts")).href;
 		await writeFile(
 			entry,
 			`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(coreUrl)};\n` +

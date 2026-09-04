@@ -2,54 +2,9 @@ import { describe, expect, it } from "bun:test";
 
 import { z } from "zod";
 
-import type { PromptIO } from "../core/renderer.ts";
-import { createPromptIO, pressKey, renderPrompt, type RenderedPrompt } from "../testing.ts";
-import { password, type PasswordOptions } from "./password.ts";
-
-// ────────────────────────────────────────────────────────────────────────────
-// Test helpers
-// ────────────────────────────────────────────────────────────────────────────
-
-let activePrompt: Pick<RenderedPrompt<unknown>, "type" | "keys" | "screen">;
-
-function runPassword<Output>(
-	options: PasswordOptions<Output>,
-	io?: PromptIO,
-): Promise<Output | string> {
-	if (options.schema) return password(options, io);
-	return password(options, io);
-}
-
-function start<Output>(options: PasswordOptions<Output>): Promise<Output | string> {
-	const prompt = renderPrompt<PasswordOptions<Output>, Output | string>(runPassword, options);
-	activePrompt = prompt;
-	return prompt.answer;
-}
-
-function screen(): string {
-	return activePrompt.screen();
-}
-
-function tick(ms = 10): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitForScreen(needle: string, timeout = 500): Promise<void> {
-	const start = Date.now();
-	while (!screen().includes(needle)) {
-		if (Date.now() - start > timeout) {
-			throw new Error(
-				`screen never contained ${JSON.stringify(needle)} within ${timeout}ms. ` +
-					`Got: ${JSON.stringify(screen())}`,
-			);
-		}
-		await tick(5);
-	}
-}
-
-function nonTTYIO() {
-	return createPromptIO({ isTTY: false }).io;
-}
+import { pressKey, renderPrompt } from "../testing.ts";
+import { password } from "./password.ts";
+import { nonTTYIO, tick, waitForScreen } from "./test-helpers.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Initial value — empty-string edge case
@@ -75,81 +30,81 @@ describe("password — initial value", () => {
 
 describe("password — masked rendering", () => {
 	it("renders message on initial display", async () => {
-		const promise = start({ message: "Enter password:" });
+		const prompt = renderPrompt(password, { message: "Enter password:" });
 
 		await tick();
-		expect(screen()).toContain("Enter password:");
+		expect(prompt.screen()).toContain("Enter password:");
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 
 	it("renders mask characters instead of actual value", async () => {
-		const promise = start({ message: "Password?" });
+		const prompt = renderPrompt(password, { message: "Password?" });
 
 		await tick();
-		pressKey(activePrompt, "a");
+		pressKey(prompt, "a");
 		await tick();
-		pressKey(activePrompt, "b");
+		pressKey(prompt, "b");
 		await tick();
-		pressKey(activePrompt, "c");
+		pressKey(prompt, "c");
 		await tick();
 
 		// Should see mask characters (***) but NOT the actual value "abc"
-		expect(screen()).toContain("*");
+		expect(prompt.screen()).toContain("*");
 		// The actual characters should not appear in output
 		// (except potentially in keypress event data, not in rendered output)
 
-		pressKey(activePrompt, "", { name: "return" });
-		const result = await promise;
+		pressKey(prompt, "", { name: "return" });
+		const result = await prompt.answer;
 		// The actual value is returned, even though it was masked in display
 		expect(result).toBe("abc");
 	});
 
 	it("supports custom mask character", async () => {
-		const promise = start({ message: "Password?", mask: "●" });
+		const prompt = renderPrompt(password, { message: "Password?", mask: "●" });
 
 		await tick();
-		pressKey(activePrompt, "x");
+		pressKey(prompt, "x");
 		await tick();
-		pressKey(activePrompt, "y");
+		pressKey(prompt, "y");
 		await tick();
 
 		// Custom mask character should appear in output
-		expect(screen()).toContain("●");
+		expect(prompt.screen()).toContain("●");
 
-		pressKey(activePrompt, "", { name: "return" });
-		const result = await promise;
+		pressKey(prompt, "", { name: "return" });
+		const result = await prompt.answer;
 		expect(result).toBe("xy");
 	});
 
 	it("shows fixed-length mask on submission regardless of actual length", async () => {
-		const promise = start({ message: "Password?" });
+		const prompt = renderPrompt(password, { message: "Password?" });
 
 		await tick();
 		// Type a 10-character password
 		for (const ch of "abcdefghij") {
-			pressKey(activePrompt, ch);
+			pressKey(prompt, ch);
 			await tick();
 		}
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 
 		// After submission, should show exactly 4 mask characters (SUBMITTED_MASK_LENGTH)
 		// The submitted line uses the success theme, so look for **** in output
-		expect(screen()).toContain("****");
+		expect(prompt.screen()).toContain("****");
 	});
 
 	it("shows cursor indicator when input is empty", async () => {
-		const promise = start({ message: "Password?" });
+		const prompt = renderPrompt(password, { message: "Password?" });
 
 		await tick();
 		// U+2502 (│) is the cursor character
-		expect(screen()).toContain("\u2502");
+		expect(prompt.screen()).toContain("\u2502");
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 });
 
@@ -159,7 +114,7 @@ describe("password — masked rendering", () => {
 
 describe("password — validation", () => {
 	it("shows error message when validation fails", async () => {
-		const promise = start({
+		const prompt = renderPrompt(password, {
 			message: "Password?",
 			validate: (v) => {
 				if (v.length < 4) throw new Error("Password must be at least 4 characters");
@@ -167,24 +122,24 @@ describe("password — validation", () => {
 		});
 
 		await tick();
-		pressKey(activePrompt, "a");
+		pressKey(prompt, "a");
 		await tick();
-		pressKey(activePrompt, "b");
+		pressKey(prompt, "b");
 		await tick();
 		// Try to submit invalid value (too short)
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 		await tick();
 
-		expect(screen()).toContain("Password must be at least 4 characters");
+		expect(prompt.screen()).toContain("Password must be at least 4 characters");
 
 		// Type more and resubmit
-		pressKey(activePrompt, "c");
+		pressKey(prompt, "c");
 		await tick();
-		pressKey(activePrompt, "d");
+		pressKey(prompt, "d");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("abcd");
 	});
 });
@@ -195,35 +150,35 @@ describe("password — validation", () => {
 
 describe("password — no message", () => {
 	it("renders default message when message is omitted", async () => {
-		const promise = start({});
+		const prompt = renderPrompt(password, {});
 
 		await tick();
-		expect(screen()).toContain("Enter a password");
-		expect(screen()).not.toContain("undefined");
+		expect(prompt.screen()).toContain("Enter a password");
+		expect(prompt.screen()).not.toContain("undefined");
 
-		pressKey(activePrompt, "s");
+		pressKey(prompt, "s");
 		await tick();
-		pressKey(activePrompt, "e");
+		pressKey(prompt, "e");
 		await tick();
-		pressKey(activePrompt, "c");
+		pressKey(prompt, "c");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("sec");
 	});
 
 	it("submitted output shows default message", async () => {
-		const promise = start({});
+		const prompt = renderPrompt(password, {});
 
 		await tick();
-		pressKey(activePrompt, "x");
+		pressKey(prompt, "x");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		await promise;
-		expect(screen()).toContain("Enter a password");
-		expect(screen()).not.toContain("undefined");
+		await prompt.answer;
+		expect(prompt.screen()).toContain("Enter a password");
+		expect(prompt.screen()).not.toContain("undefined");
 	});
 });
 
@@ -232,19 +187,20 @@ describe("password — no message", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("password — non-TTY", () => {
-	function nonTTY<Output>(options: PasswordOptions<Output>): Promise<Output | string> {
-		return runPassword(options, nonTTYIO());
-	}
-
 	it("throws NonInteractiveError when stdin is not a TTY", async () => {
-		await expect(nonTTY({ message: "Password?" })).rejects.toThrow("interactive terminal");
+		await expect(password({ message: "Password?" }, nonTTYIO())).rejects.toThrow(
+			"interactive terminal",
+		);
 	});
 
 	it("returns initial value in non-TTY environment", async () => {
-		const result = await nonTTY({
-			message: "Password?",
-			initial: "secret123",
-		});
+		const result = await password(
+			{
+				message: "Password?",
+				initial: "secret123",
+			},
+			nonTTYIO(),
+		);
 
 		expect(result).toBe("secret123");
 	});
@@ -262,23 +218,23 @@ describe("password — schema validation", () => {
 	});
 
 	it("resolves to the schema's transformed output (number from coerce)", async () => {
-		const promise = start({
+		const prompt = renderPrompt(password<number>, {
 			message: "PIN?",
 			schema: z.coerce.number().int().min(1000),
 		});
 
 		await tick();
-		pressKey(activePrompt, "4");
+		pressKey(prompt, "4");
 		await tick();
-		pressKey(activePrompt, "2");
+		pressKey(prompt, "2");
 		await tick();
-		pressKey(activePrompt, "4");
+		pressKey(prompt, "4");
 		await tick();
-		pressKey(activePrompt, "2");
+		pressKey(prompt, "2");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe(4242);
 	});
 });
@@ -341,48 +297,48 @@ describe("password — secrecy", () => {
 	const SECRET = "hunter2-XYZ";
 
 	it("never renders the raw value while typing or after submission", async () => {
-		const promise = start({ message: "Password?" });
+		const prompt = renderPrompt(password, { message: "Password?" });
 
 		await tick();
 		for (const ch of SECRET) {
-			pressKey(activePrompt, ch);
+			pressKey(prompt, ch);
 			await tick();
 		}
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 
-		expect(screen()).not.toContain(SECRET);
+		expect(prompt.screen()).not.toContain(SECRET);
 	});
 
 	it("never renders the raw value when schema validation rejects", async () => {
-		const promise = start({
+		const prompt = renderPrompt(password<string>, {
 			message: "Password?",
 			schema: z.string().min(64, "too short"),
 		});
 
 		await tick();
 		for (const ch of SECRET) {
-			pressKey(activePrompt, ch);
+			pressKey(prompt, ch);
 			await tick();
 		}
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 		// Schema validation is async; a fixed tick races the error render on slow runners.
-		await waitForScreen("too short");
+		await waitForScreen(prompt, "too short");
 
-		expect(screen()).toContain("too short");
-		expect(screen()).not.toContain(SECRET);
+		expect(prompt.screen()).toContain("too short");
+		expect(prompt.screen()).not.toContain(SECRET);
 
 		// Resolve the prompt cleanly with a long-enough valid value.
 		for (let i = 0; i < SECRET.length; i++) {
-			pressKey(activePrompt, "", { name: "backspace" });
+			pressKey(prompt, "", { name: "backspace" });
 			await tick();
 		}
 		for (const ch of "x".repeat(64)) {
-			pressKey(activePrompt, ch);
+			pressKey(prompt, ch);
 			await tick();
 		}
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 });
 

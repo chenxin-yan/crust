@@ -2,12 +2,11 @@ import { describe, expect, it } from "bun:test";
 
 import type { StandardSchema } from "@crustjs/utils/schema";
 
+import type { Equal, Expect } from "../../tests/helpers.ts";
 import { defineExtension, type Extension } from "../api/extension.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { CommandPath, CommandShapeAt, RunInput, RunOutcome } from "./crust.ts";
 import { Crust, defineCommand } from "./crust.ts";
-
-type Expect<T extends true> = T;
 interface CyclicFixture {
 	self?: CyclicFixture;
 }
@@ -32,8 +31,6 @@ interface NamedJsonPayload {
 interface NonJsonPayload {
 	createdAt: Date;
 }
-type Equal<A, B> =
-	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 // "root" plus 14 "next" segments — a path exactly at the depth-15 cap.
 type FifteenDeep = readonly [

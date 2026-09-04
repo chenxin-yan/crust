@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
+import type { Equal, Expect } from "../../tests/helpers.ts";
 import { defineContext } from "../api/context.ts";
 import { Crust } from "./crust.ts";
 
@@ -10,10 +11,6 @@ import { Crust } from "./crust.ts";
 // or ~47 (mapped merge) .flags() calls and silently degraded ctx inference
 // on long .provide() chains.
 // ────────────────────────────────────────────────────────────────────────────
-
-type Expect<T extends true> = T;
-type Equal<A, B> =
-	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 const c01 = defineContext("c01", () => 1);
 const c02 = defineContext("c02", () => 2);

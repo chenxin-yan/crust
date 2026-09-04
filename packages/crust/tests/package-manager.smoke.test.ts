@@ -1,56 +1,28 @@
 import { afterAll, describe, expect, it } from "bun:test";
-import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
+import { runProcess } from "@crustjs/utils/process";
 
 import { buildCommand } from "../src/commands/build.ts";
-import { SUPPORTED_TARGETS, TARGET_INFO } from "../src/utils/build-helpers.ts";
+import { hostTarget } from "./helpers.ts";
 
 const packageManager = process.env.CRUST_SMOKE_PM;
-const testRoot = join(tmpdir(), `crust-smoke-${packageManager ?? "skip"}-${Date.now()}`);
+const testRoot = mkdtempSync(join(tmpdir(), `crust-smoke-${packageManager ?? "skip"}-`));
 const sampleDir = join(testRoot, "sample");
 const stageDir = join(sampleDir, "dist", "npm");
 const installDir = join(testRoot, `install-${packageManager ?? "skip"}`);
 const packDir = join(testRoot, "packs");
 
-function resolveHostTarget(): string {
-	const platformKey = `${process.platform}-${process.arch}`;
-	const target = SUPPORTED_TARGETS.find(
-		(candidate) => TARGET_INFO[candidate].platformKey === platformKey,
-	);
-	if (!target) throw new Error(`Unsupported smoke-test host: ${platformKey}`);
-	return target;
-}
-
 function hasCommand(command: string): boolean {
 	return Bun.which(command) !== null;
 }
 
-async function run(
-	command: string[],
-	cwd: string,
-	env?: Record<string, string>,
-): Promise<{ exitCode: number; stdout: string; stderr: string }> {
-	const proc = Bun.spawn(command, {
-		cwd,
-		env: {
-			...process.env,
-			...env,
-		},
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-
-	return {
-		exitCode: await proc.exited,
-		stdout: await new Response(proc.stdout).text(),
-		stderr: await new Response(proc.stderr).text(),
-	};
-}
-
 async function stageSampleCli() {
+	const target = hostTarget();
+	if (!target) throw new Error(`Unsupported smoke-test host: ${process.platform}-${process.arch}`);
 	rmSync(testRoot, { recursive: true, force: true });
 	mkdirSync(join(sampleDir, "src"), { recursive: true });
 	writeFileSync(
@@ -79,15 +51,7 @@ console.log(args.join(" ") || "resolver-ok");
 	process.cwd = () => sampleDir;
 	try {
 		await app.execute({
-			argv: [
-				"build",
-				"--package",
-				"--target",
-				resolveHostTarget(),
-				"--stage-dir",
-				"dist/npm",
-				"--no-validate",
-			],
+			argv: ["build", "--package", "--target", target, "--stage-dir", "dist/npm", "--no-validate"],
 		});
 	} finally {
 		process.cwd = originalCwd;
@@ -96,7 +60,7 @@ console.log(args.join(" ") || "resolver-ok");
 
 async function packStageDir(dir: string): Promise<string> {
 	mkdirSync(packDir, { recursive: true });
-	const packed = await run(["npm", "pack", dir], packDir);
+	const packed = await runProcess("npm", ["pack", dir], { cwd: packDir });
 	if (packed.exitCode !== 0) {
 		throw new Error(`npm pack failed for ${dir}\n${packed.stderr}`);
 	}
@@ -154,12 +118,14 @@ describe.skipIf(!packageManager)("package manager smoke", () => {
 		// Audit/funding lookups hit registry endpoints the smoke test does not need;
 		// when they degrade, npm blocks on them and the test times out.
 		const auditFlags = packageManager === "npm" ? ["--no-audit", "--no-fund"] : [];
-		const install = await run([packageManager!, "install", ...auditFlags], installDir);
+		const install = await runProcess(packageManager!, ["install", ...auditFlags], {
+			cwd: installDir,
+		});
 		expect(install.exitCode).toBe(0);
 
 		const binPath = join(installDir, "node_modules", ".bin", "resolver-smoke");
 		chmodSync(binPath, 0o755);
-		const exec = await run([binPath, "smoke-ok"], installDir);
+		const exec = await runProcess(binPath, ["smoke-ok"], { cwd: installDir });
 		expect(exec.exitCode).toBe(0);
 		expect(exec.stdout.trim()).toContain("smoke-ok");
 	}, 30000);

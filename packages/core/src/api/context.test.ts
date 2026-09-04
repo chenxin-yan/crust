@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
+import type { Equal, Expect } from "../../tests/helpers.ts";
 import { Crust, defineCommand } from "../command/crust.ts";
 import type { CaughtError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
@@ -14,11 +15,7 @@ import {
 } from "./context.ts";
 import { defineExtension } from "./extension.ts";
 import { defineFlag } from "./flags.ts";
-
-type Assert<T extends true> = T;
 type MutableDisposable = Partial<Disposable>;
-type IsEqual<A, B> =
-	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 describe("defineContext()", () => {
 	it("always returns a factory, including for zero-option setups", async () => {
@@ -69,7 +66,7 @@ describe("defineContext()", () => {
 
 		const fake = db.of({ url: "fake://db" });
 		expect(fake.name).toBe("db");
-		type _Name = Assert<IsEqual<(typeof fake)["name"], "db">>;
+		type _Name = Expect<Equal<(typeof fake)["name"], "db">>;
 		// @ts-expect-error -- .of() takes the Context's value type
 		db.of({ wrong: true });
 
@@ -106,8 +103,8 @@ describe("Crust .provide()", () => {
 			const aValue = await ctx.a;
 			const bValue = await ctx.b;
 			seen.push(`${aValue}:${bValue}`);
-			type _A = Assert<IsEqual<typeof aValue, string>>;
-			type _B = Assert<IsEqual<typeof bValue, string>>;
+			type _A = Expect<Equal<typeof aValue, string>>;
+			type _B = Expect<Equal<typeof bValue, string>>;
 		});
 
 		await app.run([]);
@@ -284,7 +281,7 @@ describe("Context-owned flags", () => {
 	it("installs a propagating cloned flag and exposes its validated value to setup", async () => {
 		const seen: unknown[] = [];
 		const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => {
-			type _ApiKey = Assert<IsEqual<(typeof flags)["api-key"], string | undefined>>;
+			type _ApiKey = Expect<Equal<(typeof flags)["api-key"], string | undefined>>;
 			seen.push(flags["api-key"]);
 			return { apiKey: flags["api-key"] };
 		});
@@ -296,7 +293,7 @@ describe("Context-owned flags", () => {
 		});
 
 		const app = new Crust("cli").provide(instance).action(async ({ flags, ctx }) => {
-			type _ActionApiKey = Assert<IsEqual<(typeof flags)["api-key"], string | undefined>>;
+			type _ActionApiKey = Expect<Equal<(typeof flags)["api-key"], string | undefined>>;
 			seen.push((await ctx.auth).apiKey);
 		});
 		await app.run([], { flags: { "api-key": "secret" } });
@@ -308,7 +305,7 @@ describe("Context-owned flags", () => {
 		const port = defineFlag("port", { type: "string", parse: Number });
 		const seen: number[] = [];
 		const server = defineContext("server", { flags: [port] }, ({ flags }) => {
-			type _Port = Assert<IsEqual<typeof flags.port, number | undefined>>;
+			type _Port = Expect<Equal<typeof flags.port, number | undefined>>;
 			if (flags.port !== undefined) seen.push(flags.port);
 			return {};
 		});
@@ -349,8 +346,8 @@ describe("Context-owned flags", () => {
 		let setupStdout: ((text: string) => void) | undefined;
 		let setupStderr: ((text: string) => void) | undefined;
 		const logging = defineContext("logging", { flags: [verbose] }, ({ flags, stdout, stderr }) => {
-			type _Stdout = Assert<IsEqual<typeof stdout, (text: string) => void>>;
-			type _Stderr = Assert<IsEqual<typeof stderr, (text: string) => void>>;
+			type _Stdout = Expect<Equal<typeof stdout, (text: string) => void>>;
+			type _Stderr = Expect<Equal<typeof stderr, (text: string) => void>>;
 			setupStdout = stdout;
 			setupStderr = stderr;
 			return {
@@ -397,9 +394,9 @@ describe("Context-owned flags", () => {
 		const output = defineContext("output", { flags: [format] }, () => ({}));
 		const app = new Crust("cli").provide(auth(), output());
 
-		type _FlagKeys = Assert<IsEqual<keyof (typeof app)["_types"]["flags"], "api-key" | "format">>;
-		type _ApiKey = Assert<IsEqual<(typeof app)["_types"]["flags"]["api-key"]["type"], "string">>;
-		type _Format = Assert<IsEqual<(typeof app)["_types"]["flags"]["format"]["type"], "string">>;
+		type _FlagKeys = Expect<Equal<keyof (typeof app)["_types"]["flags"], "api-key" | "format">>;
+		type _ApiKey = Expect<Equal<(typeof app)["_types"]["flags"]["api-key"]["type"], "string">>;
+		type _Format = Expect<Equal<(typeof app)["_types"]["flags"]["format"]["type"], "string">>;
 	});
 
 	it("keeps owned flags when later .flags() calls accumulate local flags", async () => {
@@ -508,7 +505,7 @@ describe("Context setup dependencies", () => {
 		const session = defineContext("session", () => ({ userId: "yan" }));
 		const user = defineContext("user", { uses: [session] }, async ({ ctx }) => {
 			const value = await ctx.session;
-			type _Session = Assert<IsEqual<typeof value, { userId: string }>>;
+			type _Session = Expect<Equal<typeof value, { userId: string }>>;
 			// @ts-expect-error -- undeclared Contexts are absent from the bag
 			void ctx.missing;
 			return value.userId;
@@ -1377,10 +1374,10 @@ describe("inline .command()", () => {
 				.flags({ name: "loud", type: "boolean" })
 				.args({ name: "suffix", type: "string" })
 				.action(async ({ args, flags, ctx }) => {
-					type _Suffix = Assert<IsEqual<typeof args.suffix, string | undefined>>;
-					type _Loud = Assert<IsEqual<typeof flags.loud, boolean | undefined>>;
+					type _Suffix = Expect<Equal<typeof args.suffix, string | undefined>>;
+					type _Loud = Expect<Equal<typeof flags.loud, boolean | undefined>>;
 					const identity = await ctx.auth;
-					type _Auth = Assert<IsEqual<typeof identity, { user: string }>>;
+					type _Auth = Expect<Equal<typeof identity, { user: string }>>;
 					// @ts-expect-error -- undeclared Contexts are absent from the inline bag
 					void ctx.missing;
 					return `${identity.user}${args.suffix ?? ""}`;

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
@@ -50,7 +51,7 @@ function writeStageFixture(tmpDir: string, manifest: DistributionManifest) {
 }
 
 describe("publish manifest validation", () => {
-	const tmpDir = join(import.meta.dir, ".tmp-publish");
+	const tmpDir = mkdtempSync(join(tmpdir(), "crust-publish-"));
 	const manifest: DistributionManifest = {
 		version: "1.2.3",
 		root: { name: "@scope/demo", dir: "root", bin: "demo" },

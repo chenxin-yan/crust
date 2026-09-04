@@ -1,15 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
+import type { Equal, Expect } from "../../tests/helpers.ts";
 import type { ContextInstance, ContextMap, ContextValue } from "../api/context.ts";
 import type {
 	ValidateContextDeps,
 	ValidateContextNames,
 	ValidateDeclaredDeps,
 } from "./contexts.brands.ts";
-
-type Equal<A, B> =
-	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
-type Expect<T extends true> = T;
 type Inst<Name extends string, Deps extends ContextMap = {}> = ContextInstance<
 	Name,
 	unknown,

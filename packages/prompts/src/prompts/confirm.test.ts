@@ -1,56 +1,34 @@
 import { describe, expect, it } from "bun:test";
 
-import { createPromptIO, pressKey, renderPrompt, type RenderedPrompt } from "../testing.ts";
+import { pressKey, renderPrompt } from "../testing.ts";
 import { confirm, type ConfirmOptions } from "./confirm.ts";
+import { nonTTYIO, tick } from "./test-helpers.ts";
 
-// ────────────────────────────────────────────────────────────────────────────
-// Test helpers
-// ────────────────────────────────────────────────────────────────────────────
-
-let activePrompt: Pick<RenderedPrompt<unknown>, "type" | "keys" | "screen">;
-
-function start(options: ConfirmOptions): Promise<boolean> {
-	const prompt = renderPrompt<ConfirmOptions, boolean>(confirm, options);
-	activePrompt = prompt;
-	return prompt.answer;
-}
-
-function screen(): string {
-	return activePrompt.screen();
-}
-
-function tick(ms = 10): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function nonTTYIO() {
-	return createPromptIO({ isTTY: false }).io;
-}
 // ────────────────────────────────────────────────────────────────────────────
 // Default value
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("confirm — default value", () => {
 	it("defaults to true when no default is specified", async () => {
-		const promise = start({ message: "Continue?" });
+		const prompt = renderPrompt(confirm, { message: "Continue?" });
 
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe(true);
 	});
 
 	it("uses default: false when specified", async () => {
-		const promise = start({
+		const prompt = renderPrompt(confirm, {
 			message: "Continue?",
 			default: false,
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe(false);
 	});
 });
@@ -61,56 +39,56 @@ describe("confirm — default value", () => {
 
 describe("confirm — toggle", () => {
 	it("left arrow toggles value", async () => {
-		const promise = start({ message: "Continue?" });
+		const prompt = renderPrompt(confirm, { message: "Continue?" });
 
 		await tick();
 		// Default is true, left should toggle to false
-		pressKey(activePrompt, "", { name: "left" });
+		pressKey(prompt, "", { name: "left" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe(false);
 	});
 
 	it("right arrow toggles value", async () => {
-		const promise = start({ message: "Continue?" });
+		const prompt = renderPrompt(confirm, { message: "Continue?" });
 
 		await tick();
 		// Default is true, right should toggle to false
-		pressKey(activePrompt, "", { name: "right" });
+		pressKey(prompt, "", { name: "right" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe(false);
 	});
 
 	it("tab toggles value", async () => {
-		const promise = start({ message: "Continue?" });
+		const prompt = renderPrompt(confirm, { message: "Continue?" });
 
 		await tick();
 		// Default is true, tab should toggle to false
-		pressKey(activePrompt, "", { name: "tab" });
+		pressKey(prompt, "", { name: "tab" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe(false);
 	});
 
 	it("double toggle returns to original value", async () => {
-		const promise = start({ message: "Continue?" });
+		const prompt = renderPrompt(confirm, { message: "Continue?" });
 
 		await tick();
 		// Toggle twice — should be back to true
-		pressKey(activePrompt, "", { name: "left" });
+		pressKey(prompt, "", { name: "left" });
 		await tick();
-		pressKey(activePrompt, "", { name: "right" });
+		pressKey(prompt, "", { name: "right" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe(true);
 	});
 });
@@ -121,83 +99,83 @@ describe("confirm — toggle", () => {
 
 describe("confirm — shortcuts", () => {
 	it("y key sets value to true", async () => {
-		const promise = start({
+		const prompt = renderPrompt(confirm, {
 			message: "Continue?",
 			default: false,
 		});
 
 		await tick();
-		pressKey(activePrompt, "y");
+		pressKey(prompt, "y");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe(true);
 	});
 
 	it("Y key sets value to true", async () => {
-		const promise = start({
+		const prompt = renderPrompt(confirm, {
 			message: "Continue?",
 			default: false,
 		});
 
 		await tick();
-		pressKey(activePrompt, "Y", { name: "y", shift: true });
+		pressKey(prompt, "Y", { name: "y", shift: true });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe(true);
 	});
 
 	it("n key sets value to false", async () => {
-		const promise = start({ message: "Continue?" });
+		const prompt = renderPrompt(confirm, { message: "Continue?" });
 
 		await tick();
-		pressKey(activePrompt, "n");
+		pressKey(prompt, "n");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe(false);
 	});
 
 	it("N key sets value to false", async () => {
-		const promise = start({ message: "Continue?" });
+		const prompt = renderPrompt(confirm, { message: "Continue?" });
 
 		await tick();
-		pressKey(activePrompt, "N", { name: "n", shift: true });
+		pressKey(prompt, "N", { name: "n", shift: true });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe(false);
 	});
 
 	it("h key sets value to true (yes/active)", async () => {
-		const promise = start({
+		const prompt = renderPrompt(confirm, {
 			message: "Continue?",
 			default: false,
 		});
 
 		await tick();
-		pressKey(activePrompt, "h", { name: "h" });
+		pressKey(prompt, "h", { name: "h" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe(true);
 	});
 
 	it("l key sets value to false (no/inactive)", async () => {
-		const promise = start({ message: "Continue?" });
+		const prompt = renderPrompt(confirm, { message: "Continue?" });
 
 		await tick();
-		pressKey(activePrompt, "l", { name: "l" });
+		pressKey(prompt, "l", { name: "l" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe(false);
 	});
 });
@@ -208,22 +186,22 @@ describe("confirm — shortcuts", () => {
 
 describe("confirm — custom labels", () => {
 	it("renders custom active and inactive labels", async () => {
-		const promise = start({
+		const prompt = renderPrompt(confirm, {
 			message: "Accept terms?",
 			active: "Agree",
 			inactive: "Decline",
 		});
 
 		await tick();
-		expect(screen()).toContain("Agree");
-		expect(screen()).toContain("Decline");
+		expect(prompt.screen()).toContain("Agree");
+		expect(prompt.screen()).toContain("Decline");
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 
 	it("shows selected custom label on submit", async () => {
-		const promise = start({
+		const prompt = renderPrompt(confirm, {
 			message: "Accept?",
 			active: "Accept",
 			inactive: "Reject",
@@ -232,12 +210,12 @@ describe("confirm — custom labels", () => {
 
 		await tick();
 		// Toggle to true (Accept)
-		pressKey(activePrompt, "y");
+		pressKey(prompt, "y");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		await promise;
-		expect(screen()).toContain("Accept");
+		await prompt.answer;
+		expect(prompt.screen()).toContain("Accept");
 	});
 });
 
@@ -247,26 +225,26 @@ describe("confirm — custom labels", () => {
 
 describe("confirm — rendering", () => {
 	it("renders message on initial display", async () => {
-		const promise = start({ message: "Deploy to production?" });
+		const prompt = renderPrompt(confirm, { message: "Deploy to production?" });
 
 		await tick();
-		expect(screen()).toContain("Deploy to production?");
+		expect(prompt.screen()).toContain("Deploy to production?");
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 
 	it("renders submitted answer on confirm", async () => {
-		const promise = start({ message: "Continue?" });
+		const prompt = renderPrompt(confirm, { message: "Continue?" });
 
 		await tick();
-		pressKey(activePrompt, "n");
+		pressKey(prompt, "n");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		await promise;
+		await prompt.answer;
 		// After submission, the selected answer should appear
-		expect(screen()).toContain("No");
+		expect(prompt.screen()).toContain("No");
 	});
 });
 
@@ -276,28 +254,28 @@ describe("confirm — rendering", () => {
 
 describe("confirm — no message", () => {
 	it("renders default message when message is omitted", async () => {
-		const promise = start({});
+		const prompt = renderPrompt(confirm, {});
 
 		await tick();
-		expect(screen()).toContain("Are you sure?");
-		expect(screen()).not.toContain("undefined");
-		expect(screen()).toContain("Yes");
-		expect(screen()).toContain("No");
+		expect(prompt.screen()).toContain("Are you sure?");
+		expect(prompt.screen()).not.toContain("undefined");
+		expect(prompt.screen()).toContain("Yes");
+		expect(prompt.screen()).toContain("No");
 
-		pressKey(activePrompt, "", { name: "return" });
-		const result = await promise;
+		pressKey(prompt, "", { name: "return" });
+		const result = await prompt.answer;
 		expect(result).toBe(true);
 	});
 
 	it("submitted output shows default message", async () => {
-		const promise = start({});
+		const prompt = renderPrompt(confirm, {});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		await promise;
-		expect(screen()).toContain("Are you sure?");
-		expect(screen()).not.toContain("undefined");
+		await prompt.answer;
+		expect(prompt.screen()).toContain("Are you sure?");
+		expect(prompt.screen()).not.toContain("undefined");
 	});
 });
 

@@ -62,59 +62,53 @@ function win32Env(
 // Shared appName validation tests — all helpers share the same validator
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("appName validation (shared across all helpers)", () => {
-	const helpers = [{ name: "configDir", fn: configDir }] as const;
+describe("appName validation", () => {
+	it("should reject empty appName", () => {
+		try {
+			configDir("", linuxEnv());
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustStoreError);
+			expect((err as CrustStoreError).code).toBe("PATH");
+			expect((err as CrustStoreError).message).toContain("non-empty");
+		}
+	});
 
-	for (const { name, fn } of helpers) {
-		describe(name, () => {
-			it("should reject empty appName", () => {
-				try {
-					fn("", linuxEnv());
-					expect.unreachable("should have thrown");
-				} catch (err) {
-					expect(err).toBeInstanceOf(CrustStoreError);
-					expect((err as CrustStoreError).code).toBe("PATH");
-					expect((err as CrustStoreError).message).toContain("non-empty");
-				}
-			});
+	it("should reject whitespace-only appName", () => {
+		try {
+			configDir("   ", linuxEnv());
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustStoreError);
+			expect((err as CrustStoreError).code).toBe("PATH");
+		}
+	});
 
-			it("should reject whitespace-only appName", () => {
-				try {
-					fn("   ", linuxEnv());
-					expect.unreachable("should have thrown");
-				} catch (err) {
-					expect(err).toBeInstanceOf(CrustStoreError);
-					expect((err as CrustStoreError).code).toBe("PATH");
-				}
-			});
+	it("should reject appName with forward slashes", () => {
+		try {
+			configDir("my/app", linuxEnv());
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustStoreError);
+			expect((err as CrustStoreError).message).toContain("path separators");
+		}
+	});
 
-			it("should reject appName with forward slashes", () => {
-				try {
-					fn("my/app", linuxEnv());
-					expect.unreachable("should have thrown");
-				} catch (err) {
-					expect(err).toBeInstanceOf(CrustStoreError);
-					expect((err as CrustStoreError).message).toContain("path separators");
-				}
-			});
+	it("should reject appName with backslashes", () => {
+		try {
+			configDir("my\\app", linuxEnv());
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(CrustStoreError);
+			expect((err as CrustStoreError).message).toContain("path separators");
+		}
+	});
 
-			it("should reject appName with backslashes", () => {
-				try {
-					fn("my\\app", linuxEnv());
-					expect.unreachable("should have thrown");
-				} catch (err) {
-					expect(err).toBeInstanceOf(CrustStoreError);
-					expect((err as CrustStoreError).message).toContain("path separators");
-				}
-			});
-
-			it("should accept valid appName characters", () => {
-				const env = linuxEnv();
-				expect(fn("my-cli", env)).toContain("my-cli");
-				expect(fn("my_app.v2", env)).toContain("my_app.v2");
-			});
-		});
-	}
+	it("should accept valid appName characters", () => {
+		const env = linuxEnv();
+		expect(configDir("my-cli", env)).toContain("my-cli");
+		expect(configDir("my_app.v2", env)).toContain("my_app.v2");
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────

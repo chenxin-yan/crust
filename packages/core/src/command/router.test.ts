@@ -1,47 +1,13 @@
 import { describe, expect, it } from "bun:test";
 
+import { makeNode } from "../../tests/helpers.ts";
 import { CrustError } from "../errors.ts";
 import { addFlagSpellingEntries } from "../parsing/spellings.ts";
-import type { ArgsDef, CommandMeta, FlagsDef } from "../types.ts";
-import type { CommandAction, CommandNode } from "./node.ts";
+import type { FlagsDef } from "../types.ts";
+import type { CommandNode } from "./node.ts";
 import { createCommandNode } from "./node.ts";
 import { resolveCommand } from "./router.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
-
-function isString<T>(value: T): value is T & string {
-	return typeof value === "string";
-}
-
-/**
- * Test helper: creates a CommandNode from a config object for test fixtures.
- */
-function makeNode(config: {
-	meta: string | CommandMeta;
-	args?: ArgsDef;
-	flags?: FlagsDef;
-	subCommands?: Record<string, CommandNode>;
-	run?: CommandAction;
-}): CommandNode {
-	const meta = isString(config.meta) ? { name: config.meta } : config.meta;
-	const node = createCommandNode(meta.name);
-	if (meta.description) node.meta.description = meta.description;
-	if (meta.usage) node.meta.usage = meta.usage;
-	if (config.flags) {
-		node.localFlags = { ...config.flags };
-		node.effectiveFlags = { ...config.flags };
-		cacheFlagSpellings(node);
-	}
-	if (config.args) {
-		node.args = [...config.args];
-	}
-	if (config.subCommands) {
-		node.subCommands = { ...config.subCommands };
-	}
-	if (config.run) {
-		node.run = config.run;
-	}
-	return node;
-}
 
 function cacheFlagSpellings(node: CommandNode): void {
 	node.flagSpellings.clear();
