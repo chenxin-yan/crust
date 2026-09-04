@@ -137,9 +137,8 @@ function lowerStatement(
 						))) ||
 			call.arguments.some((argument) => {
 				const type = checker.getTypeAtLocation(argument);
-				return (
-					checkerTypeIsStringArray(type) ||
-					Boolean(type.flags & (ts.TypeFlags.Never | ts.TypeFlags.Void | ts.TypeFlags.Undefined))
+				return Boolean(
+					type.flags & (ts.TypeFlags.Never | ts.TypeFlags.Void | ts.TypeFlags.Undefined),
 				);
 			})
 		) {

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf16"
 )
 
@@ -82,13 +83,16 @@ func Log(values ...any) {
 		if index > 0 {
 			fmt.Print(" ")
 		}
-		if number, ok := value.(float64); ok {
-			if number == 0 && math.Signbit(number) {
+		switch value := value.(type) {
+		case float64:
+			if value == 0 && math.Signbit(value) {
 				fmt.Print("-0")
 			} else {
-				fmt.Print(numberString(number))
+				fmt.Print(String(value))
 			}
-		} else {
+		case []string:
+			fmt.Print(inspectStringArray(value))
+		default:
 			fmt.Print(String(value))
 		}
 	}
@@ -156,6 +160,238 @@ func String(value any) string {
 	}
 }
 
+func inspectStringArray(values []string) string {
+	if len(values) == 0 {
+		return "[]"
+	}
+	limit := min(len(values), 100)
+	quoted := make([]string, limit)
+	for index, value := range values[:limit] {
+		quoted[index] = quoteInspectString(value)
+	}
+	remaining := len(values) - limit
+	if len(quoted) > 6 {
+		if grouped := groupInspectStrings(quoted); len(grouped) != len(quoted) {
+			if remaining > 0 {
+				grouped = append(grouped, remainingInspectItems(remaining))
+			}
+			return "[\n  " + strings.Join(grouped, ",\n  ") + "\n]"
+		}
+	}
+	if remaining > 0 {
+		quoted = append(quoted, remainingInspectItems(remaining))
+	}
+	if inspectStringsFitLine(quoted) {
+		return "[ " + strings.Join(quoted, ", ") + " ]"
+	}
+	return "[\n  " + strings.Join(quoted, ",\n  ") + "\n]"
+}
+
+func remainingInspectItems(count int) string {
+	plural := "s"
+	if count == 1 {
+		plural = ""
+	}
+	return fmt.Sprintf("... %d more item%s", count, plural)
+}
+
+func quoteInspectString(value string) string {
+	if len(utf16.Encode([]rune(value))) > 74 && strings.Contains(value, "\n") {
+		lines := strings.SplitAfter(value, "\n")
+		if lines[len(lines)-1] == "" {
+			lines = lines[:len(lines)-1]
+		}
+		if len(lines) > 1 {
+			for index, line := range lines {
+				lines[index] = quoteInspectStringPart(line)
+			}
+			return strings.Join(lines, " +\n    ")
+		}
+	}
+	return quoteInspectStringPart(value)
+}
+
+func quoteInspectStringPart(value string) string {
+	quote := byte('\'')
+	if strings.Contains(value, "'") {
+		switch {
+		case !strings.Contains(value, "\""):
+			quote = '"'
+		case !strings.Contains(value, "`") && !strings.Contains(value, "${"):
+			quote = '`'
+		}
+	}
+
+	var escaped strings.Builder
+	escaped.WriteByte(quote)
+	for _, character := range value {
+		switch character {
+		case '\\':
+			escaped.WriteString("\\\\")
+		case '\b':
+			escaped.WriteString("\\b")
+		case '\t':
+			escaped.WriteString("\\t")
+		case '\n':
+			escaped.WriteString("\\n")
+		case '\v':
+			escaped.WriteString("\\x0B")
+		case '\f':
+			escaped.WriteString("\\f")
+		case '\r':
+			escaped.WriteString("\\r")
+		case rune(quote):
+			escaped.WriteByte('\\')
+			escaped.WriteRune(character)
+		default:
+			if character < 0x20 || character >= 0x7f && character <= 0x9f {
+				fmt.Fprintf(&escaped, "\\x%02X", character)
+			} else {
+				escaped.WriteRune(character)
+			}
+		}
+	}
+	escaped.WriteByte(quote)
+	return escaped.String()
+}
+
+func inspectStringsFitLine(values []string) bool {
+	count := len(values)
+	length := 2*count + 11
+	if length+count > 80 {
+		return false
+	}
+	for _, value := range values {
+		length += len(utf16.Encode([]rune(value)))
+		if length > 80 {
+			return false
+		}
+	}
+	return true
+}
+
+func groupInspectStrings(values []string) []string {
+	lengths := make([]int, len(values))
+	totalLength := 0
+	maxLength := 0
+	for index, value := range values {
+		length := inspectStringWidth(value)
+		lengths[index] = length
+		totalLength += length + 2
+		maxLength = max(maxLength, length)
+	}
+	actualMax := maxLength + 2
+	if actualMax*3 >= 80 || !(float64(totalLength)/float64(actualMax) > 5 || maxLength <= 6) {
+		return values
+	}
+
+	averageBias := math.Sqrt(float64(actualMax) - float64(totalLength)/float64(len(values)))
+	biasedMax := math.Max(float64(actualMax)-3-averageBias, 1)
+	columns := min(
+		int(math.Round(math.Sqrt(2.5*biasedMax*float64(len(values)))/biasedMax)),
+		80/actualMax,
+		12,
+	)
+	if columns <= 1 {
+		return values
+	}
+
+	columnWidths := make([]int, columns)
+	for column := range columns {
+		for index := column; index < len(values); index += columns {
+			columnWidths[column] = max(columnWidths[column], lengths[index]+2)
+		}
+	}
+
+	lines := make([]string, 0, (len(values)+columns-1)/columns)
+	for start := 0; start < len(values); start += columns {
+		end := min(start+columns, len(values))
+		var line strings.Builder
+		for index := start; index < end; index++ {
+			line.WriteString(values[index])
+			if index < end-1 {
+				line.WriteString(", ")
+				line.WriteString(strings.Repeat(" ", columnWidths[index-start]-lengths[index]-2))
+			}
+		}
+		lines = append(lines, line.String())
+	}
+	return lines
+}
+
+func inspectStringWidth(value string) int {
+	width := 0
+	emojiSequence := false
+	joined := false
+	for _, character := range value {
+		if character == '\u200d' {
+			joined = emojiSequence
+			continue
+		}
+		if unicode.Is(unicode.Mn, character) || unicode.Is(unicode.Me, character) {
+			continue
+		}
+		if joined {
+			joined = false
+			if character >= 0x1f000 && character <= 0x1faff {
+				emojiSequence = true
+				continue
+			}
+		}
+		emojiSequence = character >= 0x1f000 && character <= 0x1faff
+		switch {
+		case unicode.Is(unicode.Cf, character) && character != '\u00ad':
+		case character >= 0x1100 && (character <= 0x115f ||
+			character == 0x2329 || character == 0x232a ||
+			isWideBMPEmoji(character) ||
+			character >= 0x2e80 && character <= 0x3247 && character != 0x303f ||
+			character >= 0x3250 && character <= 0x4dbf ||
+			character >= 0x4e00 && character <= 0xa4c6 ||
+			character >= 0xac00 && character <= 0xd7a3 ||
+			character >= 0xf900 && character <= 0xfaff ||
+			character >= 0xfe10 && character <= 0xfe19 ||
+			character >= 0xfe30 && character <= 0xfe6f ||
+			character >= 0xff00 && character <= 0xff60 ||
+			character >= 0xffe0 && character <= 0xffe6 ||
+			character >= 0x1f000 && character <= 0x1faff ||
+			character >= 0x20000 && character <= 0x3fffd):
+			width += 2
+		default:
+			width++
+		}
+	}
+	return width
+}
+
+func isWideBMPEmoji(character rune) bool {
+	switch {
+	case character >= 0x231a && character <= 0x231b,
+		character >= 0x23e9 && character <= 0x23ec,
+		character == 0x23f0 || character == 0x23f3,
+		character >= 0x25fd && character <= 0x25fe,
+		character >= 0x2614 && character <= 0x2615,
+		character >= 0x2648 && character <= 0x2653,
+		character == 0x267f || character == 0x2693 || character == 0x26a1,
+		character >= 0x26aa && character <= 0x26ab,
+		character >= 0x26bd && character <= 0x26be,
+		character == 0x26c4 || character == 0x26c5 || character == 0x26ce,
+		character == 0x26d4 || character == 0x26ea,
+		character >= 0x26f2 && character <= 0x26f3,
+		character == 0x26f5 || character == 0x26fa || character == 0x26fd,
+		character == 0x2705 || character == 0x270a || character == 0x270b,
+		character == 0x2728 || character == 0x274c || character == 0x274e,
+		character >= 0x2753 && character <= 0x2755,
+		character == 0x2757,
+		character >= 0x2795 && character <= 0x2797,
+		character == 0x27b0 || character == 0x27bf,
+		character >= 0x2b1b && character <= 0x2b1c,
+		character == 0x2b50 || character == 0x2b55:
+		return true
+	default:
+		return false
+	}
+}
+
 func numberString(value float64) string {
 	if math.IsNaN(value) {
 		return "NaN"
@@ -169,6 +405,7 @@ func numberString(value float64) string {
 	if value == 0 {
 		return "0"
 	}
+
 	if math.Signbit(value) {
 		return "-" + numberString(math.Abs(value))
 	}
