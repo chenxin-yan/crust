@@ -74,7 +74,7 @@ defineCommand<const Name extends string>(
   recipe: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
 ): CommandDefinition<Name>;
 
-interface CommandConfig extends Omit<CommandMeta, "name" | "sections"> {
+interface CommandConfig extends Omit<CommandMeta, "name" | "sections" | "version"> {
   readonly sections?: readonly CommandSectionInput[];
 }
 
@@ -85,7 +85,7 @@ defineCommand<const Name extends string, const C extends CommandConfig>(
 ): CommandDefinition<Name, AliasesOf<C>>;
 ```
 
-Creates an inert reusable definition under a required name. Static `description`, `usage`, `aliases`, and `hidden` belong in `config`:
+Creates an inert reusable definition under a required name. Static `description`, `usage`, `aliases`, and `hidden` belong in `config`; application `version` belongs only in the root `Crust` constructor:
 
 ```ts
 const verbose = defineFlag("verbose", { type: "boolean" });
@@ -114,7 +114,7 @@ The recipe does not execute when the definition is created. It executes once for
 ## Constructor
 
 ```ts
-type RootCommandMeta = Pick<CommandMeta, "description" | "usage"> & {
+type RootCommandMeta = Pick<CommandMeta, "description" | "version" | "usage"> & {
   readonly sections?: readonly CommandSectionInput[];
 };
 
@@ -133,11 +133,12 @@ class Crust<
 new Crust(name: string, meta?: RootCommandMeta)
 ```
 
-Creates a root command builder. Root metadata is declared at construction because aliases and hidden state only apply to subcommands. `sections` accepts the same ordered plain-text entries as subcommand metadata and is validated immediately.
+Creates a root command builder. Root metadata is declared at construction because aliases and hidden state only apply to subcommands. `version` is the application version exposed on `CommandSnapshot.meta.version` for Extensions and tooling. `sections` accepts the same ordered plain-text entries as subcommand metadata and is validated immediately.
 
 ```ts
 const app = new Crust("my-cli", {
   description: "Manage issues",
+  version: "1.2.3",
   usage: "my-cli <command>",
 });
 ```
@@ -251,7 +252,7 @@ Registers application-wide Extensions. Repeated calls accumulate in registration
 ```ts
 import { help, version } from "@crustjs/extensions";
 
-const app = new Crust("my-cli").extend(help(), version("1.2.3"));
+const app = new Crust("my-cli", { version: "1.2.3" }).extend(help(), version());
 ```
 
 Added definitions become ordinary command nodes before root Extensions prepare the application, so root Extensions apply to them. Extension-contributed definitions are materialized when the application prepares.

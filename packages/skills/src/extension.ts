@@ -1,5 +1,4 @@
-import { readFile } from "node:fs/promises";
-import { join, relative, resolve } from "node:path";
+import { join, relative } from "node:path";
 
 import {
 	type Extension,
@@ -13,7 +12,6 @@ import {
 import { spinner } from "@crustjs/progress";
 import { confirm, multiselect, select } from "@crustjs/prompts";
 import { bold, dim, yellow } from "@crustjs/style";
-import { isErrnoException } from "@crustjs/utils/error";
 import { isWithin } from "@crustjs/utils/path";
 
 import {
@@ -70,12 +68,12 @@ async function repairInstalledSkill(
 	io: SkillIO,
 	report = false,
 ): Promise<void> {
-	const effectiveScope = resolveEffectiveScope(scope);
 	const status = await getSkillStatus({
 		name: packagedSkill.name,
 		sourceDir: packagedSkill.sourceDir,
 		scope,
 	});
+	const effectiveScope = status.agents[0]?.scope ?? scope;
 	for (const outputDir of new Set(
 		status.agents.filter((entry) => entry.status === "conflict").map((entry) => entry.outputDir),
 	)) {
@@ -179,33 +177,11 @@ function formatSkillDocumentation(
 	}
 }
 
-function hasPackageVersion<Value>(value: Value): value is Value & { version: string } {
-	return (
-		typeof value === "object" &&
-		value !== null &&
-		"version" in value &&
-		typeof value.version === "string"
-	);
-}
-
-async function readPackageVersion(): Promise<string | undefined> {
-	const path = resolve(process.cwd(), "package.json");
-	let content: string;
-	try {
-		content = await readFile(path, "utf8");
-	} catch (error) {
-		if (isErrnoException(error) && error.code === "ENOENT") return undefined;
-		throw error;
-	}
-	const manifest: unknown = JSON.parse(content);
-	return hasPackageVersion(manifest) && manifest.version.length > 0 ? manifest.version : undefined;
-}
-
 async function buildSkills(options: SkillOptions, context: ExtensionBuildContext): Promise<void> {
 	const { writeSkills, writeSkillsFromSnapshot } = await import("./build.ts");
 	const writeOptions = {
 		outDir: join(context.outDir, "skills"),
-		version: await readPackageVersion(),
+		version: context.snapshot.meta.version,
 		name: options.name,
 		description: options.description,
 		extras: options.extras,
@@ -250,12 +226,13 @@ async function reconcileSkill(opts: {
 	io: SkillIO;
 }): Promise<void> {
 	const { packagedSkill, scope, installAll, io } = opts;
+	const effectiveScope = resolveEffectiveScope(scope);
 	const detected = new Set(await detectInstalledAgents());
 	const universal = getUniversalAgents();
 	const status = await getSkillStatus({
 		name: packagedSkill.name,
 		sourceDir: packagedSkill.sourceDir,
-		scope,
+		scope: effectiveScope,
 	});
 	const statusMap = new Map(status.agents.map((entry) => [entry.agent, entry]));
 	const installed = new Set(
@@ -316,14 +293,14 @@ async function reconcileSkill(opts: {
 	}
 
 	if (toInstall.length > 0) {
-		const groups = groupAgentsByOutputDir(toInstall, scope, packagedSkill.name);
+		const groups = groupAgentsByOutputDir(toInstall, effectiveScope, packagedSkill.name);
 		const installedAgents: InstallSkillResult["agents"] = [];
 		for (const agents of groups.values()) {
 			const runInstall = (force?: boolean) =>
 				installSkill({
 					sourceDir: packagedSkill.sourceDir,
 					agents,
-					scope,
+					scope: effectiveScope,
 					force,
 				});
 			try {
@@ -369,7 +346,7 @@ async function reconcileSkill(opts: {
 				uninstallSkill({
 					name: packagedSkill.name,
 					agents: toUninstall,
-					scope,
+					scope: effectiveScope,
 				}),
 		});
 	}

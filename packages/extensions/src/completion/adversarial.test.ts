@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
+import { buildCommandDocumentation } from "@crustjs/core/tooling";
 
 import { completion } from "./index.ts";
 import type { CompletionCommand } from "./spec.ts";
@@ -29,14 +30,14 @@ describe("walker · validation", () => {
 		const cli = new Crust("bad")
 			.add(defineCommand("two words", (c) => c.action(() => {})))
 			.action(() => {});
-		const snapshot = await cli.snapshot();
-		expect(() => walkCommandNode(snapshot)).toThrow(/invalid command name/);
+		const model = buildCommandDocumentation(await cli.snapshot());
+		expect(() => walkCommandNode(model)).toThrow(/invalid command name/);
 	});
 
 	it("rejects flag names with shell metacharacters", async () => {
 		const cli = new Crust("bad").flags({ name: "a;rm", type: "boolean" }).action(() => {});
-		const snapshot = await cli.snapshot();
-		expect(() => walkCommandNode(snapshot)).toThrow(/invalid flag name/);
+		const model = buildCommandDocumentation(await cli.snapshot());
+		expect(() => walkCommandNode(model)).toThrow(/invalid flag name/);
 	});
 
 	it("rejects choice values containing spaces", async () => {
@@ -47,15 +48,15 @@ describe("walker · validation", () => {
 				choices: ["a", "two words", "c"],
 			})
 			.action(() => {});
-		const snapshot = await cli.snapshot();
-		expect(() => walkCommandNode(snapshot)).toThrow(/unsupported choice value/);
+		const model = buildCommandDocumentation(await cli.snapshot());
+		expect(() => walkCommandNode(model)).toThrow(/unsupported choice value/);
 	});
 
 	it("strips control characters from descriptions instead of throwing", async () => {
 		const cli = new Crust("safe", {
 			description: "first line\nsecond line\rstill same line",
 		}).action(() => {});
-		const spec = walkCommandNode(await cli.snapshot());
+		const spec = walkCommandNode(buildCommandDocumentation(await cli.snapshot()));
 		// Newlines and CR collapse to spaces during normalisation.
 		expect(spec.description).toBe("first line second line still same line");
 		// And the value never contains a raw newline that could break

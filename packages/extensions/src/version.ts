@@ -1,4 +1,5 @@
 import {
+	CrustError,
 	type Extension,
 	type ExtensionId,
 	type ExtensionContext,
@@ -21,10 +22,7 @@ export interface VersionOptions {
 	readonly format?: "plain" | ((version: string, context: ExtensionContext) => string);
 }
 
-function versionFactory(
-	versionValue: VersionValue = "0.0.0",
-	options: VersionOptions = {},
-): Extension {
+function versionFactory(versionValue?: VersionValue, options: VersionOptions = {}): Extension {
 	const { format } = options;
 
 	return defineExtension(VERSION, {
@@ -44,7 +42,14 @@ function versionFactory(
 				if (context.commandPath.length !== 1 || context.flags.version !== true) return;
 
 				// oxlint-disable-next-line anti-slop/no-runtime-typeof -- discriminating a typed options union.
-				const resolvedVersion = typeof versionValue === "function" ? versionValue() : versionValue;
+				const override = typeof versionValue === "function" ? versionValue() : versionValue;
+				const resolvedVersion = override ?? context.rootCommand.meta.version;
+				if (resolvedVersion === undefined) {
+					throw new CrustError(
+						"DEFINITION",
+						"The version extension requires a version in new Crust(name, { version }) or version(value)",
+					);
+				}
 				const line =
 					format === "plain"
 						? resolvedVersion

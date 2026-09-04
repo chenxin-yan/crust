@@ -374,7 +374,7 @@ describe("buildManifest", () => {
 			expect(flag?.multiple).toBe(true);
 		});
 
-		it("serializes flag default values as strings", async () => {
+		it("formats flag defaults like core help", async () => {
 			const cmd = makeCommand({
 				meta: { name: "serve" },
 				flags: {
@@ -398,11 +398,11 @@ describe("buildManifest", () => {
 			const flagMap = Object.fromEntries(node.flags.map((f) => [f.name, f]));
 
 			expect(flagMap.port?.default).toBe("8080");
-			expect(flagMap.host?.default).toBe("localhost");
+			expect(flagMap.host?.default).toBe('"localhost"');
 			expect(flagMap.watch?.default).toBe("true");
 		});
 
-		it("serializes multiple flag array defaults as JSON", async () => {
+		it("formats multiple flag defaults as comma-separated values", async () => {
 			const cmd = makeCommand({
 				meta: { name: "build" },
 				flags: {
@@ -418,7 +418,7 @@ describe("buildManifest", () => {
 			const node = buildManifest(await snapshotFixture(cmd));
 			const [flag] = node.flags;
 
-			expect(flag?.default).toBe('["src/index.ts","src/cli.ts"]');
+			expect(flag?.default).toBe("src/index.ts, src/cli.ts");
 		});
 
 		it("omits description and default when not provided on flag", async () => {

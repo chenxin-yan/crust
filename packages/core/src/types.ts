@@ -610,6 +610,8 @@ export interface CommandMeta {
 	name: string;
 	/** Human-readable description for help text */
 	description?: string;
+	/** Application version exposed to Extensions and tooling on the root command. */
+	version?: string;
 	/** Custom usage string (overrides auto-generated usage) */
 	usage?: string;
 	/** Plain-text sections rendered after built-in command documentation. */

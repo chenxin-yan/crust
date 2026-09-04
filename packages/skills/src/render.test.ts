@@ -380,7 +380,7 @@ describe("renderSkill", () => {
 				"`-v`, `--verbose`, `--debug`, `--no-verbose`, `--no-debug`",
 			);
 			expect(build?.content).toContain("`--target`");
-			expect(build?.content).toContain("Default: `dist`");
+			expect(build?.content).toContain('Default: `"dist"`');
 			expect(build?.content).toContain("| Yes |");
 		});
 

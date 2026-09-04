@@ -8,6 +8,7 @@ import {
 	detectInstalledAgents,
 	getUniversalAgents,
 	resolveAgentPath,
+	resolveEffectiveScope,
 } from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";
 import { isOwnedSkillLink, skillLinkTarget } from "./link.ts";
@@ -109,7 +110,7 @@ export async function installSkill(options: InstallSkillOptions): Promise<Instal
 	}
 
 	const agents = options.agents ?? [...getUniversalAgents(), ...(await detectInstalledAgents())];
-	const scope = options.scope ?? "global";
+	const scope = resolveEffectiveScope(options.scope ?? "global");
 	const results: AgentResult[] = [];
 
 	for (const [outputDir, groupedAgents] of groupAgentsByOutputDir(agents, scope, source.name)) {
@@ -135,7 +136,7 @@ export async function installSkill(options: InstallSkillOptions): Promise<Instal
 		}
 
 		for (const agent of groupedAgents) {
-			results.push({ agent, outputDir, status });
+			results.push({ agent, outputDir, scope, status });
 		}
 	}
 
@@ -147,7 +148,7 @@ export async function uninstallSkill(
 	options: UninstallSkillOptions,
 ): Promise<UninstallSkillResult> {
 	const agents = options.agents ?? [...ALL_AGENTS];
-	const scope = options.scope ?? "global";
+	const scope = resolveEffectiveScope(options.scope ?? "global");
 	const results: UninstallSkillResult["agents"] = [];
 
 	for (const [outputDir, groupedAgents] of groupAgentsByOutputDir(agents, scope, options.name)) {
@@ -155,7 +156,7 @@ export async function uninstallSkill(
 		const removed = inspection.status === "owned";
 		if (removed) await unlink(outputDir);
 		for (const agent of groupedAgents) {
-			results.push({ agent, outputDir, status: removed ? "removed" : "not-found" });
+			results.push({ agent, outputDir, scope, status: removed ? "removed" : "not-found" });
 		}
 	}
 	return { agents: results };
@@ -164,7 +165,7 @@ export async function uninstallSkill(
 /** Reports the ownership and health of each requested agent-directory entry. */
 export async function getSkillStatus(options: SkillStatusOptions): Promise<SkillStatusResult> {
 	const agents = options.agents ?? [...ALL_AGENTS];
-	const scope = options.scope ?? "global";
+	const scope = resolveEffectiveScope(options.scope ?? "global");
 	const expectedSourceDir = resolveSourceDir(options.sourceDir);
 	const results: SkillStatusResult["agents"] = [];
 
@@ -176,7 +177,7 @@ export async function getSkillStatus(options: SkillStatusOptions): Promise<Skill
 					? "linked"
 					: "dangling"
 				: inspection.status;
-		for (const agent of groupedAgents) results.push({ agent, outputDir, status });
+		for (const agent of groupedAgents) results.push({ agent, outputDir, scope, status });
 	}
 	return { agents: results };
 }

@@ -241,6 +241,7 @@ describe("command metadata", () => {
 	it("preserves root metadata through builder calls", async () => {
 		const app = new Crust("test", {
 			description: "A test command",
+			version: "1.2.3",
 			usage: "test [options]",
 		})
 			.flags({ name: "verbose", type: "boolean" })
@@ -250,6 +251,7 @@ describe("command metadata", () => {
 			meta: {
 				name: "test",
 				description: "A test command",
+				version: "1.2.3",
 				usage: "test [options]",
 			},
 			flags: { verbose: { type: "boolean" } },
@@ -271,6 +273,19 @@ describe("command metadata", () => {
 			description: "A subcommand",
 			usage: "cli sub [options]",
 		});
+	});
+
+	it("keeps version metadata on the root command", async () => {
+		const app = new Crust("cli", { version: "1.0.0" }).add(
+			defineCommand(
+				"sub",
+				// @ts-expect-error -- application versions belong to the root constructor
+				{ version: "2.0.0" },
+				(command) => command,
+			),
+		);
+
+		expect((await app.snapshot()).subCommands.sub?.meta.version).toBeUndefined();
 	});
 });
 

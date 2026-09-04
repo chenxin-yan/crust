@@ -8,9 +8,8 @@ description: Add a root-only version flag.
 ```ts
 import { Crust } from "@crustjs/core";
 import { version } from "@crustjs/extensions";
-import pkg from "../package.json";
 
-const app = new Crust("my-cli").extend(version(pkg.version)).action(() => {});
+const app = new Crust("my-cli", { version: "1.2.3" }).extend(version()).action(() => {});
 
 await app.execute();
 ```
@@ -34,7 +33,7 @@ const version: ((value?: VersionValue, options?: VersionOptions) => Extension) &
 };
 ```
 
-The default value is `"0.0.0"`. Pass a function to resolve the version only when the flag is handled:
+With no value override, `version()` reads `CommandSnapshot.meta.version` from the root. If neither the root metadata nor an override provides a version, handling `--version` reports a `DEFINITION` error. Pass a function to resolve an override only when the flag is handled:
 
 ```ts
 const app = new Crust("my-cli").extend(version(() => process.env.APP_VERSION ?? "dev"));

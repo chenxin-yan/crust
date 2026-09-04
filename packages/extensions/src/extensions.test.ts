@@ -614,12 +614,21 @@ describe("built-in extensions", () => {
 		expect(process.exitCode).toBeFalsy();
 	});
 
-	it("version extension handles --version", async () => {
-		const app = new Crust("app").extend(version("1.2.3")).action(() => {});
+	it("version extension handles --version from root metadata", async () => {
+		const app = new Crust("app", { version: "1.2.3" }).extend(version()).action(() => {});
 
 		await app.execute({ argv: ["--version"] });
 
 		expect(getStdout()).toContain("app v1.2.3");
+	});
+
+	it("version extension reports a missing version", async () => {
+		const app = new Crust("app").extend(version()).action(() => {});
+
+		await app.execute({ argv: ["--version"] });
+
+		expect(getStderr()).toContain("version extension requires a version");
+		expect(process.exitCode).toBe(1);
 	});
 
 	it("version extension handles -v alias", async () => {

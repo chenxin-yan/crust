@@ -34,12 +34,19 @@ type AliasShapeErrors<Name extends string, C> =
 			: never
 		: never;
 
-/** Brand command config containing a statically known invalid alias. */
-export type ValidateCommandConfig<Name extends string, C> = string extends Name
+type AliasShapeBrand<Name extends string, C> = [AliasShapeErrors<Name, C>] extends [never]
 	? {}
-	: [AliasShapeErrors<Name, C>] extends [never]
-		? {}
-		: { readonly FIX_ALIAS_SHAPE: AliasShapeErrors<Name, C> };
+	: { readonly FIX_ALIAS_SHAPE: AliasShapeErrors<Name, C> };
+
+type RootVersionBrand<C> = "version" extends keyof C
+	? { readonly FIX_ROOT_VERSION: 'Command config "version" belongs on the root Crust constructor' }
+	: {};
+
+/** Brand command config containing statically known invalid metadata. */
+export type ValidateCommandConfig<Name extends string, C> = (string extends Name
+	? {}
+	: AliasShapeBrand<Name, C>) &
+	RootVersionBrand<C>;
 
 type EmptyNameError = { readonly FIX_EMPTY_NAME: "Command name must be a non-empty string" };
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { defineCommand } from "../index.ts";
 import { type AnyCrust, Crust } from "./crust.ts";
-import { buildCommandDocumentation, formatDescription } from "./documentation.ts";
+import { buildCommandDocumentation, formatDefault, formatDescription } from "./documentation.ts";
 
 async function docs(app: AnyCrust) {
 	return buildCommandDocumentation(await app.snapshot());
@@ -10,6 +10,8 @@ async function docs(app: AnyCrust) {
 
 describe("formatDescription", () => {
 	it("formats descriptions, defaults, and choices", () => {
+		expect(formatDefault(["json", "text"])).toBe("json, text");
+		expect(formatDefault("json")).toBe('"json"');
 		expect(formatDescription("Output", ["json", "text"], ["pretty", "compact"])).toBe(
 			"Output [default: json, text] [choices: pretty, compact]",
 		);
@@ -87,12 +89,23 @@ describe("buildCommandDocumentation", () => {
 		expect(model.flags[1]?.spellings).toEqual(["--help"]);
 	});
 
-	it("retains defaults and choices as renderer-neutral data", async () => {
+	it("retains defaults, choices, and unfiltered sections as renderer-neutral data", async () => {
 		const model = await docs(
-			new Crust("app")
+			new Crust("app", {
+				sections: [{ title: "Notes", body: "Root notes" }],
+			})
 				.flags({ name: "target", type: "string", default: "bun", choices: ["bun", "node"] })
+				.add(
+					defineCommand(
+						"child",
+						{ sections: [{ title: "Child notes", body: "Details" }] },
+						(command) => command,
+					),
+				)
 				.action(() => {}),
 		);
 		expect(model.flags[0]).toMatchObject({ default: "bun", choices: ["bun", "node"] });
+		expect(model.sections).toEqual([{ title: "Notes", body: "Root notes" }]);
+		expect(model.children[0]?.sections).toEqual([{ title: "Child notes", body: "Details" }]);
 	});
 });

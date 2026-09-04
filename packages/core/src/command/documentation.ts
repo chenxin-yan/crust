@@ -1,9 +1,16 @@
 import { isListed } from "../sections.ts";
-import type { DeclaredDefault } from "../types.ts";
+import type { CommandSection, DeclaredDefault } from "../types.ts";
 import type { CommandSnapshot, FlagSnapshot } from "./snapshot.ts";
 
 function isNonFiniteNumber(value: DeclaredDefault): value is number {
 	return typeof value === "number" && !Number.isFinite(value);
+}
+
+/** Format a declared default value for command documentation. */
+export function formatDefault(value: DeclaredDefault): string {
+	if (isNonFiniteNumber(value)) return String(value);
+	if (Array.isArray(value)) return value.map(String).join(", ");
+	return JSON.stringify(value) ?? String(value);
 }
 
 /** Format a definition's description and optional default/choice annotations. */
@@ -15,12 +22,7 @@ export function formatDescription(
 ): string {
 	const parts = description ? [description] : [];
 	if (defaultValue !== undefined) {
-		const value = isNonFiniteNumber(defaultValue)
-			? String(defaultValue)
-			: Array.isArray(defaultValue)
-				? defaultValue.map(String).join(", ")
-				: JSON.stringify(defaultValue);
-		parts.push(formatAnnotation(`[default: ${value}]`));
+		parts.push(formatAnnotation(`[default: ${formatDefault(defaultValue)}]`));
 	}
 	if (choices?.length) parts.push(formatAnnotation(`[choices: ${choices.join(", ")}]`));
 	return parts.join(" ");
@@ -140,6 +142,8 @@ export interface CommandDocumentation {
 	readonly args: readonly DocumentationArg[];
 	/** Effective flags (Context-owned + local), in definition order. */
 	readonly flags: readonly DocumentationFlag[];
+	/** Unfiltered command-authored and Extension-contributed documentation sections. */
+	readonly sections: readonly CommandSection[];
 	/** Visible children only; hidden commands remain invocable but are not documentation. */
 	readonly children: readonly CommandDocumentation[];
 }
@@ -207,6 +211,7 @@ function buildNode(command: CommandSnapshot, path: readonly string[]): CommandDo
 		hasAction: command.hasAction,
 		args: Object.freeze(args),
 		flags: Object.freeze(flags),
+		sections: Object.freeze([...(command.meta.sections ?? [])]),
 		children: Object.freeze(children),
 	});
 }

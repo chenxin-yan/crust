@@ -1,6 +1,5 @@
 import { dirname, relative } from "node:path";
 
-import { resolveEffectiveScope } from "./agents.ts";
 import type { Scope } from "./types.ts";
 
 /** Returns whether a symlink target carries Crust's skill ownership signature. */
@@ -10,7 +9,5 @@ export function isOwnedSkillLink(target: string, name: string): boolean {
 }
 
 export function skillLinkTarget(sourceDir: string, outputDir: string, scope: Scope): string {
-	return resolveEffectiveScope(scope) === "project"
-		? relative(dirname(outputDir), sourceDir)
-		: sourceDir;
+	return scope === "project" ? relative(dirname(outputDir), sourceDir) : sourceDir;
 }

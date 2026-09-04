@@ -7,7 +7,11 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 export { BUILD_OUT_DIR_ENV, SNAPSHOT_PATH_ENV } from "./command/invocation.ts";
-export { buildCommandDocumentation, formatDescription } from "./command/documentation.ts";
+export {
+	buildCommandDocumentation,
+	formatDefault,
+	formatDescription,
+} from "./command/documentation.ts";
 export type {
 	CommandDocumentation,
 	DocumentationArg,

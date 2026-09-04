@@ -17,10 +17,16 @@ const choices: ReconcileChoice[] = [
 const universal = ["amp"] as const;
 
 const sharedStatuses: SkillStatusResult["agents"] = [
-	{ agent: "amp", outputDir: "/project/.agents/skills/demo", status: "linked" },
+	{
+		agent: "amp",
+		outputDir: "/project/.agents/skills/demo",
+		scope: "project",
+		status: "linked",
+	},
 	{
 		agent: "antigravity",
 		outputDir: "/project/.agents/skills/demo",
+		scope: "project",
 		status: "linked",
 	},
 ];

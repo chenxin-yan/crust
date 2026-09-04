@@ -374,9 +374,8 @@ export async function detectInstalledAgents(): Promise<AgentTarget[]> {
  * @internal
  */
 export function resolveAgentPath(agent: AgentTarget, scope: Scope, name: string): string {
-	const effectiveScope = resolveEffectiveScope(scope);
 	const cfg = AGENTS[agent];
-	if (effectiveScope === "project") {
+	if (scope === "project") {
 		return join(process.cwd(), cfg.projectSkillsDir, name);
 	}
 	return join(cfg.globalSkillsDir(homedir()), name);

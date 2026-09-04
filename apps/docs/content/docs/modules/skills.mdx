@@ -53,7 +53,7 @@ Point the extension at the packaged skills directory with a package-relative fil
 import { Crust } from "@crustjs/core";
 import { skill } from "@crustjs/skills";
 
-export const app = new Crust("my-cli", { description: "My CLI" })
+export const app = new Crust("my-cli", { description: "My CLI", version: "1.2.3" })
   .extend(
     skill({
       distDir: new URL("../skills", import.meta.url),
@@ -63,7 +63,7 @@ export const app = new Crust("my-cli", { description: "My CLI" })
   .action(() => {});
 ```
 
-Each authored extra is copied into the build output next to the generated skill. An authored extra with the generated skill's name replaces that generated skill; duplicate names between authored extras remain an error. Use `name` and `description` to customize the generated skill, or `generated: false` to ship only authored `extras`; a build that would produce no skills at all is an error. `distDir` is only read at runtime, for discovery and installation. Keep authored skill directories outside the build output; the build refuses an extra nested inside it.
+The generated skill records the root `CommandSnapshot.meta.version` when present; the build hook never reads `package.json` from the working directory. Each authored extra is copied into the build output next to the generated skill. An authored extra with the generated skill's name replaces that generated skill; duplicate names between authored extras remain an error. Use `name` and `description` to customize the generated skill, or `generated: false` to ship only authored `extras`; a build that would produce no skills at all is an error. `distDir` is only read at runtime, for discovery and installation. Keep authored skill directories outside the build output; the build refuses an extra nested inside it.
 
 The extension registers `my-cli skill` and `my-cli skill update`. It also contributes an **Agent skills** section to root help and generated man pages. Each shipped skill is listed by name and description with its logical source path — relative to the working directory when the packaged directory is inside it, absolute otherwise — so agents can discover and load skills without installing them first. Run builds from the project root containing the packaged skills directory to keep absolute build-machine paths out of generated artifacts.
 
@@ -102,7 +102,7 @@ Additional agents are detected through a non-executing `PATH` lookup. The export
 | Universal  | `~/.agents/skills/<name>`         | `.agents/skills/<name>`           |
 | Additional | Agent-specific convention per CLI | Agent-specific convention per CLI |
 
-When the working directory is the home directory, project scope resolves to global scope.
+When the working directory is the home directory, project scope resolves to global scope. Every per-agent result from `installSkill()`, `getSkillStatus()`, and `uninstallSkill()` includes the effective `scope`, so callers can observe that remap.
 
 ## Low-level link operations
 

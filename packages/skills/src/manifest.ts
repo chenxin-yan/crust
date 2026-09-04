@@ -1,7 +1,7 @@
 import type { CommandSnapshot } from "@crustjs/core";
 import {
 	buildCommandDocumentation,
-	isListed,
+	formatDefault,
 	sectionsFor,
 	type CommandDocumentation,
 	type DocumentationArg,
@@ -13,40 +13,29 @@ import { SKILLS } from "./extension.ts";
 import type { ManifestArg, ManifestFlag, ManifestNode } from "./types.ts";
 
 export function buildManifest(command: CommandSnapshot): ManifestNode {
-	const rootName = normalizeName(command.meta.name);
-	if (
-		Object.values(command.subCommands).some(
-			(child) => isListed(child) && normalizeName(child.meta.name) === rootName,
-		)
-	) {
+	const model = buildCommandDocumentation(command);
+	const rootName = normalizeName(model.name);
+	if (model.children.some((child) => normalizeName(child.name) === rootName)) {
 		throw new Error(
 			`Cannot generate skills when a direct subcommand has the root command name "${rootName}".`,
 		);
 	}
-	return buildNode(buildCommandDocumentation(command), command);
+	return buildNode(model);
 }
-function buildNode(model: CommandDocumentation, source: CommandSnapshot): ManifestNode {
+function buildNode(model: CommandDocumentation): ManifestNode {
 	return {
 		name: normalizeName(model.name),
 		path: model.path.map(normalizeName),
 		description: model.description,
 		usage: model.usage,
-		sections: sectionsFor(source.meta.sections, SKILLS).map(({ title, body }) => ({
+		sections: sectionsFor(model.sections, SKILLS).map(({ title, body }) => ({
 			title,
 			body,
 		})),
 		runnable: model.hasAction,
 		args: model.args.map(normalizeArg),
 		flags: [...model.flags].sort((a, b) => a.name.localeCompare(b.name)).map(normalizeFlag),
-		children: [...model.children]
-			.sort((a, b) => a.name.localeCompare(b.name))
-			.map((child) => {
-				const snapshot = source.subCommands[child.name];
-				if (snapshot === undefined) {
-					throw new Error(`Missing command snapshot for documented child "${child.name}".`);
-				}
-				return buildNode(child, snapshot);
-			}),
+		children: [...model.children].sort((a, b) => a.name.localeCompare(b.name)).map(buildNode),
 	};
 }
 function normalizeName(raw: string): string {
@@ -78,6 +67,8 @@ function normalizeFlag(flag: DocumentationFlag): ManifestFlag {
 function manifestType(type: string | undefined): BaseValueType {
 	return type === "number" || type === "boolean" ? type : "string";
 }
-function serializeDefault<Value>(value: Value): string {
-	return Array.isArray(value) ? JSON.stringify(value) : String(value);
+type DocumentationDefault = DocumentationArg["default"];
+
+function serializeDefault(value: DocumentationDefault): string {
+	return formatDefault(value);
 }

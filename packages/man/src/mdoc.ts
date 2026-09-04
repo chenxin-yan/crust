@@ -3,7 +3,6 @@ import {
 	type CommandSnapshot,
 	formatDescription,
 	sectionsFor,
-	visibleSectionsFor,
 	type CommandDocumentation,
 	type DocumentationFlag,
 } from "@crustjs/core/tooling";
@@ -38,6 +37,24 @@ function commandLabel(command: CommandDocumentation): string {
 	return command.aliases.length === 0
 		? command.name
 		: `${command.name} (${command.aliases.join(", ")})`;
+}
+function commandSectionGroups(command: CommandDocumentation): readonly {
+	readonly path: readonly string[];
+	readonly sections: readonly CommandDocumentation["sections"][number][];
+}[] {
+	const groups: {
+		path: readonly string[];
+		sections: CommandDocumentation["sections"][number][];
+	}[] = [];
+	function visit(node: CommandDocumentation, path: readonly string[]): void {
+		const sections = [...sectionsFor(node.sections, MAN)];
+		if (sections.length > 0) groups.push({ path, sections });
+		for (const child of [...node.children].sort((a, b) => a.name.localeCompare(b.name))) {
+			visit(child, [...path, child.name]);
+		}
+	}
+	visit(command, []);
+	return groups;
 }
 function resolveDdLine(explicit?: string): string {
 	if (explicit) return explicit;
@@ -121,11 +138,11 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		}
 		lines.push(".El");
 	}
-	for (const metadataSection of sectionsFor(root.meta.sections, MAN)) {
+	for (const metadataSection of sectionsFor(model.sections, MAN)) {
 		lines.push(`.Sh ${shTitle(metadataSection.title)}`);
 		for (const line of metadataSection.body.split("\n")) lines.push(escapeMdocBodyLine(line));
 	}
-	const commandSections = visibleSectionsFor(root, MAN).filter(({ path }) => path.length > 0);
+	const commandSections = commandSectionGroups(model).filter(({ path }) => path.length > 0);
 	if (commandSections.length > 0) {
 		lines.push(".Sh COMMANDS");
 		for (const group of commandSections) {

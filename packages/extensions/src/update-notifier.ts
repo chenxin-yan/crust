@@ -5,6 +5,7 @@
 import { basename } from "node:path";
 
 import {
+	CrustError,
 	type Extension,
 	type ExtensionId,
 	defineExtension,
@@ -68,23 +69,16 @@ export interface UpdateNotifierCacheConfig {
  * ```ts
  * import { updateNotifier } from "@crustjs/extensions";
  *
- * updateNotifier({
- *   packageName: "my-cli",
- *   currentVersion: "1.2.3",
- * });
+ * updateNotifier({ packageName: "my-cli" });
  * ```
  */
 export interface UpdateNotifierOptions {
 	/**
-	 * The current version of the CLI package.
+	 * Override the current version of the CLI package.
 	 *
-	 * Typically sourced from `package.json`:
-	 * ```ts
-	 * import pkg from "../package.json";
-	 * updateNotifier({ packageName: pkg.name, currentVersion: pkg.version });
-	 * ```
+	 * @default The root command's `meta.version`
 	 */
-	currentVersion: string;
+	currentVersion?: string;
 
 	/**
 	 * The npm package name to check for updates.
@@ -418,17 +412,16 @@ function resolveUpdateCommand(
  * - The update notice is emitted *after* the command action completes.
  * - Duplicate notifications for the same version are suppressed.
  *
- * @param options - Extension configuration. `currentVersion` and `packageName` are required.
+ * @param options - Extension configuration. `packageName` is required.
  * @returns An Extension registered with `.extend()`.
  *
  * @example
  * ```ts
  * import { Crust } from "@crustjs/core";
  * import { updateNotifier } from "@crustjs/extensions";
- * import pkg from "../package.json";
  *
- * const app = new Crust("my-cli", { description: "My awesome CLI" })
- *   .extend(updateNotifier({ packageName: "my-cli", currentVersion: pkg.version }))
+ * const app = new Crust("my-cli", { description: "My awesome CLI", version: "1.2.3" })
+ *   .extend(updateNotifier({ packageName: "my-cli" }))
  *   .action(() => {
  *     console.log("Hello!");
  *   });
@@ -452,6 +445,14 @@ function updateNotifierFactory(options: UpdateNotifierOptions): Extension {
 		hooks: {
 			async postRun(context, outcome) {
 				if (outcome.status !== "completed") return;
+
+				const resolvedCurrentVersion = currentVersion ?? context.rootCommand.meta.version;
+				if (resolvedCurrentVersion === undefined) {
+					throw new CrustError(
+						"DEFINITION",
+						"The update notifier extension requires a version in new Crust(name, { version }) or currentVersion",
+					);
+				}
 
 				try {
 					let cacheAdapter: UpdateNotifierCacheAdapter = NO_CACHE_ADAPTER;
@@ -479,11 +480,11 @@ function updateNotifierFactory(options: UpdateNotifierOptions): Extension {
 						// Cache is still fresh — use cached version if available
 						if (
 							state.latestVersion &&
-							isNewerVersion(currentVersion, state.latestVersion) &&
+							isNewerVersion(resolvedCurrentVersion, state.latestVersion) &&
 							state.lastNotifiedVersion !== state.latestVersion
 						) {
 							emitUpdateNotice(
-								currentVersion,
+								resolvedCurrentVersion,
 								state.latestVersion,
 								resolvedUpdateCommand,
 								updateDocsUrl,
@@ -518,11 +519,11 @@ function updateNotifierFactory(options: UpdateNotifierOptions): Extension {
 
 					// ── Emit notice if newer and not already notified ─────────
 					if (
-						isNewerVersion(currentVersion, latestVersion) &&
+						isNewerVersion(resolvedCurrentVersion, latestVersion) &&
 						state.lastNotifiedVersion !== latestVersion
 					) {
 						emitUpdateNotice(
-							currentVersion,
+							resolvedCurrentVersion,
 							latestVersion,
 							resolvedUpdateCommand,
 							updateDocsUrl,

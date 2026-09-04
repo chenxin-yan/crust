@@ -1,7 +1,10 @@
 import { stripVTControlCharacters } from "node:util";
 
-import type { ArgSnapshot, CommandSnapshot, FlagSnapshot } from "@crustjs/core";
-import { isListed } from "@crustjs/core/tooling";
+import type {
+	CommandDocumentation,
+	DocumentationArg,
+	DocumentationFlag,
+} from "@crustjs/core/tooling";
 
 import { assertSafeChoiceValue, assertSafeIdentifier, sanitizeFreeText } from "./escape.ts";
 import type { CompletionArg, CompletionCommand, CompletionFlag } from "./spec.ts";
@@ -18,28 +21,23 @@ function normaliseDescription(value: string | undefined): string | undefined {
 }
 
 /**
- * Project a single `FlagDef` (keyed by `name` in the snapshot `flags`) onto a
- * `CompletionFlag`. The walker calls this for every entry of every visible
- * command's `flags` map so propagating flags surface at the right
- * depth.
+ * Project a single documentation flag onto a `CompletionFlag`.
  */
-function walkFlag(name: string, def: FlagSnapshot): CompletionFlag {
-	assertSafeIdentifier(name, "flag name");
-	const aliases = def.aliases?.filter((alias) => alias.length > 0);
-	if (aliases !== undefined) {
-		for (const alias of aliases) assertSafeIdentifier(alias, "flag alias");
-	}
+function walkFlag(def: DocumentationFlag): CompletionFlag {
+	assertSafeIdentifier(def.name, "flag name");
+	const aliases = def.aliases.filter((alias) => alias.length > 0);
+	for (const alias of aliases) assertSafeIdentifier(alias, "flag alias");
 	if (def.short !== undefined && def.short.length > 0) {
 		assertSafeIdentifier(def.short, "flag short alias");
 	}
 
 	const description = normaliseDescription(def.description);
 	const common = {
-		name,
+		name: def.name,
 		...(def.short !== undefined && def.short.length > 0 ? { short: def.short } : {}),
-		...(aliases !== undefined && aliases.length > 0 ? { aliases } : {}),
+		...(aliases.length > 0 ? { aliases } : {}),
 		...(description === undefined ? {} : { description }),
-		...(def.multiple === true ? { multiple: true as const } : {}),
+		...(def.multiple ? { multiple: true as const } : {}),
 		negatable: def.negatable,
 	};
 
@@ -72,14 +70,14 @@ function walkFlag(name: string, def: FlagSnapshot): CompletionFlag {
 	return { ...common, type: "string", takesValue: true };
 }
 
-/** Project a single `ArgDef` onto a `CompletionArg`. */
-function walkArg(def: ArgSnapshot): CompletionArg {
+/** Project a single documentation argument onto a `CompletionArg`. */
+function walkArg(def: DocumentationArg): CompletionArg {
 	assertSafeIdentifier(def.name, "arg name");
 	const description = normaliseDescription(def.description);
 	const common = {
 		name: def.name,
-		required: def.required === true,
-		variadic: def.variadic === true,
+		required: def.required,
+		variadic: def.variadic,
 		...(description === undefined ? {} : { description }),
 	};
 
@@ -101,48 +99,29 @@ function walkArg(def: ArgSnapshot): CompletionArg {
 }
 
 /**
- * Build a completion command from a `CommandSnapshot`, recursively filtering
- * hidden subcommands at every level.
+ * Build a completion command from the shared documentation model.
  */
-export function walkCommandNode(node: CommandSnapshot): CompletionCommand {
-	assertSafeIdentifier(node.meta.name, "command name");
-	const nodeAliases = node.meta.aliases;
-	if (nodeAliases !== undefined) {
-		for (const alias of nodeAliases) {
-			assertSafeIdentifier(alias, "command alias");
-		}
+export function walkCommandNode(node: CommandDocumentation): CompletionCommand {
+	assertSafeIdentifier(node.name, "command name");
+	for (const alias of node.aliases) {
+		assertSafeIdentifier(alias, "command alias");
 	}
-	const flags: CompletionFlag[] = [];
-	for (const [flagName, flagDef] of Object.entries(node.flags)) {
-		flags.push(walkFlag(flagName, flagDef));
-	}
-
-	const args: CompletionArg[] = [];
-	for (const argDef of node.args) {
-		args.push(walkArg(argDef));
-	}
-
-	const subCommands: CompletionCommand[] = [];
-	for (const subNode of Object.values(node.subCommands)) {
-		if (!isListed(subNode)) continue;
-		subCommands.push(walkCommandNode(subNode));
-	}
+	const flags = node.flags.map(walkFlag);
+	const args = node.args.map(walkArg);
+	const subCommands = node.children.map(walkCommandNode);
 
 	const result: CompletionCommand = {
-		name: node.meta.name,
+		name: node.name,
 		flags,
 		args,
 		subCommands,
 	};
 
-	const aliases = node.meta.aliases;
-	if (aliases !== undefined && aliases.length > 0) {
-		// `CommandMeta.aliases` is `readonly string[] | undefined`. Preserve
-		// readonly-ness; template code only needs to enumerate.
-		result.aliases = aliases;
+	if (node.aliases.length > 0) {
+		result.aliases = node.aliases;
 	}
 
-	const description = normaliseDescription(node.meta.description);
+	const description = normaliseDescription(node.description);
 	if (description !== undefined) {
 		result.description = description;
 	}
