@@ -57,7 +57,12 @@ bun run check
 bun run check:types
 ```
 
-Run `bun run test` when your change affects runtime behavior.
+Run `bun run test` when your change affects runtime behavior. Compiler runtime or emission changes also require the Node/Go differential corpus (with both `node` and `go` on `PATH`):
+
+```sh
+cd packages/compiler
+bun run test:corpus
+```
 
 ## Working on Packages
 
