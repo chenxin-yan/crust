@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { text } from "node:stream/consumers";
 
+import type { InvocationIO } from "@crustjs/core";
 import { BUILD_OUT_DIR_ENV, type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
 import { yellow } from "@crustjs/style";
 import { isErrnoException } from "@crustjs/utils/error";
@@ -19,13 +20,21 @@ import { runProcess, which } from "@crustjs/utils/process";
 export const BUILD_RUNTIMES = ["bun", "deno", "node"] as const;
 export type BuildRuntime = (typeof BUILD_RUNTIMES)[number];
 
-/**
- * All Bun compile targets supported by `crust build`.
- *
- * Uses baseline x64 variants for maximum CPU compatibility (Nehalem 2008+).
- * ARM64 targets have no baseline/modern distinction.
- */
-export const SUPPORTED_TARGETS = [
+export type TargetInfo = {
+	alias: string;
+	platformKey: string;
+	unameKey: string;
+	os: "linux" | "darwin" | "win32";
+	cpu: "x64" | "arm64";
+};
+
+export type TargetTable<T extends string> = {
+	runtime: "Bun" | "Deno";
+	targets: readonly T[];
+	info: Record<T, TargetInfo>;
+};
+
+const BUN_TARGET_NAMES = [
 	"bun-linux-x64-baseline",
 	"bun-linux-arm64",
 	"bun-darwin-x64",
@@ -34,77 +43,58 @@ export const SUPPORTED_TARGETS = [
 	"bun-windows-arm64",
 ] as const;
 
-export type BunTarget = (typeof SUPPORTED_TARGETS)[number];
+export type BunTarget = (typeof BUN_TARGET_NAMES)[number];
 
-/**
- * Consolidated metadata for every supported Bun compile target.
- *
- * Single source of truth for target metadata.
- */
-export type TargetInfo = {
-	/** Human-friendly alias (e.g. "linux-x64", "darwin-arm64") */
-	alias: string;
-	/** `process.platform`-`process.arch` key (e.g. "linux-x64", "win32-arm64") */
-	platformKey: string;
-	/** `uname -s`-`uname -m` key used by shell resolvers (e.g. "Linux-x86_64") */
-	unameKey: string;
-	/** npm `os` field value */
-	os: "linux" | "darwin" | "win32";
-	/** npm `cpu` field value */
-	cpu: "x64" | "arm64";
-};
+export const BUN_TARGETS = {
+	runtime: "Bun",
+	targets: BUN_TARGET_NAMES,
+	info: {
+		"bun-linux-x64-baseline": {
+			alias: "linux-x64",
+			platformKey: "linux-x64",
+			unameKey: "Linux-x86_64",
+			os: "linux",
+			cpu: "x64",
+		},
+		"bun-linux-arm64": {
+			alias: "linux-arm64",
+			platformKey: "linux-arm64",
+			unameKey: "Linux-aarch64",
+			os: "linux",
+			cpu: "arm64",
+		},
+		"bun-darwin-x64": {
+			alias: "darwin-x64",
+			platformKey: "darwin-x64",
+			unameKey: "Darwin-x86_64",
+			os: "darwin",
+			cpu: "x64",
+		},
+		"bun-darwin-arm64": {
+			alias: "darwin-arm64",
+			platformKey: "darwin-arm64",
+			unameKey: "Darwin-arm64",
+			os: "darwin",
+			cpu: "arm64",
+		},
+		"bun-windows-x64-baseline": {
+			alias: "windows-x64",
+			platformKey: "win32-x64",
+			unameKey: "Windows-x64",
+			os: "win32",
+			cpu: "x64",
+		},
+		"bun-windows-arm64": {
+			alias: "windows-arm64",
+			platformKey: "win32-arm64",
+			unameKey: "Windows-arm64",
+			os: "win32",
+			cpu: "arm64",
+		},
+	},
+} as const satisfies TargetTable<BunTarget>;
 
-export const TARGET_INFO = {
-	"bun-linux-x64-baseline": {
-		alias: "linux-x64",
-		platformKey: "linux-x64",
-		unameKey: "Linux-x86_64",
-		os: "linux",
-		cpu: "x64",
-	},
-	"bun-linux-arm64": {
-		alias: "linux-arm64",
-		platformKey: "linux-arm64",
-		unameKey: "Linux-aarch64",
-		os: "linux",
-		cpu: "arm64",
-	},
-	"bun-darwin-x64": {
-		alias: "darwin-x64",
-		platformKey: "darwin-x64",
-		unameKey: "Darwin-x86_64",
-		os: "darwin",
-		cpu: "x64",
-	},
-	"bun-darwin-arm64": {
-		alias: "darwin-arm64",
-		platformKey: "darwin-arm64",
-		unameKey: "Darwin-arm64",
-		os: "darwin",
-		cpu: "arm64",
-	},
-	"bun-windows-x64-baseline": {
-		alias: "windows-x64",
-		platformKey: "win32-x64",
-		unameKey: "Windows-x64",
-		os: "win32",
-		cpu: "x64",
-	},
-	"bun-windows-arm64": {
-		alias: "windows-arm64",
-		platformKey: "win32-arm64",
-		unameKey: "Windows-arm64",
-		os: "win32",
-		cpu: "arm64",
-	},
-} as const satisfies Record<BunTarget, TargetInfo>;
-
-/**
- * Deno 2.9 compile targets, verified against `deno compile --help`.
- * Keep this table separate from Bun's target namespace: the compilers use
- * different canonical strings even when they describe the same platform.
- */
-export const SUPPORTED_DENO_TARGETS = [
+const DENO_TARGET_NAMES = [
 	"x86_64-unknown-linux-gnu",
 	"aarch64-unknown-linux-gnu",
 	"x86_64-apple-darwin",
@@ -113,123 +103,87 @@ export const SUPPORTED_DENO_TARGETS = [
 	"aarch64-pc-windows-msvc",
 ] as const;
 
-export type DenoTarget = (typeof SUPPORTED_DENO_TARGETS)[number];
+export type DenoTarget = (typeof DENO_TARGET_NAMES)[number];
 
-/** Subset of target metadata the generated resolver scripts consume. */
-export type ResolverTargetInfo = Pick<TargetInfo, "unameKey" | "os" | "cpu">;
+export const DENO_TARGETS = {
+	runtime: "Deno",
+	targets: DENO_TARGET_NAMES,
+	info: {
+		"x86_64-unknown-linux-gnu": {
+			alias: "linux-x64",
+			platformKey: "linux-x64",
+			unameKey: "Linux-x86_64",
+			os: "linux",
+			cpu: "x64",
+		},
+		"aarch64-unknown-linux-gnu": {
+			alias: "linux-arm64",
+			platformKey: "linux-arm64",
+			unameKey: "Linux-aarch64",
+			os: "linux",
+			cpu: "arm64",
+		},
+		"x86_64-apple-darwin": {
+			alias: "darwin-x64",
+			platformKey: "darwin-x64",
+			unameKey: "Darwin-x86_64",
+			os: "darwin",
+			cpu: "x64",
+		},
+		"aarch64-apple-darwin": {
+			alias: "darwin-arm64",
+			platformKey: "darwin-arm64",
+			unameKey: "Darwin-arm64",
+			os: "darwin",
+			cpu: "arm64",
+		},
+		"x86_64-pc-windows-msvc": {
+			alias: "windows-x64",
+			platformKey: "win32-x64",
+			unameKey: "Windows-x64",
+			os: "win32",
+			cpu: "x64",
+		},
+		"aarch64-pc-windows-msvc": {
+			alias: "windows-arm64",
+			platformKey: "win32-arm64",
+			unameKey: "Windows-arm64",
+			os: "win32",
+			cpu: "arm64",
+		},
+	},
+} as const satisfies TargetTable<DenoTarget>;
 
-/** No platformKey: npm per-platform packaging (distribute.ts) is Bun-only. */
-type DenoTargetInfo = Omit<TargetInfo, "platformKey">;
+export function resolveTargets<T extends string>(
+	table: TargetTable<T>,
+	targetFlags: string[] | undefined,
+): T[] {
+	if (!targetFlags?.length) return [...table.targets];
 
-export const DENO_TARGET_INFO = {
-	"x86_64-unknown-linux-gnu": {
-		alias: "linux-x64",
-		unameKey: "Linux-x86_64",
-		os: "linux",
-		cpu: "x64",
-	},
-	"aarch64-unknown-linux-gnu": {
-		alias: "linux-arm64",
-		unameKey: "Linux-aarch64",
-		os: "linux",
-		cpu: "arm64",
-	},
-	"x86_64-apple-darwin": {
-		alias: "darwin-x64",
-		unameKey: "Darwin-x86_64",
-		os: "darwin",
-		cpu: "x64",
-	},
-	"aarch64-apple-darwin": {
-		alias: "darwin-arm64",
-		unameKey: "Darwin-arm64",
-		os: "darwin",
-		cpu: "arm64",
-	},
-	"x86_64-pc-windows-msvc": {
-		alias: "windows-x64",
-		unameKey: "Windows-x64",
-		os: "win32",
-		cpu: "x64",
-	},
-	"aarch64-pc-windows-msvc": {
-		alias: "windows-arm64",
-		unameKey: "Windows-arm64",
-		os: "win32",
-		cpu: "arm64",
-	},
-} as const satisfies Record<DenoTarget, DenoTargetInfo>;
+	return targetFlags.map((input) => {
+		const exact = table.targets.find((target) => target === input);
+		if (exact) return exact;
 
-/**
- * Resolve a canonical Bun target string to a supported compile target.
- *
- * @param input - User-provided canonical Bun target string
- * @returns The resolved Bun compile target
- * @throws {Error} If the target is not recognized
- */
-export function resolveTarget(input: string): BunTarget {
-	const exact = SUPPORTED_TARGETS.find((target) => target === input);
-	if (exact) return exact;
-
-	const canonical = SUPPORTED_TARGETS.find((target) => TARGET_INFO[target].alias === input);
-	const hint = canonical ? ` Did you mean "${canonical}"?` : "";
-	const validTargets = SUPPORTED_TARGETS.join(", ");
-	throw new Error(
-		`Unknown target "${input}". Targets must use canonical Bun names.${hint}\n  Valid targets: ${validTargets}`,
-	);
+		const canonical = table.targets.find((target) => table.info[target].alias === input);
+		const hint = canonical ? ` Did you mean "${canonical}"?` : "";
+		const runtime = table.runtime === "Bun" ? "" : `${table.runtime} `;
+		throw new Error(
+			`Unknown ${runtime}target "${input}". Targets must use canonical ${table.runtime} names.${hint}\n  Valid targets: ${table.targets.join(", ")}`,
+		);
+	});
 }
 
-/**
- * Resolve the list of Bun targets from flags.
- *
- * When no `--target` is provided, defaults to all supported targets.
- * When `--target` is provided, builds only the specified target(s).
- *
- * @param targetFlags - Values from repeatable --target flag
- * @returns Array of resolved BunTarget values
- */
-export function resolveTargets(targetFlags: string[] | undefined): BunTarget[] {
-	// No --target flags: build all platforms (default)
-	if (!targetFlags || targetFlags.length === 0) {
-		return [...SUPPORTED_TARGETS];
-	}
-
-	return targetFlags.map(resolveTarget);
+export function binaryFilename<T extends string>(
+	table: TargetTable<T>,
+	baseName: string,
+	target: T,
+): string {
+	return `${baseName}-${target}${table.info[target].os === "win32" ? ".exe" : ""}`;
 }
 
-export function resolveDenoTarget(input: string): DenoTarget {
-	const exact = SUPPORTED_DENO_TARGETS.find((target) => target === input);
-	if (exact) return exact;
-
-	const canonical = SUPPORTED_DENO_TARGETS.find(
-		(target) => DENO_TARGET_INFO[target].alias === input,
-	);
-	const hint = canonical ? ` Did you mean "${canonical}"?` : "";
-	throw new Error(
-		`Unknown Deno target "${input}". Targets must use canonical Deno names.${hint}\n  Valid targets: ${SUPPORTED_DENO_TARGETS.join(", ")}`,
-	);
-}
-
-export function resolveDenoTargets(targetFlags: string[] | undefined): DenoTarget[] {
-	return targetFlags?.length ? targetFlags.map(resolveDenoTarget) : [...SUPPORTED_DENO_TARGETS];
-}
-
-/**
- * Get the binary filename (basename only) for a given target.
- *
- * @param baseName - The base binary name
- * @param target - The Bun compile target
- * @returns The filename (e.g. "my-cli-bun-darwin-arm64" or "my-cli-bun-windows-x64-baseline.exe")
- */
-export function getBinaryFilename(baseName: string, target: BunTarget): string {
-	const isWindows = target.startsWith("bun-windows");
-	const ext = isWindows ? ".exe" : "";
-	return `${baseName}-${target}${ext}`;
-}
-
-export function getDenoBinaryFilename(baseName: string, target: DenoTarget): string {
-	const ext = DENO_TARGET_INFO[target].os === "win32" ? ".exe" : "";
-	return `${baseName}-${target}${ext}`;
+export function hostTarget<T extends string>(table: TargetTable<T>): T | null {
+	const platformKey = `${process.platform}-${process.arch}`;
+	return table.targets.find((target) => table.info[target].platformKey === platformKey) ?? null;
 }
 
 export function readUserPackageJson(cwd: string): JsonValue | undefined {
@@ -256,12 +210,11 @@ export function resolveBaseName(
 	name: string | undefined,
 	entry: string,
 	cwd: string,
-	packageJson?: JsonValue,
+	packageJson: JsonValue | undefined,
 ): string {
 	if (name) return name;
 
-	const pkgJson = packageJson ?? readUserPackageJson(cwd);
-	if (hasStringName(pkgJson)) return pkgJson.name.replace(/^@[^/]+\//, "");
+	if (hasStringName(packageJson)) return packageJson.name.replace(/^@[^/]+\//, "");
 
 	return basename(entry).replace(/\.[^.]+$/, "");
 }
@@ -322,12 +275,13 @@ export async function execBuild(
 	entryPath: string,
 	outfilePath: string,
 	minify: boolean,
-	target?: BunTarget,
-	envFiles: readonly string[] = [],
+	target: BunTarget | undefined,
+	envFiles: readonly string[],
+	cwd: string,
 ): Promise<void> {
 	const runner = resolveBunBuildRunner();
 	const args = createBunCompileArgs(entryPath, outfilePath, minify, target, envFiles);
-	await runBuildProcess(runner, args, outfilePath);
+	await runBuildProcess(runner, args, outfilePath, cwd);
 }
 
 function createBunCompileArgs(
@@ -398,10 +352,11 @@ async function runBuildProcess(
 	runner: BuildRunner,
 	args: readonly string[],
 	outfilePath: string,
+	cwd: string,
 ): Promise<void> {
 	const { exitCode, stdout, stderr } = await runProcess(runner.command, args, {
 		env: runner.env,
-		cwd: process.cwd(),
+		cwd,
 		stdio: "collect",
 	});
 
@@ -415,13 +370,15 @@ export async function execNodeBuild(
 	entryPath: string,
 	outfilePath: string,
 	minify: boolean,
-	envFiles: readonly string[] = [],
+	envFiles: readonly string[],
+	cwd: string,
 ): Promise<void> {
 	const runner = resolveBunBuildRunner();
 	await runBuildProcess(
 		runner,
 		createNodeBuildArgs(entryPath, outfilePath, minify, envFiles),
 		outfilePath,
+		cwd,
 	);
 
 	const output = await readFile(outfilePath, "utf8");
@@ -434,6 +391,7 @@ export async function execDenoBuild(
 	entryPath: string,
 	outfilePath: string,
 	target: DenoTarget,
+	cwd: string,
 ): Promise<void> {
 	const denoPath = which("deno");
 	if (!denoPath) {
@@ -445,6 +403,7 @@ export async function execDenoBuild(
 		{ command: denoPath, env: { ...process.env } },
 		createDenoCompileArgs(entryPath, outfilePath, target),
 		outfilePath,
+		cwd,
 	);
 }
 
@@ -464,7 +423,9 @@ const SNAPSHOT_TIMEOUT_MS = 30_000;
 export async function buildEntrypoint(
 	entryPath: string,
 	outDir: string,
-	envFiles: readonly string[] = [],
+	envFiles: readonly string[],
+	io: InvocationIO,
+	cwd: string,
 ): Promise<CommandSnapshot> {
 	const absoluteEntry = resolve(entryPath);
 	const snapshotDir = await mkdtemp(join(tmpdir(), "crust-snapshot-"));
@@ -479,7 +440,7 @@ export async function buildEntrypoint(
 				[BUILD_OUT_DIR_ENV]: resolve(outDir),
 				BUN_BE_BUN: "1",
 			},
-			cwd: process.cwd(),
+			cwd,
 			stdio: ["ignore", "ignore", "pipe"],
 			timeout: SNAPSHOT_TIMEOUT_MS,
 		});
@@ -516,7 +477,7 @@ export async function buildEntrypoint(
 						: line,
 				)
 				.join("\n");
-			process.stderr.write(`${styled}\n`);
+			io.stderr(styled);
 		}
 
 		let serialized: string;

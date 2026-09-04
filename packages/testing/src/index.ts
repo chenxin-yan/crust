@@ -103,22 +103,28 @@ export async function captureExecute(
 ): Promise<CapturedExecute> {
 	const stdoutLines: string[] = [];
 	const stderrLines: string[] = [];
-	const exitCode = await app.execute({
-		argv: [...argv],
-		io: {
-			stdout: (text) => {
-				stdoutLines.push(text);
+	const originalExitCode = process.exitCode;
+	try {
+		const exitCode = await app.execute({
+			argv: [...argv],
+			io: {
+				stdout: (text) => {
+					stdoutLines.push(text);
+				},
+				stderr: (text) => {
+					stderrLines.push(text);
+				},
 			},
-			stderr: (text) => {
-				stderrLines.push(text);
-			},
-		},
-	});
-	return {
-		stdout: stdoutLines.join("\n"),
-		stderr: stderrLines.join("\n"),
-		exitCode,
-	};
+		});
+		return {
+			stdout: stdoutLines.join("\n"),
+			stderr: stderrLines.join("\n"),
+			exitCode,
+		};
+	} finally {
+		// Bun cannot clear a numeric exitCode back to undefined, so zero is the equivalent success state.
+		process.exitCode = originalExitCode ?? 0;
+	}
 }
 
 export interface InteractiveRun {

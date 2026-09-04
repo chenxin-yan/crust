@@ -203,7 +203,8 @@ describe("captureExecute", () => {
 		expect(result.exitCode).toBe(0);
 	});
 
-	it("captures exit code 1 and the rendered failure", async () => {
+	it("captures exit code 1 without leaking it to the process", async () => {
+		process.exitCode = 7;
 		const app = new Crust("test-cli").action(() => {
 			throw new Error("boom");
 		});
@@ -211,6 +212,7 @@ describe("captureExecute", () => {
 		const result = await captureExecute(app, []);
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain("boom");
+		expect(process.exitCode).toBe(7);
 	});
 
 	it("captures exit code 130 for AbortError cancellation", async () => {

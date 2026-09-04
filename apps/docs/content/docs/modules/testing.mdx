@@ -60,7 +60,7 @@ export type CapturedRun<Result = unknown> = {
 
 ## `captureExecute(app, argv)`
 
-Drive the terminal `execute()` path in-process. Unlike `captureRun()`, this exercises `execute()`'s returned exit-code protocol — `0` on success, `1` for rendered failures, `130` for `AbortError` cancellation — and the Extension `onError` rendering chain, so exit codes and rendered failure output are assertable without spawning a subprocess.
+Drive the terminal `execute()` path in-process. Unlike `captureRun()`, this exercises `execute()`'s returned exit-code protocol — `0` on success, `1` for rendered failures, `130` for `AbortError` cancellation — and the Extension `onError` rendering chain, so exit codes and rendered failure output are assertable without spawning a subprocess. The previous process exit code is restored after capture.
 
 ```ts
 import { captureExecute } from "@crustjs/testing";

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { defineCommand } from "@crustjs/core";
+import { defineCommand, type InvocationIO } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
 import { runProcess } from "@crustjs/utils/process";
 
@@ -165,6 +165,7 @@ async function defaultSpawnPublish(dir: string, command: string[]): Promise<numb
 export async function publishStagedPackages(
 	manifest: DistributionManifest,
 	options: PublishOptions,
+	io: InvocationIO,
 ): Promise<void> {
 	if (options.verify !== false) {
 		validatePublishManifest(options.stageDir, manifest);
@@ -175,9 +176,9 @@ export async function publishStagedPackages(
 		tag: options.tag,
 		registry: options.registry,
 	});
-	console.log(`${dim("Publish order:")} ${manifest.publishOrder.join(" -> ")}`);
+	io.stdout(`${dim("Publish order:")} ${manifest.publishOrder.join(" -> ")}`);
 	for (const relativeDir of manifest.publishOrder) {
-		console.log(`  ${cyan("→")} ${relativeDir}: ${dim(command.join(" "))}`);
+		io.stdout(`  ${cyan("→")} ${relativeDir}: ${dim(command.join(" "))}`);
 	}
 
 	if (options.dryRun) {
@@ -188,14 +189,14 @@ export async function publishStagedPackages(
 
 	for (const relativeDir of manifest.publishOrder) {
 		const dir = join(options.stageDir, relativeDir);
-		console.log(`\nPublishing ${bold(relativeDir)} from ${dim(dir)}...`);
+		io.stdout(`\nPublishing ${bold(relativeDir)} from ${dim(dir)}...`);
 		const exitCode = await spawnPublish(dir, command);
 		if (exitCode !== 0) {
 			throw new Error(`bun publish failed for ${relativeDir} (${dir}) with exit code ${exitCode}`);
 		}
 	}
 
-	console.log(
+	io.stdout(
 		`\n${green("✓")} Published ${bold(String(manifest.publishOrder.length))} staged package(s).`,
 	);
 }
@@ -241,17 +242,22 @@ export const publishCommand = defineCommand(
 					description: "Override the registry passed to bun publish",
 				},
 			)
-			.action(async ({ flags }) => {
-				const stageDir = resolve(process.cwd(), flags["stage-dir"]);
+			.action(async ({ flags, stdout, stderr }) => {
+				const cwd = process.cwd();
+				const stageDir = resolve(cwd, flags["stage-dir"]);
 				const manifest = readPublishManifest(stageDir);
 
-				await publishStagedPackages(manifest, {
-					stageDir,
-					access: flags.access,
-					tag: flags.tag,
-					registry: flags.registry,
-					dryRun: flags["dry-run"],
-					verify: flags.verify,
-				});
+				await publishStagedPackages(
+					manifest,
+					{
+						stageDir,
+						access: flags.access,
+						tag: flags.tag,
+						registry: flags.registry,
+						dryRun: flags["dry-run"],
+						verify: flags.verify,
+					},
+					{ stdout, stderr },
+				);
 			}),
 );

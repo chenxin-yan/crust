@@ -29,7 +29,7 @@ const roots = {
 	skills: loadPackagedSkills,
 	store: createStore,
 	style: createStyle,
-	testing: testing.captureRun,
+	testing: testing.captureExecute,
 };
 for (const [name, value] of Object.entries(roots)) {
 	assert(value !== undefined, `Missing root export from @crustjs/${name}`);
@@ -79,18 +79,10 @@ try {
 	await rm(storeRoot, { recursive: true, force: true });
 }
 
-const stdout = [];
-const originalLog = console.log;
-console.log = (...values) => stdout.push(values.join(" "));
-try {
-	await new Crust("runtime-smoke")
-		.extend(help())
-		.action(() => {})
-		.execute({ argv: ["--help"] });
-} finally {
-	console.log = originalLog;
-}
-const output = stdout.join("\n");
+const { stdout: output } = await testing.captureExecute(
+	new Crust("runtime-smoke").extend(help()).action(() => {}),
+	["--help"],
+);
 assert(
 	output.includes("runtime-smoke") && output.includes("Usage:"),
 	`Sample CLI help output was incomplete:\n${output}`,
@@ -119,7 +111,7 @@ if (!isTTY()) {
 		assert(error instanceof NonInteractiveError, "expected NonInteractiveError");
 	}
 } else {
-	originalLog("runtime-smoke: skipping non-TTY assertion in an interactive terminal");
+	console.log("runtime-smoke: skipping non-TTY assertion in an interactive terminal");
 }
 
 assert(
@@ -127,4 +119,4 @@ assert(
 	"expected checkout to be a Git worktree",
 );
 
-originalLog(`runtime-smoke-ok (${Object.keys(roots).length} package roots)`);
+console.log(`runtime-smoke-ok (${Object.keys(roots).length} package roots)`);

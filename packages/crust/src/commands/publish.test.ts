@@ -11,6 +11,8 @@ import {
 } from "../../src/commands/publish.ts";
 import type { DistributionManifest } from "../utils/distribute.ts";
 
+const io = { stdout: () => {}, stderr: () => {} };
+
 function writeStageFixture(tmpDir: string, manifest: DistributionManifest) {
 	mkdirSync(join(tmpDir, "root", "bin"), { recursive: true });
 	writeFileSync(
@@ -120,12 +122,16 @@ describe("publish manifest validation", () => {
 
 	it("supports dry-run without spawning bun publish", async () => {
 		const spawnPublish = mock(async () => 0);
-		await publishStagedPackages(manifest, {
-			stageDir: tmpDir,
-			access: "public",
-			dryRun: true,
-			spawnPublish,
-		});
+		await publishStagedPackages(
+			manifest,
+			{
+				stageDir: tmpDir,
+				access: "public",
+				dryRun: true,
+				spawnPublish,
+			},
+			io,
+		);
 		expect(spawnPublish).not.toHaveBeenCalled();
 	});
 
@@ -137,11 +143,15 @@ describe("publish manifest validation", () => {
 		});
 
 		await expect(
-			publishStagedPackages(manifest, {
-				stageDir: tmpDir,
-				access: "public",
-				spawnPublish,
-			}),
+			publishStagedPackages(
+				manifest,
+				{
+					stageDir: tmpDir,
+					access: "public",
+					spawnPublish,
+				},
+				io,
+			),
 		).rejects.toThrow(/linux-x64/);
 		expect(calls).toHaveLength(1);
 	});

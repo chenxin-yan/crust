@@ -9,18 +9,17 @@ import {
 } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
+import type { InvocationIO } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
 import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
 import { isWithin } from "@crustjs/utils/path";
 
 import {
+	binaryFilename,
+	BUN_TARGETS,
 	type BunTarget,
 	execBuild,
-	getBinaryFilename,
 	resolveBaseName,
-	resolveTargets,
-	readUserPackageJson,
-	TARGET_INFO,
 	type TargetInfo,
 } from "./build-helpers.ts";
 
@@ -40,7 +39,7 @@ const METADATA_KEYS = [
 
 type NpmOs = TargetInfo["os"];
 type NpmCpu = TargetInfo["cpu"];
-type PlatformKey = (typeof TARGET_INFO)[BunTarget]["platformKey"];
+type PlatformKey = (typeof BUN_TARGETS.info)[BunTarget]["platformKey"];
 type PublishPackageMetadata = {
 	name: string;
 	version: string;
@@ -133,7 +132,7 @@ function readPackageJson(cwd: string, packageJson: JsonValue | undefined): UserP
 	return packageJson as UserPackageJson;
 }
 
-export function derivePlatformPackageName(rootPackageName: string, targetAlias: string): string {
+function derivePlatformPackageName(rootPackageName: string, targetAlias: string): string {
 	const [scope, name] = rootPackageName.startsWith("@")
 		? rootPackageName.split("/")
 		: [undefined, rootPackageName];
@@ -141,7 +140,7 @@ export function derivePlatformPackageName(rootPackageName: string, targetAlias: 
 	return scope ? `${scope}/${suffixedName}` : suffixedName;
 }
 
-export function getPackagePathSegment(packageName: string): string {
+function getPackagePathSegment(packageName: string): string {
 	return packageName.startsWith("@") ? (packageName.split("/")[1] ?? packageName) : packageName;
 }
 
@@ -149,7 +148,7 @@ function isBinPath(bin: UserPackageJson["bin"]): bin is string {
 	return typeof bin === "string";
 }
 
-export function inferCommandName(
+function inferCommandName(
 	rootPackageName: string,
 	bin: UserPackageJson["bin"],
 	baseName: string,
@@ -175,7 +174,7 @@ export function inferCommandName(
 	return entry;
 }
 
-export function buildDistributionRootPackageJson(
+function buildDistributionRootPackageJson(
 	metadata: DistributionMetadata,
 	targets: readonly DistributionTarget[],
 	options?: { artifactDirs?: readonly string[]; manPages?: readonly string[] },
@@ -200,7 +199,7 @@ export function buildDistributionRootPackageJson(
 	return rootPackageJson;
 }
 
-export function buildDistributionPlatformPackageJson(
+function buildDistributionPlatformPackageJson(
 	metadata: DistributionMetadata,
 	target: DistributionTarget,
 ): PlatformPublishPackageJson {
@@ -276,11 +275,11 @@ function resolveDistributionTarget(
 	rootPackageName: string,
 	target: BunTarget,
 ): DistributionTarget {
-	const info = TARGET_INFO[target];
+	const info = BUN_TARGETS.info[target];
 	const packageName = derivePlatformPackageName(rootPackageName, info.alias);
 	validatePackageNameLength(packageName);
 
-	const binaryFilename = getBinaryFilename(baseName, target);
+	const filename = binaryFilename(BUN_TARGETS, baseName, target);
 	const packageDir = resolve(stageDir, info.alias);
 
 	return {
@@ -290,14 +289,14 @@ function resolveDistributionTarget(
 		packageName,
 		packagePathSegment: getPackagePathSegment(packageName),
 		packageDir,
-		binaryRelativePath: join("bin", binaryFilename),
-		binaryFilename,
+		binaryRelativePath: join("bin", filename),
+		binaryFilename: filename,
 		os: info.os,
 		cpu: info.cpu,
 	};
 }
 
-export function generateDistributionJsResolver(
+function generateDistributionJsResolver(
 	commandName: string,
 	targets: readonly DistributionTarget[],
 ): string {
@@ -490,51 +489,57 @@ function stageDistributionPackages(
 	writeDistributionManifest(stageDir, metadata, targets);
 }
 
-export async function runDistributeBuild(options: {
-	cwd?: string;
-	entry: string;
+type DistributeBuildPlan = {
+	cwd: string;
+	entryPath: string;
 	name?: string;
 	minify: boolean;
-	target?: string[];
+	targets: BunTarget[];
 	stageDir: string;
-	envFiles?: readonly string[];
-	/** Directory whose Extension-emitted artifact subdirectories are staged in the root package. */
-	artifactOutDir?: string;
-	/** Pre-read by build planning so package metadata is parsed once per build. */
-	userPackageJson?: JsonValue;
-}): Promise<void> {
-	const cwd = options.cwd ?? process.cwd();
-	const entryPath = resolve(cwd, options.entry);
+	envFiles: readonly string[];
+	validate: boolean;
+	outDir: string;
+	userPackageJson: JsonValue | undefined;
+};
 
-	if (!existsSync(entryPath)) {
-		throw new Error(
-			`Entry file not found: ${entryPath}\n  Specify a valid entry file with --entry <path>`,
-		);
-	}
+type DistributeExecutor = (
+	entryPath: string,
+	outfilePath: string,
+	minify: boolean,
+	target: BunTarget,
+	envFiles: readonly string[],
+	cwd: string,
+) => Promise<void>;
 
-	const stageDir = resolve(cwd, options.stageDir);
-	const targets = resolveTargets(options.target);
-	const userPackageJson = Object.hasOwn(options, "userPackageJson")
-		? options.userPackageJson
-		: readUserPackageJson(cwd);
-	const metadata = resolveDistributionMetadata(cwd, entryPath, options.name, userPackageJson);
-
-	const distributionTargets = targets.map((target) =>
-		resolveDistributionTarget(stageDir, metadata.baseName, metadata.rootPackageName, target),
+export async function runDistributeBuild(
+	plan: DistributeBuildPlan,
+	options: { io: InvocationIO; execute?: DistributeExecutor },
+): Promise<void> {
+	const metadata = resolveDistributionMetadata(
+		plan.cwd,
+		plan.entryPath,
+		plan.name,
+		plan.userPackageJson,
+	);
+	const distributionTargets = plan.targets.map((target) =>
+		resolveDistributionTarget(plan.stageDir, metadata.baseName, metadata.rootPackageName, target),
 	);
 
-	console.log(`Staging ${bold(`${targets.length}`)} distribution target(s) in ${dim(stageDir)}...`);
+	options.io.stdout(
+		`Staging ${bold(`${plan.targets.length}`)} distribution target(s) in ${dim(plan.stageDir)}...`,
+	);
 
-	const artifacts = collectArtifacts(options.artifactOutDir, stageDir);
-	stageDistributionPackages(cwd, stageDir, metadata, distributionTargets, {
+	const artifactOutDir = plan.validate ? plan.outDir : undefined;
+	const artifacts = collectArtifacts(artifactOutDir, plan.stageDir);
+	stageDistributionPackages(plan.cwd, plan.stageDir, metadata, distributionTargets, {
 		artifactDirs: artifacts.names,
 		manPages: artifacts.manPages,
 	});
 
-	if (options.artifactOutDir) {
-		const rootDir = join(stageDir, "root");
+	if (artifactOutDir) {
+		const rootDir = join(plan.stageDir, "root");
 		for (const name of artifacts.names) {
-			const artifactDir = join(options.artifactOutDir, name);
+			const artifactDir = join(artifactOutDir, name);
 			cpSync(artifactDir, join(rootDir, name), { recursive: true });
 			// Runtime source resolution (e.g. packaged skills) falls back to
 			// dirname(process.execPath), which is a platform package's bin dir — the
@@ -546,21 +551,29 @@ export async function runDistributeBuild(options: {
 		}
 	}
 
+	const execute = options.execute ?? execBuild;
 	for (const targetPackage of distributionTargets) {
 		const outfilePath = join(targetPackage.packageDir, targetPackage.binaryRelativePath);
-		console.log(`  ${cyan("→")} ${bold(targetPackage.targetAlias)}: ${dim(outfilePath)}`);
-		await execBuild(entryPath, outfilePath, options.minify, targetPackage.target, options.envFiles);
+		options.io.stdout(`  ${cyan("→")} ${bold(targetPackage.targetAlias)}: ${dim(outfilePath)}`);
+		await execute(
+			plan.entryPath,
+			outfilePath,
+			plan.minify,
+			targetPackage.target,
+			plan.envFiles,
+			plan.cwd,
+		);
 	}
 
-	const manifestPath = join(stageDir, "manifest.json");
-	console.log(
-		`\n${green("✓")} Staged ${bold(`${targets.length + 1}`)} npm package(s) successfully:`,
+	const manifestPath = join(plan.stageDir, "manifest.json");
+	options.io.stdout(
+		`\n${green("✓")} Staged ${bold(`${plan.targets.length + 1}`)} npm package(s) successfully:`,
 	);
-	console.log(`  ${join(stageDir, "root")}`);
+	options.io.stdout(`  ${join(plan.stageDir, "root")}`);
 	for (const targetPackage of distributionTargets) {
-		console.log(`  ${targetPackage.packageDir}`);
+		options.io.stdout(`  ${targetPackage.packageDir}`);
 	}
-	console.log(`\n${dim("Manifest:")} ${manifestPath}`);
+	options.io.stdout(`\n${dim("Manifest:")} ${manifestPath}`);
 }
 
 type CollectedArtifacts = { names: string[]; manPages: string[] };

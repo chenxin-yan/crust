@@ -1,358 +1,207 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 
-import {
-	buildDistributionPlatformPackageJson,
-	buildDistributionRootPackageJson,
-	derivePlatformPackageName,
-	generateDistributionJsResolver,
-	getPackagePathSegment,
-	inferCommandName,
-	runDistributeBuild,
-} from "./distribute.ts";
+import type { JsonValue } from "@crustjs/utils/json";
 
-const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
+import type { BunTarget } from "./build-helpers.ts";
+import { runDistributeBuild } from "./distribute.ts";
 
-describe("derivePlatformPackageName", () => {
-	it("suffixes unscoped package names", () => {
-		expect(derivePlatformPackageName("my-cli", "darwin-arm64")).toBe("my-cli-darwin-arm64");
-	});
+const io = { stdout: () => {}, stderr: () => {} };
 
-	it("suffixes scoped package names", () => {
-		expect(derivePlatformPackageName("@scope/my-cli", "linux-x64")).toBe("@scope/my-cli-linux-x64");
-	});
-});
+function createPlan(
+	cwd: string,
+	packageJson: JsonValue,
+	overrides: Partial<{
+		name: string;
+		targets: BunTarget[];
+		stageDir: string;
+		validate: boolean;
+		outDir: string;
+	}> = {},
+) {
+	return {
+		cwd,
+		entryPath: join(cwd, "src", "cli.ts"),
+		minify: true,
+		targets: ["bun-darwin-arm64"] satisfies BunTarget[],
+		stageDir: join(cwd, ".stage"),
+		envFiles: [],
+		validate: false,
+		outDir: join(cwd, "dist"),
+		userPackageJson: packageJson,
+		...overrides,
+	};
+}
 
-describe("inferCommandName", () => {
-	it("falls back to the resolved base name", () => {
-		expect(inferCommandName("my-cli", undefined, "my-cli")).toBe("my-cli");
-	});
+const fakeExecutor = async (
+	_entryPath: string,
+	outfilePath: string,
+	_minify: boolean,
+	_target: BunTarget,
+	_envFiles: readonly string[],
+	_cwd: string,
+) => {
+	writeFileSync(outfilePath, "fake binary\n");
+};
 
-	it("uses the single object bin key", () => {
-		expect(inferCommandName("my-cli", { crusty: "dist/cli" }, "my-cli")).toBe("crusty");
-	});
-
-	it("uses the unscoped package name for string bin shorthand", () => {
-		expect(inferCommandName("@scope/my-cli", "dist/cli", "ignored")).toBe("my-cli");
-	});
-
-	it("throws for multiple bin entries", () => {
-		expect(() =>
-			inferCommandName("my-cli", { one: "dist/one", two: "dist/two" }, "my-cli"),
-		).toThrow(/exactly one bin entry/);
-	});
-});
-
-describe("distribution manifest JSON builders", () => {
-	it("builds the root package optionalDependencies", () => {
-		const metadata = {
-			commandName: "crust",
-			rootPackageName: "@crustjs/crust",
-			version: "1.2.3",
-			baseName: "crust",
-			rootPackageJson: {
-				name: "@crustjs/crust",
-				version: "1.2.3",
-				description: "CLI tooling",
-				engines: { bun: ">=1.3.14" },
-			},
-		};
-		const targets = [
-			{
-				target: "bun-darwin-arm64" as const,
-				platformKey: "darwin-arm64" as const,
-				targetAlias: "darwin-arm64",
-				packageName: "@crustjs/crust-darwin-arm64",
-				packagePathSegment: "crust-darwin-arm64",
-				packageDir: "/tmp/darwin-arm64",
-				binaryRelativePath: "bin/crust-bun-darwin-arm64",
-				binaryFilename: "crust-bun-darwin-arm64",
-				os: "darwin" as const,
-				cpu: "arm64" as const,
-			},
-		];
-
-		expect(buildDistributionRootPackageJson(metadata, targets)).toEqual({
-			name: "@crustjs/crust",
-			version: "1.2.3",
-			type: "module",
-			description: "CLI tooling",
-			engines: { bun: ">=1.3.14" },
-			files: ["bin"],
-			bin: { crust: "bin/crust.js" },
-			optionalDependencies: {
-				"@crustjs/crust-darwin-arm64": "1.2.3",
-			},
-		});
-
-		expect(
-			buildDistributionRootPackageJson(metadata, targets, {
-				artifactDirs: ["man", "skills"],
-				manPages: ["crust.1"],
-			}),
-		).toEqual({
-			name: "@crustjs/crust",
-			version: "1.2.3",
-			type: "module",
-			description: "CLI tooling",
-			engines: { bun: ">=1.3.14" },
-			files: ["bin", "man", "skills"],
-			man: ["./man/crust.1"],
-			bin: { crust: "bin/crust.js" },
-			optionalDependencies: {
-				"@crustjs/crust-darwin-arm64": "1.2.3",
-			},
-		});
-	});
-
-	it("builds platform package metadata with os/cpu/bin", () => {
-		const metadata = {
-			commandName: "crust",
-			rootPackageName: "@crustjs/crust",
-			version: "1.2.3",
-			baseName: "crust",
-			rootPackageJson: {
-				name: "@crustjs/crust",
-				version: "1.2.3",
-				description: "CLI tooling",
-				engines: { bun: ">=1.3.14" },
-			},
-		};
-		const target = {
-			target: "bun-windows-arm64" as const,
-			platformKey: "win32-arm64" as const,
-			targetAlias: "windows-arm64",
-			packageName: "@crustjs/crust-windows-arm64",
-			packagePathSegment: "crust-windows-arm64",
-			packageDir: "/tmp/windows-arm64",
-			binaryRelativePath: "bin/crust-bun-windows-arm64.exe",
-			binaryFilename: "crust-bun-windows-arm64.exe",
-			os: "win32" as const,
-			cpu: "arm64" as const,
-		};
-
-		expect(buildDistributionPlatformPackageJson(metadata, target)).toEqual({
-			name: "@crustjs/crust-windows-arm64",
-			version: "1.2.3",
-			description: "CLI tooling",
-			engines: { bun: ">=1.3.14" },
-			files: ["bin"],
-			bin: { crust: "bin/crust-bun-windows-arm64.exe" },
-			os: ["win32"],
-			cpu: ["arm64"],
-		});
-	});
-});
-
-describe("getPackagePathSegment", () => {
-	it("returns the unscoped name for scoped packages", () => {
-		expect(getPackagePathSegment("@crustjs/crust-linux-x64")).toBe("crust-linux-x64");
-	});
-});
-
-describe("generateDistributionJsResolver", () => {
-	it("generates a JS resolver with fixed candidate probing", () => {
-		const launcher = generateDistributionJsResolver("crust", [
-			{
-				target: "bun-linux-x64-baseline",
-				platformKey: "linux-x64",
-				targetAlias: "linux-x64",
-				packageName: "@crustjs/crust-linux-x64",
-				packagePathSegment: "crust-linux-x64",
-				packageDir: "/tmp/linux-x64",
-				binaryRelativePath: "bin/crust-bun-linux-x64-baseline",
-				binaryFilename: "crust-bun-linux-x64-baseline",
-				os: "linux",
-				cpu: "x64",
-			},
-		]);
-
-		expect(launcher).toContain("#!/usr/bin/env node");
-		expect(launcher).toContain("process.platform");
-		expect(launcher).toContain("process.arch");
-		expect(launcher).toContain("const candidateOne = resolve(");
-		expect(launcher).toContain("const candidateTwo = resolve(");
-		expect(launcher).toContain('"packagePathSegment": "crust-linux-x64"');
-		expect(launcher).toContain('"packageName": "@crustjs/crust-linux-x64"');
-		expect(launcher).toContain('"binaryFilename": "crust-bun-linux-x64-baseline"');
-		expect(launcher).not.toContain('"targetAlias"');
-		expect(launcher).toContain("Missing platform package");
-		expect(launcher).toContain("optional dependencies are enabled");
-		expect(launcher).toContain("Supported platforms: linux-x64");
-		expect(launcher).toContain("try {");
-		expect(launcher).toContain("process.kill(process.pid, signal)");
-		expect(launcher).toContain("process.exit(1)");
-	});
-});
+function readJson<T>(path: string): T {
+	return JSON.parse(readFileSync(path, "utf8")) as T;
+}
 
 describe("runDistributeBuild", () => {
-	const tmpDir = mkdtempSync(join(tmpdir(), "crust-distribute-validation-"));
-	const originalCwd = process.cwd;
+	const tmpDir = mkdtempSync(join(tmpdir(), "crust-distribute-"));
 
-	beforeAll(() => {
+	beforeEach(() => {
 		rmSync(tmpDir, { recursive: true, force: true });
 		mkdirSync(join(tmpDir, "src"), { recursive: true });
-		writeFileSync(join(tmpDir, "src", "cli.ts"), 'console.log("hello");\n');
+		writeFileSync(join(tmpDir, "src", "cli.ts"), "export {};\n");
 		writeFileSync(join(tmpDir, "LICENSE"), "test license\n");
 	});
 
-	afterAll(() => {
-		process.cwd = originalCwd;
-		rmSync(tmpDir, { recursive: true, force: true });
-	});
+	afterAll(() => rmSync(tmpDir, { recursive: true, force: true }));
 
-	it("writes a manifest file for a staged package", async () => {
-		writeFileSync(
-			join(tmpDir, "package.json"),
-			JSON.stringify({
-				name: "test-package-cli",
-				version: "0.1.0",
-				bin: {
-					"test-cli": "dist/cli",
-				},
-			}),
-		);
-		process.cwd = () => tmpDir;
-
-		await runDistributeBuild({
-			entry: "src/cli.ts",
-			minify: true,
-			target: ["bun-darwin-arm64"],
-			stageDir: ".stage",
-		});
-
-		const manifest = JSON.parse(readFileSync(join(tmpDir, ".stage", "manifest.json"), "utf-8")) as {
-			root: { dir: string; bin: string };
-			packages: Array<{ target: string; name: string }>;
-			publishOrder: string[];
+	it("stages manifests, package metadata, resolver, licenses, and fake binary outputs", async () => {
+		const packageJson = {
+			name: "@scope/test-package-cli",
+			version: "0.1.0",
+			description: "CLI tooling",
+			bin: { "test-cli": "dist/cli" },
 		};
-
-		expect(manifest.root.dir).toBe("root");
-		expect(manifest.root.bin).toBe("test-cli");
-		expect(manifest.packages).toHaveLength(1);
-		expect(manifest.packages[0]).toMatchObject({
-			target: "darwin-arm64",
-			name: "test-package-cli-darwin-arm64",
+		const plan = createPlan(tmpDir, packageJson, {
+			targets: ["bun-linux-x64-baseline", "bun-windows-arm64"],
 		});
-		expect(manifest.publishOrder).toEqual(["darwin-arm64", "root"]);
-		expect(readFileSync(join(tmpDir, ".stage", "root", "LICENSE"), "utf-8")).toBe("test license\n");
-		expect(readFileSync(join(tmpDir, ".stage", "darwin-arm64", "LICENSE"), "utf-8")).toBe(
-			"test license\n",
+		const outputs: string[] = [];
+
+		await runDistributeBuild(plan, {
+			io,
+			execute: async (...args) => {
+				outputs.push(args[1]);
+				await fakeExecutor(...args);
+			},
+		});
+
+		const manifest = readJson<{
+			root: { name: string; dir: string; bin: string };
+			packages: Array<{ target: string; name: string; bin: string }>;
+			publishOrder: string[];
+		}>(join(plan.stageDir, "manifest.json"));
+		expect(manifest.root).toEqual({
+			name: "@scope/test-package-cli",
+			dir: "root",
+			bin: "test-cli",
+		});
+		expect(manifest.packages).toEqual([
+			expect.objectContaining({
+				target: "linux-x64",
+				name: "@scope/test-package-cli-linux-x64",
+				bin: "bin/test-package-cli-bun-linux-x64-baseline",
+			}),
+			expect.objectContaining({
+				target: "windows-arm64",
+				name: "@scope/test-package-cli-windows-arm64",
+				bin: "bin/test-package-cli-bun-windows-arm64.exe",
+			}),
+		]);
+		expect(manifest.publishOrder).toEqual(["linux-x64", "windows-arm64", "root"]);
+
+		const rootPackage = readJson<{
+			files: string[];
+			bin: Record<string, string>;
+			optionalDependencies: Record<string, string>;
+		}>(join(plan.stageDir, "root", "package.json"));
+		expect(rootPackage.bin).toEqual({ "test-cli": "bin/test-cli.js" });
+		expect(rootPackage.optionalDependencies).toEqual({
+			"@scope/test-package-cli-linux-x64": "0.1.0",
+			"@scope/test-package-cli-windows-arm64": "0.1.0",
+		});
+		expect(readFileSync(join(plan.stageDir, "root", "bin", "test-cli.js"), "utf8")).toContain(
+			'"packagePathSegment": "test-package-cli-linux-x64"',
 		);
+		expect(readFileSync(join(plan.stageDir, "root", "LICENSE"), "utf8")).toBe("test license\n");
+		expect(outputs).toEqual([
+			join(plan.stageDir, "linux-x64", "bin", "test-package-cli-bun-linux-x64-baseline"),
+			join(plan.stageDir, "windows-arm64", "bin", "test-package-cli-bun-windows-arm64.exe"),
+		]);
 	});
 
-	it("copies common license filename variants", async () => {
+	it("uses string bin shorthand and copies common license variants", async () => {
 		rmSync(join(tmpDir, "LICENSE"));
 		writeFileSync(join(tmpDir, "LICENCE.md"), "variant license\n");
-		process.cwd = () => tmpDir;
-
-		await runDistributeBuild({
-			entry: "src/cli.ts",
-			minify: true,
-			target: ["bun-darwin-arm64"],
-			stageDir: ".stage",
+		const plan = createPlan(tmpDir, {
+			name: "@scope/my-cli",
+			version: "0.1.0",
+			bin: "dist/cli",
 		});
 
-		expect(readFileSync(join(tmpDir, ".stage", "root", "LICENCE.md"), "utf-8")).toBe(
-			"variant license\n",
+		await runDistributeBuild(plan, { io, execute: fakeExecutor });
+
+		const rootPackage = readJson<{ bin: Record<string, string> }>(
+			join(plan.stageDir, "root", "package.json"),
 		);
-		expect(readFileSync(join(tmpDir, ".stage", "darwin-arm64", "LICENCE.md"), "utf-8")).toBe(
+		expect(rootPackage.bin).toEqual({ "my-cli": "bin/my-cli.js" });
+		expect(readFileSync(join(plan.stageDir, "darwin-arm64", "LICENCE.md"), "utf8")).toBe(
 			"variant license\n",
 		);
 	});
-});
 
-describe("runDistributeBuild Extension artifact staging", () => {
-	const tmpDir = mkdtempSync(join(tmpdir(), "crust-distribute-artifacts-"));
-	const originalCwd = process.cwd;
-
-	afterAll(() => {
-		process.cwd = originalCwd;
-		rmSync(tmpDir, { recursive: true, force: true });
+	it("rejects multiple bin entries through staged package planning", async () => {
+		const plan = createPlan(tmpDir, {
+			name: "my-cli",
+			version: "0.1.0",
+			bin: { one: "dist/one", two: "dist/two" },
+		});
+		await expect(runDistributeBuild(plan, { io, execute: fakeExecutor })).rejects.toThrow(
+			/exactly one bin entry/,
+		);
 	});
 
-	it("stages artifact directories into the root and platform packages", async () => {
-		rmSync(tmpDir, { recursive: true, force: true });
-		mkdirSync(join(tmpDir, "src"), { recursive: true });
-		writeFileSync(
-			join(tmpDir, "src", "cli.ts"),
-			`import { Crust } from ${JSON.stringify(corePath)};
-const app = new Crust("x").action(() => {});
-await app.execute();
-`,
+	it("stages Extension artifact directories into root and platform packages", async () => {
+		const outDir = join(tmpDir, "dist");
+		mkdirSync(join(outDir, "man"), { recursive: true });
+		mkdirSync(join(outDir, "skills", "x"), { recursive: true });
+		writeFileSync(join(outDir, "man", "x.1"), ".Dd generated\n");
+		writeFileSync(join(outDir, "skills", "x", "SKILL.md"), "skill\n");
+		const plan = createPlan(
+			tmpDir,
+			{ name: "artifact-stage-cli", version: "0.1.0", bin: { cli: "dist/cli" } },
+			{ validate: true, outDir },
 		);
-		writeFileSync(
-			join(tmpDir, "package.json"),
-			JSON.stringify({
-				name: "artifact-stage-cli",
-				version: "0.1.0",
-				bin: { cli: "dist/cli" },
-			}),
-		);
-		process.cwd = () => tmpDir;
-		const artifactOutDir = join(tmpDir, "dist");
-		mkdirSync(join(artifactOutDir, "man"), { recursive: true });
-		mkdirSync(join(artifactOutDir, "skills", "x"), { recursive: true });
-		writeFileSync(join(artifactOutDir, "man", "x.1"), ".Dd generated\n");
-		writeFileSync(join(artifactOutDir, "skills", "x", "SKILL.md"), "skill\n");
 
-		await runDistributeBuild({
-			entry: "src/cli.ts",
-			minify: true,
-			target: ["bun-darwin-arm64"],
-			stageDir: ".stage",
-			artifactOutDir,
-		});
+		await runDistributeBuild(plan, { io, execute: fakeExecutor });
 
-		const rootPkg = JSON.parse(
-			readFileSync(join(tmpDir, ".stage", "root", "package.json"), "utf-8"),
-		) as { files: string[]; man: string[] };
-		expect(rootPkg.files).toEqual(["bin", "man", "skills"]);
-		expect(rootPkg.man).toEqual(["./man/x.1"]);
-		expect(readFileSync(join(tmpDir, ".stage", "root", "man", "x.1"), "utf-8")).toContain(".Dd");
-		expect(readFileSync(join(tmpDir, ".stage", "root", "skills", "x", "SKILL.md"), "utf-8")).toBe(
-			"skill\n",
+		const rootPackage = readJson<{ files: string[]; man: string[] }>(
+			join(plan.stageDir, "root", "package.json"),
 		);
+		expect(rootPackage.files).toEqual(["bin", "man", "skills"]);
+		expect(rootPackage.man).toEqual(["./man/x.1"]);
 		expect(
-			readFileSync(
-				join(tmpDir, ".stage", "darwin-arm64", "bin", "skills", "x", "SKILL.md"),
-				"utf-8",
-			),
+			readFileSync(join(plan.stageDir, "darwin-arm64", "bin", "skills", "x", "SKILL.md"), "utf8"),
 		).toBe("skill\n");
-		expect(readFileSync(join(artifactOutDir, "man", "x.1"), "utf-8")).toContain(".Dd");
 	});
 
-	it("rejects an artifact directory inside stage-dir", async () => {
-		process.cwd = () => tmpDir;
-		const artifactOutDir = join(tmpDir, ".stage", "artifacts");
-		mkdirSync(join(artifactOutDir, "man"), { recursive: true });
-
+	it("rejects artifacts inside stage-dir and the reserved bin directory", async () => {
+		const packageJson = { name: "artifact-stage-cli", version: "0.1.0" };
+		const stageDir = join(tmpDir, ".stage");
+		const nestedOutDir = join(stageDir, "artifacts");
+		mkdirSync(join(nestedOutDir, "man"), { recursive: true });
 		await expect(
-			runDistributeBuild({
-				entry: "src/cli.ts",
-				minify: true,
-				target: ["bun-darwin-arm64"],
-				stageDir: ".stage",
-				artifactOutDir,
-			}),
+			runDistributeBuild(
+				createPlan(tmpDir, packageJson, { stageDir, validate: true, outDir: nestedOutDir }),
+				{
+					io,
+					execute: fakeExecutor,
+				},
+			),
 		).rejects.toThrow("--stage-dir cannot contain the artifact output directory");
-	});
 
-	it("rejects a reserved bin artifact directory", async () => {
-		process.cwd = () => tmpDir;
-		const artifactOutDir = join(tmpDir, "dist-bin");
-		mkdirSync(join(artifactOutDir, "bin"), { recursive: true });
-
+		const outDir = join(tmpDir, "dist-bin");
+		mkdirSync(join(outDir, "bin"), { recursive: true });
 		await expect(
-			runDistributeBuild({
-				entry: "src/cli.ts",
-				minify: true,
-				target: ["bun-darwin-arm64"],
-				stageDir: ".stage",
-				artifactOutDir,
+			runDistributeBuild(createPlan(tmpDir, packageJson, { validate: true, outDir }), {
+				io,
+				execute: fakeExecutor,
 			}),
 		).rejects.toThrow('Artifact directory "bin"');
 	});

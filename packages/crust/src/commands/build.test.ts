@@ -5,21 +5,17 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Crust } from "@crustjs/core";
+import { captureExecute } from "@crustjs/testing";
 
 const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 
 import type { BunTarget } from "../utils/build-helpers.ts";
 import {
-	DENO_TARGET_INFO,
-	getBinaryFilename,
-	getDenoBinaryFilename,
+	binaryFilename,
+	BUN_TARGETS,
+	DENO_TARGETS,
 	resolveBaseName,
-	resolveDenoTarget,
-	resolveDenoTargets,
-	resolveTarget,
-	SUPPORTED_DENO_TARGETS,
-	SUPPORTED_TARGETS,
-	TARGET_INFO,
+	resolveTargets,
 } from "../utils/build-helpers.ts";
 import {
 	buildCommand,
@@ -96,9 +92,6 @@ describe("planBuild", () => {
 	it("uses one parse-error policy for runtime and output-name resolution", () => {
 		writeFileSync(join(tmpDir, "package.json"), "not json");
 		expect(() => planBuild(baseFlags, tmpDir)).toThrow(`Failed to parse package.json in ${tmpDir}`);
-		expect(() => resolveBaseName(undefined, join(tmpDir, "src/cli.ts"), tmpDir)).toThrow(
-			`Failed to parse package.json in ${tmpDir}`,
-		);
 	});
 
 	for (const testCase of [
@@ -173,45 +166,48 @@ describe("planBuild", () => {
 
 describe("resolveTarget", () => {
 	it("accepts full Bun target names directly", () => {
-		for (const target of SUPPORTED_TARGETS) {
-			expect(resolveTarget(target)).toBe(target);
+		for (const target of BUN_TARGETS.targets) {
+			expect(resolveTargets(BUN_TARGETS, [target])[0]).toBe(target);
 		}
 	});
 
 	it("rejects every short alias with canonical-name guidance and a did-you-mean hint", () => {
-		for (const target of SUPPORTED_TARGETS) {
-			const alias = TARGET_INFO[target].alias;
-			expect(() => resolveTarget(alias)).toThrow(
+		for (const target of BUN_TARGETS.targets) {
+			const alias = BUN_TARGETS.info[target].alias;
+			expect(() => resolveTargets(BUN_TARGETS, [alias])).toThrow(
 				`Unknown target "${alias}". Targets must use canonical Bun names. Did you mean "${target}"?`,
 			);
-			expect(() => resolveTarget(alias)).toThrow(/Valid targets: bun-linux-x64-baseline/);
+			expect(() => resolveTargets(BUN_TARGETS, [alias])).toThrow(
+				/Valid targets: bun-linux-x64-baseline/,
+			);
 		}
 	});
 
 	it("throws on unknown target", () => {
-		expect(() => resolveTarget("linux-arm32")).toThrow(/Unknown target/);
+		expect(() => resolveTargets(BUN_TARGETS, ["linux-arm32"])).toThrow(/Unknown target/);
 	});
 });
 
 describe("resolveDenoTarget", () => {
 	it("accepts exactly the targets supported by deno compile", () => {
-		for (const target of SUPPORTED_DENO_TARGETS) expect(resolveDenoTarget(target)).toBe(target);
-		expect(resolveDenoTargets(undefined)).toEqual([...SUPPORTED_DENO_TARGETS]);
+		for (const target of DENO_TARGETS.targets)
+			expect(resolveTargets(DENO_TARGETS, [target])[0]).toBe(target);
+		expect(resolveTargets(DENO_TARGETS, undefined)).toEqual([...DENO_TARGETS.targets]);
 	});
 
 	it("guides aliases to canonical Deno target names", () => {
-		for (const target of SUPPORTED_DENO_TARGETS) {
-			expect(() => resolveDenoTarget(DENO_TARGET_INFO[target].alias)).toThrow(
+		for (const target of DENO_TARGETS.targets) {
+			expect(() => resolveTargets(DENO_TARGETS, [DENO_TARGETS.info[target].alias])).toThrow(
 				`Did you mean "${target}"?`,
 			);
 		}
 	});
 
 	it("uses Deno target names and the Windows executable extension", () => {
-		expect(getDenoBinaryFilename("cli", "x86_64-unknown-linux-gnu")).toBe(
+		expect(binaryFilename(DENO_TARGETS, "cli", "x86_64-unknown-linux-gnu")).toBe(
 			"cli-x86_64-unknown-linux-gnu",
 		);
-		expect(getDenoBinaryFilename("cli", "aarch64-pc-windows-msvc")).toBe(
+		expect(binaryFilename(DENO_TARGETS, "cli", "aarch64-pc-windows-msvc")).toBe(
 			"cli-aarch64-pc-windows-msvc.exe",
 		);
 	});
@@ -223,7 +219,7 @@ describe("resolveDenoTarget", () => {
 
 describe("resolveBaseName", () => {
 	it("uses --name when provided", () => {
-		expect(resolveBaseName("my-tool", "/test/src/cli.ts", "/test")).toBe("my-tool");
+		expect(resolveBaseName("my-tool", "/test/src/cli.ts", "/test", undefined)).toBe("my-tool");
 	});
 
 	describe("with package.json", () => {
@@ -238,24 +234,28 @@ describe("resolveBaseName", () => {
 		});
 
 		it("falls back to package.json name", () => {
-			writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ name: "my-cli-app" }));
-			expect(resolveBaseName(undefined, join(tmpDir, "src/cli.ts"), tmpDir)).toBe("my-cli-app");
+			expect(
+				resolveBaseName(undefined, join(tmpDir, "src/cli.ts"), tmpDir, { name: "my-cli-app" }),
+			).toBe("my-cli-app");
 		});
 
 		it("strips scope prefix from package.json name", () => {
-			writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ name: "@scope/my-cli" }));
-			expect(resolveBaseName(undefined, join(tmpDir, "src/cli.ts"), tmpDir)).toBe("my-cli");
+			expect(
+				resolveBaseName(undefined, join(tmpDir, "src/cli.ts"), tmpDir, { name: "@scope/my-cli" }),
+			).toBe("my-cli");
 		});
 	});
 
 	it("falls back to entry filename", () => {
-		expect(resolveBaseName(undefined, "/nonexistent/src/main.ts", "/nonexistent")).toBe("main");
+		expect(resolveBaseName(undefined, "/nonexistent/src/main.ts", "/nonexistent", undefined)).toBe(
+			"main",
+		);
 	});
 
 	it("strips file extension from entry filename", () => {
-		expect(resolveBaseName(undefined, "/nonexistent/src/app.cli.ts", "/nonexistent")).toBe(
-			"app.cli",
-		);
+		expect(
+			resolveBaseName(undefined, "/nonexistent/src/app.cli.ts", "/nonexistent", undefined),
+		).toBe("app.cli");
 	});
 });
 
@@ -265,17 +265,21 @@ describe("resolveBaseName", () => {
 
 describe("getBinaryFilename", () => {
 	it("returns <name>-<target> for non-Windows targets", () => {
-		expect(getBinaryFilename("my-cli", "bun-linux-x64-baseline")).toBe(
+		expect(binaryFilename(BUN_TARGETS, "my-cli", "bun-linux-x64-baseline")).toBe(
 			"my-cli-bun-linux-x64-baseline",
 		);
-		expect(getBinaryFilename("my-cli", "bun-darwin-arm64")).toBe("my-cli-bun-darwin-arm64");
+		expect(binaryFilename(BUN_TARGETS, "my-cli", "bun-darwin-arm64")).toBe(
+			"my-cli-bun-darwin-arm64",
+		);
 	});
 
 	it("appends .exe for Windows targets", () => {
-		expect(getBinaryFilename("my-cli", "bun-windows-x64-baseline")).toBe(
+		expect(binaryFilename(BUN_TARGETS, "my-cli", "bun-windows-x64-baseline")).toBe(
 			"my-cli-bun-windows-x64-baseline.exe",
 		);
-		expect(getBinaryFilename("my-cli", "bun-windows-arm64")).toBe("my-cli-bun-windows-arm64.exe");
+		expect(binaryFilename(BUN_TARGETS, "my-cli", "bun-windows-arm64")).toBe(
+			"my-cli-bun-windows-arm64.exe",
+		);
 	});
 });
 
@@ -285,12 +289,7 @@ describe("getBinaryFilename", () => {
 
 describe("generateResolverFor", () => {
 	it("maps all Unix targets to correct uname keys", () => {
-		const content = generateResolverFor(
-			"my-cli",
-			SUPPORTED_TARGETS,
-			TARGET_INFO,
-			getBinaryFilename,
-		);
+		const content = generateResolverFor(BUN_TARGETS, "my-cli", BUN_TARGETS.targets);
 		expect(content).toContain("Linux-x86_64)");
 		expect(content).toContain("Linux-aarch64)");
 		expect(content).toContain("Darwin-x86_64)");
@@ -298,23 +297,13 @@ describe("generateResolverFor", () => {
 	});
 
 	it("excludes Windows targets from shell resolver", () => {
-		const content = generateResolverFor(
-			"my-cli",
-			SUPPORTED_TARGETS,
-			TARGET_INFO,
-			getBinaryFilename,
-		);
+		const content = generateResolverFor(BUN_TARGETS, "my-cli", BUN_TARGETS.targets);
 		expect(content).not.toContain("Windows");
 		expect(content).not.toContain("bun-windows");
 	});
 
 	it("maps to correct binary filenames", () => {
-		const content = generateResolverFor(
-			"my-cli",
-			SUPPORTED_TARGETS,
-			TARGET_INFO,
-			getBinaryFilename,
-		);
+		const content = generateResolverFor(BUN_TARGETS, "my-cli", BUN_TARGETS.targets);
 		expect(content).toContain('"my-cli-bun-linux-x64-baseline"');
 		expect(content).toContain('"my-cli-bun-linux-arm64"');
 		expect(content).toContain('"my-cli-bun-darwin-x64"');
@@ -323,7 +312,7 @@ describe("generateResolverFor", () => {
 
 	it("only includes targets that were built", () => {
 		const subset: BunTarget[] = ["bun-linux-x64-baseline", "bun-darwin-arm64"];
-		const content = generateResolverFor("my-cli", subset, TARGET_INFO, getBinaryFilename);
+		const content = generateResolverFor(BUN_TARGETS, "my-cli", subset);
 		expect(content).toContain("Linux-x86_64)");
 		expect(content).toContain("Darwin-arm64)");
 		// Should NOT contain platforms not in subset
@@ -332,12 +321,7 @@ describe("generateResolverFor", () => {
 	});
 
 	it("includes the base name in error messages", () => {
-		const content = generateResolverFor(
-			"my-tool",
-			SUPPORTED_TARGETS,
-			TARGET_INFO,
-			getBinaryFilename,
-		);
+		const content = generateResolverFor(BUN_TARGETS, "my-tool", BUN_TARGETS.targets);
 		expect(content).toContain("[my-tool]");
 	});
 });
@@ -348,21 +332,11 @@ describe("generateResolverFor", () => {
 
 describe("Deno resolvers", () => {
 	it("maps Deno targets to their platform-specific filenames", () => {
-		const shell = generateResolverFor(
-			"my-cli",
-			SUPPORTED_DENO_TARGETS,
-			DENO_TARGET_INFO,
-			getDenoBinaryFilename,
-		);
+		const shell = generateResolverFor(DENO_TARGETS, "my-cli", DENO_TARGETS.targets);
 		expect(shell).toContain('Linux-x86_64) bin="my-cli-x86_64-unknown-linux-gnu"');
 		expect(shell).not.toContain("pc-windows-msvc");
 
-		const cmd = generateCmdResolverFor(
-			"my-cli",
-			SUPPORTED_DENO_TARGETS,
-			DENO_TARGET_INFO,
-			getDenoBinaryFilename,
-		);
+		const cmd = generateCmdResolverFor(DENO_TARGETS, "my-cli", DENO_TARGETS.targets);
 		expect(cmd).toContain("my-cli-x86_64-pc-windows-msvc.exe");
 		expect(cmd).toContain("my-cli-aarch64-pc-windows-msvc.exe");
 	});
@@ -370,39 +344,24 @@ describe("Deno resolvers", () => {
 
 describe("generateCmdResolverFor", () => {
 	it("references the correct Windows binary filename", () => {
-		const content = generateCmdResolverFor(
-			"my-cli",
-			SUPPORTED_TARGETS,
-			TARGET_INFO,
-			getBinaryFilename,
-		);
+		const content = generateCmdResolverFor(BUN_TARGETS, "my-cli", BUN_TARGETS.targets);
 		expect(content).toContain("my-cli-bun-windows-x64-baseline.exe");
 		expect(content).toContain("my-cli-bun-windows-arm64.exe");
 	});
 
 	it("includes the base name in error messages", () => {
-		const content = generateCmdResolverFor(
-			"my-tool",
-			SUPPORTED_TARGETS,
-			TARGET_INFO,
-			getBinaryFilename,
-		);
+		const content = generateCmdResolverFor(BUN_TARGETS, "my-tool", BUN_TARGETS.targets);
 		expect(content).toContain("[my-tool]");
 	});
 
 	it("generates error stub when no Windows targets built", () => {
 		const unixOnly: BunTarget[] = ["bun-linux-x64-baseline", "bun-darwin-arm64"];
-		const content = generateCmdResolverFor("my-cli", unixOnly, TARGET_INFO, getBinaryFilename);
+		const content = generateCmdResolverFor(BUN_TARGETS, "my-cli", unixOnly);
 		expect(content).toContain("No Windows binary was built");
 	});
 
 	it("uses CRLF line endings", () => {
-		const content = generateCmdResolverFor(
-			"my-cli",
-			SUPPORTED_TARGETS,
-			TARGET_INFO,
-			getBinaryFilename,
-		);
+		const content = generateCmdResolverFor(BUN_TARGETS, "my-cli", BUN_TARGETS.targets);
 		expect(content).toContain("\r\n");
 	});
 });
@@ -414,7 +373,7 @@ describe("writeResolver", () => {
 		rmSync(tmpDir, { recursive: true, force: true });
 		mkdirSync(tmpDir, { recursive: true });
 		try {
-			writeResolver(resolverPath, "my-cli", SUPPORTED_TARGETS, TARGET_INFO, getBinaryFilename);
+			writeResolver(BUN_TARGETS, resolverPath, "my-cli", BUN_TARGETS.targets);
 			expect(readFileSync(resolverPath, "utf8")).toContain("Linux-x86_64)");
 			expect(readFileSync(`${resolverPath}.cmd`, "utf8")).toContain(
 				"my-cli-bun-windows-x64-baseline.exe",
@@ -431,25 +390,15 @@ describe("writeResolver", () => {
 
 async function executeBuildError(name: string, argv: string[]): Promise<string> {
 	const originalCwd = process.cwd;
-	const originalLog = console.log;
-	const originalError = console.error;
 	const tmpDir = mkdtempSync(join(tmpdir(), `crust-${name}-`));
-	const errors: string[] = [];
 	rmSync(tmpDir, { recursive: true, force: true });
 	mkdirSync(join(tmpDir, "src"), { recursive: true });
 	writeFileSync(join(tmpDir, "src", "cli.ts"), "console.log('hi');");
 	process.cwd = () => tmpDir;
-	console.log = () => {};
-	console.error = (...args: unknown[]) => errors.push(args.map(String).join(" "));
 	try {
-		process.exitCode = 0;
-		await new Crust("test").add(buildCommand).execute({ argv: ["build", ...argv] });
-		return errors.join("\n");
+		return (await captureExecute(new Crust("test").add(buildCommand), ["build", ...argv])).stderr;
 	} finally {
-		process.exitCode = 0;
 		process.cwd = originalCwd;
-		console.log = originalLog;
-		console.error = originalError;
 		rmSync(tmpDir, { recursive: true, force: true });
 	}
 }
@@ -498,29 +447,19 @@ describe("buildCommand error handling", () => {
 
 		process.cwd = () => tmpDir;
 
-		const originalLog = console.log;
-		const originalError = console.error;
-		const errors: string[] = [];
-		console.log = () => {};
-		console.error = (...args: unknown[]) => {
-			errors.push(args.map(String).join(" "));
-		};
-
 		try {
-			process.exitCode = 0;
-			const app = new Crust("test").add(buildCommand);
+			const result = await captureExecute(new Crust("test").add(buildCommand), [
+				"build",
+				"--entry",
+				"nonexistent.ts",
+				"--target",
+				"bun-linux-x64-baseline",
+			]);
 
-			await app.execute({
-				argv: ["build", "--entry", "nonexistent.ts", "--target", "bun-linux-x64-baseline"],
-			});
-
-			expect(process.exitCode).toBe(1);
-			expect(errors.some((e) => /Entry file not found/.test(e))).toBe(true);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("Entry file not found");
 		} finally {
-			process.exitCode = 0;
 			process.cwd = originalCwd;
-			console.log = originalLog;
-			console.error = originalError;
 			rmSync(tmpDir, { recursive: true, force: true });
 		}
 	});
@@ -533,29 +472,18 @@ describe("buildCommand error handling", () => {
 
 		process.cwd = () => tmpDir;
 
-		const originalLog = console.log;
-		const originalError = console.error;
-		const errors: string[] = [];
-		console.log = () => {};
-		console.error = (...args: unknown[]) => {
-			errors.push(args.map(String).join(" "));
-		};
-
 		try {
-			process.exitCode = 0;
-			const app = new Crust("test").add(buildCommand);
+			const result = await captureExecute(new Crust("test").add(buildCommand), [
+				"build",
+				"--outfile",
+				"./out",
+				"--no-validate",
+			]);
 
-			await app.execute({
-				argv: ["build", "--outfile", "./out", "--no-validate"],
-			});
-
-			expect(process.exitCode).toBe(1);
-			expect(errors.some((e) => /--outfile cannot be used/.test(e))).toBe(true);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("--outfile cannot be used");
 		} finally {
-			process.exitCode = 0;
 			process.cwd = originalCwd;
-			console.log = originalLog;
-			console.error = originalError;
 			rmSync(tmpDir, { recursive: true, force: true });
 		}
 	});
@@ -573,30 +501,22 @@ describe("buildCommand error handling", () => {
 		);
 
 		process.cwd = () => tmpDir;
-		const originalLog = console.log;
-		console.log = () => {};
 
 		try {
-			process.exitCode = 0;
-			const app = new Crust("test").add(buildCommand);
-			await app.execute({
-				argv: [
-					"build",
-					"--entry",
-					"src/cli.ts",
-					"--target",
-					"bun-darwin-arm64",
-					"--outfile",
-					"./out/custom/cli",
-				],
-			});
+			const result = await captureExecute(new Crust("test").add(buildCommand), [
+				"build",
+				"--entry",
+				"src/cli.ts",
+				"--target",
+				"bun-darwin-arm64",
+				"--outfile",
+				"./out/custom/cli",
+			]);
 
-			expect(process.exitCode).toBe(0);
+			expect(result.exitCode).toBe(0);
 			expect(readFileSync(join(tmpDir, "out", "custom", "artifact.txt"), "utf-8")).toBe("built");
 		} finally {
-			process.exitCode = 0;
 			process.cwd = originalCwd;
-			console.log = originalLog;
 			rmSync(tmpDir, { recursive: true, force: true });
 		}
 	}, 30_000);

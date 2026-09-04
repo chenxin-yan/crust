@@ -4,60 +4,17 @@
  * Tests the root crust command with the build subcommand wired up,
  * verifying help output, version output, subcommand help, and error handling.
  *
- * Uses `Crust.execute({ argv })` instead of the removed `runCommand`.
+ * Uses `captureExecute(app, argv)` to exercise and capture the terminal path.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
+
+import { captureExecute } from "@crustjs/testing";
 
 import pkg from "../package.json";
 import { crustBase } from "./app.ts";
 import { buildCommand } from "./commands/build.ts";
 import { publishCommand } from "./commands/publish.ts";
-
-// ────────────────────────────────────────────────────────────────────────────
-// Test helpers — capture console output
-// ────────────────────────────────────────────────────────────────────────────
-
-let stdoutChunks: string[];
-let stderrChunks: string[];
-let originalLog: typeof console.log;
-let originalError: typeof console.error;
-let originalWarn: typeof console.warn;
-let originalExitCode: typeof process.exitCode;
-
-beforeEach(() => {
-	stdoutChunks = [];
-	stderrChunks = [];
-	originalLog = console.log;
-	originalError = console.error;
-	originalWarn = console.warn;
-	originalExitCode = process.exitCode;
-
-	console.log = (...args: unknown[]) => {
-		stdoutChunks.push(args.map(String).join(" "));
-	};
-	console.error = (...args: unknown[]) => {
-		stderrChunks.push(args.map(String).join(" "));
-	};
-	console.warn = (...args: unknown[]) => {
-		stderrChunks.push(args.map(String).join(" "));
-	};
-});
-
-afterEach(() => {
-	console.log = originalLog;
-	console.error = originalError;
-	console.warn = originalWarn;
-	process.exitCode = originalExitCode;
-});
-
-function getStdout(): string {
-	return stdoutChunks.join("\n");
-}
-
-function _getStderr(): string {
-	return stderrChunks.join("\n");
-}
 
 const expectedVersion = pkg.version;
 
@@ -73,8 +30,7 @@ function makeCrustApp() {
 describe("crust CLI entry point", () => {
 	describe("crust --help", () => {
 		it("should show help text with build and publish listed", async () => {
-			await makeCrustApp().execute({ argv: ["--help"] });
-			const output = getStdout();
+			const { stdout: output } = await captureExecute(makeCrustApp(), ["--help"]);
 
 			expect(output).toContain("crust");
 			expect(output).toContain("CLI tooling for the Crust framework");
@@ -87,8 +43,7 @@ describe("crust CLI entry point", () => {
 		});
 
 		it("should show --help and --version in options", async () => {
-			await makeCrustApp().execute({ argv: ["--help"] });
-			const output = getStdout();
+			const { stdout: output } = await captureExecute(makeCrustApp(), ["--help"]);
 
 			expect(output).toContain("--help");
 			expect(output).toContain("--version");
@@ -97,8 +52,7 @@ describe("crust CLI entry point", () => {
 		});
 
 		it("should show help with -h alias", async () => {
-			await makeCrustApp().execute({ argv: ["-h"] });
-			const output = getStdout();
+			const { stdout: output } = await captureExecute(makeCrustApp(), ["-h"]);
 
 			expect(output).toContain("Usage:");
 			expect(output).toContain("Commands:");
@@ -107,15 +61,13 @@ describe("crust CLI entry point", () => {
 
 	describe("crust --version", () => {
 		it("should show version from package.json", async () => {
-			await makeCrustApp().execute({ argv: ["--version"] });
-			const output = getStdout();
+			const { stdout: output } = await captureExecute(makeCrustApp(), ["--version"]);
 
 			expect(output).toContain(`crust v${expectedVersion}`);
 		});
 
 		it("should show version with -v alias", async () => {
-			await makeCrustApp().execute({ argv: ["-v"] });
-			const output = getStdout();
+			const { stdout: output } = await captureExecute(makeCrustApp(), ["-v"]);
 
 			expect(output).toContain(`crust v${expectedVersion}`);
 		});
@@ -123,8 +75,7 @@ describe("crust CLI entry point", () => {
 
 	describe("crust (no args)", () => {
 		it("should show help when invoked without a subcommand", async () => {
-			await makeCrustApp().execute({ argv: [] });
-			const output = getStdout();
+			const { stdout: output } = await captureExecute(makeCrustApp(), []);
 
 			expect(output).toContain("Usage:");
 			expect(output).toContain("Commands:");
@@ -135,16 +86,14 @@ describe("crust CLI entry point", () => {
 
 	describe("crust unknown", () => {
 		it("shows root help for unknown input", async () => {
-			await makeCrustApp().execute({ argv: ["unknown"] });
-			const output = getStdout();
+			const { stdout: output } = await captureExecute(makeCrustApp(), ["unknown"]);
 			expect(output).toContain("Usage:");
 			expect(output).toContain("build");
 			expect(output).toContain("publish");
 		});
 
 		it("shows root help for partial command input", async () => {
-			await makeCrustApp().execute({ argv: ["buil"] });
-			const output = getStdout();
+			const { stdout: output } = await captureExecute(makeCrustApp(), ["buil"]);
 			expect(output).toContain("Commands:");
 		});
 	});
