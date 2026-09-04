@@ -94,7 +94,7 @@ export function renderHelp(command: CommandSnapshot, path?: readonly string[]): 
 	]) {
 		if (section.length > 0) lines.push("", ...section);
 	}
-	for (const section of sectionsFor(command.meta.sections, HELP)) {
+	for (const section of sectionsFor(model.sections, HELP)) {
 		lines.push(
 			"",
 			bold(cyan(`${section.title}:`)),

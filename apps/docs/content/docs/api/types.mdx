@@ -103,7 +103,7 @@ const target = defineArg("target", { type: "string", required: true });
 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="CommandMeta" />
 
-`sections` is an ordered list of plain-text `{ title, body }` entries, optionally scoped to renderer identities with `only` or `except` audiences. Declare it in the metadata passed to `new Crust()` or `defineCommand()`; help and man render the entries after their built-in sections. `hidden` removes a command from user-facing help, completion, man-page, typo-suggestion, and skill listings without disabling direct routing.
+`version` is the application version declared through `new Crust(name, { version })`; it is available on the root `CommandSnapshot.meta` for Extensions and tooling. `sections` is an ordered list of plain-text `{ title, body }` entries, optionally scoped to renderer identities with `only` or `except` audiences. Declare sections in the metadata passed to `new Crust()` or `defineCommand()`; help and man render them after their built-in sections. `hidden` removes a command from user-facing help, completion, man-page, typo-suggestion, and skill listings without disabling direct routing.
 
 ### `SectionConsumer`, `SectionAudience`, `CommandSectionInput`, and `CommandSection`
 

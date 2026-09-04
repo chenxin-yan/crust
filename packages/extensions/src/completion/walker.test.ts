@@ -1,14 +1,17 @@
 import { describe, expect, it } from "bun:test";
 
-import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
+import { type AnyCrust, Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
+import { buildCommandDocumentation } from "@crustjs/core/tooling";
 
 import { walkCommandNode } from "./walker.ts";
 
+async function walk(app: AnyCrust) {
+	return walkCommandNode(buildCommandDocumentation(await app.snapshot()));
+}
+
 describe("walkCommandNode", () => {
 	it("walks a leaf command with no flags, args, or children", async () => {
-		const spec = walkCommandNode(
-			await new Crust("mycli", { description: "Top-level CLI" }).snapshot(),
-		);
+		const spec = await walk(new Crust("mycli", { description: "Top-level CLI" }));
 
 		expect(spec.name).toBe("mycli");
 		expect(spec.description).toBe("Top-level CLI");
@@ -23,7 +26,7 @@ describe("walkCommandNode", () => {
 			{ name: "name", type: "string", description: "Name to greet", aliases: ["nm"] },
 			{ name: "tag", type: "string", multiple: true },
 		);
-		const spec = walkCommandNode(await app.snapshot());
+		const spec = await walk(app);
 		const byName = Object.fromEntries(spec.flags.map((f) => [f.name, f]));
 
 		expect(byName.verbose).toEqual({
@@ -58,7 +61,7 @@ describe("walkCommandNode", () => {
 			.provide(auth())
 			.add(defineCommand("deploy", (command) => command.action(() => {})));
 
-		const spec = walkCommandNode(await app.snapshot());
+		const spec = await walk(app);
 		expect(spec.flags.map((flag) => flag.name)).toContain("api-key");
 		expect(spec.subCommands[0]?.flags.map((flag) => flag.name)).toContain("api-key");
 	});
@@ -68,7 +71,7 @@ describe("walkCommandNode", () => {
 			{ name: "input", type: "string", required: true, description: "Input file" },
 			{ name: "extra", type: "string", variadic: true },
 		);
-		const spec = walkCommandNode(await app.snapshot());
+		const spec = await walk(app);
 
 		expect(spec.args).toEqual([
 			{
@@ -86,7 +89,7 @@ describe("walkCommandNode", () => {
 		const app = new Crust("mycli")
 			.flags({ name: "target", type: "string", choices: ["browser", "bun", "node"] })
 			.args({ name: "shell", type: "string", required: true, choices: ["bash", "zsh", "fish"] });
-		const spec = walkCommandNode(await app.snapshot());
+		const spec = await walk(app);
 		expect(spec.flags.find((f) => f.name === "target")?.choices).toEqual([
 			"browser",
 			"bun",
@@ -105,7 +108,7 @@ describe("walkCommandNode", () => {
 					command.flags({ name: "local", type: "boolean" }),
 				),
 			);
-		const spec = walkCommandNode(await app.snapshot());
+		const spec = await walk(app);
 		const childSpec = spec.subCommands[0];
 		if (!childSpec) throw new Error("missing child");
 		expect(childSpec.description).toBe("Child command");
@@ -121,7 +124,7 @@ describe("walkCommandNode", () => {
 				(command) => command,
 			),
 		);
-		const spec = walkCommandNode(await app.snapshot());
+		const spec = await walk(app);
 		expect(spec.subCommands.map((s) => s.name)).toEqual(["issue"]);
 		expect(spec.subCommands[0]?.aliases).toEqual(["issues", "i"]);
 	});
@@ -137,7 +140,7 @@ describe("walkCommandNode", () => {
 			.add(
 				defineCommand("kid", { description: `${ESC}[31mred kid${ESC}[0m` }, (command) => command),
 			);
-		const spec = walkCommandNode(await app.snapshot());
+		const spec = await walk(app);
 		expect(spec.description).toBe("colored desc");
 		expect(spec.flags[0]?.description).toBe("verbose");
 		expect(spec.flags[1]?.description).toBeUndefined();
@@ -153,9 +156,7 @@ describe("walkCommandNode — url/path/json valueCompletion", () => {
 			{ name: "out", type: "path" },
 			{ name: "config", type: "json" },
 		);
-		const by = Object.fromEntries(
-			walkCommandNode(await app.snapshot()).flags.map((f) => [f.name, f]),
-		);
+		const by = Object.fromEntries((await walk(app)).flags.map((f) => [f.name, f]));
 		expect(by.endpoint?.valueCompletion).toBe("none");
 		expect(by.out?.valueCompletion).toBe("files");
 		expect(by.config?.valueCompletion).toBe("none");
@@ -167,7 +168,7 @@ describe("walkCommandNode — url/path/json valueCompletion", () => {
 			{ name: "dst", type: "url" },
 			{ name: "cfg", type: "json" },
 		);
-		const [src, dst, cfg] = walkCommandNode(await app.snapshot()).args;
+		const [src, dst, cfg] = (await walk(app)).args;
 		expect(src?.valueCompletion).toBe("files");
 		expect(dst?.valueCompletion).toBe("none");
 		expect(cfg?.valueCompletion).toBe("none");

@@ -9,7 +9,7 @@ import {
 	symlink,
 	writeFile,
 } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 import { SkillConflictError } from "./errors.ts";
@@ -57,11 +57,28 @@ async function projectInstall(sourceDir: string, force?: boolean) {
 }
 
 describe("symlink-only skill installation", () => {
+	it("reports the effective global scope when project scope is requested from home", async () => {
+		const name = "crust-effective-scope-test";
+		const sourceDir = await createSource(name);
+		const result = await withCwd(homedir(), () =>
+			getSkillStatus({ name, sourceDir, agents: ["codex"], scope: "project" }),
+		);
+
+		expect(result.agents[0]).toMatchObject({
+			outputDir: join(homedir(), ".agents", "skills", name),
+			scope: "global",
+		});
+	});
+
 	it("installs a relative project link", async () => {
 		const sourceDir = await createSource();
 		const installed = await projectInstall(sourceDir);
 
-		expect(installed.agents[0]).toMatchObject({ outputDir: outputDir(), status: "installed" });
+		expect(installed.agents[0]).toMatchObject({
+			outputDir: outputDir(),
+			scope: "project",
+			status: "installed",
+		});
 		expect(resolve(dirname(outputDir()), await readlink(outputDir()))).toBe(sourceDir);
 		expect(await readFile(join(outputDir(), "commands", "run.md"), "utf8")).toBe("run\n");
 	});
@@ -127,7 +144,7 @@ describe("symlink-only skill installation", () => {
 				}),
 			);
 
-		expect((await status()).agents[0]?.status).toBe("absent");
+		expect((await status()).agents[0]).toMatchObject({ scope: "project", status: "absent" });
 		await projectInstall(sourceDir);
 		expect((await status()).agents[0]?.status).toBe("linked");
 		await rm(sourceDir, { recursive: true });
@@ -144,7 +161,7 @@ describe("symlink-only skill installation", () => {
 		let result = await withCwd(tempRoot, () =>
 			uninstallSkill({ name: "demo", agents: ["claude-code"], scope: "project" }),
 		);
-		expect(result.agents[0]?.status).toBe("removed");
+		expect(result.agents[0]).toMatchObject({ scope: "project", status: "removed" });
 		await expect(lstat(outputDir())).rejects.toThrow();
 
 		await mkdir(outputDir(), { recursive: true });

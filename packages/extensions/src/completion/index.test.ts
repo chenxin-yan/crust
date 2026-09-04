@@ -62,8 +62,8 @@ function getProcessStdout(): string {
 }
 
 function buildCli() {
-	return new Crust("mycli", { description: "Test CLI" })
-		.extend(completion({ version: "1.2.3" }))
+	return new Crust("mycli", { description: "Test CLI", version: "1.2.3" })
+		.extend(completion())
 		.add(
 			defineCommand("build", { description: "Build artifact" }, (cmd) =>
 				cmd
@@ -96,6 +96,21 @@ describe("completion", () => {
 			.action(() => {});
 		const root = await app.snapshot();
 		expect(Object.keys(root.subCommands)).toContain("shell-completion");
+	});
+
+	it("uses the explicit version option as an override", async () => {
+		const app = new Crust("mycli", { version: "1.2.3" })
+			.extend(completion({ version: "2.0.0" }))
+			.action(() => {});
+		await app.execute({ argv: ["completion", "bash"] });
+		expect(getStdout()).toStartWith("# completion script for mycli v2.0.0");
+	});
+
+	it("reports a missing version", async () => {
+		const app = new Crust("mycli").extend(completion()).action(() => {});
+		await app.execute({ argv: ["completion", "bash"] });
+		expect(stderrChunks.join("\n")).toContain("completion extension requires a version");
+		expect(process.exitCode).toBe(1);
 	});
 
 	it("`mycli completion bash` prints a bash script to stdout", async () => {

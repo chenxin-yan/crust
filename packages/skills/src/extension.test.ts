@@ -142,12 +142,12 @@ describe("skill extension packaged directory", () => {
 		const extension = skill({ distDir: source, extras: [authored] });
 		const snapshot = await new Crust("demo", {
 			description: "Demo",
+			version: "9.9.9",
 			sections: [{ title: "Agent skills", body: "Application-authored agent guidance." }],
 		})
 			.extend(extension)
 			.snapshot();
 		const outDir = join(tempRoot, "dist");
-		await writeFile(join(tempRoot, "package.json"), '{"version":"9.9.9"}');
 
 		await withCwd(tempRoot, async () => {
 			await extension.build?.({ snapshot, outDir });
@@ -201,7 +201,7 @@ describe("skill extension packaged directory", () => {
 		const extension = skill({ distDir: source });
 		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
 		const outDir = join(tempRoot, "dist");
-		await writeFile(join(tempRoot, "package.json"), "{}");
+		await writeFile(join(tempRoot, "package.json"), '{"version":"8.8.8"}');
 
 		await withCwd(tempRoot, async () => {
 			await extension.build!({ snapshot, outDir });

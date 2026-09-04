@@ -180,6 +180,7 @@ export function snapshotCommand(node: CommandNode): CommandSnapshot {
 		meta: freezeCompact({
 			name: node.meta.name,
 			description: node.meta.description,
+			version: node.meta.version,
 			usage: node.meta.usage,
 			sections: node.meta.sections
 				? Object.freeze(node.meta.sections.map((section) => Object.freeze({ ...section })))

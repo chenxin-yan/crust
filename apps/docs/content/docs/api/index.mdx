@@ -28,8 +28,9 @@ See [Types](/docs/api/types) for command definitions, Command Snapshots, Command
   The package root contains invocation-time authoring and execution APIs. `@crustjs/core/tooling`
   exports the supported `CommandSnapshot` type consumed by
   [`app.snapshot()`](/docs/api/crust#snapshot), plus build- and render-time helpers: `isListed()`,
-  `sectionsFor()`, `visibleSectionsFor()`, `formatDescription()`, the presentation-neutral
-  `buildCommandDocumentation()` model with its `CommandDocumentation`, `DocumentationArg`,
-  `DocumentationFlag`, and `UsageSegment` types, and the `SNAPSHOT_PATH_ENV` and `BUILD_OUT_DIR_ENV`
-  subprocess-protocol constants. These helpers move in lockstep with first-party tooling.
+  `sectionsFor()`, `visibleSectionsFor()`, `formatDefault()`, `formatDescription()`, the
+  presentation-neutral `buildCommandDocumentation()` model with its `CommandDocumentation`
+  (including unfiltered command sections), `DocumentationArg`, `DocumentationFlag`, and
+  `UsageSegment` types, and the `SNAPSHOT_PATH_ENV` and `BUILD_OUT_DIR_ENV` subprocess-protocol
+  constants. These helpers move in lockstep with first-party tooling.
 </Callout>

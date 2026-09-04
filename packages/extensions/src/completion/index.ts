@@ -2,12 +2,14 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
 
 import {
+	CrustError,
 	type Extension,
 	type ExtensionId,
 	defineCommand,
 	defineExtension,
 	defineExtensionId,
 } from "@crustjs/core";
+import { buildCommandDocumentation } from "@crustjs/core/tooling";
 
 import { assertSafeBinName, sanitizeFreeText } from "./escape.ts";
 import { renderBash } from "./templates/bash.ts";
@@ -39,10 +41,9 @@ export interface CompletionOptions {
 	binName?: string;
 	/**
 	 * Free-form version string embedded in generated script headers. The
-	 * walker does not parse it. Pass your `package.json` version when wiring
-	 * the extension.
+	 * walker does not parse it.
 	 *
-	 * @default "0.0.0"
+	 * @default The root command's `meta.version`
 	 */
 	version?: string;
 }
@@ -77,7 +78,7 @@ const SHELL_RENDERERS = {
  * **Strategy: pure-static.** The action walks the final root snapshot, so
  * registration order is irrelevant — any commands or recursive flags added
  * by other Extensions are visible by the time we generate the script. The
- * walker projects the root snapshot to a small completion model; per-shell
+ * walker projects Core's documentation model to a small completion model; per-shell
  * renderers turn that into a self-contained shell script with no runtime
  * callbacks.
  *
@@ -94,7 +95,6 @@ const SHELL_RENDERERS = {
  */
 function completionFactory(options: CompletionOptions = {}): Extension {
 	const subcommandName = options.command ?? "completion";
-	const version = options.version ?? "0.0.0";
 
 	const completionCommand = defineCommand(
 		subcommandName,
@@ -120,13 +120,20 @@ function completionFactory(options: CompletionOptions = {}): Extension {
 					// CLIs fail loudly. The walker also re-validates command/flag
 					// identifiers when it builds the spec.
 					const binName = assertSafeBinName(options.binName ?? rootCommand.meta.name);
+					const version = options.version ?? rootCommand.meta.version;
+					if (version === undefined) {
+						throw new CrustError(
+							"DEFINITION",
+							"The completion extension requires a version in new Crust(name, { version }) or completion({ version })",
+						);
+					}
 					// `version` flows into header comments only; sanitise to drop
 					// control characters (newlines especially) so they cannot break
 					// out of the comment line in the emitted script.
 					const safeVersion = sanitizeFreeText(version);
 
 					const { shell: requestedShell } = context.args;
-					const spec = walkCommandNode(rootCommand);
+					const spec = walkCommandNode(buildCommandDocumentation(rootCommand));
 					const outputDir = context.flags["output-dir"];
 
 					if (outputDir === undefined) {

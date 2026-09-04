@@ -241,6 +241,7 @@ describe("command metadata", () => {
 	it("preserves root metadata through builder calls", async () => {
 		const app = new Crust("test", {
 			description: "A test command",
+			version: "1.2.3",
 			usage: "test [options]",
 		})
 			.flags({ name: "verbose", type: "boolean" })
@@ -250,6 +251,7 @@ describe("command metadata", () => {
 			meta: {
 				name: "test",
 				description: "A test command",
+				version: "1.2.3",
 				usage: "test [options]",
 			},
 			flags: { verbose: { type: "boolean" } },

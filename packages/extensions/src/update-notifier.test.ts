@@ -1196,18 +1196,13 @@ describe("updateNotifier post-run hook", () => {
 	// ── Integration with Crust ──────────────────────────────────────────
 
 	describe("Crust.execute() integration", () => {
-		it("works as an extension passed to Crust.execute()", async () => {
+		it("uses the root metadata version with Crust.execute()", async () => {
 			const pkgName = uniquePackageName("runcommand");
 			mockRegistryResponse("5.0.0");
 
 			let commandExecuted = false;
-			const app = new Crust(pkgName, { description: "Test" })
-				.extend(
-					updateNotifier({
-						currentVersion: "1.0.0",
-						packageName: pkgName,
-					}),
-				)
+			const app = new Crust(pkgName, { description: "Test", version: "1.0.0" })
+				.extend(updateNotifier({ packageName: pkgName }))
 				.action(() => {
 					commandExecuted = true;
 				});
@@ -1217,6 +1212,18 @@ describe("updateNotifier post-run hook", () => {
 			expect(commandExecuted).toBe(true);
 			expect(getOutput()).toContain("Update available");
 			expect(getOutput()).toContain("5.0.0");
+		});
+
+		it("reports a missing application version", async () => {
+			const pkgName = uniquePackageName("missing-version");
+			const app = new Crust(pkgName)
+				.extend(updateNotifier({ packageName: pkgName }))
+				.action(() => {});
+
+			await app.execute({ argv: [] });
+
+			expect(getOutput()).toContain("update notifier extension requires a version");
+			expect(process.exitCode).toBe(1);
 		});
 
 		it("does not break command execution when registry is down", async () => {

@@ -99,6 +99,8 @@ export type UninstallStatus = "removed" | "not-found";
 export interface AgentResult {
 	agent: AgentTarget;
 	outputDir: string;
+	/** Effective scope after remapping project scope at the home directory. */
+	scope: Scope;
 	status: InstallStatus;
 }
 
@@ -116,6 +118,7 @@ export interface UninstallSkillResult {
 	agents: Array<{
 		agent: AgentTarget;
 		outputDir: string;
+		scope: Scope;
 		status: UninstallStatus;
 	}>;
 }
@@ -134,6 +137,7 @@ export interface SkillStatusResult {
 	agents: Array<{
 		agent: AgentTarget;
 		outputDir: string;
+		scope: Scope;
 		status: SkillLinkStatus;
 	}>;
 }

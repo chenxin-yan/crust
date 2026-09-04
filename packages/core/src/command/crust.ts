@@ -225,13 +225,13 @@ export type RunArguments<Shape extends CommandShape> = readonly [
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Static configuration for a reusable command definition. */
-export interface CommandConfig extends Omit<CommandMeta, "name" | "sections"> {
+export interface CommandConfig extends Omit<CommandMeta, "name" | "sections" | "version"> {
 	/** Plain-text sections rendered after built-in command documentation. */
 	readonly sections?: readonly CommandSectionInput[];
 }
 
 /** Static metadata accepted by the root command constructor. */
-export type RootCommandMeta = Pick<CommandMeta, "description" | "usage"> & {
+export type RootCommandMeta = Pick<CommandMeta, "description" | "version" | "usage"> & {
 	/** Plain-text sections rendered after built-in command documentation. */
 	readonly sections?: readonly CommandSectionInput[];
 };
@@ -1005,7 +1005,7 @@ export class Crust<
 	 * Create a new root command builder.
 	 *
 	 * @param name - The command name.
-	 * @param meta - Optional root description, usage, and documentation sections.
+	 * @param meta - Optional root description, version, usage, and documentation sections.
 	 */
 	constructor(name: string, meta: RootCommandMeta = {}) {
 		// Runtime is the single home for this check: constructors cannot carry
@@ -1029,6 +1029,7 @@ export class Crust<
 		}
 		this._node = createCommandNode(name);
 		if (meta.description !== undefined) this._node.meta.description = meta.description;
+		if (meta.version !== undefined) this._node.meta.version = meta.version;
 		if (meta.usage !== undefined) this._node.meta.usage = meta.usage;
 		if (meta.sections !== undefined) {
 			this._node.meta.sections = validateCommandSections(name, meta.sections);

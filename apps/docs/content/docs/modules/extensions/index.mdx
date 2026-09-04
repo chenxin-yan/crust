@@ -27,14 +27,14 @@ import {
 } from "@crustjs/extensions";
 import pkg from "../package.json";
 
-const app = new Crust("my-cli")
+const app = new Crust("my-cli", { version: pkg.version })
   .extend(
     help(),
-    version(pkg.version),
+    version(),
     didYouMean(),
     noColor(),
-    completion({ version: pkg.version }),
-    updateNotifier({ packageName: pkg.name, currentVersion: pkg.version }),
+    completion(),
+    updateNotifier({ packageName: pkg.name }),
   )
   .action(({ stdout }) => stdout("Hello"));
 
