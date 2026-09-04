@@ -63,6 +63,7 @@ export { center, padEnd, padStart } from "./text/pad.ts";
 // Capability detection
 export type {
 	CapabilityOverrides,
+	ChainableStyleFn,
 	ColorDepth,
 	ColorInput,
 	ColorMode,

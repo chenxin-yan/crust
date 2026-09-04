@@ -13,7 +13,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
 import { linkCode } from "./hyperlinks.ts";
-import { bold, createStyle, red, style } from "./index.ts";
+import { bold, createStyle, fg, red, style } from "./index.ts";
 import { applyStyle } from "./styleEngine.ts";
 import { setEnv, snapshotEnv } from "./testEnv.ts";
 
@@ -194,8 +194,10 @@ describe("top-level chainables — full surface", () => {
 		expect(bold`hello ${42}!`).toBe("\x1b[1mhello 42!\x1b[22m");
 	});
 
-	it("top-level `bold.fg('#f00')('x')` chain root works", () => {
+	it("top-level dynamic colors support direct and chain-root calls", () => {
 		setEnv("FORCE_COLOR", "3");
+		expect(fg("x", "#ff0000")).toBe("\x1b[38;2;255;0;0mx\x1b[39m");
+		expect(fg("#ff0000")("x")).toBe("\x1b[38;2;255;0;0mx\x1b[39m");
 		expect(bold.fg("#ff0000")("x")).toBe("\x1b[1m\x1b[38;2;255;0;0mx\x1b[39m\x1b[22m");
 	});
 

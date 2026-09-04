@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { z } from "zod";
 
-import { pressKey, renderPrompt } from "../testing.ts";
+import { renderPrompt } from "../testing.ts";
 import { input } from "./input.ts";
 import { nonTTYIO, tick, waitForScreen } from "./test-helpers.ts";
 
@@ -36,7 +36,7 @@ describe("input — interactive", () => {
 		expect(prompt.screen()).toContain("Your name?");
 
 		// Submit empty to resolve
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await prompt.answer;
 	});
 
@@ -49,7 +49,7 @@ describe("input — interactive", () => {
 		await tick();
 		expect(prompt.screen()).toContain("Enter your name");
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await prompt.answer;
 	});
 
@@ -64,7 +64,7 @@ describe("input — interactive", () => {
 		expect(prompt.screen()).toContain("World");
 		expect(prompt.screen()).not.toContain("(World)");
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await prompt.answer;
 	});
 
@@ -79,7 +79,7 @@ describe("input — interactive", () => {
 		expect(prompt.screen()).toContain("Enter your name");
 		expect(prompt.screen()).toContain("(World)");
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await prompt.answer;
 	});
 
@@ -87,13 +87,13 @@ describe("input — interactive", () => {
 		const prompt = renderPrompt(input, { message: "Name?" });
 
 		await tick();
-		pressKey(prompt, "A", { name: "a" });
+		prompt.type("A");
 		await tick();
-		pressKey(prompt, "B", { name: "b" });
+		prompt.type("B");
 		await tick();
-		pressKey(prompt, "C", { name: "c" });
+		prompt.type("C");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("ABC");
@@ -106,7 +106,7 @@ describe("input — interactive", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("DefaultName");
@@ -119,9 +119,9 @@ describe("input — interactive", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "X", { name: "x" });
+		prompt.type("X");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("X");
@@ -131,11 +131,11 @@ describe("input — interactive", () => {
 		const prompt = renderPrompt(input, { message: "Name?" });
 
 		await tick();
-		pressKey(prompt, "O", { name: "o" });
+		prompt.type("O");
 		await tick();
-		pressKey(prompt, "K", { name: "k" });
+		prompt.type("K");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		await prompt.answer;
 		// After submission, the confirmed value should appear in output
@@ -152,13 +152,13 @@ describe("input — keypress editing", () => {
 		const prompt = renderPrompt(input, { message: "Name?" });
 
 		await tick();
-		pressKey(prompt, "A");
+		prompt.type("A");
 		await tick();
-		pressKey(prompt, "B");
+		prompt.type("B");
 		await tick();
-		pressKey(prompt, "", { name: "backspace" });
+		prompt.keys("backspace");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("A");
@@ -168,11 +168,11 @@ describe("input — keypress editing", () => {
 		const prompt = renderPrompt(input, { message: "Name?" });
 
 		await tick();
-		pressKey(prompt, "", { name: "backspace" });
+		prompt.keys("backspace");
 		await tick();
-		pressKey(prompt, "A");
+		prompt.type("A");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("A");
@@ -182,21 +182,21 @@ describe("input — keypress editing", () => {
 		const prompt = renderPrompt(input, { message: "Name?" });
 
 		await tick();
-		pressKey(prompt, "A");
+		prompt.type("A");
 		await tick();
-		pressKey(prompt, "B");
+		prompt.type("B");
 		await tick();
-		pressKey(prompt, "C");
+		prompt.type("C");
 		await tick();
 		// Move cursor left to position before C
-		pressKey(prompt, "", { name: "left" });
+		prompt.keys("left");
 		await tick();
-		pressKey(prompt, "", { name: "left" });
+		prompt.keys("left");
 		await tick();
 		// Delete the character at cursor (B)
-		pressKey(prompt, "", { name: "delete" });
+		prompt.keys("delete");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("AC");
@@ -206,16 +206,16 @@ describe("input — keypress editing", () => {
 		const prompt = renderPrompt(input, { message: "Name?" });
 
 		await tick();
-		pressKey(prompt, "A");
+		prompt.type("A");
 		await tick();
-		pressKey(prompt, "B");
+		prompt.type("B");
 		await tick();
 		// Move left, then type C — inserts before B
-		pressKey(prompt, "", { name: "left" });
+		prompt.keys("left");
 		await tick();
-		pressKey(prompt, "C");
+		prompt.type("C");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("ACB");
@@ -225,20 +225,20 @@ describe("input — keypress editing", () => {
 		const prompt = renderPrompt(input, { message: "Name?" });
 
 		await tick();
-		pressKey(prompt, "A");
+		prompt.type("A");
 		await tick();
-		pressKey(prompt, "B");
+		prompt.type("B");
 		await tick();
 		// Move left twice, then right once — cursor is between A and B
-		pressKey(prompt, "", { name: "left" });
+		prompt.keys("left");
 		await tick();
-		pressKey(prompt, "", { name: "left" });
+		prompt.keys("left");
 		await tick();
-		pressKey(prompt, "", { name: "right" });
+		prompt.keys("right");
 		await tick();
-		pressKey(prompt, "C");
+		prompt.type("C");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("ACB");
@@ -248,15 +248,15 @@ describe("input — keypress editing", () => {
 		const prompt = renderPrompt(input, { message: "Name?" });
 
 		await tick();
-		pressKey(prompt, "A");
+		prompt.type("A");
 		await tick();
-		pressKey(prompt, "B");
+		prompt.type("B");
 		await tick();
-		pressKey(prompt, "", { name: "home" });
+		prompt.keys("home");
 		await tick();
-		pressKey(prompt, "C");
+		prompt.type("C");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("CAB");
@@ -266,17 +266,17 @@ describe("input — keypress editing", () => {
 		const prompt = renderPrompt(input, { message: "Name?" });
 
 		await tick();
-		pressKey(prompt, "A");
+		prompt.type("A");
 		await tick();
-		pressKey(prompt, "B");
+		prompt.type("B");
 		await tick();
-		pressKey(prompt, "", { name: "home" });
+		prompt.keys("home");
 		await tick();
-		pressKey(prompt, "", { name: "end" });
+		prompt.keys("end");
 		await tick();
-		pressKey(prompt, "C");
+		prompt.type("C");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("ABC");
@@ -286,12 +286,12 @@ describe("input — keypress editing", () => {
 		const prompt = renderPrompt(input, { message: "Name?" });
 
 		await tick();
-		pressKey(prompt, "A");
+		prompt.type("A");
 		await tick();
 		// Ctrl+A should be ignored (not inserted)
-		pressKey(prompt, "a", { name: "a", ctrl: true });
+		prompt.keys("ctrl+a");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("A");
@@ -312,21 +312,21 @@ describe("input — validation", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "a");
+		prompt.type("a");
 		await tick();
-		pressKey(prompt, "b");
+		prompt.type("b");
 		await tick();
 		// Try to submit invalid value
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await tick();
 
 		// Error should be displayed
 		expect(prompt.screen()).toContain("Must contain @");
 
 		// Now type valid input and resubmit
-		pressKey(prompt, "@");
+		prompt.type("@");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("ab@");
@@ -344,18 +344,18 @@ describe("input — validation", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "A");
+		prompt.type("A");
 		await tick();
 		// Submit too-short value
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await tick();
 
 		expect(prompt.screen()).toContain("Too short");
 
 		// Add more text and resubmit
-		pressKey(prompt, "B");
+		prompt.type("B");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("AB");
@@ -372,15 +372,15 @@ describe("input — validation", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "1");
+		prompt.type("1");
 		await tick();
-		pressKey(prompt, "2");
+		prompt.type("2");
 		await tick();
-		pressKey(prompt, "3");
+		prompt.type("3");
 		await tick();
-		pressKey(prompt, "4");
+		prompt.type("4");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("1234");
@@ -397,15 +397,15 @@ describe("input — validation", () => {
 
 		await tick();
 		// Submit empty — default is "" which should fail validation
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await tick();
 
 		expect(prompt.screen()).toContain("Required");
 
 		// Type something and submit
-		pressKey(prompt, "X");
+		prompt.type("X");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("X");
@@ -424,9 +424,9 @@ describe("input — no message", () => {
 		expect(prompt.screen()).toContain("Enter a value");
 		expect(prompt.screen()).not.toContain("undefined");
 
-		pressKey(prompt, "A");
+		prompt.type("A");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("A");
@@ -436,9 +436,9 @@ describe("input — no message", () => {
 		const prompt = renderPrompt(input, {});
 
 		await tick();
-		pressKey(prompt, "X");
+		prompt.type("X");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		await prompt.answer;
 		expect(prompt.screen()).toContain("Enter a value");
@@ -496,13 +496,13 @@ describe("input — schema validation", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "A");
+		prompt.type("A");
 		await tick();
-		pressKey(prompt, "l");
+		prompt.type("l");
 		await tick();
-		pressKey(prompt, "i");
+		prompt.type("i");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("Ali");
@@ -515,11 +515,11 @@ describe("input — schema validation", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "4");
+		prompt.type("4");
 		await tick();
-		pressKey(prompt, "2");
+		prompt.type("2");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe(42);
@@ -532,20 +532,20 @@ describe("input — schema validation", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "A");
+		prompt.type("A");
 		await tick();
 		// Submit too-short value
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await tick();
 
 		expect(prompt.screen()).toContain("Too short");
 
 		// Add more characters and retry
-		pressKey(prompt, "l");
+		prompt.type("l");
 		await tick();
-		pressKey(prompt, "i");
+		prompt.type("i");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("Ali");
@@ -570,21 +570,21 @@ describe("input — schema validation", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "x");
+		prompt.type("x");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await tick();
 
 		expect(prompt.screen()).toContain("Validation failed");
 
 		// Clear field, type valid value, submit
-		pressKey(prompt, "", { name: "backspace" });
+		prompt.keys("backspace");
 		await tick();
-		pressKey(prompt, "o");
+		prompt.type("o");
 		await tick();
-		pressKey(prompt, "k");
+		prompt.type("k");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("ok");
@@ -608,11 +608,11 @@ describe("input — schema validation", () => {
 		const prompt = renderPrompt(input<string>, { message: "Word?", schema: emptyIssuesSchema });
 
 		await tick();
-		pressKey(prompt, "o");
+		prompt.type("o");
 		await tick();
-		pressKey(prompt, "k");
+		prompt.type("k");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("ok");
@@ -631,27 +631,27 @@ describe("input — schema validation", () => {
 		const prompt = renderPrompt(input<string>, { message: "Confirm?", schema: asyncSchema });
 
 		await tick();
-		pressKey(prompt, "n");
+		prompt.type("n");
 		await tick();
-		pressKey(prompt, "o");
+		prompt.type("o");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await waitForScreen(prompt, "must be yes");
 
 		expect(prompt.screen()).toContain("must be yes");
 
 		// Clear and type valid value
-		pressKey(prompt, "", { name: "backspace" });
+		prompt.keys("backspace");
 		await tick();
-		pressKey(prompt, "", { name: "backspace" });
+		prompt.keys("backspace");
 		await tick();
-		pressKey(prompt, "y");
+		prompt.type("y");
 		await tick();
-		pressKey(prompt, "e");
+		prompt.type("e");
 		await tick();
-		pressKey(prompt, "s");
+		prompt.type("s");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("yes");
@@ -723,7 +723,7 @@ describe("input — schema + interactive default", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe(4000);
@@ -761,13 +761,13 @@ describe("input — callable Standard Schema", () => {
 		const prompt = renderPrompt(input<string>, { message: "Word?", schema: callable });
 
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await tick();
 		expect(prompt.screen()).toContain("empty");
 
-		pressKey(prompt, "a");
+		prompt.type("a");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("[a]");

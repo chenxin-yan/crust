@@ -8,6 +8,12 @@ Interactive terminal prompts for the Crust CLI ecosystem.
 bun add @crustjs/prompts
 ```
 
+## Custom prompts
+
+The package root exports the built-in rendering pieces, including `renderTextWithCursor`, `highlightMatches`, `formatPromptLine`, `formatSubmitted`, `renderChoiceList`, and the shared prompt glyph constants.
+
+Test prompts through `@crustjs/prompts/testing`: call `prompt.type(text)` for literal text and `prompt.keys(...keys)` for named or control keys.
+
 ## Documentation
 
 Full docs: [crustjs.com/docs/modules/prompts](https://crustjs.com/docs/modules/prompts)

@@ -125,6 +125,20 @@ await uninstallSkill({ name: "my-cli" });
 
 <auto-type-table path="../../../../../packages/skills/src/types.ts" name="InstallSkillOptions" />
 
+### Public workflow types
+
+| Type                                             | Description                                                                |
+| ------------------------------------------------ | -------------------------------------------------------------------------- |
+| `PackagedSkill`                                  | Name, description, and source directory returned by `loadPackagedSkills()` |
+| `AgentClass`                                     | `"universal" \| "additional"` agent-layout category                        |
+| `Scope`                                          | `"global" \| "project"` installation scope                                 |
+| `InstallStatus`                                  | `"installed" \| "repaired" \| "up-to-date"` result status                  |
+| `UninstallStatus`                                | `"removed" \| "not-found"` result status                                   |
+| `SkillLinkStatus`                                | `"linked" \| "dangling" \| "conflict" \| "absent"` link-health status      |
+| `AgentResult` / `InstallSkillResult`             | Per-agent and aggregate results from `installSkill()`                      |
+| `UninstallSkillOptions` / `UninstallSkillResult` | Input and result shapes for `uninstallSkill()`                             |
+| `SkillStatusOptions` / `SkillStatusResult`       | Input and result shapes for `getSkillStatus()`                             |
+
 ## Command sections
 
 Add agent-facing guidance to a command's metadata. Each section is rendered as a Markdown heading and body in that command's generated documentation. Sections are shared with every renderer by default; pass the `skill` (`crust:skills`) factory for agent-only guidance:

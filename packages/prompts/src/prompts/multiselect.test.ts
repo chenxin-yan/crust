@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { pressKey, renderPrompt } from "../testing.ts";
+import { renderPrompt } from "../testing.ts";
 import { multiselect, type MultiselectOptions } from "./multiselect.ts";
 import { nonTTYIO, tick } from "./test-helpers.ts";
 
@@ -39,7 +39,7 @@ describe("multiselect — default value", () => {
 
 		await tick();
 		// Submit immediately — should return pre-selected items
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["cheese", "mushrooms"]);
@@ -52,7 +52,7 @@ describe("multiselect — default value", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual([]);
@@ -66,7 +66,7 @@ describe("multiselect — default value", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["cheese"]);
@@ -86,9 +86,9 @@ describe("multiselect — Space toggle", () => {
 
 		await tick();
 		// Toggle first item on
-		pressKey(prompt, " ", { name: "space" });
+		prompt.type(" ");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["a"]);
@@ -103,9 +103,9 @@ describe("multiselect — Space toggle", () => {
 
 		await tick();
 		// Toggle first item off (it was pre-selected)
-		pressKey(prompt, " ", { name: "space" });
+		prompt.type(" ");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual([]);
@@ -119,14 +119,14 @@ describe("multiselect — Space toggle", () => {
 
 		await tick();
 		// Select first item
-		pressKey(prompt, " ", { name: "space" });
+		prompt.type(" ");
 		await tick();
 		// Move down and select second
-		pressKey(prompt, "", { name: "down" });
+		prompt.keys("down");
 		await tick();
-		pressKey(prompt, " ", { name: "space" });
+		prompt.type(" ");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["a", "b"]);
@@ -145,11 +145,11 @@ describe("multiselect — navigation", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "", { name: "down" });
+		prompt.keys("down");
 		await tick();
-		pressKey(prompt, " ", { name: "space" });
+		prompt.type(" ");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["b"]);
@@ -163,13 +163,13 @@ describe("multiselect — navigation", () => {
 
 		await tick();
 		// Move down to b, then up back to a
-		pressKey(prompt, "", { name: "down" });
+		prompt.keys("down");
 		await tick();
-		pressKey(prompt, "", { name: "up" });
+		prompt.keys("up");
 		await tick();
-		pressKey(prompt, " ", { name: "space" });
+		prompt.type(" ");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["a"]);
@@ -182,11 +182,11 @@ describe("multiselect — navigation", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "j", { name: "j" });
+		prompt.type("j");
 		await tick();
-		pressKey(prompt, " ", { name: "space" });
+		prompt.type(" ");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["b"]);
@@ -199,13 +199,13 @@ describe("multiselect — navigation", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "", { name: "down" });
+		prompt.keys("down");
 		await tick();
-		pressKey(prompt, "k", { name: "k" });
+		prompt.type("k");
 		await tick();
-		pressKey(prompt, " ", { name: "space" });
+		prompt.type(" ");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["a"]);
@@ -218,11 +218,11 @@ describe("multiselect — navigation", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "", { name: "up" });
+		prompt.keys("up");
 		await tick();
-		pressKey(prompt, " ", { name: "space" });
+		prompt.type(" ");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["c"]);
@@ -241,9 +241,9 @@ describe("multiselect — toggle all / invert", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "a", { name: "a" });
+		prompt.type("a");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["a", "b", "c"]);
@@ -257,9 +257,9 @@ describe("multiselect — toggle all / invert", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "a", { name: "a" });
+		prompt.type("a");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual([]);
@@ -273,9 +273,9 @@ describe("multiselect — toggle all / invert", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "a", { name: "a" });
+		prompt.type("a");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["a", "b", "c"]);
@@ -289,9 +289,9 @@ describe("multiselect — toggle all / invert", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "i", { name: "i" });
+		prompt.type("i");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["b", "c"]);
@@ -312,16 +312,16 @@ describe("multiselect — validation", () => {
 
 		await tick();
 		// Try to submit with nothing selected
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await tick();
 
 		// Error should be shown
 		expect(prompt.screen()).toContain("At least one item must be selected");
 
 		// Select something and submit
-		pressKey(prompt, " ", { name: "space" });
+		prompt.type(" ");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["a"]);
@@ -336,20 +336,20 @@ describe("multiselect — validation", () => {
 
 		await tick();
 		// Select only 1 item
-		pressKey(prompt, " ", { name: "space" });
+		prompt.type(" ");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await tick();
 
 		// Error should be shown
 		expect(prompt.screen()).toContain("Select at least 2 items");
 
 		// Select another item and submit
-		pressKey(prompt, "", { name: "down" });
+		prompt.keys("down");
 		await tick();
-		pressKey(prompt, " ", { name: "space" });
+		prompt.type(" ");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["a", "b"]);
@@ -364,16 +364,16 @@ describe("multiselect — validation", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await tick();
 
 		// Error should be shown
 		expect(prompt.screen()).toContain("Select at most 1 item");
 
 		// Deselect one and submit
-		pressKey(prompt, " ", { name: "space" });
+		prompt.type(" ");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["b"]);
@@ -388,22 +388,22 @@ describe("multiselect — validation", () => {
 
 		await tick();
 		// Submit with nothing — triggers error
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await tick();
 		expect(prompt.screen()).toContain("At least one item must be selected");
 
 		// Navigate — error should clear
 
-		pressKey(prompt, "", { name: "down" });
+		prompt.keys("down");
 		await tick();
 
 		// The error should no longer appear in new output
 		expect(prompt.screen()).not.toContain("At least one item must be selected");
 
 		// Select and submit
-		pressKey(prompt, " ", { name: "space" });
+		prompt.type(" ");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["b"]);
@@ -424,7 +424,7 @@ describe("multiselect — rendering", () => {
 		await tick();
 		expect(prompt.screen()).toContain("Select toppings");
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await prompt.answer;
 	});
 
@@ -440,7 +440,7 @@ describe("multiselect — rendering", () => {
 		expect(prompt.screen()).toContain("gamma");
 		expect(prompt.screen()).toContain("○");
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await prompt.answer;
 	});
 
@@ -454,7 +454,7 @@ describe("multiselect — rendering", () => {
 		await tick();
 		expect(prompt.screen()).toContain("●");
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await prompt.answer;
 	});
 
@@ -466,7 +466,7 @@ describe("multiselect — rendering", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		await prompt.answer;
 		// After submit, should show comma-separated labels
@@ -485,7 +485,7 @@ describe("multiselect — rendering", () => {
 		await tick();
 		expect(prompt.screen()).toContain("recommended");
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await prompt.answer;
 	});
 });
@@ -508,7 +508,7 @@ describe("multiselect — viewport scrolling", () => {
 		expect(prompt.screen()).toContain("item-4");
 		expect(prompt.screen()).not.toContain("item-5");
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await prompt.answer;
 	});
 
@@ -522,17 +522,17 @@ describe("multiselect — viewport scrolling", () => {
 
 		await tick();
 		// Move down 3 times to scroll past the initial viewport
-		pressKey(prompt, "", { name: "down" });
+		prompt.keys("down");
 		await tick();
-		pressKey(prompt, "", { name: "down" });
+		prompt.keys("down");
 		await tick();
-		pressKey(prompt, "", { name: "down" });
+		prompt.keys("down");
 		await tick();
 
 		// item-3 should now be visible
 		expect(prompt.screen()).toContain("item-3");
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await prompt.answer;
 	});
 });
@@ -553,9 +553,9 @@ describe("multiselect — no message", () => {
 		expect(prompt.screen()).toContain("a");
 
 		// Select first item and submit
-		pressKey(prompt, "", { name: "space" });
+		prompt.keys("space");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["a"]);
@@ -567,9 +567,9 @@ describe("multiselect — no message", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "", { name: "space" });
+		prompt.keys("space");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		await prompt.answer;
 		expect(prompt.screen()).toContain("Pick one or more");

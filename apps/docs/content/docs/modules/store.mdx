@@ -127,7 +127,7 @@ All four helpers follow XDG conventions on Linux and macOS, and Windows-native c
   `~/Library/...` paths.
 </Callout>
 
-The optional `env` parameter on each helper accepts a structural test environment (`platform`, `env`, and `homedir`) for deterministic testing without mutating `process.env`.
+The optional `env` parameter on each helper accepts the exported `PlatformEnv` structural test environment (`platform`, `env`, and `homedir`) for deterministic testing without mutating `process.env`.
 
 ### Multiple Stores
 
@@ -516,7 +516,7 @@ if (err instanceof CrustStoreError) {
 
 <auto-type-table path="../../../../../packages/store/src/types.ts" name="StoreValidatorIssue" />
 
-The package also exports `CreateStoreOptions`, `StoreUpdater`, `FieldsDef`, `InferStoreConfig`, `ValidationErrorDetails`, `StoreErrorCode`, `ValueType`, and the `CrustStoreError` class.
+The package also exports `CreateStoreOptions`, `StoreUpdater`, `FieldsDef`, `InferStoreConfig`, `PlatformEnv`, `ValidationErrorDetails`, `StoreErrorCode`, `ValueType`, and the `CrustStoreError` class.
 
 ## Design
 

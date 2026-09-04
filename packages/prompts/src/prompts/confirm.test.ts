@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { pressKey, renderPrompt } from "../testing.ts";
+import { renderPrompt } from "../testing.ts";
 import { confirm, type ConfirmOptions } from "./confirm.ts";
 import { nonTTYIO, tick } from "./test-helpers.ts";
 
@@ -13,7 +13,7 @@ describe("confirm — default value", () => {
 		const prompt = renderPrompt(confirm, { message: "Continue?" });
 
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe(true);
@@ -26,7 +26,7 @@ describe("confirm — default value", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe(false);
@@ -43,9 +43,9 @@ describe("confirm — toggle", () => {
 
 		await tick();
 		// Default is true, left should toggle to false
-		pressKey(prompt, "", { name: "left" });
+		prompt.keys("left");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe(false);
@@ -56,9 +56,9 @@ describe("confirm — toggle", () => {
 
 		await tick();
 		// Default is true, right should toggle to false
-		pressKey(prompt, "", { name: "right" });
+		prompt.keys("right");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe(false);
@@ -69,9 +69,9 @@ describe("confirm — toggle", () => {
 
 		await tick();
 		// Default is true, tab should toggle to false
-		pressKey(prompt, "", { name: "tab" });
+		prompt.keys("tab");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe(false);
@@ -82,11 +82,11 @@ describe("confirm — toggle", () => {
 
 		await tick();
 		// Toggle twice — should be back to true
-		pressKey(prompt, "", { name: "left" });
+		prompt.keys("left");
 		await tick();
-		pressKey(prompt, "", { name: "right" });
+		prompt.keys("right");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe(true);
@@ -105,9 +105,9 @@ describe("confirm — shortcuts", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "y");
+		prompt.type("y");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe(true);
@@ -120,9 +120,9 @@ describe("confirm — shortcuts", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "Y", { name: "y", shift: true });
+		prompt.type("Y");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe(true);
@@ -132,9 +132,9 @@ describe("confirm — shortcuts", () => {
 		const prompt = renderPrompt(confirm, { message: "Continue?" });
 
 		await tick();
-		pressKey(prompt, "n");
+		prompt.type("n");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe(false);
@@ -144,9 +144,9 @@ describe("confirm — shortcuts", () => {
 		const prompt = renderPrompt(confirm, { message: "Continue?" });
 
 		await tick();
-		pressKey(prompt, "N", { name: "n", shift: true });
+		prompt.type("N");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe(false);
@@ -159,9 +159,9 @@ describe("confirm — shortcuts", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "h", { name: "h" });
+		prompt.type("h");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe(true);
@@ -171,9 +171,9 @@ describe("confirm — shortcuts", () => {
 		const prompt = renderPrompt(confirm, { message: "Continue?" });
 
 		await tick();
-		pressKey(prompt, "l", { name: "l" });
+		prompt.type("l");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe(false);
@@ -196,7 +196,7 @@ describe("confirm — custom labels", () => {
 		expect(prompt.screen()).toContain("Agree");
 		expect(prompt.screen()).toContain("Decline");
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await prompt.answer;
 	});
 
@@ -210,9 +210,9 @@ describe("confirm — custom labels", () => {
 
 		await tick();
 		// Toggle to true (Accept)
-		pressKey(prompt, "y");
+		prompt.type("y");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		await prompt.answer;
 		expect(prompt.screen()).toContain("Accept");
@@ -230,7 +230,7 @@ describe("confirm — rendering", () => {
 		await tick();
 		expect(prompt.screen()).toContain("Deploy to production?");
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await prompt.answer;
 	});
 
@@ -238,9 +238,9 @@ describe("confirm — rendering", () => {
 		const prompt = renderPrompt(confirm, { message: "Continue?" });
 
 		await tick();
-		pressKey(prompt, "n");
+		prompt.type("n");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		await prompt.answer;
 		// After submission, the selected answer should appear
@@ -262,7 +262,7 @@ describe("confirm — no message", () => {
 		expect(prompt.screen()).toContain("Yes");
 		expect(prompt.screen()).toContain("No");
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		const result = await prompt.answer;
 		expect(result).toBe(true);
 	});
@@ -271,7 +271,7 @@ describe("confirm — no message", () => {
 		const prompt = renderPrompt(confirm, {});
 
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		await prompt.answer;
 		expect(prompt.screen()).toContain("Are you sure?");

@@ -7,6 +7,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 export type { FuzzyFilterResult, FuzzyMatchResult } from "./core/fuzzy.ts";
+export { highlightMatches } from "./core/fuzzy.ts";
 export type {
 	Choice,
 	ChoiceValue,
@@ -69,5 +70,14 @@ export { select } from "./prompts/select.ts";
 // ────────────────────────────────────────────────────────────────────────────
 
 export { fuzzyFilter, fuzzyMatch } from "./core/fuzzy.ts";
+export {
+	CHECKBOX_CHECKED,
+	CHECKBOX_UNCHECKED,
+	CURSOR_INDICATOR,
+	PREFIX_SUBMITTED,
+	PREFIX_SYMBOL,
+	SCROLL_INDICATOR,
+} from "./core/symbols.ts";
 export type { TextEditResult, TextEditState } from "./core/textEdit.ts";
-export { handleTextEdit } from "./core/textEdit.ts";
+export { handleTextEdit, renderTextWithCursor } from "./core/textEdit.ts";
+export { formatPromptLine, formatSubmitted, renderChoiceList } from "./core/utils.ts";

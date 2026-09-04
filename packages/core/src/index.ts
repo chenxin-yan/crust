@@ -54,6 +54,7 @@ export type {
 	CommandNotFoundErrorDetails,
 	CrustErrorCode,
 	CrustErrorDetails,
+	CrustErrorJson,
 	CrustErrorDetailsMap,
 	DefinitionErrorDetails,
 	ParseErrorDetails,

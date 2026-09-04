@@ -986,7 +986,7 @@ export class Crust<
 	CollisionSp extends CollisionSpellings = CollisionSpellings,
 	Result = void,
 > {
-	/** @internal — Phantom property exposing generic parameters for type-level testing */
+	/** Supported type-level seam exposing the application's inferred command types. */
 	declare readonly _types: {
 		flags: Flags;
 		args: A;

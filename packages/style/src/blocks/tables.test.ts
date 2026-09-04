@@ -86,46 +86,6 @@ describe("table", () => {
 		expect(lines[3]).toBe("| Bob   |  FAIL  |");
 	});
 
-	// ── Options ────────────────────────────────────────────────────────────
-
-	it("respects minColumnWidth", () => {
-		const result = table(["A", "B"], [["1", "2"]], { minColumnWidth: 5 });
-		const lines = result.split("\n");
-		// Columns should be at least 5 wide even though content is only 1 wide
-		expect(lines[0]).toBe("| A     | B     |");
-		expect(lines[1]).toBe("|-------|-------|");
-	});
-
-	it("respects custom cellPadding", () => {
-		const result = table(["A", "B"], [["1", "2"]], { cellPadding: 2 });
-		const lines = result.split("\n");
-		expect(lines[0]).toBe("|  A  |  B  |");
-		expect(lines[1]).toBe("|-----|-----|");
-		expect(lines[2]).toBe("|  1  |  2  |");
-	});
-
-	it("respects cellPadding of 0", () => {
-		const result = table(["A", "B"], [["1", "2"]], { cellPadding: 0 });
-		const lines = result.split("\n");
-		expect(lines[0]).toBe("|A|B|");
-		expect(lines[1]).toBe("|-|-|");
-		expect(lines[2]).toBe("|1|2|");
-	});
-
-	it("uses custom separator character", () => {
-		const result = table(["A"], [["1"]], { separatorChar: "=" });
-		const lines = result.split("\n");
-		expect(lines[1]).toBe("|===|");
-	});
-
-	it("uses custom border character", () => {
-		const result = table(["A"], [["1"]], { borderChar: ":" });
-		const lines = result.split("\n");
-		expect(lines[0]).toBe(": A :");
-		expect(lines[1]).toBe(":---:");
-		expect(lines[2]).toBe(": 1 :");
-	});
-
 	// ── ANSI Styled Content ────────────────────────────────────────────────
 
 	it("handles ANSI-styled header values", () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { createPrompts } from "../create-prompts.ts";
-import { pressKey, renderPrompt } from "../testing.ts";
+import { renderPrompt } from "../testing.ts";
 import { select, type SelectOptions } from "./select.ts";
 import { nonTTYIO, tick } from "./test-helpers.ts";
 
@@ -40,7 +40,7 @@ describe("select — default value", () => {
 
 		await tick();
 		// Submit immediately — should select "green" (cursor at index 1)
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("green");
@@ -53,7 +53,7 @@ describe("select — default value", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("red");
@@ -67,7 +67,7 @@ describe("select — default value", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("red");
@@ -86,9 +86,9 @@ describe("select — navigation", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "", { name: "down" });
+		prompt.keys("down");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("b");
@@ -102,9 +102,9 @@ describe("select — navigation", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "", { name: "up" });
+		prompt.keys("up");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("a");
@@ -117,9 +117,9 @@ describe("select — navigation", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "j", { name: "j" });
+		prompt.type("j");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("b");
@@ -133,9 +133,9 @@ describe("select — navigation", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "k", { name: "k" });
+		prompt.type("k");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("b");
@@ -149,9 +149,9 @@ describe("select — navigation", () => {
 
 		await tick();
 		// Cursor at 0, up should wrap to index 2
-		pressKey(prompt, "", { name: "up" });
+		prompt.keys("up");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("c");
@@ -173,9 +173,9 @@ describe("select — choice types", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "", { name: "down" });
+		prompt.keys("down");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe(443);
@@ -194,7 +194,7 @@ describe("select — choice types", () => {
 		// Verify hint text is rendered
 		expect(prompt.screen()).toContain("recommended");
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await prompt.answer;
 	});
 });
@@ -213,7 +213,7 @@ describe("select — rendering", () => {
 		await tick();
 		expect(prompt.screen()).toContain("Choose your favorite");
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await prompt.answer;
 	});
 
@@ -228,7 +228,7 @@ describe("select — rendering", () => {
 		expect(prompt.screen()).toContain("beta");
 		expect(prompt.screen()).toContain("gamma");
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await prompt.answer;
 	});
 
@@ -239,9 +239,9 @@ describe("select — rendering", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "", { name: "down" });
+		prompt.keys("down");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		await prompt.answer;
 		// After submit, the selected label should appear in the output
@@ -261,7 +261,7 @@ describe("select — rendering", () => {
 		expect(prompt.screen()).toContain("Option A");
 		expect(prompt.screen()).toContain("Option B");
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await prompt.answer;
 	});
 });
@@ -285,7 +285,7 @@ describe("select — viewport scrolling", () => {
 		expect(prompt.screen()).toContain("item-4");
 		expect(prompt.screen()).not.toContain("item-5");
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await prompt.answer;
 	});
 
@@ -300,7 +300,7 @@ describe("select — viewport scrolling", () => {
 		await tick();
 		expect(prompt.screen()).toContain("...");
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await prompt.answer;
 	});
 
@@ -314,17 +314,17 @@ describe("select — viewport scrolling", () => {
 
 		await tick();
 		// Move down 3 times to scroll past the initial viewport
-		pressKey(prompt, "", { name: "down" });
+		prompt.keys("down");
 		await tick();
-		pressKey(prompt, "", { name: "down" });
+		prompt.keys("down");
 		await tick();
-		pressKey(prompt, "", { name: "down" });
+		prompt.keys("down");
 		await tick();
 
 		// item-3 should now be visible
 		expect(prompt.screen()).toContain("item-3");
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		const result = await prompt.answer;
 		expect(result).toBe("item-3");
 	});
@@ -343,7 +343,7 @@ describe("select — viewport scrolling", () => {
 		const scrollLines = lines.filter((l) => l.trim() === "...");
 		expect(scrollLines.length).toBe(0);
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await prompt.answer;
 	});
 });
@@ -363,7 +363,7 @@ describe("select — no message", () => {
 		expect(prompt.screen()).not.toContain("undefined");
 		expect(prompt.screen()).toContain("a");
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		const result = await prompt.answer;
 		expect(result).toBe("a");
 	});
@@ -374,7 +374,7 @@ describe("select — no message", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		await prompt.answer;
 		expect(prompt.screen()).toContain("Pick an option");

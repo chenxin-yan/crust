@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { pressKey, renderPrompt } from "../testing.ts";
+import { renderPrompt } from "../testing.ts";
 import { multifilter, type MultifilterOptions } from "./multifilter.ts";
 import { nonTTYIO, tick } from "./test-helpers.ts";
 
@@ -74,13 +74,13 @@ describe("multifilter — interactive", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "", { name: "space" });
+		prompt.keys("space");
 		await tick();
-		pressKey(prompt, "", { name: "down" });
+		prompt.keys("down");
 		await tick();
-		pressKey(prompt, "", { name: "space" });
+		prompt.keys("space");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["alpha", "beta"]);
@@ -97,9 +97,9 @@ describe("multifilter — interactive", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "", { name: "down" });
+		prompt.keys("down");
 		await tick();
-		pressKey(prompt, "", { name: "space" });
+		prompt.keys("space");
 		await tick();
 
 		const duplicateLines = prompt
@@ -108,7 +108,7 @@ describe("multifilter — interactive", () => {
 			.filter((line) => line.includes("duplicate"));
 		expect(duplicateLines.map((line) => line.includes("●"))).toEqual([false, true]);
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		expect(await prompt.answer).toEqual([value]);
 	});
 
@@ -121,7 +121,7 @@ describe("multifilter — interactive", () => {
 
 		await tick();
 		expect(prompt.screen()).toContain("●");
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["c"]);
@@ -138,9 +138,9 @@ describe("multifilter — interactive", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "", { name: "space" });
+		prompt.keys("space");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		expect(await prompt.answer).toEqual([]);
 	});
@@ -153,14 +153,14 @@ describe("multifilter — interactive", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await tick();
 
 		expect(prompt.screen()).toContain("At least one");
 
-		pressKey(prompt, "", { name: "space" });
+		prompt.keys("space");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["x"]);
@@ -173,21 +173,21 @@ describe("multifilter — interactive", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "", { name: "down" });
+		prompt.keys("down");
 		await tick();
-		pressKey(prompt, "", { name: "down" });
+		prompt.keys("down");
 		await tick();
-		pressKey(prompt, "", { name: "space" });
+		prompt.keys("space");
 		await tick();
-		pressKey(prompt, "g", { name: "g" });
+		prompt.type("g");
 		await tick();
-		pressKey(prompt, "a", { name: "a" });
+		prompt.type("a");
 		await tick();
-		pressKey(prompt, "m", { name: "m" });
+		prompt.type("m");
 		await tick();
 
 		expect(prompt.screen()).toContain("gamma");
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["gamma"]);

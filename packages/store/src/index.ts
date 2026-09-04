@@ -6,6 +6,7 @@
 export type { StoreErrorCode, ValidationErrorDetails } from "./errors.ts";
 export { CrustStoreError } from "./errors.ts";
 // Path
+export type { PlatformEnv } from "./path.ts";
 export { cacheDir, configDir, dataDir, stateDir } from "./path.ts";
 // Store
 export { createStore } from "./store.ts";

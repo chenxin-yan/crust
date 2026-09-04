@@ -69,6 +69,7 @@ Downstream commands and other Context setups call `await ctx.api`. See [Contexts
 | `CommandSection`                              | A titled documentation block with an optional consumer audience                    |
 | `CommandSectionInput`                         | Plain-text section (`title`, `body`) with an optional consumer audience            |
 | `SectionAudience`                             | Mutually exclusive `only`/`except` consumer lists on a section                     |
+| `SectionConsumer`                             | Extension identity or value exposing one at `.id`                                  |
 | `ExtensionId`                                 | Branded identity minted by `defineExtensionId()`                                   |
 | `ContextBag` / `FactoryValueOf`               | Lazy Context property bag and factory-value helper types                           |
 | [`RootCommandMeta`](/docs/api/crust)          | Root description, version, usage, and sections accepted by the `Crust` constructor |
@@ -154,6 +155,7 @@ Omitting `io` creates no new ambient scope, preserving native TTY detection and 
 | `CrustErrorCode`              | Four codes: `DEFINITION`, `PARSE`, `VALIDATION`, and `COMMAND_NOT_FOUND` |
 | `CrustErrorDetails<C>`        | Details selected by an error code                                        |
 | `CrustErrorDetailsMap`        | Mapping from each code to its details type                               |
+| `CrustErrorJson<C>`           | Serializable shape returned by `CrustError<C>.toJSON()`                  |
 | `DefinitionErrorDetails`      | Definition subject, name, and reason                                     |
 | `ParseErrorDetails`           | Flag, argument, value, and reason                                        |
 | `ValidationErrorDetails`      | Aggregated `{ message, path }` issues                                    |
