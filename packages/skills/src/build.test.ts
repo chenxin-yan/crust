@@ -61,11 +61,14 @@ describe("writeSkills", () => {
 		const serve = await readFile(join(outDir, "demo", "commands", "serve.md"), "utf8");
 		expect(serve).toContain("# `demo serve`");
 		expect(serve).toContain("## Deployment\nCheck the target environment first.");
-		expect(await readdir(join(outDir, "demo"))).toEqual(["SKILL.md", "commands"]);
+		expect((await readdir(join(outDir, "demo"))).sort()).toEqual(["SKILL.md", "commands"]);
 		expect(await readFile(join(outDir, "deployment-guide", "references", "guide.md"), "utf8")).toBe(
 			"# Guide\n",
 		);
-		expect(await readdir(join(outDir, "deployment-guide"))).toEqual(["SKILL.md", "references"]);
+		expect((await readdir(join(outDir, "deployment-guide"))).sort()).toEqual([
+			"SKILL.md",
+			"references",
+		]);
 	});
 
 	it("supports overrides and replaces stale output", async () => {
