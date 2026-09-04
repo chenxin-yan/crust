@@ -243,39 +243,43 @@ describe("captureExecute", () => {
 		expect(result.stderr).toBe("custom: boom");
 	});
 
-	it("captures exit codes across overlapping captures", async () => {
-		const originalExitCode = process.exitCode;
-		try {
-			process.exitCode = 7;
+	it("restores the caller's exit code after overlapping failure and success captures", async () => {
+		process.exitCode = 7;
 
-			let releaseA!: () => void;
-			const gateA = new Promise<void>((resolve) => {
-				releaseA = resolve;
-			});
-			let releaseB!: () => void;
-			const gateB = new Promise<void>((resolve) => {
-				releaseB = resolve;
-			});
+		let releaseErrorRenderer!: () => void;
+		const errorRendererGate = new Promise<void>((resolve) => {
+			releaseErrorRenderer = resolve;
+		});
+		let releaseSuccess!: () => void;
+		const successGate = new Promise<void>((resolve) => {
+			releaseSuccess = resolve;
+		});
 
-			const appA = new Crust("test-cli").action(async () => {
-				await gateA;
-			});
-			const appB = new Crust("test-cli").action(async () => {
-				await gateB;
-			});
+		const delayedRenderer = defineExtension(defineExtensionId("delayed-renderer"), {
+			hooks: {
+				async onError() {
+					await errorRendererGate;
+					return true;
+				},
+			},
+		});
+		const failingApp = new Crust("test-cli").extend(delayedRenderer).action(() => {
+			throw new Error("boom");
+		});
+		const successfulApp = new Crust("test-cli").action(async () => {
+			await successGate;
+		});
 
-			const pendingA = captureExecute(appA, []);
-			await Bun.sleep(0);
-			const pendingB = captureExecute(appB, []);
-			await Bun.sleep(0);
+		const pendingFailure = captureExecute(failingApp, []);
+		await Bun.sleep(0);
+		expect(process.exitCode).toBe(1);
+		const pendingSuccess = captureExecute(successfulApp, []);
+		await Bun.sleep(0);
 
-			releaseA();
-			expect((await pendingA).exitCode).toBe(0);
-			releaseB();
-			expect((await pendingB).exitCode).toBe(0);
-			expect(process.exitCode).toBe(7);
-		} finally {
-			process.exitCode = originalExitCode;
-		}
+		releaseErrorRenderer();
+		expect((await pendingFailure).exitCode).toBe(1);
+		releaseSuccess();
+		expect((await pendingSuccess).exitCode).toBe(0);
+		expect(process.exitCode).toBe(7);
 	});
 });

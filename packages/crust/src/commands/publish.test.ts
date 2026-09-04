@@ -135,6 +135,32 @@ describe("publish manifest validation", () => {
 		expect(spawnPublish).not.toHaveBeenCalled();
 	});
 
+	it("passes invocation IO to the publisher executor", async () => {
+		const stdout: string[] = [];
+		const stderr: string[] = [];
+		const invocationIO = {
+			stdout: (text: string) => stdout.push(text),
+			stderr: (text: string) => stderr.push(text),
+		};
+
+		await publishStagedPackages(
+			manifest,
+			{
+				stageDir: tmpDir,
+				access: "public",
+				spawnPublish: async (_dir, _command, executorIO) => {
+					executorIO.stdout("registry stdout");
+					executorIO.stderr("registry stderr");
+					return 0;
+				},
+			},
+			invocationIO,
+		);
+
+		expect(stdout).toContain("registry stdout");
+		expect(stderr).toEqual(["registry stderr", "registry stderr", "registry stderr"]);
+	});
+
 	it("stops on first failed publish", async () => {
 		const calls: string[] = [];
 		const spawnPublish = mock(async (dir: string) => {

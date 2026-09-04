@@ -16,9 +16,9 @@ import { Crust } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import { runProcess } from "@crustjs/utils/process";
 
-import { buildCommand } from "../../src/commands/build.ts";
-import { BUN_TARGETS, DENO_TARGETS } from "../../src/utils/build-helpers.ts";
-import { hostTarget } from "../../tests/helpers.ts";
+import { buildCommand } from "../src/commands/build.ts";
+import { BUN_TARGETS, DENO_TARGETS } from "../src/utils/build-helpers.ts";
+import { hostTarget } from "./helpers.ts";
 
 function getHostBunTarget() {
 	return hostTarget();
@@ -38,7 +38,7 @@ function getHostDenoTarget(): string | null {
 
 describe("crust build integration — single target", () => {
 	const tmpDir = mkdtempSync(join(tmpdir(), "crust-build-integration-"));
-	const crustCliPath = resolve(import.meta.dir, "..", "cli.ts");
+	const crustCliPath = resolve(import.meta.dir, "..", "src", "cli.ts");
 	const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 	const originalCwd = process.cwd;
 

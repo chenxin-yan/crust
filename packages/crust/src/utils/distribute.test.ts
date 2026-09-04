@@ -116,9 +116,17 @@ describe("runDistributeBuild", () => {
 			"@scope/test-package-cli-linux-x64": "0.1.0",
 			"@scope/test-package-cli-windows-arm64": "0.1.0",
 		});
-		expect(readFileSync(join(plan.stageDir, "root", "bin", "test-cli.js"), "utf8")).toContain(
-			'"packagePathSegment": "test-package-cli-linux-x64"',
-		);
+		const resolver = readFileSync(join(plan.stageDir, "root", "bin", "test-cli.js"), "utf8");
+		expect(resolver).toContain('"packagePathSegment": "test-package-cli-linux-x64"');
+		expect(resolver).toContain("const candidateOne = resolve(");
+		expect(resolver).toContain("const candidateTwo = resolve(");
+		expect(resolver).toContain("Unsupported platform:");
+		expect(resolver).toContain("Supported platforms: linux-x64, windows-arm64");
+		expect(resolver).toContain("Missing platform package");
+		expect(resolver).toContain("optional dependencies are enabled");
+		expect(resolver).toContain('child.on("error"');
+		expect(resolver).toContain("process.kill(process.pid, signal)");
+		expect(resolver).toContain("process.exit(code ?? 0)");
 		expect(readFileSync(join(plan.stageDir, "root", "LICENSE"), "utf8")).toBe("test license\n");
 		expect(outputs).toEqual([
 			join(plan.stageDir, "linux-x64", "bin", "test-package-cli-bun-linux-x64-baseline"),

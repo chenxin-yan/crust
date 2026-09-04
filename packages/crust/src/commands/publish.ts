@@ -23,7 +23,7 @@ type PublishOptions = {
 	registry?: string;
 	dryRun?: boolean;
 	verify?: boolean;
-	spawnPublish?: (dir: string, command: string[]) => Promise<number>;
+	spawnPublish?: (dir: string, command: string[], io: InvocationIO) => Promise<number>;
 };
 
 export function readPublishManifest(stageDir: string): DistributionManifest {
@@ -149,15 +149,20 @@ export function buildPublishCommand(args: {
 	return command;
 }
 
-async function defaultSpawnPublish(dir: string, command: string[]): Promise<number> {
-	const { exitCode } = await runProcess(command[0]!, command.slice(1), {
+async function defaultSpawnPublish(
+	dir: string,
+	command: string[],
+	io: InvocationIO,
+): Promise<number> {
+	const { exitCode, stdout, stderr } = await runProcess(command[0]!, command.slice(1), {
 		cwd: dir,
 		env: {
 			...process.env,
 			BUN_BE_BUN: "1",
 		},
-		stdio: "inherit",
 	});
+	if (stdout) io.stdout(stdout.replace(/\r?\n$/, ""));
+	if (stderr) io.stderr(stderr.replace(/\r?\n$/, ""));
 
 	return exitCode ?? 1;
 }
@@ -190,7 +195,7 @@ export async function publishStagedPackages(
 	for (const relativeDir of manifest.publishOrder) {
 		const dir = join(options.stageDir, relativeDir);
 		io.stdout(`\nPublishing ${bold(relativeDir)} from ${dim(dir)}...`);
-		const exitCode = await spawnPublish(dir, command);
+		const exitCode = await spawnPublish(dir, command, io);
 		if (exitCode !== 0) {
 			throw new Error(`bun publish failed for ${relativeDir} (${dir}) with exit code ${exitCode}`);
 		}
