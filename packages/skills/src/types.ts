@@ -145,14 +145,16 @@ export interface SkillStatusResult {
 
 /** Options for the skills extension. */
 export interface SkillOptions {
-	/** Read-only directory produced by writeSkills(). */
+	/** Packaged skills directory read at runtime for discovery and installation. */
 	distDir: string | URL;
-	/**
-	 * Hand-authored skill directories (URL, absolute, or package-root-relative path).
-	 * When non-empty, the build regenerates the command skill from the snapshot and
-	 * includes only these authored skills instead of copying `distDir`.
-	 */
+	/** Hand-authored skill directories (URL, absolute, or package-root-relative path) built alongside the generated skill. */
 	extras?: readonly (string | URL)[];
+	/** Generated command skill name. Defaults to the root command name. */
+	name?: string;
+	/** Generated command skill description. Defaults to the root command description. */
+	description?: string;
+	/** Whether to build the generated command skill. Set `false` to ship only `extras`. @default true */
+	generated?: boolean;
 	/** Default agent-directory scope. */
 	defaultScope?: Scope;
 	/** Repair stale or dangling owned links before commands run. @default true */

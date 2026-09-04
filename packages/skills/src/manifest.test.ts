@@ -44,6 +44,22 @@ function makeCommand(opts: {
 
 describe("buildManifest", () => {
 	describe("root command basics", () => {
+		it("rejects a direct subcommand that would overwrite the root command file", () => {
+			const child = makeCommand({ meta: { name: "demo" }, run: () => {} });
+			const root = makeCommand({ meta: { name: "demo" }, subCommands: { demo: child } });
+
+			expect(() => buildManifest(snapshotCommand(root))).toThrow(
+				'Cannot generate skills when a direct subcommand has the root command name "demo"',
+			);
+		});
+
+		it("ignores hidden same-named children, which are never rendered", () => {
+			const child = makeCommand({ meta: { name: "demo", hidden: true }, run: () => {} });
+			const root = makeCommand({ meta: { name: "demo" }, subCommands: { demo: child } });
+
+			expect(buildManifest(snapshotCommand(root)).children).toEqual([]);
+		});
+
 		it("returns a ManifestNode with name and path from meta", () => {
 			const cmd = makeCommand({
 				meta: { name: "my-cli", description: "A test CLI" },

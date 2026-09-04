@@ -34,7 +34,7 @@ describe("package-as-source pipeline", () => {
 				defineCommand("deploy", { description: "Deploy" }, (command) => command.action(() => {})),
 			);
 		const source = join(tempRoot, "package", "skills");
-		await writeSkills(app, { outDir: source, version: "1.0.0" });
+		await writeSkills({ app, outDir: source, version: "1.0.0" });
 
 		// Discovery reads required Agent Skills frontmatter and validates the directory name.
 		expect(loadPackagedSkills(source)).toMatchObject([{ name: "demo", description: "Demo CLI" }]);

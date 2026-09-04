@@ -100,7 +100,7 @@ export interface FlagSnapshot {
  * ```
  */
 export interface CommandSnapshot {
-	/** Command metadata: `name`, `description`, `usage`, `sections`, `aliases`, `hidden`. */
+	/** Command metadata, including routing and presentation options. */
 	readonly meta: Readonly<CommandMeta>;
 	/** Whether the command defines a Command Action */
 	readonly hasAction: boolean;

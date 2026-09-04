@@ -100,7 +100,9 @@ export function loadPackagedSkills(source: string | URL): readonly PackagedSkill
 		skills.push({ sourceDir, name: frontmatter.name, description: frontmatter.description });
 	}
 	if (skills.length === 0) {
-		throw new Error(`Skill source "${root}" does not contain any skill directories.`);
+		throw new SkillSourceUnavailableError(
+			`Skill source "${root}" does not contain any skill directories.`,
+		);
 	}
 	return skills.sort((a, b) => a.name.localeCompare(b.name));
 }

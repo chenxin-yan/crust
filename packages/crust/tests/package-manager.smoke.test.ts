@@ -151,7 +151,10 @@ describe.skipIf(!packageManager)("package manager smoke", () => {
 			),
 		);
 
-		const install = await run([packageManager!, "install"], installDir);
+		// Audit/funding lookups hit registry endpoints the smoke test does not need;
+		// when they degrade, npm blocks on them and the test times out.
+		const auditFlags = packageManager === "npm" ? ["--no-audit", "--no-fund"] : [];
+		const install = await run([packageManager!, "install", ...auditFlags], installDir);
 		expect(install.exitCode).toBe(0);
 
 		const binPath = join(installDir, "node_modules", ".bin", "resolver-smoke");

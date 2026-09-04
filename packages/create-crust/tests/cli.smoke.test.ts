@@ -234,7 +234,9 @@ describe.skipIf(process.env.CREATE_CRUST_SMOKE !== "1")("create-crust smoke test
 		expect(existsSync(join(sampleDir, "README.md"))).toBe(true);
 
 		useLocalDependencyPackages(sampleDir, await packLocalDependencyPackages());
-		const installCommand = npmArgv(["install"]);
+		// Audit/funding lookups hit registry endpoints the smoke test does not need;
+		// when they degrade, npm blocks on them and the test times out.
+		const installCommand = npmArgv(["install", "--no-audit", "--no-fund"]);
 		const install = await run(installCommand, sampleDir, {
 			BUN_BE_BUN: "1",
 			npm_config_user_agent: "npm/10.0.0 node/v22.0.0",

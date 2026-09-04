@@ -211,6 +211,7 @@
         "@crustjs/config": "workspace:*",
         "@crustjs/core": "workspace:*",
         "@crustjs/extensions": "workspace:*",
+        "@crustjs/testing": "workspace:*",
         "@crustjs/utils": "workspace:*",
         "tsdown": "catalog:",
       },

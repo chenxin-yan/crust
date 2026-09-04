@@ -12,8 +12,10 @@ import { renderSkill } from "./render.ts";
 import { isValidSkillName } from "./skill-name.ts";
 import type { RenderedFile, SkillMeta } from "./types.ts";
 
-/** Options for rendering an application's skill source. */
+/** Options for rendering a skill source. */
 export interface WriteSkillsOptions {
+	/** Application whose command tree is rendered into a generated skill. Omit to write only `extras`. */
+	readonly app?: { snapshot(): Promise<CommandSnapshot> };
 	/** `skills` directory that receives one subdirectory per skill. */
 	readonly outDir: string;
 	/** Version recorded in the generated skill's SKILL.md metadata. Omitted when absent. */
@@ -27,36 +29,34 @@ export interface WriteSkillsOptions {
 }
 
 /**
- * Renders an application's generated and authored skills into a package-ready skill source.
+ * Renders generated and authored skills into a package-ready skill source.
  */
-export async function writeSkills(
-	app: { snapshot(): Promise<CommandSnapshot> },
-	options: WriteSkillsOptions,
-): Promise<void> {
-	await writeSkillsFromSnapshot(await app.snapshot(), options);
+export async function writeSkills({ app, ...options }: WriteSkillsOptions): Promise<void> {
+	await writeSkillSource(await app?.snapshot(), options);
 }
 
 /** Renders skills from a Command Snapshot prepared in this or another process. */
 export async function writeSkillsFromSnapshot(
 	snapshot: CommandSnapshot,
-	options: WriteSkillsOptions,
+	options: Omit<WriteSkillsOptions, "app">,
 ): Promise<void> {
-	const generatedMeta: SkillMeta = {
-		name: options.name ?? snapshot.meta.name,
-		description: options.description ?? snapshot.meta.description ?? "",
-		version: options.version,
-	};
-	validateSkillName(generatedMeta.name);
-	requireSkillFrontmatter(generatedMeta, `Skill "${generatedMeta.name}"`);
+	await writeSkillSource(snapshot, options);
+}
 
+async function writeSkillSource(
+	snapshot: CommandSnapshot | undefined,
+	options: Omit<WriteSkillsOptions, "app">,
+): Promise<void> {
+	if (snapshot === undefined && (options.extras?.length ?? 0) === 0) {
+		throw new Error("Nothing to write: provide an app or at least one extra skill directory.");
+	}
 	const outDir = resolve(options.outDir);
 	if (basename(outDir) !== "skills") {
 		throw new Error(`Skill source outDir "${outDir}" must be named "skills".`);
 	}
 
-	const skills = new Map<string, readonly RenderedFile[]>([
-		[generatedMeta.name, renderSkill(buildManifest(snapshot), generatedMeta)],
-	]);
+	const skills = new Map<string, readonly RenderedFile[]>();
+	const authoredNames = new Set<string>();
 
 	for (const sourceDir of options.extras ?? []) {
 		const resolved = resolveSourceDir(sourceDir);
@@ -68,10 +68,26 @@ export async function writeSkillsFromSnapshot(
 		}
 		const bundle = await loadBundleFiles(sourceDir);
 		validateSkillName(bundle.frontmatter.name);
-		if (skills.has(bundle.frontmatter.name)) {
+		if (authoredNames.has(bundle.frontmatter.name)) {
 			throw new SkillSourceConflictError(bundle.frontmatter.name);
 		}
+		authoredNames.add(bundle.frontmatter.name);
 		skills.set(bundle.frontmatter.name, bundle.files);
+	}
+
+	if (snapshot) {
+		const generatedMeta: SkillMeta = {
+			name: options.name ?? snapshot.meta.name,
+			description: options.description ?? snapshot.meta.description ?? "",
+			version: options.version,
+		};
+		// An authored skill may intentionally replace the same-named generated command skill;
+		// a replaced skill is neither validated nor rendered.
+		if (!authoredNames.has(generatedMeta.name)) {
+			validateSkillName(generatedMeta.name);
+			requireSkillFrontmatter(generatedMeta, `Skill "${generatedMeta.name}"`);
+			skills.set(generatedMeta.name, renderSkill(buildManifest(snapshot), generatedMeta));
+		}
 	}
 
 	const cwd = resolve(".");

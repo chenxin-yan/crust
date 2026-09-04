@@ -18,21 +18,22 @@ The **packaged skills directory** is the `skills/` directory shipped in your npm
 - A **generated skill**, rendered from the command tree and its `meta.sections`.
 - Any **authored skills**, included from hand-written skill directories via `extras`.
 
-The `skill()` Extension owns its build output. During `crust build`, configured `extras` are built alongside the generated skill from the prepared Command Snapshot. Without `extras`, the Extension copies the available packaged skills directory wholesale to `<outdir>/skills`, falling back to the generated skill when that directory is unavailable. `crust build --package` includes the resulting directory in the staged root package. No `--skills` build flag is needed; `--no-validate` skips all Extension build hooks.
+The `skill()` Extension owns its build output. During `crust build`, it renders the generated skill from the prepared Command Snapshot and any configured `extras` into `<outdir>/skills`, so the packaged directory always matches the built command tree. `crust build --package` includes the resulting directory in the staged root package. No `--skills` build flag is needed; `--no-validate` skips all Extension build hooks.
 
 ```ts
 import { writeSkills } from "@crustjs/skills";
 import { app } from "./cli.ts";
 import pkg from "./package.json" with { type: "json" };
 
-await writeSkills(app, {
+await writeSkills({
+  app,
   outDir: "dist/skills",
   version: pkg.version, // optional; recorded in the generated skill's metadata
   extras: ["skills-src/deployment-guide"],
 });
 ```
 
-For a custom pipeline with a prepared Command Snapshot instead of a live app, call `writeSkillsFromSnapshot(snapshot, options)`. `outDir` must be named `skills`. Each skill gets its own `skills/<name>/` directory containing `SKILL.md` and any supporting files. `writeSkills()` and `writeSkillsFromSnapshot()` replace `outDir` on every build and never write to an agent directory.
+Omit `app` to write only authored `extras`; at least one of the two is required. For a custom pipeline with a prepared Command Snapshot instead of a live app, call `writeSkillsFromSnapshot(snapshot, options)`. `outDir` must be named `skills`. Each skill gets its own `skills/<name>/` directory containing `SKILL.md` and any supporting files. `writeSkills()` and `writeSkillsFromSnapshot()` replace `outDir` on every build and never write to an agent directory.
 
 Include the directory in the published package:
 
@@ -62,7 +63,7 @@ export const app = new Crust("my-cli", { description: "My CLI" })
   .action(() => {});
 ```
 
-When `extras` is non-empty, the build regenerates current command documentation and copies each authored skill into the output instead of copying the existing packaged skills directory. `distDir` remains the directory used for runtime discovery and installation. Keep authored skill directories outside the build output; the build refuses an extra nested inside it.
+Each authored extra is copied into the build output next to the generated skill. An authored extra with the generated skill's name replaces that generated skill; duplicate names between authored extras remain an error. Use `name` and `description` to customize the generated skill, or `generated: false` to ship only authored `extras`; a build that would produce no skills at all is an error. `distDir` is only read at runtime, for discovery and installation. Keep authored skill directories outside the build output; the build refuses an extra nested inside it.
 
 The extension registers `my-cli skill` and `my-cli skill update`. It also contributes an **Agent skills** section to root help and generated man pages. Each shipped skill is listed by name and description with its logical source path — relative to the working directory when the packaged directory is inside it, absolute otherwise — so agents can discover and load skills without installing them first. Run builds from the project root containing the packaged skills directory to keep absolute build-machine paths out of generated artifacts.
 
