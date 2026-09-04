@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, spyOn } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -75,14 +75,9 @@ describe("buildEntrypoint", () => {
 				`await new Crust("demo", { description: "Demo" }).extend(skill({ distDir: ${JSON.stringify(source)} }), man()).execute();\n`,
 		);
 
-		// crust build runs from the project root; the entry subprocess inherits
-		// that cwd, so advertised sources relativize against the fixture project.
-		const cwdSpy = spyOn(process, "cwd").mockReturnValue(directory);
-		try {
-			await buildEntrypoint(entry, outDir);
-		} finally {
-			cwdSpy.mockRestore();
-		}
+		// Run the entry subprocess from the fixture project root so advertised
+		// sources are relative to that project.
+		await buildEntrypoint(entry, outDir, [], io, directory);
 
 		const manual = await Bun.file(join(outDir, "man", "demo.1")).text();
 		const packagedSkill = await Bun.file(join(outDir, "skills", "demo", "SKILL.md")).text();
