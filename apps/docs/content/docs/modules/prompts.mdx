@@ -98,7 +98,7 @@ Custom prompt functions passed to `renderPrompt` must accept `(options, io?)`, l
 
 The package root exports the renderer pieces used by the built-in prompts:
 
-- `renderTextWithCursor` renders editable text or its placeholder with a themed cursor.
+- `renderTextWithCursor` renders editable text with a themed cursor, or a styled placeholder when empty.
 - `highlightMatches` applies the theme's match style to fuzzy-match indices.
 - `formatPromptLine` and `formatSubmitted` assemble active and submitted prompt lines.
 - `renderChoiceList` renders a scrolled choice viewport with overflow indicators.
