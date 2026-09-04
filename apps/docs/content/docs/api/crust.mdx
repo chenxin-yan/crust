@@ -74,7 +74,7 @@ defineCommand<const Name extends string>(
   recipe: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
 ): CommandDefinition<Name>;
 
-interface CommandConfig extends Omit<CommandMeta, "name" | "sections"> {
+interface CommandConfig extends Omit<CommandMeta, "name" | "sections" | "version"> {
   readonly sections?: readonly CommandSectionInput[];
 }
 
@@ -85,7 +85,7 @@ defineCommand<const Name extends string, const C extends CommandConfig>(
 ): CommandDefinition<Name, AliasesOf<C>>;
 ```
 
-Creates an inert reusable definition under a required name. Static `description`, `usage`, `aliases`, and `hidden` belong in `config`:
+Creates an inert reusable definition under a required name. Static `description`, `usage`, `aliases`, and `hidden` belong in `config`; application `version` belongs only in the root `Crust` constructor:
 
 ```ts
 const verbose = defineFlag("verbose", { type: "boolean" });

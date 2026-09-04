@@ -635,10 +635,10 @@ export function defineCommand(
 	maybeRecipe?: CommandRecipe,
 ): CommandDefinition {
 	const hasConfig = !isCommandRecipe(configOrRecipe);
-	const config: CommandConfig = hasConfig ? configOrRecipe : {};
+	const config: CommandConfig & { readonly version?: unknown } = hasConfig ? configOrRecipe : {};
 	const recipe = hasConfig ? maybeRecipe : configOrRecipe;
 	if (!recipe) throw new CrustError("DEFINITION", `Command "${name}" requires a recipe`);
-	const { sections, ...metaRest } = config;
+	const { sections, version: _rootVersion, ...metaRest } = config;
 	const meta: Omit<CommandMeta, "name"> = {
 		...metaRest,
 		...(config.aliases ? { aliases: [...config.aliases] } : {}),

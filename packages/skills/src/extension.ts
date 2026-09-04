@@ -19,6 +19,7 @@ import {
 	detectInstalledAgents,
 	getAdditionalAgents,
 	getUniversalAgents,
+	resolveEffectiveScope,
 } from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";
 import {
@@ -130,7 +131,7 @@ async function autoRepairSkills(options: SkillOptions, io: SkillIO): Promise<voi
 	const configuredScopes: Scope[] = options.defaultScope
 		? [options.defaultScope]
 		: ["project", "global"];
-	const scopes = [...new Set(configuredScopes)];
+	const scopes = [...new Set(configuredScopes.map(resolveEffectiveScope))];
 	for (const packagedSkill of skills) {
 		for (const scope of scopes) {
 			try {
@@ -225,12 +226,13 @@ async function reconcileSkill(opts: {
 	io: SkillIO;
 }): Promise<void> {
 	const { packagedSkill, scope, installAll, io } = opts;
+	const effectiveScope = resolveEffectiveScope(scope);
 	const detected = new Set(await detectInstalledAgents());
 	const universal = getUniversalAgents();
 	const status = await getSkillStatus({
 		name: packagedSkill.name,
 		sourceDir: packagedSkill.sourceDir,
-		scope,
+		scope: effectiveScope,
 	});
 	const statusMap = new Map(status.agents.map((entry) => [entry.agent, entry]));
 	const installed = new Set(
@@ -291,14 +293,14 @@ async function reconcileSkill(opts: {
 	}
 
 	if (toInstall.length > 0) {
-		const groups = groupAgentsByOutputDir(toInstall, scope, packagedSkill.name);
+		const groups = groupAgentsByOutputDir(toInstall, effectiveScope, packagedSkill.name);
 		const installedAgents: InstallSkillResult["agents"] = [];
 		for (const agents of groups.values()) {
 			const runInstall = (force?: boolean) =>
 				installSkill({
 					sourceDir: packagedSkill.sourceDir,
 					agents,
-					scope,
+					scope: effectiveScope,
 					force,
 				});
 			try {
@@ -344,7 +346,7 @@ async function reconcileSkill(opts: {
 				uninstallSkill({
 					name: packagedSkill.name,
 					agents: toUninstall,
-					scope,
+					scope: effectiveScope,
 				}),
 		});
 	}

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
+	chmod,
 	lstat,
 	mkdir,
 	mkdtemp,
@@ -228,6 +229,81 @@ describe("skill extension packaged directory", () => {
 		expect((await lstat(target("demo"))).isSymbolicLink()).toBe(true);
 		expect((await lstat(target("guide"))).isSymbolicLink()).toBe(true);
 		expect(await readFile(join(target("demo"), "content.md"), "utf8")).toBe("demo\n");
+	});
+
+	it("normalizes home-directory scopes before repair and install grouping", async () => {
+		const source = await writeSource("demo");
+		for (const conflict of [
+			join(tempRoot, ".agents", "skills", "demo"),
+			join(tempRoot, ".trae", "skills", "demo"),
+		]) {
+			await mkdir(conflict, { recursive: true });
+			await writeFile(join(conflict, "manual.md"), "keep\n");
+		}
+		const binDir = join(tempRoot, "bin");
+		const traeBin = join(binDir, "trae");
+		await mkdir(binDir);
+		await writeFile(traeBin, "#!/bin/sh\nexit 0\n");
+		await chmod(traeBin, 0o755);
+
+		const script = join(tempRoot, "home-scope.ts");
+		await writeFile(
+			script,
+			`import { lstat } from "node:fs/promises";
+import { join } from "node:path";
+import { Crust } from ${JSON.stringify(import.meta.resolve("@crustjs/core"))};
+import { skill } from ${JSON.stringify(new URL("./extension.ts", import.meta.url).href)};
+
+const source = ${JSON.stringify(source)};
+const repairErrors: string[] = [];
+await new Crust("demo")
+  .extend(skill({ distDir: source }))
+  .action(() => {})
+  .execute({ argv: [], io: { stderr: (text) => repairErrors.push(text) } });
+
+await new Crust("demo")
+  .extend(skill({ distDir: source, autoUpdate: false }))
+  .action(() => {})
+  .execute({
+    argv: ["skill", "--all", "--scope", "project"],
+    io: { stderr: () => {} },
+  });
+
+let traeCnInstalled = false;
+try {
+  traeCnInstalled = (await lstat(join(process.cwd(), ".trae-cn", "skills", "demo"))).isSymbolicLink();
+} catch {}
+console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
+`,
+		);
+		const proc = Bun.spawn([process.execPath, script], {
+			cwd: tempRoot,
+			env: {
+				...process.env,
+				HOME: tempRoot,
+				PATH: binDir,
+				XDG_CONFIG_HOME: join(tempRoot, ".config"),
+				CLAUDE_CONFIG_DIR: join(tempRoot, ".claude"),
+				VIBE_HOME: join(tempRoot, ".vibe"),
+			},
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		const [stdout, stderr, exitCode] = await Promise.all([
+			new Response(proc.stdout).text(),
+			new Response(proc.stderr).text(),
+			proc.exited,
+		]);
+		expect(exitCode, stderr).toBe(0);
+		const resultLine = stdout.match(/^RESULT (.+)$/m)?.[1];
+		expect(resultLine, stdout).toBeDefined();
+		const result = JSON.parse(resultLine!) as {
+			repairErrors: string[];
+			traeCnInstalled: boolean;
+		};
+		expect(result.repairErrors).toHaveLength(2);
+		expect(new Set(result.repairErrors).size).toBe(2);
+		expect(result.traeCnInstalled).toBe(true);
 	});
 
 	it("does not let --all overwrite an unowned agent directory", async () => {

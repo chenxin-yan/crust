@@ -274,6 +274,19 @@ describe("command metadata", () => {
 			usage: "cli sub [options]",
 		});
 	});
+
+	it("keeps version metadata on the root command", async () => {
+		const app = new Crust("cli", { version: "1.0.0" }).add(
+			defineCommand(
+				"sub",
+				// @ts-expect-error -- application versions belong to the root constructor
+				{ version: "2.0.0" },
+				(command) => command,
+			),
+		);
+
+		expect((await app.snapshot()).subCommands.sub?.meta.version).toBeUndefined();
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
