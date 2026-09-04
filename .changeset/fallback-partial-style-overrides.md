@@ -2,4 +2,4 @@
 "@crustjs/style": patch
 ---
 
-Make each omitted `CapabilityOverrides` property fall back to its matching runtime environment input instead of a partial override object clearing every unspecified capability.
+Make each omitted `CapabilityOverrides` property fall back to its matching runtime environment input, and expose dynamic-color chain pairs at the configured color depth.

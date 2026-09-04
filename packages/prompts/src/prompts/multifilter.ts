@@ -260,7 +260,7 @@ export function multifilter(
 ): Promise<string[]>;
 export function multifilter<T>(options: MultifilterOptions<T>, io?: PromptIO): Promise<T[]>;
 export async function multifilter<T>(options: MultifilterOptions<T>, io?: PromptIO): Promise<T[]> {
-	const setup = await setupListPrompt<T, readonly T[]>(options, io);
+	const setup = await setupListPrompt<T, readonly T[]>(options, "multiple", io);
 	if (setup.shortCircuited) return [...setup.value];
 
 	const { choices, cursor, maxVisible, promptIO, scrollOffset, selected } = setup;

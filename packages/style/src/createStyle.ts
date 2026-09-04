@@ -178,7 +178,7 @@ function buildChainableStyleFactory(
 		let open = "";
 		let close = "";
 		for (const step of steps) {
-			const pair = stepPair(step, "truecolor");
+			const pair = stepPair(step, fixedCapabilities?.colorDepth ?? "truecolor");
 			open += pair.open;
 			close = pair.close + close;
 		}

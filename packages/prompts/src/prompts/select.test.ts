@@ -46,6 +46,23 @@ describe("select — default value", () => {
 		expect(result).toBe("green");
 	});
 
+	it("preserves an array-valued choice as one default", async () => {
+		const defaultValue = ["green"] as const;
+		const prompt = renderPrompt(select, {
+			message: "Pick a color",
+			choices: [
+				{ label: "Red", value: ["red"] as const },
+				{ label: "Green", value: defaultValue },
+			],
+			default: defaultValue,
+		});
+
+		await tick();
+		prompt.keys("return");
+
+		expect(await prompt.answer).toBe(defaultValue);
+	});
+
 	it("defaults cursor to first item when no default is provided", async () => {
 		const prompt = renderPrompt(select, {
 			message: "Pick a color",

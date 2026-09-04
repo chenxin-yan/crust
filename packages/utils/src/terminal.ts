@@ -29,14 +29,22 @@ export interface AmbientTerminalIO {
 }
 
 const STORAGE_KEY = Symbol.for("crustjs.terminal.io");
-// SAFETY: This intersection only declares the optional symbol slot read and initialized below.
+const AMBIENT_CALLBACKS_KEY = Symbol.for("crustjs.terminal.ambient-callbacks");
+// SAFETY: These intersections only declare the optional symbol slots read and initialized below.
 const globalWithStorage = globalThis as typeof globalThis & {
 	[key: symbol]: AsyncLocalStorage<TerminalIO> | undefined;
 };
+// SAFETY: This intersection only declares the optional symbol slot read and initialized below.
+const globalWithAmbientCallbacks = globalThis as typeof globalThis & {
+	[key: symbol]: WeakMap<TerminalOutput, AmbientTerminalIO> | undefined;
+};
 
-/** Bundled copies in Core, Prompts, and Progress share one process-wide storage instance. */
+/** Bundled copies in Core, Prompts, and Progress share process-wide terminal state. */
 const storage = (globalWithStorage[STORAGE_KEY] ??= new AsyncLocalStorage<TerminalIO>());
-const ambientCallbacks = new WeakMap<TerminalOutput, AmbientTerminalIO>();
+const ambientCallbacks = (globalWithAmbientCallbacks[AMBIENT_CALLBACKS_KEY] ??= new WeakMap<
+	TerminalOutput,
+	AmbientTerminalIO
+>());
 
 /** Run a function with terminal streams available in its async scope. */
 export function withTerminalIO<T>(io: TerminalIO, fn: () => T): T {

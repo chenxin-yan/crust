@@ -55,6 +55,13 @@ describe("createStyle — colorDepth introspection", () => {
 });
 
 describe("createStyle — fg/bg emit format matching colorDepth", () => {
+	it("exposes dynamic chain pairs at the configured depth", () => {
+		const chain = autoStyle({ term: "xterm-256color" }).fg("#ff0000");
+		expect(chain.open).toBe("\x1b[38;5;196m");
+		expect(`${chain.open}text${chain.close}`).toBe(chain("text"));
+		expect(createStyle({ mode: "never" }).fg("#ff0000").open).toBe("");
+	});
+
 	it('bg emits ansi-256 background when capability is "256"', () => {
 		const s = autoStyle({ term: "xterm-256color" });
 		const fgOpen = Bun.color("#00ff88", "ansi-256") as string;

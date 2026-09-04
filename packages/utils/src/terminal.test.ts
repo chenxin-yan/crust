@@ -22,6 +22,20 @@ describe("ambient terminal IO", () => {
 		expect(getAmbientTerminalIO()).toBeUndefined();
 	});
 
+	it("shares ambient callback lookup across bundled module copies", async () => {
+		const first = (await import(
+			new URL("./terminal.ts?copy=first", import.meta.url).href
+		)) as typeof import("./terminal.ts");
+		const second = (await import(
+			new URL("./terminal.ts?copy=second", import.meta.url).href
+		)) as typeof import("./terminal.ts");
+		const io = { stdout: (_text: string) => {}, stderr: (_text: string) => {} };
+
+		first.withAmbientTerminalIO(io, () => {
+			expect(second.getAmbientTerminalIO()).toBe(io);
+		});
+	});
+
 	it("line-buffers callback output through the shared stream scope", () => {
 		const errors: string[] = [];
 		withAmbientTerminalIO({ stdout: () => {}, stderr: (text) => errors.push(text) }, () => {

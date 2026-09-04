@@ -6,10 +6,6 @@ import type { Choice } from "./types.ts";
 import type { NormalizedChoice } from "./utils.ts";
 import { calculateScrollOffset, DEFAULT_MAX_VISIBLE, normalizeChoices } from "./utils.ts";
 
-function isDefaultArray<T>(value: T | readonly T[] | undefined): value is readonly T[] {
-	return Array.isArray(value);
-}
-
 interface ListPromptOptions<T, Answer extends T | readonly T[]> {
 	readonly choices: readonly Choice<T>[];
 	readonly initial?: Answer;
@@ -32,6 +28,7 @@ type ListPromptSetup<T, Answer extends T | readonly T[]> =
 /** @internal Resolve the shared lifecycle and initial viewport for list prompts. */
 export async function setupListPrompt<T, Answer extends T | readonly T[]>(
 	options: ListPromptOptions<T, Answer>,
+	mode: "single" | "multiple",
 	io?: PromptIO,
 ): Promise<ListPromptSetup<T, Answer>> {
 	const shortCircuit = await resolveShortCircuit(options, io);
@@ -39,11 +36,13 @@ export async function setupListPrompt<T, Answer extends T | readonly T[]>(
 
 	const choices = normalizeChoices(options.choices);
 	const maxVisible = options.maxVisible ?? DEFAULT_MAX_VISIBLE;
-	const defaults = isDefaultArray<T>(options.default)
-		? options.default
-		: options.default === undefined
+	// SAFETY: The explicit mode disambiguates scalar array-valued T from multi-answer T[].
+	const defaults: readonly T[] =
+		options.default === undefined
 			? []
-			: [options.default];
+			: mode === "multiple"
+				? (options.default as readonly T[])
+				: [options.default as T];
 	const selected = new Set(
 		defaults
 			.map((value) => choices.findIndex((choice) => choice.value === value))

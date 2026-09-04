@@ -208,7 +208,7 @@ export function select(
 ): Promise<string>;
 export function select<T>(options: SelectOptions<T>, io?: PromptIO): Promise<T>;
 export async function select<T>(options: SelectOptions<T>, io?: PromptIO): Promise<T> {
-	const setup = await setupListPrompt<T, T>(options, io);
+	const setup = await setupListPrompt<T, T>(options, "single", io);
 	if (setup.shortCircuited) return setup.value;
 
 	const { choices, cursor, maxVisible, promptIO, scrollOffset } = setup;
