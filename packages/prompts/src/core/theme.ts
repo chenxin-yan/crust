@@ -4,7 +4,7 @@
 
 import { bold, cyan, dim, green, red } from "@crustjs/style";
 
-import type { PartialPromptTheme, PromptTheme } from "./types.ts";
+import type { PromptTheme } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Default Theme
@@ -28,22 +28,3 @@ export const defaultTheme: PromptTheme = {
 	hint: dim,
 	filterMatch: cyan,
 };
-
-// ────────────────────────────────────────────────────────────────────────────
-// Theme Resolution (internal)
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Resolve a complete theme by merging partial overrides onto
- * {@link defaultTheme}. Instance themes from `createPrompts` are
- * pre-merged into the per-prompt overrides before this runs.
- *
- * @internal — Prompt implementations call this; users do not need to.
- *
- * @param promptTheme - Partial theme overrides
- * @returns A complete `PromptTheme` with all slots defined.
- */
-export function resolveTheme(promptTheme?: PartialPromptTheme): PromptTheme {
-	if (!promptTheme) return defaultTheme;
-	return { ...defaultTheme, ...promptTheme };
-}

@@ -202,14 +202,13 @@ export interface NormalizedChoice<T> {
  * // => [{ label: "HTTP", value: 80 }]
  * ```
  */
-function isStringChoice(choice: Choice<unknown>): choice is string {
-	return typeof choice === "string";
-}
-
-export function normalizeChoices<T>(choices: readonly Choice<T>[]): NormalizedChoice<T>[];
-export function normalizeChoices(choices: readonly Choice<unknown>[]): NormalizedChoice<unknown>[] {
+export function normalizeChoices<T>(choices: readonly Choice<T>[]): NormalizedChoice<T>[] {
 	return choices.map((choice) => {
-		if (isStringChoice(choice)) return { label: choice, value: choice };
+		// oxlint-disable-next-line anti-slop/no-runtime-typeof -- Choice is an internal discriminated union, not unparsed input.
+		if (typeof choice === "string") {
+			// SAFETY: plain-string Choice values are represented by that same string.
+			return { label: choice, value: choice as T };
+		}
 		return choice;
 	});
 }

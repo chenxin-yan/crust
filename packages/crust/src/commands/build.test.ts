@@ -23,12 +23,11 @@ import {
 } from "../utils/build-helpers.ts";
 import {
 	buildCommand,
-	generateCmdResolver,
-	generateDenoCmdResolver,
-	generateDenoResolver,
-	generateResolver,
+	generateCmdResolverFor,
+	generateResolverFor,
 	planBuild,
 	resolveEnvFilePaths,
+	writeResolver,
 	type BuildFlags,
 } from "./build.ts";
 
@@ -284,9 +283,14 @@ describe("getBinaryFilename", () => {
 // Unit tests for generateResolver (shell script)
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("generateResolver", () => {
+describe("generateResolverFor", () => {
 	it("maps all Unix targets to correct uname keys", () => {
-		const content = generateResolver("my-cli", SUPPORTED_TARGETS);
+		const content = generateResolverFor(
+			"my-cli",
+			SUPPORTED_TARGETS,
+			TARGET_INFO,
+			getBinaryFilename,
+		);
 		expect(content).toContain("Linux-x86_64)");
 		expect(content).toContain("Linux-aarch64)");
 		expect(content).toContain("Darwin-x86_64)");
@@ -294,13 +298,23 @@ describe("generateResolver", () => {
 	});
 
 	it("excludes Windows targets from shell resolver", () => {
-		const content = generateResolver("my-cli", SUPPORTED_TARGETS);
+		const content = generateResolverFor(
+			"my-cli",
+			SUPPORTED_TARGETS,
+			TARGET_INFO,
+			getBinaryFilename,
+		);
 		expect(content).not.toContain("Windows");
 		expect(content).not.toContain("bun-windows");
 	});
 
 	it("maps to correct binary filenames", () => {
-		const content = generateResolver("my-cli", SUPPORTED_TARGETS);
+		const content = generateResolverFor(
+			"my-cli",
+			SUPPORTED_TARGETS,
+			TARGET_INFO,
+			getBinaryFilename,
+		);
 		expect(content).toContain('"my-cli-bun-linux-x64-baseline"');
 		expect(content).toContain('"my-cli-bun-linux-arm64"');
 		expect(content).toContain('"my-cli-bun-darwin-x64"');
@@ -309,7 +323,7 @@ describe("generateResolver", () => {
 
 	it("only includes targets that were built", () => {
 		const subset: BunTarget[] = ["bun-linux-x64-baseline", "bun-darwin-arm64"];
-		const content = generateResolver("my-cli", subset);
+		const content = generateResolverFor("my-cli", subset, TARGET_INFO, getBinaryFilename);
 		expect(content).toContain("Linux-x86_64)");
 		expect(content).toContain("Darwin-arm64)");
 		// Should NOT contain platforms not in subset
@@ -318,7 +332,12 @@ describe("generateResolver", () => {
 	});
 
 	it("includes the base name in error messages", () => {
-		const content = generateResolver("my-tool", SUPPORTED_TARGETS);
+		const content = generateResolverFor(
+			"my-tool",
+			SUPPORTED_TARGETS,
+			TARGET_INFO,
+			getBinaryFilename,
+		);
 		expect(content).toContain("[my-tool]");
 	});
 });
@@ -329,37 +348,80 @@ describe("generateResolver", () => {
 
 describe("Deno resolvers", () => {
 	it("maps Deno targets to their platform-specific filenames", () => {
-		const shell = generateDenoResolver("my-cli", SUPPORTED_DENO_TARGETS);
+		const shell = generateResolverFor(
+			"my-cli",
+			SUPPORTED_DENO_TARGETS,
+			DENO_TARGET_INFO,
+			getDenoBinaryFilename,
+		);
 		expect(shell).toContain('Linux-x86_64) bin="my-cli-x86_64-unknown-linux-gnu"');
 		expect(shell).not.toContain("pc-windows-msvc");
 
-		const cmd = generateDenoCmdResolver("my-cli", SUPPORTED_DENO_TARGETS);
+		const cmd = generateCmdResolverFor(
+			"my-cli",
+			SUPPORTED_DENO_TARGETS,
+			DENO_TARGET_INFO,
+			getDenoBinaryFilename,
+		);
 		expect(cmd).toContain("my-cli-x86_64-pc-windows-msvc.exe");
 		expect(cmd).toContain("my-cli-aarch64-pc-windows-msvc.exe");
 	});
 });
 
-describe("generateCmdResolver", () => {
+describe("generateCmdResolverFor", () => {
 	it("references the correct Windows binary filename", () => {
-		const content = generateCmdResolver("my-cli", SUPPORTED_TARGETS);
+		const content = generateCmdResolverFor(
+			"my-cli",
+			SUPPORTED_TARGETS,
+			TARGET_INFO,
+			getBinaryFilename,
+		);
 		expect(content).toContain("my-cli-bun-windows-x64-baseline.exe");
 		expect(content).toContain("my-cli-bun-windows-arm64.exe");
 	});
 
 	it("includes the base name in error messages", () => {
-		const content = generateCmdResolver("my-tool", SUPPORTED_TARGETS);
+		const content = generateCmdResolverFor(
+			"my-tool",
+			SUPPORTED_TARGETS,
+			TARGET_INFO,
+			getBinaryFilename,
+		);
 		expect(content).toContain("[my-tool]");
 	});
 
 	it("generates error stub when no Windows targets built", () => {
 		const unixOnly: BunTarget[] = ["bun-linux-x64-baseline", "bun-darwin-arm64"];
-		const content = generateCmdResolver("my-cli", unixOnly);
+		const content = generateCmdResolverFor("my-cli", unixOnly, TARGET_INFO, getBinaryFilename);
 		expect(content).toContain("No Windows binary was built");
 	});
 
 	it("uses CRLF line endings", () => {
-		const content = generateCmdResolver("my-cli", SUPPORTED_TARGETS);
+		const content = generateCmdResolverFor(
+			"my-cli",
+			SUPPORTED_TARGETS,
+			TARGET_INFO,
+			getBinaryFilename,
+		);
 		expect(content).toContain("\r\n");
+	});
+});
+
+describe("writeResolver", () => {
+	it("writes both resolver formats with the generic target configuration", () => {
+		const tmpDir = join(import.meta.dir, ".tmp-resolver-write");
+		const resolverPath = join(tmpDir, "cli");
+		rmSync(tmpDir, { recursive: true, force: true });
+		mkdirSync(tmpDir, { recursive: true });
+		try {
+			writeResolver(resolverPath, "my-cli", SUPPORTED_TARGETS, TARGET_INFO, getBinaryFilename);
+			expect(readFileSync(resolverPath, "utf8")).toContain("Linux-x86_64)");
+			expect(readFileSync(`${resolverPath}.cmd`, "utf8")).toContain(
+				"my-cli-bun-windows-x64-baseline.exe",
+			);
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
 	});
 });
 

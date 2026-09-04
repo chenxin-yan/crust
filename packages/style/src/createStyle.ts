@@ -20,6 +20,11 @@ import type {
 	StyleOptions,
 } from "./types.ts";
 
+const dynamicColorKinds = [
+	["fg", fgPairAtDepth, fgDirect],
+	["bg", bgPairAtDepth, bgDirect],
+] as const;
+
 // Computed namespace access is safe because StyleMethodName contains only ANSI-pair exports.
 const styleMethodPairs = codes;
 
@@ -151,44 +156,27 @@ function buildChainableStyleFactory(
 		}
 
 		// Dynamic-color chain methods resolve depth when the chain is extended.
-		Object.defineProperty(styleFn, "fg", {
-			configurable: false,
-			enumerable: true,
-			value: (input: ColorInput): ChainableStyleFn => {
-				const resolved = capabilitiesForCall();
-				return createChainableStyle(
-					[
-						...steps,
-						{
-							kind: "pair",
-							pair: fgPairAtDepth(input, resolved.colorDepth),
-						},
-					],
-					false,
-					resolved,
-				);
-			},
-			writable: false,
-		});
-		Object.defineProperty(styleFn, "bg", {
-			configurable: false,
-			enumerable: true,
-			value: (input: ColorInput): ChainableStyleFn => {
-				const resolved = capabilitiesForCall();
-				return createChainableStyle(
-					[
-						...steps,
-						{
-							kind: "pair",
-							pair: bgPairAtDepth(input, resolved.colorDepth),
-						},
-					],
-					false,
-					resolved,
-				);
-			},
-			writable: false,
-		});
+		for (const [kind, pairAtDepth] of dynamicColorKinds) {
+			Object.defineProperty(styleFn, kind, {
+				configurable: false,
+				enumerable: true,
+				value: (input: ColorInput): ChainableStyleFn => {
+					const resolved = capabilitiesForCall();
+					return createChainableStyle(
+						[
+							...steps,
+							{
+								kind: "pair",
+								pair: pairAtDepth(input, resolved.colorDepth),
+							},
+						],
+						false,
+						resolved,
+					);
+				},
+				writable: false,
+			});
+		}
 
 		// Attach `open` / `close` so the chainable doubles as an `AnsiPair`.
 		// Composition rule: open in declaration order, close in reverse —
@@ -290,47 +278,28 @@ function createStyleInstance(options: StyleOptions | undefined, runtime: boolean
 	const createChainableStyle = buildChainableStyleFactory(resolveCapabilities, runtime);
 	const methods = buildStyleMethods(createChainableStyle);
 
-	function foreground(input: ColorInput): ChainableStyleFn;
-	function foreground(text: string, input: ColorInput): string;
-	function foreground(
-		...args: [input: ColorInput] | [text: string, input: ColorInput]
-	): string | ChainableStyleFn {
-		const resolved = resolveCapabilities();
-		if (args.length === 1) {
-			return createChainableStyle(
-				[
-					{
-						kind: "pair",
-						pair: fgPairAtDepth(args[0], resolved.colorDepth),
-					},
-				],
-				false,
-				resolved,
-			);
-		}
-		return fgDirect(args[0], args[1], resolved.colorDepth);
-	}
-
-	function background(input: ColorInput): ChainableStyleFn;
-	function background(text: string, input: ColorInput): string;
-	function background(
-		...args: [input: ColorInput] | [text: string, input: ColorInput]
-	): string | ChainableStyleFn {
-		const resolved = resolveCapabilities();
-		if (args.length === 1) {
-			return createChainableStyle(
-				[
-					{
-						kind: "pair",
-						pair: bgPairAtDepth(args[0], resolved.colorDepth),
-					},
-				],
-				false,
-				resolved,
-			);
-		}
-		return bgDirect(args[0], args[1], resolved.colorDepth);
-	}
+	// SAFETY: dynamicColorKinds contains exactly the fg and bg entries required by this map.
+	const dynamicColors = Object.fromEntries(
+		dynamicColorKinds.map(([kind, pairAtDepth, paint]) => [
+			kind,
+			(...args: [input: ColorInput] | [text: string, input: ColorInput]) => {
+				const resolved = resolveCapabilities();
+				if (args.length === 1) {
+					return createChainableStyle(
+						[
+							{
+								kind: "pair",
+								pair: pairAtDepth(args[0], resolved.colorDepth),
+							},
+						],
+						false,
+						resolved,
+					);
+				}
+				return paint(args[0], args[1], resolved.colorDepth);
+			},
+		]),
+	) as Pick<StyleInstance, "fg" | "bg">;
 
 	const instance: StyleInstance = {
 		get enabled() {
@@ -357,9 +326,7 @@ function createStyleInstance(options: StyleOptions | undefined, runtime: boolean
 			return text;
 		},
 
-		fg: foreground,
-		bg: background,
-
+		...dynamicColors,
 		...methods,
 	};
 

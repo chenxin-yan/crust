@@ -6,7 +6,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 
 import { getAmbientTerminalIO } from "@crustjs/utils/terminal";
 
-import { resolveTheme } from "./theme.ts";
+import { defaultTheme } from "./theme.ts";
 import type { PartialProgressTheme, ProgressTheme } from "./theme.ts";
 
 const ESC = "\x1B[";
@@ -111,15 +111,12 @@ export interface SpinnerOptions<T> extends SpinnerHandleOptions {
 	readonly task: (controller: Pick<SpinnerHandle, "updateMessage">) => Promise<T>;
 }
 
-function isBuiltinSpinner(spinnerType: SpinnerType): spinnerType is keyof typeof BUILTIN_SPINNERS {
-	return typeof spinnerType === "string";
-}
-
 function resolveSpinner(spinnerType: SpinnerType | undefined): SpinnerFrameSet {
 	if (spinnerType === undefined) {
 		return BUILTIN_SPINNERS.dots;
 	}
-	if (isBuiltinSpinner(spinnerType)) {
+	// oxlint-disable-next-line anti-slop/no-runtime-typeof -- SpinnerType is a typed discriminated union, not unparsed input.
+	if (typeof spinnerType === "string") {
 		return BUILTIN_SPINNERS[spinnerType];
 	}
 	if (spinnerType.frames.length === 0)
@@ -189,7 +186,7 @@ function ambientTerminalSink(): ProgressSink | undefined {
 /** Internal handle constructor shared by both `spinner()` modes and `progress()`. */
 export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandle {
 	const sink = options.sink ?? sinkStorage.getStore() ?? ambientTerminalSink() ?? processSink;
-	const theme = resolveTheme(options.theme);
+	const theme = options.theme ? { ...defaultTheme, ...options.theme } : defaultTheme;
 	const isInteractive = sink.isTTY;
 	const { frames, interval } = resolveSpinner(options.spinner);
 	const sigint = options.sigint ?? "exit";

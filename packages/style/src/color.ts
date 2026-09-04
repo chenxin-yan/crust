@@ -38,10 +38,6 @@ function describeInput(input: ColorInput): string {
 	}
 }
 
-function isColorString(input: ColorInput): input is string {
-	return typeof input === "string";
-}
-
 function isNamedColor(value: string): value is NamedColor {
 	return Object.hasOwn(namedColorValues, value);
 }
@@ -55,7 +51,8 @@ function parseRgb(input: ColorInput): readonly [number, number, number] {
 		) {
 			return [input[0], input[1], input[2]];
 		}
-	} else if (isColorString(input)) {
+		// oxlint-disable-next-line anti-slop/no-runtime-typeof -- ColorInput is a typed discriminated union; this selects its string representation.
+	} else if (typeof input === "string") {
 		const value = input.toLowerCase();
 		if (isNamedColor(value)) {
 			return namedColorValues[value];
@@ -165,6 +162,17 @@ function bgOpen(input: ColorInput, depth: Exclude<ColorDepth, "none">): string {
 // AnsiPair factories (internal — back the chainable `.fg()` / `.bg()`)
 // ────────────────────────────────────────────────────────────────────────────
 
+function colorPair(kind: "fg" | "bg", input: ColorInput, depth: ColorDepth): AnsiPair {
+	if (depth === "none") {
+		parseRgb(input); // validate, do not emit
+		return { open: "", close: "" };
+	}
+	return {
+		open: kind === "fg" ? fgOpen(input, depth) : bgOpen(input, depth),
+		close: kind === "fg" ? FG_CLOSE : BG_CLOSE,
+	};
+}
+
 /**
  * Depth-aware foreground `AnsiPair` for chain composition. `depth: "none"`
  * returns an empty pair (still validates input). Used by `createStyle()`
@@ -174,11 +182,7 @@ function bgOpen(input: ColorInput, depth: Exclude<ColorDepth, "none">): string {
  * @internal
  */
 export function fgPairAtDepth(input: ColorInput, depth: ColorDepth): AnsiPair {
-	if (depth === "none") {
-		parseRgb(input); // validate, do not emit
-		return { open: "", close: "" };
-	}
-	return { open: fgOpen(input, depth), close: FG_CLOSE };
+	return colorPair("fg", input, depth);
 }
 
 /**
@@ -189,16 +193,24 @@ export function fgPairAtDepth(input: ColorInput, depth: ColorDepth): AnsiPair {
  * @internal
  */
 export function bgPairAtDepth(input: ColorInput, depth: ColorDepth): AnsiPair {
-	if (depth === "none") {
-		parseRgb(input); // validate, do not emit
-		return { open: "", close: "" };
-	}
-	return { open: bgOpen(input, depth), close: BG_CLOSE };
+	return colorPair("bg", input, depth);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
 // Direct styling functions
 // ────────────────────────────────────────────────────────────────────────────
+
+function paint(kind: "fg" | "bg", text: string, input: ColorInput, depth: ColorDepth): string {
+	// Validate the color before the empty-string short-circuit so bad inputs
+	// fail consistently even when styling is disabled or text is empty.
+	if (depth === "none") {
+		parseRgb(input);
+		return text === "" ? "" : text;
+	}
+	const open = kind === "fg" ? fgOpen(input, depth) : bgOpen(input, depth);
+	if (text === "") return "";
+	return applyStyle(text, { open, close: kind === "fg" ? FG_CLOSE : BG_CLOSE });
+}
 
 /**
  * Apply a foreground color to `text` from any {@link ColorInput}. `depth`
@@ -217,18 +229,7 @@ export function bgPairAtDepth(input: ColorInput, depth: ColorDepth): AnsiPair {
  * ```
  */
 export function fg(text: string, input: ColorInput, depth: ColorDepth = "truecolor"): string {
-	// Validate the color BEFORE the empty-string short-circuit so callers
-	// get TypeError on bad input regardless of `text`. Otherwise
-	// `fg("", "definitely-not-a-color")` would silently return "" and mask
-	// the bug. Validation is cheap and the
-	// non-empty path needs the parsed open sequence anyway.
-	if (depth === "none") {
-		parseRgb(input); // validate, do not emit
-		return text === "" ? "" : text;
-	}
-	const open = fgOpen(input, depth);
-	if (text === "") return "";
-	return applyStyle(text, { open, close: FG_CLOSE });
+	return paint("fg", text, input, depth);
 }
 
 /**
@@ -243,12 +244,5 @@ export function fg(text: string, input: ColorInput, depth: ColorDepth = "truecol
  * ```
  */
 export function bg(text: string, input: ColorInput, depth: ColorDepth = "truecolor"): string {
-	// See `fg` above — validate before short-circuiting on empty `text`.
-	if (depth === "none") {
-		parseRgb(input);
-		return text === "" ? "" : text;
-	}
-	const open = bgOpen(input, depth);
-	if (text === "") return "";
-	return applyStyle(text, { open, close: BG_CLOSE });
+	return paint("bg", text, input, depth);
 }
