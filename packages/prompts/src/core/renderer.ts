@@ -2,13 +2,16 @@
 // Renderer — Core terminal rendering engine for @crustjs/prompts
 // ────────────────────────────────────────────────────────────────────────────
 
-import { AsyncLocalStorage } from "node:async_hooks";
 import * as readline from "node:readline";
-import type { Readable } from "node:stream";
-import { Writable } from "node:stream";
 
 import { stringWidth } from "@crustjs/style";
-import { getAmbientTerminalIO } from "@crustjs/utils/terminal";
+import {
+	getTerminalIO,
+	type TerminalIO,
+	type TerminalInput,
+	type TerminalOutput,
+	withTerminalIO as withSharedTerminalIO,
+} from "@crustjs/utils/terminal";
 
 import { defaultTheme } from "./theme.ts";
 import type { PartialPromptTheme, PromptTheme } from "./types.ts";
@@ -18,55 +21,30 @@ import type { PartialPromptTheme, PromptTheme } from "./types.ts";
 // ────────────────────────────────────────────────────────────────────────────
 
 /** A readable stream that can drive an interactive terminal prompt. */
-export type PromptInput = Readable & {
-	readonly isTTY?: boolean;
-	readonly isRaw?: boolean;
-	setRawMode?: (mode: boolean) => void;
-};
+export type PromptInput = TerminalInput;
 
-export type PromptOutput = Writable & {
-	readonly columns?: number;
-};
+/** A writable stream that receives prompt output. */
+export type PromptOutput = TerminalOutput;
 
 /** Streams used to render and receive input for a prompt. */
-export interface PromptIO {
-	readonly input?: PromptInput;
-	readonly output?: PromptOutput;
-}
+export type PromptIO = TerminalIO;
 
-const promptIOStorage = new AsyncLocalStorage<PromptIO>();
+/** Run a function with terminal streams available to UI created in its async scope. */
+export function withTerminalIO<T>(io: PromptIO, fn: () => T): T {
+	return withSharedTerminalIO(io, fn);
+}
 
 /** Run a function with prompt streams available to prompts created in its async scope. */
 export function withPromptIO<T>(io: PromptIO, fn: () => T): T {
-	return promptIOStorage.run(io, fn);
+	return withSharedTerminalIO(io, fn);
 }
 
-function ambientTerminalWritable(): PromptOutput | undefined {
-	const io = getAmbientTerminalIO();
-	if (!io) return undefined;
-
-	let pending = "";
-	return new Writable({
-		decodeStrings: false,
-		write(chunk, _encoding, callback) {
-			pending += chunk.toString();
-			let newline = pending.indexOf("\n");
-			while (newline !== -1) {
-				io.stderr(pending.slice(0, newline));
-				pending = pending.slice(newline + 1);
-				newline = pending.indexOf("\n");
-			}
-			callback();
-		},
-	});
-}
-
-/** Resolve explicit, prompt-scoped, invocation, then process-global streams. */
+/** Resolve explicit, ambient, then process-global streams. */
 export function resolvePromptIO(io?: PromptIO): Required<PromptIO> {
-	const ambient = promptIOStorage.getStore();
+	const ambient = getTerminalIO();
 	return {
 		input: io?.input ?? ambient?.input ?? process.stdin,
-		output: io?.output ?? ambient?.output ?? ambientTerminalWritable() ?? process.stderr,
+		output: io?.output ?? ambient?.output ?? process.stderr,
 	};
 }
 
@@ -198,18 +176,18 @@ export class NonInteractiveError extends Error {
 }
 
 /**
- * Check whether stdin is an interactive TTY.
- * @returns `true` if stdin is a TTY, `false` otherwise
+ * Check whether the resolved prompt input is an interactive TTY.
+ * @returns `true` if the input is a TTY, `false` otherwise
  */
-export function isTTY(input: Pick<PromptInput, "isTTY"> = process.stdin): boolean {
+export function isTTY(input: Pick<PromptInput, "isTTY"> = resolvePromptIO().input): boolean {
 	return !!input.isTTY;
 }
 
 /**
- * Check that stdin is an interactive TTY.
- * @throws {NonInteractiveError} when stdin is not a TTY
+ * Check that the resolved prompt input is an interactive TTY.
+ * @throws {NonInteractiveError} when the input is not a TTY
  */
-export function assertTTY(input: Pick<PromptInput, "isTTY"> = process.stdin): void {
+export function assertTTY(input: Pick<PromptInput, "isTTY"> = resolvePromptIO().input): void {
 	if (!isTTY(input)) {
 		throw new NonInteractiveError();
 	}
@@ -260,6 +238,8 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Prom
 	const { render, handleKey, initialState, renderSubmitted } = config;
 	const theme = config.theme ? { ...defaultTheme, ...config.theme } : defaultTheme;
 	const { input: stdin, output } = resolvePromptIO(io);
+	// SAFETY: readline's cursor helpers only call write(), which PromptOutput provides.
+	const readlineOutput = output as NodeJS.WritableStream;
 
 	return new Promise<T>((resolve, reject) => {
 		// Guard against concurrent prompts sharing an input stream.
@@ -304,9 +284,9 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Prom
 
 			// Erase previous frame
 			if (prevLineCount > 0) {
-				readline.cursorTo(output, 0);
-				readline.moveCursor(output, 0, -(prevLineCount - 1));
-				readline.clearScreenDown(output);
+				readline.cursorTo(readlineOutput, 0);
+				readline.moveCursor(readlineOutput, 0, -(prevLineCount - 1));
+				readline.clearScreenDown(readlineOutput);
 			}
 
 			output.write(content);

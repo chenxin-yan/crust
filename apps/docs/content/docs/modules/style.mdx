@@ -94,7 +94,7 @@ Inspect the resolved tier via `style.colorDepth` (live) or `instance.colorDepth`
 
 Two channels, one rule each:
 
-**The environment controls the default exports.** `style` and all named helpers re-resolve these standard variables on every call:
+**The environment controls the default exports.** `style`, named helpers, and stored chains re-resolve these standard variables on every call:
 
 | Variable                           | Effect                                                                                          |
 | ---------------------------------- | ----------------------------------------------------------------------------------------------- |
@@ -126,6 +126,8 @@ const t = createStyle({
   overrides: { isTTY: true, noColor: undefined, forceColor: undefined, colorTerm: "truecolor" },
 });
 ```
+
+Each `overrides` property replaces only its matching runtime input. Omitted properties continue to read `process.stdout` or `process.env`; set a property explicitly to `undefined` when a deterministic test must simulate an unset environment variable.
 
 ## Hyperlinks (OSC 8)
 
@@ -187,8 +189,6 @@ type ColorInput =
 <auto-type-table path="../../../../../packages/style/src/blocks/tables.ts" name="TableOptions" />
 
 ## Fine print
-
-**Capture semantics.** Top-level helpers and first-level properties (`style.bold`) are forwarders — they re-resolve the environment on every call. Deeper chains (`style.bold.red`) snapshot the resolved instance at access time (chalk/ansis parity). Capture the first level and chain at the call site when a reference must follow later env changes.
 
 **`open` / `close` for hot paths.** Every chainable exposes its raw ANSI codes (chalk/ansis parity) for manual composition in tight loops. They are static strings that bypass mode detection — check `style.enabled` first. Note `chain.open + text + chain.close` matches `chain(text)` byte-for-byte only when adjacent steps have distinct close codes; when steps share one (e.g. `bold` + `dim` both close with `\x1b[22m`), `chain(text)` re-opens the outer style after each inner close to prevent bleed. Use `chain(text)` for emission.
 

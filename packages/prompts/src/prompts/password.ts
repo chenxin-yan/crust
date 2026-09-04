@@ -5,7 +5,8 @@
 import type { StandardSchema } from "@crustjs/utils/schema";
 
 import type { PromptIO } from "../core/renderer.ts";
-import { resolvePromptIO, runPrompt } from "../core/renderer.ts";
+import { runPrompt } from "../core/renderer.ts";
+import { resolveShortCircuit } from "../core/shortCircuit.ts";
 import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import { createTextSubmitHandler, CURSOR_CHAR } from "../core/textEdit.ts";
 import type { TextSubmitState } from "../core/textEdit.ts";
@@ -16,7 +17,7 @@ import type {
 	ValidateFn,
 } from "../core/types.ts";
 import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
-import { resolvePromptInitial } from "../core/validate.ts";
+import { parseShortCircuit } from "../core/validate.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -167,10 +168,17 @@ export async function password<Output>(
 	options: PasswordOptions<Output> = {},
 	io?: PromptIO,
 ): Promise<Output | string> {
-	const initial = await resolvePromptInitial("password", options);
-	if (initial.shortCircuited) return initial.value;
-
-	const promptIO = resolvePromptIO(io);
+	if (options.schema !== undefined && options.validate !== undefined) {
+		throw new Error('password() cannot combine "schema" with "validate"');
+	}
+	const schema = options.schema;
+	const shortCircuit = schema
+		? await resolveShortCircuit(options, io, (value, source) =>
+				parseShortCircuit(schema, value, source),
+			)
+		: await resolveShortCircuit(options, io);
+	if (shortCircuit.shortCircuited) return shortCircuit.value;
+	const { promptIO } = shortCircuit;
 
 	const mask = options.mask ?? "*";
 

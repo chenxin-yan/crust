@@ -23,7 +23,7 @@ const deterministic = createStyle({
 console.log(deterministic.fg("snapshot", "#4fa83d"));
 ```
 
-`fg` and `bg` use the active style capabilities. Use `createStyle({ overrides })` when output must be deterministic.
+`fg` and `bg` use the active style capabilities. Stored chains follow runtime capability changes. Use `createStyle({ overrides })` when output must be deterministic; each override only replaces its matching environment input.
 
 ## Documentation
 

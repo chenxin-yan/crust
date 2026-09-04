@@ -6,6 +6,7 @@ import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
 import { createPromptIO } from "../testing.ts";
 import {
 	assertTTY,
+	isTTY,
 	NonInteractiveError,
 	type PromptConfig,
 	resolvePromptIO,
@@ -65,6 +66,19 @@ describe("assertTTY", () => {
 		});
 
 		expect(() => assertTTY()).toThrow(NonInteractiveError);
+	});
+
+	it("uses the ambient prompt input by default", () => {
+		Object.defineProperty(process.stdin, "isTTY", {
+			value: true,
+			writable: true,
+			configurable: true,
+		});
+		const harness = createPromptIO({ isTTY: false });
+		withPromptIO(harness.io, () => {
+			expect(isTTY()).toBe(false);
+			expect(() => assertTTY()).toThrow(NonInteractiveError);
+		});
 	});
 
 	it("does not throw when stdin is a TTY", () => {

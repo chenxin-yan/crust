@@ -5,7 +5,7 @@ import { createStyle, style } from "./createStyle.ts";
 import { bold, red } from "./index.ts";
 import { snapshotEnv } from "./testEnv.ts";
 
-const restoreEnvVars = snapshotEnv("NO_COLOR", "FORCE_COLOR");
+const restoreEnvVars = snapshotEnv("NO_COLOR", "FORCE_COLOR", "COLORTERM", "TERM");
 const originalStdoutIsTTY = process.stdout.isTTY;
 
 /** Restore mutable runtime env (`NO_COLOR`, `FORCE_COLOR`, `isTTY`). */
@@ -23,6 +23,8 @@ beforeEach(() => {
 	// runners) must not leak in. afterEach still restores the ambient values.
 	delete process.env.NO_COLOR;
 	delete process.env.FORCE_COLOR;
+	delete process.env.COLORTERM;
+	delete process.env.TERM;
 });
 afterEach(restoreRuntimeEnv);
 
@@ -55,6 +57,11 @@ describe("resolveColorDepth", () => {
 	});
 
 	describe("`auto` mode", () => {
+		it("falls back to the environment for each omitted override", () => {
+			process.env.COLORTERM = "truecolor";
+			expect(resolveColorDepth("auto", { isTTY: true })).toBe("truecolor");
+		});
+
 		it('non-TTY → "none"', () => {
 			expect(
 				resolveColorDepth("auto", {

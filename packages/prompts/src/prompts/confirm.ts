@@ -3,7 +3,8 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import type { KeypressEvent, PromptIO, SubmitResult } from "../core/renderer.ts";
-import { isTTY, resolvePromptIO, runPrompt, submit } from "../core/renderer.ts";
+import { runPrompt, submit } from "../core/renderer.ts";
+import { resolveShortCircuit } from "../core/shortCircuit.ts";
 import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import type { PartialPromptTheme, PromptTheme } from "../core/types.ts";
 import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
@@ -182,18 +183,9 @@ function renderSubmitted(
  * ```
  */
 export async function confirm(options: ConfirmOptions, io?: PromptIO): Promise<boolean> {
-	// Short-circuit: return initial value immediately without rendering
-	if (options.initial !== undefined) {
-		return options.initial;
-	}
-
-	const promptIO = resolvePromptIO(io);
-
-	// Non-interactive fallback: return default value when stdin is not a TTY
-	// Only triggers when user explicitly passed `default` (not the internal default of `true`)
-	if (!isTTY(promptIO.input) && options.default !== undefined) {
-		return options.default;
-	}
+	const shortCircuit = await resolveShortCircuit(options, io);
+	if (shortCircuit.shortCircuited) return shortCircuit.value;
+	const { promptIO } = shortCircuit;
 
 	const activeLabel = options.active ?? "Yes";
 	const inactiveLabel = options.inactive ?? "No";

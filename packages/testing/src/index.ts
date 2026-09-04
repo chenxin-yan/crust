@@ -9,8 +9,7 @@ import type {
 	RunInputArguments,
 	RunOutcome,
 } from "@crustjs/core";
-import { type ProgressSink, withProgressSink } from "@crustjs/progress";
-import { withPromptIO } from "@crustjs/prompts";
+import { withTerminalIO } from "@crustjs/prompts";
 import { createPromptIO, type Key } from "@crustjs/prompts/testing";
 
 /** Structural io shape shared by `run()` and `execute()` captures. */
@@ -151,28 +150,18 @@ export function runInteractive<App extends AnyCrust, const Path extends CommandP
 ): InteractiveRun {
 	const harness = createPromptIO();
 	const output = harness.io.output;
-	// Spinners and progress indicators render onto the same fake terminal as
-	// prompts, so waitFor()/screen() observe them too.
-	const sink: ProgressSink = {
-		isTTY: true,
-		write: (text) => {
-			output.write(text);
-		},
-	};
 	const [input] = args;
 	// SAFETY: Path and input were constrained together by RunInputArguments above.
-	const done = withProgressSink(sink, () =>
-		withPromptIO(harness.io, () =>
-			app
-				.run(path as never, input as never, {
-					stdout: () => {},
-					stderr: (text) => {
-						// Line-oriented like core's console.error default.
-						output.write(`${text}\n`);
-					},
-				})
-				.then(() => {}),
-		),
+	const done = withTerminalIO(harness.io, () =>
+		app
+			.run(path as never, input as never, {
+				stdout: () => {},
+				stderr: (text) => {
+					// Line-oriented like core's console.error default.
+					output.write(`${text}\n`);
+				},
+			})
+			.then(() => {}),
 	);
 
 	// Observe settlement so waitFor can stop polling; the action also keeps an

@@ -45,6 +45,21 @@ describe("multiselect — default value", () => {
 		expect(result).toEqual(["cheese", "mushrooms"]);
 	});
 
+	it("positions the cursor on the first default value", async () => {
+		const prompt = renderPrompt(multiselect, {
+			message: "Select toppings",
+			choices: ["cheese", "pepperoni", "mushrooms"],
+			default: ["mushrooms"],
+		});
+
+		await tick();
+		prompt.keys("space");
+		await tick();
+		prompt.keys("return");
+
+		expect(await prompt.answer).toEqual([]);
+	});
+
 	it("returns empty array when no defaults and nothing selected", async () => {
 		const prompt = renderPrompt(multiselect, {
 			message: "Select toppings",

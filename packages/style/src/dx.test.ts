@@ -208,13 +208,12 @@ describe("top-level chainables — full surface", () => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// 8. Environment changes — capture semantics
+// 8. Environment changes — dynamic chains
 // ───────────────────────────────────────────────────────────────────────────
 //
-// Locks in H1 from the adversarial review: forwarders re-resolve the
-// environment; sub-chain captures snapshot (documented limitation).
+// Runtime facade chains re-resolve capabilities when called.
 
-describe("environment changes — capture semantics", () => {
+describe("environment changes — dynamic chains", () => {
 	const restoreEnv = snapshotEnv("FORCE_COLOR");
 	afterEach(restoreEnv);
 
@@ -234,15 +233,20 @@ describe("environment changes — capture semantics", () => {
 		expect(captured.red("x")).toBe("x");
 	});
 
-	it("sub-chain capture (`style.bold.red`) snapshots at access time", () => {
-		// This is documented behavior: capturing a deeper chain locks the
-		// resolved chainable to the runtime instance active at capture time.
-		// Matches chalk/ansis. To stay dynamic, capture the leaf only.
+	it("stored sub-chains re-resolve after an env flip", () => {
 		setEnv("FORCE_COLOR", "3");
-		const snapshot = style.bold.red;
+		const captured = style.bold.red;
+		expect(captured("x")).toBe("\x1b[1m\x1b[31mx\x1b[39m\x1b[22m");
 		setEnv("FORCE_COLOR", "0");
-		// snapshot is locked to the pre-flip instance: full color emitted.
-		expect(snapshot("x")).toBe("\x1b[1m\x1b[31mx\x1b[39m\x1b[22m");
+		expect(captured("x")).toBe("x");
+	});
+
+	it("stored dynamic-color chains re-resolve color depth", () => {
+		setEnv("FORCE_COLOR", "3");
+		const captured = style.bold.fg("#ff0000");
+		expect(captured("x")).toContain("\x1b[38;2;255;0;0m");
+		setEnv("FORCE_COLOR", "2");
+		expect(captured("x")).toContain("\x1b[38;5;196m");
 	});
 });
 

@@ -260,26 +260,11 @@ export function multifilter(
 ): Promise<string[]>;
 export function multifilter<T>(options: MultifilterOptions<T>, io?: PromptIO): Promise<T[]>;
 export async function multifilter<T>(options: MultifilterOptions<T>, io?: PromptIO): Promise<T[]> {
-	const setup = setupListPrompt<T, readonly T[]>(
-		options,
-		io,
-		options.default?.[0],
-		(options.default?.length ?? 0) > 0,
-	);
+	const setup = await setupListPrompt<T, readonly T[]>(options, "multiple", io);
 	if (setup.shortCircuited) return [...setup.value];
 
-	const { choices, cursor, maxVisible, promptIO, scrollOffset } = setup;
+	const { choices, cursor, maxVisible, promptIO, scrollOffset, selected } = setup;
 	const results = fuzzyFilter("", choices);
-
-	const selected = new Set<number>();
-	if (options.default) {
-		for (const defaultValue of options.default) {
-			const idx = choices.findIndex((choice) => choice.value === defaultValue);
-			if (idx !== -1) {
-				selected.add(idx);
-			}
-		}
-	}
 
 	const initialState: MultifilterState<T> = {
 		query: "",
@@ -288,7 +273,7 @@ export async function multifilter<T>(options: MultifilterOptions<T>, io?: Prompt
 		results,
 		listCursor: cursor,
 		scrollOffset,
-		selected,
+		selected: new Set(selected),
 		error: null,
 	};
 

@@ -1,6 +1,8 @@
 # @crustjs/progress
 
-Progress indicators for the Crust CLI ecosystem
+Progress indicators for the Crust CLI ecosystem.
+
+Use `withTerminalIO()` to share ambient input/output with `@crustjs/prompts`; `withProgressSink()` remains an output-only alias.
 
 ## Install
 
