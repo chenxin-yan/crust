@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { buildEntrypoint } from "./build-helpers.ts";
 
@@ -51,6 +52,42 @@ describe("buildEntrypoint", () => {
 
 		expect(snapshot.meta.name).toBe("fixture");
 		expect(await Bun.file(join(outDir, "artifact.txt")).text()).toBe("built");
+	});
+
+	it("builds skill and man artifacts without absolute source paths", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "crust-entry-artifacts-test-"));
+		tempDirs.push(directory);
+		const entry = join(directory, "cli.ts");
+		const source = join(directory, "package", "skills");
+		const outDir = join(directory, "dist");
+		await Bun.write(
+			join(source, "demo", "SKILL.md"),
+			"---\nname: demo\ndescription: Demo workflows\n---\n",
+		);
+		const skillsUrl = pathToFileURL(resolve(import.meta.dir, "../../../skills/src/index.ts")).href;
+		const manUrl = pathToFileURL(resolve(import.meta.dir, "../../../man/src/index.ts")).href;
+		await writeFile(
+			entry,
+			`import { Crust } from ${JSON.stringify(coreUrl)};\n` +
+				`import { skill } from ${JSON.stringify(skillsUrl)};\n` +
+				`import { man } from ${JSON.stringify(manUrl)};\n` +
+				`await new Crust("demo", { description: "Demo" }).extend(skill({ distDir: ${JSON.stringify(source)} }), man()).execute();\n`,
+		);
+
+		// crust build runs from the project root; the entry subprocess inherits
+		// that cwd, so advertised sources relativize against the fixture project.
+		const cwdSpy = spyOn(process, "cwd").mockReturnValue(directory);
+		try {
+			await buildEntrypoint(entry, outDir);
+		} finally {
+			cwdSpy.mockRestore();
+		}
+
+		const manual = await Bun.file(join(outDir, "man", "demo.1")).text();
+		const packagedSkill = await Bun.file(join(outDir, "skills", "demo", "SKILL.md")).text();
+		expect(manual).toContain("Demo workflows");
+		expect(manual).not.toContain(source);
+		expect(packagedSkill).not.toContain(source);
 	});
 
 	it("attributes Extension build failures", async () => {
