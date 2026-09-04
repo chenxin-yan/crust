@@ -40,7 +40,7 @@ export interface DocumentationArg {
 	 * with `...` appended when variadic — e.g. `"<file>"`, `"[files...]"`.
 	 */
 	readonly token: string;
-	/** Value type (`"string"`, `"number"`, …); `undefined` for schema/raw args. */
+	/** Value type (`"string"`, `"number"`, …); `undefined` for schema-backed args. */
 	readonly type?: CommandSnapshot["args"][number]["type"];
 	/** Human-readable description from the arg definition. */
 	readonly description?: string;

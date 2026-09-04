@@ -1043,7 +1043,22 @@ export class Crust<
 	private _clone<Out = this>(nodeOverrides: Partial<CommandNode>): Out {
 		// SAFETY: the clone uses the same prototype and receives every instance field below.
 		const cloned = Object.create(Object.getPrototypeOf(this)) as this;
-		const newNode: CommandNode = { ...cloneCommandNode(this._node), ...nodeOverrides };
+		const effectiveFlags = { ...this._node.effectiveFlags };
+		const newNode: CommandNode = {
+			...this._node,
+			// Descendants are immutable builder values; sharing them keeps fluent updates O(1).
+			localFlags: { ...this._node.localFlags },
+			ownedFlags: { ...this._node.ownedFlags },
+			effectiveFlags,
+			flagSpellings: cloneFlagSpellings(this._node.flagSpellings, effectiveFlags),
+			args: [...this._node.args],
+			subCommands: { ...this._node.subCommands },
+			contexts: [...this._node.contexts],
+			contextExtensionIds: [...this._node.contextExtensionIds],
+			extensions: [...this._node.extensions],
+			meta: { ...this._node.meta },
+			...nodeOverrides,
+		};
 		cloned._node = newNode;
 		cloned._ancestorOwnedFlags = this._ancestorOwnedFlags;
 		/* oxlint-disable anti-slop/no-chained-type-assertions -- one runtime builder shape is re-parameterized after each matching mutation. */
