@@ -12,14 +12,12 @@ import type {
 import type { Extension, ExtensionsProvidesOutput } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
+import type { RunInputPayload } from "../parsing/parser.ts";
 import { cloneFlagSpellings } from "../parsing/spellings.ts";
-import { isListed } from "../sections.ts";
 import type {
-	ArgDef,
 	ArgsDef,
 	CommandMeta,
 	CommandSectionInput,
-	FlagDef,
 	FlagsDef,
 	InferArgs,
 	InferFlags,
@@ -71,7 +69,6 @@ import {
 } from "./extensions-install.ts";
 import { executeInvocation, prepareInvocation, runInvocation } from "./invocation.ts";
 import { type CommandAction, type CommandNode, createCommandNode, registerFlag } from "./node.ts";
-import { resolveCommand } from "./router.ts";
 import { snapshotCommand } from "./snapshot.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
 
@@ -179,7 +176,7 @@ type RunSection<Name extends string, Values> = keyof Values extends never
 		? { [K in Name]?: Values }
 		: { [K in Name]: Values };
 
-/** Structured values serialized to argv before the normal parser pipeline runs. */
+/** Structured values bound directly against the selected command's definitions; no argv is produced. */
 export type RunInput<Shape extends CommandShape> = RunSection<"args", InputArgs<Shape["args"]>> &
 	RunSection<"flags", InputFlags<Shape["flags"]>> & {
 		readonly raw?: readonly string[];
@@ -662,148 +659,6 @@ export function defineCommand(
 function dedupeExtensions(extensions: readonly Extension[]): Extension[] {
 	// ponytail: O(n^2) scan, fine for handfuls of extensions.
 	return extensions.filter((e, i) => extensions.findLastIndex((x) => x.id === e.id) === i);
-}
-
-type RunInputValue = URL | JsonValue | readonly RunInputValue[];
-
-interface RunInputPayload {
-	readonly args?: Readonly<Record<string, RunInputValue>>;
-	readonly flags?: Readonly<Record<string, RunInputValue>>;
-	readonly raw?: readonly string[];
-}
-
-function serializeInputValue(
-	definition: ArgDef | FlagDef,
-	name: string,
-	value: RunInputValue,
-): string {
-	if (definition.type !== "json") return String(value);
-	let serialized: string | undefined;
-	try {
-		serialized = JSON.stringify(value);
-	} catch {
-		// JSON.stringify throws for bigints and cyclic objects; both are the same
-		// user error as stringify-to-undefined, so fall through to the parse error.
-		serialized = undefined;
-	}
-	if (serialized === undefined) {
-		throw new CrustError("PARSE", `Value for "${name}" is not JSON-serializable`, {
-			value: String(value),
-			reason: "unserializable-json",
-		});
-	}
-	return serialized;
-}
-
-function serializeRunArgv(
-	root: CommandNode,
-	path: readonly string[],
-	input: RunInputPayload,
-): string[] {
-	const route = resolveCommand(root, [...path]);
-	if (route.argv.length > 0) {
-		// A path element the router could not consume must fail here; letting it
-		// fall through would serialize it ahead of the real positionals.
-		// SAFETY: the enclosing length check proves the first element exists.
-		const candidate = route.argv[0]!;
-		const parentCommand = snapshotCommand(route.command);
-		throw new CrustError("COMMAND_NOT_FOUND", `Unknown command "${candidate}".`, {
-			input: candidate,
-			available: Object.entries(parentCommand.subCommands)
-				.filter(([, child]) => isListed(child))
-				.map(([name]) => name),
-			commandPath: route.commandPath,
-			parentCommand,
-		});
-	}
-	const command = route.command;
-	const argv = [...path];
-	const args = input.args;
-	let omittedArgument: string | undefined;
-	let firstPositional: string | undefined;
-	for (const definition of command.args) {
-		const value = args?.[definition.name];
-		if (value === undefined) {
-			omittedArgument = definition.name;
-			continue;
-		}
-		if (omittedArgument !== undefined) {
-			throw new CrustError(
-				"PARSE",
-				`Argument <${definition.name}> cannot be provided after omitted argument <${omittedArgument}>`,
-				{ argument: definition.name, reason: "positional-gap" },
-			);
-		}
-		// Arrays are repeated occurrences only for variadic args; a scalar json
-		// arg legitimately holds an array as its single value.
-		const values = definition.variadic && Array.isArray(value) ? value : [value];
-		for (const item of values) {
-			const serialized = serializeInputValue(definition, definition.name, item);
-			if (serialized.startsWith("-")) {
-				throw new CrustError(
-					"PARSE",
-					`Argument <${definition.name}> cannot start with "-" in typed run()`,
-					{ argument: definition.name, value: serialized, reason: "option-like-positional" },
-				);
-			}
-			firstPositional ??= serialized;
-			argv.push(serialized);
-		}
-	}
-	for (const name of Object.keys(args ?? {})) {
-		if (args?.[name] === undefined) continue;
-		if (!command.args.some((definition) => definition.name === name)) {
-			throw new CrustError("PARSE", `Unknown argument "${name}"`, {
-				argument: name,
-				reason: "unknown-argument",
-			});
-		}
-	}
-	// The router matches subcommand names/aliases before positionals, so a first
-	// positional spelled like a child would silently dispatch that child instead
-	// of the command the typed path selected.
-	if (firstPositional !== undefined) {
-		const value = firstPositional;
-		// hasOwn, not `in`: a positional spelled "constructor" must not
-		// false-positive on inherited Object.prototype members.
-		const collides =
-			Object.hasOwn(command.subCommands, value) ||
-			Object.values(command.subCommands).some((child) => child.meta.aliases?.includes(value));
-		if (collides) {
-			throw new CrustError(
-				"PARSE",
-				`Argument value "${value}" matches a subcommand of the selected command; typed run() cannot disambiguate it from a command path`,
-				{ value, reason: "ambiguous-positional" },
-			);
-		}
-	}
-
-	const flags = input.flags;
-	for (const [name, value] of Object.entries(flags ?? {})) {
-		if (value === undefined) continue;
-		// hasOwn guard: an inherited Object.prototype key must not resolve as a
-		// ghost flag definition.
-		const definition = Object.hasOwn(command.effectiveFlags, name)
-			? command.effectiveFlags[name]
-			: undefined;
-		if (definition === undefined) {
-			throw new CrustError("PARSE", `Unknown flag "--${name}"`, {
-				flag: name,
-				reason: "unknown-flag",
-			});
-		}
-		// Same as args: only `multiple` flags treat an array as repeated occurrences.
-		const values = definition.multiple && Array.isArray(value) ? value : [value];
-		for (const item of values) {
-			if (definition.type === "boolean") {
-				argv.push(item ? `--${name}` : `--no-${name}`);
-			} else {
-				argv.push(`--${name}=${serializeInputValue(definition, name, item)}`);
-			}
-		}
-	}
-	if (input.raw !== undefined) argv.push("--", ...input.raw);
-	return argv;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -1340,7 +1195,7 @@ export class Crust<
 	}
 
 	/**
-	 * Invoke this application programmatically: serialize the typed input, resolve, parse,
+	 * Invoke this application programmatically: resolve the typed path, bind structured input directly,
 	 * run the Extension hooks, and execute the selected Command Action.
 	 *
 	 * Unlike {@link Crust.execute}, `run()` throws the original definition,
@@ -1376,10 +1231,13 @@ export class Crust<
 		const structuredInput = (args[0] ?? {}) as RunInputPayload;
 		// SAFETY: the public overloads constrain the second argument to invocation IO.
 		const io = args[1] as Partial<InvocationIO> | undefined;
-		const root = prepareInvocation(this._node, materializeCommandDefinition).rootNode;
-		const argv = serializeRunArgv(root, path, structuredInput);
 		// Programmatic calls preserve raw failures and never change process status.
-		return await runInvocation(this._node, argv, io, materializeCommandDefinition);
+		return await runInvocation(
+			this._node,
+			{ path, input: structuredInput },
+			io,
+			materializeCommandDefinition,
+		);
 	}
 
 	/**

@@ -79,6 +79,7 @@ export interface ExtensionContext<
 > extends Readonly<InvocationIO> {
 	/**
 	 * Complete argv passed to the application, including routed command names.
+	 * For typed `run()` this is the command path only; structured values are never rendered as argv.
 	 *
 	 * @example `["deploy", "api", "--trace", "--", "--dry-run"]`
 	 */

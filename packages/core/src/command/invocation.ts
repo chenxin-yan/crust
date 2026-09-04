@@ -11,9 +11,15 @@ import {
 } from "../api/extension.ts";
 import { CrustError, type CaughtError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
-import { parseArgs, validateParsed } from "../parsing/parser.ts";
+import {
+	parseArgs,
+	parseStructured,
+	validateParsed,
+	type RunInputPayload,
+} from "../parsing/parser.ts";
 import { applySchemas } from "../parsing/schema.ts";
-import type { InvocationIO } from "../types.ts";
+import { isListed } from "../sections.ts";
+import type { InvocationIO, ParseResult } from "../types.ts";
 import type { CrustCommandContext, RunOutcome } from "./crust.ts";
 import {
 	applyExtensionCommands,
@@ -23,7 +29,7 @@ import {
 	type MaterializeCommandDefinition,
 } from "./extensions-install.ts";
 import type { CommandNode } from "./node.ts";
-import { resolveCommand } from "./router.ts";
+import { resolveCommand, type CommandRoute } from "./router.ts";
 import { snapshotCommand } from "./snapshot.ts";
 
 /** Terminal defaults: line-oriented writes to the process streams. */
@@ -119,9 +125,48 @@ export function prepareInvocation(
 	return prepared;
 }
 
+/** An invocation starts from terminal argv or a typed path plus structured values. */
+export type InvocationInput =
+	| { readonly argv: readonly string[] }
+	| { readonly path: readonly string[]; readonly input: RunInputPayload };
+
+interface ResolvedInput {
+	argv: readonly string[];
+	route: CommandRoute;
+	parsed: ParseResult;
+}
+
+function resolveArgvInput(root: CommandNode, argv: readonly string[]): ResolvedInput {
+	const route = resolveCommand(root, [...argv]);
+	return { argv, route, parsed: parseArgs(route.command, route.argv) };
+}
+
+function resolveStructuredInput(
+	root: CommandNode,
+	path: readonly string[],
+	input: RunInputPayload,
+): ResolvedInput {
+	const route = resolveCommand(root, [...path]);
+	if (route.argv.length > 0) {
+		// An unconsumed path element would otherwise silently run the nearest resolved ancestor.
+		// SAFETY: the enclosing length check proves the first element exists.
+		const candidate = route.argv[0]!;
+		const parentCommand = snapshotCommand(route.command);
+		throw new CrustError("COMMAND_NOT_FOUND", `Unknown command "${candidate}".`, {
+			input: candidate,
+			available: Object.entries(parentCommand.subCommands)
+				.filter(([, child]) => isListed(child))
+				.map(([name]) => name),
+			commandPath: route.commandPath,
+			parentCommand,
+		});
+	}
+	return { argv: path, route, parsed: parseStructured(route.command, input) };
+}
+
 /** Resolve, parse, and run one invocation without rendering failures. */
 async function dispatch(
-	argv: readonly string[],
+	input: InvocationInput,
 	prepared: PreparedInvocation,
 	io: InvocationIO,
 	onExtensionContext?: (context: ExtensionContext) => void,
@@ -130,9 +175,11 @@ async function dispatch(
 	const { rootNode, extensions } = prepared;
 
 	// Routing and syntax parsing — failures flow directly to the caller.
-	const resolved = resolveCommand(rootNode, [...argv]);
-	const resolvedNode = resolved.command;
-	const parsed = parseArgs(resolvedNode, resolved.argv);
+	const { argv, route, parsed } =
+		"argv" in input
+			? resolveArgvInput(rootNode, input.argv)
+			: resolveStructuredInput(rootNode, input.path, input.input);
+	const resolvedNode = route.command;
 
 	// One resource scope and resolver span pre-run, the action, and post-run.
 	// DisposalStack (not the bare global): Node 22 has no AsyncDisposableStack.
@@ -145,7 +192,7 @@ async function dispatch(
 		argv: [...argv],
 		rootCommand: rootSnapshot,
 		command: resolvedNode === rootNode ? rootSnapshot : snapshotCommand(resolvedNode),
-		commandPath: Object.freeze([...resolved.commandPath]),
+		commandPath: Object.freeze([...route.commandPath]),
 		args: parsed.args,
 		flags: parsed.flags,
 		rawArgs: parsed.rawArgs,
@@ -302,13 +349,13 @@ function hasInjectedIO(io: Partial<InvocationIO> | undefined): boolean {
 /** Programmatic boundary: throw raw failures and leave process status untouched. */
 export async function runInvocation(
 	node: CommandNode,
-	argv: readonly string[],
+	input: InvocationInput,
 	io: Partial<InvocationIO> | undefined,
 	materializeCommandDefinition: MaterializeCommandDefinition,
 ): Promise<RunOutcome<unknown>> {
 	const resolvedIO: InvocationIO = { ...DEFAULT_IO, ...io };
 	const prepared = prepareInvocation(node, materializeCommandDefinition);
-	const invoke = () => dispatch(argv, prepared, resolvedIO);
+	const invoke = () => dispatch(input, prepared, resolvedIO);
 	return await (hasInjectedIO(io) ? withAmbientTerminalIO(resolvedIO, invoke) : invoke());
 }
 
@@ -382,7 +429,7 @@ export async function executeInvocation(
 		let renderedInDispatch = false;
 		try {
 			await dispatch(
-				argv,
+				{ argv },
 				prepared,
 				io,
 				(context) => {
