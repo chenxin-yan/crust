@@ -54,11 +54,7 @@ describe("writeSkills", () => {
 		const bundleDir = await createBundle("deployment-guide", "Deployment guidance");
 		const outDir = join(tempRoot, "skills");
 
-		await writeSkills(createApp(), {
-			outDir,
-			version: "1.2.3",
-			extras: [bundleDir],
-		});
+		await writeSkills({ app: createApp(), outDir, version: "1.2.3", extras: [bundleDir] });
 
 		expect((await readdir(tempRoot)).sort()).toEqual(["deployment-guide", "skills"]);
 		expect(await readFile(join(outDir, "demo", "SKILL.md"), "utf8")).toContain("name: demo");
@@ -76,7 +72,8 @@ describe("writeSkills", () => {
 		const outDir = join(tempRoot, "skills");
 		await mkdir(join(outDir, "removed-skill"), { recursive: true });
 
-		await writeSkills(createApp(), {
+		await writeSkills({
+			app: createApp(),
 			outDir,
 			version: "2.0.0",
 			name: "demo-reference",
@@ -94,7 +91,7 @@ describe("writeSkills", () => {
 		const outDir = join(tempRoot, "skills");
 		const app = new Crust("gyst", { description: "Generated command reference" }).action(() => {});
 
-		await writeSkills(app, { outDir, version: "1.0.0", extras: [bundleDir] });
+		await writeSkills({ app: app, outDir, version: "1.0.0", extras: [bundleDir] });
 
 		const skill = await readFile(join(outDir, "gyst", "SKILL.md"), "utf8");
 		expect(skill).toContain("description: Authored co-review workflow");
@@ -107,7 +104,7 @@ describe("writeSkills", () => {
 		// No root description: generating this skill would fail, but it is replaced.
 		const app = new Crust("gyst").action(() => {});
 
-		await writeSkills(app, { outDir, extras: [bundleDir] });
+		await writeSkills({ app: app, outDir, extras: [bundleDir] });
 
 		const skill = await readFile(join(outDir, "gyst", "SKILL.md"), "utf8");
 		expect(skill).toContain("description: Authored co-review workflow");
@@ -118,7 +115,8 @@ describe("writeSkills", () => {
 		const second = join(tempRoot, "other", "guide");
 		await mkdir(second, { recursive: true });
 		await writeFile(join(second, "SKILL.md"), "---\nname: guide\ndescription: Second guide\n---\n");
-		const result = writeSkills(createApp(), {
+		const result = writeSkills({
+			app: createApp(),
 			outDir: join(tempRoot, "skills"),
 			extras: [first, second],
 		});
@@ -127,11 +125,18 @@ describe("writeSkills", () => {
 		await expect(result).rejects.toMatchObject({ skillName: "guide" });
 	});
 
-	it("can omit the generated command skill", async () => {
+	it("refuses to write an empty skill source", async () => {
+		const outDir = join(tempRoot, "skills");
+
+		await expect(writeSkills({ outDir })).rejects.toThrow("Nothing to write");
+		await expect(readdir(outDir)).rejects.toThrow();
+	});
+
+	it("writes only authored skills when no app is given", async () => {
 		const bundleDir = await createBundle("guide", "Authored guidance");
 		const outDir = join(tempRoot, "skills");
 
-		await writeSkills(createApp(), { outDir, generated: false, extras: [bundleDir] });
+		await writeSkills({ outDir, extras: [bundleDir] });
 
 		expect(await readdir(outDir)).toEqual(["guide"]);
 	});
@@ -144,7 +149,8 @@ describe("writeSkills", () => {
 			"---\nname: nested\ndescription: Nested\n---\n",
 		);
 
-		const result = writeSkills(createApp(), {
+		const result = writeSkills({
+			app: createApp(),
 			outDir,
 			version: "1.0.0",
 			extras: [join(outDir, "nested")],
@@ -157,7 +163,7 @@ describe("writeSkills", () => {
 		const outDir = join(tempRoot, "skills");
 		const app = new Crust("demo").action(() => {});
 
-		await expect(writeSkills(app, { outDir, version: "1.0.0" })).rejects.toThrow(
+		await expect(writeSkills({ app: app, outDir, version: "1.0.0" })).rejects.toThrow(
 			"requires a description",
 		);
 		await expect(readdir(outDir)).rejects.toThrow();
@@ -166,7 +172,7 @@ describe("writeSkills", () => {
 	it("requires the package skills directory layout", async () => {
 		const outDir = join(tempRoot, "agent-skills");
 
-		await expect(writeSkills(createApp(), { outDir, version: "1.0.0" })).rejects.toThrow(
+		await expect(writeSkills({ app: createApp(), outDir, version: "1.0.0" })).rejects.toThrow(
 			'must be named "skills"',
 		);
 		await expect(readdir(outDir)).rejects.toThrow();
@@ -175,11 +181,7 @@ describe("writeSkills", () => {
 	it("rejects an invalid skill name before writing", async () => {
 		const outDir = join(tempRoot, "skills");
 
-		const result = writeSkills(createApp(), {
-			outDir,
-			version: "1.0.0",
-			name: "Bad_Name",
-		});
+		const result = writeSkills({ app: createApp(), outDir, version: "1.0.0", name: "Bad_Name" });
 		await expect(result).rejects.toThrow('Invalid skill name "Bad_Name"');
 		await expect(readdir(outDir)).rejects.toThrow();
 	});

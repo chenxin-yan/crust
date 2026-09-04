@@ -95,15 +95,35 @@ describe("skill extension packaged directory", () => {
 		expect(output).not.toContain(source);
 	});
 
-	it("copies packaged sources from its build hook", async () => {
-		const source = await writeSource("demo", "packaged");
+	it("omits the generated skill when generated is false", async () => {
+		const authored = join(tempRoot, "authored", "guide");
+		await mkdir(authored, { recursive: true });
+		await writeFile(join(authored, "SKILL.md"), "---\nname: guide\ndescription: Guide\n---\n");
+		const extension = skill({
+			distDir: join(tempRoot, "dist", "skills"),
+			generated: false,
+			extras: [authored],
+		});
+		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
+		const outDir = join(tempRoot, "dist");
+
+		await extension.build?.({ snapshot, outDir });
+
+		expect(await readdir(join(outDir, "skills"))).toEqual(["guide"]);
+	});
+
+	it("generates from the snapshot even when a stale packaged directory exists", async () => {
+		const source = await writeSource("demo", "stale");
 		const extension = skill({ distDir: source });
 		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
 		const outDir = join(tempRoot, "dist");
 
 		await extension.build?.({ snapshot, outDir });
 
-		expect(await readFile(join(outDir, "skills", "demo", "content.md"), "utf8")).toBe("packaged\n");
+		expect(await readdir(join(outDir, "skills", "demo"))).not.toContain("content.md");
+		expect(await readFile(join(outDir, "skills", "demo", "SKILL.md"), "utf8")).toContain(
+			"description: Demo",
+		);
 	});
 
 	it("generates command and authored skills together when extras are configured", async () => {
@@ -170,17 +190,6 @@ describe("skill extension packaged directory", () => {
 		expect(await readFile(join(outDir, "skills", "gyst-reference", "SKILL.md"), "utf8")).toContain(
 			"description: Generated command reference",
 		);
-	});
-
-	it("copies packaged sources when extras is empty", async () => {
-		const source = await writeSource("demo", "packaged");
-		const extension = skill({ distDir: source, extras: [] });
-		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
-		const outDir = join(tempRoot, "dist");
-
-		await extension.build?.({ snapshot, outDir });
-
-		expect(await readFile(join(outDir, "skills", "demo", "content.md"), "utf8")).toBe("packaged\n");
 	});
 
 	it("renders from the snapshot without requiring a package version", async () => {

@@ -1,5 +1,5 @@
-import { cp, mkdir, readFile, rm } from "node:fs/promises";
-import { dirname, join, relative, resolve } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join, relative, resolve } from "node:path";
 
 import {
 	type Extension,
@@ -21,7 +21,7 @@ import {
 	getUniversalAgents,
 	resolveEffectiveScope,
 } from "./agents.ts";
-import { writeSkillsFromSnapshot } from "./build.ts";
+import { writeSkills } from "./build.ts";
 import { SkillConflictError } from "./errors.ts";
 import {
 	getSkillStatus,
@@ -32,12 +32,7 @@ import {
 import { SKILLS } from "./manifest.ts";
 import { isWithin } from "./path.ts";
 import { planReconcile, UNIVERSAL_GROUP, type ReconcileChoice } from "./reconcile.ts";
-import {
-	SkillSourceUnavailableError,
-	loadPackagedSkills,
-	resolveSkillSource,
-	type PackagedSkill,
-} from "./source.ts";
+import { SkillSourceUnavailableError, loadPackagedSkills, type PackagedSkill } from "./source.ts";
 import type { AgentTarget, InstallSkillResult, Scope, SkillOptions } from "./types.ts";
 
 const DEFAULT_SKILL_COMMAND_NAME = "skill";
@@ -215,36 +210,15 @@ async function readPackageVersion(): Promise<string | undefined> {
 }
 
 async function buildSkills(options: SkillOptions, context: ExtensionBuildContext): Promise<void> {
-	const outDir = join(context.outDir, "skills");
-	let source: string | undefined;
-	try {
-		source = resolveSkillSource(options.distDir);
-	} catch (error) {
-		if (!(error instanceof SkillSourceUnavailableError)) throw error;
-		// A missing packaged directory is regenerated from the snapshot below.
-	}
-
-	if (source === undefined || (options.extras?.length ?? 0) > 0) {
-		await writeSkillsFromSnapshot(context.snapshot, {
-			outDir,
-			version: await readPackageVersion(),
-			name: options.name,
-			description: options.description,
-			generated: options.generated,
-			extras: options.extras,
-		});
-		return;
-	}
-
-	// rm below would destroy a packaged directory nested in (or equal to) its output.
-	if (isWithin(outDir, source)) {
-		throw new Error(
-			`Packaged skills directory "${source}" cannot be nested inside output directory "${outDir}".`,
-		);
-	}
-	await rm(outDir, { recursive: true, force: true });
-	await mkdir(dirname(outDir), { recursive: true });
-	await cp(source, outDir, { recursive: true });
+	await writeSkills({
+		// The snapshot is already prepared; wrap it so the generated skill can be opted out.
+		app: options.generated === false ? undefined : { snapshot: async () => context.snapshot },
+		outDir: join(context.outDir, "skills"),
+		version: await readPackageVersion(),
+		name: options.name,
+		description: options.description,
+		extras: options.extras,
+	});
 }
 
 function skillFactory(options: SkillOptions): Extension {
