@@ -1,32 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
 import { createPrompts } from "../create-prompts.ts";
-import { createPromptIO, pressKey, renderPrompt, type RenderedPrompt } from "../testing.ts";
+import { pressKey, renderPrompt } from "../testing.ts";
 import { select, type SelectOptions } from "./select.ts";
+import { nonTTYIO, tick } from "./test-helpers.ts";
 
-// ────────────────────────────────────────────────────────────────────────────
-// Test helpers
-// ────────────────────────────────────────────────────────────────────────────
-
-let activePrompt: Pick<RenderedPrompt<unknown>, "type" | "keys" | "screen">;
-
-function start<T>(options: SelectOptions<T>): Promise<T> {
-	const prompt = renderPrompt<SelectOptions<T>, T>(select, options);
-	activePrompt = prompt;
-	return prompt.answer;
-}
-
-function screen(): string {
-	return activePrompt.screen();
-}
-
-function tick(ms = 10): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function nonTTYIO() {
-	return createPromptIO({ isTTY: false }).io;
-}
 // ────────────────────────────────────────────────────────────────────────────
 // Initial value — object-choice numeric value
 // ────────────────────────────────────────────────────────────────────────────
@@ -54,7 +32,7 @@ describe("select — initial value", () => {
 
 describe("select — default value", () => {
 	it("sets initial cursor to matching default value", async () => {
-		const promise = start({
+		const prompt = renderPrompt(select, {
 			message: "Pick a color",
 			choices: ["red", "green", "blue"],
 			default: "green",
@@ -62,36 +40,36 @@ describe("select — default value", () => {
 
 		await tick();
 		// Submit immediately — should select "green" (cursor at index 1)
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("green");
 	});
 
 	it("defaults cursor to first item when no default is provided", async () => {
-		const promise = start({
+		const prompt = renderPrompt(select, {
 			message: "Pick a color",
 			choices: ["red", "green", "blue"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("red");
 	});
 
 	it("defaults cursor to first item when default value is not found", async () => {
-		const promise = start({
+		const prompt = renderPrompt(select, {
 			message: "Pick a color",
 			choices: ["red", "green", "blue"],
 			default: "yellow",
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("red");
 	});
 });
@@ -102,80 +80,80 @@ describe("select — default value", () => {
 
 describe("select — navigation", () => {
 	it("down arrow moves cursor down", async () => {
-		const promise = start({
+		const prompt = renderPrompt(select, {
 			message: "Pick",
 			choices: ["a", "b", "c"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("b");
 	});
 
 	it("up arrow moves cursor up", async () => {
-		const promise = start({
+		const prompt = renderPrompt(select, {
 			message: "Pick",
 			choices: ["a", "b", "c"],
 			default: "b",
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "up" });
+		pressKey(prompt, "", { name: "up" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("a");
 	});
 
 	it("j moves cursor down (vim)", async () => {
-		const promise = start({
+		const prompt = renderPrompt(select, {
 			message: "Pick",
 			choices: ["a", "b", "c"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "j", { name: "j" });
+		pressKey(prompt, "j", { name: "j" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("b");
 	});
 
 	it("k moves cursor up (vim)", async () => {
-		const promise = start({
+		const prompt = renderPrompt(select, {
 			message: "Pick",
 			choices: ["a", "b", "c"],
 			default: "c",
 		});
 
 		await tick();
-		pressKey(activePrompt, "k", { name: "k" });
+		pressKey(prompt, "k", { name: "k" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("b");
 	});
 
 	it("wraps to last item when moving up from first", async () => {
-		const promise = start({
+		const prompt = renderPrompt(select, {
 			message: "Pick",
 			choices: ["a", "b", "c"],
 		});
 
 		await tick();
 		// Cursor at 0, up should wrap to index 2
-		pressKey(activePrompt, "", { name: "up" });
+		pressKey(prompt, "", { name: "up" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("c");
 	});
 });
@@ -186,7 +164,7 @@ describe("select — navigation", () => {
 
 describe("select — choice types", () => {
 	it("handles object choices with label and value", async () => {
-		const promise = start({
+		const prompt = renderPrompt(select, {
 			message: "Pick a port",
 			choices: [
 				{ label: "HTTP", value: 80 },
@@ -195,16 +173,16 @@ describe("select — choice types", () => {
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe(443);
 	});
 
 	it("handles object choices with hints", async () => {
-		const promise = start({
+		const prompt = renderPrompt(select, {
 			message: "Pick a port",
 			choices: [
 				{ label: "HTTP", value: 80 },
@@ -214,10 +192,10 @@ describe("select — choice types", () => {
 
 		await tick();
 		// Verify hint text is rendered
-		expect(screen()).toContain("recommended");
+		expect(prompt.screen()).toContain("recommended");
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 });
 
@@ -227,51 +205,51 @@ describe("select — choice types", () => {
 
 describe("select — rendering", () => {
 	it("renders message on initial display", async () => {
-		const promise = start({
+		const prompt = renderPrompt(select, {
 			message: "Choose your favorite",
 			choices: ["apple", "banana", "cherry"],
 		});
 
 		await tick();
-		expect(screen()).toContain("Choose your favorite");
+		expect(prompt.screen()).toContain("Choose your favorite");
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 
 	it("renders all visible choices", async () => {
-		const promise = start({
+		const prompt = renderPrompt(select, {
 			message: "Pick",
 			choices: ["alpha", "beta", "gamma"],
 		});
 
 		await tick();
-		expect(screen()).toContain("alpha");
-		expect(screen()).toContain("beta");
-		expect(screen()).toContain("gamma");
+		expect(prompt.screen()).toContain("alpha");
+		expect(prompt.screen()).toContain("beta");
+		expect(prompt.screen()).toContain("gamma");
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 
 	it("renders submitted answer on confirm", async () => {
-		const promise = start({
+		const prompt = renderPrompt(select, {
 			message: "Pick a fruit",
 			choices: ["apple", "banana", "cherry"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		await promise;
+		await prompt.answer;
 		// After submit, the selected label should appear in the output
-		expect(screen()).toContain("banana");
+		expect(prompt.screen()).toContain("banana");
 	});
 
 	it("renders labels for object choices", async () => {
-		const promise = start({
+		const prompt = renderPrompt(select, {
 			message: "Pick",
 			choices: [
 				{ label: "Option A", value: 1 },
@@ -280,11 +258,11 @@ describe("select — rendering", () => {
 		});
 
 		await tick();
-		expect(screen()).toContain("Option A");
-		expect(screen()).toContain("Option B");
+		expect(prompt.screen()).toContain("Option A");
+		expect(prompt.screen()).toContain("Option B");
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 });
 
@@ -295,7 +273,7 @@ describe("select — rendering", () => {
 describe("select — viewport scrolling", () => {
 	it("limits visible choices to maxVisible", async () => {
 		const choices = Array.from({ length: 20 }, (_, i) => `item-${i}`);
-		const promise = start({
+		const prompt = renderPrompt(select, {
 			message: "Pick",
 			choices,
 			maxVisible: 5,
@@ -303,32 +281,32 @@ describe("select — viewport scrolling", () => {
 
 		await tick();
 		// Only first 5 items should be visible
-		expect(screen()).toContain("item-0");
-		expect(screen()).toContain("item-4");
-		expect(screen()).not.toContain("item-5");
+		expect(prompt.screen()).toContain("item-0");
+		expect(prompt.screen()).toContain("item-4");
+		expect(prompt.screen()).not.toContain("item-5");
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 
 	it("shows scroll-down indicator when more items below", async () => {
 		const choices = Array.from({ length: 20 }, (_, i) => `item-${i}`);
-		const promise = start({
+		const prompt = renderPrompt(select, {
 			message: "Pick",
 			choices,
 			maxVisible: 5,
 		});
 
 		await tick();
-		expect(screen()).toContain("...");
+		expect(prompt.screen()).toContain("...");
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 
 	it("scrolls down when navigating past visible items", async () => {
 		const choices = Array.from({ length: 10 }, (_, i) => `item-${i}`);
-		const promise = start({
+		const prompt = renderPrompt(select, {
 			message: "Pick",
 			choices,
 			maxVisible: 3,
@@ -336,23 +314,23 @@ describe("select — viewport scrolling", () => {
 
 		await tick();
 		// Move down 3 times to scroll past the initial viewport
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
 
 		// item-3 should now be visible
-		expect(screen()).toContain("item-3");
+		expect(prompt.screen()).toContain("item-3");
 
-		pressKey(activePrompt, "", { name: "return" });
-		const result = await promise;
+		pressKey(prompt, "", { name: "return" });
+		const result = await prompt.answer;
 		expect(result).toBe("item-3");
 	});
 
 	it("does not show scroll indicators when all items fit", async () => {
-		const promise = start({
+		const prompt = renderPrompt(select, {
 			message: "Pick",
 			choices: ["a", "b", "c"],
 			maxVisible: 10,
@@ -361,12 +339,12 @@ describe("select — viewport scrolling", () => {
 		await tick();
 		// With only 3 items and maxVisible=10, no scroll indicators
 		// Count "..." occurrences — should not appear as a scroll indicator line
-		const lines = screen().split("\n");
+		const lines = prompt.screen().split("\n");
 		const scrollLines = lines.filter((l) => l.trim() === "...");
 		expect(scrollLines.length).toBe(0);
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 });
 
@@ -376,31 +354,31 @@ describe("select — viewport scrolling", () => {
 
 describe("select — no message", () => {
 	it("renders default message when message is omitted", async () => {
-		const promise = start({
+		const prompt = renderPrompt(select, {
 			choices: ["a", "b", "c"],
 		});
 
 		await tick();
-		expect(screen()).toContain("Pick an option");
-		expect(screen()).not.toContain("undefined");
-		expect(screen()).toContain("a");
+		expect(prompt.screen()).toContain("Pick an option");
+		expect(prompt.screen()).not.toContain("undefined");
+		expect(prompt.screen()).toContain("a");
 
-		pressKey(activePrompt, "", { name: "return" });
-		const result = await promise;
+		pressKey(prompt, "", { name: "return" });
+		const result = await prompt.answer;
 		expect(result).toBe("a");
 	});
 
 	it("submitted output shows default message", async () => {
-		const promise = start({
+		const prompt = renderPrompt(select, {
 			choices: ["a", "b", "c"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		await promise;
-		expect(screen()).toContain("Pick an option");
-		expect(screen()).not.toContain("undefined");
+		await prompt.answer;
+		expect(prompt.screen()).toContain("Pick an option");
+		expect(prompt.screen()).not.toContain("undefined");
 	});
 });
 

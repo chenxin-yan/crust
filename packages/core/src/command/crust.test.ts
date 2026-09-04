@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import type { StandardSchema } from "@crustjs/utils/schema";
 import { getAmbientTerminalIO } from "@crustjs/utils/terminal";
 
+import type { Equal, Expect } from "../../tests/helpers.ts";
 import { defineContext } from "../api/context.ts";
 import { defineExtension, type Extension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
@@ -19,8 +20,6 @@ import { BUILD_OUT_DIR_ENV, SNAPSHOT_PATH_ENV } from "./invocation.ts";
 // ────────────────────────────────────────────────────────────────────────────
 // Type-level test utilities
 // ────────────────────────────────────────────────────────────────────────────
-
-type Expect<T extends true> = T;
 
 interface BasicReceivedContext {
 	args: { file: string };
@@ -38,9 +37,6 @@ function isString<T>(value: T): value is T & string {
 function stringifyConsoleArg<T>(value: T): string {
 	return isString(value) ? value : String(value);
 }
-
-type Equal<A, B> =
-	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Constructor

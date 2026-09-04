@@ -27,14 +27,14 @@ const serveCmd = defineCommand("serve", (command) =>
 	command
 		.args({ name: "dir", type: "string", default: "." })
 		.flags({ name: "port", type: "number", default: 3000, short: "p" })
-		.action(({ args, flags }) => {
-			console.log(`serve ${args.dir} on ${flags.port}`);
+		.action(({ args, flags, stdout }) => {
+			stdout(`serve ${args.dir} on ${flags.port}`);
 		}),
 );
 
-const rootCmd = rootBase.add(serveCmd).action(({ flags }) => {
+const rootCmd = rootBase.add(serveCmd).action(({ flags, stdout }) => {
 	if (flags.help) {
-		console.log("help");
+		stdout("help");
 	}
 });
 
@@ -81,9 +81,9 @@ describe("integration: .execute() full pipeline with argv override", () => {
 				cmd
 					.use(deployment)
 					.args(defineArg("name", { type: "string", required: true }))
-					.action(async ({ args, ctx }) => {
+					.action(async ({ args, ctx, stdout }) => {
 						const config = await ctx.deployment;
-						console.log(`deploy service=${args.name} env=${config.env} dryRun=${config.dryRun}`);
+						stdout(`deploy service=${args.name} env=${config.env} dryRun=${config.dryRun}`);
 					}),
 			),
 		);
@@ -117,9 +117,9 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 			credential: flags["api-key"],
 		}));
 		const deploy = defineCommand("deploy", (command) =>
-			command.use(auth).action(async ({ ctx }) => {
+			command.use(auth).action(async ({ ctx, stdout }) => {
 				const identity = await ctx.auth;
-				console.log(`${identity.credential.constructor.name.toLowerCase()}:${identity.credential}`);
+				stdout(`${identity.credential.constructor.name.toLowerCase()}:${identity.credential}`);
 			}),
 		);
 		const app = new Crust("cli").provide(auth()).add(deploy);
@@ -145,7 +145,9 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 							defineCommand("deploy", (deploy) =>
 								deploy
 									.use(logging)
-									.action(async ({ ctx }) => console.log(`verbose=${(await ctx.logging).verbose}`)),
+									.action(async ({ ctx, stdout }) =>
+										stdout(`verbose=${(await ctx.logging).verbose}`),
+									),
 							),
 						),
 				),
@@ -180,8 +182,8 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 				defineCommand("render", (command) =>
 					command
 						.use(outputConfig)
-						.action(async ({ ctx }) =>
-							console.log(`output=${(await ctx["output-config"]).output}`),
+						.action(async ({ ctx, stdout }) =>
+							stdout(`output=${(await ctx["output-config"]).output}`),
 						),
 				),
 			);
@@ -200,8 +202,8 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 		});
 		const app = new Crust("cli").provide(auth()).add(
 			defineCommand("deploy", (command) =>
-				command.action(({ flags }) => {
-					console.log(`token=${String((flags as { token?: string }).token)}`);
+				command.action(({ flags, stdout }) => {
+					stdout(`token=${String((flags as { token?: string }).token)}`);
 				}),
 			),
 		);
@@ -225,9 +227,9 @@ describe("integration: Extension adds flag visible to subcommand action", () => 
 
 		const app = new Crust("cli").extend(versionFlag).action((ctx) => {
 			if (ctx.flags.version) {
-				console.log("v1.0.0");
+				ctx.stdout("v1.0.0");
 			} else {
-				console.log("running");
+				ctx.stdout("running");
 			}
 		});
 
@@ -282,8 +284,8 @@ describe("integration: nested added definitions end-to-end", () => {
 								.use(logging)
 								.use(remoteConfig)
 								.args({ name: "name", type: "string", required: true })
-								.action(async ({ args, ctx }) => {
-									console.log(
+								.action(async ({ args, ctx, stdout }) => {
+									stdout(
 										`add remote=${args.name} verbose=${(await ctx.logging).verbose} timeout=${(await ctx["remote-config"]).timeout}`,
 									);
 								}),
@@ -308,12 +310,12 @@ describe("integration: nested added definitions end-to-end", () => {
 		const app = new Crust("cli")
 			.args({ name: "input", type: "string" })
 			.action((ctx) => {
-				console.log(`root input=${ctx.args.input}`);
+				ctx.stdout(`root input=${ctx.args.input}`);
 			})
 			.add(
 				defineCommand("sub", (cmd) =>
-					cmd.action(() => {
-						console.log("sub ran");
+					cmd.action(({ stdout }) => {
+						stdout("sub ran");
 					}),
 				),
 			);
@@ -337,8 +339,8 @@ describe("integration: split-file definitions end-to-end", () => {
 			.use(logging)
 			.flags({ name: "format", type: "string", default: "table" })
 			.args({ name: "resource", type: "string", required: true })
-			.action(async ({ args, flags, ctx }) => {
-				console.log(
+			.action(async ({ args, flags, ctx, stdout }) => {
+				stdout(
 					`list ${args.resource} format=${flags.format} verbose=${(await ctx.logging).verbose}`,
 				);
 			}),
@@ -350,8 +352,8 @@ describe("integration: split-file definitions end-to-end", () => {
 				{ name: "resource", type: "string", required: true },
 				{ name: "id", type: "string", required: true },
 			)
-			.action(async ({ args, ctx }) => {
-				console.log(`get ${args.resource}/${args.id} verbose=${(await ctx.logging).verbose}`);
+			.action(async ({ args, ctx, stdout }) => {
+				stdout(`get ${args.resource}/${args.id} verbose=${(await ctx.logging).verbose}`);
 			}),
 	);
 
@@ -396,8 +398,8 @@ describe("integration: added definitions", () => {
 			command
 				.use(logging)
 				.use(deployment)
-				.action(async ({ ctx }) => {
-					console.log(`verbose=${(await ctx.logging).verbose} env=${(await ctx.deployment).env}`);
+				.action(async ({ ctx, stdout }) => {
+					stdout(`verbose=${(await ctx.logging).verbose} env=${(await ctx.deployment).env}`);
 				}),
 		);
 		const deploy = defineCommand("deploy", (command) =>
@@ -421,8 +423,8 @@ describe("integration: Context-owned boolean flag negation", () => {
 		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
 		const app = new Crust("cli").provide(logging()).add(
 			defineCommand("sub", (cmd) =>
-				cmd.use(logging).action(async ({ ctx }) => {
-					console.log(`verbose=${(await ctx.logging).verbose}`);
+				cmd.use(logging).action(async ({ ctx, stdout }) => {
+					stdout(`verbose=${(await ctx.logging).verbose}`);
 				}),
 			),
 		);
@@ -447,8 +449,8 @@ describe("integration: Context-owned multiple-value flag", () => {
 		const tags = defineContext("tags", { flags: [tag] }, ({ flags }) => flags);
 		const app = new Crust("cli").provide(tags()).add(
 			defineCommand("sub", (cmd) =>
-				cmd.use(tags).action(async ({ ctx }) => {
-					console.log(`tags=${JSON.stringify((await ctx.tags).tag)}`);
+				cmd.use(tags).action(async ({ ctx, stdout }) => {
+					stdout(`tags=${JSON.stringify((await ctx.tags).tag)}`);
 				}),
 			),
 		);
@@ -473,9 +475,9 @@ describe("integration: separator (--) with subcommand and Context-owned flags", 
 		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
 		const app = new Crust("cli").provide(logging()).add(
 			defineCommand("sub", (cmd) =>
-				cmd.use(logging).action(async ({ ctx, rawArgs }) => {
-					console.log(`verbose=${(await ctx.logging).verbose}`);
-					console.log(`rawArgs=${JSON.stringify(rawArgs)}`);
+				cmd.use(logging).action(async ({ ctx, rawArgs, stdout }) => {
+					stdout(`verbose=${(await ctx.logging).verbose}`);
+					stdout(`rawArgs=${JSON.stringify(rawArgs)}`);
 				}),
 			),
 		);
@@ -519,19 +521,17 @@ describe("integration: complex real-world CLI scenario", () => {
 					cmd
 						.use(settings)
 						.flags({ name: "env", type: "string", required: true })
-						.action(async ({ flags, ctx }) => {
+						.action(async ({ flags, ctx, stdout }) => {
 							const config = await ctx.settings;
 							order.push("deploy:run");
-							console.log(
-								`deploy env=${flags.env} verbose=${config.verbose} config=${config.config}`,
-							);
+							stdout(`deploy env=${flags.env} verbose=${config.verbose} config=${config.config}`);
 						}),
 				),
 				defineCommand("status", (cmd) =>
-					cmd.use(settings).action(async ({ ctx }) => {
+					cmd.use(settings).action(async ({ ctx, stdout }) => {
 						const config = await ctx.settings;
 						order.push("status:run");
-						console.log(`status verbose=${config.verbose} config=${config.config}`);
+						stdout(`status verbose=${config.verbose} config=${config.config}`);
 					}),
 				),
 			);

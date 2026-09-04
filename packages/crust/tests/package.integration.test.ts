@@ -1,25 +1,28 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	cpSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust } from "@crustjs/core";
+import { runProcess } from "@crustjs/utils/process";
 
 import { buildCommand } from "../src/commands/build.ts";
-import { SUPPORTED_TARGETS, TARGET_INFO } from "../src/utils/build-helpers.ts";
+import { TARGET_INFO } from "../src/utils/build-helpers.ts";
+import { hostTarget } from "./helpers.ts";
 
-const tmpDir = join(import.meta.dir, ".tmp-stage");
+const tmpDir = mkdtempSync(join(tmpdir(), "crust-package-integration-"));
 const originalCwd = process.cwd;
 
 function readJson<T>(path: string): T {
 	return JSON.parse(readFileSync(path, "utf-8")) as T;
-}
-
-function getHostTarget(): string | null {
-	const platformKey = `${process.platform}-${process.arch}`;
-	const target = SUPPORTED_TARGETS.find(
-		(candidate) => TARGET_INFO[candidate].platformKey === platformKey,
-	);
-	return target ? TARGET_INFO[target].alias : null;
 }
 
 async function runBuild(argv: string[]) {
@@ -102,15 +105,13 @@ describe("crust build --package integration", () => {
 		expect(existsSync(join(tmpDir, ".subset", "darwin-arm64"))).toBe(false);
 	});
 
-	it.skipIf(getHostTarget() === null || !Bun.which("node"))(
+	it.skipIf(hostTarget() === null || !Bun.which("node"))(
 		"executes the staged JS resolver through Node on the host platform",
 		async () => {
-			const hostTarget = getHostTarget();
-			const hostBunTarget = SUPPORTED_TARGETS.find(
-				(target) => TARGET_INFO[target].alias === hostTarget,
-			);
+			const hostBunTarget = hostTarget();
 			const nodePath = Bun.which("node");
-			if (!hostTarget || !hostBunTarget || !nodePath) return;
+			if (!hostBunTarget || !nodePath) return;
+			const hostAlias = TARGET_INFO[hostBunTarget].alias;
 
 			await runBuild([
 				"--package",
@@ -122,7 +123,7 @@ describe("crust build --package integration", () => {
 			]);
 
 			cpSync(
-				join(tmpDir, ".host", hostTarget),
+				join(tmpDir, ".host", hostAlias),
 				join(
 					tmpDir,
 					".host",
@@ -131,23 +132,15 @@ describe("crust build --package integration", () => {
 					// Scoped package names split into @scope/name path segments here,
 					// matching resolver candidateTwo's resolve(..., target.packageName, ...).
 					"@scope",
-					`test-cli-${hostTarget}`,
+					`test-cli-${hostAlias}`,
 				),
 				{ recursive: true },
 			);
 
 			const resolverPath = join(tmpDir, ".host", "root", "bin", "test-cli.js");
-			const proc = Bun.spawn([nodePath, resolverPath], {
+			const { exitCode, stdout, stderr } = await runProcess(nodePath, [resolverPath], {
 				cwd: tmpDir,
-				stdout: "pipe",
-				stderr: "pipe",
 			});
-
-			const [exitCode, stdout, stderr] = await Promise.all([
-				proc.exited,
-				new Response(proc.stdout).text(),
-				new Response(proc.stderr).text(),
-			]);
 
 			expect(exitCode).toBe(0);
 			expect(stderr.trim()).toBe("");

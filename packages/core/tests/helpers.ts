@@ -1,20 +1,40 @@
-/**
- * Test utility for running Crust builders and capturing output.
- *
- * Accepts a Crust builder instance + optional argv, captures stdout/stderr
- * via mocked console, and returns { stdout, stderr, exitCode }.
- *
- * Uses the real .execute() pipeline from the Crust builder.
- */
-
 import type { AnyCrust } from "../src/command/crust.ts";
+import type { CommandAction, CommandNode } from "../src/command/node.ts";
+import { createCommandNode } from "../src/command/node.ts";
+import { addFlagSpellingEntries } from "../src/parsing/spellings.ts";
+import type { ArgsDef, CommandMeta, FlagsDef } from "../src/types.ts";
 
-function isString<T>(value: T): value is T & string {
-	return typeof value === "string";
-}
+export type Expect<T extends true> = T;
+export type Equal<A, B> =
+	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
-function stringifyConsoleArg<T>(value: T): string {
-	return isString(value) ? value : String(value);
+export function makeNode<
+	const A extends ArgsDef = ArgsDef,
+	const F extends FlagsDef = FlagsDef,
+>(config: {
+	meta: string | CommandMeta;
+	args?: A;
+	flags?: F;
+	subCommands?: Record<string, CommandNode>;
+	run?: CommandAction;
+}): CommandNode & { args: A | undefined; effectiveFlags: F } {
+	// oxlint-disable-next-line anti-slop/no-runtime-typeof -- test fixtures intentionally accept either shorthand names or full metadata.
+	const meta = typeof config.meta === "string" ? { name: config.meta } : config.meta;
+	const node = createCommandNode(meta.name);
+	if (meta.description) node.meta.description = meta.description;
+	if (meta.usage) node.meta.usage = meta.usage;
+	if (config.flags) {
+		node.localFlags = { ...config.flags };
+		node.effectiveFlags = { ...config.flags };
+		for (const [name, def] of Object.entries(node.effectiveFlags)) {
+			addFlagSpellingEntries(node.flagSpellings, name, def);
+		}
+	}
+	if (config.args) node.args = [...config.args];
+	if (config.subCommands) node.subCommands = { ...config.subCommands };
+	if (config.run) node.run = config.run;
+	// SAFETY: the fixture copies config.args and config.flags into the returned node above.
+	return node as CommandNode & { args: A | undefined; effectiveFlags: F };
 }
 
 export interface RunResult {
@@ -35,46 +55,23 @@ export async function executeCrust(builder: AnyCrust, argv?: string[]): Promise<
 	const stdoutChunks: string[] = [];
 	const stderrChunks: string[] = [];
 	let exitCode = 0;
-
-	// Save original console methods and process.exitCode
-	const originalLog = console.log;
-	const originalError = console.error;
-	const originalWarn = console.warn;
 	const originalExitCode = process.exitCode;
 
-	// Mock console to capture output
-	console.log = (...args: unknown[]) => {
-		stdoutChunks.push(args.map(stringifyConsoleArg).join(" "));
-	};
-	console.error = (...args: unknown[]) => {
-		stderrChunks.push(args.map(stringifyConsoleArg).join(" "));
-	};
-	console.warn = (...args: unknown[]) => {
-		stderrChunks.push(args.map(stringifyConsoleArg).join(" "));
-	};
-
 	try {
-		await builder.execute({ argv });
+		await builder.execute({
+			argv,
+			io: {
+				stdout: (text) => stdoutChunks.push(text),
+				stderr: (text) => stderrChunks.push(text),
+			},
+		});
 	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
-		stderrChunks.push(message);
+		stderrChunks.push(error instanceof Error ? error.message : String(error));
 		exitCode = 1;
 	} finally {
-		// Restore original console methods
-		console.log = originalLog;
-		console.error = originalError;
-		console.warn = originalWarn;
-
-		// Capture exit code if set by the command
-		if (
-			process.exitCode !== undefined &&
-			process.exitCode !== null &&
-			process.exitCode !== originalExitCode
-		) {
+		if (process.exitCode != null && process.exitCode !== originalExitCode) {
 			exitCode = Number(process.exitCode);
 		}
-
-		// Restore original exit code
 		process.exitCode = originalExitCode;
 	}
 

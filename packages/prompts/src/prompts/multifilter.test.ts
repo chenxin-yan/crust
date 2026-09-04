@@ -1,31 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
-import { createPromptIO, pressKey, renderPrompt, type RenderedPrompt } from "../testing.ts";
+import { pressKey, renderPrompt } from "../testing.ts";
 import { multifilter, type MultifilterOptions } from "./multifilter.ts";
+import { nonTTYIO, tick } from "./test-helpers.ts";
 
-// ────────────────────────────────────────────────────────────────────────────
-// Test helpers
-// ────────────────────────────────────────────────────────────────────────────
-
-let activePrompt: Pick<RenderedPrompt<unknown>, "type" | "keys" | "screen">;
-
-function start<T>(options: MultifilterOptions<T>): Promise<T[]> {
-	const prompt = renderPrompt<MultifilterOptions<T>, T[]>(multifilter, options);
-	activePrompt = prompt;
-	return prompt.answer;
-}
-
-function screen(): string {
-	return activePrompt.screen();
-}
-
-function tick(ms = 10): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function nonTTYIO() {
-	return createPromptIO({ isTTY: false }).io;
-}
 // ────────────────────────────────────────────────────────────────────────────
 // Initial/default short-circuits
 // ────────────────────────────────────────────────────────────────────────────
@@ -90,27 +68,27 @@ describe("multifilter — non-TTY", () => {
 
 describe("multifilter — interactive", () => {
 	it("Space toggles selection; Enter submits values in choice order", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multifilter, {
 			message: "Search",
 			choices: ["alpha", "beta", "gamma"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "space" });
+		pressKey(prompt, "", { name: "space" });
 		await tick();
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
-		pressKey(activePrompt, "", { name: "space" });
+		pressKey(prompt, "", { name: "space" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toEqual(["alpha", "beta"]);
 	});
 
 	it("toggles the highlighted choice when duplicate choices share a label and value", async () => {
 		const value = { id: 1 };
-		const promise = start({
+		const prompt = renderPrompt(multifilter, {
 			message: "Search",
 			choices: [
 				{ label: "duplicate", value },
@@ -119,37 +97,38 @@ describe("multifilter — interactive", () => {
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
-		pressKey(activePrompt, "", { name: "space" });
+		pressKey(prompt, "", { name: "space" });
 		await tick();
 
-		const duplicateLines = screen()
+		const duplicateLines = prompt
+			.screen()
 			.split("\n")
 			.filter((line) => line.includes("duplicate"));
 		expect(duplicateLines.map((line) => line.includes("●"))).toEqual([false, true]);
 
-		pressKey(activePrompt, "", { name: "return" });
-		expect(await promise).toEqual([value]);
+		pressKey(prompt, "", { name: "return" });
+		expect(await prompt.answer).toEqual([value]);
 	});
 
 	it("pre-selects from default", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multifilter, {
 			message: "Search",
 			choices: ["a", "b", "c"],
 			default: ["c"],
 		});
 
 		await tick();
-		expect(screen()).toContain("●");
-		pressKey(activePrompt, "", { name: "return" });
+		expect(prompt.screen()).toContain("●");
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toEqual(["c"]);
 	});
 
 	it("positions the cursor on an undefined default value", async () => {
-		const promise = start<string | undefined>({
+		const prompt = renderPrompt(multifilter, {
 			message: "Search",
 			choices: [
 				{ label: "first", value: "first" },
@@ -159,58 +138,58 @@ describe("multifilter — interactive", () => {
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "space" });
+		pressKey(prompt, "", { name: "space" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		expect(await promise).toEqual([]);
+		expect(await prompt.answer).toEqual([]);
 	});
 
 	it("Enter with required and no selection shows error", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multifilter, {
 			message: "Search",
 			choices: ["x", "y"],
 			required: true,
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 		await tick();
 
-		expect(screen()).toContain("At least one");
+		expect(prompt.screen()).toContain("At least one");
 
-		pressKey(activePrompt, "", { name: "space" });
+		pressKey(prompt, "", { name: "space" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toEqual(["x"]);
 	});
 
 	it("keeps selections when query filters the list", async () => {
-		const promise = start({
+		const prompt = renderPrompt(multifilter, {
 			message: "Search",
 			choices: ["alpha", "beta", "gamma"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
-		pressKey(activePrompt, "", { name: "space" });
+		pressKey(prompt, "", { name: "space" });
 		await tick();
-		pressKey(activePrompt, "g", { name: "g" });
+		pressKey(prompt, "g", { name: "g" });
 		await tick();
-		pressKey(activePrompt, "a", { name: "a" });
+		pressKey(prompt, "a", { name: "a" });
 		await tick();
-		pressKey(activePrompt, "m", { name: "m" });
+		pressKey(prompt, "m", { name: "m" });
 		await tick();
 
-		expect(screen()).toContain("gamma");
-		pressKey(activePrompt, "", { name: "return" });
+		expect(prompt.screen()).toContain("gamma");
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toEqual(["gamma"]);
 	});
 });

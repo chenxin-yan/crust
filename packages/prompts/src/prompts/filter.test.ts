@@ -1,31 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
-import { createPromptIO, pressKey, renderPrompt, type RenderedPrompt } from "../testing.ts";
+import { pressKey, renderPrompt } from "../testing.ts";
 import { filter, type FilterOptions } from "./filter.ts";
+import { nonTTYIO, tick } from "./test-helpers.ts";
 
-// ────────────────────────────────────────────────────────────────────────────
-// Test helpers
-// ────────────────────────────────────────────────────────────────────────────
-
-let activePrompt: Pick<RenderedPrompt<unknown>, "type" | "keys" | "screen">;
-
-function start<T>(options: FilterOptions<T>): Promise<T> {
-	const prompt = renderPrompt<FilterOptions<T>, T>(filter, options);
-	activePrompt = prompt;
-	return prompt.answer;
-}
-
-function screen(): string {
-	return activePrompt.screen();
-}
-
-function tick(ms = 10): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function nonTTYIO() {
-	return createPromptIO({ isTTY: false }).io;
-}
 // ────────────────────────────────────────────────────────────────────────────
 // Initial value — object-choice numeric value
 // ────────────────────────────────────────────────────────────────────────────
@@ -53,7 +31,7 @@ describe("filter — initial value", () => {
 
 describe("filter — default value", () => {
 	it("sets initial cursor to matching default value", async () => {
-		const promise = start({
+		const prompt = renderPrompt(filter, {
 			message: "Search",
 			choices: ["TypeScript", "JavaScript", "Rust"],
 			default: "Rust",
@@ -61,36 +39,36 @@ describe("filter — default value", () => {
 
 		await tick();
 		// Submit immediately — should select "Rust" (cursor at matching index)
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("Rust");
 	});
 
 	it("defaults cursor to first item when no default is provided", async () => {
-		const promise = start({
+		const prompt = renderPrompt(filter, {
 			message: "Search",
 			choices: ["TypeScript", "JavaScript", "Rust"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("TypeScript");
 	});
 
 	it("defaults cursor to first item when default value is not found", async () => {
-		const promise = start({
+		const prompt = renderPrompt(filter, {
 			message: "Search",
 			choices: ["TypeScript", "JavaScript", "Rust"],
 			default: "Python",
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("TypeScript");
 	});
 });
@@ -101,67 +79,67 @@ describe("filter — default value", () => {
 
 describe("filter — typing filters the list", () => {
 	it("empty query shows all items", async () => {
-		const promise = start({
+		const prompt = renderPrompt(filter, {
 			message: "Search",
 			choices: ["TypeScript", "JavaScript", "Rust"],
 		});
 
 		await tick();
-		expect(screen()).toContain("TypeScript");
-		expect(screen()).toContain("JavaScript");
-		expect(screen()).toContain("Rust");
+		expect(prompt.screen()).toContain("TypeScript");
+		expect(prompt.screen()).toContain("JavaScript");
+		expect(prompt.screen()).toContain("Rust");
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 
 	it("typing a character filters the results", async () => {
-		const promise = start({
+		const prompt = renderPrompt(filter, {
 			message: "Search",
 			choices: ["TypeScript", "JavaScript", "Rust", "Python", "Go"],
 		});
 
 		await tick();
 		// Type "py" to filter
-		pressKey(activePrompt, "p", { name: "p" });
+		pressKey(prompt, "p", { name: "p" });
 		await tick();
-		pressKey(activePrompt, "y", { name: "y" });
+		pressKey(prompt, "y", { name: "y" });
 		await tick();
 
 		// "Python" should be visible, "Go" should not
-		expect(screen()).toContain("Python");
+		expect(prompt.screen()).toContain("Python");
 
-		pressKey(activePrompt, "", { name: "return" });
-		const result = await promise;
+		pressKey(prompt, "", { name: "return" });
+		const result = await prompt.answer;
 		expect(result).toBe("Python");
 	});
 
 	it("shows 'No matches' when nothing matches the query", async () => {
-		const promise = start({
+		const prompt = renderPrompt(filter, {
 			message: "Search",
 			choices: ["TypeScript", "JavaScript", "Rust"],
 		});
 
 		await tick();
 		// Type something that won't match anything
-		pressKey(activePrompt, "z", { name: "z" });
+		pressKey(prompt, "z", { name: "z" });
 		await tick();
-		pressKey(activePrompt, "z", { name: "z" });
+		pressKey(prompt, "z", { name: "z" });
 		await tick();
-		pressKey(activePrompt, "z", { name: "z" });
+		pressKey(prompt, "z", { name: "z" });
 		await tick();
 
-		expect(screen()).toContain("No matches");
+		expect(prompt.screen()).toContain("No matches");
 
 		// Backspace to clear and get matches again, then submit
-		pressKey(activePrompt, "", { name: "backspace" });
+		pressKey(prompt, "", { name: "backspace" });
 		await tick();
-		pressKey(activePrompt, "", { name: "backspace" });
+		pressKey(prompt, "", { name: "backspace" });
 		await tick();
-		pressKey(activePrompt, "", { name: "backspace" });
+		pressKey(prompt, "", { name: "backspace" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 });
 
@@ -171,84 +149,84 @@ describe("filter — typing filters the list", () => {
 
 describe("filter — navigation", () => {
 	it("down arrow moves to next result", async () => {
-		const promise = start({
+		const prompt = renderPrompt(filter, {
 			message: "Search",
 			choices: ["alpha", "beta", "gamma"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("beta");
 	});
 
 	it("up arrow moves to previous result", async () => {
-		const promise = start({
+		const prompt = renderPrompt(filter, {
 			message: "Search",
 			choices: ["alpha", "beta", "gamma"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
-		pressKey(activePrompt, "", { name: "up" });
+		pressKey(prompt, "", { name: "up" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("beta");
 	});
 
 	it("wraps to last item when moving up from first", async () => {
-		const promise = start({
+		const prompt = renderPrompt(filter, {
 			message: "Search",
 			choices: ["alpha", "beta", "gamma"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "up" });
+		pressKey(prompt, "", { name: "up" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("gamma");
 	});
 
 	it("ignores navigation when no results", async () => {
-		const promise = start({
+		const prompt = renderPrompt(filter, {
 			message: "Search",
 			choices: ["alpha", "beta"],
 		});
 
 		await tick();
 		// Type something that won't match
-		pressKey(activePrompt, "z", { name: "z" });
+		pressKey(prompt, "z", { name: "z" });
 		await tick();
-		pressKey(activePrompt, "z", { name: "z" });
+		pressKey(prompt, "z", { name: "z" });
 		await tick();
-		pressKey(activePrompt, "z", { name: "z" });
+		pressKey(prompt, "z", { name: "z" });
 		await tick();
 
 		// Navigation should be ignored (no crash)
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
-		pressKey(activePrompt, "", { name: "up" });
+		pressKey(prompt, "", { name: "up" });
 		await tick();
 
 		// Clear query and submit
-		pressKey(activePrompt, "", { name: "backspace" });
+		pressKey(prompt, "", { name: "backspace" });
 		await tick();
-		pressKey(activePrompt, "", { name: "backspace" });
+		pressKey(prompt, "", { name: "backspace" });
 		await tick();
-		pressKey(activePrompt, "", { name: "backspace" });
+		pressKey(prompt, "", { name: "backspace" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 });
 
@@ -258,27 +236,27 @@ describe("filter — navigation", () => {
 
 describe("filter — query editing", () => {
 	it("left/right arrow moves cursor in query", async () => {
-		const promise = start({
+		const prompt = renderPrompt(filter, {
 			message: "Search",
 			choices: ["abc", "xyz"],
 		});
 
 		await tick();
 		// Type "ac"
-		pressKey(activePrompt, "a", { name: "a" });
+		pressKey(prompt, "a", { name: "a" });
 		await tick();
-		pressKey(activePrompt, "c", { name: "c" });
+		pressKey(prompt, "c", { name: "c" });
 		await tick();
 
 		// Move cursor left and insert "b" to make "abc"
-		pressKey(activePrompt, "", { name: "left" });
+		pressKey(prompt, "", { name: "left" });
 		await tick();
-		pressKey(activePrompt, "b", { name: "b" });
+		pressKey(prompt, "b", { name: "b" });
 		await tick();
 
 		// "abc" should now match
-		pressKey(activePrompt, "", { name: "return" });
-		const result = await promise;
+		pressKey(prompt, "", { name: "return" });
+		const result = await prompt.answer;
 		expect(result).toBe("abc");
 	});
 });
@@ -289,49 +267,49 @@ describe("filter — query editing", () => {
 
 describe("filter — rendering", () => {
 	it("renders message on initial display", async () => {
-		const promise = start({
+		const prompt = renderPrompt(filter, {
 			message: "Find a language",
 			choices: ["TypeScript", "JavaScript"],
 		});
 
 		await tick();
-		expect(screen()).toContain("Find a language");
+		expect(prompt.screen()).toContain("Find a language");
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 
 	it("renders placeholder when query is empty", async () => {
-		const promise = start({
+		const prompt = renderPrompt(filter, {
 			message: "Search",
 			choices: ["TypeScript"],
 			placeholder: "Type to filter...",
 		});
 
 		await tick();
-		expect(screen()).toContain("Type to filter...");
+		expect(prompt.screen()).toContain("Type to filter...");
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 
 	it("renders submitted answer on confirm", async () => {
-		const promise = start({
+		const prompt = renderPrompt(filter, {
 			message: "Pick a fruit",
 			choices: ["apple", "banana", "cherry"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		await promise;
-		expect(screen()).toContain("banana");
+		await prompt.answer;
+		expect(prompt.screen()).toContain("banana");
 	});
 
 	it("renders labels for object choices", async () => {
-		const promise = start({
+		const prompt = renderPrompt(filter, {
 			message: "Pick",
 			choices: [
 				{ label: "Option A", value: 1 },
@@ -340,11 +318,11 @@ describe("filter — rendering", () => {
 		});
 
 		await tick();
-		expect(screen()).toContain("Option A");
-		expect(screen()).toContain("Option B");
+		expect(prompt.screen()).toContain("Option A");
+		expect(prompt.screen()).toContain("Option B");
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 });
 
@@ -355,7 +333,7 @@ describe("filter — rendering", () => {
 describe("filter — viewport scrolling", () => {
 	it("limits visible results to maxVisible", async () => {
 		const choices = Array.from({ length: 20 }, (_, i) => `item-${i}`);
-		const promise = start({
+		const prompt = renderPrompt(filter, {
 			message: "Search",
 			choices,
 			maxVisible: 5,
@@ -363,17 +341,17 @@ describe("filter — viewport scrolling", () => {
 
 		await tick();
 		// Only first 5 items should be visible
-		expect(screen()).toContain("item-0");
-		expect(screen()).toContain("item-4");
-		expect(screen()).not.toContain("item-5");
+		expect(prompt.screen()).toContain("item-0");
+		expect(prompt.screen()).toContain("item-4");
+		expect(prompt.screen()).not.toContain("item-5");
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 
 	it("scrolls down when navigating past visible items", async () => {
 		const choices = Array.from({ length: 10 }, (_, i) => `item-${i}`);
-		const promise = start({
+		const prompt = renderPrompt(filter, {
 			message: "Search",
 			choices,
 			maxVisible: 3,
@@ -381,18 +359,18 @@ describe("filter — viewport scrolling", () => {
 
 		await tick();
 		// Move down 3 times to scroll past the initial viewport
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
-		pressKey(activePrompt, "", { name: "down" });
+		pressKey(prompt, "", { name: "down" });
 		await tick();
 
 		// item-3 should now be visible
-		expect(screen()).toContain("item-3");
+		expect(prompt.screen()).toContain("item-3");
 
-		pressKey(activePrompt, "", { name: "return" });
-		const result = await promise;
+		pressKey(prompt, "", { name: "return" });
+		const result = await prompt.answer;
 		expect(result).toBe("item-3");
 	});
 });
@@ -403,31 +381,31 @@ describe("filter — viewport scrolling", () => {
 
 describe("filter — no message", () => {
 	it("renders default message when message is omitted", async () => {
-		const promise = start({
+		const prompt = renderPrompt(filter, {
 			choices: ["apple", "banana", "cherry"],
 		});
 
 		await tick();
-		expect(screen()).toContain("Search and select");
-		expect(screen()).not.toContain("undefined");
-		expect(screen()).toContain("apple");
+		expect(prompt.screen()).toContain("Search and select");
+		expect(prompt.screen()).not.toContain("undefined");
+		expect(prompt.screen()).toContain("apple");
 
-		pressKey(activePrompt, "", { name: "return" });
-		const result = await promise;
+		pressKey(prompt, "", { name: "return" });
+		const result = await prompt.answer;
 		expect(result).toBe("apple");
 	});
 
 	it("submitted output shows default message", async () => {
-		const promise = start({
+		const prompt = renderPrompt(filter, {
 			choices: ["apple", "banana", "cherry"],
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		await promise;
-		expect(screen()).toContain("Search and select");
-		expect(screen()).not.toContain("undefined");
+		await prompt.answer;
+		expect(prompt.screen()).toContain("Search and select");
+		expect(prompt.screen()).not.toContain("undefined");
 	});
 });
 

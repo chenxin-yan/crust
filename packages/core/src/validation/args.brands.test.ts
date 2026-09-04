@@ -1,10 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
+import type { Equal, Expect } from "../../tests/helpers.ts";
 import type { AppendArgsChecks, ValidateVariadicArgs } from "./args.brands.ts";
-
-type Expect<T extends true> = T;
-type Equal<A, B> =
-	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 describe("ValidateVariadicArgs type inference", () => {
 	it("resolves to identity when variadic is the last arg", () => {

@@ -1,15 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
+import type { Equal, Expect } from "../../tests/helpers.ts";
 import type {
 	CommandDefinitionSpellings,
 	ValidateCommandConfig,
 	ValidateCommandDefinitions,
 	ValidateExtensionCommands,
 } from "./commands.brands.ts";
-
-type Equal<A, B> =
-	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
-type Expect<T extends true> = T;
 type Def<Name extends string, Aliases extends readonly string[] = readonly string[]> = {
 	readonly name: Name;
 	readonly _aliases?: Aliases;

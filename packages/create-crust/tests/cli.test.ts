@@ -3,6 +3,10 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
+import corePackage from "../../core/package.json";
+import crustPackage from "../../crust/package.json";
+import extensionsPackage from "../../extensions/package.json";
+
 const packageRoot = resolve(import.meta.dir, "..");
 const builtCliPath = join(packageRoot, "dist", "index.js");
 const tempRoots: string[] = [];
@@ -70,12 +74,52 @@ describe("create-crust CLI", () => {
 		expect(result.stdout).not.toContain("Distribution mode");
 		expect(result.stdout).not.toContain("Install dependencies?");
 		expect(result.stdout).not.toContain("Initialize a git repository?");
-		expect(existsSync(join(projectDir, "package.json"))).toBe(true);
+		const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf-8"));
+		expect(pkg).toMatchObject({
+			name: "my-cli",
+			version: "0.0.0",
+			type: "module",
+			bin: { "my-cli": "dist/cli" },
+			devDependencies: {
+				"@crustjs/core": `^${corePackage.version}`,
+				"@crustjs/extensions": `^${extensionsPackage.version}`,
+				"@crustjs/crust": `^${crustPackage.version}`,
+			},
+		});
+		expect(pkg.dependencies).toBeUndefined();
 		expect(existsSync(join(projectDir, "tsconfig.json"))).toBe(true);
-		expect(existsSync(join(projectDir, "src", "cli.ts"))).toBe(true);
-		expect(existsSync(join(projectDir, "README.md"))).toBe(true);
+		const cli = readFileSync(join(projectDir, "src", "cli.ts"), "utf-8");
+		expect(cli).toContain('new Crust("my-cli"');
+		expect(cli).toContain(".execute()");
+		expect(cli).toContain("help()");
+		expect(cli).toContain("version(pkg.version)");
+		expect(readFileSync(join(projectDir, ".gitignore"), "utf-8")).toContain("node_modules");
+		expect(readFileSync(join(projectDir, "README.md"), "utf-8")).toContain("# my-cli");
 		expect(existsSync(join(projectDir, "node_modules"))).toBe(false);
 		expect(existsSync(join(projectDir, ".git"))).toBe(false);
+	}, 30_000);
+
+	it("scaffolds the runtime distribution through the real CLI", async () => {
+		const tempRoot = makeTempRoot("create-crust-runtime");
+		const projectDir = join(tempRoot, "runtime-cli");
+
+		const result = await runCreateCrust([
+			projectDir,
+			"--distribution",
+			"runtime",
+			"--no-install",
+			"--no-git",
+		]);
+
+		expect(result.exitCode).toBe(0);
+		const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf-8"));
+		expect(pkg.bin).toEqual({ "runtime-cli": "dist/cli.js" });
+		expect(pkg.files).toEqual(["dist"]);
+		expect(pkg.dependencies).toEqual({
+			"@crustjs/core": `^${corePackage.version}`,
+			"@crustjs/extensions": `^${extensionsPackage.version}`,
+		});
+		expect(pkg.scripts.build).toBe("bun build src/cli.ts --target bun --outfile dist/cli.js");
 	}, 30_000);
 
 	it("fails with a clear error for an invalid distribution", async () => {

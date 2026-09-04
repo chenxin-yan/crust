@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
 	buildDistributionPlatformPackageJson,
@@ -11,6 +13,8 @@ import {
 	inferCommandName,
 	runDistributeBuild,
 } from "./distribute.ts";
+
+const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 
 describe("derivePlatformPackageName", () => {
 	it("suffixes unscoped package names", () => {
@@ -185,7 +189,7 @@ describe("generateDistributionJsResolver", () => {
 });
 
 describe("runDistributeBuild", () => {
-	const tmpDir = join(import.meta.dir, ".tmp-distribute-validation");
+	const tmpDir = mkdtempSync(join(tmpdir(), "crust-distribute-validation-"));
 	const originalCwd = process.cwd;
 
 	beforeAll(() => {
@@ -262,7 +266,7 @@ describe("runDistributeBuild", () => {
 });
 
 describe("runDistributeBuild Extension artifact staging", () => {
-	const tmpDir = join(import.meta.dir, ".tmp-distribute-artifacts");
+	const tmpDir = mkdtempSync(join(tmpdir(), "crust-distribute-artifacts-"));
 	const originalCwd = process.cwd;
 
 	afterAll(() => {
@@ -275,7 +279,7 @@ describe("runDistributeBuild Extension artifact staging", () => {
 		mkdirSync(join(tmpDir, "src"), { recursive: true });
 		writeFileSync(
 			join(tmpDir, "src", "cli.ts"),
-			`import { Crust } from "@crustjs/core";
+			`import { Crust } from ${JSON.stringify(corePath)};
 const app = new Crust("x").action(() => {});
 await app.execute();
 `,

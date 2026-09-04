@@ -1,19 +1,16 @@
 import { describe, expect, it } from "bun:test";
 
+import type { Equal, Expect } from "../../tests/helpers.ts";
 import { Crust } from "../command/crust.ts";
 import { defineArg, defineFlag } from "./flags.ts";
-
-type Assert<T extends true> = T;
-type IsEqual<A, B> =
-	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 describe("defineFlag", () => {
 	it("returns the named definition with literal types preserved", () => {
 		const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
 
 		expect(verbose).toEqual({ name: "verbose", type: "boolean", short: "v" });
-		type _Flag = Assert<
-			IsEqual<
+		type _Flag = Expect<
+			Equal<
 				typeof verbose,
 				{
 					readonly name: "verbose";
@@ -47,10 +44,8 @@ describe("defineFlag", () => {
 		const app = new Crust("cli").flags(verbose, { name: "output", type: "string", short: "o" });
 
 		type Flags = (typeof app)["_types"]["flags"];
-		type _Verbose = Assert<IsEqual<Flags["verbose"], { readonly type: "boolean" }>>;
-		type _Output = Assert<
-			IsEqual<Flags["output"], { readonly type: "string"; readonly short: "o" }>
-		>;
+		type _Verbose = Expect<Equal<Flags["verbose"], { readonly type: "boolean" }>>;
+		type _Output = Expect<Equal<Flags["output"], { readonly type: "string"; readonly short: "o" }>>;
 		expect((await app.snapshot()).flags).toEqual({
 			verbose: { type: "boolean", negatable: true },
 			output: { type: "string", short: "o", negatable: false },
@@ -63,8 +58,8 @@ describe("defineArg", () => {
 		const target = defineArg("target", { type: "string", required: true });
 
 		expect(target).toEqual({ name: "target", type: "string", required: true });
-		type _Arg = Assert<
-			IsEqual<
+		type _Arg = Expect<
+			Equal<
 				typeof target,
 				{ readonly name: "target"; readonly type: "string"; readonly required: true }
 			>
@@ -90,8 +85,8 @@ describe("defineArg", () => {
 		const app = new Crust("cli").args(target, { name: "count", type: "number", default: 1 });
 
 		type Args = (typeof app)["_types"]["args"];
-		type _Args = Assert<
-			IsEqual<
+		type _Args = Expect<
+			Equal<
 				Args,
 				readonly [
 					{ readonly name: "target"; readonly type: "string"; readonly required: true },

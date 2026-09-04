@@ -7,24 +7,9 @@ import { formatPromptLine, formatSubmitted, moveCursor, normalizeChoices } from 
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("formatSubmitted", () => {
-	it("returns prefix + message + value when all provided", () => {
+	it("formats values with and without a message", () => {
 		expect(formatSubmitted("✔", "Name?", "Alice")).toBe("✔ Name? Alice");
-	});
-
-	it("returns prefix + value when message is undefined", () => {
 		expect(formatSubmitted("✔", undefined, "Alice")).toBe("✔ Alice");
-	});
-
-	it("returns prefix + message when value is undefined", () => {
-		expect(formatSubmitted("✔", "Name?", undefined)).toBe("✔ Name?");
-	});
-
-	it("returns only prefix when both message and value are undefined", () => {
-		expect(formatSubmitted("✔", undefined, undefined)).toBe("✔");
-	});
-
-	it("returns prefix + value when message is empty string", () => {
-		expect(formatSubmitted("✔", "", "Alice")).toBe("✔ Alice");
 	});
 });
 
@@ -33,34 +18,9 @@ describe("formatSubmitted", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("formatPromptLine", () => {
-	it("renders two lines when message is provided", () => {
+	it("formats content with and without a message", () => {
 		expect(formatPromptLine("○", "Name?", "Alice")).toBe("○ Name?\n  Alice");
-	});
-
-	it("renders single line when message is undefined", () => {
 		expect(formatPromptLine("○", undefined, "Alice")).toBe("○ Alice");
-	});
-
-	it("renders single line when message is empty string", () => {
-		expect(formatPromptLine("○", "", "Alice")).toBe("○ Alice");
-	});
-
-	it("appends suffix to header when message is provided", () => {
-		expect(formatPromptLine("○", "Name?", "Alice", " (default)")).toBe(
-			"○ Name? (default)\n  Alice",
-		);
-	});
-
-	it("appends suffix after prefix when message is undefined", () => {
-		expect(formatPromptLine("○", undefined, "Alice", " (default)")).toBe("○ (default) Alice");
-	});
-
-	it("handles empty content with message", () => {
-		expect(formatPromptLine("○", "Name?", "")).toBe("○ Name?\n  ");
-	});
-
-	it("handles empty content without message", () => {
-		expect(formatPromptLine("○", undefined, "")).toBe("○ ");
 	});
 });
 

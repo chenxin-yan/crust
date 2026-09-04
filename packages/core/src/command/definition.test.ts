@@ -1,15 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
+import type { Equal, Expect } from "../../tests/helpers.ts";
 import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { CommandDefinitionBuilder } from "./crust.ts";
 import { Crust, defineCommand } from "./crust.ts";
-
-type Assert<T extends true> = T;
-type IsEqual<A, B> =
-	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 describe("command definitions", () => {
 	it("stays inert and materializes each time it is added", async () => {
@@ -62,8 +59,8 @@ describe("command definitions", () => {
 				.args({ name: "source", type: "string", required: true })
 				.args({ name: "destination", type: "string", required: true })
 				.action(({ args, flags }) => {
-					type _Source = Assert<IsEqual<typeof args.source, string>>;
-					type _Output = Assert<IsEqual<typeof flags.output, string | undefined>>;
+					type _Source = Expect<Equal<typeof args.source, string>>;
+					type _Output = Expect<Equal<typeof flags.output, string | undefined>>;
 					received = { args, flags };
 				}),
 		);
@@ -144,7 +141,7 @@ describe("command definitions", () => {
 		const status = defineCommand("status", (command) =>
 			command.use(db, logging).action(async ({ ctx }) => {
 				const database = await ctx.db;
-				type _Db = Assert<IsEqual<typeof database, string>>;
+				type _Db = Expect<Equal<typeof database, string>>;
 				calls.push(`${database}:${String((await ctx.logging).verbose)}`);
 			}),
 		);
@@ -262,10 +259,10 @@ describe("command definitions", () => {
 				.action(async ({ args, flags, ctx }) => {
 					const identity = await ctx.auth;
 					const location = await ctx.region;
-					type _Target = Assert<IsEqual<typeof args.target, string>>;
-					type _Force = Assert<IsEqual<typeof flags.force, boolean>>;
-					type _Auth = Assert<IsEqual<typeof identity, { user: string }>>;
-					type _Region = Assert<IsEqual<typeof location, string>>;
+					type _Target = Expect<Equal<typeof args.target, string>>;
+					type _Force = Expect<Equal<typeof flags.force, boolean>>;
+					type _Auth = Expect<Equal<typeof identity, { user: string }>>;
+					type _Region = Expect<Equal<typeof location, string>>;
 				}),
 		);
 
@@ -273,22 +270,20 @@ describe("command definitions", () => {
 	});
 
 	it("keeps root-only methods off the definition builder", () => {
-		type _NoExtend = Assert<
-			IsEqual<"extend" extends keyof CommandDefinitionBuilder ? true : false, false>
+		type _NoExtend = Expect<
+			Equal<"extend" extends keyof CommandDefinitionBuilder ? true : false, false>
 		>;
-		type _NoCommand = Assert<
-			IsEqual<"command" extends keyof CommandDefinitionBuilder ? true : false, false>
+		type _NoCommand = Expect<
+			Equal<"command" extends keyof CommandDefinitionBuilder ? true : false, false>
 		>;
-		type _NoDerive = Assert<
-			IsEqual<"derive" extends keyof CommandDefinitionBuilder ? true : false, false>
+		type _NoDerive = Expect<
+			Equal<"derive" extends keyof CommandDefinitionBuilder ? true : false, false>
 		>;
 		// `.use()` is a recipe-builder surface; Crust's declared type omits it.
-		type _HasUse = Assert<
-			IsEqual<"use" extends keyof CommandDefinitionBuilder ? true : false, true>
-		>;
-		type _NoCrustUse = Assert<IsEqual<"use" extends keyof Crust ? true : false, false>>;
+		type _HasUse = Expect<Equal<"use" extends keyof CommandDefinitionBuilder ? true : false, true>>;
+		type _NoCrustUse = Expect<Equal<"use" extends keyof Crust ? true : false, false>>;
 		// `.command()` is root-only: on Crust, not on the definition builder.
-		type _CrustCommand = Assert<IsEqual<"command" extends keyof Crust ? true : false, true>>;
+		type _CrustCommand = Expect<Equal<"command" extends keyof Crust ? true : false, true>>;
 
 		defineCommand("configured", (command) => {
 			// @ts-expect-error -- Extensions are root-only
@@ -297,8 +292,8 @@ describe("command definitions", () => {
 				.args({ name: "target", type: "string" })
 				.flags({ name: "force", type: "boolean" })
 				.provide(defineContext("region", () => "us")());
-			type _StillNoExtend = Assert<
-				IsEqual<"extend" extends keyof typeof configured ? true : false, false>
+			type _StillNoExtend = Expect<
+				Equal<"extend" extends keyof typeof configured ? true : false, false>
 			>;
 			return configured;
 		});

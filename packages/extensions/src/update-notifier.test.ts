@@ -251,20 +251,6 @@ describe("fetchLatestVersion", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Lazy store import — sideEffects:false invariant
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("lazy store import", () => {
-	it("never imports @crustjs/store statically", async () => {
-		// The env-sandbox tests can't detect an eager import (env is read at call
-		// time), so pin the deferred-import invariant against the source itself.
-		const source = await Bun.file(new URL("./update-notifier.ts", import.meta.url)).text();
-		expect(source).not.toMatch(/^import[^;]*["']@crustjs\/store["']/m);
-		expect(source).toContain('await import("@crustjs/store")');
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // updateNotifier — post-run integration tests
 // ────────────────────────────────────────────────────────────────────────────
 

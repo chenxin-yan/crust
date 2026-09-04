@@ -2,51 +2,9 @@ import { describe, expect, it } from "bun:test";
 
 import { z } from "zod";
 
-import type { PromptIO } from "../core/renderer.ts";
-import { createPromptIO, pressKey, renderPrompt, type RenderedPrompt } from "../testing.ts";
-import { input, type InputOptions } from "./input.ts";
-
-// ────────────────────────────────────────────────────────────────────────────
-// Test helpers
-// ────────────────────────────────────────────────────────────────────────────
-
-let activePrompt: Pick<RenderedPrompt<unknown>, "type" | "keys" | "screen">;
-
-function runInput<Output>(options: InputOptions<Output>, io?: PromptIO): Promise<Output | string> {
-	if (options.schema) return input(options, io);
-	return input(options, io);
-}
-
-function start<Output>(options: InputOptions<Output>): Promise<Output | string> {
-	const prompt = renderPrompt<InputOptions<Output>, Output | string>(runInput, options);
-	activePrompt = prompt;
-	return prompt.answer;
-}
-
-function screen(): string {
-	return activePrompt.screen();
-}
-
-function tick(ms = 10): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitForScreen(needle: string, timeout = 500): Promise<void> {
-	const start = Date.now();
-	while (!screen().includes(needle)) {
-		if (Date.now() - start > timeout) {
-			throw new Error(
-				`screen never contained ${JSON.stringify(needle)} within ${timeout}ms. ` +
-					`Got: ${JSON.stringify(screen())}`,
-			);
-		}
-		await tick(5);
-	}
-}
-
-function nonTTYIO() {
-	return createPromptIO({ isTTY: false }).io;
-}
+import { pressKey, renderPrompt } from "../testing.ts";
+import { input } from "./input.ts";
+import { nonTTYIO, tick, waitForScreen } from "./test-helpers.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Initial value — empty-string edge case
@@ -72,116 +30,116 @@ describe("input — initial value", () => {
 
 describe("input — interactive", () => {
 	it("renders message on initial display", async () => {
-		const promise = start({ message: "Your name?" });
+		const prompt = renderPrompt(input, { message: "Your name?" });
 
 		await tick();
-		expect(screen()).toContain("Your name?");
+		expect(prompt.screen()).toContain("Your name?");
 
 		// Submit empty to resolve
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 
 	it("renders placeholder when no value entered", async () => {
-		const promise = start({
+		const prompt = renderPrompt(input, {
 			message: "Name?",
 			placeholder: "Enter your name",
 		});
 
 		await tick();
-		expect(screen()).toContain("Enter your name");
+		expect(prompt.screen()).toContain("Enter your name");
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 
 	it("renders default value as placeholder when no placeholder is set", async () => {
-		const promise = start({
+		const prompt = renderPrompt(input, {
 			message: "Name?",
 			default: "World",
 		});
 
 		await tick();
 		// Default is shown as placeholder text, not as a (hint)
-		expect(screen()).toContain("World");
-		expect(screen()).not.toContain("(World)");
+		expect(prompt.screen()).toContain("World");
+		expect(prompt.screen()).not.toContain("(World)");
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 
 	it("renders default hint when both placeholder and default are set", async () => {
-		const promise = start({
+		const prompt = renderPrompt(input, {
 			message: "Name?",
 			placeholder: "Enter your name",
 			default: "World",
 		});
 
 		await tick();
-		expect(screen()).toContain("Enter your name");
-		expect(screen()).toContain("(World)");
+		expect(prompt.screen()).toContain("Enter your name");
+		expect(prompt.screen()).toContain("(World)");
 
-		pressKey(activePrompt, "", { name: "return" });
-		await promise;
+		pressKey(prompt, "", { name: "return" });
+		await prompt.answer;
 	});
 
 	it("submits typed value on Enter", async () => {
-		const promise = start({ message: "Name?" });
+		const prompt = renderPrompt(input, { message: "Name?" });
 
 		await tick();
-		pressKey(activePrompt, "A", { name: "a" });
+		pressKey(prompt, "A", { name: "a" });
 		await tick();
-		pressKey(activePrompt, "B", { name: "b" });
+		pressKey(prompt, "B", { name: "b" });
 		await tick();
-		pressKey(activePrompt, "C", { name: "c" });
+		pressKey(prompt, "C", { name: "c" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("ABC");
 	});
 
 	it("uses default value when submitting empty input", async () => {
-		const promise = start({
+		const prompt = renderPrompt(input, {
 			message: "Name?",
 			default: "DefaultName",
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("DefaultName");
 	});
 
 	it("submits typed value even when default is set", async () => {
-		const promise = start({
+		const prompt = renderPrompt(input, {
 			message: "Name?",
 			default: "DefaultName",
 		});
 
 		await tick();
-		pressKey(activePrompt, "X", { name: "x" });
+		pressKey(prompt, "X", { name: "x" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("X");
 	});
 
 	it("renders submitted value with success styling", async () => {
-		const promise = start({ message: "Name?" });
+		const prompt = renderPrompt(input, { message: "Name?" });
 
 		await tick();
-		pressKey(activePrompt, "O", { name: "o" });
+		pressKey(prompt, "O", { name: "o" });
 		await tick();
-		pressKey(activePrompt, "K", { name: "k" });
+		pressKey(prompt, "K", { name: "k" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		await promise;
+		await prompt.answer;
 		// After submission, the confirmed value should appear in output
-		expect(screen()).toContain("OK");
+		expect(prompt.screen()).toContain("OK");
 	});
 });
 
@@ -191,151 +149,151 @@ describe("input — interactive", () => {
 
 describe("input — keypress editing", () => {
 	it("backspace deletes character before cursor", async () => {
-		const promise = start({ message: "Name?" });
+		const prompt = renderPrompt(input, { message: "Name?" });
 
 		await tick();
-		pressKey(activePrompt, "A");
+		pressKey(prompt, "A");
 		await tick();
-		pressKey(activePrompt, "B");
+		pressKey(prompt, "B");
 		await tick();
-		pressKey(activePrompt, "", { name: "backspace" });
+		pressKey(prompt, "", { name: "backspace" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("A");
 	});
 
 	it("backspace at position 0 does nothing", async () => {
-		const promise = start({ message: "Name?" });
+		const prompt = renderPrompt(input, { message: "Name?" });
 
 		await tick();
-		pressKey(activePrompt, "", { name: "backspace" });
+		pressKey(prompt, "", { name: "backspace" });
 		await tick();
-		pressKey(activePrompt, "A");
+		pressKey(prompt, "A");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("A");
 	});
 
 	it("delete removes character at cursor", async () => {
-		const promise = start({ message: "Name?" });
+		const prompt = renderPrompt(input, { message: "Name?" });
 
 		await tick();
-		pressKey(activePrompt, "A");
+		pressKey(prompt, "A");
 		await tick();
-		pressKey(activePrompt, "B");
+		pressKey(prompt, "B");
 		await tick();
-		pressKey(activePrompt, "C");
+		pressKey(prompt, "C");
 		await tick();
 		// Move cursor left to position before C
-		pressKey(activePrompt, "", { name: "left" });
+		pressKey(prompt, "", { name: "left" });
 		await tick();
-		pressKey(activePrompt, "", { name: "left" });
+		pressKey(prompt, "", { name: "left" });
 		await tick();
 		// Delete the character at cursor (B)
-		pressKey(activePrompt, "", { name: "delete" });
+		pressKey(prompt, "", { name: "delete" });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("AC");
 	});
 
 	it("left arrow moves cursor left", async () => {
-		const promise = start({ message: "Name?" });
+		const prompt = renderPrompt(input, { message: "Name?" });
 
 		await tick();
-		pressKey(activePrompt, "A");
+		pressKey(prompt, "A");
 		await tick();
-		pressKey(activePrompt, "B");
+		pressKey(prompt, "B");
 		await tick();
 		// Move left, then type C — inserts before B
-		pressKey(activePrompt, "", { name: "left" });
+		pressKey(prompt, "", { name: "left" });
 		await tick();
-		pressKey(activePrompt, "C");
+		pressKey(prompt, "C");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("ACB");
 	});
 
 	it("right arrow moves cursor right", async () => {
-		const promise = start({ message: "Name?" });
+		const prompt = renderPrompt(input, { message: "Name?" });
 
 		await tick();
-		pressKey(activePrompt, "A");
+		pressKey(prompt, "A");
 		await tick();
-		pressKey(activePrompt, "B");
+		pressKey(prompt, "B");
 		await tick();
 		// Move left twice, then right once — cursor is between A and B
-		pressKey(activePrompt, "", { name: "left" });
+		pressKey(prompt, "", { name: "left" });
 		await tick();
-		pressKey(activePrompt, "", { name: "left" });
+		pressKey(prompt, "", { name: "left" });
 		await tick();
-		pressKey(activePrompt, "", { name: "right" });
+		pressKey(prompt, "", { name: "right" });
 		await tick();
-		pressKey(activePrompt, "C");
+		pressKey(prompt, "C");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("ACB");
 	});
 
 	it("home key jumps to start", async () => {
-		const promise = start({ message: "Name?" });
+		const prompt = renderPrompt(input, { message: "Name?" });
 
 		await tick();
-		pressKey(activePrompt, "A");
+		pressKey(prompt, "A");
 		await tick();
-		pressKey(activePrompt, "B");
+		pressKey(prompt, "B");
 		await tick();
-		pressKey(activePrompt, "", { name: "home" });
+		pressKey(prompt, "", { name: "home" });
 		await tick();
-		pressKey(activePrompt, "C");
+		pressKey(prompt, "C");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("CAB");
 	});
 
 	it("end key jumps to end", async () => {
-		const promise = start({ message: "Name?" });
+		const prompt = renderPrompt(input, { message: "Name?" });
 
 		await tick();
-		pressKey(activePrompt, "A");
+		pressKey(prompt, "A");
 		await tick();
-		pressKey(activePrompt, "B");
+		pressKey(prompt, "B");
 		await tick();
-		pressKey(activePrompt, "", { name: "home" });
+		pressKey(prompt, "", { name: "home" });
 		await tick();
-		pressKey(activePrompt, "", { name: "end" });
+		pressKey(prompt, "", { name: "end" });
 		await tick();
-		pressKey(activePrompt, "C");
+		pressKey(prompt, "C");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("ABC");
 	});
 
 	it("ignores ctrl+key combinations", async () => {
-		const promise = start({ message: "Name?" });
+		const prompt = renderPrompt(input, { message: "Name?" });
 
 		await tick();
-		pressKey(activePrompt, "A");
+		pressKey(prompt, "A");
 		await tick();
 		// Ctrl+A should be ignored (not inserted)
-		pressKey(activePrompt, "a", { name: "a", ctrl: true });
+		pressKey(prompt, "a", { name: "a", ctrl: true });
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("A");
 	});
 });
@@ -346,7 +304,7 @@ describe("input — keypress editing", () => {
 
 describe("input — validation", () => {
 	it("shows error message when validation fails", async () => {
-		const promise = start({
+		const prompt = renderPrompt(input, {
 			message: "Email?",
 			validate: (v) => {
 				if (!v.includes("@")) throw new Error("Must contain @");
@@ -354,30 +312,30 @@ describe("input — validation", () => {
 		});
 
 		await tick();
-		pressKey(activePrompt, "a");
+		pressKey(prompt, "a");
 		await tick();
-		pressKey(activePrompt, "b");
+		pressKey(prompt, "b");
 		await tick();
 		// Try to submit invalid value
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 		await tick();
 
 		// Error should be displayed
-		expect(screen()).toContain("Must contain @");
+		expect(prompt.screen()).toContain("Must contain @");
 
 		// Now type valid input and resubmit
-		pressKey(activePrompt, "@");
+		pressKey(prompt, "@");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("ab@");
 	});
 
 	it("accepts valid input after correction", async () => {
 		let validateCallCount = 0;
 
-		const promise = start({
+		const prompt = renderPrompt(input, {
 			message: "Name?",
 			validate: (v) => {
 				validateCallCount++;
@@ -386,26 +344,26 @@ describe("input — validation", () => {
 		});
 
 		await tick();
-		pressKey(activePrompt, "A");
+		pressKey(prompt, "A");
 		await tick();
 		// Submit too-short value
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 		await tick();
 
-		expect(screen()).toContain("Too short");
+		expect(prompt.screen()).toContain("Too short");
 
 		// Add more text and resubmit
-		pressKey(activePrompt, "B");
+		pressKey(prompt, "B");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("AB");
 		expect(validateCallCount).toBe(2);
 	});
 
 	it("supports async validation", async () => {
-		const promise = start({
+		const prompt = renderPrompt(input, {
 			message: "Code?",
 			validate: async (v) => {
 				await new Promise((r) => setTimeout(r, 5));
@@ -414,22 +372,22 @@ describe("input — validation", () => {
 		});
 
 		await tick();
-		pressKey(activePrompt, "1");
+		pressKey(prompt, "1");
 		await tick();
-		pressKey(activePrompt, "2");
+		pressKey(prompt, "2");
 		await tick();
-		pressKey(activePrompt, "3");
+		pressKey(prompt, "3");
 		await tick();
-		pressKey(activePrompt, "4");
+		pressKey(prompt, "4");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("1234");
 	});
 
 	it("validates default value when used", async () => {
-		const promise = start({
+		const prompt = renderPrompt(input, {
 			message: "Name?",
 			default: "",
 			validate: (v) => {
@@ -439,17 +397,17 @@ describe("input — validation", () => {
 
 		await tick();
 		// Submit empty — default is "" which should fail validation
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 		await tick();
 
-		expect(screen()).toContain("Required");
+		expect(prompt.screen()).toContain("Required");
 
 		// Type something and submit
-		pressKey(activePrompt, "X");
+		pressKey(prompt, "X");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("X");
 	});
 });
@@ -460,32 +418,32 @@ describe("input — validation", () => {
 
 describe("input — no message", () => {
 	it("renders default message when message is omitted", async () => {
-		const promise = start({});
+		const prompt = renderPrompt(input, {});
 
 		await tick();
-		expect(screen()).toContain("Enter a value");
-		expect(screen()).not.toContain("undefined");
+		expect(prompt.screen()).toContain("Enter a value");
+		expect(prompt.screen()).not.toContain("undefined");
 
-		pressKey(activePrompt, "A");
+		pressKey(prompt, "A");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("A");
 	});
 
 	it("submitted output shows default message", async () => {
-		const promise = start({});
+		const prompt = renderPrompt(input, {});
 
 		await tick();
-		pressKey(activePrompt, "X");
+		pressKey(prompt, "X");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		await promise;
-		expect(screen()).toContain("Enter a value");
-		expect(screen()).not.toContain("undefined");
-		expect(screen()).toContain("X");
+		await prompt.answer;
+		expect(prompt.screen()).toContain("Enter a value");
+		expect(prompt.screen()).not.toContain("undefined");
+		expect(prompt.screen()).toContain("X");
 	});
 });
 
@@ -532,64 +490,64 @@ describe("input — schema validation", () => {
 	});
 
 	it("resolves to string when a string schema accepts the input", async () => {
-		const promise = start({
+		const prompt = renderPrompt(input<string>, {
 			message: "Name?",
 			schema: z.string().min(3),
 		});
 
 		await tick();
-		pressKey(activePrompt, "A");
+		pressKey(prompt, "A");
 		await tick();
-		pressKey(activePrompt, "l");
+		pressKey(prompt, "l");
 		await tick();
-		pressKey(activePrompt, "i");
+		pressKey(prompt, "i");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("Ali");
 	});
 
 	it("resolves to the schema's transformed output (number from coerce)", async () => {
-		const promise = start({
+		const prompt = renderPrompt(input<number>, {
 			message: "Port?",
 			schema: z.coerce.number().int().min(1),
 		});
 
 		await tick();
-		pressKey(activePrompt, "4");
+		pressKey(prompt, "4");
 		await tick();
-		pressKey(activePrompt, "2");
+		pressKey(prompt, "2");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe(42);
 	});
 
 	it("renders the first issue's message and waits for retry on failure", async () => {
-		const promise = start({
+		const prompt = renderPrompt(input<string>, {
 			message: "Name?",
 			schema: z.string().min(3, "Too short"),
 		});
 
 		await tick();
-		pressKey(activePrompt, "A");
+		pressKey(prompt, "A");
 		await tick();
 		// Submit too-short value
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 		await tick();
 
-		expect(screen()).toContain("Too short");
+		expect(prompt.screen()).toContain("Too short");
 
 		// Add more characters and retry
-		pressKey(activePrompt, "l");
+		pressKey(prompt, "l");
 		await tick();
-		pressKey(activePrompt, "i");
+		pressKey(prompt, "i");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("Ali");
 	});
 
@@ -606,29 +564,29 @@ describe("input — schema validation", () => {
 			},
 		};
 
-		const promise = start({
+		const prompt = renderPrompt(input<string>, {
 			message: "Word?",
 			schema: emptyMessageSchema,
 		});
 
 		await tick();
-		pressKey(activePrompt, "x");
+		pressKey(prompt, "x");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 		await tick();
 
-		expect(screen()).toContain("Validation failed");
+		expect(prompt.screen()).toContain("Validation failed");
 
 		// Clear field, type valid value, submit
-		pressKey(activePrompt, "", { name: "backspace" });
+		pressKey(prompt, "", { name: "backspace" });
 		await tick();
-		pressKey(activePrompt, "o");
+		pressKey(prompt, "o");
 		await tick();
-		pressKey(activePrompt, "k");
+		pressKey(prompt, "k");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("ok");
 	});
 
@@ -647,18 +605,18 @@ describe("input — schema validation", () => {
 			},
 		};
 
-		const promise = start({ message: "Word?", schema: emptyIssuesSchema });
+		const prompt = renderPrompt(input<string>, { message: "Word?", schema: emptyIssuesSchema });
 
 		await tick();
-		pressKey(activePrompt, "o");
+		pressKey(prompt, "o");
 		await tick();
-		pressKey(activePrompt, "k");
+		pressKey(prompt, "k");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("ok");
-		expect(screen()).not.toContain("Validation failed");
+		expect(prompt.screen()).not.toContain("Validation failed");
 	});
 
 	it("awaits async schema validation", async () => {
@@ -670,32 +628,32 @@ describe("input — schema validation", () => {
 			{ message: "must be yes" },
 		);
 
-		const promise = start({ message: "Confirm?", schema: asyncSchema });
+		const prompt = renderPrompt(input<string>, { message: "Confirm?", schema: asyncSchema });
 
 		await tick();
-		pressKey(activePrompt, "n");
+		pressKey(prompt, "n");
 		await tick();
-		pressKey(activePrompt, "o");
+		pressKey(prompt, "o");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
-		await waitForScreen("must be yes");
+		pressKey(prompt, "", { name: "return" });
+		await waitForScreen(prompt, "must be yes");
 
-		expect(screen()).toContain("must be yes");
+		expect(prompt.screen()).toContain("must be yes");
 
 		// Clear and type valid value
-		pressKey(activePrompt, "", { name: "backspace" });
+		pressKey(prompt, "", { name: "backspace" });
 		await tick();
-		pressKey(activePrompt, "", { name: "backspace" });
+		pressKey(prompt, "", { name: "backspace" });
 		await tick();
-		pressKey(activePrompt, "y");
+		pressKey(prompt, "y");
 		await tick();
-		pressKey(activePrompt, "e");
+		pressKey(prompt, "e");
 		await tick();
-		pressKey(activePrompt, "s");
+		pressKey(prompt, "s");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("yes");
 	});
 });
@@ -758,16 +716,16 @@ describe("input — schema short-circuit", () => {
 
 describe("input — schema + interactive default", () => {
 	it("runs schema against the default value when user submits empty", async () => {
-		const promise = start({
+		const prompt = renderPrompt(input<number>, {
 			message: "Port?",
 			default: "4000",
 			schema: z.coerce.number().int(),
 		});
 
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe(4000);
 	});
 });
@@ -800,18 +758,18 @@ describe("input — callable Standard Schema", () => {
 			},
 		});
 
-		const promise = start({ message: "Word?", schema: callable });
+		const prompt = renderPrompt(input<string>, { message: "Word?", schema: callable });
 
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 		await tick();
-		expect(screen()).toContain("empty");
+		expect(prompt.screen()).toContain("empty");
 
-		pressKey(activePrompt, "a");
+		pressKey(prompt, "a");
 		await tick();
-		pressKey(activePrompt, "", { name: "return" });
+		pressKey(prompt, "", { name: "return" });
 
-		const result = await promise;
+		const result = await prompt.answer;
 		expect(result).toBe("[a]");
 	});
 });

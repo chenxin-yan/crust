@@ -1,8 +1,12 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { Crust } from "@crustjs/core";
+
+const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 
 import type { BunTarget } from "../utils/build-helpers.ts";
 import {
@@ -29,7 +33,7 @@ import {
 } from "./build.ts";
 
 describe("env file helpers", () => {
-	const tmpDir = join(import.meta.dir, ".tmp-env-files");
+	const tmpDir = mkdtempSync(join(tmpdir(), "crust-env-files-"));
 
 	beforeAll(() => {
 		rmSync(tmpDir, { recursive: true, force: true });
@@ -55,7 +59,7 @@ describe("env file helpers", () => {
 });
 
 describe("planBuild", () => {
-	const tmpDir = join(import.meta.dir, ".tmp-build-plan");
+	const tmpDir = mkdtempSync(join(tmpdir(), "crust-build-plan-"));
 	const baseFlags: BuildFlags = {
 		entry: "src/cli.ts",
 		outdir: "dist",
@@ -224,7 +228,7 @@ describe("resolveBaseName", () => {
 	});
 
 	describe("with package.json", () => {
-		const tmpDir = join(import.meta.dir, ".tmp-basename-test");
+		const tmpDir = mkdtempSync(join(tmpdir(), "crust-basename-test-"));
 
 		beforeAll(() => {
 			mkdirSync(tmpDir, { recursive: true });
@@ -367,7 +371,7 @@ async function executeBuildError(name: string, argv: string[]): Promise<string> 
 	const originalCwd = process.cwd;
 	const originalLog = console.log;
 	const originalError = console.error;
-	const tmpDir = join(import.meta.dir, `.tmp-${name}`);
+	const tmpDir = mkdtempSync(join(tmpdir(), `crust-${name}-`));
 	const errors: string[] = [];
 	rmSync(tmpDir, { recursive: true, force: true });
 	mkdirSync(join(tmpDir, "src"), { recursive: true });
@@ -408,7 +412,8 @@ describe("buildCommand error handling", () => {
 		expect(
 			await executeBuildError("deno-minify", ["--runtime", "deno", "--minify", "--no-validate"]),
 		).toContain("--minify is not supported with --runtime deno");
-		const envFile = join(import.meta.dir, ".tmp-deno-env-file.env");
+		const envDir = mkdtempSync(join(tmpdir(), "crust-deno-env-file-"));
+		const envFile = join(envDir, ".env");
 		writeFileSync(envFile, "SECRET=x\n");
 		try {
 			expect(
@@ -421,12 +426,12 @@ describe("buildCommand error handling", () => {
 				]),
 			).toContain("--env-file is not supported with --runtime deno");
 		} finally {
-			rmSync(envFile, { force: true });
+			rmSync(envDir, { recursive: true, force: true });
 		}
 	});
 	it("sets exitCode and logs error when entry file is missing", async () => {
 		const originalCwd = process.cwd;
-		const tmpDir = join(import.meta.dir, ".tmp-missing-entry");
+		const tmpDir = mkdtempSync(join(tmpdir(), "crust-missing-entry-"));
 		mkdirSync(tmpDir, { recursive: true });
 
 		process.cwd = () => tmpDir;
@@ -460,7 +465,7 @@ describe("buildCommand error handling", () => {
 
 	it("sets exitCode and logs error when --outfile used with default all-target build", async () => {
 		const originalCwd = process.cwd;
-		const tmpDir = join(import.meta.dir, ".tmp-outfile-default");
+		const tmpDir = mkdtempSync(join(tmpdir(), "crust-outfile-default-"));
 		mkdirSync(join(tmpDir, "src"), { recursive: true });
 		writeFileSync(join(tmpDir, "src", "cli.ts"), "console.log('hi');");
 
@@ -495,12 +500,12 @@ describe("buildCommand error handling", () => {
 
 	it("writes Extension build artifacts beside an explicit --outfile", async () => {
 		const originalCwd = process.cwd;
-		const tmpDir = join(import.meta.dir, ".tmp-outfile-artifacts");
+		const tmpDir = mkdtempSync(join(tmpdir(), "crust-outfile-artifacts-"));
 		rmSync(tmpDir, { recursive: true, force: true });
 		mkdirSync(join(tmpDir, "src"), { recursive: true });
 		writeFileSync(
 			join(tmpDir, "src", "cli.ts"),
-			`import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";\n` +
+			`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(corePath)};\n` +
 				`const artifact = defineExtension(defineExtensionId("artifact"), { build: ({ outDir }) => Bun.write(outDir + "/artifact.txt", "built") });\n` +
 				`await new Crust("fixture").extend(artifact).action(() => {}).execute();\n`,
 		);

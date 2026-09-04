@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
+import type { Equal, Expect } from "../../tests/helpers.ts";
 import type { FlagsDef, NamedFlagDef } from "../types.ts";
 import type {
 	DefinitionTreeSpellings,
@@ -10,10 +11,6 @@ import type {
 	ValidateExtensionFlags,
 	ValidateNamedFlagDefs,
 } from "./flags.brands.ts";
-
-type Expect<T extends true> = T;
-type Equal<A, B> =
-	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 describe("ValidateNamedFlagDefs", () => {
 	it("passes clean definitions through unchanged", () => {

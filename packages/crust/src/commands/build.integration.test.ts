@@ -1,54 +1,37 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { Crust } from "@crustjs/core";
+import { runProcess } from "@crustjs/utils/process";
 
 import { buildCommand } from "../../src/commands/build.ts";
 import {
 	DENO_TARGET_INFO,
 	SUPPORTED_DENO_TARGETS,
-	SUPPORTED_TARGETS,
 	TARGET_INFO,
 } from "../../src/utils/build-helpers.ts";
+import { hostTarget } from "../../tests/helpers.ts";
 
-function getHostTarget(): string | null {
-	if (process.platform === "darwin" && process.arch === "arm64") {
-		return "darwin-arm64";
-	}
-
-	if (process.platform === "darwin" && process.arch === "x64") {
-		return "darwin-x64";
-	}
-
-	if (process.platform === "linux" && process.arch === "arm64") {
-		return "linux-arm64";
-	}
-
-	if (process.platform === "linux" && process.arch === "x64") {
-		return "linux-x64";
-	}
-
-	if (process.platform === "win32" && process.arch === "arm64") {
-		return "windows-arm64";
-	}
-
-	if (process.platform === "win32" && process.arch === "x64") {
-		return "windows-x64";
-	}
-
-	return null;
-}
-
-function getHostBunTarget(): string | null {
-	const hostTarget = getHostTarget();
-	return SUPPORTED_TARGETS.find((target) => TARGET_INFO[target].alias === hostTarget) ?? null;
+function getHostBunTarget() {
+	return hostTarget();
 }
 
 function getHostDenoTarget(): string | null {
-	const hostTarget = getHostTarget();
+	const target = hostTarget();
+	const alias = target && TARGET_INFO[target].alias;
 	return (
-		SUPPORTED_DENO_TARGETS.find((target) => DENO_TARGET_INFO[target].alias === hostTarget) ?? null
+		SUPPORTED_DENO_TARGETS.find((candidate) => DENO_TARGET_INFO[candidate].alias === alias) ?? null
 	);
 }
 
@@ -57,9 +40,9 @@ function getHostDenoTarget(): string | null {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("crust build integration — single target", () => {
-	const tmpDir = join(import.meta.dir, ".tmp-build-integration");
+	const tmpDir = mkdtempSync(join(tmpdir(), "crust-build-integration-"));
 	const crustCliPath = resolve(import.meta.dir, "..", "cli.ts");
-	const corePath = resolve(import.meta.dir, "../../../core/src/index.ts");
+	const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 	const originalCwd = process.cwd;
 
 	beforeAll(() => {
@@ -134,13 +117,7 @@ console.log("hello from crust build test");
 				return;
 			}
 
-			const proc = Bun.spawn([outPath], {
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-
-			const exitCode = await proc.exited;
-			const stdout = await new Response(proc.stdout).text();
+			const { exitCode, stdout } = await runProcess(outPath);
 
 			expect(exitCode).toBe(0);
 			expect(stdout.trim()).toBe("hello from crust build test");
@@ -257,14 +234,7 @@ await app.execute();
 
 				expect(existsSync(outPath)).toBe(true);
 
-				const proc = Bun.spawn([outPath], {
-					cwd: tmpDir,
-					env: {},
-					stdout: "pipe",
-					stderr: "pipe",
-				});
-				const exitCode = await proc.exited;
-				const stdout = await new Response(proc.stdout).text();
+				const { exitCode, stdout } = await runProcess(outPath, [], { cwd: tmpDir, env: {} });
 
 				expect(exitCode).toBe(0);
 				expect(JSON.parse(stdout.trim())).toEqual({
@@ -302,25 +272,12 @@ await app.execute();
 				expect(readFileSync(outPath, "utf8").startsWith("#!/usr/bin/env node\n")).toBe(true);
 				if (process.platform !== "win32") expect(statSync(outPath).mode & 0o111).not.toBe(0);
 
-				const run = async (args: string[]) => {
-					const proc = Bun.spawn([Bun.which("node")!, outPath, ...args], {
-						stdout: "pipe",
-						stderr: "pipe",
-					});
-					const [exitCode, stdout, stderr] = await Promise.all([
-						proc.exited,
-						new Response(proc.stdout).text(),
-						new Response(proc.stderr).text(),
-					]);
-					return { exitCode, stdout, stderr };
-				};
-
-				const action = await run([]);
+				const action = await runProcess(Bun.which("node")!, [outPath]);
 				expect(action.exitCode).toBe(0);
 				expect(action.stdout.trim()).toBe("core under node");
 
 				// Unknown flag exercises core's dispatch/error path in the bundle.
-				const bad = await run(["--definitely-not-a-flag"]);
+				const bad = await runProcess(Bun.which("node")!, [outPath, "--definitely-not-a-flag"]);
 				expect(bad.exitCode).toBe(1);
 				expect(bad.stderr).toContain("Unknown flag");
 			} finally {
@@ -359,8 +316,7 @@ await app.execute();
 					"--no-validate",
 				],
 			});
-			const proc = Bun.spawn([outPath], { stdout: "pipe", stderr: "pipe" });
-			const [exitCode, stdout] = await Promise.all([proc.exited, new Response(proc.stdout).text()]);
+			const { exitCode, stdout } = await runProcess(outPath);
 			expect(exitCode).toBe(0);
 			expect(stdout.trim()).toBe("hello from crust build test");
 		},
@@ -400,9 +356,9 @@ await app.execute();
 			);
 
 			const outPath = join(autoloadDir, "dist", "autoload-cli");
-			const proc = Bun.spawn(
+			const { exitCode } = await runProcess(
+				process.execPath,
 				[
-					process.execPath,
 					crustCliPath,
 					"build",
 					"--entry",
@@ -414,35 +370,19 @@ await app.execute();
 				],
 				{
 					cwd: autoloadDir,
-					env: {
-						...process.env,
-						BUN_BE_BUN: "1",
-					},
-					stdout: "pipe",
-					stderr: "pipe",
+					env: { ...process.env, BUN_BE_BUN: "1" },
 				},
 			);
-
-			const [exitCode, _stderr] = await Promise.all([
-				proc.exited,
-				new Response(proc.stderr).text(),
-			]);
 			expect(exitCode).toBe(0);
 			expect(existsSync(outPath)).toBe(true);
 
 			const runtimeDir = join(autoloadDir, "runtime-no-env");
 			mkdirSync(runtimeDir, { recursive: true });
 
-			const built = Bun.spawn([outPath], {
+			const { exitCode: builtExitCode, stdout } = await runProcess(outPath, [], {
 				cwd: runtimeDir,
 				env: {},
-				stdout: "pipe",
-				stderr: "pipe",
 			});
-			const [builtExitCode, stdout] = await Promise.all([
-				built.exited,
-				new Response(built.stdout).text(),
-			]);
 
 			expect(builtExitCode).toBe(0);
 			expect(JSON.parse(stdout.trim())).toEqual({
