@@ -12,6 +12,7 @@ import type {
 import type { Extension, ExtensionsProvidesOutput } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
+import { cloneFlagSpellings } from "../parsing/spellings.ts";
 import { isListed } from "../sections.ts";
 import type {
 	ArgDef,
@@ -1052,7 +1053,6 @@ export class Crust<
 			args: [...this._node.args],
 			subCommands: { ...this._node.subCommands },
 			contexts: [...this._node.contexts],
-			contextExtensionIds: [...this._node.contextExtensionIds],
 			extensions: [...this._node.extensions],
 			meta: { ...this._node.meta },
 			...nodeOverrides,
