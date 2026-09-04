@@ -25,14 +25,3 @@ export const defaultTheme: ProgressTheme = {
 	success: green,
 	error: red,
 };
-
-/**
- * Resolve a complete theme by merging partial overrides onto
- * {@link defaultTheme}.
- *
- * @internal — Indicator implementations call this; users do not need to.
- */
-export function resolveTheme(progressTheme?: PartialProgressTheme): ProgressTheme {
-	if (!progressTheme) return defaultTheme;
-	return { ...defaultTheme, ...progressTheme };
-}

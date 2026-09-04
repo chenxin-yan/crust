@@ -8,6 +8,7 @@ import type { PromptIO } from "../core/renderer.ts";
 import { isTTY, resolvePromptIO, runPrompt } from "../core/renderer.ts";
 import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import { createTextSubmitHandler, renderTextWithCursor } from "../core/textEdit.ts";
+import type { TextSubmitState } from "../core/textEdit.ts";
 import type {
 	PartialPromptTheme,
 	PromptTheme,
@@ -15,7 +16,7 @@ import type {
 	ValidateFn,
 } from "../core/types.ts";
 import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
-import { parseShortCircuit } from "../core/validate.ts";
+import { parseShortCircuit, resolvePromptInitial } from "../core/validate.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -67,21 +68,11 @@ interface InputBaseOptions {
 export type InputOptions<Output = string> = InputBaseOptions & SchemaOrValidate<Output>;
 
 // ────────────────────────────────────────────────────────────────────────────
-// State
-// ────────────────────────────────────────────────────────────────────────────
-
-interface InputState {
-	readonly value: string;
-	readonly cursorPos: number;
-	readonly error: string | null;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
 // Render
 // ────────────────────────────────────────────────────────────────────────────
 
 function renderInput(
-	state: InputState,
+	state: TextSubmitState,
 	theme: PromptTheme,
 	message: string | undefined,
 	placeholder: string | undefined,
@@ -113,7 +104,7 @@ function renderInput(
 }
 
 function renderSubmitted<Output>(
-	_state: InputState,
+	_state: TextSubmitState,
 	value: Output,
 	theme: PromptTheme,
 	message: string | undefined,
@@ -185,15 +176,8 @@ export async function input<Output>(
 	options: InputOptions<Output> = {},
 	io?: PromptIO,
 ): Promise<Output | string> {
-	if (options.schema !== undefined && options.validate !== undefined) {
-		throw new Error('input() cannot combine "schema" with "validate"');
-	}
-
-	// Schema short-circuits must preserve the promised output type.
-	if (options.initial !== undefined) {
-		if (options.schema) return parseShortCircuit(options.schema, options.initial, "initial");
-		return options.initial;
-	}
+	const initial = await resolvePromptInitial("input", options);
+	if (initial.shortCircuited) return initial.value;
 
 	const promptIO = resolvePromptIO(io);
 
@@ -203,13 +187,13 @@ export async function input<Output>(
 		return options.default;
 	}
 
-	const initialState: InputState = {
+	const initialState: TextSubmitState = {
 		value: "",
 		cursorPos: 0,
 		error: null,
 	};
 
-	return runPrompt<InputState, Output | string>(
+	return runPrompt<TextSubmitState, Output | string>(
 		{
 			initialState,
 			theme: options.theme,

@@ -10,7 +10,7 @@ import { Writable } from "node:stream";
 import { stringWidth } from "@crustjs/style";
 import { getAmbientTerminalIO } from "@crustjs/utils/terminal";
 
-import { resolveTheme } from "./theme.ts";
+import { defaultTheme } from "./theme.ts";
 import type { PartialPromptTheme, PromptTheme } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -258,7 +258,7 @@ function isSubmit<S, T>(result: HandleKeyResult<S, T>): result is SubmitResult<T
  */
 export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Promise<T> {
 	const { render, handleKey, initialState, renderSubmitted } = config;
-	const theme = resolveTheme(config.theme);
+	const theme = config.theme ? { ...defaultTheme, ...config.theme } : defaultTheme;
 	const { input: stdin, output } = resolvePromptIO(io);
 
 	return new Promise<T>((resolve, reject) => {

@@ -3,12 +3,29 @@ import { dirname, join, relative, resolve } from "node:path";
 
 import { resolveSourceDir } from "@crustjs/utils/source";
 
-import { interpolate } from "./interpolate.ts";
 import type { ScaffoldOptions, ScaffoldResult } from "./types.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Replace `{{variable}}` placeholders in a string with values from the context.
+ * Unknown placeholders are left unchanged.
+ *
+ * @param content - The template string containing `{{var}}` placeholders.
+ * @param context - A flat map of variable names to replacement values.
+ * @returns The interpolated string.
+ *
+ * @example
+ * ```ts
+ * interpolate("Hello, {{name}}!", { name: "world" });
+ * // => "Hello, world!"
+ * ```
+ */
+export function interpolate(content: string, context: Record<string, string>): string {
+	return content.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key: string) => context[key] ?? match);
+}
 
 /**
  * Rename dotfile convention: a single leading `_` in the filename becomes `.`.

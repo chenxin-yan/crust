@@ -96,7 +96,7 @@ function resolveBuildRuntimeFromPackageJson(
  * @param targets - The list of targets that were built
  * @returns The shell resolver script as a string
  */
-function generateResolverFor<T extends string>(
+export function generateResolverFor<T extends string>(
 	baseName: string,
 	targets: readonly T[],
 	targetInfo: Record<T, ResolverTargetInfo>,
@@ -151,14 +151,6 @@ exec "$bin_path" "$@"
 `;
 }
 
-export function generateResolver(baseName: string, targets: readonly BunTarget[]): string {
-	return generateResolverFor(baseName, targets, TARGET_INFO, getBinaryFilename);
-}
-
-export function generateDenoResolver(baseName: string, targets: readonly DenoTarget[]): string {
-	return generateResolverFor(baseName, targets, DENO_TARGET_INFO, getDenoBinaryFilename);
-}
-
 /**
  * Generate the Windows batch resolver script content (.cmd).
  *
@@ -169,7 +161,7 @@ export function generateDenoResolver(baseName: string, targets: readonly DenoTar
  * @param targets - The list of targets that were built
  * @returns The .cmd resolver script as a string
  */
-function generateCmdResolverFor<T extends string>(
+export function generateCmdResolverFor<T extends string>(
 	baseName: string,
 	targets: readonly T[],
 	targetInfo: Record<T, ResolverTargetInfo>,
@@ -236,14 +228,6 @@ if not exist "%bin_path%" (\r
 `;
 }
 
-export function generateCmdResolver(baseName: string, targets: readonly BunTarget[]): string {
-	return generateCmdResolverFor(baseName, targets, TARGET_INFO, getBinaryFilename);
-}
-
-export function generateDenoCmdResolver(baseName: string, targets: readonly DenoTarget[]): string {
-	return generateCmdResolverFor(baseName, targets, DENO_TARGET_INFO, getDenoBinaryFilename);
-}
-
 /**
  * Write the resolver scripts to disk.
  *
@@ -254,22 +238,20 @@ export function generateDenoCmdResolver(baseName: string, targets: readonly Deno
  * @param baseName - The base binary name
  * @param targets - The list of targets that were built
  */
-function writeResolver(
+export function writeResolver<T extends string>(
 	resolverPath: string,
 	baseName: string,
-	targets: readonly BunTarget[],
+	targets: readonly T[],
+	targetInfo: Record<T, ResolverTargetInfo>,
+	getFilename: (baseName: string, target: T) => string,
 ): void {
-	writeFileSync(resolverPath, generateResolver(baseName, targets), { mode: 0o755 });
-	writeFileSync(`${resolverPath}.cmd`, generateCmdResolver(baseName, targets));
-}
-
-function writeDenoResolver(
-	resolverPath: string,
-	baseName: string,
-	targets: readonly DenoTarget[],
-): void {
-	writeFileSync(resolverPath, generateDenoResolver(baseName, targets), { mode: 0o755 });
-	writeFileSync(`${resolverPath}.cmd`, generateDenoCmdResolver(baseName, targets));
+	writeFileSync(resolverPath, generateResolverFor(baseName, targets, targetInfo, getFilename), {
+		mode: 0o755,
+	});
+	writeFileSync(
+		`${resolverPath}.cmd`,
+		generateCmdResolverFor(baseName, targets, targetInfo, getFilename),
+	);
 }
 
 type BinaryOutput<T extends string> = { target: T; outfilePath: string };
@@ -694,9 +676,9 @@ export const buildCommand = defineCommand(
 			.action(async ({ flags }) => {
 				const plan = planBuild(flags, process.cwd());
 				for (const warning of plan.warnings) console.warn(warning);
-				const prepared = plan.validate
-					? await buildEntrypoint(plan.entryPath, plan.outDir, plan.envFiles)
-					: undefined;
+				if (plan.validate) {
+					await buildEntrypoint(plan.entryPath, plan.outDir, plan.envFiles);
+				}
 
 				if (plan.runtime === "bun" && plan.mode === "package") {
 					const { runDistributeBuild } = await import("../utils/distribute.ts");
@@ -708,7 +690,7 @@ export const buildCommand = defineCommand(
 						minify: plan.minify,
 						target: plan.staging.targets,
 						envFiles: plan.envFiles,
-						artifactOutDir: prepared ? plan.outDir : undefined,
+						artifactOutDir: plan.validate ? plan.outDir : undefined,
 						userPackageJson: plan.userPackageJson,
 					});
 					return;
@@ -725,13 +707,15 @@ export const buildCommand = defineCommand(
 					await buildBinaryOutputs(plan, {
 						execute: (entry, outfile, target, envFiles) =>
 							execBuild(entry, outfile, plan.minify, target, envFiles),
-						writeResolver,
+						writeResolver: (path, baseName, targets) =>
+							writeResolver(path, baseName, targets, TARGET_INFO, getBinaryFilename),
 					});
 					return;
 				}
 				await buildBinaryOutputs(plan, {
 					execute: (entry, outfile, target) => execDenoBuild(entry, outfile, target),
-					writeResolver: writeDenoResolver,
+					writeResolver: (path, baseName, targets) =>
+						writeResolver(path, baseName, targets, DENO_TARGET_INFO, getDenoBinaryFilename),
 				});
 			}),
 );
