@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { z } from "zod";
 
-import { pressKey, renderPrompt } from "../testing.ts";
+import { renderPrompt } from "../testing.ts";
 import { password } from "./password.ts";
 import { nonTTYIO, tick, waitForScreen } from "./test-helpers.ts";
 
@@ -35,7 +35,7 @@ describe("password — masked rendering", () => {
 		await tick();
 		expect(prompt.screen()).toContain("Enter password:");
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await prompt.answer;
 	});
 
@@ -43,11 +43,11 @@ describe("password — masked rendering", () => {
 		const prompt = renderPrompt(password, { message: "Password?" });
 
 		await tick();
-		pressKey(prompt, "a");
+		prompt.type("a");
 		await tick();
-		pressKey(prompt, "b");
+		prompt.type("b");
 		await tick();
-		pressKey(prompt, "c");
+		prompt.type("c");
 		await tick();
 
 		// Should see mask characters (***) but NOT the actual value "abc"
@@ -55,7 +55,7 @@ describe("password — masked rendering", () => {
 		// The actual characters should not appear in output
 		// (except potentially in keypress event data, not in rendered output)
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		const result = await prompt.answer;
 		// The actual value is returned, even though it was masked in display
 		expect(result).toBe("abc");
@@ -65,15 +65,15 @@ describe("password — masked rendering", () => {
 		const prompt = renderPrompt(password, { message: "Password?", mask: "●" });
 
 		await tick();
-		pressKey(prompt, "x");
+		prompt.type("x");
 		await tick();
-		pressKey(prompt, "y");
+		prompt.type("y");
 		await tick();
 
 		// Custom mask character should appear in output
 		expect(prompt.screen()).toContain("●");
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		const result = await prompt.answer;
 		expect(result).toBe("xy");
 	});
@@ -84,11 +84,11 @@ describe("password — masked rendering", () => {
 		await tick();
 		// Type a 10-character password
 		for (const ch of "abcdefghij") {
-			pressKey(prompt, ch);
+			prompt.type(ch);
 			await tick();
 		}
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await prompt.answer;
 
 		// After submission, should show exactly 4 mask characters (SUBMITTED_MASK_LENGTH)
@@ -103,7 +103,7 @@ describe("password — masked rendering", () => {
 		// U+2502 (│) is the cursor character
 		expect(prompt.screen()).toContain("\u2502");
 
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await prompt.answer;
 	});
 });
@@ -122,22 +122,22 @@ describe("password — validation", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "a");
+		prompt.type("a");
 		await tick();
-		pressKey(prompt, "b");
+		prompt.type("b");
 		await tick();
 		// Try to submit invalid value (too short)
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await tick();
 
 		expect(prompt.screen()).toContain("Password must be at least 4 characters");
 
 		// Type more and resubmit
-		pressKey(prompt, "c");
+		prompt.type("c");
 		await tick();
-		pressKey(prompt, "d");
+		prompt.type("d");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("abcd");
@@ -156,13 +156,13 @@ describe("password — no message", () => {
 		expect(prompt.screen()).toContain("Enter a password");
 		expect(prompt.screen()).not.toContain("undefined");
 
-		pressKey(prompt, "s");
+		prompt.type("s");
 		await tick();
-		pressKey(prompt, "e");
+		prompt.type("e");
 		await tick();
-		pressKey(prompt, "c");
+		prompt.type("c");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe("sec");
@@ -172,9 +172,9 @@ describe("password — no message", () => {
 		const prompt = renderPrompt(password, {});
 
 		await tick();
-		pressKey(prompt, "x");
+		prompt.type("x");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		await prompt.answer;
 		expect(prompt.screen()).toContain("Enter a password");
@@ -224,15 +224,15 @@ describe("password — schema validation", () => {
 		});
 
 		await tick();
-		pressKey(prompt, "4");
+		prompt.type("4");
 		await tick();
-		pressKey(prompt, "2");
+		prompt.type("2");
 		await tick();
-		pressKey(prompt, "4");
+		prompt.type("4");
 		await tick();
-		pressKey(prompt, "2");
+		prompt.type("2");
 		await tick();
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 
 		const result = await prompt.answer;
 		expect(result).toBe(4242);
@@ -301,10 +301,10 @@ describe("password — secrecy", () => {
 
 		await tick();
 		for (const ch of SECRET) {
-			pressKey(prompt, ch);
+			prompt.type(ch);
 			await tick();
 		}
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await prompt.answer;
 
 		expect(prompt.screen()).not.toContain(SECRET);
@@ -318,10 +318,10 @@ describe("password — secrecy", () => {
 
 		await tick();
 		for (const ch of SECRET) {
-			pressKey(prompt, ch);
+			prompt.type(ch);
 			await tick();
 		}
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		// Schema validation is async; a fixed tick races the error render on slow runners.
 		await waitForScreen(prompt, "too short");
 
@@ -330,14 +330,14 @@ describe("password — secrecy", () => {
 
 		// Resolve the prompt cleanly with a long-enough valid value.
 		for (let i = 0; i < SECRET.length; i++) {
-			pressKey(prompt, "", { name: "backspace" });
+			prompt.keys("backspace");
 			await tick();
 		}
 		for (const ch of "x".repeat(64)) {
-			pressKey(prompt, ch);
+			prompt.type(ch);
 			await tick();
 		}
-		pressKey(prompt, "", { name: "return" });
+		prompt.keys("return");
 		await prompt.answer;
 	});
 });

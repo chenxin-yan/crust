@@ -2,9 +2,8 @@
 // Runtime Exports — Top-level color/modifier helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-import { bg as directBg, fg as directFg } from "./color.ts";
 import { style } from "./createStyle.ts";
-import type { ChainableStyleFn, ColorDepth, ColorInput, StyleInstance } from "./types.ts";
+import type { ChainableStyleFn, StyleInstance } from "./types.ts";
 
 export const black: ChainableStyleFn = style.black;
 export const red: ChainableStyleFn = style.red;
@@ -46,44 +45,5 @@ export const inverse: ChainableStyleFn = style.inverse;
 export const hidden: ChainableStyleFn = style.hidden;
 export const strikethrough: ChainableStyleFn = style.strikethrough;
 export const link: StyleInstance["link"] = style.link;
-
-/**
- * Apply a foreground color to `text`.
- *
- * Resolves the active color depth from the runtime style facade (respecting
- * `NO_COLOR`, `FORCE_COLOR`, and TTY detection) and emits the matching
- * terminal color format — truecolor, 256, 16, or none.
- *
- * @param text - The string to style. Empty input returns `""` after
- *   validating `input` (so invalid colors still throw).
- * @param input - Any {@link ColorInput} (named CSS color, hex, `rgb()`, or tuple).
- * @param depth - Optional override for the resolved color depth. When
- *   omitted, depth comes from the runtime style. Useful for deterministic
- *   output (e.g. tests, snapshots).
- * @returns The styled string with appropriate ANSI escape sequences.
- * @throws {TypeError} If `input` is not a recognized color.
- *
- * @example
- * ```ts
- * fg("error", "#ff0000");
- * fg("name", "rebeccapurple");
- * fg("deterministic", "#ff8800", "256"); // force 256-color
- * ```
- */
-export function fg(text: string, input: ColorInput, depth?: ColorDepth): string {
-	return depth === undefined ? style.fg(text, input) : directFg(text, input, depth);
-}
-
-/**
- * Apply a background color to `text`. Mirrors {@link fg} — see there for
- * details on `depth`, validation, and capability detection.
- *
- * @example
- * ```ts
- * bg("warning", "#ff8800");
- * bg("info", "rgb(0, 128, 255)", "16"); // force 16-color fallback
- * ```
- */
-export function bg(text: string, input: ColorInput, depth?: ColorDepth): string {
-	return depth === undefined ? style.bg(text, input) : directBg(text, input, depth);
-}
+export const fg: StyleInstance["fg"] = style.fg;
+export const bg: StyleInstance["bg"] = style.bg;

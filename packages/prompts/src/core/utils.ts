@@ -67,7 +67,7 @@ export function formatPromptLine(
 
 export const DEFAULT_MAX_VISIBLE = 10;
 
-/** @internal Render a scrollable list with viewport indicators. */
+/** Render a scrollable list with viewport indicators. */
 export function renderChoiceList<T>(
 	items: readonly T[],
 	scrollOffset: number,

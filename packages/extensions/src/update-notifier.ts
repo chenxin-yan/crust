@@ -18,7 +18,7 @@ const UPDATE_NOTIFIER: ExtensionId = defineExtensionId("crust:update-notifier");
 
 export type UpdateNotifierPackageManager = "npm" | "pnpm" | "yarn" | "bun";
 
-type UpdateCommandResolver = (info: {
+export type UpdateCommandResolver = (info: {
 	packageName: string;
 	packageManager: UpdateNotifierPackageManager;
 }) => string;

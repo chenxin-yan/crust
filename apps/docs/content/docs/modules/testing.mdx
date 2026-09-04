@@ -15,7 +15,7 @@ bun add -d @crustjs/testing
 
 `captureRun()` and `runInteractive()` accept a `Crust` application and infer its command tree. Their command path, argument object, and flag object are checked from the definitions added to that application. Misspelled command, argument, or flag names fail TypeScript checking and editor completion suggests valid names.
 
-`captureExecute()` instead accepts the structural `ExecutableApp` contract:
+`captureExecute()` instead accepts the structural `ExecutableApp` contract. Its `CaptureIO` option type is exported as `Partial<InvocationIO>`:
 
 ```ts
 interface ExecutableApp {

@@ -6,6 +6,7 @@ export { help, renderHelp } from "./help.ts";
 export { noColor } from "./no-color.ts";
 export { updateNotifier } from "./update-notifier.ts";
 export type {
+	UpdateCommandResolver,
 	UpdateNotifierCacheAdapter,
 	UpdateNotifierCacheConfig,
 	UpdateNotifierPackageManager,

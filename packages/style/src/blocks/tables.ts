@@ -24,35 +24,6 @@ export interface TableOptions {
 	 * left-aligned.
 	 */
 	align?: ColumnAlignment[];
-
-	/**
-	 * Minimum column width (in visible characters). Columns are always at
-	 * least as wide as their widest cell content regardless of this setting.
-	 *
-	 * @default 0
-	 */
-	minColumnWidth?: number;
-
-	/**
-	 * Padding (number of spaces) added to each side of every cell.
-	 *
-	 * @default 1
-	 */
-	cellPadding?: number;
-
-	/**
-	 * The character used for the horizontal separator line.
-	 *
-	 * @default "-"
-	 */
-	separatorChar?: string;
-
-	/**
-	 * The column separator character placed between cells.
-	 *
-	 * @default "|"
-	 */
-	borderChar?: string;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -62,9 +33,9 @@ export interface TableOptions {
 /**
  * Compute the maximum visible width for each column across headers and rows.
  */
-function computeColumnWidths(headers: string[], rows: string[][], minWidth: number): number[] {
+function computeColumnWidths(headers: string[], rows: string[][]): number[] {
 	const columnCount = headers.length;
-	const widths = Array<number>(columnCount).fill(minWidth);
+	const widths = Array<number>(columnCount).fill(0);
 
 	for (const row of [headers, ...rows]) {
 		for (let col = 0; col < columnCount; col++) {
@@ -93,39 +64,22 @@ function alignCell(value: string, width: number, alignment: ColumnAlignment): st
 /**
  * Format a single row of cells into a bordered row string.
  */
-function formatRow(
-	cells: string[],
-	columnWidths: number[],
-	alignments: ColumnAlignment[],
-	cellPadding: number,
-	borderChar: string,
-): string {
-	const pad = " ".repeat(cellPadding);
+function formatRow(cells: string[], columnWidths: number[], alignments: ColumnAlignment[]): string {
 	const formattedCells = columnWidths.map((width, col) => {
 		const cell = cells[col] ?? "";
 		const alignment = alignments[col] ?? "left";
-		const aligned = alignCell(cell, width, alignment);
-		return `${pad}${aligned}${pad}`;
+		return ` ${alignCell(cell, width, alignment)} `;
 	});
 
-	return `${borderChar}${formattedCells.join(borderChar)}${borderChar}`;
+	return `|${formattedCells.join("|")}|`;
 }
 
 /**
  * Generate a separator row using the given character.
  */
-function formatSeparator(
-	columnWidths: number[],
-	cellPadding: number,
-	separatorChar: string,
-	borderChar: string,
-): string {
-	const segments = columnWidths.map((width) => {
-		// Fill: column width + padding on both sides
-		return separatorChar.repeat(width + cellPadding * 2);
-	});
-
-	return `${borderChar}${segments.join(borderChar)}${borderChar}`;
+function formatSeparator(columnWidths: number[]): string {
+	const segments = columnWidths.map((width) => "-".repeat(width + 2));
+	return `|${segments.join("|")}|`;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -163,24 +117,19 @@ function formatSeparator(
  */
 export function table(headers: string[], rows: string[][], options?: TableOptions): string {
 	const alignments = options?.align ?? [];
-	const minColumnWidth = options?.minColumnWidth ?? 0;
-	const cellPadding = options?.cellPadding ?? 1;
-	const separatorChar = options?.separatorChar ?? "-";
-	const borderChar = options?.borderChar ?? "|";
-
-	const columnWidths = computeColumnWidths(headers, rows, minColumnWidth);
+	const columnWidths = computeColumnWidths(headers, rows);
 
 	const lines: string[] = [];
 
 	// Header row
-	lines.push(formatRow(headers, columnWidths, alignments, cellPadding, borderChar));
+	lines.push(formatRow(headers, columnWidths, alignments));
 
 	// Separator row
-	lines.push(formatSeparator(columnWidths, cellPadding, separatorChar, borderChar));
+	lines.push(formatSeparator(columnWidths));
 
 	// Data rows
 	for (const row of rows) {
-		lines.push(formatRow(row, columnWidths, alignments, cellPadding, borderChar));
+		lines.push(formatRow(row, columnWidths, alignments));
 	}
 
 	return lines.join("\n");

@@ -67,7 +67,9 @@ if (failed) {
 }
 ```
 
-`stop()` is idempotent; the default outcome is `"success"`. Calling it before `start()` still renders the final line. `SpinnerOutcome` is the union `"success" | "error"`.
+`stop()` is idempotent; the default outcome is `"success"`. Calling it before `start()` still renders the final line. The exported handle type is `SpinnerHandle`; `SpinnerOutcome` is the union `"success" | "error"`.
+
+<auto-type-table path="../../../../../packages/progress/src/spinner.ts" name="SpinnerHandle" />
 
 <auto-type-table
   path="../../../../../packages/progress/src/spinner.ts"

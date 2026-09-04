@@ -155,6 +155,8 @@ type Path = CommandPath<Tree>; // e.g. readonly [] | readonly ["greet"]
 type GreetInput = RunInput<CommandShapeAt<(typeof app)["_types"]["shape"], readonly ["greet"]>>;
 ```
 
+`Crust._types` is a supported type-level seam for accessing an application's inferred flags, arguments, Contexts, command tree, and command shape; it has no runtime value.
+
 ## Parser boundary types
 
 `ParseResult<A, F>` is the syntax-parsed result before required-value and Standard Schema validation. Its generic `args` and `flags` preserve definition-specific raw value types; `ParsedArgValue` and `ParsedFlagValue` are the runtime-erased fallbacks for widened definitions. Its `excessArgs` holds positionals before `--` that no declared argument consumed (validation rejects them); its `rawArgs` holds tokens after `--`. `ValidatedInput<A, F>` is the validated boundary passed onward to Command Actions, with `InferArgs<A>` and `InferFlags<F>` applied.
@@ -331,4 +333,4 @@ Infers the syntax-parsed values from an Extension's named-definition array and e
 
 ## Error types
 
-See [Errors](/docs/api/errors) for `CrustError`, `CrustErrorCode`, `CrustErrorDetails`, `CrustErrorDetailsMap`, and the four detail interfaces.
+See [Errors](/docs/api/errors) for `CrustError`, `CrustErrorCode`, `CrustErrorDetails`, `CrustErrorDetailsMap`, `CrustErrorJson` (the serializable shape returned by `.toJSON()`), and the four detail interfaces.

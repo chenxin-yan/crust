@@ -34,7 +34,7 @@ The `postRun` hook checks for an update only after a Command Action completes su
 
 By default, notifier state is persisted at `stateDir(packageName)` using `@crustjs/store`; package names are URL-encoded for the state directory (`@scope/cli` → `%40scope%2Fcli`) so distinct packages never share state, and cached state from a different `registryUrl` is discarded. A fresh cached result is reused for 24 hours and duplicate notices for the same version are suppressed across sequential process invocations (best-effort: concurrent invocations may race and double-notice). A corrupt state file is treated as empty and repaired on the next successful check. Set `cache: false` to opt out, pass `cache: { intervalMs }` to tune the built-in cache interval, or provide a custom adapter to control persistence.
 
-By default, the notice reports only the available version. Configure `updateCommand` with a fixed string, a `{ scope: "global" | "local" }` object that generates a command for the detected package manager, or a callback receiving `{ packageName, packageManager }`. Set `updateDocsUrl` to link to update instructions. Automatic package-manager detection uses `npm_config_user_agent` when available, falling back to `npm_execpath` and the runtime executable name before defaulting to npm.
+By default, the notice reports only the available version. Configure `updateCommand` with a fixed string, a `{ scope: "global" | "local" }` object that generates a command for the detected package manager, or an exported `UpdateCommandResolver` callback receiving `{ packageName, packageManager }`. Set `updateDocsUrl` to link to update instructions. Automatic package-manager detection uses `npm_config_user_agent` when available, falling back to `npm_execpath` and the runtime executable name before defaulting to npm.
 
 ## Update command
 
@@ -101,7 +101,7 @@ The adapter reads and writes the exported `UpdateNotifierState` shape:
   name="UpdateNotifierState"
 />
 
-The package exports `UpdateNotifierCacheAdapter`, `UpdateNotifierCacheConfig`, `UpdateNotifierPackageManager`, and `UpdateNotifierState` alongside `UpdateNotifierOptions`.
+The package exports `UpdateCommandResolver`, `UpdateNotifierCacheAdapter`, `UpdateNotifierCacheConfig`, `UpdateNotifierPackageManager`, and `UpdateNotifierState` alongside `UpdateNotifierOptions`.
 
 ```ts
 import {

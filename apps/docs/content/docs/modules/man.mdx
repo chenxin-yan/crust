@@ -24,7 +24,9 @@ import { man } from "@crustjs/man";
 const app = new Crust("my-cli").extend(man());
 ```
 
-`man()` writes `<outdir>/man/<name>.1`. Pass `man({ section: 5 })` to select another section and filename, and `man({ name: "my-tool" })` when the installed command name differs from the application name (for example, `crust build --name` or a diverging npm `bin` key). Extension presence is the source of intent; there is no `--man` build flag. `crust build --no-validate` skips all build hooks, including this one. Package builds stage the generated directory and populate npm `files` and `man` metadata.
+`man()` writes `<outdir>/man/<name>.1`. Pass `man({ section: 5 })` to select another section and filename, and `man({ name: "my-tool" })` when the installed command name differs from the application name (for example, `crust build --name` or a diverging npm `bin` key). Its options use the exported `ManOptions` type. The `man.id` static exposes the `crust:man` Extension identity for section filtering and integrations. Extension presence is the source of intent; there is no `--man` build flag. `crust build --no-validate` skips all build hooks, including this one. Package builds stage the generated directory and populate npm `files` and `man` metadata.
+
+<auto-type-table path="../../../../../packages/man/src/extension.ts" name="ManOptions" />
 
 ## `writeManPage(options)`
 

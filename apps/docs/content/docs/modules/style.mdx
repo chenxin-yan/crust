@@ -47,16 +47,18 @@ bold.red.bgYellow("chained"); // open left-to-right, close right-to-left
 
 ### Styles as values
 
-Chainables are plain `(text: StyleInput) => string` functions — passing a style around is just passing the chainable. `StyleInput` accepts stringifiable values plus `null` and `undefined`; nullish values become `""`, while other values are converted with `String(value)`. The narrower `StyleFn` type names the `(text: string) => string` callback contract; every chainable is assignable to it:
+Chainables are plain functions — passing a style around is just passing the chainable. `ChainableStyleFn` names the full callable, tagged-template, chaining, and `open`/`close` surface. `StyleInput` accepts stringifiable values plus `null` and `undefined`; nullish values become `""`, while other values are converted with `String(value)`. The narrower `StyleFn` type names the `(text: string) => string` callback contract; every chainable is assignable to it:
 
 ```ts
-import { style, type StyleFn } from "@crustjs/style";
+import { style, type ChainableStyleFn, type StyleFn } from "@crustjs/style";
+
+const accent: ChainableStyleFn = style.bold.red;
 
 function renderError(paint: StyleFn) {
   return paint("boom");
 }
 
-renderError(style.bold.red); // mode-aware, per-step NO_COLOR degradation
+renderError(accent); // mode-aware, per-step NO_COLOR degradation
 ```
 
 ## Dynamic colors
@@ -86,7 +88,7 @@ Output adapts to the resolved depth:
 | `"16"`        | 16-color ANSI  | Any other TTY                                                                            |
 | `"none"`      | Plain text     | Not a TTY, `NO_COLOR`, `FORCE_COLOR=0`, `TERM=dumb`, or `mode: "never"`                  |
 
-Inspect the resolved tier via `style.colorDepth` (live) or `instance.colorDepth` (frozen at creation).
+Inspect the resolved tier via `style.colorDepth` (live) or `instance.colorDepth` (frozen at creation). `colorsEnabled` reports whether color codes can be emitted, while `trueColorEnabled` reports whether the resolved depth is 24-bit.
 
 ## Color control
 
@@ -153,22 +155,22 @@ table(
 );
 ```
 
-`padStart` / `padEnd` / `center` measure visible width — unlike `String.prototype.padStart`, which counts code units and ANSI escapes. `table` supports per-column alignment, padding, separators, and styled cells. Headers define its column count, so extra row cells beyond the last header are dropped.
+`padStart` / `padEnd` / `center` measure visible width — unlike `String.prototype.padStart`, which counts code units and ANSI escapes. `table` supports per-column alignment and styled cells, using one space around each cell with `|` borders and `-` header separators. Headers define its column count, so extra row cells beyond the last header are dropped.
 
 Use the exported `stringWidth(text)` helper for ANSI-, CJK-, combining-mark-, and emoji-aware terminal width measurement.
 
 ## Reference
 
-| Group          | Exports                                                                                                                                                                                                                  |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Instances      | `style`, `createStyle(options?)`                                                                                                                                                                                         |
-| Chainables     | 7 modifiers, 16 foreground, 16 background (listed under [Styling](#styling))                                                                                                                                             |
-| Dynamic colors | `fg(text, input, depth?)`, `bg(text, input, depth?)`                                                                                                                                                                     |
-| Hyperlinks     | `link(text, url, options?)`                                                                                                                                                                                              |
-| Layout         | `padStart`, `padEnd`, `center`, `table`, `stringWidth`                                                                                                                                                                   |
-| Types          | `AnsiPair`, `ColorInput`, `ColorString`, `NamedColor`, `ColorMode`, `ColorDepth`, `StyleInput`, `StyleFn`, `StyleInstance`, `StyleOptions`, `CapabilityOverrides`, `HyperlinkOptions`, `TableOptions`, `ColumnAlignment` |
+| Group          | Exports                                                                                                                                                                                                                                      |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Instances      | `style`, `createStyle(options?)`                                                                                                                                                                                                             |
+| Chainables     | 7 modifiers, 16 foreground, 16 background (listed under [Styling](#styling))                                                                                                                                                                 |
+| Dynamic colors | `fg(text, input)`, `bg(text, input)`, plus chain-root `fg(input)` / `bg(input)`                                                                                                                                                              |
+| Hyperlinks     | `link(text, url, options?)`                                                                                                                                                                                                                  |
+| Layout         | `padStart`, `padEnd`, `center`, `table`, `stringWidth`                                                                                                                                                                                       |
+| Types          | `AnsiPair`, `ColorInput`, `ColorString`, `NamedColor`, `ColorMode`, `ColorDepth`, `StyleInput`, `StyleFn`, `ChainableStyleFn`, `StyleInstance`, `StyleOptions`, `CapabilityOverrides`, `HyperlinkOptions`, `TableOptions`, `ColumnAlignment` |
 
-Scalar types in prose: `ColorMode` is `"auto" | "always" | "never"`; `ColorDepth` is `"truecolor" | "256" | "16" | "none"`; `StyleInput` is `{ toString(): string } | null | undefined`; `StyleFn` is `(text: string) => string`; `ColumnAlignment` is `"left" | "right" | "center"`.
+Scalar types in prose: `ColorMode` is `"auto" | "always" | "never"`; `ColorDepth` is `"truecolor" | "256" | "16" | "none"`; `StyleInput` is `{ toString(): string } | null | undefined`; `StyleFn` is `(text: string) => string`; `ChainableStyleFn` is the type of every named chainable style export; `ColumnAlignment` is `"left" | "right" | "center"`.
 
 ```ts
 type ColorInput =

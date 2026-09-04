@@ -179,7 +179,7 @@ export function fuzzyFilter<T>(
 	return results;
 }
 
-/** @internal Apply the filter-match style to matched runs in a label. */
+/** Apply the filter-match style to matched runs in a label. */
 export function highlightMatches(
 	label: string,
 	indices: readonly number[],
