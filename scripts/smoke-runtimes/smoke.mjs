@@ -99,7 +99,11 @@ assert(
 const ambientErrors = [];
 await new Crust("ambient-dist")
 	.action(async () => {
-		await progress.spinner({ message: "Dist bridge", task: async () => undefined });
+		await progress.spinner({
+			message: "Dist bridge",
+			task: async () => undefined,
+			theme: { success: (text) => text, message: (text) => text },
+		});
 	})
 	.execute({
 		argv: [],
