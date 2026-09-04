@@ -8,13 +8,20 @@ import type { CapabilityOverrides, ColorDepth, ColorMode } from "./types.ts";
 // Internal helpers
 // ────────────────────────────────────────────────────────────────────────────
 
+function read<Key extends keyof CapabilityOverrides>(
+	overrides: CapabilityOverrides | undefined,
+	key: Key,
+	environment: CapabilityOverrides[Key],
+): CapabilityOverrides[Key] {
+	return overrides !== undefined && key in overrides ? overrides[key] : environment;
+}
+
 function readTTY(overrides: CapabilityOverrides | undefined): boolean {
-	const hasOverride = overrides !== undefined && "isTTY" in overrides;
-	return hasOverride ? (overrides.isTTY ?? false) : (process.stdout?.isTTY ?? false);
+	return read(overrides, "isTTY", process.stdout?.isTTY) ?? false;
 }
 
 function readForceColor(overrides: CapabilityOverrides | undefined): string | undefined {
-	return overrides !== undefined ? overrides.forceColor : process.env.FORCE_COLOR;
+	return read(overrides, "forceColor", process.env.FORCE_COLOR);
 }
 
 /** `FORCE_COLOR=0` / `FORCE_COLOR=false` mean "force off"; any other value forces on. */
@@ -113,8 +120,8 @@ export function resolveColorDepth(mode: ColorMode, overrides?: CapabilityOverrid
 	}
 
 	// auto mode
-	const colorTerm = overrides !== undefined ? overrides.colorTerm : process.env.COLORTERM;
-	const term = overrides !== undefined ? overrides.term : process.env.TERM;
+	const colorTerm = read(overrides, "colorTerm", process.env.COLORTERM);
+	const term = read(overrides, "term", process.env.TERM);
 
 	const forceColor = readForceColor(overrides);
 	if (forceColor !== undefined) {
@@ -132,7 +139,7 @@ export function resolveColorDepth(mode: ColorMode, overrides?: CapabilityOverrid
 		return "none";
 	}
 
-	const noColor = overrides !== undefined ? overrides.noColor : process.env.NO_COLOR;
+	const noColor = read(overrides, "noColor", process.env.NO_COLOR);
 	if (noColor !== undefined && noColor !== "") {
 		return "none";
 	}

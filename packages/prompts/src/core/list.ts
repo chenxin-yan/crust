@@ -1,19 +1,23 @@
 import type { FuzzyFilterResult } from "./fuzzy.ts";
 import { fuzzyFilter } from "./fuzzy.ts";
 import type { PromptIO } from "./renderer.ts";
-import { isTTY, resolvePromptIO } from "./renderer.ts";
+import { resolveShortCircuit } from "./shortCircuit.ts";
 import type { Choice } from "./types.ts";
 import type { NormalizedChoice } from "./utils.ts";
 import { calculateScrollOffset, DEFAULT_MAX_VISIBLE, normalizeChoices } from "./utils.ts";
 
-interface ListPromptOptions<T, Answer> {
+function isDefaultArray<T>(value: T | readonly T[] | undefined): value is readonly T[] {
+	return Array.isArray(value);
+}
+
+interface ListPromptOptions<T, Answer extends T | readonly T[]> {
 	readonly choices: readonly Choice<T>[];
 	readonly initial?: Answer;
 	readonly default?: Answer;
 	readonly maxVisible?: number;
 }
 
-type ListPromptSetup<T, Answer> =
+type ListPromptSetup<T, Answer extends T | readonly T[]> =
 	| { readonly shortCircuited: true; readonly value: Answer }
 	| {
 			readonly shortCircuited: false;
@@ -21,28 +25,32 @@ type ListPromptSetup<T, Answer> =
 			readonly maxVisible: number;
 			readonly cursor: number;
 			readonly scrollOffset: number;
+			readonly selected: ReadonlySet<number>;
 			readonly promptIO: Required<PromptIO>;
 	  };
 
 /** @internal Resolve the shared lifecycle and initial viewport for list prompts. */
-export function setupListPrompt<T, Answer>(
+export async function setupListPrompt<T, Answer extends T | readonly T[]>(
 	options: ListPromptOptions<T, Answer>,
 	io?: PromptIO,
-	defaultCursorValue?: T,
-	hasDefaultCursor: boolean = defaultCursorValue !== undefined,
-): ListPromptSetup<T, Answer> {
-	if (options.initial !== undefined) return { shortCircuited: true, value: options.initial };
-
-	const promptIO = resolvePromptIO(io);
-	if (!isTTY(promptIO.input) && options.default !== undefined) {
-		return { shortCircuited: true, value: options.default };
-	}
+): Promise<ListPromptSetup<T, Answer>> {
+	const shortCircuit = await resolveShortCircuit(options, io);
+	if (shortCircuit.shortCircuited) return shortCircuit;
 
 	const choices = normalizeChoices(options.choices);
 	const maxVisible = options.maxVisible ?? DEFAULT_MAX_VISIBLE;
-	const defaultCursor = hasDefaultCursor
-		? choices.findIndex((choice) => choice.value === defaultCursorValue)
-		: -1;
+	const defaults = isDefaultArray<T>(options.default)
+		? options.default
+		: options.default === undefined
+			? []
+			: [options.default];
+	const selected = new Set(
+		defaults
+			.map((value) => choices.findIndex((choice) => choice.value === value))
+			.filter((index) => index !== -1),
+	);
+	const defaultCursor =
+		defaults.length === 0 ? -1 : choices.findIndex((choice) => choice.value === defaults[0]);
 	const cursor = defaultCursor === -1 ? 0 : defaultCursor;
 
 	return {
@@ -51,7 +59,8 @@ export function setupListPrompt<T, Answer>(
 		maxVisible,
 		cursor,
 		scrollOffset: calculateScrollOffset(cursor, 0, choices.length, maxVisible),
-		promptIO,
+		selected,
+		promptIO: shortCircuit.promptIO,
 	};
 }
 

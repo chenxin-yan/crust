@@ -28,19 +28,21 @@ const dynamicColorKinds = [
 // Computed namespace access is safe because StyleMethodName contains only ANSI-pair exports.
 const styleMethodPairs = codes;
 
-// A single step in a chainable style. Either a registered method (looked
-// up by name in the style registry) or an ad-hoc `AnsiPair` produced by a
-// dynamic-color call like `style.bold.fg("#f00")`.
+// A single step in a chainable style: a registered method or a color
+// resolved against the active terminal depth when the chain is called.
 type ChainStep =
 	| { readonly kind: "named"; readonly name: StyleMethodName }
-	| { readonly kind: "pair"; readonly pair: AnsiPair };
+	| { readonly kind: "fg" | "bg"; readonly input: ColorInput };
 
 function stepIsModifier(step: ChainStep): boolean {
 	return step.kind === "named" && isModifierName(step.name);
 }
 
-function stepPair(step: ChainStep): AnsiPair {
-	return step.kind === "named" ? styleMethodPairs[step.name] : step.pair;
+function stepPair(step: ChainStep, colorDepth: ColorDepth): AnsiPair {
+	if (step.kind === "named") return styleMethodPairs[step.name];
+	return step.kind === "fg"
+		? fgPairAtDepth(step.input, colorDepth)
+		: bgPairAtDepth(step.input, colorDepth);
 }
 
 interface ResolvedStyleCapabilities {
@@ -66,7 +68,8 @@ function applyChain(
 		return result;
 	}
 
-	const { modifiersEnabled, colorsEnabled } = resolveCapabilities();
+	const capabilities = resolveCapabilities();
+	const { modifiersEnabled, colorsEnabled } = capabilities;
 	for (let i = steps.length - 1; i >= 0; i--) {
 		const step = steps[i];
 		if (step === undefined) {
@@ -75,7 +78,7 @@ function applyChain(
 		if (stepIsModifier(step) ? !modifiersEnabled : !colorsEnabled) {
 			continue;
 		}
-		result = applyStyle(result, stepPair(step));
+		result = applyStyle(result, stepPair(step, capabilities.colorDepth));
 	}
 
 	return result;
@@ -104,7 +107,7 @@ function buildChainableStyleFactory(
 			? "runtime"
 			: `${capabilities?.modifiersEnabled}|${capabilities?.colorDepth}`;
 		return `${mode}|${steps
-			.map((step) => (step.kind === "named" ? step.name : `~${step.pair.open}`))
+			.map((step) => (step.kind === "named" ? step.name : `~${stepPair(step, "truecolor").open}`))
 			.join("|")}`;
 	}
 
@@ -148,31 +151,21 @@ function buildChainableStyleFactory(
 				get() {
 					return createChainableStyle(
 						[...steps, { kind: "named", name }],
-						false,
-						capabilitiesForCall(),
+						dynamic,
+						fixedCapabilities,
 					);
 				},
 			});
 		}
 
-		// Dynamic-color chain methods resolve depth when the chain is extended.
+		// Dynamic-color chain methods validate now and resolve depth when called.
 		for (const [kind, pairAtDepth] of dynamicColorKinds) {
 			Object.defineProperty(styleFn, kind, {
 				configurable: false,
 				enumerable: true,
 				value: (input: ColorInput): ChainableStyleFn => {
-					const resolved = capabilitiesForCall();
-					return createChainableStyle(
-						[
-							...steps,
-							{
-								kind: "pair",
-								pair: pairAtDepth(input, resolved.colorDepth),
-							},
-						],
-						false,
-						resolved,
-					);
+					pairAtDepth(input, "truecolor");
+					return createChainableStyle([...steps, { kind, input }], dynamic, fixedCapabilities);
 				},
 				writable: false,
 			});
@@ -185,7 +178,7 @@ function buildChainableStyleFactory(
 		let open = "";
 		let close = "";
 		for (const step of steps) {
-			const pair = stepPair(step);
+			const pair = stepPair(step, "truecolor");
 			open += pair.open;
 			close = pair.close + close;
 		}
@@ -285,16 +278,8 @@ function createStyleInstance(options: StyleOptions | undefined, runtime: boolean
 			(...args: [input: ColorInput] | [text: string, input: ColorInput]) => {
 				const resolved = resolveCapabilities();
 				if (args.length === 1) {
-					return createChainableStyle(
-						[
-							{
-								kind: "pair",
-								pair: pairAtDepth(args[0], resolved.colorDepth),
-							},
-						],
-						false,
-						resolved,
-					);
+					pairAtDepth(args[0], "truecolor");
+					return createChainableStyle([{ kind, input: args[0] }], runtime, resolved);
 				}
 				return paint(args[0], args[1], resolved.colorDepth);
 			},

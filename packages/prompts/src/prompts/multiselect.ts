@@ -292,26 +292,15 @@ export function multiselect(
 ): Promise<string[]>;
 export function multiselect<T>(options: MultiselectOptions<T>, io?: PromptIO): Promise<T[]>;
 export async function multiselect<T>(options: MultiselectOptions<T>, io?: PromptIO): Promise<T[]> {
-	const setup = setupListPrompt<T, readonly T[]>(options, io);
+	const setup = await setupListPrompt<T, readonly T[]>(options, io);
 	if (setup.shortCircuited) return [...setup.value];
 
-	const { choices, cursor, maxVisible, promptIO, scrollOffset } = setup;
-
-	// Pre-select items matching default values
-	const initialSelected = new Set<number>();
-	if (options.default) {
-		for (const defaultValue of options.default) {
-			const idx = choices.findIndex((c) => c.value === defaultValue);
-			if (idx !== -1) {
-				initialSelected.add(idx);
-			}
-		}
-	}
+	const { choices, cursor, maxVisible, promptIO, scrollOffset, selected } = setup;
 
 	const initialState: MultiselectState<T> = {
 		cursor,
 		choices,
-		selected: initialSelected,
+		selected: new Set(selected),
 		scrollOffset,
 		error: null,
 	};

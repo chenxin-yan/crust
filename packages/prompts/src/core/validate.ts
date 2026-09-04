@@ -2,12 +2,6 @@ import type { StandardSchema } from "@crustjs/utils/schema";
 
 import type { ValidateFn } from "./types.ts";
 
-type PromptInitialOptions<Output> = {
-	readonly schema?: StandardSchema<unknown, Output>;
-	readonly validate?: ValidateFn<string>;
-	readonly initial?: string;
-};
-
 export async function validateSubmitValue<Output>(
 	value: string,
 	schema: StandardSchema<unknown, Output> | undefined,
@@ -40,24 +34,4 @@ export async function parseShortCircuit<Output>(
 	if (!result.ok) throw new Error(`${source} value rejected by schema: ${result.error}`);
 	// SAFETY: a provided schema makes validateSubmitValue return only that schema's output.
 	return result.value as Output;
-}
-
-/** @internal Validate shared text-prompt options and resolve an initial value. */
-export async function resolvePromptInitial<Output>(
-	promptName: "input" | "password",
-	options: PromptInitialOptions<Output>,
-): Promise<
-	| { readonly shortCircuited: false }
-	| { readonly shortCircuited: true; readonly value: Output | string }
-> {
-	if (options.schema !== undefined && options.validate !== undefined) {
-		throw new Error(`${promptName}() cannot combine "schema" with "validate"`);
-	}
-	if (options.initial === undefined) return { shortCircuited: false };
-	return {
-		shortCircuited: true,
-		value: options.schema
-			? await parseShortCircuit(options.schema, options.initial, "initial")
-			: options.initial,
-	};
 }

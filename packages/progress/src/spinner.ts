@@ -2,9 +2,12 @@
 // Spinner — Animated progress spinner for @crustjs/progress
 // ────────────────────────────────────────────────────────────────────────────
 
-import { AsyncLocalStorage } from "node:async_hooks";
-
-import { getAmbientTerminalIO } from "@crustjs/utils/terminal";
+import {
+	getTerminalIO,
+	type TerminalIO as SharedTerminalIO,
+	type TerminalOutput,
+	withTerminalIO as withSharedTerminalIO,
+} from "@crustjs/utils/terminal";
 
 import { defaultTheme } from "./theme.ts";
 import type { PartialProgressTheme, ProgressTheme } from "./theme.ts";
@@ -85,8 +88,7 @@ export interface SpinnerHandleOptions {
 	readonly sigint?: SpinnerSigintPolicy;
 	/**
 	 * Terminal sink receiving the rendered output. Resolution order:
-	 * this option → ambient {@link withProgressSink} sink → ambient invocation
-	 * IO → `process.stderr`.
+	 * this option → ambient {@link withTerminalIO} output → `process.stderr`.
 	 */
 	readonly sink?: ProgressSink;
 }
@@ -146,48 +148,27 @@ function renderFinal(
 	return erase ? ERASE_LINE + CURSOR_TO_START + line : line;
 }
 
-/** Terminal operations driven by spinners and progress indicators. */
-export interface ProgressSink {
-	readonly isTTY: boolean;
-	write: (text: string) => void;
+/** Terminal IO shared by prompts, spinners, and progress indicators. */
+export type TerminalIO = SharedTerminalIO;
+
+/** Writable-compatible output driven by spinners and progress indicators. */
+export type ProgressSink = TerminalOutput;
+
+/** Run a function with terminal streams available to UI created in its async scope. */
+export function withTerminalIO<T>(io: TerminalIO, fn: () => T): T {
+	return withSharedTerminalIO(io, fn);
 }
 
-const sinkStorage = new AsyncLocalStorage<ProgressSink>();
-
-/**
- * Run a function with a sink ambiently available to every spinner or
- * progress indicator created in its async scope (unless a per-call
- * `sink` option overrides it). Mirrors `withPromptIO` in
- * `@crustjs/prompts` — test harnesses and embedders redirect indicator
- * output without touching process globals.
- */
+/** Run a function with an ambient output sink for progress indicators. */
 export function withProgressSink<T>(sink: ProgressSink, fn: () => T): T {
-	return sinkStorage.run(sink, fn);
-}
-
-const processSink: ProgressSink = {
-	get isTTY() {
-		return process.stderr.isTTY ?? false;
-	},
-	write(text) {
-		process.stderr.write(text);
-	},
-};
-
-function ambientTerminalSink(): ProgressSink | undefined {
-	const io = getAmbientTerminalIO();
-	if (!io) return undefined;
-	return {
-		isTTY: false,
-		write: (text) => io.stderr(text.endsWith("\n") ? text.slice(0, -1) : text),
-	};
+	return withSharedTerminalIO({ output: sink }, fn);
 }
 
 /** Internal handle constructor shared by both `spinner()` modes and `progress()`. */
 export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandle {
-	const sink = options.sink ?? sinkStorage.getStore() ?? ambientTerminalSink() ?? processSink;
+	const sink = options.sink ?? getTerminalIO()?.output ?? process.stderr;
 	const theme = options.theme ? { ...defaultTheme, ...options.theme } : defaultTheme;
-	const isInteractive = sink.isTTY;
+	const isInteractive = sink.isTTY ?? false;
 	const { frames, interval } = resolveSpinner(options.spinner);
 	const sigint = options.sigint ?? "exit";
 

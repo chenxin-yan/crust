@@ -152,7 +152,7 @@ export function createPromptIO({ isTTY = true }: { isTTY?: boolean } = {}): Prom
 				callback();
 			},
 		}),
-		{ columns: 80 },
+		{ columns: 80, isTTY },
 	);
 
 	return {

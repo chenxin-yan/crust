@@ -93,7 +93,7 @@ run.keys("return");
 await run.done;
 ```
 
-`screen()` returns the ANSI-stripped terminal screen. Prompt frames, `ctx.stderr()` output, and `@crustjs/progress` indicators (routed via the ambient [`withProgressSink`](/docs/modules/progress#output-sinks) sink) all share that screen and the transcript scanned by `waitFor()`.
+`screen()` returns the ANSI-stripped terminal screen. One ambient [`withTerminalIO`](/docs/modules/progress#output-sinks) scope routes prompt frames, `ctx.stderr()` output, and `@crustjs/progress` indicators into that screen and the transcript scanned by `waitFor()`.
 
 The return type is `InteractiveRun`:
 

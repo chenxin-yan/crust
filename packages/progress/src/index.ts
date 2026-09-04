@@ -12,7 +12,8 @@ export type {
 	SpinnerOutcome,
 	SpinnerSigintPolicy,
 	SpinnerType,
+	TerminalIO,
 } from "./spinner.ts";
-export { spinner, withProgressSink } from "./spinner.ts";
+export { spinner, withProgressSink, withTerminalIO } from "./spinner.ts";
 export { defaultTheme } from "./theme.ts";
 export type { PartialProgressTheme, ProgressTheme } from "./theme.ts";

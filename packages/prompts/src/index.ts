@@ -41,9 +41,11 @@ export {
 	assertTTY,
 	isTTY,
 	NonInteractiveError,
+	resolvePromptIO,
 	runPrompt,
 	submit,
 	withPromptIO,
+	withTerminalIO,
 } from "./core/renderer.ts";
 
 // ────────────────────────────────────────────────────────────────────────────

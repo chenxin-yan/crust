@@ -5,7 +5,8 @@
 import type { StandardSchema } from "@crustjs/utils/schema";
 
 import type { PromptIO } from "../core/renderer.ts";
-import { isTTY, resolvePromptIO, runPrompt } from "../core/renderer.ts";
+import { runPrompt } from "../core/renderer.ts";
+import { resolveShortCircuit } from "../core/shortCircuit.ts";
 import { PREFIX_SUBMITTED, PREFIX_SYMBOL } from "../core/symbols.ts";
 import { createTextSubmitHandler, renderTextWithCursor } from "../core/textEdit.ts";
 import type { TextSubmitState } from "../core/textEdit.ts";
@@ -16,7 +17,7 @@ import type {
 	ValidateFn,
 } from "../core/types.ts";
 import { formatPromptLine, formatSubmitted } from "../core/utils.ts";
-import { parseShortCircuit, resolvePromptInitial } from "../core/validate.ts";
+import { parseShortCircuit } from "../core/validate.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -176,16 +177,17 @@ export async function input<Output>(
 	options: InputOptions<Output> = {},
 	io?: PromptIO,
 ): Promise<Output | string> {
-	const initial = await resolvePromptInitial("input", options);
-	if (initial.shortCircuited) return initial.value;
-
-	const promptIO = resolvePromptIO(io);
-
-	// Non-interactive defaults also flow through the schema.
-	if (!isTTY(promptIO.input) && options.default !== undefined) {
-		if (options.schema) return parseShortCircuit(options.schema, options.default, "default");
-		return options.default;
+	if (options.schema !== undefined && options.validate !== undefined) {
+		throw new Error('input() cannot combine "schema" with "validate"');
 	}
+	const schema = options.schema;
+	const shortCircuit = schema
+		? await resolveShortCircuit(options, io, (value, source) =>
+				parseShortCircuit(schema, value, source),
+			)
+		: await resolveShortCircuit(options, io);
+	if (shortCircuit.shortCircuited) return shortCircuit.value;
+	const { promptIO } = shortCircuit;
 
 	const initialState: TextSubmitState = {
 		value: "",
