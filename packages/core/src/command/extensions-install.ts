@@ -259,11 +259,11 @@ export function installExtensionContexts(
 			}
 			// A Context provided locally on a descendant is more specific than a
 			// root-wide install: skip same-name instances for that subtree.
-			const inherited = new WeakSet(target.contexts);
+			const inherited = new WeakSet(target.contexts.map(({ instance }) => instance));
 			for (const child of Object.values(target.subCommands)) {
 				const childSkip = new Set(skip);
-				for (const context of child.contexts) {
-					if (!inherited.has(context)) childSkip.add(context.instance.name);
+				for (const { instance } of child.contexts) {
+					if (!inherited.has(instance)) childSkip.add(instance.name);
 				}
 				walk(child, childSkip);
 			}

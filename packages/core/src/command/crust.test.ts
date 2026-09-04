@@ -719,6 +719,28 @@ describe("Crust .extend()", () => {
 		expect(value).toBe("A");
 	});
 
+	it("replaces an inherited Extension provider on existing descendants", async () => {
+		let value: string | undefined;
+		const original = defineContext("resource", () => "original");
+		const replacement = defineContext("resource", () => "replacement");
+		const child = defineCommand("child", (command) =>
+			command.action(async ({ ctx }) => {
+				value = await (ctx as { resource: Promise<string> }).resource;
+			}),
+		);
+		const app = new Crust("test")
+			.extend(defineExtension(defineExtensionId("original-provider"), { provides: [original()] }))
+			.add(child)
+			.extend(
+				defineExtension(defineExtensionId("replacement-provider"), {
+					provides: [replacement()],
+				}) as never,
+			);
+
+		await app.run(["child"]);
+		expect(value).toBe("replacement");
+	});
+
 	it("rejects an Extension provider flag colliding with a local flag", () => {
 		const id = defineExtensionId("flag-provider");
 		const provider = defineContext(
@@ -2602,6 +2624,21 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 				expect.objectContaining({
 					code: "DEFINITION",
 					details: expect.objectContaining({ reason: "flag-collision" }),
+				}),
+			);
+		}
+	});
+
+	it("rejects duplicate spellings within a dynamic .flags() definition", () => {
+		for (const definition of [
+			{ name: "mode", type: "string", short: "mode" },
+			{ name: "mode", type: "string", aliases: ["mode"] },
+			{ name: "mode", type: "string", aliases: ["m", "m"] },
+		]) {
+			expect(() => new Crust("cli").flags(...asDynamic([definition]))).toThrow(
+				expect.objectContaining({
+					code: "DEFINITION",
+					details: { subject: "flag", name: "mode", reason: "flag-collision" },
 				}),
 			);
 		}

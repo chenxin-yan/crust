@@ -333,9 +333,7 @@ function materializeCommandDefinition(
 	// Recipe-provided Contexts vs ancestor-owned flags. Sealed recipes start
 	// with empty compile-time spellings, so a fully typed recipe can provide a
 	// Context whose owned flag retypes an ancestor Context's parser definition;
-	// the ancestor setup would then receive a value of the wrong type. Same-name
-	// providers are exempt: re-providing a Context (e.g. an `.of()` double)
-	// replaces its flags consistently.
+	// the ancestor setup would then receive a value of the wrong type.
 	const ancestorFlagOwners = new Map<string, string>();
 	for (const { instance } of parent.contexts) {
 		for (const [flagName, def] of Object.entries(instance.ownedFlags)) {

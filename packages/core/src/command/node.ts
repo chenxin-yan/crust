@@ -83,12 +83,20 @@ export function registerFlag(
 	def: FlagDef,
 	source: "local" | "owned",
 ): void {
+	const incomingSpellings = [name, def.short, ...(def.aliases ?? [])].filter(
+		(spelling): spelling is string => spelling !== undefined,
+	);
+	if (new Set(incomingSpellings).size !== incomingSpellings.length) {
+		throw new CrustError(
+			"DEFINITION",
+			`Flag "${name}" repeats one of its own spellings on command "${node.meta.name}"`,
+			{ subject: "flag", name, reason: "flag-collision" },
+		);
+	}
 	const existingName = Object.hasOwn(node.effectiveFlags, name)
 		? name
-		: [name, def.short, ...(def.aliases ?? [])]
-				.map((spelling) =>
-					spelling === undefined ? undefined : node.flagSpellings.get(spelling)?.canonicalName,
-				)
+		: incomingSpellings
+				.map((spelling) => node.flagSpellings.get(spelling)?.canonicalName)
 				.find((existing) => existing !== undefined);
 	if (existingName !== undefined) {
 		throw new CrustError(
