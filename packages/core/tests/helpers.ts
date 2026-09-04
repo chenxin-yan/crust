@@ -17,7 +17,7 @@ export function makeNode<
 	flags?: F;
 	subCommands?: Record<string, CommandNode>;
 	run?: CommandAction;
-}): CommandNode & { args: A | undefined; effectiveFlags: F } {
+}): CommandNode & { args: A; effectiveFlags: F } {
 	// oxlint-disable-next-line anti-slop/no-runtime-typeof -- test fixtures intentionally accept either shorthand names or full metadata.
 	const meta = typeof config.meta === "string" ? { name: config.meta } : config.meta;
 	const node = createCommandNode(meta.name);
@@ -34,7 +34,7 @@ export function makeNode<
 	if (config.subCommands) node.subCommands = { ...config.subCommands };
 	if (config.run) node.run = config.run;
 	// SAFETY: the fixture copies config.args and config.flags into the returned node above.
-	return node as CommandNode & { args: A | undefined; effectiveFlags: F };
+	return node as CommandNode & { args: A; effectiveFlags: F };
 }
 
 export interface RunResult {

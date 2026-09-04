@@ -896,30 +896,6 @@ describe("validateParsed", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Schema-backed args with no parser type hint
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("parseArgs — raw schema-backed args", () => {
-	it("keeps untyped positional args as raw strings", () => {
-		const cmd = makeNode({
-			meta: { name: "raw-arg" },
-			args: [{ name: "port" }],
-		});
-		const result = parseArgs(cmd, ["3000"]);
-		expect(result.args.port).toBe("3000");
-	});
-
-	it("keeps untyped variadic args as raw string arrays", () => {
-		const cmd = makeNode({
-			meta: { name: "raw-variadic" },
-			args: [{ name: "files", variadic: true }],
-		});
-		const result = parseArgs(cmd, ["a.ts", "b.ts"]);
-		expect(result.args.files).toEqual(["a.ts", "b.ts"]);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // url / path / json built-in types
 // ────────────────────────────────────────────────────────────────────────────
 

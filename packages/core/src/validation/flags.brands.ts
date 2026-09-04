@@ -231,7 +231,7 @@ type ValidateNoPrefixedFlags<F extends FlagsDef> = {
 // Context-owned flag validation (compile-time, per-instance granularity)
 // ────────────────────────────────────────────────────────────────────────────
 
-type ContextOwnedFlags<C> = C extends {
+export type ContextOwnedFlags<C> = C extends {
 	readonly _ownedFlags?: infer OF extends FlagsDef;
 }
 	? OF

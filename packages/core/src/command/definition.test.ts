@@ -172,29 +172,6 @@ describe("command definitions", () => {
 		void rejectedForms;
 	});
 
-	it("clones annotations and isolates materializations across parents", async () => {
-		const annotation = Symbol("annotation");
-		const definition = defineCommand("one", { description: "Reusable" }, (command) => {
-			// SAFETY: this fixture attaches an ecosystem annotation to the runtime node.
-			// oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Crust's declared type omits the builder-only `.use()`, so the escape must pass through unknown.
-			Object.defineProperty((command as unknown as Crust)._node, annotation, {
-				value: "preserved",
-				enumerable: true,
-			});
-			return command;
-		});
-
-		const first = await new Crust("first").add(definition).snapshot();
-		const second = await new Crust("second").add(definition.as("two")).snapshot();
-
-		expect(Object.getOwnPropertyDescriptor(first.subCommands.one!, annotation)?.value).toBe(
-			"preserved",
-		);
-		expect(Object.getOwnPropertyDescriptor(second.subCommands.two!, annotation)?.value).toBe(
-			"preserved",
-		);
-	});
-
 	it("excludes parent local flags from added commands", async () => {
 		const definition = defineCommand("users", (command) => command.action(() => {}));
 		const app = new Crust("cli").flags({ name: "secret", type: "string" }).add(definition);

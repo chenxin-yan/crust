@@ -25,7 +25,7 @@ import {
 } from "./extensions-install.ts";
 import type { CommandNode } from "./node.ts";
 import { resolveCommand } from "./router.ts";
-import { type CommandSnapshot, snapshotCommand } from "./snapshot.ts";
+import { snapshotCommand } from "./snapshot.ts";
 
 /** Terminal defaults: line-oriented writes to the process streams. */
 const DEFAULT_IO: InvocationIO = {
@@ -67,7 +67,7 @@ function freezeTree(node: CommandNode): void {
 	Object.freeze(node.contexts);
 	Object.freeze(node.contextExtensionIds);
 	Object.freeze(node.extensions);
-	if (node.args) Object.freeze(node.args);
+	Object.freeze(node.args);
 	for (const sub of Object.values(node.subCommands)) freezeTree(sub);
 	Object.freeze(node.subCommands);
 }
@@ -109,7 +109,7 @@ function applySectionsAndFreeze(
 }
 
 /** Clone, apply Extensions and sections, freeze, and cache ordinary invocation preparation. */
-function prepareInvocation(
+export function prepareInvocation(
 	node: CommandNode,
 	materializeCommandDefinition: MaterializeCommandDefinition,
 ): PreparedInvocation {
@@ -301,14 +301,6 @@ function hasInjectedIO(io: Partial<InvocationIO> | undefined): boolean {
 	return io !== undefined && Object.keys(io).length > 0;
 }
 
-/** Prepare the cached runtime command tree for structured programmatic serialization. */
-export function prepareInvocationRoot(
-	node: CommandNode,
-	materializeCommandDefinition: MaterializeCommandDefinition,
-): CommandNode {
-	return prepareInvocation(node, materializeCommandDefinition).rootNode;
-}
-
 /** Programmatic boundary: throw raw failures and leave process status untouched. */
 export async function runInvocation(
 	node: CommandNode,
@@ -423,13 +415,4 @@ export async function executeInvocation(
 	};
 
 	await (hasInjectedIO(options?.io) ? withAmbientTerminalIO(io, invoke) : invoke());
-}
-
-/** Prepare a frozen, validated snapshot without invoking a command action. */
-export async function prepareInvocationSnapshot(
-	node: CommandNode,
-	materializeCommandDefinition: MaterializeCommandDefinition,
-): Promise<CommandSnapshot> {
-	const prepared = prepareInvocation(node, materializeCommandDefinition);
-	return snapshotCommand(prepared.rootNode);
 }

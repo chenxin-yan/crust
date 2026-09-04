@@ -1,6 +1,11 @@
 // ────────────────────────────────────────────────────────────────────────────
-// Shared compile-time validation helpers (used by flag and arg validators)
+// Shared type helpers
 // ────────────────────────────────────────────────────────────────────────────
+
+export type Awaitable<T> = T | Promise<T>;
+export type Simplify<T> = { [K in keyof T]: T[K] };
+// Flat intersections keep chained composition at constant instantiation depth.
+export type MergeContext<A, B> = A & B;
 
 /**
  * Extract the narrowed canonical `name` literal from a definition.

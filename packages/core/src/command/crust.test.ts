@@ -107,6 +107,14 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 		apply(app);
 		expect(await app.snapshot()).toEqual(before);
 	});
+
+	it("shares immutable descendants across fluent clones", () => {
+		const app = new Crust("test").add(defineCommand("sub", (command) => command));
+		const derived = app.action(() => {});
+
+		expect(derived._node.subCommands).not.toBe(app._node.subCommands);
+		expect(derived._node.subCommands.sub).toBe(app._node.subCommands.sub);
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────

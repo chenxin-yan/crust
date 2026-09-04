@@ -33,7 +33,7 @@ export interface CommandNode {
 	/** Cached canonical/short/alias table for the effective flags. */
 	flagSpellings: Map<string, FlagSpelling>;
 	/** Positional argument definitions */
-	args: ArgsDef | undefined;
+	args: ArgsDef;
 	/** Named subcommands keyed by name */
 	subCommands: Record<string, CommandNode>;
 	/** Context instances available to this command in provide order (construction order is pull-driven). */
@@ -64,7 +64,7 @@ export function createCommandNode(name: string): CommandNode {
 		ownedFlags: {},
 		effectiveFlags: {},
 		flagSpellings: new Map(),
-		args: undefined,
+		args: [],
 		subCommands: {},
 		contexts: [],
 		contextExtensionIds: [],

@@ -1,5 +1,5 @@
 import { CrustError, type CaughtError } from "../errors.ts";
-import { assertDefinableFlag } from "../parsing/spellings.ts";
+import { toFlagsRecord } from "../parsing/spellings.ts";
 import type {
 	FlagsDef,
 	InferFlags,
@@ -8,14 +8,11 @@ import type {
 	NamedFlagDef,
 	NamedFlagsRecord,
 } from "../types.ts";
-import type { ValidateNamedFlagDefs } from "../validation/flags.brands.ts";
+import type { ContextOwnedFlags, ValidateNamedFlagDefs } from "../validation/flags.brands.ts";
+import type { Awaitable } from "../validation/shared.ts";
 
 /** Upper bound for phantom name-to-value context maps. */
 export type ContextMap = object;
-export type Awaitable<T> = T | Promise<T>;
-export type Simplify<T> = { [K in keyof T]: T[K] };
-// Flat intersections keep chained composition at constant instantiation depth.
-export type MergeContext<A, B> = A & B;
 
 /** Lazy, invocation-scoped Context values. Reading a property starts construction. */
 export type ContextBag<Deps extends ContextMap = {}> = {
@@ -44,7 +41,6 @@ export interface ContextInstance<
 	OF extends FlagsDef = {},
 	Deps extends ContextMap = {},
 > {
-	readonly kind: "context";
 	readonly name: Name;
 	readonly ownedFlags: FlagsDef;
 	/** @internal — declared direct dependency factories */
@@ -103,8 +99,6 @@ export type ContextsOwnedFlags<Cs extends readonly ContextInstance[]> = Cs exten
 ]
 	? MergeFlags<ContextOwnedFlags<H>, ContextsOwnedFlags<T>>
 	: {};
-
-type ContextOwnedFlags<C> = C extends ContextInstance<any, any, infer OF, any> ? OF : {};
 
 export type FactoryOutput<F> =
 	F extends ContextFactory<infer Name, any, infer Value, any, any>
@@ -183,18 +177,9 @@ export function defineContext(
 	const config = hasConfig ? configOrSetup : {};
 	const setup = hasConfig ? maybeSetup : configOrSetup;
 	if (!setup) throw new CrustError("DEFINITION", `Context "${name}" requires a setup function`);
-	const ownedFlags: FlagsDef = {};
-	for (const def of config.flags ?? []) {
-		const { name: flagName, ...rest } = def;
-		// Validate before the record assignment: a `__proto__` key would be
-		// silently swallowed as the record's prototype.
-		const flag = rest;
-		assertDefinableFlag(flagName, flag);
-		ownedFlags[flagName] = flag;
-	}
+	const ownedFlags = toFlagsRecord(config.flags ?? []);
 	const uses = Object.freeze([...(config.uses ?? [])]);
 	const factory = (options: Parameters<AnyContextFactory>[0]): ContextInstance => ({
-		kind: "context",
 		name,
 		ownedFlags,
 		uses,
@@ -206,7 +191,6 @@ export function defineContext(
 	factory.contextName = name;
 	factory.uses = uses;
 	factory.of = (value: ContextValue): ContextInstance => ({
-		kind: "context",
 		name,
 		ownedFlags,
 		uses: [],

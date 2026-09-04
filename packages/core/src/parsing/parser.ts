@@ -151,6 +151,7 @@ function resolveDefault(def: ArgDef | FlagDef, label: string) {
 	// so an out-of-range default would silently reach the action.
 	if (choices) {
 		for (const v of Array.isArray(defaultValue) ? defaultValue : [defaultValue]) {
+			// oxlint-disable-next-line typescript/no-unnecessary-type-conversion -- runtime-configured definitions can violate the static string-default contract
 			validateChoice(String(v), choices, label);
 		}
 	}
@@ -286,25 +287,22 @@ function resolveAliases(
  * Handles coercion and default values.
  */
 function resolveFlags<F extends FlagsDef>(
-	flagsDef: F | undefined,
+	flagsDef: F,
 	tokens: ParseArgsToken[],
 	aliasToName: Record<string, string>,
 ): RawParsedFlags<F> {
 	const resolved: Record<string, ParsedFlagValue> = {};
+	const canonical = resolveAliases(tokens, aliasToName, flagsDef);
 
-	if (flagsDef) {
-		const canonical = resolveAliases(tokens, aliasToName, flagsDef);
+	for (const [name, def] of Object.entries(flagsDef)) {
+		const parsedValue = canonical[name];
 
-		for (const [name, def] of Object.entries(flagsDef)) {
-			const parsedValue = canonical[name];
-
-			if (parsedValue !== undefined) {
-				resolved[name] = coerceFlagValue(name, def, parsedValue);
-				continue;
-			}
-
-			resolved[name] = resolveDefault(def, `--${name}`);
+		if (parsedValue !== undefined) {
+			resolved[name] = coerceFlagValue(name, def, parsedValue);
+			continue;
 		}
+
+		resolved[name] = resolveDefault(def, `--${name}`);
 	}
 
 	// SAFETY: the loop writes exactly every key from flagsDef; mapped generic keys cannot be correlated at runtime.
@@ -315,11 +313,9 @@ function resolveFlags<F extends FlagsDef>(
  * Validate required flags against already-resolved flag values.
  */
 function validateRequiredFlags<F extends FlagsDef>(
-	flagsDef: F | undefined,
+	flagsDef: F,
 	resolvedFlags: RawParsedFlags<F>,
 ): void {
-	if (!flagsDef) return;
-
 	for (const [name, def] of Object.entries(flagsDef)) {
 		if (def.required === true && def.default === undefined) {
 			if (resolvedFlags[name] === undefined) {
@@ -341,21 +337,19 @@ interface ResolvedArgs<A extends ArgsDef> {
 	consumed: number;
 }
 
-function resolveArgs<A extends ArgsDef>(
-	argsDef: A | undefined,
-	positionals: string[],
-): ResolvedArgs<A> {
+function resolveArgs<A extends ArgsDef>(argsDef: A, positionals: string[]): ResolvedArgs<A> {
 	const resolved: Record<string, ParsedArgValue> = {};
 	let index = 0;
 
-	for (const def of argsDef ?? []) {
+	for (const def of argsDef) {
 		const { name, choices, parse } = def;
 		const label = `<${name}>`;
 
 		const coerceOne = (raw: string, i?: number) => {
+			if (def.schema) return raw;
 			if (choices) validateChoice(raw, choices, label);
 			if (parse) return invokeParse(parse, raw, label, i);
-			return def.type === undefined ? raw : coerceValue(raw, def.type, label);
+			return coerceValue(raw, def.type, label);
 		};
 
 		if (def.variadic) {
@@ -424,7 +418,7 @@ function validateNoNegateUsage(argv: string[], spellings: ReadonlyMap<string, Fl
  * @throws {CrustError} On unknown flags or type coercion failure
  */
 export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
-	command: CommandNode & { args: A | undefined; effectiveFlags: F },
+	command: CommandNode & { args: A; effectiveFlags: F },
 	argv: string[],
 ): ParseResult<A, F> {
 	const argsDef = command.args;
@@ -498,7 +492,7 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
  * @throws {CrustError} On missing required args or flags
  */
 export function validateParsed<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
-	command: CommandNode & { args: A | undefined; effectiveFlags: F },
+	command: CommandNode & { args: A; effectiveFlags: F },
 	parsed: ParseResult<A, F>,
 ): void {
 	const argsDef = command.args;
@@ -515,21 +509,19 @@ export function validateParsed<A extends ArgsDef = ArgsDef, F extends FlagsDef =
 	}
 
 	// Re-validate args: check for required args that are undefined
-	if (argsDef) {
-		for (const def of argsDef) {
-			const { name } = def;
-			const label = `argument "<${name}>"`;
-			// SAFETY: name comes from the same argument definitions that produced this mapped result.
-			const value = args[name as keyof typeof args];
+	for (const def of argsDef) {
+		const { name } = def;
+		const label = `argument "<${name}>"`;
+		// SAFETY: name comes from the same argument definitions that produced this mapped result.
+		const value = args[name as keyof typeof args];
 
-			if (def.required === true && def.default === undefined) {
-				if (def.variadic) {
-					if (!Array.isArray(value) || value.length === 0) {
-						throw new CrustError("VALIDATION", `Missing required ${label}`);
-					}
-				} else if (value === undefined) {
+		if (def.required === true && def.default === undefined) {
+			if (def.variadic) {
+				if (!Array.isArray(value) || value.length === 0) {
 					throw new CrustError("VALIDATION", `Missing required ${label}`);
 				}
+			} else if (value === undefined) {
+				throw new CrustError("VALIDATION", `Missing required ${label}`);
 			}
 		}
 	}

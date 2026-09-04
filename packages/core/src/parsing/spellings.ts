@@ -1,5 +1,5 @@
 import { CrustError } from "../errors.ts";
-import type { FlagDef, FlagsDef } from "../types.ts";
+import type { FlagDef, FlagsDef, NamedFlagDef } from "../types.ts";
 
 // Compile-time brands (FIX_EMPTY_SPELLING, FIX_NO_PREFIX) own literal
 // definitions; this guard owns the dynamic path (config-built flag defs).
@@ -45,7 +45,6 @@ export function assertDefinableFlag(name: string, def: FlagDef): void {
 
 export interface FlagSpelling {
 	canonicalName: string;
-	spelling: string;
 	def: FlagDef;
 	kind: "canonical" | "short" | "alias";
 	negatable: boolean;
@@ -71,13 +70,20 @@ export function addFlagSpellingEntries(
 		def,
 		negatable: isFlagNegatable(def),
 	} as const;
-	spellings.set(canonicalName, { ...entry, spelling: canonicalName, kind: "canonical" });
-	if (def.short) {
-		spellings.set(def.short, { ...entry, spelling: def.short, kind: "short" });
+	spellings.set(canonicalName, { ...entry, kind: "canonical" });
+	if (def.short) spellings.set(def.short, { ...entry, kind: "short" });
+	for (const alias of def.aliases ?? []) spellings.set(alias, { ...entry, kind: "alias" });
+}
+
+/** Convert named authoring definitions to the runtime flag record. */
+export function toFlagsRecord(definitions: readonly NamedFlagDef[]): FlagsDef {
+	const flags: FlagsDef = {};
+	for (const { name, ...flag } of definitions) {
+		// Validate before assignment: a `__proto__` key would change the record's prototype.
+		assertDefinableFlag(name, flag);
+		flags[name] = flag;
 	}
-	for (const alias of def.aliases ?? []) {
-		spellings.set(alias, { ...entry, spelling: alias, kind: "alias" });
-	}
+	return flags;
 }
 
 /** Clone a cached table while rebinding entries to cloned flag definitions. */

@@ -25,7 +25,7 @@ import type { CommandNode } from "./node.ts";
 export interface ArgSnapshot {
 	/** Argument name as defined, e.g. `"file"`. */
 	readonly name: string;
-	/** Value type (`"string"`, `"number"`, …); absent for schema/raw args. */
+	/** Value type (`"string"`, `"number"`, …); absent for schema-backed args. */
 	readonly type?: ValueType;
 	/** Human-readable description for help text. */
 	readonly description?: string;
@@ -176,21 +176,7 @@ export function snapshotCommand(node: CommandNode): CommandSnapshot {
 		subCommands[name] = snapshotCommand(sub);
 	}
 
-	// Enumerable symbol-keyed annotations (e.g. skills' command annotations)
-	// pass through so annotation-driven tooling can read them off snapshots.
-	// JSON/structuredClone ignore symbol keys, so serializability holds.
-	/* oxlint-disable anti-slop/no-unsafe-dictionary-type, anti-slop/no-chained-type-assertions -- open symbol annotations are owned by ecosystem packages and intentionally pass through unchanged. */
-	const annotations: Record<symbol, unknown> = {};
-	for (const sym of Object.getOwnPropertySymbols(node)) {
-		if (Object.getOwnPropertyDescriptor(node, sym)?.enumerable) {
-			// SAFETY: sym was enumerated from node and this open annotation value passes through unchanged.
-			annotations[sym] = (node as unknown as Record<symbol, unknown>)[sym];
-		}
-	}
-	/* oxlint-enable anti-slop/no-unsafe-dictionary-type, anti-slop/no-chained-type-assertions */
-
 	return Object.freeze({
-		...annotations,
 		meta: freezeCompact({
 			name: node.meta.name,
 			description: node.meta.description,
@@ -202,7 +188,7 @@ export function snapshotCommand(node: CommandNode): CommandSnapshot {
 			hidden: node.meta.hidden,
 		}),
 		hasAction: node.run !== undefined,
-		args: Object.freeze((node.args ?? []).map(snapshotArg)),
+		args: Object.freeze(node.args.map(snapshotArg)),
 		flags: Object.freeze(flags),
 		subCommands: Object.freeze(subCommands),
 	});

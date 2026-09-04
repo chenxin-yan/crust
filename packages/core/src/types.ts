@@ -2,8 +2,8 @@ import type { JsonValue } from "@crustjs/utils/json";
 import type { BaseValueType } from "@crustjs/utils/primitive";
 import type { InferOutput, StandardSchema } from "@crustjs/utils/schema";
 
-import type { Simplify } from "./api/context.ts";
 import type { ExtensionId } from "./identity.ts";
+import type { Simplify } from "./validation/shared.ts";
 
 /** Injectable output callbacks threaded through one invocation. */
 export interface InvocationIO {
@@ -168,16 +168,6 @@ interface JsonArgDef extends ArgDefBase {
 	parse?: never;
 }
 
-interface RawArgDef extends ArgDefBase {
-	/** Optional parser hint. Omit for raw schema-backed validation. */
-	type?: never;
-	/** Raw default value when the argument is not provided */
-	default?: unknown;
-	choices?: readonly string[];
-	/** Not supported on raw args — schema validators own the transform. */
-	parse?: never;
-}
-
 /**
  * A positional argument validated by a Standard Schema (exclusive mode).
  *
@@ -225,8 +215,7 @@ export type ArgDef =
 	| UrlArgDef
 	| PathArgDef
 	| JsonArgDef
-	| SchemaArgDef
-	| RawArgDef;
+	| SchemaArgDef;
 
 /** Ordered tuple of positional argument definitions */
 export type ArgsDef = readonly ArgDef[];
@@ -428,33 +417,18 @@ export type InferArgValue<A extends ArgDef> = A extends {
 	schema: infer S extends StandardSchema;
 }
 	? InferOutput<S>
-	: A extends { type: ValueType }
-		? A extends { variadic: true }
-			? ResolveBaseType<A>[]
-			: A extends { required: true }
+	: A extends { variadic: true }
+		? ResolveBaseType<A>[]
+		: A extends { required: true }
+			? ResolveBaseType<A>
+			: // Narrow on `default` presence, not its type. When `parse` is
+				// present the raw default is a string while `ResolveBaseType<A>`
+				// is the parsed return type, so a typed-default check would miss.
+				// ArgDef's discriminated interfaces already constrain the default
+				// shape at the call site.
+				A extends { default: unknown }
 				? ResolveBaseType<A>
-				: // Narrow on `default` presence, not its type. When `parse` is
-					// present the raw default is a string while `ResolveBaseType<A>`
-					// is the parsed return type, so a typed-default check would miss.
-					// ArgDef's discriminated interfaces already constrain the default
-					// shape at the call site.
-					A extends { default: unknown }
-					? ResolveBaseType<A>
-					: ResolveBaseType<A> | undefined
-		: // Raw args (no `type`, no `schema`) still enforce `choices` at parse
-			// time, so a literal tuple narrows the raw string token the same way.
-			// One ladder serves both raw variants: without choices the base is
-			// `unknown`, and `unknown | undefined` collapses back to `unknown`.
-			A extends { variadic: true }
-			? RawArgBase<A>[]
-			: A extends { required: true }
-				? RawArgBase<A>
-				: A extends { default: unknown }
-					? RawArgBase<A>
-					: RawArgBase<A> | undefined;
-
-/** Base type of a raw arg: the literal `choices` union when present, else `unknown`. */
-type RawArgBase<A> = A extends { choices: readonly (infer C extends string)[] } ? C : unknown;
+				: ResolveBaseType<A> | undefined;
 
 type DuplicateArgNames<
 	A extends readonly ArgDef[],
@@ -558,7 +532,7 @@ type InputBaseValue<D> = D extends { type: "boolean"; noNegate: true }
 					? string
 					: D extends { type: infer T extends ValueType }
 						? Resolve<T>
-						: string;
+						: never;
 
 type InputArgValue<D> = D extends { variadic: true } ? InputBaseValue<D>[] : InputBaseValue<D>;
 type InputFlagValue<D> = D extends { multiple: true } ? InputBaseValue<D>[] : InputBaseValue<D>;
@@ -685,8 +659,8 @@ export interface CommandMeta {
 	 * **Scope: commands only.** There is no analogous `hidden` field on
 	 * `FlagDef` or `ArgDef`; flags and positional arguments always surface
 	 * in help, completion, and man output. If you need a flag that does
-	 * not advertise itself, the workaround is to register it through a
-	 * extension's `setup()` hook without describing it (omit `description`),
+	 * not advertise itself, the workaround is to register it as an Extension
+	 * flags entry without a description (omit `description`),
 	 * which suppresses its description body but still lists the spelling
 	 * — there is intentionally no full hide mechanism at the flag layer.
 	 *
