@@ -254,6 +254,18 @@ describe("Crust .provide()", () => {
 		expect(seen).toEqual(["user(session)"]);
 	});
 
+	it("throws DEFINITION when .provide() owns a colliding flag", () => {
+		const owner = defineContext("owner", { flags: [{ name: "mode", type: "string" }] }, () => ({}));
+		const app = new Crust("cli").flags({ name: "mode", type: "string" });
+
+		expect(() => app.provide(...([owner()] as never[]))).toThrow(
+			expect.objectContaining({
+				code: "DEFINITION",
+				details: { subject: "flag", name: "mode", reason: "flag-collision" },
+			}),
+		);
+	});
+
 	it("does not backfill added children with later parent provides", async () => {
 		let lateProvided = false;
 		const late = defineContext("late", () => {

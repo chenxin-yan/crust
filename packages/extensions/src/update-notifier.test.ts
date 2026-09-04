@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust } from "@crustjs/core";
-import { snapshotCommand } from "@crustjs/core/tooling";
 
 import {
 	createStoreCacheAdapter,
@@ -48,66 +47,66 @@ function mockRegistryFailure() {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("isNewerVersion", () => {
-	it("returns true when latest major is higher", () => {
+	it("returns true when latest major is higher", async () => {
 		expect(isNewerVersion("1.0.0", "2.0.0")).toBe(true);
 	});
 
-	it("returns true when latest minor is higher", () => {
+	it("returns true when latest minor is higher", async () => {
 		expect(isNewerVersion("1.0.0", "1.1.0")).toBe(true);
 	});
 
-	it("returns true when latest patch is higher", () => {
+	it("returns true when latest patch is higher", async () => {
 		expect(isNewerVersion("1.0.0", "1.0.1")).toBe(true);
 	});
 
-	it("returns false for equal versions", () => {
+	it("returns false for equal versions", async () => {
 		expect(isNewerVersion("1.2.3", "1.2.3")).toBe(false);
 	});
 
-	it("returns false when latest is older (major)", () => {
+	it("returns false when latest is older (major)", async () => {
 		expect(isNewerVersion("2.0.0", "1.0.0")).toBe(false);
 	});
 
-	it("returns false when latest is older (minor)", () => {
+	it("returns false when latest is older (minor)", async () => {
 		expect(isNewerVersion("1.2.0", "1.1.0")).toBe(false);
 	});
 
-	it("returns false when latest is older (patch)", () => {
+	it("returns false when latest is older (patch)", async () => {
 		expect(isNewerVersion("1.0.2", "1.0.1")).toBe(false);
 	});
 
-	it("returns false when current is unparsable", () => {
+	it("returns false when current is unparsable", async () => {
 		expect(isNewerVersion("invalid", "1.0.0")).toBe(false);
 	});
 
-	it("returns false when latest is unparsable", () => {
+	it("returns false when latest is unparsable", async () => {
 		expect(isNewerVersion("1.0.0", "invalid")).toBe(false);
 	});
 
-	it("returns false when both are unparsable", () => {
+	it("returns false when both are unparsable", async () => {
 		expect(isNewerVersion("invalid", "also-invalid")).toBe(false);
 	});
 
-	it("notifies prerelease users when the stable release is available", () => {
+	it("notifies prerelease users when the stable release is available", async () => {
 		expect(isNewerVersion("1.2.3-beta.1", "1.2.3")).toBe(true);
 	});
 
-	it("handles prerelease latest versions", () => {
+	it("handles prerelease latest versions", async () => {
 		expect(isNewerVersion("1.2.3", "1.2.4-rc.1")).toBe(true);
 	});
 
-	it("orders prerelease identifiers per SemVer precedence", () => {
+	it("orders prerelease identifiers per SemVer precedence", async () => {
 		expect(isNewerVersion("1.0.0-alpha.2", "1.0.0-alpha.10")).toBe(true);
 		expect(isNewerVersion("1.0.0-alpha", "1.0.0-alpha.1")).toBe(true);
 		expect(isNewerVersion("1.0.0-1", "1.0.0-alpha")).toBe(true);
 		expect(isNewerVersion("1.0.0+build.1", "1.0.0+build.2")).toBe(false);
 	});
 
-	it("handles v-prefixed versions", () => {
+	it("handles v-prefixed versions", async () => {
 		expect(isNewerVersion("v1.0.0", "v2.0.0")).toBe(true);
 	});
 
-	it("handles mixed v-prefix", () => {
+	it("handles mixed v-prefix", async () => {
 		expect(isNewerVersion("v1.0.0", "2.0.0")).toBe(true);
 		expect(isNewerVersion("1.0.0", "v2.0.0")).toBe(true);
 	});
@@ -364,9 +363,9 @@ describe("updateNotifier post-run hook", () => {
 		},
 	};
 
-	/** Create a basic command node for testing. */
-	function makeCommandSnapshot(name = "test-cli") {
-		return snapshotCommand(new Crust(name).action(() => {})._node);
+	/** Create a basic command snapshot for testing. */
+	async function makeCommandSnapshot(name = "test-cli") {
+		return await new Crust(name).action(() => {}).snapshot();
 	}
 
 	/** Helper to invoke the extension post-run hook with a completed outcome. */
@@ -394,7 +393,7 @@ describe("updateNotifier post-run hook", () => {
 		};
 		const extension = updateNotifier(extensionOptions);
 
-		const rootCommand = makeCommandSnapshot(overrides?.commandName ?? options.packageName);
+		const rootCommand = await makeCommandSnapshot(overrides?.commandName ?? options.packageName);
 
 		const context = {
 			argv: [] as readonly string[],

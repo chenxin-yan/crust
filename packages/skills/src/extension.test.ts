@@ -23,12 +23,16 @@ import { skill } from "./extension.ts";
 import { installSkill } from "./generate.ts";
 
 let tempRoot: string;
+let originalExitCode: typeof process.exitCode;
 
 beforeEach(async () => {
+	originalExitCode = process.exitCode;
+	process.exitCode = 0;
 	tempRoot = await mkdtemp(join(tmpdir(), "crust-skill-plugin-"));
 });
 
 afterEach(async () => {
+	process.exitCode = originalExitCode;
 	await rm(tempRoot, { recursive: true, force: true });
 });
 

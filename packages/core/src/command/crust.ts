@@ -12,13 +12,11 @@ import type {
 import type { Extension, ExtensionsProvidesOutput } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
-import { addFlagSpellingEntries, cloneFlagSpellings } from "../parsing/spellings.ts";
 import { isListed } from "../sections.ts";
 import type {
 	ArgDef,
 	ArgsDef,
 	CommandMeta,
-	CommandSection,
 	CommandSectionInput,
 	FlagDef,
 	FlagsDef,
@@ -65,9 +63,13 @@ import type {
 	MergeContext,
 	UnionToIntersection,
 } from "../validation/shared.ts";
-import { cloneCommandNode, installExtensionContexts } from "./extensions-install.ts";
+import {
+	cloneCommandNode,
+	installExtensionContexts,
+	validateCommandSections,
+} from "./extensions-install.ts";
 import { executeInvocation, prepareInvocation, runInvocation } from "./invocation.ts";
-import { type CommandAction, type CommandNode, createCommandNode } from "./node.ts";
+import { type CommandAction, type CommandNode, createCommandNode, registerFlag } from "./node.ts";
 import { resolveCommand } from "./router.ts";
 import { snapshotCommand } from "./snapshot.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
@@ -233,11 +235,6 @@ export type RootCommandMeta = Pick<CommandMeta, "description" | "usage"> & {
 	readonly sections?: readonly CommandSectionInput[];
 };
 
-function copyUnvalidatedSections(sections: readonly CommandSectionInput[]): CommandSection[] {
-	// SAFETY: preparation validates and replaces these author inputs before any consumer observes them.
-	return sections.map((section) => ({ ...section })) as CommandSection[];
-}
-
 type AnyCommandDefinitionBuilder = CommandDefinitionBuilder<
 	any,
 	any,
@@ -306,11 +303,10 @@ function materializeCommandDefinition(
 
 	const child = new Crust(name);
 	child._ancestorOwnedFlags = parent.ownedFlags;
-	child._node.ownedFlags = { ...parent.ownedFlags };
-	child._node.effectiveFlags = { ...parent.ownedFlags };
-	child._node.flagSpellings = cloneFlagSpellings(parent.flagSpellings, child._node.effectiveFlags);
-	child._node.contexts = [...parent.contexts];
-	child._node.contextExtensionIds = [...parent.contextExtensionIds];
+	for (const [flagName, def] of Object.entries(parent.ownedFlags)) {
+		registerFlag(child._node, flagName, def, "owned");
+	}
+	child._node.contexts = parent.contexts.map((context) => ({ ...context }));
 
 	// SAFETY: Keep this cast aligned with the recipe-builder surface to avoid silent drift.
 	// A compile-time check is structurally impossible: branded generic method parameters compare
@@ -341,14 +337,14 @@ function materializeCommandDefinition(
 	// providers are exempt: re-providing a Context (e.g. an `.of()` double)
 	// replaces its flags consistently.
 	const ancestorFlagOwners = new Map<string, string>();
-	for (const instance of parent.contexts) {
+	for (const { instance } of parent.contexts) {
 		for (const [flagName, def] of Object.entries(instance.ownedFlags)) {
 			for (const spelling of [flagName, def.short, ...(def.aliases ?? [])]) {
 				if (spelling) ancestorFlagOwners.set(spelling, instance.name);
 			}
 		}
 	}
-	for (const instance of configured._node.contexts.slice(parent.contexts.length)) {
+	for (const { instance } of configured._node.contexts.slice(parent.contexts.length)) {
 		for (const [flagName, def] of Object.entries(instance.ownedFlags)) {
 			for (const spelling of [flagName, def.short, ...(def.aliases ?? [])]) {
 				if (!spelling) continue;
@@ -647,7 +643,7 @@ export function defineCommand(
 	const meta: Omit<CommandMeta, "name"> = {
 		...metaRest,
 		...(config.aliases ? { aliases: [...config.aliases] } : {}),
-		...(sections ? { sections: copyUnvalidatedSections(sections) } : {}),
+		...(sections ? { sections: validateCommandSections(name, sections) } : {}),
 	};
 	const internal: CommandDefinitionInternal = {
 		// SAFETY: overloads pair each recipe with its declared dependency context; storage erases it.
@@ -1036,7 +1032,7 @@ export class Crust<
 		if (meta.description !== undefined) this._node.meta.description = meta.description;
 		if (meta.usage !== undefined) this._node.meta.usage = meta.usage;
 		if (meta.sections !== undefined) {
-			this._node.meta.sections = copyUnvalidatedSections(meta.sections);
+			this._node.meta.sections = validateCommandSections(name, meta.sections);
 		}
 		this._ancestorOwnedFlags = {};
 	}
@@ -1085,41 +1081,15 @@ export class Crust<
 	flags<const Defs extends readonly NamedFlagDef[]>(
 		...defs: ValidateNamedFlagDefs<Defs, Sp>
 	): AfterFlags<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Defs> {
-		const localFlags: FlagsDef = { ...this._node.localFlags };
-		const effectiveFlags: FlagsDef = { ...this._node.effectiveFlags };
-		const flagSpellings = cloneFlagSpellings(this._node.flagSpellings, effectiveFlags);
+		const cloned = this._clone<
+			AfterFlags<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Defs>
+		>({});
 		for (const def of defs) {
 			const { name, ...rest } = def;
 			// SAFETY: removing name from a NamedFlagDef leaves its discriminated FlagDef.
-			const definition = rest as FlagDef;
-			// ValidateNamedFlagDefs owns literal collisions; this owns config-built
-			// defs and sealed-recipe collisions with ancestor-seeded flags, where a
-			// silent overwrite retypes an already-bound consumer's flag.
-			if (Object.hasOwn(effectiveFlags, name)) {
-				throw new CrustError("DEFINITION", `Flag "${name}" is already defined on this command`, {
-					subject: "flag",
-					name,
-					reason: "flag-collision",
-				});
-			}
-			for (const spelling of [definition.short, ...(definition.aliases ?? [])]) {
-				const existing = spelling === undefined ? undefined : flagSpellings.get(spelling);
-				if (existing !== undefined && existing.canonicalName !== name) {
-					throw new CrustError(
-						"DEFINITION",
-						`Flag spelling "${spelling}" collides with existing flag "${existing.canonicalName}"`,
-						{ subject: "flag", name, reason: "flag-collision" },
-					);
-				}
-			}
-			localFlags[name] = definition;
-			effectiveFlags[name] = definition;
-			addFlagSpellingEntries(flagSpellings, name, definition);
+			registerFlag(cloned._node, name, rest, "local");
 		}
-
-		return this._clone<
-			AfterFlags<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Defs>
-		>({ localFlags, effectiveFlags, flagSpellings });
+		return cloned;
 	}
 
 	/**
@@ -1173,7 +1143,8 @@ export class Crust<
 	 * Contexts are inherited by descendant commands and constructed lazily when
 	 * their `ctx` property is accessed. Dependency order within one call does not
 	 * affect construction. Disposable values are released in
-	 * reverse construction order after post-run hooks.
+	 * reverse construction order after post-run hooks. A Context-owned flag that
+	 * collides with an existing flag throws a `DEFINITION` error.
 	 *
 	 */
 	provide<const Cs extends readonly ContextInstance[]>(
@@ -1184,24 +1155,15 @@ export class Crust<
 		// Positional by design: providers reach only this node and children added
 		// afterwards (flag scoping; see definition.test.ts). Extension `provides`
 		// differ deliberately — they are application-wide and walk the whole tree.
-		const ownedFlags = { ...this._node.ownedFlags };
-		const effectiveFlags = { ...this._node.effectiveFlags };
-		const flagSpellings = cloneFlagSpellings(this._node.flagSpellings, effectiveFlags);
-		const contexts: ContextInstance[] = [...this._node.contexts, ...instances];
-		const contextExtensionIds = [
-			...this._node.contextExtensionIds,
-			...instances.map(() => undefined),
-		];
+		const cloned = this._clone<
+			AfterProvide<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Cs>
+		>({ contexts: [...this._node.contexts, ...instances.map((instance) => ({ instance }))] });
 		for (const instance of instances) {
 			for (const [name, definition] of Object.entries(instance.ownedFlags)) {
-				effectiveFlags[name] = definition;
-				addFlagSpellingEntries(flagSpellings, name, definition);
+				registerFlag(cloned._node, name, definition, "owned");
 			}
-			Object.assign(ownedFlags, instance.ownedFlags);
 		}
-		return this._clone<
-			AfterProvide<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Cs>
-		>({ contexts, contextExtensionIds, ownedFlags, effectiveFlags, flagSpellings });
+		return cloned;
 	}
 
 	/**
@@ -1428,15 +1390,16 @@ export class Crust<
 	 * This is the terminal CLI boundary — call it on the root builder. It
 	 * renders a failure once (through Extension `onError` hooks, ending in
 	 * Core's default renderer), sets `process.exitCode` (`1`, or
-	 * `130` for an `AbortError` cancellation), and resolves.
+	 * `130` for an `AbortError` cancellation), and resolves to the exit code.
 	 *
 	 * @param options - Optional overrides (e.g. custom `argv` and captured
 	 *                   `io` for in-process testing of exit codes and
 	 *                   rendered failures)
+	 * @returns The terminal exit code (`0`, `1`, or `130` for cancellation)
 	 */
-	async execute(options?: { argv?: string[]; io?: Partial<InvocationIO> }): Promise<void> {
+	async execute(options?: { argv?: string[]; io?: Partial<InvocationIO> }): Promise<number> {
 		// Terminal calls render failures and set process exit status instead of throwing.
-		await executeInvocation(this._node, options, materializeCommandDefinition);
+		return await executeInvocation(this._node, options, materializeCommandDefinition);
 	}
 }
 

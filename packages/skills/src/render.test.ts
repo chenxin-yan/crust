@@ -2,8 +2,6 @@ import { describe, expect, it } from "bun:test";
 
 import type { ArgDef, CommandSection, FlagDef } from "@crustjs/core";
 import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
-import { snapshotCommand } from "@crustjs/core/tooling";
-type CommandNode = Parameters<typeof snapshotCommand>[0];
 
 import { buildManifest } from "./manifest.ts";
 import { renderSkill } from "./render.ts";
@@ -23,20 +21,41 @@ function makeCommand(opts: {
 	args?: readonly ArgDef[];
 	flags?: Record<string, FlagDef>;
 	run?: () => void;
-	subCommands?: Record<string, CommandNode>;
-}): CommandNode {
-	const node = new Crust(opts.meta.name)._node;
-	Object.assign(node.meta, opts.meta);
-	if (opts.args) node.args = opts.args;
-	if (opts.flags) {
-		node.localFlags = { ...opts.flags };
-		node.effectiveFlags = { ...opts.flags };
+	subCommands?: Record<string, CommandFixture>;
+}): CommandFixture {
+	return opts;
+}
+
+type CommandFixture = Parameters<typeof makeCommand>[0];
+
+function configureFixture(command: Crust, fixture: CommandFixture): Crust {
+	let configured = command;
+	if (fixture.args) configured = configured.args(...fixture.args);
+	if (fixture.flags) {
+		const flags = Object.entries(fixture.flags).map(([name, def]) => ({ name, ...def }));
+		configured = configured.flags(...(flags as never[]));
 	}
-	if (opts.run) node.run = opts.run;
-	if (opts.subCommands) {
-		node.subCommands = opts.subCommands;
+	if (fixture.run) configured = configured.action(fixture.run);
+	for (const child of Object.values(fixture.subCommands ?? {})) {
+		const { name, ...meta } = child.meta;
+		configured = configured.add(
+			defineCommand(
+				name as never,
+				meta as never,
+				(builder) =>
+					// SAFETY: command recipes receive Crust's configure-only runtime builder.
+					// oxlint-disable-next-line anti-slop/no-chained-type-assertions -- the public recipe interface intentionally hides the Crust class identity.
+					configureFixture(builder as unknown as Crust, child) as never,
+			),
+		);
 	}
-	return node;
+	return configured;
+}
+
+async function snapshotFixture(fixture: CommandFixture | Crust) {
+	if (fixture instanceof Crust) return await fixture.snapshot();
+	const { name, ...meta } = fixture.meta;
+	return await configureFixture(new Crust(name, meta), fixture).snapshot();
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -71,12 +90,12 @@ function expectTextContent(file: RenderedFile | undefined): string {
 /**
  * Builds a simple manifest from a makeCommand call for testing.
  */
-function buildSimpleManifest(): ManifestNode {
+async function buildSimpleManifest(): Promise<ManifestNode> {
 	const cmd = makeCommand({
 		meta: { name: "test-cli", description: "A test CLI tool" },
 		run() {},
 	});
-	return buildManifest(snapshotCommand(cmd));
+	return buildManifest(await snapshotFixture(cmd));
 }
 
 describe("renderSkill", () => {
@@ -85,8 +104,8 @@ describe("renderSkill", () => {
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("SKILL.md content", () => {
-		it("includes version in metadata when provided", () => {
-			const manifest = buildSimpleManifest();
+		it("includes version in metadata when provided", async () => {
+			const manifest = await buildSimpleManifest();
 			const meta: SkillMeta = { ...baseMeta, version: "1.2.3" };
 			const files = renderSkill(manifest, meta);
 			const skill = findFile(files, "SKILL.md");
@@ -95,8 +114,8 @@ describe("renderSkill", () => {
 			expect(skill?.content).toContain('  version: "1.2.3"');
 		});
 
-		it("omits the metadata block when no version is provided", () => {
-			const manifest = buildSimpleManifest();
+		it("omits the metadata block when no version is provided", async () => {
+			const manifest = await buildSimpleManifest();
 			const files = renderSkill(manifest, baseMeta);
 			const skill = findFile(files, "SKILL.md");
 
@@ -104,8 +123,8 @@ describe("renderSkill", () => {
 			expect(skill?.content).not.toContain("version:");
 		});
 
-		it("includes usage section when root is runnable", () => {
-			const manifest = buildSimpleManifest();
+		it("includes usage section when root is runnable", async () => {
+			const manifest = await buildSimpleManifest();
 			const files = renderSkill(manifest, baseMeta);
 			const skill = findFile(files, "SKILL.md");
 
@@ -113,7 +132,7 @@ describe("renderSkill", () => {
 			expect(skill?.content).toContain("root command is directly executable");
 		});
 
-		it("omits usage section when root is not runnable", () => {
+		it("omits usage section when root is not runnable", async () => {
 			const child = makeCommand({
 				meta: { name: "child" },
 				run() {},
@@ -123,7 +142,7 @@ describe("renderSkill", () => {
 				subCommands: { child },
 			});
 
-			const manifest = buildManifest(snapshotCommand(root));
+			const manifest = buildManifest(await snapshotFixture(root));
 			const meta: SkillMeta = {
 				name: "app",
 				description: "App",
@@ -136,8 +155,8 @@ describe("renderSkill", () => {
 			expect(skill?.content).not.toContain("root command is directly executable");
 		});
 
-		it("uses the literal skill name in when-to-use text", () => {
-			const manifest = buildSimpleManifest();
+		it("uses the literal skill name in when-to-use text", async () => {
+			const manifest = await buildSimpleManifest();
 			const meta: SkillMeta = {
 				...baseMeta,
 				name: "use-my-tool",
@@ -150,8 +169,8 @@ describe("renderSkill", () => {
 			);
 		});
 
-		it("escapes YAML-special characters in description", () => {
-			const manifest = buildSimpleManifest();
+		it("escapes YAML-special characters in description", async () => {
+			const manifest = await buildSimpleManifest();
 			const meta: SkillMeta = {
 				...baseMeta,
 				description: 'Deploy: the "app" to {production}',
@@ -163,8 +182,8 @@ describe("renderSkill", () => {
 			expect(skill?.content).toContain('description: "Deploy: the \\"app\\" to {production}"');
 		});
 
-		it("does not quote YAML values that are safe plain scalars", () => {
-			const manifest = buildSimpleManifest();
+		it("does not quote YAML values that are safe plain scalars", async () => {
+			const manifest = await buildSimpleManifest();
 			const files = renderSkill(manifest, baseMeta);
 			const skill = findFile(files, "SKILL.md");
 
@@ -178,7 +197,7 @@ describe("renderSkill", () => {
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("SKILL.md command reference content", () => {
-		it("includes command descriptions in the markdown table", () => {
+		it("includes command descriptions in the markdown table", async () => {
 			const child = makeCommand({
 				meta: { name: "child" },
 				run() {},
@@ -187,7 +206,7 @@ describe("renderSkill", () => {
 				meta: { name: "app", description: "Build | deploy" },
 				subCommands: { child },
 			});
-			const files = renderSkill(buildManifest(snapshotCommand(root)), baseMeta);
+			const files = renderSkill(buildManifest(await snapshotFixture(root)), baseMeta);
 			const skill = findFile(files, "SKILL.md");
 
 			expect(skill).toBeDefined();
@@ -201,7 +220,7 @@ describe("renderSkill", () => {
 			);
 		});
 
-		it("shows correct type labels for runnable vs group", () => {
+		it("shows correct type labels for runnable vs group", async () => {
 			const leaf = makeCommand({
 				meta: { name: "leaf" },
 				run() {},
@@ -216,7 +235,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(snapshotCommand(hybrid));
+			const manifest = buildManifest(await snapshotFixture(hybrid));
 			const meta: SkillMeta = {
 				name: "hybrid",
 				description: "Test",
@@ -239,7 +258,7 @@ describe("renderSkill", () => {
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("leaf command files", () => {
-		it("renders an arguments table with required/optional/variadic", () => {
+		it("renders an arguments table with required/optional/variadic", async () => {
 			const cmd = makeCommand({
 				meta: { name: "copy" },
 				args: [
@@ -264,7 +283,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(snapshotCommand(cmd));
+			const manifest = buildManifest(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "copy",
 				description: "Copy",
@@ -279,7 +298,7 @@ describe("renderSkill", () => {
 			expect(copy?.content).toContain("| `extras...` | string | No | Extra files |");
 		});
 
-		it("renders argument default values", () => {
+		it("renders argument default values", async () => {
 			const cmd = makeCommand({
 				meta: { name: "serve" },
 				args: [
@@ -293,7 +312,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(snapshotCommand(cmd));
+			const manifest = buildManifest(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "serve",
 				description: "Serve",
@@ -305,7 +324,7 @@ describe("renderSkill", () => {
 			expect(serve?.content).toContain("Default: `3000`");
 		});
 
-		it("renders Context-owned flags from a Core-built command tree", () => {
+		it("renders Context-owned flags from a Core-built command tree", async () => {
 			const apiKey = defineFlag("api-key", {
 				type: "string",
 				description: "API credential",
@@ -314,14 +333,14 @@ describe("renderSkill", () => {
 			const app = new Crust("test-cli")
 				.provide(auth())
 				.add(defineCommand("deploy", (command) => command.action(() => {})));
-			const files = renderSkill(buildManifest(snapshotCommand(app._node)), baseMeta);
+			const files = renderSkill(buildManifest(await snapshotFixture(app)), baseMeta);
 			const deploy = findFile(files, "commands/deploy.md");
 
 			expect(deploy?.content).toContain("--api-key");
 			expect(deploy?.content).toContain("API credential");
 		});
 
-		it("renders a flags table with doc-model spellings and defaults", () => {
+		it("renders a flags table with doc-model spellings and defaults", async () => {
 			const cmd = makeCommand({
 				meta: { name: "build" },
 				flags: {
@@ -346,7 +365,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(snapshotCommand(cmd));
+			const manifest = buildManifest(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "build",
 				description: "Build",
@@ -365,7 +384,7 @@ describe("renderSkill", () => {
 			expect(build?.content).toContain("| Yes |");
 		});
 
-		it("renders multiple flag indicator", () => {
+		it("renders multiple flag indicator", async () => {
 			const cmd = makeCommand({
 				meta: { name: "lint" },
 				flags: {
@@ -378,7 +397,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(snapshotCommand(cmd));
+			const manifest = buildManifest(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "lint",
 				description: "Lint",
@@ -390,7 +409,7 @@ describe("renderSkill", () => {
 			expect(lint?.content).toContain("Can be specified multiple times");
 		});
 
-		it("renders variadic args in usage line", () => {
+		it("renders variadic args in usage line", async () => {
 			const cmd = makeCommand({
 				meta: { name: "install" },
 				args: [
@@ -404,7 +423,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(snapshotCommand(cmd));
+			const manifest = buildManifest(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "install",
 				description: "Install",
@@ -416,13 +435,13 @@ describe("renderSkill", () => {
 			expect(install?.content).toContain("install <packages...>");
 		});
 
-		it("renders navigation with link to SKILL.md", () => {
+		it("renders navigation with link to SKILL.md", async () => {
 			const cmd = makeCommand({
 				meta: { name: "serve" },
 				run() {},
 			});
 
-			const manifest = buildManifest(snapshotCommand(cmd));
+			const manifest = buildManifest(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "serve",
 				description: "Serve",
@@ -435,7 +454,7 @@ describe("renderSkill", () => {
 			expect(serve?.content).toContain("SKILL.md");
 		});
 
-		it("renders metadata sections for leaf commands", () => {
+		it("renders metadata sections for leaf commands", async () => {
 			const cmd = makeCommand({
 				meta: {
 					name: "deploy",
@@ -453,7 +472,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(snapshotCommand(cmd));
+			const manifest = buildManifest(await snapshotFixture(cmd));
 			const files = renderSkill(manifest, {
 				name: "deploy",
 				description: "Deploy",
@@ -469,13 +488,13 @@ describe("renderSkill", () => {
 			);
 		});
 
-		it("omits arguments section when command has no args", () => {
+		it("omits arguments section when command has no args", async () => {
 			const cmd = makeCommand({
 				meta: { name: "serve" },
 				run() {},
 			});
 
-			const manifest = buildManifest(snapshotCommand(cmd));
+			const manifest = buildManifest(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "serve",
 				description: "Serve",
@@ -487,13 +506,13 @@ describe("renderSkill", () => {
 			expect(serve?.content).not.toContain("## Arguments");
 		});
 
-		it("omits flags section when command has no flags", () => {
+		it("omits flags section when command has no flags", async () => {
 			const cmd = makeCommand({
 				meta: { name: "serve" },
 				run() {},
 			});
 
-			const manifest = buildManifest(snapshotCommand(cmd));
+			const manifest = buildManifest(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "serve",
 				description: "Serve",
@@ -505,14 +524,14 @@ describe("renderSkill", () => {
 			expect(serve?.content).not.toContain("## Flags");
 		});
 
-		it("renders dash in description cell when arg has no description or default", () => {
+		it("renders dash in description cell when arg has no description or default", async () => {
 			const cmd = makeCommand({
 				meta: { name: "test" },
 				args: [{ name: "file", type: "string" }] as ArgDef[],
 				run() {},
 			});
 
-			const manifest = buildManifest(snapshotCommand(cmd));
+			const manifest = buildManifest(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "test",
 				description: "Test",
@@ -524,7 +543,7 @@ describe("renderSkill", () => {
 			expect(test?.content).toContain("| `file` | string | No | - |");
 		});
 
-		it("renders dash in description cell when flag has no description or default", () => {
+		it("renders dash in description cell when flag has no description or default", async () => {
 			const cmd = makeCommand({
 				meta: { name: "test" },
 				flags: {
@@ -533,7 +552,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(snapshotCommand(cmd));
+			const manifest = buildManifest(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "test",
 				description: "Test",
@@ -551,7 +570,7 @@ describe("renderSkill", () => {
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("group command files", () => {
-		it("lists subcommands with links", () => {
+		it("lists subcommands with links", async () => {
 			const add = makeCommand({
 				meta: { name: "add", description: "Add a remote" },
 				run() {},
@@ -569,7 +588,7 @@ describe("renderSkill", () => {
 				subCommands: { remote },
 			});
 
-			const manifest = buildManifest(snapshotCommand(root));
+			const manifest = buildManifest(await snapshotFixture(root));
 			const meta: SkillMeta = {
 				name: "git",
 				description: "Git",
@@ -585,7 +604,7 @@ describe("renderSkill", () => {
 			expect(remoteFile?.content).toContain("Remove a remote");
 		});
 
-		it("includes usage section when group is also runnable", () => {
+		it("includes usage section when group is also runnable", async () => {
 			const sub = makeCommand({
 				meta: { name: "sub" },
 				run() {},
@@ -602,7 +621,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(snapshotCommand(parent));
+			const manifest = buildManifest(await snapshotFixture(parent));
 			const meta: SkillMeta = {
 				name: "parent",
 				description: "Parent",
@@ -617,7 +636,7 @@ describe("renderSkill", () => {
 			expect(parentFile?.content).toContain("## Subcommands");
 		});
 
-		it("omits usage/args/flags sections when group is not runnable", () => {
+		it("omits usage/args/flags sections when group is not runnable", async () => {
 			const sub = makeCommand({
 				meta: { name: "sub" },
 				run() {},
@@ -627,7 +646,7 @@ describe("renderSkill", () => {
 				subCommands: { sub },
 			});
 
-			const manifest = buildManifest(snapshotCommand(parent));
+			const manifest = buildManifest(await snapshotFixture(parent));
 			const meta: SkillMeta = {
 				name: "parent",
 				description: "Parent",
@@ -642,7 +661,7 @@ describe("renderSkill", () => {
 			expect(parentFile?.content).toContain("## Subcommands");
 		});
 
-		it("renders metadata sections for group commands", () => {
+		it("renders metadata sections for group commands", async () => {
 			const sub = makeCommand({
 				meta: { name: "sub" },
 				run() {},
@@ -661,7 +680,7 @@ describe("renderSkill", () => {
 				subCommands: { sub },
 			});
 
-			const manifest = buildManifest(snapshotCommand(parent));
+			const manifest = buildManifest(await snapshotFixture(parent));
 			const files = renderSkill(manifest, {
 				name: "parent",
 				description: "Parent",
@@ -674,7 +693,7 @@ describe("renderSkill", () => {
 			);
 		});
 
-		it("uses relative links to child command files", () => {
+		it("uses relative links to child command files", async () => {
 			const add = makeCommand({
 				meta: { name: "add" },
 				run() {},
@@ -688,7 +707,7 @@ describe("renderSkill", () => {
 				subCommands: { remote },
 			});
 
-			const manifest = buildManifest(snapshotCommand(root));
+			const manifest = buildManifest(await snapshotFixture(root));
 			const meta: SkillMeta = {
 				name: "git",
 				description: "Git",
@@ -707,7 +726,7 @@ describe("renderSkill", () => {
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("link integrity", () => {
-		it("all file references in SKILL.md point to existing files", () => {
+		it("all file references in SKILL.md point to existing files", async () => {
 			const serve = makeCommand({
 				meta: { name: "serve", description: "Start server" },
 				run() {},
@@ -721,7 +740,7 @@ describe("renderSkill", () => {
 				subCommands: { serve, build },
 			});
 
-			const manifest = buildManifest(snapshotCommand(root));
+			const manifest = buildManifest(await snapshotFixture(root));
 			const meta: SkillMeta = {
 				name: "app",
 				description: "App CLI",
@@ -748,7 +767,7 @@ describe("renderSkill", () => {
 			}
 		});
 
-		it("SKILL.md command reference lists all generated command files", () => {
+		it("SKILL.md command reference lists all generated command files", async () => {
 			const add = makeCommand({
 				meta: { name: "add" },
 				run() {},
@@ -762,7 +781,7 @@ describe("renderSkill", () => {
 				subCommands: { remote },
 			});
 
-			const manifest = buildManifest(snapshotCommand(root));
+			const manifest = buildManifest(await snapshotFixture(root));
 			const meta: SkillMeta = {
 				name: "git",
 				description: "Git",
@@ -783,7 +802,7 @@ describe("renderSkill", () => {
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("complex command tree fixture", () => {
-		it("renders a realistic git-like CLI correctly", () => {
+		it("renders a realistic git-like CLI correctly", async () => {
 			const clone = makeCommand({
 				meta: { name: "clone", description: "Clone a repository" },
 				args: [
@@ -841,7 +860,7 @@ describe("renderSkill", () => {
 				subCommands: { clone, remote },
 			});
 
-			const manifest = buildManifest(snapshotCommand(root));
+			const manifest = buildManifest(await snapshotFixture(root));
 			const meta: SkillMeta = {
 				name: "git",
 				description:
@@ -901,7 +920,7 @@ describe("renderSkill", () => {
 	// ────────────────────────────────────────────────────────────────────────
 
 	describe("edge cases", () => {
-		it("handles deeply nested commands (4 levels)", () => {
+		it("handles deeply nested commands (4 levels)", async () => {
 			const deep = makeCommand({
 				meta: { name: "deep", description: "Deep command" },
 				run() {},
@@ -919,7 +938,7 @@ describe("renderSkill", () => {
 				subCommands: { level2 },
 			});
 
-			const manifest = buildManifest(snapshotCommand(root));
+			const manifest = buildManifest(await snapshotFixture(root));
 			const meta: SkillMeta = {
 				name: "root",
 				description: "Root",
@@ -934,7 +953,7 @@ describe("renderSkill", () => {
 			expect(deepFile?.content).toContain("`root level2 level3`");
 		});
 
-		it("escapes pipe characters in description within table cells", () => {
+		it("escapes pipe characters in description within table cells", async () => {
 			const cmd = makeCommand({
 				meta: { name: "test" },
 				flags: {
@@ -946,7 +965,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(snapshotCommand(cmd));
+			const manifest = buildManifest(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "test",
 				description: "Test tool",
@@ -968,7 +987,7 @@ describe("renderSkill", () => {
 			}
 		});
 
-		it("preserves pipe in command description outside tables", () => {
+		it("preserves pipe in command description outside tables", async () => {
 			const cmd = makeCommand({
 				meta: {
 					name: "test",
@@ -977,7 +996,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(snapshotCommand(cmd));
+			const manifest = buildManifest(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "test",
 				description: "Test tool",
@@ -990,7 +1009,7 @@ describe("renderSkill", () => {
 			expect(test?.content).toContain("Use `--flag` to enable | disable features");
 		});
 
-		it("escapes pipe characters in arg description within table cells", () => {
+		it("escapes pipe characters in arg description within table cells", async () => {
 			const cmd = makeCommand({
 				meta: { name: "test" },
 				args: [
@@ -1003,7 +1022,7 @@ describe("renderSkill", () => {
 				run() {},
 			});
 
-			const manifest = buildManifest(snapshotCommand(cmd));
+			const manifest = buildManifest(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "test",
 				description: "Test tool",
@@ -1015,13 +1034,13 @@ describe("renderSkill", () => {
 			expect(test?.content).toContain("File path \\| URL to process");
 		});
 
-		it("root command file does not have parent navigation", () => {
+		it("root command file does not have parent navigation", async () => {
 			const cmd = makeCommand({
 				meta: { name: "app" },
 				run() {},
 			});
 
-			const manifest = buildManifest(snapshotCommand(cmd));
+			const manifest = buildManifest(await snapshotFixture(cmd));
 			const meta: SkillMeta = {
 				name: "app",
 				description: "App",

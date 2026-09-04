@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
-import { snapshotCommand } from "@crustjs/core/tooling";
 
 import { completion } from "./index.ts";
 import type { CompletionCommand } from "./spec.ts";
@@ -26,19 +25,21 @@ import { walkCommandNode } from "./walker.ts";
 // ── Walker validation ────────────────────────────────────────────────────
 
 describe("walker · validation", () => {
-	it("rejects command names containing whitespace", () => {
+	it("rejects command names containing whitespace", async () => {
 		const cli = new Crust("bad")
 			.add(defineCommand("two words", (c) => c.action(() => {})))
 			.action(() => {});
-		expect(() => walkCommandNode(snapshotCommand(cli._node))).toThrow(/invalid command name/);
+		const snapshot = await cli.snapshot();
+		expect(() => walkCommandNode(snapshot)).toThrow(/invalid command name/);
 	});
 
-	it("rejects flag names with shell metacharacters", () => {
+	it("rejects flag names with shell metacharacters", async () => {
 		const cli = new Crust("bad").flags({ name: "a;rm", type: "boolean" }).action(() => {});
-		expect(() => walkCommandNode(snapshotCommand(cli._node))).toThrow(/invalid flag name/);
+		const snapshot = await cli.snapshot();
+		expect(() => walkCommandNode(snapshot)).toThrow(/invalid flag name/);
 	});
 
-	it("rejects choice values containing spaces", () => {
+	it("rejects choice values containing spaces", async () => {
 		const cli = new Crust("bad")
 			.flags({
 				name: "target",
@@ -46,14 +47,15 @@ describe("walker · validation", () => {
 				choices: ["a", "two words", "c"],
 			})
 			.action(() => {});
-		expect(() => walkCommandNode(snapshotCommand(cli._node))).toThrow(/unsupported choice value/);
+		const snapshot = await cli.snapshot();
+		expect(() => walkCommandNode(snapshot)).toThrow(/unsupported choice value/);
 	});
 
-	it("strips control characters from descriptions instead of throwing", () => {
+	it("strips control characters from descriptions instead of throwing", async () => {
 		const cli = new Crust("safe", {
 			description: "first line\nsecond line\rstill same line",
 		}).action(() => {});
-		const spec = walkCommandNode(snapshotCommand(cli._node));
+		const spec = walkCommandNode(await cli.snapshot());
 		// Newlines and CR collapse to spaces during normalisation.
 		expect(spec.description).toBe("first line second line still same line");
 		// And the value never contains a raw newline that could break
@@ -80,20 +82,20 @@ describe("--no- negation", () => {
 		subCommands: [],
 	};
 
-	it("bash: emits --no-<name> for negatable boolean flags", () => {
+	it("bash: emits --no-<name> for negatable boolean flags", async () => {
 		const out = renderBash(spec, "mycli", "1");
 		expect(out).toContain("--no-force");
 		// Core's snapshot-derived negation policy suppresses the color spelling.
 		expect(out).not.toContain("--no-color");
 	});
 
-	it("zsh: emits --no-<name> as a separate spec", () => {
+	it("zsh: emits --no-<name> as a separate spec", async () => {
 		const out = renderZsh(spec, "mycli", "1");
 		expect(out).toContain("--no-force");
 		expect(out).not.toContain("--no-color");
 	});
 
-	it("fish: emits --no-<name> as its own complete rule", () => {
+	it("fish: emits --no-<name> as its own complete rule", async () => {
 		const out = renderFish(spec, "mycli", "1");
 		expect(out).toMatch(/-l 'no-force'/);
 		expect(out).not.toMatch(/-l 'no-color'/);
@@ -285,7 +287,7 @@ describe("renderFish · ordered subcommand predicate", () => {
 		],
 	};
 
-	it("emits a path-walking helper that only matches the in-order canonical path", () => {
+	it("emits a path-walking helper that only matches the in-order canonical path", async () => {
 		const out = renderFish(spec, "mycli", "1");
 		// One helper, used by both the build subcmd and its child.
 		expect(out).toContain("function __mycli_path_at_arg");

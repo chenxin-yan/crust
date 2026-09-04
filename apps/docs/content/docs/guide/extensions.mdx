@@ -134,7 +134,7 @@ const logging = defineExtension(defineExtensionId("logging"), {
 });
 ```
 
-Extension providers use the same compile-time name and owned-flag collision brands as `.provide()`; widened or dynamically assembled providers resolve deterministically last-write-wins. Resolution is lazy and memoized for the invocation.
+Extension providers use the same compile-time name and owned-flag collision brands as `.provide()`; widened or dynamically assembled owned-flag collisions throw a `DEFINITION` error from `.extend()`. Duplicate Context names remain last-write-wins. Resolution is lazy and memoized for the invocation.
 
 A `preRun` hook runs before flag validation, so it cannot pull a Context that owns flags. A flagless Context may pull other flagless Contexts, but its pull of a flag-owning Context rejects. That rejection is not memoized: after validation, the next pull re-runs the whole setup from the start, so a setup that acquires resources before the failing pull leaks them and repeats its side effects. Pull dependencies before acquiring resources. Flag-owning Contexts are available from the action and from `postRun` after validation; they remain unavailable after `ctx.finish()`, which skips validation. Values stay live through all `postRun` hooks and are disposed afterwards.
 

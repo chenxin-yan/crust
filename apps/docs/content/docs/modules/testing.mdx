@@ -19,7 +19,7 @@ bun add -d @crustjs/testing
 
 ```ts
 interface ExecutableApp {
-  execute(options?: { argv?: string[]; io?: CaptureIO }): Promise<void>;
+  execute(options?: { argv?: string[]; io?: CaptureIO }): Promise<number>;
 }
 ```
 
@@ -60,7 +60,7 @@ export type CapturedRun<Result = unknown> = {
 
 ## `captureExecute(app, argv)`
 
-Drive the terminal `execute()` path in-process. Unlike `captureRun()`, this exercises `execute()`'s exit-code protocol — `0` on success, `1` for rendered failures, `130` for `AbortError` cancellation — and the Extension `onError` rendering chain, so exit codes and rendered failure output are assertable without spawning a subprocess. `process.exitCode` is restored afterwards.
+Drive the terminal `execute()` path in-process. Unlike `captureRun()`, this exercises `execute()`'s returned exit-code protocol — `0` on success, `1` for rendered failures, `130` for `AbortError` cancellation — and the Extension `onError` rendering chain, so exit codes and rendered failure output are assertable without spawning a subprocess.
 
 ```ts
 import { captureExecute } from "@crustjs/testing";

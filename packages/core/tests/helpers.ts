@@ -1,7 +1,6 @@
 import type { AnyCrust } from "../src/command/crust.ts";
 import type { CommandAction, CommandNode } from "../src/command/node.ts";
-import { createCommandNode } from "../src/command/node.ts";
-import { addFlagSpellingEntries } from "../src/parsing/spellings.ts";
+import { createCommandNode, registerFlag } from "../src/command/node.ts";
 import type { ArgsDef, CommandMeta, FlagsDef } from "../src/types.ts";
 
 export type Expect<T extends true> = T;
@@ -24,11 +23,7 @@ export function makeNode<
 	if (meta.description) node.meta.description = meta.description;
 	if (meta.usage) node.meta.usage = meta.usage;
 	if (config.flags) {
-		node.localFlags = { ...config.flags };
-		node.effectiveFlags = { ...config.flags };
-		for (const [name, def] of Object.entries(node.effectiveFlags)) {
-			addFlagSpellingEntries(node.flagSpellings, name, def);
-		}
+		for (const [name, def] of Object.entries(config.flags)) registerFlag(node, name, def, "local");
 	}
 	if (config.args) node.args = [...config.args];
 	if (config.subCommands) node.subCommands = { ...config.subCommands };

@@ -6,7 +6,7 @@ import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
 import { Crust, defineCommand } from "./crust.ts";
-import { createCommandNode } from "./node.ts";
+import { createCommandNode, registerFlag } from "./node.ts";
 import { snapshotCommand } from "./snapshot.ts";
 
 function buildTree() {
@@ -20,15 +20,28 @@ function buildTree() {
 			parse: (s: string) => s.toUpperCase(),
 		},
 	];
-	root.effectiveFlags = {
-		verbose: { type: "boolean", short: "v", description: "Verbose output" },
-		endpoint: { type: "url", default: new URL("https://example.com/") },
-		mirrors: {
+	registerFlag(
+		root,
+		"verbose",
+		{ type: "boolean", short: "v", description: "Verbose output" },
+		"local",
+	);
+	registerFlag(
+		root,
+		"endpoint",
+		{ type: "url", default: new URL("https://example.com/") },
+		"local",
+	);
+	registerFlag(
+		root,
+		"mirrors",
+		{
 			type: "url",
 			multiple: true,
 			default: [new URL("https://a.example/"), new URL("https://b.example/")],
 		},
-	};
+		"local",
+	);
 	root.run = () => {};
 
 	const sub = createCommandNode("build");
@@ -109,15 +122,9 @@ describe("command metadata sections", () => {
 		const section = JSON.parse(
 			JSON.stringify({ title: "T", body: "B", only: [agentDocs], except: [agentDocs] }),
 		) as { title: string; body: string };
-		const app = new Crust("cli", { sections: [section] }).action(() => {});
-		const stderr: string[] = [];
-		const originalExitCode = process.exitCode;
-		try {
-			await app.execute({ argv: [], io: { stderr: (text) => stderr.push(text) } });
-		} finally {
-			process.exitCode = originalExitCode;
-		}
-		expect(stderr.join("\n")).toContain("contains invalid documentation sections");
+		expect(() => new Crust("cli", { sections: [section] })).toThrow(
+			"contains invalid documentation sections",
+		);
 	});
 
 	it("appends targeted Extension sections after authored sections in registration order", async () => {
@@ -252,15 +259,16 @@ describe("command metadata sections", () => {
 			[null],
 		];
 		for (const sections of badSections) {
-			const app = new Crust("cli", { sections: sections as never });
-			await expect(app.snapshot()).rejects.toMatchObject({
-				code: "DEFINITION",
-				details: {
-					subject: "command",
-					name: "cli",
-					reason: "invalid-sections",
-				},
-			});
+			expect(() => new Crust("cli", { sections: sections as never })).toThrow(
+				expect.objectContaining({
+					code: "DEFINITION",
+					details: {
+						subject: "command",
+						name: "cli",
+						reason: "invalid-sections",
+					},
+				}),
+			);
 		}
 	});
 
@@ -296,16 +304,15 @@ describe("command metadata sections", () => {
 	});
 
 	it("rejects CR/LF in authored and contributed section titles", async () => {
-		const authored = new Crust("cli", {
-			sections: [{ title: "Injected\nheading", body: "Body" }],
-		});
+		expect(
+			() => new Crust("cli", { sections: [{ title: "Injected\nheading", body: "Body" }] }),
+		).toThrow(CrustError);
 		const contributed = new Crust("cli").extend(
 			defineExtension(defineExtensionId("docs"), {
 				sections: () => [{ command: [], title: "Injected\rheading", body: "Body" }],
 			}),
 		);
 
-		await expect(authored.snapshot()).rejects.toBeInstanceOf(CrustError);
 		await expect(contributed.snapshot()).rejects.toMatchObject({
 			code: "DEFINITION",
 			details: {

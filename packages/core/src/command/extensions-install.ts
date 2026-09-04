@@ -1,11 +1,9 @@
-import type { ContextInstance } from "../api/context.ts";
 import type { Extension } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId, type ExtensionId } from "../identity.ts";
-import { addFlagSpellingEntries, cloneFlagSpellings } from "../parsing/spellings.ts";
-import type { CommandSection, FlagDef, FlagsDef } from "../types.ts";
+import type { CommandSection, CommandSectionInput, FlagDef, FlagsDef } from "../types.ts";
 import type { CommandDefinition } from "./crust.ts";
-import type { CommandNode } from "./node.ts";
+import { registerFlag, type CommandContext, type CommandNode } from "./node.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
 
 export type MaterializeCommandDefinition = (
@@ -21,31 +19,7 @@ function injectExtensionFlag(
 	def: FlagDef,
 	recursive: boolean,
 ): void {
-	// ValidateExtensionFlags owns literal collisions at .extend()/.add(); this
-	// owns dynamic Extensions, where a silent overwrite retypes the owning
-	// command's (or another Extension's) flag at parse time.
-	if (Object.hasOwn(node.effectiveFlags, name)) {
-		throw new CrustError(
-			"DEFINITION",
-			`Extension flag "${name}" collides with a flag already defined on command "${node.meta.name}"`,
-			{ subject: "extension", name, reason: "flag-collision" },
-		);
-	}
-	// The canonical name is checked against the spelling table too: an existing
-	// flag's *alias* equal to the incoming canonical would otherwise be silently
-	// stolen (effectiveFlags only has canonical keys).
-	for (const spelling of [name, def.short, ...(def.aliases ?? [])]) {
-		const existing = spelling === undefined ? undefined : node.flagSpellings.get(spelling);
-		if (existing !== undefined && existing.canonicalName !== name) {
-			throw new CrustError(
-				"DEFINITION",
-				`Extension flag spelling "${spelling}" collides with existing flag "${existing.canonicalName}" on command "${node.meta.name}"`,
-				{ subject: "extension", name, reason: "flag-collision" },
-			);
-		}
-	}
-	node.effectiveFlags[name] = def;
-	addFlagSpellingEntries(node.flagSpellings, name, def);
+	registerFlag(node, name, def, "owned");
 	if (!recursive) return;
 	for (const sub of Object.values(node.subCommands)) {
 		injectExtensionFlag(sub, name, def, true);
@@ -72,17 +46,6 @@ export function applyExtensionFlags(root: CommandNode, extension: Extension): vo
 	}
 }
 
-function cloneFlags(flags: FlagsDef): FlagsDef {
-	const out: FlagsDef = {};
-	for (const [key, def] of Object.entries(flags)) {
-		out[key] = {
-			...def,
-			aliases: def.aliases ? [...def.aliases] : undefined,
-		};
-	}
-	return out;
-}
-
 /** Deep-clone a command subtree without mutating the builder graph. */
 export function cloneCommandNode(node: CommandNode): CommandNode {
 	const subCommands: Record<string, CommandNode> = {};
@@ -90,24 +53,32 @@ export function cloneCommandNode(node: CommandNode): CommandNode {
 		subCommands[name] = cloneCommandNode(sub);
 	}
 
-	const effectiveFlags = cloneFlags(node.effectiveFlags);
 	// Spread first, then override every structural field with a decoupled copy.
-	return {
+	const cloned: CommandNode = {
 		...node,
 		// Section objects/arrays are never mutated in place (prepare replaces
 		// them wholesale), so sharing them here is safe.
 		meta: { ...node.meta },
-		localFlags: cloneFlags(node.localFlags),
-		ownedFlags: cloneFlags(node.ownedFlags),
-		effectiveFlags,
-		flagSpellings: cloneFlagSpellings(node.flagSpellings, effectiveFlags),
+		localFlags: {},
+		ownedFlags: {},
+		effectiveFlags: {},
+		flagSpellings: new Map(),
 		args: node.args.map((def) => ({ ...def })),
 		subCommands,
-		contexts: [...node.contexts],
-		contextExtensionIds: [...node.contextExtensionIds],
+		contexts: node.contexts.map((context) => ({ ...context })),
 		extensions: [...node.extensions],
 		run: node.run,
 	};
+	for (const [name, def] of Object.entries(node.effectiveFlags)) {
+		const source = Object.hasOwn(node.localFlags, name) ? "local" : "owned";
+		registerFlag(
+			cloned,
+			name,
+			{ ...def, aliases: def.aliases ? [...def.aliases] : undefined },
+			source,
+		);
+	}
+	return cloned;
 }
 
 /** Who authored the sections being validated; error labels derive from this. */
@@ -174,14 +145,13 @@ function validateSection(section: unknown, owner: SectionOwner): CommandSection 
 	return Object.freeze({ title, body });
 }
 
-export function validateAuthoredSections(node: CommandNode): void {
-	const sections = node.meta.sections;
-	if (sections !== undefined) {
-		const owner: SectionOwner = { subject: "command", name: node.meta.name };
-		if (!Array.isArray(sections)) throw invalidSections(owner);
-		node.meta.sections = sections.map((section) => validateSection(section, owner));
-	}
-	for (const sub of Object.values(node.subCommands)) validateAuthoredSections(sub);
+export function validateCommandSections(
+	name: string,
+	sections: readonly CommandSectionInput[],
+): CommandSection[] {
+	const owner: SectionOwner = { subject: "command", name };
+	if (!Array.isArray(sections)) throw invalidSections(owner);
+	return sections.map((section) => validateSection(section, owner));
 }
 
 function contributionTarget(
@@ -251,28 +221,22 @@ export function installExtensionContexts(
 			.map((e) => e.id),
 	);
 	const prune = (target: CommandNode): void => {
-		const contexts: ContextInstance[] = [];
-		const contextExtensionIds: CommandNode["contextExtensionIds"] = [];
-		for (let index = 0; index < target.contexts.length; index++) {
-			const id = target.contextExtensionIds[index];
-			if (id !== undefined && !kept.has(id)) continue;
-			contexts.push(target.contexts[index]!);
-			contextExtensionIds.push(id);
-		}
-		target.contexts = contexts;
-		target.contextExtensionIds = contextExtensionIds;
-		target.ownedFlags = Object.assign({}, ...contexts.map((context) => context.ownedFlags));
-		const effectiveFlags: FlagsDef = {};
+		target.contexts = target.contexts.filter(
+			(context) => context.extensionId === undefined || kept.has(context.extensionId),
+		);
+		const effectiveNames = Object.keys(target.effectiveFlags);
+		const localFlags = target.localFlags;
+		const ownedFlags: FlagsDef = {};
+		for (const { instance } of target.contexts) Object.assign(ownedFlags, instance.ownedFlags);
+		target.localFlags = {};
+		target.ownedFlags = {};
+		target.effectiveFlags = {};
 		target.flagSpellings = new Map();
-		for (const name of Object.keys(target.effectiveFlags)) {
-			// Context flags can only collide dynamically after a local flag and therefore win.
-			const source = Object.hasOwn(target.ownedFlags, name) ? target.ownedFlags : target.localFlags;
-			if (!Object.hasOwn(source, name)) continue;
-			const def = source[name]!;
-			effectiveFlags[name] = def;
-			addFlagSpellingEntries(target.flagSpellings, name, def);
+		for (const name of effectiveNames) {
+			const source = Object.hasOwn(ownedFlags, name) ? "owned" : "local";
+			const flags = source === "owned" ? ownedFlags : localFlags;
+			if (Object.hasOwn(flags, name)) registerFlag(target, name, flags[name]!, source);
 		}
-		target.effectiveFlags = effectiveFlags;
 		for (const child of Object.values(target.subCommands)) prune(child);
 	};
 	prune(cloned);
@@ -283,14 +247,15 @@ export function installExtensionContexts(
 		if (instances.length === 0) continue;
 		const walk = (target: CommandNode, skip: ReadonlySet<string>): void => {
 			const installed = instances.filter((instance) => !skip.has(instance.name));
-			target.contexts.push(...installed);
-			target.contextExtensionIds.push(...installed.map(() => extension.id));
+			const registrations: CommandContext[] = installed.map((instance) => ({
+				instance,
+				extensionId: extension.id,
+			}));
+			target.contexts.push(...registrations);
 			for (const instance of installed) {
 				for (const [name, def] of Object.entries(instance.ownedFlags)) {
-					target.effectiveFlags[name] = def;
-					addFlagSpellingEntries(target.flagSpellings, name, def);
+					registerFlag(target, name, def, "owned");
 				}
-				Object.assign(target.ownedFlags, instance.ownedFlags);
 			}
 			// A Context provided locally on a descendant is more specific than a
 			// root-wide install: skip same-name instances for that subtree.
@@ -298,7 +263,7 @@ export function installExtensionContexts(
 			for (const child of Object.values(target.subCommands)) {
 				const childSkip = new Set(skip);
 				for (const context of child.contexts) {
-					if (!inherited.has(context)) childSkip.add(context.name);
+					if (!inherited.has(context)) childSkip.add(context.instance.name);
 				}
 				walk(child, childSkip);
 			}

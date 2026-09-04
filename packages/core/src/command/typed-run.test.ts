@@ -328,7 +328,7 @@ describe("typed programmatic invocation", () => {
 			.action(() => {});
 
 		await expect(app.run([])).rejects.toThrow(
-			'Extension flag "mode" collides with a flag already defined on command "cli"',
+			'Flag "mode" collides with existing flag "mode" on command "cli"',
 		);
 	});
 

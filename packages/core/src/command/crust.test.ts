@@ -719,7 +719,7 @@ describe("Crust .extend()", () => {
 		expect(value).toBe("A");
 	});
 
-	it("restores a surviving local flag definition after provider replacement", async () => {
+	it("rejects an Extension provider flag colliding with a local flag", () => {
 		const id = defineExtensionId("flag-provider");
 		const provider = defineContext(
 			"flagProvider",
@@ -728,21 +728,20 @@ describe("Crust .extend()", () => {
 		);
 		const first: Extension = defineExtension(id, { provides: [provider()] });
 		const replacement: Extension = defineExtension(id);
-		const app = new Crust("test")
-			.flags({ name: "mode", type: "string", aliases: ["local-mode"] })
-			.extend(first)
-			.extend(replacement)
-			.action(() => {});
-
-		const snapshot = await app.snapshot();
-		expect(snapshot.flags.mode).toEqual({
+		const app = new Crust("test").flags({
+			name: "mode",
 			type: "string",
 			aliases: ["local-mode"],
-			negatable: false,
 		});
+		expect(() => app.extend(first).extend(replacement)).toThrow(
+			expect.objectContaining({
+				code: "DEFINITION",
+				details: expect.objectContaining({ reason: "flag-collision" }),
+			}),
+		);
 	});
 
-	it("keeps a surviving provider flag definition across unrelated .extend() calls", async () => {
+	it("rejects an unrelated Extension provider flag colliding with a local flag", () => {
 		const provider = defineContext(
 			"flagProvider",
 			{ flags: [{ name: "mode", type: "number", aliases: ["extension-mode"] }] },
@@ -751,18 +750,19 @@ describe("Crust .extend()", () => {
 		const extension: Extension = defineExtension(defineExtensionId("flag-provider"), {
 			provides: [provider()],
 		});
-		const app = new Crust("test")
-			.flags({ name: "mode", type: "string", aliases: ["local-mode"] })
-			.extend(extension)
-			.extend(defineExtension(defineExtensionId("unrelated")))
-			.action(() => {});
-
-		const snapshot = await app.snapshot();
-		expect(snapshot.flags.mode).toEqual({
-			type: "number",
-			aliases: ["extension-mode"],
-			negatable: false,
+		const app = new Crust("test").flags({
+			name: "mode",
+			type: "string",
+			aliases: ["local-mode"],
 		});
+		expect(() =>
+			app.extend(extension).extend(defineExtension(defineExtensionId("unrelated"))),
+		).toThrow(
+			expect.objectContaining({
+				code: "DEFINITION",
+				details: expect.objectContaining({ reason: "flag-collision" }),
+			}),
+		);
 	});
 
 	it("keeps a local provider override across unrelated .extend() calls", async () => {
@@ -1062,7 +1062,7 @@ describe("Extension application at prepare time", () => {
 		} finally {
 			process.exitCode = originalExitCode;
 		}
-		expect(stderr.join("\n")).toContain('spelling "auth" collides');
+		expect(stderr.join("\n")).toContain('Flag "auth" collides with existing flag "token"');
 	});
 
 	it("rejects a dynamic Extension flag colliding with an app flag at prepare time", async () => {
@@ -1088,7 +1088,7 @@ describe("Extension application at prepare time", () => {
 		}
 
 		expect(runs).toBe(0);
-		expect(stderr.join("\n")).toContain('Extension flag "mode" collides');
+		expect(stderr.join("\n")).toContain('Flag "mode" collides with existing flag "mode"');
 	});
 
 	it("non-recursive Extension flags stay on the root", async () => {
@@ -1789,8 +1789,9 @@ describe("Crust .execute()", () => {
 				receivedCtx = ctx;
 			});
 
-		await app.execute({ argv: ["public", "--port", "8080"] });
+		const exitCode = await app.execute({ argv: ["public", "--port", "8080"] });
 
+		expect(exitCode).toBe(0);
 		expect(receivedCtx).toBeDefined();
 		expect(receivedCtx?.args.dir).toBe("public");
 		expect(receivedCtx?.flags.port).toBe(8080);
@@ -1882,8 +1883,9 @@ describe("Crust .execute()", () => {
 			throw new Error("execution failed");
 		});
 
-		await app.execute({ argv: [] });
+		const exitCode = await app.execute({ argv: [] });
 
+		expect(exitCode).toBe(1);
 		expect(process.exitCode).toBe(1);
 		expect(stderrChunks.join("\n")).toContain("execution failed");
 	});
