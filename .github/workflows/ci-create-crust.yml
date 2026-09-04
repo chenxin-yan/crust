@@ -2,8 +2,6 @@ name: CI Create Crust
 
 on:
   pull_request:
-    branches:
-      - main
     paths:
       - "packages/config/**"
       - "packages/core/**"

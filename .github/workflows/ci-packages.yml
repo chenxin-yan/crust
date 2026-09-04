@@ -3,8 +3,6 @@ name: CI Packages
 on:
   workflow_call:
   pull_request:
-    branches:
-      - main
     paths:
       - ".changeset/**"
       - "packages/**"

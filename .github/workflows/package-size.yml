@@ -2,8 +2,6 @@ name: Package Size
 
 on:
   pull_request:
-    branches:
-      - main
     paths:
       - "packages/**"
       - "package.json"
