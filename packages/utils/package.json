@@ -8,6 +8,7 @@
 	"exports": {
 		"./error": "./src/error.ts",
 		"./json": "./src/json.ts",
+		"./path": "./src/path.ts",
 		"./primitive": "./src/primitive.ts",
 		"./process": "./src/process.ts",
 		"./source": "./src/source.ts",

@@ -2,6 +2,8 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
+import { packageManagerFromUserAgent } from "@crustjs/utils/process";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Package Manager Detection
 // ────────────────────────────────────────────────────────────────────────────
@@ -49,15 +51,7 @@ export function detectPackageManager(cwd?: string): PackageManager {
 	}
 
 	// Fall back to npm_config_user_agent (set by npm/yarn/pnpm/bun when running scripts)
-	const userAgent = process.env.npm_config_user_agent;
-	if (userAgent) {
-		if (userAgent.startsWith("bun")) return "bun";
-		if (userAgent.startsWith("pnpm")) return "pnpm";
-		if (userAgent.startsWith("yarn")) return "yarn";
-		if (userAgent.startsWith("npm")) return "npm";
-	}
-
-	return "npm";
+	return packageManagerFromUserAgent(process.env.npm_config_user_agent) ?? "npm";
 }
 
 // ────────────────────────────────────────────────────────────────────────────

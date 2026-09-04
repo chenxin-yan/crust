@@ -13,6 +13,7 @@ import type { Extension, ExtensionsProvidesOutput } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
 import { addFlagSpellingEntries, cloneFlagSpellings } from "../parsing/spellings.ts";
+import { isListed } from "../sections.ts";
 import type {
 	ArgDef,
 	ArgsDef,
@@ -710,11 +711,14 @@ function serializeRunArgv(
 		// fall through would serialize it ahead of the real positionals.
 		// SAFETY: the enclosing length check proves the first element exists.
 		const candidate = route.argv[0]!;
+		const parentCommand = snapshotCommand(route.command);
 		throw new CrustError("COMMAND_NOT_FOUND", `Unknown command "${candidate}".`, {
 			input: candidate,
-			available: Object.keys(route.command.subCommands),
+			available: Object.entries(parentCommand.subCommands)
+				.filter(([, child]) => isListed(child))
+				.map(([name]) => name),
 			commandPath: route.commandPath,
-			parentCommand: snapshotCommand(route.command),
+			parentCommand,
 		});
 	}
 	const command = route.command;

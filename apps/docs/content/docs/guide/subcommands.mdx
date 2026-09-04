@@ -91,4 +91,4 @@ Finalize `.provide()` calls on the parent builder before `.add()`. [Flags owned 
 
 ## Unknown commands
 
-An unknown subcommand produces `CrustError` code `COMMAND_NOT_FOUND`. Its details include the input, available commands, the command path, and a readonly snapshot of the parent command. The official `didYouMean()` Extension uses this information to suggest nearby names.
+An unknown subcommand produces `CrustError` code `COMMAND_NOT_FOUND`. Its details include the input, visible available commands, the command path, and a readonly snapshot of the parent command. Hidden commands are omitted from `available`. The official `didYouMean()` Extension uses this information to suggest nearby names.

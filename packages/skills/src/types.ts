@@ -1,9 +1,9 @@
 import type { CommandSection } from "@crustjs/core";
 import type { BaseValueType } from "@crustjs/utils/primitive";
 
-import type { AgentTarget } from "./agents.ts";
+import type { AgentTarget, Scope } from "./agents.ts";
 
-export type { AgentTarget };
+export type { AgentClass, AgentTarget, Scope } from "./agents.ts";
 
 /** Metadata used to render a generated skill. */
 export interface SkillMeta {
@@ -11,9 +11,6 @@ export interface SkillMeta {
 	description: string;
 	version?: string;
 }
-
-export type AgentClass = "universal" | "additional";
-export type Scope = "global" | "project";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Command manifest — canonical intermediate representation
@@ -41,8 +38,6 @@ export interface ManifestFlag {
 	description?: string;
 	required: boolean;
 	multiple: boolean;
-	short?: string;
-	aliases: string[];
 	default?: string;
 }
 
@@ -63,7 +58,7 @@ export interface ManifestFlag {
  *   runnable: true,
  *   usage: "git remote add <name>",
  *   args: [{ name: "name", type: "string", required: true, variadic: false }],
- *   flags: [{ name: "fetch", spellings: ["--fetch", "--no-fetch"], type: "boolean", required: false, multiple: false, aliases: [] }],
+ *   flags: [{ name: "fetch", spellings: ["--fetch", "--no-fetch"], type: "boolean", required: false, multiple: false }],
  *   children: [],
  * };
  * ```

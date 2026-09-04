@@ -8,11 +8,13 @@ import {
 	type InvocationIO,
 	defineCommand,
 	defineExtension,
+	defineExtensionId,
 } from "@crustjs/core";
 import { spinner } from "@crustjs/progress";
 import { confirm, multiselect, select } from "@crustjs/prompts";
 import { bold, dim, yellow } from "@crustjs/style";
 import { isErrnoException } from "@crustjs/utils/error";
+import { isWithin } from "@crustjs/utils/path";
 
 import {
 	AGENT_LABELS,
@@ -21,7 +23,6 @@ import {
 	getUniversalAgents,
 	resolveEffectiveScope,
 } from "./agents.ts";
-import { writeSkills } from "./build.ts";
 import { SkillConflictError } from "./errors.ts";
 import {
 	getSkillStatus,
@@ -29,11 +30,11 @@ import {
 	installSkill,
 	uninstallSkill,
 } from "./generate.ts";
-import { SKILLS } from "./manifest.ts";
-import { isWithin } from "./path.ts";
 import { planReconcile, UNIVERSAL_GROUP, type ReconcileChoice } from "./reconcile.ts";
 import { SkillSourceUnavailableError, loadPackagedSkills, type PackagedSkill } from "./source.ts";
 import type { AgentTarget, InstallSkillResult, Scope, SkillOptions } from "./types.ts";
+
+export const SKILLS: ExtensionId = defineExtensionId("crust:skills");
 
 const DEFAULT_SKILL_COMMAND_NAME = "skill";
 const SKILLS_SECTION_TITLE = "Agent skills";
@@ -41,17 +42,8 @@ const DEFAULT_SKILL_SCOPE = "global";
 
 type SkillIO = Pick<InvocationIO, "stdout" | "stderr">;
 
-function parseScopeFlag(value: string | undefined): Scope | undefined {
-	if (value === undefined) return undefined;
-	if (value !== "global" && value !== "project") {
-		throw new Error(`Invalid --scope value: ${value}. Expected "project" or "global".`);
-	}
-	return value;
-}
-
-async function resolveScope(rawScope: string | undefined, options: SkillOptions): Promise<Scope> {
-	const explicit = parseScopeFlag(rawScope);
-	if (explicit) return explicit;
+async function resolveScope(rawScope: Scope | undefined, options: SkillOptions): Promise<Scope> {
+	if (rawScope) return rawScope;
 	if (options.defaultScope) return options.defaultScope;
 	return select<Scope>({
 		message: "Select scope",
@@ -210,15 +202,16 @@ async function readPackageVersion(): Promise<string | undefined> {
 }
 
 async function buildSkills(options: SkillOptions, context: ExtensionBuildContext): Promise<void> {
-	await writeSkills({
-		// The snapshot is already prepared; wrap it so the generated skill can be opted out.
-		app: options.generated === false ? undefined : { snapshot: async () => context.snapshot },
+	const { writeSkills, writeSkillsFromSnapshot } = await import("./build.ts");
+	const writeOptions = {
 		outDir: join(context.outDir, "skills"),
 		version: await readPackageVersion(),
 		name: options.name,
 		description: options.description,
 		extras: options.extras,
-	});
+	};
+	if (options.generated === false) await writeSkills(writeOptions);
+	else await writeSkillsFromSnapshot(context.snapshot, writeOptions);
 }
 
 function skillFactory(options: SkillOptions): Extension {
@@ -424,7 +417,7 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 				.action(async (context) => {
 					const installAll = context.flags.all === true;
 					const scope = installAll
-						? (parseScopeFlag(context.flags.scope) ?? options.defaultScope ?? DEFAULT_SKILL_SCOPE)
+						? (context.flags.scope ?? options.defaultScope ?? DEFAULT_SKILL_SCOPE)
 						: await resolveScope(context.flags.scope, options);
 					for (const packagedSkill of loadPackagedSkills(options.distDir)) {
 						await reconcileSkill({ packagedSkill, scope, installAll, io: context });

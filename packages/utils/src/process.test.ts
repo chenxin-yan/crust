@@ -3,7 +3,23 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join, relative } from "node:path";
 
-import { getWindowsShimCommand, runProcess, which } from "./process.ts";
+import {
+	getWindowsShimCommand,
+	packageManagerFromUserAgent,
+	runProcess,
+	which,
+} from "./process.ts";
+
+describe("packageManagerFromUserAgent", () => {
+	it("recognizes supported package manager user agents", () => {
+		expect(packageManagerFromUserAgent("bun/1.3.0")).toBe("bun");
+		expect(packageManagerFromUserAgent("pnpm/10.0.0 node/v22")).toBe("pnpm");
+		expect(packageManagerFromUserAgent("yarn/4.0.0 npm/?")).toBe("yarn");
+		expect(packageManagerFromUserAgent("npm/10.0.0 node/v22")).toBe("npm");
+		expect(packageManagerFromUserAgent("unknown/1.0.0")).toBeNull();
+		expect(packageManagerFromUserAgent(undefined)).toBeNull();
+	});
+});
 
 describe("getWindowsShimCommand", () => {
 	it("only selects command shims on Windows when shell mode was not requested", () => {

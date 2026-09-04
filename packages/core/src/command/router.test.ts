@@ -304,12 +304,14 @@ describe("resolveCommand — aliases", () => {
 		expect(resolveCommand(root, ["issues"]).commandPath).toEqual(["app", "issue"]);
 	});
 
-	it("reports only canonical names in COMMAND_NOT_FOUND details.available", () => {
+	it("reports only visible canonical names in COMMAND_NOT_FOUND details.available", () => {
 		const issue = makeChild("issue", ["issues", "i"]);
 		const pull = makeChild("pull-request", ["pr"]);
+		const internal = makeChild("internal");
+		internal.meta.hidden = true;
 		const version = makeChild("version");
 		const root = createCommandNode("app");
-		root.subCommands = { issue, "pull-request": pull, version };
+		root.subCommands = { issue, "pull-request": pull, internal, version };
 
 		let caught: unknown;
 		try {
@@ -321,7 +323,7 @@ describe("resolveCommand — aliases", () => {
 		if (!(caught instanceof CrustError) || !caught.is("COMMAND_NOT_FOUND")) {
 			throw new Error("expected COMMAND_NOT_FOUND");
 		}
-		// `available` lists canonical sibling names in insertion order. Aliases
+		// `available` lists visible canonical sibling names in insertion order. Aliases
 		// stay reachable via `details.parentCommand.subCommands[name].meta.aliases`
 		// for consumers (e.g. didYouMean) that want alias-aware matching.
 		expect(caught.details.available).toEqual(["issue", "pull-request", "version"]);

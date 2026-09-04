@@ -12,7 +12,7 @@ export type CaughtError = unknown;
 export interface CommandNotFoundErrorDetails {
 	/** Unrecognized subcommand token. */
 	input: string;
-	/** Canonical names of available child commands. */
+	/** Canonical names of visible available child commands. */
 	available: string[];
 	/** Canonical path to the command whose child could not be resolved. */
 	commandPath: string[];

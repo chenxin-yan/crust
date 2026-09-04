@@ -9,7 +9,6 @@ import {
 	sanitizeFreeText,
 	zshArgsDescription,
 	zshDescribeField,
-	zshSingleQuote,
 } from "./escape.ts";
 
 describe("assertSafeIdentifier", () => {
@@ -117,11 +116,7 @@ describe("bashSingleQuote", () => {
 	});
 });
 
-describe("zshSingleQuote / zshArgsDescription / zshDescribeField", () => {
-	it("zshSingleQuote uses the same close-and-reopen idiom as bash", () => {
-		expect(zshSingleQuote("it's")).toBe("'it'\\''s'");
-	});
-
+describe("zshArgsDescription / zshDescribeField", () => {
 	it("zshArgsDescription escapes [ ] : \\ ' and drops newlines", () => {
 		expect(zshArgsDescription("a:b")).toBe("a\\:b");
 		expect(zshArgsDescription("a[b]c")).toBe("a\\[b\\]c");

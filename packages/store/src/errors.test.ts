@@ -38,7 +38,7 @@ describe("CrustStoreError", () => {
 		expect(err.is("IO")).toBe(false);
 
 		if (err.is("PATH")) {
-			// Type-narrowed: err.details is PathErrorDetails
+			// Type-narrowed to PATH details.
 			expect(err.details.path).toBe("/bad");
 		}
 	});

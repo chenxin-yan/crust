@@ -1,9 +1,13 @@
 import { join } from "node:path";
 
-import { type Extension, type ExtensionId, defineExtension } from "@crustjs/core";
+import {
+	type Extension,
+	type ExtensionId,
+	defineExtension,
+	defineExtensionId,
+} from "@crustjs/core";
 
-import { MAN } from "./mdoc.ts";
-import { writeManPage } from "./write-man-page.ts";
+export const MAN: ExtensionId = defineExtensionId("crust:man");
 
 export interface ManOptions {
 	/** Manual section. Defaults to 1. */
@@ -21,6 +25,7 @@ function manFactory(options: ManOptions = {}): Extension {
 	const section = options.section ?? 1;
 	return defineExtension(MAN, {
 		async build({ snapshot, outDir }) {
+			const { writeManPage } = await import("./write-man-page.ts");
 			const name = options.name ?? snapshot.meta.name;
 			await writeManPage({
 				root: snapshot,

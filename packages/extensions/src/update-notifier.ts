@@ -11,6 +11,7 @@ import {
 	defineExtensionId,
 } from "@crustjs/core";
 import { bold, cyan, dim, green, padEnd, stringWidth, yellow } from "@crustjs/style";
+import { packageManagerFromUserAgent } from "@crustjs/utils/process";
 
 const UPDATE_NOTIFIER: ExtensionId = defineExtensionId("crust:update-notifier");
 
@@ -333,13 +334,8 @@ export async function createStoreCacheAdapter(
 }
 
 function detectPackageManager(): UpdateNotifierPackageManager {
-	const userAgent = process.env.npm_config_user_agent;
-	if (userAgent) {
-		if (userAgent.startsWith("bun")) return "bun";
-		if (userAgent.startsWith("pnpm")) return "pnpm";
-		if (userAgent.startsWith("yarn")) return "yarn";
-		if (userAgent.startsWith("npm")) return "npm";
-	}
+	const detectedFromUserAgent = packageManagerFromUserAgent(process.env.npm_config_user_agent);
+	if (detectedFromUserAgent) return detectedFromUserAgent;
 
 	const detectedFromExecPath = detectPackageManagerFromExecPath(process.env.npm_execpath);
 	if (detectedFromExecPath) return detectedFromExecPath;
@@ -388,24 +384,16 @@ function defaultUpdateCommand(
 		: `npm install ${packageName}@latest`;
 }
 
-function isStringUpdateCommand(value: UpdateNotifierOptions["updateCommand"]): value is string {
-	return typeof value === "string";
-}
-
-function isUpdateCommandResolver(
-	value: UpdateNotifierOptions["updateCommand"],
-): value is UpdateCommandResolver {
-	return typeof value === "function";
-}
-
 function resolveUpdateCommand(
 	packageName: string,
 	updateCommand: UpdateNotifierOptions["updateCommand"],
 ): string | undefined {
-	if (updateCommand === undefined || isStringUpdateCommand(updateCommand)) return updateCommand;
+	// oxlint-disable-next-line anti-slop/no-runtime-typeof -- discriminating a typed options union.
+	if (updateCommand === undefined || typeof updateCommand === "string") return updateCommand;
 
 	const packageManager = detectPackageManager();
-	if (isUpdateCommandResolver(updateCommand)) {
+	// oxlint-disable-next-line anti-slop/no-runtime-typeof -- discriminating a typed options union.
+	if (typeof updateCommand === "function") {
 		return updateCommand({ packageName, packageManager });
 	}
 	return defaultUpdateCommand(packageName, packageManager, updateCommand.scope);
@@ -557,14 +545,6 @@ function updateNotifierFactory(options: UpdateNotifierOptions): Extension {
 // Internal — Update notice output
 // ────────────────────────────────────────────────────────────────────────────
 
-// Box-drawing characters (rounded corners)
-const BOX_TOP_LEFT = "╭";
-const BOX_TOP_RIGHT = "╮";
-const BOX_BOTTOM_LEFT = "╰";
-const BOX_BOTTOM_RIGHT = "╯";
-const BOX_HORIZONTAL = "─";
-const BOX_VERTICAL = "│";
-
 /**
  * Emits a styled, boxed update notice to stderr.
  *
@@ -596,20 +576,19 @@ function emitUpdateNotice(
 	const contentWidth = Math.max(...contentLines.map((line) => stringWidth(line)));
 	const innerWidth = contentWidth + PADDING * 2;
 
-	const border = BOX_HORIZONTAL.repeat(innerWidth);
+	const border = "─".repeat(innerWidth);
 	const pad = " ".repeat(PADDING);
-	const emptyLine = `${yellow(BOX_VERTICAL)}${" ".repeat(innerWidth)}${yellow(BOX_VERTICAL)}`;
+	const emptyLine = `${yellow("│")}${" ".repeat(innerWidth)}${yellow("│")}`;
 
 	const lines = [
 		"",
-		`${yellow(BOX_TOP_LEFT)}${yellow(border)}${yellow(BOX_TOP_RIGHT)}`,
+		`${yellow("╭")}${yellow(border)}${yellow("╮")}`,
 		emptyLine,
 		...contentLines.map(
-			(line) =>
-				`${yellow(BOX_VERTICAL)}${pad}${padEnd(line, contentWidth)}${pad}${yellow(BOX_VERTICAL)}`,
+			(line) => `${yellow("│")}${pad}${padEnd(line, contentWidth)}${pad}${yellow("│")}`,
 		),
 		emptyLine,
-		`${yellow(BOX_BOTTOM_LEFT)}${yellow(border)}${yellow(BOX_BOTTOM_RIGHT)}`,
+		`${yellow("╰")}${yellow(border)}${yellow("╯")}`,
 		"",
 	];
 
