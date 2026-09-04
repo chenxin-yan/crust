@@ -99,9 +99,8 @@ beforeAll(() => {
 	// Declaration emission must be checked against dist, where types live in
 	// a private chunk. Never rebuild an existing dist here: sibling packages'
 	// tests import @crustjs/core from dist in parallel, and a rebuild races
-	// them. In turbo runs core:build precedes core:test (packages/core/
-	// turbo.json); this fallback only serves a direct `bun test` on a fresh
-	// checkout.
+	// them. In turbo runs the root test dependency makes core:build precede
+	// core:test; this fallback only serves a direct `bun test` on a fresh checkout.
 	if (!existsSync(join(corePkg, "dist/index.d.ts"))) {
 		const build = Bun.spawnSync(["bun", "run", "build"], { cwd: corePkg });
 		if (build.exitCode !== 0) {

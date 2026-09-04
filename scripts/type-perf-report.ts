@@ -1,12 +1,4 @@
-import {
-	mkdirSync,
-	mkdtempSync,
-	readdirSync,
-	readFileSync,
-	rmSync,
-	symlinkSync,
-	writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
@@ -133,30 +125,11 @@ export function formatComparison(base: TypePerfReport, head: TypePerfReport): st
 }
 
 /**
- * Whether a core package's built declarations expose the chainable builder
- * `.use()`. The head copy of this script measures both trees (type-perf.yml:
- * "Head's script measures both trees"), so the fixture must speak the API of
- * the dist it compiles against: `.use()` chains on trees that ship it, the
- * removed `uses:` config on older base revisions.
- */
-// ponytail: one-release compat shim — delete this probe and every builderUse=false branch once released base trees ship builder `.use()`.
-export function distSupportsBuilderUse(corePackageDir: string): boolean {
-	const distDir = join(corePackageDir, "dist");
-	return readdirSync(distDir).some(
-		(file) =>
-			file.endsWith(".d.ts") &&
-			/\buse<[\s\S]{0,200}?\)\s*:\s*CommandDefinitionBuilder</.test(
-				readFileSync(join(distDir, file), "utf8"),
-			),
-	);
-}
-
-/**
  * Generate a deterministic downstream app with `size` top-level sibling commands.
  * Each command has three chained flags and two chained args. Context count is
  * max(3, ceil(size / 10)); every tenth command also owns one nested subcommand.
  */
-export function generateConsumerSource(size: number, builderUse = true): string {
+export function generateConsumerSource(size: number): string {
 	if (!Number.isInteger(size) || size < 1) throw new Error("size must be a positive integer");
 	const contextCount = Math.max(3, Math.ceil(size / 10));
 	const lines = [
@@ -182,13 +155,10 @@ export function generateConsumerSource(size: number, builderUse = true): string 
 
 	for (let index = 0; index < size; index++) {
 		const contextIndex = index % contextCount;
-		const commandConfig = builderUse
-			? `{ aliases: ["cmd-${index}", "c-${index}"] }`
-			: `{ aliases: ["cmd-${index}", "c-${index}"], uses: [context${contextIndex}] }`;
 		lines.push(
-			`const command${index} = defineCommand("command-${index}", ${commandConfig}, (command) =>`,
+			`const command${index} = defineCommand("command-${index}", { aliases: ["cmd-${index}", "c-${index}"] }, (command) =>`,
 			"\tcommand",
-			...(builderUse ? [`\t\t.use(context${contextIndex})`] : []),
+			`\t\t.use(context${contextIndex})`,
 			`\t\t.flags({ name: "command-${index}-verbose", type: "boolean", short: "v", aliases: ["verbose-${index}"] })`,
 			`\t\t.flags({ name: "command-${index}-output", type: "string", short: "o", aliases: ["output-${index}"] })`,
 			`\t\t.flags({ name: "command-${index}-force", type: "boolean", short: "f", aliases: ["force-${index}"] })`,
@@ -196,13 +166,9 @@ export function generateConsumerSource(size: number, builderUse = true): string 
 			`\t\t.args({ name: "destination-${index}", type: "string" })`,
 		);
 		if (index % 10 === 0) {
-			const nestedConfig = builderUse
-				? `{ aliases: ["n-${index}"] }`
-				: `{ aliases: ["n-${index}"], uses: [context${contextIndex}] }`;
-			const nestedUse = builderUse ? `.use(context${contextIndex})` : "";
 			lines.push(
-				`\t\t.add(defineCommand("nested-${index}", ${nestedConfig}, (nested) =>`,
-				`\t\t\tnested${nestedUse}.flags({ name: "nested-${index}-mode", type: "string", short: "m", aliases: ["mode-${index}"] }).action(async ({ flags, ctx }) => { void flags["nested-${index}-mode"]; void await ctx["context-${contextIndex}"]; }),`,
+				`\t\t.add(defineCommand("nested-${index}", { aliases: ["n-${index}"] }, (nested) =>`,
+				`\t\t\tnested.use(context${contextIndex}).flags({ name: "nested-${index}-mode", type: "string", short: "m", aliases: ["mode-${index}"] }).action(async ({ flags, ctx }) => { void flags["nested-${index}-mode"]; void await ctx["context-${contextIndex}"]; }),`,
 				"\t\t))",
 			);
 		}
@@ -239,10 +205,7 @@ export function generateConsumerFixture(
 	const packageDir = resolve(corePackageDir);
 	mkdirSync(join(fixtureDir, "node_modules/@crustjs"), { recursive: true });
 	symlinkSync(packageDir, join(fixtureDir, "node_modules/@crustjs/core"), "dir");
-	writeFileSync(
-		join(fixtureDir, "consumer.ts"),
-		generateConsumerSource(size, distSupportsBuilderUse(packageDir)),
-	);
+	writeFileSync(join(fixtureDir, "consumer.ts"), generateConsumerSource(size));
 	writeFileSync(
 		join(fixtureDir, "tsconfig.json"),
 		`${JSON.stringify(
@@ -277,56 +240,9 @@ function run(command: string[], cwd: string): string {
 	return result.stdout.toString().trim();
 }
 
-function isTypePerfMetrics<Value>(value: Value): value is Value & TypePerfMetrics {
-	return (
-		typeof value === "object" &&
-		value !== null &&
-		"typescriptVersion" in value &&
-		typeof value.typescriptVersion === "string" &&
-		"instantiations" in value &&
-		typeof value.instantiations === "number" &&
-		"types" in value &&
-		typeof value.types === "number" &&
-		"checkTimeSeconds" in value &&
-		typeof value.checkTimeSeconds === "number"
-	);
-}
-
-function isEditorLatencyMetrics<Value>(value: Value): value is Value & EditorLatencyMetrics {
-	return (
-		typeof value === "object" &&
-		value !== null &&
-		"coldCompletionMs" in value &&
-		typeof value.coldCompletionMs === "number" &&
-		"completionMs" in value &&
-		typeof value.completionMs === "number" &&
-		"hoverMs" in value &&
-		typeof value.hoverMs === "number" &&
-		"editCompletionMs" in value &&
-		typeof value.editCompletionMs === "number"
-	);
-}
-
-function isTypePerfReport<Value>(value: Value): value is Value & TypePerfReport {
-	if (!isTypePerfMetrics(value) || !("scaling" in value) || !("editor" in value)) return false;
-	const scaling = value.scaling;
-	return (
-		typeof scaling === "object" &&
-		scaling !== null &&
-		"10" in scaling &&
-		(scaling[10] === null || isTypePerfMetrics(scaling[10])) &&
-		"50" in scaling &&
-		(scaling[50] === null || isTypePerfMetrics(scaling[50])) &&
-		"100" in scaling &&
-		(scaling[100] === null || isTypePerfMetrics(scaling[100])) &&
-		(value.editor === null || isEditorLatencyMetrics(value.editor))
-	);
-}
-
 function parseTypePerfReport(content: string): TypePerfReport {
-	const parsed: unknown = JSON.parse(content);
-	if (!isTypePerfReport(parsed)) throw new Error("Invalid type-performance report JSON");
-	return parsed;
+	// SAFETY: self-produced by measure()
+	return JSON.parse(content) as TypePerfReport;
 }
 
 async function measure(outputPath: string, rootDir = "."): Promise<void> {
@@ -345,8 +261,7 @@ async function measure(outputPath: string, rootDir = "."): Promise<void> {
 		for (const size of scalingSizes) {
 			const fixtureDir = join(fixtureRoot, String(size));
 			try {
-				// Inside the catch so fixture *generation* failures (e.g. missing dist
-				// during the .use() probe) follow the same n/a policy as compile failures.
+				// Fixture generation failures follow the same n/a policy as compile failures.
 				generateConsumerFixture(fixtureDir, join(root, "packages/core"), size);
 				const fixtureDiagnostics = run(
 					[tsc, "--noEmit", "--incremental", "false", "--extendedDiagnostics", "-p", fixtureDir],

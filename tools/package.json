@@ -4,7 +4,8 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"check:types": "tsc --noEmit"
+		"check:types": "tsc --noEmit",
+		"test": "node --experimental-strip-types --test oxlint/anti-slop/rules/*.test.ts"
 	},
 	"dependencies": {
 		"@oxlint/plugins": "^1.79.0"

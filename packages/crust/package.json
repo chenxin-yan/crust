@@ -26,14 +26,14 @@
 		"access": "public"
 	},
 	"bin": {
-		"crust": "dist/cli"
+		"crust": "dist/cli.js"
 	},
 	"scripts": {
 		"build": "bun run build:cli && bun dist/cli.js build --package --entry src/cli.ts --name crust",
 		"build:cli": "bun build src/cli.ts --target=bun --format=esm --outfile=dist/cli.js --minify --packages=external",
 		"publish": "bun dist/cli.js publish --stage-dir dist/npm",
 		"dev": "bun ./src/cli.ts",
-		"start": "./dist/cli",
+		"start": "./dist/cli.js",
 		"check:types": "tsc --noEmit",
 		"test": "bun test"
 	},

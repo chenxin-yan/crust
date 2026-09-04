@@ -105,7 +105,6 @@
       },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
-        "@crustjs/crust": "workspace:*",
         "@crustjs/extensions": "workspace:*",
         "tsdown": "catalog:",
       },
@@ -293,7 +292,6 @@
   },
   "catalog": {
     "tsdown": "^0.22.14",
-    "typescript": "^7.0.2",
   },
   "packages": {
     "@andrewbranch/untar.js": ["@andrewbranch/untar.js@1.0.4", "", {}, "sha512-pVXSwPsLuw8IGLo2Di0EaOfsk+ntVvpkk942J/sHYIkwvtKUakEcPh7HBgZ6tuimgzKSEHgCvO4XgQ05DEbwDw=="],

@@ -96,6 +96,17 @@ assert(
 	`Sample CLI help output was incomplete:\n${output}`,
 );
 
+const ambientErrors = [];
+await new Crust("ambient-dist")
+	.action(async () => {
+		await progress.spinner({ message: "Dist bridge", task: async () => undefined });
+	})
+	.execute({
+		argv: [],
+		io: { stdout: () => {}, stderr: (text) => ambientErrors.push(text) },
+	});
+assert.deepEqual(ambientErrors, ["✓ Dist bridge"]);
+
 if (!isTTY()) {
 	try {
 		assertTTY();

@@ -1,8 +1,8 @@
 {
 	"extends": "@crustjs/config/tsconfig.base.json",
 	"compilerOptions": {
-		"declaration": true,
-		"isolatedDeclarations": true
+		"declaration": false,
+		"isolatedDeclarations": false
 	},
 	"include": ["src", "tests"],
 	"exclude": ["templates"]
