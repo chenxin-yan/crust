@@ -7,10 +7,11 @@ import {
 	rmSync,
 	writeFileSync,
 } from "node:fs";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { join, relative, resolve } from "node:path";
 
 import { bold, cyan, dim, green } from "@crustjs/style";
 import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
+import { isWithin } from "@crustjs/utils/path";
 
 import {
 	type BunTarget,
@@ -560,11 +561,6 @@ export async function runDistributeBuild(options: {
 		console.log(`  ${targetPackage.packageDir}`);
 	}
 	console.log(`\n${dim("Manifest:")} ${manifestPath}`);
-}
-
-function isWithin(parent: string, child: string): boolean {
-	const path = relative(parent, child);
-	return path === "" || (!isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`));
 }
 
 type CollectedArtifacts = { names: string[]; manPages: string[] };

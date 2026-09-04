@@ -5,26 +5,6 @@ import type { StoreValidatorIssue } from "./types.ts";
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Contextual details attached to a `PATH` error.
- *
- * Returned when the resolved or provided config file path is invalid.
- */
-export interface PathErrorDetails {
-	/** The path value that caused the error. */
-	path: string;
-}
-
-/**
- * Contextual details attached to a `PARSE` error.
- *
- * Returned when the persisted JSON file cannot be parsed.
- */
-export interface ParseErrorDetails {
-	/** Absolute path to the file that failed parsing. */
-	path: string;
-}
-
-/**
  * Contextual details attached to an `IO` error.
  *
  * Returned on filesystem read, write, or delete failures.
@@ -55,8 +35,8 @@ export interface ValidationErrorDetails {
  * Used internally for conditional constructor parameters and type narrowing.
  */
 export interface StoreErrorDetailsMap {
-	PATH: PathErrorDetails;
-	PARSE: ParseErrorDetails;
+	PATH: { path: string };
+	PARSE: { path: string };
 	IO: IOErrorDetails;
 	VALIDATION: ValidationErrorDetails;
 	DEFINITION: undefined;

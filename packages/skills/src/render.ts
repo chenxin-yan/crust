@@ -65,12 +65,7 @@ export function renderSkill(manifest: ManifestNode, meta: SkillMeta): RenderedFi
 
 	// 2. commands/ — per-command markdown files
 	for (const node of allNodes) {
-		const filePath = commandFilePath(node);
-		const content =
-			node.children.length > 0
-				? renderGroupCommand(node, manifest)
-				: renderLeafCommand(node, manifest);
-		files.push({ path: filePath, content });
+		files.push({ path: commandFilePath(node), content: renderCommand(node, manifest) });
 	}
 
 	return files;
@@ -245,50 +240,15 @@ function commandType(node: ManifestNode): string {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Leaf command renderer
+// Command renderer
 // ────────────────────────────────────────────────────────────────────────────
 
-/**
- * Renders a leaf command markdown file with full invocation details:
- * description, usage, arguments, flags, defaults, aliases, and examples.
- */
-function renderLeafCommand(node: ManifestNode, root: ManifestNode): string {
-	const lines: string[] = [];
-	lines.push(...renderCommandHeading(node));
-	lines.push(...renderCommandSections(node));
-	lines.push(...renderRunnableCommandSections(node));
-
-	// Parent navigation
+/** Renders a command markdown file with its runnable details and child links. */
+function renderCommand(node: ManifestNode, root: ManifestNode): string {
+	const lines = [...renderCommandHeading(node), ...renderCommandSections(node)];
+	if (node.runnable) lines.push(...renderRunnableCommandSections(node));
+	if (node.children.length > 0) lines.push(...renderSubcommandLinks(node, commandFilePath(node)));
 	lines.push(...renderNavigation(node, root));
-
-	return lines.join("\n");
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Group command renderer
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Renders a non-leaf (group) command markdown file as a concise overview
- * linking to child command documentation files.
- */
-function renderGroupCommand(node: ManifestNode, root: ManifestNode): string {
-	const lines: string[] = [];
-	const filePath = commandFilePath(node);
-	lines.push(...renderCommandHeading(node));
-	lines.push(...renderCommandSections(node));
-
-	// If the group is also runnable, show its own usage
-	if (node.runnable) {
-		lines.push(...renderRunnableCommandSections(node));
-	}
-
-	// Subcommands list
-	lines.push(...renderSubcommandLinks(node, filePath));
-
-	// Parent navigation
-	lines.push(...renderNavigation(node, root));
-
 	return lines.join("\n");
 }
 

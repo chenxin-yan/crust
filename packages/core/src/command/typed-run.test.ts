@@ -494,11 +494,17 @@ describe("typed programmatic invocation", () => {
 	});
 
 	it("throws COMMAND_NOT_FOUND for path elements the router cannot consume", async () => {
-		const app = new Crust("cli").args({ name: "source", type: "string" }).action(() => {});
+		const app = new Crust("cli")
+			.args({ name: "source", type: "string" })
+			.action(() => {})
+			.add(
+				defineCommand("visible", (command) => command.action(() => {})),
+				defineCommand("internal", { hidden: true }, (command) => command.action(() => {})),
+			);
 
 		await expect(app.run(["missing"] as never)).rejects.toMatchObject({
 			code: "COMMAND_NOT_FOUND",
-			details: { input: "missing" },
+			details: { input: "missing", available: ["visible"] },
 		});
 	});
 

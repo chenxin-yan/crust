@@ -1,5 +1,6 @@
 import { CrustError } from "../errors.ts";
 import type { FlagSpelling } from "../parsing/spellings.ts";
+import { isListed } from "../sections.ts";
 import type { CommandNode } from "./node.ts";
 import { snapshotCommand } from "./snapshot.ts";
 
@@ -106,7 +107,7 @@ function matchKnownFlagToken(
  * 4. If no match and the current command has NO `run()`, it signals the caller
  *    should show help (the `showHelp` flag is set in the result)
  * 5. Unknown subcommands produce a structured COMMAND_NOT_FOUND error whose
- *    `details.available` lists the canonical sibling names (aliases are
+ *    `details.available` lists visible canonical sibling names (aliases are
  *    discoverable via `details.parentCommand.subCommands[name].meta.aliases`)
  *
  * Implementation: linear scan over siblings on miss. Command trees are small
@@ -214,14 +215,14 @@ export function resolveCommand(command: CommandNode, argv: string[]): CommandRou
 		}
 
 		// Parent has no run() — this is an unknown subcommand error.
-		// `details.available` lists canonical sibling names only; consumers
-		// that want alias-aware matching (e.g. didYouMean) read aliases
-		// directly from `details.parentCommand.subCommands`.
+		const parentCommand = snapshotCommand(current);
 		throw new CrustError("COMMAND_NOT_FOUND", `Unknown command "${candidate}".`, {
 			input: candidate,
-			available: Object.keys(subCommands),
+			available: Object.entries(parentCommand.subCommands)
+				.filter(([, child]) => isListed(child))
+				.map(([name]) => name),
 			commandPath: [...path],
-			parentCommand: snapshotCommand(current),
+			parentCommand,
 		});
 	}
 

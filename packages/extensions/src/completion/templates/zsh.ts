@@ -1,4 +1,4 @@
-import { toShellIdent, zshArgsDescription, zshDescribeField, zshSingleQuote } from "../escape.ts";
+import { toShellIdent, zshArgsDescription, zshDescribeField, bashSingleQuote } from "../escape.ts";
 import type { CompletionCommand, CompletionFlag } from "../spec.ts";
 
 /**
@@ -15,26 +15,13 @@ import type { CompletionCommand, CompletionFlag } from "../spec.ts";
  * script works both when dropped into `$fpath` and when sourced directly
  * (e.g. via `eval "$(mycli completion zsh)"`).
  *
- * **Quoting model.** Every spec string is wrapped via {@link zshSingleQuote}
+ * **Quoting model.** Every spec string is wrapped via {@link bashSingleQuote}
  * so it survives any character (description text, choice values) by going
  * through the standard `'foo'\''bar'` close-and-reopen idiom. The spec
  * **contents** are independently escaped via {@link zshArgsDescription}
  * (for `_arguments` description brackets) and {@link zshDescribeField}
  * (for the colon-separated `_describe` items).
  */
-
-/**
- * Render the `_arguments` specs for every flag on a given command. Each
- * flag becomes one or more spec strings depending on whether it has a
- * short alias (we use the `(-x --name){-x,--name}` mutex+alias pattern).
- */
-function renderFlagSpecs(node: CompletionCommand): string[] {
-	const specs: string[] = [];
-	for (const flag of node.flags) {
-		specs.push(...flagSpecs(flag));
-	}
-	return specs;
-}
 
 function flagSpecs(flag: CompletionFlag): string[] {
 	const desc = flag.description ?? "";
@@ -80,7 +67,7 @@ function flagSpecs(flag: CompletionFlag): string[] {
 		// Single long form — simplest spec.
 		const eq = flag.takesValue ? "=" : "";
 		const body = `${repeat}--${flag.name}${eq}${descPart}${valueSuffix}`;
-		specs.push(zshSingleQuote(body));
+		specs.push(bashSingleQuote(body));
 	} else {
 		// Multiple spellings — emit a mutex group. The standard zsh idiom
 		// (per `man zshcompsys`) is:
@@ -106,9 +93,9 @@ function flagSpecs(flag: CompletionFlag): string[] {
 		// because none of the quoted contents contain a single quote
 		// (description quotes are escaped by zshArgsDescription).
 		const fragments = [
-			zshSingleQuote(headPrefix),
+			bashSingleQuote(headPrefix),
 			`${repeatBrace}{${altGroup}}`,
-			zshSingleQuote(`${descPart}${valueSuffix}`),
+			bashSingleQuote(`${descPart}${valueSuffix}`),
 		];
 		specs.push(fragments.join(""));
 	}
@@ -120,14 +107,16 @@ function flagSpecs(flag: CompletionFlag): string[] {
 		const negDesc = `[${zshArgsDescription(`disable: ${desc}`.trim())}]`;
 		const negNames = allLong.map((l) => `--no-${l}`);
 		if (negNames.length === 1) {
-			specs.push(zshSingleQuote(`${repeat}${negNames[0]}${negDesc}`));
+			specs.push(bashSingleQuote(`${repeat}${negNames[0]}${negDesc}`));
 		} else {
 			const negMutex = negNames.join(" ");
 			const negAlt = negNames.join(",");
 			const headPrefix = flag.multiple === true ? "" : `(${negMutex})`;
 			const repeatBrace = flag.multiple === true ? "*" : "";
 			specs.push(
-				[zshSingleQuote(headPrefix), `${repeatBrace}{${negAlt}}`, zshSingleQuote(negDesc)].join(""),
+				[bashSingleQuote(headPrefix), `${repeatBrace}{${negAlt}}`, bashSingleQuote(negDesc)].join(
+					"",
+				),
 			);
 		}
 	}
@@ -163,7 +152,7 @@ function renderArgSpecs(node: CompletionCommand): string[] {
 		} else {
 			action = " ";
 		}
-		specs.push(zshSingleQuote(`${idxToken}:${label}:${action}`));
+		specs.push(bashSingleQuote(`${idxToken}:${label}:${action}`));
 	});
 	return specs;
 }
@@ -201,7 +190,7 @@ function renderHelper(
 	out: string[],
 ): void {
 	const fnName = helperName(rootIdent, path);
-	const flagSpecLines = renderFlagSpecs(node);
+	const flagSpecLines = node.flags.flatMap(flagSpecs);
 	const argSpecLines = renderArgSpecs(node);
 	const hasChildren = node.subCommands.length > 0;
 
@@ -224,10 +213,10 @@ function renderHelper(
 		out.push("\t\t\tsubcmds=(");
 		for (const sub of node.subCommands) {
 			const desc = zshDescribeField(sub.description ?? "");
-			out.push(`\t\t\t\t${zshSingleQuote(`${zshDescribeField(sub.name)}:${desc}`)}`);
+			out.push(`\t\t\t\t${bashSingleQuote(`${zshDescribeField(sub.name)}:${desc}`)}`);
 			if (sub.aliases !== undefined) {
 				for (const alias of sub.aliases) {
-					out.push(`\t\t\t\t${zshSingleQuote(`${zshDescribeField(alias)}:${desc}`)}`);
+					out.push(`\t\t\t\t${bashSingleQuote(`${zshDescribeField(alias)}:${desc}`)}`);
 				}
 			}
 		}
@@ -242,7 +231,7 @@ function renderHelper(
 			// avoid `|`-joined patterns because a quoted alternation list
 			// is simpler to keep literal (no glob metacharacter risk).
 			const allSpellings = [sub.name, ...(sub.aliases ?? [])];
-			const alts = allSpellings.map(zshSingleQuote).join("|");
+			const alts = allSpellings.map(bashSingleQuote).join("|");
 			out.push(`\t\t\t\t${alts})`);
 			out.push(`\t\t\t\t\t${childFn}`);
 			out.push("\t\t\t\t\t;;");
@@ -315,7 +304,7 @@ export function renderZsh(spec: CompletionCommand, binName: string, version: str
 	lines.push(`if [ "$funcstack[1]" = "_${ident}" ]; then`);
 	lines.push(`\t_${ident} "$@"`);
 	lines.push("else");
-	lines.push(`\tcompdef _${ident} ${zshSingleQuote(binName)}`);
+	lines.push(`\tcompdef _${ident} ${bashSingleQuote(binName)}`);
 	lines.push("fi");
 
 	return `${lines.join("\n")}\n`;

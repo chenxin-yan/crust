@@ -2,12 +2,12 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 
 import type { CommandSnapshot } from "@crustjs/core";
+import { isWithin } from "@crustjs/utils/path";
 import { resolveSourceDir } from "@crustjs/utils/source";
 
 import { loadBundleFiles, requireSkillFrontmatter } from "./bundle.ts";
 import { SkillSourceConflictError } from "./errors.ts";
 import { buildManifest } from "./manifest.ts";
-import { isWithin } from "./path.ts";
 import { renderSkill } from "./render.ts";
 import { isValidSkillName } from "./skill-name.ts";
 import type { RenderedFile, SkillMeta } from "./types.ts";

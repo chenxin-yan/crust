@@ -5,7 +5,8 @@ import { Crust, defineCommand, defineExtensionId } from "@crustjs/core";
 import { snapshotCommand } from "@crustjs/core/tooling";
 type CommandNode = Parameters<typeof snapshotCommand>[0];
 
-import { buildManifest, SKILLS } from "./manifest.ts";
+import { SKILLS } from "./extension.ts";
+import { buildManifest } from "./manifest.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helper — builds a CommandNode for introspection tests
@@ -275,7 +276,6 @@ describe("buildManifest", () => {
 					description: "Enable verbose output",
 					required: false,
 					multiple: false,
-					aliases: [],
 				},
 			]);
 		});
@@ -313,11 +313,9 @@ describe("buildManifest", () => {
 
 			expect(flag?.name).toBe("target");
 			expect(flag?.required).toBe(true);
-			expect(flag?.short).toBe("t");
-			expect(flag?.aliases).toEqual([]);
 		});
 
-		it("normalizes a flag with long aliases sorted alphabetically", () => {
+		it("preserves documentation-order flag spellings", () => {
 			const cmd = makeCommand({
 				meta: { name: "run" },
 				flags: {
@@ -333,8 +331,6 @@ describe("buildManifest", () => {
 			const node = buildManifest(snapshotCommand(cmd));
 			const [flag] = node.flags;
 
-			expect(flag?.short).toBe("o");
-			expect(flag?.aliases).toEqual(["dest", "out"]);
 			expect(flag?.spellings).toEqual(["-o", "--output", "--out", "--dest"]);
 		});
 
@@ -634,8 +630,6 @@ describe("buildManifest", () => {
 			expect(cloneNode?.flags).toHaveLength(3);
 			// Flags sorted: bare, branch, depth
 			expect(cloneNode?.flags.map((f) => f.name)).toEqual(["bare", "branch", "depth"]);
-			expect(cloneNode?.flags[1]?.short).toBe("b");
-			expect(cloneNode?.flags[1]?.aliases).toEqual([]);
 
 			// remote
 			const remoteNode = manifest.children[1];

@@ -1,4 +1,4 @@
-import { type CommandSnapshot, type ExtensionId, defineExtensionId } from "@crustjs/core";
+import type { CommandSnapshot } from "@crustjs/core";
 import {
 	buildCommandDocumentation,
 	isListed,
@@ -9,9 +9,8 @@ import {
 } from "@crustjs/core/tooling";
 import type { BaseValueType } from "@crustjs/utils/primitive";
 
+import { SKILLS } from "./extension.ts";
 import type { ManifestArg, ManifestFlag, ManifestNode } from "./types.ts";
-
-export const SKILLS: ExtensionId = defineExtensionId("crust:skills");
 
 export function buildManifest(command: CommandSnapshot): ManifestNode {
 	const rootName = normalizeName(command.meta.name);
@@ -71,8 +70,6 @@ function normalizeFlag(flag: DocumentationFlag): ManifestFlag {
 		type: manifestType(flag.type),
 		required: flag.required,
 		multiple: flag.multiple,
-		short: flag.short,
-		aliases: [...flag.aliases].sort((a, b) => a.localeCompare(b)),
 	};
 	if (flag.description !== undefined) result.description = flag.description;
 	if (flag.default !== undefined) result.default = serializeDefault(flag.default);

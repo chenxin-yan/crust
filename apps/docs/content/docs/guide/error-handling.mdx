@@ -34,7 +34,7 @@ Crust checks developer-authored definitions at compile time through TypeScript. 
 
 Argv is untrusted and remains runtime-validated. Invalid tokens, choices, and built-in conversions throw `PARSE`; missing values and Standard Schema issues throw `VALIDATION`. Declared Context dependencies are checked statically; lazy bag access retains runtime `DEFINITION` guards for missing providers on dynamically assembled paths, dependency cycles, and lifecycle misuse. Materialization retains runtime checks that a command recipe returns the seeded builder and does not register nested Extensions, because recipe behavior is dynamic. Snapshot preparation also retains runtime checks for authored and Extension-contributed documentation sections.
 
-`COMMAND_NOT_FOUND` details contain `input`, `available`, `commandPath`, and `parentCommand`, a readonly serializable Command Snapshot.
+`COMMAND_NOT_FOUND` details contain `input`, `available`, `commandPath`, and `parentCommand`, a readonly serializable Command Snapshot. `available` contains only visible child command names; hidden commands remain invocable but are omitted from user-facing choices.
 
 ## Application errors pass through
 

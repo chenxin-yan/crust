@@ -3,8 +3,9 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
-import { join, sep } from "node:path";
+import { join } from "node:path";
 
+import { isWithin } from "@crustjs/utils/path";
 import { resolveSourceDir } from "@crustjs/utils/source";
 
 import type { RenderedFile } from "./types.ts";
@@ -97,12 +98,10 @@ export function requireSkillFrontmatter(
  * Asserts that `realPath` lies inside (or equals) `canonicalRoot`.
  *
  * The check is performed on canonicalized paths (after `realpath`) so
- * symlinks pointing outside the skill directory root are reliably rejected. Includes
- * a `sep` boundary check to prevent `/canonical-foo` from matching `/canonical`.
+ * symlinks pointing outside the skill directory root are reliably rejected.
  */
 function assertInsideRoot(realPath: string, canonicalRoot: string, originalPath: string): void {
-	const rootWithSep = canonicalRoot.endsWith(sep) ? canonicalRoot : canonicalRoot + sep;
-	if (realPath !== canonicalRoot && !realPath.startsWith(rootWithSep)) {
+	if (!isWithin(canonicalRoot, realPath)) {
 		throw new Error(
 			`Extra skill path traversal rejected: "${originalPath}" resolves to "${realPath}", ` +
 				`which is outside the skill directory root "${canonicalRoot}".`,
@@ -171,10 +170,7 @@ async function collectBundleEntries(
 /** Result of loading a hand-authored bundle: files plus parsed frontmatter. */
 export interface LoadedBundle {
 	readonly files: readonly RenderedFile[];
-	readonly frontmatter: {
-		readonly name: string;
-		readonly description: string;
-	};
+	readonly frontmatter: RequiredSkillFrontmatter;
 }
 
 /**

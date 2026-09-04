@@ -1,4 +1,3 @@
-import { type ExtensionId, defineExtensionId } from "@crustjs/core";
 import {
 	buildCommandDocumentation,
 	type CommandSnapshot,
@@ -9,7 +8,7 @@ import {
 	type DocumentationFlag,
 } from "@crustjs/core/tooling";
 
-export const MAN: ExtensionId = defineExtensionId("crust:man");
+import { MAN } from "./extension.ts";
 
 function escapeMdocBodyLine(line: string): string {
 	// Both `.` and `'` start roff control lines.
@@ -35,20 +34,10 @@ function flagMacro(spelling: string): string {
 function flagMacros(flag: DocumentationFlag): string {
 	return flag.spellings.map(flagMacro).join(" , ");
 }
-function longestFlagWidth(flags: readonly DocumentationFlag[]): string {
-	let max = 8;
-	for (const flag of flags) max = Math.max(max, flag.spellings.join(", ").length);
-	return `${max}n`;
-}
 function commandLabel(command: CommandDocumentation): string {
 	return command.aliases.length === 0
 		? command.name
 		: `${command.name} (${command.aliases.join(", ")})`;
-}
-function longestSubcommandWidth(command: CommandDocumentation): string {
-	let max = 8;
-	for (const child of command.children) max = Math.max(max, commandLabel(child).length);
-	return `${max}n`;
 }
 function resolveDdLine(explicit?: string): string {
 	if (explicit) return explicit;
@@ -100,7 +89,10 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 	// A man page intentionally summarizes only the root's immediate children;
 	// the shared model still resolves the complete visible tree for other adapters.
 	if (model.children.length > 0) {
-		lines.push(".Sh SUBCOMMANDS", `.Bl -tag -width ${longestSubcommandWidth(model)}`);
+		lines.push(
+			".Sh SUBCOMMANDS",
+			`.Bl -tag -width ${Math.max(8, ...model.children.map((child) => commandLabel(child).length))}n`,
+		);
 		for (const child of [...model.children].sort((a, b) => a.name.localeCompare(b.name))) {
 			lines.push(`.It Nm ${commandLabel(child)}`);
 			if (child.description)
@@ -109,7 +101,10 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		lines.push(".El");
 	}
 	if (model.flags.length > 0) {
-		lines.push(".Sh OPTIONS", `.Bl -tag -width ${longestFlagWidth(model.flags)}`);
+		lines.push(
+			".Sh OPTIONS",
+			`.Bl -tag -width ${Math.max(8, ...model.flags.map((flag) => flag.spellings.join(", ").length))}n`,
+		);
 		for (const flag of [...model.flags].sort((a, b) => a.name.localeCompare(b.name))) {
 			lines.push(`.It ${flagMacros(flag)}`);
 			const body = formatDescription(flag.description, flag.default, flag.choices);

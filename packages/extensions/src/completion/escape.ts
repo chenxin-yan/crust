@@ -167,9 +167,6 @@ export function bashDoubleQuoteInner(value: string): string {
 
 // ── Zsh ───────────────────────────────────────────────────────────────────
 
-/** Wrap `value` as a zsh single-quoted shell word. */
-export const zshSingleQuote: typeof bashSingleQuote = bashSingleQuote;
-
 /**
  * Escape free-form text for use inside the `[...]` description bracket of
  * a zsh `_arguments` spec.
@@ -197,7 +194,7 @@ export function zshArgsDescription(value: string): string {
  * escape character.
  *
  * The result is meant to be placed inside zsh single quotes by the
- * caller (we do NOT include outer quotes); call {@link zshSingleQuote}
+ * caller (we do NOT include outer quotes); call {@link bashSingleQuote}
  * on the assembled `name:desc` string when emitting.
  */
 export function zshDescribeField(value: string): string {

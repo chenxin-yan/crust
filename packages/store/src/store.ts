@@ -54,31 +54,15 @@ function isFieldValueResult(
 	);
 }
 
-function isString(value: JsonValue | undefined): value is string {
-	return typeof value === "string";
-}
-
-function isNumber(value: JsonValue | undefined): value is number {
-	return typeof value === "number" && Number.isFinite(value);
-}
-
-function isBoolean(value: JsonValue | undefined): value is boolean {
-	return typeof value === "boolean";
-}
-
-function matchesValueType(value: JsonValue | undefined, type: ValueType): boolean {
-	if (type === "string") return isString(value);
-	if (type === "number") return isNumber(value);
-	return isBoolean(value);
-}
-
 function matchesDeclaredType(
 	def: { type: ValueType; array?: true },
 	value: JsonValue | undefined,
 ): boolean {
-	return def.array === true
-		? Array.isArray(value) && value.every((item) => matchesValueType(item, def.type))
-		: matchesValueType(value, def.type);
+	const matches = (item: JsonValue | undefined) => {
+		// oxlint-disable-next-line anti-slop/no-runtime-typeof -- comparing against the declared field type.
+		return typeof item === def.type && (def.type !== "number" || Number.isFinite(item));
+	};
+	return def.array === true ? Array.isArray(value) && value.every(matches) : matches(value);
 }
 
 function expectedTypeMessage(def: { type: ValueType; array?: true }): string {
@@ -131,16 +115,6 @@ export function createStore<const F extends FieldsDef>(
 	type Config = InferStoreConfig<F>;
 	const validators = new Map<string, FieldValidator>();
 
-	function configFromDocument(document: StoreDocument): Config {
-		// SAFETY: this conversion is used only after normalization and either validation or before a full validated replacement.
-		return document as Config;
-	}
-
-	function documentFromConfig(config: Config): StoreDocument {
-		// SAFETY: field definitions constrain config values and schema outputs to JSON-compatible values.
-		return { ...config } as StoreDocument;
-	}
-
 	for (const [key, def] of Object.entries(fields)) {
 		if (def.schema !== undefined) {
 			for (const option of ["default", "validate"] as const) {
@@ -177,11 +151,13 @@ export function createStore<const F extends FieldsDef>(
 	// ──────────────────────────────────────────────────────────────────────
 
 	function coerceByType(value: JsonValue, type: ValueType): JsonValue {
-		if (type === "number" && isString(value)) {
+		// oxlint-disable-next-line anti-slop/no-runtime-typeof -- typed store values are coerced by their declaration.
+		if (type === "number" && typeof value === "string") {
 			return tryCoerceNumber(value) ?? value;
 		}
 
-		if (type === "boolean" && isString(value)) {
+		// oxlint-disable-next-line anti-slop/no-runtime-typeof -- typed store values are coerced by their declaration.
+		if (type === "boolean" && typeof value === "string") {
 			return coerceBooleanString(value);
 		}
 
@@ -354,7 +330,8 @@ export function createStore<const F extends FieldsDef>(
 	async function read(): Promise<Config> {
 		const document = await readRaw();
 		await runFieldValidators(document, "read");
-		return configFromDocument(document);
+		// SAFETY: the document was normalized and validated against every field definition.
+		return document as Config;
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
@@ -362,10 +339,12 @@ export function createStore<const F extends FieldsDef>(
 	// ──────────────────────────────────────────────────────────────────────
 
 	async function write(config: Config): Promise<Config> {
-		const normalized = normalizeStateTypes(documentFromConfig(config));
+		// SAFETY: field definitions constrain config values and schema outputs to JSON-compatible values.
+		const normalized = normalizeStateTypes({ ...config } as StoreDocument);
 		await runFieldValidators(normalized, "write");
 		await writeJson(filePath, normalized, writeOptions);
-		return configFromDocument(normalized);
+		// SAFETY: the normalized document was validated against every field definition.
+		return normalized as Config;
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
@@ -374,11 +353,14 @@ export function createStore<const F extends FieldsDef>(
 
 	async function update(updater: StoreUpdater<Config>): Promise<Config> {
 		const current = await readRaw();
-		const updated = updater(configFromDocument(current));
-		const normalized = normalizeStateTypes(documentFromConfig(updated));
+		// SAFETY: readRaw normalizes the current document against the field definitions.
+		const updated = updater(current as Config);
+		// SAFETY: field definitions constrain updater output to JSON-compatible values.
+		const normalized = normalizeStateTypes({ ...updated } as StoreDocument);
 		await runFieldValidators(normalized, "update");
 		await writeJson(filePath, normalized, writeOptions);
-		return configFromDocument(normalized);
+		// SAFETY: the normalized document was validated against every field definition.
+		return normalized as Config;
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
@@ -390,7 +372,8 @@ export function createStore<const F extends FieldsDef>(
 		const normalized = normalizeStateTypes({ ...current, ...partial });
 		await runFieldValidators(normalized, "patch");
 		await writeJson(filePath, normalized, writeOptions);
-		return configFromDocument(normalized);
+		// SAFETY: the merged document was normalized and validated against every field definition.
+		return normalized as Config;
 	}
 
 	// ──────────────────────────────────────────────────────────────────────

@@ -127,15 +127,8 @@ function didYouMeanFactory(options: DidYouMeanOptions = {}): Extension {
 					return true;
 				}
 
-				// `details.available` lists every canonical sibling name including
-				// those marked `meta.hidden: true`. The error message is user-
-				// facing, so filter the same way `findSuggestions` does — internal
-				// commands stay invocable but never surface in this list.
-				const visibleAvailable = details.available.filter((canonical) =>
-					isListed(details.parentCommand.subCommands[canonical]!),
-				);
-				if (visibleAvailable.length > 0) {
-					message += `\n\nAvailable commands: ${visibleAvailable.join(", ")}`;
+				if (details.available.length > 0) {
+					message += `\n\nAvailable commands: ${details.available.join(", ")}`;
 				}
 				context.stderr(message);
 				// Core preserves the nonzero exit code — rendering only here.
