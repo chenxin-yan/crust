@@ -2,11 +2,10 @@ import type { CommandDefinition } from "../command/crust.ts";
 import type { CommandSnapshot } from "../command/snapshot.ts";
 import type { CaughtError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
-import { assertDefinableFlag } from "../parsing/spellings.ts";
+import { toFlagsRecord } from "../parsing/spellings.ts";
 import type {
 	CommandSectionInput,
 	FlagDef,
-	FlagsDef,
 	InferFlags,
 	InvocationIO,
 	NamedFlagDef,
@@ -21,9 +20,9 @@ import type {
 	ProvidedContextSpellings,
 	ValidateNamedFlagDefs,
 } from "../validation/flags.brands.ts";
+import type { Awaitable } from "../validation/shared.ts";
 import type {
 	AnyContextFactory,
-	Awaitable,
 	ContextBag,
 	ContextDependencies,
 	ContextInstance,
@@ -324,16 +323,7 @@ export function defineExtension<
 	Defs,
 	Commands
 > {
-	const ownedFlags: FlagsDef = {};
-	for (const def of config.flags ?? []) {
-		const { name: flagName, ...rest } = def;
-		// Validate before the record assignment: a `__proto__` key would be
-		// silently swallowed as the record's prototype.
-		// SAFETY: removing name from a NamedExtensionFlagDef leaves its runtime ExtensionFlagDef.
-		const flag = rest as ExtensionFlagDef;
-		assertDefinableFlag(flagName, flag);
-		ownedFlags[flagName] = flag;
-	}
+	const ownedFlags = toFlagsRecord(config.flags ?? []);
 
 	// SAFETY: the runtime registry erases Defs after this function contextually typed every hook.
 	return Object.freeze({

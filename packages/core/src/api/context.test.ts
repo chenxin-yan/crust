@@ -26,7 +26,6 @@ describe("defineContext()", () => {
 		expect(auth.contextName).toBe("auth");
 
 		const instance = auth();
-		expect(instance.kind).toBe("context");
 		expect(instance.name).toBe("auth");
 		await expect(
 			Promise.resolve(
@@ -740,7 +739,6 @@ describe("Context dependency runtime boundaries", () => {
 		const aFactory = defineContext("a", () => "a");
 		const bFactory = defineContext("b", () => "b");
 		const a: ContextInstance<"a"> = {
-			kind: "context",
 			name: "a",
 			ownedFlags: {},
 			uses: [bFactory],
@@ -750,7 +748,6 @@ describe("Context dependency runtime boundaries", () => {
 			},
 		};
 		const b: ContextInstance<"b"> = {
-			kind: "context",
 			name: "b",
 			ownedFlags: {},
 			uses: [aFactory],

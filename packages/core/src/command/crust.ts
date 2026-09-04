@@ -8,7 +8,6 @@ import type {
 	ContextMap,
 	ContextsOutput,
 	ContextsOwnedFlags,
-	MergeContext,
 } from "../api/context.ts";
 import type { Extension, ExtensionsProvidesOutput } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
@@ -59,14 +58,14 @@ import type {
 	SpellingsOf,
 	ValidateNamedFlagDefs,
 } from "../validation/flags.brands.ts";
-import type { IsStaticTuple, IsUnion, UnionToIntersection } from "../validation/shared.ts";
+import type {
+	IsStaticTuple,
+	IsUnion,
+	MergeContext,
+	UnionToIntersection,
+} from "../validation/shared.ts";
 import { cloneCommandNode, installExtensionContexts } from "./extensions-install.ts";
-import {
-	executeInvocation,
-	prepareInvocationRoot,
-	prepareInvocationSnapshot,
-	runInvocation,
-} from "./invocation.ts";
+import { executeInvocation, prepareInvocation, runInvocation } from "./invocation.ts";
 import { type CommandAction, type CommandNode, createCommandNode } from "./node.ts";
 import { resolveCommand } from "./router.ts";
 import { snapshotCommand } from "./snapshot.ts";
@@ -723,7 +722,7 @@ function serializeRunArgv(
 	const args = input.args;
 	let omittedArgument: string | undefined;
 	let firstPositional: string | undefined;
-	for (const definition of command.args ?? []) {
+	for (const definition of command.args) {
 		const value = args?.[definition.name];
 		if (value === undefined) {
 			omittedArgument = definition.name;
@@ -754,7 +753,7 @@ function serializeRunArgv(
 	}
 	for (const name of Object.keys(args ?? {})) {
 		if (args?.[name] === undefined) continue;
-		if (!(command.args ?? []).some((definition) => definition.name === name)) {
+		if (!command.args.some((definition) => definition.name === name)) {
 			throw new CrustError("PARSE", `Unknown argument "${name}"`, {
 				argument: name,
 				reason: "unknown-argument",
@@ -1044,22 +1043,7 @@ export class Crust<
 	private _clone<Out = this>(nodeOverrides: Partial<CommandNode>): Out {
 		// SAFETY: the clone uses the same prototype and receives every instance field below.
 		const cloned = Object.create(Object.getPrototypeOf(this)) as this;
-		const effectiveFlags = { ...this._node.effectiveFlags };
-		const newNode: CommandNode = {
-			...this._node,
-			// Shallow copy collections so mutations don't affect the original
-			localFlags: { ...this._node.localFlags },
-			ownedFlags: { ...this._node.ownedFlags },
-			effectiveFlags,
-			flagSpellings: cloneFlagSpellings(this._node.flagSpellings, effectiveFlags),
-			subCommands: { ...this._node.subCommands },
-			contexts: [...this._node.contexts],
-			contextExtensionIds: [...this._node.contextExtensionIds],
-			extensions: [...this._node.extensions],
-			meta: { ...this._node.meta },
-			args: this._node.args ? [...this._node.args] : undefined,
-			...nodeOverrides,
-		};
+		const newNode: CommandNode = { ...cloneCommandNode(this._node), ...nodeOverrides };
 		cloned._node = newNode;
 		cloned._ancestorOwnedFlags = this._ancestorOwnedFlags;
 		/* oxlint-disable anti-slop/no-chained-type-assertions -- one runtime builder shape is re-parameterized after each matching mutation. */
@@ -1133,7 +1117,7 @@ export class Crust<
 	args<const NewA extends ArgsDef>(
 		...defs: NewA & AppendArgsChecks<A, NewA>
 	): AfterArgs<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, NewA> {
-		const combined = [...(this._node.args ?? []), ...defs.map((definition) => ({ ...definition }))];
+		const combined = [...this._node.args, ...defs.map((definition) => ({ ...definition }))];
 		// Brands own literal tuples; this owns config-built defs, where a
 		// duplicate name silently discards a positional and a mid-tuple variadic
 		// swallows every later argument.
@@ -1372,7 +1356,7 @@ export class Crust<
 	 * calling Command Actions.
 	 */
 	async snapshot(): Promise<CommandSnapshot> {
-		return prepareInvocationSnapshot(this._node, materializeCommandDefinition);
+		return snapshotCommand(prepareInvocation(this._node, materializeCommandDefinition).rootNode);
 	}
 
 	/**
@@ -1412,7 +1396,7 @@ export class Crust<
 		const structuredInput = (args[0] ?? {}) as RunInputPayload;
 		// SAFETY: the public overloads constrain the second argument to invocation IO.
 		const io = args[1] as Partial<InvocationIO> | undefined;
-		const root = prepareInvocationRoot(this._node, materializeCommandDefinition);
+		const root = prepareInvocation(this._node, materializeCommandDefinition).rootNode;
 		const argv = serializeRunArgv(root, path, structuredInput);
 		// Programmatic calls preserve raw failures and never change process status.
 		return await runInvocation(this._node, argv, io, materializeCommandDefinition);

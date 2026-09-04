@@ -3,7 +3,6 @@ import type { Extension } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId, type ExtensionId } from "../identity.ts";
 import { addFlagSpellingEntries, cloneFlagSpellings } from "../parsing/spellings.ts";
-import { isText } from "../sections.ts";
 import type { CommandSection, FlagDef, FlagsDef } from "../types.ts";
 import type { CommandDefinition } from "./crust.ts";
 import type { CommandNode } from "./node.ts";
@@ -102,7 +101,7 @@ export function cloneCommandNode(node: CommandNode): CommandNode {
 		ownedFlags: cloneFlags(node.ownedFlags),
 		effectiveFlags,
 		flagSpellings: cloneFlagSpellings(node.flagSpellings, effectiveFlags),
-		args: node.args ? node.args.map((def) => ({ ...def })) : undefined,
+		args: node.args.map((def) => ({ ...def })),
 		subCommands,
 		contexts: [...node.contexts],
 		contextExtensionIds: [...node.contextExtensionIds],
@@ -131,6 +130,10 @@ function hasId<T>(value: T): value is T & { readonly id?: unknown } {
 
 function isString<T>(value: T): value is T & string {
 	return typeof value === "string";
+}
+
+function isText<T>(value: T): value is T & string {
+	return typeof value === "string" && !!value.trim();
 }
 
 function parseExtensionId(consumer: unknown, owner: SectionOwner): ExtensionId {

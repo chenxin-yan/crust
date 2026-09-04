@@ -49,8 +49,6 @@ const args = [{ name: "port", schema: z.coerce.number().int().min(1) }] as const
 
 The schema receives `string | undefined`, or `string[]` for a variadic argument. It exclusively owns coercion, defaults, requiredness, choices, and validation, so `type`, `required`, `default`, `choices`, and `parse` are not available in this variant. The schema's output type reaches the Command Action.
 
-An argument with neither `type` nor `schema` is a raw definition and returns the raw token value.
-
 ### `FlagDef`
 
 ```ts

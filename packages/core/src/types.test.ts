@@ -47,26 +47,6 @@ describe("InferArgs type inference", () => {
 		expect(val).toBeDefined();
 	});
 
-	it("narrows raw args (no type/schema) with literal choices", () => {
-		type Args = readonly [
-			{ name: "mode"; choices: readonly ["dev", "prod"] },
-			{ name: "env"; choices: readonly ["a", "b"]; default: "a" },
-			{ name: "tags"; choices: readonly ["x", "y"]; variadic: true },
-		];
-		type Result = InferArgs<Args>;
-		type _check = Expect<
-			Equal<
-				Result,
-				{
-					mode: "dev" | "prod" | undefined;
-					env: "a" | "b";
-					tags: ("x" | "y")[];
-				}
-			>
-		>;
-		expect(true).toBe(true);
-	});
-
 	it("schema args infer the schema output, untouched by choices narrowing", () => {
 		type Args = readonly [{ name: "url"; schema: StandardSchema<string | undefined, URL> }];
 		type Result = InferArgs<Args>;

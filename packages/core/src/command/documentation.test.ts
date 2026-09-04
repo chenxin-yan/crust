@@ -26,7 +26,10 @@ describe("buildCommandDocumentation", () => {
 	it("builds usage and arg tokens", async () => {
 		const model = await docs(
 			new Crust("app")
-				.args({ name: "file", required: true }, { name: "rest", variadic: true })
+				.args(
+					{ name: "file", type: "string", required: true },
+					{ name: "rest", type: "string", variadic: true },
+				)
 				.flags({ name: "verbose", type: "boolean" })
 				.action(() => {}),
 		);

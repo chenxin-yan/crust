@@ -37,14 +37,14 @@ async function runSchema<S extends StandardSchema, Raw>(
  * @throws {CrustError} `VALIDATION` aggregating every schema issue
  */
 export async function applySchemas<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
-	node: CommandNode & { args: A | undefined; effectiveFlags: F },
+	node: CommandNode & { args: A; effectiveFlags: F },
 	parsed: ParseResult<A, F>,
 ): Promise<ValidatedInput<A, F>> {
 	const issues: ValidationIssue[] = [];
 	const args = new Map<string, unknown>(Object.entries(parsed.args));
 	const flags = new Map<string, unknown>(Object.entries(parsed.flags));
 
-	for (const def of node.args ?? []) {
+	for (const def of node.args) {
 		if (def.schema === undefined) continue;
 		const result = await runSchema(def.schema, args.get(def.name), ["args", def.name], issues);
 		if (result.ok) args.set(def.name, result.value);
