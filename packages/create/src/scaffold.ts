@@ -83,6 +83,7 @@ function isNonEmptyDir(dirPath: string): boolean {
  *
  * @param options - Scaffold configuration.
  * @returns The list of all written file paths, relative to the destination directory.
+ * @throws When the template source cannot be resolved, does not exist, or is not a directory.
  * @throws When `conflict` is `"abort"` and the destination is a non-empty directory.
  *
  * @example

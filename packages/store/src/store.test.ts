@@ -479,6 +479,21 @@ describe("store.update", () => {
 		expect(JSON.parse(raw)).toEqual({ theme: "light", verbose: true });
 	});
 
+	it("should materialize schema defaults before calling the updater", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: { theme: { schema: z.enum(["light", "dark"]).default("light") } },
+		});
+
+		await expect(
+			store.update((current) => {
+				expect(current.theme).toBe("light");
+				return { theme: "dark" };
+			}),
+		).resolves.toEqual({ theme: "dark" });
+	});
+
 	it("should run field validators on update", async () => {
 		const store = createStore({
 			dirPath: tempDir,
@@ -578,6 +593,22 @@ describe("store.patch", () => {
 		const result = await store.read();
 		expect(result.theme).toBe("dark");
 		expect(result.verbose).toBe(false);
+	});
+
+	it("should preserve schema defaults when patching another field", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: {
+				theme: { schema: z.enum(["light", "dark"]).default("light") },
+				verbose: { type: "boolean", default: false },
+			},
+		});
+
+		await expect(store.patch({ verbose: true })).resolves.toEqual({
+			theme: "light",
+			verbose: true,
+		});
 	});
 });
 

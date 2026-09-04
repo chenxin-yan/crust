@@ -306,7 +306,7 @@ export function createStore<const F extends FieldsDef>(
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
-	// readRaw — Load persisted config, apply field defaults (no validation)
+	// readRaw — Load persisted config and materialize defaults without rejecting
 	// ──────────────────────────────────────────────────────────────────────
 
 	async function readRaw(): Promise<StoreDocument> {
@@ -320,6 +320,15 @@ export function createStore<const F extends FieldsDef>(
 			});
 		}
 		const merged = applyFieldDefaults(persistedObject, fields, shouldPrune);
+		for (const [key, def] of Object.entries(fields)) {
+			if (merged[key] !== undefined || def.schema === undefined) continue;
+			try {
+				const result = await validators.get(key)?.(undefined);
+				if (result !== undefined && isFieldValueResult(result)) merged[key] = result.value;
+			} catch {
+				// Required schemas are validated after the updater or patch can supply a value.
+			}
+		}
 		return normalizeStateTypes(merged);
 	}
 
@@ -348,7 +357,7 @@ export function createStore<const F extends FieldsDef>(
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
-	// update — Read current (raw), apply updater, validate, persist
+	// update — Read current effective state, apply updater, validate, persist
 	// ──────────────────────────────────────────────────────────────────────
 
 	async function update(updater: StoreUpdater<Config>): Promise<Config> {

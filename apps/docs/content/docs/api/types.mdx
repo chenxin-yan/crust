@@ -276,7 +276,7 @@ The build context contains the frozen root Command Snapshot and the resolved abs
 
 <auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="Extension" />
 
-`defineExtension(id, config)` returns a frozen structural value. Mint the branded `ExtensionId` with `defineExtensionId()`.
+`defineExtension(id, config?)` returns a frozen structural value; omitted config defaults to `{}`. Mint the branded `ExtensionId` with `defineExtensionId()`, which requires a non-empty, already-trimmed string.
 
 ### `ExtensionFlagDef`
 

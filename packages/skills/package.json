@@ -1,7 +1,7 @@
 {
 	"name": "@crustjs/skills",
 	"version": "0.1.2",
-	"description": "Agent skill generation from Crust command definitions",
+	"description": "Package and install agent skills for AI coding assistants.",
 	"type": "module",
 	"sideEffects": false,
 	"license": "MIT",

@@ -235,6 +235,10 @@ Always returns the inferred store shape. Fields with defaults are guaranteed pre
 
 After coercion, every core field is checked against its declared primitive and array type. Per-field `validate` functions then run after defaults are applied. Invalid persisted config fails loudly with `VALIDATION`.
 
+### Coercion
+
+String values in core number and boolean fields are coerced before validation on every operation, including array elements. Number strings use JavaScript `Number()` semantics through `tryCoerceNumber`; strings that produce `NaN` remain strings and then fail type validation. Boolean coercion is intentionally strict: only `"true"` and `"1"` become `true`; every other string becomes `false`, so `"yes"` silently maps to `false`. Schema-backed fields are passed to their schema instead.
+
 **Throws:** `CrustStoreError` with `PARSE` code on malformed JSON, `VALIDATION` if the config fails validation, `IO` code on filesystem failure.
 
 ### `store.write(state)`
@@ -260,7 +264,7 @@ const persisted = await store.update((current) => ({
 }));
 ```
 
-When no persisted file exists, the updater receives field `defaults` as the current value. The method returns the persisted state, including schema transformations.
+When no persisted file exists, the updater receives core field `defaults` and values produced by schema defaults as the current state. The method returns the persisted state, including schema transformations.
 
 The final file replacement is atomic, but the read-modify-write sequence is not locked across processes. Concurrent updates can overwrite each other.
 
@@ -386,7 +390,7 @@ Schemas run on `read`, `write`, `update`, and `patch` — never on `reset`. If a
 
 Schema transforms are applied on `write`, `update`, and `patch`. The transformed output replaces the input before persistence and is re-validated once. A transform whose output the schema would itself reject (for example `z.string().transform(Number)`) fails with a `read-unstable transform` issue.
 
-On `read`, schemas validate persisted values but transformed output is discarded so existing on-disk values remain unchanged. The exception is a missing value: Crust passes `undefined` to the schema and uses its output, allowing schema defaults and optionality to work naturally.
+On `read`, schemas validate persisted values but transformed output is discarded so existing on-disk values remain unchanged. The exception is a missing value: Crust passes `undefined` to the schema and uses its output, allowing schema defaults and optionality to work naturally. The same materialized schema defaults are present before an `update()` callback runs and before `patch()` merges its partial input.
 
 ```ts
 const fields = {
@@ -430,15 +434,10 @@ import { CrustStoreError } from "@crustjs/store";
 try {
   const state = await store.read();
 } catch (err) {
-  if (err instanceof CrustStoreError) {
-    switch (err.code) {
-      case "PARSE":
-        console.error(`Corrupt file at ${err.details.path}`);
-        break;
-      case "IO":
-        console.error(`File ${err.details.operation} failed: ${err.message}`);
-        break;
-    }
+  if (err instanceof CrustStoreError && err.is("PARSE")) {
+    console.error(`Corrupt file at ${err.details.path}`);
+  } else if (err instanceof CrustStoreError && err.is("IO")) {
+    console.error(`File ${err.details.operation} failed: ${err.message}`);
   }
 }
 ```
@@ -460,7 +459,8 @@ if (err instanceof CrustStoreError && err.is("IO")) {
 
 ```ts
 if (err instanceof CrustStoreError && err.is("VALIDATION")) {
-  // err.details is { operation: string; issues: StoreValidatorIssue[] }
+  // err.details is { operation: "read" | "write" | "update" | "patch";
+  //                  issues: readonly StoreValidatorIssue[] }
   for (const issue of err.details.issues) {
     console.error(`${issue.path}: ${issue.message}`);
   }

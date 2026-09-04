@@ -66,7 +66,7 @@ See [Contexts](/docs/guide/contexts#test-doubles).
 
 ## Test interactive commands
 
-Use `runInteractive()` when an action renders a built-in prompt. Its `type()` and `keys()` methods send terminal input. One ambient terminal-IO scope routes prompt frames, progress indicators, and `ctx.stderr()` text into the same transcript, so `waitFor()` and `screen()` observe the same terminal output. Application code can use either package's `withTerminalIO()` export; `withPromptIO()` and `withProgressSink()` remain focused aliases.
+Use `runInteractive()` when an action renders a built-in prompt. Its `type()` and `keys()` methods send terminal input. One ambient terminal-IO scope routes prompt frames, progress indicators, and `ctx.stderr()` text into the same transcript, so `waitFor()` and `screen()` observe the same terminal output. Calls to `ctx.stdout()` are discarded and never appear in `screen()`; use `captureRun()` when stdout assertions matter. Application code can use either package's `withTerminalIO()` export; `withPromptIO()` and `withProgressSink()` remain focused aliases.
 
 ```ts
 import { expect, test } from "bun:test";
@@ -82,7 +82,7 @@ test("collects a name", async () => {
   run.keys("return");
   await run.done;
 
-  expect(run.screen()).toContain("Hello, Ada!");
+  expect(run.screen()).toContain("Name? Ada");
 });
 ```
 

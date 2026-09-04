@@ -58,20 +58,14 @@ export interface StoreErrorDetailsMap {
  * try {
  *   const config = await store.read();
  * } catch (err) {
- *   if (err instanceof CrustStoreError) {
- *     switch (err.code) {
- *       case "PARSE":
- *         console.error(`Corrupt config at ${err.details.path}`);
- *         break;
- *       case "VALIDATION":
- *         for (const issue of err.details.issues) {
- *           console.error(`${issue.path}: ${issue.message}`);
- *         }
- *         break;
- *       case "IO":
- *         console.error(`File ${err.details.operation} failed: ${err.message}`);
- *         break;
+ *   if (err instanceof CrustStoreError && err.is("PARSE")) {
+ *     console.error(`Corrupt config at ${err.details.path}`);
+ *   } else if (err instanceof CrustStoreError && err.is("VALIDATION")) {
+ *     for (const issue of err.details.issues) {
+ *       console.error(`${issue.path}: ${issue.message}`);
  *     }
+ *   } else if (err instanceof CrustStoreError && err.is("IO")) {
+ *     console.error(`File ${err.details.operation} failed: ${err.message}`);
  *   }
  * }
  * ```

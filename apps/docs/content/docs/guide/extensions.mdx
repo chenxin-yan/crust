@@ -25,7 +25,7 @@ Two consequences of the root-only model:
 
 ## Author an Extension
 
-`defineExtension(id, config)` returns a frozen plain value. The config can contain `flags`, `commands`, `provides`, `sections`, `build`, and `hooks`:
+`defineExtension(id, config?)` returns a frozen plain value; omitted config defaults to `{}`. The config can contain `flags`, `commands`, `uses`, `provides`, `sections`, `build`, and `hooks`:
 
 <include lang="ts" meta='title="diagnostics.ts"'>
   ../../../examples/extensions/diagnostics.ts
