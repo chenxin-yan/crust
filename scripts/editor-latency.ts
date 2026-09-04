@@ -323,19 +323,3 @@ export async function measureEditorLatency(
 		await client.close();
 	}
 }
-
-if (import.meta.main) {
-	const size = Number(process.argv[2] ?? 50);
-	const { mkdtempSync, rmSync } = await import("node:fs");
-	const { tmpdir } = await import("node:os");
-	const { generateConsumerFixture } = await import("./type-perf-report.ts");
-	const root = resolve(".");
-	const fixtureDir = mkdtempSync(join(tmpdir(), "crust-editor-latency-"));
-	try {
-		generateConsumerFixture(fixtureDir, join(root, "packages/core"), size);
-		const metrics = await measureEditorLatency(fixtureDir, join(root, "node_modules/.bin/tsc"));
-		console.log(JSON.stringify(metrics, null, 2));
-	} finally {
-		rmSync(fixtureDir, { recursive: true, force: true });
-	}
-}

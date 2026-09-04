@@ -10,4 +10,4 @@ Internal shared utilities for Crust workspace packages.
 - `@crustjs/utils/schema` — Standard Schema types and issue normalization.
 - `@crustjs/utils/terminal` — cross-package ambient terminal IO.
 
-Utils are inline-bundled into consumers, so stateful modules must share state through a `Symbol.for` process-global key and have a dist-level integration test; `terminal.ts` and `packages/testing/tests/ambient-io-dist.test.ts` are the precedent.
+Utils are inline-bundled into consumers by tsdown's `onlyImport` rule and must remain a devDependency of those packages. Stateful modules share state through a `Symbol.for` process-global key; `terminal.ts` uses that slot as the cross-bundle share point, covered by `scripts/smoke-runtimes/smoke.mjs`.

@@ -14,7 +14,7 @@
 		"check": "turbo run build --filter='./packages/*' && turbo run //#lint //#format",
 		"check:fix": "turbo run build --filter='./packages/*' && oxlint --fix && oxfmt",
 		"check:types": "turbo run check:types",
-		"test": "turbo run test --filter='./packages/*'",
+		"test": "turbo run test --filter='./packages/*' --filter='./tools'",
 		"changeset": "changeset",
 		"packages:version": "changeset version && bun install",
 		"packages:publish": "bun ./scripts/publish-packages.mjs"
@@ -33,7 +33,6 @@
 		"typescript": "^7.0.2"
 	},
 	"catalog": {
-		"typescript": "^7.0.2",
 		"tsdown": "^0.22.14"
 	},
 	"packageManager": "bun@1.4.0",
