@@ -1,29 +1,28 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-import { defineCommand } from "@crustjs/core";
+import { defineCommand, type InvocationIO } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
 import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
 
 import {
+	binaryFilename,
 	BUILD_RUNTIMES,
 	type BuildRuntime,
+	BUN_TARGETS,
 	type BunTarget,
-	DENO_TARGET_INFO,
+	DENO_TARGETS,
 	type DenoTarget,
 	execBuild,
 	execDenoBuild,
 	execNodeBuild,
-	getBinaryFilename,
-	getDenoBinaryFilename,
 	resolveBaseName,
-	resolveDenoTargets,
 	readUserPackageJson,
 	resolveTargets,
-	TARGET_INFO,
 	buildEntrypoint,
-	type ResolverTargetInfo,
+	type TargetTable,
 } from "../utils/build-helpers.ts";
+import { runDistributeBuild } from "../utils/distribute.ts";
 
 /**
  * Resolve the output file path for a single-target build.
@@ -97,16 +96,15 @@ function resolveBuildRuntimeFromPackageJson(
  * @returns The shell resolver script as a string
  */
 export function generateResolverFor<T extends string>(
+	table: TargetTable<T>,
 	baseName: string,
 	targets: readonly T[],
-	targetInfo: Record<T, ResolverTargetInfo>,
-	getFilename: (baseName: string, target: T) => string,
 ): string {
 	const caseEntries: string[] = [];
 	for (const target of targets) {
-		const info = targetInfo[target];
+		const info = table.info[target];
 		if (info.os === "win32") continue;
-		caseEntries.push(`\t${info.unameKey}) bin="${getFilename(baseName, target)}" ;;`);
+		caseEntries.push(`\t${info.unameKey}) bin="${binaryFilename(table, baseName, target)}" ;;`);
 	}
 	const caseBody = caseEntries.join("\n");
 
@@ -162,22 +160,23 @@ exec "$bin_path" "$@"
  * @returns The .cmd resolver script as a string
  */
 export function generateCmdResolverFor<T extends string>(
+	table: TargetTable<T>,
 	baseName: string,
 	targets: readonly T[],
-	targetInfo: Record<T, ResolverTargetInfo>,
-	getFilename: (baseName: string, target: T) => string,
 ): string {
-	const windowsTargets = targets.filter((target) => targetInfo[target].os === "win32");
+	const windowsTargets = targets.filter((target) => table.info[target].os === "win32");
 
 	if (windowsTargets.length === 0) {
 		return `@echo off\r\necho [${baseName}] No Windows binary was built for this package. >&2\r\nexit /b 1\r\n`;
 	}
 
-	const windowsX64Target = windowsTargets.find((target) => targetInfo[target].cpu === "x64");
-	const windowsArm64Target = windowsTargets.find((target) => targetInfo[target].cpu === "arm64");
+	const windowsX64Target = windowsTargets.find((target) => table.info[target].cpu === "x64");
+	const windowsArm64Target = windowsTargets.find((target) => table.info[target].cpu === "arm64");
 
-	const x64Filename = windowsX64Target ? getFilename(baseName, windowsX64Target) : "";
-	const arm64Filename = windowsArm64Target ? getFilename(baseName, windowsArm64Target) : "";
+	const x64Filename = windowsX64Target ? binaryFilename(table, baseName, windowsX64Target) : "";
+	const arm64Filename = windowsArm64Target
+		? binaryFilename(table, baseName, windowsArm64Target)
+		: "";
 
 	// Build architecture dispatch lines.
 	// CMD expands %var% at parse-time, so we cannot test a variable
@@ -239,19 +238,13 @@ if not exist "%bin_path%" (\r
  * @param targets - The list of targets that were built
  */
 export function writeResolver<T extends string>(
+	table: TargetTable<T>,
 	resolverPath: string,
 	baseName: string,
 	targets: readonly T[],
-	targetInfo: Record<T, ResolverTargetInfo>,
-	getFilename: (baseName: string, target: T) => string,
 ): void {
-	writeFileSync(resolverPath, generateResolverFor(baseName, targets, targetInfo, getFilename), {
-		mode: 0o755,
-	});
-	writeFileSync(
-		`${resolverPath}.cmd`,
-		generateCmdResolverFor(baseName, targets, targetInfo, getFilename),
-	);
+	writeFileSync(resolverPath, generateResolverFor(table, baseName, targets), { mode: 0o755 });
+	writeFileSync(`${resolverPath}.cmd`, generateCmdResolverFor(table, baseName, targets));
 }
 
 type BinaryOutput<T extends string> = { target: T; outfilePath: string };
@@ -279,27 +272,28 @@ async function buildBinaryOutputs<T extends string>(
 		resolver: ResolverPlan;
 	},
 	executor: BinaryExecutor<T>,
+	io: InvocationIO,
 ): Promise<void> {
 	if (plan.outputs.length === 1) {
 		const output = plan.outputs[0]!;
-		console.log(`Building ${dim(plan.entryPath)} ${cyan("→")} ${dim(output.outfilePath)}...`);
+		io.stdout(`Building ${dim(plan.entryPath)} ${cyan("→")} ${dim(output.outfilePath)}...`);
 		await executor.execute(plan.entryPath, output.outfilePath, output.target, plan.envFiles);
-		console.log(`${green("✓")} Built successfully: ${output.outfilePath}`);
+		io.stdout(`${green("✓")} Built successfully: ${output.outfilePath}`);
 		return;
 	}
 
-	console.log(`Building ${dim(plan.entryPath)} for ${bold(`${plan.outputs.length}`)} target(s)...`);
+	io.stdout(`Building ${dim(plan.entryPath)} for ${bold(`${plan.outputs.length}`)} target(s)...`);
 	for (const output of plan.outputs) {
-		console.log(`  ${cyan("→")} ${bold(output.target)}: ${dim(output.outfilePath)}`);
+		io.stdout(`  ${cyan("→")} ${bold(output.target)}: ${dim(output.outfilePath)}`);
 		await executor.execute(plan.entryPath, output.outfilePath, output.target, plan.envFiles);
 	}
 
 	const resolver = plan.resolver;
 	const targets = plan.outputs.map((output) => output.target);
 	executor.writeResolver(resolver.path, resolver.baseName, targets);
-	console.log(`\n${green("✓")} Built ${bold(`${plan.outputs.length}`)} target(s) successfully:`);
-	for (const output of plan.outputs) console.log(`  ${output.outfilePath}`);
-	console.log(`\n${dim("Resolver:")} ${resolver.path} ${dim(`(+ ${resolver.path}.cmd)`)}`);
+	io.stdout(`\n${green("✓")} Built ${bold(`${plan.outputs.length}`)} target(s) successfully:`);
+	for (const output of plan.outputs) io.stdout(`  ${output.outfilePath}`);
+	io.stdout(`\n${dim("Resolver:")} ${resolver.path} ${dim(`(+ ${resolver.path}.cmd)`)}`);
 }
 
 export function resolveEnvFilePaths(cwd: string, envFiles: string[] | undefined): string[] {
@@ -349,12 +343,9 @@ type BunBuildPlan = CommonBuildPlan &
 		| {
 				runtime: "bun";
 				mode: "package";
-				staging: {
-					entry: string;
-					name?: string;
-					targets: BunTarget[];
-					stageDir: string;
-				};
+				name?: string;
+				targets: BunTarget[];
+				stageDir: string;
 		  }
 		| {
 				runtime: "bun";
@@ -380,8 +371,8 @@ type NodeBuildPlan = CommonBuildPlan & {
 export type BuildPlan = BunBuildPlan | DenoBuildPlan | NodeBuildPlan;
 
 function planBinaryOutputs<T extends string>(options: {
+	table: TargetTable<T>;
 	targets: T[];
-	getFilename: (baseName: string, target: T) => string;
 	flags: BuildFlags;
 	cwd: string;
 	entryPath: string;
@@ -399,7 +390,7 @@ function planBinaryOutputs<T extends string>(options: {
 	};
 	if (options.targets.length === 1) {
 		const target = options.targets[0]!;
-		const ext = options.getFilename("x", target).endsWith(".exe") ? ".exe" : "";
+		const ext = options.table.info[target].os === "win32" ? ".exe" : "";
 		const resolved = resolveOutfile(
 			options.flags.outfile,
 			options.flags.name,
@@ -423,7 +414,7 @@ function planBinaryOutputs<T extends string>(options: {
 			outfilePath: resolve(
 				options.cwd,
 				options.flags.outdir,
-				options.getFilename(baseName, target),
+				binaryFilename(options.table, baseName, target),
 			),
 		})),
 		resolver,
@@ -509,7 +500,7 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 		};
 	}
 	if (runtime === "bun") {
-		const targets = resolveTargets(flags.target);
+		const targets = resolveTargets(BUN_TARGETS, flags.target);
 		if (!flags.package && flags.outfile && targets.length > 1) {
 			throw new Error(
 				"--outfile cannot be used when building for multiple targets.\n  Use --name to set the base binary name instead.",
@@ -520,12 +511,9 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 				...common,
 				runtime,
 				mode: "package",
-				staging: {
-					entry: flags.entry,
-					...(flags.name === undefined ? {} : { name: flags.name }),
-					targets,
-					stageDir: resolve(cwd, flags["stage-dir"]),
-				},
+				...(flags.name === undefined ? {} : { name: flags.name }),
+				targets,
+				stageDir: resolve(cwd, flags["stage-dir"]),
 			};
 		}
 		return {
@@ -533,8 +521,8 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 			runtime,
 			mode: "binary",
 			...planBinaryOutputs({
+				table: BUN_TARGETS,
 				targets,
-				getFilename: getBinaryFilename,
 				flags,
 				cwd,
 				entryPath,
@@ -543,7 +531,7 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 		};
 	}
 
-	const targets = resolveDenoTargets(flags.target);
+	const targets = resolveTargets(DENO_TARGETS, flags.target);
 	if (flags.outfile && targets.length > 1) {
 		throw new Error(
 			"--outfile cannot be used when building for multiple targets.\n  Use --name to set the base binary name instead.",
@@ -554,8 +542,8 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 		runtime,
 		mode: "binary",
 		...planBinaryOutputs({
+			table: DENO_TARGETS,
 			targets,
-			getFilename: getDenoBinaryFilename,
 			flags,
 			cwd,
 			entryPath,
@@ -673,49 +661,48 @@ export const buildCommand = defineCommand(
 					default: "dist/npm",
 				},
 			)
-			.action(async ({ flags }) => {
-				const plan = planBuild(flags, process.cwd());
-				for (const warning of plan.warnings) console.warn(warning);
+			.action(async ({ flags, stdout, stderr }) => {
+				const cwd = process.cwd();
+				const io = { stdout, stderr };
+				const plan = planBuild(flags, cwd);
+				for (const warning of plan.warnings) stderr(warning);
 				if (plan.validate) {
-					await buildEntrypoint(plan.entryPath, plan.outDir, plan.envFiles);
+					await buildEntrypoint(plan.entryPath, plan.outDir, plan.envFiles, io, cwd);
 				}
 
 				if (plan.runtime === "bun" && plan.mode === "package") {
-					const { runDistributeBuild } = await import("../utils/distribute.ts");
-					await runDistributeBuild({
-						cwd: plan.cwd,
-						entry: plan.staging.entry,
-						name: plan.staging.name,
-						stageDir: plan.staging.stageDir,
-						minify: plan.minify,
-						target: plan.staging.targets,
-						envFiles: plan.envFiles,
-						artifactOutDir: plan.validate ? plan.outDir : undefined,
-						userPackageJson: plan.userPackageJson,
-					});
+					await runDistributeBuild(plan, { io });
 					return;
 				}
 
 				if (plan.runtime === "node") {
-					console.log(`Building ${dim(plan.entryPath)} ${cyan("→")} ${dim(plan.outfilePath)}...`);
-					await execNodeBuild(plan.entryPath, plan.outfilePath, plan.minify, plan.envFiles);
-					console.log(`${green("✓")} Built successfully: ${plan.outfilePath}`);
+					stdout(`Building ${dim(plan.entryPath)} ${cyan("→")} ${dim(plan.outfilePath)}...`);
+					await execNodeBuild(plan.entryPath, plan.outfilePath, plan.minify, plan.envFiles, cwd);
+					stdout(`${green("✓")} Built successfully: ${plan.outfilePath}`);
 					return;
 				}
 
 				if (plan.runtime === "bun") {
-					await buildBinaryOutputs(plan, {
-						execute: (entry, outfile, target, envFiles) =>
-							execBuild(entry, outfile, plan.minify, target, envFiles),
-						writeResolver: (path, baseName, targets) =>
-							writeResolver(path, baseName, targets, TARGET_INFO, getBinaryFilename),
-					});
+					await buildBinaryOutputs(
+						plan,
+						{
+							execute: (entry, outfile, target, envFiles) =>
+								execBuild(entry, outfile, plan.minify, target, envFiles, cwd),
+							writeResolver: (path, baseName, targets) =>
+								writeResolver(BUN_TARGETS, path, baseName, targets),
+						},
+						io,
+					);
 					return;
 				}
-				await buildBinaryOutputs(plan, {
-					execute: (entry, outfile, target) => execDenoBuild(entry, outfile, target),
-					writeResolver: (path, baseName, targets) =>
-						writeResolver(path, baseName, targets, DENO_TARGET_INFO, getDenoBinaryFilename),
-				});
+				await buildBinaryOutputs(
+					plan,
+					{
+						execute: (entry, outfile, target) => execDenoBuild(entry, outfile, target, cwd),
+						writeResolver: (path, baseName, targets) =>
+							writeResolver(DENO_TARGETS, path, baseName, targets),
+					},
+					io,
+				);
 			}),
 );

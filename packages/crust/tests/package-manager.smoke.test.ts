@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
+import { captureExecute } from "@crustjs/testing";
 import { runProcess } from "@crustjs/utils/process";
 
 import { buildCommand } from "../src/commands/build.ts";
@@ -50,9 +51,16 @@ console.log(args.join(" ") || "resolver-ok");
 	const originalCwd = process.cwd;
 	process.cwd = () => sampleDir;
 	try {
-		await app.execute({
-			argv: ["build", "--package", "--target", target, "--stage-dir", "dist/npm", "--no-validate"],
-		});
+		const result = await captureExecute(app, [
+			"build",
+			"--package",
+			"--target",
+			target,
+			"--stage-dir",
+			"dist/npm",
+			"--no-validate",
+		]);
+		if (result.exitCode !== 0) throw new Error(result.stderr);
 	} finally {
 		process.cwd = originalCwd;
 	}

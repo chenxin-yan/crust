@@ -113,13 +113,14 @@
       "name": "@crustjs/crust",
       "version": "0.0.24",
       "bin": {
-        "crust": "dist/cli",
+        "crust": "dist/cli.js",
       },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "@crustjs/core": "workspace:*",
         "@crustjs/extensions": "workspace:*",
         "@crustjs/style": "workspace:*",
+        "@crustjs/testing": "workspace:*",
         "@crustjs/utils": "workspace:*",
       },
     },

@@ -92,6 +92,10 @@ export interface CapturedExecute {
 	readonly exitCode: number;
 }
 
+// Overlapping captures share process-global exit state, so only the outermost can restore it safely.
+let activeExecuteCaptures = 0;
+let exitCodeBeforeExecuteCaptures: typeof process.exitCode;
+
 /**
  * Drive the terminal `execute()` path in-process: exit-code protocol,
  * Extension `onError` rendering, and cancellation (130) are all observable
@@ -103,22 +107,32 @@ export async function captureExecute(
 ): Promise<CapturedExecute> {
 	const stdoutLines: string[] = [];
 	const stderrLines: string[] = [];
-	const exitCode = await app.execute({
-		argv: [...argv],
-		io: {
-			stdout: (text) => {
-				stdoutLines.push(text);
+	if (activeExecuteCaptures === 0) exitCodeBeforeExecuteCaptures = process.exitCode;
+	activeExecuteCaptures++;
+	try {
+		const exitCode = await app.execute({
+			argv: [...argv],
+			io: {
+				stdout: (text) => {
+					stdoutLines.push(text);
+				},
+				stderr: (text) => {
+					stderrLines.push(text);
+				},
 			},
-			stderr: (text) => {
-				stderrLines.push(text);
-			},
-		},
-	});
-	return {
-		stdout: stdoutLines.join("\n"),
-		stderr: stderrLines.join("\n"),
-		exitCode,
-	};
+		});
+		return {
+			stdout: stdoutLines.join("\n"),
+			stderr: stderrLines.join("\n"),
+			exitCode,
+		};
+	} finally {
+		activeExecuteCaptures--;
+		if (activeExecuteCaptures === 0) {
+			// Bun cannot clear a numeric exitCode back to undefined, so zero is the equivalent success state.
+			process.exitCode = exitCodeBeforeExecuteCaptures ?? 0;
+		}
+	}
 }
 
 export interface InteractiveRun {

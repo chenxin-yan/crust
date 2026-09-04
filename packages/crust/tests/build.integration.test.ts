@@ -13,15 +13,12 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Crust } from "@crustjs/core";
+import { captureExecute } from "@crustjs/testing";
 import { runProcess } from "@crustjs/utils/process";
 
-import { buildCommand } from "../../src/commands/build.ts";
-import {
-	DENO_TARGET_INFO,
-	SUPPORTED_DENO_TARGETS,
-	TARGET_INFO,
-} from "../../src/utils/build-helpers.ts";
-import { hostTarget } from "../../tests/helpers.ts";
+import { buildCommand } from "../src/commands/build.ts";
+import { BUN_TARGETS, DENO_TARGETS } from "../src/utils/build-helpers.ts";
+import { hostTarget } from "./helpers.ts";
 
 function getHostBunTarget() {
 	return hostTarget();
@@ -29,9 +26,9 @@ function getHostBunTarget() {
 
 function getHostDenoTarget(): string | null {
 	const target = hostTarget();
-	const alias = target && TARGET_INFO[target].alias;
+	const alias = target && BUN_TARGETS.info[target].alias;
 	return (
-		SUPPORTED_DENO_TARGETS.find((candidate) => DENO_TARGET_INFO[candidate].alias === alias) ?? null
+		DENO_TARGETS.targets.find((candidate) => DENO_TARGETS.info[candidate].alias === alias) ?? null
 	);
 }
 
@@ -41,7 +38,7 @@ function getHostDenoTarget(): string | null {
 
 describe("crust build integration — single target", () => {
 	const tmpDir = mkdtempSync(join(tmpdir(), "crust-build-integration-"));
-	const crustCliPath = resolve(import.meta.dir, "..", "cli.ts");
+	const crustCliPath = resolve(import.meta.dir, "..", "src", "cli.ts");
 	const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 	const originalCwd = process.cwd;
 
@@ -73,37 +70,24 @@ console.log("hello from crust build test");
 	it("builds a standalone executable for a single target", async () => {
 		process.cwd = () => tmpDir;
 
-		const logs: string[] = [];
-		const originalLog = console.log;
-		console.log = (...args: unknown[]) => {
-			logs.push(args.map(String).join(" "));
-		};
-
-		try {
-			const app = new Crust("test").add(buildCommand);
-			await app.execute({
-				argv: [
-					"build",
-					"--entry",
-					"src/cli.ts",
-					"--no-validate",
-					"--outfile",
-					join(tmpDir, "dist", "test-cli"),
-					"--target",
-					"bun-darwin-arm64",
-				],
-			});
-		} finally {
-			console.log = originalLog;
-		}
+		const { stdout } = await captureExecute(new Crust("test").add(buildCommand), [
+			"build",
+			"--entry",
+			"src/cli.ts",
+			"--no-validate",
+			"--outfile",
+			join(tmpDir, "dist", "test-cli"),
+			"--target",
+			"bun-darwin-arm64",
+		]);
 
 		// Verify the output binary exists
 		const outPath = join(tmpDir, "dist", "test-cli");
 		expect(existsSync(outPath)).toBe(true);
 
 		// Verify build progress messages were printed
-		expect(logs.some((l) => l.includes("Building"))).toBe(true);
-		expect(logs.some((l) => l.includes("Built successfully"))).toBe(true);
+		expect(stdout).toContain("Building");
+		expect(stdout).toContain("Built successfully");
 	});
 
 	// This test can only run when the host matches the build target (darwin-arm64).
@@ -127,60 +111,40 @@ console.log("hello from crust build test");
 	it("builds without --minify when --no-minify is passed", async () => {
 		process.cwd = () => tmpDir;
 
-		const logs: string[] = [];
-		const originalLog = console.log;
-		console.log = (...args: unknown[]) => {
-			logs.push(args.map(String).join(" "));
-		};
-
 		const outPath = join(tmpDir, "dist", "test-cli-no-minify");
-
-		try {
-			const app = new Crust("test").add(buildCommand);
-			await app.execute({
-				argv: [
-					"build",
-					"--entry",
-					"src/cli.ts",
-					"--outfile",
-					outPath,
-					"--no-validate",
-					"--no-minify",
-					"--target",
-					"bun-darwin-arm64",
-				],
-			});
-		} finally {
-			console.log = originalLog;
-		}
+		const { stdout } = await captureExecute(new Crust("test").add(buildCommand), [
+			"build",
+			"--entry",
+			"src/cli.ts",
+			"--outfile",
+			outPath,
+			"--no-validate",
+			"--no-minify",
+			"--target",
+			"bun-darwin-arm64",
+		]);
 
 		expect(existsSync(outPath)).toBe(true);
-		expect(logs.some((l) => l.includes("Built successfully"))).toBe(true);
+		expect(stdout).toContain("Built successfully");
 	});
 
 	it("uses package.json name for output when no --outfile or --name", async () => {
 		process.cwd = () => tmpDir;
 		mkdirSync(join(tmpDir, "dist"), { recursive: true });
 
-		const logs: string[] = [];
-		const originalLog = console.log;
-		console.log = (...args: unknown[]) => {
-			logs.push(args.map(String).join(" "));
-		};
-
-		try {
-			const app = new Crust("test").add(buildCommand);
-			await app.execute({
-				argv: ["build", "--entry", "src/cli.ts", "--no-validate", "--target", "bun-darwin-arm64"],
-			});
-		} finally {
-			console.log = originalLog;
-		}
+		const { stdout } = await captureExecute(new Crust("test").add(buildCommand), [
+			"build",
+			"--entry",
+			"src/cli.ts",
+			"--no-validate",
+			"--target",
+			"bun-darwin-arm64",
+		]);
 
 		// Single target without --outfile: uses dist/<package-name>
 		const expectedOut = resolve(tmpDir, "dist", "test-build-cli");
 		expect(existsSync(expectedOut)).toBe(true);
-		expect(logs.some((l) => l.includes(expectedOut))).toBe(true);
+		expect(stdout).toContain(expectedOut);
 	});
 
 	it.skipIf(getHostBunTarget() === null)(

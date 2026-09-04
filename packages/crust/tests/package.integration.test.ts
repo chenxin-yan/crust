@@ -12,10 +12,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust } from "@crustjs/core";
+import { captureExecute } from "@crustjs/testing";
 import { runProcess } from "@crustjs/utils/process";
 
 import { buildCommand } from "../src/commands/build.ts";
-import { TARGET_INFO } from "../src/utils/build-helpers.ts";
+import { BUN_TARGETS } from "../src/utils/build-helpers.ts";
 import { hostTarget } from "./helpers.ts";
 
 const tmpDir = mkdtempSync(join(tmpdir(), "crust-package-integration-"));
@@ -28,7 +29,7 @@ function readJson<T>(path: string): T {
 async function runBuild(argv: string[]) {
 	const app = new Crust("test").add(buildCommand);
 	process.cwd = () => tmpDir;
-	await app.execute({ argv: ["build", ...argv] });
+	return await captureExecute(app, ["build", ...argv]);
 }
 
 beforeAll(() => {
@@ -111,7 +112,7 @@ describe("crust build --package integration", () => {
 			const hostBunTarget = hostTarget();
 			const nodePath = Bun.which("node");
 			if (!hostBunTarget || !nodePath) return;
-			const hostAlias = TARGET_INFO[hostBunTarget].alias;
+			const hostAlias = BUN_TARGETS.info[hostBunTarget].alias;
 
 			await runBuild([
 				"--package",

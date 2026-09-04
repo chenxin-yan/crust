@@ -41,6 +41,7 @@
 		"@crustjs/core": "workspace:*",
 		"@crustjs/extensions": "workspace:*",
 		"@crustjs/style": "workspace:*",
+		"@crustjs/testing": "workspace:*",
 		"@crustjs/config": "workspace:*",
 		"@crustjs/utils": "workspace:*"
 	},

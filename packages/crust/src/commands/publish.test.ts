@@ -11,6 +11,8 @@ import {
 } from "../../src/commands/publish.ts";
 import type { DistributionManifest } from "../utils/distribute.ts";
 
+const io = { stdout: () => {}, stderr: () => {} };
+
 function writeStageFixture(tmpDir: string, manifest: DistributionManifest) {
 	mkdirSync(join(tmpDir, "root", "bin"), { recursive: true });
 	writeFileSync(
@@ -120,13 +122,43 @@ describe("publish manifest validation", () => {
 
 	it("supports dry-run without spawning bun publish", async () => {
 		const spawnPublish = mock(async () => 0);
-		await publishStagedPackages(manifest, {
-			stageDir: tmpDir,
-			access: "public",
-			dryRun: true,
-			spawnPublish,
-		});
+		await publishStagedPackages(
+			manifest,
+			{
+				stageDir: tmpDir,
+				access: "public",
+				dryRun: true,
+				spawnPublish,
+			},
+			io,
+		);
 		expect(spawnPublish).not.toHaveBeenCalled();
+	});
+
+	it("passes invocation IO to the publisher executor", async () => {
+		const stdout: string[] = [];
+		const stderr: string[] = [];
+		const invocationIO = {
+			stdout: (text: string) => stdout.push(text),
+			stderr: (text: string) => stderr.push(text),
+		};
+
+		await publishStagedPackages(
+			manifest,
+			{
+				stageDir: tmpDir,
+				access: "public",
+				spawnPublish: async (_dir, _command, executorIO) => {
+					executorIO.stdout("registry stdout");
+					executorIO.stderr("registry stderr");
+					return 0;
+				},
+			},
+			invocationIO,
+		);
+
+		expect(stdout).toContain("registry stdout");
+		expect(stderr).toEqual(["registry stderr", "registry stderr", "registry stderr"]);
 	});
 
 	it("stops on first failed publish", async () => {
@@ -137,11 +169,15 @@ describe("publish manifest validation", () => {
 		});
 
 		await expect(
-			publishStagedPackages(manifest, {
-				stageDir: tmpDir,
-				access: "public",
-				spawnPublish,
-			}),
+			publishStagedPackages(
+				manifest,
+				{
+					stageDir: tmpDir,
+					access: "public",
+					spawnPublish,
+				},
+				io,
+			),
 		).rejects.toThrow(/linux-x64/);
 		expect(calls).toHaveLength(1);
 	});
