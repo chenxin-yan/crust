@@ -51,6 +51,7 @@ Downstream commands and other Context setups call `await ctx.api`. See [Contexts
 | [`defineCommand`](/docs/api/crust)    | Create a named, inert reusable command definition; its builder declares Context demand with variadic `.use()`                                                            |
 | `defineContext(name, config?, setup)` | Define a named Context factory with optional owned flags; setup receives its declared lazy Context bag and invocation I/O                                                |
 | `defineExtension(id, config?)`        | Define a frozen, application-wide Extension value; config defaults to `{}`                                                                                               |
+| `defineExtension(id, factory)`        | Build an Extension factory with `.id` from a config-returning callback                                                                                                   |
 | `defineExtensionId(id)`               | Mint a branded Extension identity from a non-empty, already-trimmed string                                                                                               |
 | `defineFlag(name, definition)`        | Define one named flag, preserving its literal definition                                                                                                                 |
 | `defineArg(name, definition)`         | Define one named positional argument, preserving its literal definition                                                                                                  |
@@ -134,19 +135,20 @@ Omitting `io` creates no new ambient scope, preserving native TTY detection and 
 
 ## Extension types
 
-| Type                           | Description                                                                 |
-| ------------------------------ | --------------------------------------------------------------------------- |
-| `Extension`                    | Identified frozen Extension value                                           |
-| `ExtensionBuildContext`        | Frozen root snapshot and resolved output directory for artifact generation  |
-| `ExtensionConfig`              | Owned flags, commands, section contributions, build generation, and hooks   |
-| `ExtensionFlagDef`             | Extension-owned flag with optional `recursive` scope                        |
-| `ExtensionContext`             | Readonly invocation view with inferred Extension-owned flags and `finish()` |
-| `ExtensionHooks`               | Typed `preRun`, `postRun`, and `onError` hook slots                         |
-| `InferExtensionFlags`          | Syntax-parsed values inferred from an Extension's contributed flags         |
-| `NamedExtensionFlagDef`        | Named Extension flag accepted by `ExtensionConfig.flags`                    |
-| `ExtensionSectionContribution` | Section contributed by an Extension to command documentation                |
-| `Finished`                     | Opaque token returned by `ExtensionContext.finish()`                        |
-| `InvocationOutcome`            | Completed, short-circuited, or failed invocation result                     |
+| Type                           | Description                                                                                      |
+| ------------------------------ | ------------------------------------------------------------------------------------------------ |
+| `Extension`                    | Identified frozen Extension value                                                                |
+| `ExtensionFactory<Args>`       | Callable Extension constructor with a readonly `.id`; short annotations erase contribution types |
+| `ExtensionBuildContext`        | Frozen root snapshot and resolved output directory for artifact generation                       |
+| `ExtensionConfig`              | Owned flags, commands, section contributions, build generation, and hooks                        |
+| `ExtensionFlagDef`             | Extension-owned flag with optional `recursive` scope                                             |
+| `ExtensionContext`             | Readonly invocation view with inferred Extension-owned flags and `finish()`                      |
+| `ExtensionHooks`               | Typed `preRun`, `postRun`, and `onError` hook slots                                              |
+| `InferExtensionFlags`          | Syntax-parsed values inferred from an Extension's contributed flags                              |
+| `NamedExtensionFlagDef`        | Named Extension flag accepted by `ExtensionConfig.flags`                                         |
+| `ExtensionSectionContribution` | Section contributed by an Extension to command documentation                                     |
+| `Finished`                     | Opaque token returned by `ExtensionContext.finish()`                                             |
+| `InvocationOutcome`            | Completed, short-circuited, or failed invocation result                                          |
 
 ## Error types
 
@@ -166,10 +168,15 @@ Omitting `io` creates no new ambient scope, preserving native TTY detection and 
 A command section without an audience is available to every renderer. Use `only` or `except` with section consumers to narrow it; the two fields are mutually exclusive. A `SectionConsumer` is either a branded `ExtensionId` or an Extension/factory object carrying one, so official renderers can be passed directly while custom renderers can use their minted id:
 
 ```ts
-import { defineExtensionId, type CommandSection, type CommandSnapshot } from "@crustjs/core";
+import {
+  defineExtensionId,
+  type CommandSection,
+  type CommandSnapshot,
+  type ExtensionId,
+} from "@crustjs/core";
 import { sectionsFor, visibleSectionsFor } from "@crustjs/core/tooling";
 
-export const WEB_DOCS = defineExtensionId("acme:web-docs");
+export const WEB_DOCS: ExtensionId = defineExtensionId("acme:web-docs");
 
 const sections: readonly CommandSection[] = [
   { title: "Overview", body: "Visible everywhere." },

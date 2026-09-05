@@ -26,7 +26,7 @@ Available commands: deploy
 ## Options
 
 ```ts
-const didYouMean: ((options?: DidYouMeanOptions) => Extension) & { readonly id: ExtensionId };
+const didYouMean: ExtensionFactory<[options?: DidYouMeanOptions]>;
 ```
 
 <auto-type-table

@@ -35,7 +35,7 @@ my-cli completion fish > ~/.config/fish/completions/my-cli.fish
 ```ts
 type CompletionShell = "bash" | "zsh" | "fish";
 
-const completion: ((options?: CompletionOptions) => Extension) & { readonly id: ExtensionId };
+const completion: ExtensionFactory<[options?: CompletionOptions]>;
 ```
 
 <auto-type-table

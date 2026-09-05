@@ -278,6 +278,14 @@ The build context contains the frozen root Command Snapshot and the resolved abs
 
 `defineExtension(id, config?)` returns a frozen structural value; omitted config defaults to `{}`. Mint the branded `ExtensionId` with `defineExtensionId()`, which requires a non-empty, already-trimmed string.
 
+### `ExtensionFactory`
+
+| Type                          | Description                                                                                    |
+| ----------------------------- | ---------------------------------------------------------------------------------------------- |
+| `ExtensionFactory<Args = []>` | Callable Extension constructor with a readonly `id: ExtensionId`; valid as a `SectionConsumer` |
+
+`defineExtension(id, factory)` wraps a config-returning callback, preserving its parameters and inferring its flags, dependencies, providers, and commands. Each call follows the object form's normalization and freezing path. `ExtensionFactory<Args, Deps, Provides, Defs, Commands>` accepts optional contribution type parameters; their defaults erase contributions to `Extension`, keeping published annotations short. See [authoring an Extension](/docs/guide/extensions#author-an-extension).
+
 ### `ExtensionFlagDef`
 
 ```ts

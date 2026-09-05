@@ -1,7 +1,7 @@
 import { join, relative } from "node:path";
 
 import {
-	type Extension,
+	type ExtensionFactory,
 	type ExtensionId,
 	type ExtensionBuildContext,
 	type InvocationIO,
@@ -190,33 +190,31 @@ async function buildSkills(options: SkillOptions, context: ExtensionBuildContext
 	else await writeSkillsFromSnapshot(context.snapshot, writeOptions);
 }
 
-function skillFactory(options: SkillOptions): Extension {
-	const commandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
-	return defineExtension(SKILLS, {
-		commands: [buildSkillCommand(commandName, options)],
-		// Skills are loaded when a snapshot is prepared, not at construction, so
-		// help and man pages reflect the packaged directory as it exists at render time.
-		sections: (snapshot) => [
-			{
-				command: [],
-				title: SKILLS_SECTION_TITLE,
-				body: formatSkillDocumentation(options.distDir, commandName, snapshot.meta.name),
-				except: [SKILLS],
+export const skill: ExtensionFactory<[options: SkillOptions]> = defineExtension(
+	SKILLS,
+	(options) => {
+		const commandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
+		return {
+			commands: [buildSkillCommand(commandName, options)],
+			// Skills are loaded when a snapshot is prepared, not at construction, so
+			// help and man pages reflect the packaged directory as it exists at render time.
+			sections: (snapshot) => [
+				{
+					command: [],
+					title: SKILLS_SECTION_TITLE,
+					body: formatSkillDocumentation(options.distDir, commandName, snapshot.meta.name),
+					except: [SKILLS],
+				},
+			],
+			build: (context) => buildSkills(options, context),
+			hooks: {
+				async preRun(context) {
+					if (context.commandPath[1] === commandName || options.autoUpdate === false) return;
+					await autoRepairSkills(options, context);
+				},
 			},
-		],
-		build: (context) => buildSkills(options, context),
-		hooks: {
-			async preRun(context) {
-				if (context.commandPath[1] === commandName || options.autoUpdate === false) return;
-				await autoRepairSkills(options, context);
-			},
-		},
-	});
-}
-
-export const skill: typeof skillFactory & { readonly id: ExtensionId } = Object.assign(
-	skillFactory,
-	{ id: SKILLS },
+		};
+	},
 );
 
 async function reconcileSkill(opts: {

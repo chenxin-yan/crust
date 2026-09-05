@@ -3,7 +3,7 @@ import { resolve as resolvePath } from "node:path";
 
 import {
 	CrustError,
-	type Extension,
+	type ExtensionFactory,
 	type ExtensionId,
 	defineCommand,
 	defineExtension,
@@ -93,73 +93,71 @@ const SHELL_RENDERERS = {
  *   distribution channels — distributors run it once at packaging time
  *   and the resulting files become drop-ins.
  */
-function completionFactory(options: CompletionOptions = {}): Extension {
-	const subcommandName = options.command ?? "completion";
+export const completion: ExtensionFactory<[options?: CompletionOptions]> = defineExtension(
+	COMPLETION,
+	(options = {}) => {
+		const subcommandName = options.command ?? "completion";
 
-	const completionCommand = defineCommand(
-		subcommandName,
-		{ description: "Generate shell tab-completion scripts" },
-		(cmd) =>
-			cmd
-				.args({
-					name: "shell",
-					type: "string",
-					required: true,
-					description: "Shell to generate completion for",
-					choices: SUPPORTED_SHELLS,
-				})
-				.flags({
-					name: "output-dir",
-					type: "string",
-					description:
-						"Write all supported shells' scripts into this directory instead of printing to stdout",
-				})
-				.action(async (context) => {
-					const rootCommand = context.rootCommand;
-					// Validate `binName` before emitting anything so misconfigured
-					// CLIs fail loudly. The walker also re-validates command/flag
-					// identifiers when it builds the spec.
-					const binName = assertSafeBinName(options.binName ?? rootCommand.meta.name);
-					const version = options.version ?? rootCommand.meta.version;
-					if (version === undefined) {
-						throw new CrustError(
-							"DEFINITION",
-							"The completion extension requires a version in new Crust(name, { version }) or completion({ version })",
-						);
-					}
-					// `version` flows into header comments only; sanitise to drop
-					// control characters (newlines especially) so they cannot break
-					// out of the comment line in the emitted script.
-					const safeVersion = sanitizeFreeText(version);
+		const completionCommand = defineCommand(
+			subcommandName,
+			{ description: "Generate shell tab-completion scripts" },
+			(cmd) =>
+				cmd
+					.args({
+						name: "shell",
+						type: "string",
+						required: true,
+						description: "Shell to generate completion for",
+						choices: SUPPORTED_SHELLS,
+					})
+					.flags({
+						name: "output-dir",
+						type: "string",
+						description:
+							"Write all supported shells' scripts into this directory instead of printing to stdout",
+					})
+					.action(async (context) => {
+						const rootCommand = context.rootCommand;
+						// Validate `binName` before emitting anything so misconfigured
+						// CLIs fail loudly. The walker also re-validates command/flag
+						// identifiers when it builds the spec.
+						const binName = assertSafeBinName(options.binName ?? rootCommand.meta.name);
+						const version = options.version ?? rootCommand.meta.version;
+						if (version === undefined) {
+							throw new CrustError(
+								"DEFINITION",
+								"The completion extension requires a version in new Crust(name, { version }) or completion({ version })",
+							);
+						}
+						// `version` flows into header comments only; sanitise to drop
+						// control characters (newlines especially) so they cannot break
+						// out of the comment line in the emitted script.
+						const safeVersion = sanitizeFreeText(version);
 
-					const { shell: requestedShell } = context.args;
-					const spec = walkCommandNode(buildCommandDocumentation(rootCommand));
-					const outputDir = context.flags["output-dir"];
+						const { shell: requestedShell } = context.args;
+						const spec = walkCommandNode(buildCommandDocumentation(rootCommand));
+						const outputDir = context.flags["output-dir"];
 
-					if (outputDir === undefined) {
-						const script = SHELL_RENDERERS[requestedShell](spec, binName, safeVersion);
-						context.stdout(script);
-						return;
-					}
+						if (outputDir === undefined) {
+							const script = SHELL_RENDERERS[requestedShell](spec, binName, safeVersion);
+							context.stdout(script);
+							return;
+						}
 
-					// File path: write **all** supported shells. This matches
-					// the packaging-time use case — distributors generate every
-					// supported file in one invocation regardless of which
-					// shell they nominally requested.
-					const targetDir = resolvePath(outputDir);
-					await mkdir(targetDir, { recursive: true });
-					for (const shell of SUPPORTED_SHELLS) {
-						const filename = filenameForShell(shell, binName);
-						const script = SHELL_RENDERERS[shell](spec, binName, safeVersion);
-						await writeFile(resolvePath(targetDir, filename), script, "utf8");
-					}
-				}),
-	);
+						// File path: write **all** supported shells. This matches
+						// the packaging-time use case — distributors generate every
+						// supported file in one invocation regardless of which
+						// shell they nominally requested.
+						const targetDir = resolvePath(outputDir);
+						await mkdir(targetDir, { recursive: true });
+						for (const shell of SUPPORTED_SHELLS) {
+							const filename = filenameForShell(shell, binName);
+							const script = SHELL_RENDERERS[shell](spec, binName, safeVersion);
+							await writeFile(resolvePath(targetDir, filename), script, "utf8");
+						}
+					}),
+		);
 
-	return defineExtension(COMPLETION, { commands: [completionCommand] });
-}
-
-export const completion: typeof completionFactory & { readonly id: ExtensionId } = Object.assign(
-	completionFactory,
-	{ id: COMPLETION },
+		return { commands: [completionCommand] };
+	},
 );

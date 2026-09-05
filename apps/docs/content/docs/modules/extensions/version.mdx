@@ -28,9 +28,7 @@ interface VersionOptions {
   format?: "plain" | ((version: string, context: ExtensionContext) => string);
 }
 
-const version: ((value?: VersionValue, options?: VersionOptions) => Extension) & {
-  readonly id: ExtensionId;
-};
+const version: ExtensionFactory<[versionValue?: VersionValue, options?: VersionOptions]>;
 ```
 
 With no value override, `version()` reads `CommandSnapshot.meta.version` from the root. If neither the root metadata nor an override provides a version, handling `--version` reports a `DEFINITION` error. Pass a function to resolve an override only when the flag is handled:
