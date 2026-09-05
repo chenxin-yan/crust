@@ -1,8 +1,9 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { resolve as resolvePath } from "node:path";
+import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { join, resolve as resolvePath } from "node:path";
 
 import {
 	CrustError,
+	type CommandSnapshot,
 	type ExtensionFactory,
 	type ExtensionId,
 	defineCommand,
@@ -35,6 +36,8 @@ export interface CompletionOptions {
 	/**
 	 * Binary name embedded in generated scripts (the `complete -F` target,
 	 * the `#compdef` line, the `complete -c <bin>` rules).
+	 * Applies to the runtime command and build hook; set it when `crust build --name`
+	 * or the npm bin key installs the CLI under a different name.
 	 *
 	 * @default The root command's `meta.name`
 	 */
@@ -47,6 +50,9 @@ export interface CompletionOptions {
 	 */
 	version?: string;
 }
+
+/** Render inputs shared by the pure shell renderers. */
+export type CompletionRenderOptions = Pick<CompletionOptions, "binName" | "version">;
 
 /** Filename convention for each shell's drop-in completion file. */
 function filenameForShell(shell: CompletionShell, binName: string): string {
@@ -71,6 +77,73 @@ const SHELL_RENDERERS = {
 	fish: renderFish,
 } satisfies Record<CompletionShell, typeof renderBash>;
 
+function prepareRender(root: CommandSnapshot, options: CompletionRenderOptions) {
+	// Validate `binName` before emitting anything so misconfigured CLIs fail loudly.
+	// The walker also re-validates command/flag identifiers when it builds the spec.
+	const binName = assertSafeBinName(options.binName ?? root.meta.name);
+	const version = options.version ?? root.meta.version;
+	if (version === undefined) {
+		throw new CrustError(
+			"DEFINITION",
+			"The completion extension requires a version in new Crust(name, { version }) or completion({ version })",
+		);
+	}
+	// `version` flows into header comments only; strip control characters so it
+	// cannot break out of the comment line in the emitted script.
+	return {
+		spec: walkCommandNode(buildCommandDocumentation(root)),
+		binName,
+		version: sanitizeFreeText(version),
+	};
+}
+
+async function writeCompletionFiles(
+	dir: string,
+	root: CommandSnapshot,
+	options: CompletionRenderOptions,
+): Promise<void> {
+	const { spec, binName, version } = prepareRender(root, options);
+	await mkdir(dir, { recursive: true });
+	for (const shell of SUPPORTED_SHELLS) {
+		const filename = filenameForShell(shell, binName);
+		const script = SHELL_RENDERERS[shell](spec, binName, version);
+		await writeFile(join(dir, filename), script, "utf8");
+	}
+}
+
+function renderCompletionScript(
+	shell: CompletionShell,
+	root: CommandSnapshot,
+	options: CompletionRenderOptions = {},
+): string {
+	const { spec, binName, version } = prepareRender(root, options);
+	return SHELL_RENDERERS[shell](spec, binName, version);
+}
+
+/** Render a bash completion script from a prepared root Command Snapshot. */
+export function renderBashCompletion(
+	root: CommandSnapshot,
+	options?: CompletionRenderOptions,
+): string {
+	return renderCompletionScript("bash", root, options);
+}
+
+/** Render a zsh completion script from a prepared root Command Snapshot. */
+export function renderZshCompletion(
+	root: CommandSnapshot,
+	options?: CompletionRenderOptions,
+): string {
+	return renderCompletionScript("zsh", root, options);
+}
+
+/** Render a fish completion script from a prepared root Command Snapshot. */
+export function renderFishCompletion(
+	root: CommandSnapshot,
+	options?: CompletionRenderOptions,
+): string {
+	return renderCompletionScript("fish", root, options);
+}
+
 /**
  * Build an Extension that contributes a `completion <shell>` command
  * which emits a tab-completion script for bash, zsh, or fish.
@@ -92,6 +165,10 @@ const SHELL_RENDERERS = {
  *   is the artifact-generation path used by Homebrew, Nix, and similar
  *   distribution channels — distributors run it once at packaging time
  *   and the resulting files become drop-ins.
+ *
+ * **Build hook.** `crust build` writes the same three files under
+ * `<outDir>/completions/`; `--package` stages that directory. The binary name
+ * defaults to the snapshot's `meta.name`, unless `options.binName` is set.
  */
 export const completion: ExtensionFactory<[options?: CompletionOptions]> = defineExtension(
 	COMPLETION,
@@ -117,30 +194,11 @@ export const completion: ExtensionFactory<[options?: CompletionOptions]> = defin
 							"Write all supported shells' scripts into this directory instead of printing to stdout",
 					})
 					.action(async (context) => {
-						const rootCommand = context.rootCommand;
-						// Validate `binName` before emitting anything so misconfigured
-						// CLIs fail loudly. The walker also re-validates command/flag
-						// identifiers when it builds the spec.
-						const binName = assertSafeBinName(options.binName ?? rootCommand.meta.name);
-						const version = options.version ?? rootCommand.meta.version;
-						if (version === undefined) {
-							throw new CrustError(
-								"DEFINITION",
-								"The completion extension requires a version in new Crust(name, { version }) or completion({ version })",
-							);
-						}
-						// `version` flows into header comments only; sanitise to drop
-						// control characters (newlines especially) so they cannot break
-						// out of the comment line in the emitted script.
-						const safeVersion = sanitizeFreeText(version);
-
-						const { shell: requestedShell } = context.args;
-						const spec = walkCommandNode(buildCommandDocumentation(rootCommand));
 						const outputDir = context.flags["output-dir"];
-
 						if (outputDir === undefined) {
-							const script = SHELL_RENDERERS[requestedShell](spec, binName, safeVersion);
-							context.stdout(script);
+							context.stdout(
+								renderCompletionScript(context.args.shell, context.rootCommand, options),
+							);
 							return;
 						}
 
@@ -148,16 +206,26 @@ export const completion: ExtensionFactory<[options?: CompletionOptions]> = defin
 						// the packaging-time use case — distributors generate every
 						// supported file in one invocation regardless of which
 						// shell they nominally requested.
-						const targetDir = resolvePath(outputDir);
-						await mkdir(targetDir, { recursive: true });
-						for (const shell of SUPPORTED_SHELLS) {
-							const filename = filenameForShell(shell, binName);
-							const script = SHELL_RENDERERS[shell](spec, binName, safeVersion);
-							await writeFile(resolvePath(targetDir, filename), script, "utf8");
-						}
+						await writeCompletionFiles(resolvePath(outputDir), context.rootCommand, options);
 					}),
 		);
 
-		return { commands: [completionCommand] };
+		return {
+			commands: [completionCommand],
+			build: async ({ snapshot, outDir }) => {
+				const dir = join(outDir, "completions");
+				await mkdir(outDir, { recursive: true });
+				const stagedDir = await mkdtemp(join(outDir, ".completions-"));
+				try {
+					// Keep previous artifacts until validation, rendering, and writes succeed.
+					await writeCompletionFiles(stagedDir, snapshot, options);
+					// The hook owns this directory; remove stale scripts after a binary rename.
+					await rm(dir, { recursive: true, force: true });
+					await rename(stagedDir, dir);
+				} finally {
+					await rm(stagedDir, { recursive: true, force: true });
+				}
+			},
+		};
 	},
 );

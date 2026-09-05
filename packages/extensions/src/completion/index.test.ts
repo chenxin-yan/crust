@@ -1,11 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
 
-import { completion } from "./index.ts";
+import {
+	completion,
+	type CompletionRenderOptions,
+	renderBashCompletion,
+	renderFishCompletion,
+	renderZshCompletion,
+} from "../index.ts";
 
 let stdoutBuf: Buffer[];
 let processStdoutBuf: Buffer[];
@@ -207,6 +213,14 @@ describe("completion", () => {
 			expect(fish).toContain("complete -c 'mycli' -f");
 		});
 
+		it("preserves unrelated files in the user-owned output directory", async () => {
+			await writeFile(join(tmpDir, "other-cli"), "existing completion");
+			await buildCli().execute({
+				argv: ["completion", "bash", "--output-dir", tmpDir],
+			});
+			expect(await readFile(join(tmpDir, "other-cli"), "utf8")).toBe("existing completion");
+		});
+
 		it("writes nothing to stdout in --output-dir mode", async () => {
 			const app = buildCli();
 			await app.execute({
@@ -224,5 +238,131 @@ describe("completion", () => {
 			const entries = (await readdir(nested)).sort();
 			expect(entries).toEqual(["_mycli", "mycli", "mycli.fish"]);
 		});
+	});
+});
+
+describe("completion build hook", () => {
+	let tmpDir: string;
+
+	beforeEach(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "crust-completion-build-"));
+	});
+
+	afterEach(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("writes all three shell files under outDir/completions", async () => {
+		const snapshot = await buildCli().snapshot();
+		await completion().build?.({ snapshot, outDir: tmpDir });
+
+		expect(await readdir(tmpDir)).toEqual(["completions"]);
+		const dir = join(tmpDir, "completions");
+		expect((await readdir(dir)).sort()).toEqual(["_mycli", "mycli", "mycli.fish"]);
+		const bash = await readFile(join(dir, "mycli"), "utf8");
+		expect(bash).toContain("# completion script for mycli v1.2.3");
+		expect(bash).toContain("complete -o default -F _mycli 'mycli'");
+		expect(await readFile(join(dir, "_mycli"), "utf8")).toStartWith("#compdef mycli\n");
+		expect(await readFile(join(dir, "mycli.fish"), "utf8")).toContain("complete -c 'mycli' -f");
+	});
+
+	it("honors binName and version overrides at build time", async () => {
+		const snapshot = await buildCli().snapshot();
+		await completion({ binName: "my-tool", version: "2.0.0" }).build?.({
+			snapshot,
+			outDir: tmpDir,
+		});
+
+		const dir = join(tmpDir, "completions");
+		expect((await readdir(dir)).sort()).toEqual(["_my-tool", "my-tool", "my-tool.fish"]);
+		expect(await readFile(join(dir, "_my-tool"), "utf8")).toStartWith("#compdef my-tool\n");
+		expect(await readFile(join(dir, "my-tool"), "utf8")).toContain("my-tool v2.0.0");
+	});
+
+	it("removes stale completion files after a binary rename without touching sibling artifacts", async () => {
+		const snapshot = await buildCli().snapshot();
+		await writeFile(join(tmpDir, "other-artifact"), "preserved");
+		await completion().build?.({ snapshot, outDir: tmpDir });
+		await completion({ binName: "renamed" }).build?.({ snapshot, outDir: tmpDir });
+
+		expect((await readdir(join(tmpDir, "completions"))).sort()).toEqual([
+			"_renamed",
+			"renamed",
+			"renamed.fish",
+		]);
+		expect(await readFile(join(tmpDir, "other-artifact"), "utf8")).toBe("preserved");
+	});
+
+	it("rejects an unsafe binName before writing anything", async () => {
+		const snapshot = await buildCli().snapshot();
+		await expect(
+			completion({ binName: "../pwn" }).build?.({ snapshot, outDir: tmpDir }),
+		).rejects.toThrow(/invalid binName/);
+		expect(await readdir(tmpDir)).toEqual([]);
+	});
+
+	it("pure renderers match build and runtime files byte-for-byte", async () => {
+		const app = buildCli();
+		const snapshot = await app.snapshot();
+		const options: CompletionRenderOptions = { version: "1.2.3" };
+		await completion(options).build?.({ snapshot, outDir: tmpDir });
+		const runtimeDir = join(tmpDir, "runtime");
+		await app.execute({ argv: ["completion", "zsh", "--output-dir", runtimeDir] });
+
+		for (const [filename, render] of [
+			["mycli", renderBashCompletion],
+			["_mycli", renderZshCompletion],
+			["mycli.fish", renderFishCompletion],
+		] as const) {
+			const script = render(snapshot, options);
+			expect(script).toBe(await readFile(join(tmpDir, "completions", filename), "utf8"));
+			expect(script).toBe(await readFile(join(runtimeDir, filename), "utf8"));
+		}
+	});
+
+	it("preserves existing artifacts when a rebuild fails validation", async () => {
+		await completion().build?.({ snapshot: await buildCli().snapshot(), outDir: tmpDir });
+		const dir = join(tmpDir, "completions");
+		const filenames = (await readdir(dir)).sort();
+		const scripts = await Promise.all(filenames.map((name) => readFile(join(dir, name), "utf8")));
+
+		await expect(
+			completion().build?.({ snapshot: await new Crust("mycli").snapshot(), outDir: tmpDir }),
+		).rejects.toThrow("requires a version");
+
+		expect(await readdir(tmpDir)).toEqual(["completions"]);
+		expect((await readdir(dir)).sort()).toEqual(filenames);
+		expect(await Promise.all(filenames.map((name) => readFile(join(dir, name), "utf8")))).toEqual(
+			scripts,
+		);
+	});
+
+	it("rejects a missing version without writing files", async () => {
+		await expect(
+			completion().build?.({ snapshot: await new Crust("mycli").snapshot(), outDir: tmpDir }),
+		).rejects.toThrow("requires a version");
+		expect(await readdir(tmpDir)).toEqual([]);
+	});
+});
+
+describe("completion renderers", () => {
+	it("uses snapshot metadata by default and honors overrides", async () => {
+		const snapshot = await buildCli().snapshot();
+		expect(renderBashCompletion(snapshot)).toStartWith("# completion script for mycli v1.2.3");
+		expect(renderZshCompletion(snapshot)).toStartWith("#compdef mycli\n");
+		expect(renderFishCompletion(snapshot, { binName: "my-tool", version: "9.9.9" })).toStartWith(
+			"# completion script for my-tool v9.9.9",
+		);
+	});
+
+	it("validates names, requires a version, and sanitizes header text", async () => {
+		const snapshot = await new Crust("mycli").snapshot();
+		for (const render of [renderBashCompletion, renderZshCompletion, renderFishCompletion]) {
+			expect(() => render(snapshot, { binName: "../pwn", version: "1" })).toThrow(
+				/invalid binName/,
+			);
+			expect(() => render(snapshot)).toThrow("completion extension requires a version");
+			expect(render(snapshot, { version: "1\ninjected" })).not.toContain("\ninjected");
+		}
 	});
 });

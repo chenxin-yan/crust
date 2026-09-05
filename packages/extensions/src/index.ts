@@ -1,5 +1,14 @@
-export { completion } from "./completion/index.ts";
-export type { CompletionOptions, CompletionShell } from "./completion/index.ts";
+export {
+	completion,
+	renderBashCompletion,
+	renderFishCompletion,
+	renderZshCompletion,
+} from "./completion/index.ts";
+export type {
+	CompletionOptions,
+	CompletionRenderOptions,
+	CompletionShell,
+} from "./completion/index.ts";
 export { didYouMean } from "./did-you-mean.ts";
 export type { DidYouMeanOptions } from "./did-you-mean.ts";
 export { help, renderHelp } from "./help.ts";

@@ -34,6 +34,6 @@ The default `crust build` output is a raw binary and resolver script. Use it for
 
 ## Extension artifacts
 
-Registered Extensions own build artifacts. For example, [`man()`](/docs/modules/man) writes `<outdir>/man/<name>.1`, and [`skill()`](/docs/modules/skills) writes `<outdir>/skills`. No Extension-specific build flags are required. `--no-validate` skips snapshot preparation and all build hooks.
+Registered Extensions own build artifacts. For example, [`man()`](/docs/modules/man) writes `<outdir>/man/<name>.1`, [`skill()`](/docs/modules/skills) writes `<outdir>/skills`, and [`completion()`](/docs/modules/extensions/completion) writes `<outdir>/completions`. `crust build --package` ships these directories in the root npm package and includes them in npm `files`, with copies under each platform package's `bin/` directory. No Extension-specific build flags are required. `--no-validate` skips snapshot preparation and all build hooks.
 
 Install this package only as a development dependency; generated applications do not need it at runtime.
