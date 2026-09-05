@@ -4,7 +4,7 @@ import { makeNode } from "../../tests/helpers.ts";
 import { createCommandNode, registerFlag } from "../command/node.ts";
 import { CrustError } from "../errors.ts";
 import type { ArgDef } from "../types.ts";
-import { parseArgs, validateParsed } from "./parser.ts";
+import { parseArgs, parseStructured, validateParsed } from "./parser.ts";
 
 type DynamicParser = NonNullable<Extract<ArgDef, { type: "string" }>["parse"]>;
 
@@ -1213,5 +1213,221 @@ describe("parseArgs \u2014 default coercion symmetry", () => {
 			args: [{ name: "mode", type: "string", choices: ["a", "b"], default: "z" }],
 		});
 		expect(() => parseArgs(cmd, [])).toThrow(/Invalid value "z"/);
+	});
+});
+
+describe("parseStructured", () => {
+	it("treats inherited prototype names as omitted while accepting own values", () => {
+		for (const name of ["constructor", "toString"]) {
+			for (const required of [false, true]) {
+				const def = {
+					type: "string",
+					required: required || undefined,
+					default: required ? undefined : "fallback",
+				} as const;
+				for (const kind of ["args", "flags"] as const) {
+					const command = makeNode({
+						meta: "test",
+						...(kind === "args" ? { args: [{ name, ...def }] } : { flags: { [name]: def } }),
+					});
+					for (const input of [{}, { [kind]: {} }]) {
+						const result = parseStructured(command, input);
+						expect(result[kind][name]).toBe(def.default);
+						if (required) {
+							expect(() => validateParsed(command, result)).toThrow(
+								kind === "args"
+									? `Missing required argument "<${name}>"`
+									: `Missing required flag "--${name}"`,
+							);
+						}
+					}
+					const supplied = parseStructured(command, { [kind]: { [name]: "own" } });
+					expect(supplied[kind][name]).toBe("own");
+					expect(() => validateParsed(command, supplied)).not.toThrow();
+				}
+			}
+		}
+	});
+
+	it("does not invoke inherited structured input getters", () => {
+		class Input {
+			readonly [name: string]: string;
+
+			get value(): string {
+				throw new Error("Inherited getter must not be read");
+			}
+		}
+		const command = makeNode({
+			meta: "test",
+			args: [{ name: "value", type: "string", default: "argument" }],
+			flags: { value: { type: "string", default: "flag" } },
+		});
+		expect(parseStructured(command, { args: new Input() }).args.value).toBe("argument");
+		expect(parseStructured(command, { flags: new Input() }).flags.value).toBe("flag");
+	});
+
+	it.each(["args", "flags"] as const)("reads each own structured %s getter once", (kind) => {
+		let reads = 0;
+		const values = {
+			get value() {
+				if (++reads > 1) throw new Error("Structured value read twice");
+				return "first";
+			},
+		};
+		const command = makeNode({
+			meta: "test",
+			...(kind === "args"
+				? { args: [{ name: "value", type: "string" }] }
+				: { flags: { value: { type: "string" } } }),
+		});
+		expect(parseStructured(command, { [kind]: values })[kind].value).toBe("first");
+		expect(reads).toBe(1);
+	});
+
+	it("passes numbers, booleans, and URL instances through", () => {
+		const url = new URL("https://example.com");
+		const command = makeNode({
+			meta: "test",
+			args: [
+				{ name: "count", type: "number" },
+				{ name: "enabled", type: "boolean" },
+				{ name: "url", type: "url" },
+			],
+			flags: { count: { type: "number" }, enabled: { type: "boolean" }, url: { type: "url" } },
+		});
+		const values = { count: -3, enabled: false, url };
+		const result = parseStructured(command, { args: values, flags: values });
+		expect(result.args).toEqual(values);
+		expect(result.flags).toEqual(values);
+		expect(result.args.url).toBe(url);
+		expect(result.flags.url).toBe(url);
+	});
+
+	it("resolves path arguments and multiple path flags", () => {
+		const command = makeNode({
+			meta: "test",
+			args: [{ name: "out", type: "path" }],
+			flags: { dirs: { type: "path", multiple: true } },
+		});
+		const result = parseStructured(command, {
+			args: { out: "./dist" },
+			flags: { dirs: ["./a", "./b"] },
+		});
+		expect(result.args.out).toBe(`${process.cwd()}/dist`);
+		expect(result.flags.dirs).toEqual([`${process.cwd()}/a`, `${process.cwd()}/b`]);
+	});
+
+	it("validates choices before invoking parse on the supplied string", () => {
+		const seen: string[] = [];
+		const parse = (raw: string) => {
+			seen.push(raw);
+			return Number(raw);
+		};
+		const command = makeNode({
+			meta: "test",
+			args: [{ name: "port", type: "string", choices: ["80"], parse }],
+			flags: { port: { type: "string", choices: ["80"], parse } },
+		});
+		expect(parseStructured(command, { args: { port: "80" }, flags: { port: "80" } })).toMatchObject(
+			{ args: { port: 80 }, flags: { port: 80 } },
+		);
+		expect(seen).toEqual(["80", "80"]);
+		expect(() => parseStructured(command, { flags: { port: "90" } })).toThrow(
+			'Invalid value "90" for --port. Expected one of: 80',
+		);
+		expect(() => parseStructured(command, { args: { port: "90" } })).toThrow(
+			'Invalid value "90" for <port>. Expected one of: 80',
+		);
+		expect(seen).toEqual(["80", "80"]);
+	});
+
+	it("preserves multiple flag order and wraps a scalar occurrence", () => {
+		const command = makeNode({ meta: "test", flags: { tag: { type: "string", multiple: true } } });
+		expect(parseStructured(command, { flags: { tag: ["b", "-a"] } }).flags.tag).toEqual([
+			"b",
+			"-a",
+		]);
+		expect(parseStructured(command, { flags: { tag: "a" } }).flags.tag).toEqual(["a"]);
+	});
+
+	it("spreads variadic values in definition order", () => {
+		const command = makeNode({
+			meta: "test",
+			args: [
+				{ name: "first", type: "string" },
+				{ name: "rest", type: "string", variadic: true },
+			],
+		});
+		expect(parseStructured(command, { args: { rest: ["b", "a"], first: "-first" } }).args).toEqual({
+			first: "-first",
+			rest: ["b", "a"],
+		});
+	});
+
+	it("keeps scalar JSON arrays intact and passes raw input verbatim", () => {
+		const command = makeNode({
+			meta: "test",
+			args: [{ name: "data", type: "json" }],
+			flags: { data: { type: "json" } },
+		});
+		const data = [1, 2];
+		const result = parseStructured(command, {
+			args: { data },
+			flags: { data },
+			raw: ["--", "--literal"],
+		});
+		expect(result.args.data).toBe(data);
+		expect(result.flags.data).toBe(data);
+		expect(result.rawArgs).toEqual(["--", "--literal"]);
+		expect(result.excessArgs).toEqual([]);
+	});
+
+	it("rejects gaps, unknown argument names, and unknown canonical flags", () => {
+		const command = makeNode({
+			meta: "test",
+			args: [
+				{ name: "first", type: "string" },
+				{ name: "second", type: "string" },
+			],
+			flags: { mode: { type: "string", aliases: ["format"] } },
+		});
+		for (const [input, reason] of [
+			[{ args: { second: "x" } }, "positional-gap"],
+			[{ args: { bogus: "x" } }, "unknown-argument"],
+			[{ flags: { bogus: "x" } }, "unknown-flag"],
+			[{ flags: { format: "x" } }, "unknown-flag"],
+			[{ flags: { constructor: "x" } }, "unknown-flag"],
+		] as const) {
+			expect(() => parseStructured(command, input)).toThrow(
+				expect.objectContaining({ code: "PARSE", details: expect.objectContaining({ reason }) }),
+			);
+		}
+	});
+
+	it("resolves omitted defaults with the same transforms as argv", () => {
+		const command = makeNode({
+			meta: "test",
+			args: [{ name: "port", type: "string", parse: Number, default: "80" }],
+			flags: { dir: { type: "path", default: "./dist" } },
+		});
+		expect(
+			parseStructured(command, { args: { port: undefined }, flags: { dir: undefined } }),
+		).toEqual(parseArgs(command, []));
+	});
+
+	it("treats empty multiple arrays as zero occurrences for defaults and required flags", () => {
+		const command = makeNode({
+			meta: "test",
+			flags: {
+				optional: { type: "string", multiple: true },
+				defaulted: { type: "string", multiple: true, default: ["fallback"] },
+				required: { type: "string", multiple: true, required: true },
+			},
+		});
+		const result = parseStructured(command, {
+			flags: { optional: [], defaulted: [], required: [] },
+		});
+		expect(result).toEqual(parseArgs(command, []));
+		expect(() => validateParsed(command, result)).toThrow('Missing required flag "--required"');
 	});
 });

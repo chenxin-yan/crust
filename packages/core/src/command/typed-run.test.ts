@@ -7,9 +7,6 @@ import { defineExtension, type Extension } from "../api/extension.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { CommandPath, CommandShapeAt, RunInput, RunOutcome } from "./crust.ts";
 import { Crust, defineCommand } from "./crust.ts";
-interface CyclicFixture {
-	self?: CyclicFixture;
-}
 interface StructuredRunCapture {
 	args: { name: string; count: number; files: string[] };
 	flags: {
@@ -352,7 +349,7 @@ describe("typed programmatic invocation", () => {
 		expect(await pending).toEqual({ status: "finished", by: gateId });
 	});
 
-	it("serializes structured input through routing and the parser", async () => {
+	it("binds structured input directly against the selected command", async () => {
 		let received: StructuredRunCapture | undefined;
 		const remoteAdd = defineCommand("remote-add", (command) =>
 			command
@@ -371,7 +368,15 @@ describe("typed programmatic invocation", () => {
 					received = { args, flags, rawArgs };
 				}),
 		);
-		const app = new Crust("git").add(remoteAdd);
+		const app = new Crust("git").add(remoteAdd).extend(
+			defineExtension(defineExtensionId("argv"), {
+				hooks: {
+					preRun: (ctx) => {
+						expect(ctx.argv).toEqual(["remote-add"]);
+					},
+				},
+			}),
+		);
 
 		await app.run(["remote-add"], {
 			args: { name: "origin", count: 2, files: ["a.ts", "b.ts"] },
@@ -386,7 +391,7 @@ describe("typed programmatic invocation", () => {
 		});
 	});
 
-	it("rejects positional holes and option-like positional values before dispatch", async () => {
+	it("rejects positional holes before dispatch", async () => {
 		const app = new Crust("cli")
 			.args({ name: "source", type: "string" }, { name: "destination", type: "string" })
 			.action(() => {});
@@ -395,18 +400,25 @@ describe("typed programmatic invocation", () => {
 			code: "PARSE",
 			details: { reason: "positional-gap" },
 		});
-		await expect(app.run([], { args: { source: "-unsafe" } })).rejects.toMatchObject({
-			code: "PARSE",
-			details: { reason: "option-like-positional" },
+	});
+
+	it("accepts positional values beginning with a dash", async () => {
+		const app = new Crust("cli")
+			.args({ name: "source", type: "string" })
+			.action(({ args }) => args.source);
+		expect(await app.run([], { args: { source: "-unsafe" } })).toEqual({
+			status: "completed",
+			result: "-unsafe",
 		});
 	});
 
-	it("rejects positional values that collide with subcommand names or aliases", async () => {
+	it("selects commands only from the typed path, not positional names or aliases", async () => {
 		let ran = "";
 		const app = new Crust("cli")
 			.args({ name: "target", type: "string" })
-			.action(() => {
+			.action(({ args }) => {
 				ran = "root";
+				return args.target;
 			})
 			.add(
 				defineCommand("build", { aliases: ["compile"] }, (command) =>
@@ -415,19 +427,15 @@ describe("typed programmatic invocation", () => {
 					}),
 				),
 			);
-
-		await expect(app.run([], { args: { target: "build" } })).rejects.toMatchObject({
-			code: "PARSE",
-			details: { reason: "ambiguous-positional" },
-		});
-		await expect(app.run([], { args: { target: "compile" } })).rejects.toMatchObject({
-			code: "PARSE",
-			details: { reason: "ambiguous-positional" },
-		});
-		expect(ran).toBe("");
-
-		await app.run([], { args: { target: "other" } });
-		expect(ran).toBe("root");
+		for (const target of ["build", "compile"]) {
+			expect(await app.run([], { args: { target } })).toEqual({
+				status: "completed",
+				result: target,
+			});
+			expect(ran).toBe("root");
+		}
+		await app.run(["build"]);
+		expect(ran).toBe("build");
 	});
 
 	it("accepts structurally JSON-compatible named interfaces", () => {
@@ -456,28 +464,37 @@ describe("typed programmatic invocation", () => {
 		expect(received).toEqual({ args: { payload: [1, 2] }, flags: { config: [3, 4] } });
 	});
 
-	it("rejects unserializable JSON input values", async () => {
-		const app = new Crust("cli").flags({ name: "config", type: "json" }).action(() => {});
-
+	it("passes JSON values through by reference and treats undefined as omitted", async () => {
+		const app = new Crust("cli")
+			.flags({ name: "config", type: "json" })
+			.action(({ flags }) => flags.config);
 		await expect(app.run([], { flags: { config: undefined } })).resolves.toEqual({
 			status: "completed",
 			result: undefined,
 		});
-		await expect(app.run([], { flags: { config: (() => {}) as never } })).rejects.toMatchObject({
-			code: "PARSE",
-			details: { reason: "unserializable-json" },
+		const payload = { nested: [1, 2] };
+		const outcome = await app.run([], { flags: { config: payload } });
+		expect(outcome.status).toBe("completed");
+		if (outcome.status === "completed") expect(outcome.result).toBe(payload);
+	});
+
+	it("treats empty multiple flag arrays as omitted", async () => {
+		const app = new Crust("cli")
+			.flags(
+				{ name: "optional", type: "string", multiple: true },
+				{ name: "defaulted", type: "string", multiple: true, default: ["fallback"] },
+			)
+			.action(({ flags }) => flags);
+		expect(await app.run([], { flags: { optional: [], defaulted: [] } })).toEqual({
+			status: "completed",
+			result: { optional: undefined, defaulted: ["fallback"] },
 		});
-		// JSON.stringify throws for these instead of returning undefined.
-		await expect(app.run([], { flags: { config: 1n as never } })).rejects.toMatchObject({
-			code: "PARSE",
-			details: { reason: "unserializable-json" },
-		});
-		const cyclic: CyclicFixture = {};
-		cyclic.self = cyclic;
-		await expect(app.run([], { flags: { config: cyclic as never } })).rejects.toMatchObject({
-			code: "PARSE",
-			details: { reason: "unserializable-json" },
-		});
+		const required = new Crust("cli")
+			.flags({ name: "tag", type: "string", multiple: true, required: true })
+			.action(() => {});
+		await expect(required.run([], { flags: { tag: [] } })).rejects.toThrow(
+			'Missing required flag "--tag"',
+		);
 	});
 
 	it("rejects unknown structured arguments and flags", async () => {

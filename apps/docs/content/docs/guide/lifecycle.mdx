@@ -29,13 +29,13 @@ await app.run(
 );
 ```
 
-It requires an explicit typed command path, serializes structured input through the normal parser, honors injected writers, throws the original error, does not render it, and does not modify `process.exitCode`. It resolves to `{ status: "completed", result }` after an action (including actionless and `void` actions), or `{ status: "finished", by }` when an Extension `preRun` hook finishes first. Runtime-dynamic Extension commands use `execute({ argv })` instead.
+It requires an explicit typed command path, binds structured input directly against the selected command's definitions, honors injected writers, throws the original error, does not render it, and does not modify `process.exitCode`. It resolves to `{ status: "completed", result }` after an action (including actionless and `void` actions), or `{ status: "finished", by }` when an Extension `preRun` hook finishes first. Runtime-dynamic Extension commands use `execute({ argv })` instead.
 
 ## Successful invocation order
 
 1. **Prepare definitions** — apply Extensions and validate Extension-contributed documentation sections. Command-authored sections were already validated by the constructor or `defineCommand()`. Definitions are compile-time checked, with runtime guards for dynamic definitions. `.flags()` and Extension-contributed flags reject duplicate canonical names or colliding spellings with a `DEFINITION` error; `.add()` rejects duplicate canonical command names, while dynamic alias collisions route by the precedence below. Extension-contributed commands replace existing commands with the same canonical name, while duplicate Context names without owned-flag collisions use last-write-wins. Canonical command names beat aliases, and the first-registered alias wins among colliding aliases.
 2. **Route** — resolve the command path.
-3. **Parse syntax** — consume positional and flag tokens, enforce choices, and run built-in conversions.
+3. **Parse or bind input** — `execute()` consumes positional and flag tokens and runs built-in conversions; `run()` binds own argument and flag properties directly, preserving typed values. Both enforce choices, apply string parse transforms and path normalization, and resolve defaults.
 4. **Run `preRun` hooks** — invoke Extension hooks in registration order. Hooks may lazily pull flagless Contexts. A hook can return `ctx.finish()` to skip the remaining hooks, validation, schemas, and the Command Action.
 5. **Validate structure** — enforce required values and other core rules.
 6. **Apply schemas** — validate and transform every schema-backed input, aggregating issues.

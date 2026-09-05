@@ -79,6 +79,7 @@ export interface ExtensionContext<
 > extends Readonly<InvocationIO> {
 	/**
 	 * Complete argv passed to the application, including routed command names.
+	 * For typed `run()` this is the command path only; structured values are never rendered as argv.
 	 *
 	 * @example `["deploy", "api", "--trace", "--", "--dry-run"]`
 	 */
@@ -110,19 +111,22 @@ export interface ExtensionContext<
 	 */
 	readonly commandPath: readonly string[];
 	/**
-	 * Syntax-parsed positional values for the resolved command, before validation.
+	 * Bound positional values for the resolved command, before validation: parsed from
+	 * argv tokens for `execute()`, taken as-is from the structured input for typed `run()`
+	 * (URL/JSON values keep their identity).
 	 *
 	 * @example `{ target: "api" }`
 	 */
 	readonly args: Readonly<Record<string, ParsedArgValue>>;
 	/**
-	 * Syntax-parsed own flags plus unknown flags from the resolved command, before validation.
+	 * Bound own flags plus unknown flags from the resolved command, before validation;
+	 * parsed from argv tokens for `execute()`, taken as-is from the structured input for typed `run()`.
 	 *
 	 * @example `{ trace: true }`
 	 */
 	readonly flags: Readonly<InferExtensionFlags<Defs> & Record<string, ParsedFlagValue>>;
 	/**
-	 * Positional values that appeared after the `--` separator.
+	 * Positional values that appeared after the `--` separator, or the `raw` array passed to typed `run()`.
 	 *
 	 * @example `["--dry-run"]`
 	 */
@@ -147,7 +151,8 @@ export interface ExtensionHooks<
 	Deps extends ContextMap = {},
 > {
 	/**
-	 * Runs after routing and syntax parsing, before validation, in `.extend()` order.
+	 * Runs after routing and input binding (argv parsing for `execute()`, structured
+	 * binding for typed `run()`), before validation, in `.extend()` order.
 	 * Return `ctx.finish()` to end the invocation successfully; later pre-run hooks,
 	 * validation, schemas, Contexts, and the Command Action do not run.
 	 */

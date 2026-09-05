@@ -546,7 +546,7 @@ type RequiredArgNames<A extends ArgsDef> = A[number] extends infer D
 		: never
 	: never;
 
-/** Values accepted by typed programmatic invocation before argv parsing. */
+/** Values accepted by typed programmatic invocation before parsing/validation. */
 export type InputArgs<A extends ArgsDef> = Simplify<
 	{
 		[
@@ -568,7 +568,7 @@ type RequiredFlagNames<F extends FlagsDef> = {
 		: never;
 }[keyof F];
 
-/** Flag values accepted by typed programmatic invocation before argv parsing. */
+/** Flag values accepted by typed programmatic invocation before parsing/validation. */
 export type InputFlags<F extends FlagsDef> = Simplify<
 	{
 		[K in RequiredFlagNames<F>]-?: InputFlagValue<F[K]>;

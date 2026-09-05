@@ -1,5 +1,6 @@
 import { parseArgs as nodeParseArgs, type ParseArgsOptionDescriptor } from "node:util";
 
+import type { JsonValue } from "@crustjs/utils/json";
 import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils/primitive";
 
 import type { CommandNode } from "../command/node.ts";
@@ -22,6 +23,14 @@ import type { FlagSpelling } from "./spellings.ts";
 // ────────────────────────────────────────────────────────────────────────────
 // Internal types
 // ────────────────────────────────────────────────────────────────────────────
+
+export type RunInputValue = URL | JsonValue | readonly RunInputValue[];
+
+export interface RunInputPayload {
+	readonly args?: Readonly<Record<string, RunInputValue | undefined>>;
+	readonly flags?: Readonly<Record<string, RunInputValue | undefined>>;
+	readonly raw?: readonly string[];
+}
 
 /**
  * Union of all possible value shapes that `util.parseArgs` can produce for a
@@ -286,19 +295,32 @@ function resolveAliases(
  * Resolve all flag definitions against the canonical parsed values.
  * Handles coercion and default values.
  */
-function resolveFlags<F extends FlagsDef>(
+function resolveFlags<F extends FlagsDef, V>(
 	flagsDef: F,
-	tokens: ParseArgsToken[],
-	aliasToName: Record<string, string>,
+	values: Readonly<Record<string, V | undefined>>,
+	coerce: (name: string, def: FlagDef, value: V) => ParsedFlagValue,
 ): RawParsedFlags<F> {
 	const resolved: Record<string, ParsedFlagValue> = {};
-	const canonical = resolveAliases(tokens, aliasToName, flagsDef);
+	for (const name of Object.keys(values)) {
+		// Read known values only during binding, so own getters run once.
+		// hasOwn prevents inherited Object.prototype keys becoming ghost flags.
+		if (!Object.hasOwn(flagsDef, name) && values[name] !== undefined) {
+			throw new CrustError("PARSE", `Unknown flag "--${name}"`, {
+				flag: name,
+				reason: "unknown-flag",
+			});
+		}
+	}
 
 	for (const [name, def] of Object.entries(flagsDef)) {
-		const parsedValue = canonical[name];
+		const parsedValue = Object.hasOwn(values, name) ? values[name] : undefined;
 
-		if (parsedValue !== undefined) {
-			resolved[name] = coerceFlagValue(name, def, parsedValue);
+		// An empty multiple array is zero occurrences, matching argv omission.
+		const absent =
+			parsedValue === undefined ||
+			(def.multiple && Array.isArray(parsedValue) && parsedValue.length === 0);
+		if (!absent) {
+			resolved[name] = coerce(name, def, parsedValue);
 			continue;
 		}
 
@@ -337,28 +359,32 @@ interface ResolvedArgs<A extends ArgsDef> {
 	consumed: number;
 }
 
-function resolveArgs<A extends ArgsDef>(argsDef: A, positionals: string[]): ResolvedArgs<A> {
+function coerceArgToken(def: ArgDef, raw: string, label: string, index?: number): ParsedArgValue {
+	if (def.schema) return raw;
+	if (def.choices) validateChoice(raw, def.choices, label);
+	if (def.parse) return invokeParse(def.parse, raw, label, index);
+	return coerceValue(raw, def.type, label);
+}
+
+function resolveArgs<A extends ArgsDef, V>(
+	argsDef: A,
+	positionals: readonly V[],
+	coerce: (def: ArgDef, value: V, label: string, index?: number) => ParsedArgValue,
+): ResolvedArgs<A> {
 	const resolved: Record<string, ParsedArgValue> = {};
 	let index = 0;
 
 	for (const def of argsDef) {
-		const { name, choices, parse } = def;
+		const { name } = def;
 		const label = `<${name}>`;
-
-		const coerceOne = (raw: string, i?: number) => {
-			if (def.schema) return raw;
-			if (choices) validateChoice(raw, choices, label);
-			if (parse) return invokeParse(parse, raw, label, i);
-			return coerceValue(raw, def.type, label);
-		};
 
 		if (def.variadic) {
 			const remaining = positionals.slice(index);
-			resolved[name] = remaining.map((v, i) => coerceOne(v, i));
+			resolved[name] = remaining.map((v, i) => coerce(def, v, label, i));
 			index = positionals.length;
 		} else if (index < positionals.length) {
 			// SAFETY: the bounds check above proves this positional exists.
-			resolved[name] = coerceOne(positionals[index] as string);
+			resolved[name] = coerce(def, positionals[index] as V, label);
 			index++;
 		} else {
 			resolved[name] = resolveDefault(def, label);
@@ -397,33 +423,7 @@ function validateNoNegateUsage(argv: string[], spellings: ReadonlyMap<string, Fl
 	}
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// parseArgs — Main parsing function
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Parse argv against a command's arg/flag definitions.
- *
- * Wraps Node's `util.parseArgs` with Crust's enhanced semantics:
- * positional arg mapping, type coercion, alias expansion, default values,
- * variadic args, and strict mode.
- *
- * This is a pure parse+coerce function — it never throws for missing required
- * values. Use {@link validateParsed} to enforce required constraints after
- * extensions have had a chance to finish an invocation (e.g. `--help`).
- *
- * @param command - The command whose arg/flag definitions drive the parsing
- * @param argv - The argv array to parse (typically `process.argv.slice(2)`)
- * @returns Parsed args, flags, excessArgs (positionals before `--` not consumed by a declared argument), and rawArgs (everything after `--`)
- * @throws {CrustError} On unknown flags or type coercion failure
- */
-export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
-	command: CommandNode & { args: A; effectiveFlags: F },
-	argv: string[],
-): ParseResult<A, F> {
-	const argsDef = command.args;
-	const flagsDef = command.effectiveFlags;
-
+function tokenizeArgv(command: CommandNode, argv: string[]) {
 	const spellings = command.flagSpellings;
 	const { options: parseOptions, aliasToName } = buildParseArgsOptionDescriptor(spellings);
 
@@ -470,15 +470,134 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 		}
 	}
 
-	const resolvedFlags = resolveFlags(flagsDef, parsed.tokens, aliasToName);
-	const resolvedArgs = resolveArgs(argsDef, preSeparatorPositionals);
-
 	return {
-		args: resolvedArgs.args,
-		flags: resolvedFlags,
-		excessArgs: preSeparatorPositionals.slice(resolvedArgs.consumed),
+		positionals: preSeparatorPositionals,
+		flagValues: resolveAliases(parsed.tokens, aliasToName, command.effectiveFlags),
 		rawArgs,
 	};
+}
+
+/** Typed values already have their runtime shape; only raw-string transforms remain. */
+function coerceStructuredValue(
+	def: ArgDef | FlagDef,
+	value: RunInputValue,
+	label: string,
+	index?: number,
+): ParsedArgValue {
+	if (def.choices) validateChoice(String(value), def.choices, label);
+	if (def.parse) return invokeParse(def.parse, String(value), label, index);
+	if (def.type === "path") return coercePath(String(value));
+	return value;
+}
+
+function coerceStructuredFlag(name: string, def: FlagDef, value: RunInputValue): ParsedFlagValue {
+	const label = `--${name}`;
+	// Only multiple flags interpret arrays as occurrences; scalar JSON can itself be an array.
+	if (def.multiple) {
+		return (Array.isArray(value) ? value : [value]).map((item, i) =>
+			coerceStructuredValue(def, item, label, i),
+		);
+	}
+	return coerceStructuredValue(def, value, label);
+}
+
+/** Both front doors share binding, defaults, and canonical flag validation. */
+function bind<A extends ArgsDef, F extends FlagsDef, V, W>(
+	command: CommandNode & { args: A; effectiveFlags: F },
+	positionals: readonly V[],
+	flagValues: Readonly<Record<string, W | undefined>>,
+	coerceArg: (def: ArgDef, value: V, label: string, index?: number) => ParsedArgValue,
+	coerceFlag: (name: string, def: FlagDef, value: W) => ParsedFlagValue,
+) {
+	const flags = resolveFlags(command.effectiveFlags, flagValues, coerceFlag);
+	return { ...resolveArgs(command.args, positionals, coerceArg), flags };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// parseArgs — Main parsing function
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Parse argv against a command's arg/flag definitions.
+ *
+ * Wraps Node's `util.parseArgs` with Crust's enhanced semantics:
+ * positional arg mapping, type coercion, alias expansion, default values,
+ * variadic args, and strict mode.
+ *
+ * This is a pure parse+coerce function — it never throws for missing required
+ * values. Use {@link validateParsed} to enforce required constraints after
+ * extensions have had a chance to finish an invocation (e.g. `--help`).
+ *
+ * @param command - The command whose arg/flag definitions drive the parsing
+ * @param argv - The argv array to parse (typically `process.argv.slice(2)`)
+ * @returns Parsed args, flags, excessArgs (positionals before `--` not consumed by a declared argument), and rawArgs (everything after `--`)
+ * @throws {CrustError} On unknown flags or type coercion failure
+ */
+export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
+	command: CommandNode & { args: A; effectiveFlags: F },
+	argv: string[],
+): ParseResult<A, F> {
+	const { positionals, flagValues, rawArgs } = tokenizeArgv(command, argv);
+	const { args, flags, consumed } = bind(
+		command,
+		positionals,
+		flagValues,
+		coerceArgToken,
+		coerceFlagValue,
+	);
+	return { args, flags, excessArgs: positionals.slice(consumed), rawArgs };
+}
+
+/** Bind typed input without producing argv; the path alone selects the command. */
+export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
+	command: CommandNode & { args: A; effectiveFlags: F },
+	input: RunInputPayload,
+): ParseResult<A, F> {
+	const positionals: RunInputValue[] = [];
+	let omittedArgument: string | undefined;
+	for (const definition of command.args) {
+		const value =
+			input.args && Object.hasOwn(input.args, definition.name)
+				? input.args[definition.name]
+				: undefined;
+		if (value === undefined) {
+			omittedArgument = definition.name;
+			continue;
+		}
+		// Only named records can supply a later positional while omitting an earlier one.
+		if (omittedArgument !== undefined) {
+			throw new CrustError(
+				"PARSE",
+				`Argument <${definition.name}> cannot be provided after omitted argument <${omittedArgument}>`,
+				{
+					argument: definition.name,
+					reason: "positional-gap",
+				},
+			);
+		}
+		// A non-variadic JSON array is one positional value.
+		positionals.push(...(definition.variadic && Array.isArray(value) ? value : [value]));
+	}
+	// Only named records carry argument names to validate; argv has positional tokens.
+	for (const name of Object.keys(input.args ?? {})) {
+		if (
+			!command.args.some((definition) => definition.name === name) &&
+			input.args?.[name] !== undefined
+		) {
+			throw new CrustError("PARSE", `Unknown argument "${name}"`, {
+				argument: name,
+				reason: "unknown-argument",
+			});
+		}
+	}
+	const { args, flags } = bind(
+		command,
+		positionals,
+		input.flags ?? {},
+		coerceStructuredValue,
+		coerceStructuredFlag,
+	);
+	return { args, flags, excessArgs: [], rawArgs: [...(input.raw ?? [])] };
 }
 
 /**

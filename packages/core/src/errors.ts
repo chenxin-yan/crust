@@ -30,6 +30,7 @@ export interface ValidationErrorDetails {
 export interface ParseErrorDetails {
 	readonly flag?: string;
 	readonly argument?: string;
+	/** Retained for compatibility; Core no longer populates this field. */
 	readonly value?: string;
 	readonly reason?: string;
 }

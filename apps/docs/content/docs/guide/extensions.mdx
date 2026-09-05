@@ -165,7 +165,7 @@ A `preRun` hook runs before flag validation, so it cannot pull a Context that ow
 
 ## Hooks
 
-Hooks run after routing and syntax parsing. Where each hook sits in the invocation, and how failures flow through them, is defined once in the [Execution Model](/docs/guide/lifecycle).
+Hooks run after routing and input binding (argv parsing for `execute()`, structured binding for typed `run()`). Where each hook sits in the invocation, and how failures flow through them, is defined once in the [Execution Model](/docs/guide/lifecycle).
 
 ### `preRun`
 
