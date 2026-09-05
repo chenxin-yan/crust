@@ -2,13 +2,14 @@
 "@crustjs/prompts": minor
 ---
 
-Rework `@crustjs/prompts` around themed instances, injectable IO, and typed results (breaking).
+Breaking: themed prompt instances, injectable terminal IO, and typed choice results.
 
-- Global theme state is removed: `setTheme`, `getTheme`, and `createTheme` are gone. `createPrompts({ theme })` returns all prompt functions bound to a theme plus the resolved `theme` for custom `runPrompt` renderers; `runPrompt`'s `theme` config is an optional partial merged onto `defaultTheme`. Resolution order: `defaultTheme` ← instance theme ← per-call `theme`. Migrate `setTheme({...})` → `const p = createPrompts({ theme: {...} })`.
-- Prompt cancellation (Ctrl+C) rejects with a standard `DOMException` named `"AbortError"` instead of the removed `CancelledError` class; check `err.name === "AbortError"`.
-- Prompt IO is injectable through optional `io` parameters and `withPromptIO()`. The new `@crustjs/prompts/testing` subpath ships fake-TTY helpers, whose `keys()` autocompletes named key names (`Key` and `NamedKey` types are exported).
-- `select`, `multiselect`, `filter`, and `multifilter` narrow their result type to the union of literal choice values (`choices: ["dev", "prod"]` → `"dev" | "prod"`) for plain string and `{ label, value }` object choices; widened `string[]` choices infer `string`. The `ChoiceValue` helper type is exported.
-- `input()` and `password()` take Standard Schemas through the dedicated `schema` option; `validate` is function-only, follows the `void` return contract, and cannot be combined with `schema` (encoded in the option types).
-- The deprecated spinner exports are removed; import spinner APIs from `@crustjs/progress`.
-- Trim the custom-prompt utility surface to the prompt engine, text editing, and fuzzy matching APIs. Formatting and list-normalization helpers, `NormalizedChoice`, and `CURSOR_CHAR` are no longer exported.
-- Fix multifilter selection when duplicate choices share a label and value, and preserve the initial cursor when the first default value is `undefined`.
+- `setTheme`, `getTheme`, and `createTheme` are removed. Migrate global themes to `const p = createPrompts({ theme })`; `p` exposes every prompt plus its resolved `theme` for custom renderers. Theme resolution is `defaultTheme` ← instance ← per-call; `runPrompt` accepts an optional partial theme. `CreatePromptsOptions` and `PromptsInstance` are exported.
+- Ctrl+C rejects with a `DOMException` named `"AbortError"` instead of `CancelledError`; check `err.name === "AbortError"`.
+- Prompts and `runPrompt` accept optional `PromptIO` (`{ input?, output? }`). `withTerminalIO(io, fn)` shares streams with prompts and `@crustjs/progress` in an async scope; `withPromptIO` is an alias. Resolution is explicit IO → ambient scope → `process.stdin`/`process.stderr`. `resolvePromptIO(io?)` exposes the resolved streams; `isTTY(input?)`/`assertTTY(input?)` default to the resolved input. `PromptIO`, `PromptInput`, and `PromptOutput` are exported.
+- New `@crustjs/prompts/testing` provides `renderPrompt`, `createPromptIO`, and `encodeKey` for fake-terminal tests with `type()`, `keys()`, `screen()`, and `answer`. Exported types include `Key`, `NamedKey`, `PromptTestIO`, and `RenderedPrompt`; named keys autocomplete, while control keys and single characters remain accepted.
+- `select`, `multiselect`, `filter`, and `multifilter` infer literal choice-value unions for strings and `{ label, value }` choices; widened arrays retain their wider type. `ChoiceValue` is exported.
+- `input`/`password` accept Standard Schema through `schema`; migrate `validate: schema` to `schema`. `validate` is function-only and cannot combine with `schema` (checked statically and at runtime). Non-`undefined` validator returns are now ignored rather than raising `TypeError`; throw an error to reject input.
+- Deprecated spinner re-exports and the `@crustjs/progress` dependency are removed; import spinner APIs directly from `@crustjs/progress`.
+- Custom renderers gain `renderTextWithCursor`, `highlightMatches`, `renderChoiceList`, and glyph exports `PREFIX_SYMBOL`, `PREFIX_SUBMITTED`, `CURSOR_INDICATOR`, `SCROLL_INDICATOR`, `CHECKBOX_CHECKED`, and `CHECKBOX_UNCHECKED`. `formatPromptLine`/`formatSubmitted` remain available. `normalizeChoices`, `NormalizedChoice`, `calculateScrollOffset`, and `CURSOR_CHAR` are removed from the root exports.
+- `multiselect` starts on the first default choice, matching `multifilter`. `multifilter` toggles the highlighted item when duplicates share label and value, and preserves its initial cursor when the first default value is `undefined`.

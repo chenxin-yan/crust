@@ -3,9 +3,8 @@
 "create-crust": minor
 ---
 
-Make the scaffolder runtime-portable and fix overwrite handling.
-
-- The scaffolder runs on Bun, Deno, and Node: post-scaffold commands use Node-compatible process APIs, and `create-crust` can be launched with npm, pnpm, Bun, or Deno.
-- Fix `--overwrite`: a confirmed overwrite is passed through to the scaffolder, so scaffolding into an existing non-empty destination works instead of aborting. Scaffolding into a non-empty current directory (`create-crust .`) asks for confirmation (pre-answered by `--overwrite`/`--no-overwrite`) instead of failing.
-- Scaffolded projects depend on TypeScript 7 (`^7.0.2`), the Go-native compiler; `tsc --noEmit` and all generated scripts work unchanged.
-- The unused `isGitInstalled` API is removed from `@crustjs/create`.
+- `create-crust` can be launched with npm, pnpm, Bun, or Deno (`npm create crust`, `bunx create-crust`, `deno run -A npm:create-crust`). It ships a single minimal template with binary/runtime distribution choices; the modular template, template-selection prompt, and `--template` flag are removed.
+- Confirmed overwrites now reach the scaffolder instead of aborting. `create-crust .` in a non-empty directory asks before writing; `--overwrite`/`--no-overwrite` pre-answer the confirmation.
+- Scaffolded projects depend on TypeScript 7 (`^7.0.2`); generated `tsc --noEmit` scripts are unchanged.
+- `@crustjs/create` runs post-scaffold `command` steps through the platform shell (`/bin/sh` or `cmd.exe`) instead of Bun Shell. Windows `.cmd`/`.bat` install and Git shims work under Node's CVE-2024-27980 hardening.
+- The `getGitUser` and `isGitInstalled` exports are removed from `@crustjs/create`; callers needing them must query Git themselves.
