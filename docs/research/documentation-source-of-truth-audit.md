@@ -6,6 +6,8 @@
 
 **Method:** three parallel sub-agent audits, followed by a consolidation sub-agent and parent verification. Only this research report was added to the repository. Documentation pages, source examples, implementation, and dependencies were unchanged.
 
+**Resolution status:** [PR #347](https://github.com/chenxin-yan/crust/pull/347) resolved D1 (root/tooling API scope), D2 (`VersionOptions.format` readonly modifier), and P1 (package changes triggering docs CI). Findings, counts, and line references below describe the historical baseline, not the current tree.
+
 ## 1. Direct answer
 
 **Only partly.** Selected reference tables are genuinely generated from TypeScript source and JSDoc. Most callable signatures, small aliases/unions, export inventories, CLI option/target tables, examples, and behavioral explanations remain hand-authored.
