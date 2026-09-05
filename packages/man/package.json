@@ -52,7 +52,7 @@
 		"tsdown": "catalog:"
 	},
 	"peerDependencies": {
-		"@crustjs/core": "workspace:0.x",
+		"@crustjs/core": "workspace:^",
 		"typescript": "^7.0.0"
 	},
 	"peerDependenciesMeta": {

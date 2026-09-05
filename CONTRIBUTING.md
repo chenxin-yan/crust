@@ -151,6 +151,8 @@ bun run changeset
 
 Use the smallest accurate bump. Do not manually edit package versions or changelog files unless the release workflow specifically requires it.
 
+Official packages declare `@crustjs/core` peer dependencies as `workspace:^`. Bun packs this as a caret range from the versioned workspace core, excluding older, incompatible pre-1.0 APIs that `workspace:0.x` would accept. Adopting this policy uses an explicit minor changeset for every affected package, including `@crustjs/testing`, which is outside the fixed release cohort. Subsequent out-of-range core updates can cause Changesets to automatically re-release testing as a patch; review those computed bumps when planning compatibility changes.
+
 ## Pull Requests
 
 Open PRs against `main`.
