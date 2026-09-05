@@ -138,7 +138,7 @@
         "tsdown": "catalog:",
       },
       "peerDependencies": {
-        "@crustjs/core": "workspace:0.x",
+        "@crustjs/core": "workspace:^",
         "typescript": "^7.0.0",
       },
       "optionalPeers": [
@@ -156,7 +156,7 @@
         "tsdown": "catalog:",
       },
       "peerDependencies": {
-        "@crustjs/core": "workspace:0.x",
+        "@crustjs/core": "workspace:^",
         "typescript": "^7.0.0",
       },
       "optionalPeers": [
@@ -217,7 +217,7 @@
         "tsdown": "catalog:",
       },
       "peerDependencies": {
-        "@crustjs/core": "workspace:0.x",
+        "@crustjs/core": "workspace:^",
         "typescript": "^7.0.0",
       },
       "optionalPeers": [
@@ -265,7 +265,7 @@
         "tsdown": "catalog:",
       },
       "peerDependencies": {
-        "@crustjs/core": "workspace:0.x",
+        "@crustjs/core": "workspace:^",
         "@crustjs/progress": "workspace:0.x",
         "@crustjs/prompts": "workspace:0.x",
         "typescript": "^7.0.0",
