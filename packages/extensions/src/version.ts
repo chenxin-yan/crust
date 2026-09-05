@@ -1,6 +1,6 @@
 import {
 	CrustError,
-	type Extension,
+	type ExtensionFactory,
 	type ExtensionId,
 	type ExtensionContext,
 	defineExtension,
@@ -22,48 +22,44 @@ export interface VersionOptions {
 	readonly format?: "plain" | ((version: string, context: ExtensionContext) => string);
 }
 
-function versionFactory(versionValue?: VersionValue, options: VersionOptions = {}): Extension {
-	const { format } = options;
+export const version: ExtensionFactory<[versionValue?: VersionValue, options?: VersionOptions]> =
+	defineExtension(VERSION, (versionValue, options = {}) => {
+		const { format } = options;
 
-	return defineExtension(VERSION, {
-		flags: [
-			{
-				name: "version",
-				type: "boolean",
-				short: "v",
-				noNegate: true,
-				description: "Show version number",
-				recursive: false,
-			},
-		],
-		hooks: {
-			preRun(context) {
-				// Root invocation with --version only
-				if (context.commandPath.length !== 1 || context.flags.version !== true) return;
+		return {
+			flags: [
+				{
+					name: "version",
+					type: "boolean",
+					short: "v",
+					noNegate: true,
+					description: "Show version number",
+					recursive: false,
+				},
+			],
+			hooks: {
+				preRun(context) {
+					// Root invocation with --version only
+					if (context.commandPath.length !== 1 || context.flags.version !== true) return;
 
-				// oxlint-disable-next-line anti-slop/no-runtime-typeof -- discriminating a typed options union.
-				const override = typeof versionValue === "function" ? versionValue() : versionValue;
-				const resolvedVersion = override ?? context.rootCommand.meta.version;
-				if (resolvedVersion === undefined) {
-					throw new CrustError(
-						"DEFINITION",
-						"The version extension requires a version in new Crust(name, { version }) or version(value)",
-					);
-				}
-				const line =
-					format === "plain"
-						? resolvedVersion
-						: format
-							? format(resolvedVersion, context)
-							: `${context.rootCommand.meta.name} v${resolvedVersion}`;
-				context.stdout(line);
-				return context.finish();
+					// oxlint-disable-next-line anti-slop/no-runtime-typeof -- discriminating a typed options union.
+					const override = typeof versionValue === "function" ? versionValue() : versionValue;
+					const resolvedVersion = override ?? context.rootCommand.meta.version;
+					if (resolvedVersion === undefined) {
+						throw new CrustError(
+							"DEFINITION",
+							"The version extension requires a version in new Crust(name, { version }) or version(value)",
+						);
+					}
+					const line =
+						format === "plain"
+							? resolvedVersion
+							: format
+								? format(resolvedVersion, context)
+								: `${context.rootCommand.meta.name} v${resolvedVersion}`;
+					context.stdout(line);
+					return context.finish();
+				},
 			},
-		},
+		};
 	});
-}
-
-export const version: typeof versionFactory & { readonly id: ExtensionId } = Object.assign(
-	versionFactory,
-	{ id: VERSION },
-);

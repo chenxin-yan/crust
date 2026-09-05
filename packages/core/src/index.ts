@@ -12,6 +12,7 @@ export type {
 export { defineContext } from "./api/context.ts";
 export type {
 	Extension,
+	ExtensionFactory,
 	ExtensionBuildContext,
 	ExtensionConfig,
 	ExtensionContext,

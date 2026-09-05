@@ -33,6 +33,31 @@ Two consequences of the root-only model:
 
 Official Extension identities use the `crust:` namespace, reserved by convention for official Crust identities (the prefix is not enforced at runtime). Third-party packages should namespace published Extension ids with their own prefix; application-local ids can remain plain.
 
+Packages that publish a configurable Extension factory use `defineExtension(id, factory)`. The callback returns config; each call builds a frozen Extension with normalized flags and the same id. The returned factory exposes a readonly `id`, so consumers can pass it to `only` or `except` without constructing an Extension. Every official Extension is exported this way.
+
+```ts
+import {
+  defineExtension,
+  defineExtensionId,
+  type ExtensionFactory,
+  type ExtensionId,
+} from "@crustjs/core";
+
+const DOCS: ExtensionId = defineExtensionId("acme:docs");
+interface DocsOptions {
+  readonly verbose?: boolean;
+}
+export const docs: ExtensionFactory<[options?: DocsOptions]> = defineExtension(
+  DOCS,
+  (options = {}) => ({
+    flags: [{ name: "verbose", type: "boolean", default: options.verbose }],
+  }),
+);
+// docs.id === DOCS; docs({ verbose: true }).id === DOCS
+```
+
+Authors not building with `isolatedDeclarations` can omit the annotation (`export const docs = defineExtension(DOCS, (options?: DocsOptions) => ({ … }))`) and get full inference.
+
 ## Owned flags and commands
 
 Extension flags are a readonly array of named definitions. Use `defineFlag()` values for ordinary recursive flags, or write a named definition inline. Extension flags default to `recursive: true`, which contributes them to every command. The documented way to set the Extension-only `recursive` option for a root-only flag is an inline definition:
@@ -104,7 +129,7 @@ const deploy = defineCommand(
 );
 ```
 
-A renderer exposes its identity on its factory. Render-time helpers are imported from `@crustjs/core/tooling`: a single-command renderer selects from that command with `sectionsFor()`, and a full-tree renderer uses `visibleSectionsFor(snapshot, consumer)`, which returns section-bearing visible commands in canonical path order, represents the root as `[]`, skips hidden command trees, and applies audience filtering. Section audiences accept the factory itself, such as `only: [help]`, while renderer integrations pass a branded `ExtensionId` such as `help.id`. Raw strings are not accepted, and core does not maintain a fixed list of identities.
+A renderer exposes its identity on its factory via `defineExtension(id, factory)`. Render-time helpers are imported from `@crustjs/core/tooling`: a single-command renderer selects from that command with `sectionsFor()`, and a full-tree renderer uses `visibleSectionsFor(snapshot, consumer)`, which returns section-bearing visible commands in canonical path order, represents the root as `[]`, skips hidden command trees, and applies audience filtering. Section audiences accept the factory itself, such as `only: [help]`, while renderer integrations pass a branded `ExtensionId` such as `help.id`. Raw strings are not accepted, and core does not maintain a fixed list of identities.
 
 ## Build hooks
 

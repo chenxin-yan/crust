@@ -9,16 +9,17 @@ All exports on these pages come from `@crustjs/core`.
 
 ## Runtime API
 
-| Export                                                    | Description                                                        |
-| --------------------------------------------------------- | ------------------------------------------------------------------ |
-| [`Crust`](/docs/api/crust)                                | Immutable, chainable command builder and invocation boundary       |
-| [`defineCommand(name, config?, recipe)`](/docs/api/crust) | Define a named, inert reusable command definition for `.add()`     |
-| `defineContext(name, config?, setup)`                     | Define a named command dependency factory                          |
-| `defineExtension(id, config?)`                            | Define an application-wide Extension                               |
-| `defineExtensionId(id)`                                   | Mint a branded Extension identity from a non-empty, trimmed string |
-| `defineFlag(name, definition)`                            | Define one named flag, preserving its literal definition           |
-| `defineArg(name, definition)`                             | Define one named positional argument                               |
-| [`CrustError`](/docs/api/errors)                          | Structured framework error with one of four stable codes           |
+| Export                                                    | Description                                                            |
+| --------------------------------------------------------- | ---------------------------------------------------------------------- |
+| [`Crust`](/docs/api/crust)                                | Immutable, chainable command builder and invocation boundary           |
+| [`defineCommand(name, config?, recipe)`](/docs/api/crust) | Define a named, inert reusable command definition for `.add()`         |
+| `defineContext(name, config?, setup)`                     | Define a named command dependency factory                              |
+| `defineExtension(id, config?)`                            | Define an application-wide Extension                                   |
+| `defineExtension(id, factory)`                            | Build an Extension factory with `.id` from a config-returning callback |
+| `defineExtensionId(id)`                                   | Mint a branded Extension identity from a non-empty, trimmed string     |
+| `defineFlag(name, definition)`                            | Define one named flag, preserving its literal definition               |
+| `defineArg(name, definition)`                             | Define one named positional argument                                   |
+| [`CrustError`](/docs/api/errors)                          | Structured framework error with one of four stable codes               |
 
 ## Types
 

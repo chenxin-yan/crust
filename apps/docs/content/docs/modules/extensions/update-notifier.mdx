@@ -20,9 +20,7 @@ await app.execute();
 ## API
 
 ```ts
-const updateNotifier: ((options: UpdateNotifierOptions) => Extension) & {
-  readonly id: ExtensionId;
-};
+const updateNotifier: ExtensionFactory<[options: UpdateNotifierOptions]>;
 ```
 
 <auto-type-table

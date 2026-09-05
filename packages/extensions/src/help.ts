@@ -1,6 +1,6 @@
 import {
 	type CommandSnapshot,
-	type Extension,
+	type ExtensionFactory,
 	type ExtensionId,
 	defineExtension,
 	defineExtensionId,
@@ -104,21 +104,13 @@ export function renderHelp(command: CommandSnapshot, path?: readonly string[]): 
 	return lines.join("\n");
 }
 
-function helpFactory(): Extension {
-	return defineExtension(HELP, {
-		flags: [
-			{ name: "help", type: "boolean", short: "h", noNegate: true, description: "Show help" },
-		],
-		hooks: {
-			preRun(context) {
-				if (context.flags.help !== true && context.command.hasAction) return;
-				context.stdout(renderHelp(context.command, context.commandPath));
-				return context.finish();
-			},
+export const help: ExtensionFactory = defineExtension(HELP, () => ({
+	flags: [{ name: "help", type: "boolean", short: "h", noNegate: true, description: "Show help" }],
+	hooks: {
+		preRun(context) {
+			if (context.flags.help !== true && context.command.hasAction) return;
+			context.stdout(renderHelp(context.command, context.commandPath));
+			return context.finish();
 		},
-	});
-}
-
-export const help: typeof helpFactory & { readonly id: ExtensionId } = Object.assign(helpFactory, {
-	id: HELP,
-});
+	},
+}));

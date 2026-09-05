@@ -300,12 +300,55 @@ export type ExtensionsProvidesOutput<Es extends readonly Extension<any, any>[]> 
 		? ExtensionProvidesOutput<H> & ExtensionsProvidesOutput<T>
 		: {};
 
+/** A callable Extension constructor whose identity is also a section consumer. */
+export type ExtensionFactory<
+	Args extends readonly unknown[] = [],
+	Deps extends ContextMap = ContextMap,
+	Provides extends readonly ContextInstance[] = readonly ContextInstance[],
+	Defs extends readonly NamedExtensionFlagDef[] = readonly NamedExtensionFlagDef[],
+	Commands extends readonly CommandDefinition<any, any, any, any>[] = readonly CommandDefinition<
+		any,
+		any,
+		any,
+		any
+	>[],
+> = ((...args: Args) => Extension<Deps, Provides, Defs, Commands>) & { readonly id: ExtensionId };
+
+type ErasedExtensionFactory = (...args: any[]) => ExtensionConfig;
+
+function isExtensionFactory(
+	value: ExtensionConfig | ErasedExtensionFactory,
+): value is ErasedExtensionFactory {
+	return typeof value === "function";
+}
+
 /**
- * Define an Extension.
+ * Define an Extension, or a factory that builds one from config on each call.
  *
  * Extensions apply to the whole application and own the flags and commands
- * they contribute.
+ * they contribute. Factories expose the same identity for section audiences.
  */
+export function defineExtension<
+	Args extends readonly unknown[],
+	const Defs extends readonly NamedExtensionFlagDef[] = [],
+	const Uses extends readonly AnyContextFactory[] = [],
+	const Provides extends readonly ContextInstance[] = [],
+	const Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
+>(
+	id: ExtensionId,
+	factory: (
+		...args: Args
+	) => ExtensionConfig<Defs, Uses, Provides, Commands> &
+		ValidateExtensionConfig<Defs, Provides, Commands>,
+): ExtensionFactory<
+	Args,
+	ContextDependencies<Uses> &
+		ContextsDependencies<Provides> &
+		CommandDefinitionsDependencies<Commands>,
+	Provides,
+	Defs,
+	Commands
+>;
 export function defineExtension<
 	const Defs extends readonly NamedExtensionFlagDef[] = [],
 	const Uses extends readonly AnyContextFactory[] = [],
@@ -313,8 +356,8 @@ export function defineExtension<
 	const Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
 >(
 	id: ExtensionId,
-	config: ExtensionConfig<Defs, Uses, Provides, Commands> &
-		ValidateExtensionConfig<Defs, Provides, Commands> = {},
+	config?: ExtensionConfig<Defs, Uses, Provides, Commands> &
+		ValidateExtensionConfig<Defs, Provides, Commands>,
 ): Extension<
 	ContextDependencies<Uses> &
 		ContextsDependencies<Provides> &
@@ -322,21 +365,21 @@ export function defineExtension<
 	Provides,
 	Defs,
 	Commands
-> {
+>;
+export function defineExtension(
+	id: ExtensionId,
+	config: ExtensionConfig | ErasedExtensionFactory = {},
+): Extension | ExtensionFactory<any[]> {
+	if (isExtensionFactory(config)) {
+		return Object.assign((...args: any[]) => defineExtension(id, config(...args)), { id });
+	}
 	const ownedFlags = toFlagsRecord(config.flags ?? []);
 
-	// SAFETY: the runtime registry erases Defs after this function contextually typed every hook.
+	// SAFETY: the runtime registry erases Defs after the overloads contextually typed every hook.
 	return Object.freeze({
 		...config,
 		uses: Object.freeze([...(config.uses ?? [])]),
 		id,
 		...(config.flags === undefined ? {} : { flags: ownedFlags }),
-	}) as Extension<
-		ContextDependencies<Uses> &
-			ContextsDependencies<Provides> &
-			CommandDefinitionsDependencies<Commands>,
-		Provides,
-		Defs,
-		Commands
-	>;
+	}) as Extension;
 }
