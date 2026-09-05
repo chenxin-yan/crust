@@ -21,9 +21,14 @@ const app = new Crust("my-cli", { version: "1.2.3" })
 await app.execute();
 ```
 
-`my-cli completion bash` prints a script. `crust build` generates Bash, Zsh,
-and Fish files in `<outdir>/completions/`; `crust build --package` stages them
-in the npm packages.
+For manual setup, source the installed application's generated script in your
+shell configuration. See [quick shell setup](https://crustjs.com/docs/modules/extensions/completion#quick-shell-setup)
+for Bash, Zsh, and Fish commands and prerequisites. If package-managed completion
+already works, do not add a second loading method.
+
+For packaging, `crust build` generates all three shell files in
+`<outdir>/completions/`; `crust build --package` stages them in the npm packages.
+These artifacts do not activate completion automatically.
 
 ## Exports
 
