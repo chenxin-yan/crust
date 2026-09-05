@@ -7,17 +7,7 @@ description: Compose nested command trees from named command definitions.
 
 `defineCommand(name, recipe)` creates an inert definition that carries its name; `.add(...definitions)` materializes definitions as child commands:
 
-```ts
-import { Crust, defineCommand } from "@crustjs/core";
-
-const app = new Crust("git").add(
-  defineCommand("clone", (command) =>
-    command
-      .args({ name: "url", type: "url", required: true })
-      .action(({ args, stdout }) => stdout(`clone ${args.url}`)),
-  ),
-);
-```
+<include lang="ts">../../../examples/guide/subcommands.ts</include>
 
 Routing consumes command names before parsing the resolved command's arguments and flags. Metadata aliases can route to the same command. Nest `.add()` calls inside definitions to any depth.
 

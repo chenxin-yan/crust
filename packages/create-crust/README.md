@@ -24,6 +24,15 @@ This prompts for the project directory, distribution mode (standalone binaries r
 create-crust [directory] [--distribution binary|runtime] [--install|--no-install] [--git|--no-git] [--overwrite|--no-overwrite]
 ```
 
+| Flag spellings                  | Type      | Choices             | Declared default |
+| ------------------------------- | --------- | ------------------- | ---------------- |
+| `--distribution`                | `string`  | `binary`, `runtime` | —                |
+| `--install`, `--no-install`     | `boolean` | —                   | —                |
+| `--git`, `--no-git`             | `boolean` | —                   | —                |
+| `--overwrite`, `--no-overwrite` | `boolean` | —                   | —                |
+
+The option table is parity-checked against the built CLI snapshot. No flag default is declared; defaults below belong to the prompts.
+
 - `directory` sets the destination; omit it to be prompted.
 - `--distribution` preselects standalone binaries or a Bun runtime package in the interactive prompt (default: `binary`).
 - `--install` / `--no-install` sets the initial answer to the dependency installation prompt (default: install).

@@ -4,6 +4,9 @@
   "tasks": {
     "build": {
       "cache": false
+    },
+    "check:types": {
+      "inputs": ["$TURBO_DEFAULT$", "../../packages/crust/src/**"]
     }
   }
 }

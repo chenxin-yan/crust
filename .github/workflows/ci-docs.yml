@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "apps/docs/**"
+      - "packages/**"
       - "package.json"
       - "bun.lock"
       - "turbo.json"
@@ -45,6 +46,9 @@ jobs:
       - name: Type check (docs)
         run: bun run check:types --filter=./apps/docs
 
+      - name: Check source reference parity
+        run: bun run --cwd apps/docs check:references
+
       - name: Lint and format check (docs)
         run: |
           bun run lint apps/docs
@@ -52,3 +56,6 @@ jobs:
 
       - name: Build (docs)
         run: bun run build:docs
+
+      - name: Check compiled documentation output
+        run: bun run --cwd apps/docs check:output
