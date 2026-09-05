@@ -76,7 +76,7 @@ With `completion()` registered, `crust build` writes all three shell files throu
 - `<outdir>/completions/_<bin>` for zsh
 - `<outdir>/completions/<bin>.fish` for fish
 
-The hook replaces its owned `<outdir>/completions/` directory on each build so renamed binaries do not leave stale scripts. Runtime `--output-dir` preserves unrelated files in the supplied directory.
+The hook stages all three scripts before replacing its owned `<outdir>/completions/` directory, preserving previous artifacts if validation, rendering, or staging writes fail. Successful builds replace the directory so renamed binaries do not leave stale scripts. Runtime `--output-dir` preserves unrelated files in the supplied directory.
 
 `crust build --package` stages `completions/` in the root npm package and adds it to npm `files`; platform packages also receive a copy under `bin/completions/`. `--no-validate` skips the hook.
 

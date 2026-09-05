@@ -320,6 +320,23 @@ describe("completion build hook", () => {
 		}
 	});
 
+	it("preserves existing artifacts when a rebuild fails validation", async () => {
+		await completion().build?.({ snapshot: await buildCli().snapshot(), outDir: tmpDir });
+		const dir = join(tmpDir, "completions");
+		const filenames = (await readdir(dir)).sort();
+		const scripts = await Promise.all(filenames.map((name) => readFile(join(dir, name), "utf8")));
+
+		await expect(
+			completion().build?.({ snapshot: await new Crust("mycli").snapshot(), outDir: tmpDir }),
+		).rejects.toThrow("requires a version");
+
+		expect(await readdir(tmpDir)).toEqual(["completions"]);
+		expect((await readdir(dir)).sort()).toEqual(filenames);
+		expect(await Promise.all(filenames.map((name) => readFile(join(dir, name), "utf8")))).toEqual(
+			scripts,
+		);
+	});
+
 	it("rejects a missing version without writing files", async () => {
 		await expect(
 			completion().build?.({ snapshot: await new Crust("mycli").snapshot(), outDir: tmpDir }),

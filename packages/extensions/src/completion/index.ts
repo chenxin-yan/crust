@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { join, resolve as resolvePath } from "node:path";
 
 import {
@@ -214,9 +214,17 @@ export const completion: ExtensionFactory<[options?: CompletionOptions]> = defin
 			commands: [completionCommand],
 			build: async ({ snapshot, outDir }) => {
 				const dir = join(outDir, "completions");
-				// The hook owns this directory; remove stale scripts after a binary rename.
-				await rm(dir, { recursive: true, force: true });
-				await writeCompletionFiles(dir, snapshot, options);
+				await mkdir(outDir, { recursive: true });
+				const stagedDir = await mkdtemp(join(outDir, ".completions-"));
+				try {
+					// Keep previous artifacts until validation, rendering, and writes succeed.
+					await writeCompletionFiles(stagedDir, snapshot, options);
+					// The hook owns this directory; remove stale scripts after a binary rename.
+					await rm(dir, { recursive: true, force: true });
+					await rename(stagedDir, dir);
+				} finally {
+					await rm(stagedDir, { recursive: true, force: true });
+				}
 			},
 		};
 	},
