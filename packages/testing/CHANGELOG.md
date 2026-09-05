@@ -1,20 +1,8 @@
-# @crustjs/man
+# @crustjs/testing
 
-## 0.2.0
+## 0.1.0
 
 ### Minor Changes
-
-- [#307](https://github.com/chenxin-yan/crust/pull/307) [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Unify build-time artifact generation behind Extension build hooks and a single snapshot protocol.
-  
-  - Extensions can expose a `build(ctx)` hook for build-time artifact generation. The context carries the frozen root Command Snapshot and a resolved absolute output directory; snapshots are refreshed between hooks so later generators see sections derived from earlier hooks' outputs.
-  - `crust build` runs build hooks from every registered Extension in registration order. Extension presence is the source of intent — the `--man` flag is removed, and `--no-validate` is the single opt-out that skips entry preparation and all build hooks. npm package staging includes every top-level artifact directory emitted by hooks; the name `bin` is reserved for generated npm executables.
-  - Build validation and artifact generation share one subprocess-only snapshot-file protocol. `@crustjs/core/tooling` exports `SNAPSHOT_PATH_ENV` (replacing `VALIDATION_MODE_ENV` and `VALIDATION_FORCE_EXIT_ENV`), and man-page generation no longer requires the entry module to export its app. Entries that never call `await app.execute()` previously passed validation vacuously; they now fail with an actionable missing-snapshot error (use `--no-validate` if intentional).
-  - New `man(options?)` in `@crustjs/man` is a build-only Extension that writes an mdoc page under the build output's `man` directory. Section 1 is the default; `man({ section })` selects another section and `man({ name })` sets the installed command name. `writeManPage()` remains for custom pipelines and accepts a prepared Command Snapshot as `root` instead of a live app.
-  - The `skill()` Extension in `@crustjs/skills` contributes a build hook that writes packaged skills under the build output's `skills` directory: it copies an available packaged source wholesale and otherwise renders from the prepared Command Snapshot.
-  - Add first-class Bun, Deno, and Node build runtimes. Projects can persist `crust.runtime` in package.json or override it with `--runtime`; Deno produces standalone executables and Node produces executable bundled JavaScript.
-  - `--target` accepts canonical Bun target names only. Replace short names such as `linux-x64` and `darwin-arm64` with `bun-linux-x64-baseline` and `bun-darwin-arm64`.
-  - Make build option validation deterministic through a reusable build plan and consistently reject malformed project package manifests. Fix create-crust workspace version inputs, declaratively validate distribution choices, and avoid announcing overwrites before confirmation.
-  - Run Windows `.cmd` and `.bat` subprocess shims through the platform shell so Crust builds and create package install and Git steps work with Node's CVE-2024-27980 hardening.
 
 - [`cc466b5`](https://github.com/chenxin-yan/crust/commit/cc466b5a0b5792d4811e85d82e341980bc1fb606) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Ship the 0.2 API revamp for the framework spine (see `docs/adr/`). This is a hard cut from the 0.1 API with no compatibility shims; each removed name's replacement is listed below.
   
@@ -76,100 +64,22 @@
   - Package builds migrate to tsdown (Rolldown) and modules are marked side-effect free. Internal `@crustjs/utils` imports are inlined, fixing `@crustjs/store` installs that previously required `@crustjs/utils` at runtime. Consumers bundling with Bun 1.3.10–1.3.13 may encounter oven-sh/bun#27709 when tree-shaking packages with `sideEffects: false`.
   - All packages that ship type declarations declare an optional `typescript: "^7.0.0"` peerDependency. Builder inference performance is measured and supported against the native TypeScript 7 compiler; plain-JavaScript consumers are unaffected.
 
+- [#142](https://github.com/chenxin-yan/crust/pull/142) [`c679228`](https://github.com/chenxin-yan/crust/commit/c679228436d00a398c103142762ee89381e44836) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Introduce `@crustjs/testing`: application testing helpers with captured output and fake interactive terminals.
+  
+  - `captureRun(app, path, input?)` drives the typed `run()` pipeline and returns a status-discriminated `CapturedRun` with captured `stdout`/`stderr`: `completed` owns the action's typed `result`, `finished` owns the finishing Extension's `by` identity, and `failed` owns the thrown `error`.
+  - `captureExecute(app, argv)` drives the terminal `execute()` path in-process: returned exit codes (`0`/`1`/`130`), Extension `onError` rendering, and cancellation are assertable without subprocess probes.
+  - `runInteractive(app, path, input?)` runs against a fake terminal for prompt-driven flows. `keys()` autocompletes named key names (`ctrl+<letter>` and single printable characters remain accepted), and spinners and progress indicators render onto the fake terminal through the ambient progress sink — `waitFor()` and `screen()` observe them.
+  
+  `@crustjs/testing` requires `@crustjs/progress` and `@crustjs/prompts` as peer dependencies.
+
 ### Patch Changes
+
+- [#334](https://github.com/chenxin-yan/crust/pull/334) [`6ce23e2`](https://github.com/chenxin-yan/crust/commit/6ce23e239b61777ffd29feb2458e23afc546953c) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Return the terminal exit code from `Crust.execute()`, reject dynamic flag spelling collisions instead of overwriting them, and validate command-authored documentation sections eagerly. Remove `snapshotCommand(node)` from `@crustjs/core/tooling`; use `app.snapshot()` instead. `captureExecute()` now reads the returned exit code without serializing calls or restoring `process.exitCode`.
 
 - [#337](https://github.com/chenxin-yan/crust/pull/337) [`8e9fe39`](https://github.com/chenxin-yan/crust/commit/8e9fe3996832f0e6327bead3e82888d58df6201a) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Expose and document the public types needed to name existing API signatures. `Crust._types` is now a supported type-level seam for accessing an application's inferred command types.
+
+- [#336](https://github.com/chenxin-yan/crust/pull/336) [`189f89c`](https://github.com/chenxin-yan/crust/commit/189f89c734664138e3873b299cd5104907f8ed8b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Route build and publish output through invocation IO, reuse build plans across distribution staging, and prevent captured executions from leaking their exit code to the process.
+
+- [#338](https://github.com/chenxin-yan/crust/pull/338) [`85d7aa4`](https://github.com/chenxin-yan/crust/commit/85d7aa4ee5010f82622ca6f0d9e81e85f99255ee) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Add `withTerminalIO()` to prompts and progress so prompts, spinners, and progress indicators share one ambient input/output scope. Existing `withPromptIO()` and `withProgressSink()` APIs remain as focused aliases, and `ProgressSink` now accepts writable-compatible outputs with optional TTY metadata.
 - Updated dependencies [[`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce), [`3526708`](https://github.com/chenxin-yan/crust/commit/3526708b3e95c214c4142c31caa106f845bd2fa4), [`cc466b5`](https://github.com/chenxin-yan/crust/commit/cc466b5a0b5792d4811e85d82e341980bc1fb606), [`6ce23e2`](https://github.com/chenxin-yan/crust/commit/6ce23e239b61777ffd29feb2458e23afc546953c), [`40241e2`](https://github.com/chenxin-yan/crust/commit/40241e2e7ecf80a5524a5a6abc1e603ba81ae1b4), [`8ee2946`](https://github.com/chenxin-yan/crust/commit/8ee2946af57574bbd497104cda70dedf34e095b8), [`8e9fe39`](https://github.com/chenxin-yan/crust/commit/8e9fe3996832f0e6327bead3e82888d58df6201a), [`65b6686`](https://github.com/chenxin-yan/crust/commit/65b66866b360cf07610be5a2f52c5dce46d70dbe), [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce), [`38aac0c`](https://github.com/chenxin-yan/crust/commit/38aac0cb804c300864f37dacea460c3daf0cef29), [`11f6e26`](https://github.com/chenxin-yan/crust/commit/11f6e261e08367d9f1b36f47ed52d0646ebe9903), [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce), [`11f6e26`](https://github.com/chenxin-yan/crust/commit/11f6e261e08367d9f1b36f47ed52d0646ebe9903), [`3526708`](https://github.com/chenxin-yan/crust/commit/3526708b3e95c214c4142c31caa106f845bd2fa4), [`58fd65d`](https://github.com/chenxin-yan/crust/commit/58fd65d8efcba8dcad4652d11abb2bef62f32da9)]:
   - @crustjs/core@0.2.0
-
-## 0.1.2
-
-### Patch Changes
-
-- @crustjs/core@0.0.19
-
-## 0.1.1
-
-### Patch Changes
-
-- Updated dependencies [0dc69b1]
-- Updated dependencies [d08439a]
-- Updated dependencies [c4d2b22]
-- Updated dependencies [c4d2b22]
-  - @crustjs/core@0.0.18
-
-## 0.1.0
-
-### Minor Changes
-
-- 8779692: Make the `choices`, `meta.aliases`, and `meta.hidden` contracts consistent
-  across every consumer (help, did-you-mean, man, completion).
-
-  A cross-consumer audit found three gaps:
-
-  - `helpPlugin` rendered output omitted the `choices` list for both flags
-    and positional args, so users could not discover valid values from
-    `--help` without resorting to shell completion or source-reading.
-  - `didYouMeanPlugin` and the `@crustjs/man` manpage generator both
-    walked the command tree without filtering `meta.hidden: true`, so
-    internal commands (e.g. `__complete`) leaked into typo suggestions,
-    the "Available commands" fallback, and published man pages.
-  - `@crustjs/man` omitted long flag aliases (`def.aliases`) and `choices`
-    from the OPTIONS / ARGUMENTS sections, leaving the man page strictly
-    less informative than `--help`.
-  - The completion plugin's bash and fish templates only surfaced
-    `choices` for the **first** positional argument; zsh respected every
-    slot. Variadic-with-choices arguments and multi-positional commands
-    silently fell through to file completion in bash/fish.
-
-  Changes:
-
-  - `helpPlugin` renders `[choices: a, b, c]` after the description for
-    every flag and arg that declares a `choices` list, composed with
-    `[default: ...]` when both are present.
-  - `didYouMeanPlugin` skips `meta.hidden: true` siblings in both the
-    Levenshtein suggestion corpus (canonical names **and** aliases) and
-    the "Available commands" fallback list.
-  - `@crustjs/man` filters `meta.hidden: true` subcommands from the
-    SUBCOMMANDS section (and skips the section entirely when every
-    subcommand is hidden), surfaces flag and arg `choices` as a
-    `[choices: ...]` suffix, and includes long flag aliases in OPTIONS
-    labels (`-o, --output, --out`, plus `--no-` negation for every long
-    spelling on boolean flags).
-  - `completionPlugin` bash and fish templates now track positional slot
-    index past the resolved command path and emit per-slot choice
-    candidates. Variadic-with-choices arguments are handled correctly
-    (the choice list applies at every slot from the variadic's declared
-    index onwards). The fish template gains a second per-script helper
-    `__<ident>_path_at_arg` that the existing `__<ident>_path_is` is
-    layered alongside; subcommand and flag rules continue to use the
-    original predicate.
-
-  Core / docs:
-
-  - `CommandMeta.hidden` JSDoc now enumerates every tooling surface the
-    flag affects (help, completion, did-you-mean, man, skills) and is
-    explicit that there is intentionally no analogous `FlagDef.hidden` —
-    the workaround for flag-level hiding is to register without a
-    description.
-
-### Patch Changes
-
-- f1baa45: `mdoc` includes command aliases in the SUBCOMMANDS section.
-
-  When a subcommand declares `aliases` on its `meta`, the rendered man page lists them inline next to the canonical name on the `.It Nm` line — e.g. `.It Nm issue (issues, i)` — matching the inline format used by `helpPlugin`. Subcommands without aliases render unchanged. The `.Bl -tag -width` directive's column width is recalculated to fit the longest combined label so alignment stays consistent.
-
-  Requires `aliases` on `CommandMeta`, added in the same release of `@crustjs/core`.
-
-- Updated dependencies [b87e0ee]
-- Updated dependencies [f1baa45]
-- Updated dependencies [8779692]
-- Updated dependencies [9db2613]
-  - @crustjs/core@0.0.17
-
-## 0.0.2
-
-### Patch Changes
-
-- Updated dependencies [def425e]
-  - @crustjs/core@0.0.16
