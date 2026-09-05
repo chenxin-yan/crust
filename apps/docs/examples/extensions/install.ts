@@ -8,13 +8,11 @@ import {
   version,
 } from "@crustjs/extensions";
 
-const currentVersion = "0.2.0";
-
-export const app = new Crust("my-cli", { version: currentVersion }).extend(
+export const app = new Crust("my-cli", { version: "0.2.0" }).extend(
   help(),
   version(),
   completion(),
   didYouMean(),
   noColor(),
-  updateNotifier({ packageName: "my-cli", currentVersion }),
+  updateNotifier({ packageName: "my-cli" }),
 );

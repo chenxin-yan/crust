@@ -114,7 +114,7 @@ The Extension validates command, flag, argument, alias, choice, and binary ident
 
 ## Package-manager and advanced setup
 
-Use pre-generated files for packaging or to avoid generator startup cost. Generating or shipping these files does not activate shell completion or edit shell profiles. Package maintainers should install them into the target shell's completion search path, following their package manager's conventions.
+Use pre-generated files for packaging or to avoid generator startup cost. Generating or shipping these files does not activate shell completion or edit shell profiles. Package maintainers should install them into the target shell's completion search path, following their package manager's conventions. See [Zsh files](#zsh-files) for the current autoload limitation.
 
 ### Build artifacts
 
@@ -173,7 +173,7 @@ source ~/.zsh/completions/_my-cli
 
 If completion is not initialized yet, follow [quick setup](#zsh) first. Use this saved-file line instead of sourcing the generator's output.
 
-Zsh autoload currently has a first-use issue with hyphenated executable names such as `my-cli`. Source the saved file explicitly rather than relying on `fpath` discovery.
+Crust's generated Zsh script currently misses the first Tab completion when autoloaded from `$fpath` for binary names containing `-` or `.`, such as `my-cli`. This also affects packaged `_<bin>` files. Source the saved file explicitly until this is fixed.
 
 #### Fish files
 
