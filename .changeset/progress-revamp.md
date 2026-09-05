@@ -2,8 +2,10 @@
 "@crustjs/progress": minor
 ---
 
-Rework `@crustjs/progress` around imperative primitives and injectable output (breaking).
+Breaking: imperative progress indicators and injectable output.
 
-- `spinner()` called without a `task` returns an imperative handle whose `start`/`updateMessage`/`stop(outcome, message?)` can live in different call frames, with `stop("error")` rendering the `✗` final line without throwing. The final line also renders when an imperative handle is stopped before it is started. New `progress()` is a determinate `(current/total)` indicator with `advance()`. Both accept `sigint: false` to skip the built-in `SIGINT → exit(130)` handler. Task-mode `spinner({ message, task })` behavior is unchanged, and task callbacks still receive `updateMessage`.
-- Output is injectable: the `ProgressSink` contract (`{ isTTY, write }`) is a public export, `spinner()` and `progress()` accept a per-call `sink` option, and `withProgressSink(sink, fn)` makes a sink ambiently available in `fn`'s async scope (mirroring `withPromptIO` in `@crustjs/prompts`). Resolution order: per-call `sink` → ambient sink → `process.stderr`; non-TTY sinks receive final lines only.
-- Global theme state (`setTheme`, `getTheme`, `createTheme`) and the `SpinnerController` export are removed. Pass theme overrides directly on each `spinner`/`progress` call; resolution is `defaultTheme` ← per-call `theme`.
+- `spinner()` without `task` returns a `SpinnerHandle` with `start()`, `updateMessage()`, and `stop(outcome?, message?)`. `stop("error")` renders the failure line without throwing; stopping before starting still renders a final line. New `progress({ total, message })` returns a `ProgressHandle` with `advance(amount?, message?)`, rendering `(current/total)`. Task-mode spinners still pass `updateMessage` to the callback.
+- Interactive indicators restore the cursor on SIGINT and re-raise the signal instead of calling `process.exit(130)`. If the host retains a SIGINT listener, termination is left to it. Pass `sigint: false` to install no handler and perform your own cleanup.
+- `spinner`/`progress` accept a per-call `sink`: `ProgressSink` is writable-compatible (`{ write, isTTY?, columns? }`). `withTerminalIO(io, fn)` shares ambient output with prompts; `withProgressSink(sink, fn)` is an output-only alias. Resolution is per-call sink → ambient output → `process.stderr`; non-TTY output receives final lines only.
+- Global theme APIs `setTheme`, `getTheme`, and `createTheme` are removed; pass `theme` per call over `defaultTheme`. `SpinnerController` is removed; the task callback takes `Pick<SpinnerHandle, "updateMessage">`.
+- New public types: `SpinnerHandle`, `SpinnerHandleOptions`, `SpinnerOutcome`, `SpinnerSigintPolicy`, `ProgressHandle`, `ProgressOptions`, `ProgressSink`, and `TerminalIO`.
