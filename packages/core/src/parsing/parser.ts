@@ -313,7 +313,7 @@ function resolveFlags<F extends FlagsDef, V>(
 	}
 
 	for (const [name, def] of Object.entries(flagsDef)) {
-		const parsedValue = values[name];
+		const parsedValue = Object.hasOwn(values, name) ? values[name] : undefined;
 
 		// An empty multiple array is zero occurrences, matching argv omission.
 		const absent =
@@ -556,7 +556,10 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 	const positionals: RunInputValue[] = [];
 	let omittedArgument: string | undefined;
 	for (const definition of command.args) {
-		const value = input.args?.[definition.name];
+		const value =
+			input.args && Object.hasOwn(input.args, definition.name)
+				? input.args[definition.name]
+				: undefined;
 		if (value === undefined) {
 			omittedArgument = definition.name;
 			continue;

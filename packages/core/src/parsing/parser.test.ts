@@ -1217,6 +1217,55 @@ describe("parseArgs \u2014 default coercion symmetry", () => {
 });
 
 describe("parseStructured", () => {
+	it("treats inherited prototype names as omitted while accepting own values", () => {
+		for (const name of ["constructor", "toString"]) {
+			for (const required of [false, true]) {
+				const def = {
+					type: "string",
+					required: required || undefined,
+					default: required ? undefined : "fallback",
+				} as const;
+				for (const kind of ["args", "flags"] as const) {
+					const command = makeNode({
+						meta: "test",
+						...(kind === "args" ? { args: [{ name, ...def }] } : { flags: { [name]: def } }),
+					});
+					for (const input of [{}, { [kind]: {} }]) {
+						const result = parseStructured(command, input);
+						expect(result[kind][name]).toBe(def.default);
+						if (required) {
+							expect(() => validateParsed(command, result)).toThrow(
+								kind === "args"
+									? `Missing required argument "<${name}>"`
+									: `Missing required flag "--${name}"`,
+							);
+						}
+					}
+					const supplied = parseStructured(command, { [kind]: { [name]: "own" } });
+					expect(supplied[kind][name]).toBe("own");
+					expect(() => validateParsed(command, supplied)).not.toThrow();
+				}
+			}
+		}
+	});
+
+	it("does not invoke inherited structured input getters", () => {
+		class Input {
+			readonly [name: string]: string;
+
+			get value(): string {
+				throw new Error("Inherited getter must not be read");
+			}
+		}
+		const command = makeNode({
+			meta: "test",
+			args: [{ name: "value", type: "string", default: "argument" }],
+			flags: { value: { type: "string", default: "flag" } },
+		});
+		expect(parseStructured(command, { args: new Input() }).args.value).toBe("argument");
+		expect(parseStructured(command, { flags: new Input() }).flags.value).toBe("flag");
+	});
+
 	it("passes numbers, booleans, and URL instances through", () => {
 		const url = new URL("https://example.com");
 		const command = makeNode({
