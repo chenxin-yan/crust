@@ -1,5 +1,25 @@
 # @crustjs/style
 
+## 0.3.0
+
+### Minor Changes
+
+- [#307](https://github.com/chenxin-yan/crust/pull/307) [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Update runtime compatibility and package builds.
+  
+  - Libraries support Bun 1.3.14+, Node.js 22+, and Deno 2.8+ (`engines` updated). Context disposal includes a fallback for runtimes without `AsyncDisposableStack`, including Node 22/23. The `crust` build CLI remains Bun tooling; its npm distribution ships standalone executables with Bun embedded.
+  - Published packages no longer depend on `@crustjs/utils`; its helpers are bundled. `@crustjs/store` also drops `@standard-schema/spec`. Library packages and `create-crust` are marked `sideEffects: false` for bundlers.
+  - Packages shipping declarations declare an optional TypeScript `^7.0.0` peer; builder inference is supported on TypeScript 7. JavaScript consumers are unaffected by this compiler requirement.
+
+- [#307](https://github.com/chenxin-yan/crust/pull/307) [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Breaking: simplify color inputs, styling, and formatting APIs.
+  
+  - Colors accept only 3-/6-digit hex, `rgb(r, g, b)`/`rgb(r g b)` strings, integer `[r, g, b]` tuples, and the 148 named CSS colors. Other CSS notation, alpha forms, packed numbers, and channel objects throw `TypeError`. `ColorString` provides named-color autocomplete and hex/RGB hints. Literal-checking types `StrictColorString`, `CssColorFunctionString`, `NonStringColorInput`, `ColorInputCandidate`, and `CheckedColorInput` are removed.
+  - Removed deprecated helpers: `rgb`, `bgRgb`, `hex`, `bgHex`, `rgbCode`, `bgRgbCode`, `hexCode`, `bgHexCode`, and `parseHex`. Use depth-aware `fg`/`bg`; their color-depth argument is also removed, so use `createStyle({ mode, overrides })` for deterministic depth.
+  - Static `*Code` exports, `applyStyle`, `composeStyles`, `fgCode`, `bgCode`, `linkCode`, `resolveColorDepth`, and `StyleInstance.apply` are removed. Call chainables directly (`bold(text)`), pass them as `StyleFn`, use `chain.open`/`chain.close` for manual composition, and use `link`/`style.colorDepth`. `ChainableStyleFn` and `StyleInput` are now exported.
+  - `setGlobalColorMode`/`getGlobalColorMode` are removed. The default facade, top-level helpers, and stored sub-chains re-resolve environment/TTY capabilities on each call; `createStyle()` instances stay frozen. `FORCE_COLOR=0`/`false` disables ANSI; `1`/`2`/`3` forces 16/256/truecolor depth and overrides `NO_COLOR` and non-TTY. Other values force color at detected depth. `ColorMode` (`"auto"`, `"always"`, `"never"`) is instance-only.
+  - `CapabilityOverrides` gains `forceColor`, `colorTerm`, and `term`; omitted properties read their corresponding runtime input, while explicit `undefined` simulates an unset variable. `TrueColorOverrides` is removed. Instance `fg`/`bg` chain pairs use resolved depth (empty at `"none"`); facade chain pairs remain static truecolor bytes.
+  - Markdown theme exports (`MarkdownTheme`, `PartialMarkdownTheme`, `ThemeSlotFn`, `CreateMarkdownThemeOptions`, `createMarkdownTheme`, `defaultTheme`), list helpers/types (`unorderedList`, `orderedList`, `taskList`, `UnorderedListOptions`, `OrderedListOptions`, `TaskListOptions`, `TaskListItem`), and `wrapText`/`WrapOptions` are removed. `table` remains, but `TableOptions` retains only `align`; `minColumnWidth`, `cellPadding`, `separatorChar`, and `borderChar` are removed.
+  - `visibleWidth` becomes `stringWidth(text)`, aware of ANSI, CJK, combining marks, and emoji. Padding helpers are unchanged.
+
 ## 0.2.0
 
 ### Minor Changes

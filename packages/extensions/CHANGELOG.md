@@ -1,5 +1,34 @@
 # @crustjs/plugins
 
+## 0.2.0
+
+### Minor Changes
+
+- [#345](https://github.com/chenxin-yan/crust/pull/345) [`6afef3d`](https://github.com/chenxin-yan/crust/commit/6afef3d3ca04bd941507298d074d1b54a775c54a) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Official Extensions require a caret-compatible `@crustjs/core` peer (`^0.2.0` for this release), excluding older incompatible core APIs rather than accepting all 0.x versions.
+
+- [`cc466b5`](https://github.com/chenxin-yan/crust/commit/cc466b5a0b5792d4811e85d82e341980bc1fb606) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `@crustjs/extensions` replaces `@crustjs/plugins`. Import everything from the package root and register with `.extend()`: `helpPlugin` → `help`, `versionPlugin` → `version`, `completionPlugin` → `completion`, `didYouMeanPlugin` (and deprecated `autoCompletePlugin`) → `didYouMean`, `noColorPlugin` → `noColor`, `updateNotifierPlugin` → `updateNotifier`. Factories expose `.id` for section audiences.
+  
+  - `help()` lists every accepted spelling, including all long-alias negations (`-v, --verbose, --loud, --no-verbose, --no-loud`); `noNegate` flags show no negation.
+  - `version(value?, options?)` defaults to root `version` metadata and prints `<name> v<version>`. `format: "plain"` prints the bare version; a `(version, context) => string` callback customizes the line.
+  - `completion(options?)` defaults `binName` to the root name and `version` to root version metadata; missing versions fail with `DEFINITION`. `completion <shell> --output-dir <dir>` writes all three shells (`<bin>`, `_<bin>`, `<bin>.fish`); the `shells` option is removed. Its build hook writes the same files to `<outdir>/completions/`, staged by `crust build --package`. `renderBashCompletion`, `renderZshCompletion`, `renderFishCompletion`, and `CompletionRenderOptions` support custom pipelines.
+  - `noColor()` scopes standard environment variables instead of only toggling `@crustjs/style`: `--color` sets `FORCE_COLOR=3` and clears `NO_COLOR`; `--no-color` sets `NO_COLOR=1` and clears `FORCE_COLOR`. Previous values are restored after execution, so child processes and other color-aware libraries comply.
+  - `updateNotifier()` follows SemVer precedence, including prerelease-to-stable notifications. `currentVersion` defaults to root version metadata. Persistence is on by default through the runtime dependency `@crustjs/store`, in the platform state directory for `packageName`. Use `cache: false` to opt out, `cache: { intervalMs }` to tune checks, or `cache: { adapter }` for custom storage. Corrupt caches are treated as empty and repaired after a successful check.
+  - Update notices are command-less unless `updateCommand` supplies a string, a `({ packageName, packageManager }) => string` callback, or `{ scope: "global" | "local" }`. Migrate positional callback arguments to that object; `updateDocsUrl` adds a documentation link. The separate `packageManager`/`installScope` options and `UpdateNotifierInstallScope` type are removed.
+  - Option types are renamed: `CompletionPluginOptions` → `CompletionOptions`, `DidYouMeanPluginOptions`/`AutoCompletePluginOptions` → `DidYouMeanOptions`, and `UpdateNotifierPluginOptions` → `UpdateNotifierOptions`. New root type exports include `VersionOptions`, `UpdateCommandResolver`, and `UpdateNotifierState`.
+
+- [#307](https://github.com/chenxin-yan/crust/pull/307) [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Update runtime compatibility and package builds.
+  
+  - Libraries support Bun 1.3.14+, Node.js 22+, and Deno 2.8+ (`engines` updated). Context disposal includes a fallback for runtimes without `AsyncDisposableStack`, including Node 22/23. The `crust` build CLI remains Bun tooling; its npm distribution ships standalone executables with Bun embedded.
+  - Published packages no longer depend on `@crustjs/utils`; its helpers are bundled. `@crustjs/store` also drops `@standard-schema/spec`. Library packages and `create-crust` are marked `sideEffects: false` for bundlers.
+  - Packages shipping declarations declare an optional TypeScript `^7.0.0` peer; builder inference is supported on TypeScript 7. JavaScript consumers are unaffected by this compiler requirement.
+
+### Patch Changes
+
+- Updated dependencies [[`cc466b5`](https://github.com/chenxin-yan/crust/commit/cc466b5a0b5792d4811e85d82e341980bc1fb606), [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce), [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce), [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce)]:
+  - @crustjs/core@0.2.0
+  - @crustjs/store@0.3.0
+  - @crustjs/style@0.3.0
+
 ## 0.1.2
 
 ### Patch Changes

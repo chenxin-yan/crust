@@ -1,5 +1,21 @@
 # @crustjs/create
 
+## 0.1.0
+
+### Minor Changes
+
+- [#307](https://github.com/chenxin-yan/crust/pull/307) [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - - `create-crust` can be launched with npm, pnpm, Bun, or Deno (`npm create crust`, `bunx create-crust`, `deno run -A npm:create-crust`). It ships a single minimal template with binary/runtime distribution choices; the modular template, template-selection prompt, and `--template` flag are removed.
+  - Confirmed overwrites now reach the scaffolder instead of aborting. `create-crust .` in a non-empty directory asks before writing; `--overwrite`/`--no-overwrite` pre-answer the confirmation.
+  - Scaffolded projects depend on TypeScript 7 (`^7.0.2`); generated `tsc --noEmit` scripts are unchanged.
+  - `@crustjs/create` runs post-scaffold `command` steps through the platform shell (`/bin/sh` or `cmd.exe`) instead of Bun Shell. Windows `.cmd`/`.bat` install and Git shims work under Node's CVE-2024-27980 hardening.
+  - The `getGitUser` and `isGitInstalled` exports are removed from `@crustjs/create`; callers needing them must query Git themselves.
+
+- [#307](https://github.com/chenxin-yan/crust/pull/307) [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Update runtime compatibility and package builds.
+  
+  - Libraries support Bun 1.3.14+, Node.js 22+, and Deno 2.8+ (`engines` updated). Context disposal includes a fallback for runtimes without `AsyncDisposableStack`, including Node 22/23. The `crust` build CLI remains Bun tooling; its npm distribution ships standalone executables with Bun embedded.
+  - Published packages no longer depend on `@crustjs/utils`; its helpers are bundled. `@crustjs/store` also drops `@standard-schema/spec`. Library packages and `create-crust` are marked `sideEffects: false` for bundlers.
+  - Packages shipping declarations declare an optional TypeScript `^7.0.0` peer; builder inference is supported on TypeScript 7. JavaScript consumers are unaffected by this compiler requirement.
+
 ## 0.0.7
 
 ### Patch Changes

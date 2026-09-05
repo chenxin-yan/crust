@@ -1,5 +1,35 @@
 # @crustjs/skills
 
+## 0.2.0
+
+### Minor Changes
+
+- [#345](https://github.com/chenxin-yan/crust/pull/345) [`6afef3d`](https://github.com/chenxin-yan/crust/commit/6afef3d3ca04bd941507298d074d1b54a775c54a) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Official Extensions require a caret-compatible `@crustjs/core` peer (`^0.2.0` for this release), excluding older incompatible core APIs rather than accepting all 0.x versions.
+
+- [#307](https://github.com/chenxin-yan/crust/pull/307) [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Update runtime compatibility and package builds.
+  
+  - Libraries support Bun 1.3.14+, Node.js 22+, and Deno 2.8+ (`engines` updated). Context disposal includes a fallback for runtimes without `AsyncDisposableStack`, including Node 22/23. The `crust` build CLI remains Bun tooling; its npm distribution ships standalone executables with Bun embedded.
+  - Published packages no longer depend on `@crustjs/utils`; its helpers are bundled. `@crustjs/store` also drops `@standard-schema/spec`. Library packages and `create-crust` are marked `sideEffects: false` for bundlers.
+  - Packages shipping declarations declare an optional TypeScript `^7.0.0` peer; builder inference is supported on TypeScript 7. JavaScript consumers are unaffected by this compiler requirement.
+
+- [#307](https://github.com/chenxin-yan/crust/pull/307) [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Breaking: skills are built once, shipped under the package's `skills/` directory, and symlinked into agent directories on opt-in. Runtime generation, the `.crust/skills` store, `crust.json` manifests, copy installs, and version-based synchronization are removed.
+  
+  - **Extension:** migrate `skillPlugin(options)` to `skill(options)` and `SkillPluginOptions` to `SkillOptions`. Required `distDir` points at packaged skills and is read only at runtime. `extras` supplies authored skills; `name`/`description` override generated frontmatter; `generated: false` ships only extras. `version` now comes from root metadata, `customSkills` becomes `extras`, and `installMode`, `instructions`, `license`, `allowedTools`, `compatibility`, and `disableModelInvocation` options are removed. Put command guidance in documentation `sections`; use authored extras for custom frontmatter.
+  - **Build:** `writeSkills({ app?, outDir, version?, name?, description?, extras? })` and `writeSkillsFromSnapshot(snapshot, options)` render without installing. `outDir` must be a dedicated directory named `skills` and is replaced on each build. Omit `app` for extras only; empty builds and extras nested in `outDir` fail. Duplicate authored names throw `SkillSourceConflictError`; an authored skill may replace the same-named generated skill. Optional `version` appears only in the generated SKILL.md metadata. The `skill()` build hook renders from the snapshot into `<outdir>/skills`.
+  - **Install:** use `installSkill({ sourceDir, agents?, scope?, force? })` instead of `generateSkill`/`installSkillBundle`. Sources must be `skills/<name>` directories with non-empty SKILL.md `name`/`description` and a closed frontmatter fence. Links are relative to the logical package path for project scope and absolute for global scope; unsupported symlink creation fails clearly. Ownership is determined by targets ending in `skills/<name>`; `uninstallSkill()` removes only owned links. `autoUpdate` and `skill update` repair owned dangling/stale links without creating new installations. Automatic repair is silent when the package ships no skills. The management command reconciles selected agents; `--scope` accepts only `project`/`global`, rejecting invalid values during parsing.
+  - **Status and exports:** `skillStatus` becomes `getSkillStatus({ name, sourceDir, ... })`, reporting `linked | dangling | conflict | absent`. Install statuses are `installed | repaired | up-to-date` (`repaired` replaces `updated`); per-agent results include effective `scope`. New exports include `loadPackagedSkills`, `resolveSkillSource`, `SkillSourceUnavailableError`, `SkillSourceConflictError`, `WriteSkillsOptions`, `PackagedSkill`, and `SkillLinkStatus`. Migrate `GenerateOptions`/`GenerateResult` and `InstallSkillBundleOptions`/`InstallSkillBundleResult` to `InstallSkillOptions`/`InstallSkillResult`, `StatusOptions`/`StatusResult` to `SkillStatusOptions`/`SkillStatusResult`, and `UninstallOptions`/`UninstallResult` to `UninstallSkillOptions`/`UninstallSkillResult`.
+  - **Other removals:** `annotate`, `SkillCommandAnnotations`, `resolveSkillName`, `resolveCanonicalSkillPath`, `SkillMeta`, `SkillKind`, `SkillInstallMode`, `CustomSkillConfig`, `SkillConflictDetails`, `SkillKindMismatch`, and `SkillManifestMalformed` are no longer root exports. Use build options and sections for generated metadata/guidance. `detectInstalledAgents()` takes no arguments.
+  - **Agents:** Warp and Zed are new universal targets; Pi now uses `~/.agents/skills` and `.agents/skills`. Antigravity uses `.agents/skills` (project) and `~/.gemini/config/skills` (global); Mistral Vibe uses `$VIBE_HOME/skills`, falling back to `~/.vibe/skills`. Old Pi links at `~/.pi/agent/skills`/`.pi/skills`, Antigravity links at `.agent/skills`/`~/.gemini/antigravity/skills`, and `~/.vibe/skills` links when `VIBE_HOME` points elsewhere are no longer managed; remove them manually.
+  - **Generated documentation:** root help/man pages list packaged skills with descriptions and source paths; SKILL.md command tables include descriptions. Application-authored "Agent skills" sections are preserved. A direct subcommand sharing the root name now fails generation rather than overwriting the root documentation file.
+
+### Patch Changes
+
+- Updated dependencies [[`cc466b5`](https://github.com/chenxin-yan/crust/commit/cc466b5a0b5792d4811e85d82e341980bc1fb606), [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce), [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce), [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce), [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce)]:
+  - @crustjs/core@0.2.0
+  - @crustjs/progress@0.1.0
+  - @crustjs/prompts@0.2.0
+  - @crustjs/style@0.3.0
+
 ## 0.1.2
 
 ### Patch Changes
