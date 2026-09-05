@@ -24,11 +24,55 @@ const app = new Crust("my-cli", { version: "1.2.3" })
 await app.execute();
 ```
 
-```sh
-my-cli completion bash > ~/.local/share/bash-completion/completions/my-cli
-my-cli completion zsh > ~/.zsh/completions/_my-cli
-my-cli completion fish > ~/.config/fish/completions/my-cli.fish
+Set the version in the root metadata as above, or pass `completion({ version })`. The `version()` Extension only handles the version flag; an override passed to `version(value)` does not set root metadata for completion.
+
+## Quick shell setup
+
+Here, `my-cli` is your installed application executable, not the `crust` build tool. Install it and put it on `PATH` before adding completion setup. Only source output from a CLI you trust, since the generated script runs in your shell.
+
+If completion already works through your package manager, keep that setup instead of adding rc sourcing on top. Otherwise, add the line for your shell once to its configuration file. Run the same line in your current interactive shell to activate completion now; saving the configuration applies it to future sessions.
+
+### Bash
+
+Add to the interactive section of `~/.bashrc`:
+
+```bash
+source <(my-cli completion bash)
 ```
+
+Crust's script works without the `bash-completion` package. If your terminal starts a login shell, make sure its login profile already loads `~/.bashrc`.
+
+### Zsh
+
+Add to `~/.zshrc`, **after** your existing `compinit` call or shell framework's completion initialization:
+
+```zsh
+source <(my-cli completion zsh)
+```
+
+Only if your configuration does not already initialize completion, add this before the sourcing line and run it before activating completion in the current session:
+
+```zsh
+autoload -Uz compinit; compinit
+```
+
+Do not add a second `compinit` call when your framework already runs it.
+
+### Fish
+
+Add to `~/.config/fish/config.fish`, or your `config.fish` under `$XDG_CONFIG_HOME/fish` if customized:
+
+```fish
+status --is-interactive; and my-cli completion fish | source
+```
+
+The guard skips generation in noninteractive shells. Fish can source stdin; Bash and Zsh use process substitution instead.
+
+### Startup and updates
+
+Direct sourcing runs the CLI generator at each interactive shell startup, not on every Tab press. The resulting scripts contain static command, flag, and choice definitions with no dynamic candidate callbacks into your application. For example, `my-cli build --target <Tab>` offers `browser`, `bun`, and `node` from the definition above.
+
+New shells generate definitions from the currently installed CLI. After updating the CLI, open a new shell to refresh completion. [Saved files](#saved-files-and-autoload) avoid launching the generator at startup, but you must regenerate or replace them after CLI changes.
 
 ## API
 
@@ -52,7 +96,7 @@ The pure renderers are exported from `@crustjs/extensions` for custom pipelines.
 
 By default, generated headers use the root `CommandSnapshot.meta.version`; `CompletionOptions.version` remains an override. The runtime command, build hook, and pure renderers require one of these versions; omitting both throws a `DEFINITION` error (reported as an Extension build failure during builds).
 
-The positional `<shell>` accepts `bash`, `zsh`, or `fish`. With no `--output-dir`, the selected script is written through the invocation's stdout callback, so programmatic `run()` calls honor injected output. With `--output-dir <path>`, the Extension writes every supported shell using canonical filenames: `<bin>` for bash, `_<bin>` for zsh, and `<bin>.fish` for fish.
+The positional `<shell>` accepts `bash`, `zsh`, or `fish`. With no `--output-dir`, the selected script is written through the invocation's stdout callback, so programmatic `run()` calls honor injected output. With `--output-dir <path>`, the `<shell>` argument is still required, but the Extension writes all three shells regardless of the selected shell, using canonical filenames: `<bin>` for bash, `_<bin>` for zsh, and `<bin>.fish` for fish.
 
 ```sh
 my-cli completion bash --output-dir completions/
@@ -68,7 +112,11 @@ my-cli completion bash --output-dir completions/
 
 The Extension validates command, flag, argument, alias, choice, and binary identifiers before rendering. Unsafe identifiers throw instead of producing shell code with incorrect quoting.
 
-## Build artifacts
+## Package-manager and advanced setup
+
+Use pre-generated files for packaging or to avoid generator startup cost. Generating or shipping these files does not activate shell completion or edit shell profiles. Package maintainers should install them into the target shell's completion search path, following their package manager's conventions.
+
+### Build artifacts
 
 With `completion()` registered, `crust build` writes all three shell files through its build hook:
 
@@ -93,4 +141,49 @@ When not using `crust build`, generate all files with `--output-dir` during pack
 }
 ```
 
-Completion scripts are snapshots. Regenerate them when the command definition changes.
+### Saved files and autoload
+
+Use one loading method per shell. These examples generate files locally; packagers can install the corresponding [build artifacts](#build-artifacts) instead.
+
+#### Bash files
+
+With `bash-completion` installed and initialized by your shell, save the script in its default user completion directory:
+
+```bash
+mkdir -p "${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions"
+my-cli completion bash > "${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions/my-cli"
+```
+
+Unlike direct sourcing, this autoload setup requires the `bash-completion` loader. If you customize `BASH_COMPLETION_USER_DIR`, use a `completions/` subdirectory of one of its configured directories instead. System installation directories depend on the distribution or package manager.
+
+#### Zsh files
+
+Save the script with the `_<command>` filename:
+
+```zsh
+mkdir -p ~/.zsh/completions
+my-cli completion zsh > ~/.zsh/completions/_my-cli
+```
+
+In `~/.zshrc`, source the saved file **after** your existing `compinit` or framework initialization:
+
+```zsh
+source ~/.zsh/completions/_my-cli
+```
+
+If completion is not initialized yet, follow [quick setup](#zsh) first. Use this saved-file line instead of sourcing the generator's output.
+
+Zsh autoload currently has a first-use issue with hyphenated executable names such as `my-cli`. Source the saved file explicitly rather than relying on `fpath` discovery.
+
+#### Fish files
+
+Fish autoloads command-named completion files from its user completion directory:
+
+```fish
+mkdir -p "$__fish_config_dir/completions"
+my-cli completion fish > "$__fish_config_dir/completions/my-cli.fish"
+```
+
+`$__fish_config_dir` defaults to `~/.config/fish`. Packages should use Fish's vendor completion directory for their installation prefix rather than a user's directory. See [Fish's completion search paths](https://fishshell.com/docs/current/completions.html#where-to-put-completions).
+
+Regenerate saved scripts after CLI changes, then start a new shell so already-loaded definitions do not remain stale.
