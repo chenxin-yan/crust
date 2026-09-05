@@ -63,7 +63,7 @@
     },
     "packages/core": {
       "name": "@crustjs/core",
-      "version": "0.0.19",
+      "version": "0.2.0",
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "@crustjs/utils": "workspace:*",
@@ -78,7 +78,7 @@
     },
     "packages/create": {
       "name": "@crustjs/create",
-      "version": "0.0.7",
+      "version": "0.1.0",
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "@crustjs/utils": "workspace:*",
@@ -93,7 +93,7 @@
     },
     "packages/create-crust": {
       "name": "create-crust",
-      "version": "0.0.31",
+      "version": "0.2.0",
       "bin": {
         "create-crust": "dist/index.js",
       },
@@ -111,7 +111,7 @@
     },
     "packages/crust": {
       "name": "@crustjs/crust",
-      "version": "0.0.24",
+      "version": "0.2.0",
       "bin": {
         "crust": "dist/cli.js",
       },
@@ -126,7 +126,7 @@
     },
     "packages/extensions": {
       "name": "@crustjs/extensions",
-      "version": "0.1.2",
+      "version": "0.2.0",
       "dependencies": {
         "@crustjs/store": "workspace:^",
         "@crustjs/style": "workspace:^",
@@ -147,7 +147,7 @@
     },
     "packages/man": {
       "name": "@crustjs/man",
-      "version": "0.1.2",
+      "version": "0.2.0",
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "@crustjs/core": "workspace:*",
@@ -165,7 +165,7 @@
     },
     "packages/progress": {
       "name": "@crustjs/progress",
-      "version": "0.0.4",
+      "version": "0.1.0",
       "dependencies": {
         "@crustjs/style": "workspace:^",
       },
@@ -183,7 +183,7 @@
     },
     "packages/prompts": {
       "name": "@crustjs/prompts",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@crustjs/style": "workspace:^",
       },
@@ -202,7 +202,7 @@
     },
     "packages/skills": {
       "name": "@crustjs/skills",
-      "version": "0.1.2",
+      "version": "0.2.0",
       "dependencies": {
         "@crustjs/progress": "workspace:^",
         "@crustjs/prompts": "workspace:^",
@@ -226,7 +226,7 @@
     },
     "packages/store": {
       "name": "@crustjs/store",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "@crustjs/utils": "workspace:*",
@@ -242,7 +242,7 @@
     },
     "packages/style": {
       "name": "@crustjs/style",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "tsdown": "catalog:",
@@ -256,7 +256,7 @@
     },
     "packages/testing": {
       "name": "@crustjs/testing",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "@crustjs/core": "workspace:*",

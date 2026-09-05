@@ -1,5 +1,32 @@
 # @crustjs/prompts
 
+## 0.2.0
+
+### Minor Changes
+
+- [#307](https://github.com/chenxin-yan/crust/pull/307) [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Breaking: themed prompt instances, injectable terminal IO, and typed choice results.
+  
+  - `setTheme`, `getTheme`, and `createTheme` are removed. Migrate global themes to `const p = createPrompts({ theme })`; `p` exposes every prompt plus its resolved `theme` for custom renderers. Theme resolution is `defaultTheme` ← instance ← per-call; `runPrompt` accepts an optional partial theme. `CreatePromptsOptions` and `PromptsInstance` are exported.
+  - Ctrl+C rejects with a `DOMException` named `"AbortError"` instead of `CancelledError`; check `err.name === "AbortError"`.
+  - Prompts and `runPrompt` accept optional `PromptIO` (`{ input?, output? }`). `withTerminalIO(io, fn)` shares streams with prompts and `@crustjs/progress` in an async scope; `withPromptIO` is an alias. Resolution is explicit IO → ambient scope → `process.stdin`/`process.stderr`. `resolvePromptIO(io?)` exposes the resolved streams; `isTTY(input?)`/`assertTTY(input?)` default to the resolved input. `PromptIO`, `PromptInput`, and `PromptOutput` are exported.
+  - New `@crustjs/prompts/testing` provides `renderPrompt`, `createPromptIO`, and `encodeKey` for fake-terminal tests with `type()`, `keys()`, `screen()`, and `answer`. Exported types include `Key`, `NamedKey`, `PromptTestIO`, and `RenderedPrompt`; named keys autocomplete, while control keys and single characters remain accepted.
+  - `select`, `multiselect`, `filter`, and `multifilter` infer literal choice-value unions for strings and `{ label, value }` choices; widened arrays retain their wider type. `ChoiceValue` is exported.
+  - `input`/`password` accept Standard Schema through `schema`; migrate `validate: schema` to `schema`. `validate` is function-only and cannot combine with `schema` (checked statically and at runtime). Non-`undefined` validator returns are now ignored rather than raising `TypeError`; throw an error to reject input.
+  - Deprecated spinner re-exports and the `@crustjs/progress` dependency are removed; import spinner APIs directly from `@crustjs/progress`.
+  - Custom renderers gain `renderTextWithCursor`, `highlightMatches`, `renderChoiceList`, and glyph exports `PREFIX_SYMBOL`, `PREFIX_SUBMITTED`, `CURSOR_INDICATOR`, `SCROLL_INDICATOR`, `CHECKBOX_CHECKED`, and `CHECKBOX_UNCHECKED`. `formatPromptLine`/`formatSubmitted` remain available. `normalizeChoices`, `NormalizedChoice`, `calculateScrollOffset`, and `CURSOR_CHAR` are removed from the root exports.
+  - `multiselect` starts on the first default choice, matching `multifilter`. `multifilter` toggles the highlighted item when duplicates share label and value, and preserves its initial cursor when the first default value is `undefined`.
+
+- [#307](https://github.com/chenxin-yan/crust/pull/307) [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Update runtime compatibility and package builds.
+  
+  - Libraries support Bun 1.3.14+, Node.js 22+, and Deno 2.8+ (`engines` updated). Context disposal includes a fallback for runtimes without `AsyncDisposableStack`, including Node 22/23. The `crust` build CLI remains Bun tooling; its npm distribution ships standalone executables with Bun embedded.
+  - Published packages no longer depend on `@crustjs/utils`; its helpers are bundled. `@crustjs/store` also drops `@standard-schema/spec`. Library packages and `create-crust` are marked `sideEffects: false` for bundlers.
+  - Packages shipping declarations declare an optional TypeScript `^7.0.0` peer; builder inference is supported on TypeScript 7. JavaScript consumers are unaffected by this compiler requirement.
+
+### Patch Changes
+
+- Updated dependencies [[`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce), [`e3b196a`](https://github.com/chenxin-yan/crust/commit/e3b196a0d300790b95e9417324b05ae2371d24ce)]:
+  - @crustjs/style@0.3.0
+
 ## 0.1.0
 
 ### Minor Changes
