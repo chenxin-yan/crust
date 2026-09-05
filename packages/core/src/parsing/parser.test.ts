@@ -1266,6 +1266,24 @@ describe("parseStructured", () => {
 		expect(parseStructured(command, { flags: new Input() }).flags.value).toBe("flag");
 	});
 
+	it.each(["args", "flags"] as const)("reads each own structured %s getter once", (kind) => {
+		let reads = 0;
+		const values = {
+			get value() {
+				if (++reads > 1) throw new Error("Structured value read twice");
+				return "first";
+			},
+		};
+		const command = makeNode({
+			meta: "test",
+			...(kind === "args"
+				? { args: [{ name: "value", type: "string" }] }
+				: { flags: { value: { type: "string" } } }),
+		});
+		expect(parseStructured(command, { [kind]: values })[kind].value).toBe("first");
+		expect(reads).toBe(1);
+	});
+
 	it("passes numbers, booleans, and URL instances through", () => {
 		const url = new URL("https://example.com");
 		const command = makeNode({

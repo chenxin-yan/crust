@@ -393,6 +393,8 @@ if (outcome.status === "completed") {
 
 Structured values are bound directly against the selected command's argument and flag definitions — no argv is produced — and then flow through the normal schema, Context, and Command Action pipeline. `choices` and `parse` run on the supplied string exactly as for argv, `type: "path"` values are resolved, and number, boolean, `URL`, and JSON values are passed through unchanged. Scalar arguments and flags declared with `type: "json"` accept JSON primitives, structurally JSON-compatible object types (including named interfaces), and mutable or readonly arrays/tuples; variadic JSON arguments and multiple JSON flags require a mutable array of JSON values as repeated occurrences. `Date`, `bigint`, functions, and other non-JSON values are excluded from JSON inputs. JSON objects and arrays retain their identity; no serialization check or copy is performed. `undefined` is treated as an omitted optional input. Multiple-flag arrays preserve occurrence order; an empty array means zero occurrences and uses the default, if any. When `io` contains at least one callback, the resolved callbacks are also ambient for the full invocation: progress indicators and prompt output default to the injected `stderr` callback. Progress uses non-TTY static lines, and prompt input remains a separate `PromptIO` concern.
 
+Each declared own argument or flag value is read once during binding; name validation does not invoke its getter again.
+
 The optional `raw` array reaches the Command Action unchanged as `rawArgs`, equivalent to tokens after a `--` separator in terminal input:
 
 ```ts

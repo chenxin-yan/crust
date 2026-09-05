@@ -301,10 +301,10 @@ function resolveFlags<F extends FlagsDef, V>(
 	coerce: (name: string, def: FlagDef, value: V) => ParsedFlagValue,
 ): RawParsedFlags<F> {
 	const resolved: Record<string, ParsedFlagValue> = {};
-	for (const [name, value] of Object.entries(values)) {
-		if (value === undefined) continue;
+	for (const name of Object.keys(values)) {
+		// Read known values only during binding, so own getters run once.
 		// hasOwn prevents inherited Object.prototype keys becoming ghost flags.
-		if (!Object.hasOwn(flagsDef, name)) {
+		if (!Object.hasOwn(flagsDef, name) && values[name] !== undefined) {
 			throw new CrustError("PARSE", `Unknown flag "--${name}"`, {
 				flag: name,
 				reason: "unknown-flag",
@@ -580,8 +580,10 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 	}
 	// Only named records carry argument names to validate; argv has positional tokens.
 	for (const name of Object.keys(input.args ?? {})) {
-		if (input.args?.[name] === undefined) continue;
-		if (!command.args.some((definition) => definition.name === name)) {
+		if (
+			!command.args.some((definition) => definition.name === name) &&
+			input.args?.[name] !== undefined
+		) {
 			throw new CrustError("PARSE", `Unknown argument "${name}"`, {
 				argument: name,
 				reason: "unknown-argument",
