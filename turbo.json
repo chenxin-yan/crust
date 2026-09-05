@@ -13,6 +13,19 @@
 		"test": {
 			"dependsOn": ["build", "^build"]
 		},
+		"@crustjs/testing#test": {
+			// The packed core-peer regression copies these files into its release fixture.
+			"inputs": [
+				"$TURBO_DEFAULT$",
+				"$TURBO_ROOT$/package.json",
+				"$TURBO_ROOT$/bun.lock",
+				"$TURBO_ROOT$/LICENSE",
+				"$TURBO_ROOT$/.changeset/config.json",
+				"$TURBO_ROOT$/apps/*/package.json",
+				"$TURBO_ROOT$/packages/*/package.json",
+				"$TURBO_ROOT$/tools/package.json"
+			]
+		},
 		"check:types": {
 			"dependsOn": ["^build"]
 		},
