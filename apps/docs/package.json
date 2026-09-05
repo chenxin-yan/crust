@@ -7,6 +7,8 @@
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
+    "check:references": "cd ../.. && bunx turbo run build --filter=create-crust && bun test apps/docs/scripts/cli-reference.test.ts",
+    "check:output": "bun test scripts/compiled-docs.test.ts",
     "check:types": "fumadocs-mdx && tsc --noEmit",
     "postinstall": "fumadocs-mdx",
     "deploy": "bun run build && wrangler deploy",
