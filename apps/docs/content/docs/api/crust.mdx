@@ -30,7 +30,10 @@ A sealed command declares consumed Context factories with `.use(...factories)` â
 <Callout type="info">
   These signatures are simplified for readability. The exported interfaces use const generics,
   validation intersections, and refined return types; use your editor's `@crustjs/core` type hints
-  for the exact signatures.
+  for the exact signatures. The [source
+  declarations](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts)
+  preserve all overloads, generic constraints, and readonly modifiers; property tables below
+  summarize object fields, not those complete contracts.
 </Callout>
 
 ```ts
@@ -78,16 +81,14 @@ defineCommand<const Name extends string>(
   recipe: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
 ): CommandDefinition<Name>;
 
-interface CommandConfig extends Omit<CommandMeta, "name" | "sections" | "version"> {
-  readonly sections?: readonly CommandSectionInput[];
-}
-
 defineCommand<const Name extends string, const C extends CommandConfig>(
   name: Name & EmptyNameBrand<Name>,
   config: C & ValidateCommandConfig<Name, C>,
   recipe: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
 ): CommandDefinition<Name, AliasesOf<C>>;
 ```
+
+<auto-type-table path="../../../../../packages/core/src/command/crust.ts" name="CommandConfig" />
 
 Creates an inert reusable definition under a required name. Static `description`, `usage`, `aliases`, and `hidden` belong in `config`; application `version` belongs only in the root `Crust` constructor:
 
@@ -118,10 +119,6 @@ The recipe does not execute when the definition is created. It executes once for
 ## Constructor
 
 ```ts
-type RootCommandMeta = Pick<CommandMeta, "description" | "version" | "usage"> & {
-  readonly sections?: readonly CommandSectionInput[];
-};
-
 class Crust<
   Flags,
   A,
@@ -136,6 +133,8 @@ class Crust<
 
 new Crust(name: string, meta?: RootCommandMeta)
 ```
+
+<auto-type-table path="../../../../../packages/core/src/command/crust.ts" name="RootCommandMeta" />
 
 Creates a root command builder. Root metadata is declared at construction because aliases and hidden state only apply to subcommands. `version` is the application version exposed on `CommandSnapshot.meta.version` for Extensions and tooling. `sections` accepts the same ordered plain-text entries as subcommand metadata and is validated immediately.
 

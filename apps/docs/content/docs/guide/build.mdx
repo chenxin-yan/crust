@@ -40,20 +40,22 @@ crust build --env-file .env.production
 
 ## Flags
 
-| Flag                           | Alias | Type                    | Default           | Description                                                                         |
-| ------------------------------ | ----- | ----------------------- | ----------------- | ----------------------------------------------------------------------------------- |
-| `--entry`                      | `-e`  | `"string"`              | `src/cli.ts`      | Entry file path                                                                     |
-| `--outfile`                    | `-o`  | `"string"`              | —                 | Output file path (single-target only)                                               |
-| `--name`                       | `-n`  | `"string"`              | auto-detected     | Binary name                                                                         |
-| `--minify`                     | —     | `"boolean"`             | `true` (Bun/Node) | Minify Bun and Node output; not applicable to Deno (`deno compile` has no minifier) |
-| `--runtime`                    | —     | `"string"`              | `bun`             | `bun`, `deno`, or `node`; overrides `package.json`                                  |
-| `--target`                     | `-t`  | `"string"` (repeatable) | all platforms     | Canonical Bun or Deno compiler target; unsupported for Node                         |
-| `--outdir`                     | `-d`  | `"string"`              | `dist`            | Output directory for compiled binaries                                              |
-| `--resolver`                   | `-r`  | `"string"`              | `cli`             | Resolver script filename (multi-target only, no extension)                          |
-| `--env-file`                   | —     | `"string"` (repeatable) | —                 | Explicit env file(s) used for build-time constants (Bun and Node only)              |
-| `--validate` / `--no-validate` | —     | `"boolean"`             | `true`            | Materialize command definitions and run Extension build hooks before compiling      |
-| `--package`                    | —     | `"boolean"`             | `false`           | Stage npm packages in `dist/npm` instead of raw binaries                            |
-| `--stage-dir`                  | —     | `"string"`              | `dist/npm`        | Package staging directory; only used with `--package`                               |
+“Declared default” is only a definition default; `—` means none is declared. Effective defaults are resolved later: runtime uses the flag, then `package.json`, then Bun; name is [auto-detected](#binary-naming); omitted targets select all platforms for Bun/Deno; minification defaults to enabled for Bun/Node and is unavailable for Deno.
+
+| Flag spellings                | Type                  | Choices               | Declared default | Description                                                                         |
+| ----------------------------- | --------------------- | --------------------- | ---------------- | ----------------------------------------------------------------------------------- |
+| `-e`, `--entry`               | `string`              | —                     | `"src/cli.ts"`   | Entry file path                                                                     |
+| `-o`, `--outfile`             | `string`              | —                     | —                | Output file path (single-target only)                                               |
+| `-n`, `--name`                | `string`              | —                     | —                | Binary name                                                                         |
+| `--minify`, `--no-minify`     | `boolean`             | —                     | —                | Minify Bun and Node output; not applicable to Deno (`deno compile` has no minifier) |
+| `--runtime`                   | `string`              | `bun`, `deno`, `node` | —                | `bun`, `deno`, or `node`; overrides `package.json`                                  |
+| `-t`, `--target`              | `string` (repeatable) | —                     | —                | Canonical Bun or Deno compiler target; unsupported for Node                         |
+| `-d`, `--outdir`              | `string`              | —                     | `"dist"`         | Output directory for compiled binaries                                              |
+| `-r`, `--resolver`            | `string`              | —                     | `"cli"`          | Resolver script filename (multi-target only, no extension)                          |
+| `--validate`, `--no-validate` | `boolean`             | —                     | `true`           | Materialize command definitions and run Extension build hooks before compiling      |
+| `--env-file`                  | `string` (repeatable) | —                     | —                | Explicit env file(s) used for build-time constants (Bun and Node only)              |
+| `--package`, `--no-package`   | `boolean`             | —                     | `false`          | Stage npm packages in `dist/npm` instead of raw binaries                            |
+| `--stage-dir`                 | `string`              | —                     | `"dist/npm"`     | Package staging directory; only used with `--package`                               |
 
 ## Runtime Outputs
 
@@ -305,14 +307,14 @@ crust publish --stage-dir ./npm-packages
 
 The publish command reads the `manifest.json` and publishes packages in dependency order (platform packages first, then root package).
 
-| Flag          | Type        | Default    | Description                                              |
-| ------------- | ----------- | ---------- | -------------------------------------------------------- |
-| `--stage-dir` | `"string"`  | `dist/npm` | Directory containing the staged `manifest.json`          |
-| `--tag`       | `"string"`  | —          | Override the npm dist-tag passed to `bun publish`        |
-| `--access`    | `"string"`  | `public`   | npm access level passed to `bun publish`                 |
-| `--dry-run`   | `"boolean"` | `false`    | Print publish order and commands without publishing      |
-| `--verify`    | `"boolean"` | `true`     | Verify staged directories and metadata before publishing |
-| `--registry`  | `"string"`  | —          | Override the registry passed to `bun publish`            |
+| Flag spellings              | Type      | Choices | Declared default | Description                                              |
+| --------------------------- | --------- | ------- | ---------------- | -------------------------------------------------------- |
+| `--stage-dir`               | `string`  | —       | `"dist/npm"`     | Directory containing the staged `manifest.json`          |
+| `--tag`                     | `string`  | —       | —                | Override the npm dist-tag passed to `bun publish`        |
+| `--access`                  | `string`  | —       | `"public"`       | npm access level passed to `bun publish`                 |
+| `--dry-run`, `--no-dry-run` | `boolean` | —       | `false`          | Print publish order and commands without publishing      |
+| `--verify`, `--no-verify`   | `boolean` | —       | `true`           | Verify staged directories and metadata before publishing |
+| `--registry`                | `string`  | —       | —                | Override the registry passed to `bun publish`            |
 
 ### Distribution Package Names
 
