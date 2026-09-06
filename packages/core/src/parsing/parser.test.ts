@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { resolve } from "node:path";
 
 import { makeNode } from "../../tests/helpers.ts";
 import { createCommandNode, registerFlag } from "../command/node.ts";
@@ -904,7 +905,7 @@ describe("parseArgs — url/path/json types", () => {
 			flags: { out: { type: "path" } },
 		});
 		const result = parseArgs(cmd, ["--out", "./dist"]);
-		expect(result.flags.out).toEqual(expect.any(String));
+		expect(result.flags.out).toBe(resolve(process.cwd(), "dist"));
 	});
 
 	it("parses a json flag into the corresponding value", () => {

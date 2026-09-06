@@ -154,7 +154,7 @@ describe("renderManPageMdoc", () => {
 		expect(mdoc).toContain(".Sh SUBCOMMANDS");
 		expect(mdoc).toContain(".It Nm ping");
 		expect(mdoc).toContain(".Sh OPTIONS");
-		expect(mdoc).toMatch(/verbose|--verbose|help/);
+		expect(mdoc).toContain(".It Fl v , Fl Fl verbose , Fl Fl no-verbose");
 	});
 
 	it("escapes leading dots in descriptions and .Nd", async () => {
@@ -166,7 +166,7 @@ describe("renderManPageMdoc", () => {
 		const mdoc = renderManPageMdoc({ root, name: "x", section: 1 });
 
 		expect(mdoc).toMatch(/\.Nd .*\\&\.config is read automatically\./);
-		expect(mdoc).toContain("\\&.config is read automatically.");
+		expect(mdoc).toContain(".Sh DESCRIPTION\n\\&.config is read automatically.");
 	});
 
 	it("appends metadata sections after built-ins and escapes body lines", async () => {

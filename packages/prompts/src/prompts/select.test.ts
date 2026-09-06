@@ -370,7 +370,7 @@ describe("select — viewport scrolling", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("select — no message", () => {
-	it("renders default message when message is omitted", async () => {
+	it("renders default message before and after submission", async () => {
 		const prompt = renderPrompt(select, {
 			choices: ["a", "b", "c"],
 		});
@@ -383,17 +383,6 @@ describe("select — no message", () => {
 		prompt.keys("return");
 		const result = await prompt.answer;
 		expect(result).toBe("a");
-	});
-
-	it("submitted output shows default message", async () => {
-		const prompt = renderPrompt(select, {
-			choices: ["a", "b", "c"],
-		});
-
-		await tick();
-		prompt.keys("return");
-
-		await prompt.answer;
 		expect(prompt.screen()).toContain("Pick an option");
 		expect(prompt.screen()).not.toContain("undefined");
 	});

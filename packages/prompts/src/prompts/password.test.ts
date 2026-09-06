@@ -51,9 +51,8 @@ describe("password — masked rendering", () => {
 		await tick();
 
 		// Should see mask characters (***) but NOT the actual value "abc"
-		expect(prompt.screen()).toContain("*");
-		// The actual characters should not appear in output
-		// (except potentially in keypress event data, not in rendered output)
+		expect(prompt.screen()).toContain("***");
+		expect(prompt.screen()).not.toContain("abc");
 
 		prompt.keys("return");
 		const result = await prompt.answer;
@@ -83,17 +82,14 @@ describe("password — masked rendering", () => {
 
 		await tick();
 		// Type a 10-character password
-		for (const ch of "abcdefghij") {
-			prompt.type(ch);
-			await tick();
-		}
+		prompt.type("abcdefghij");
+		await tick();
 
 		prompt.keys("return");
 		await prompt.answer;
 
 		// After submission, should show exactly 4 mask characters (SUBMITTED_MASK_LENGTH)
-		// The submitted line uses the success theme, so look for **** in output
-		expect(prompt.screen()).toContain("****");
+		expect(prompt.screen()).toBe("✓ Password? ****");
 	});
 
 	it("shows cursor indicator when input is empty", async () => {
@@ -149,7 +145,7 @@ describe("password — validation", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("password — no message", () => {
-	it("renders default message when message is omitted", async () => {
+	it("renders default message before and after submission", async () => {
 		const prompt = renderPrompt(password, {});
 
 		await tick();
@@ -166,17 +162,6 @@ describe("password — no message", () => {
 
 		const result = await prompt.answer;
 		expect(result).toBe("sec");
-	});
-
-	it("submitted output shows default message", async () => {
-		const prompt = renderPrompt(password, {});
-
-		await tick();
-		prompt.type("x");
-		await tick();
-		prompt.keys("return");
-
-		await prompt.answer;
 		expect(prompt.screen()).toContain("Enter a password");
 		expect(prompt.screen()).not.toContain("undefined");
 	});
@@ -260,8 +245,7 @@ describe("password — schema short-circuit", () => {
 	it("treats `{ issues: [] }` from a non-conformant schema as success", async () => {
 		// Spec only marks `issues === undefined` as success, but a malformed
 		// schema returning an empty array has no actual issue to surface —
-		// guarding on `?.length` prevents a phantom rejection of the
-		// short-circuit `initial` value.
+		// reading `issues?.[0]` finds no issue and accepts the initial value.
 		const emptyIssuesSchema = {
 			"~standard": {
 				version: 1 as const,
@@ -313,14 +297,12 @@ describe("password — secrecy", () => {
 	it("never renders the raw value when schema validation rejects", async () => {
 		const prompt = renderPrompt(password<string>, {
 			message: "Password?",
-			schema: z.string().min(64, "too short"),
+			schema: z.string().min(12, "too short"),
 		});
 
 		await tick();
-		for (const ch of SECRET) {
-			prompt.type(ch);
-			await tick();
-		}
+		prompt.type(SECRET);
+		await tick();
 		prompt.keys("return");
 		// Schema validation is async; a fixed tick races the error render on slow runners.
 		await waitForScreen(prompt, "too short");
@@ -331,12 +313,8 @@ describe("password — secrecy", () => {
 		// Resolve the prompt cleanly with a long-enough valid value.
 		for (let i = 0; i < SECRET.length; i++) {
 			prompt.keys("backspace");
-			await tick();
 		}
-		for (const ch of "x".repeat(64)) {
-			prompt.type(ch);
-			await tick();
-		}
+		prompt.type("x".repeat(12));
 		prompt.keys("return");
 		await prompt.answer;
 	});

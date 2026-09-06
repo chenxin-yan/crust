@@ -363,15 +363,14 @@ describe("generateCmdResolverFor", () => {
 	it("uses CRLF line endings", () => {
 		const content = generateCmdResolverFor(BUN_TARGETS, "my-cli", BUN_TARGETS.targets);
 		expect(content).toContain("\r\n");
+		expect(content.split("\n").every((line) => line === "" || line.endsWith("\r"))).toBe(true);
 	});
 });
 
 describe("writeResolver", () => {
 	it("writes both resolver formats with the generic target configuration", () => {
-		const tmpDir = join(import.meta.dir, ".tmp-resolver-write");
+		const tmpDir = mkdtempSync(join(tmpdir(), "crust-resolver-write-"));
 		const resolverPath = join(tmpDir, "cli");
-		rmSync(tmpDir, { recursive: true, force: true });
-		mkdirSync(tmpDir, { recursive: true });
 		try {
 			writeResolver(BUN_TARGETS, resolverPath, "my-cli", BUN_TARGETS.targets);
 			expect(readFileSync(resolverPath, "utf8")).toContain("Linux-x86_64)");

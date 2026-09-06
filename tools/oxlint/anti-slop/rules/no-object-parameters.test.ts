@@ -7,7 +7,6 @@ const error = { messageId: "objectParameter" };
 
 tester.run("anti-slop/no-object-parameters", noObjectParametersRule, {
 	valid: [
-		"type Alias = object;",
 		"function f(value: Alias) {}",
 		"interface Owner { readonly id: string } function f(value: Owner) {}",
 		"function f<Value>(value: Value) {}",

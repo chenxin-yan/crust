@@ -304,9 +304,11 @@ describe("input — keypress editing", () => {
 
 describe("input — validation", () => {
 	it("shows error message when validation fails", async () => {
+		let validateCallCount = 0;
 		const prompt = renderPrompt(input, {
 			message: "Email?",
 			validate: (v) => {
+				validateCallCount++;
 				if (!v.includes("@")) throw new Error("Must contain @");
 			},
 		});
@@ -330,35 +332,6 @@ describe("input — validation", () => {
 
 		const result = await prompt.answer;
 		expect(result).toBe("ab@");
-	});
-
-	it("accepts valid input after correction", async () => {
-		let validateCallCount = 0;
-
-		const prompt = renderPrompt(input, {
-			message: "Name?",
-			validate: (v) => {
-				validateCallCount++;
-				if (v.length < 2) throw new Error("Too short");
-			},
-		});
-
-		await tick();
-		prompt.type("A");
-		await tick();
-		// Submit too-short value
-		prompt.keys("return");
-		await tick();
-
-		expect(prompt.screen()).toContain("Too short");
-
-		// Add more text and resubmit
-		prompt.type("B");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toBe("AB");
 		expect(validateCallCount).toBe(2);
 	});
 
@@ -389,14 +362,14 @@ describe("input — validation", () => {
 	it("validates default value when used", async () => {
 		const prompt = renderPrompt(input, {
 			message: "Name?",
-			default: "",
+			default: "bad",
 			validate: (v) => {
-				if (v.length === 0) throw new Error("Required");
+				if (v === "bad") throw new Error("Required");
 			},
 		});
 
 		await tick();
-		// Submit empty — default is "" which should fail validation
+		// Submit without typing — the non-empty default should fail validation
 		prompt.keys("return");
 		await tick();
 
@@ -417,7 +390,7 @@ describe("input — validation", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("input — no message", () => {
-	it("renders default message when message is omitted", async () => {
+	it("renders default message before and after submission", async () => {
 		const prompt = renderPrompt(input, {});
 
 		await tick();
@@ -430,20 +403,9 @@ describe("input — no message", () => {
 
 		const result = await prompt.answer;
 		expect(result).toBe("A");
-	});
-
-	it("submitted output shows default message", async () => {
-		const prompt = renderPrompt(input, {});
-
-		await tick();
-		prompt.type("X");
-		await tick();
-		prompt.keys("return");
-
-		await prompt.answer;
 		expect(prompt.screen()).toContain("Enter a value");
 		expect(prompt.screen()).not.toContain("undefined");
-		expect(prompt.screen()).toContain("X");
+		expect(prompt.screen()).toContain("A");
 	});
 });
 
@@ -593,7 +555,7 @@ describe("input — schema validation", () => {
 	it("treats `{ issues: [] }` from a non-conformant schema as success", async () => {
 		// Spec only marks `issues === undefined` as success, but a malformed
 		// schema returning an empty array has no actual issue to surface —
-		// guarding on `?.length` prevents a phantom "Validation failed" error.
+		// reading `issues?.[0]` finds no issue and treats it as success.
 		const emptyIssuesSchema = {
 			"~standard": {
 				version: 1 as const,
@@ -736,7 +698,8 @@ describe("input — schema + interactive default", () => {
 //
 // The Standard Schema spec only requires the `~standard` property; some
 // vendors (e.g. Effect Schema's `Schema.standardSchemaV1`) expose schemas as
-// callable function-objects. Our guard must accept both shapes.
+// callable function-objects. `options.schema !== undefined` selects the schema
+// branch for callable objects just as it does for plain objects.
 
 describe("input — callable Standard Schema", () => {
 	it("dispatches a callable schema through the schema branch", async () => {

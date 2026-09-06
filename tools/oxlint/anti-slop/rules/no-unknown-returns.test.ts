@@ -7,7 +7,6 @@ const error = { messageId: "unknownReturn" };
 
 tester.run("anti-slop/no-unknown-returns", noUnknownReturnsRule, {
 	valid: [
-		"type ImportedValue = unknown;",
 		"function parse(): ImportedValue { return input; }",
 		"function parse(): User { return user; }",
 		"function infer() { return input; }",

@@ -294,15 +294,15 @@ describe("renderBash · multi-positional choices", () => {
 
 		// Slot 1: enters the variadic.
 		const slot1 = await runCompletion(["mp", "vary", "start", ""]);
-		expect(slot1.sort()).toEqual(["a", "b", "c"]);
+		expect(slot1).toEqual(["a", "b", "c"]);
 
 		// Slot 2 and beyond: still the variadic list.
 		const slot2 = await runCompletion(["mp", "vary", "start", "a", ""]);
-		expect(slot2.sort()).toEqual(["a", "b", "c"]);
+		expect(slot2).toEqual(["a", "b", "c"]);
 	});
 
 	it("intervening flags do not count toward the positional slot index", async () => {
-		// `--unknown=x` and `--foo bar` between positionals should be
+		// `--unknown=x` between positionals should be
 		// skipped; slot 1 should still offer the second arg's choices.
 		const completions = await runCompletion(["mp", "two", "alpha", "--unknown=x", ""]);
 		expect(completions).toContain("gamma");
@@ -395,14 +395,8 @@ describe("renderBash — url/path/json value-flag handling", () => {
 		// Suppression case is emitted for the two non-path slots (1, 2).
 		expect(script).toContain("compopt +o default 2>/dev/null");
 		// Slot 0 (path) is NOT in the suppression case — only 1 and 2 are.
-		const suppressBlock = script
-			.split("\n")
-			.slice(script.split("\n").findIndex((l) => l.includes("compopt +o default")) - 4)
-			.slice(0, 12)
-			.join("\n");
-		expect(suppressBlock).toMatch(/\b1\)\s*\n\s*compopt \+o default/);
-		expect(suppressBlock).toMatch(/\b2\)\s*\n\s*compopt \+o default/);
-		// The path slot (0) is not in the suppress block.
-		expect(suppressBlock).not.toMatch(/\b0\)\s*\n\s*compopt \+o default/);
+		expect(script).toMatch(/\b1\)\s*\n\s*compopt \+o default/);
+		expect(script).toMatch(/\b2\)\s*\n\s*compopt \+o default/);
+		expect(script).not.toMatch(/\b0\)\s*\n\s*compopt \+o default/);
 	});
 });

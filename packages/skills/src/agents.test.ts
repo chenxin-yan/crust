@@ -12,8 +12,20 @@ describe("resolveAgentPath", () => {
 	});
 
 	it("resolves claude-code global path", () => {
-		const result = resolveAgentPath("claude-code", "global", "my-cli");
-		expect(result).toBe(join(homedir(), ".claude", "skills", "my-cli"));
+		const original = process.env.CLAUDE_CONFIG_DIR;
+		try {
+			delete process.env.CLAUDE_CONFIG_DIR;
+			expect(resolveAgentPath("claude-code", "global", "my-cli")).toBe(
+				join(homedir(), ".claude", "skills", "my-cli"),
+			);
+			process.env.CLAUDE_CONFIG_DIR = join(homedir(), "custom-claude");
+			expect(resolveAgentPath("claude-code", "global", "my-cli")).toBe(
+				join(homedir(), "custom-claude", "skills", "my-cli"),
+			);
+		} finally {
+			if (original === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+			else process.env.CLAUDE_CONFIG_DIR = original;
+		}
 	});
 
 	it("resolves Mistral Vibe's global path from VIBE_HOME, falling back to ~/.vibe", () => {
@@ -53,9 +65,8 @@ describe("detectInstalledAgents", () => {
 	});
 
 	afterEach(() => {
-		if (originalPath !== undefined) {
-			process.env.PATH = originalPath;
-		}
+		if (originalPath === undefined) delete process.env.PATH;
+		else process.env.PATH = originalPath;
 		if (originalPathExt === undefined) {
 			delete process.env.PATHEXT;
 		} else {

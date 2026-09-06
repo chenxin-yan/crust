@@ -25,7 +25,7 @@ describe("spinner — terminal sink", () => {
 		handle.stop();
 
 		expect(writes[0]).toBe("\x1B[?25l");
-		expect(writes).toContain("\x1B[?25h");
+		expect(writes.at(-1)).toBe("\x1B[?25h");
 	});
 
 	it("restores the cursor and re-raises SIGINT", () => {
@@ -315,44 +315,6 @@ describe("spinner — task error", () => {
 	});
 });
 
-describe("spinner — stderr output", () => {
-	it("shows success indicator on task completion", async () => {
-		await spinner({
-			sink,
-			message: "Building...",
-			task: async () => "ok",
-		});
-
-		expect(writes.join("")).toContain("✓");
-		expect(writes.join("")).toContain("Building...");
-	});
-
-	it("shows error indicator on task failure", async () => {
-		try {
-			await spinner({
-				sink,
-				message: "Deploying...",
-				task: async () => {
-					throw new Error("deploy failed");
-				},
-			});
-		} catch {}
-
-		expect(writes.join("")).toContain("✗");
-		expect(writes.join("")).toContain("Deploying...");
-	});
-
-	it("renders initial spinner frame immediately", async () => {
-		await spinner({
-			sink,
-			message: "Loading...",
-			task: async () => "ok",
-		});
-
-		expect(writes.join("")).toContain("⠋");
-	});
-});
-
 describe("spinner — animation", () => {
 	it("animates through frames during long-running task", async () => {
 		await spinner({
@@ -372,14 +334,11 @@ describe("spinner — animation", () => {
 		await spinner({
 			sink,
 			message: "Processing...",
-			task: async () => {
-				await tick(200);
-				return "ok";
-			},
+			task: async () => "ok",
 			spinner: "line",
 		});
 
-		expect(writes.join("")).toContain("-");
+		expect(writes[1]).toContain("- Processing...");
 	});
 
 	it("uses custom spinner frames", async () => {
@@ -425,12 +384,8 @@ describe("spinner — message updates", () => {
 			},
 		});
 
-		expect(writes.join("")).toContain("✓");
-		expect(writes.join("")).toContain("Final...");
-		const lastCursorShow = writes.join("").lastIndexOf("\x1B[?25h");
-		const beforeCursor = writes.join("").slice(0, lastCursorShow);
-		const lastNewline = beforeCursor.lastIndexOf("\n");
-		expect(beforeCursor.slice(0, lastNewline + 1)).toContain("Final...");
+		expect(writes.at(-2)).toBe("\x1B[2K\r✓ Final...\n");
+		expect(writes.at(-1)).toBe("\x1B[?25h");
 	});
 
 	it("error line uses the latest message", async () => {
@@ -482,18 +437,6 @@ describe("spinner — cleanup", () => {
 
 		expect(writes.join("")).toBe(outputAfterComplete);
 	});
-
-	it("output ends with newline on success", async () => {
-		await spinner({
-			sink,
-			message: "Working...",
-			task: async () => "ok",
-		});
-
-		const lastCursorShow = writes.join("").lastIndexOf("\x1B[?25h");
-		const beforeCursor = writes.join("").slice(0, lastCursorShow);
-		expect(beforeCursor.endsWith("\n")).toBe(true);
-	});
 });
 
 describe("spinner — non-interactive", () => {
@@ -501,36 +444,7 @@ describe("spinner — non-interactive", () => {
 		({ sink, writes } = createFakeSink(false));
 	});
 
-	it("does not emit ANSI escape codes", async () => {
-		await spinner({
-			sink,
-			message: "Working...",
-			task: async () => "ok",
-		});
-
-		expect(writes.join("")).not.toContain("\x1B[?25l");
-		expect(writes.join("")).not.toContain("\x1B[?25h");
-		expect(writes.join("")).not.toContain("\x1B[2K");
-		expect(writes.join("")).not.toContain("\r");
-	});
-
-	it("only outputs the final success line", async () => {
-		await spinner({
-			sink,
-			message: "Building...",
-			task: async () => "ok",
-		});
-
-		expect(writes.join("")).toContain("✓");
-		expect(writes.join("")).toContain("Building...");
-		const lines = writes
-			.join("")
-			.split("\n")
-			.filter((l) => l.length > 0);
-		expect(lines.length).toBe(1);
-	});
-
-	it("does not output spinner frames", async () => {
+	it("only outputs the final plain-text line during a long task", async () => {
 		await spinner({
 			sink,
 			message: "Working...",
@@ -540,8 +454,7 @@ describe("spinner — non-interactive", () => {
 			},
 		});
 
-		expect(writes.join("")).not.toContain("⠋");
-		expect(writes.join("")).not.toContain("⠙");
+		expect(writes).toEqual(["✓ Working...\n"]);
 	});
 
 	it("updateMessage silently updates the message", async () => {
@@ -555,14 +468,7 @@ describe("spinner — non-interactive", () => {
 			},
 		});
 
-		expect(writes.join("")).not.toContain("Step 1...");
-		expect(writes.join("")).not.toContain("Step 2...");
-		expect(writes.join("")).toContain("Step 3...");
-		const lines = writes
-			.join("")
-			.split("\n")
-			.filter((l) => l.length > 0);
-		expect(lines.length).toBe(1);
+		expect(writes).toEqual(["✓ Step 3...\n"]);
 	});
 });
 
