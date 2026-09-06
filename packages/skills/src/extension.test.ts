@@ -33,7 +33,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-	process.exitCode = originalExitCode;
+	process.exitCode = originalExitCode ?? 0;
 	await rm(tempRoot, { recursive: true, force: true });
 });
 
@@ -494,15 +494,15 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 
 	it("continues installs after a conflict in another agent directory", async () => {
 		const source = await writeSource("demo");
-		await withCwd(tempRoot, () =>
-			installSkill({
-				sourceDir: join(source, "demo"),
-				agents: ["claude-code"],
-				scope: "project",
-			}),
-		);
+		const claude = join(tempRoot, ".claude", "skills", "demo");
+		await mkdir(dirname(claude), { recursive: true });
+		// Owned but dangling: reconciliation must repair this after the Universal conflict.
+		await symlink(join(tempRoot, "missing", "skills", "demo"), claude);
 		await mkdir(target(), { recursive: true });
-		await withCwd(tempRoot, () => createApp(source).execute({ argv: ["skill", "--all"] }));
-		expect((await lstat(join(tempRoot, ".claude", "skills", "demo"))).isSymbolicLink()).toBe(true);
+		const captured = await withCwd(tempRoot, () =>
+			captureExecute(createApp(source), ["skill", "--all"]),
+		);
+		expect(captured.stderr).toContain("Skipped Universal [demo]");
+		expect(resolve(dirname(claude), await readlink(claude))).toBe(join(source, "demo"));
 	});
 });

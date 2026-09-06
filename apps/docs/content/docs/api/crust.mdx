@@ -101,16 +101,13 @@ const logging = defineContext("logging", { flags: [verbose] }, ({ flags, stderr 
 }));
 const auth = defineContext("auth", () => ({ user: "Ada" }));
 
-const deploy = defineCommand(
-  "deploy",
-  { description: "Deploy an application", aliases: ["ship"] },
-  (command) =>
-    command
-      .use(logging, auth)
-      .args({ name: "target", type: "string", required: true })
-      .action(async ({ args, ctx }) => {
-        (await ctx.logging).debug(`${(await ctx.auth).user}:${args.target}`);
-      }),
+const deploy = defineCommand("deploy", { description: "Deploy an application" }, (command) =>
+  command
+    .use(logging, auth)
+    .args({ name: "target", type: "string", required: true })
+    .action(async ({ args, ctx }) => {
+      (await ctx.logging).debug(`${(await ctx.auth).user}:${args.target}`);
+    }),
 );
 ```
 

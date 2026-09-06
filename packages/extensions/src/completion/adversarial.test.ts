@@ -237,9 +237,9 @@ describe("completion · --output-dir traversal", () => {
 		process.exitCode = originalExitCode;
 	});
 
-	it("rejects a binName containing path separators at setup time", async () => {
-		// `binName` validation runs during the extension's `setup()`. Crust
-		// catches setup errors and reports them via stderr + exitCode=1,
+	it("rejects a binName containing path separators at render time", async () => {
+		// `binName` validation runs in the completion action. Crust
+		// catches action errors and reports them via stderr + exitCode=1,
 		// rather than rethrowing, so we observe both side-effects to
 		// confirm the error fired before any file could be written.
 		const stderrChunks: string[] = [];

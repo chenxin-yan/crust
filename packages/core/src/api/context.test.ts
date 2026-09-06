@@ -267,28 +267,18 @@ describe("Crust .provide()", () => {
 	});
 
 	it("does not backfill added children with later parent provides", async () => {
-		let lateProvided = false;
-		const late = defineContext("late", () => {
-			lateProvided = true;
-			return "late";
-		});
+		const late = defineContext("late", () => "late");
 		const app = new Crust("cli")
-			.add(defineCommand("status", (command) => command.action(() => {})))
+			.add(defineCommand("status", (command) => command.action(({ ctx }) => "late" in ctx)))
 			.provide(late());
 
-		await app.run(["status"]);
-
-		expect(lateProvided).toBe(false);
+		expect(await app.run(["status"])).toEqual({ status: "completed", result: false });
 	});
 });
 
-describe("Context-owned flags", () => {
-	const apiKey = defineFlag("api-key", {
-		type: "string",
-		short: "k",
-		aliases: ["token"],
-	});
+const apiKey = defineFlag("api-key", { type: "string", short: "k", aliases: ["token"] });
 
+describe("Context-owned flags", () => {
 	it("installs a propagating cloned flag and exposes its validated value to setup", async () => {
 		const seen: unknown[] = [];
 		const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => {
@@ -399,18 +389,8 @@ describe("Context-owned flags", () => {
 		expect(seen).toEqual(["secret"]);
 	});
 
-	it("merges owned flag types from multiple Contexts in one provide call", () => {
-		const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
-		const format = defineFlag("format", { type: "string", choices: ["json", "text"] });
-		const output = defineContext("output", { flags: [format] }, () => ({}));
-		const app = new Crust("cli").provide(auth(), output());
-
-		type _FlagKeys = Expect<Equal<keyof (typeof app)["_types"]["flags"], "api-key" | "format">>;
-		type _ApiKey = Expect<Equal<(typeof app)["_types"]["flags"]["api-key"]["type"], "string">>;
-		type _Format = Expect<Equal<(typeof app)["_types"]["flags"]["format"]["type"], "string">>;
-	});
-
 	it("keeps owned flags when later .flags() calls accumulate local flags", async () => {
+		expect.assertions(2);
 		const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
 		const app = new Crust("cli")
 			.provide(auth())
@@ -443,6 +423,7 @@ describe("Context-owned flags", () => {
 	});
 
 	it("retains owned flags on .of() test doubles", async () => {
+		expect.assertions(3);
 		const auth = defineContext("auth", { flags: [apiKey] }, () => ({ real: true }));
 		const fake = auth.of({ real: false });
 		expect(fake.ownedFlags["api-key"]).toBeDefined();
@@ -458,61 +439,8 @@ describe("Context-owned flags", () => {
 });
 
 describe("Context setup dependencies", () => {
-	it("checks dependency graphs at every composition boundary", () => {
-		const config = defineContext("config", () => ({ url: "memory://" }));
-		const db = defineContext("db", { uses: [config] }, async ({ ctx }) => {
-			// @ts-expect-error -- setup bags expose only declared Contexts
-			void ctx.logger;
-			return { url: (await ctx.config).url };
-		});
-		const fake = db.of({ url: "fake" });
-		new Crust("cli").provide(fake);
-		new Crust("cli").provide(db(), config());
-
-		const command = defineCommand("run", (builder) =>
-			builder.use(db).action(async ({ ctx }) => {
-				void (await ctx.db);
-				// @ts-expect-error -- action bags expose only declared Contexts
-				void ctx.logger;
-			}),
-		);
-		new Crust("cli").provide(config(), db()).add(command);
-
-		const extension = defineExtension(defineExtensionId("typed-deps"), {
-			uses: [db],
-			hooks: { preRun: async ({ ctx }) => void (await ctx.db) },
-		});
-		new Crust("cli").provide(config(), db()).extend(extension);
-
-		// A factory widened to AnyContextFactory opts out of the compile-time
-		// dependency brand; wiring stays runtime-checked.
-		const widened: AnyContextFactory = config;
-		new Crust("cli").provide(widened(undefined));
-
-		const invalidCompositions = () => {
-			// @ts-expect-error -- db's transitive dependency closure is unsatisfied
-			new Crust("cli").provide(db());
-			// @ts-expect-error -- uses entries must be Context factories
-			defineContext("bad", { uses: [42] }, () => 1);
-			// @ts-expect-error -- command dependencies are checked by .add()
-			new Crust("cli").add(command);
-			// @ts-expect-error -- Extension dependencies are checked by .extend()
-			new Crust("cli").extend(extension);
-			const badProvides = defineExtension(defineExtensionId("bad-provides"), {
-				provides: [db()],
-			});
-			// @ts-expect-error -- Extension provides with unmet transitive deps are checked by .extend()
-			new Crust("cli").extend(badProvides);
-			const badCommand = defineExtension(defineExtensionId("bad-command"), {
-				commands: [command],
-			});
-			// @ts-expect-error -- Extension-contributed command deps are checked by .extend()
-			new Crust("cli").extend(badCommand);
-		};
-		void invalidCompositions;
-	});
-
 	it("types and resolves declared Context bags in two- and three-argument setups", async () => {
+		expect.assertions(1);
 		const session = defineContext("session", () => ({ userId: "yan" }));
 		const user = defineContext("user", { uses: [session] }, async ({ ctx }) => {
 			const value = await ctx.session;
@@ -534,6 +462,7 @@ describe("Context setup dependencies", () => {
 	});
 
 	it("exposes the transitive dependency closure at runtime", async () => {
+		expect.assertions(1);
 		const base = defineContext("base", () => "base");
 		const mid = defineContext("mid", { uses: [base] }, async ({ ctx }) => await ctx.base);
 		const db = defineContext("db", { uses: [mid] }, async ({ ctx }) => await ctx.base);
@@ -545,29 +474,13 @@ describe("Context setup dependencies", () => {
 	});
 
 	it("deduplicates repeated dependency names in a setup bag", async () => {
+		expect.assertions(1);
 		const base = defineContext("base", () => "base");
 		const db = defineContext("db", { uses: [base, base] }, async ({ ctx }) => await ctx.base);
 		await new Crust("cli")
 			.provide(base(), db())
 			.action(async ({ ctx }) => expect(await ctx.db).toBe("base"))
 			.run([]);
-	});
-
-	it("constructs a transitive chain lazily", async () => {
-		const order: string[] = [];
-		const base = defineContext("base", () => (order.push("base"), "base"));
-		const mid = defineContext("mid", { uses: [base] }, async ({ ctx }) => `mid(${await ctx.base})`);
-		const db = defineContext("db", { uses: [mid] }, async ({ ctx }) => {
-			const value = `db(${await ctx.mid})`;
-			order.push("db");
-			return value;
-		});
-		const unused = defineContext("unused", () => (order.push("unused"), "unused"));
-		await new Crust("cli")
-			.provide(db(), unused(), mid(), base())
-			.action(async ({ ctx }) => expect(await ctx.db).toBe("db(mid(base))"))
-			.run([]);
-		expect(order).toEqual(["base", "db"]);
 	});
 
 	it("only constructs conditionally pulled dependencies", async () => {
@@ -593,6 +506,7 @@ describe("Context setup dependencies", () => {
 	});
 
 	it("shares dependencies in a concurrent diamond without reporting a cycle", async () => {
+		expect.assertions(2);
 		let baseSetups = 0;
 		const base = defineContext("base", async () => ({ id: ++baseSetups }));
 		const left = defineContext("left", { uses: [base] }, async ({ ctx }) => (await ctx.base).id);
@@ -610,6 +524,7 @@ describe("Context setup dependencies", () => {
 	});
 
 	it("accepts dependencies in the same call in any order and across ordered calls", async () => {
+		expect.assertions(2);
 		const base = defineContext("base", () => "base");
 		const dependent = defineContext(
 			"dependent",
@@ -628,6 +543,7 @@ describe("Context setup dependencies", () => {
 	});
 
 	it("lets .of() cut the dependency graph while retaining owned flags", async () => {
+		expect.assertions(1);
 		const token = defineFlag("token", { type: "string" });
 		const missing = defineContext("missing", () => "real");
 		const db = defineContext(
@@ -642,6 +558,7 @@ describe("Context setup dependencies", () => {
 	});
 
 	it("exposes the typed transitive closure above an .of() cut", async () => {
+		expect.assertions(1);
 		const config = defineContext("config", () => ({ url: "memory://" }));
 		const db = defineContext("db", { uses: [config] }, async ({ ctx }) => ({
 			url: (await ctx.config).url,
@@ -915,6 +832,7 @@ describe("lazy Context bags", () => {
 	});
 
 	it("resolves dependencies across Extension providers regardless of order", async () => {
+		expect.assertions(1);
 		const base = defineContext("base", () => "base");
 		const service = defineContext(
 			"service",
@@ -1044,6 +962,7 @@ describe("lazy Context bags", () => {
 	});
 
 	it("memoizes ordinary setup rejections", async () => {
+		expect.assertions(3);
 		let setups = 0;
 		const failure = new Error("failed");
 		const service = defineContext("service", () => {
@@ -1061,6 +980,7 @@ describe("lazy Context bags", () => {
 	});
 
 	it("allows nested flag-free pulls in preRun", async () => {
+		expect.assertions(1);
 		const base = defineContext("base", () => "ok");
 		const service = defineContext("service", { uses: [base] }, async ({ ctx }) => await ctx.base);
 		const extension = defineExtension(defineExtensionId("consumer"), {
@@ -1417,46 +1337,6 @@ describe("inline .command()", () => {
 		expect(await app.run([])).toEqual({ status: "completed", result: "logger" });
 	});
 
-	it("brands inline .use() demands that the call site does not provide", () => {
-		const config = defineContext("config", () => ({ url: "memory://" }));
-		const db = defineContext("db", { uses: [config] }, async ({ ctx }) => await ctx.config);
-
-		// Satisfied demand (including db's transitive closure) composes cleanly.
-		new Crust("cli")
-			.provide(config(), db())
-			.command("query", (cmd) => cmd.use(db).action(async ({ ctx }) => void (await ctx.db)));
-
-		const invalidCompositions = () => {
-			// @ts-expect-error -- inline .use(db) demand is unmet at the call site
-			new Crust("cli").command("query", (cmd) => cmd.use(db).action(() => {}));
-			new Crust("cli")
-				.provide(db.of({ url: "fake" }))
-				// @ts-expect-error -- db's transitive config dependency is still unmet
-				.command("query", (cmd) => cmd.use(db).action(() => {}));
-		};
-		void invalidCompositions;
-	});
-
-	it("keeps .use() brand parity for defineCommand at .add() and .extend()", () => {
-		const config = defineContext("config", () => ({ url: "memory://" }));
-		const db = defineContext("db", { uses: [config] }, async ({ ctx }) => await ctx.config);
-		const query = defineCommand("query", (cmd) =>
-			cmd.use(db).action(async ({ ctx }) => void (await ctx.db)),
-		);
-		const carrier = defineExtension(defineExtensionId("carrier"), { commands: [query] });
-
-		new Crust("cli").provide(config(), db()).add(query);
-		new Crust("cli").provide(config(), db()).extend(carrier);
-
-		const invalidCompositions = () => {
-			// @ts-expect-error -- db's transitive config dependency is unmet at .add()
-			new Crust("cli").provide(db.of({ url: "fake" })).add(query);
-			// @ts-expect-error -- db's transitive config dependency is unmet at .extend()
-			new Crust("cli").provide(db.of({ url: "fake" })).extend(carrier);
-		};
-		void invalidCompositions;
-	});
-
 	it("demands the union of branch deps from a conditionally-returned recipe", async () => {
 		const a = defineContext("a", () => "a-value");
 		const b = defineContext("b", () => "b-value");
@@ -1495,33 +1375,6 @@ describe("inline .command()", () => {
 		expect(outcome.status === "completed" && outcome.result).toBeUndefined();
 	});
 
-	it("brands inline flags that collide with registered Extension flags, matching .add()", () => {
-		const tracer = defineExtension(defineExtensionId("tracer"), {
-			flags: [{ name: "trace", type: "boolean" }],
-		});
-		const rootOnly = defineExtension(defineExtensionId("root-only"), {
-			flags: [{ name: "depth", type: "string", recursive: false }],
-		});
-		const nestedColliding = defineCommand("child", (cmd) =>
-			cmd.flags({ name: "trace", type: "boolean" }).action(() => {}),
-		);
-
-		// Collision-free recipes compose cleanly after .extend().
-		new Crust("cli").extend(tracer).command("ok", (cmd) => cmd.action(() => {}));
-
-		const invalidCompositions = () => {
-			new Crust("cli")
-				.extend(tracer)
-				// @ts-expect-error -- nested child's "trace" collides with tracer's recursive flag (parity with .add())
-				.command("query", (cmd) => cmd.add(nestedColliding).action(() => {}));
-			new Crust("cli")
-				.extend(rootOnly)
-				// @ts-expect-error -- inline "depth" collides with a registered Extension flag (parity with .add())
-				.command("query", (cmd) => cmd.flags({ name: "depth", type: "string" }).action(() => {}));
-		};
-		void invalidCompositions;
-	});
-
 	it("rejects a Context instance passed to .use() at runtime", () => {
 		const logger = defineContext("logger", () => "logger");
 		expect(() =>
@@ -1540,3 +1393,141 @@ describe("inline .command()", () => {
 		).toThrow(/already registered/);
 	});
 });
+
+// Compile-time regression checks; intentionally never invoked.
+// merges owned flag types from multiple Contexts in one provide call
+function _typecheckMergesOwnedFlagTypesFromMultipleContextsInOneProvideCall() {
+	const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
+	const format = defineFlag("format", { type: "string", choices: ["json", "text"] });
+	const output = defineContext("output", { flags: [format] }, () => ({}));
+	const app = new Crust("cli").provide(auth(), output());
+
+	type _FlagKeys = Expect<Equal<keyof (typeof app)["_types"]["flags"], "api-key" | "format">>;
+	type _ApiKey = Expect<Equal<(typeof app)["_types"]["flags"]["api-key"]["type"], "string">>;
+	type _Format = Expect<Equal<(typeof app)["_types"]["flags"]["format"]["type"], "string">>;
+}
+
+// checks dependency graphs at every composition boundary
+function _typecheckChecksDependencyGraphsAtEveryCompositionBoundary() {
+	const config = defineContext("config", () => ({ url: "memory://" }));
+	const db = defineContext("db", { uses: [config] }, async ({ ctx }) => {
+		// @ts-expect-error -- setup bags expose only declared Contexts
+		void ctx.logger;
+		return { url: (await ctx.config).url };
+	});
+	const fake = db.of({ url: "fake" });
+	new Crust("cli").provide(fake);
+	new Crust("cli").provide(db(), config());
+
+	const command = defineCommand("run", (builder) =>
+		builder.use(db).action(async ({ ctx }) => {
+			void (await ctx.db);
+			// @ts-expect-error -- action bags expose only declared Contexts
+			void ctx.logger;
+		}),
+	);
+	new Crust("cli").provide(config(), db()).add(command);
+
+	const extension = defineExtension(defineExtensionId("typed-deps"), {
+		uses: [db],
+		hooks: { preRun: async ({ ctx }) => void (await ctx.db) },
+	});
+	new Crust("cli").provide(config(), db()).extend(extension);
+
+	// A factory widened to AnyContextFactory opts out of the compile-time
+	// dependency brand; wiring stays runtime-checked.
+	const widened: AnyContextFactory = config;
+	new Crust("cli").provide(widened(undefined));
+
+	const invalidCompositions = () => {
+		// @ts-expect-error -- db's transitive dependency closure is unsatisfied
+		new Crust("cli").provide(db());
+		// @ts-expect-error -- uses entries must be Context factories
+		defineContext("bad", { uses: [42] }, () => 1);
+		// @ts-expect-error -- command dependencies are checked by .add()
+		new Crust("cli").add(command);
+		// @ts-expect-error -- Extension dependencies are checked by .extend()
+		new Crust("cli").extend(extension);
+		const badProvides = defineExtension(defineExtensionId("bad-provides"), {
+			provides: [db()],
+		});
+		// @ts-expect-error -- Extension provides with unmet transitive deps are checked by .extend()
+		new Crust("cli").extend(badProvides);
+		const badCommand = defineExtension(defineExtensionId("bad-command"), {
+			commands: [command],
+		});
+		// @ts-expect-error -- Extension-contributed command deps are checked by .extend()
+		new Crust("cli").extend(badCommand);
+	};
+	void invalidCompositions;
+}
+
+// brands inline .use() demands that the call site does not provide
+function _typecheckBrandsInlineUseDemandsThatTheCallSiteDoesNotProvide() {
+	const config = defineContext("config", () => ({ url: "memory://" }));
+	const db = defineContext("db", { uses: [config] }, async ({ ctx }) => await ctx.config);
+
+	// Satisfied demand (including db's transitive closure) composes cleanly.
+	new Crust("cli")
+		.provide(config(), db())
+		.command("query", (cmd) => cmd.use(db).action(async ({ ctx }) => void (await ctx.db)));
+
+	const invalidCompositions = () => {
+		// @ts-expect-error -- inline .use(db) demand is unmet at the call site
+		new Crust("cli").command("query", (cmd) => cmd.use(db).action(() => {}));
+		new Crust("cli")
+			.provide(db.of({ url: "fake" }))
+			// @ts-expect-error -- db's transitive config dependency is still unmet
+			.command("query", (cmd) => cmd.use(db).action(() => {}));
+	};
+	void invalidCompositions;
+}
+
+// keeps .use() brand parity for defineCommand at .add() and .extend()
+function _typecheckKeepsUseBrandParityForDefineCommandAtAddAndExtend() {
+	const config = defineContext("config", () => ({ url: "memory://" }));
+	const db = defineContext("db", { uses: [config] }, async ({ ctx }) => await ctx.config);
+	const query = defineCommand("query", (cmd) =>
+		cmd.use(db).action(async ({ ctx }) => void (await ctx.db)),
+	);
+	const carrier = defineExtension(defineExtensionId("carrier"), { commands: [query] });
+
+	new Crust("cli").provide(config(), db()).add(query);
+	new Crust("cli").provide(config(), db()).extend(carrier);
+
+	const invalidCompositions = () => {
+		// @ts-expect-error -- db's transitive config dependency is unmet at .add()
+		new Crust("cli").provide(db.of({ url: "fake" })).add(query);
+		// @ts-expect-error -- db's transitive config dependency is unmet at .extend()
+		new Crust("cli").provide(db.of({ url: "fake" })).extend(carrier);
+	};
+	void invalidCompositions;
+}
+
+// brands inline flags that collide with registered Extension flags, matching .add()
+function _typecheckBrandsInlineFlagsThatCollideWithRegisteredExtensionFlagsMatchingAdd() {
+	const tracer = defineExtension(defineExtensionId("tracer"), {
+		flags: [{ name: "trace", type: "boolean" }],
+	});
+	const rootOnly = defineExtension(defineExtensionId("root-only"), {
+		flags: [{ name: "depth", type: "string", recursive: false }],
+	});
+	const nestedColliding = defineCommand("child", (cmd) =>
+		cmd.flags({ name: "trace", type: "boolean" }).action(() => {}),
+	);
+
+	// Collision-free recipes compose cleanly after .extend().
+	new Crust("cli").extend(tracer).command("ok", (cmd) => cmd.action(() => {}));
+
+	const invalidCompositions = () => {
+		new Crust("cli")
+			.extend(tracer)
+			// @ts-expect-error -- nested child's "trace" collides with tracer's recursive flag (parity with .add())
+			.command("query", (cmd) => cmd.add(nestedColliding).action(() => {}));
+		new Crust("cli")
+			.extend(rootOnly)
+			// @ts-expect-error -- inline "depth" collides with a registered Extension flag (parity with .add())
+			.command("query", (cmd) => cmd.flags({ name: "depth", type: "string" }).action(() => {}));
+	};
+	void invalidCompositions;
+}

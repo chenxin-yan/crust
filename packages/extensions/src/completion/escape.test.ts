@@ -59,7 +59,7 @@ describe("assertSafeBinName", () => {
 		["NUL", "foo\0bar"],
 		["leading hyphen", "-mycli"],
 	])("rejects %s", (_label, value) => {
-		expect(() => assertSafeBinName(value)).toThrow();
+		expect(() => assertSafeBinName(value)).toThrow(/binName/);
 	});
 });
 

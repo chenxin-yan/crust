@@ -265,7 +265,7 @@ describe("buildManifest", () => {
 			const node = buildManifest(await snapshotFixture(cmd));
 			const [arg] = node.args;
 
-			expect(arg?.description).toBeUndefined();
+			expect(arg).toStrictEqual({ name: "file", type: "string", required: false, variadic: false });
 		});
 	});
 
@@ -433,8 +433,13 @@ describe("buildManifest", () => {
 			const node = buildManifest(await snapshotFixture(cmd));
 			const [flag] = node.flags;
 
-			expect(flag?.description).toBeUndefined();
-			expect(flag?.default).toBeUndefined();
+			expect(flag).toStrictEqual({
+				name: "quiet",
+				spellings: ["--quiet", "--no-quiet"],
+				type: "boolean",
+				required: false,
+				multiple: false,
+			});
 		});
 	});
 

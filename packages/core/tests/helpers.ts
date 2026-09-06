@@ -53,21 +53,15 @@ export async function executeCrust(builder: AnyCrust, argv?: string[]): Promise<
 	const originalExitCode = process.exitCode;
 
 	try {
-		await builder.execute({
+		exitCode = await builder.execute({
 			argv,
 			io: {
 				stdout: (text) => stdoutChunks.push(text),
 				stderr: (text) => stderrChunks.push(text),
 			},
 		});
-	} catch (error) {
-		stderrChunks.push(error instanceof Error ? error.message : String(error));
-		exitCode = 1;
 	} finally {
-		if (process.exitCode != null && process.exitCode !== originalExitCode) {
-			exitCode = Number(process.exitCode);
-		}
-		process.exitCode = originalExitCode;
+		process.exitCode = originalExitCode ?? 0;
 	}
 
 	return {

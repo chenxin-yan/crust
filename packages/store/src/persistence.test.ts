@@ -63,7 +63,7 @@ describe("readJson", () => {
 				expect(storeErr.details.path).toBe(filePath);
 			}
 			expect(storeErr.message).toContain("Malformed JSON");
-			expect(storeErr.cause).toBeDefined();
+			expect(storeErr.cause).toBeInstanceOf(SyntaxError);
 		}
 	});
 
@@ -86,18 +86,6 @@ describe("readJson", () => {
 		} finally {
 			// Restore permissions for cleanup
 			await chmod(filePath, 0o644);
-		}
-	});
-
-	it("should preserve cause from original parse error", async () => {
-		await writeFile(filePath, "not json at all");
-
-		try {
-			await readJson(filePath);
-			expect.unreachable("should have thrown");
-		} catch (err) {
-			const storeErr = err as CrustStoreError;
-			expect(storeErr.cause).toBeInstanceOf(SyntaxError);
 		}
 	});
 });
@@ -137,7 +125,7 @@ describe("writeJson", () => {
 		expect(JSON.parse(raw)).toEqual({ created: true });
 	});
 
-	it("should overwrite existing file atomically", async () => {
+	it("should overwrite an existing file", async () => {
 		await mkdir(tempDir, { recursive: true });
 		await writeFile(filePath, JSON.stringify({ old: true }));
 
@@ -151,7 +139,6 @@ describe("writeJson", () => {
 		await writeJson(filePath, { theme: "dark" });
 
 		const raw = await readFile(filePath, "utf-8");
-		expect(raw).toContain("\t");
 		expect(raw).toBe(JSON.stringify({ theme: "dark" }, null, "\t"));
 	});
 

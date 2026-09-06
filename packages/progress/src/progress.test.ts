@@ -19,7 +19,7 @@ describe("progress — determinate", () => {
 		expect(output).toContain("✓");
 	});
 
-	it("advance accepts a message and defaults to +1", () => {
+	it("advance and stop accept a replacement message", () => {
 		const { sink, writes } = createFakeSink();
 		const progress = createProgressBar({ total: 2, message: "Files", sink });
 
