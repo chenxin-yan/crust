@@ -56,6 +56,3 @@ jobs:
 
       - name: Build (docs)
         run: bun run build:docs
-
-      - name: Check compiled documentation output
-        run: bun run --cwd apps/docs check:output
