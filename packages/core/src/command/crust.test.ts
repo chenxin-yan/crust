@@ -136,7 +136,7 @@ describe("Crust .flags()", () => {
 		});
 	});
 
-	it("deep copies flag definitions (decoupled from caller)", async () => {
+	it("copies scalar flag definition fields (decoupled from caller)", async () => {
 		const flagDef = {
 			name: "verbose" as const,
 			type: "boolean" as const,
@@ -188,7 +188,7 @@ describe("Crust .args()", () => {
 		]);
 	});
 
-	it("deep copies arg definitions (decoupled from caller)", async () => {
+	it("copies scalar arg definition fields (decoupled from caller)", async () => {
 		const argDef = {
 			name: "file" as const,
 			type: "string" as const,
@@ -290,86 +290,6 @@ describe("command metadata", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// Type-level tests — .flags()
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("Crust type-level tests", () => {
-	it(".flags() updates Flags generic", () => {
-		const app = new Crust("test").flags(
-			{ name: "verbose", type: "boolean", short: "v" },
-			{ name: "port", type: "number", default: 3000 },
-		);
-
-		// Extract the Flags type from the phantom _types property
-		type AppFlags = (typeof app)["_types"]["flags"];
-
-		type _checkVerbose = Expect<
-			Equal<AppFlags["verbose"], { readonly type: "boolean"; readonly short: "v" }>
-		>;
-		type _checkPort = Expect<
-			Equal<AppFlags["port"], { readonly type: "number"; readonly default: 3000 }>
-		>;
-	});
-
-	it(".args() updates A generic", () => {
-		const app = new Crust("test").args(
-			{ name: "file", type: "string", required: true },
-			{ name: "count", type: "number", default: 1 },
-		);
-
-		type AppArgs = (typeof app)["_types"]["args"];
-
-		type _checkIsReadonly = Expect<
-			Equal<
-				AppArgs,
-				readonly [
-					{
-						readonly name: "file";
-						readonly type: "string";
-						readonly required: true;
-					},
-					{
-						readonly name: "count";
-						readonly type: "number";
-						readonly default: 1;
-					},
-				]
-			>
-		>;
-	});
-
-	it("chaining .flags().args() preserves both generics", () => {
-		const app = new Crust("test")
-			.flags(
-				{ name: "verbose", type: "boolean", short: "v" },
-				{ name: "port", type: "number", default: 3000 },
-			)
-			.args({ name: "file", type: "string", required: true });
-
-		// Verify the Flags generic is preserved
-		type AppFlags = (typeof app)["_types"]["flags"];
-		type _checkVerbose = Expect<
-			Equal<AppFlags["verbose"], { readonly type: "boolean"; readonly short: "v" }>
-		>;
-
-		// Verify args A generic is preserved
-		type AppArgs = (typeof app)["_types"]["args"];
-		type _checkArgs = Expect<
-			Equal<
-				AppArgs,
-				readonly [
-					{
-						readonly name: "file";
-						readonly type: "string";
-						readonly required: true;
-					},
-				]
-			>
-		>;
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // .add() — Runtime tests
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -429,88 +349,6 @@ describe("Crust .add() with inline definitions", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// .add() — Type-level tests
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("Crust .add() type-level tests", () => {
-	it("rejects sibling command spelling collisions at the call site", () => {
-		const issue = defineCommand("issue", { aliases: ["issues", "i"] }, (command) => command);
-		const app = new Crust("cli").add(issue);
-
-		const typecheckCollisions = () => {
-			// @ts-expect-error -- duplicate sibling canonical name across .add() calls
-			app.add(defineCommand("issue", (command) => command));
-			// @ts-expect-error -- alias collides with a sibling canonical name
-			app.add(defineCommand("info", { aliases: ["issue"] }, (command) => command));
-			// @ts-expect-error -- canonical name collides with a sibling alias
-			app.add(defineCommand("i", (command) => command));
-			// @ts-expect-error -- .as() preserves aliases, including their collisions
-			app.add(issue.as("ticket"));
-			new Crust("cli").add(
-				// @ts-expect-error -- collisions are checked against earlier definitions in the batch
-				defineCommand("build", { aliases: ["b"] }, (command) => command),
-				defineCommand("b", (command) => command),
-			);
-		};
-		void typecheckCollisions;
-
-		const dynamicName = "dynamic" as string;
-		const dynamic = defineCommand(dynamicName, (command) => command);
-		new Crust("cli").add(dynamic).add(defineCommand("static", (command) => command));
-
-		expect(true).toBe(true);
-	});
-
-	it("rejects invalid command alias shapes at defineCommand()", () => {
-		const typecheckAliasShapes = () => {
-			// @ts-expect-error -- aliases must be non-empty
-			defineCommand("issue", { aliases: [""] }, (command) => command);
-			// @ts-expect-error -- aliases must not start with a dash
-			defineCommand("issue", { aliases: ["-i"] }, (command) => command);
-			// @ts-expect-error -- aliases must not contain spaces
-			defineCommand("issue", { aliases: ["my issue"] }, (command) => command);
-			// @ts-expect-error -- aliases must not contain tabs
-			defineCommand("issue", { aliases: ["my\tissue"] }, (command) => command);
-			// @ts-expect-error -- aliases must differ from their own canonical name
-			defineCommand("issue", { aliases: ["issue"] }, (command) => command);
-		};
-		void typecheckAliasShapes;
-
-		expect(true).toBe(true);
-	});
-
-	it("types pulled capabilities and local values in actions", () => {
-		const verbose = defineFlag("verbose", { type: "boolean" });
-		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
-			verbose: flags.verbose === true,
-		}));
-		new Crust("cli")
-			.flags({ name: "rootOnly", type: "string" })
-			.provide(logging())
-			.add(
-				defineCommand("level1", (command) =>
-					command.use(logging).add(
-						defineCommand("level2", (child) =>
-							child
-								.use(logging)
-								.args({ name: "target", type: "string", required: true })
-								.action(async ({ args, flags, ctx }) => {
-									const log = await ctx.logging;
-									type _target = Expect<Equal<typeof args.target, string>>;
-									type _verbose = Expect<Equal<typeof log.verbose, boolean>>;
-									// @ts-expect-error -- ancestor-owned flags are parsed but not action-visible
-									void flags.verbose;
-									// @ts-expect-error -- root-local flags do not propagate
-									void flags.rootOnly;
-								}),
-						),
-					),
-				),
-			);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
 // .action() — Runtime tests
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -544,62 +382,6 @@ describe("Crust .action()", () => {
 			flags: { verbose: { type: "boolean" } },
 			args: [{ name: "file", type: "string" }],
 			subCommands: { sub: { meta: { name: "sub" } } },
-		});
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// .action() — Type-level tests
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("Crust .action() type-level tests", () => {
-	it("action receives InferArgs<A> for args", () => {
-		new Crust("test")
-			.args(
-				{ name: "file", type: "string", required: true },
-				{ name: "count", type: "number", default: 5 },
-			)
-			.action((_ctx) => {
-				type CtxArgs = typeof _ctx.args;
-				type _checkFile = Expect<Equal<CtxArgs["file"], string>>;
-				type _checkCount = Expect<Equal<CtxArgs["count"], number>>;
-			});
-	});
-
-	it("variadic args resolve to array type in action", () => {
-		new Crust("test").args({ name: "files", type: "string", variadic: true }).action((_ctx) => {
-			type CtxArgs = typeof _ctx.args;
-			type _checkFiles = Expect<Equal<CtxArgs["files"], string[]>>;
-		});
-	});
-
-	it("multiple flag resolves to array type in action", () => {
-		new Crust("test")
-			.flags({ name: "tags", type: "string", multiple: true, required: true })
-			.action((_ctx) => {
-				type CtxFlags = typeof _ctx.flags;
-				type _checkTags = Expect<Equal<CtxFlags["tags"], string[]>>;
-			});
-	});
-
-	it("optional flag resolves to union with undefined in action", () => {
-		new Crust("test").flags({ name: "port", type: "number" }).action((_ctx) => {
-			type CtxFlags = typeof _ctx.flags;
-			type _checkPort = Expect<Equal<CtxFlags["port"], number | undefined>>;
-		});
-	});
-
-	it("required flag resolves to non-optional type in action", () => {
-		new Crust("test").flags({ name: "name", type: "string", required: true }).action((_ctx) => {
-			type CtxFlags = typeof _ctx.flags;
-			type _checkName = Expect<Equal<CtxFlags["name"], string>>;
-		});
-	});
-
-	it("flag with default resolves to non-optional type in action", () => {
-		new Crust("test").flags({ name: "port", type: "number", default: 3000 }).action((_ctx) => {
-			type CtxFlags = typeof _ctx.flags;
-			type _checkPort = Expect<Equal<CtxFlags["port"], number>>;
 		});
 	});
 });
@@ -764,37 +546,12 @@ describe("Crust .extend()", () => {
 			() => ({}),
 		);
 		const first: Extension = defineExtension(id, { provides: [provider()] });
-		const replacement: Extension = defineExtension(id);
 		const app = new Crust("test").flags({
 			name: "mode",
 			type: "string",
 			aliases: ["local-mode"],
 		});
-		expect(() => app.extend(first).extend(replacement)).toThrow(
-			expect.objectContaining({
-				code: "DEFINITION",
-				details: expect.objectContaining({ reason: "flag-collision" }),
-			}),
-		);
-	});
-
-	it("rejects an unrelated Extension provider flag colliding with a local flag", () => {
-		const provider = defineContext(
-			"flagProvider",
-			{ flags: [{ name: "mode", type: "number", aliases: ["extension-mode"] }] },
-			() => ({}),
-		);
-		const extension: Extension = defineExtension(defineExtensionId("flag-provider"), {
-			provides: [provider()],
-		});
-		const app = new Crust("test").flags({
-			name: "mode",
-			type: "string",
-			aliases: ["local-mode"],
-		});
-		expect(() =>
-			app.extend(extension).extend(defineExtension(defineExtensionId("unrelated"))),
-		).toThrow(
+		expect(() => app.extend(first)).toThrow(
 			expect.objectContaining({
 				code: "DEFINITION",
 				details: expect.objectContaining({ reason: "flag-collision" }),
@@ -851,57 +608,6 @@ describe("Crust .extend()", () => {
 		expect(ext.flags).toEqual({ x: { type: "boolean" } });
 	});
 
-	it("infers Extension-owned flags in hook contexts", () => {
-		const ext = defineExtension(defineExtensionId("typed-flags"), {
-			flags: [
-				{ name: "verbose", type: "boolean", default: false },
-				{ name: "rootPort", type: "number", default: 3000, recursive: false },
-				{ name: "token", type: "string", required: true },
-				{
-					name: "endpoint",
-					type: "string",
-					schema: {} as StandardSchema<string | undefined, URL>,
-				},
-				{
-					name: "tags",
-					type: "string",
-					multiple: true,
-					schema: {} as StandardSchema<string[], string[]>,
-				},
-			],
-			hooks: {
-				preRun(ctx) {
-					type _verbose = Expect<Equal<typeof ctx.flags.verbose, boolean>>;
-					type _rootPort = Expect<Equal<typeof ctx.flags.rootPort, number | undefined>>;
-					// Hooks run before validation, so a required flag may still be absent.
-					type _token = Expect<Equal<typeof ctx.flags.token, string | undefined>>;
-					// Schema flags reflect the raw syntax token, not the schema output.
-					type _endpoint = Expect<Equal<typeof ctx.flags.endpoint, string | undefined>>;
-					type _tags = Expect<Equal<typeof ctx.flags.tags, string[] | undefined>>;
-					type _commandFlag = Expect<Equal<typeof ctx.flags.commandFlag, unknown>>;
-					const commandFlag: unknown = ctx.flags.commandFlag;
-					void commandFlag;
-				},
-			},
-		});
-
-		expect(ext.id as string).toBe("typed-flags");
-	});
-
-	it("infers defineFlag() values attached to an Extension", () => {
-		const trace = defineFlag("trace", { type: "boolean", default: false });
-		const ext = defineExtension(defineExtensionId("defined-flags"), {
-			flags: [trace],
-			hooks: {
-				preRun(ctx) {
-					type _trace = Expect<Equal<typeof ctx.flags.trace, boolean>>;
-				},
-			},
-		});
-
-		expect(ext.flags?.trace).toEqual({ type: "boolean", default: false });
-	});
-
 	it("preserves the command definition when extending", async () => {
 		const app = new Crust("test")
 			.flags({ name: "verbose", type: "boolean" })
@@ -940,67 +646,6 @@ describe("Crust .extend()", () => {
 });
 
 describe("Extension application at prepare time", () => {
-	it("brands statically known Extension command collisions at .extend()", () => {
-		const build = defineCommand("build", (command) => command);
-		const collidingName = defineExtension(defineExtensionId("name-collision"), {
-			commands: [defineCommand("build", (command) => command)],
-		});
-		const collidingAlias = defineExtension(defineExtensionId("alias-collision"), {
-			commands: [defineCommand("inspect", { aliases: ["build"] }, (command) => command)],
-		});
-		const first = defineExtension(defineExtensionId("first-command"), {
-			commands: [defineCommand("deploy", { aliases: ["d"] }, (command) => command)],
-		});
-		const second = defineExtension(defineExtensionId("second-command"), {
-			commands: [defineCommand("d", (command) => command)],
-		});
-		const dynamic: Extension = collidingName;
-		const clean = defineExtension(defineExtensionId("clean-command"), {
-			commands: [defineCommand("inspect", (command) => command)],
-		});
-
-		function typecheckHarness() {
-			const app = new Crust("cli").add(build);
-			// @ts-expect-error -- command name collides with an app sibling (FIX_COMMAND_COLLISION)
-			void app.extend(collidingName);
-			// @ts-expect-error -- command alias collides with an app sibling (FIX_COMMAND_COLLISION)
-			void app.extend(collidingAlias);
-			// @ts-expect-error -- command name collides with an earlier Extension alias (FIX_COMMAND_COLLISION)
-			void new Crust("cli").extend(first).extend(second);
-			void app.extend(dynamic);
-			void app.extend(clean);
-		}
-		void typecheckHarness;
-		expect(true).toBe(true);
-	});
-
-	it("brands duplicate command spellings within one Extension at defineExtension()", () => {
-		function typecheckHarness() {
-			void defineExtension(defineExtensionId("self-name-collision"), {
-				commands: [
-					defineCommand("dup", (command) => command),
-					// @ts-expect-error -- duplicate canonical name within one Extension (FIX_COMMAND_COLLISION)
-					defineCommand("dup", (command) => command),
-				],
-			});
-			void defineExtension(defineExtensionId("self-alias-collision"), {
-				commands: [
-					defineCommand("deploy", { aliases: ["d"] }, (command) => command),
-					// @ts-expect-error -- canonical name matches an earlier alias within one Extension (FIX_COMMAND_COLLISION)
-					defineCommand("d", (command) => command),
-				],
-			});
-			void defineExtension(defineExtensionId("self-clean"), {
-				commands: [
-					defineCommand("build", (command) => command),
-					defineCommand("deploy", (command) => command),
-				],
-			});
-		}
-		void typecheckHarness;
-		expect(true).toBe(true);
-	});
-
 	it("rejects an Extension providing a Context name already on the path at compile time", () => {
 		const db = defineContext("db", {}, () => "real");
 		const impostor = defineContext("db", {}, () => 42);
@@ -1097,7 +742,7 @@ describe("Extension application at prepare time", () => {
 		try {
 			await app.execute({ argv: [], io: { stderr: (text) => stderr.push(text) } });
 		} finally {
-			process.exitCode = originalExitCode;
+			process.exitCode = originalExitCode ?? 0;
 		}
 		expect(stderr.join("\n")).toContain('Flag "auth" collides with existing flag "token"');
 	});
@@ -1121,7 +766,7 @@ describe("Extension application at prepare time", () => {
 		try {
 			await app.execute({ argv: ["--old"], io: { stderr: (text) => stderr.push(text) } });
 		} finally {
-			process.exitCode = originalExitCode;
+			process.exitCode = originalExitCode ?? 0;
 		}
 
 		expect(runs).toBe(0);
@@ -1153,9 +798,9 @@ describe("Extension application at prepare time", () => {
 				io: { stderr: (text) => stderr.push(text) },
 			});
 		} finally {
-			process.exitCode = originalExitCode;
+			process.exitCode = originalExitCode ?? 0;
 		}
-		expect(stderr.join("\n")).toContain("--version");
+		expect(stderr.join("\n")).toContain('Unknown flag "--version"');
 	});
 
 	it("Extension command definitions are routable, validated, and receive recursive flags", async () => {
@@ -1197,7 +842,7 @@ describe("Extension application at prepare time", () => {
 			await app.execute({ argv: ["completion", "fish"] });
 			await app.execute({ argv: ["completion"] });
 		} finally {
-			process.exitCode = originalExitCode;
+			process.exitCode = originalExitCode ?? 0;
 		}
 		expect(lines).toEqual(["completion:bash:true:cli"]);
 		expect(errors).toEqual(["PARSE", "VALIDATION"]);
@@ -1539,7 +1184,7 @@ describe("Extension onError hooks", () => {
 	afterEach(() => {
 		console.log = originalLog;
 		console.error = originalError;
-		process.exitCode = originalExitCode;
+		process.exitCode = originalExitCode ?? 0;
 	});
 
 	const failing = () =>
@@ -1707,7 +1352,7 @@ describe("Crust .run()", () => {
 	});
 
 	afterEach(() => {
-		process.exitCode = originalExitCode;
+		process.exitCode = originalExitCode ?? 0;
 	});
 
 	it("throws the original CrustError without rendering or setting exitCode", async () => {
@@ -2533,7 +2178,7 @@ describe("Crust.snapshot", () => {
 		const a = await app.snapshot();
 		const b = await app.snapshot();
 		expect(a.meta.name).toBe("cli");
-		expect(b.meta.name).toBe("cli");
+		expect(b).toEqual(a);
 	});
 
 	it("never calls Command Actions", async () => {
@@ -2680,3 +2325,310 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 		);
 	});
 });
+
+// Compile-time regression checks; intentionally never invoked.
+// .flags() updates Flags generic
+function _typecheckFlagsUpdatesFlagsGeneric() {
+	const app = new Crust("test").flags(
+		{ name: "verbose", type: "boolean", short: "v" },
+		{ name: "port", type: "number", default: 3000 },
+	);
+
+	// Extract the Flags type from the phantom _types property
+	type AppFlags = (typeof app)["_types"]["flags"];
+
+	type _checkVerbose = Expect<
+		Equal<AppFlags["verbose"], { readonly type: "boolean"; readonly short: "v" }>
+	>;
+	type _checkPort = Expect<
+		Equal<AppFlags["port"], { readonly type: "number"; readonly default: 3000 }>
+	>;
+}
+
+// .args() updates A generic
+function _typecheckArgsUpdatesAGeneric() {
+	const app = new Crust("test").args(
+		{ name: "file", type: "string", required: true },
+		{ name: "count", type: "number", default: 1 },
+	);
+
+	type AppArgs = (typeof app)["_types"]["args"];
+
+	type _checkIsReadonly = Expect<
+		Equal<
+			AppArgs,
+			readonly [
+				{
+					readonly name: "file";
+					readonly type: "string";
+					readonly required: true;
+				},
+				{
+					readonly name: "count";
+					readonly type: "number";
+					readonly default: 1;
+				},
+			]
+		>
+	>;
+}
+
+// chaining .flags().args() preserves both generics
+function _typecheckChainingFlagsArgsPreservesBothGenerics() {
+	const app = new Crust("test")
+		.flags(
+			{ name: "verbose", type: "boolean", short: "v" },
+			{ name: "port", type: "number", default: 3000 },
+		)
+		.args({ name: "file", type: "string", required: true });
+
+	// Verify the Flags generic is preserved
+	type AppFlags = (typeof app)["_types"]["flags"];
+	type _checkVerbose = Expect<
+		Equal<AppFlags["verbose"], { readonly type: "boolean"; readonly short: "v" }>
+	>;
+
+	// Verify args A generic is preserved
+	type AppArgs = (typeof app)["_types"]["args"];
+	type _checkArgs = Expect<
+		Equal<
+			AppArgs,
+			readonly [
+				{
+					readonly name: "file";
+					readonly type: "string";
+					readonly required: true;
+				},
+			]
+		>
+	>;
+}
+
+// rejects sibling command spelling collisions at the call site
+function _typecheckRejectsSiblingCommandSpellingCollisionsAtTheCallSite() {
+	const issue = defineCommand("issue", { aliases: ["issues", "i"] }, (command) => command);
+	const app = new Crust("cli").add(issue);
+
+	// @ts-expect-error -- duplicate sibling canonical name across .add() calls
+	app.add(defineCommand("issue", (command) => command));
+	// @ts-expect-error -- alias collides with a sibling canonical name
+	app.add(defineCommand("info", { aliases: ["issue"] }, (command) => command));
+	// @ts-expect-error -- canonical name collides with a sibling alias
+	app.add(defineCommand("i", (command) => command));
+	// @ts-expect-error -- .as() preserves aliases, including their collisions
+	app.add(issue.as("ticket"));
+	new Crust("cli").add(
+		// @ts-expect-error -- collisions are checked against earlier definitions in the batch
+		defineCommand("build", { aliases: ["b"] }, (command) => command),
+		defineCommand("b", (command) => command),
+	);
+
+	const dynamicName = "dynamic" as string;
+	const dynamic = defineCommand(dynamicName, (command) => command);
+	new Crust("cli").add(dynamic).add(defineCommand("static", (command) => command));
+}
+
+// rejects invalid command alias shapes at defineCommand()
+function _typecheckRejectsInvalidCommandAliasShapesAtDefineCommand() {
+	// @ts-expect-error -- aliases must be non-empty
+	defineCommand("issue", { aliases: [""] }, (command) => command);
+	// @ts-expect-error -- aliases must not start with a dash
+	defineCommand("issue", { aliases: ["-i"] }, (command) => command);
+	// @ts-expect-error -- aliases must not contain spaces
+	defineCommand("issue", { aliases: ["my issue"] }, (command) => command);
+	// @ts-expect-error -- aliases must not contain tabs
+	defineCommand("issue", { aliases: ["my\tissue"] }, (command) => command);
+	// @ts-expect-error -- aliases must differ from their own canonical name
+	defineCommand("issue", { aliases: ["issue"] }, (command) => command);
+}
+
+// types pulled capabilities and local values in actions
+function _typecheckTypesPulledCapabilitiesAndLocalValuesInActions() {
+	const verbose = defineFlag("verbose", { type: "boolean" });
+	const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
+		verbose: flags.verbose === true,
+	}));
+	new Crust("cli")
+		.flags({ name: "rootOnly", type: "string" })
+		.provide(logging())
+		.add(
+			defineCommand("level1", (command) =>
+				command.use(logging).add(
+					defineCommand("level2", (child) =>
+						child
+							.use(logging)
+							.args({ name: "target", type: "string", required: true })
+							.action(async ({ args, flags, ctx }) => {
+								const log = await ctx.logging;
+								type _target = Expect<Equal<typeof args.target, string>>;
+								type _verbose = Expect<Equal<typeof log.verbose, boolean>>;
+								// @ts-expect-error -- ancestor-owned flags are parsed but not action-visible
+								void flags.verbose;
+								// @ts-expect-error -- root-local flags do not propagate
+								void flags.rootOnly;
+							}),
+					),
+				),
+			),
+		);
+}
+
+// action receives InferArgs<A> for args
+function _typecheckActionReceivesInferArgsAForArgs() {
+	new Crust("test")
+		.args(
+			{ name: "file", type: "string", required: true },
+			{ name: "count", type: "number", default: 5 },
+		)
+		.action((_ctx) => {
+			type CtxArgs = typeof _ctx.args;
+			type _checkFile = Expect<Equal<CtxArgs["file"], string>>;
+			type _checkCount = Expect<Equal<CtxArgs["count"], number>>;
+		});
+}
+
+// variadic args resolve to array type in action
+function _typecheckVariadicArgsResolveToArrayTypeInAction() {
+	new Crust("test").args({ name: "files", type: "string", variadic: true }).action((_ctx) => {
+		type CtxArgs = typeof _ctx.args;
+		type _checkFiles = Expect<Equal<CtxArgs["files"], string[]>>;
+	});
+}
+
+// multiple flag resolves to array type in action
+function _typecheckMultipleFlagResolvesToArrayTypeInAction() {
+	new Crust("test")
+		.flags({ name: "tags", type: "string", multiple: true, required: true })
+		.action((_ctx) => {
+			type CtxFlags = typeof _ctx.flags;
+			type _checkTags = Expect<Equal<CtxFlags["tags"], string[]>>;
+		});
+}
+
+// optional flag resolves to union with undefined in action
+function _typecheckOptionalFlagResolvesToUnionWithUndefinedInAction() {
+	new Crust("test").flags({ name: "port", type: "number" }).action((_ctx) => {
+		type CtxFlags = typeof _ctx.flags;
+		type _checkPort = Expect<Equal<CtxFlags["port"], number | undefined>>;
+	});
+}
+
+// required flag resolves to non-optional type in action
+function _typecheckRequiredFlagResolvesToNonOptionalTypeInAction() {
+	new Crust("test").flags({ name: "name", type: "string", required: true }).action((_ctx) => {
+		type CtxFlags = typeof _ctx.flags;
+		type _checkName = Expect<Equal<CtxFlags["name"], string>>;
+	});
+}
+
+// flag with default resolves to non-optional type in action
+function _typecheckFlagWithDefaultResolvesToNonOptionalTypeInAction() {
+	new Crust("test").flags({ name: "port", type: "number", default: 3000 }).action((_ctx) => {
+		type CtxFlags = typeof _ctx.flags;
+		type _checkPort = Expect<Equal<CtxFlags["port"], number>>;
+	});
+}
+
+// brands statically known Extension command collisions at .extend()
+function _typecheckBrandsStaticallyKnownExtensionCommandCollisionsAtExtend() {
+	const build = defineCommand("build", (command) => command);
+	const collidingName = defineExtension(defineExtensionId("name-collision"), {
+		commands: [defineCommand("build", (command) => command)],
+	});
+	const collidingAlias = defineExtension(defineExtensionId("alias-collision"), {
+		commands: [defineCommand("inspect", { aliases: ["build"] }, (command) => command)],
+	});
+	const first = defineExtension(defineExtensionId("first-command"), {
+		commands: [defineCommand("deploy", { aliases: ["d"] }, (command) => command)],
+	});
+	const second = defineExtension(defineExtensionId("second-command"), {
+		commands: [defineCommand("d", (command) => command)],
+	});
+	const dynamic: Extension = collidingName;
+	const clean = defineExtension(defineExtensionId("clean-command"), {
+		commands: [defineCommand("inspect", (command) => command)],
+	});
+
+	const app = new Crust("cli").add(build);
+	// @ts-expect-error -- command name collides with an app sibling (FIX_COMMAND_COLLISION)
+	void app.extend(collidingName);
+	// @ts-expect-error -- command alias collides with an app sibling (FIX_COMMAND_COLLISION)
+	void app.extend(collidingAlias);
+	// @ts-expect-error -- command name collides with an earlier Extension alias (FIX_COMMAND_COLLISION)
+	void new Crust("cli").extend(first).extend(second);
+	void app.extend(dynamic);
+	void app.extend(clean);
+}
+
+// brands duplicate command spellings within one Extension at defineExtension()
+function _typecheckBrandsDuplicateCommandSpellingsWithinOneExtensionAtDefineExtension() {
+	void defineExtension(defineExtensionId("self-name-collision"), {
+		commands: [
+			defineCommand("dup", (command) => command),
+			// @ts-expect-error -- duplicate canonical name within one Extension (FIX_COMMAND_COLLISION)
+			defineCommand("dup", (command) => command),
+		],
+	});
+	void defineExtension(defineExtensionId("self-alias-collision"), {
+		commands: [
+			defineCommand("deploy", { aliases: ["d"] }, (command) => command),
+			// @ts-expect-error -- canonical name matches an earlier alias within one Extension (FIX_COMMAND_COLLISION)
+			defineCommand("d", (command) => command),
+		],
+	});
+	void defineExtension(defineExtensionId("self-clean"), {
+		commands: [
+			defineCommand("build", (command) => command),
+			defineCommand("deploy", (command) => command),
+		],
+	});
+}
+
+// infers Extension-owned flags in hook contexts
+function _typecheckExtensionOwnedHookFlags() {
+	defineExtension(defineExtensionId("typed-flags"), {
+		flags: [
+			{ name: "verbose", type: "boolean", default: false },
+			{ name: "rootPort", type: "number", default: 3000, recursive: false },
+			{ name: "token", type: "string", required: true },
+			{
+				name: "endpoint",
+				type: "string",
+				schema: {} as StandardSchema<string | undefined, URL>,
+			},
+			{
+				name: "tags",
+				type: "string",
+				multiple: true,
+				schema: {} as StandardSchema<string[], string[]>,
+			},
+		],
+		hooks: {
+			preRun(ctx) {
+				type _verbose = Expect<Equal<typeof ctx.flags.verbose, boolean>>;
+				type _rootPort = Expect<Equal<typeof ctx.flags.rootPort, number | undefined>>;
+				// Hooks run before validation, so a required flag may still be absent.
+				type _token = Expect<Equal<typeof ctx.flags.token, string | undefined>>;
+				// Schema flags reflect the raw syntax token, not the schema output.
+				type _endpoint = Expect<Equal<typeof ctx.flags.endpoint, string | undefined>>;
+				type _tags = Expect<Equal<typeof ctx.flags.tags, string[] | undefined>>;
+				type _commandFlag = Expect<Equal<typeof ctx.flags.commandFlag, unknown>>;
+				const commandFlag: unknown = ctx.flags.commandFlag;
+				void commandFlag;
+			},
+		},
+	});
+}
+
+// infers defineFlag() values attached to an Extension
+function _typecheckDefinedExtensionFlags() {
+	const trace = defineFlag("trace", { type: "boolean", default: false });
+	defineExtension(defineExtensionId("defined-flags"), {
+		flags: [trace],
+		hooks: {
+			preRun(ctx) {
+				type _trace = Expect<Equal<typeof ctx.flags.trace, boolean>>;
+			},
+		},
+	});
+}

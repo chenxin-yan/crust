@@ -136,7 +136,7 @@ describe("scaffold", () => {
 
 		createTemplateFile("file.txt", "hello");
 
-		expect(
+		await expect(
 			scaffold({
 				template: templateDir,
 				dest: destDir,
@@ -154,7 +154,7 @@ describe("scaffold", () => {
 
 		createTemplateFile("file.txt", "hello");
 
-		expect(
+		await expect(
 			scaffold({
 				template: templateDir,
 				dest: destDir,
@@ -322,7 +322,7 @@ describe("scaffold", () => {
 	});
 
 	it("throws when template URL uses non-file protocol", async () => {
-		expect(
+		await expect(
 			scaffold({
 				template: new URL("https://example.com/templates/base"),
 				dest: destDir,
@@ -339,7 +339,7 @@ describe("scaffold", () => {
 		process.argv[1] = fakeEntrypoint;
 
 		try {
-			expect(
+			await expect(
 				scaffold({
 					template: "templates/base",
 					dest: destDir,
@@ -356,7 +356,7 @@ describe("scaffold", () => {
 	});
 
 	it("throws when template directory does not exist", async () => {
-		expect(
+		await expect(
 			scaffold({
 				template: "/nonexistent/path/to/template",
 				dest: destDir,
@@ -369,7 +369,7 @@ describe("scaffold", () => {
 		const filePath = join(tempDir, "not-a-dir.txt");
 		writeFileSync(filePath, "I am a file");
 
-		expect(
+		await expect(
 			scaffold({
 				template: filePath,
 				dest: destDir,

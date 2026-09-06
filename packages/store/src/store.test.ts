@@ -64,7 +64,7 @@ describe("createStore", () => {
 				name: "config",
 				fields: BASIC_FIELDS,
 			}),
-		).toThrow(CrustStoreError);
+		).toThrow(expect.objectContaining({ code: "PATH" }));
 	});
 
 	it("should use custom name for store file", async () => {
@@ -387,25 +387,10 @@ describe("store.write", () => {
 			if (e.is("VALIDATION")) {
 				expect(e.details.operation).toBe("write");
 				expect(e.details.issues[0]?.path).toBe("port");
+				expect(e.details.issues[0]?.message).toBe("port must be 1-65535");
 			}
 		}
-	});
-
-	it("should not persist when validation fails", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: VALIDATED_FIELDS,
-		});
-
-		try {
-			await store.write({ port: 0, host: "localhost" });
-		} catch {
-			// expected
-		}
-
-		const filePath = join(tempDir, "config.json");
-		expect(existsSync(filePath)).toBe(false);
+		expect(existsSync(join(tempDir, "config.json"))).toBe(false);
 	});
 
 	it("should coerce values before running field validators on write", async () => {
@@ -838,6 +823,7 @@ describe("field validation", () => {
 		} catch (__err) {
 			const e = __err as CrustStoreError;
 			expect(e).toBeInstanceOf(CrustStoreError);
+			expect(e.is("VALIDATION")).toBe(true);
 			if (e.is("VALIDATION")) {
 				expect(e.details.issues).toHaveLength(2);
 				const paths = e.details.issues.map((i: { path: string }) => i.path);
@@ -896,25 +882,6 @@ describe("field validation", () => {
 			const e = __err as CrustStoreError;
 			expect(e).toBeInstanceOf(CrustStoreError);
 			expect(e.is("VALIDATION")).toBe(true);
-		}
-	});
-
-	it("should include field path in validation error details", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: VALIDATED_FIELDS,
-		});
-
-		try {
-			await store.write({ port: 99999, host: "localhost" });
-			expect.unreachable("should have thrown");
-		} catch (__err) {
-			const e = __err as CrustStoreError;
-			if (e.is("VALIDATION")) {
-				expect(e.details.issues[0]?.path).toBe("port");
-				expect(e.details.issues[0]?.message).toBe("port must be 1-65535");
-			}
 		}
 	});
 });

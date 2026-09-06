@@ -450,8 +450,7 @@ describe("renderSkill", () => {
 			const files = renderSkill(manifest, meta);
 			const serve = findFile(files, "commands/serve.md");
 
-			expect(serve?.content).toContain("[Skill Overview]");
-			expect(serve?.content).toContain("SKILL.md");
+			expect(serve?.content).toContain("[Skill Overview](../SKILL.md)");
 		});
 
 		it("renders metadata sections for leaf commands", async () => {
@@ -488,7 +487,7 @@ describe("renderSkill", () => {
 			);
 		});
 
-		it("omits arguments section when command has no args", async () => {
+		it("omits arguments and flags sections when neither is defined", async () => {
 			const cmd = makeCommand({
 				meta: { name: "serve" },
 				run() {},
@@ -504,23 +503,6 @@ describe("renderSkill", () => {
 			const serve = findFile(files, "commands/serve.md");
 
 			expect(serve?.content).not.toContain("## Arguments");
-		});
-
-		it("omits flags section when command has no flags", async () => {
-			const cmd = makeCommand({
-				meta: { name: "serve" },
-				run() {},
-			});
-
-			const manifest = buildManifest(await snapshotFixture(cmd));
-			const meta: SkillMeta = {
-				name: "serve",
-				description: "Serve",
-				version: "1.0.0",
-			};
-			const files = renderSkill(manifest, meta);
-			const serve = findFile(files, "commands/serve.md");
-
 			expect(serve?.content).not.toContain("## Flags");
 		});
 
@@ -949,8 +931,8 @@ describe("renderSkill", () => {
 			const deepFile = findFile(files, "commands/level2/level3/deep.md");
 			expect(deepFile).toBeDefined();
 			expect(deepFile?.content).toContain("# `root level2 level3 deep`");
-			expect(deepFile?.content).toContain("Parent:");
-			expect(deepFile?.content).toContain("`root level2 level3`");
+			expect(deepFile?.content).toContain("Parent: [`root level2 level3`](../level3.md)");
+			expect(deepFile?.content).toContain("[Skill Overview](../../../SKILL.md)");
 		});
 
 		it("escapes pipe characters in description within table cells", async () => {

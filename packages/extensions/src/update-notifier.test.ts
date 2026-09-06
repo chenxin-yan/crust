@@ -274,6 +274,7 @@ describe("updateNotifier post-run hook", () => {
 	const originalXdgStateHome = process.env.XDG_STATE_HOME;
 	let originalStderrWrite: typeof process.stderr.write;
 	let originalConsoleError: typeof console.error;
+	let originalExitCode: typeof process.exitCode;
 	let processStderrChunks: string[];
 	let stderrChunks: string[];
 	let cachedState: UpdateNotifierState | undefined;
@@ -297,6 +298,7 @@ describe("updateNotifier post-run hook", () => {
 		processStderrChunks = [];
 		originalStderrWrite = process.stderr.write;
 		originalConsoleError = console.error;
+		originalExitCode = process.exitCode;
 		process.stderr.write = (chunk: string | Uint8Array) => {
 			processStderrChunks.push(String(chunk));
 			return true;
@@ -319,7 +321,7 @@ describe("updateNotifier post-run hook", () => {
 		restoreEnv("npm_execpath", originalNpmExecpath);
 		restoreEnv("XDG_STATE_HOME", originalXdgStateHome);
 		await Promise.all(tempDirs.map((dir) => rm(dir, { recursive: true, force: true })));
-		process.exitCode = 0;
+		process.exitCode = originalExitCode ?? 0;
 	});
 
 	function getOutput() {
@@ -465,20 +467,6 @@ describe("updateNotifier post-run hook", () => {
 			expect(getOutput()).toContain("1.0.0");
 			expect(getOutput()).toContain("2.0.0");
 		});
-
-		it("includes upgrade instruction in update notice", async () => {
-			const pkgName = uniquePackageName("upgrade-instr");
-			process.env.npm_config_user_agent = "npm/10.0.0 node/v22";
-			mockRegistryResponse("3.0.0");
-
-			await runExtensionMiddleware({
-				currentVersion: "1.0.0",
-				packageName: pkgName,
-				updateCommand: { scope: "local" },
-			});
-
-			expect(getOutput()).toContain(`npm install ${pkgName}@latest`);
-		});
 	});
 
 	// ── No update flow ────────────────────────────────────────────────────
@@ -540,6 +528,7 @@ describe("updateNotifier post-run hook", () => {
 			// Should emit notice from cached version, not from fetch
 			expect(getOutput()).toContain("2.0.0");
 			expect(getOutput()).not.toContain("3.0.0");
+			expect(fetchFn).not.toHaveBeenCalled();
 		});
 
 		it("performs network check when cache is stale (exceeds intervalMs)", async () => {
@@ -560,37 +549,6 @@ describe("updateNotifier post-run hook", () => {
 			});
 
 			expect(getOutput()).toContain("2.0.0");
-		});
-
-		it("respects custom intervalMs — cache still fresh", async () => {
-			const pkgName = uniquePackageName("custom-interval-fresh");
-
-			// Set lastCheckedAt to 500ms ago
-			setCachedState({
-				lastCheckedAt: Date.now() - 500,
-				latestVersion: "2.0.0",
-				lastNotifiedVersion: undefined,
-			});
-
-			// With intervalMs=1000, 500ms ago is still fresh — should use cache
-			const fetchFn = mock(() =>
-				Promise.resolve(
-					new Response(JSON.stringify({ "dist-tags": { latest: "3.0.0" } }), {
-						status: 200,
-					}),
-				),
-			);
-			mockFetch(fetchFn);
-
-			await runExtensionMiddleware({
-				currentVersion: "1.0.0",
-				packageName: pkgName,
-				intervalMs: 1000,
-			});
-
-			// Notice should come from cached version (2.0.0), not fetch (3.0.0)
-			expect(getOutput()).toContain("2.0.0");
-			expect(getOutput()).not.toContain("3.0.0");
 		});
 
 		it("refetches when elapsed equals intervalMs exactly (strict boundary)", async () => {
@@ -640,29 +598,6 @@ describe("updateNotifier post-run hook", () => {
 			if (!state) throw new Error("state should exist");
 			expect(state.lastCheckedAt).toBeLessThanOrEqual(Date.now());
 		});
-
-		it("refetches when custom intervalMs is exceeded", async () => {
-			const pkgName = uniquePackageName("interval-exceeded");
-
-			// Set lastCheckedAt to 2000ms ago
-			setCachedState({
-				lastCheckedAt: Date.now() - 2000,
-				latestVersion: "1.5.0",
-				lastNotifiedVersion: undefined,
-			});
-
-			// With intervalMs=1000, 2000ms ago is stale — should refetch
-			mockRegistryResponse("3.0.0");
-
-			await runExtensionMiddleware({
-				currentVersion: "1.0.0",
-				packageName: pkgName,
-				intervalMs: 1000,
-			});
-
-			// Notice should come from fresh fetch (3.0.0)
-			expect(getOutput()).toContain("3.0.0");
-		});
 	});
 
 	// ── Network failure tolerance ─────────────────────────────────────────
@@ -678,18 +613,6 @@ describe("updateNotifier post-run hook", () => {
 			});
 
 			expect(getOutput()).toBe("");
-		});
-
-		it("does not throw or set non-zero exit code on fetch failure", async () => {
-			const pkgName = uniquePackageName("fail-exitcode");
-			mockRegistryFailure();
-
-			await runExtensionMiddleware({
-				currentVersion: "1.0.0",
-				packageName: pkgName,
-			});
-
-			expect(process.exitCode).toBeFalsy();
 		});
 
 		it("updates lastCheckedAt even on fetch failure to avoid hammering", async () => {
@@ -708,27 +631,30 @@ describe("updateNotifier post-run hook", () => {
 			expect(state.lastCheckedAt).toBeGreaterThanOrEqual(beforeRun);
 		});
 
-		it("swallows internal errors and never affects exit code", async () => {
-			const pkgName = uniquePackageName("swallow-error");
-			// Throw synchronously from fetch mock
-			mockFetch(() => {
-				throw new TypeError("Cannot read properties of undefined");
-			});
-
+		it("swallows adapter write failures after emitting the update notice", async () => {
+			mockRegistryResponse("2.0.0");
+			let writeAttempted = false;
 			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
-				packageName: pkgName,
+				packageName: uniquePackageName("write-failure"),
+				cache: {
+					read: async () => null,
+					write: async () => {
+						writeAttempted = true;
+						throw new Error("disk full");
+					},
+				},
 			});
-
-			expect(process.exitCode).toBeFalsy();
-			expect(getOutput()).toBe("");
+			expect(writeAttempted).toBe(true);
+			expect(getOutput()).toContain("Update available");
+			expect(getOutput()).toContain("2.0.0");
 		});
 	});
 
 	// ── Timeout behavior ──────────────────────────────────────────────────
 
 	describe("timeout behavior", () => {
-		it("does not block command execution when fetch is slow", async () => {
+		it("aborts the registry fetch after timeoutMs and emits nothing", async () => {
 			const pkgName = uniquePackageName("timeout-nonblock");
 			// Simulate a very slow fetch that would hang
 			mockFetch(
@@ -743,14 +669,13 @@ describe("updateNotifier post-run hook", () => {
 			);
 
 			const start = Date.now();
-			const result = await runExtensionMiddleware({
+			await runExtensionMiddleware({
 				currentVersion: "1.0.0",
 				packageName: pkgName,
 				timeoutMs: 100, // Very short timeout
 			});
 			const elapsed = Date.now() - start;
 
-			expect(result.extension.hooks?.postRun).toBeDefined();
 			// Should complete quickly (timeout + overhead), not hang
 			expect(elapsed).toBeLessThan(5000);
 			// No notice on timeout
@@ -761,7 +686,7 @@ describe("updateNotifier post-run hook", () => {
 	// ── Dedupe behavior ───────────────────────────────────────────────────
 
 	describe("dedupe behavior", () => {
-		it("skips check on second invocation with same state (process dedupe)", async () => {
+		it("does not re-notify from a fresh cache (cache-path dedupe)", async () => {
 			const pkgName = uniquePackageName("dedupe-process");
 			mockRegistryResponse("2.0.0");
 

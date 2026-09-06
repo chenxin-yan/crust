@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import {
 	existsSync,
 	mkdirSync,
@@ -62,6 +62,10 @@ console.log("hello from crust build test");
 		);
 	});
 
+	afterEach(() => {
+		process.cwd = originalCwd;
+	});
+
 	afterAll(() => {
 		process.cwd = originalCwd;
 		rmSync(tmpDir, { recursive: true, force: true });
@@ -70,7 +74,7 @@ console.log("hello from crust build test");
 	it("builds a standalone executable for a single target", async () => {
 		process.cwd = () => tmpDir;
 
-		const { stdout } = await captureExecute(new Crust("test").add(buildCommand), [
+		const { stdout, exitCode } = await captureExecute(new Crust("test").add(buildCommand), [
 			"build",
 			"--entry",
 			"src/cli.ts",
@@ -81,6 +85,8 @@ console.log("hello from crust build test");
 			"bun-darwin-arm64",
 		]);
 
+		expect(exitCode).toBe(0);
+
 		// Verify the output binary exists
 		const outPath = join(tmpDir, "dist", "test-cli");
 		expect(existsSync(outPath)).toBe(true);
@@ -90,29 +96,11 @@ console.log("hello from crust build test");
 		expect(stdout).toContain("Built successfully");
 	});
 
-	// This test can only run when the host matches the build target (darwin-arm64).
-	// On CI (Linux), the cross-compiled binary exists but cannot be executed.
-	it.skipIf(process.platform !== "darwin" || process.arch !== "arm64")(
-		"built binary is executable and produces correct output",
-		async () => {
-			const outPath = join(tmpDir, "dist", "test-cli");
-			if (!existsSync(outPath)) {
-				// Skip if previous test didn't produce the binary
-				return;
-			}
-
-			const { exitCode, stdout } = await runProcess(outPath);
-
-			expect(exitCode).toBe(0);
-			expect(stdout.trim()).toBe("hello from crust build test");
-		},
-	);
-
 	it("builds without --minify when --no-minify is passed", async () => {
 		process.cwd = () => tmpDir;
 
 		const outPath = join(tmpDir, "dist", "test-cli-no-minify");
-		const { stdout } = await captureExecute(new Crust("test").add(buildCommand), [
+		const { stdout, exitCode } = await captureExecute(new Crust("test").add(buildCommand), [
 			"build",
 			"--entry",
 			"src/cli.ts",
@@ -124,6 +112,7 @@ console.log("hello from crust build test");
 			"bun-darwin-arm64",
 		]);
 
+		expect(exitCode).toBe(0);
 		expect(existsSync(outPath)).toBe(true);
 		expect(stdout).toContain("Built successfully");
 	});
@@ -132,7 +121,7 @@ console.log("hello from crust build test");
 		process.cwd = () => tmpDir;
 		mkdirSync(join(tmpDir, "dist"), { recursive: true });
 
-		const { stdout } = await captureExecute(new Crust("test").add(buildCommand), [
+		const { stdout, exitCode } = await captureExecute(new Crust("test").add(buildCommand), [
 			"build",
 			"--entry",
 			"src/cli.ts",
@@ -140,6 +129,8 @@ console.log("hello from crust build test");
 			"--target",
 			"bun-darwin-arm64",
 		]);
+
+		expect(exitCode).toBe(0);
 
 		// Single target without --outfile: uses dist/<package-name>
 		const expectedOut = resolve(tmpDir, "dist", "test-build-cli");

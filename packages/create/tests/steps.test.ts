@@ -65,22 +65,26 @@ describe("runSteps", () => {
 	// ────────────────────────────────────────────────────────────────────────────
 
 	describe("install step", () => {
-		it("runs the detected package manager install command", async () => {
-			// Create a minimal package.json so install has something to work with
-			writeFileSync(
-				join(tempDir, "package.json"),
-				JSON.stringify({ name: "test-project", version: "0.0.0" }),
-			);
-
-			// Create bun.lock to ensure bun is detected (since we're in a bun env)
-			writeFileSync(join(tempDir, "bun.lock"), "");
-
-			await runSteps([{ type: "install" }], tempDir);
-
-			// Verify that bun install ran — it creates node_modules or bun.lockb
-			// At minimum, a successful exit is expected (no throw)
-			expect(existsSync(join(tempDir, "package.json"))).toBe(true);
-		});
+		it.skipIf(process.platform === "win32")(
+			"runs the detected package manager install command",
+			async () => {
+				writeFileSync(join(tempDir, "pnpm-lock.yaml"), "");
+				const binDir = join(tempDir, "bin");
+				mkdirSync(binDir);
+				writeFileSync(join(binDir, "pnpm"), '#!/bin/sh\nprintf "%s\\n" "$@" > install-ran\n', {
+					mode: 0o755,
+				});
+				const originalPath = process.env.PATH;
+				process.env.PATH = binDir;
+				try {
+					await runSteps([{ type: "install" }], tempDir);
+					expect(readFileSync(join(tempDir, "install-ran"), "utf-8")).toBe("install\n");
+				} finally {
+					if (originalPath === undefined) delete process.env.PATH;
+					else process.env.PATH = originalPath;
+				}
+			},
+		);
 
 		it("reports when the detected package manager is unavailable", async () => {
 			writeFileSync(join(tempDir, "pnpm-lock.yaml"), "");
@@ -102,13 +106,6 @@ describe("runSteps", () => {
 	// ────────────────────────────────────────────────────────────────────────────
 
 	describe("command step", () => {
-		it("runs a simple command successfully", async () => {
-			await runSteps([{ type: "command", cmd: "echo hello > output.txt" }], tempDir);
-
-			expect(existsSync(join(tempDir, "output.txt"))).toBe(true);
-			expect(readFileSync(join(tempDir, "output.txt"), "utf-8").trim()).toBe("hello");
-		});
-
 		it("uses the provided cwd for the command", async () => {
 			const subDir = join(tempDir, "subdir");
 			mkdirSync(subDir);
@@ -118,12 +115,6 @@ describe("runSteps", () => {
 			// File should be in subDir, not tempDir
 			expect(existsSync(join(subDir, "file.txt"))).toBe(true);
 			expect(existsSync(join(tempDir, "file.txt"))).toBe(false);
-		});
-
-		it("throws when command exits with non-zero code", async () => {
-			await expect(runSteps([{ type: "command", cmd: "exit 1" }], tempDir)).rejects.toThrow(
-				'Command "exit 1" exited with code 1',
-			);
 		});
 	});
 
@@ -158,7 +149,7 @@ describe("runSteps", () => {
 					],
 					tempDir,
 				),
-			).rejects.toThrow();
+			).rejects.toThrow('Command "exit 1" exited with code 1');
 
 			// The second command should not have run
 			expect(existsSync(join(tempDir, "fail.txt"))).toBe(false);

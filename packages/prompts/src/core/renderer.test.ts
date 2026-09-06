@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { PassThrough, Writable } from "node:stream";
 
 import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
@@ -97,79 +97,8 @@ describe("assertTTY", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("runPrompt", () => {
-	const originalIsTTY = process.stdin.isTTY;
-	const originalSetRawMode = process.stdin.setRawMode;
-	const originalIsRaw = process.stdin.isRaw;
-	const originalStderrWrite = process.stderr.write;
-	let stderrOutput: string;
-
-	beforeEach(() => {
-		stderrOutput = "";
-
-		// Mock stderr to capture output
-		process.stderr.write = (chunk: string | Uint8Array) => {
-			stderrOutput += chunk.toString();
-			return true;
-		};
-
-		// Ensure stdin looks like a TTY with a working setRawMode
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: true,
-			writable: true,
-			configurable: true,
-		});
-
-		// Mock setRawMode since the test runner stdin is not a real TTY
-		(process.stdin as any).setRawMode = (mode: boolean) => {
-			Object.defineProperty(process.stdin, "isRaw", {
-				value: mode,
-				writable: true,
-				configurable: true,
-			});
-			return process.stdin;
-		};
-	});
-
-	afterEach(() => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: originalIsTTY,
-			writable: true,
-			configurable: true,
-		});
-		Object.defineProperty(process.stdin, "isRaw", {
-			value: originalIsRaw,
-			writable: true,
-			configurable: true,
-		});
-		if (originalSetRawMode) {
-			process.stdin.setRawMode = originalSetRawMode;
-		}
-		process.stderr.write = originalStderrWrite;
-		// Remove any lingering keypress listeners added during tests
-		process.stdin.removeAllListeners("keypress");
-	});
-
 	it("uses supplied TTY streams instead of process globals", async () => {
-		const input = new PassThrough() as PassThrough & {
-			isTTY: boolean;
-			isRaw: boolean;
-			setRawMode: (mode: boolean) => PassThrough;
-		};
-		input.isTTY = true;
-		input.isRaw = false;
-		input.setRawMode = (mode) => {
-			input.isRaw = mode;
-			return input;
-		};
-
-		let output = "";
-		const stream = new Writable({
-			write(chunk, _encoding, callback) {
-				output += chunk.toString();
-				callback();
-			},
-		}) as Writable & { columns: number };
-		stream.columns = 80;
+		const harness = createPromptIO();
 
 		const config: PromptConfig<{ value: string }, string> = {
 			render: (state) => state.value,
@@ -178,31 +107,15 @@ describe("runPrompt", () => {
 			theme: defaultTheme,
 		};
 
-		const answer = runPrompt(config, { input, output: stream });
-		input.write("x");
+		const answer = runPrompt(config, harness.io);
+		harness.type("x");
 
 		expect(await answer).toBe("done");
-		expect(output).toContain("prompt");
+		expect(harness.screen()).toBe("prompt");
 	});
 
 	it("resolves an omitted theme to defaultTheme", async () => {
-		const input = new PassThrough() as PassThrough & {
-			isTTY: boolean;
-			isRaw: boolean;
-			setRawMode: (mode: boolean) => PassThrough;
-		};
-		input.isTTY = true;
-		input.isRaw = false;
-		input.setRawMode = (mode) => {
-			input.isRaw = mode;
-			return input;
-		};
-		const stream = new Writable({
-			write(_chunk, _encoding, callback) {
-				callback();
-			},
-		}) as Writable & { columns: number };
-		stream.columns = 80;
+		const harness = createPromptIO();
 
 		let seenTheme: unknown;
 		const answer = runPrompt<{ value: string }, string>(
@@ -214,31 +127,15 @@ describe("runPrompt", () => {
 				handleKey: () => submit("done"),
 				initialState: { value: "prompt" },
 			},
-			{ input, output: stream },
+			harness.io,
 		);
-		input.write("x");
+		harness.type("x");
 		expect(await answer).toBe("done");
 		expect(seenTheme).toEqual(defaultTheme);
 	});
 
 	it("merges a partial theme onto defaultTheme", async () => {
-		const input = new PassThrough() as PassThrough & {
-			isTTY: boolean;
-			isRaw: boolean;
-			setRawMode: (mode: boolean) => PassThrough;
-		};
-		input.isTTY = true;
-		input.isRaw = false;
-		input.setRawMode = (mode) => {
-			input.isRaw = mode;
-			return input;
-		};
-		const stream = new Writable({
-			write(_chunk, _encoding, callback) {
-				callback();
-			},
-		}) as Writable & { columns: number };
-		stream.columns = 80;
+		const harness = createPromptIO();
 
 		const prefix = (t: string) => `<P ${t}>`;
 		let seenTheme: { prefix: typeof prefix; message: unknown } | undefined;
@@ -252,25 +149,23 @@ describe("runPrompt", () => {
 				initialState: { value: "prompt" },
 				theme: { prefix },
 			},
-			{ input, output: stream },
+			harness.io,
 		);
-		input.write("x");
+		harness.type("x");
 		expect(await answer).toBe("done");
 		expect(seenTheme?.prefix).toBe(prefix); // override applied
 		expect(seenTheme?.message).toBe(defaultTheme.message); // default preserved
 	});
 
 	it("disables raw mode on a fake input without isRaw", async () => {
-		const input = new PassThrough() as PassThrough & {
-			isTTY: boolean;
-			setRawMode: (mode: boolean) => PassThrough;
-		};
-		input.isTTY = true;
 		const rawModes: boolean[] = [];
-		input.setRawMode = (mode) => {
-			rawModes.push(mode);
-			return input;
-		};
+		const input = Object.assign(new PassThrough(), {
+			isTTY: true,
+			setRawMode(mode: boolean) {
+				rawModes.push(mode);
+				return input;
+			},
+		});
 		const output = new Writable({
 			write(_chunk, _encoding, callback) {
 				callback();
@@ -359,12 +254,6 @@ describe("runPrompt", () => {
 	});
 
 	it("rejects with NonInteractiveError when stdin is not a TTY", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: false,
-			writable: true,
-			configurable: true,
-		});
-
 		const config: PromptConfig<{ value: string }, string> = {
 			render: (state) => state.value,
 			handleKey: (_key, state) => state,
@@ -372,7 +261,9 @@ describe("runPrompt", () => {
 			theme: defaultTheme,
 		};
 
-		await expect(runPrompt(config)).rejects.toThrow(NonInteractiveError);
+		await expect(runPrompt(config, createPromptIO({ isTTY: false }).io)).rejects.toThrow(
+			NonInteractiveError,
+		);
 	});
 
 	it("resolves with submitted value when handleKey returns submit", async () => {
@@ -383,11 +274,9 @@ describe("runPrompt", () => {
 			theme: defaultTheme,
 		};
 
-		const promise = runPrompt(config);
-
-		// Allow event listener setup
-		await new Promise((r) => setTimeout(r, 10));
-		process.stdin.emit("keypress", "a", { name: "a" });
+		const harness = createPromptIO();
+		const promise = runPrompt(config, harness.io);
+		harness.type("a");
 
 		const result = await promise;
 		expect(result).toBe("hello");
@@ -409,34 +298,20 @@ describe("runPrompt", () => {
 			theme: defaultTheme,
 		};
 
-		const promise = runPrompt(config);
-
+		const harness = createPromptIO();
+		const promise = runPrompt(config, harness.io);
+		harness.type("a");
 		await new Promise((r) => setTimeout(r, 10));
-		process.stdin.emit("keypress", "a", { name: "a" });
+		harness.type("b");
 		await new Promise((r) => setTimeout(r, 10));
-		process.stdin.emit("keypress", "b", { name: "b" });
-		await new Promise((r) => setTimeout(r, 10));
-		process.stdin.emit("keypress", undefined, { name: "return" });
+		harness.keys("return");
 
 		const result = await promise;
 		expect(result).toBe("xx!");
 	});
 
-	it("writes output to stderr, not stdout", async () => {
-		const config: PromptConfig<{ value: string }, string> = {
-			render: () => "prompt output",
-			handleKey: () => submit("done"),
-			initialState: { value: "" },
-			theme: defaultTheme,
-		};
-
-		const promise = runPrompt(config);
-
-		await new Promise((r) => setTimeout(r, 10));
-		process.stdin.emit("keypress", "a", { name: "return" });
-
-		await promise;
-		expect(stderrOutput).toContain("prompt output");
+	it("defaults output to stderr, not stdout", () => {
+		expect(resolvePromptIO().output).toBe(process.stderr);
 	});
 
 	it("hides cursor on start and shows cursor on cleanup", async () => {
@@ -447,17 +322,25 @@ describe("runPrompt", () => {
 			theme: defaultTheme,
 		};
 
-		const promise = runPrompt(config);
+		const harness = createPromptIO();
+		let raw = "";
+		const output = new Writable({
+			write(chunk, _encoding, callback) {
+				raw += chunk.toString();
+				callback();
+			},
+		});
+		const promise = runPrompt(config, { input: harness.io.input, output });
 
 		await new Promise((r) => setTimeout(r, 10));
-		process.stdin.emit("keypress", "a", { name: "return" });
+		harness.keys("return");
 
 		await promise;
 
 		// Hide cursor (ESC[?25l) at start
-		expect(stderrOutput).toContain("\x1B[?25l");
+		expect(raw.startsWith("\x1B[?25l")).toBe(true);
 		// Show cursor (ESC[?25h) at cleanup
-		expect(stderrOutput).toContain("\x1B[?25h");
+		expect(raw.endsWith("\x1B[?25h")).toBe(true);
 	});
 
 	it("calls renderSubmitted when provided", async () => {
@@ -469,15 +352,13 @@ describe("runPrompt", () => {
 			renderSubmitted: (_state, value, theme) => `${theme.success("done")} ${value}`,
 		};
 
-		const promise = runPrompt(config);
-
-		await new Promise((r) => setTimeout(r, 10));
-		process.stdin.emit("keypress", undefined, { name: "return" });
+		const harness = createPromptIO();
+		const promise = runPrompt(config, harness.io);
+		harness.keys("return");
 
 		const result = await promise;
 		expect(result).toBe("final");
-		expect(stderrOutput).toContain("done");
-		expect(stderrOutput).toContain("final");
+		expect(harness.screen()).toBe("done final");
 	});
 
 	it("handles async handleKey", async () => {
@@ -491,10 +372,9 @@ describe("runPrompt", () => {
 			theme: defaultTheme,
 		};
 
-		const promise = runPrompt(config);
-
-		await new Promise((r) => setTimeout(r, 10));
-		process.stdin.emit("keypress", "a", { name: "a" });
+		const harness = createPromptIO();
+		const promise = runPrompt(config, harness.io);
+		harness.type("a");
 
 		const result = await promise;
 		expect(result).toBe("async-result");
@@ -510,10 +390,9 @@ describe("runPrompt", () => {
 			theme: defaultTheme,
 		};
 
-		const promise = runPrompt(config);
-
-		await new Promise((r) => setTimeout(r, 10));
-		process.stdin.emit("keypress", "a", { name: "a" });
+		const harness = createPromptIO();
+		const promise = runPrompt(config, harness.io);
+		harness.type("a");
 
 		await expect(promise).rejects.toThrow("handler error");
 	});
@@ -526,10 +405,9 @@ describe("runPrompt", () => {
 			theme: defaultTheme,
 		};
 
-		const promise = runPrompt(config);
-
-		await new Promise((r) => setTimeout(r, 10));
-		process.stdin.emit("keypress", undefined, { name: "c", ctrl: true });
+		const harness = createPromptIO();
+		const promise = runPrompt(config, harness.io);
+		harness.keys("ctrl+c");
 
 		await expect(promise).rejects.toBeInstanceOf(DOMException);
 		await expect(promise).rejects.toMatchObject({
@@ -545,23 +423,17 @@ describe("runPrompt", () => {
 			theme: defaultTheme,
 		};
 
-		const promise = runPrompt(config);
+		const harness = createPromptIO();
+		const promise = runPrompt(config, harness.io);
+		expect(harness.screen()).toBe("initial frame");
 
-		await new Promise((r) => setTimeout(r, 10));
-		expect(stderrOutput).toContain("initial frame");
-
-		process.stdin.emit("keypress", "a", { name: "return" });
+		harness.keys("return");
 		await promise;
 	});
 
 	it("erases previous frame before rendering new frame", async () => {
-		let renderCount = 0;
-
 		const config: PromptConfig<{ value: string }, string> = {
-			render: (state) => {
-				renderCount++;
-				return `frame ${state.value}`;
-			},
+			render: (state) => `frame ${state.value}`,
 			handleKey: (_key, state) => {
 				if (state.value === "2") return submit(state.value);
 				const next = state.value === "" ? "1" : "2";
@@ -571,20 +443,16 @@ describe("runPrompt", () => {
 			theme: defaultTheme,
 		};
 
-		const promise = runPrompt(config);
-
+		const harness = createPromptIO();
+		const promise = runPrompt(config, harness.io);
+		harness.type("a");
 		await new Promise((r) => setTimeout(r, 10));
-		process.stdin.emit("keypress", "a", { name: "a" });
+		harness.type("b");
 		await new Promise((r) => setTimeout(r, 10));
-		process.stdin.emit("keypress", "b", { name: "b" });
-		await new Promise((r) => setTimeout(r, 10));
-		process.stdin.emit("keypress", "c", { name: "c" });
+		harness.type("c");
 
 		await promise;
 
-		// clearScreenDown sequence should appear for frame clearing
-		expect(stderrOutput).toContain("\x1B[0J");
-		// Should have rendered multiple frames
-		expect(renderCount).toBeGreaterThanOrEqual(2);
+		expect(harness.screen()).toBe("frame 2");
 	});
 });

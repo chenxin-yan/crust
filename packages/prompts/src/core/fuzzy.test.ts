@@ -49,7 +49,7 @@ describe("fuzzyMatch", () => {
 
 	it("scoring prefers contiguous matches", () => {
 		// "ts" in "TypeScript" matches at indices [0, 4] (T...S)
-		// "ts" in "tests" matches at indices [0, 1] (te) — consecutive bonus
+		// "ts" in "tsconfig" matches at indices [0, 1] (ts) — consecutive bonus
 		const nonContiguous = fuzzyMatch("ts", "TypeScript");
 		const contiguous = fuzzyMatch("ts", "tsconfig");
 		expect(contiguous.match).toBe(true);
@@ -134,7 +134,7 @@ describe("fuzzyFilter", () => {
 		const results = fuzzyFilter("go", items);
 		const goResult = results.find((r) => r.item.value === "go");
 		expect(goResult).toBeDefined();
-		expect(goResult?.indices.length).toBeGreaterThan(0);
+		expect(goResult?.indices).toEqual([0, 1]);
 	});
 
 	it("preserves item references", () => {

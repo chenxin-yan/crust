@@ -202,7 +202,7 @@ describe("confirm — custom labels", () => {
 
 	it("shows selected custom label on submit", async () => {
 		const prompt = renderPrompt(confirm, {
-			message: "Accept?",
+			message: "Proceed?",
 			active: "Accept",
 			inactive: "Reject",
 			default: false,
@@ -215,7 +215,7 @@ describe("confirm — custom labels", () => {
 		prompt.keys("return");
 
 		await prompt.answer;
-		expect(prompt.screen()).toContain("Accept");
+		expect(prompt.screen()).toBe("✓ Proceed? Accept");
 	});
 });
 
@@ -244,7 +244,7 @@ describe("confirm — rendering", () => {
 
 		await prompt.answer;
 		// After submission, the selected answer should appear
-		expect(prompt.screen()).toContain("No");
+		expect(prompt.screen()).toBe("✓ Continue? No");
 	});
 });
 
@@ -253,7 +253,7 @@ describe("confirm — rendering", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("confirm — no message", () => {
-	it("renders default message when message is omitted", async () => {
+	it("renders default message before and after submission", async () => {
 		const prompt = renderPrompt(confirm, {});
 
 		await tick();
@@ -265,15 +265,6 @@ describe("confirm — no message", () => {
 		prompt.keys("return");
 		const result = await prompt.answer;
 		expect(result).toBe(true);
-	});
-
-	it("submitted output shows default message", async () => {
-		const prompt = renderPrompt(confirm, {});
-
-		await tick();
-		prompt.keys("return");
-
-		await prompt.answer;
 		expect(prompt.screen()).toContain("Are you sure?");
 		expect(prompt.screen()).not.toContain("undefined");
 	});

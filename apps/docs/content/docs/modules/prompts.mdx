@@ -87,8 +87,8 @@ test("accepts a name", async () => {
   prompt.type("Ada");
   prompt.keys("return");
 
-  expect(prompt.screen()).toContain("Ada");
   expect(await prompt.answer).toBe("Ada");
+  expect(prompt.screen()).toContain("Ada");
 });
 ```
 

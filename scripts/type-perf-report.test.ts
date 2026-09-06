@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -56,21 +56,13 @@ describe("type performance report", () => {
 		);
 	});
 
-	it("generates deterministic scaling fixtures", () => {
-		expect(generateConsumerSource(10)).toBe(generateConsumerSource(10));
-		expect(generateConsumerSource(10)).toContain(".flags(");
-		expect(generateConsumerSource(10)).toContain(".extend(extension)");
+	it("generates the requested number of commands", () => {
 		expect(generateConsumerSource(10).match(/const command\d+ = defineCommand/g)).toHaveLength(10);
 	});
 
 	it("compiles the size-10 consumer fixture against built dist declarations", () => {
-		const build = Bun.spawnSync(["bun", "run", "build"], {
-			cwd: corePackage,
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		if (build.exitCode !== 0) {
-			throw new Error(`core build failed:\n${build.stdout.toString()}${build.stderr.toString()}`);
+		if (!existsSync(join(corePackage, "dist/index.d.ts"))) {
+			throw new Error("Run bun run build:pkgs before script tests");
 		}
 		const fixtureDir = mkdtempSync(join(tmpdir(), "crust-type-perf-test-"));
 		try {

@@ -22,16 +22,6 @@ describe("isListed", () => {
 });
 
 describe("sectionsFor", () => {
-	it("requires minted Extension ids in section audiences", () => {
-		const invalid: CommandSectionInput = {
-			title: "Invalid",
-			body: "Invalid",
-			// @ts-expect-error section audiences reject raw strings
-			only: ["raw"],
-		};
-		void invalid;
-	});
-
 	it("includes untargeted sections for every consumer", () => {
 		expect(sectionsFor([universal], terminal)).toEqual([universal]);
 	});
@@ -104,3 +94,15 @@ describe("visibleSectionsFor", () => {
 		]);
 	});
 });
+
+// Compile-time regression checks; intentionally never invoked.
+// requires minted Extension ids in section audiences
+function _typecheckRequiresMintedExtensionIdsInSectionAudiences() {
+	const invalid: CommandSectionInput = {
+		title: "Invalid",
+		body: "Invalid",
+		// @ts-expect-error section audiences reject raw strings
+		only: ["raw"],
+	};
+	void invalid;
+}

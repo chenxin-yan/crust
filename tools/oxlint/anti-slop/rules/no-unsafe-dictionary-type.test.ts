@@ -66,7 +66,6 @@ tester.run("anti-slop/no-unsafe-dictionary-type", noUnsafeDictionaryTypeRule, {
 			errors: [error],
 		},
 		{ code: "type Escape = unknown; type A = Record<string, Escape>;", errors: [error] },
-		{ code: "type Dict = Record<string, unknown>;", errors: [error] },
 		{ code: "type A = Readonly<Partial<Required<(Record<string, unknown>)>>>;", errors: [error] },
 		{ code: "type A = { readonly [key: string]: unknown };", errors: [error] },
 		{ code: "type A = { readonly [K in string]: unknown };", errors: [error] },

@@ -88,7 +88,7 @@ describe("renderFish", () => {
 		expect(script).toMatch(/-x -l 'target' -a 'node'/);
 	});
 
-	it("nested subcommand rules call __<ident>_path_at_arg with the consumed path", () => {
+	it("gates prod-level flag rules on the full deploy-to-prod path", () => {
 		const script = renderFish(fixture, "mycli", "1.0.0");
 		expect(script).toContain(
 			"-n '__mycli_path_at_arg \\'deploy dep\\' \\'prod\\' \\'*0\\' \\'\\''",
@@ -243,25 +243,27 @@ describeIfFish("renderFish · fish -n parse check", () => {
 		expect(code).toBe(0);
 	});
 
-	it("sources cleanly under fish and registers complete rules", async () => {
-		const driver = `
-source ${shQuoteForFish(scriptPath)}
-complete -c mycli | head -3
-echo SOURCE_OK
-`;
-		const proc = Bun.spawn(["fish", "-c", driver], {
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		const [out, err] = await Promise.all([
-			new Response(proc.stdout).text(),
-			new Response(proc.stderr).text(),
-		]);
-		const code = await proc.exited;
-		if (code !== 0) {
-			throw new Error(`fish failed: ${err}\nstdout:\n${out}`);
+	it("completes root commands, nested commands, and flag choices under fish", async () => {
+		for (const [line, expected] of [
+			["mycli ", ["build", "dep", "deploy"]],
+			["mycli deploy ", ["prod"]],
+			["mycli build --target ", ["browser", "bun", "node"]],
+		] as const) {
+			const driver = `source ${shQuoteForFish(scriptPath)}; complete -C ${shQuoteForFish(line)}`;
+			const proc = Bun.spawn(["fish", "-c", driver], { stdout: "pipe", stderr: "pipe" });
+			const [out, err] = await Promise.all([
+				new Response(proc.stdout).text(),
+				new Response(proc.stderr).text(),
+			]);
+			expect(await proc.exited).toBe(0);
+			expect(err).toBe("");
+			expect(
+				out
+					.trim()
+					.split("\n")
+					.map((candidate) => candidate.split("\t")[0]),
+			).toEqual([...expected]);
 		}
-		expect(out).toContain("SOURCE_OK");
 	});
 });
 

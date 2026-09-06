@@ -74,14 +74,9 @@ describe("applyStyle — nesting", () => {
 		const mid = applyStyle(`mid ${innerBold} mid`, codes.dim);
 		const outer = applyStyle(`outer ${mid} outer`, codes.bold);
 
-		// Verify structure: bold opens, dim content has its own nesting,
-		// and bold's close appears at the end
-		expect(outer.startsWith("\x1b[1m")).toBe(true);
-		expect(outer.endsWith("\x1b[22m")).toBe(true);
-		// Content is preserved
-		expect(outer).toContain("outer");
-		expect(outer).toContain("mid");
-		expect(outer).toContain("deep");
+		expect(outer).toBe(
+			"\x1b[1mouter \x1b[2mmid \x1b[1mdeep\x1b[22m\x1b[1m\x1b[2m mid\x1b[22m\x1b[1m outer\x1b[22m",
+		);
 	});
 
 	it("different style categories nest without interference", () => {

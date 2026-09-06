@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 
 import corePackage from "../../core/package.json";
 import crustPackage from "../../crust/package.json";
@@ -27,7 +27,6 @@ async function runCreateCrust(
 		env: {
 			...process.env,
 			...options?.env,
-			BUN_BE_BUN: "1",
 		},
 		stdout: "pipe",
 		stderr: "pipe",
@@ -70,10 +69,6 @@ describe("create-crust CLI", () => {
 		expect(result.exitCode).toBe(0);
 		expect(result.stderr).not.toContain("Error:");
 		expect(result.stdout).toContain("Created my-cli!");
-		expect(result.stdout).not.toContain("Template style");
-		expect(result.stdout).not.toContain("Distribution mode");
-		expect(result.stdout).not.toContain("Install dependencies?");
-		expect(result.stdout).not.toContain("Initialize a git repository?");
 		const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf-8"));
 		expect(pkg).toMatchObject({
 			name: "my-cli",
@@ -188,10 +183,9 @@ describe("create-crust CLI", () => {
 
 		expect(result.exitCode).toBe(0);
 		expect(result.stderr).not.toContain("Error:");
-		expect(result.stdout).not.toContain("overwriting (--overwrite)");
 		expect(existsSync(join(tempRoot, "src", "cli.ts"))).toBe(true);
 		const pkg = JSON.parse(readFileSync(join(tempRoot, "package.json"), "utf-8"));
-		expect(pkg.name).not.toBe("old");
+		expect(pkg.name).toBe(basename(tempRoot));
 	}, 30_000);
 
 	it("scaffolds into an empty current directory without prompting", async () => {
@@ -204,7 +198,6 @@ describe("create-crust CLI", () => {
 
 		expect(result.exitCode).toBe(0);
 		expect(result.stderr).not.toContain("Error:");
-		expect(result.stdout).not.toContain("Overwrite");
 		expect(existsSync(join(tempRoot, "package.json"))).toBe(true);
 	}, 30_000);
 

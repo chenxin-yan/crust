@@ -6,7 +6,6 @@ import type { FlagsDef } from "../types.ts";
 import type { CommandNode } from "./node.ts";
 import { createCommandNode, registerFlag } from "./node.ts";
 import { resolveCommand } from "./router.ts";
-import type { CommandSnapshot } from "./snapshot.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test fixtures
@@ -136,24 +135,24 @@ describe("resolveCommand", () => {
 		it("throws CrustError with structured details", () => {
 			const root = createRootWithSubcommands(); // no run()
 
-			try {
-				resolveCommand(root, ["buld"]);
-				expect(true).toBe(false); // Should not reach here
-			} catch (error) {
-				expect(error).toBeInstanceOf(CrustError);
-				const crustError = error as CrustError;
-				expect(crustError.code).toBe("COMMAND_NOT_FOUND");
-				expect(crustError.message).toContain('Unknown command "buld"');
-				expect(crustError.details).toMatchObject({
-					input: "buld",
-					available: ["build", "dev"],
-					commandPath: ["crust"],
-				});
-				const parentCommand = (crustError.details as { parentCommand: CommandSnapshot })
-					.parentCommand;
-				expect(parentCommand.meta.name).toBe(root.meta.name);
-				expect(Object.keys(parentCommand.subCommands)).toEqual(Object.keys(root.subCommands));
-			}
+			expect(() => resolveCommand(root, ["buld"])).toThrow(
+				expect.objectContaining({
+					code: "COMMAND_NOT_FOUND",
+					message: expect.stringContaining('Unknown command "buld"'),
+					details: expect.objectContaining({
+						input: "buld",
+						available: ["build", "dev"],
+						commandPath: ["crust"],
+						parentCommand: expect.objectContaining({
+							meta: expect.objectContaining({ name: root.meta.name }),
+							subCommands: expect.objectContaining({
+								build: expect.anything(),
+								dev: expect.anything(),
+							}),
+						}),
+					}),
+				}),
+			);
 		});
 
 		it("throws error for unknown nested subcommand", () => {
@@ -169,18 +168,16 @@ describe("resolveCommand", () => {
 				subCommands: { generate: generateCmd },
 			});
 
-			try {
-				resolveCommand(root, ["generate", "unknown"]);
-				expect(true).toBe(false); // Should not reach here
-			} catch (error) {
-				const crustError = error as CrustError;
-				expect(crustError.message).toContain('Unknown command "unknown"');
-				expect(crustError.code).toBe("COMMAND_NOT_FOUND");
-				expect(crustError.details).toMatchObject({
-					available: ["command"],
-					commandPath: ["crust", "generate"],
-				});
-			}
+			expect(() => resolveCommand(root, ["generate", "unknown"])).toThrow(
+				expect.objectContaining({
+					code: "COMMAND_NOT_FOUND",
+					message: expect.stringContaining('Unknown command "unknown"'),
+					details: expect.objectContaining({
+						available: ["command"],
+						commandPath: ["crust", "generate"],
+					}),
+				}),
+			);
 		});
 	});
 
@@ -512,14 +509,13 @@ describe("resolveCommand — known-flag skipping", () => {
 			subCommands: { translate },
 		});
 		expect(() => resolveCommand(root, ["--quiet", "translate"])).toThrow(
-			'Flag "--quiet" cannot be used before subcommand "translate"',
+			expect.objectContaining({
+				code: "PARSE",
+				message: expect.stringContaining(
+					'Flag "--quiet" cannot be used before subcommand "translate"',
+				),
+			}),
 		);
-		try {
-			resolveCommand(root, ["--quiet", "translate"]);
-		} catch (error) {
-			expect(error).toBeInstanceOf(CrustError);
-			expect((error as CrustError).code).toBe("PARSE");
-		}
 	});
 
 	it("rejects a forwarded flag whose child spelling has a different token shape", () => {

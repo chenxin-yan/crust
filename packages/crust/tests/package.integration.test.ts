@@ -29,7 +29,13 @@ function readJson<T>(path: string): T {
 async function runBuild(argv: string[]) {
 	const app = new Crust("test").add(buildCommand);
 	process.cwd = () => tmpDir;
-	return await captureExecute(app, ["build", ...argv]);
+	try {
+		const result = await captureExecute(app, ["build", ...argv]);
+		expect(result.exitCode).toBe(0);
+		return result;
+	} finally {
+		process.cwd = originalCwd;
+	}
 }
 
 beforeAll(() => {

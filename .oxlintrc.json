@@ -81,6 +81,7 @@
 		{
 			"files": [
 				"**/*.test.ts",
+				"**/*.test-d.ts",
 				"**/*.test.tsx",
 				"**/*.spec.ts",
 				"**/*.spec.tsx",

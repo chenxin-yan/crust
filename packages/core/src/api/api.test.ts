@@ -76,6 +76,7 @@ describe("public beta API", () => {
 	});
 
 	it("loads extensions separately from command context", async () => {
+		let actionVersion: unknown;
 		let wrapperCalled = false;
 		const version = defineExtension(defineExtensionId("version"), {
 			flags: [{ name: "version", type: "boolean" }],
@@ -88,12 +89,13 @@ describe("public beta API", () => {
 
 		const app = new Crust("my-cli").extend(version).action(({ flags, ctx }) => {
 			type _ctx = Expect<Equal<typeof ctx, ContextBag>>;
-			expect(flags.version).toBe(true);
+			actionVersion = flags.version;
 		});
 
 		await app.execute({ argv: ["--version"] });
 
 		expect(wrapperCalled).toBe(true);
+		expect(actionVersion).toBe(true);
 	});
 
 	it("can execute repeatedly without freezing or accumulating extension setup on the source builder", async () => {

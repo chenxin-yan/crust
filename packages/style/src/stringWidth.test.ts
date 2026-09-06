@@ -4,10 +4,11 @@ import { stringWidth, stringWidthJs } from "./stringWidth.ts";
 
 describe("stringWidth", () => {
 	it("measures ANSI, combining marks, CJK, and emoji", () => {
-		expect(stringWidth("\u001b[31mred\u001b[0m")).toBe(3);
-		expect(stringWidth("e\u0301")).toBe(1);
+		expect(stringWidthJs("\u001b[31mred\u001b[0m")).toBe(3);
+		expect(stringWidthJs("e\u0301")).toBe(1);
+		expect(stringWidthJs("你好")).toBe(4);
+		expect(stringWidthJs("👨‍👩‍👧‍👦")).toBe(2);
 		expect(stringWidth("你好")).toBe(4);
-		expect(stringWidth("👨‍👩‍👧‍👦")).toBe(2);
 	});
 
 	it("keeps fallback coverage for presentation and supplementary characters", () => {
@@ -40,7 +41,6 @@ describe("stringWidth", () => {
 		]) {
 			const nativeWidth = Bun.stringWidth(value, { countAnsiEscapeCodes: false });
 			expect(stringWidthJs(value)).toBe(nativeWidth);
-			expect(stringWidth(value)).toBe(nativeWidth);
 		}
 	});
 });

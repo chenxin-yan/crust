@@ -93,22 +93,6 @@ describe("multiselect — default value", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("multiselect — Space toggle", () => {
-	it("Space toggles selection on current item", async () => {
-		const prompt = renderPrompt(multiselect, {
-			message: "Select",
-			choices: ["a", "b", "c"],
-		});
-
-		await tick();
-		// Toggle first item on
-		prompt.type(" ");
-		await tick();
-		prompt.keys("return");
-
-		const result = await prompt.answer;
-		expect(result).toEqual(["a"]);
-	});
-
 	it("Space toggles off a selected item", async () => {
 		const prompt = renderPrompt(multiselect, {
 			message: "Select",
@@ -557,7 +541,7 @@ describe("multiselect — viewport scrolling", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("multiselect — no message", () => {
-	it("renders default message when message is omitted", async () => {
+	it("renders default message before and after submission", async () => {
 		const prompt = renderPrompt(multiselect, {
 			choices: ["a", "b", "c"],
 		});
@@ -574,19 +558,6 @@ describe("multiselect — no message", () => {
 
 		const result = await prompt.answer;
 		expect(result).toEqual(["a"]);
-	});
-
-	it("submitted output shows default message", async () => {
-		const prompt = renderPrompt(multiselect, {
-			choices: ["a", "b", "c"],
-		});
-
-		await tick();
-		prompt.keys("space");
-		await tick();
-		prompt.keys("return");
-
-		await prompt.answer;
 		expect(prompt.screen()).toContain("Pick one or more");
 		expect(prompt.screen()).not.toContain("undefined");
 	});

@@ -27,11 +27,11 @@ beforeEach(() => {
 afterEach(() => {
 	console.error = originalError;
 	console.log = originalLog;
-	process.exitCode = originalExitCode;
+	process.exitCode = originalExitCode ?? 0;
 });
 
 describe("didYouMean", () => {
-	it("suggests the closest command on a typo (smoke test)", async () => {
+	it("suggests the closest command on a typo", async () => {
 		const app = new Crust("app")
 			.extend(didYouMean())
 			.add(defineCommand("build", (cmd) => cmd.action(() => {})))
@@ -96,20 +96,19 @@ describe("didYouMean", () => {
 		expect(stderr).not.toContain("issues");
 	});
 
-	it("deduplicates suggestions when an alias and its canonical both match", async () => {
+	it("renders canonical suggestion and help to stdout in help mode", async () => {
 		const app = new Crust("app")
 			.extend(didYouMean({ mode: "help" }))
 			.add(defineCommand("issue", { aliases: ["issues"] }, (cmd) => cmd.action(() => {})));
 
-		// Both the canonical "issue" and the alias "issues" are within
-		// Levenshtein distance 3 of "issuee". The first suggestion line
-		// must contain only one mention of "issue" (canonical) and never
-		// the alias.
 		await app.execute({ argv: ["issuee"] });
 
 		const stdout = stdoutChunks.join("\n");
 		expect(stdout).toContain('Unknown command "issuee". Did you mean "issue"?');
 		expect(stdout).not.toContain('Did you mean "issues"');
+		expect(stdout).toContain("Usage:");
+		expect(stderrChunks).toEqual([]);
+		expect(process.exitCode).toBe(1);
 	});
 
 	it("never suggests a `meta.hidden: true` command, even on a close match", async () => {
@@ -165,5 +164,6 @@ describe("didYouMean", () => {
 		const stderr = stderrChunks.join("\n");
 		expect(stderr).toContain("Available commands: build, test");
 		expect(stderr).not.toContain("__complete");
+		expect(stderr).not.toContain("Did you mean");
 	});
 });

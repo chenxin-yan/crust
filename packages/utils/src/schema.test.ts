@@ -6,24 +6,19 @@ type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type Expect<T extends true> = T;
 
-describe("schema types", () => {
-	it("preserves structural compatibility and output inference", async () => {
-		const schema = {
-			"~standard": {
-				version: 1 as const,
-				vendor: "crust-test",
-				types: undefined as { input: string; output: number } | undefined,
-				validate: (value: NonNullable<StandardSchema["~standard"]["types"]>["input"]) => ({
-					value: Number(value),
-				}),
-			},
-		};
-		const compatible: StandardSchema<string, number> = schema;
-		type _Output = Expect<Equal<InferOutput<typeof schema>, number>>;
-
-		expect(await compatible["~standard"].validate("42")).toEqual({ value: 42 });
-	});
-});
+// Compile-time compatibility and inference; checked by check:types.
+const schema = {
+	"~standard": {
+		version: 1 as const,
+		vendor: "crust-test",
+		types: undefined as { input: string; output: number } | undefined,
+		validate: (value: NonNullable<StandardSchema["~standard"]["types"]>["input"]) => ({
+			value: Number(value),
+		}),
+	},
+};
+schema satisfies StandardSchema<string, number>;
+type _Output = Expect<Equal<InferOutput<typeof schema>, number>>;
 
 describe("schema issue normalization", () => {
 	it("normalizes Standard Schema issues with an optional prefix", () => {
