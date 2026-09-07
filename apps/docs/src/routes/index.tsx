@@ -11,6 +11,7 @@ import gruvboxLightHard from "shiki/themes/gruvbox-light-hard.mjs";
 import { baseOptions } from "@/lib/layout.shared";
 import { buildPageMeta } from "@/lib/seo";
 
+// oxlint-disable-next-line import/default -- Vite's ?raw loader exports the file text; the TypeScript source needs no default export.
 import CODE_EXAMPLE from "../../examples/landing/greet.ts?raw";
 
 let highlighterPromise: Promise<Awaited<ReturnType<typeof createHighlighterCore>>> | null = null;

@@ -1,11 +1,12 @@
-import { expect, it, mock } from "bun:test";
+import { expect, it, mock, spyOn } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 import { Glob, plugin } from "bun";
 
 // Keep Fumadocs URL generation real without compiling every MDX page.
-mock.module("fumadocs-mdx:collections/server", () => ({
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Adapt the Vite-only collection boundary; the actual Fumadocs loader still resolves every page.
+await mock.module("fumadocs-mdx:collections/server", () => ({
   docs: {
     toFumadocsSource: () => ({
       files: [
@@ -18,7 +19,8 @@ mock.module("fumadocs-mdx:collections/server", () => ({
 }));
 
 // Server functions run locally; Vite's raw imports become text in Bun.
-mock.module("@tanstack/react-start", () => ({
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Bun has no Start server transport; execute the real handlers locally.
+await mock.module("@tanstack/react-start", () => ({
   createServerFn: () => ({ handler: <T>(fn: T) => fn }),
 }));
 plugin({
@@ -38,12 +40,9 @@ const { absoluteUrl } = await import("../src/lib/seo");
 
 it("sitemap lists each Fumadocs page once, including the docs index", async () => {
   expect(source.getPage([])?.url).toBe("/docs");
-  const handlers = sitemap.options.server?.handlers;
-  if (typeof handlers !== "object" || typeof handlers.GET !== "function") {
-    throw new Error("Missing sitemap GET handler");
-  }
-  const response: unknown = await Reflect.apply(handlers.GET, undefined, []);
-  if (!(response instanceof Response)) throw new Error("Sitemap did not return a Response");
+  // This route declares a context-free GET, not a handler factory.
+  const handlers = sitemap.options.server?.handlers as { GET: () => Promise<Response> };
+  const response = await handlers.GET();
   const xml = await response.text();
   const locations = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map((match) => match[1]);
   expect(response.headers.get("Content-Type")).toBe("application/xml");
@@ -55,15 +54,16 @@ it("sitemap lists each Fumadocs page once, including the docs index", async () =
 });
 
 it("landing highlights the checked greeting example", async () => {
-  if (typeof landing.options.loader !== "function") throw new Error("Missing landing loader");
-  const data: unknown = await Reflect.apply(landing.options.loader, undefined, []);
-  if (
-    typeof data !== "object" ||
-    data === null ||
-    !("highlightedCode" in data) ||
-    typeof data.highlightedCode !== "string"
-  ) {
-    throw new Error("Landing loader did not return highlighted code");
+  // The loader ignores router context; only the external registry boundary is stubbed.
+  const load = landing.options.loader as () => Promise<typeof landing.types.loaderData>;
+  const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(null, { status: 503 }),
+  );
+  let data: typeof landing.types.loaderData;
+  try {
+    data = await load();
+  } finally {
+    fetchSpy.mockRestore();
   }
   expect(data.highlightedCode).toContain("--shiki-light");
   let code = "";

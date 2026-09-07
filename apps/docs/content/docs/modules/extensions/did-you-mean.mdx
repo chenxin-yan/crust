@@ -38,6 +38,6 @@ Suggestions compare the unknown token with visible sibling command names and ali
 
 `didYouMean()` is a presentation-only `onError` Extension. It handles only `CrustError` values with code `COMMAND_NOT_FOUND`, returns `true` after rendering, and delegates every other failure to the next presenter. Core sets and preserves the nonzero terminal exit code independently of the selected mode.
 
-During argv routing, an unknown subcommand produces `COMMAND_NOT_FOUND` only when its parent has no Command Action. An action-bearing parent treats the unknown token as a positional argument, so `didYouMean()` does not suggest a command for that typo. See [subcommand routing](/docs/guide/subcommands).
+During argv routing, an unknown subcommand produces `COMMAND_NOT_FOUND` only when its parent has no Command Action. An action-bearing parent treats the unknown token as a positional argument, so `didYouMean()` does not suggest a command for that typo. See [subcommand routing](/docs/guide/subcommands#unknown-commands).
 
 `app.run(path, input)` does not run presentation hooks; a command path forced past its static types throws the original `COMMAND_NOT_FOUND` error instead.
