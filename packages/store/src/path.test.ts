@@ -352,6 +352,13 @@ describe("resolveStorePath", () => {
 	});
 
 	describe("name parameter", () => {
+		it("should reject an omitted name from an untyped caller", () => {
+			expect(() => {
+				// @ts-expect-error -- JavaScript callers can omit the required name.
+				resolveStorePath("/home/user/.config/my-cli");
+			}).toThrow();
+		});
+
 		it("should use custom name as filename", () => {
 			const result = resolveStorePath("/home/user/.config/my-cli", "auth");
 			expect(result).toBe(join("/home/user/.config/my-cli", "auth.json"));

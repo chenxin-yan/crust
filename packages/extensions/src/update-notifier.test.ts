@@ -1152,6 +1152,7 @@ describe("updateNotifier post-run hook", () => {
 		});
 
 		it("does not break command execution when registry is down", async () => {
+			process.exitCode = 0;
 			const pkgName = uniquePackageName("registry-down");
 			mockRegistryFailure();
 
@@ -1167,9 +1168,11 @@ describe("updateNotifier post-run hook", () => {
 					commandExecuted = true;
 				});
 
-			await app.execute({ argv: [] });
+			const exitCode = await app.execute({ argv: [] });
 
 			expect(commandExecuted).toBe(true);
+			expect(exitCode).toBe(0);
+			expect(process.exitCode).toBe(0);
 			expect(getOutput()).toBe("");
 		});
 	});

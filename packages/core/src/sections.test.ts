@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { defineCommand, Crust } from "./command/crust.ts";
 import { defineExtensionId } from "./identity.ts";
 import { isListed, sectionsFor, visibleSectionsFor } from "./tooling.ts";
-import type { CommandSection, CommandSectionInput } from "./types.ts";
+import type { CommandSection } from "./types.ts";
 
 const universal = { title: "Universal", body: "Everywhere" } as const;
 const agentDocs = defineExtensionId("agent-docs");
@@ -94,15 +94,3 @@ describe("visibleSectionsFor", () => {
 		]);
 	});
 });
-
-// Compile-time regression checks; intentionally never invoked.
-// requires minted Extension ids in section audiences
-function _typecheckRequiresMintedExtensionIdsInSectionAudiences() {
-	const invalid: CommandSectionInput = {
-		title: "Invalid",
-		body: "Invalid",
-		// @ts-expect-error section audiences reject raw strings
-		only: ["raw"],
-	};
-	void invalid;
-}

@@ -24,11 +24,9 @@ type NameBrandOf<T> = Extract<keyof T, "FIX_DUPLICATE_CONTEXT">;
 			'Context "db" uses Context "config" which is not provided on this command path'
 		>
 	>;
-	type Satisfied = ValidateContextDeps<
-		{},
-		readonly [Inst<"db", { config: string }>, Inst<"config">]
-	>;
-	type _satisfied = Expect<Equal<Extract<keyof Satisfied[0], "FIX_MISSING_DEPENDENCY">, never>>;
+	type Providers = readonly [Inst<"db", { config: string }>, ValueInst<"config", string>];
+	type Satisfied = ValidateContextDeps<{}, Providers>;
+	type _satisfied = Expect<Equal<Satisfied, Providers>>;
 }
 {
 	// brands a same-name provider whose value type mismatches the declared dependency
