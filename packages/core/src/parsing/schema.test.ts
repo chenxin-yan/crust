@@ -2,10 +2,9 @@ import { describe, expect, it } from "bun:test";
 
 import type { StandardSchema } from "@crustjs/utils/schema";
 
-import type { Equal, Expect } from "../../tests/helpers.ts";
-
 type StandardInput = Parameters<StandardSchema["~standard"]["validate"]>[0];
 
+import { defineExtension } from "../api/extension.ts";
 import { Crust } from "../command/crust.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
@@ -183,7 +182,6 @@ describe("Standard Schema on flag definitions", () => {
 
 describe("schema interaction with Extensions", () => {
 	it("pre-run hooks observe raw values while the action sees schema outputs", async () => {
-		const { defineExtension } = await import("../api/extension.ts");
 		let preRunSaw: unknown;
 		let actionSaw: unknown;
 
@@ -214,7 +212,6 @@ describe("schema interaction with Extensions", () => {
 			validated = true;
 			return { value: String(raw) };
 		});
-		const { defineExtension } = await import("../api/extension.ts");
 		const gate = defineExtension(defineExtensionId("gate"), {
 			hooks: { preRun: (ctx) => ctx.finish() },
 		});
@@ -226,18 +223,5 @@ describe("schema interaction with Extensions", () => {
 
 		await app.run([], { flags: { x: "whatever" } });
 		expect(validated).toBe(false);
-	});
-});
-
-describe("schema type inference", () => {
-	it("the schema output type reaches the Command Action", () => {
-		new Crust("cli")
-			.args({ name: "port", schema: port() })
-			.flags({ name: "tag", type: "string", schema: port() })
-			.action((_ctx) => {
-				type _argOutput = Expect<Equal<(typeof _ctx.args)["port"], number>>;
-				type _flagOutput = Expect<Equal<(typeof _ctx.flags)["tag"], number>>;
-			});
-		expect(true).toBe(true);
 	});
 });

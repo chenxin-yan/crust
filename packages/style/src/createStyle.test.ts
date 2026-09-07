@@ -64,9 +64,7 @@ describe("createStyle — fg/bg emit format matching colorDepth", () => {
 
 	it('bg emits ansi-256 background when capability is "256"', () => {
 		const s = autoStyle({ term: "xterm-256color" });
-		const fgOpen = Bun.color("#00ff88", "ansi-256") as string;
-		const expectedOpen = fgOpen.replace("\x1b[38;", "\x1b[48;");
-		expect(s.bg("text", "#00ff88")).toBe(`${expectedOpen}text\x1b[49m`);
+		expect(s.bg("text", "#00ff88")).toBe("\x1b[48;5;48mtext\x1b[49m");
 	});
 
 	it('bg emits a real 16-color background SGR when capability is "16"', () => {

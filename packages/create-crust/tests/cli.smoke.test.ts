@@ -279,15 +279,7 @@ describe.skipIf(process.env.CREATE_CRUST_SMOKE !== "1")("create-crust smoke test
 		const binaryName = basename(sampleDir);
 		const distEntries = readdirSync(join(sampleDir, "dist"));
 
-		expect(distEntries.length).toBeGreaterThan(0);
-		expect(
-			distEntries.includes("cli") ||
-				distEntries.includes("cli.cmd") ||
-				distEntries.includes("cli.exe") ||
-				distEntries.includes(binaryName) ||
-				distEntries.includes(`${binaryName}.exe`) ||
-				distEntries.some((entry) => entry.startsWith(`${binaryName}-bun-`)),
-		).toBe(true);
+		expect(distEntries).toContain(process.platform === "win32" ? `${binaryName}.exe` : binaryName);
 
 		cleanupSmokeRoot = true;
 	}, 180_000);

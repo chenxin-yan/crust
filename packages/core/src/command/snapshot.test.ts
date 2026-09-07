@@ -115,7 +115,7 @@ describe("snapshotCommand", () => {
 });
 
 describe("command metadata sections", () => {
-	it("rejects a dynamic section carrying both only and except", async () => {
+	it("rejects a dynamic section carrying both only and except", () => {
 		const agentDocs = defineExtensionId("agent-docs");
 		// Dynamic path: the SectionAudience union owns literals, but a
 		// config-built object can carry both fields — runtime must reject it.
@@ -240,7 +240,7 @@ describe("command metadata sections", () => {
 		}
 	});
 
-	it("rejects malformed authored section data", async () => {
+	it("rejects malformed authored section data", () => {
 		const badSections: unknown[] = [
 			[{ title: "", body: "Body" }],
 			[{ title: "   ", body: "Body" }],

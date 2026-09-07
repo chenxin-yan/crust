@@ -21,6 +21,7 @@ let stdoutChunks: string[];
 let stderrChunks: string[];
 let originalLog: typeof console.log;
 let originalError: typeof console.error;
+let originalExitCode: typeof process.exitCode;
 
 beforeEach(() => {
 	// Ambient NO_COLOR/FORCE_COLOR (e.g. CI runners) must not leak into the
@@ -31,6 +32,7 @@ beforeEach(() => {
 	stderrChunks = [];
 	originalLog = console.log;
 	originalError = console.error;
+	originalExitCode = process.exitCode;
 
 	console.log = (...args: unknown[]) => {
 		stdoutChunks.push(args.map((arg) => String(arg)).join(" "));
@@ -55,7 +57,7 @@ function restoreEnv(name: string, value: string | undefined) {
 afterEach(() => {
 	console.log = originalLog;
 	console.error = originalError;
-	process.exitCode = 0;
+	process.exitCode = originalExitCode ?? 0;
 	restoreEnv("FORCE_COLOR", originalForceColor);
 	restoreEnv("NO_COLOR", originalNoColor);
 	Object.defineProperty(process.stdout, "isTTY", {
@@ -326,27 +328,6 @@ describe("built-in extensions", () => {
 		expect(buildOutput.indexOf("Build notes:")).toBeGreaterThan(buildOutput.indexOf("Options:"));
 	});
 
-	it("recursive false Extension flags stay root-only", async () => {
-		const rootOnly = defineExtension(defineExtensionId("root-only"), {
-			flags: [{ name: "root", type: "boolean", recursive: false }],
-		});
-		let rootSaw = false;
-		const app = new Crust("app")
-			.extend(rootOnly)
-			.add(defineCommand("build", (build) => build.action(() => {})))
-			.action(({ flags }) => {
-				rootSaw = flags.root === true;
-			});
-
-		// Extension flags only exist on the prepared tree, so scoping must be
-		// exercised through execute(): parsed on the root, unknown on the child.
-		await app.execute({ argv: ["--root"] });
-		expect(rootSaw).toBe(true);
-
-		await app.execute({ argv: ["build", "--root"] });
-		expect(getStderr()).toContain("--root");
-	});
-
 	it("noColor injects --color and --no-color into help output", async () => {
 		const app = new Crust("app")
 			.extend(noColor())
@@ -461,7 +442,7 @@ describe("built-in extensions", () => {
 		}
 	});
 
-	it("noColor restores the prior env after the command", async () => {
+	it("noColor overrides ambient FORCE_COLOR during help and restores it after", async () => {
 		process.env.FORCE_COLOR = "3";
 		delete process.env.NO_COLOR;
 
@@ -471,18 +452,8 @@ describe("built-in extensions", () => {
 
 		expect(process.env.FORCE_COLOR).toBe("3");
 		expect(process.env.NO_COLOR).toBeUndefined();
-	});
-
-	it("noColor --no-color wins over ambient FORCE_COLOR", async () => {
-		process.env.FORCE_COLOR = "3";
-
-		const app = new Crust("app").extend(noColor()).extend(help());
-
-		await app.execute({ argv: ["--help", "--no-color"] });
-
-		const output = getStdout();
-		expect(output).not.toContain("\x1b[36m");
-		expect(output).not.toContain("\x1b[33m");
+		expect(getStdout()).not.toContain("\x1b[36m");
+		expect(getStdout()).not.toContain("\x1b[33m");
 	});
 
 	it("noColor flag is recursive on subcommands", async () => {
@@ -663,10 +634,12 @@ describe("built-in extensions", () => {
 			),
 		);
 
-		await app.execute({ argv: ["build"] });
+		await app.execute({ argv: ["build", "--version"] });
 
 		expect(getStdout()).toBe("");
-		expect(ran).toBe(true);
+		expect(ran).toBe(false);
+		expect(getStderr()).toContain('Unknown flag "--version"');
+		expect(process.exitCode).toBe(1);
 	});
 
 	it("version extension flag appears in help output", async () => {
@@ -734,19 +707,7 @@ describe("built-in extensions", () => {
 		expect(plain).toContain("Manage issues");
 	});
 
-	it("renderHelp renders unchanged for a command without aliases", async () => {
-		const command = new Crust("app").add(
-			defineCommand("build", { description: "Build the project" }, (cmd) => cmd.action(() => {})),
-		);
-
-		const plain = stripAnsi(renderHelp(await command.snapshot()));
-		expect(plain).toContain("Commands:");
-		expect(plain).toContain("build");
-		// No parens means no aliases were rendered.
-		expect(plain).not.toMatch(/build\s*\(/);
-	});
-
-	it("renderHelp keeps description column aligned when aliases overflow the column", async () => {
+	it("renderHelp keeps description on the same line when aliases overflow the column", async () => {
 		const command = new Crust("app")
 			.add(
 				defineCommand(

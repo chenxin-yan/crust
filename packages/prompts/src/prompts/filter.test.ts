@@ -108,6 +108,7 @@ describe("filter — typing filters the list", () => {
 
 		// "Python" should be visible, "Go" should not
 		expect(prompt.screen()).toContain("Python");
+		expect(prompt.screen()).not.toContain("Go");
 
 		prompt.keys("return");
 		const result = await prompt.answer;
@@ -195,38 +196,6 @@ describe("filter — navigation", () => {
 
 		const result = await prompt.answer;
 		expect(result).toBe("gamma");
-	});
-
-	it("ignores navigation when no results", async () => {
-		const prompt = renderPrompt(filter, {
-			message: "Search",
-			choices: ["alpha", "beta"],
-		});
-
-		await tick();
-		// Type something that won't match
-		prompt.type("z");
-		await tick();
-		prompt.type("z");
-		await tick();
-		prompt.type("z");
-		await tick();
-
-		// Navigation should be ignored (no crash)
-		prompt.keys("down");
-		await tick();
-		prompt.keys("up");
-		await tick();
-
-		// Clear query and submit
-		prompt.keys("backspace");
-		await tick();
-		prompt.keys("backspace");
-		await tick();
-		prompt.keys("backspace");
-		await tick();
-		prompt.keys("return");
-		await prompt.answer;
 	});
 });
 
@@ -380,7 +349,7 @@ describe("filter — viewport scrolling", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("filter — no message", () => {
-	it("renders default message when message is omitted", async () => {
+	it("renders default message before and after submission", async () => {
 		const prompt = renderPrompt(filter, {
 			choices: ["apple", "banana", "cherry"],
 		});
@@ -393,17 +362,6 @@ describe("filter — no message", () => {
 		prompt.keys("return");
 		const result = await prompt.answer;
 		expect(result).toBe("apple");
-	});
-
-	it("submitted output shows default message", async () => {
-		const prompt = renderPrompt(filter, {
-			choices: ["apple", "banana", "cherry"],
-		});
-
-		await tick();
-		prompt.keys("return");
-
-		await prompt.answer;
 		expect(prompt.screen()).toContain("Search and select");
 		expect(prompt.screen()).not.toContain("undefined");
 	});

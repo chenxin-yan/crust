@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 
 import type { StandardSchema } from "@crustjs/utils/schema";
 
@@ -10,8 +10,8 @@ import {
 	defineExtension,
 	defineExtensionId,
 	defineFlag,
-} from "../src/index";
-import { executeCrust } from "./helpers";
+} from "../src/index.ts";
+import { executeCrust } from "./helpers.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Shared fixtures
@@ -43,23 +43,27 @@ const rootCmd = rootBase.add(serveCmd).action(({ flags, stdout }) => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("integration: core APIs", () => {
-	beforeEach(() => {
-		process.exitCode = 0;
-	});
-
 	it("execute() runs using argv override", async () => {
 		const result = await executeCrust(rootCmd, ["serve", "src", "--port", "4000"]);
 		expect(result.stdout).toContain("serve src on 4000");
 		expect(result.exitCode).toBe(0);
 	});
 
-	it("execute() catches errors and sets exit code", async () => {
+	it("executeCrust captures failures even when the prior exit code is already nonzero", async () => {
 		const failCmd = new Crust("fail").action(() => {
 			throw new Error("boom");
 		});
 
-		const result = await executeCrust(failCmd, []);
-		expect(result.exitCode).toBe(1);
+		const originalExitCode = process.exitCode;
+		process.exitCode = 1;
+		try {
+			const result = await executeCrust(failCmd, []);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("boom");
+			expect(process.exitCode).toBe(1);
+		} finally {
+			process.exitCode = originalExitCode ?? 0;
+		}
 	});
 });
 
@@ -68,10 +72,6 @@ describe("integration: core APIs", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("integration: .execute() full pipeline with argv override", () => {
-	beforeEach(() => {
-		process.exitCode = 0;
-	});
-
 	it("full pipeline: root flags + args + subcommand routing + execution", async () => {
 		const env = defineFlag("env", { type: "string", default: "staging" });
 		const dryRun = defineFlag("dryRun", { type: "boolean" });
@@ -95,10 +95,6 @@ describe("integration: .execute() full pipeline with argv override", () => {
 });
 
 describe("integration: Context-owned flag → derived Context and descendant", () => {
-	beforeEach(() => {
-		process.exitCode = 0;
-	});
-
 	it("routes before the subcommand and passes schema output to setup and action", async () => {
 		const schema: StandardSchema<string | undefined, number> = {
 			"~standard": {
@@ -216,10 +212,6 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 });
 
 describe("integration: Extension adds flag visible to subcommand action", () => {
-	beforeEach(() => {
-		process.exitCode = 0;
-	});
-
 	it("Extension flag on root is parsed and available to root action", async () => {
 		const versionFlag = defineExtension(defineExtensionId("version-extension"), {
 			flags: [{ name: "version", type: "boolean", short: "V", recursive: false }],
@@ -264,10 +256,6 @@ describe("integration: Extension adds flag visible to subcommand action", () => 
 });
 
 describe("integration: nested added definitions end-to-end", () => {
-	beforeEach(() => {
-		process.exitCode = 0;
-	});
-
 	it("3-level nested definitions execute correctly", async () => {
 		const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
 		const timeout = defineFlag("timeout", { type: "number", default: 30 });
@@ -328,10 +316,6 @@ describe("integration: nested added definitions end-to-end", () => {
 });
 
 describe("integration: split-file definitions end-to-end", () => {
-	beforeEach(() => {
-		process.exitCode = 0;
-	});
-
 	const verbose = defineFlag("verbose", { type: "boolean" });
 	const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
 	const listCommand = defineCommand("list", (command) =>
@@ -384,10 +368,6 @@ describe("integration: split-file definitions end-to-end", () => {
 });
 
 describe("integration: added definitions", () => {
-	beforeEach(() => {
-		process.exitCode = 0;
-	});
-
 	const verbose = defineFlag("verbose", { type: "boolean" });
 
 	it("adds nested definitions end-to-end", async () => {
@@ -414,10 +394,6 @@ describe("integration: added definitions", () => {
 });
 
 describe("integration: Context-owned boolean flag negation", () => {
-	beforeEach(() => {
-		process.exitCode = 0;
-	});
-
 	it("--no-verbose negates a Context-owned boolean flag on a subcommand", async () => {
 		const verbose = defineFlag("verbose", { type: "boolean", default: true });
 		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
@@ -440,10 +416,6 @@ describe("integration: Context-owned boolean flag negation", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("integration: Context-owned multiple-value flag", () => {
-	beforeEach(() => {
-		process.exitCode = 0;
-	});
-
 	it("Context-owned multiple-value flag collects values on a subcommand", async () => {
 		const tag = defineFlag("tag", { type: "string", multiple: true });
 		const tags = defineContext("tags", { flags: [tag] }, ({ flags }) => flags);
@@ -466,10 +438,6 @@ describe("integration: Context-owned multiple-value flag", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("integration: separator (--) with subcommand and Context-owned flags", () => {
-	beforeEach(() => {
-		process.exitCode = 0;
-	});
-
 	it("rawArgs captured correctly on a subcommand with Context-owned flags", async () => {
 		const verbose = defineFlag("verbose", { type: "boolean" });
 		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
@@ -494,10 +462,6 @@ describe("integration: separator (--) with subcommand and Context-owned flags", 
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("integration: complex real-world CLI scenario", () => {
-	beforeEach(() => {
-		process.exitCode = 0;
-	});
-
 	it("full CLI with global flags, multiple subcommands, extensions, and lifecycle hooks", async () => {
 		const order: string[] = [];
 

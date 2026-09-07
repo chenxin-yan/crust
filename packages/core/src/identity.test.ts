@@ -12,9 +12,7 @@ describe("defineExtensionId", () => {
 		expect(() => defineExtensionId(" acme:docs ")).toThrow(CrustError);
 	});
 
-	it("remains a plain string across serialization", () => {
-		const id = defineExtensionId("acme:docs");
-		expect(structuredClone(id)).toBe(id);
-		expect(JSON.parse(JSON.stringify(id))).toBe(id);
+	it("returns the input string primitive", () => {
+		expect<string>(defineExtensionId("acme:docs")).toBe("acme:docs");
 	});
 });

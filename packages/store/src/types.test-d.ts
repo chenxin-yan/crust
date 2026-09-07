@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+// Compile-time contracts, enforced by check:types (not bun test).
 
 import type { StandardSchema } from "@crustjs/utils/schema";
 import { z } from "zod";
@@ -17,8 +17,10 @@ type Expect<T extends true> = T;
 // InferStoreConfig
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("InferStoreConfig", () => {
-	it("should infer types from field definitions with defaults", () => {
+{
+	// InferStoreConfig
+	{
+		// should infer types from field definitions with defaults
 		type Fields = {
 			readonly theme: { readonly type: "string"; readonly default: "light" };
 			readonly verbose: {
@@ -30,18 +32,13 @@ describe("InferStoreConfig", () => {
 		type Config = InferStoreConfig<Fields>;
 
 		// Fields with defaults resolve to their primitive type (guaranteed)
-		const config: Config = {
-			theme: "dark",
-			verbose: true,
-			retries: 5,
-		};
+		type _Theme = Expect<Equal<Config["theme"], string>>;
+		type _Verbose = Expect<Equal<Config["verbose"], boolean>>;
+		type _Retries = Expect<Equal<Config["retries"], number>>;
+	}
 
-		expect(config.theme).toBe("dark");
-		expect(config.verbose).toBe(true);
-		expect(config.retries).toBe(5);
-	});
-
-	it("should infer optional fields as T | undefined", () => {
+	{
+		// should infer optional fields as T | undefined
 		type Fields = {
 			readonly theme: { readonly type: "string"; readonly default: "light" };
 			readonly token: { readonly type: "string" };
@@ -49,16 +46,11 @@ describe("InferStoreConfig", () => {
 		type Config = InferStoreConfig<Fields>;
 
 		// token has no default → string | undefined
-		const config: Config = {
-			theme: "light",
-			token: undefined,
-		};
+		type _Token = Expect<Equal<Config["token"], string | undefined>>;
+	}
 
-		expect(config.theme).toBe("light");
-		expect(config.token).toBeUndefined();
-	});
-
-	it("should infer array fields", () => {
+	{
+		// should infer array fields
 		type Fields = {
 			readonly tags: {
 				readonly type: "string";
@@ -71,16 +63,12 @@ describe("InferStoreConfig", () => {
 
 		// tags has array default → string[] (guaranteed)
 		// ids has no default → number[] | undefined
-		const config: Config = {
-			tags: ["a", "b"],
-			ids: undefined,
-		};
+		type _Tags = Expect<Equal<Config["tags"], string[]>>;
+		type _Ids = Expect<Equal<Config["ids"], number[] | undefined>>;
+	}
 
-		expect(config.tags).toEqual(["a", "b"]);
-		expect(config.ids).toBeUndefined();
-	});
-
-	it("uses the exact Standard Schema output type", () => {
+	{
+		// uses the exact Standard Schema output type
 		const fields = {
 			withDefault: { schema: z.string().default("x") },
 			optional: { schema: z.string().optional() },
@@ -91,27 +79,28 @@ describe("InferStoreConfig", () => {
 		type _WithDefault = Expect<Equal<Config["withDefault"], string>>;
 		type _Optional = Expect<Equal<Config["optional"], string | undefined>>;
 		type _Required = Expect<Equal<Config["required"], string>>;
-	});
-});
+	}
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // FieldDef
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("FieldDef", () => {
-	it("accepts schemas that output structurally JSON-compatible named interfaces", () => {
+{
+	// FieldDef
+	{
+		// accepts schemas that output structurally JSON-compatible named interfaces
 		interface Payload {
 			name: string;
 			nested: { enabled: boolean };
 		}
 		const schema = {} as StandardSchema<unknown, Payload>;
 		const fields = { payload: { schema } } as const satisfies FieldsDef;
-		const options: CreateStoreOptions<typeof fields> = {
+		const _options: CreateStoreOptions<typeof fields> = {
 			dirPath: "/tmp",
 			name: "named-json",
 			fields,
 		};
-		expect(options.fields).toBe(fields);
 
 		const dateSchema = {} as StandardSchema<unknown, { createdAt: Date }>;
 		const invalidFields = { payload: { schema: dateSchema } } as const satisfies FieldsDef;
@@ -122,35 +111,35 @@ describe("FieldDef", () => {
 			fields: invalidFields,
 		};
 		void invalidOptions;
-	});
+	}
 
-	it("rejects mixing schema with core value options", () => {
-		const fields: FieldsDef = {
+	{
+		// rejects mixing schema with core value options
+		const _fields: FieldsDef = {
 			// @ts-expect-error — schema exclusively owns defaults
 			withDefault: { schema: z.string(), default: "x" },
 			// @ts-expect-error — schema exclusively owns validation
 			withValidate: { schema: z.string(), validate: () => {} },
 		};
-		expect(fields).toBeDefined();
-	});
-});
+	}
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // CreateStoreOptions
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("CreateStoreOptions", () => {
-	it("should require a store name", () => {
+{
+	// CreateStoreOptions
+	{
+		// should require a store name
 		const fields = {
 			theme: { type: "string", default: "light" },
 		} as const satisfies FieldsDef;
 
 		// @ts-expect-error — stores must have an explicit name
-		const options: CreateStoreOptions<typeof fields> = {
+		const _options: CreateStoreOptions<typeof fields> = {
 			dirPath: "/tmp/test",
 			fields,
 		};
-
-		expect(options).toBeDefined();
-	});
-});
+	}
+}

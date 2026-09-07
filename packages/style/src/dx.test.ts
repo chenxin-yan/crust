@@ -152,11 +152,7 @@ describe("Defensive nullish handling", () => {
 
 describe("Error messages — locked via snapshots", () => {
 	it("linkCode rejects URLs with spaces and echoes the URL", () => {
-		// Use `linkCode` directly: top-level `link` goes through the runtime
-		// facade which suppresses (and therefore skips validation) when
-		// hyperlinks are disabled (e.g. non-TTY tests). `linkCode` always
-		// validates because it's how callers get an AnsiPair regardless of
-		// emission mode.
+		// linkCode validates pairs; facade validation in all modes is covered below.
 		expect(() => linkCode("https://example.com/with space")).toThrow(
 			'Invalid hyperlink URL: "https://example.com/with space" must contain only printable ASCII characters without spaces.',
 		);
@@ -244,9 +240,9 @@ describe("environment changes — dynamic chains", () => {
 	it("stored dynamic-color chains re-resolve color depth", () => {
 		setEnv("FORCE_COLOR", "3");
 		const captured = style.bold.fg("#ff0000");
-		expect(captured("x")).toContain("\x1b[38;2;255;0;0m");
+		expect(captured("x")).toBe("\x1b[1m\x1b[38;2;255;0;0mx\x1b[39m\x1b[22m");
 		setEnv("FORCE_COLOR", "2");
-		expect(captured("x")).toContain("\x1b[38;5;196m");
+		expect(captured("x")).toBe("\x1b[1m\x1b[38;5;196mx\x1b[39m\x1b[22m");
 	});
 });
 

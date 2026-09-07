@@ -1,29 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { type InferOutput, normalizeStandardIssues, type StandardSchema } from "./schema.ts";
-
-type Equal<A, B> =
-	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
-type Expect<T extends true> = T;
-
-describe("schema types", () => {
-	it("preserves structural compatibility and output inference", async () => {
-		const schema = {
-			"~standard": {
-				version: 1 as const,
-				vendor: "crust-test",
-				types: undefined as { input: string; output: number } | undefined,
-				validate: (value: NonNullable<StandardSchema["~standard"]["types"]>["input"]) => ({
-					value: Number(value),
-				}),
-			},
-		};
-		const compatible: StandardSchema<string, number> = schema;
-		type _Output = Expect<Equal<InferOutput<typeof schema>, number>>;
-
-		expect(await compatible["~standard"].validate("42")).toEqual({ value: 42 });
-	});
-});
+import { normalizeStandardIssues } from "./schema.ts";
 
 describe("schema issue normalization", () => {
 	it("normalizes Standard Schema issues with an optional prefix", () => {

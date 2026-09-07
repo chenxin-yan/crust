@@ -1,12 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 
-import { bold, red } from "../runtimeExports.ts";
-import { setEnv, snapshotEnv } from "../testEnv.ts";
 import { table } from "./tables.ts";
-
-const restoreEnv = snapshotEnv("FORCE_COLOR");
-beforeAll(() => setEnv("FORCE_COLOR", "3"));
-afterAll(restoreEnv);
 
 // ────────────────────────────────────────────────────────────────────────────
 // Table
@@ -89,25 +83,27 @@ describe("table", () => {
 	// ── ANSI Styled Content ────────────────────────────────────────────────
 
 	it("handles ANSI-styled header values", () => {
-		const styledHeader = bold("Name");
+		const styledHeader = "\x1b[1mName\x1b[22m";
 		const result = table([styledHeader, "Age"], [["Alice", "30"]]);
 		const lines = result.split("\n");
 		// The column should size based on visible width of "Name" (4), not the raw ANSI string length
 		// "Alice" is wider (5), so column width should be 5
+		expect(lines[0]).toBe("| \x1b[1mName\x1b[22m  | Age |");
 		expect(lines[2]).toBe("| Alice | 30  |");
 	});
 
 	it("handles ANSI-styled cell values", () => {
-		const styledCell = red("error");
+		const styledCell = "\x1b[31merror\x1b[39m";
 		const result = table(["Status"], [[styledCell], ["ok"]]);
 		const lines = result.split("\n");
 		// "Status" (6) is widest => column width 6
 		// "error" visible width is 5, padded to 6
-		expect(lines[0]).toBe("| Status |");
+		expect(lines[2]).toBe("| \x1b[31merror\x1b[39m  |");
+		expect(lines[3]).toBe("| ok     |");
 	});
 
 	it("aligns ANSI-styled cells correctly with plain cells", () => {
-		const styledName = bold("Alice");
+		const styledName = "\x1b[1mAlice\x1b[22m";
 		const result = table(
 			["Name", "Score"],
 			[
@@ -119,7 +115,7 @@ describe("table", () => {
 		const lines = result.split("\n");
 		// Both names are 5 visible chars wide, so column is 5
 		// Score column: "Score" is 5, "100" is 3, "5" is 1 => column width 5
-		expect(lines[2]).toContain("Alice");
+		expect(lines[2]).toBe("| \x1b[1mAlice\x1b[22m |   100 |");
 		expect(lines[3]).toBe("| Bob   |     5 |");
 	});
 

@@ -22,7 +22,7 @@ describe("hyperlinks", () => {
 	});
 
 	it("returns empty text unchanged", () => {
-		expect(link("", "https://crustjs.com")).toBe("");
+		expect(createStyle({ mode: "always" }).link("", "https://crustjs.com")).toBe("");
 	});
 
 	it("reopens the outer hyperlink after an inner hyperlink closes", () => {
