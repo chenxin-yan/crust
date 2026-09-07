@@ -21,11 +21,13 @@ my-cli v1.2.3
 
 ## API
 
+[Exact declarations](https://github.com/chenxin-yan/crust/blob/main/packages/extensions/src/version.ts).
+
 ```ts
 type VersionValue = string | (() => string);
 
 interface VersionOptions {
-  format?: "plain" | ((version: string, context: ExtensionContext) => string);
+  readonly format?: "plain" | ((version: string, context: ExtensionContext) => string);
 }
 
 const version: ExtensionFactory<[versionValue?: VersionValue, options?: VersionOptions]>;

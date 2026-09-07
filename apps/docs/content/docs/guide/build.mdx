@@ -18,6 +18,8 @@ The CLI flag overrides project configuration. Existing projects without `crust.r
 
 ## Basic Usage
 
+By default, `crust build` reads `src/cli.ts` and writes build artifacts to `dist`.
+
 ```sh
 # Build for all platforms (default)
 crust build
@@ -38,22 +40,11 @@ crust build --runtime node --name my-cli
 crust build --env-file .env.production
 ```
 
-## Flags
+For the complete option reference, run:
 
-| Flag                           | Alias | Type                    | Default           | Description                                                                         |
-| ------------------------------ | ----- | ----------------------- | ----------------- | ----------------------------------------------------------------------------------- |
-| `--entry`                      | `-e`  | `"string"`              | `src/cli.ts`      | Entry file path                                                                     |
-| `--outfile`                    | `-o`  | `"string"`              | —                 | Output file path (single-target only)                                               |
-| `--name`                       | `-n`  | `"string"`              | auto-detected     | Binary name                                                                         |
-| `--minify`                     | —     | `"boolean"`             | `true` (Bun/Node) | Minify Bun and Node output; not applicable to Deno (`deno compile` has no minifier) |
-| `--runtime`                    | —     | `"string"`              | `bun`             | `bun`, `deno`, or `node`; overrides `package.json`                                  |
-| `--target`                     | `-t`  | `"string"` (repeatable) | all platforms     | Canonical Bun or Deno compiler target; unsupported for Node                         |
-| `--outdir`                     | `-d`  | `"string"`              | `dist`            | Output directory for compiled binaries                                              |
-| `--resolver`                   | `-r`  | `"string"`              | `cli`             | Resolver script filename (multi-target only, no extension)                          |
-| `--env-file`                   | —     | `"string"` (repeatable) | —                 | Explicit env file(s) used for build-time constants (Bun and Node only)              |
-| `--validate` / `--no-validate` | —     | `"boolean"`             | `true`            | Materialize command definitions and run Extension build hooks before compiling      |
-| `--package`                    | —     | `"boolean"`             | `false`           | Stage npm packages in `dist/npm` instead of raw binaries                            |
-| `--stage-dir`                  | —     | `"string"`              | `dist/npm`        | Package staging directory; only used with `--package`                               |
+```sh
+crust build --help
+```
 
 ## Runtime Outputs
 
@@ -65,27 +56,11 @@ crust build --env-file .env.production
 
 Node produces a single portable JavaScript artifact, so it rejects `--target` and `--package`; resolver settings do not apply. Publish it as a normal npm package with its output path in `bin`.
 
-### Supported Bun targets
+### Choosing targets
 
-| Canonical target           | Platform            |
-| -------------------------- | ------------------- |
-| `bun-linux-x64-baseline`   | Linux x86_64        |
-| `bun-linux-arm64`          | Linux ARM64         |
-| `bun-darwin-x64`           | macOS Intel         |
-| `bun-darwin-arm64`         | macOS Apple Silicon |
-| `bun-windows-x64-baseline` | Windows x86_64      |
-| `bun-windows-arm64`        | Windows ARM64       |
+Use canonical compiler names with `--target`, such as `bun-darwin-arm64` for Bun or `aarch64-apple-darwin` for Deno on Apple Silicon. Repeat `--target` to select multiple platforms, or omit it to build for all supported platforms of the selected runtime.
 
-### Supported Deno targets
-
-| Canonical target            | Platform            |
-| --------------------------- | ------------------- |
-| `x86_64-unknown-linux-gnu`  | Linux x86_64        |
-| `aarch64-unknown-linux-gnu` | Linux ARM64         |
-| `x86_64-apple-darwin`       | macOS Intel         |
-| `aarch64-apple-darwin`      | macOS Apple Silicon |
-| `x86_64-pc-windows-msvc`    | Windows x86_64      |
-| `aarch64-pc-windows-msvc`   | Windows ARM64       |
+For the complete supported target lists, see `BUN_TARGET_NAMES` and `DENO_TARGET_NAMES` in the [build target definitions](https://github.com/chenxin-yan/crust/blob/main/packages/crust/src/utils/build-helpers.ts). These track `main`; `crust build --help` describes the option but does not list targets.
 
 <Callout type="info">
   Deno binaries are compiled with `-A` (all permissions granted). Crust core reads environment
@@ -305,18 +280,15 @@ crust publish --stage-dir ./npm-packages
 
 The publish command reads the `manifest.json` and publishes packages in dependency order (platform packages first, then root package).
 
-| Flag          | Type        | Default    | Description                                              |
-| ------------- | ----------- | ---------- | -------------------------------------------------------- |
-| `--stage-dir` | `"string"`  | `dist/npm` | Directory containing the staged `manifest.json`          |
-| `--tag`       | `"string"`  | —          | Override the npm dist-tag passed to `bun publish`        |
-| `--access`    | `"string"`  | `public`   | npm access level passed to `bun publish`                 |
-| `--dry-run`   | `"boolean"` | `false`    | Print publish order and commands without publishing      |
-| `--verify`    | `"boolean"` | `true`     | Verify staged directories and metadata before publishing |
-| `--registry`  | `"string"`  | —          | Override the registry passed to `bun publish`            |
+For the complete publishing option reference, run:
+
+```sh
+crust publish --help
+```
 
 ### Distribution Package Names
 
-Per-platform packages are named by appending the platform suffix (see [Supported Bun targets](#supported-bun-targets)) to your package name:
+Per-platform packages are named by appending the platform suffix to your package name:
 
 | Root Package    | Platform Package                                              |
 | --------------- | ------------------------------------------------------------- |

@@ -5,16 +5,7 @@ description: Define typed named inputs, aliases, repeated values, and shared fla
 
 `.flags(...defs)` takes named flag definitions — values from `defineFlag(name, def)` or inline literals carrying `name`:
 
-```ts
-import { Crust } from "@crustjs/core";
-
-const command = new Crust("serve")
-  .flags(
-    { name: "port", type: "number", default: 3000, short: "p" },
-    { name: "verbose", type: "boolean", short: "v" },
-  )
-  .action(({ flags, stdout }) => stdout(`${flags.port} ${flags.verbose ?? false}`));
-```
+<include lang="ts">../../../examples/guide/flags.ts</include>
 
 See [`FlagDef`](/docs/api/types#flagdef) for the complete definition.
 

@@ -17,11 +17,9 @@ bun add -d @crustjs/testing
 
 `captureExecute()` instead accepts the structural `ExecutableApp` contract. Its `CaptureIO` option type is exported as `Partial<InvocationIO>`:
 
-```ts
-interface ExecutableApp {
-  execute(options?: { argv?: string[]; io?: CaptureIO }): Promise<number>;
-}
-```
+<auto-type-table path="../../../../../packages/testing/src/index.ts" name="ExecutableApp" />
+
+[Exact declarations for the helpers and result unions](https://github.com/chenxin-yan/crust/blob/main/packages/testing/src/index.ts).
 
 An inert `CommandDefinition` must first be added to a `Crust` application before using the typed helpers.
 

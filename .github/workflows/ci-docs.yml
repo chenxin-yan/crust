@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "apps/docs/**"
+      - "packages/**"
       - "package.json"
       - "bun.lock"
       - "turbo.json"

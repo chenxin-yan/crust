@@ -3,9 +3,11 @@ title: "Types"
 description: Public command definitions, snapshots, Command Action contexts, Contexts, and Extensions.
 ---
 
-All types on this page are exported from `@crustjs/core`.
+All types on this page are exported from `@crustjs/core`. Tables summarize object properties; the readable signature sketches do not reproduce every generic constraint or overload.
 
 ## Definition types
+
+[Exact declarations](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/types.ts).
 
 ### `ValueType`
 
@@ -145,6 +147,8 @@ Snapshots omit schemas and parse functions. Every flag snapshot includes `negata
 
 ## Typed invocation
 
+[Exact declarations](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts).
+
 Types inferred from the application definition that back [`run(path, input?, io?)`](/docs/api/crust#runpath-input-io) and the [`@crustjs/testing`](/docs/modules/testing) helpers. `CommandTree` is the compile-time tree accumulated by `.add()`; `CommandPath` enumerates every valid path through it (including the root path `[]`); `CommandShapeAt` resolves the `CommandShape` a path selects; and `RunInput` is the structured `args`/`flags`/`raw` input for that shape, built from the pre-parse `InputArgs` and `InputFlags` value types. When calling `run()`, inputs declared with `type: "json"` accept JSON primitives, structurally JSON-compatible object types (including named interfaces), and mutable or readonly arrays/tuples (`RunInput` itself and the testing helpers constrain leaves to `JsonValue`); variadic JSON arguments and multiple JSON flags use a mutable array whose items are JSON values. Inputs declared with `type: "url"` accept `URL`; `Date`, `bigint`, functions, and other non-JSON values are excluded from JSON inputs. `RunInputArguments` and `RunArguments` are the tuple types that make `input` optional when the selected command requires nothing; `RunOutcome` is the status-discriminated value `run()` resolves to. `AnyCrust` accepts any fully-built application.
 
 ```ts
@@ -184,6 +188,8 @@ The same injectable callbacks are passed to the Command Action and every Context
 
 ## Context types
 
+[Exact declarations](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/api/context.ts).
+
 ### `ContextFactory`
 
 ```ts
@@ -198,21 +204,14 @@ interface ContextFactory<Name extends string, Options, Value, OF, Deps> {
 
 ### `ContextConfig`, `ContextSetup`, and `ContextBag`
 
-```ts
-interface ContextConfig {
-  readonly flags?: readonly NamedFlagDef[];
-  readonly uses?: readonly AnyContextFactory[];
-}
+<auto-type-table path="../../../../../packages/core/src/api/context.ts" name="ContextConfig" />
 
+<auto-type-table path="../../../../../packages/core/src/api/context.ts" name="ContextSetup" />
+
+```ts
 type ContextBag<Deps> = {
   readonly [K in keyof Deps]: Promise<Deps[K]>;
 };
-
-interface ContextSetup<Options, OF, Deps> extends InvocationIO {
-  readonly options: Options;
-  readonly flags: InferFlags<OF>;
-  readonly ctx: ContextBag<Deps>;
-}
 ```
 
 `flags` declares propagating flags. `uses` declares Context dependencies and determines the exact lazy bag exposed to setup. Reading a property starts memoized construction; destructuring therefore starts construction immediately. Setup also receives the invocation's `stdout` and `stderr` callbacks.
@@ -243,6 +242,8 @@ type ContextMap = object;
 The upper bound for the name/value registry accumulated by `.provide()` and Extension `provides`. It is a phantom constraint: the builder infers the concrete property map, so consumer-defined context shapes do not need a string index signature. Command actions receive `ContextBag<Ctx>` for that inferred registry. Reusable command definitions and Extensions expose only Contexts declared through `.use()` (command definitions) or the `uses` config field (Extensions).
 
 ## Extension types
+
+[Exact declarations](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/api/extension.ts).
 
 ### `ExtensionConfig`
 
