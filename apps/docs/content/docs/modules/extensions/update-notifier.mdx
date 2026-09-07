@@ -28,7 +28,7 @@ const updateNotifier: ExtensionFactory<[options: UpdateNotifierOptions]>;
   name="UpdateNotifierOptions"
 />
 
-The `postRun` hook checks for an update only after a Command Action completes successfully. It reads the root `CommandSnapshot.meta.version` by default; `currentVersion` remains an override. A successful action with neither version reports a `DEFINITION` error before any network or cache work. Network, registry, cache, and response failures are swallowed so the notifier does not fail a successful command. It does not check after `ctx.finish()` short-circuits such as `--help`. The notice is written through the invocation's stderr callback (process stderr under `execute()`). Version comparison follows SemVer precedence, so a stable release is considered newer than its prerelease.
+The `postRun` hook checks for an update only after a Command Action completes successfully. It reads the root `CommandSnapshot.meta.version` by default; `currentVersion` remains an override. If neither version is available, the hook throws a `DEFINITION` error before any network or cache work, failing the invocation despite the successful action. Network, registry, cache, and response failures are swallowed so the notifier does not fail a successful command. It does not check after `ctx.finish()` short-circuits such as `--help`. The notice is written through the invocation's stderr callback (process stderr under `execute()`). Version comparison follows SemVer precedence, so a stable release is considered newer than its prerelease.
 
 The hook awaits the registry check and cache reads and writes after the action, delaying invocation completion. `timeoutMs` defaults to 5,000 ms and limits only the network request, not cache operations or the entire hook.
 

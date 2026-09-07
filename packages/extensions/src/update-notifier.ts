@@ -539,8 +539,7 @@ export const updateNotifier: ExtensionFactory<[options: UpdateNotifierOptions]> 
 
 						await cacheAdapter.write(nextState);
 					} catch {
-						// All notifier internal errors are silently swallowed.
-						// The extension must never affect command exit codes or output.
+						// Registry, cache, and notification failures must not fail the completed command.
 					}
 				},
 			},
