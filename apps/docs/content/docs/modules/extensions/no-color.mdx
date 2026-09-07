@@ -16,6 +16,8 @@ await app.execute();
 const noColor: ExtensionFactory;
 ```
 
+Register `noColor()` before Extensions that finish in `preRun`, such as `help()`. Once a hook returns `ctx.finish()`, later `preRun` hooks are skipped, so a later `noColor()` cannot apply the color flags to help output.
+
 `noColor()` owns a recursive boolean `color` flag. Crust's normal boolean negation provides both forms:
 
 ```sh

@@ -39,7 +39,7 @@ With no value override, `version()` reads `CommandSnapshot.meta.version` from th
 const app = new Crust("my-cli").extend(version(() => process.env.APP_VERSION ?? "dev"));
 ```
 
-`version()` owns a root-only boolean `version` flag with short name `v`. It prints through `ctx.stdout` and short-circuits the Command Action only for a root invocation with `--version` or `-v`; subcommands do not receive the flag.
+`version()` owns a root-only boolean `version` flag with short name `v`. It prints through `ctx.stdout` and short-circuits the Command Action only for a root invocation with `--version` or `-v`; subcommands do not receive this flag and reject `--version` as unknown unless they define their own flag with that name.
 
 ## Options
 

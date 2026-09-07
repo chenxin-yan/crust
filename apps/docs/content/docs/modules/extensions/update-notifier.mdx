@@ -30,13 +30,15 @@ const updateNotifier: ExtensionFactory<[options: UpdateNotifierOptions]>;
 
 The `postRun` hook checks for an update only after a Command Action completes successfully. It reads the root `CommandSnapshot.meta.version` by default; `currentVersion` remains an override. A successful action with neither version reports a `DEFINITION` error before any network or cache work. Network, registry, cache, and response failures are swallowed so the notifier does not fail a successful command. It does not check after `ctx.finish()` short-circuits such as `--help`. The notice is written through the invocation's stderr callback (process stderr under `execute()`). Version comparison follows SemVer precedence, so a stable release is considered newer than its prerelease.
 
+The hook awaits the registry check and cache reads and writes after the action, delaying invocation completion. `timeoutMs` defaults to 5,000 ms and limits only the network request, not cache operations or the entire hook.
+
 By default, notifier state is persisted at `stateDir(packageName)` using `@crustjs/store`; package names are URL-encoded for the state directory (`@scope/cli` → `%40scope%2Fcli`) so distinct packages never share state, and cached state from a different `registryUrl` is discarded. A fresh cached result is reused for 24 hours and duplicate notices for the same version are suppressed across sequential process invocations (best-effort: concurrent invocations may race and double-notice). A corrupt state file is treated as empty and repaired on the next successful check. Set `cache: false` to opt out, pass `cache: { intervalMs }` to tune the built-in cache interval, or provide a custom adapter to control persistence.
 
 By default, the notice reports only the available version. Configure `updateCommand` with a fixed string, a `{ scope: "global" | "local" }` object that generates a command for the detected package manager, or an exported `UpdateCommandResolver` callback receiving `{ packageName, packageManager }`. Set `updateDocsUrl` to link to update instructions. Automatic package-manager detection uses `npm_config_user_agent` when available, falling back to `npm_execpath` and the runtime executable name before defaulting to npm.
 
 ## Update command
 
-Generate the standard global update command for the detected package manager:
+Generate the standard global update command for the detected package manager. When Yarn is detected, global scope uses `npm install -g <package>@latest` instead:
 
 ```ts
 updateNotifier({
