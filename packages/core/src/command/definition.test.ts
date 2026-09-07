@@ -5,7 +5,7 @@ import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { defineExtensionId } from "../identity.ts";
-import { Crust, defineCommand } from "./crust.ts";
+import { type CommandDefinitionBuilder, Crust, defineCommand } from "./crust.ts";
 
 describe("command definitions", () => {
 	it("stays inert and materializes each time it is added", async () => {
@@ -28,6 +28,39 @@ describe("command definitions", () => {
 		const unrelated = defineCommand("bad", () => new Crust("other") as never);
 
 		expect(() => new Crust("cli").add(unrelated)).toThrow(/same command builder/);
+	});
+
+	it("rejects a later batch recipe returning an earlier recipe's fluent builder", async () => {
+		const events: string[] = [];
+		let retained: CommandDefinitionBuilder<{ "from-first": { type: "boolean" } }, []> | undefined;
+		const base = new Crust("cli");
+		const receiver = base.add(defineCommand("existing", (command) => command));
+		const first = defineCommand("first", (command) => {
+			events.push("first");
+			retained = command.flags({ name: "from-first", type: "boolean" }).action(() => {});
+			return retained;
+		});
+		const second = defineCommand("second", () => {
+			events.push("second");
+			if (!retained) throw new Error("first recipe has not run");
+			return retained;
+		});
+		const later = defineCommand("later", (command) => {
+			events.push("later");
+			return command;
+		});
+
+		expect(() => receiver.add(first, second, later)).toThrow(
+			expect.objectContaining({
+				code: "DEFINITION",
+				message: 'Command "second" definition must return the same command builder it received',
+				details: { subject: "command", name: "second", reason: "foreign-command-builder" },
+			}),
+		);
+		expect(events).toEqual(["first", "second"]);
+		expect(Object.keys(base._node.subCommands)).toEqual([]);
+		expect(Object.keys(receiver._node.subCommands)).toEqual(["existing"]);
+		expect(Object.keys((await receiver.snapshot()).subCommands)).toEqual(["existing"]);
 	});
 
 	it("rejects Extensions registered inside command definitions", () => {

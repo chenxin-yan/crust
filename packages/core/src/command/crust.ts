@@ -300,7 +300,6 @@ function materializeCommandDefinition(
 	});
 
 	const child = new Crust(name);
-	child._ancestorOwnedFlags = parent.ownedFlags;
 	for (const [flagName, def] of Object.entries(parent.ownedFlags)) {
 		registerFlag(child._node, flagName, def, "owned");
 	}
@@ -313,7 +312,10 @@ function materializeCommandDefinition(
 	/* oxlint-disable anti-slop/no-chained-type-assertions -- Crust's declared type omits the builder-only `.use()` (implemented on its prototype), so the cast must pass through unknown. */
 	const configured = internal.recipe(child as unknown as AnyCommandDefinitionBuilder);
 	/* oxlint-enable anti-slop/no-chained-type-assertions */
-	if (!(configured instanceof Crust) || configured._ancestorOwnedFlags !== parent.ownedFlags) {
+	if (
+		!(configured instanceof Crust) ||
+		configured._ancestorOwnedFlags !== child._ancestorOwnedFlags
+	) {
 		throw new CrustError(
 			"DEFINITION",
 			`${owner} definition must return the same command builder it received`,
@@ -853,7 +855,7 @@ export class Crust<
 	/** @internal */
 	_node: CommandNode;
 
-	/** @internal — Runtime identity anchor for the ancestor-owned flag carrier */
+	/** @internal — Recipe-builder lineage anchor, unique per materialization and preserved by clones */
 	_ancestorOwnedFlags: FlagsDef;
 
 	/**
