@@ -18,7 +18,6 @@ Before submitting:
 
 - Examples in changed docs compile against the new API
 - Cross-links resolve; `meta.json` updated if pages added/removed/reordered
-- Package README and `modules/<pkg>.mdx` agree on install, exports, quick example
 
 ## Changesets
 
