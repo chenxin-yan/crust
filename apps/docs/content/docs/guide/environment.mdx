@@ -5,7 +5,7 @@ description: Separate runtime secrets from public build-time constants.
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-Crust adds no environment-variable abstraction. Read runtime configuration from `process.env`; Bun loads `.env` files according to its normal runtime rules.
+Crust adds no environment-variable abstraction. Read runtime configuration from `process.env`; Bun loads `.env` files according to its normal runtime rules. When running with Node or Deno, load files explicitly with `node --env-file=.env` or `deno run --env-file=.env`, or supply variables through the shell.
 
 ```ts
 import { Crust } from "@crustjs/core";

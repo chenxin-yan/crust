@@ -21,7 +21,7 @@ npm install @crustjs/core
 deno add npm:@crustjs/core
 ```
 
-The `crust` build CLI remains Bun tooling, but its npm distribution ships as standalone executables with Bun embedded. You do not need a separate Bun installation to run the packaged CLI.
+The `crust` build CLI remains Bun tooling, but its npm distribution ships as standalone executables with Bun embedded. Its npm entry is a small Node launcher, so Node is required to start it, but a separate Bun installation is not. The same launcher requirement applies to CLIs distributed with `crust build --package`; their platform binaries embed Bun.
 
 ## Deno permissions
 

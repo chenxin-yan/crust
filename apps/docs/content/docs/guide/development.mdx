@@ -26,7 +26,7 @@ Use the [Testing guide](/docs/guide/testing) for `captureRun()` and `runInteract
 crust build
 ```
 
-The build snapshot subprocess prepares the complete command graph, including Extension-owned flags and commands, validates documentation sections, and runs Extension build hooks before compilation. Definition checks run through TypeScript. Use `--no-validate` only when the snapshot subprocess cannot run in your environment.
+The build snapshot subprocess evaluates the entry under Bun for every target runtime, including Node and Deno. Packaged Crust uses its embedded Bun for this step. It prepares the complete command graph, validates documentation sections, and runs Extension build hooks before compilation, with a 30-second timeout for the subprocess. Target-only APIs used during preparation can fail under Bun. `--no-validate` skips this runtime validation and all build hooks; with `--package`, it also skips artifact-directory staging. See [snapshot preparation](/docs/guide/build#pre-compile-snapshot-preparation).
 
 ## Inspect input
 
