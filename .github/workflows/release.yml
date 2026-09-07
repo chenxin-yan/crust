@@ -42,7 +42,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
-      # tsdown's bin runs under Node (engines ^22.18 || >=24.11)
+      # tsdown's bin runs under Node (engines ^22.18.0 || ^24.11.0 || >=26.0.0)
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
@@ -94,7 +94,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
-      # tsdown's bin runs under Node (engines ^22.18 || >=24.11)
+      # tsdown's bin runs under Node (engines ^22.18.0 || ^24.11.0 || >=26.0.0)
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
@@ -152,7 +152,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
-      # tsdown's bin runs under Node (engines ^22.18 || >=24.11)
+      # tsdown's bin runs under Node (engines ^22.18.0 || ^24.11.0 || >=26.0.0)
       - name: Setup Node
         uses: actions/setup-node@v7
         with:

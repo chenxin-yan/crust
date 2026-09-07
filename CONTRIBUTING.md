@@ -10,8 +10,8 @@ Thanks for contributing to Crust. This repository is a Bun-native, TypeScript-fi
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) `1.4.0`
-- Node.js `^22.18 || >=24.11` (package builds run tsdown under Node, which enforces this exact range — Node 23.x and 24.0–24.10 are rejected)
+- [Bun](https://bun.sh) `1.4.2`
+- Node.js `^22.18.0 || ^24.11.0 || >=26.0.0` (package builds run tsdown under Node, which enforces this exact range — Node 23.x, 25.x and 24.0–24.10 are rejected)
 - [Deno](https://deno.com) `>=2.8` (only needed to run the cross-runtime smoke suite locally; CI runs it on every PR)
 - Git
 

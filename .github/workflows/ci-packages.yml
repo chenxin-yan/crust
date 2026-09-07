@@ -101,7 +101,7 @@ jobs:
         with:
           deno-version: v2.x
 
-      # tsdown's bin runs under Node (engines ^22.18 || >=24.11); don't rely
+      # tsdown's bin runs under Node (engines ^22.18.0 || ^24.11.0 || >=26.0.0); don't rely
       # on the runner image's preinstalled Node.
       - name: Setup Node
         uses: actions/setup-node@v7

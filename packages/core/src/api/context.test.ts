@@ -716,9 +716,7 @@ describe("Context dependency runtime boundaries", () => {
 				details: { reason: "flags-before-validation" },
 			});
 		} finally {
-			// TODO: drop cast once https://github.com/oven-sh/bun/issues/40003 is fixed.
-			// Cast: bun-types 1.4.0's memoryPressure override shadows the generic overload.
-			(process as NodeJS.EventEmitter).off("unhandledRejection", onUnhandled);
+			process.off("unhandledRejection", onUnhandled);
 		}
 	});
 

@@ -185,11 +185,7 @@ export function createSpinnerHandle(options: SpinnerHandleOptions): SpinnerHandl
 			timerId = undefined;
 		}
 		if (sigintHandler) {
-			// TODO: drop cast once https://github.com/oven-sh/bun/issues/40003 is fixed.
-			// bun-types 1.4.0's Process override (memoryPressure) shadows the generic
-			// EventEmitter removeListener overload, so cast back to the base type.
-			// SAFETY: Node's Process implements EventEmitter; only Bun's declaration shadows this overload.
-			(process as NodeJS.EventEmitter).removeListener("SIGINT", sigintHandler);
+			process.removeListener("SIGINT", sigintHandler);
 			sigintHandler = undefined;
 		}
 	}

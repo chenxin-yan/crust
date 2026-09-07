@@ -18,6 +18,7 @@ function tick(ms = 10): Promise<void> {
 
 describe("spinner — terminal sink", () => {
 	it("hides and restores the cursor in TTY mode", () => {
+		const previousHandlers = process.listeners("SIGINT");
 		const { sink, writes } = createFakeSink(true);
 		const handle = spinner({ message: "Working", sink });
 
@@ -26,6 +27,7 @@ describe("spinner — terminal sink", () => {
 
 		expect(writes[0]).toBe("\x1B[?25l");
 		expect(writes.at(-1)).toBe("\x1B[?25h");
+		expect(process.listeners("SIGINT")).toEqual(previousHandlers);
 	});
 
 	it("restores the cursor and re-raises SIGINT", () => {
@@ -72,9 +74,7 @@ describe("spinner — terminal sink", () => {
 			handler?.("SIGINT");
 		} finally {
 			process.kill = realKill;
-			// TODO: drop cast once https://github.com/oven-sh/bun/issues/40003 is fixed.
-			// Cast: bun-types 1.4.0's memoryPressure override shadows the generic overload.
-			(process as NodeJS.EventEmitter).removeListener("SIGINT", hostListener);
+			process.removeListener("SIGINT", hostListener);
 		}
 		expect(kills).toEqual([]);
 		expect(writes.at(-1)).toBe("\x1B[?25h");

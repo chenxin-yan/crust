@@ -445,6 +445,18 @@ describe("input — non-TTY", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("input — schema validation", () => {
+	it("validates Unicode code-point limits through a string schema", async () => {
+		await expect(
+			input({ initial: "😀😀", schema: z.string().min(3, "Too short") }, nonTTYIO()),
+		).rejects.toThrow("Too short");
+		await expect(input({ initial: "😀😀😀", schema: z.string().min(3) }, nonTTYIO())).resolves.toBe(
+			"😀😀😀",
+		);
+		await expect(input({ initial: "😀😀", schema: z.string().max(2) }, nonTTYIO())).resolves.toBe(
+			"😀😀",
+		);
+	});
+
 	it("rejects combining schema with a function validator", async () => {
 		await expect(input({ schema: z.string(), validate: () => {} } as never)).rejects.toThrow(
 			'input() cannot combine "schema" with "validate"',
