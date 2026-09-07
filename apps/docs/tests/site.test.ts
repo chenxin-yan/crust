@@ -76,5 +76,5 @@ it("landing highlights the checked greeting example", async () => {
     .transform(new Response(data.highlightedCode))
     .text();
   const example = await readFile(new URL("../examples/landing/greet.ts", import.meta.url), "utf8");
-  expect(code.trimEnd()).toBe(example.trimEnd());
+  expect(code).toBe(example.trimEnd());
 }, 10000);
