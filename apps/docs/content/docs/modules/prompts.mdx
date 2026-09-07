@@ -13,7 +13,7 @@ import { Callout } from "fumadocs-ui/components/callout";
   throw-on-failure function; the two options are mutually exclusive.
 </Callout>
 
-All prompt UI renders to **stderr** so it never pollutes piped stdout. Every prompt accepts an `initial` option to skip interactivity, which is useful for prefilling from CLI flags or CI environments.
+Prompt UI renders to **stderr** by default, keeping piped stdout clean unless you override the output stream. Every prompt accepts an `initial` option to skip interactivity, which is useful for prefilling from CLI flags or CI environments.
 
 ## Install
 
@@ -152,9 +152,9 @@ const secret = await password({
 - `validate`: a `(value: string) => void | Promise<void>` function that throws to reject input; its message renders inline and the prompt returns `string`.
 - `schema`: any [Standard Schema v1](https://standardschema.dev/) object (Zod, Valibot, Effect Schema, ArkType, and others); the prompt returns the schema's exact output type.
 
-A schema parses the raw submitted string, renders its first issue inline on rejection (falling back to `"Validation failed"`), and returns its transformed output on success. Async schemas are supported. Passing both `schema` and `validate` throws at the call boundary.
+A schema parses the raw submitted string, renders its first issue inline on rejection (falling back to `"Validation failed"`), and returns its transformed output on success. Async schemas are supported. Passing both `schema` and `validate` rejects immediately, before rendering.
 
-`initial` and non-TTY `default` are raw UI fallback values rather than semantic defaults. Crust parses them through `schema` before returning them, preserving the `Promise<Output>` contract. Put semantic defaults inside the schema.
+`initial` and non-TTY `default` are raw UI fallback values rather than semantic defaults. Crust parses them through `schema` before returning them, preserving the `Promise<Output>` contract. A rejected fallback rejects the prompt promise with `initial value rejected by schema: ...` or `default value rejected by schema: ...`, without rendering. Put semantic defaults inside the schema.
 
 ```ts
 import { input } from "@crustjs/prompts";
@@ -296,6 +296,8 @@ const features = await multifilter({
 
 All prompts share a theming system with 10 style slots. Each slot is a `StyleFn`, which is a `(text: string) => string` function from `@crustjs/style`.
 
+The default theme's styling follows [`@crustjs/style` capability detection](/docs/modules/style#color-control), including `process.stdout.isTTY`, not the resolved prompt output. `NO_COLOR` disables colors but not modifiers, hyperlinks, or the renderer's cursor-control sequences.
+
 ### Default Theme
 
 | Slot          | Default | Used for                             |
@@ -338,7 +340,7 @@ Theme resolution order, from lowest to highest priority:
 
 ## Non-Interactive Environments
 
-All prompts require an interactive TTY unless a short-circuit value is available. Every prompt returns `initial` immediately without rendering. In addition, `input`, `confirm`, `select`, `multiselect`, `filter`, and `multifilter` return an explicitly provided `default` when stdin is not a TTY. Otherwise, the prompt throws `NonInteractiveError`.
+All prompts require an interactive input TTY unless a short-circuit value is available. Every prompt skips rendering when `initial` is provided, parsing it through `schema` when configured. In addition, `input`, `confirm`, `select`, `multiselect`, `filter`, and `multifilter` use an explicitly provided `default` when the resolved input is not a TTY. Otherwise, the prompt rejects with `NonInteractiveError`. See [Validation](#validation) for schema-backed fallback rejection.
 
 ```ts
 import { input, NonInteractiveError } from "@crustjs/prompts";

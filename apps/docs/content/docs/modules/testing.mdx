@@ -11,6 +11,8 @@ description: Test Crust applications with captured output and fake interactive t
 bun add -d @crustjs/testing
 ```
 
+The required peers are `@crustjs/core`, `@crustjs/progress`, and `@crustjs/prompts`; install any your project does not already have. TypeScript is an optional peer.
+
 ## Application contracts
 
 `captureRun()` and `runInteractive()` accept a `Crust` application and infer its command tree. Their command path, argument object, and flag object are checked from the definitions added to that application. Misspelled command, argument, or flag names fail TypeScript checking and editor completion suggests valid names.
@@ -26,6 +28,8 @@ An inert `CommandDefinition` must first be added to a `Crust` application before
 ## `captureRun(app, path, input?)`
 
 Run an application with captured output and the selected action's inferred result. Each `ctx.stdout()`/`ctx.stderr()` call is one line (matching the terminal defaults), and the returned `stdout` and `stderr` fields join those lines with `"\n"`. The `completed` branch owns the action's awaited `result`, the `finished` branch owns the finishing Extension's `by` identity, and the `failed` branch owns the thrown `error`. Output written before failure is retained. Narrow with `captured.status`.
+
+With the default capture setup, prompt and progress output is bridged into captured `stderr` through a non-TTY, line-buffered adapter. A spinner contributes its final line without animation. Capturing output does not provide interactive input; use `runInteractive()` to drive prompts.
 
 ```ts
 import { captureRun } from "@crustjs/testing";
@@ -58,7 +62,7 @@ export type CapturedRun<Result = unknown> = {
 
 ## `captureExecute(app, argv)`
 
-Drive the terminal `execute()` path in-process. Unlike `captureRun()`, this exercises `execute()`'s returned exit-code protocol — `0` on success, `1` for rendered failures, `130` for `AbortError` cancellation — and the Extension `onError` rendering chain, so exit codes and rendered failure output are assertable without spawning a subprocess. The previous process exit code is restored after capture.
+Drive the terminal `execute()` path in-process. Unlike `captureRun()`, this exercises `execute()`'s returned exit-code protocol — `0` on success, `1` for rendered failures, `130` for `AbortError` cancellation — and the Extension `onError` rendering chain, so exit codes and rendered failure output are assertable without spawning a subprocess. The previous process exit code is restored after capture; an unset exit code is restored as `0`.
 
 ```ts
 import { captureExecute } from "@crustjs/testing";
@@ -77,7 +81,7 @@ The return type is `CapturedExecute`:
 
 ## `runInteractive(app, path, input?)`
 
-Run an application against a fake TTY. Use `waitFor()` before sending input with `type()` or `keys()`, then await `done`.
+Run an application against a fake TTY. Use `waitFor()` before sending input with `type()` or `keys()`, then await `done`. See the [prompt testing helpers](/docs/modules/prompts#testing-custom-prompts) for the `keys()` vocabulary.
 
 `waitFor(pattern, timeoutMs?)` polls the terminal (default timeout 5000ms). It fails fast instead of hanging: if the application throws before the pattern matches, `waitFor()` rethrows that error; if the application completes without matching, or the timeout elapses, it throws with the current screen contents.
 

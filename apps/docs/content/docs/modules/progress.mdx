@@ -29,9 +29,9 @@ const data = await spinner({
 
 ### `spinner(options)`
 
-Display a spinner animation while an async task runs. Non-interactive and output-only. On completion it prints a success (`✓`) or error (`✗`) line to `stderr`.
+Display a spinner animation while an async task runs. It is output-only and does not read input. On completion it prints a success (`✓`) or error (`✗`) line to the resolved output sink, stderr by default. A failed task rejects with the task's error after printing the error line.
 
-In non-interactive environments, the spinner skips animation and ANSI escape codes. Only the final success or error line is printed.
+When the sink is not a TTY, the spinner skips animation and cursor-control sequences. Only the final success or error line is printed; its styling follows the theme's color and modifier settings.
 
 ```ts
 await spinner({
@@ -147,6 +147,8 @@ Or provide a custom frame set:
 const custom = { frames: ["⊶", "⊷"], interval: 150 };
 ```
 
+`frames` must contain at least one frame. An empty array throws synchronously when the indicator is created.
+
 ## Themes
 
 `@crustjs/progress` has its own theme contract with four slots:
@@ -203,4 +205,6 @@ await withTerminalIO({ output: sink }, () => deploy()); // prompts and indicator
 
 ## Non-interactive behavior
 
-When `stderr` is not a TTY, `spinner()` does not animate and does not emit cursor-control ANSI sequences. `updateMessage()` still works and updates the message used in the final success or error line.
+When the resolved sink is not a TTY, `spinner()` does not animate and does not emit cursor-control ANSI sequences. `updateMessage()` still works and updates the message used in the final success or error line.
+
+The default theme still applies styling to that line. [`@crustjs/style`](/docs/modules/style#color-control) checks `process.stdout.isTTY`, `NO_COLOR`, and `FORCE_COLOR`, not the sink's `isTTY`. Redirecting stderr alone can therefore leave styling escapes in a log. `NO_COLOR` disables colors, not modifiers such as the default bold message. To avoid escapes added by the indicator, use a non-TTY sink and plain functions such as `(text) => text` for every theme slot; messages must also be escape-free.
