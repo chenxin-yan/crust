@@ -901,13 +901,16 @@ export class Crust<
 		const effectiveFlags = { ...this._node.effectiveFlags };
 		const newNode: CommandNode = {
 			...this._node,
-			// Descendants are immutable builder values; sharing them keeps fluent updates O(1).
+			// Descendants are immutable builder values; sharing them avoids recursive clones.
 			localFlags: { ...this._node.localFlags },
 			ownedFlags: { ...this._node.ownedFlags },
 			effectiveFlags,
 			flagSpellings: cloneFlagSpellings(this._node.flagSpellings, effectiveFlags),
 			args: [...this._node.args],
-			subCommands: { ...this._node.subCommands },
+			// A supplied replacement wins even when explicitly undefined at runtime.
+			...(Object.hasOwn(nodeOverrides, "subCommands")
+				? {}
+				: { subCommands: { ...this._node.subCommands } }),
 			contexts: [...this._node.contexts],
 			extensions: [...this._node.extensions],
 			meta: { ...this._node.meta },
@@ -1092,15 +1095,9 @@ export class Crust<
 			ValidateDeclaredDeps<Ctx, Ds> &
 			ValidateDefinitionFlags<Ds, CollisionSp["extension"]>
 	): AfterAdd<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Ds> {
-		let result = this._clone<Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result>>(
-			{},
-		);
-		for (const definition of definitions) {
-			result = result._addDefinition(definition);
-		}
-		return result._clone<
+		return this._addDefinitions<
 			AfterAdd<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Ds>
-		>({});
+		>(definitions);
 	}
 
 	/**
@@ -1147,7 +1144,7 @@ export class Crust<
 		// SAFETY: the erased recipe still returns the builder it receives; materialization re-validates that at runtime.
 		const definition = define(name, recipe as unknown as CommandRecipe);
 		/* oxlint-enable anti-slop/no-chained-type-assertions */
-		return this._addDefinition(definition)._clone<
+		return this._addDefinitions<
 			AfterAdd<
 				Flags,
 				A,
@@ -1160,27 +1157,29 @@ export class Crust<
 				Result,
 				readonly [CommandDefinition<N, readonly [], ShapeOfBuilder<B>, DepsOfBuilder<B>>]
 			>
-		>({});
+		>([definition]);
 	}
 
-	private _addDefinition(
-		definition: CommandDefinition,
-	): Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result> {
-		// FIX_COMMAND_COLLISION owns literal names; this owns dynamic `.add()`,
-		// where a silent replacement makes the earlier command unreachable.
-		// Extension-contributed commands keep documented last-write-wins.
-		if (Object.hasOwn(this._node.subCommands, definition.name)) {
-			throw new CrustError(
-				"DEFINITION",
-				`Command name "${definition.name}" is already registered on this command`,
-				{ subject: "command", name: definition.name, reason: "command-collision" },
-			);
+	private _addDefinitions<Out>(definitions: readonly CommandDefinition[]): Out {
+		// Keep partial additions private if a duplicate or recipe throws. Every
+		// recipe inherits from the original parent, never from earlier siblings.
+		const subCommands = { ...this._node.subCommands };
+		for (const definition of definitions) {
+			// FIX_COMMAND_COLLISION owns literal names; this owns dynamic `.add()`,
+			// where a silent replacement makes the earlier command unreachable.
+			// Extension-contributed commands keep documented last-write-wins.
+			if (Object.hasOwn(subCommands, definition.name)) {
+				throw new CrustError(
+					"DEFINITION",
+					`Command name "${definition.name}" is already registered on this command`,
+					{ subject: "command", name: definition.name, reason: "command-collision" },
+				);
+			}
+			const childNode = materializeCommandDefinition(definition, this._node);
+			subCommands[definition.name] = childNode;
 		}
-		const childNode = materializeCommandDefinition(definition, this._node);
 
-		return this._clone<Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result>>({
-			subCommands: { ...this._node.subCommands, [definition.name]: childNode },
-		});
+		return this._clone<Out>({ subCommands });
 	}
 
 	/**

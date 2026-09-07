@@ -207,23 +207,93 @@ describe("command definitions", () => {
 		);
 	});
 
-	it("adds multiple definitions in one variadic call", async () => {
+	it("keeps retained builders unchanged when a batch recipe throws", async () => {
+		const events: string[] = [];
+		const base = new Crust("cli");
+		const receiver = base.add(defineCommand("existing", (command) => command));
+		const first = defineCommand("first", (command) => {
+			events.push("first");
+			return command;
+		});
+		const failure = new Error("recipe failed");
+		const throwing = defineCommand("throwing", () => {
+			events.push("throwing");
+			throw failure;
+		});
+		const later = defineCommand("later", (command) => {
+			events.push("later");
+			return command;
+		});
+
+		expect(() => receiver.add(first, throwing, later)).toThrow(failure);
+		expect(events).toEqual(["first", "throwing"]);
+		expect(Object.keys(base._node.subCommands)).toEqual([]);
+		expect(Object.keys(receiver._node.subCommands)).toEqual(["existing"]);
+		expect(Object.keys((await receiver.snapshot()).subCommands)).toEqual(["existing"]);
+	});
+
+	it.each(["first", "existing"])(
+		"checks a batch duplicate of %s before its recipe and stops registration",
+		async (name: string) => {
+			const events: string[] = [];
+			const base = new Crust("cli");
+			const receiver = base.add(defineCommand("existing", (command) => command));
+			const first = defineCommand("first", (command) => {
+				events.push("first");
+				return command;
+			});
+			const duplicate = defineCommand(name, (command) => {
+				events.push("duplicate");
+				return command;
+			});
+			const later = defineCommand("later", (command) => {
+				events.push("later");
+				return command;
+			});
+
+			expect(() => receiver.add(first, duplicate, later)).toThrow(
+				expect.objectContaining({
+					code: "DEFINITION",
+					message: `Command name "${name}" is already registered on this command`,
+					details: { subject: "command", name, reason: "command-collision" },
+				}),
+			);
+			expect(events).toEqual(["first"]);
+			expect(Object.keys(base._node.subCommands)).toEqual([]);
+			expect(Object.keys(receiver._node.subCommands)).toEqual(["existing"]);
+			expect(Object.keys((await receiver.snapshot()).subCommands)).toEqual(["existing"]);
+		},
+	);
+
+	it("adds multiple definitions in argument order without mutating retained builders", async () => {
+		const configured: string[] = [];
 		const ran: string[] = [];
-		const build = defineCommand("build", (command) =>
-			command.action(() => {
+		const build = defineCommand("build", (command) => {
+			configured.push("build");
+			return command.action(() => {
 				ran.push("build");
-			}),
-		);
-		const publish = defineCommand("publish", (command) =>
-			command.action(() => {
+			});
+		});
+		const publish = defineCommand("publish", (command) => {
+			configured.push("publish");
+			return command.action(() => {
 				ran.push("publish");
-			}),
-		);
-		const app = new Crust("cli").add(build, publish);
+			});
+		});
+		const base = new Crust("cli");
+		const receiver = base.add(defineCommand("existing", (command) => command));
+		const app = receiver.add(build, publish);
+
+		expect(configured).toEqual(["build", "publish"]);
+		expect(Object.keys(base._node.subCommands)).toEqual([]);
+		expect(Object.keys(receiver._node.subCommands)).toEqual(["existing"]);
+		expect(Object.keys(app._node.subCommands)).toEqual(["existing", "build", "publish"]);
+		expect(app._node.subCommands).not.toBe(receiver._node.subCommands);
 
 		await app.run(["build"]);
 		await app.run(["publish"]);
 
 		expect(ran).toEqual(["build", "publish"]);
+		expect(configured).toEqual(["build", "publish"]);
 	});
 });
