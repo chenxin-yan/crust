@@ -17,7 +17,7 @@ Thanks for contributing to Crust. This repository is a Bun-native, TypeScript-fi
 
 ## Repository Layout
 
-- `packages/`: published framework packages
+- `packages/`: framework packages and the private experimental compiler
 - `apps/docs/`: documentation site
 - `.changeset/`: release metadata used by Changesets
 - `scripts/`: release and maintenance scripts
@@ -57,12 +57,9 @@ bun run check
 bun run check:types
 ```
 
-Run `bun run test` when your change affects runtime behavior. Compiler runtime or emission changes also require the Node/Go differential corpus (with both `node` and `go` on `PATH`):
+Run `bun run test` when your change affects runtime behavior. This includes the compiler's Go-free diagnostics through its public `compile()` seam, but not the native differential corpus. Compiler runtime or emission changes also require `test:corpus`: use Node **24** as the reference runtime and the optional Go version pinned in `mise.toml` (`mise install go`). CI reads its Bun version from the root `package.json` `packageManager` field.
 
-```sh
-cd packages/compiler
-bun run test:corpus
-```
+See the [compiler README](packages/compiler/README.md#testing) for compiler-only commands, loud Go-absent skips, and the runtime parity contract. The corpus runs in its own filtered CI lane; compiler build, types, lint, formatting, and Go-free tests remain framework checks. Add regressions through `compile()`, not internal lowering functions or IR/Go-source snapshots.
 
 ## Working on Packages
 

@@ -38,6 +38,61 @@ function expectLocated(error: CompilerError): void {
 }
 
 describe("compiler diagnostic corpus", () => {
+	it("rejects a directory-valued output path", async () => {
+		const fixture = join(import.meta.dir, "fixtures", "hello.ts");
+		const outputPath = await mkdtemp(join(tmpdir(), "crust-compiler-output-"));
+		try {
+			await expect(compile(fixture, { outputPath })).rejects.toThrow("must not be a directory");
+		} finally {
+			await rm(outputPath, { recursive: true, force: true });
+		}
+	});
+
+	it("rejects default parameters before emission", async () => {
+		const fixture = join(import.meta.dir, "fixtures", "default-parameter.ts");
+		await expect(compile(fixture)).rejects.toThrow("Unsupported TypeScript Parameter");
+	});
+
+	it("rejects expressions unsupported by the Go runtime", async () => {
+		const workspace = await mkdtemp(join(tmpdir(), "crust-unsupported-expression-"));
+		const fixture = join(workspace, "fixture.ts");
+		try {
+			await writeFile(fixture, 'process.exit("2");');
+			const compilation = compile(fixture);
+			await expect(compilation).rejects.toBeInstanceOf(CompilerError);
+			await expect(compilation).rejects.toMatchObject({
+				diagnostics: [expect.objectContaining({ code: DiagnosticCodes.TypeScriptError })],
+			});
+			for (const source of [
+				'console.log("abc".slice(1));',
+				'console.log("abc"[0]);',
+				'console.log("abc"[0].length);',
+				'console.log(+"42");',
+				"console.log(String(42));",
+				"console.log(undefined);",
+				"function f(): void {} console.log(f());",
+				"console.log(process.exit(0));",
+				"function f(value: void): number { return 1; } f();",
+				"function f(): void {} function g(): void { return f(); } g();",
+				'console.log(process.argv["0"]);',
+				'console.log("%s", "ok");',
+				'function format(): string { return "%s"; } console.log(format(), "ok");',
+				"function f(): void {} console.log(`${f()}`);",
+				"console.log(`${process.exit(0)}`);",
+				"console.log(process.exit(0) + 1);",
+				"console.log((process.argv[99] + 1).length);",
+				"function f(): number { process.exit(0); } f();",
+				"function f() { return 1; } console.log(f);",
+				"function f(value: number) { return value; } console.log(f.length);",
+			]) {
+				await writeFile(fixture, source);
+				await expect(compile(fixture)).rejects.toThrow("Unsupported TypeScript");
+			}
+		} finally {
+			await rm(workspace, { recursive: true, force: true });
+		}
+	}, 120_000);
+
 	it("rejects suppressed ill-typed calls before invoking Go", async () => {
 		const error = await compileSourceFailure(
 			'// @ts-nocheck\nfunction f(a: number): number { return a; }\nconsole.log(f("x"));',
