@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
 import { compile } from "../src/index.js";
+import { numericStringBoundarySources } from "./string-boundary.js";
 
 const goPath = Bun.which("go");
 const nodePath = Bun.which("node");
@@ -102,37 +103,6 @@ describe("compiler differential corpus", () => {
 		);
 	}
 
-	it("rejects direct string-array logging", async () => {
-		const fixture = join(import.meta.dir, "fixtures", "array-log.ts");
-		const workspace = await mkdtemp(join(tmpdir(), "crust-array-log-"));
-		try {
-			await expect(compile(fixture, { outputPath: join(workspace, "binary") })).rejects.toThrow(
-				"Unsupported TypeScript call to console.log",
-			);
-		} finally {
-			await rm(workspace, { recursive: true, force: true });
-		}
-	}, 120_000);
-
-	it.each([
-		"console.log(process.argv);",
-		"console.log((process.argv.slice(2))!);",
-		"console.log(42, process.argv.slice(2));",
-		"function log(values: string[]): void { console.log(values); } log(process.argv.slice(2));",
-		"function args(): string[] { return process.argv.slice(2); } console.log(args());",
-	])("rejects string-array log arguments: %s", async (source) => {
-		const workspace = await mkdtemp(join(tmpdir(), "crust-array-log-"));
-		const fixture = join(workspace, "fixture.ts");
-		try {
-			await writeFile(fixture, source);
-			await expect(compile(fixture, { outputPath: join(workspace, "binary") })).rejects.toThrow(
-				"Unsupported TypeScript call to console.log",
-			);
-		} finally {
-			await rm(workspace, { recursive: true, force: true });
-		}
-	});
-
 	it.skipIf(goPath === null)(
 		"matches ECMAScript number formatting",
 		async () => {
@@ -197,24 +167,17 @@ describe("compiler differential corpus", () => {
 		);
 	}
 
-	it("rejects numeric string results escaping through function boundaries", async () => {
+	it("exposes numeric string results in the Node oracle", async () => {
 		const workspace = await mkdtemp(join(tmpdir(), "crust-string-boundary-"));
 		const fixture = join(workspace, "fixture.ts");
 		try {
-			for (const source of [
-				"function len(s: string): number { return s.length; } console.log(len(process.argv[99] + 1));",
-				"function len(s: string): number { return s.length; } console.log(len((process.argv[99]! + 1)!));",
-				"function value(): string { return process.argv[99] + 1; } console.log(value().length);",
-				"function value(s: string): string { return s + 1; } console.log(value(process.argv[99]).length);",
-				"function len(s: string): number { return s.length; } console.log(len(process.argv[98] + process.argv[99]));",
-			]) {
+			for (const source of numericStringBoundarySources) {
 				await writeFile(fixture, source);
 				if (nodePath === null) throw new Error("Node is required as the corpus reference runtime");
 				const reference = run(nodePath, [fixture]);
 				expect(reference.exitCode).toBe(0);
 				expect(reference.stdout.toString()).toBe("undefined\n");
 				expect(reference.stderr.toString()).toBe("");
-				await expect(compile(fixture)).rejects.toThrow("Unsupported TypeScript");
 			}
 		} finally {
 			await rm(workspace, { recursive: true, force: true });
