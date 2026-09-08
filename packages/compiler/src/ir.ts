@@ -19,11 +19,9 @@ export interface Parameter {
 }
 
 export type Expression =
-	| {
-			readonly kind: "literal";
-			readonly type: Exclude<ValueType, "string-array" | "void">;
-			readonly value: boolean | number | string;
-	  }
+	| { readonly kind: "literal"; readonly type: "boolean"; readonly value: boolean }
+	| { readonly kind: "literal"; readonly type: "number"; readonly value: number }
+	| { readonly kind: "literal"; readonly type: "string"; readonly value: string }
 	| { readonly kind: "identifier"; readonly name: string }
 	| {
 			readonly kind: "binary";
@@ -35,6 +33,7 @@ export type Expression =
 	| { readonly kind: "unary"; readonly operator: "+" | "-"; readonly operand: Expression }
 	| { readonly kind: "template"; readonly head: string; readonly spans: readonly TemplateSpan[] }
 	| { readonly kind: "call"; readonly callee: string; readonly arguments: readonly Expression[] }
+	| { readonly kind: "exit"; readonly code: Expression }
 	| { readonly kind: "argv"; readonly entryFile: string }
 	| { readonly kind: "slice"; readonly value: Expression; readonly start: Expression }
 	| { readonly kind: "length"; readonly value: Expression }
