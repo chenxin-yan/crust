@@ -5,7 +5,8 @@ corpus tests compile and execute binaries against Node, not emitted-source snaps
 The only package dependency is TypeScript. The checker loads compiler-owned ES2022
 and M0 console/process declarations, independent of the caller's working directory;
 Node, Bun, and DOM ambient types are not discovered. `process.exit` requires a
-number, so invalid argument types are rejected by the checker before lowering.
+number argument. Invalid exit calls (including `process.exit()`), `console.error`,
+and `console.warn` are rejected by the checker before lowering (`CRUST1000`).
 
 ## String representation boundary
 
@@ -48,7 +49,7 @@ M0 rejects TypeScript suppression directives before type analysis or lowering: l
 
 User-written `any` annotations, implicit `any` reported by TypeScript, and calls returning the intrinsic `any` type (such as `JSON.parse`) are rejected in the entry source. Library declarations themselves are not rejected. TypeScript recovery types are not misreported as user `any`, and inferred `never` remains an unsupported type rather than an `any` error.
 
-Unsupported calls name the operation. For example, `console.error` can be replaced by `console.log` only when stdout is acceptable; M0 does not support stderr output. Operations with no supported replacement, such as `Math.abs`, must be removed rather than merely renamed.
+Unsupported type-valid calls name the operation. Operations with no supported replacement, such as `Math.abs`, must be removed rather than merely renamed. Direct string-array logging is deferred; use template string coercion instead.
 
 | Code        | Meaning                        | Rewrite                                                                                                                                              |
 | ----------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |

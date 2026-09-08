@@ -88,7 +88,7 @@ function rejectTypeSuppressions(sourceFile: ts.SourceFile): void {
 		scanner.setText(text, node.pos, node.getStart(sourceFile) - node.pos);
 		for (let kind = scanner.scan(); kind !== ts.SyntaxKind.EndOfFileToken; kind = scanner.scan()) {
 			const comment = scanner.getTokenText();
-			const start = scanner.getTokenPos();
+			const start = scanner.getTokenStart();
 			// Match TypeScript 5.9's scanner directives and leading single-line pragmas.
 			let directive: string | undefined;
 			let lastLineStart = 0;
@@ -530,12 +530,9 @@ function unsupported(node: ts.Node, sourceFile: ts.SourceFile): CompilerError {
 		const callee = node.expression.getText(sourceFile);
 		message = `Unsupported TypeScript call to ${callee}.`;
 		hint = `Remove the ${callee} call; this operation is not supported in M0.`;
-		if (isPropertyCall(node, "console", "error") || isPropertyCall(node, "console", "warn")) {
-			hint = "Use console.log(...) for stdout; stderr output is not supported in M0.";
-		} else if (isPropertyCall(node, "console", "log")) {
-			hint = "Use console.log with at least one supported value and no format placeholders.";
-		} else if (isPropertyCall(node, "process", "exit")) {
-			hint = "Use process.exit(code) with one number argument.";
+		if (isPropertyCall(node, "console", "log")) {
+			hint =
+				"Use console.log with at least one supported non-array value and no format placeholders. For arrays, use template string coercion.";
 		} else if (
 			ts.isPropertyAccessExpression(node.expression) &&
 			node.expression.name.text === "slice"
