@@ -2,4 +2,8 @@ function length(value: string): number {
 	return value.length;
 }
 
-console.log(length(process.argv[99]!));
+function missing() {
+	return process.argv[99]!;
+}
+
+console.log(length(missing()));

@@ -33,14 +33,6 @@ func Index(values []string, index float64) any {
 	return values[int(index)]
 }
 
-func IndexLength(values []string, index float64) float64 {
-	if index < 0 || index >= float64(len(values)) || index != math.Trunc(index) {
-		fmt.Fprintln(os.Stderr, "TypeError: Cannot read properties of undefined (reading 'length')")
-		os.Exit(1)
-	}
-	return Length(values[int(index)])
-}
-
 func Slice(values []string, start float64) []string {
 	if math.IsNaN(start) {
 		start = 0
@@ -55,8 +47,23 @@ func Slice(values []string, start float64) []string {
 }
 
 func Exit(code float64) {
-	if math.IsNaN(code) || math.IsInf(code, 0) || code != math.Trunc(code) || math.Abs(code) > 9007199254740991 {
-		fmt.Fprintf(os.Stderr, "RangeError: process.exit code must be an integer. Received %s\n", numberString(code))
+	requirement := ""
+	received := numberString(code)
+	if math.IsNaN(code) || math.IsInf(code, 0) || code != math.Trunc(code) {
+		requirement = "an integer"
+	} else if math.Abs(code) > 9007199254740991 {
+		requirement = ">= -9007199254740991 && <= 9007199254740991"
+		received = numberString(math.Abs(code))
+		// Node's range diagnostic groups the string in threes, even exponential notation.
+		for index := len(received) - 3; index > 0; index -= 3 {
+			received = received[:index] + "_" + received[index:]
+		}
+		if code < 0 {
+			received = "-" + received
+		}
+	}
+	if requirement != "" {
+		fmt.Fprintf(os.Stderr, "RangeError [ERR_OUT_OF_RANGE]: The value of \"code\" is out of range. It must be %s. Received %s\n", requirement, received)
 		os.Exit(1)
 	}
 	os.Exit(int(code))

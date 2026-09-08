@@ -10,6 +10,7 @@ export function emitGo(program: Program): string {
 
 import crustRuntime ${JSON.stringify(runtimeModule)}
 
+// Keep the runtime import valid for programs with no runtime operations.
 var _ = crustRuntime.Number
 ${functions ? `\n${functions}\n` : ""}
 func main() {
@@ -47,9 +48,9 @@ function emitStatement(statement: Statement, indentation: number): string {
 function emitExpression(expression: Expression): string {
 	switch (expression.kind) {
 		case "literal":
-			if (expression.type === "string") return goString(expression.value as string);
+			if (expression.type === "string") return goString(expression.value);
 			if (expression.type === "boolean") return String(expression.value);
-			return emitNumber(expression.value as number);
+			return emitNumber(expression.value);
 		case "identifier":
 			return goIdentifier(expression.name);
 		case "binary": {
@@ -70,18 +71,14 @@ function emitExpression(expression: Expression): string {
 				goString(expression.head),
 			);
 		case "call":
-			if (expression.callee === "process.exit") {
-				return `crustRuntime.Exit(${emitExpression(expression.arguments[0]!)})`;
-			}
 			return `${goIdentifier(expression.callee)}(${expression.arguments.map(emitExpression).join(", ")})`;
+		case "exit":
+			return `crustRuntime.Exit(${emitExpression(expression.code)})`;
 		case "argv":
 			return `crustRuntime.Argv(${goString(expression.entryFile)})`;
 		case "slice":
 			return `crustRuntime.Slice(${emitExpression(expression.value)}, ${emitExpression(expression.start)})`;
 		case "length":
-			if (expression.value.kind === "index") {
-				return `crustRuntime.IndexLength(${emitExpression(expression.value.value)}, ${emitExpression(expression.value.index)})`;
-			}
 			return `crustRuntime.Length(${emitExpression(expression.value)})`;
 		case "index":
 			return `crustRuntime.Index(${emitExpression(expression.value)}, ${emitExpression(expression.index)})`;
@@ -89,7 +86,9 @@ function emitExpression(expression: Expression): string {
 }
 
 function goIdentifier(name: string): string {
-	return `js_${Array.from(name, (character) => character.codePointAt(0)!.toString(16)).join("_")}`;
+	return `js_${name.replace(/[^a-zA-Z0-9]/gu, (character) =>
+		character === "_" ? "__" : `_u${character.codePointAt(0)!.toString(16)}_`,
+	)}`;
 }
 
 function emitType(type: ValueType): string {
@@ -99,6 +98,7 @@ function emitType(type: ValueType): string {
 		case "number":
 			return "float64";
 		case "string":
+			// Array indexing can yield undefined despite TypeScript's string type.
 			return "any";
 		case "string-array":
 			return "[]string";
@@ -111,6 +111,7 @@ function emitNumber(value: number): string {
 	if (!Number.isFinite(value)) {
 		return value < 0 ? "-crustRuntime.Infinity()" : "crustRuntime.Infinity()";
 	}
+	// A call prevents Go constant folding from changing IEEE-754 arithmetic.
 	const literal = String(value);
 	return `crustRuntime.Number(${Number.isInteger(value) && !literal.includes("e") ? `${literal}.0` : literal})`;
 }
