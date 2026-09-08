@@ -41,59 +41,7 @@ function fromTypeScriptDiagnostic(
 	};
 }
 
-function functionReturnsItself(node: ts.FunctionDeclaration, checker: ts.TypeChecker): boolean {
-	const symbol = node.name && checker.getSymbolAtLocation(node.name);
-	if (!symbol || !node.body) return false;
-
-	let found = false;
-	function findSelfCall(child: ts.Node): void {
-		if (
-			ts.isCallExpression(child) &&
-			ts.isIdentifier(child.expression) &&
-			checker.getSymbolAtLocation(child.expression) === symbol
-		) {
-			found = true;
-			return;
-		}
-		if (!ts.isFunctionLike(child)) ts.forEachChild(child, findSelfCall);
-	}
-	function visit(child: ts.Node): void {
-		if (ts.isReturnStatement(child) && child.expression) findSelfCall(child.expression);
-		else if (!ts.isFunctionLike(child)) ts.forEachChild(child, visit);
-	}
-	visit(node.body);
-	return found;
-}
-
-function typeContainsAny(
-	type: ts.Type,
-	checker: ts.TypeChecker,
-	seen = new Set<ts.Type>(),
-): boolean {
-	if (type === checker.getAnyType()) return true;
-	if (seen.has(type)) return false;
-	seen.add(type);
-	if (
-		type.isUnionOrIntersection() &&
-		type.types.some((member) => typeContainsAny(member, checker, seen))
-	)
-		return true;
-	for (const indexType of [type.getNumberIndexType(), type.getStringIndexType()]) {
-		if (indexType && typeContainsAny(indexType, checker, seen)) return true;
-	}
-	return type.getProperties().some((property) => {
-		const declaration = property.valueDeclaration ?? property.declarations?.[0];
-		return declaration
-			? typeContainsAny(checker.getTypeOfSymbolAtLocation(property, declaration), checker, seen)
-			: false;
-	});
-}
-
-function findAnyDiagnostics(
-	sourceFile: ts.SourceFile,
-	checker: ts.TypeChecker,
-	typescriptDiagnostics: readonly ts.Diagnostic[],
-) {
+function findAnyDiagnostics(sourceFile: ts.SourceFile, checker: ts.TypeChecker) {
 	const diagnostics: CompilerDiagnostic[] = [];
 	function visit(node: ts.Node): void {
 		if (node.kind === ts.SyntaxKind.AnyKeyword) {
@@ -103,58 +51,6 @@ function findAnyDiagnostics(
 					node,
 					DiagnosticCodes.AnyType,
 					"The compiler does not support the `any` type.",
-					anyHint,
-				),
-			);
-		} else if (
-			ts.isParameter(node) &&
-			!node.type &&
-			typeContainsAny(checker.getTypeAtLocation(node), checker) &&
-			!typescriptDiagnostics.some(
-				(diagnostic) =>
-					diagnostic.file === sourceFile &&
-					diagnostic.start !== undefined &&
-					implicitAnyDiagnosticCodes.has(diagnostic.code) &&
-					diagnostic.start >= node.getStart(sourceFile) &&
-					diagnostic.start < node.end,
-			)
-		) {
-			diagnostics.push(
-				diagnosticAtNode(
-					sourceFile,
-					node,
-					DiagnosticCodes.AnyType,
-					"This parameter has an implicit `any` type, which the compiler cannot lower safely.",
-					anyHint,
-				),
-			);
-		} else if (
-			ts.isFunctionDeclaration(node) &&
-			!node.type &&
-			functionReturnsItself(node, checker)
-		) {
-			const signature = checker.getSignatureFromDeclaration(node);
-			if (signature && checker.getReturnTypeOfSignature(signature).flags & ts.TypeFlags.Never) {
-				diagnostics.push(
-					diagnosticAtNode(
-						sourceFile,
-						node,
-						DiagnosticCodes.AnyType,
-						"This function has an implicit `any` return type, which the compiler cannot lower safely.",
-						anyHint,
-					),
-				);
-			}
-		} else if (
-			node.kind === ts.SyntaxKind.ThisKeyword &&
-			checker.getTypeAtLocation(node) === checker.getAnyType()
-		) {
-			diagnostics.push(
-				diagnosticAtNode(
-					sourceFile,
-					node,
-					DiagnosticCodes.AnyType,
-					"This expression has an implicit `any` type, which the compiler cannot lower safely.",
 					anyHint,
 				),
 			);
@@ -178,6 +74,57 @@ function findAnyDiagnostics(
 	return diagnostics;
 }
 
+function rejectTypeSuppressions(sourceFile: ts.SourceFile): void {
+	const text = sourceFile.text;
+	const leadingComments = new Set(ts.getLeadingCommentRanges(text, 0)?.map(({ pos }) => pos));
+	const scanner = ts.createScanner(ts.ScriptTarget.ES2022, false);
+	function visit(node: ts.Node): void {
+		if (ts.isJSDoc(node)) return;
+		if (!ts.isToken(node)) {
+			for (const child of node.getChildren(sourceFile)) visit(child);
+			return;
+		}
+		// Scan only parsed token trivia: a standalone scan mistakes regex/template text for comments.
+		scanner.setText(text, node.pos, node.getStart(sourceFile) - node.pos);
+		for (let kind = scanner.scan(); kind !== ts.SyntaxKind.EndOfFileToken; kind = scanner.scan()) {
+			const comment = scanner.getTokenText();
+			const start = scanner.getTokenPos();
+			// Match TypeScript 5.9's scanner directives and leading single-line pragmas.
+			let directive: string | undefined;
+			let lastLineStart = 0;
+			if (kind === ts.SyntaxKind.SingleLineCommentTrivia) {
+				directive = /^\/\/\/?\s*@(ts-expect-error|ts-ignore)/.exec(comment)?.[1];
+				if (!directive && leadingComments.has(start)) {
+					directive = /^\/\/\/?\s*@(ts-nocheck)(?=\s|:|$)/i.exec(comment)?.[1];
+				}
+			} else if (kind === ts.SyntaxKind.MultiLineCommentTrivia) {
+				lastLineStart =
+					Math.max(
+						...["\n", "\r", "\u2028", "\u2029"].map((lineBreak) => comment.lastIndexOf(lineBreak)),
+					) + 1;
+				directive = /^\s*(?:\/|\*)*\s*@(ts-expect-error|ts-ignore)/.exec(
+					comment.slice(lastLineStart),
+				)?.[1];
+			}
+			if (!directive) continue;
+			const { line, character } = sourceFile.getLineAndCharacterOfPosition(
+				start + comment.indexOf("@", lastLineStart),
+			);
+			throw new CompilerError([
+				{
+					code: DiagnosticCodes.TypeSuppression,
+					file: sourceFile.fileName,
+					line: line + 1,
+					column: character + 1,
+					message: `TypeScript suppression directive @${directive} is unsupported.`,
+					hint: `Remove @${directive} and fix the TypeScript errors it suppresses before compiling.`,
+				},
+			]);
+		}
+	}
+	visit(sourceFile);
+}
+
 export function lower(entryFile: string): Program {
 	const absoluteEntry = resolve(entryFile);
 	const compilerOptions: ts.CompilerOptions = {
@@ -195,28 +142,13 @@ export function lower(entryFile: string): Program {
 	const ambientFile = fileURLToPath(new URL("../runtime/m0.d.ts", import.meta.url));
 	const program = ts.createProgram([absoluteEntry, ambientFile], compilerOptions);
 	const sourceFile = program.getSourceFile(absoluteEntry);
+	if (sourceFile) rejectTypeSuppressions(sourceFile);
 	const typescriptDiagnostics = ts.getPreEmitDiagnostics(program);
 	const diagnostics = typescriptDiagnostics.map((diagnostic) =>
 		fromTypeScriptDiagnostic(diagnostic, absoluteEntry),
 	);
 	if (sourceFile) {
-		for (const candidate of findAnyDiagnostics(
-			sourceFile,
-			program.getTypeChecker(),
-			typescriptDiagnostics,
-		)) {
-			if (
-				!diagnostics.some(
-					(diagnostic) =>
-						diagnostic.code === candidate.code &&
-						diagnostic.file === candidate.file &&
-						diagnostic.line === candidate.line &&
-						diagnostic.column === candidate.column,
-				)
-			) {
-				diagnostics.push(candidate);
-			}
-		}
+		diagnostics.push(...findAnyDiagnostics(sourceFile, program.getTypeChecker()));
 	}
 	if (diagnostics.length > 0) throw new CompilerError(diagnostics);
 	if (!sourceFile) {
@@ -592,13 +524,27 @@ function isPropertyCall(node: ts.CallExpression, object: string, property: strin
 
 function unsupported(node: ts.Node, sourceFile: ts.SourceFile): CompilerError {
 	const construct = ts.SyntaxKind[node.kind];
+	let message = `Unsupported TypeScript ${construct}.`;
+	let hint = `Rewrite the ${construct} using the supported M0 language surface.`;
+	if (ts.isCallExpression(node)) {
+		const callee = node.expression.getText(sourceFile);
+		message = `Unsupported TypeScript call to ${callee}.`;
+		hint = `Remove the ${callee} call; this operation is not supported in M0.`;
+		if (isPropertyCall(node, "console", "error") || isPropertyCall(node, "console", "warn")) {
+			hint = "Use console.log(...) for stdout; stderr output is not supported in M0.";
+		} else if (isPropertyCall(node, "console", "log")) {
+			hint = "Use console.log with at least one supported value and no format placeholders.";
+		} else if (isPropertyCall(node, "process", "exit")) {
+			hint = "Use process.exit(code) with one number argument.";
+		} else if (
+			ts.isPropertyAccessExpression(node.expression) &&
+			node.expression.name.text === "slice"
+		) {
+			hint =
+				"Use stringArray.slice(start) with one number argument; string slicing is not supported in M0.";
+		}
+	}
 	return new CompilerError([
-		diagnosticAtNode(
-			sourceFile,
-			node,
-			DiagnosticCodes.UnsupportedConstruct,
-			`Unsupported TypeScript ${construct}.`,
-			`Rewrite the ${construct} using the supported M0 language surface.`,
-		),
+		diagnosticAtNode(sourceFile, node, DiagnosticCodes.UnsupportedConstruct, message, hint),
 	]);
 }
