@@ -11,7 +11,7 @@ Each property is lazy and memoized per invocation: unused providers do not run s
 
 ## Owned flags
 
-A Context can own the flags used to construct its value. Attaching it installs those flags on the provider command and later-added descendants. Setup receives the validated owned slice only.
+A Context can own the flags used to construct its value. Attaching it with `.provide()` installs those flags on the provider command and later-added descendants. Setup receives the validated owned slice only.
 
 ```ts
 import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
@@ -50,7 +50,7 @@ Dependencies remain lazy: `config` starts only if setup accesses `ctx.config`. A
 
 Reusable commands declare demand with `.use(...factories)` — `.use(logger)` demands (a factory), `.provide(logger())` supplies (an instance) — and Extensions declare theirs with the `uses` config field. `.add()` and `.extend()` validate those declarations against Contexts already provided on the builder. Put `.provide()` or provider `.extend()` calls before `.add()`.
 
-Contexts are inherited by descendants present when the builder is added. Immutable builder chains do not backfill already-added children.
+A later `.provide()` does not backfill already-added children. Extension `provides` differ: `.extend()` installs them and their owned flags across the existing tree, while preserving more-specific local providers on descendants. Later-added descendants inherit them too. This runtime scope does not relax the composition-time dependency checks above.
 
 ## Test doubles
 

@@ -57,7 +57,7 @@ export interface FlagSnapshot {
 	readonly description?: string;
 	/** Single-character short alias without the dash, e.g. `"v"` for `-v`. */
 	readonly short?: string;
-	/** Additional long aliases without dashes, e.g. `["out"]` for `--out`. */
+	/** Additional aliases without dashes; one-character aliases accept one or two dashes. */
 	readonly aliases?: readonly string[];
 	/** `true` when parsing fails if the flag is not provided. */
 	readonly required?: boolean;
@@ -123,8 +123,9 @@ function freezeCompact<T extends object>(obj: T): T {
 
 /**
  * URL defaults are the only non-JSON default values; serialize them as
- * strings. Array defaults (multi-value flags, variadic args) are copied and
- * frozen so the snapshot cannot observe later mutation of the source def.
+ * strings. Array defaults are recursively copied and frozen. Object-valued
+ * JSON defaults, including objects inside arrays, remain shared references
+ * and are not frozen; callers must treat them as immutable.
  */
 type SerializableDefault = (ArgSnapshot | FlagSnapshot)["default"];
 

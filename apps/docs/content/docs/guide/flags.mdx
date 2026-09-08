@@ -11,11 +11,11 @@ See [`FlagDef`](/docs/api/types#flagdef) for the complete definition.
 
 Repeated `.flags()` calls accumulate: `.flags(a).flags(b)` defines both flags. A statically known name, short form, or alias collision with an earlier call or an existing Context-owned flag fails typecheck with `FIX_ALIAS_COLLISION` at the call that introduces it.
 
-Builder chaining follows the same accumulation rule for `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` (except duplicate `ExtensionId`s, where `.extend()` keeps only the last registration). Definition correctness is enforced by TypeScript for statically known definitions; inputs the type system cannot see — flags built from config objects, duplicate or misplaced arguments, and dynamic `.add()` name collisions — throw runtime `DEFINITION` errors instead.
+Builder chaining follows the same accumulation rule for `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` (except duplicate `ExtensionId`s, where `.extend()` keeps only the last registration). TypeScript checks statically known definitions. Core also checks flag spelling collisions and reserved names, duplicate or misplaced arguments, and dynamic `.add()` name collisions at runtime, throwing `DEFINITION` errors.
 
 ## Aliases and negation
 
-`short` defines one single-character form. `aliases` adds other short or long forms:
+Use one character for `short`, such as `"o"` for `-o`. `aliases` adds alternate names with two dashes, such as `"out"` for `--out`. A one-character alias such as `"x"` accepts both `--x` and `-x`:
 
 ```ts
 .flags({ name: "output", type: "path", short: "o", aliases: ["out"] })
@@ -91,7 +91,7 @@ const app = new Crust("app").provide(logging()).add(deploy);
 
 The Context declares, parses, and consumes `--verbose`, then wraps the invocation's injected `stderr` as behavior. Actions call the logging capability without re-checking the flag. Renaming the flag or deriving log levels later changes the Context rather than every action.
 
-Context-owned flags are parsed and shown in help at the provider and later-added descendants. They can appear before, between, or after subcommand names. Command-local flags do not propagate: writing one before a subcommand name is a `PARSE` error, because the routed subcommand cannot parse it. See [Contexts: Owned flags](/docs/guide/contexts#owned-flags).
+Flags installed by `.provide()` are parsed and shown in help at the provider and later-added descendants. Extension `provides` also reach existing descendants. They can appear before, between, or after subcommand names. Command-local flags do not propagate: writing one before a subcommand name is a `PARSE` error, because the routed subcommand cannot parse it. See [Contexts: Owned flags](/docs/guide/contexts#owned-flags).
 
 If an action needs the raw value, expose it from the owning Context as part of that capability. Cross-command dependencies are always Context capabilities; raw flags are never injected into an added action's types.
 

@@ -84,6 +84,7 @@ function expectedTypeMessage(def: { type: ValueType; array?: true }): string {
  * @param options - Store configuration options.
  * @returns A {@link Store} instance with `read`, `write`, `update`, `patch`, and `reset` methods.
  * @throws {CrustStoreError} `PATH` if `dirPath` or `name` is invalid.
+ * @throws {CrustStoreError} `DEFINITION` if a field mixes `schema` with `default` or `validate`.
  *
  * @example
  * ```ts

@@ -85,7 +85,9 @@ await app.run(
 );
 ```
 
-`run()` resolves to a status-discriminated outcome: `completed` carries the action result, while `finished` names the Extension whose `preRun` hook ended the invocation. It throws the original error on failure. `execute()` presents errors through Extension `onError` hooks, sets `process.exitCode`, and resolves. See [Execution Model](/docs/guide/lifecycle).
+`run()` resolves to a status-discriminated outcome: `completed` carries the action result, while `finished` names the Extension whose `preRun` hook ended the invocation. It throws failures to the caller, including [combined invocation and disposal failures](/docs/guide/lifecycle#error-flow). `execute()` presents errors through Extension `onError` hooks, sets `process.exitCode`, and resolves. See [Execution Model](/docs/guide/lifecycle).
+
+A parent with a Command Action treats unmatched argv command tokens as positional arguments. Typed `run()` rejects unknown path segments. See [Unknown commands](/docs/guide/subcommands#unknown-commands).
 
 <Callout type="info">
   A command without a Command Action is valid when it owns subcommands. Invoking it directly

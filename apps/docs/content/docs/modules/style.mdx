@@ -27,7 +27,7 @@ console.log(fg("brand", "#4FA83D")); // hex, rgb triple, or named color
 console.log(link("docs", "https://crustjs.com")); // OSC 8 hyperlink
 ```
 
-Output automatically respects the terminal: colors need a TTY and no `NO_COLOR`; depth (truecolor / 256 / 16) is detected from `COLORTERM` / `TERM`. See [Color control](#color-control).
+Default styling checks `process.stdout.isTTY`, even when you write the result to stderr or an injected stream. `NO_COLOR` disables colors but not modifiers or hyperlinks; `FORCE_COLOR` overrides both TTY detection and `NO_COLOR`. Color depth is detected from `COLORTERM` / `TERM`. See [Color control](#color-control).
 
 ## Styling
 
@@ -86,7 +86,9 @@ Output adapts to the resolved depth:
 | `"truecolor"` | 24-bit ANSI    | `COLORTERM=truecolor\|24bit`, or `TERM` contains `truecolor`/`24bit`/ends with `-direct` |
 | `"256"`       | 256-color ANSI | `TERM` contains `256color`                                                               |
 | `"16"`        | 16-color ANSI  | Any other TTY                                                                            |
-| `"none"`      | Plain text     | Not a TTY, `NO_COLOR`, `FORCE_COLOR=0`, `TERM=dumb`, or `mode: "never"`                  |
+| `"none"`      | No color codes | Not a TTY, `NO_COLOR`, `FORCE_COLOR=0`, `TERM=dumb`, or `mode: "never"`                  |
+
+In auto mode, a forcing `FORCE_COLOR` value takes precedence over the other checks. Without it, `TERM=dumb` disables colors only when truecolor is not detected through `COLORTERM`. A `"none"` color depth does not itself disable modifiers or hyperlinks.
 
 Inspect the resolved tier via `style.colorDepth` (live) or `instance.colorDepth` (frozen at creation). `colorsEnabled` reports whether color codes can be emitted, while `trueColorEnabled` reports whether the resolved depth is 24-bit.
 
@@ -190,6 +192,6 @@ type ColorInput =
 
 ## Fine print
 
-**`open` / `close` for hot paths.** Every chainable exposes its raw ANSI codes (chalk/ansis parity) for manual composition in tight loops. They are static strings that bypass mode detection — check `style.enabled` first. Note `chain.open + text + chain.close` matches `chain(text)` byte-for-byte only when adjacent steps have distinct close codes; when steps share one (e.g. `bold` + `dim` both close with `\x1b[22m`), `chain(text)` re-opens the outer style after each inner close to prevent bleed. Use `chain(text)` for emission.
+**`open` / `close` for hot paths.** Every chainable exposes its raw ANSI codes (chalk/ansis parity) for manual composition in tight loops. They are static strings that do not re-evaluate capabilities when used. Dynamic colors use truecolor codes on the default exports and the instance's fixed color depth on `createStyle()` instances. Raw composition is not generally byte-for-byte equivalent to `chain(text)`: shared close codes anywhere in the chain, or matching close codes already in the text, cause `chain(text)` to re-open outer styles. For example, `bold.red.dim` shares `\x1b[22m` between non-adjacent steps. Use `chain(text)` for capability-aware, nesting-safe emission.
 
 **Input guarantees.** Chainable styles accept nullish text (`bold(null)`, `style.fg("#f00")(undefined)`) and return `""` — never crashing or printing styled `"undefined"`. The direct `fg(text, input)` helper requires string text. Other `StyleInput` values passed to chainables are stringified. Empty text returns `""` with no orphan escape codes, but invalid colors still throw.

@@ -51,5 +51,8 @@ jobs:
           bun run lint apps/docs
           bun run format apps/docs
 
+      - name: Test (docs)
+        run: bun run --cwd apps/docs test
+
       - name: Build (docs)
         run: bun run build:docs

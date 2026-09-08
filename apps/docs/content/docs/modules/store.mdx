@@ -179,7 +179,7 @@ const store = createStore(options);
 
 **Returns:** A `Store<T>` with `read()`, `write()`, `update()`, `patch()`, and `reset()` methods.
 
-**Throws:** `CrustStoreError` with `PATH` code if `dirPath` or `name` is invalid.
+**Throws:** `CrustStoreError` with `PATH` code if `dirPath` or `name` is invalid, or `DEFINITION` if a field mixes `schema` with `default` or `validate`.
 
 #### Securing secrets
 
@@ -237,9 +237,9 @@ After coercion, every core field is checked against its declared primitive and a
 
 ### Coercion
 
-String values in core number and boolean fields are coerced before validation on every operation, including array elements. Number strings use JavaScript `Number()` semantics through `tryCoerceNumber`; strings that produce `NaN` remain strings and then fail type validation. Boolean coercion is intentionally strict: only `"true"` and `"1"` become `true`; every other string becomes `false`, so `"yes"` silently maps to `false`. Schema-backed fields are passed to their schema instead.
+String values in core number and boolean fields are coerced before validation on every operation, including array elements. Number strings use JavaScript `Number()` semantics; strings that produce `NaN` remain strings and then fail type validation. Boolean coercion is intentionally strict: only `"true"` and `"1"` become `true`; every other string becomes `false`, so `"yes"` silently maps to `false`. Schema-backed fields are passed to their schema instead.
 
-**Throws:** `CrustStoreError` with `PARSE` code on malformed JSON, `VALIDATION` if the config fails validation, `IO` code on filesystem failure.
+**Throws:** `CrustStoreError` with `PARSE` code on malformed JSON or a non-object JSON root, `VALIDATION` if the config fails validation, `IO` code on filesystem failure.
 
 ### `store.write(state)`
 
@@ -255,7 +255,7 @@ Returns the persisted state, including schema transformations.
 
 ### `store.update(updater)`
 
-Reads the current effective state, applies the updater function, and atomically persists the result.
+Reads the current state with defaults and core coercion applied, calls the updater, then validates and atomically persists the result. Unlike `read()`, the state passed to the updater has not undergone full field validation. Do not assume persisted values satisfy their declared types or validators at this point.
 
 ```ts
 const persisted = await store.update((current) => ({
@@ -266,13 +266,13 @@ const persisted = await store.update((current) => ({
 
 When no persisted file exists, the updater receives core field `defaults` and values produced by schema defaults as the current state. The method returns the persisted state, including schema transformations.
 
-The final file replacement is atomic, but the read-modify-write sequence is not locked across processes. Concurrent updates can overwrite each other.
+The final file replacement is atomic, but mutations are not serialized, even between overlapping calls in the same process. Concurrent updates or patches can overwrite each other. Await mutations sequentially for each file; multiple processes need external coordination.
 
-**Throws:** `CrustStoreError` with `VALIDATION` if field validators reject, `PARSE` on malformed JSON, `IO` on filesystem failure.
+**Throws:** `CrustStoreError` with `VALIDATION` if field validators reject, `PARSE` on malformed JSON or a non-object JSON root, `IO` on filesystem failure.
 
 ### `store.patch(partial)`
 
-Applies a shallow partial update to the current state and persists. Only the provided keys are updated; everything else is preserved.
+Applies a shallow partial update to the current state and persists. Only the provided keys are updated; everything else is preserved. As with `update()`, the current state has defaults and core coercion applied but has not undergone full field validation; the merged result is validated before persistence. Await mutations sequentially to avoid lost updates.
 
 ```ts
 const persisted = await store.patch({ theme: "solarized" });
@@ -280,7 +280,7 @@ const persisted = await store.patch({ theme: "solarized" });
 
 Returns the persisted state, including schema transformations.
 
-**Throws:** `CrustStoreError` with `VALIDATION` if field validators reject, `PARSE` on malformed JSON, `IO` on filesystem failure.
+**Throws:** `CrustStoreError` with `VALIDATION` if field validators reject, `PARSE` on malformed JSON or a non-object JSON root, `IO` on filesystem failure.
 
 ### `store.reset()`
 
@@ -410,21 +410,21 @@ Mutations return exactly what the next `read()` sees, so `write`, `update`, and 
 
 - **Write:** validates each field before persisting. Schema and validator transforms replace the input value.
 - **Read:** applies defaults, then validates. Schema transform output is discarded so the returned value matches the persisted value.
-- **Update:** reads the current config, applies the updater, validates, then persists any schema-transformed output.
-- **Patch:** shallow-merges the partial input, validates, then persists any schema-transformed output.
+- **Update:** applies defaults and core coercion to the current config without full field validation, runs the updater, then validates and persists the result, including schema transformations.
+- **Patch:** uses the same unvalidated current config as `update()`, shallow-merges the partial input, then validates and persists the result, including schema transformations.
 - **Reset:** removes the persisted file without validation.
 
 ## Error Handling
 
 All errors thrown by `@crustjs/store` are instances of `CrustStoreError` with a typed `code` property:
 
-| Code         | When                                                    | Details                 |
-| ------------ | ------------------------------------------------------- | ----------------------- |
-| `PATH`       | Invalid `dirPath`, invalid `name`, unsupported platform | `{ path: string }`      |
-| `PARSE`      | Malformed JSON in persisted file                        | `{ path: string }`      |
-| `IO`         | Filesystem read, write, or delete failure               | `{ path, operation }`   |
-| `VALIDATION` | One or more field validators rejected the state         | `{ operation, issues }` |
-| `DEFINITION` | A field mixes `schema` with `default` or `validate`     | none                    |
+| Code         | When                                                           | Details                 |
+| ------------ | -------------------------------------------------------------- | ----------------------- |
+| `PATH`       | Invalid `dirPath`, invalid `name`, unsupported platform        | `{ path: string }`      |
+| `PARSE`      | Malformed JSON or a non-object JSON root in the persisted file | `{ path: string }`      |
+| `IO`         | Filesystem read, write, or delete failure                      | `{ path, operation }`   |
+| `VALIDATION` | One or more field validators rejected the state                | `{ operation, issues }` |
+| `DEFINITION` | A field mixes `schema` with `default` or `validate`            | none                    |
 
 ### Catching Errors
 
@@ -478,8 +478,8 @@ if (err instanceof CrustStoreError) {
 ```
 
 <Callout type="warn">
-  `@crustjs/store` does **not** silently recover from malformed JSON. If the persisted file contains
-  invalid JSON, `read()` throws immediately — no fallback to defaults.
+  `@crustjs/store` does **not** silently recover from malformed JSON or a non-object JSON root. In
+  either case, `read()` rejects with `PARSE` instead of falling back to defaults.
 </Callout>
 
 ## Exports
@@ -525,7 +525,7 @@ The package also exports `CreateStoreOptions`, `StoreUpdater`, `FieldsDef`, `Inf
 **Not included** (by design):
 
 - Alternative formats (YAML, TOML, JSON5) — JSON only
-- Cross-process locking — assumes single-process usage
+- Mutation locking or serialization, including overlapping calls in one process. Await mutations sequentially; coordinate multiple processes externally.
 - Sync API variants
 - Encryption or keychain integration
 - Remote/cloud synchronization

@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "check:types": "fumadocs-mdx && tsc --noEmit",
+    "test": "bun test tests",
     "postinstall": "fumadocs-mdx",
     "deploy": "bun run build && wrangler deploy",
     "cf-typegen": "wrangler types"

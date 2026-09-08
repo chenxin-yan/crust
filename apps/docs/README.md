@@ -21,5 +21,6 @@ Run the existing docs gates from the repository root (also run by CI for docs an
 bun run check:types --filter=./apps/docs
 bun run lint apps/docs
 bun run format apps/docs
+bun run --cwd apps/docs test
 bun run build:docs
 ```

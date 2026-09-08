@@ -78,7 +78,7 @@ const flags = {
 } satisfies FlagsDef;
 ```
 
-The schema receives the raw `string | undefined` or `boolean | undefined`; with `multiple: true` it receives the corresponding array. `required`, `default`, `choices`, and `parse` cannot be mixed into schema mode.
+The schema receives the raw `string | undefined` or `boolean | undefined`. With `multiple: true`, it receives `string[]` or `boolean[]` when the flag appears at least once, and `undefined` when omitted. Variadic arguments, by contrast, always supply an array. `required`, `default`, `choices`, and `parse` cannot be mixed into schema mode.
 
 ### `NamedFlagDef`
 
@@ -124,7 +124,7 @@ type CommandSectionInput = { readonly title: string; readonly body: string } & S
 
 ## Command Snapshots
 
-Command Snapshots are readonly, serializable descriptions. They contain no Command Action, parser, schema, or Context functions and are deeply frozen at public boundaries.
+Command Snapshots are readonly, serializable descriptions. They omit Command Actions, parsers, schemas, and Context functions. Core freezes the snapshot structure at public boundaries, but does not clone or freeze object-valued JSON defaults.
 
 ### `CommandSnapshot`
 
@@ -143,7 +143,7 @@ Command Snapshots are readonly, serializable descriptions. They contain no Comma
 
 <auto-type-table path="../../../../../packages/core/src/command/snapshot.ts" name="FlagSnapshot" />
 
-Snapshots omit schemas and parse functions. Every flag snapshot includes `negatable`, derived from the parser's spelling policy. `URL` defaults become strings, and array defaults are copied and frozen.
+Snapshots omit schemas and parse functions. Every flag snapshot includes `negatable`, derived from the parser's spelling policy. `URL` defaults become strings, and array defaults are recursively copied and frozen. Object-valued JSON defaults, including objects inside arrays, remain shared references; treat them as immutable.
 
 ## Typed invocation
 
@@ -329,7 +329,7 @@ Infers the syntax-parsed values from an Extension's named-definition array and e
   name="ExtensionHooks"
 />
 
-`preRun` runs in `.extend()` order after routing and input binding (argv parsing for `execute()`, structured binding for typed `run()`), before validation. Its declared Context bag is lazy, but accessing a flag-owning Context directly or transitively rejects before validation; a later post-validation access re-executes that Context's setup from the start. Return `ctx.finish()` to end successfully. `onError` is used by `.execute()` only and settles before `postRun`; return `true` after rendering to stop the chain, or a falsy value to continue to Core's renderer. `postRun` is the reverse-`.extend()`-order `finally` hook: it can pull or reuse Contexts, observes any failed-outcome attribution from `onError`, and runs for every Extension after a completed, finished, or failed invocation. Invocation Contexts remain available through these hooks, and disposal follows post-run hooks.
+`preRun` runs in `.extend()` order after routing and input binding (argv parsing for `execute()`, structured binding for typed `run()`), before validation. Its declared Context bag is lazy, but accessing a flag-owning Context directly or transitively rejects before validation; a later post-validation access re-executes that Context's setup from the start. Return `ctx.finish()` to end successfully. `onError` is used by `.execute()` only. For failures raised during dispatch before `postRun`, it settles before `postRun`; return `true` after rendering to stop the chain, or a falsy value to continue to Core's renderer. `postRun` is the reverse-`.extend()`-order `finally` hook: it can pull or reuse Contexts, observes any failed-outcome attribution from `onError`, and runs for every Extension after a completed, finished, or failed invocation. Invocation Contexts remain available through `postRun`, and disposal follows. An `onError` call for a post-run or disposal failure runs after cleanup, with Context pulls unavailable. Routing and parse failures use a fallback context with no available Contexts. See [Error flow](/docs/guide/lifecycle#error-flow).
 
 ### `Finished`
 

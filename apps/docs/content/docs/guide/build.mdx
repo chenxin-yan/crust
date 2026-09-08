@@ -14,7 +14,7 @@ The `crust build` command builds CLIs for Bun, Deno, or Node. Bun (the default) 
 }
 ```
 
-The CLI flag overrides project configuration. Existing projects without `crust.runtime` continue to use Bun. Bun compilation prefers a `bun` executable on `PATH` and otherwise uses the runtime embedded in the packaged Crust executable. Deno builds require `deno` on `PATH`. Node builds use Crust's embedded Bun bundler, so users do not need Bun installed.
+The CLI flag overrides project configuration. Existing projects without `crust.runtime` continue to use Bun. Bun compilation prefers a `bun` executable on `PATH` and otherwise uses the runtime embedded in the packaged Crust executable. Deno builds require `deno` on `PATH`. Node builds use Crust's embedded Bun bundler, so users do not need Bun installed. The packaged `crust` command itself uses a Node launcher, so Node is required to start the build tool.
 
 ## Basic Usage
 
@@ -48,7 +48,7 @@ crust build --help
 
 ## Runtime Outputs
 
-| Runtime | Compiler                  | Output                                       | Requirements                   |
+| Runtime | Compiler                  | Output                                       | Additional requirements        |
 | ------- | ------------------------- | -------------------------------------------- | ------------------------------ |
 | Bun     | `bun build --compile`     | Standalone executable(s)                     | None when using packaged Crust |
 | Deno    | `deno compile`            | Standalone executable(s)                     | Deno on `PATH` while building  |
@@ -178,9 +178,9 @@ See [Environment Variables](/docs/guide/environment) for the full env model, inc
 
 ## Pre-compile snapshot preparation
 
-By default, `crust build` materializes your full command tree before compiling. It runs the entry file in a subprocess to prepare a Command Snapshot, forcing all command recipes and Extensions. TypeScript reports statically representable definition errors during compilation. Runtime materialization still validates dynamic or config-built definitions, materialized command recipes, and authored and Extension-contributed documentation sections.
+By default, `crust build` materializes your full command tree before compiling. It evaluates the entry under Bun in a subprocess to prepare a Command Snapshot, forcing all command recipes and Extensions. This happens for every target runtime, including Node and Deno; packaged Crust uses its embedded Bun. Target-only APIs used during preparation can fail under Bun. TypeScript reports statically representable definition errors during compilation. Runtime materialization still validates dynamic or config-built definitions, materialized command recipes, and authored and Extension-contributed documentation sections.
 
-`crust build` sets `CRUST_INTERNAL_SNAPSHOT_PATH` in the subprocess environment, pointing at a temporary file. `.execute()` materializes the full command graph, including nested subcommands and Extension-owned flags and commands, validates documentation sections, runs Extension build hooks, writes the final JSON snapshot, and exits without executing Command Actions or code after `await app.execute()`.
+In this subprocess, `.execute()` materializes the full command graph, including nested subcommands and Extension-owned flags and commands, validates documentation sections, runs Extension build hooks, writes the final JSON snapshot, and exits without executing Command Actions or code after `await app.execute()`.
 
 <Callout type="warn">
   Materialization imports your entry module, so its top-level side effects run before compilation.
@@ -188,7 +188,11 @@ By default, `crust build` materializes your full command tree before compiling. 
   effects are unavoidable.
 </Callout>
 
+The subprocess has a 30-second timeout covering entry evaluation and build hooks. A timeout fails the build.
+
 After preparing the initial snapshot, the same subprocess runs every registered Extension `build` hook in registration order. After each hook, Crust re-evaluates Extension section callbacks on a fresh copy of the materialized command tree — command recipes still run once — so each later hook and the final snapshot observe outputs from earlier hooks. A hook receives the snapshot prepared before it starts, so it cannot observe its own outputs through that initial `ctx.snapshot`; register a later renderer hook when an artifact must include those outputs. Extension presence is the source of intent: for example, `man()` writes a manual and `skill()` writes packaged skills without Extension-specific build flags. Hook errors fail the build with the Extension id. Each build hook must own and clean a unique top-level directory in the artifact output directory. Top-level artifact directories are retained under `<outdir>` — or beside the binary when `--outfile` relocates it — and when `--package` is used they are staged into the root package and beside each platform binary, so executable-relative source resolution finds them at runtime. `--stage-dir` must not contain `--outdir`; staging replaces the stage directory and would delete the artifacts. The artifact name `bin` is reserved for the generated npm executables.
+
+Raw binaries do not embed these artifact directories. Include them beside the binary when distributing an archive. The generated binary template's `files` list includes only the resolver scripts and Bun binaries, not `man`, `skills`, or `completions`. Use `--package` for npm distribution with those directories, or include them explicitly in your own package's `files` list.
 
 If you pass `--env-file`, the snapshot subprocess receives the same explicit env-file inputs as the build step. This keeps Extension configuration and command definitions aligned with the final compilation.
 
@@ -200,7 +204,7 @@ Snapshot preparation is enabled by default. To skip it:
 crust build --no-validate
 ```
 
-Use this escape hatch for entries with unavoidable import-time side effects. It can also help when the snapshot subprocess cannot resolve your project's dependencies in a particular environment (for example, a non-standard module resolution setup), or when the entry never calls `await app.execute()` — such entries fail with a missing-snapshot error. Because build hooks run in that subprocess, `--no-validate` also skips every Extension build hook.
+Use this escape hatch for entries with unavoidable import-time side effects. It can also help when the snapshot subprocess cannot resolve your project's dependencies in a particular environment (for example, a non-standard module resolution setup), or when the entry never calls `await app.execute()` — such entries fail with a missing-snapshot error. Skipping preparation removes its runtime definition and documentation validation and every Extension build hook. With `--package`, no artifact directories are staged, even if they already exist.
 
 ## Per-OS Distribution with `--package`
 
@@ -217,12 +221,18 @@ crust build --package --target bun-linux-x64-baseline --target bun-darwin-arm64
 crust build --package --stage-dir ./npm-packages
 ```
 
+Requirements:
+
+- A project `package.json` with `name` and `version`.
+- If `bin` is an object, it must contain exactly one entry. A string `bin` is supported; if omitted, Crust infers the command name.
+- No `--outfile`. Use `--stage-dir` to choose the staging destination.
+
 ### What `--package` Creates
 
 When using `--package`, instead of raw binaries, Crust creates:
 
 1. **A root package** — Contains the JS resolver and declares optional dependencies on platform packages
-2. **Per-platform packages** — One package per target containing only the binary for that platform
+2. **Per-platform packages** — One package per target containing that platform's binary and any staged Extension artifact directories
 3. **A manifest file** — `manifest.json` listing all staged packages and publish order
 
 ```
@@ -258,7 +268,7 @@ dist/npm/
         └── my-cli-bun-windows-arm64.exe
 ```
 
-The root package exposes `bin/my-cli.js` as its `bin` entry. npm generates platform launchers from that entry during install.
+The root package exposes `bin/my-cli.js` as its `bin` entry. This is a small Node launcher, so end users need Node to start it; the platform binaries embed Bun. npm generates platform launchers from that entry during install.
 
 ### Publishing with `crust publish`
 
@@ -278,7 +288,7 @@ crust publish --tag next
 crust publish --stage-dir ./npm-packages
 ```
 
-The publish command reads the `manifest.json` and publishes packages in dependency order (platform packages first, then root package).
+The publish command reads `manifest.json`, verifies staged directories and metadata, and publishes platform packages first, then the root package. It runs Bun's `publish` command with `--access public --no-git-checks` by default and stops on the first failed publish. `--access`, `--tag`, and `--registry` override the corresponding publish options. `--no-verify` skips staged metadata verification. `--dry-run` prints the order and commands without publishing; verification still runs unless disabled.
 
 For the complete publishing option reference, run:
 

@@ -33,7 +33,7 @@ await writeSkills({
 });
 ```
 
-Omit `app` to write only authored `extras`; at least one of the two is required. For a custom pipeline with a prepared Command Snapshot instead of a live app, call `writeSkillsFromSnapshot(snapshot, options)`. `outDir` must be named `skills`. Each skill gets its own `skills/<name>/` directory containing `SKILL.md` and any supporting files. `writeSkills()` and `writeSkillsFromSnapshot()` replace `outDir` on every build and never write to an agent directory.
+Omit `app` to write only authored `extras`; at least one of the two is required. For a custom pipeline with a prepared Command Snapshot instead of a live app, call `writeSkillsFromSnapshot(snapshot, options)`. `outDir` must be a dedicated directory named `skills`, not the working directory, an ancestor of it, or the filesystem root. Each skill gets its own `skills/<name>/` directory containing `SKILL.md` and any supporting files. `writeSkills()` and `writeSkillsFromSnapshot()` replace `outDir` on every build and never write to an agent directory.
 
 Include the directory in the published package:
 
@@ -47,7 +47,7 @@ Include the directory in the published package:
 
 ## Enable discovery and installation
 
-Point the extension at the packaged skills directory with a package-relative file URL:
+For an entry at `src/cli.ts` and build output in `dist/`, point the extension at `dist/skills` with a module-relative file URL:
 
 ```ts
 import { Crust } from "@crustjs/core";
@@ -56,18 +56,20 @@ import { skill } from "@crustjs/skills";
 export const app = new Crust("my-cli", { description: "My CLI", version: "1.2.3" })
   .extend(
     skill({
-      distDir: new URL("../skills", import.meta.url),
+      distDir: new URL("../dist/skills", import.meta.url),
       extras: [new URL("../skills-src/deployment-guide", import.meta.url)],
     }),
   )
   .action(() => {});
 ```
 
+This URL reads `<project>/dist/skills` when running `src/cli.ts`. A Bun compiled executable falls back to an adjacent `skills/` directory when that URL is unavailable. For a JavaScript bundle at `dist/cli.js`, use `new URL("./skills", import.meta.url)` instead, since file URLs resolve relative to the executing module.
+
 The generated skill records the root `CommandSnapshot.meta.version` when present; the build hook never reads `package.json` from the working directory. Each authored extra is copied into the build output next to the generated skill. An authored extra with the generated skill's name replaces that generated skill; duplicate names between authored extras remain an error. Use `name` and `description` to customize the generated skill, or `generated: false` to ship only authored `extras`; a build that would produce no skills at all is an error. `distDir` is only read at runtime, for discovery and installation. Keep authored skill directories outside the build output; the build refuses an extra nested inside it.
 
 The extension registers `my-cli skill` and `my-cli skill update`. It also contributes an **Agent skills** section to root help and generated man pages. Each shipped skill is listed by name and description with its logical source path — relative to the working directory when the packaged directory is inside it, absolute otherwise — so agents can discover and load skills without installing them first. Run builds from the project root containing the packaged skills directory to keep absolute build-machine paths out of generated artifacts.
 
-The management command reads every skill in `distDir` and reconciles links against your selection: agents that already have links installed are preselected, selected agents get links created, and deselecting a previously installed agent removes its links (a warning is shown when the directory is shared with a still-selected agent). `--scope project|global` selects project or user locations; `--all` installs for universal and detected agents without prompting.
+The management command reads every skill in `distDir` and reconciles links against your selection: agents that already have links installed are preselected, selected agents get links created, and deselecting a previously installed agent removes its links (a warning is shown when the directory is shared with a still-selected agent). `--scope project|global` selects project or user locations; `--all` installs for universal and detected agents without prompting. Scope precedence for `--all` is `--scope`, then `defaultScope`, then `"global"`. Interactive runs without `--all` prompt for scope when both `--scope` and `defaultScope` are omitted, with `"global"` selected. Non-interactive runs use that default without prompting.
 
 ```sh
 my-cli skill
@@ -162,7 +164,7 @@ const deploy = defineCommand(
 
 ## Name validation
 
-Skill names follow the [Agent Skills specification](https://agentskills.io/specification): 1–64 lowercase alphanumeric characters and hyphens, with no leading, trailing, or consecutive hyphens. `writeSkills()` validates generated and authored names; `isValidSkillName()` is also exported for callers that need an early check.
+Skill names follow the [Agent Skills specification](https://agentskills.io/specification): 1–64 lowercase alphanumeric characters and hyphens, with no leading, trailing, or consecutive hyphens. `writeSkills()` validates generated and authored names; `isValidSkillName()` is also exported for callers that need an early check. Generating command documentation also rejects a visible direct subcommand whose name matches the root command name after trimming and lowercasing.
 
 ## Source helpers and errors
 

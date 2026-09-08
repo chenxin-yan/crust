@@ -5,7 +5,7 @@ description: Test Crust applications and custom prompts without process-global s
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-`@crustjs/testing` runs a Crust application with captured output or fake terminal streams. It is for application developers; install it alongside `@crustjs/core`.
+`@crustjs/testing` runs a Crust application with captured output or fake terminal streams. It is for application developers. Its required peers are `@crustjs/core`, `@crustjs/progress`, and `@crustjs/prompts`; install any your project does not already have. TypeScript is an optional peer.
 
 ```sh
 bun add -d @crustjs/testing
@@ -14,6 +14,8 @@ bun add -d @crustjs/testing
 ## Capture command output
 
 Use `captureRun()` for commands that write ordinary stdout or stderr or return a value. Each `ctx.stdout()`/`ctx.stderr()` call is captured as one line, joined with `"\n"` (matching the terminal defaults). The capture is a status-discriminated union: `completed` carries the action's inferred `result`, `finished` names the Extension whose `preRun` hook ended the invocation, and `failed` carries the thrown value without discarding earlier output.
+
+With the default capture setup, prompt and progress output is line-buffered into captured `stderr` through a non-TTY adapter. A spinner emits only its final line. This captures output but does not supply interactive input; use `runInteractive()` to drive prompts.
 
 ```ts
 import { expect, test } from "bun:test";
@@ -32,7 +34,7 @@ test("greets a name", async () => {
 
 ## Capture terminal execution
 
-Use `captureExecute()` to exercise the terminal `execute()` path, including Extension error rendering and the exit code established through `process.exitCode`. It captures stdout and stderr, restores the previous process exit code afterward, and reports cancellation as exit code `130`.
+Use `captureExecute()` to exercise the terminal `execute()` path, including Extension error rendering and the exit code established through `process.exitCode`. It captures stdout and stderr, restores the previous process exit code afterward, and reports cancellation as exit code `130`. An unset previous exit code is restored as `0`.
 
 ```ts
 import { expect, test } from "bun:test";
@@ -66,7 +68,7 @@ See [Contexts](/docs/guide/contexts#test-doubles).
 
 ## Test interactive commands
 
-Use `runInteractive()` when an action renders a built-in prompt. Its `type()` and `keys()` methods send terminal input. One ambient terminal-IO scope routes prompt frames, progress indicators, and `ctx.stderr()` text into the same transcript, so `waitFor()` and `screen()` observe the same terminal output. Calls to `ctx.stdout()` are discarded and never appear in `screen()`; use `captureRun()` when stdout assertions matter. Application code can use either package's `withTerminalIO()` export; `withPromptIO()` and `withProgressSink()` remain focused aliases.
+Use `runInteractive()` when an action renders a built-in prompt. Its `type()` and `keys()` methods send terminal input. See the [prompt testing helpers](/docs/modules/prompts#testing-custom-prompts) for supported key names. One ambient terminal-IO scope routes prompt frames, progress indicators, and `ctx.stderr()` text into the same transcript, so `waitFor()` and `screen()` observe the same terminal output. Calls to `ctx.stdout()` are discarded and never appear in `screen()`; use `captureRun()` when stdout assertions matter. Application code can use either package's `withTerminalIO()` export; `withPromptIO()` and `withProgressSink()` remain focused aliases.
 
 ```ts
 import { expect, test } from "bun:test";

@@ -17,7 +17,7 @@ new Crust("inspect")
   });
 ```
 
-`type` determines token consumption and built-in conversion. Failed conversions produce `PARSE` errors.
+`type` determines token consumption and built-in conversion. Invalid numbers, URLs, paths, and JSON produce `PARSE` errors. Number conversion follows `Number()`, so an empty token becomes `0`. Boolean positional arguments become `true` only for the exact tokens `"true"` and `"1"`; every other token becomes `false`. Use a string argument with `choices` or a schema when other spellings should be rejected.
 
 ## Custom parsing
 
@@ -61,7 +61,7 @@ const command = new Crust("serve")
   });
 ```
 
-For arguments, the schema receives `string | undefined`, or `string[]` for a variadic argument. For flags it receives the raw token value; `multiple: true` produces an array.
+For arguments, the schema receives `string | undefined`, or `string[]` for a variadic argument. For flags it receives `string | undefined` or `boolean | undefined`. With `multiple: true`, it receives `string[]` or `boolean[]` when the flag appears at least once, and `undefined` when omitted. Unlike repeated flags, variadic arguments always supply an array.
 
 On a schema-backed flag, `type` remains necessary to define token grammar: `"string"` consumes the next token, while `"boolean"` is a switch. It does not own output conversion.
 

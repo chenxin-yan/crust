@@ -208,27 +208,28 @@ function isSubmit<S, T>(result: HandleKeyResult<S, T>): result is SubmitResult<T
  * Run an interactive prompt with the given configuration.
  *
  * Manages the full terminal lifecycle:
- * 1. Asserts stdin is a TTY
+ * 1. Asserts the resolved input is a TTY
  * 2. Enables raw mode and hides cursor
  * 3. Renders initial state
  * 4. Listens for keypress events, delegating to `handleKey`
  * 5. Re-renders on state changes
  * 6. On submit, renders final state, cleans up, and resolves
  *
- * Output is written to `process.stderr` so prompt UI doesn't pollute
- * piped stdout.
+ * Input and output resolve from explicit IO, the ambient terminal scope,
+ * then `process.stdin` / `process.stderr`, keeping stdout clean by default.
  *
  * @param config - Prompt configuration (render, handleKey, initialState, theme)
+ * @param io - Optional input/output streams, resolved per stream.
  * @returns Promise resolving to the user's submitted value
- * @throws {NonInteractiveError} when stdin is not a TTY
+ * @throws {NonInteractiveError} when the resolved input is not a TTY
  *
  * @example
  * ```ts
  * const value = await runPrompt({
- *   initialState: { value: "", submitted: false },
+ *   initialState: { value: "" },
  *   render: (state, theme) => `${theme.prefix("?")} Enter value: ${state.value}`,
  *   handleKey: (key, state) => {
- *     if (key.name === "return") return { submit: state.value };
+ *     if (key.name === "return") return submit(state.value);
  *     return { ...state, value: state.value + key.char };
  *   },
  * });
