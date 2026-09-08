@@ -23,4 +23,4 @@ export type {
 	UpdateNotifierState,
 } from "./update-notifier.ts";
 export { version } from "./version.ts";
-export type { VersionOptions, VersionValue } from "./version.ts";
+export type { VersionExtension, VersionOptions, VersionValue } from "./version.ts";

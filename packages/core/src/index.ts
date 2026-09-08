@@ -13,6 +13,8 @@ export { defineContext } from "./api/context.ts";
 export type {
 	Extension,
 	ExtensionFactory,
+	DefineExtensionWith,
+	RootMetaKey,
 	ExtensionBuildContext,
 	ExtensionConfig,
 	ExtensionContext,

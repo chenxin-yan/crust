@@ -54,7 +54,7 @@ function configureFixture(command: Crust, fixture: CommandFixture): Crust {
 
 async function snapshotFixture(fixture: CommandFixture | Crust) {
 	if (fixture instanceof Crust) return await fixture.snapshot();
-	const { name, ...meta } = fixture.meta;
+	const { name, hidden: _hidden, ...meta } = fixture.meta;
 	return await configureFixture(new Crust(name, meta), fixture).snapshot();
 }
 

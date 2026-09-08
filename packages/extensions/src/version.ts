@@ -1,6 +1,6 @@
 import {
-	CrustError,
-	type ExtensionFactory,
+	type DefineExtensionWith,
+	type RootMetaKey,
 	type ExtensionId,
 	type ExtensionContext,
 	defineExtension,
@@ -22,44 +22,65 @@ export interface VersionOptions {
 	readonly format?: "plain" | ((version: string, context: ExtensionContext) => string);
 }
 
-export const version: ExtensionFactory<[versionValue?: VersionValue, options?: VersionOptions]> =
-	defineExtension(VERSION, (versionValue, options = {}) => {
-		const { format } = options;
+// ReturnType uses DefineExtensionWith's last (config) overload to retain the registration type.
+type VersionRegistration<K extends RootMetaKey> = ReturnType<DefineExtensionWith<K>>;
 
-		return {
-			flags: [
-				{
-					name: "version",
-					type: "boolean",
-					short: "v",
-					noNegate: true,
-					description: "Show version number",
-					recursive: false,
-				},
-			],
-			hooks: {
-				preRun(context) {
-					// Root invocation with --version only
-					if (context.commandPath.length !== 1 || context.flags.version !== true) return;
+/** Explicit values supply their own version; omitted values require root metadata. */
+export interface VersionExtension {
+	(value: VersionValue, options?: VersionOptions): VersionRegistration<never>;
+	(value?: VersionValue, options?: VersionOptions): VersionRegistration<"version">;
+	readonly id: ExtensionId;
+}
 
-					// oxlint-disable-next-line anti-slop/no-runtime-typeof -- discriminating a typed options union.
-					const override = typeof versionValue === "function" ? versionValue() : versionValue;
-					const resolvedVersion = override ?? context.rootCommand.meta.version;
-					if (resolvedVersion === undefined) {
-						throw new CrustError(
-							"DEFINITION",
-							"The version extension requires a version in new Crust(name, { version }) or version(value)",
-						);
-					}
-					const line =
-						format === "plain"
-							? resolvedVersion
-							: format
-								? format(resolvedVersion, context)
-								: `${context.rootCommand.meta.name} v${resolvedVersion}`;
-					context.stdout(line);
-					return context.finish();
-				},
+function makeVersion<K extends RootMetaKey>(
+	resolve: (context: ExtensionContext<[], {}, K>) => string,
+	options: VersionOptions,
+): VersionRegistration<K> {
+	const { format } = options;
+	return defineExtension<K>()(VERSION, {
+		flags: [
+			{
+				name: "version",
+				type: "boolean",
+				short: "v",
+				noNegate: true,
+				description: "Show version number",
+				recursive: false,
 			},
-		};
+		],
+		hooks: {
+			preRun(context) {
+				if (context.commandPath.length !== 1 || context.flags.version !== true) return;
+				const resolvedVersion = resolve(context);
+				const line =
+					format === "plain"
+						? resolvedVersion
+						: format
+							? format(resolvedVersion, context)
+							: `${context.rootCommand.meta.name} v${resolvedVersion}`;
+				context.stdout(line);
+				return context.finish();
+			},
+		},
 	});
+}
+
+function createVersion(value: VersionValue, options?: VersionOptions): VersionRegistration<never>;
+function createVersion(
+	value?: VersionValue,
+	options?: VersionOptions,
+): VersionRegistration<"version">;
+function createVersion(
+	value?: VersionValue,
+	options: VersionOptions = {},
+): VersionRegistration<"version"> {
+	if (value === undefined) {
+		return makeVersion<"version">((context) => context.rootCommand.meta.version, options);
+	}
+	return makeVersion<never>(() => {
+		// oxlint-disable-next-line anti-slop/no-runtime-typeof -- discriminating a typed options union.
+		return typeof value === "function" ? value() : value;
+	}, options);
+}
+
+export const version: VersionExtension = Object.assign(createVersion, { id: VERSION });

@@ -593,13 +593,20 @@ describe("built-in extensions", () => {
 		expect(getStdout()).toContain("app v1.2.3");
 	});
 
-	it("version extension reports a missing version", async () => {
-		const app = new Crust("app").extend(version()).action(() => {});
-
+	it("evaluates a version provider only when the root version flag is handled", async () => {
+		let calls = 0;
+		const extension = version(() => {
+			calls++;
+			return "2.0.0";
+		});
+		const app = new Crust("app").extend(extension).action(() => {});
+		expect(extension.id).toBe(version.id);
+		await app.snapshot();
+		await app.execute({ argv: [] });
+		expect(calls).toBe(0);
 		await app.execute({ argv: ["--version"] });
-
-		expect(getStderr()).toContain("version extension requires a version");
-		expect(process.exitCode).toBe(1);
+		expect(calls).toBe(1);
+		expect(getStdout()).toBe("app v2.0.0");
 	});
 
 	it("version extension handles -v alias", async () => {

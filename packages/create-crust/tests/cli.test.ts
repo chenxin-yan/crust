@@ -87,7 +87,8 @@ describe("create-crust CLI", () => {
 		expect(cli).toContain('new Crust("my-cli"');
 		expect(cli).toContain(".execute()");
 		expect(cli).toContain("help()");
-		expect(cli).toContain("version(pkg.version)");
+		expect(cli).toContain("version: pkg.version");
+		expect(cli).toContain("version()");
 		expect(readFileSync(join(projectDir, ".gitignore"), "utf-8")).toContain("node_modules");
 		expect(readFileSync(join(projectDir, "README.md"), "utf-8")).toContain("# my-cli");
 		expect(existsSync(join(projectDir, "node_modules"))).toBe(false);

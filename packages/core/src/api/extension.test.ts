@@ -73,6 +73,31 @@ describe("defineExtension", () => {
 		expect(logging().commands).toEqual([command]);
 	});
 
+	it("specializes metadata without changing factory identity or runtime normalization", async () => {
+		const emit = defineExtension<"version" | "sections">()(HELP, (prefix: string) => ({
+			flags: [{ name: "prefix", type: "string", default: prefix }],
+			hooks: {
+				preRun(ctx) {
+					ctx.stdout(`${ctx.flags.prefix}:${ctx.rootCommand.meta.version}`);
+					expect(ctx.rootCommand.meta.sections[0]?.only).toEqual([HELP]);
+				},
+			},
+		}));
+		const output: string[] = [];
+		const instance = emit("release");
+		expect(emit.id).toBe(HELP);
+		expect(instance.id).toBe(HELP);
+		expect(Object.isFrozen(instance)).toBe(true);
+		await new Crust("app", {
+			version: "1.2.3",
+			sections: [{ title: "Example", body: "app", only: [emit] }],
+		})
+			.extend(instance)
+			.action(() => {})
+			.run([], {}, { stdout: (line) => output.push(line) });
+		expect(output).toEqual(["release:1.2.3"]);
+	});
+
 	it("keeps the object and omitted-config forms unchanged", () => {
 		const extension = defineExtension(HELP, {
 			flags: [{ name: "verbose", type: "boolean", default: false }],

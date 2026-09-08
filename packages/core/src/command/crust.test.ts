@@ -66,8 +66,8 @@ describe("Crust constructor", () => {
 	});
 
 	it("does not carry sibling-only metadata onto the root", async () => {
+		// @ts-expect-error -- aliases belong to defineCommand() config
 		const snapshot = await new Crust("my-cli", {
-			// @ts-expect-error -- aliases belong to defineCommand() config
 			aliases: ["cli"],
 		}).snapshot();
 		expect(snapshot.meta.aliases).toBeUndefined();

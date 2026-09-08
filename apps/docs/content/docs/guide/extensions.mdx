@@ -33,7 +33,7 @@ Two consequences of the root-only model:
 
 Official Extension identities use the `crust:` namespace, reserved by convention for official Crust identities (the prefix is not enforced at runtime). Third-party packages should namespace published Extension ids with their own prefix; application-local ids can remain plain.
 
-Packages that publish a configurable Extension factory use `defineExtension(id, factory)`. The callback returns config; each call builds a frozen Extension with normalized flags and the same id. The returned factory exposes a readonly `id`, so consumers can pass it to `only` or `except` without constructing an Extension. Every official Extension is exported this way.
+Packages that publish a configurable Extension factory use `defineExtension(id, factory)`. The callback returns config; each call builds a frozen Extension with normalized flags and the same id. The returned factory exposes a readonly `id`, so consumers can pass it to `only` or `except` without constructing an Extension. Official Extension factories expose the same identity contract.
 
 ```ts
 import {
@@ -57,6 +57,22 @@ export const docs: ExtensionFactory<[options?: DocsOptions]> = defineExtension(
 ```
 
 Authors not building with `isolatedDeclarations` can omit the annotation (`export const docs = defineExtension(DOCS, (options?: DocsOptions) => ({ … }))`) and get full inference.
+
+## Required root metadata
+
+Declare required metadata keys with `defineExtension<"version">()(id, configOrFactory)`. The first call fixes the keys; the second still infers flags, factory arguments, Contexts, and commands. Ordinary `defineExtension(id, configOrFactory)` calls declare no metadata requirements.
+
+<include lang="ts" meta='title="metadata.ts"'>
+  ../../../examples/extensions/metadata.ts
+</include>
+
+The key argument is constrained to `keyof RootCommandMeta`, so editors suggest supported keys and reject typos such as `"versin"` or arbitrary fields. Use a union such as `"version" | "description"` to require multiple fields. Their types come from the metadata schema rather than a separate declaration.
+
+Declared fields are non-optional in every invocation hook's `ctx.rootCommand.meta`, in `build`'s `ctx.snapshot.meta`, and in the root snapshot passed to `sections`. Other fields keep their existing optional types. The resolved `ctx.command` is not refined, because it may be a subcommand. Requiring `"sections"` exposes normalized `CommandSection[]`, not authored `CommandSectionInput[]`.
+
+`.extend()` rejects a root whose inferred metadata does not guarantee every required field. Metadata state survives fluent calls. A field typed `string | undefined`, or a value widened to `RootCommandMeta`, cannot satisfy a required string. `satisfies RootCommandMeta` checks a configuration without widening its supplied fields. Typed unions and arrays of Extensions retain metadata requirements even when their contributed command and flag types are runtime-only.
+
+These checks require strict TypeScript checking, such as `tsc --noEmit`. They add no runtime metadata validation. JavaScript, `any`, assertions, or types that erase the requirement can bypass them. Neither `bun build` nor `crust build` runs a TypeScript check; use `tsc --noEmit && crust build` to enforce the contract in a build script.
 
 ## Owned flags and commands
 

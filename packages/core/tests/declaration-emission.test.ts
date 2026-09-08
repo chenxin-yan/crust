@@ -69,6 +69,15 @@ export const app = new Crust("consumer-cli")
 	.add(defineCommand("build", (cmd) => cmd.action(() => {})))
 	.add(deploy);
 
+// Curried requirements must remain nameable through exported factories and builders.
+export const stamp = defineExtension<"version">()(defineExtensionId("stamp"), (prefix: string) => ({
+	flags: [{ name: "prefix", type: "string", default: prefix }],
+	hooks: { preRun: ({ rootCommand, stdout }) => stdout(rootCommand.meta.version) },
+}));
+export const versionedApp = new Crust("versioned", { version: "1.2.3" })
+	.extend(stamp("release"))
+	.command("show", (cmd) => cmd.action(() => 42));
+
 // ~30 chained inline commands with chained .use() demands: generic depth
 // must stay bounded (no TS2589) and every intermediate builder type must
 // remain nameable in the emitted declarations.
