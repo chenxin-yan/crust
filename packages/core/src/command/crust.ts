@@ -9,7 +9,12 @@ import type {
 	ContextsOutput,
 	ContextsOwnedFlags,
 } from "../api/context.ts";
-import type { Extension, ExtensionsProvidesOutput } from "../api/extension.ts";
+import type {
+	AnyExtension,
+	Extension,
+	ExtensionsProvidesOutput,
+	RootMetaKey,
+} from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
 import type { RunInputPayload } from "../parsing/parser.ts";
@@ -547,15 +552,14 @@ type DefinitionsTree<
 // Mapped per slot: `Es[number]` cannot distinguish `.extend(a, b)` from
 // `.extend(cond ? a : b)` — both index to the same union. Variable-length
 // Extension lists (`.extend(...dynamicList)`) contribute nothing.
-type ExtensionCommands<Es extends readonly Extension<any, any, any, any>[]> =
-	number extends Es["length"]
-		? readonly []
-		: { [I in keyof Es]: ExtensionCommandDefs<Es[I]> }[number];
+type ExtensionCommands<Es extends readonly AnyExtension[]> = number extends Es["length"]
+	? readonly []
+	: { [I in keyof Es]: ExtensionCommandDefs<Es[I]> }[number];
 
 type StaticExtensionFlagDefs<E> =
 	IsUnion<E> extends true
 		? readonly []
-		: E extends Extension<any, any, infer Defs, any>
+		: E extends Extension<any, any, infer Defs, any, RootMetaKey>
 			? IsStaticTuple<Defs> extends true
 				? string extends Defs[number]["name"]
 					? readonly []
@@ -563,19 +567,16 @@ type StaticExtensionFlagDefs<E> =
 				: readonly []
 			: readonly [];
 
-type ExtensionFlagDefs<Es extends readonly Extension<any, any, any, any>[]> =
-	number extends Es["length"]
-		? readonly []
-		: { [I in keyof Es]: StaticExtensionFlagDefs<Es[I]> }[number];
+type ExtensionFlagDefs<Es extends readonly AnyExtension[]> = number extends Es["length"]
+	? readonly []
+	: { [I in keyof Es]: StaticExtensionFlagDefs<Es[I]> }[number];
 
-type ExtensionFlags<Es extends readonly Extension<any, any, any, any>[]> = NamedFlagsRecord<
-	ExtensionFlagDefs<Es>
->;
+type ExtensionFlags<Es extends readonly AnyExtension[]> = NamedFlagsRecord<ExtensionFlagDefs<Es>>;
 
 // Only a statically `true` (or omitted — the runtime default) `recursive` scope
 // promotes a flag onto descendant inputs: a widened `boolean` scope may be
 // `false` at runtime, which installs the flag on the root only.
-type RecursiveExtensionFlags<Es extends readonly Extension<any, any, any, any>[]> = {
+type RecursiveExtensionFlags<Es extends readonly AnyExtension[]> = {
 	[
 		D in ExtensionFlagDefs<Es>[number] as D extends { readonly recursive: infer R }
 			? [R] extends [true]
@@ -681,6 +682,7 @@ function dedupeExtensions(extensions: readonly Extension[]): Extension[] {
  *   Extension flags accumulated by `.extend()`, inherited by the shapes of
  *   definitions added afterwards
  * - `Result` — awaited return type of this command's action
+ * - `Meta` — authored root metadata available to Extension requirements
  *
  * @example
  * ```ts
@@ -708,6 +710,7 @@ type AfterFlags<
 	CollisionSp extends CollisionSpellings,
 	Result,
 	Defs extends readonly NamedFlagDef[],
+	Meta extends RootCommandMeta,
 > = Crust<
 	MergeFlags<Flags, NamedFlagsRecord<Defs>>,
 	A,
@@ -717,7 +720,8 @@ type AfterFlags<
 	Tree,
 	CtxFlags,
 	CollisionSp,
-	Result
+	Result,
+	Meta
 >;
 
 type AfterArgs<
@@ -731,7 +735,8 @@ type AfterArgs<
 	CollisionSp extends CollisionSpellings,
 	Result,
 	NewA extends ArgsDef,
-> = Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result>;
+	Meta extends RootCommandMeta,
+> = Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Meta>;
 
 type AfterProvide<
 	Flags extends FlagsDef,
@@ -744,6 +749,7 @@ type AfterProvide<
 	CollisionSp extends CollisionSpellings,
 	Result,
 	Cs extends readonly ContextInstance[],
+	Meta extends RootCommandMeta,
 > = Crust<
 	MergeFlags<Flags, ContextsOwnedFlags<Cs>>,
 	A,
@@ -753,7 +759,8 @@ type AfterProvide<
 	Tree,
 	MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>,
 	CollisionSp,
-	Result
+	Result,
+	Meta
 >;
 
 type AfterAction<
@@ -766,7 +773,8 @@ type AfterAction<
 	CtxFlags extends FlagsDef,
 	CollisionSp extends CollisionSpellings,
 	R,
-> = Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Awaited<R>>;
+	Meta extends RootCommandMeta,
+> = Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Awaited<R>, Meta>;
 
 type AfterExtend<
 	Flags extends FlagsDef,
@@ -778,7 +786,8 @@ type AfterExtend<
 	CtxFlags extends FlagsDef,
 	CollisionSp extends CollisionSpellings,
 	Result,
-	Es extends readonly Extension<any, any, any, any>[],
+	Es extends readonly AnyExtension[],
+	Meta extends RootCommandMeta,
 > = Crust<
 	MergeFlags<Flags, ExtensionFlags<Es>>,
 	A,
@@ -791,7 +800,8 @@ type AfterExtend<
 		CollisionSp["extension"] | ExtensionsSpellings<Es>,
 		CollisionSp["tree"] | DefinitionTreeSpellings<ExtensionCommands<Es>>
 	>,
-	Result
+	Result,
+	Meta
 >;
 
 type AfterAdd<
@@ -805,6 +815,7 @@ type AfterAdd<
 	CollisionSp extends CollisionSpellings,
 	Result,
 	Ds extends readonly CommandDefinition<any, any, any, any>[],
+	Meta extends RootCommandMeta,
 > = Crust<
 	Flags,
 	A,
@@ -814,7 +825,8 @@ type AfterAdd<
 	Tree & DefinitionsTree<Ds, CtxFlags>,
 	CtxFlags,
 	CollisionSpellings<CollisionSp["extension"], CollisionSp["tree"] | DefinitionTreeSpellings<Ds>>,
-	Result
+	Result,
+	Meta
 >;
 
 // Missing-dependency brand for inline `.command()`: parity with
@@ -826,7 +838,11 @@ type ValidateInlineCommandDeps<Ctx extends ContextMap, B> = MissingDeclaredDepen
 >;
 
 /** Broad application type for APIs that accept any fully-built Crust application. */
-export type AnyCrust = Crust<any, any, any, any, any, any, any, any, any>;
+export type AnyCrust = Crust<any, any, any, any, any, any, any, any, any, any>;
+
+type DefinedRootMetaKeys<Meta extends RootCommandMeta> = {
+	[K in RootMetaKey]: [Meta] extends [Required<Pick<RootCommandMeta, K>>] ? K : never;
+}[RootMetaKey];
 
 export class Crust<
 	Flags extends FlagsDef = {},
@@ -842,6 +858,7 @@ export class Crust<
 	out CtxFlags extends FlagsDef = {},
 	CollisionSp extends CollisionSpellings = CollisionSpellings,
 	Result = void,
+	out Meta extends RootCommandMeta = {},
 > {
 	/** Supported type-level seam exposing the application's inferred command types. */
 	declare readonly _types: {
@@ -850,6 +867,7 @@ export class Crust<
 		ctx: Ctx;
 		tree: Tree;
 		shape: CommandShape<A, Flags, Tree, Result>;
+		readonly rootMeta: Meta;
 	};
 
 	/** @internal */
@@ -862,9 +880,16 @@ export class Crust<
 	 * Create a new root command builder.
 	 *
 	 * @param name - The command name.
-	 * @param meta - Optional root description, version, usage, and documentation sections.
+	 * @param metadata - Optional root description, version, usage, and documentation sections.
 	 */
-	constructor(name: string, meta: RootCommandMeta = {}) {
+	constructor(
+		name: string,
+		...metadata:
+			// RootCommandMeta keeps contextual excess-property checks for fresh section literals.
+			| [meta: Meta & RootCommandMeta & { [K in Exclude<keyof Meta, RootMetaKey>]: never }]
+			| ({} extends Meta ? [meta?: undefined] : never)
+	) {
+		const meta: RootCommandMeta = metadata[0] ?? {};
 		// Runtime is the single home for this check: constructors cannot carry
 		// type parameters, so no brand can reject a statically known blank name.
 		if (name.trim() === "") {
@@ -939,9 +964,9 @@ export class Crust<
 	 */
 	flags<const Defs extends readonly NamedFlagDef[]>(
 		...defs: ValidateNamedFlagDefs<Defs, Sp>
-	): AfterFlags<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Defs> {
+	): AfterFlags<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Defs, Meta> {
 		const cloned = this._clone<
-			AfterFlags<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Defs>
+			AfterFlags<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Defs, Meta>
 		>({});
 		for (const def of defs) {
 			const { name, ...rest } = def;
@@ -964,7 +989,7 @@ export class Crust<
 	 */
 	args<const NewA extends ArgsDef>(
 		...defs: NewA & AppendArgsChecks<A, NewA>
-	): AfterArgs<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, NewA> {
+	): AfterArgs<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, NewA, Meta> {
 		const combined = [...this._node.args, ...defs.map((definition) => ({ ...definition }))];
 		// Brands own literal tuples; this owns config-built defs, where a
 		// duplicate name silently discards a positional and a mid-tuple variadic
@@ -992,7 +1017,7 @@ export class Crust<
 			}
 		}
 		return this._clone<
-			AfterArgs<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, NewA>
+			AfterArgs<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, NewA, Meta>
 		>({ args: combined });
 	}
 
@@ -1010,12 +1035,12 @@ export class Crust<
 		...instances: ProvideChecks<Sp, Cs> &
 			ValidateContextNames<Ctx, Cs> &
 			ValidateContextDeps<Ctx, Cs>
-	): AfterProvide<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Cs> {
+	): AfterProvide<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Cs, Meta> {
 		// Positional by design: providers reach only this node and children added
 		// afterwards (flag scoping; see definition.test.ts). Extension `provides`
 		// differ deliberately — they are application-wide and walk the whole tree.
 		const cloned = this._clone<
-			AfterProvide<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Cs>
+			AfterProvide<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Cs, Meta>
 		>({ contexts: [...this._node.contexts, ...instances.map((instance) => ({ instance }))] });
 		for (const instance of instances) {
 			for (const [name, definition] of Object.entries(instance.ownedFlags)) {
@@ -1040,9 +1065,9 @@ export class Crust<
 	 */
 	action<R>(
 		action: (ctx: NoInfer<CrustCommandContext<A, Flags, Ctx>>) => R,
-	): AfterAction<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, R> {
+	): AfterAction<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, R, Meta> {
 		// SAFETY: dispatch reconstructs this node's context from its own validated definitions.
-		return this._clone<AfterAction<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, R>>({
+		return this._clone<AfterAction<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, R, Meta>>({
 			run: action as CommandAction,
 		});
 	}
@@ -1058,9 +1083,11 @@ export class Crust<
 	 * runtime-only: contributions already merged into the builder's static
 	 * types stay visible, so invoking a replaced literal Extension's commands
 	 * through typed `run()` fails at runtime with `COMMAND_NOT_FOUND`.
+	 * Required root metadata keys are checked against the constructor's inferred
+	 * metadata by TypeScript, not at runtime.
 	 * Command definition builders do not expose this method.
 	 */
-	extend<const Es extends readonly Extension<any, any, any, any>[]>(
+	extend<const Es extends readonly Extension<any, any, any, any, DefinedRootMetaKeys<Meta>>[]>(
 		...extensions: Es &
 			ValidateDeclaredDeps<MergeContext<Ctx, ExtensionsProvidesOutput<Es>>, Es> &
 			// Contributed command trees count as existing spellings: prepare
@@ -1072,10 +1099,14 @@ export class Crust<
 			> &
 			ValidateExtensionCommands<Es, Sibs> &
 			ValidateExtensionProvides<Es, Ctx>
-	): AfterExtend<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Es> {
-		const activeExtensions = dedupeExtensions([...this._node.extensions, ...extensions]);
+	): AfterExtend<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Es, Meta> {
+		// SAFETY: composition checked metadata compatibility; runtime storage erases hook requirements.
+		const activeExtensions = dedupeExtensions([
+			...this._node.extensions,
+			...extensions,
+		] as Extension[]);
 		return this._clone<
-			AfterExtend<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Es>
+			AfterExtend<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Es, Meta>
 		>({
 			...installExtensionContexts(
 				this._node,
@@ -1096,9 +1127,9 @@ export class Crust<
 			ValidateCommandDefinitions<Ds, Sibs> &
 			ValidateDeclaredDeps<Ctx, Ds> &
 			ValidateDefinitionFlags<Ds, CollisionSp["extension"]>
-	): AfterAdd<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Ds> {
+	): AfterAdd<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Ds, Meta> {
 		return this._addDefinitions<
-			AfterAdd<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Ds>
+			AfterAdd<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Ds, Meta>
 		>(definitions);
 	}
 
@@ -1134,7 +1165,8 @@ export class Crust<
 		CtxFlags,
 		CollisionSp,
 		Result,
-		readonly [CommandDefinition<N, readonly [], ShapeOfBuilder<B>, DepsOfBuilder<B>>]
+		readonly [CommandDefinition<N, readonly [], ShapeOfBuilder<B>, DepsOfBuilder<B>>],
+		Meta
 	> {
 		/* oxlint-disable anti-slop/no-chained-type-assertions -- inline sugar erases the call-site-seeded recipe generics before delegating to the defineCommand + add runtime. */
 		// SAFETY: the seeded recipe generics restate runtime facts — materialization
@@ -1157,7 +1189,8 @@ export class Crust<
 				CtxFlags,
 				CollisionSp,
 				Result,
-				readonly [CommandDefinition<N, readonly [], ShapeOfBuilder<B>, DepsOfBuilder<B>>]
+				readonly [CommandDefinition<N, readonly [], ShapeOfBuilder<B>, DepsOfBuilder<B>>],
+				Meta
 			>
 		>([definition]);
 	}

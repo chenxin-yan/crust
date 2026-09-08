@@ -159,7 +159,7 @@ type Path = CommandPath<Tree>; // e.g. readonly [] | readonly ["greet"]
 type GreetInput = RunInput<CommandShapeAt<(typeof app)["_types"]["shape"], readonly ["greet"]>>;
 ```
 
-`Crust._types` is a supported type-level seam for accessing an application's inferred flags, arguments, Contexts, command tree, and command shape; it has no runtime value.
+`Crust._types` is a supported type-level seam for accessing an application's inferred flags, arguments, Contexts, command tree, command shape, and authored root metadata (`rootMeta`); it has no runtime value.
 
 ## Parser boundary types
 
@@ -271,7 +271,7 @@ The entry shape returned by `ExtensionConfig.sections(snapshot)`: a plain-text s
   name="ExtensionBuildContext"
 />
 
-The build context contains the frozen root Command Snapshot and the resolved absolute output directory.
+The build context contains the frozen root Command Snapshot and the resolved absolute output directory. Its optional `MetaKeys` type parameter refines required snapshot metadata fields.
 
 ### `Extension`
 
@@ -285,7 +285,13 @@ The build context contains the frozen root Command Snapshot and the resolved abs
 | ----------------------------- | ---------------------------------------------------------------------------------------------- |
 | `ExtensionFactory<Args = []>` | Callable Extension constructor with a readonly `id: ExtensionId`; valid as a `SectionConsumer` |
 
-`defineExtension(id, factory)` wraps a config-returning callback, preserving its parameters and inferring its flags, dependencies, providers, and commands. Each call follows the object form's normalization and freezing path. `ExtensionFactory<Args, Deps, Provides, Defs, Commands>` accepts optional contribution type parameters; their defaults erase contributions to `Extension`, keeping published annotations short. See [authoring an Extension](/docs/guide/extensions#author-an-extension).
+`defineExtension(id, factory)` wraps a config-returning callback, preserving its parameters and inferring its flags, dependencies, providers, and commands. Each call follows the object form's normalization and freezing path. `ExtensionFactory<Args, Deps, Provides, Defs, Commands, MetaKeys>` accepts optional contribution and metadata-key type parameters. Contribution defaults keep published annotations short; `MetaKeys` defaults to `never`, meaning no required metadata. An annotation for a metadata-requiring factory must preserve those keys. See [authoring an Extension](/docs/guide/extensions#author-an-extension).
+
+### `RootMetaKey` and `DefineExtensionWith`
+
+`RootMetaKey` is `keyof RootCommandMeta`. `defineExtension<MetaKeys>()` returns `DefineExtensionWith<MetaKeys>`, whose config and factory overloads infer the remaining types. Required fields retain their schema types and become non-optional in root snapshots passed to hooks, `build`, and `sections`. `.extend()` checks that the root's inferred metadata supplies them.
+
+Use the [curried declaration](/docs/guide/extensions#required-root-metadata) to require keys without losing flag, Context, or factory-argument inference. These requirements are compile-time-only.
 
 ### `ExtensionFlagDef`
 

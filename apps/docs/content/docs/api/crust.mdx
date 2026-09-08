@@ -126,14 +126,22 @@ class Crust<
   CtxFlags = {},
   CollisionSp = CollisionSpellings,
   Result = void,
+  Meta extends RootCommandMeta = {},
 >
 
-new Crust(name: string, meta?: RootCommandMeta)
+new Crust(
+  name: string,
+  ...metadata:
+    | [meta: Meta & RootCommandMeta & { [K in Exclude<keyof Meta, RootMetaKey>]: never }]
+    | ({} extends Meta ? [meta?: undefined] : never)
+)
 ```
 
 <auto-type-table path="../../../../../packages/core/src/command/crust.ts" name="RootCommandMeta" />
 
-Creates a root command builder. Root metadata is declared at construction because aliases and hidden state only apply to subcommands. `version` is the application version exposed on `CommandSnapshot.meta.version` for Extensions and tooling. `sections` accepts the same ordered plain-text entries as subcommand metadata and is validated immediately.
+Creates a root command builder. Metadata is optional unless an installed Extension requires it. `Meta` retains the inferred constructor metadata through fluent calls; `.extend()` checks it against [extension-owned requirements](/docs/guide/extensions#required-root-metadata). Optional or widened metadata cannot promise a required field. Statically known extra root keys are rejected, including on pretyped metadata objects. Generic wrappers must also rule out extra keys; `M extends RootCommandMeta` alone is not sufficient. Wrappers that do not need to retain required-field information can accept `RootCommandMeta` directly.
+
+Root metadata is declared at construction because aliases and hidden state only apply to subcommands. `version` is the application version exposed on `CommandSnapshot.meta.version` for Extensions and tooling. `sections` accepts the same ordered plain-text entries as subcommand metadata and is validated immediately.
 
 ```ts
 const app = new Crust("my-cli", {
@@ -147,7 +155,7 @@ Definition aliases must be non-empty, contain no whitespace, not start with `-`,
 
 ## Chaining semantics
 
-Variadic builder methods accumulate across calls: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` preserve earlier registrations — with one exception: `.extend()` deduplicates by `ExtensionId`, keeping only the last registration for a given id. TypeScript brands reject statically known invalid definitions and collisions at compile time. Runtime `DEFINITION` checks cover flag spelling collisions and reserved names, duplicate or misplaced arguments, and duplicate `.add()` command names. Extension flag collisions also fail at runtime, including Context-owned flags from providers. Dynamic Extension-contributed commands instead replace commands with the same canonical name at preparation time, as described under [`.extend()`](#extendextensions). Command alias rules are compile-time-only. Recipe behavior, Context lifecycle, documentation sections, and argv input retain their runtime checks.
+Variadic builder methods accumulate across calls: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` preserve earlier registrations — with one exception: `.extend()` deduplicates by `ExtensionId`, keeping only the last registration for a given id. TypeScript brands reject statically known invalid definitions and collisions at compile time. Runtime `DEFINITION` checks cover flag spelling collisions and reserved names, duplicate or misplaced arguments, and duplicate `.add()` command names. Extension flag collisions also fail at runtime, including Context-owned flags from providers. Dynamic Extension-contributed commands instead replace commands with the same canonical name at preparation time, as described under [`.extend()`](#extendextensions). Command alias rules and Extension metadata requirements are compile-time-only. Recipe behavior, Context lifecycle, documentation sections, and argv input retain their runtime checks.
 
 ## `.args(...defs)`
 

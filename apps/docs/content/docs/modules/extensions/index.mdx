@@ -60,4 +60,4 @@ Extension factories return plain `Extension` values. Contributions are applicati
 
 `preRun` hooks run in registration order until one returns `ctx.finish()`. Later `preRun` hooks and the Command Action are skipped; all `postRun` hooks still run in reverse registration order. Register `noColor()` before `help()` so color flags affect help output.
 
-Use [`defineExtension(id, config?)`](/docs/guide/extensions) from `@crustjs/core` to author a custom Extension; omitted config defaults to `{}`.
+Use [`defineExtension(id, config?)`](/docs/guide/extensions) from `@crustjs/core` to author a custom Extension; omitted config defaults to `{}`. Extensions that need root metadata declare its keys with [`defineExtension<"version">()(id, configOrFactory)`](/docs/guide/extensions#required-root-metadata).

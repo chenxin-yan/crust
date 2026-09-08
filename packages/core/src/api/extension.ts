@@ -1,9 +1,10 @@
-import type { CommandDefinition } from "../command/crust.ts";
+import type { CommandDefinition, RootCommandMeta } from "../command/crust.ts";
 import type { CommandSnapshot } from "../command/snapshot.ts";
 import type { CaughtError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
 import { toFlagsRecord } from "../parsing/spellings.ts";
 import type {
+	CommandMeta,
 	CommandSectionInput,
 	FlagDef,
 	InferFlags,
@@ -54,13 +55,20 @@ export type InvocationOutcome =
 	| { readonly status: "finished"; readonly by: ExtensionId }
 	| { readonly status: "failed"; readonly error: unknown; readonly by?: ExtensionId };
 
+/** Authored root metadata fields an Extension may require. */
+export type RootMetaKey = keyof RootCommandMeta;
+
+type RootCommandSnapshot<K extends RootMetaKey> = CommandSnapshot & {
+	readonly meta: Readonly<Required<Pick<CommandMeta, K>>>;
+};
+
 /** Build-time context passed to an Extension's artifact generator. */
-export interface ExtensionBuildContext {
+export interface ExtensionBuildContext<MetaKeys extends RootMetaKey = never> {
 	/**
 	 * Frozen snapshot prepared before this hook starts. It does not include this hook's own
 	 * outputs; later-registered hooks receive refreshed snapshots.
 	 */
-	readonly snapshot: CommandSnapshot;
+	readonly snapshot: RootCommandSnapshot<MetaKeys>;
 	/** Resolved absolute output directory. */
 	readonly outDir: string;
 }
@@ -76,6 +84,7 @@ export interface ExtensionBuildContext {
 export interface ExtensionContext<
 	Defs extends readonly NamedExtensionFlagDef[] = [],
 	Deps extends ContextMap = {},
+	MetaKeys extends RootMetaKey = never,
 > extends Readonly<InvocationIO> {
 	/**
 	 * Complete argv passed to the application, including routed command names.
@@ -93,7 +102,7 @@ export interface ExtensionContext<
 	 * Object.keys(ctx.rootCommand.subCommands); // ["deploy"]
 	 * ```
 	 */
-	readonly rootCommand: CommandSnapshot;
+	readonly rootCommand: RootCommandSnapshot<MetaKeys>;
 	/**
 	 * Snapshot of the resolved command (the root when routing failed).
 	 *
@@ -149,6 +158,7 @@ export interface ExtensionContext<
 export interface ExtensionHooks<
 	Defs extends readonly NamedExtensionFlagDef[] = [],
 	Deps extends ContextMap = {},
+	MetaKeys extends RootMetaKey = never,
 > {
 	/**
 	 * Runs after routing and input binding (argv parsing for `execute()`, structured
@@ -156,13 +166,13 @@ export interface ExtensionHooks<
 	 * Return `ctx.finish()` to end the invocation successfully; later pre-run hooks,
 	 * validation, schemas, Contexts, and the Command Action do not run.
 	 */
-	readonly preRun?: (ctx: ExtensionContext<Defs, Deps>) => Awaitable<void | Finished>;
+	readonly preRun?: (ctx: ExtensionContext<Defs, Deps, MetaKeys>) => Awaitable<void | Finished>;
 	/**
 	 * Runs after the invocation settles, in reverse `.extend()` order. This is the
 	 * `finally` slot for cleanup and post-run side effects.
 	 */
 	readonly postRun?: (
-		ctx: ExtensionContext<Defs, Deps>,
+		ctx: ExtensionContext<Defs, Deps, MetaKeys>,
 		outcome: InvocationOutcome,
 	) => Awaitable<void>;
 	/**
@@ -176,7 +186,7 @@ export interface ExtensionHooks<
 	 */
 	readonly onError?: (
 		error: CaughtError,
-		ctx: ExtensionContext<[], Deps>,
+		ctx: ExtensionContext<[], Deps, MetaKeys>,
 	) => Awaitable<boolean | void>;
 }
 
@@ -245,14 +255,17 @@ export interface ExtensionConfig<
 		any,
 		any
 	>[],
+	MetaKeys extends RootMetaKey = never,
 > {
 	readonly flags?: Defs;
 	readonly commands?: Commands;
 	readonly uses?: Uses;
 	readonly provides?: Provides;
-	readonly sections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
-	readonly build?: (ctx: ExtensionBuildContext) => void | Promise<void>;
-	readonly hooks?: ExtensionHooks<Defs, ContextDependencies<Uses>>;
+	readonly sections?: (
+		snapshot: RootCommandSnapshot<MetaKeys>,
+	) => readonly ExtensionSectionContribution[];
+	readonly build?: (ctx: ExtensionBuildContext<MetaKeys>) => void | Promise<void>;
+	readonly hooks?: ExtensionHooks<Defs, ContextDependencies<Uses>, MetaKeys>;
 }
 
 type ValidateExtensionConfig<
@@ -284,6 +297,7 @@ export interface Extension<
 		any,
 		any
 	>[],
+	out MetaKeys extends RootMetaKey = never,
 > {
 	readonly id: ExtensionId;
 	readonly flags?: Readonly<Record<string, ExtensionFlagDef>>;
@@ -292,18 +306,25 @@ export interface Extension<
 	readonly commands?: Commands;
 	readonly uses: readonly AnyContextFactory[];
 	readonly provides?: Provides;
-	readonly sections?: (snapshot: CommandSnapshot) => readonly ExtensionSectionContribution[];
-	readonly build?: (ctx: ExtensionBuildContext) => void | Promise<void>;
-	readonly hooks?: ExtensionHooks<any, Deps>;
+	readonly sections?: (
+		snapshot: RootCommandSnapshot<MetaKeys>,
+	) => readonly ExtensionSectionContribution[];
+	readonly build?: (ctx: ExtensionBuildContext<MetaKeys>) => void | Promise<void>;
+	readonly hooks?: ExtensionHooks<any, Deps, MetaKeys>;
 	readonly _deps?: Deps;
 }
 
+/** @internal Broad Extension constraint; contravariance requires the full metadata key set. */
+export type AnyExtension = Extension<any, any, any, any, RootMetaKey>;
+
 export type ExtensionProvidesOutput<E> =
-	E extends Extension<any, infer Provides> ? ContextsOutput<Provides> : {};
-export type ExtensionsProvidesOutput<Es extends readonly Extension<any, any>[]> =
-	Es extends readonly [infer H, ...infer T extends readonly Extension<any, any>[]]
-		? ExtensionProvidesOutput<H> & ExtensionsProvidesOutput<T>
-		: {};
+	E extends Extension<any, infer Provides, any, any, RootMetaKey> ? ContextsOutput<Provides> : {};
+export type ExtensionsProvidesOutput<Es extends readonly AnyExtension[]> = Es extends readonly [
+	infer H,
+	...infer T extends readonly AnyExtension[],
+]
+	? ExtensionProvidesOutput<H> & ExtensionsProvidesOutput<T>
+	: {};
 
 /** A callable Extension constructor whose identity is also a section consumer. */
 export type ExtensionFactory<
@@ -317,7 +338,54 @@ export type ExtensionFactory<
 		any,
 		any
 	>[],
-> = ((...args: Args) => Extension<Deps, Provides, Defs, Commands>) & { readonly id: ExtensionId };
+	MetaKeys extends RootMetaKey = never,
+> = ((...args: Args) => Extension<Deps, Provides, Defs, Commands, MetaKeys>) & {
+	readonly id: ExtensionId;
+};
+
+/** Curried Extension definer: explicit metadata keys leave all other types inferred. */
+export interface DefineExtensionWith<MetaKeys extends RootMetaKey> {
+	<
+		Args extends readonly unknown[],
+		const Defs extends readonly NamedExtensionFlagDef[] = [],
+		const Uses extends readonly AnyContextFactory[] = [],
+		const Provides extends readonly ContextInstance[] = [],
+		const Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
+	>(
+		id: ExtensionId,
+		factory: (
+			...args: Args
+		) => ExtensionConfig<Defs, Uses, Provides, Commands, MetaKeys> &
+			ValidateExtensionConfig<Defs, Provides, Commands>,
+	): ExtensionFactory<
+		Args,
+		ContextDependencies<Uses> &
+			ContextsDependencies<Provides> &
+			CommandDefinitionsDependencies<Commands>,
+		Provides,
+		Defs,
+		Commands,
+		MetaKeys
+	>;
+	<
+		const Defs extends readonly NamedExtensionFlagDef[] = [],
+		const Uses extends readonly AnyContextFactory[] = [],
+		const Provides extends readonly ContextInstance[] = [],
+		const Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
+	>(
+		id: ExtensionId,
+		config?: ExtensionConfig<Defs, Uses, Provides, Commands, MetaKeys> &
+			ValidateExtensionConfig<Defs, Provides, Commands>,
+	): Extension<
+		ContextDependencies<Uses> &
+			ContextsDependencies<Provides> &
+			CommandDefinitionsDependencies<Commands>,
+		Provides,
+		Defs,
+		Commands,
+		MetaKeys
+	>;
+}
 
 type ErasedExtensionFactory = (...args: any[]) => ExtensionConfig;
 
@@ -332,7 +400,12 @@ function isExtensionFactory(
  *
  * Extensions apply to the whole application and own the flags and commands
  * they contribute. Factories expose the same identity for section audiences.
+ * `defineExtension<"version">()(id, configOrFactory)` declares required root
+ * metadata keys without preventing inference of flags, Contexts, or commands.
  */
+export function defineExtension<
+	MetaKeys extends RootMetaKey = never,
+>(): DefineExtensionWith<MetaKeys>;
 export function defineExtension<
 	Args extends readonly unknown[],
 	const Defs extends readonly NamedExtensionFlagDef[] = [],
@@ -372,9 +445,11 @@ export function defineExtension<
 	Commands
 >;
 export function defineExtension(
-	id: ExtensionId,
+	id?: ExtensionId,
 	config: ExtensionConfig | ErasedExtensionFactory = {},
-): Extension | ExtensionFactory<any[]> {
+): Extension | ExtensionFactory<any[]> | DefineExtensionWith<never> {
+	// Metadata requirements are erased, so specialization needs no runtime state.
+	if (id === undefined) return defineExtension;
 	if (isExtensionFactory(config)) {
 		return Object.assign((...args: any[]) => defineExtension(id, config(...args)), { id });
 	}
