@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
-import { compile } from "../src/index.js";
+import { compile, TypeScriptCompileError } from "../src/index.js";
 
 const goPath = Bun.which("go");
 const nodePath = Bun.which("node");
@@ -110,6 +110,8 @@ describe("compiler differential corpus", () => {
 		const workspace = await mkdtemp(join(tmpdir(), "crust-unsupported-expression-"));
 		const fixture = join(workspace, "fixture.ts");
 		try {
+			await writeFile(fixture, 'process.exit("2");');
+			await expect(compile(fixture)).rejects.toBeInstanceOf(TypeScriptCompileError);
 			for (const source of [
 				'console.log("abc".slice(1));',
 				'console.log("abc"[0]);',
@@ -122,7 +124,6 @@ describe("compiler differential corpus", () => {
 				"function f(value: void): number { return 1; } f();",
 				"function f(): void {} function g(): void { return f(); } g();",
 				'console.log(process.argv["0"]);',
-				'process.exit("2");',
 				'console.log("%s", "ok");',
 				'function format(): string { return "%s"; } console.log(format(), "ok");',
 				"function f(): void {} console.log(`${f()}`);",

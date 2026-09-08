@@ -9,7 +9,7 @@ describe("compile", () => {
 	it("reports missing Go from an outside cwd", async () => {
 		const workspace = await mkdtemp(join(tmpdir(), "crust-compiler-no-go-"));
 		try {
-			await writeFile(join(workspace, "entry.ts"), 'console.log("hello");');
+			await writeFile(join(workspace, "entry.ts"), "console.log(`hello ${process.argv[2]}`);");
 			const entrypoint = new URL("../src/index.ts", import.meta.url).href;
 			const child = Bun.spawnSync(
 				[

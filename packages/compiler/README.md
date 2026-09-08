@@ -2,7 +2,10 @@
 
 Private M0 TypeScript-to-Go compiler. `compile(entryFile)` is the public test seam;
 corpus tests compile and execute binaries against Node, not emitted-source snapshots.
-The only package dependency is TypeScript.
+The only package dependency is TypeScript. The checker loads compiler-owned ES2022
+and M0 console/process declarations, independent of the caller's working directory;
+Node, Bun, and DOM ambient types are not discovered. `process.exit` requires a
+number, so invalid argument types are rejected by the checker before lowering.
 
 ## String representation boundary
 
