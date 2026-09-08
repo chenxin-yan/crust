@@ -32,23 +32,23 @@ $ greet --help
 
 ## Philosophy
 
-- **One way to do it.** One starter pattern. Inline `.command()` for app-local commands, `defineCommand()` when a command needs its own file, reuse, or a package; `new Crust()` appears exactly once, at the root.
-- **Inference over annotation.** Types flow from definitions to actions. No decorators, no codegen, no manual generics.
-- **Plain values, immutable builders.** Definitions and Extensions are frozen data; every fluent call returns a new builder.
-- **TypeScript-first definitions.** Statically known collisions and malformed definitions fail at their authoring call sites during type checking; argv is still validated at runtime.
-- **Standards over lock-in.** Standard Schema for validation, `NO_COLOR`/`FORCE_COLOR` and OSC 8 conventions, native `Symbol.dispose` cleanup.
-- **Pay only for what you use.** Zero-dependency core, composable modules, Contexts constructed lazily, only when the resolved command requires them.
+- **Zero-dependency core.** The core has no runtime package dependencies.
+- **Declarative command trees.** Define commands, arguments, flags, and subcommands together. Crust handles parsing and routing.
+- **Composable features.** Add optional modules as you need them, including standalone libraries you can use without the framework.
+- **End-to-end type safety.** Types flow from definitions to actions, Contexts, and programmatic invocation, with no manual annotations, decorators, or codegen.
+- **Compile-time validation first.** Check statically known definitions through TypeScript, without repeating those checks at runtime. Reserve runtime validation for terminal input and definitions that cannot be checked statically.
+- **One source of truth.** Reuse command definitions for parsing, inferred types, and generated help, completion scripts, manual pages, and agent documentation.
+- **Explicit extension points.** Add application-wide behavior through Extensions with flags, commands, lifecycle hooks, and build hooks.
 
-## Feature highlight
+## Feature highlights
 
-- **TypeScript-first** — Immutable, chainable builders with args and flags fully inferred from your definitions. No manual type annotations, just autocomplete that works.
-- **Compile-time validation** — Flag alias collisions and variadic arg mistakes are caught before your code runs
-- **Schema-first validation** — Place any Standard Schema on an argument or flag definition; the action receives its output type
-- **Composable, not monolithic** — Every capability ships as its own module with zero runtime dependencies in core. Install only what you need — `@crustjs/core` for the framework, `@crustjs/extensions` for official extensions, `@crustjs/crust` for build tooling.
-- **Extensions** — App-wide capabilities like help, version, completion, and update notices, attached once at the root
-- **Contexts** — Named command dependencies constructed lazily, only when the resolved command requires them
-- **Subcommands** — Nested command trees with automatic resolution and Context-owned flag propagation
-- **Bun-first, runtime-portable** — Crust tooling builds standalone Bun or Deno executables, or a Node.js bundle, while the library packages have first-class support for Bun, Node.js 22+, and Deno 2.8+ through shared `node:` APIs.
+- **Commands and input parsing.** Nested [commands](/docs/guide/subcommands), positional [arguments](/docs/guide/arguments), and [flags](/docs/guide/flags) with aliases, defaults, choices, [Standard Schema validation](/docs/guide/types#schema-backed-definitions), and inferred types.
+- **[Extensions](/docs/guide/extensions).** Shared flags, commands, and lifecycle hooks, plus [official extensions](/docs/modules/extensions) for help, version, typo suggestions, and update notices.
+- **[Dependency injection](/docs/guide/contexts).** Typed Contexts with lazy initialization and automatic cleanup.
+- **Generated from your definitions.** [Shell completion](/docs/modules/extensions/completion) for Bash, Zsh, and Fish, [manual pages](/docs/modules/man), and [agent skills](/docs/modules/skills).
+- **Terminal UI.** [Styling](/docs/modules/style), [interactive prompts](/docs/modules/prompts), and [progress indicators](/docs/modules/progress), with non-interactive fallbacks.
+- **[Testing helpers](/docs/guide/testing).** Capture output and exit codes, or drive interactive commands with simulated input.
+- **[Build and distribution](/docs/guide/build).** Standalone Bun or Deno executables, or a Node.js bundle.
 
 [`@crustjs/tui`](/docs/modules/tui) is Bun-only because its OpenTUI dependency uses native FFI.
 
