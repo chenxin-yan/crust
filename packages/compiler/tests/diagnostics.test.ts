@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { compile, CompilerError, DiagnosticCodes } from "../src/index.js";
+import { numericStringBoundarySources } from "./string-boundary.js";
 
 async function compileFailure(fixtureName: string): Promise<CompilerError> {
 	try {
@@ -38,6 +39,33 @@ function expectLocated(error: CompilerError): void {
 }
 
 describe("compiler diagnostic corpus", () => {
+	it("rejects direct string-array logging", async () => {
+		const error = await compileFailure("array-log.ts");
+		expect(error.diagnostics[0]?.code).toBe(DiagnosticCodes.UnsupportedConstruct);
+		expectLocated(error);
+	});
+
+	it.each([
+		"console.log(process.argv);",
+		"console.log((process.argv.slice(2))!);",
+		"console.log(42, process.argv.slice(2));",
+		"function log(values: string[]): void { console.log(values); } log(process.argv.slice(2));",
+		"function args(): string[] { return process.argv.slice(2); } console.log(args());",
+	])("rejects string-array log arguments: %s", async (source) => {
+		const error = await compileSourceFailure(source);
+		expect(error.diagnostics[0]?.code).toBe(DiagnosticCodes.UnsupportedConstruct);
+		expectLocated(error);
+	});
+
+	it.each(numericStringBoundarySources)(
+		"rejects numeric string results at function boundaries: %s",
+		async (source) => {
+			const error = await compileSourceFailure(source);
+			expect(error.diagnostics[0]?.code).toBe(DiagnosticCodes.UnsupportedConstruct);
+			expectLocated(error);
+		},
+	);
+
 	it("rejects a directory-valued output path", async () => {
 		const fixture = join(import.meta.dir, "fixtures", "hello.ts");
 		const outputPath = await mkdtemp(join(tmpdir(), "crust-compiler-output-"));
