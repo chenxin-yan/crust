@@ -230,7 +230,7 @@ interface FlagDefBase {
 	description?: string;
 	/** Single-character short alias (e.g. `"v"` → `-v`) */
 	short?: string;
-	/** Additional long aliases (e.g. `["out"]` → `--out`) */
+	/** Additional aliases (e.g. `["out"]` → `--out`); one-character aliases also accept one dash. */
 	aliases?: string[];
 	/** When `true`, the parser throws if the flag is not provided */
 	required?: true;
@@ -310,24 +310,24 @@ interface SchemaFlagBase extends Omit<FlagDefBase, "schema" | "required"> {
 
 /**
  * A schema-backed flag that consumes a value token (`--flag value`).
- * The schema receives the raw string (`string | undefined`, or `string[]`
- * with `multiple: true`) and exclusively owns coercion, defaults,
- * requiredness, and validation. `type` declares token consumption only.
+ * The schema receives the raw string (`string | undefined`, or
+ * `string[] | undefined` with `multiple: true`) and exclusively owns coercion,
+ * defaults, requiredness, and validation. `type` declares token consumption only.
  */
 interface SchemaStringFlagDef extends SchemaFlagBase {
 	type: "string";
-	/** When `true`, the flag is repeatable and the schema receives `string[]` */
+	/** When `true`, the schema receives `string[]` when present, or `undefined` when omitted. */
 	multiple?: true;
 	noNegate?: never;
 }
 
 /**
  * A schema-backed toggle flag (no value token). The schema receives the raw
- * `boolean | undefined` (or `boolean[]` with `multiple: true`).
+ * `boolean | undefined` (or `boolean[] | undefined` with `multiple: true`).
  */
 interface SchemaBooleanFlagDef extends SchemaFlagBase {
 	type: "boolean";
-	/** When `true`, the flag is repeatable and the schema receives `boolean[]` */
+	/** When `true`, the schema receives `boolean[]` when present, or `undefined` when omitted. */
 	multiple?: true;
 	/** When `true`, reject `--no-{name}` (and negated aliases) at parse time and hide the generated help label */
 	noNegate?: true;

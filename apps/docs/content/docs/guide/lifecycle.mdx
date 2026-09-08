@@ -29,7 +29,7 @@ await app.run(
 );
 ```
 
-It requires an explicit typed command path, binds structured input directly against the selected command's definitions, honors injected writers, throws the original error, does not render it, and does not modify `process.exitCode`. It resolves to `{ status: "completed", result }` after an action (including actionless and `void` actions), or `{ status: "finished", by }` when an Extension `preRun` hook finishes first. Runtime-dynamic Extension commands use `execute({ argv })` instead.
+It requires an explicit typed command path, binds structured input directly against the selected command's definitions, honors injected writers, throws failures to the caller without rendering them, and does not modify `process.exitCode`. It resolves to `{ status: "completed", result }` after an action (including actionless and `void` actions), or `{ status: "finished", by }` when an Extension `preRun` hook finishes first. Runtime-dynamic Extension commands use `execute({ argv })` instead.
 
 ## Successful invocation order
 
@@ -48,11 +48,13 @@ It requires an explicit typed command path, binds structured input directly agai
 
 Preparation, routing, and parse failures occur before `preRun` and `postRun`. A failure from `preRun`, validation, schema application, Context construction, or the Command Action still runs every `postRun` hook. The original invocation failure wins over post-run hook failures; after a successful or finished invocation, the first post-run failure fails the invocation after remaining hooks run. Context disposal is LIFO. Crust uses native `AsyncDisposableStack` semantics where available; on Node 22, its fallback aggregates multiple disposal failures in an `AggregateError` rather than a native `SuppressedError` chain.
 
-With `run()`, the original value is thrown to the caller. Action and Context failures are never wrapped in `CrustError`.
+With `run()`, the original value is thrown to the caller unless disposal also fails. If both invocation and disposal fail, `await using` combines them in a `SuppressedError`: `.error` holds the disposal failure and `.suppressed` holds the invocation failure. This is separate from the disposal stack's aggregation of multiple cleanup failures. Action and Context failures are not converted to `CrustError`.
 
-With `execute()`, Crust invokes Extension `onError` hooks in registration order before `postRun`, allowing cleanup hooks to observe the handling Extension in `outcome.by`. A hook returns `true` when it rendered the failure; falsy results continue to the next hook and then Core's default renderer, which leaves `by` undefined. `onError` is presentation only and never runs for `run()`.
+For `execute()` failures raised during dispatch before `postRun`, Crust invokes Extension `onError` hooks in registration order while Contexts are live, allowing cleanup hooks to observe the handling Extension in `outcome.by`. A hook returns `true` when it rendered the failure; falsy results continue to the next hook and then Core's default renderer, which leaves `by` undefined. `onError` is presentation only and never runs for `run()`.
 
-A `DOMException` whose name is `"AbortError"` is cancellation. `execute()` sets status `130`, offers the error to `onError` hooks (so an application can render "Operation cancelled" centrally), and renders nothing by default when no hook claims it. `run()` still throws it.
+Routing and parse failures use a fallback hook context with empty `args` and `flags` and no available Contexts. If `postRun` or disposal fails after an otherwise successful or finished invocation, `onError` runs after cleanup and Context pulls reject with `context-after-disposal`. A failure already rendered during dispatch is not presented again after cleanup.
+
+Any `Error` whose `name` is `"AbortError"`, including a `DOMException`, is cancellation. `execute()` sets status `130`, offers the error to `onError` hooks (so an application can render "Operation cancelled" centrally), and renders nothing by default when no hook claims it. `run()` still throws it.
 
 ## Setup and cleanup
 

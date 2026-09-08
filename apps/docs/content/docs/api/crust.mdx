@@ -147,7 +147,7 @@ Definition aliases must be non-empty, contain no whitespace, not start with `-`,
 
 ## Chaining semantics
 
-Variadic builder methods accumulate across calls: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` preserve earlier registrations — with one exception: `.extend()` deduplicates by `ExtensionId`, keeping only the last registration for a given id. Every definition rule has one home per path: TypeScript brands reject statically known invalid definitions and collisions at compile time, and dynamically assembled definitions (config-built flags, args, commands, and Extensions) fail loud with a `DEFINITION` error at the same composition points — aliases excepted: alias rules are compile-time-only. Recipe behavior, Context lifecycle, documentation sections, and argv input retain their runtime checks.
+Variadic builder methods accumulate across calls: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` preserve earlier registrations — with one exception: `.extend()` deduplicates by `ExtensionId`, keeping only the last registration for a given id. TypeScript brands reject statically known invalid definitions and collisions at compile time. Runtime `DEFINITION` checks cover flag spelling collisions and reserved names, duplicate or misplaced arguments, and duplicate `.add()` command names. Extension flag collisions also fail at runtime, including Context-owned flags from providers. Dynamic Extension-contributed commands instead replace commands with the same canonical name at preparation time, as described under [`.extend()`](#extendextensions). Command alias rules are compile-time-only. Recipe behavior, Context lifecycle, documentation sections, and argv input retain their runtime checks.
 
 ## `.args(...defs)`
 
@@ -194,7 +194,7 @@ Repeated `.flags()` calls accumulate local flags and cache their statically know
 
 Flags declared here are local to this command. Context-owned flags are the propagation mechanism for descendant parsers; downstream code receives their derived Context capability. Boolean flags support generated `--no-<spelling>` negation for the canonical name and every long alias; `noNegate: true` rejects negation with a `PARSE` error and hides the generated label from help, completion, and man output. Names and aliases beginning with `no-` are reserved.
 
-Schema-backed flags require `type: "string" | "boolean"` only to declare whether the flag consumes a token. Their schema owns the value rules and receives the raw parsed value.
+Schema-backed flags require `type: "string" | "boolean"` only to declare whether the flag consumes a token. Their schema owns the value rules and receives the raw parsed value, including `undefined` when omitted even with `multiple: true`. See [schema-backed flags](/docs/api/types#flagdef).
 
 ```ts
 const app = new Crust("serve").flags({
@@ -218,7 +218,7 @@ provide<const Cs extends readonly ContextInstance[]>(
 >
 ```
 
-Attaches Contexts produced by invoking `defineContext()` factories. Contexts are inherited by descendants and constructed lazily when their bag property is accessed. The return type merges every instance's owned `flags` into the builder's accumulated flag type.
+Attaches Contexts produced by invoking `defineContext()` factories. Contexts are inherited by later-added descendants and constructed lazily when their bag property is accessed. The return type merges every instance's owned `flags` into the builder's accumulated flag type.
 
 ```ts
 import { defineContext, Crust } from "@crustjs/core";
@@ -257,7 +257,7 @@ const app = new Crust("my-cli", { version: "1.2.3" }).extend(help(), version());
 
 Added definitions become ordinary command nodes before root Extensions prepare the application, so root Extensions apply to them. Extension-contributed definitions are materialized when the application prepares.
 
-An Extension's `provides` instances are installed on the root immediately and Extension commands and flags are materialized during preparation. Type-expressible Extension definitions are compile-time checked; preparation retains guards only for dynamic recipe behavior.
+An Extension's `provides` instances and their owned flags are installed immediately across the root and existing descendants, preserving more-specific local providers on descendants. Later-added descendants inherit them too. Extension commands and declared flags are materialized during preparation. Statically known definitions are compile-time checked; preparation also checks dynamic flag collisions, recipe behavior, and documentation sections.
 
 See [Extensions](/docs/guide/extensions) for authoring custom Extensions.
 
@@ -316,8 +316,9 @@ A definition can add other definitions. Context providers are inherited on the m
 The typed [`run()`](#runpath-input-io) shape of an added definition merges the Context-owned flags already provided on the parent path, matching the runtime parser: descendants accept inherited Context-owned flags, while parent-local flags stay excluded.
 
 <Callout type="info">
-  Finalize Contexts on the builder used for `.add()`. Later fluent calls create a new builder and do
-  not backfill a definition that was already added.
+  Finalize `.provide()` calls before `.add()`: a later `.provide()` does not backfill an
+  already-added definition. Extension `provides` also reach existing descendants, but register them
+  before `.add()` when a definition declares those dependencies with `.use()`.
 </Callout>
 
 ## `.command(name, recipe)`
@@ -397,13 +398,13 @@ The optional `raw` array reaches the Command Action unchanged as `rawArgs`, equi
 await app.run(["exec"], { args: { command: "lint" }, raw: ["--fix", "src"] });
 ```
 
-Positional values may begin with `-` or equal a subcommand name or alias; the typed path alone selects the command. `ExtensionContext.argv` contains only that path for `run()` invocations. Use `execute({ argv })` when testing raw terminal syntax.
+Positional values may begin with `-` or equal a subcommand name or alias; the typed path alone selects the command. `run()` rejects unknown path segments even when the nearest resolved parent has an action. By contrast, argv routing can treat unmatched tokens as positionals; see [Unknown commands](/docs/guide/subcommands#unknown-commands). `ExtensionContext.argv` contains only that path for `run()` invocations. Use `execute({ argv })` when testing raw terminal syntax.
 
-`run()` resolves to a `RunOutcome`: `{ status: "completed", result }` carries the selected Command Action's awaited return value after successful cleanup (including `undefined` from actionless or `void` actions), while `{ status: "finished", by }` identifies the Extension whose `preRun` hook finished the invocation first. It does not render errors, run Extension `onError` hooks, or change `process.exitCode`. Definition, parse, Context, Command Action, and cancellation failures are thrown unchanged. Extension preparation happens before structured input is bound, so preparation errors can surface before dispatch.
+`run()` resolves to a `RunOutcome`: `{ status: "completed", result }` carries the selected Command Action's awaited return value after successful cleanup (including `undefined` from actionless or `void` actions), while `{ status: "finished", by }` identifies the Extension whose `preRun` hook finished the invocation first. It does not render errors, run Extension `onError` hooks, or change `process.exitCode`. Definition, parse, Context, Command Action, and cancellation failures are thrown unchanged unless disposal also fails, producing a combined failure. See [Error flow](/docs/guide/lifecycle#error-flow). Extension preparation happens before structured input is bound, so preparation errors can surface before dispatch.
 
 Prepared invocations are cached once per immutable builder and shared by subsequent `run()`, `execute()`, and `snapshot()` calls on that builder. Command recipes, Extension commands and flags, and section callbacks therefore prepare once; a later fluent call returns a new builder with its own preparation.
 
-Commands and flags declared directly in `defineExtension()` participate in typed paths and inputs. Recursive Extension flags (the default) appear on root and descendant inputs; `recursive: false` and widened-`boolean` scopes appear only on the root. Contributions hidden behind a widened `Extension` type, assembled dynamically or conditionally (including variable-length arrays), selected conditionally (`.extend(cond ? a : b)`), or spread from a variable-length Extension list remain runtime-only and must be invoked through `execute({ argv })`. Statically known Extension command collisions — inside one `defineExtension()` tuple, with authored commands, or with other Extensions — fail typecheck with `FIX_COMMAND_COLLISION`, and statically known Extension flags colliding with a contributed command's local flags fail with `FIX_ALIAS_COLLISION`; dynamically assembled contributions keep last-write-wins at prepare time — namespace Extension command names to avoid that mismatch.
+Commands and flags declared directly in `defineExtension()` participate in typed paths and inputs. Recursive Extension flags (the default) appear on root and descendant inputs; `recursive: false` and widened-`boolean` scopes appear only on the root. Contributions hidden behind a widened `Extension` type, assembled dynamically or conditionally (including variable-length arrays), selected conditionally (`.extend(cond ? a : b)`), or spread from a variable-length Extension list remain runtime-only and must be invoked through `execute({ argv })`. Statically known Extension command collisions — inside one `defineExtension()` tuple, with authored commands, or with other Extensions — fail typecheck with `FIX_COMMAND_COLLISION`, and statically known Extension flags colliding with a contributed command's local flags fail with `FIX_ALIAS_COLLISION`; dynamically assembled commands keep last-write-wins at prepare time — namespace Extension command names to avoid that mismatch.
 
 ## `.execute(options?)`
 
@@ -420,7 +421,7 @@ Runs the terminal boundary. By default it parses `process.argv.slice(2)`; `optio
 await app.execute();
 ```
 
-`execute()` resolves to the terminal exit code: `0` on success, `1` on failure, or `130` for cancellation. It still renders a failure once through Extension `onError` hooks ending in Core's renderer and sets `process.exitCode` on failure. A standard `AbortError` is offered to `onError` hooks and renders nothing when no hook claims it.
+`execute()` resolves to the terminal exit code: `0` on success, `1` on failure, or `130` for cancellation. It still renders a failure once through Extension `onError` hooks ending in Core's renderer and sets `process.exitCode` on failure. Any `Error` whose `name` is `"AbortError"`, including a `DOMException`, is cancellation. It is offered to `onError` hooks and renders nothing when no hook claims it.
 
 <Callout type="warn">
   Use `.action(action)` to define behavior. `.run(path, input, io)` is only programmatic invocation;

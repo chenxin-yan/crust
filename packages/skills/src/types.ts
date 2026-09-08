@@ -154,7 +154,12 @@ export interface SkillOptions {
 	description?: string;
 	/** Whether to build the generated command skill. Set `false` to ship only `extras`. @default true */
 	generated?: boolean;
-	/** Default agent-directory scope. */
+	/**
+	 * Agent-directory scope used when no `--scope` flag is passed.
+	 * When set, skips the scope prompt and limits automatic link repairs to this scope.
+	 * When omitted, interactive management prompts for scope.
+	 * @default "global" for `--all` and the scope prompt.
+	 */
 	defaultScope?: Scope;
 	/** Repair stale or dangling owned links before commands run. @default true */
 	autoUpdate?: boolean;

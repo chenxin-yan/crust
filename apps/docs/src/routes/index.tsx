@@ -11,6 +11,11 @@ import gruvboxLightHard from "shiki/themes/gruvbox-light-hard.mjs";
 import { baseOptions } from "@/lib/layout.shared";
 import { buildPageMeta } from "@/lib/seo";
 
+// oxlint-disable-next-line import/default -- Vite's ?raw loader exports the file text; the TypeScript source needs no default export.
+import codeExampleSource from "../../examples/landing/greet.ts?raw";
+
+const CODE_EXAMPLE = codeExampleSource.trimEnd();
+
 let highlighterPromise: Promise<Awaited<ReturnType<typeof createHighlighterCore>>> | null = null;
 
 function getHighlighter() {
@@ -90,7 +95,7 @@ export const Route = createFileRoute("/")({
 
 const FEATURES = [
   { id: "type-safe", title: "Type-Safe", desc: "Full inference. Zero casts." },
-  { id: "zero-deps", title: "Zero Deps", desc: "No runtime dependencies." },
+  { id: "zero-deps", title: "Zero-Dep Core", desc: "No runtime dependencies in core." },
   { id: "composable", title: "Composable", desc: "Modular packages." },
   { id: "extensions", title: "Extensions", desc: "Application-wide capabilities." },
   { id: "chainable", title: "Chainable", desc: "Fluent builder API." },
@@ -219,20 +224,6 @@ const getNpmVersions = createServerFn({ method: "GET" }).handler(async () => {
   );
   return Object.fromEntries(entries);
 });
-
-const CODE_EXAMPLE = `import { Crust } from "@crustjs/core";
-import { help } from "@crustjs/extensions";
-
-const app = new Crust("greet")
-  .extend(help())
-  .args({ name: "name", type: "string" })
-  .flags({ name: "shout", type: "boolean", short: "s" })
-  .action(({ args, flags, stdout }) => {
-    const msg = \`Hello, \${args.name}!\`;
-    stdout(flags.shout ? msg.toUpperCase() : msg);
-  });
-
-await app.execute();`;
 
 const FALLBACK_HIGHLIGHTED_CODE = createFallbackHighlightedCode(CODE_EXAMPLE);
 

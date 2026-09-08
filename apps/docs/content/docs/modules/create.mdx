@@ -72,7 +72,7 @@ Files starting with `__` (double underscore) are left unchanged, so directories 
 
 ### Binary Files
 
-Binary files (images, fonts, compiled assets) are detected via null-byte check and copied as-is without interpolation.
+Binary files (images, fonts, compiled assets) are detected by checking the first 8 KiB for a null byte and copied as-is without interpolation.
 
 ### Template Composition
 

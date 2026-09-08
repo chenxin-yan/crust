@@ -89,7 +89,8 @@ export interface UpdateNotifierOptions {
 	 * Network request timeout in milliseconds for the registry check.
 	 *
 	 * If the check does not complete within this duration, it is silently
-	 * aborted and treated as a soft failure.
+	 * aborted and treated as a soft failure. This timeout does not bound cache
+	 * operations or the entire postRun hook.
 	 *
 	 * @default 5_000 (5 seconds)
 	 */
@@ -398,18 +399,20 @@ function resolveUpdateCommand(
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Creates an update notifier extension that performs background version checks
- * against the npm registry and displays a concise notice when a newer
- * version is available.
+ * Creates an update notifier extension that checks the npm registry after a
+ * successful command action and displays a notice when a newer version is available.
  *
  * **Behavior:**
  * - By default, checks are cached for 24 hours in the package's state directory.
  * - `cache: false` disables cross-run persistence.
  * - A custom cache adapter can override the built-in persistence.
  * - The notice is command-less unless `updateCommand` is configured.
- * - The network check is non-blocking — it never delays command execution.
- * - All internal errors (network, cache, parsing) are silently swallowed.
- * - The update notice is emitted *after* the command action completes.
+ * - The postRun hook awaits the network check and cache reads and writes,
+ *   delaying invocation completion after the action.
+ * - `timeoutMs` bounds only the network request, defaulting to 5 seconds.
+ * - Network, cache, and parsing errors are silently swallowed. A missing
+ *   current version throws a DEFINITION error before that recovery block.
+ * - Update notices are intentionally written to the invocation's stderr callback.
  * - Duplicate notifications for the same version are suppressed.
  *
  * @param options - Extension configuration. `packageName` is required.
@@ -536,8 +539,7 @@ export const updateNotifier: ExtensionFactory<[options: UpdateNotifierOptions]> 
 
 						await cacheAdapter.write(nextState);
 					} catch {
-						// All notifier internal errors are silently swallowed.
-						// The extension must never affect command exit codes or output.
+						// Registry, cache, and notification failures must not fail the completed command.
 					}
 				},
 			},

@@ -24,12 +24,6 @@ export const Route = createFileRoute("/sitemap.xml")({
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>`,
-          // Docs index
-          `  <url>
-    <loc>${escapeXml(absoluteUrl("/docs"))}</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>`,
           // All docs pages
           ...pages.map((page) => {
             const lastmod =

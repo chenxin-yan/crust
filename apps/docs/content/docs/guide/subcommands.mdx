@@ -77,8 +77,10 @@ const app = new Crust("app").provide(logging()).add(deploy);
 
 Adding materializes a fresh command scope seeded with the parent's current Context path. Nested definitions declare inherited providers with `.use()`; the corresponding lazy bag property carries the factory's value type.
 
-Finalize `.provide()` calls on the parent builder before `.add()`. [Flags owned by a provided Context](/docs/guide/contexts#owned-flags) propagate only into descendants added later. Later fluent calls return a new builder and do not backfill a definition that was already added.
+Finalize `.provide()` calls on the parent builder before `.add()`. [Flags owned by a provided Context](/docs/guide/contexts#owned-flags) propagate only into descendants added later. A later `.provide()` does not backfill a definition that was already added. Extension `provides` are application-wide and also reach existing descendants, subject to local provider overrides. Register providers before adding definitions that declare them with `.use()` so composition-time dependency checks pass.
 
 ## Unknown commands
 
-An unknown subcommand produces `CrustError` code `COMMAND_NOT_FOUND`. Its details include the input, visible available commands, the command path, and a readonly snapshot of the parent command. Hidden commands are omitted from `available`. The official `didYouMean()` Extension uses this information to suggest nearby names.
+During argv routing with `execute()`, an unmatched subcommand token produces `CrustError` code `COMMAND_NOT_FOUND` when the parent has no Command Action. A parent with an action treats that token as a positional argument instead; parsing or validation may then reject it. Typed `run()` always rejects unknown command-path segments rather than treating them as arguments.
+
+`COMMAND_NOT_FOUND` details include the input, visible available commands, the command path, and a readonly snapshot of the parent command. Hidden commands are omitted from `available`. The official `didYouMean()` Extension uses this error to suggest nearby names; it cannot suggest a correction when argv routing treats the typo as a positional argument.

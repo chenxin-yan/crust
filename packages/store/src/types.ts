@@ -314,9 +314,11 @@ export interface CreateStoreOptions<F extends FieldsDef> {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Receives the current effective config and returns an updated config.
+ * Receives the current config with defaults and core coercion applied,
+ * but without full field validation, and returns an updated config.
+ * Persisted values may not yet satisfy their declared types or validators.
  *
- * Used by {@link Store.update} to calculate the next config in process.
+ * Used by {@link Store.update}, which validates the result before persistence.
  *
  * @example
  * ```ts
@@ -337,6 +339,8 @@ export type StoreUpdater<TConfig> = (current: TConfig) => NoInfer<TConfig>;
  *
  * Provides `read`, `write`, `update`, `patch`, and `reset` operations for a
  * single typed config object persisted as JSON on the local filesystem.
+ * Mutations are not serialized, including overlapping calls in one process.
+ * Await mutations sequentially for each file; coordinate multiple processes externally.
  *
  * @typeParam TConfig - The inferred config shape from field definitions.
  *
@@ -369,7 +373,7 @@ export interface Store<TConfig> {
 	 * after defaults are applied. Invalid persisted config fails loudly.
 	 *
 	 * @returns The effective config value.
-	 * @throws {CrustStoreError} `PARSE` if persisted JSON is malformed.
+	 * @throws {CrustStoreError} `PARSE` if persisted JSON is malformed or its root is not an object.
 	 * @throws {CrustStoreError} `VALIDATION` if field validation fails.
 	 * @throws {CrustStoreError} `IO` on filesystem read failures.
 	 */
@@ -389,14 +393,16 @@ export interface Store<TConfig> {
 	write(config: NoInfer<TConfig>): Promise<TConfig>;
 
 	/**
-	 * Reads current effective config, applies the updater, and persists.
+	 * Reads current config with defaults and core coercion applied, without
+	 * full field validation. Applies the updater, validates the result, and persists.
 	 *
 	 * The final file replacement is atomic, but the read-modify-write sequence
-	 * is not locked across processes; concurrent updates can overwrite each other.
+	 * is not serialized, even within one process. Await mutations sequentially
+	 * to avoid lost updates; coordinate multiple processes externally.
 	 *
 	 * @param updater - Function receiving current config and returning updated config.
 	 * @returns The persisted config, including schema transformations.
-	 * @throws {CrustStoreError} `PARSE` if persisted JSON is malformed.
+	 * @throws {CrustStoreError} `PARSE` if persisted JSON is malformed or its root is not an object.
 	 * @throws {CrustStoreError} `VALIDATION` if field validation fails.
 	 * @throws {CrustStoreError} `IO` on filesystem failures.
 	 */
@@ -406,11 +412,14 @@ export interface Store<TConfig> {
 	 * Applies a partial update to the current config and persists.
 	 *
 	 * Only the provided keys are updated; everything else is preserved.
+	 * Like {@link Store.update}, the current config has defaults and core coercion
+	 * applied but has not undergone full field validation. The merged result is
+	 * validated before persistence. Await mutations sequentially to avoid lost updates.
 	 *
 	 * @param partial - A partial subset of the config to merge in.
 	 * @returns The persisted config, including schema transformations.
 	 * @throws {CrustStoreError} `VALIDATION` if field validation fails.
-	 * @throws {CrustStoreError} `PARSE` if persisted JSON is malformed.
+	 * @throws {CrustStoreError} `PARSE` if persisted JSON is malformed or its root is not an object.
 	 * @throws {CrustStoreError} `IO` on filesystem failures.
 	 */
 	patch(partial: Partial<NoInfer<TConfig>>): Promise<TConfig>;
