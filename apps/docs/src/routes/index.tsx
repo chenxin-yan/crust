@@ -93,15 +93,6 @@ export const Route = createFileRoute("/")({
   },
 });
 
-const FEATURES = [
-  { id: "type-safe", title: "Type-Safe", desc: "Full inference. Zero casts." },
-  { id: "zero-deps", title: "Zero-Dep Core", desc: "No runtime dependencies in core." },
-  { id: "composable", title: "Composable", desc: "Modular packages." },
-  { id: "extensions", title: "Extensions", desc: "Application-wide capabilities." },
-  { id: "chainable", title: "Chainable", desc: "Fluent builder API." },
-  { id: "bun-native", title: "Bun Native", desc: "Built for Bun runtime." },
-];
-
 const MODULES: Array<{
   pkg: string;
   desc: string;
@@ -386,20 +377,6 @@ function FurnaceHome() {
           font-family: 'Fira Code', monospace;
         }
 
-        /* Feature card */
-        .fn-feature {
-          background: var(--fn-surface);
-          border: 1px solid var(--fn-border);
-          border-top: 2px solid var(--fn-molten);
-          padding: 20px;
-          transition: all 0.25s;
-          position: relative;
-        }
-        .fn-feature:hover {
-          border-top-width: 4px;
-          padding-top: 18px;
-        }
-
         /* Install command — copy to clipboard */
         .fn-install-cmd {
           margin-top: 28px;
@@ -646,20 +623,13 @@ function FurnaceHome() {
           z-index: 2;
         }
 
-        /* Content section (features, modules) */
+        /* Content section (modules) */
         .fn-content-section {
           padding: 0 40px 64px;
           max-width: 1100px;
           margin: 0 auto;
           position: relative;
           z-index: 2;
-        }
-
-        /* Features grid */
-        .fn-features-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 12px;
         }
 
         /* Module info row (pkg name + desc) */
@@ -685,9 +655,6 @@ function FurnaceHome() {
             grid-template-columns: 1fr;
             gap: 32px;
           }
-          .fn-features-grid {
-            grid-template-columns: repeat(2, 1fr);
-          }
         }
 
         @media (max-width: 640px) {
@@ -696,9 +663,6 @@ function FurnaceHome() {
           }
           .fn-content-section {
             padding: 0 20px 48px;
-          }
-          .fn-features-grid {
-            grid-template-columns: 1fr;
           }
           .fn-footer {
             padding: 16px 20px;
@@ -722,7 +686,7 @@ function FurnaceHome() {
               className="fn-mono fn-dev-badge"
             >
               <span className="fn-dev-badge-dot" />
-              <span className="fn-dev-badge-status">Now in Alpha</span>
+              <span className="fn-dev-badge-status">Now in Beta</span>
               <span className="fn-dev-badge-sep" />
               <span className="fn-dev-badge-cta">
                 See Roadmap
@@ -817,51 +781,6 @@ function FurnaceHome() {
                   dangerouslySetInnerHTML={{ __html: highlightedCode }}
                 />
               </div>
-            </div>
-          </section>
-
-          {/* Features */}
-          <section className="fn-content-section">
-            <p
-              className="fn-mono"
-              style={{
-                fontSize: 10,
-                letterSpacing: 4,
-                color: "var(--fn-dim)",
-                textTransform: "uppercase",
-                marginBottom: 16,
-              }}
-            >
-              Features
-            </p>
-
-            <div className="fn-features-grid">
-              {FEATURES.map((f) => (
-                <div key={f.id} className="fn-feature">
-                  <h3
-                    className="fn-condensed"
-                    style={{
-                      fontSize: 16,
-                      fontWeight: 700,
-                      margin: "0 0 6px",
-                      letterSpacing: 1,
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    {f.title}
-                  </h3>
-                  <p
-                    style={{
-                      fontSize: 12,
-                      lineHeight: 1.5,
-                      color: "var(--fn-dim)",
-                      margin: 0,
-                    }}
-                  >
-                    {f.desc}
-                  </p>
-                </div>
-              ))}
             </div>
           </section>
 
