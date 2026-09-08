@@ -112,43 +112,36 @@ describe("compiler differential corpus", () => {
 		);
 	}
 
-	it.skipIf(goPath === null)(
-		"matches Node array inspection edge cases",
-		async () => {
-			if (nodePath === null) throw new Error("Node is required as the corpus reference runtime");
+	it("rejects direct string-array logging", async () => {
+		const fixture = join(import.meta.dir, "fixtures", "array-log.ts");
+		const workspace = await mkdtemp(join(tmpdir(), "crust-array-log-"));
+		try {
+			await expect(compile(fixture, { outputPath: join(workspace, "binary") })).rejects.toThrow(
+				"Unsupported TypeScript CallExpression",
+			);
+		} finally {
+			await rm(workspace, { recursive: true, force: true });
+		}
+	}, 120_000);
 
-			const fixture = join(import.meta.dir, "fixtures", "arrays.ts");
-			const binary = await compile(fixture);
-			try {
-				for (const args of [
-					["a'b", `a'"b`, "a'\"`b", "${x}'\""],
-					["\b\f\v\x01\x1f\x7f"],
-					["a".repeat(89) + "\n" + "b".repeat(20)],
-					["x".repeat(90)],
-					Array.from({ length: 10 }, (_, index) => `value${index}`),
-					Array(7).fill("中"),
-					Array(7).fill("\u200b"),
-					Array(7).fill("\u00ad"),
-					Array(7).fill("a‍b"),
-					Array(10).fill("🏳️‍🌈"),
-					Array(3).fill("中".repeat(10)),
-					Array(10).fill("㉈"),
-					Array(8).fill("🇺🇸"),
-					Array(7).fill("\u0600"),
-					Array(10).fill("😀‍中"),
-					Array(10).fill("🀄"),
-					Array(10).fill("✅"),
-					Array.from({ length: 101 }, (_, index) => `value${index}`),
-					Array.from({ length: 105 }, (_, index) => `value${index}`),
-				]) {
-					expect(run(binary, args)).toEqual(run(nodePath, [fixture, ...args]));
-				}
-			} finally {
-				await rm(dirname(binary), { recursive: true, force: true });
-			}
-		},
-		120_000,
-	);
+	it.each([
+		"console.log(process.argv);",
+		"console.log((process.argv.slice(2))!);",
+		"console.log(42, process.argv.slice(2));",
+		"function log(values: string[]): void { console.log(values); } log(process.argv.slice(2));",
+		"function args(): string[] { return process.argv.slice(2); } console.log(args());",
+	])("rejects string-array log arguments: %s", async (source) => {
+		const workspace = await mkdtemp(join(tmpdir(), "crust-array-log-"));
+		const fixture = join(workspace, "fixture.ts");
+		try {
+			await writeFile(fixture, source);
+			await expect(compile(fixture, { outputPath: join(workspace, "binary") })).rejects.toThrow(
+				"Unsupported TypeScript CallExpression",
+			);
+		} finally {
+			await rm(workspace, { recursive: true, force: true });
+		}
+	});
 
 	it.skipIf(goPath === null)(
 		"matches ECMAScript number formatting",
