@@ -4,6 +4,7 @@ export const DiagnosticCodes = {
 	TypeScriptError: "CRUST1000",
 	AnyType: "CRUST1001",
 	UnsupportedConstruct: "CRUST1002",
+	TypeSuppression: "CRUST1003",
 } as const;
 
 export type DiagnosticCode = (typeof DiagnosticCodes)[keyof typeof DiagnosticCodes];
