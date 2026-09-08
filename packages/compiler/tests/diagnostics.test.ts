@@ -219,26 +219,32 @@ describe("compiler diagnostic corpus", () => {
 		expectLocated(error);
 	});
 
-	it("names unsupported console.error and an honest stdout alternative", async () => {
+	it("rejects console.error in the checker", async () => {
 		const error = await compileFailure("unsupported.ts");
-		expect(error.diagnostics[0]?.code).toBe(DiagnosticCodes.UnsupportedConstruct);
-		expect(error.diagnostics[0]?.message).toContain("console.error");
-		expect(error.diagnostics[0]?.hint).toBe(
-			"Use console.log(...) for stdout; stderr output is not supported in M0.",
-		);
+		expect(error.diagnostics[0]?.code).toBe(DiagnosticCodes.TypeScriptError);
+		expect(error.diagnostics[0]?.message).toContain("TS2339");
+		expectLocated(error);
+	});
+
+	it.each([
+		{ call: 'console.warn("hello")', code: "TS2339" },
+		{ call: "process.exit()", code: "TS2554" },
+	])("checks $call before lowering", async ({ call, code }) => {
+		const error = await compileSourceFailure(`${call};`);
+		expect(error.diagnostics[0]?.code).toBe(DiagnosticCodes.TypeScriptError);
+		expect(error.diagnostics[0]?.message).toContain(code);
 		expectLocated(error);
 	});
 
 	it.each([
 		{
-			call: 'console.warn("hello")',
-			hint: "Use console.log(...) for stdout; stderr output is not supported in M0.",
+			call: "console.log(process.argv)",
+			hint: "Use console.log with at least one supported non-array value and no format placeholders. For arrays, use template string coercion.",
 		},
 		{
 			call: "console.log()",
-			hint: "Use console.log with at least one supported value and no format placeholders.",
+			hint: "Use console.log with at least one supported non-array value and no format placeholders. For arrays, use template string coercion.",
 		},
-		{ call: "process.exit()", hint: "Use process.exit(code) with one number argument." },
 		{
 			call: "console.log(`${process.argv.slice(1, 2)}`)",
 			hint: "Use stringArray.slice(start) with one number argument; string slicing is not supported in M0.",
