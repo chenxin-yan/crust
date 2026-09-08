@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import ts from "typescript";
 
@@ -20,14 +21,18 @@ export class TypeScriptCompileError extends Error {
 export function lower(entryFile: string): Program {
 	const absoluteEntry = resolve(entryFile);
 	const compilerOptions: ts.CompilerOptions = {
+		lib: ["lib.es2022.d.ts"],
 		module: ts.ModuleKind.NodeNext,
 		moduleResolution: ts.ModuleResolutionKind.NodeNext,
 		noEmit: true,
 		skipLibCheck: true,
 		strict: true,
 		target: ts.ScriptTarget.ES2022,
+		types: [],
 	};
-	const program = ts.createProgram([absoluteEntry], compilerOptions);
+	// Runtime assets stay beside both src and dist; never discover the caller's host types.
+	const ambientFile = fileURLToPath(new URL("../runtime/m0.d.ts", import.meta.url));
+	const program = ts.createProgram([absoluteEntry, ambientFile], compilerOptions);
 	const diagnostics = ts.getPreEmitDiagnostics(program);
 	if (diagnostics.length > 0) throw new TypeScriptCompileError(diagnostics);
 
