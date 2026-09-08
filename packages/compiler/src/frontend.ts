@@ -107,19 +107,10 @@ function lowerStatement(
 	sourceFile: ts.SourceFile,
 ): Statement {
 	if (ts.isReturnStatement(node)) {
-		if (
-			node.expression &&
-			Boolean(
-				checker.getTypeAtLocation(node.expression).flags &
-				(ts.TypeFlags.Never | ts.TypeFlags.Void | ts.TypeFlags.Undefined),
-			)
-		) {
-			throw unsupported(node.expression, sourceFile);
-		}
 		return {
 			kind: "return",
 			expression: node.expression
-				? lowerValueExpression(node.expression, checker, sourceFile)
+				? lowerFunctionValue(node.expression, checker, sourceFile)
 				: undefined,
 		};
 	}
@@ -171,6 +162,33 @@ function lowerValueExpression(
 		throw unsupported(node, sourceFile);
 	}
 	return lowerExpression(node, checker, sourceFile);
+}
+
+// String parameters/returns use any for missing argv entries, not arbitrary numbers.
+function lowerFunctionValue(
+	node: ts.Expression,
+	checker: ts.TypeChecker,
+	sourceFile: ts.SourceFile,
+): Expression {
+	const expression = lowerValueExpression(node, checker, sourceFile);
+	if (
+		expression.kind === "binary" &&
+		expression.type === "string" &&
+		!isDefinitelyString(expression)
+	) {
+		throw unsupported(node, sourceFile);
+	}
+	return expression;
+}
+
+function isDefinitelyString(expression: Expression): boolean {
+	return (
+		(expression.kind === "literal" && expression.type === "string") ||
+		expression.kind === "template" ||
+		(expression.kind === "binary" &&
+			expression.type === "string" &&
+			(isDefinitelyString(expression.left) || isDefinitelyString(expression.right)))
+	);
 }
 
 function lowerExpression(
@@ -232,18 +250,10 @@ function lowerExpression(
 		return {
 			kind: "template",
 			head: node.head.text,
-			spans: node.templateSpans.map((span) => {
-				if (
-					checker.getTypeAtLocation(span.expression).flags &
-					(ts.TypeFlags.Never | ts.TypeFlags.Void | ts.TypeFlags.Undefined)
-				) {
-					throw unsupported(span.expression, sourceFile);
-				}
-				return {
-					expression: lowerValueExpression(span.expression, checker, sourceFile),
-					literal: span.literal.text,
-				};
-			}),
+			spans: node.templateSpans.map((span) => ({
+				expression: lowerValueExpression(span.expression, checker, sourceFile),
+				literal: span.literal.text,
+			})),
 		};
 	}
 	if (isProcessArgv(node)) return { kind: "argv", entryFile: sourceFile.fileName };
@@ -308,9 +318,8 @@ function lowerExpression(
 				throw unsupported(node, sourceFile);
 			}
 			return {
-				kind: "call",
-				callee: "process.exit",
-				arguments: [lowerValueExpression(argument, checker, sourceFile)],
+				kind: "exit",
+				code: lowerValueExpression(argument, checker, sourceFile),
 			};
 		}
 		if (ts.isIdentifier(node.expression)) {
@@ -326,7 +335,7 @@ function lowerExpression(
 				kind: "call",
 				callee: node.expression.text,
 				arguments: node.arguments.map((argument) =>
-					lowerValueExpression(argument, checker, sourceFile),
+					lowerFunctionValue(argument, checker, sourceFile),
 				),
 			};
 		}
