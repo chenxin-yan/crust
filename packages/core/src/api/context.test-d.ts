@@ -94,6 +94,8 @@ function _typecheckBrandsInlineUseDemandsThatTheCallSiteDoesNotProvide() {
 			.provide(db.of({ url: "fake" }))
 			// @ts-expect-error -- db's transitive config dependency is still unmet
 			.command("query", (cmd) => cmd.use(db).action(() => {}));
+		// @ts-expect-error -- .use() takes factories; instances belong to .provide()
+		new Crust("cli").provide(config(), db()).command("query", (cmd) => cmd.use(db()));
 	};
 	void invalidCompositions;
 }

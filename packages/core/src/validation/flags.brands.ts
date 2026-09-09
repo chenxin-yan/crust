@@ -189,8 +189,11 @@ export type ExtensionSpellings<E> =
 				? ProvidedContextSpellings<P>
 				: never);
 
-type ExtensionFlagCollisionBrand<E, Existing extends string> =
-	Overlap<ExtensionSpellings<E>, Existing> extends infer Collision extends string
+type ExtensionFlagCollisionBrand<E, Existing extends string> = string extends
+	| ExtensionSpellings<E>
+	| Existing
+	? RuntimeRequiredBrand
+	: Overlap<ExtensionSpellings<E>, Existing> extends infer Collision extends string
 		? [Collision] extends [never]
 			? {}
 			: {
