@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Crust } from "@crustjs/core";
+import { Crust, runtime } from "@crustjs/core";
 
 import {
 	createStoreCacheAdapter,
@@ -367,7 +367,7 @@ describe("updateNotifier post-run hook", () => {
 
 	/** Create a basic command snapshot for testing. */
 	async function makeCommandSnapshot(name = "test-cli") {
-		return await new Crust(name).action(() => {}).snapshot();
+		return await new Crust(runtime(name)).action(() => {}).snapshot();
 	}
 
 	/** Helper to invoke the extension post-run hook with a completed outcome. */
@@ -1086,7 +1086,7 @@ describe("updateNotifier post-run hook", () => {
 			const pkgName = uniquePackageName("ordering");
 			mockRegistryResponse("2.0.0");
 			const executionOrder: string[] = [];
-			const app = new Crust(pkgName)
+			const app = new Crust(runtime(pkgName))
 				.extend(updateNotifier({ currentVersion: "1.0.0", packageName: pkgName }))
 				.action(() => {
 					executionOrder.push("command");
@@ -1106,7 +1106,7 @@ describe("updateNotifier post-run hook", () => {
 					new Response(JSON.stringify({ "dist-tags": { latest: "2.0.0" } }), { status: 200 }),
 				);
 			});
-			const app = new Crust(pkgName)
+			const app = new Crust(runtime(pkgName))
 				.extend(updateNotifier({ currentVersion: "1.0.0", packageName: pkgName }))
 				.action(() => {
 					throw new Error("command failed");
@@ -1126,7 +1126,7 @@ describe("updateNotifier post-run hook", () => {
 			mockRegistryResponse("5.0.0");
 
 			let commandExecuted = false;
-			const app = new Crust(pkgName, { description: "Test", version: "1.0.0" })
+			const app = new Crust(runtime(pkgName), { description: "Test", version: "1.0.0" })
 				.extend(updateNotifier({ packageName: pkgName }))
 				.action(() => {
 					commandExecuted = true;
@@ -1141,7 +1141,7 @@ describe("updateNotifier post-run hook", () => {
 
 		it("reports a missing application version", async () => {
 			const pkgName = uniquePackageName("missing-version");
-			const app = new Crust(pkgName)
+			const app = new Crust(runtime(pkgName))
 				.extend(updateNotifier({ packageName: pkgName }))
 				.action(() => {});
 
@@ -1157,7 +1157,7 @@ describe("updateNotifier post-run hook", () => {
 			mockRegistryFailure();
 
 			let commandExecuted = false;
-			const app = new Crust(pkgName, { description: "Test" })
+			const app = new Crust(runtime(pkgName), { description: "Test" })
 				.extend(
 					updateNotifier({
 						currentVersion: "1.0.0",
@@ -1182,7 +1182,7 @@ describe("updateNotifier post-run hook", () => {
 			const pkgName = uniquePackageName("injected-stderr");
 			mockRegistryResponse("5.0.0");
 			const stderr: string[] = [];
-			const app = new Crust(pkgName)
+			const app = new Crust(runtime(pkgName))
 				.extend(
 					updateNotifier({
 						currentVersion: "1.0.0",

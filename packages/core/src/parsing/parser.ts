@@ -32,12 +32,10 @@ export interface RunInputPayload {
 	readonly raw?: readonly string[];
 }
 
-/**
- * Union of all possible value shapes that `util.parseArgs` can produce for a
- * single option when the config is constructed dynamically at runtime.
- * Not exported by `@types/node`, so we define it here.
- */
-type OptionTokenValue = string | boolean | (string | boolean)[] | undefined;
+/** Values bound from strict Node tokens, tagged before definition/value correlation erases. */
+type ArgvFlagValue =
+	| { readonly kind: "boolean"; value: boolean | boolean[] }
+	| { readonly kind: "string"; value: string | string[] };
 
 /** Element type of `parseArgs(...).tokens` — not exported by `@types/node`. */
 type ParseArgsToken = NonNullable<ReturnType<typeof nodeParseArgs>["tokens"]>[number];
@@ -85,7 +83,7 @@ function coerceValue(value: string, type: ValueType, label: string) {
 		return num;
 	}
 	if (type === "boolean") {
-		// util.parseArgs handles boolean flags natively, but in case we receive a string
+		// Positional booleans arrive as text; option booleans are already native values.
 		return coerceBooleanString(value);
 	}
 	if (type === "url") return coerceUrl(value);
@@ -125,13 +123,6 @@ function invokeParse<ParseOutput>(
 		const reason = err instanceof Error ? err.message : String(err);
 		throw new CrustError("PARSE", `Failed to parse ${location}: ${reason}`).withCause(err);
 	}
-	// AsyncParseBrand owns literal async parsers; this owns the dynamic path.
-	// Without it the pending Promise becomes the flag/arg value, and a rejecting
-	// parser escapes the CrustError pipeline as an unhandled rejection.
-	if (result instanceof Promise) {
-		result.catch(() => {}); // the rejection is reported synchronously below
-		throw new CrustError("PARSE", `Failed to parse ${location}: parse must be synchronous`);
-	}
 	return result;
 }
 
@@ -151,26 +142,13 @@ function invokeParse<ParseOutput>(
  * per the variant interfaces, so they pass through unchanged.
  */
 function resolveDefault(def: ArgDef | FlagDef, label: string) {
-	const { default: defaultValue, choices, parse } = def;
+	const { default: defaultValue, parse } = def;
 	if (defaultValue === undefined) return undefined;
-
-	// Runtime home for the dynamic path only: choices/defaults widened from
-	// runtime data (config-driven definitions) are invisible to the
-	// FIX_DEFAULT_CHOICE brand, and defaults bypass the argv choices check,
-	// so an out-of-range default would silently reach the action.
-	if (choices) {
-		for (const v of Array.isArray(defaultValue) ? defaultValue : [defaultValue]) {
-			// oxlint-disable-next-line typescript/no-unnecessary-type-conversion -- runtime-configured definitions can violate the static string-default contract
-			validateChoice(String(v), choices, label);
-		}
-	}
 
 	if (parse) {
 		if (Array.isArray(defaultValue)) {
-			// oxlint-disable-next-line typescript/no-unnecessary-type-conversion -- runtime-configured definitions can violate the static string-default contract
 			return defaultValue.map((v, i) => invokeParse(parse, String(v), label, i));
 		}
-		// oxlint-disable-next-line typescript/no-unnecessary-type-conversion -- runtime-configured definitions can violate the static string-default contract
 		return invokeParse(parse, String(defaultValue), label);
 	}
 
@@ -181,7 +159,10 @@ function resolveDefault(def: ArgDef | FlagDef, label: string) {
 		return coercePath(String(defaultValue));
 	}
 
-	return defaultValue;
+	// Occurrence output is mutable; retained defaults must not be rewritten by an action.
+	return "multiple" in def && def.multiple && Array.isArray(defaultValue)
+		? [...defaultValue]
+		: defaultValue;
 }
 
 /**
@@ -191,60 +172,15 @@ function resolveDefault(def: ArgDef | FlagDef, label: string) {
  *   raw token → choices validation → parse transform (if set) → result.
  * For multi-value flags both steps run per element.
  */
-function isBooleanToken(value: OptionTokenValue): value is boolean {
-	return typeof value === "boolean";
-}
-
-function isStringToken(value: OptionTokenValue): value is string {
-	return typeof value === "string";
-}
-
-function coerceFlagValue(
-	name: string,
-	def: FlagDef,
-	parsedValue: string | boolean | (string | boolean)[],
-) {
+function coerceFlagValue(name: string, def: FlagDef, parsed: ArgvFlagValue) {
+	if (parsed.kind === "boolean") return parsed.value;
 	const label = `--${name}`;
-	const { choices, parse } = def;
-
-	if (def.multiple && Array.isArray(parsedValue)) {
-		if (def.type === "boolean") {
-			return parsedValue.filter(isBooleanToken);
-		}
-		return parsedValue.map((value, i) => {
-			if (!isStringToken(value)) {
-				throw new CrustError("PARSE", `Internal: unexpected non-string value for flag "${label}"`);
-			}
-			if (choices) validateChoice(value, choices, label);
-			if (parse) return invokeParse(parse, value, label, i);
-			return coerceValue(value, def.type, label);
-		});
-	}
-
-	if (def.type === "boolean") {
-		// Strict: only accept actual boolean values from the parser.
-		// --flag produces true, --no-flag produces false.
-		if (isBooleanToken(parsedValue)) {
-			return parsedValue;
-		}
-		throw new CrustError(
-			"PARSE",
-			`Expected boolean value for flag "${label}", got non-boolean token`,
-		);
-	}
-
-	if (isStringToken(parsedValue)) {
-		if (choices) validateChoice(parsedValue, choices, label);
-		if (parse) return invokeParse(parse, parsedValue, label);
-		return coerceValue(parsedValue, def.type, label);
-	}
-
-	// Unreachable: `util.parseArgs` is configured with `type: "string"` for
-	// every non-boolean flag (see buildParseArgsOptionDescriptor) and
-	// `strict: true`, so a non-boolean flag can never see a boolean or
-	// array `parsedValue` here. Fail loud rather than silently returning a
-	// default value, which would mask a parser-configuration bug.
-	throw new CrustError("PARSE", `Internal: unexpected value shape for flag "${label}"`);
+	const coerce = (value: string, index?: number) => {
+		if (def.choices) validateChoice(value, def.choices, label);
+		if (def.parse) return invokeParse(def.parse, value, label, index);
+		return coerceValue(value, def.type, label);
+	};
+	return Array.isArray(parsed.value) ? parsed.value.map(coerce) : coerce(parsed.value);
 }
 
 /**
@@ -261,30 +197,26 @@ function resolveAliases(
 	aliasToName: Record<string, string>,
 	flagsDef: FlagsDef,
 ) {
-	const canonical: Record<string, OptionTokenValue> = {};
+	const canonical: Record<string, ArgvFlagValue | undefined> = {};
 
 	for (const token of tokens) {
 		if (token.kind !== "option") continue;
 
 		const canonicalName = aliasToName[token.name] ?? token.name;
-		const def = flagsDef[canonicalName];
-		if (!def) continue;
-
-		// Booleans carry no token value; a `--no-` spelling means false
-		// (allowNegative). Non-booleans always have a string value in strict mode.
-		// SAFETY: strict-mode parseArgs guarantees string values on non-boolean option tokens.
-		const value: string | boolean =
-			def.type === "boolean" ? !token.rawName.startsWith("--no-") : (token.value as string);
-
-		if (def.multiple) {
-			const existing = canonical[canonicalName];
-			if (Array.isArray(existing)) {
-				existing.push(value);
-			} else {
-				canonical[canonicalName] = [value];
-			}
+		// Strict token names come from this command's descriptor, built from its retained spelling map.
+		const def = flagsDef[canonicalName]!;
+		const existing = canonical[canonicalName];
+		if (def.type === "boolean") {
+			const value = !token.rawName.startsWith("--no-");
+			if (def.multiple && existing?.kind === "boolean" && Array.isArray(existing.value))
+				existing.value.push(value);
+			else canonical[canonicalName] = { kind: "boolean", value: def.multiple ? [value] : value };
 		} else {
-			canonical[canonicalName] = value;
+			// SAFETY: strict Node descriptors configure every non-boolean option as string-valued.
+			const value = token.value as string;
+			if (def.multiple && existing?.kind === "string" && Array.isArray(existing.value))
+				existing.value.push(value);
+			else canonical[canonicalName] = { kind: "string", value: def.multiple ? [value] : value };
 		}
 	}
 
@@ -299,12 +231,20 @@ function resolveFlags<F extends FlagsDef, V>(
 	flagsDef: F,
 	values: Readonly<Record<string, V | undefined>>,
 	coerce: (name: string, def: FlagDef, value: V) => ParsedFlagValue,
+	checked: boolean,
+	retiredFlagNames: ReadonlySet<string>,
 ): RawParsedFlags<F> {
 	const resolved: Record<string, ParsedFlagValue> = {};
-	for (const name of Object.keys(values)) {
+	// Runtime identity owns retired keys: same-ID replacement is not visible in ExtensionId's type.
+	// Other trusted keys and values remain TypeScript-owned, including surviving/reintroduced flags.
+	for (const name of checked ? Object.keys(values) : retiredFlagNames) {
 		// Read known values only during binding, so own getters run once.
 		// hasOwn prevents inherited Object.prototype keys becoming ghost flags.
-		if (!Object.hasOwn(flagsDef, name) && values[name] !== undefined) {
+		if (
+			!Object.hasOwn(flagsDef, name) &&
+			Object.hasOwn(values, name) &&
+			values[name] !== undefined
+		) {
 			throw new CrustError("PARSE", `Unknown flag "--${name}"`, {
 				flag: name,
 				reason: "unknown-flag",
@@ -337,9 +277,15 @@ function resolveFlags<F extends FlagsDef, V>(
 function validateRequiredFlags<F extends FlagsDef>(
 	flagsDef: F,
 	resolvedFlags: RawParsedFlags<F>,
+	trusted: boolean,
 ): void {
 	for (const [name, def] of Object.entries(flagsDef)) {
-		if (def.required === true && def.default === undefined) {
+		if (
+			// Parsers can return undefined; empty occurrence arrays can resolve to a missing default.
+			(!trusted || def.parse || def.multiple) &&
+			def.required === true &&
+			def.default === undefined
+		) {
 			if (resolvedFlags[name] === undefined) {
 				throw new CrustError("VALIDATION", `Missing required flag "--${name}"`);
 			}
@@ -466,7 +412,7 @@ function tokenizeArgv(command: CommandNode, argv: string[]) {
 			continue;
 		}
 		if (token.kind === "positional") {
-			(afterSeparator ? rawArgs : preSeparatorPositionals).push(token.value ?? "");
+			(afterSeparator ? rawArgs : preSeparatorPositionals).push(token.value);
 		}
 	}
 
@@ -477,28 +423,70 @@ function tokenizeArgv(command: CommandNode, argv: string[]) {
 	};
 }
 
-/** Typed values already have their runtime shape; only raw-string transforms remain. */
+function validateStructuredValue(def: ArgDef | FlagDef, value: RunInputValue, label: string): void {
+	const type = def.schema ? (def.type === "boolean" ? "boolean" : "string") : def.type;
+	let valid: boolean;
+	if (type === "url") {
+		valid = value instanceof URL;
+	} else if (type === "json") {
+		// The dynamic payload permits URLs nested in occurrence arrays; JSON records stay typed.
+		const pending: RunInputValue[] = [value];
+		const seen = new Set<object>();
+		valid = true;
+		while (pending.length > 0) {
+			const item = pending.pop();
+			if (item instanceof URL) {
+				valid = false;
+				break;
+			}
+			if (Array.isArray(item) && !seen.has(item)) {
+				seen.add(item);
+				pending.push(...item);
+			}
+		}
+	} else {
+		// oxlint-disable-next-line anti-slop/no-runtime-typeof -- runtime(input) checks the declared primitive kind at the explicit invocation boundary.
+		valid = typeof value === (type === "path" ? "string" : type);
+	}
+	if (!valid) throw new CrustError("PARSE", `Expected ${type} for ${label}`);
+	if (value === false && "noNegate" in def && def.noNegate) {
+		throw new CrustError("PARSE", `Flag "${label}" does not support negation`);
+	}
+}
+
+/** Typed values already have their runtime shape; checked inputs establish it before transforms. */
 function coerceStructuredValue(
 	def: ArgDef | FlagDef,
 	value: RunInputValue,
 	label: string,
 	index?: number,
+	checked = false,
 ): ParsedArgValue {
-	if (def.choices) validateChoice(String(value), def.choices, label);
+	if (checked) validateStructuredValue(def, value, label);
+	if (checked && def.choices) validateChoice(String(value), def.choices, label);
 	if (def.parse) return invokeParse(def.parse, String(value), label, index);
 	if (def.type === "path") return coercePath(String(value));
 	return value;
 }
 
-function coerceStructuredFlag(name: string, def: FlagDef, value: RunInputValue): ParsedFlagValue {
+function coerceStructuredFlag(
+	name: string,
+	def: FlagDef,
+	value: RunInputValue,
+	checked = false,
+): ParsedFlagValue {
 	const label = `--${name}`;
 	// Only multiple flags interpret arrays as occurrences; scalar JSON can itself be an array.
 	if (def.multiple) {
-		return (Array.isArray(value) ? value : [value]).map((item, i) =>
-			coerceStructuredValue(def, item, label, i),
+		if (checked && !Array.isArray(value)) {
+			throw new CrustError("PARSE", `Expected an occurrence array for ${label}`);
+		}
+		// SAFETY: typed multiple input or the checked guard above establishes an occurrence array.
+		return (value as readonly RunInputValue[]).map((item, i) =>
+			coerceStructuredValue(def, item, label, i, checked),
 		);
 	}
-	return coerceStructuredValue(def, value, label);
+	return coerceStructuredValue(def, value, label, undefined, checked);
 }
 
 /** Both front doors share binding, defaults, and canonical flag validation. */
@@ -508,8 +496,15 @@ function bind<A extends ArgsDef, F extends FlagsDef, V, W>(
 	flagValues: Readonly<Record<string, W | undefined>>,
 	coerceArg: (def: ArgDef, value: V, label: string, index?: number) => ParsedArgValue,
 	coerceFlag: (name: string, def: FlagDef, value: W) => ParsedFlagValue,
+	checked = false,
 ) {
-	const flags = resolveFlags(command.effectiveFlags, flagValues, coerceFlag);
+	const flags = resolveFlags(
+		command.effectiveFlags,
+		flagValues,
+		coerceFlag,
+		checked,
+		command.retiredFlagNames,
+	);
 	return { ...resolveArgs(command.args, positionals, coerceArg), flags };
 }
 
@@ -552,6 +547,7 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
 	command: CommandNode & { args: A; effectiveFlags: F },
 	input: RunInputPayload,
+	checked = false,
 ): ParseResult<A, F> {
 	const positionals: RunInputValue[] = [];
 	let omittedArgument: string | undefined;
@@ -565,7 +561,7 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 			continue;
 		}
 		// Only named records can supply a later positional while omitting an earlier one.
-		if (omittedArgument !== undefined) {
+		if (checked && omittedArgument !== undefined) {
 			throw new CrustError(
 				"PARSE",
 				`Argument <${definition.name}> cannot be provided after omitted argument <${omittedArgument}>`,
@@ -575,11 +571,14 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 				},
 			);
 		}
+		if (checked && definition.variadic && !Array.isArray(value)) {
+			throw new CrustError("PARSE", `Expected an occurrence array for <${definition.name}>`);
+		}
 		// A non-variadic JSON array is one positional value.
 		positionals.push(...(definition.variadic && Array.isArray(value) ? value : [value]));
 	}
 	// Only named records carry argument names to validate; argv has positional tokens.
-	for (const name of Object.keys(input.args ?? {})) {
+	for (const name of checked ? Object.keys(input.args ?? {}) : []) {
 		if (
 			!command.args.some((definition) => definition.name === name) &&
 			input.args?.[name] !== undefined
@@ -594,8 +593,9 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 		command,
 		positionals,
 		input.flags ?? {},
-		coerceStructuredValue,
-		coerceStructuredFlag,
+		(def, value, label, index) => coerceStructuredValue(def, value, label, index, checked),
+		(name, def, value) => coerceStructuredFlag(name, def, value, checked),
+		checked,
 	);
 	return { args, flags, excessArgs: [], rawArgs: [...(input.raw ?? [])] };
 }
@@ -613,6 +613,7 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 export function validateParsed<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
 	command: CommandNode & { args: A; effectiveFlags: F },
 	parsed: ParseResult<A, F>,
+	trusted = false,
 ): void {
 	const argsDef = command.args;
 	const flagsDef = command.effectiveFlags;
@@ -620,7 +621,7 @@ export function validateParsed<A extends ArgsDef = ArgsDef, F extends FlagsDef =
 	const args = parsed.args;
 	const flags = parsed.flags;
 
-	if (parsed.excessArgs.length > 0) {
+	if (!trusted && parsed.excessArgs.length > 0) {
 		throw new CrustError(
 			"VALIDATION",
 			`Unexpected positional argument${parsed.excessArgs.length === 1 ? "" : "s"}: ${parsed.excessArgs.map((arg) => JSON.stringify(arg)).join(", ")}`,
@@ -634,7 +635,12 @@ export function validateParsed<A extends ArgsDef = ArgsDef, F extends FlagsDef =
 		// SAFETY: name comes from the same argument definitions that produced this mapped result.
 		const value = args[name as keyof typeof args];
 
-		if (def.required === true && def.default === undefined) {
+		if (
+			// A scalar parser can erase a supplied value; variadic parsing retains the occurrence array.
+			(!trusted || (def.parse && !def.variadic)) &&
+			def.required === true &&
+			def.default === undefined
+		) {
 			if (def.variadic) {
 				if (!Array.isArray(value) || value.length === 0) {
 					throw new CrustError("VALIDATION", `Missing required ${label}`);
@@ -645,5 +651,5 @@ export function validateParsed<A extends ArgsDef = ArgsDef, F extends FlagsDef =
 		}
 	}
 
-	validateRequiredFlags(flagsDef, flags);
+	validateRequiredFlags(flagsDef, flags, trusted);
 }

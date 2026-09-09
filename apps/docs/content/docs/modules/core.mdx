@@ -88,25 +88,28 @@ See [Types](/docs/api/types) for field-level definitions.
 
 These types back [`run(path, input?, io?)`](/docs/api/crust) and the [`@crustjs/testing`](/docs/modules/testing) helpers.
 
-| Type                | Description                                                                   |
-| ------------------- | ----------------------------------------------------------------------------- |
-| `AnyCrust`          | Any fully-built application; parameter type for APIs accepting arbitrary apps |
-| `CommandTree`       | Compile-time command tree accumulated by `.add()`                             |
-| `CommandPath`       | Every valid typed path through a command tree, including the root path `[]`   |
-| `CommandShape`      | Argument, flag, children, and action result shape of one command              |
-| `CommandShapeAt`    | Resolve the command shape at a typed path                                     |
-| `RunInput`          | Structured `args`, `flags`, and `raw` values accepted by `run()`              |
-| `RunOutcome`        | Completed action result or the Extension that finished the invocation         |
-| `RunInputArguments` | Input tuple for a shape: optional when nothing is required                    |
-| `RunArguments`      | Full `run()` rest tuple: input plus optional invocation I/O                   |
-| `InputArgs`         | Pre-parse structured argument values for an argument definition list          |
-| `InputFlags`        | Pre-parse structured flag values for a flag definition record                 |
-| `ParseResult`       | Syntax-parsed arguments, flags, and raw tokens before schema validation       |
-| `ValidatedInput`    | Fully validated argument and flag values passed beyond the parser boundary    |
-| `ParsedArgValue`    | Runtime-erased syntax-parsed positional value                                 |
-| `ParsedFlagValue`   | Runtime-erased syntax-parsed flag value                                       |
+| Type                | Description                                                                    |
+| ------------------- | ------------------------------------------------------------------------------ |
+| `AnyCrust`          | Completed-app inspection, execute, and checked run; no authoring after erasure |
+| `RuntimeInput<T>`   | Opaque input from `runtime(value)`, checked by the consuming operation         |
+| `CommandTree`       | Compile-time command tree accumulated by `.add()`                              |
+| `CommandPath`       | Every valid typed path through a command tree, including the root path `[]`    |
+| `CommandShape`      | Argument, flag, children, and action result shape of one command               |
+| `CommandShapeAt`    | Resolve the command shape at a typed path                                      |
+| `RunInput`          | Structured `args`, `flags`, and `raw` values accepted by `run()`               |
+| `RunOutcome`        | Completed action result or the Extension that finished the invocation          |
+| `RunInputArguments` | Input tuple for a shape: optional when nothing is required                     |
+| `RunArguments`      | Full `run()` rest tuple: input plus optional invocation I/O                    |
+| `InputArgs`         | Pre-parse structured argument values for an argument definition list           |
+| `InputFlags`        | Pre-parse structured flag values for a flag definition record                  |
+| `ParseResult`       | Syntax-parsed arguments, flags, and raw tokens before schema validation        |
+| `ValidatedInput`    | Fully validated argument and flag values passed beyond the parser boundary     |
+| `ParsedArgValue`    | Runtime-erased syntax-parsed positional value                                  |
+| `ParsedFlagValue`   | Runtime-erased syntax-parsed flag value                                        |
 
-When calling `run()`, scalar JSON arguments and flags accept JSON primitives, structurally JSON-compatible object types (including named interfaces), and mutable or readonly arrays/tuples (the exported `RunInput` type itself requires `JsonValue` leaves); variadic JSON arguments and multiple JSON flags use a mutable occurrence array of JSON values. URL definitions instead accept `URL` values or mutable occurrence arrays of them. The typed API excludes `Date`, `bigint`, functions, and other non-JSON values from JSON inputs. At runtime, JSON values pass through as-is, preserving object identity without a serialization round-trip or runtime JSON guard; `undefined` omits an optional input. Untyped callers also receive their supplied values unchanged: `Date` stays a `Date`, undefined object properties survive, and `NaN`/`Infinity` are not converted to `null`.
+When calling `run()`, scalar JSON arguments and flags accept JSON primitives, structurally JSON-compatible object types (including named interfaces), and mutable or readonly arrays/tuples (the exported `RunInput` type itself requires `JsonValue` leaves); variadic JSON arguments and multiple JSON flags use a mutable occurrence array of JSON values. URL definitions instead accept `URL` values or mutable occurrence arrays of them. The typed API excludes `Date`, `bigint`, functions, and other non-JSON values from JSON inputs. Ordinary typed calls pass JSON values through as-is, preserving object identity without a serialization round-trip or runtime JSON guard; `undefined` omits an optional input. Checked calls validate the accepted value kinds without cloning JSON payloads.
+
+Structured arguments must form a supplied prefix; defaults do not fill gaps. Required core variadics without defaults use nonempty tuples. Broad app holders and open input definitions require `runtime(input)` for invocation. `runtime(value)` also opts dynamic command names, local definitions/configs, and flag/argument collections into checked consumption; it neither validates nor copies by itself and is not an `unknown` decoder. See [Runtime input](/docs/guide/types#runtime-input) for the call forms and the migration from broad `Crust` annotations.
 
 `run()` resolves to `RunOutcome<R>`: the `completed` branch owns the selected action's typed `result`, while the `finished` branch owns the `ExtensionId` of the Extension whose `preRun` hook ended the invocation.
 
@@ -137,20 +140,20 @@ Omitting `io` creates no new ambient scope, preserving native TTY detection and 
 
 ## Extension types
 
-| Type                           | Description                                                                                      |
-| ------------------------------ | ------------------------------------------------------------------------------------------------ |
-| `Extension`                    | Identified frozen Extension value                                                                |
-| `ExtensionFactory<Args>`       | Callable Extension constructor with a readonly `.id`; short annotations erase contribution types |
-| `ExtensionBuildContext`        | Frozen root snapshot and resolved output directory for artifact generation                       |
-| `ExtensionConfig`              | Owned flags, commands, section contributions, build generation, and hooks                        |
-| `ExtensionFlagDef`             | Extension-owned flag with optional `recursive` scope                                             |
-| `ExtensionContext`             | Readonly invocation view with inferred Extension-owned flags and `finish()`                      |
-| `ExtensionHooks`               | Typed `preRun`, `postRun`, and `onError` hook slots                                              |
-| `InferExtensionFlags`          | Syntax-parsed values inferred from an Extension's contributed flags                              |
-| `NamedExtensionFlagDef`        | Named Extension flag accepted by `ExtensionConfig.flags`                                         |
-| `ExtensionSectionContribution` | Section contributed by an Extension to command documentation                                     |
-| `Finished`                     | Opaque token returned by `ExtensionContext.finish()`                                             |
-| `InvocationOutcome`            | Completed, short-circuited, or failed invocation result                                          |
+| Type                           | Description                                                                                                  |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `Extension`                    | Identified frozen Extension value                                                                            |
+| `ExtensionFactory<Args>`       | Callable Extension constructor with a readonly `.id`; broad annotations require checked Extension attachment |
+| `ExtensionBuildContext`        | Frozen root snapshot and resolved output directory for artifact generation                                   |
+| `ExtensionConfig`              | Owned flags, commands, section contributions, build generation, and hooks                                    |
+| `ExtensionFlagDef`             | Extension-owned flag with optional `recursive` scope                                                         |
+| `ExtensionContext`             | Readonly invocation view with inferred Extension-owned flags and `finish()`                                  |
+| `ExtensionHooks`               | Typed `preRun`, `postRun`, and `onError` hook slots                                                          |
+| `InferExtensionFlags`          | Syntax-parsed values inferred from an Extension's contributed flags                                          |
+| `NamedExtensionFlagDef`        | Named Extension flag accepted by `ExtensionConfig.flags`                                                     |
+| `ExtensionSectionContribution` | Section contributed by an Extension to command documentation                                                 |
+| `Finished`                     | Opaque token returned by `ExtensionContext.finish()`                                                         |
+| `InvocationOutcome`            | Completed, short-circuited, or failed invocation result                                                      |
 
 ## Error types
 

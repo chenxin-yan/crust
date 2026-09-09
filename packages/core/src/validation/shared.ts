@@ -7,15 +7,26 @@ export type Simplify<T> = { [K in keyof T]: T[K] };
 // Flat intersections keep chained composition at constant instantiation depth.
 export type MergeContext<A, B> = A & B;
 
+/** Provider replacement is last-write-wins; an open name may leave any earlier value in place. */
+export type MergeProviders<A, B> = keyof A extends never
+	? B
+	: keyof B extends never
+		? A
+		: string extends keyof B
+			? Record<string, A[keyof A] | B[string]>
+			: [keyof A & keyof B] extends [never]
+				? A & B
+				: Omit<A, keyof B> & B;
+
 /**
  * Extract the narrowed canonical `name` literal from a definition.
- * Resolves to `never` when no `name` field exists or when the type is the
- * broad `string` (not a narrowed literal), so widened defs opt out of checks.
+ * Open name domains carry no spelling proof; checked attachment must retain
+ * their uncertainty rather than treating this absence as an empty namespace.
  */
 export type DefName<T> = T extends { name: infer N extends string }
-	? string extends N
-		? never
-		: N
+	? IsClosedName<N> extends true
+		? N
+		: never
 	: never;
 
 export type UnionToIntersection<U> = (U extends unknown ? (x: U) => void : never) extends (
@@ -24,7 +35,14 @@ export type UnionToIntersection<U> = (U extends unknown ? (x: U) => void : never
 	? I
 	: never;
 
-export type IsUnion<T> = [T] extends [UnionToIntersection<T>] ? false : true;
+export type IsUnion<T> = true extends UnionMemberDiffers<T> ? true : false;
+
+// Overlapping members can produce boolean; any differing member still makes a union.
+type UnionMemberDiffers<T, Whole = T> = T extends unknown
+	? [Whole] extends [T]
+		? false
+		: true
+	: never;
 
 /**
  * `true` only for a single statically known fixed-length tuple whose members
@@ -95,3 +113,49 @@ export type DefaultWithinChoicesBrand<T> = T extends {
 							}
 				: {}
 	: {};
+
+/** A local authoring fact too broad to establish without consuming runtime(...). */
+export type RuntimeRequiredBrand = {
+	readonly FIX_RUNTIME_INPUT: "Use runtime(...) for unproven definitions or collections";
+};
+
+/** Finite literal domains have required record keys; infinite templates and branded strings do not.
+ * Distribute first so a finite union member cannot hide an open member's index signature.
+ */
+export type IsClosedName<N extends string> = false extends (
+	N extends unknown ? ({} extends Record<N, true> ? false : true) : never
+)
+	? false
+	: true;
+
+export type KnownNameBrand<N extends string> =
+	IsClosedName<N> extends true ? {} : RuntimeRequiredBrand;
+
+/** Unlike the transitional graph brands, local definitions cannot opt out by widening. */
+export type LocalValueBrand<T> = (IsUnion<T> extends true ? RuntimeRequiredBrand : {}) &
+	("parse" extends keyof T
+		? T extends { parse: (...args: never[]) => infer R }
+			? Promise<unknown> extends R
+				? RuntimeRequiredBrand
+				: AsyncParseBrand<T>
+			: T extends { parse?: never }
+				? {}
+				: RuntimeRequiredBrand
+		: {}) &
+	(T extends { choices: infer C extends readonly string[]; default: infer D }
+		? IsStaticTuple<C> extends true
+			? IsClosedName<C[number]> extends false
+				? RuntimeRequiredBrand
+				: D extends readonly string[]
+					? string extends D[number]
+						? RuntimeRequiredBrand
+						: DefaultWithinChoicesBrand<T>
+					: string extends D
+						? RuntimeRequiredBrand
+						: DefaultWithinChoicesBrand<T>
+			: RuntimeRequiredBrand
+		: "choices" extends keyof T
+			? "default" extends keyof T
+				? RuntimeRequiredBrand
+				: {}
+			: {});

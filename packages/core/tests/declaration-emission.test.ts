@@ -14,7 +14,22 @@ const repoRoot = resolve(import.meta.dir, "../../..");
 const corePkg = resolve(import.meta.dir, "..");
 const tscBin = join(repoRoot, "node_modules/.bin/tsc");
 
-const CONSUMER_SOURCE = `import { Crust, defineCommand, defineContext, defineExtension, defineExtensionId, defineFlag } from "@crustjs/core";
+const CONSUMER_SOURCE = `import { Crust, defineCommand, defineContext, defineExtension, defineExtensionId, defineFlag, runtime } from "@crustjs/core";
+
+export const localFlag = defineFlag("local", runtime({ type: "string", choices: ["a"], default: "a" }));
+export const localConfigured = new Crust("local", runtime({ sections: [{ title: "Notes", body: "text" }] }))
+	.flags(runtime([localFlag])).args(runtime([{ name: "file", type: "string" }]));
+export const configuredChild = defineCommand("configured", runtime({ aliases: ["alias"] }), b => b);
+
+export const checkedName = runtime("checked");
+export const checkedApp = new Crust(checkedName)
+	.args({ name: "file", type: "string", required: true })
+	.action(({ args }) => args.file);
+export const checkedResult = checkedApp.run([], runtime({ args: { file: "input" } }));
+export const dynamicResult = checkedApp.run(runtime([]), runtime({ args: { file: "input" } }));
+export function checkedCommand<Name extends string>(name: Name) {
+	return defineCommand(runtime(name), (command) => command.action(() => name));
+}
 
 // Inferred defineFlag element type remains structurally nameable
 export const configFlag = defineFlag("config", {
@@ -25,7 +40,7 @@ export const configFlag = defineFlag("config", {
 export const flags = [
 	configFlag,
 	defineFlag("quiet", { type: "boolean", short: "q", description: "Quiet mode" }),
-];
+] as const;
 
 // Inferred builder type exposes the accumulated spelling-literal union
 export const flagged = new Crust("flagged").flags(...flags);

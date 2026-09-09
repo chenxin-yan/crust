@@ -35,9 +35,48 @@ The Command Action receives the return type. A parser must be synchronous: TypeS
 
 ## Compile-time definition checks
 
-Crust is TypeScript-first: command, flag, argument, Context, and Extension definitions are checked at compile time. `FIX_*` brands let the editor point at collisions, invalid alias shapes, asynchronous parsers, duplicate names, and invalid variadic positions. For definitions TypeScript cannot see — flags built from config objects, duplicate or misplaced arguments, dynamic `.add()` name collisions — core repeats the checks at runtime and throws `DEFINITION` errors.
+Crust is TypeScript-first: command, flag, argument, Context, and Extension definitions are checked at compile time. `FIX_*` brands let the editor point at collisions, invalid alias shapes, asynchronous parsers, duplicate names, and invalid variadic positions. Direct flag/argument helpers and attachments require proof of local spellings, synchronous parsers, choice defaults, and positional layout. Unproven definitions and collections must cross `runtime(...)`; consuming them checks the local facts and destination relations. Trusted authoring and composition do not repeat those checks at runtime.
 
-Argv remains untrusted input. Parsing, built-in conversion, required values, choices, and Standard Schema validation still run for every invocation. Context dependency declarations are checked statically; lazy bag access retains runtime guards for missing providers on dynamically assembled paths, dependency cycles, and lifecycle misuse.
+Argv remains untrusted input. CLI syntax, incoming choices, and required occurrences remain runtime-owned. Typed structured input skips already-proven checks; custom-parser requiredness, empty multiple arrays, and Standard Schema validation still run when needed after `preRun`. Context dependency declarations are checked statically; lazy bag access retains runtime guards for missing providers on dynamically assembled paths, dependency cycles, and lifecycle misuse.
+
+## Runtime input
+
+For command names, local definitions/configuration, flag/argument/provider/command collections, and structured invocation, use `runtime(value)` when TypeScript cannot prove the input. The wrapper does not validate, normalize, or copy its value. The consuming operation checks it against its actual destination.
+
+```ts
+import { Crust, runtime } from "@crustjs/core";
+
+const commandName: string = "generated";
+const app = new Crust(runtime(commandName))
+  .args({ name: "file", type: "string", required: true })
+  .action(({ args }) => args.file);
+
+const outcome = await app.run([], runtime({ args: { file: "input.txt" } }));
+```
+
+Wrapping the root name does not erase the known `file` argument or the action's return type. `defineCommand(runtime(name), recipe)`, `.as(runtime(name))`, and `.command(runtime(name), recipe)` also accept checked names. Blank and reserved command names are rejected when consumed. Ordinary literal names are checked by TypeScript.
+
+`defineFlag(runtime(name), runtime(def))` and `defineArg(runtime(name), runtime(def))` check local definitions; either argument may remain ordinary when proven. Open aliases, unproven default/choice membership, and parser results typed as `unknown`, `any`, or `object` require a checked definition. Parsers are never called during authoring; checked parser results still must be synchronous when invoked. Wrapping only the name does not recheck a trusted parser. An optional checked parser produces the union of its parsed and unparsed output types. Helpers preserve every conditional definition branch, including parser, default, requiredness and negation fields; local checking does not turn alternatives into a single closed definition.
+
+Wrap one collection for checked attachment: `.flags(runtime(defs))`, `.args(runtime(defs))`, `.provide(runtime(instances))`, or `.add(runtime(definitions))`, on roots or recipe builders. Root Extension collections use `.extend(runtime(extensions))`. Local validity is not collision-free composition. Narrow tuples preserve their known types; conditional argument tuples and conditional flag-record input types require checked invocation. Infinite template name domains such as `` `mode-${string}` `` and `` `${number}` `` need `runtime(name)` and remain open at attachment. Finite unions still identify only one actual canonical name, not every alternative key. Open spellings/layout stay open and require checked subsequent attachment and, when input shapes are open, checked invocation. Collections retained by normalization are copied and exposed readonly; contained JSON/URL/schema values are not cloned or frozen. Flag and argument helper results are shallow-frozen because they retain local proof reused by later checked consumers.
+
+```ts
+import { Crust, defineFlag, runtime } from "@crustjs/core";
+
+const choices: string[] = ["fast", "safe"];
+const mode = defineFlag("mode", runtime({ type: "string", choices, default: "safe" }));
+const app = new Crust("build", runtime({ sections: [{ title: "Modes", body: "Choose a mode." }] }))
+  .flags(runtime([mode]))
+  .args(runtime([{ name: "file", type: "path" }]));
+```
+
+Use `new Crust(name, runtime(meta))` or `defineCommand(name, runtime(config), recipe)` for unproven section text/audiences or command aliases. Trusted section titles are nonblank single lines, bodies are nonblank, and `only`/`except` audiences are nonempty and mutually exclusive. Checked configs validate text and audience nonemptiness at consumption; their typed shape still enforces audience exclusivity and minted consumer IDs. Ordinary `.add()` requires statically known names/aliases and compatibility with inherited Context flags. Use `.add(runtime(definitions))` for unproven destination relations; local checking alone does not prove compatibility with siblings. Repeated aliases within one command remain allowed. Extension metadata and Context callback-value demands remain TypeScript-owned, including in checked collections. Unknown provider outputs cannot establish a known demanded value; use an unknown-valued demand and narrow its result when that is the intended contract.
+
+`app.run(path, runtime(input))` keeps the known path's result type. Use `app.run(runtime(path), runtime(input))` when the selected command is dynamic; its result is `unknown`. Checked invocation validates input names, value kinds, occurrence arrays, positional order, choices, and `noNegate`. Required and schema validation still happen after `preRun`, so `finish()` can skip them. Widened or conditional choices, including fixed tuples with infinite template-valued members, need checked supplied input even after `runtime(def)`; local checking cannot prove future membership. A definition union needs checked supplied values even when all branches have the same primitive kind. Exported input types allow omission only when every branch is optional or has a definitely present default. Possible `noNegate` on a single definition permits only `true` on the trusted path; uncertain primitive kinds and multiple/variadic layouts need checked supplied values. Unrelated known inputs and safe omission remain available.
+
+This is a boundary for typed dynamic data, not an `unknown` decoder or a JSON configuration loader. Decode external data first. It does not replace Standard Schema or inspect arbitrary callback return shapes; custom parsers still must return synchronously.
+
+A bare `Crust` type now describes an empty argument tuple. Prefer inferred builder types. Use `AnyCrust` for inspection, `execute()`, and checked `run()` on arbitrary completed apps. It deliberately has no authoring methods and cannot regain an empty-root type. Preserve concrete builder generics while authoring, or construct `Crust<Flags, ArgsDef>` when an open argument state is intentional. Those broad holders require checked invocation. If you supply earlier class type arguments explicitly, TypeScript cannot infer the trailing name parameter; pass `runtime(name)` in that case.
 
 ## Schema-backed definitions
 

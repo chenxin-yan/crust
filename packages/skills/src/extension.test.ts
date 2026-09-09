@@ -14,7 +14,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
-import { Crust } from "@crustjs/core";
+import { Crust, runtime } from "@crustjs/core";
 import { renderHelp } from "@crustjs/extensions";
 import { withPromptIO } from "@crustjs/prompts";
 import { createPromptIO } from "@crustjs/prompts/testing";
@@ -58,7 +58,7 @@ async function writeSource(name: string, content = name, description = name): Pr
 
 function createApp(source: string | URL, autoUpdate = true) {
 	return new Crust("demo", { description: "Demo" })
-		.extend(skill({ distDir: source, defaultScope: "project", autoUpdate }))
+		.extend(runtime([skill({ distDir: source, defaultScope: "project", autoUpdate })]))
 		.action(() => {});
 }
 
@@ -90,7 +90,7 @@ describe("skill extension packaged directory", () => {
 	it("keeps help usable when the packaged skills directory cannot be resolved", async () => {
 		const source = join(tempRoot, "missing-skills");
 		const app = new Crust("demo", { description: "Demo" })
-			.extend(skill({ distDir: source, command: "agents" }))
+			.extend(runtime([skill({ distDir: source, command: "agents" })]))
 			.action(() => {});
 		const output = renderHelp(await app.snapshot());
 
@@ -109,7 +109,9 @@ describe("skill extension packaged directory", () => {
 			generated: false,
 			extras: [authored],
 		});
-		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
+		const snapshot = await new Crust("demo", { description: "Demo" })
+			.extend(runtime([extension]))
+			.snapshot();
 		const outDir = join(tempRoot, "dist");
 
 		await extension.build?.({ snapshot, outDir });
@@ -120,7 +122,9 @@ describe("skill extension packaged directory", () => {
 	it("generates from the snapshot even when a stale packaged directory exists", async () => {
 		const source = await writeSource("demo", "stale");
 		const extension = skill({ distDir: source });
-		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
+		const snapshot = await new Crust("demo", { description: "Demo" })
+			.extend(runtime([extension]))
+			.snapshot();
 		const outDir = join(tempRoot, "dist");
 
 		await extension.build?.({ snapshot, outDir });
@@ -146,7 +150,7 @@ describe("skill extension packaged directory", () => {
 			version: "9.9.9",
 			sections: [{ title: "Agent skills", body: "Application-authored agent guidance." }],
 		})
-			.extend(extension)
+			.extend(runtime([extension]))
 			.snapshot();
 		const outDir = join(tempRoot, "dist");
 
@@ -186,7 +190,9 @@ describe("skill extension packaged directory", () => {
 			name: "gyst-reference",
 			description: "Generated command reference",
 		});
-		const snapshot = await new Crust("gyst", { description: "Gyst" }).extend(extension).snapshot();
+		const snapshot = await new Crust("gyst", { description: "Gyst" })
+			.extend(runtime([extension]))
+			.snapshot();
 		const outDir = join(tempRoot, "dist");
 
 		await extension.build?.({ snapshot, outDir });
@@ -200,7 +206,9 @@ describe("skill extension packaged directory", () => {
 	it("renders from the snapshot without requiring a package version", async () => {
 		const source = join(tempRoot, "missing-skills");
 		const extension = skill({ distDir: source });
-		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
+		const snapshot = await new Crust("demo", { description: "Demo" })
+			.extend(runtime([extension]))
+			.snapshot();
 		const outDir = join(tempRoot, "dist");
 		await writeFile(join(tempRoot, "package.json"), '{"version":"8.8.8"}');
 
@@ -251,18 +259,18 @@ describe("skill extension packaged directory", () => {
 			script,
 			`import { lstat } from "node:fs/promises";
 import { join } from "node:path";
-import { Crust } from ${JSON.stringify(import.meta.resolve("@crustjs/core"))};
+import { Crust, runtime } from ${JSON.stringify(import.meta.resolve("@crustjs/core"))};
 import { skill } from ${JSON.stringify(new URL("./extension.ts", import.meta.url).href)};
 
 const source = ${JSON.stringify(source)};
 const repairErrors: string[] = [];
 await new Crust("demo")
-  .extend(skill({ distDir: source }))
+  .extend(runtime([skill({ distDir: source })]))
   .action(() => {})
   .execute({ argv: [], io: { stderr: (text) => repairErrors.push(text) } });
 
 await new Crust("demo")
-  .extend(skill({ distDir: source, autoUpdate: false }))
+  .extend(runtime([skill({ distDir: source, autoUpdate: false })]))
   .action(() => {})
   .execute({
     argv: ["skill", "--all", "--scope", "project"],
@@ -404,7 +412,7 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 
 		let ran = false;
 		const app = new Crust("demo", { description: "Demo" })
-			.extend(skill({ distDir: source, defaultScope: "project" }))
+			.extend(runtime([skill({ distDir: source, defaultScope: "project" })]))
 			.action(() => {
 				ran = true;
 			});
@@ -428,7 +436,7 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 	it("does not break unrelated commands when the packaged directory is unavailable", async () => {
 		let ran = false;
 		const app = new Crust("demo")
-			.extend(skill({ distDir: join(tempRoot, "missing-skills") }))
+			.extend(runtime([skill({ distDir: join(tempRoot, "missing-skills") })]))
 			.action(() => {
 				ran = true;
 			});

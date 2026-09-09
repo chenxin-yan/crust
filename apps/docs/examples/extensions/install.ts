@@ -1,4 +1,4 @@
-import { Crust } from "@crustjs/core";
+import { Crust, runtime } from "@crustjs/core";
 import {
   completion,
   didYouMean,
@@ -9,10 +9,12 @@ import {
 } from "@crustjs/extensions";
 
 export const app = new Crust("my-cli", { version: "0.2.0" }).extend(
-  help(),
-  version(),
-  completion(),
-  didYouMean(),
-  noColor(),
-  updateNotifier({ packageName: "my-cli" }),
+  runtime([
+    help(),
+    version(),
+    completion(),
+    didYouMean(),
+    noColor(),
+    updateNotifier({ packageName: "my-cli" }),
+  ]),
 );

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
-import type { ArgDef, CommandSection, FlagDef } from "@crustjs/core";
-import { Crust, defineCommand, defineExtensionId } from "@crustjs/core";
+import type { CommandDefinition, AnyCrust, ArgDef, CommandSection, FlagDef } from "@crustjs/core";
+import { Crust, runtime, defineCommand, defineExtensionId } from "@crustjs/core";
 
 import { SKILLS } from "./extension.ts";
 import { buildManifest } from "./manifest.ts";
@@ -28,34 +28,25 @@ function makeCommand(opts: {
 
 type CommandFixture = Parameters<typeof makeCommand>[0];
 
-function configureFixture(command: Crust, fixture: CommandFixture): Crust {
-	let configured = command;
-	if (fixture.args) configured = configured.args(...fixture.args);
-	if (fixture.flags) {
-		const flags = Object.entries(fixture.flags).map(([name, def]) => ({ name, ...def }));
-		configured = configured.flags(...(flags as never[]));
-	}
-	if (fixture.run) configured = configured.action(fixture.run);
-	for (const child of Object.values(fixture.subCommands ?? {})) {
-		const { name, ...meta } = child.meta;
-		configured = configured.add(
-			defineCommand(
-				name as never,
-				meta as never,
-				(builder) =>
-					// SAFETY: command recipes receive Crust's configure-only runtime builder.
-					// oxlint-disable-next-line anti-slop/no-chained-type-assertions -- the public recipe interface intentionally hides the Crust class identity.
-					configureFixture(builder as unknown as Crust, child) as never,
-			),
-		);
-	}
-	return configured;
+function fixtureDefinition(fixture: CommandFixture): CommandDefinition<any, any, any, any> {
+	const { name, ...meta } = fixture.meta;
+	return defineCommand(runtime(name), runtime(meta), (command) => {
+		const configured = command
+			.args(runtime(fixture.args ?? []))
+			.flags(runtime(Object.entries(fixture.flags ?? {}).map(([name, def]) => ({ name, ...def }))))
+			.add(runtime(Object.values(fixture.subCommands ?? {}).map(fixtureDefinition)));
+		return fixture.run ? configured.action(fixture.run) : configured;
+	});
 }
 
-async function snapshotFixture(fixture: CommandFixture | Crust) {
-	if (fixture instanceof Crust) return await fixture.snapshot();
+async function snapshotFixture(fixture: CommandFixture | AnyCrust) {
+	if ("snapshot" in fixture) return await fixture.snapshot();
 	const { name, hidden: _hidden, ...meta } = fixture.meta;
-	return await configureFixture(new Crust(name, meta), fixture).snapshot();
+	const root = new Crust(runtime(name), runtime(meta))
+		.args(runtime(fixture.args ?? []))
+		.flags(runtime(Object.entries(fixture.flags ?? {}).map(([name, def]) => ({ name, ...def }))))
+		.add(runtime(Object.values(fixture.subCommands ?? {}).map(fixtureDefinition)));
+	return await (fixture.run ? root.action(fixture.run) : root).snapshot();
 }
 
 // ────────────────────────────────────────────────────────────────────────────

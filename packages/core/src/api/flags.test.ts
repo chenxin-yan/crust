@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { Crust } from "../command/crust.ts";
+import { runtime } from "../runtime.ts";
 import { defineArg, defineFlag } from "./flags.ts";
 
 describe("defineFlag", () => {
@@ -74,4 +75,101 @@ describe("defineArg", () => {
 		>;
 		expect((await app.snapshot()).args.map((def) => def.name)).toEqual(["target", "count"]);
 	});
+});
+
+describe("checked local definitions", () => {
+	it("checks at consumption and snapshots only structural collections", () => {
+		const aliases = ["v"];
+		const input = runtime({ type: "string" as const, aliases, choices: ["a"], default: "a" });
+		aliases.push("v");
+		expect(() => defineFlag("value", input)).toThrow("repeats");
+		aliases.pop();
+		const flag = defineFlag("value", input);
+		aliases.push("later");
+		expect(flag.aliases).toEqual(["v"]);
+		expect(() => defineFlag(runtime(""), { type: "boolean" })).toThrow("non-empty");
+		expect(() => defineFlag("value", runtime({ type: "boolean", short: "xx" }))).toThrow(
+			"one character",
+		);
+		expect(() => defineArg(runtime(""), { type: "string" })).toThrow("non-empty");
+		expect(() =>
+			defineArg("mode", runtime({ type: "string", choices: ["a"], default: "b" })),
+		).toThrow("choices");
+	});
+});
+
+describe("checked attachments", () => {
+	it("checks destination relations and owns definition collections", async () => {
+		const local = defineFlag("value", runtime({ type: "string", aliases: ["v"] }));
+		const app = new Crust("cli").flags(runtime([local]));
+		expect(() => app.flags(runtime([local]))).toThrow("collides");
+		expect(() =>
+			new Crust("cli").args(
+				runtime([
+					{ name: "files", type: "string", variadic: true },
+					{ name: "later", type: "string" },
+				]),
+			),
+		).toThrow("last positional");
+		expect(() =>
+			new Crust("cli")
+				.args({ name: "a", type: "string" })
+				.args(runtime([{ name: "a", type: "number" }])),
+		).toThrow("already defined");
+		const choices = ["a"];
+		const defaults = ["a"];
+		const attached = new Crust("cli")
+			.flags(
+				runtime([{ name: "mode", type: "string", multiple: true, choices, default: defaults }]),
+			)
+			.action(({ flags }) => flags.mode);
+		choices.length = 0;
+		defaults[0] = "b";
+		expect(await attached.run([], {})).toMatchObject({ result: ["a"] });
+	});
+});
+
+it("defers checked parsers until binding and preserves payload identity", async () => {
+	let calls = 0;
+	const flag = defineFlag(
+		"value",
+		runtime({
+			type: "string",
+			parse: (raw: string) => {
+				calls++;
+				return Promise.resolve(raw);
+			},
+		}),
+	);
+	const app = new Crust("cli").flags(runtime([flag]));
+	expect(calls).toBe(0);
+	await expect(app.run([], runtime({ flags: { value: "input" } }))).rejects.toThrow("synchronous");
+	expect(calls).toBe(1);
+	const payload = { key: "value" };
+	const endpoint = new URL("https://example.com");
+	const defaults = new Crust("cli")
+		.flags(
+			runtime([
+				{ name: "json", type: "json", default: payload },
+				{ name: "url", type: "url", multiple: true, default: [endpoint] },
+			]),
+		)
+		.action(({ flags }) => flags);
+	const outcome = await defaults.run([]);
+	if (outcome.status !== "completed") throw new Error("Expected completed invocation");
+	expect(outcome.result.json).toBe(payload);
+	expect(outcome.result.url[0]).toBe(endpoint);
+	expect(Object.isFrozen(payload)).toBe(false);
+	expect(Object.isFrozen(endpoint)).toBe(false);
+});
+
+it("keeps occurrence results mutable without exposing stored defaults", async () => {
+	const app = new Crust("cli")
+		.flags(runtime([{ name: "mode", type: "string", multiple: true, default: ["a"] }]))
+		.action(({ flags }) => {
+			flags.mode.push("b");
+			return flags.mode;
+		});
+	expect(await app.run([])).toMatchObject({ result: ["a", "b"] });
+	expect(await app.run([])).toMatchObject({ result: ["a", "b"] });
 });

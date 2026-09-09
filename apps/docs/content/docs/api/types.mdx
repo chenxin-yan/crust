@@ -34,7 +34,7 @@ Core-value argument definitions share these fields:
 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="ArgDef" />
 
-A variadic value is always an array. `parse` runs once per element for a variadic string argument.
+A core variadic value is always an array. Required core variadics without defaults accept and resolve to nonempty `[T, ...T[]]` tuples after validation; optional and default-backed variadics remain `T[]`. `parse` runs once per element for a variadic string argument.
 
 ```ts
 const args = [
@@ -99,7 +99,7 @@ const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
 const target = defineArg("target", { type: "string", required: true });
 ```
 
-`defineFlag(name, def)` returns a `NamedFlagDef`; `defineArg(name, def)` returns an `ArgDef`. Statically known empty names fail typecheck with `FIX_EMPTY_SPELLING` for flags and `FIX_EMPTY_NAME` for arguments; widened strings remain accepted for dynamic definitions. `UnnamedArgDef` is the `defineArg` input shape — an `ArgDef` without its `name`.
+`defineFlag(name, def)` returns a `NamedFlagDef`; `defineArg(name, def)` returns an `ArgDef`. Statically known empty names fail typecheck with `FIX_EMPTY_SPELLING` for flags and `FIX_EMPTY_NAME` for arguments; widened names require `runtime(name)`. Use `runtime(def)` when local spellings, synchronous parser results, or default/choice membership cannot be proven; either argument may be wrapped independently. Helpers return owned readonly definitions, including copied alias/choice and multiple-default arrays. Local checking is not destination collision proof. `UnnamedArgDef` is the `defineArg` input shape — an `ArgDef` without its `name`.
 
 ### `CommandMeta`
 
@@ -113,14 +113,14 @@ const target = defineArg("target", { type: "string", required: true });
 type SectionConsumer = ExtensionId | { readonly id: ExtensionId };
 
 type SectionAudience =
-  | { readonly only: readonly SectionConsumer[]; readonly except?: never }
-  | { readonly except: readonly SectionConsumer[]; readonly only?: never }
+  | { readonly only: readonly [SectionConsumer, ...SectionConsumer[]]; readonly except?: never }
+  | { readonly except: readonly [SectionConsumer, ...SectionConsumer[]]; readonly only?: never }
   | { readonly only?: never; readonly except?: never };
 
 type CommandSectionInput = { readonly title: string; readonly body: string } & SectionAudience;
 ```
 
-`SectionConsumer` identifies a renderer: a branded `ExtensionId`, or any value exposing one at `.id` (such as the help, man, and skills Extension factory values). `SectionAudience` is the optional `only`/`except` scoping accepted on authored sections, and `CommandSectionInput` is the authoring shape accepted from command and Extension authors. `CommandSection` is the validated section stored on snapshot `meta.sections`, with its audience consumers resolved to plain `ExtensionId` arrays.
+`SectionConsumer` identifies a renderer: a branded `ExtensionId`, or any value exposing one at `.id` (such as the help, man, and skills Extension factory values). `SectionAudience` is the optional `only`/`except` scoping accepted on authored sections, and `CommandSectionInput` is the ordinary command-authoring shape. Extension section callbacks retain their consumption-time validation for dynamic contributions. `CommandSection` is the validated section stored on snapshot `meta.sections`, with its audience consumers resolved to nonempty readonly `ExtensionId` tuples. Checked metadata accepts typed dynamic audience arrays and checks nonemptiness when consumed.
 
 ## Command Snapshots
 
@@ -159,11 +159,19 @@ type Path = CommandPath<Tree>; // e.g. readonly [] | readonly ["greet"]
 type GreetInput = RunInput<CommandShapeAt<(typeof app)["_types"]["shape"], readonly ["greet"]>>;
 ```
 
+`InputArgs` requires supplied positional values to form a prefix. Defaults do not fill gaps, and a required trailing argument requires all preceding positions. Open argument lists, widened positional names, and open flag records do not prove structured input; use checked invocation through `runtime(input)`.
+
+`Crust` defaults its argument state to `[]`. Use `AnyCrust` for completed-app inspection, `execute()`, and checked `run()` only; it has no authoring methods and cannot be assigned back to an empty root. Keep authoring builders inferred, or use explicit `Crust<Flags, ArgsDef>` for an open argument state. Neither proves input validity. Prefer inferred builders; explicit earlier class type arguments prevent inference of the trailing name parameter and require `runtime(name)`.
+
 `Crust._types` is a supported type-level seam for accessing an application's inferred flags, arguments, Contexts, command tree, command shape, and authored root metadata (`rootMeta`); it has no runtime value.
+
+### `RuntimeInput<T>`
+
+`runtime(value)` returns an opaque `RuntimeInput<T>`, not a value assignable to `T`. It performs no validation or copying; the consuming operation validates it. There is no public unwrap function. See [Runtime input](/docs/guide/types#runtime-input) for checked names, local definitions/configs, flag/argument collections, input, and dynamic paths. The API accepts typed dynamic data, not arbitrary `unknown` objects.
 
 ## Parser boundary types
 
-`ParseResult<A, F>` is the syntax-parsed result before required-value and Standard Schema validation. Its generic `args` and `flags` preserve definition-specific raw value types; `ParsedArgValue` and `ParsedFlagValue` are the runtime-erased fallbacks for widened definitions. Its `excessArgs` holds positionals before `--` that no declared argument consumed (validation rejects them); its `rawArgs` holds tokens after `--`. `ValidatedInput<A, F>` is the validated boundary passed onward to Command Actions, with `InferArgs<A>` and `InferFlags<F>` applied.
+`ParseResult<A, F>` is the syntax-parsed result before required-value and Standard Schema validation. Required core variadics still have ordinary array types here, because binding can produce an empty array before a finishing hook skips validation. Its generic `args` and `flags` preserve definition-specific raw value types; `ParsedArgValue` and `ParsedFlagValue` are the runtime-erased fallbacks for widened definitions. Its `excessArgs` holds positionals before `--` that no declared argument consumed (validation rejects them); its `rawArgs` holds tokens after `--`. `ValidatedInput<A, F>` is the validated boundary passed onward to Command Actions, with `InferArgs<A>` and `InferFlags<F>` applied.
 
 Most application authors consume the inferred Action context rather than naming these types directly. They are exported for parser integrations and tooling that need to distinguish syntax parsing from schema-validated values.
 
@@ -223,7 +231,7 @@ type ContextBag<Deps> = {
   name="ContextInstance"
 />
 
-Attach an instance with `.provide()`. Core checks its transitive dependency closure at composition time and constructs it lazily when its bag property is accessed.
+Attach helper-created instances with `.provide()`, or `.provide(runtime(instances))` for unproven collections. Owned-flag/dependency state cannot be erased into an explicitly empty `ContextInstance` holder. The default open instantiation is not an existential upper bound; prefer inference or a generic identity helper. Construction stays lazy.
 
 ### `FactoryValueOf<F>`
 
@@ -252,17 +260,17 @@ The upper bound for the name/value registry accumulated by `.provide()` and Exte
   name="ExtensionConfig"
 />
 
-`commands` entries are `defineCommand()` definitions contributed at the application root. `sections(snapshot)` returns plain-text sections targeted by canonical command paths relative to that root; contributions append to each target's `meta.sections` in Extension registration order. `build(ctx)` generates artifacts in Extension registration order when invoked by build tooling and may be async; its errors propagate to the caller. See [Extensions](/docs/guide/extensions).
+`commands` entries are `defineCommand()` definitions contributed at the application root. `sections(snapshot)` returns `runtime(contributions)` containing plain-text sections targeted by canonical command paths relative to that root; contributions append to each target's `meta.sections` in Extension registration order. `build(ctx)` generates artifacts in Extension registration order when invoked by build tooling and may be async; its errors propagate to the caller. See [Extensions](/docs/guide/extensions).
 
 ### `ExtensionSectionContribution`
 
 ```ts
-type ExtensionSectionContribution = CommandSectionInput & {
+type ExtensionSectionContribution = RuntimeCommandSectionInput & {
   readonly command: readonly string[];
 };
 ```
 
-The entry shape returned by `ExtensionConfig.sections(snapshot)`: a plain-text section plus the required canonical `command` path it targets, relative to the application root (`[]` targets the root command).
+The entry shape inside the wrapped collection returned by `ExtensionConfig.sections(snapshot)`. `RuntimeCommandSectionInput` accepts typed audience arrays whose nonemptiness is checked at consumption: a plain-text section plus the required canonical `command` path it targets, relative to the application root (`[]` targets the root command).
 
 ### `ExtensionBuildContext`
 
@@ -277,7 +285,7 @@ The build context contains the frozen root Command Snapshot and the resolved abs
 
 <auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="Extension" />
 
-`defineExtension(id, config?)` returns a frozen structural value; omitted config defaults to `{}`. Mint the branded `ExtensionId` with `defineExtensionId()`, which requires a non-empty, already-trimmed string.
+`defineExtension(id, config?)` returns a frozen helper-owned value with private defining data; omitted config defaults to `{}`. Mint the branded `ExtensionId` with `defineExtensionId()`, which requires a non-empty, already-trimmed string.
 
 ### `ExtensionFactory`
 
@@ -285,7 +293,7 @@ The build context contains the frozen root Command Snapshot and the resolved abs
 | ----------------------------- | ---------------------------------------------------------------------------------------------- |
 | `ExtensionFactory<Args = []>` | Callable Extension constructor with a readonly `id: ExtensionId`; valid as a `SectionConsumer` |
 
-`defineExtension(id, factory)` wraps a config-returning callback, preserving its parameters and inferring its flags, dependencies, providers, and commands. Each call follows the object form's normalization and freezing path. `ExtensionFactory<Args, Deps, Provides, Defs, Commands, MetaKeys>` accepts optional contribution and metadata-key type parameters. Contribution defaults keep published annotations short; `MetaKeys` defaults to `never`, meaning no required metadata. An annotation for a metadata-requiring factory must preserve those keys. See [authoring an Extension](/docs/guide/extensions#author-an-extension).
+`defineExtension(id, factory)` wraps a config-returning callback, preserving its parameters and inferring its flags, dependencies, providers, and commands. Each call follows the object form's normalization and freezing path. `ExtensionFactory<Args, Deps, Provides, Defs, Commands, MetaKeys>` accepts optional contribution and metadata-key type parameters. Broad contribution annotations require checked attachment. Preserve literal tuples in published annotations when ordinary `.extend()` should remain available; `MetaKeys` defaults to `never`, meaning no required metadata. An annotation for a metadata-requiring factory must preserve those keys. See [authoring an Extension](/docs/guide/extensions#author-an-extension).
 
 ### `RootMetaKey` and `DefineExtensionWith`
 

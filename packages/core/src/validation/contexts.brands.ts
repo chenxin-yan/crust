@@ -1,11 +1,28 @@
-import type { ContextDepsOf, ContextInstance, ContextMap, ContextsOutput } from "../api/context.ts";
-import type { DefName, Overlap } from "./shared.ts";
+import type {
+	ContextValue,
+	ContextDepsOf,
+	AnyContextInstance,
+	ContextInstanceData,
+	ContextMap,
+	ContextsOutput,
+} from "../api/context.ts";
+import type { ExtensionData } from "../api/extension.ts";
+import type { CommandDefinitionData } from "../command/crust.ts";
+import type { LocalSpellingsOf, ContextOwnedFlags } from "./flags.brands.ts";
+import type {
+	DefName,
+	KnownNameBrand,
+	Overlap,
+	IsStaticTuple,
+	IsUnion,
+	RuntimeRequiredBrand,
+} from "./shared.ts";
 
 /** Canonical names claimed by more than one instance in the same `.provide()` call. */
 type DuplicateContextNames<
-	Cs extends readonly ContextInstance[],
+	Cs extends readonly AnyContextInstance[],
 	Seen extends string = never,
-> = Cs extends readonly [infer Head, ...infer Tail extends readonly ContextInstance[]]
+> = Cs extends readonly [infer Head, ...infer Tail extends readonly AnyContextInstance[]]
 	? (DefName<Head> & Seen) | DuplicateContextNames<Tail, Seen | DefName<Head>>
 	: never;
 
@@ -30,7 +47,7 @@ type DuplicateContextBrand<C, Existing extends string> =
  */
 export type ValidateContextNames<
 	Ctx extends ContextMap,
-	Cs extends readonly ContextInstance[],
+	Cs extends readonly AnyContextInstance[],
 	// Hoisted invariants — computed once per call, not per element.
 	Existing extends string = string extends keyof Ctx ? never : keyof Ctx & string,
 	Dups extends string = DuplicateContextNames<Cs>,
@@ -46,11 +63,12 @@ type InstanceNames<P extends readonly unknown[]> = P extends readonly [
 	: never;
 
 /** Statically known names of an Extension's provided Contexts; widened Extensions opt out. */
-type ExtensionProvidedNames<E> = E extends {
-	readonly provides?: infer P extends readonly unknown[];
-}
-	? InstanceNames<P>
-	: never;
+type ExtensionProvidedNames<E> =
+	ExtensionData<E> extends {
+		readonly provides?: infer P extends readonly unknown[];
+	}
+		? InstanceNames<P>
+		: never;
 
 type ExtensionContextBrand<E, Existing extends string> =
 	Overlap<ExtensionProvidedNames<E>, Existing> extends infer Duplicate extends string
@@ -83,7 +101,7 @@ export type ValidateExtensionProvides<
 > = ValidateExtensionProvidesWorker<Es, string extends keyof Ctx ? never : keyof Ctx & string>;
 
 // Widened instances (Deps = any, or a string-indexed Deps map) opt out to
-// runtime-only validation, mirroring DeclaredDepsOf below.
+// checked availability. Callback value contracts still use ValidateContextValues.
 type ProvidedDepsOf<C> =
 	IsAny<C> extends true
 		? {}
@@ -104,17 +122,22 @@ type MissingDependencyBrand<C, Known extends string> =
 
 // A same-name provider must also deliver the value type the consumer's
 // declared factory promises; name-only matching would compile-cleanly mistype
-// `ctx.<name>`. `any`-valued providers opt out (runtime-only), and there is no
-// runtime twin because values are opaque until setup runs.
-type MismatchedDependencyNames<Deps, KnownValues> = {
-	[K in keyof Deps & keyof KnownValues & string]: IsAny<KnownValues[K]> extends true
-		? never
-		: IsAny<Deps[K]> extends true
-			? never
-			: KnownValues[K] extends Deps[K]
-				? never
-				: K;
-}[keyof Deps & keyof KnownValues & string];
+// `ctx.<name>`. Explicit `any` opts out of TypeScript guarantees; there is no
+// runtime reflection of erased callback values. Unknown values remain unproven.
+// Inspect each possible provider record before common keys can hide a replacement.
+type MismatchedDependencyNames<Deps, KnownValues> = keyof Deps extends never
+	? never
+	: KnownValues extends unknown
+		? {
+				[K in keyof Deps & keyof KnownValues & string]: IsAny<KnownValues[K]> extends true
+					? never
+					: IsAny<Deps[K]> extends true
+						? never
+						: KnownValues[K] extends Deps[K]
+							? never
+							: K;
+			}[keyof Deps & keyof KnownValues & string]
+		: never;
 
 type MismatchedDependencyBrand<C, KnownValues> =
 	MismatchedDependencyNames<ProvidedDepsOf<C>, KnownValues> extends infer Mismatched extends string
@@ -128,7 +151,7 @@ type MismatchedDependencyBrand<C, KnownValues> =
 /** Brand provided instances whose transitive dependency closure is unsatisfied. */
 export type ValidateContextDeps<
 	Ctx extends ContextMap,
-	Cs extends readonly ContextInstance[],
+	Cs extends readonly AnyContextInstance[],
 	Known extends string =
 		| (string extends keyof Ctx ? never : keyof Ctx & string)
 		| DefName<Cs[number]>,
@@ -143,18 +166,22 @@ export type ValidateContextDeps<
 type IsAny<T> = 0 extends 1 & T ? true : false;
 export type DeclaredDepsOf<T> =
 	IsAny<T> extends true
-		? {}
-		: T extends { readonly _deps?: infer Deps extends ContextMap }
-			? IsAny<Deps> extends true
-				? {}
-				: string extends keyof Deps
-					? {}
-					: Deps
+		? Record<string, ContextValue>
+		: CommandDefinitionData<ExtensionData<T>> extends {
+					readonly _deps?: infer D extends ContextMap;
+			  }
+			? IsAny<D> extends true
+				? Record<string, ContextValue>
+				: D
 			: {};
 
 /** Missing-dependency brand shared by `ValidateDeclaredDeps` and inline `.command()`. */
-export type MissingDeclaredDependencyBrand<T, Known extends string> =
-	Exclude<keyof DeclaredDepsOf<T> & string, Known> extends infer Missing extends string
+export type MissingDeclaredDependencyBrand<
+	T,
+	Known extends string,
+> = string extends keyof DeclaredDepsOf<T>
+	? RuntimeRequiredBrand
+	: Exclude<keyof DeclaredDepsOf<T> & string, Known> extends infer Missing extends string
 		? [Missing] extends [never]
 			? {}
 			: { readonly FIX_MISSING_DEPENDENCY: `Uses Context "${Missing}" which is not provided` }
@@ -163,5 +190,39 @@ export type MissingDeclaredDependencyBrand<T, Known extends string> =
 /** Brand sealed units whose declared dependencies are absent at a composition site. */
 export type ValidateDeclaredDeps<Ctx extends ContextMap, Items extends readonly unknown[]> = {
 	[I in keyof Items]: Items[I] &
-		MissingDeclaredDependencyBrand<Items[I], string extends keyof Ctx ? never : keyof Ctx & string>;
+		MissingDeclaredDependencyBrand<
+			Items[I],
+			string extends keyof Ctx ? never : keyof Ctx & string
+		> &
+		DeclaredDependencyValuesBrand<DeclaredDepsOf<Items[I]>, Ctx>;
+};
+
+/** Callback values stay TypeScript-owned, including at checked composition. */
+export type DeclaredDependencyValuesBrand<Deps, Values> =
+	MismatchedDependencyNames<Deps, Values> extends infer Names extends string
+		? [Names] extends [never]
+			? {}
+			: {
+					readonly FIX_DEPENDENCY_TYPE: `Provided Context "${Names}" does not satisfy its declared value type`;
+				}
+		: never;
+
+export type ValidateDeclaredValues<Ctx, Items extends readonly unknown[]> = {
+	[I in keyof Items]: DeclaredDependencyValuesBrand<DeclaredDepsOf<Items[I]>, Ctx>;
+};
+
+/** A trusted provider collection must prove names, owned spellings, and demands. */
+export type KnownContextInstances<Cs extends readonly AnyContextInstance[]> =
+	(IsStaticTuple<Cs> extends true ? {} : RuntimeRequiredBrand) & {
+		[I in keyof Cs]: Cs[I] &
+			Pick<ContextInstanceData<Cs[I]>, "name"> &
+			KnownNameBrand<Cs[I]["name"]> &
+			(IsUnion<Cs[I]["name"]> extends true ? RuntimeRequiredBrand : {}) &
+			(string extends keyof ContextDepsOf<Cs[I]> ? RuntimeRequiredBrand : {}) &
+			(string extends LocalSpellingsOf<ContextOwnedFlags<Cs[I]>> ? RuntimeRequiredBrand : {});
+	};
+
+/** Checked provider collections still need evidence for opaque setup result contracts. */
+export type ValidateContextValues<Ctx, Cs extends readonly AnyContextInstance[]> = {
+	[I in keyof Cs]: DeclaredDependencyValuesBrand<ContextDepsOf<Cs[I]>, Ctx>;
 };

@@ -12,9 +12,7 @@ const app = new Crust("my-cli").extend(noColor()).action(() => {});
 await app.execute();
 ```
 
-```ts
-const noColor: ExtensionFactory;
-```
+The factory preserves its literal owned-flag types for ordinary `.extend()` attachment.
 
 Register `noColor()` before Extensions that finish in `preRun`, such as `help()`. Once a hook returns `ctx.finish()`, later `preRun` hooks are skipped, so a later `noColor()` cannot apply the color flags to help output.
 

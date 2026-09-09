@@ -104,9 +104,8 @@ function findSuggestions(
 		.map(([name]) => name);
 }
 
-export const didYouMean: ExtensionFactory<[options?: DidYouMeanOptions]> = defineExtension(
-	DID_YOU_MEAN,
-	(options = {}) => {
+export const didYouMean: ExtensionFactory<[options?: DidYouMeanOptions], {}, [], [], []> =
+	defineExtension(DID_YOU_MEAN, (options = {}) => {
 		const mode = options.mode ?? "error";
 
 		return {
@@ -138,5 +137,4 @@ export const didYouMean: ExtensionFactory<[options?: DidYouMeanOptions]> = defin
 				},
 			},
 		};
-	},
-);
+	});

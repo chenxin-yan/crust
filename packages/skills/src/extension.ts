@@ -2,12 +2,15 @@ import { join, relative } from "node:path";
 
 import {
 	type ExtensionFactory,
+	type ExtensionContext,
+	type CommandSnapshot,
 	type ExtensionId,
 	type ExtensionBuildContext,
 	type InvocationIO,
 	defineCommand,
 	defineExtension,
 	defineExtensionId,
+	runtime,
 } from "@crustjs/core";
 import { spinner } from "@crustjs/progress";
 import { confirm, multiselect, select } from "@crustjs/prompts";
@@ -190,31 +193,32 @@ async function buildSkills(options: SkillOptions, context: ExtensionBuildContext
 	else await writeSkillsFromSnapshot(context.snapshot, writeOptions);
 }
 
-export const skill: ExtensionFactory<[options: SkillOptions]> = defineExtension(
+export const skill: ExtensionFactory<[options: SkillOptions], {}, [], []> = defineExtension(
 	SKILLS,
-	(options) => {
+	runtime((options: SkillOptions) => {
 		const commandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
 		return {
 			commands: [buildSkillCommand(commandName, options)],
 			// Skills are loaded when a snapshot is prepared, not at construction, so
 			// help and man pages reflect the packaged directory as it exists at render time.
-			sections: (snapshot) => [
-				{
-					command: [],
-					title: SKILLS_SECTION_TITLE,
-					body: formatSkillDocumentation(options.distDir, commandName, snapshot.meta.name),
-					except: [SKILLS],
-				},
-			],
-			build: (context) => buildSkills(options, context),
+			sections: (snapshot: CommandSnapshot) =>
+				runtime([
+					{
+						command: [],
+						title: SKILLS_SECTION_TITLE,
+						body: formatSkillDocumentation(options.distDir, commandName, snapshot.meta.name),
+						except: [SKILLS],
+					},
+				]),
+			build: (context: ExtensionBuildContext) => buildSkills(options, context),
 			hooks: {
-				async preRun(context) {
+				async preRun(context: ExtensionContext) {
 					if (context.commandPath[1] === commandName || options.autoUpdate === false) return;
 					await autoRepairSkills(options, context);
 				},
 			},
 		};
-	},
+	}),
 );
 
 async function reconcileSkill(opts: {
@@ -355,7 +359,7 @@ async function reconcileSkill(opts: {
 
 function buildSkillCommand(commandName: string, options: SkillOptions) {
 	return defineCommand(
-		commandName,
+		runtime(commandName),
 		{ description: "Manage agent skill installations" },
 		(command) =>
 			command

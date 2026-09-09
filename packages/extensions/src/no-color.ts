@@ -36,48 +36,53 @@ let baseForceColor: string | undefined;
 let baseNoColor: string | undefined;
 const colorRuns = new WeakMap<ExtensionContext, true>();
 
-export const noColor: ExtensionFactory = defineExtension(NO_COLOR, () => ({
-	flags: [
-		{
-			name: "color",
-			type: "boolean",
-			description: "Enable colored output",
-		},
-	],
-	hooks: {
-		preRun(context) {
-			const flagValue = context.flags.color;
-			if (flagValue !== true && flagValue !== false) return;
-
-			if (activeRuns === 0) {
-				baseForceColor = process.env.FORCE_COLOR;
-				baseNoColor = process.env.NO_COLOR;
-			}
-			activeRuns++;
-			colorRuns.set(context, true);
-
-			if (flagValue) {
-				delete process.env.NO_COLOR;
-				process.env.FORCE_COLOR = "3";
-			} else {
-				delete process.env.FORCE_COLOR;
-				process.env.NO_COLOR = "1";
-			}
-		},
-		postRun(context) {
-			if (!colorRuns.has(context)) return;
-			colorRuns.delete(context);
-			activeRuns--;
-			// ponytail: opposing overlapping runs share process.env and are last-writer-wins;
-			// ambient env restored once all runs finish. If a consumer needs per-invocation
-			// color correctness, implement fail-fast (reject opposing overlap in preRun) —
-			// do not serialize (nested execute() deadlocks).
-			if (activeRuns === 0) {
-				if (baseForceColor === undefined) delete process.env.FORCE_COLOR;
-				else process.env.FORCE_COLOR = baseForceColor;
-				if (baseNoColor === undefined) delete process.env.NO_COLOR;
-				else process.env.NO_COLOR = baseNoColor;
-			}
-		},
+const colorFlags = [
+	{
+		name: "color",
+		type: "boolean",
+		description: "Enable colored output",
 	},
-}));
+] as const;
+
+export const noColor: ExtensionFactory<[], {}, [], typeof colorFlags, []> = defineExtension(
+	NO_COLOR,
+	() => ({
+		flags: colorFlags,
+		hooks: {
+			preRun(context) {
+				const flagValue = context.flags.color;
+				if (flagValue !== true && flagValue !== false) return;
+
+				if (activeRuns === 0) {
+					baseForceColor = process.env.FORCE_COLOR;
+					baseNoColor = process.env.NO_COLOR;
+				}
+				activeRuns++;
+				colorRuns.set(context, true);
+
+				if (flagValue) {
+					delete process.env.NO_COLOR;
+					process.env.FORCE_COLOR = "3";
+				} else {
+					delete process.env.FORCE_COLOR;
+					process.env.NO_COLOR = "1";
+				}
+			},
+			postRun(context) {
+				if (!colorRuns.has(context)) return;
+				colorRuns.delete(context);
+				activeRuns--;
+				// ponytail: opposing overlapping runs share process.env and are last-writer-wins;
+				// ambient env restored once all runs finish. If a consumer needs per-invocation
+				// color correctness, implement fail-fast (reject opposing overlap in preRun) —
+				// do not serialize (nested execute() deadlocks).
+				if (activeRuns === 0) {
+					if (baseForceColor === undefined) delete process.env.FORCE_COLOR;
+					else process.env.FORCE_COLOR = baseForceColor;
+					if (baseNoColor === undefined) delete process.env.NO_COLOR;
+					else process.env.NO_COLOR = baseNoColor;
+				}
+			},
+		},
+	}),
+);

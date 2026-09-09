@@ -4,9 +4,9 @@ import type { Equal, Expect } from "../../tests/helpers.ts";
 import { Crust, defineCommand } from "../command/crust.ts";
 import type { CaughtError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
+import { runtime } from "../runtime.ts";
 import {
 	type ContextBag,
-	type ContextInstance,
 	type ContextSetup,
 	createContextResolver,
 	defineContext,
@@ -257,7 +257,7 @@ describe("Crust .provide()", () => {
 		const owner = defineContext("owner", { flags: [{ name: "mode", type: "string" }] }, () => ({}));
 		const app = new Crust("cli").flags({ name: "mode", type: "string" });
 
-		expect(() => app.provide(...([owner()] as never[]))).toThrow(
+		expect(() => app.provide(runtime([owner()]))).toThrow(
 			expect.objectContaining({
 				code: "DEFINITION",
 				details: { subject: "flag", name: "mode", reason: "flag-collision" },
@@ -408,7 +408,7 @@ describe("Context-owned flags", () => {
 			apiKey: flags["api-key"],
 		}));
 		const branch = <const Name extends string>(name: Name) =>
-			defineCommand(name, (command) =>
+			defineCommand(runtime(name), (command) =>
 				command.provide(auth()).action(async ({ ctx }) => {
 					seen.push(`${name}:${(await ctx.auth).apiKey}`);
 				}),
@@ -581,7 +581,7 @@ describe("Context setup dependencies", () => {
 		const app = new Crust("cli")
 			.provide(db.of("fake"), report() as never)
 			.action(async ({ ctx }) => void (await (ctx as { report: Promise<string> }).report));
-		await expect(app.run([])).rejects.toMatchObject({
+		await expect(app.run([], runtime({}))).rejects.toMatchObject({
 			details: { name: "config", reason: "missing-context" },
 		});
 	});
@@ -666,25 +666,11 @@ describe("Context dependency runtime boundaries", () => {
 	it("keeps dynamic cycle detection for untyped Context instances", async () => {
 		const aFactory = defineContext("a", () => "a");
 		const bFactory = defineContext("b", () => "b");
-		const a: ContextInstance<"a"> = {
-			name: "a",
-			ownedFlags: {},
-			uses: [bFactory],
-			setup: async ({ ctx }) => {
-				// SAFETY: this malformed dynamic cycle fixture declares b through uses.
-				return await (ctx as ContextBag<{ b: string }>).b;
-			},
-		};
-		const b: ContextInstance<"b"> = {
-			name: "b",
-			ownedFlags: {},
-			uses: [aFactory],
-			setup: async ({ ctx }) => {
-				// SAFETY: this malformed dynamic cycle fixture declares a through uses.
-				return await (ctx as ContextBag<{ a: string }>).a;
-			},
-		};
-		const app = new Crust("cli").provide(a, b).action(async ({ ctx }) => void (await ctx.a));
+		const a = defineContext("a", { uses: [bFactory] }, async ({ ctx }) => await ctx.b);
+		const b = defineContext("b", { uses: [aFactory] }, async ({ ctx }) => await ctx.a);
+		const app = new Crust("cli")
+			.provide(runtime([a(), b()]))
+			.action(async ({ ctx }) => void (await ctx.a));
 
 		await expect(app.run([])).rejects.toMatchObject({
 			details: { reason: "context-cycle" },
@@ -1009,8 +995,8 @@ describe("lazy Context bags", () => {
 });
 
 describe("Context disposal", () => {
-	function disposableContext(name: string, log: string[]) {
-		return defineContext(name, () => ({
+	function disposableContext<const Name extends string>(name: Name, log: string[]) {
+		return defineContext(runtime(name), () => ({
 			name,
 			async [Symbol.asyncDispose]() {
 				log.push(`dispose:${name}`);
@@ -1372,21 +1358,118 @@ describe("inline .command()", () => {
 		expect(outcome.status === "completed" && outcome.result).toBeUndefined();
 	});
 
-	it("rejects a Context instance passed to .use() at runtime", () => {
-		const logger = defineContext("logger", () => "logger");
-		expect(() =>
-			new Crust("cli").command("sub", (cmd) =>
-				// SAFETY: deliberately bypass the factory-only signature to verify the runtime guard.
-				(cmd.use as (instance: ContextInstance) => never)(logger()),
-			),
-		).toThrow(/expects Context factories/);
+	it("retains only selected declared demands and does not inspect trusted factory shapes", () => {
+		let reads = 0;
+		const logger = new Proxy(
+			defineContext("logger", () => "logger"),
+			{
+				get(target, key, receiver) {
+					if (key === "contextName") reads++;
+					// oxlint-disable-next-line eslint/no-restricted-properties -- transparent Proxy forwarding preserves private symbols while observing validation reads.
+					return Reflect.get(target, key, receiver);
+				},
+			},
+		);
+		const unused = defineContext("unused", () => "unused");
+		const command = defineCommand("sub", (cmd) => {
+			void cmd.use(unused);
+			return cmd.use(logger).action(() => {});
+		});
+		new Crust("trusted").provide(logger()).add(command);
+		expect(reads).toBe(0);
+		new Crust("checked").provide(logger()).add(runtime([command]));
+		expect(reads).toBe(0);
 	});
 
 	it("rejects an inline command name that is already registered", () => {
 		expect(() =>
 			new Crust("cli")
 				.command("dup", (cmd) => cmd.action(() => {}))
-				.command("dup", (cmd) => cmd.action(() => {})),
+				.command(runtime("dup"), (cmd) => cmd.action(() => {})),
 		).toThrow(/already registered/);
 	});
+});
+
+describe("checked Context definitions", () => {
+	it("consumes mutable flag configs locally without starting setup", () => {
+		let setups = 0;
+		const flags = [{ name: "token", type: "string" as const, aliases: ["t"] }];
+		const config = runtime({ flags });
+		flags.push({ name: "other", type: "string", aliases: ["t"] });
+		expect(() => defineContext(runtime("auth"), config, () => ++setups)).toThrow("collides");
+		flags.pop();
+		const auth = defineContext(runtime("auth"), config, () => ++setups);
+		flags[0]!.aliases.push("mutated");
+		flags.length = 0;
+		expect(auth().ownedFlags.token?.aliases).toEqual(["t"]);
+		expect(Object.isFrozen(auth().ownedFlags)).toBe(true);
+		expect(setups).toBe(0);
+		expect(defineContext(runtime("empty"), () => 1)().name).toBe("empty");
+	});
+});
+
+it("checks provider availability at consumption without eager setup", async () => {
+	let setups = 0;
+	const source = defineContext("source", () => {
+		setups++;
+		return 1;
+	});
+	const dependent = defineContext("dependent", { uses: [source] }, () => {
+		setups++;
+		return 2;
+	});
+	const instances = [dependent()];
+	expect(() => new Crust("missing").provide(runtime(instances))).toThrow("source");
+	const app = new Crust("present").provide(source()).provide(runtime(instances));
+	instances.length = 0;
+	expect(setups).toBe(0);
+	await app.action(async ({ ctx }) => expect(await ctx.dependent).toBe(2)).run([]);
+	expect(setups).toBe(1);
+});
+
+it("preserves value-only Context replacement but rejects overlapping owned flags", async () => {
+	const source = defineContext("source", () => 1);
+	const app = new Crust("replace").provide(source()).provide(runtime([source.of(2)]));
+	await app.action(async ({ ctx }) => expect(await ctx.source).toBe(2)).run([]);
+	const auth = defineContext(
+		"auth",
+		{ flags: [{ name: "token", type: "string", aliases: ["t"] }] },
+		() => 1,
+	);
+	expect(() => new Crust("same-owner").provide(auth()).provide(runtime([auth.of(2)]))).toThrow(
+		"collides",
+	);
+	const other = defineContext(
+		"auth",
+		{ flags: [{ name: "other", type: "string", short: "t" }] },
+		() => 2,
+	);
+	expect(() => new Crust("same-owner-alias").provide(auth()).provide(runtime([other()]))).toThrow(
+		"collides",
+	);
+});
+
+it("consumes privately owned Context data through structural copies", async () => {
+	const dep = defineContext("dep", () => 1);
+	const real = defineContext(
+		"real",
+		{ uses: [dep], flags: [{ name: "token", type: "string" }] },
+		() => 2,
+	);
+	const altered = {
+		...real(),
+		uses: [],
+		setup: () => 99,
+		ownedFlags: { fake: { type: "boolean" as const } },
+	};
+	expect(() => new Crust("missing").provide(runtime([altered]))).toThrow("dep");
+	const app = new Crust("present")
+		.provide(dep())
+		.provide(runtime([altered]))
+		.action(async ({ ctx, flags }) => {
+			expect(await ctx.real).toBe(2);
+			expect(flags.token).toBe("original");
+		});
+	await app.run([], { flags: { token: "original" } });
+	expect(Object.keys((await app.snapshot()).flags)).toEqual(["token"]);
 });

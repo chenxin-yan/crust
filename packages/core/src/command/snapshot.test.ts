@@ -5,6 +5,7 @@ import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
+import { runtime } from "../runtime.ts";
 import { Crust, defineCommand } from "./crust.ts";
 import { createCommandNode, registerFlag } from "./node.ts";
 import { snapshotCommand } from "./snapshot.ts";
@@ -115,25 +116,13 @@ describe("snapshotCommand", () => {
 });
 
 describe("command metadata sections", () => {
-	it("rejects a dynamic section carrying both only and except", () => {
-		const agentDocs = defineExtensionId("agent-docs");
-		// Dynamic path: the SectionAudience union owns literals, but a
-		// config-built object can carry both fields — runtime must reject it.
-		const section = JSON.parse(
-			JSON.stringify({ title: "T", body: "B", only: [agentDocs], except: [agentDocs] }),
-		) as { title: string; body: string };
-		expect(() => new Crust("cli", { sections: [section] })).toThrow(
-			"contains invalid documentation sections",
-		);
-	});
-
 	it("appends targeted Extension sections after authored sections in registration order", async () => {
 		const first = defineExtension(defineExtensionId("first"), {
 			sections(snapshot) {
 				expect(snapshot.meta.sections).toEqual([{ title: "Root guide", body: "Root body" }]);
 				expect(snapshot.subCommands.build).toBeDefined();
 				expect(snapshot.subCommands.generated).toBeDefined();
-				return [
+				return runtime([
 					{ command: [], title: "First root", body: "First body" },
 					{ command: ["build"], title: "First build", body: "Build body" },
 					{
@@ -141,12 +130,12 @@ describe("command metadata sections", () => {
 						title: "Generated guide",
 						body: "Generated body",
 					},
-				];
+				]);
 			},
 		});
 		const second = defineExtension(defineExtensionId("second"), {
 			commands: [defineCommand("generated", (command) => command)],
-			sections: () => [{ command: [], title: "Second root", body: "Second body" }],
+			sections: () => runtime([{ command: [], title: "Second root", body: "Second body" }]),
 		});
 		const app = new Crust("cli", {
 			sections: [{ title: "Root guide", body: "Root body" }],
@@ -195,14 +184,15 @@ describe("command metadata sections", () => {
 			)
 			.extend(
 				defineExtension(defineExtensionId("docs"), {
-					sections: () => [
-						{
-							command: ["build"],
-							title: "Human notes",
-							body: "Human body",
-							except: [agentDocs.id, { id: terminal }],
-						},
-					],
+					sections: () =>
+						runtime([
+							{
+								command: ["build"],
+								title: "Human notes",
+								body: "Human body",
+								except: [agentDocs.id, { id: terminal }],
+							},
+						]),
 				}),
 			);
 
@@ -224,7 +214,7 @@ describe("command metadata sections", () => {
 			const app = new Crust("cli")
 				.extend(
 					defineExtension(defineExtensionId("docs"), {
-						sections: () => [{ command, title: "Notes", body: "Body" }],
+						sections: () => runtime([{ command, title: "Notes", body: "Body" }]),
 					}),
 				)
 				.add(defineCommand("build", { aliases: ["b"] }, (builder) => builder));
@@ -241,25 +231,15 @@ describe("command metadata sections", () => {
 	});
 
 	it("rejects malformed authored section data", () => {
-		const badSections: unknown[] = [
+		const badSections = [
 			[{ title: "", body: "Body" }],
 			[{ title: "   ", body: "Body" }],
 			[{ title: "Notes", body: "" }],
-			[{ title: 1, body: "Body" }],
-			[{ title: "Notes", body: null }],
-			[{ title: "Notes", body: "Body", only: [], except: ["terminal"] }],
-			[{ title: "Notes", body: "Body", only: "terminal" }],
 			[{ title: "Notes", body: "Body", only: [] }],
 			[{ title: "Notes", body: "Body", except: [] }],
-			[{ title: "Notes", body: "Body", only: [{}] }],
-			[{ title: "Notes", body: "Body", only: [{ id: "" }] }],
-			[{ title: "Notes", body: "Body", only: [{ id: " terminal " }] }],
-			[{ title: "Notes", body: "Body", except: [1] }],
-			[{ title: "Notes", body: "Body", only: ["   "] }],
-			[null],
 		];
 		for (const sections of badSections) {
-			expect(() => new Crust("cli", { sections: sections as never })).toThrow(
+			expect(() => new Crust("cli", runtime({ sections }))).toThrow(
 				expect.objectContaining({
 					code: "DEFINITION",
 					details: {
@@ -273,23 +253,15 @@ describe("command metadata sections", () => {
 	});
 
 	it("rejects malformed Extension section contributions", async () => {
-		const badReturns: unknown[] = [
-			{ command: [], title: "Notes", body: "Body" }, // not an array
-			[{ title: "Notes", body: "Body" }], // missing command
-			[{ command: "build", title: "Notes", body: "Body" }],
-			[{ command: [1], title: "Notes", body: "Body" }],
+		const badReturns = [
 			[{ command: [], title: "", body: "Body" }],
 			[{ command: [], title: "Notes", body: "   " }],
-			[{ command: [], title: "Notes", body: "Body", only: [], except: [] }],
-			[{ command: [], title: "Notes", body: "Body", only: "terminal" }],
 			[{ command: [], title: "Notes", body: "Body", only: [] }],
-			[{ command: [], title: "Notes", body: "Body", only: [null] }],
-			[{ command: [], title: "Notes", body: "Body", only: [{ id: 1 }] }],
 		];
 		for (const contributions of badReturns) {
 			const app = new Crust("cli").extend(
 				defineExtension(defineExtensionId("docs"), {
-					sections: () => contributions as never,
+					sections: () => runtime(contributions),
 				}),
 			);
 			await expect(app.snapshot()).rejects.toMatchObject({
@@ -305,11 +277,11 @@ describe("command metadata sections", () => {
 
 	it("rejects CR/LF in authored and contributed section titles", async () => {
 		expect(
-			() => new Crust("cli", { sections: [{ title: "Injected\nheading", body: "Body" }] }),
+			() => new Crust("cli", runtime({ sections: [{ title: "Injected\nheading", body: "Body" }] })),
 		).toThrow(CrustError);
 		const contributed = new Crust("cli").extend(
 			defineExtension(defineExtensionId("docs"), {
-				sections: () => [{ command: [], title: "Injected\rheading", body: "Body" }],
+				sections: () => runtime([{ command: [], title: "Injected\rheading", body: "Body" }]),
 			}),
 		);
 

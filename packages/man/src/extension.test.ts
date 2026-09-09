@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { runtime } from "@crustjs/core";
 import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
 import { BUILD_OUT_DIR_ENV, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
 import { skill } from "@crustjs/skills";
@@ -59,9 +60,7 @@ describe("man Extension", () => {
 			},
 		});
 		const app = new Crust("demo", { description: "Demo CLI" }).extend(
-			producer,
-			skill({ distDir: source }),
-			man(),
+			runtime([producer, skill({ distDir: source }), man()]),
 		);
 
 		try {

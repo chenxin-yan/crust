@@ -66,7 +66,7 @@ function freezeTree(node: CommandNode): void {
 	Object.freeze(node.localFlags);
 	Object.freeze(node.ownedFlags);
 	Object.freeze(node.effectiveFlags);
-	// Section objects are already frozen by validateSection.
+	// Section objects are already frozen during normalization.
 	if (node.meta.sections) Object.freeze(node.meta.sections);
 	Object.freeze(node.meta);
 	Object.freeze(node.contexts);
@@ -128,7 +128,11 @@ export function prepareInvocation(
 /** An invocation starts from terminal argv or a typed path plus structured values. */
 export type InvocationInput =
 	| { readonly argv: readonly string[] }
-	| { readonly path: readonly string[]; readonly input: RunInputPayload };
+	| {
+			readonly path: readonly string[];
+			readonly input: RunInputPayload;
+			readonly checked: boolean;
+	  };
 
 interface ResolvedInput {
 	argv: readonly string[];
@@ -145,6 +149,7 @@ function resolveStructuredInput(
 	root: CommandNode,
 	path: readonly string[],
 	input: RunInputPayload,
+	checked: boolean,
 ): ResolvedInput {
 	const route = resolveCommand(root, [...path]);
 	if (route.argv.length > 0) {
@@ -161,7 +166,7 @@ function resolveStructuredInput(
 			parentCommand,
 		});
 	}
-	return { argv: path, route, parsed: parseStructured(route.command, input) };
+	return { argv: path, route, parsed: parseStructured(route.command, input, checked) };
 }
 
 /** Resolve, parse, and run one invocation without rendering failures. */
@@ -178,7 +183,7 @@ async function dispatch(
 	const { argv, route, parsed } =
 		"argv" in input
 			? resolveArgvInput(rootNode, input.argv)
-			: resolveStructuredInput(rootNode, input.path, input.input);
+			: resolveStructuredInput(rootNode, input.path, input.input, input.checked);
 	const resolvedNode = route.command;
 
 	// One resource scope and resolver span pre-run, the action, and post-run.
@@ -204,7 +209,7 @@ async function dispatch(
 	onExtensionContext?.(extensionContext);
 
 	const terminal = async () => {
-		validateParsed(resolvedNode, parsed);
+		validateParsed(resolvedNode, parsed, !("argv" in input) && !input.checked);
 
 		// Standard Schemas on arg/flag definitions own value validation and
 		// transformation; actions and flag-owning Contexts receive schema outputs.

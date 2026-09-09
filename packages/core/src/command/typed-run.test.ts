@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { defineExtension, type Extension } from "../api/extension.ts";
 import { defineExtensionId } from "../identity.ts";
+import { runtime } from "../runtime.ts";
 import type { CommandShapeAt, RunInput, RunOutcome } from "./crust.ts";
 import { Crust, defineCommand } from "./crust.ts";
 interface StructuredRunCapture {
@@ -87,7 +88,7 @@ describe("typed programmatic invocation", () => {
 				),
 			],
 		});
-		const app = new Crust("cli").extend(dynamic);
+		const app = new Crust("cli").extend(runtime([dynamic]));
 
 		function typecheckHarness() {
 			// @ts-expect-error -- widened Extension commands are not statically known paths
@@ -99,7 +100,7 @@ describe("typed programmatic invocation", () => {
 		expect(ran).toBe(true);
 	});
 
-	it("keeps a widened Extension from degrading a literal sibling's typed shape", async () => {
+	it("opens child results when a later Extension can replace any canonical child", async () => {
 		const lit = defineExtension(defineExtensionId("lit"), {
 			commands: [
 				defineCommand("inspect", (command) => command.action(() => ({ kind: "lit" as const }))),
@@ -108,25 +109,26 @@ describe("typed programmatic invocation", () => {
 		const widened: Extension = defineExtension(defineExtensionId("dyn"), {
 			commands: [defineCommand("generated", (command) => command.action(() => {}))],
 		});
-		const app = new Crust("cli").extend(lit, widened);
+		const app = new Crust("cli").extend(runtime([lit, widened]));
 
-		const pending = app.run(["inspect"]);
-		type _result = Expect<Equal<typeof pending, Promise<RunOutcome<{ kind: "lit" }>>>>;
+		const pending = app.run(["inspect"], runtime({}));
+		type _result = Expect<Equal<typeof pending, Promise<RunOutcome<unknown>>>>;
 		expect(await pending).toEqual({ status: "completed", result: { kind: "lit" } });
 	});
 
-	it("surfaces Extension preparation failures before typed dispatch", async () => {
-		const replacement = defineExtension(defineExtensionId("replacement"), {
-			flags: [{ name: "mode", type: "boolean" }],
-		});
-		const app = new Crust("cli")
-			.flags({ name: "mode", type: "string" })
-			.extend(replacement as never)
-			.action(() => {});
-
-		await expect(app.run([])).rejects.toThrow(
-			'Flag "mode" collides with existing flag "mode" on command "cli"',
+	it("surfaces delayed checked recipe failures before typed dispatch", async () => {
+		const app = new Crust("cli").extend(
+			runtime([
+				defineExtension(defineExtensionId("failure"), {
+					commands: [
+						defineCommand("child", () => {
+							throw new Error("recipe failed");
+						}),
+					],
+				}),
+			]),
 		);
+		await expect(app.run([])).rejects.toThrow("recipe failed");
 	});
 
 	it("awaits async action results", async () => {
@@ -196,7 +198,7 @@ describe("typed programmatic invocation", () => {
 			.args({ name: "source", type: "string" }, { name: "destination", type: "string" })
 			.action(() => {});
 
-		await expect(app.run([], { args: { destination: "out" } })).rejects.toMatchObject({
+		await expect(app.run([], runtime({ args: { destination: "out" } }))).rejects.toMatchObject({
 			code: "PARSE",
 			details: { reason: "positional-gap" },
 		});
@@ -291,11 +293,11 @@ describe("typed programmatic invocation", () => {
 	it("rejects unknown structured arguments and flags", async () => {
 		const app = new Crust("cli").args({ name: "source", type: "string" }).action(() => {});
 
-		await expect(app.run([], { args: { bogus: "x" } } as never)).rejects.toMatchObject({
+		await expect(app.run([], runtime({ args: { bogus: "x" } }))).rejects.toMatchObject({
 			code: "PARSE",
 			details: { reason: "unknown-argument", argument: "bogus" },
 		});
-		await expect(app.run([], { flags: { bogus: true } } as never)).rejects.toMatchObject({
+		await expect(app.run([], runtime({ flags: { bogus: true } }))).rejects.toMatchObject({
 			code: "PARSE",
 			details: { reason: "unknown-flag", flag: "bogus" },
 		});
@@ -310,7 +312,7 @@ describe("typed programmatic invocation", () => {
 				defineCommand("internal", { hidden: true }, (command) => command.action(() => {})),
 			);
 
-		await expect(app.run(["missing"] as never)).rejects.toMatchObject({
+		await expect(app.run(["missing"] as never, {} as never)).rejects.toMatchObject({
 			code: "COMMAND_NOT_FOUND",
 			details: { input: "missing", available: ["visible"] },
 		});

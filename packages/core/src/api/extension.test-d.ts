@@ -2,6 +2,7 @@ import type { Equal, Expect } from "../../tests/helpers.ts";
 import { Crust, defineCommand, type AnyCrust, type RootCommandMeta } from "../command/crust.ts";
 import type { CommandSnapshot } from "../command/snapshot.ts";
 import { defineExtensionId } from "../identity.ts";
+import { runtime } from "../runtime.ts";
 import type { CommandSection } from "../types.ts";
 import { defineContext } from "./context.ts";
 import { defineExtension, type Extension } from "./extension.ts";
@@ -29,7 +30,7 @@ function _metadataRequirements() {
 		},
 		sections(snapshot) {
 			const _value: string = snapshot.meta.version;
-			return [];
+			return runtime([]);
 		},
 	});
 	const plain = defineExtension(ID, {
@@ -122,7 +123,7 @@ function _metadataRequirements() {
 		never,
 		{},
 		{},
-		{ extension: never; tree: never },
+		{ extension: never; tree: never; demands: {}; pending: never },
 		void,
 		{ version: string }
 	>;
@@ -146,13 +147,13 @@ function _metadataRequirements() {
 	// @ts-expect-error An optional metadata argument cannot promise required fields.
 	optionalApp.extend(needsVersion);
 	const widenedOptionalMeta: RootCommandMeta | undefined = optionalMeta;
-	const widenedOptionalApp = new Crust("app", widenedOptionalMeta);
+	const widenedOptionalApp = new Crust("app", runtime(widenedOptionalMeta));
 	// @ts-expect-error Widened optional metadata cannot promise required fields either.
 	widenedOptionalApp.extend(needsVersion);
 	const conditional = Math.random() ? plain : needsVersion;
 	// @ts-expect-error Conditional extensions retain their metadata requirements.
-	unversioned.extend(conditional);
-	app.extend(conditional);
+	unversioned.extend(runtime([conditional]));
+	app.extend(runtime([conditional]));
 	const tuple = [plain, needsVersion] as const;
 	const list = [plain, needsVersion];
 	// @ts-expect-error Tuple spread retains requirements.
@@ -160,7 +161,7 @@ function _metadataRequirements() {
 	// @ts-expect-error Array spread retains requirements.
 	unversioned.extend(...list);
 	app.extend(...tuple);
-	app.extend(...list);
+	app.extend(runtime(list));
 	// @ts-expect-error Ordinary Extension promises it accepts metadata-free contexts.
 	const _widened: Extension = needsVersion;
 	// @ts-expect-error Replacement does not undo the first registration's requirement.

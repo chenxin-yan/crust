@@ -1,7 +1,15 @@
 import type { Extension } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
-import { defineExtensionId, type ExtensionId } from "../identity.ts";
-import type { CommandSection, CommandSectionInput, FlagDef, FlagsDef } from "../types.ts";
+import type { ExtensionId } from "../identity.ts";
+import { cloneFlagSpellings } from "../parsing/spellings.ts";
+import { runtimeInputValue } from "../runtime.ts";
+import type {
+	CommandSection,
+	RuntimeCommandSectionInput,
+	SectionConsumer,
+	FlagDef,
+	FlagsDef,
+} from "../types.ts";
 import type { CommandDefinition } from "./crust.ts";
 import { registerFlag, type CommandContext, type CommandNode } from "./node.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
@@ -10,6 +18,7 @@ export type MaterializeCommandDefinition = (
 	definition: CommandDefinition,
 	parent: CommandNode,
 	extensionName?: string,
+	checked?: boolean,
 ) => CommandNode;
 
 /** Inject an Extension-owned flag into a node and, when recursive, its descendants. */
@@ -18,11 +27,12 @@ function injectExtensionFlag(
 	name: string,
 	def: FlagDef,
 	recursive: boolean,
+	checked = false,
 ): void {
-	registerFlag(node, name, def, "owned");
+	registerFlag(node, name, def, "owned", checked);
 	if (!recursive) return;
 	for (const sub of Object.values(node.subCommands)) {
-		injectExtensionFlag(sub, name, def, true);
+		injectExtensionFlag(sub, name, def, true, checked);
 	}
 }
 
@@ -33,17 +43,42 @@ export function applyExtensionCommands(
 	materializeCommandDefinition: MaterializeCommandDefinition,
 ): void {
 	for (const definition of extension.commands ?? []) {
-		const node = materializeCommandDefinition(definition, root, extension.id);
+		const node = materializeCommandDefinition(
+			definition,
+			root,
+			extension.id,
+			root.checkedExtensions.has(extension.id),
+		);
+		if (root.checkedExtensions.has(extension.id)) {
+			checkExtensionFlagRelations(
+				{ ...root, subCommands: { [definition.name]: node } },
+				root.extensions,
+			);
+		}
 		root.subCommands[definition.name] = node;
 	}
 }
 
 /** Inject one Extension's owned flags across a cloned tree. */
-export function applyExtensionFlags(root: CommandNode, extension: Extension): void {
+export function applyExtensionFlags(
+	root: CommandNode,
+	extension: Extension,
+	checked = false,
+): void {
 	for (const [name, defWithScope] of Object.entries(extension.flags ?? {})) {
 		const { recursive = true, ...def } = defWithScope;
-		injectExtensionFlag(root, name, def, recursive);
+		injectExtensionFlag(root, name, def, recursive, checked);
 	}
+}
+
+/** Check registered but not yet injected flags without executing future recipes or hooks. */
+export function checkExtensionFlagRelations(
+	node: CommandNode,
+	extensions: readonly Extension[],
+): void {
+	if (extensions.length === 0) return;
+	const copy = cloneCommandNode(node);
+	for (const extension of extensions) applyExtensionFlags(copy, extension, true);
 }
 
 /** Deep-clone a command subtree without mutating the builder graph. */
@@ -59,25 +94,17 @@ export function cloneCommandNode(node: CommandNode): CommandNode {
 		// Section objects/arrays are never mutated in place (prepare replaces
 		// them wholesale), so sharing them here is safe.
 		meta: { ...node.meta },
-		localFlags: {},
-		ownedFlags: {},
-		effectiveFlags: {},
-		flagSpellings: new Map(),
-		args: node.args.map((def) => ({ ...def })),
+		localFlags: { ...node.localFlags },
+		ownedFlags: { ...node.ownedFlags },
+		effectiveFlags: { ...node.effectiveFlags },
+		flagSpellings: cloneFlagSpellings(node.flagSpellings, node.effectiveFlags),
+		args: [...node.args],
 		subCommands,
 		contexts: node.contexts.map((context) => ({ ...context })),
+		demands: [...node.demands],
 		extensions: [...node.extensions],
 		run: node.run,
 	};
-	for (const [name, def] of Object.entries(node.effectiveFlags)) {
-		const source = Object.hasOwn(node.localFlags, name) ? "local" : "owned";
-		registerFlag(
-			cloned,
-			name,
-			{ ...def, aliases: def.aliases ? [...def.aliases] : undefined },
-			source,
-		);
-	}
 	return cloned;
 }
 
@@ -93,65 +120,45 @@ function invalidSections({ subject, name }: SectionOwner): CrustError {
 	);
 }
 
-function hasId<T>(value: T): value is T & { readonly id?: unknown } {
-	return (
-		((typeof value === "object" && value !== null) || typeof value === "function") && "id" in value
-	);
-}
-
-function isString<T>(value: T): value is T & string {
-	return typeof value === "string";
-}
-
-function isText<T>(value: T): value is T & string {
-	return typeof value === "string" && !!value.trim();
-}
-
-function parseExtensionId(consumer: unknown, owner: SectionOwner): ExtensionId {
-	const id = isString(consumer) ? consumer : hasId(consumer) ? consumer.id : undefined;
-	if (!isText(id) || id !== id.trim()) throw invalidSections(owner);
-	return defineExtensionId(id);
-}
-
-function validateSectionAudienceIds(ids: unknown, owner: SectionOwner): readonly ExtensionId[] {
-	if (!Array.isArray(ids) || ids.length === 0) throw invalidSections(owner);
-	return Object.freeze(ids.map((consumer) => parseExtensionId(consumer, owner)));
-}
-
-function validateSection(section: unknown, owner: SectionOwner): CommandSection {
-	// SAFETY: optional-field probe of an unvalidated section; every field is checked below.
-	const { title, body, only, except } = (section ?? {}) as {
-		title?: unknown;
-		body?: unknown;
-		only?: unknown;
-		except?: unknown;
+function normalizeSection(
+	section: RuntimeCommandSectionInput,
+	owner: SectionOwner,
+	checked: boolean,
+): CommandSection {
+	const { title, body, only, except } = section;
+	if (
+		checked &&
+		(!title.trim() ||
+			/[\r\n]/.test(title) ||
+			!body.trim() ||
+			only?.length === 0 ||
+			except?.length === 0)
+	) {
+		throw invalidSections(owner);
+	}
+	const audience = (ids: readonly SectionConsumer[]): readonly [ExtensionId, ...ExtensionId[]] => {
+		// SAFETY: trusted signatures or checked consumption establish nonemptiness; consumers carry minted IDs.
+		/* oxlint-disable anti-slop/no-runtime-typeof -- SectionConsumer is a typed minted ID or an object carrying one, not unvalidated data. */
+		return Object.freeze(
+			ids.map((consumer) => (typeof consumer === "string" ? consumer : consumer.id)),
+		) as readonly [ExtensionId, ...ExtensionId[]];
+		/* oxlint-enable anti-slop/no-runtime-typeof */
 	};
-	if (!isText(title) || /[\r\n]/.test(title) || !isText(body)) {
-		throw invalidSections(owner);
-	}
-	// The SectionAudience union owns literals; this runtime branch owns the
-	// dynamic path (Extension `sections` callbacks, config-built objects), where
-	// both fields would otherwise freeze and `sectionsFor()` would silently
-	// ignore `except`.
-	if (only !== undefined && except !== undefined) {
-		throw invalidSections(owner);
-	}
-	if (only !== undefined) {
-		return Object.freeze({ title, body, only: validateSectionAudienceIds(only, owner) });
-	}
-	if (except !== undefined) {
-		return Object.freeze({ title, body, except: validateSectionAudienceIds(except, owner) });
-	}
-	return Object.freeze({ title, body });
+	return Object.freeze({
+		title,
+		body,
+		...(only ? { only: audience(only) } : except ? { except: audience(except) } : {}),
+	});
 }
 
 export function validateCommandSections(
 	name: string,
-	sections: readonly CommandSectionInput[],
+	sections: readonly RuntimeCommandSectionInput[],
+	checked = false,
 ): CommandSection[] {
-	const owner: SectionOwner = { subject: "command", name };
-	if (!Array.isArray(sections)) throw invalidSections(owner);
-	return sections.map((section) => validateSection(section, owner));
+	return sections.map((section) =>
+		normalizeSection(section, { subject: "command", name }, checked),
+	);
 }
 
 function contributionTarget(
@@ -188,17 +195,55 @@ export function applyExtensionSections(
 ): void {
 	if (!extension.sections) return;
 	const owner: SectionOwner = { subject: "extension", name: extension.id };
-	const contributions = extension.sections(snapshot);
-	if (!Array.isArray(contributions)) throw invalidSections(owner);
+	const contributions = runtimeInputValue(extension.sections(snapshot));
 	for (const contribution of contributions) {
-		// validateSection rejects null/non-object contributions, so reading
-		// `.command` afterwards is safe.
-		const section = validateSection(contribution, owner);
-		if (!Array.isArray(contribution.command) || !contribution.command.every(isString)) {
-			throw invalidSections(owner);
-		}
+		const section = normalizeSection(contribution, owner, true);
 		const target = contributionTarget(root, contribution.command, extension);
 		target.meta.sections = [...(target.meta.sections ?? []), section];
+	}
+}
+
+/** Record only retired canonical keys; value validation remains owned by typed or checked input. */
+function retireExtensionFlags(root: CommandNode, removed: Extension, replacement: Extension): void {
+	for (const [name, def] of Object.entries(removed.flags ?? {})) {
+		const current =
+			replacement.flags && Object.hasOwn(replacement.flags, name)
+				? replacement.flags[name]
+				: undefined;
+		const recursive = def.recursive !== false && (!current || current.recursive === false);
+		const walk = (node: CommandNode, local: boolean): void => {
+			if (local) node.retiredFlagNames = new Set([...node.retiredFlagNames, name]);
+			if (!recursive) return;
+			node.retiredRecursiveFlagNames = new Set([...node.retiredRecursiveFlagNames, name]);
+			for (const child of Object.values(node.subCommands)) walk(child, true);
+		};
+		walk(root, !current);
+	}
+	// Already-installed providers are compared per node after pruning/reinstallation below.
+	if (root.extensions.includes(removed)) return;
+	for (const instance of removed.provides ?? []) {
+		const current = replacement.provides?.filter((provider) => provider.name === instance.name);
+		const names = Object.keys(instance.ownedFlags).filter(
+			(name) => !current?.some((provider) => Object.hasOwn(provider.ownedFlags, name)),
+		);
+		if (names.length === 0) continue;
+		const walk = (node: CommandNode): void => {
+			node.retiredFlagNames = new Set([...node.retiredFlagNames, ...names]);
+			node.retiredRecursiveFlagNames = new Set([...node.retiredRecursiveFlagNames, ...names]);
+			const inherited = new WeakSet(node.contexts.map((context) => context.instance));
+			for (const child of Object.values(node.subCommands)) {
+				// Match provider installation scope: a more specific Context shadows this provider.
+				if (
+					child.contexts.some(
+						(context) =>
+							context.instance.name === instance.name && !inherited.has(context.instance),
+					)
+				)
+					continue;
+				walk(child);
+			}
+		};
+		walk(root);
 	}
 }
 
@@ -206,6 +251,8 @@ export function installExtensionContexts(
 	node: CommandNode,
 	extensions: readonly Extension[],
 	reRegisteredIds: ReadonlySet<Extension["id"]>,
+	checked = false,
+	replacedExtensions: readonly Extension[] = [],
 ): CommandNode {
 	// Rebuild Extension providers from the deduplicated list so replacing an id
 	// cannot leave the earlier registration's eager Context installs behind.
@@ -214,6 +261,14 @@ export function installExtensionContexts(
 	// promises flag definition order, so pruning in place (instead of
 	// regrouping locals before Extensions) keeps both observable orders.
 	const cloned = cloneCommandNode(node);
+	for (const removed of replacedExtensions) {
+		// SAFETY: deduplication removes registrations only when a same-ID replacement survives.
+		retireExtensionFlags(
+			cloned,
+			removed,
+			extensions.find((entry) => entry.id === removed.id)!,
+		);
+	}
 	// ponytail: O(n²) includes over an already-deduped list, fine for handfuls of extensions.
 	const kept = new Set(
 		extensions
@@ -254,7 +309,7 @@ export function installExtensionContexts(
 			target.contexts.push(...registrations);
 			for (const instance of installed) {
 				for (const [name, def] of Object.entries(instance.ownedFlags)) {
-					registerFlag(target, name, def, "owned");
+					registerFlag(target, name, def, "owned", checked);
 				}
 			}
 			// A Context provided locally on a descendant is more specific than a
@@ -269,6 +324,26 @@ export function installExtensionContexts(
 			}
 		};
 		walk(cloned, new Set());
+	}
+	const retireRemovedProviders = (before: CommandNode, after: CommandNode): void => {
+		const names = before.contexts.flatMap(({ instance, extensionId }) =>
+			extensionId !== undefined && !kept.has(extensionId)
+				? Object.keys(instance.ownedFlags).filter(
+						(name) => !Object.hasOwn(after.effectiveFlags, name),
+					)
+				: [],
+		);
+		if (names.length > 0) {
+			after.retiredFlagNames = new Set([...after.retiredFlagNames, ...names]);
+			after.retiredRecursiveFlagNames = new Set([...after.retiredRecursiveFlagNames, ...names]);
+		}
+		for (const [name, child] of Object.entries(before.subCommands)) {
+			// Context installation preserves the existing command tree.
+			retireRemovedProviders(child, after.subCommands[name]!);
+		}
+	};
+	if (node.extensions.some((extension) => reRegisteredIds.has(extension.id))) {
+		retireRemovedProviders(node, cloned);
 	}
 	return cloned;
 }

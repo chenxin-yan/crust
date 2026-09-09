@@ -1,28 +1,40 @@
 import type { JsonCompatible, JsonValue } from "@crustjs/utils/json";
 
+import type { KnownContextFactories } from "../api/context.ts";
+import {
+	validateContextAvailability,
+	contextInstanceData,
+	contextFactoryData,
+} from "../api/context.ts";
 import type {
 	AnyContextFactory,
 	ContextBag,
 	ContextDependencies,
-	ContextInstance,
+	AnyContextInstance,
+	ContextValue,
 	ContextMap,
 	ContextsOutput,
 	ContextsOwnedFlags,
 } from "../api/context.ts";
 import type {
+	ExtensionData,
+	KnownExtensions,
 	AnyExtension,
 	Extension,
 	ExtensionsProvidesOutput,
 	RootMetaKey,
 } from "../api/extension.ts";
+import { extensionData } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
 import type { RunInputPayload } from "../parsing/parser.ts";
-import { cloneFlagSpellings } from "../parsing/spellings.ts";
+import { cloneFlagSpellings, normalizeArg, normalizeFlag } from "../parsing/spellings.ts";
+import { isRuntimeInput, runtimeInputValue, runtime, type RuntimeInput } from "../runtime.ts";
 import type {
 	ArgsDef,
 	CommandMeta,
 	CommandSectionInput,
+	RuntimeCommandSectionInput,
 	FlagsDef,
 	InferArgs,
 	InferFlags,
@@ -31,22 +43,33 @@ import type {
 	InvocationIO,
 	MergeFlags,
 	NamedFlagDef,
-	NamedFlagsRecord,
 } from "../types.ts";
-import type { AppendArgsChecks } from "../validation/args.brands.ts";
+import type { LocalAppendArgsChecks, AttachedArgs } from "../validation/args.brands.ts";
+import type {
+	AttachedCommandSpellings,
+	CommandCollisionBrand,
+} from "../validation/commands.brands.ts";
 import type {
 	AliasesOf,
 	CommandDefinitionSpellings,
-	EmptyNameBrand,
+	CommandNameBrand,
 	ExtensionCommandDefs,
 	ExtensionsCommandSpellings,
 	ValidateCommandConfig,
+	LocalCommandConfigBrand,
+	LocalSectionsBrand,
+	KnownCommandAliasesBrand,
+	KnownDefinitionAliases,
 	ValidateCommandDefinitions,
 	ValidateExtensionCommands,
 } from "../validation/commands.brands.ts";
+import type { KnownContextInstances } from "../validation/contexts.brands.ts";
 import type {
 	MissingDeclaredDependencyBrand,
+	DeclaredDependencyValuesBrand,
+	ValidateDeclaredValues,
 	ValidateContextDeps,
+	ValidateContextValues,
 	ValidateContextNames,
 	ValidateDeclaredDeps,
 	ValidateExtensionProvides,
@@ -58,17 +81,22 @@ import type {
 	ShapeFlagCollisionBrand,
 	ValidateDefinitionFlags,
 	ValidateExtensionFlags,
-	SpellingsOf,
-	ValidateNamedFlagDefs,
+	ValidateLocalFlagDefs,
+	AttachedFlags,
+	AttachedSpellings,
+	LocalSpellingsOf,
 } from "../validation/flags.brands.ts";
+import type { IsClosedName, RuntimeRequiredBrand } from "../validation/shared.ts";
 import type {
 	IsStaticTuple,
 	IsUnion,
 	MergeContext,
+	MergeProviders,
 	UnionToIntersection,
 } from "../validation/shared.ts";
 import {
 	cloneCommandNode,
+	checkExtensionFlagRelations,
 	installExtensionContexts,
 	validateCommandSections,
 } from "./extensions-install.ts";
@@ -112,13 +140,17 @@ export interface CrustCommandContext<
 // Typed programmatic invocation
 // ────────────────────────────────────────────────────────────────────────────
 
+declare const commandProviders: unique symbol;
+
 /** Compile-time description of one command's programmatic input and action result. */
 export interface CommandShape<
 	A extends ArgsDef = ArgsDef,
 	F extends FlagsDef = FlagsDef,
 	Children extends object = {},
 	Result = unknown,
+	Providers extends Record<string, ContextValue> = Record<string, ContextValue>,
 > {
+	readonly [commandProviders]?: Providers;
 	readonly args: A;
 	readonly flags: F;
 	readonly children: Children;
@@ -151,6 +183,9 @@ export type CommandPath<
 							: never;
 				  }[keyof Tree & string];
 
+type KnownCommandPath<Path extends readonly string[]> =
+	IsStaticTuple<Path> extends true ? (string extends Path[number] ? never : Path) : never;
+
 /** Resolve the command shape at a typed path. */
 export type CommandShapeAt<
 	Shape extends CommandShape,
@@ -171,13 +206,9 @@ export type CommandShapeAt<
 			// unknowable command, so the shape (and its result) widens too.
 			CommandShape;
 
-type RequiredKeys<T> = {
-	[K in keyof T]-?: {} extends Pick<T, K> ? never : K;
-}[keyof T];
-
 type RunSection<Name extends string, Values> = keyof Values extends never
 	? { [K in Name]?: never }
-	: RequiredKeys<Values> extends never
+	: {} extends Values
 		? { [K in Name]?: Values }
 		: { [K in Name]: Values };
 
@@ -187,25 +218,45 @@ export type RunInput<Shape extends CommandShape> = RunSection<"args", InputArgs<
 		readonly raw?: readonly string[];
 	};
 
+// Check each prefix separately so JSON compatibility cannot recombine positional branches.
 type CompatibleRunValue<Expected, Actual> = Actual extends Expected
 	? Actual
 	: JsonValue extends Expected
 		? Actual extends JsonCompatible<Actual>
 			? Actual
 			: never
-		: Expected extends readonly (infer Item)[]
-			? JsonValue extends Item
+		: Expected extends unknown
+			? CompatibleRunBranch<Expected, Actual>
+			: never;
+
+type CompatibleRunBranch<Expected, Actual> = Actual extends Expected
+	? Actual
+	: Expected extends readonly (infer Item)[]
+		? JsonValue extends Item
+			? Actual extends (
+					Expected extends readonly [unknown, ...unknown[]]
+						? readonly [unknown, ...unknown[]]
+						: readonly unknown[]
+				)
 				? Actual extends JsonCompatible<Actual>
 					? Actual
 					: never
 				: never
-			: Actual extends object
+			: never
+		: Actual extends object
+			? string extends keyof Expected
 				? {
+						[K in keyof Actual]: CompatibleRunValue<
+							Exclude<Expected[string], undefined>,
+							Actual[K]
+						>;
+					}
+				: {
 						[K in keyof Expected]: K extends keyof Actual
 							? CompatibleRunValue<Exclude<Expected[K], undefined>, Actual[K]>
 							: Expected[K];
 					} & { [K in Exclude<keyof Actual, keyof Expected>]: never }
-				: never;
+			: never;
 
 type CompatibleRunInput<Shape extends CommandShape, Input> = CompatibleRunValue<
 	RunInput<Shape>,
@@ -213,7 +264,7 @@ type CompatibleRunInput<Shape extends CommandShape, Input> = CompatibleRunValue<
 >;
 
 export type RunInputArguments<Shape extends CommandShape> =
-	RequiredKeys<RunInput<Shape>> extends never
+	{} extends RunInput<Shape>
 		? readonly [input?: RunInput<Shape>]
 		: readonly [input: RunInput<Shape>];
 
@@ -238,7 +289,15 @@ export type RootCommandMeta = Pick<CommandMeta, "description" | "version" | "usa
 	readonly sections?: readonly CommandSectionInput[];
 };
 
+type RuntimeCommandConfig = Omit<CommandConfig, "sections"> & {
+	readonly sections?: readonly RuntimeCommandSectionInput[];
+};
+type RuntimeRootCommandMeta = Omit<RootCommandMeta, "sections"> & {
+	readonly sections?: readonly RuntimeCommandSectionInput[];
+};
+
 type AnyCommandDefinitionBuilder = CommandDefinitionBuilder<
+	any,
 	any,
 	any,
 	any,
@@ -250,11 +309,8 @@ type AnyCommandDefinitionBuilder = CommandDefinitionBuilder<
 	any
 >;
 
-// Child builders start without inherited flags, so brands cannot see ancestor
-// spellings from inside a sealed recipe. Materialization seeds the child with
-// the parent's owned flags and catches collisions at runtime: `.flags()` hits
-// the seeded spelling table, and recipe-provided Contexts are checked against
-// ancestor owners in `materializeCommandDefinition`.
+// Sealed recipes build local types; .add checks the completed shape against
+// call-site Context flags. Checked attachment carries destination validation into the recipe.
 type CommandRecipe<Builder extends AnyCommandDefinitionBuilder = AnyCommandDefinitionBuilder> = (
 	command: CommandDefinitionBuilder<{}, [], {}, never, never>,
 ) => Builder;
@@ -262,9 +318,21 @@ type CommandRecipe<Builder extends AnyCommandDefinitionBuilder = AnyCommandDefin
 const commandDefinitionInternal: unique symbol = Symbol.for("crust.commandDefinition");
 
 interface CommandDefinitionInternal {
+	readonly name: string;
 	readonly recipe: (command: AnyCommandDefinitionBuilder) => AnyCommandDefinitionBuilder;
 	readonly meta: Omit<CommandMeta, "name">;
 }
+
+type CommandInputShape<S extends CommandShape> = {
+	readonly args: S["args"];
+	readonly flags: S["flags"];
+	readonly providers: S[typeof commandProviders];
+	readonly children: {
+		[K in keyof S["children"]]: S["children"][K] extends CommandShape
+			? CommandInputShape<S["children"][K]>
+			: never;
+	};
+};
 
 export interface CommandDefinition<
 	Name extends string = string,
@@ -276,10 +344,24 @@ export interface CommandDefinition<
 	readonly name: Name;
 	/** The same definition under a different name; configured aliases travel with it. */
 	as<const N extends string>(
-		name: N & EmptyNameBrand<N>,
+		name:
+			| (N &
+					CommandNameBrand<N> &
+					ValidateCommandConfig<N, { aliases: Aliases }> &
+					KnownCommandAliasesBrand<{ aliases: Aliases }>)
+			| RuntimeInput<N>,
 	): CommandDefinition<N, Aliases, Shape, Deps>;
 	/** @internal */
-	readonly [commandDefinitionInternal]: CommandDefinitionInternal;
+	readonly [commandDefinitionInternal]: CommandDefinitionInternal & {
+		readonly _aliases?: Aliases;
+		readonly _shape?: Shape;
+		readonly _deps?: Deps;
+		readonly proof?: [Shape] extends [never]
+			? unknown
+			: string extends keyof Shape["flags"] | keyof Deps
+				? unknown
+				: (state: [CommandInputShape<Shape>, Deps]) => void;
+	};
 	/** @internal — phantom carrying configured alias literals for add-time checks */
 	readonly _aliases?: Aliases;
 	/** @internal — phantom carrying args, flags, and descendants for typed invocation */
@@ -288,13 +370,22 @@ export interface CommandDefinition<
 	readonly _deps?: Deps;
 }
 
+/** @internal Private recipe metadata survives public phantom-field overrides. */
+export type CommandDefinitionData<D> = D extends {
+	readonly [commandDefinitionInternal]: infer Data;
+}
+	? Data
+	: D;
+
 function materializeCommandDefinition(
 	definition: CommandDefinition,
 	parent: CommandNode,
 	extensionName?: string,
+	checked = false,
 ): CommandNode {
 	const internal = definition[commandDefinitionInternal];
 	const name = definition.name;
+	if (checked && name !== internal.name) resolveCommandName(runtime(name), internal.meta.aliases);
 	const owner = extensionName
 		? `Extension "${extensionName}" command "${name}"`
 		: `Command "${name}"`;
@@ -304,7 +395,13 @@ function materializeCommandDefinition(
 		reason,
 	});
 
-	const child = new Crust(name);
+	// SAFETY: materialization owns the normalized name and initializes every builder field.
+	const child = Object.create(Crust.prototype) as Crust;
+	child._node = createCommandNode(name);
+	child._node.retiredFlagNames = parent.retiredRecursiveFlagNames;
+	child._node.retiredRecursiveFlagNames = parent.retiredRecursiveFlagNames;
+	child._ancestorOwnedFlags = {};
+	child._checkedMaterialization = checked;
 	for (const [flagName, def] of Object.entries(parent.ownedFlags)) {
 		registerFlag(child._node, flagName, def, "owned");
 	}
@@ -335,45 +432,26 @@ function materializeCommandDefinition(
 		);
 	}
 
-	// Recipe-provided Contexts vs ancestor-owned flags. Sealed recipes start
-	// with empty compile-time spellings, so a fully typed recipe can provide a
-	// Context whose owned flag retypes an ancestor Context's parser definition;
-	// the ancestor setup would then receive a value of the wrong type.
-	const ancestorFlagOwners = new Map<string, string>();
-	for (const { instance } of parent.contexts) {
-		for (const [flagName, def] of Object.entries(instance.ownedFlags)) {
-			for (const spelling of [flagName, def.short, ...(def.aliases ?? [])]) {
-				if (spelling) ancestorFlagOwners.set(spelling, instance.name);
-			}
-		}
-	}
-	for (const { instance } of configured._node.contexts.slice(parent.contexts.length)) {
-		for (const [flagName, def] of Object.entries(instance.ownedFlags)) {
-			for (const spelling of [flagName, def.short, ...(def.aliases ?? [])]) {
-				if (!spelling) continue;
-				const ownerName = ancestorFlagOwners.get(spelling);
-				if (ownerName !== undefined && ownerName !== instance.name) {
-					throw new CrustError(
-						"DEFINITION",
-						`${owner} provides Context "${instance.name}" whose flag spelling "${spelling}" collides with a flag owned by ancestor Context "${ownerName}"`,
-						definitionDetails("ancestor-flag-collision"),
-					);
-				}
-			}
-		}
-	}
-
 	const childNode = cloneCommandNode(configured._node);
+	if (checked) {
+		const validate = (node: CommandNode): void => {
+			validateContextAvailability(
+				node.contexts.map(({ instance }) => instance),
+				[
+					...node.demands,
+					...node.contexts.slice(parent.contexts.length).map(({ instance }) => instance),
+				],
+			);
+			for (const descendant of Object.values(node.subCommands)) validate(descendant);
+		};
+		validate(childNode);
+	}
 	childNode.meta = { name, ...internal.meta };
 	return childNode;
 }
 
-// Bare `Crust` uses broad `ArgsDef` for structural consumers; a `.args()` call on
-// that broad type only reflects the new defs (runtime still appends to any args a
-// widened builder already carries), while already-refined builders append in-type.
-type AppendedArgs<A extends ArgsDef, NewA extends ArgsDef> = ArgsDef extends A
-	? NewA
-	: readonly [...A, ...NewA];
+// Unknown previous positional state remains open after checked appends.
+type AppendedArgs<A extends ArgsDef, NewA extends ArgsDef> = readonly [...A, ...AttachedArgs<NewA>];
 
 /**
  * Configure-only command builder.
@@ -381,33 +459,62 @@ type AppendedArgs<A extends ArgsDef, NewA extends ArgsDef> = ArgsDef extends A
  * Generic parameters mirror {@link Crust}; `Sp` caches the flag spellings
  * accumulated by `.flags()` and `.provide()` for compile-time collision checks.
  */
+declare const commandBuilderTypes: unique symbol;
+
 export interface CommandDefinitionBuilder<
 	Flags extends FlagsDef = {},
 	A extends ArgsDef = ArgsDef,
 	out Ctx extends ContextMap = {},
 	Sibs extends string = never,
-	Sp extends string = SpellingsOf<Flags>,
+	Sp extends string = LocalSpellingsOf<Flags>,
 	Tree extends object = {},
 	out CtxFlags extends FlagsDef = {},
 	Result = void,
-	out Deps extends ContextMap = {},
+	Deps extends ContextMap = {},
+	Providers extends Record<string, ContextValue> = {},
 > {
+	/** @internal — recipe state, without structural inference through builder methods. */
+	readonly [commandBuilderTypes]: {
+		readonly shape: CommandShape<A, Flags, Tree, Result, Providers>;
+		readonly deps: Deps;
+		readonly proof?: (
+			state: [CommandInputShape<CommandShape<A, Flags, Tree, Result, Providers>>, Deps],
+		) => void;
+	};
+	readonly _shape?: CommandShape<A, Flags, Tree, Result, Providers>;
+	/** @internal — declared dependency closure. */
+	readonly _deps?: Deps;
 	flags<const Defs extends readonly NamedFlagDef[]>(
-		...defs: ValidateNamedFlagDefs<Defs, Sp>
+		...defs: ValidateLocalFlagDefs<Defs, Sp>
 	): CommandDefinitionBuilder<
-		MergeFlags<Flags, NamedFlagsRecord<Defs>>,
+		MergeFlags<Flags, AttachedFlags<Defs>>,
 		A,
 		Ctx,
 		Sibs,
-		Sp | SpellingsOf<NamedFlagsRecord<Defs>>,
+		Sp | AttachedSpellings<Defs>,
 		Tree,
 		CtxFlags,
 		Result,
-		Deps
+		Deps,
+		Providers
+	>;
+	flags<const Defs extends readonly NamedFlagDef[]>(
+		defs: RuntimeInput<Defs>,
+	): CommandDefinitionBuilder<
+		MergeFlags<Flags, AttachedFlags<Defs>>,
+		A,
+		Ctx,
+		Sibs,
+		Sp | AttachedSpellings<Defs>,
+		Tree,
+		CtxFlags,
+		Result,
+		Deps,
+		Providers
 	>;
 
 	args<const NewA extends ArgsDef>(
-		...defs: NewA & AppendArgsChecks<A, NewA>
+		...defs: NewA & LocalAppendArgsChecks<A, NewA>
 	): CommandDefinitionBuilder<
 		Flags,
 		AppendedArgs<A, NewA>,
@@ -417,7 +524,23 @@ export interface CommandDefinitionBuilder<
 		Tree,
 		CtxFlags,
 		Result,
-		Deps
+		Deps,
+		Providers
+	>;
+
+	args<const NewA extends ArgsDef>(
+		defs: RuntimeInput<NewA>,
+	): CommandDefinitionBuilder<
+		Flags,
+		AppendedArgs<A, NewA>,
+		Ctx,
+		Sibs,
+		Sp,
+		Tree,
+		CtxFlags,
+		Result,
+		Deps,
+		Providers
 	>;
 
 	/**
@@ -429,12 +552,13 @@ export interface CommandDefinitionBuilder<
 	 * declared dependencies checked at `.provide()`/`.add()`/`.extend()`
 	 * composition sites.
 	 *
-	 * Declarations are type-only — nothing is recorded at runtime — so the
-	 * signature requires a statically known, non-empty factory tuple: a widened
-	 * or empty spread would contribute nothing and is rejected at compile time.
+	 * A statically known, nonempty tuple declares the typed dependency closure.
+	 * Factory references are retained for checked attachment; setups stay lazy.
 	 */
 	use<const Fs extends readonly [AnyContextFactory, ...AnyContextFactory[]]>(
-		...factories: Fs
+		...factories: Fs &
+			KnownContextFactories<Fs> &
+			DeclaredDependencyValuesBrand<ContextDependencies<Fs>, Providers>
 	): CommandDefinitionBuilder<
 		Flags,
 		A,
@@ -444,57 +568,93 @@ export interface CommandDefinitionBuilder<
 		Tree,
 		CtxFlags,
 		Result,
-		MergeContext<Deps, ContextDependencies<Fs>>
+		MergeContext<Deps, ContextDependencies<Fs>>,
+		Providers
 	>;
 
-	provide<const Cs extends readonly ContextInstance[]>(
-		...instances: ProvideChecks<Sp, Cs> &
+	provide<const Cs extends readonly AnyContextInstance[]>(
+		...instances: KnownContextInstances<Cs> &
+			(string extends Sp ? RuntimeRequiredBrand : {}) &
+			(string extends keyof Ctx ? RuntimeRequiredBrand : {}) &
+			ProvideChecks<Sp, Cs> &
 			ValidateContextNames<Ctx, Cs> &
-			ValidateContextDeps<Ctx, Cs>
+			ValidateContextDeps<Ctx, Cs> &
+			DeclaredDependencyValuesBrand<Deps, ContextsOutput<Cs>>
 	): CommandDefinitionBuilder<
 		MergeFlags<Flags, ContextsOwnedFlags<Cs>>,
 		A,
-		MergeContext<Ctx, ContextsOutput<Cs>>,
+		MergeProviders<Ctx, ContextsOutput<Cs>>,
 		Sibs,
-		Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
+		Sp | LocalSpellingsOf<ContextsOwnedFlags<Cs>>,
 		Tree,
 		MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>,
 		Result,
-		Deps
+		Deps,
+		MergeProviders<Providers, ContextsOutput<Cs>>
+	>;
+
+	provide<const Cs extends readonly AnyContextInstance[]>(
+		instances: RuntimeInput<
+			Cs & ValidateContextValues<MergeProviders<Ctx, ContextsOutput<Cs>>, NoInfer<Cs>>
+		> &
+			DeclaredDependencyValuesBrand<Deps, ContextsOutput<NoInfer<Cs>>>,
+	): CommandDefinitionBuilder<
+		MergeFlags<Flags, ContextsOwnedFlags<Cs>>,
+		A,
+		MergeProviders<Ctx, ContextsOutput<Cs>>,
+		Sibs,
+		Sp | LocalSpellingsOf<ContextsOwnedFlags<Cs>>,
+		Tree,
+		MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>,
+		Result,
+		Deps,
+		MergeProviders<Providers, ContextsOutput<Cs>>
 	>;
 
 	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
-		...definitions: Ds & ValidateCommandDefinitions<Ds, Sibs> & ValidateDeclaredDeps<Ctx, Ds>
+		...definitions: Ds &
+			(string extends Sibs ? RuntimeRequiredBrand : {}) &
+			KnownDefinitionAliases<Ds> &
+			ValidateCommandDefinitions<Ds, Sibs> &
+			ValidateDeclaredDeps<Ctx, Ds> &
+			ValidateDefinitionFlags<Ds, LocalSpellingsOf<CtxFlags>>
 	): CommandDefinitionBuilder<
 		Flags,
 		A,
 		Ctx,
-		Sibs | CommandDefinitionSpellings<Ds[number]>,
+		Sibs | AttachedCommandSpellings<Ds>,
 		Sp,
 		Tree & DefinitionsTree<Ds, CtxFlags>,
 		CtxFlags,
 		Result,
-		Deps
+		Deps,
+		Providers
+	>;
+
+	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
+		definitions: RuntimeInput<Ds & ValidateDeclaredValues<Ctx, NoInfer<Ds>>>,
+	): CommandDefinitionBuilder<
+		Flags,
+		A,
+		Ctx,
+		Sibs | AttachedCommandSpellings<Ds>,
+		Sp,
+		Tree & DefinitionsTree<Ds, CtxFlags>,
+		CtxFlags,
+		Result,
+		Deps,
+		Providers
 	>;
 
 	action<R>(
 		action: (ctx: NoInfer<CrustCommandContext<A, Flags, Ctx>>) => R,
-	): CommandDefinitionBuilder<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, Awaited<R>, Deps>;
+	): CommandDefinitionBuilder<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, Awaited<R>, Deps, Providers>;
 }
 
-type ShapeOfBuilder<B> =
-	B extends CommandDefinitionBuilder<
-		infer Flags,
-		infer A,
-		any,
-		any,
-		any,
-		infer Tree,
-		any,
-		infer Result,
-		any
-	>
-		? CommandShape<A, Flags, Tree, Result>
+type ShapeOfBuilder<B> = [B] extends [never]
+	? CommandShape<[], {}, {}, never, {}>
+	: B extends { readonly [commandBuilderTypes]: { shape: infer S extends CommandShape } }
+		? S
 		: never;
 
 // Deps accumulated by `.use()` calls inside the recipe; `defineCommand` and
@@ -507,18 +667,16 @@ type ShapeOfBuilder<B> =
 // any key extraction.
 type DepsOfBuilder<B> =
 	UnionToIntersection<
-		B extends CommandDefinitionBuilder<any, any, any, any, any, any, any, any, infer Deps>
+		B extends { readonly [commandBuilderTypes]: { deps: infer Deps extends ContextMap } }
 			? Deps
 			: {}
 	> extends infer Merged extends ContextMap
 		? Merged
 		: {};
 
-// Matching against CommandDefinitionSpellings (never for widened names) keeps a
-// widened definition in the same tuple or union from degrading a literal
-// sibling's shape: a widened `Name` would otherwise match every spelling.
+// Match only established spellings; open siblings must not replace a known shape.
 type DefinitionShapeForSpelling<D, Spelling extends string> =
-	D extends CommandDefinition<any, any, infer Shape, any>
+	CommandDefinitionData<D> extends { readonly _shape?: infer Shape extends CommandShape }
 		? Spelling extends CommandDefinitionSpellings<D>
 			? Shape
 			: never
@@ -528,80 +686,233 @@ type DefinitionShapeForSpelling<D, Spelling extends string> =
 // (materialization seeds the child with `parent.ownedFlags`), so the typed shape
 // merges them too — deeply, because nested definitions materialize against the
 // same inherited flag namespace. Local parent flags never inherit and stay out.
-type ShapeWithInheritedFlags<S, CF extends FlagsDef> = {} extends CF
+type ShapeWithInheritedFlags<S, CF extends FlagsDef> = keyof CF extends never
 	? S
-	: S extends CommandShape<infer SA, infer SF, infer SC, infer SR>
+	: S extends CommandShape<infer SA, infer SF, infer SC, infer SR, infer P>
 		? CommandShape<
 				SA,
 				MergeFlags<CF, SF>,
 				{ [K in keyof SC]: ShapeWithInheritedFlags<SC[K], CF> },
-				SR
+				SR,
+				P
 			>
 		: never;
 
 type DefinitionsTree<
 	Ds extends readonly CommandDefinition<any, any, any, any>[],
 	CtxFlags extends FlagsDef = {},
-> = {
-	[K in CommandDefinitionSpellings<Ds[number]>]: ShapeWithInheritedFlags<
-		DefinitionShapeForSpelling<Ds[number], K>,
-		CtxFlags
-	>;
-};
+> =
+	string extends AttachedCommandSpellings<Ds>
+		? Record<string, CommandShape> & KnownDefinitionTree<Ds, CtxFlags>
+		: {
+				[K in CommandDefinitionSpellings<Ds[number]>]: ShapeWithInheritedFlags<
+					DefinitionShapeForSpelling<Ds[number], K>,
+					CtxFlags
+				>;
+			};
 
-// Mapped per slot: `Es[number]` cannot distinguish `.extend(a, b)` from
-// `.extend(cond ? a : b)` — both index to the same union. Variable-length
-// Extension lists (`.extend(...dynamicList)`) contribute nothing.
-type ExtensionCommands<Es extends readonly AnyExtension[]> = number extends Es["length"]
-	? readonly []
-	: { [I in keyof Es]: ExtensionCommandDefs<Es[I]> }[number];
+type KnownDefinitionTree<Ds extends readonly unknown[], CF extends FlagsDef> =
+	IsUnion<Ds> extends true
+		? {}
+		: Ds extends readonly [infer H, ...infer T]
+			? (IsUnion<H> extends true
+					? {}
+					: {
+							[K in CommandDefinitionSpellings<H>]: ShapeWithInheritedFlags<
+								DefinitionShapeForSpelling<H, K>,
+								CF
+							>;
+						}) &
+					KnownDefinitionTree<T, CF>
+			: {};
 
-type StaticExtensionFlagDefs<E> =
-	IsUnion<E> extends true
+type ExtensionCheckAt<Checks, I> = I extends keyof Checks ? Checks[I] : never;
+
+type ExtensionCommands<Es extends readonly AnyExtension[]> = Es extends readonly [
+	infer H,
+	...infer T extends readonly AnyExtension[],
+]
+	? readonly [...ExtensionCommandDefs<H>, ...ExtensionCommands<T>]
+	: ExtensionCommandDefs<Es[number]>[number] extends never
 		? readonly []
-		: E extends Extension<any, any, infer Defs, any, RootMetaKey>
-			? IsStaticTuple<Defs> extends true
-				? string extends Defs[number]["name"]
-					? readonly []
-					: Defs
-				: readonly []
-			: readonly [];
+		: readonly CommandDefinition<any, any, any, any>[];
 
-type ExtensionFlagDefs<Es extends readonly AnyExtension[]> = number extends Es["length"]
-	? readonly []
-	: { [I in keyof Es]: StaticExtensionFlagDefs<Es[I]> }[number];
+type ExtensionProviders<E> = [E] extends [never]
+	? []
+	: ExtensionData<E> extends { provides?: infer P extends readonly AnyContextInstance[] }
+		? P
+		: [];
+type ExtensionOwnDefs<E> = [E] extends [never]
+	? []
+	: ExtensionData<E> extends { _flagDefs?: infer F extends readonly NamedFlagDef[] }
+		? F
+		: [];
 
-type ExtensionFlags<Es extends readonly AnyExtension[]> = NamedFlagsRecord<ExtensionFlagDefs<Es>>;
+type ExtensionFlags<Es extends readonly AnyExtension[]> = Es extends readonly [
+	infer H,
+	...infer T extends readonly AnyExtension[],
+]
+	? AttachedFlags<ExtensionOwnDefs<H>> &
+			ContextsOwnedFlags<ExtensionProviders<H>> &
+			ExtensionFlags<T>
+	: ExtensionOwnDefs<Es[number]>[number] extends never
+		? keyof ContextsOwnedFlags<ExtensionProviders<Es[number]>> extends never
+			? {}
+			: FlagsDef
+		: FlagsDef;
 
-// Only a statically `true` (or omitted — the runtime default) `recursive` scope
-// promotes a flag onto descendant inputs: a widened `boolean` scope may be
-// `false` at runtime, which installs the flag on the root only.
-type RecursiveExtensionFlags<Es extends readonly AnyExtension[]> = {
-	[
-		D in ExtensionFlagDefs<Es>[number] as D extends { readonly recursive: infer R }
-			? [R] extends [true]
-				? D["name"]
-				: never
-			: D["name"]
-	]: Omit<D, "name">;
-} extends infer F extends FlagsDef
-	? F
-	: never;
+type RecursiveFlagsOf<E> = ExtensionOwnDefs<E>[number] extends never
+	? {}
+	: true extends {
+				[K in keyof ExtensionOwnDefs<E>]: ExtensionOwnDefs<E>[K] extends infer D extends
+					NamedFlagDef
+					? D extends { readonly recursive: false }
+						? false
+						: IsClosedName<D["name"]> extends false
+							? true
+							: IsUnion<D["name"]> extends true
+								? true
+								: D extends { recursive: infer R }
+									? boolean extends R
+										? true
+										: false
+									: false
+					: false;
+		  }[number]
+		? FlagsDef
+		: IsStaticTuple<ExtensionOwnDefs<E>> extends true
+			? {
+					[
+						D in ExtensionOwnDefs<E>[number] as D extends { readonly recursive: infer R }
+							? [R] extends [false]
+								? never
+								: D["name"]
+							: D["name"]
+					]: Omit<D, "name">;
+				}
+			: FlagsDef;
+
+type RecursiveExtensionFlags<Es extends readonly AnyExtension[]> = Es extends readonly [
+	infer H,
+	...infer T extends readonly AnyExtension[],
+]
+	? RecursiveFlagsOf<H> & ContextsOwnedFlags<ExtensionProviders<H>> & RecursiveExtensionFlags<T>
+	: ExtensionFlags<Es>;
 
 type TreeWithInheritedFlags<Tree, F extends FlagsDef> = {
 	[K in keyof Tree]: ShapeWithInheritedFlags<Tree[K], F>;
 };
 
-type ExtendedTree<
+// The tree does not retain canonical/alias insertion provenance. Colliding alias keys stay open.
+type ReplacementTree<Tree, D extends CommandDefinition<any, any, any, any>, CF extends FlagsDef> =
+	CommandDefinitionData<D> extends { readonly _aliases?: infer Aliases extends readonly string[] }
+		? IsClosedName<Aliases[number]> extends false
+			? Record<string, CommandShape> & {
+					[K in D["name"]]: ShapeWithInheritedFlags<DefinitionShapeForSpelling<D, K>, CF>;
+				}
+			: Omit<Tree, CommandDefinitionSpellings<D>> & {
+					[K in CommandDefinitionSpellings<D>]: K extends D["name"]
+						? ShapeWithInheritedFlags<DefinitionShapeForSpelling<D, K>, CF>
+						: K extends keyof Tree
+							? CommandShape
+							: ShapeWithInheritedFlags<DefinitionShapeForSpelling<D, K>, CF>;
+				}
+		: Record<string, CommandShape>;
+
+// Extension commands replace canonical children; an open contribution can replace any child.
+type ReplacedTree<
 	Tree,
 	Commands extends readonly CommandDefinition<any, any, any, any>[],
+	CF extends FlagsDef,
+> = Commands extends readonly [
+	infer H extends CommandDefinition<any, any, any, any>,
+	...infer T extends readonly CommandDefinition<any, any, any, any>[],
+]
+	? ReplacedTree<
+			IsClosedName<H["name"]> extends false
+				? Record<string, CommandShape>
+				: true extends IsUnion<H> | IsUnion<H["name"]>
+					? Record<string, CommandShape>
+					: ReplacementTree<Tree, H, CF>,
+			T,
+			CF
+		>
+	: number extends Commands["length"]
+		? Record<string, CommandShape>
+		: Tree;
+
+type ReplacedExtensionTree<
+	Tree,
+	Es extends readonly AnyExtension[],
+	CF extends FlagsDef,
+> = Es extends readonly [infer H extends AnyExtension, ...infer T extends readonly AnyExtension[]]
+	? ReplacedExtensionTree<
+			ReplacedTree<
+				Tree,
+				ExtensionCommandDefs<H> extends infer Ds extends readonly CommandDefinition<
+					any,
+					any,
+					any,
+					any
+				>[]
+					? Ds
+					: readonly CommandDefinition<any, any, any, any>[],
+				CF
+			>,
+			T,
+			CF
+		>
+	: ExtensionCommandDefs<Es[number]>[number] extends never
+		? Tree
+		: Record<string, CommandShape>;
+
+type ExtendedTree<
+	Tree,
+	Es extends readonly AnyExtension[],
 	RecursiveFlags extends FlagsDef,
 	InheritedFlags extends FlagsDef,
-> = {} extends RecursiveFlags
-	? Tree & DefinitionsTree<Commands, InheritedFlags>
-	: TreeWithInheritedFlags<Tree & DefinitionsTree<Commands, InheritedFlags>, RecursiveFlags>;
+> = keyof RecursiveFlags extends never
+	? ReplacedExtensionTree<Tree, Es, InheritedFlags>
+	: TreeWithInheritedFlags<ReplacedExtensionTree<Tree, Es, InheritedFlags>, RecursiveFlags>;
 
-function isCommandRecipe(value: CommandConfig | CommandRecipe): value is CommandRecipe {
+function resolveCommandName<Name extends string>(
+	input: Name | RuntimeInput<Name>,
+	aliases: readonly string[] = [],
+): Name {
+	if (!isRuntimeInput(input)) return input;
+	const name = runtimeInputValue(input);
+	if (name.trim() === "") {
+		throw new CrustError("DEFINITION", "Command name must be a non-empty string", {
+			subject: "command",
+			name,
+			reason: "empty-name",
+		});
+	}
+	// Plain-object child registries cannot store this key without changing their prototype.
+	if (name === "__proto__") {
+		throw new CrustError("DEFINITION", 'Command name "__proto__" is reserved', {
+			subject: "command",
+			name,
+			reason: "reserved-name",
+		});
+	}
+	if (aliases.includes(name)) {
+		throw new CrustError(
+			"DEFINITION",
+			`Command "${name}" must not list its own canonical name as an alias`,
+			{
+				subject: "command",
+				name,
+				reason: "alias-collision",
+			},
+		);
+	}
+	return name;
+}
+
+function isCommandRecipe(
+	value: RuntimeCommandConfig | RuntimeInput<RuntimeCommandConfig> | CommandRecipe,
+): value is CommandRecipe {
 	return typeof value === "function";
 }
 
@@ -617,7 +928,7 @@ export function defineCommand<
 	const Name extends string,
 	Builder extends AnyCommandDefinitionBuilder,
 >(
-	name: Name & EmptyNameBrand<Name>,
+	name: (Name & CommandNameBrand<Name>) | RuntimeInput<Name>,
 	recipe: CommandRecipe<Builder>,
 ): CommandDefinition<Name, readonly [], ShapeOfBuilder<Builder>, DepsOfBuilder<Builder>>;
 export function defineCommand<
@@ -625,26 +936,50 @@ export function defineCommand<
 	const C extends CommandConfig,
 	Builder extends AnyCommandDefinitionBuilder,
 >(
-	name: Name & EmptyNameBrand<Name>,
-	config: C & ValidateCommandConfig<Name, C>,
+	name: (Name & CommandNameBrand<Name>) | RuntimeInput<Name>,
+	config: C & LocalCommandConfigBrand<Name, C>,
+	recipe: CommandRecipe<Builder>,
+): CommandDefinition<Name, AliasesOf<C>, ShapeOfBuilder<Builder>, DepsOfBuilder<Builder>>;
+export function defineCommand<
+	const Name extends string,
+	const C extends RuntimeCommandConfig,
+	Builder extends AnyCommandDefinitionBuilder,
+>(
+	name: (Name & CommandNameBrand<Name>) | RuntimeInput<Name>,
+	config: RuntimeInput<C> &
+		("version" extends keyof C ? { readonly FIX_ROOT_VERSION: "version belongs on the root" } : {}),
 	recipe: CommandRecipe<Builder>,
 ): CommandDefinition<Name, AliasesOf<C>, ShapeOfBuilder<Builder>, DepsOfBuilder<Builder>>;
 export function defineCommand(
-	name: string,
-	configOrRecipe: CommandConfig | CommandRecipe,
+	nameInput: string | RuntimeInput<string>,
+	configOrRecipe: RuntimeCommandConfig | RuntimeInput<RuntimeCommandConfig> | CommandRecipe,
 	maybeRecipe?: CommandRecipe,
 ): CommandDefinition {
 	const hasConfig = !isCommandRecipe(configOrRecipe);
-	const config: CommandConfig & { readonly version?: unknown } = hasConfig ? configOrRecipe : {};
-	const recipe = hasConfig ? maybeRecipe : configOrRecipe;
-	if (!recipe) throw new CrustError("DEFINITION", `Command "${name}" requires a recipe`);
+	const checkedConfig = hasConfig && isRuntimeInput(configOrRecipe);
+	const config: RuntimeCommandConfig & { readonly version?: unknown } = hasConfig
+		? isRuntimeInput(configOrRecipe)
+			? runtimeInputValue(configOrRecipe)
+			: configOrRecipe
+		: {};
+	// Authoring overloads require a recipe in both call forms.
+	const recipe = hasConfig ? maybeRecipe! : configOrRecipe;
+	const name = resolveCommandName(nameInput, config.aliases);
+	if (checkedConfig) {
+		for (const alias of config.aliases ?? []) {
+			if (alias === "" || /[ \t\n\r\v\f]/.test(alias) || alias.startsWith("-") || alias === name) {
+				throw new CrustError("DEFINITION", `Command "${name}" has an invalid alias "${alias}"`);
+			}
+		}
+	}
 	const { sections, version: _rootVersion, ...metaRest } = config;
 	const meta: Omit<CommandMeta, "name"> = {
 		...metaRest,
 		...(config.aliases ? { aliases: [...config.aliases] } : {}),
-		...(sections ? { sections: validateCommandSections(name, sections) } : {}),
+		...(sections ? { sections: validateCommandSections(name, sections, checkedConfig) } : {}),
 	};
 	const internal: CommandDefinitionInternal = {
+		name,
 		// SAFETY: overloads pair each recipe with its declared dependency context; storage erases it.
 		recipe: recipe as CommandDefinitionInternal["recipe"],
 		meta,
@@ -652,8 +987,9 @@ export function defineCommand(
 	const named = <const DefName extends string>(defName: DefName): CommandDefinition<DefName> => {
 		return Object.freeze({
 			name: defName,
-			as: <const NewName extends string>(newName: NewName) => named(newName),
-			[commandDefinitionInternal]: internal,
+			as: <const NewName extends string>(newName: NewName | RuntimeInput<NewName>) =>
+				named(resolveCommandName(newName, meta.aliases)),
+			[commandDefinitionInternal]: Object.freeze({ ...internal, name: defName }),
 		});
 	};
 	return named(name);
@@ -694,7 +1030,14 @@ function dedupeExtensions(extensions: readonly Extension[]): Extension[] {
  *   });
  * ```
  */
-type CollisionSpellings<Extensions extends string = never, Tree extends string = never> = {
+type CollisionSpellings<
+	Extensions extends string = never,
+	Tree extends string = never,
+	Demands extends ContextMap = {},
+	Pending extends string = never,
+> = {
+	readonly pending: Pending;
+	readonly demands: Demands;
 	readonly extension: Extensions;
 	readonly tree: Tree;
 };
@@ -707,16 +1050,16 @@ type AfterFlags<
 	Sp extends string,
 	Tree extends object,
 	CtxFlags extends FlagsDef,
-	CollisionSp extends CollisionSpellings,
+	CollisionSp extends CollisionSpellings<string, string, ContextMap, string>,
 	Result,
 	Defs extends readonly NamedFlagDef[],
-	Meta extends RootCommandMeta,
+	Meta extends RuntimeRootCommandMeta | undefined,
 > = Crust<
-	MergeFlags<Flags, NamedFlagsRecord<Defs>>,
+	MergeFlags<Flags, AttachedFlags<Defs>>,
 	A,
 	Ctx,
 	Sibs,
-	Sp | SpellingsOf<NamedFlagsRecord<Defs>>,
+	Sp | AttachedSpellings<Defs>,
 	Tree,
 	CtxFlags,
 	CollisionSp,
@@ -732,10 +1075,10 @@ type AfterArgs<
 	Sp extends string,
 	Tree extends object,
 	CtxFlags extends FlagsDef,
-	CollisionSp extends CollisionSpellings,
+	CollisionSp extends CollisionSpellings<string, string, ContextMap, string>,
 	Result,
 	NewA extends ArgsDef,
-	Meta extends RootCommandMeta,
+	Meta extends RuntimeRootCommandMeta | undefined,
 > = Crust<Flags, AppendedArgs<A, NewA>, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Meta>;
 
 type AfterProvide<
@@ -746,16 +1089,16 @@ type AfterProvide<
 	Sp extends string,
 	Tree extends object,
 	CtxFlags extends FlagsDef,
-	CollisionSp extends CollisionSpellings,
+	CollisionSp extends CollisionSpellings<string, string, ContextMap, string>,
 	Result,
-	Cs extends readonly ContextInstance[],
-	Meta extends RootCommandMeta,
+	Cs extends readonly AnyContextInstance[],
+	Meta extends RuntimeRootCommandMeta | undefined,
 > = Crust<
 	MergeFlags<Flags, ContextsOwnedFlags<Cs>>,
 	A,
-	MergeContext<Ctx, ContextsOutput<Cs>>,
+	MergeProviders<Ctx, ContextsOutput<Cs>>,
 	Sibs,
-	Sp | SpellingsOf<ContextsOwnedFlags<Cs>>,
+	Sp | LocalSpellingsOf<ContextsOwnedFlags<Cs>>,
 	Tree,
 	MergeFlags<CtxFlags, ContextsOwnedFlags<Cs>>,
 	CollisionSp,
@@ -771,9 +1114,9 @@ type AfterAction<
 	Sp extends string,
 	Tree extends object,
 	CtxFlags extends FlagsDef,
-	CollisionSp extends CollisionSpellings,
+	CollisionSp extends CollisionSpellings<string, string, ContextMap, string>,
 	R,
-	Meta extends RootCommandMeta,
+	Meta extends RuntimeRootCommandMeta | undefined,
 > = Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Awaited<R>, Meta>;
 
 type AfterExtend<
@@ -784,21 +1127,23 @@ type AfterExtend<
 	Sp extends string,
 	Tree extends object,
 	CtxFlags extends FlagsDef,
-	CollisionSp extends CollisionSpellings,
+	CollisionSp extends CollisionSpellings<string, string, ContextMap, string>,
 	Result,
 	Es extends readonly AnyExtension[],
-	Meta extends RootCommandMeta,
+	Meta extends RuntimeRootCommandMeta | undefined,
 > = Crust<
 	MergeFlags<Flags, ExtensionFlags<Es>>,
 	A,
-	MergeContext<Ctx, ExtensionsProvidesOutput<Es>>,
+	MergeProviders<Ctx, ExtensionsProvidesOutput<Es>>,
 	Sibs | ExtensionsCommandSpellings<Es>,
 	Sp | ExtensionsSpellings<Es>,
-	ExtendedTree<Tree, ExtensionCommands<Es>, RecursiveExtensionFlags<Es>, CtxFlags>,
+	ExtendedTree<Tree, Es, RecursiveExtensionFlags<Es>, CtxFlags>,
 	MergeFlags<CtxFlags, RecursiveExtensionFlags<Es>>,
 	CollisionSpellings<
 		CollisionSp["extension"] | ExtensionsSpellings<Es>,
-		CollisionSp["tree"] | DefinitionTreeSpellings<ExtensionCommands<Es>>
+		CollisionSp["tree"] | DefinitionTreeSpellings<ExtensionCommands<Es>>,
+		CollisionSp["demands"] & ExtensionDemandValues<Es>,
+		CollisionSp["pending"] | DefinitionTreeSpellings<ExtensionCommands<Es>>
 	>,
 	Result,
 	Meta
@@ -812,54 +1157,108 @@ type AfterAdd<
 	Sp extends string,
 	Tree extends object,
 	CtxFlags extends FlagsDef,
-	CollisionSp extends CollisionSpellings,
+	CollisionSp extends CollisionSpellings<string, string, ContextMap, string>,
 	Result,
 	Ds extends readonly CommandDefinition<any, any, any, any>[],
-	Meta extends RootCommandMeta,
+	Meta extends RuntimeRootCommandMeta | undefined,
 > = Crust<
 	Flags,
 	A,
 	Ctx,
-	Sibs | CommandDefinitionSpellings<Ds[number]>,
+	Sibs | AttachedCommandSpellings<Ds>,
 	Sp,
 	Tree & DefinitionsTree<Ds, CtxFlags>,
 	CtxFlags,
-	CollisionSpellings<CollisionSp["extension"], CollisionSp["tree"] | DefinitionTreeSpellings<Ds>>,
+	CollisionSpellings<
+		CollisionSp["extension"],
+		CollisionSp["tree"] | DefinitionTreeSpellings<Ds>,
+		CollisionSp["demands"],
+		CollisionSp["pending"]
+	>,
 	Result,
 	Meta
 >;
 
-// Missing-dependency brand for inline `.command()`: parity with
-// `ValidateDeclaredDeps` at `.add()`, attached to the name parameter because
-// the builder type `B` is inferred from the recipe argument itself.
+type ExtensionDemandValues<Es extends readonly AnyExtension[]> =
+	UnionToIntersection<
+		ExtensionData<Es[number]> extends { readonly _hookDeps?: infer H extends ContextMap }
+			? H
+			: Record<string, ContextValue>
+	> extends infer D extends ContextMap
+		? D
+		: {};
+
+// Conditional recipes retain every provider and child branch, including beside an empty branch.
+type DescendantShapeValuesBrand<S, Deps> = S extends CommandShape
+	? DeclaredDependencyValuesBrand<Deps, NonNullable<S[typeof commandProviders]>> &
+			DescendantValuesBrand<S["children"], Deps>
+	: {};
+
+type DescendantValuesBrand<Tree, Deps> = keyof Deps extends never
+	? {}
+	: UnionToIntersection<
+			Tree extends unknown
+				? keyof Tree extends never
+					? {}
+					: { [K in keyof Tree]: DescendantShapeValuesBrand<Tree[K], Deps> }[keyof Tree]
+				: never
+		>;
+
+type DefinitionDescendantValuesBrand<
+	Ds extends readonly CommandDefinition<any, any, any, any>[],
+	Deps,
+> = DescendantValuesBrand<DefinitionsTree<Ds>, Deps>;
+
+// Inline recipes validate demands after return-type inference, like sealed definitions.
+// Descendant checks constrain the recipe itself: a return intersection can lose conditional branches.
 type ValidateInlineCommandDeps<Ctx extends ContextMap, B> = MissingDeclaredDependencyBrand<
 	{ readonly _deps?: DepsOfBuilder<B> },
 	string extends keyof Ctx ? never : keyof Ctx & string
->;
+> &
+	DeclaredDependencyValuesBrand<DepsOfBuilder<B>, Ctx>;
 
 /** Broad application type for APIs that accept any fully-built Crust application. */
-export type AnyCrust = Crust<any, any, any, any, any, any, any, any, any, any>;
+type ErasedCrust = Crust<any, any, any, any, any, any, any, any, any, any>;
+/** Completed applications expose inspection and checked invocation, not authoring after erasure. */
+export type AnyCrust = Pick<
+	Crust<
+		FlagsDef,
+		ArgsDef,
+		Record<string, ContextValue>,
+		string,
+		string,
+		CommandTree,
+		FlagsDef,
+		CollisionSpellings<string, string, ContextMap, string>,
+		unknown,
+		RuntimeRootCommandMeta
+	>,
+	"_types" | "run" | "execute" | "snapshot"
+>;
 
-type DefinedRootMetaKeys<Meta extends RootCommandMeta> = {
+type DefinedRootMetaKeys<Meta extends RuntimeRootCommandMeta | undefined> = {
 	[K in RootMetaKey]: [Meta] extends [Required<Pick<RootCommandMeta, K>>] ? K : never;
 }[RootMetaKey];
 
 export class Crust<
 	Flags extends FlagsDef = {},
-	A extends ArgsDef = ArgsDef,
-	// `out` forces covariance over the contravariant brand positions in
-	// provide()/extend(); those brands are best-effort lints (already bypassable
-	// via widening), and the annotation skips a full structural comparison per
-	// assignment. Do not "fix" it back to inferred variance.
-	out Ctx extends ContextMap = {},
+	A extends ArgsDef = [],
+	// Context proof is invariant: a completed holder must not masquerade as an empty root.
+	Ctx extends ContextMap = {},
 	Sibs extends string = never,
-	Sp extends string = SpellingsOf<Flags>,
+	Sp extends string = LocalSpellingsOf<Flags>,
 	Tree extends object = {},
-	out CtxFlags extends FlagsDef = {},
-	CollisionSp extends CollisionSpellings = CollisionSpellings,
+	CtxFlags extends FlagsDef = {},
+	CollisionSp extends CollisionSpellings<string, string, ContextMap, string> = CollisionSpellings,
 	Result = void,
-	out Meta extends RootCommandMeta = {},
+	const out Meta extends RuntimeRootCommandMeta | undefined = {},
+	// Constructors cannot declare generics; append Name to preserve explicit type-argument order.
+	const Name extends string = string,
 > {
+	declare private readonly _contextProof: (
+		state: [Flags, A, Ctx, CtxFlags, CollisionSp["demands"]],
+	) => void;
+
 	/** Supported type-level seam exposing the application's inferred command types. */
 	declare readonly _types: {
 		flags: Flags;
@@ -876,6 +1275,9 @@ export class Crust<
 	/** @internal — Recipe-builder lineage anchor, unique per materialization and preserved by clones */
 	_ancestorOwnedFlags: FlagsDef;
 
+	/** @internal Checked attachment mode exists only while executing this recipe, not on stored nodes. */
+	_checkedMaterialization = false;
+
 	/**
 	 * Create a new root command builder.
 	 *
@@ -883,38 +1285,39 @@ export class Crust<
 	 * @param metadata - Optional root description, version, usage, and documentation sections.
 	 */
 	constructor(
-		name: string,
-		...metadata:
-			// RootCommandMeta keeps contextual excess-property checks for fresh section literals.
-			| [meta: Meta & RootCommandMeta & { [K in Exclude<keyof Meta, RootMetaKey>]: never }]
-			| ({} extends Meta ? [meta?: undefined] : never)
+		nameInput: ((Name & CommandNameBrand<Name>) | RuntimeInput<Name>) &
+			({} extends Meta ? {} : { readonly FIX_ROOT_META: "This root requires metadata" }),
+	);
+	constructor(
+		nameInput: (Name & CommandNameBrand<Name>) | RuntimeInput<Name>,
+		meta: Meta &
+			(
+				| undefined
+				| (RootCommandMeta &
+						LocalSectionsBrand<NoInfer<NonNullable<Meta>>> & {
+							[K in Exclude<keyof Meta, RootMetaKey>]: never;
+						})
+			),
+	);
+	constructor(
+		nameInput: (Name & CommandNameBrand<Name>) | RuntimeInput<Name>,
+		meta: RuntimeInput<Meta> & { [K in Exclude<keyof Meta, RootMetaKey>]: never },
+	);
+	constructor(
+		nameInput: (Name & CommandNameBrand<Name>) | RuntimeInput<Name>,
+		...metadata: [meta?: RuntimeRootCommandMeta | RuntimeInput<RuntimeRootCommandMeta | undefined>]
 	) {
-		const meta: RootCommandMeta = metadata[0] ?? {};
-		// Runtime is the single home for this check: constructors cannot carry
-		// type parameters, so no brand can reject a statically known blank name.
-		if (name.trim() === "") {
-			throw new CrustError("DEFINITION", "Command name must be a non-empty string", {
-				subject: "command",
-				name,
-				reason: "empty-name",
-			});
-		}
-		// Prepare-time deep clones assign `subCommands[name] = node`; a
-		// `__proto__` key would become the record's prototype, vanishing from
-		// help/snapshots while ghost-routing every inherited key.
-		if (name === "__proto__") {
-			throw new CrustError("DEFINITION", 'Command name "__proto__" is reserved', {
-				subject: "command",
-				name,
-				reason: "reserved-name",
-			});
-		}
+		const metaInput = metadata[0];
+		const checkedMeta = isRuntimeInput(metaInput);
+		const meta: RuntimeRootCommandMeta =
+			(checkedMeta ? runtimeInputValue(metaInput) : metaInput) ?? {};
+		const name = resolveCommandName(nameInput);
 		this._node = createCommandNode(name);
 		if (meta.description !== undefined) this._node.meta.description = meta.description;
 		if (meta.version !== undefined) this._node.meta.version = meta.version;
 		if (meta.usage !== undefined) this._node.meta.usage = meta.usage;
 		if (meta.sections !== undefined) {
-			this._node.meta.sections = validateCommandSections(name, meta.sections);
+			this._node.meta.sections = validateCommandSections(name, meta.sections, checkedMeta);
 		}
 		this._ancestorOwnedFlags = {};
 	}
@@ -945,6 +1348,7 @@ export class Crust<
 		};
 		cloned._node = newNode;
 		cloned._ancestorOwnedFlags = this._ancestorOwnedFlags;
+		cloned._checkedMaterialization = this._checkedMaterialization;
 		/* oxlint-disable anti-slop/no-chained-type-assertions -- one runtime builder shape is re-parameterized after each matching mutation. */
 		// SAFETY: every caller pairs this generic transition with the matching runtime node mutation.
 		return cloned as unknown as Out;
@@ -963,16 +1367,27 @@ export class Crust<
 	 * @returns A new `Crust` instance with the given flags
 	 */
 	flags<const Defs extends readonly NamedFlagDef[]>(
-		...defs: ValidateNamedFlagDefs<Defs, Sp>
+		...defs: ValidateLocalFlagDefs<Defs, Sp>
+	): AfterFlags<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Defs, Meta>;
+	flags<const Defs extends readonly NamedFlagDef[]>(
+		defs: RuntimeInput<Defs>,
+	): AfterFlags<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Defs, Meta>;
+	flags<const Defs extends readonly NamedFlagDef[]>(
+		...inputs: Defs | [RuntimeInput<Defs>]
 	): AfterFlags<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Defs, Meta> {
+		const checked = inputs.length === 1 && isRuntimeInput<unknown>(inputs[0]);
+		// SAFETY: the overloads permit exactly one envelope or the definition tuple.
+		const defs = checked ? runtimeInputValue(inputs[0]) : (inputs as Defs);
 		const cloned = this._clone<
 			AfterFlags<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Defs, Meta>
 		>({});
 		for (const def of defs) {
-			const { name, ...rest } = def;
+			const { name, ...rest } = normalizeFlag(def.name, def, checked);
 			// SAFETY: removing name from a NamedFlagDef leaves its discriminated FlagDef.
-			registerFlag(cloned._node, name, rest, "local");
+			registerFlag(cloned._node, name, rest, "local", checked || this._checkedMaterialization);
 		}
+		if (checked)
+			checkExtensionFlagRelations({ ...cloned._node, subCommands: {} }, this._node.extensions);
 		return cloned;
 	}
 
@@ -988,32 +1403,43 @@ export class Crust<
 	 * @returns A new `Crust` instance with the combined args
 	 */
 	args<const NewA extends ArgsDef>(
-		...defs: NewA & AppendArgsChecks<A, NewA>
+		...defs: NewA & LocalAppendArgsChecks<A, NewA>
+	): AfterArgs<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, NewA, Meta>;
+	args<const NewA extends ArgsDef>(
+		defs: RuntimeInput<NewA>,
+	): AfterArgs<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, NewA, Meta>;
+	args<const NewA extends ArgsDef>(
+		...inputs: NewA | [RuntimeInput<NewA>]
 	): AfterArgs<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, NewA, Meta> {
-		const combined = [...this._node.args, ...defs.map((definition) => ({ ...definition }))];
-		// Brands own literal tuples; this owns config-built defs, where a
-		// duplicate name silently discards a positional and a mid-tuple variadic
-		// swallows every later argument.
-		const seen = new Set<string>();
-		for (const [index, definition] of combined.entries()) {
-			if (seen.has(definition.name)) {
-				throw new CrustError(
-					"DEFINITION",
-					`Argument name "${definition.name}" is already defined`,
-					{
-						subject: "argument",
-						name: definition.name,
-						reason: "duplicate-arg",
-					},
-				);
-			}
-			seen.add(definition.name);
-			if (definition.variadic === true && index !== combined.length - 1) {
-				throw new CrustError(
-					"DEFINITION",
-					`Only the last positional argument can be variadic; "${definition.name}" is not last`,
-					{ subject: "argument", name: definition.name, reason: "variadic-position" },
-				);
+		const checked = inputs.length === 1 && isRuntimeInput<unknown>(inputs[0]);
+		// SAFETY: the overloads permit exactly one envelope or the definition tuple.
+		const defs = checked ? runtimeInputValue(inputs[0]) : (inputs as NewA);
+		const combined = [
+			...this._node.args,
+			...defs.map((definition) => normalizeArg(definition, checked)),
+		];
+		if (checked) {
+			const seen = new Set<string>();
+			for (const [index, definition] of combined.entries()) {
+				if (seen.has(definition.name)) {
+					throw new CrustError(
+						"DEFINITION",
+						`Argument name "${definition.name}" is already defined`,
+						{
+							subject: "argument",
+							name: definition.name,
+							reason: "duplicate-arg",
+						},
+					);
+				}
+				seen.add(definition.name);
+				if (definition.variadic === true && index !== combined.length - 1) {
+					throw new CrustError(
+						"DEFINITION",
+						`Only the last positional argument can be variadic; "${definition.name}" is not last`,
+						{ subject: "argument", name: definition.name, reason: "variadic-position" },
+					);
+				}
 			}
 		}
 		return this._clone<
@@ -1027,15 +1453,38 @@ export class Crust<
 	 * Contexts are inherited by descendant commands and constructed lazily when
 	 * their `ctx` property is accessed. Dependency order within one call does not
 	 * affect construction. Disposable values are released in
-	 * reverse construction order after post-run hooks. A Context-owned flag that
-	 * collides with an existing flag throws a `DEFINITION` error.
+	 * reverse construction order after post-run hooks. TypeScript rejects known Context-owned flag collisions, including pending
+	 * Extension commands. Checked operations throw `DEFINITION` for actual collisions.
 	 *
 	 */
-	provide<const Cs extends readonly ContextInstance[]>(
-		...instances: ProvideChecks<Sp, Cs> &
+	provide<const Cs extends readonly AnyContextInstance[]>(
+		...instances: KnownContextInstances<Cs> &
+			(string extends Sp | CollisionSp["pending"] ? RuntimeRequiredBrand : {}) &
+			(string extends keyof Ctx ? RuntimeRequiredBrand : {}) &
+			ProvideChecks<Sp | CollisionSp["pending"], Cs> &
 			ValidateContextNames<Ctx, Cs> &
 			ValidateContextDeps<Ctx, Cs>
+	): AfterProvide<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Cs, Meta>;
+	provide<const Cs extends readonly AnyContextInstance[]>(
+		instances: RuntimeInput<
+			Cs & ValidateContextValues<MergeProviders<Ctx, ContextsOutput<Cs>>, NoInfer<Cs>>
+		> &
+			DeclaredDependencyValuesBrand<CollisionSp["demands"], ContextsOutput<NoInfer<Cs>>>,
+	): AfterProvide<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Cs, Meta>;
+	provide<const Cs extends readonly AnyContextInstance[]>(
+		...inputs: Cs | [RuntimeInput<Cs>]
 	): AfterProvide<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Cs, Meta> {
+		const checked = inputs.length === 1 && isRuntimeInput<unknown>(inputs[0]);
+		// SAFETY: overloads admit exactly one envelope or the instance tuple.
+		const instances = (checked ? runtimeInputValue(inputs[0]) : (inputs as Cs)).map(
+			contextInstanceData,
+		);
+		if (checked || this._checkedMaterialization)
+			validateContextAvailability(
+				[...this._node.contexts.map(({ instance }) => instance), ...instances],
+				instances,
+			);
+
 		// Positional by design: providers reach only this node and children added
 		// afterwards (flag scoping; see definition.test.ts). Extension `provides`
 		// differ deliberately — they are application-wide and walk the whole tree.
@@ -1044,7 +1493,25 @@ export class Crust<
 		>({ contexts: [...this._node.contexts, ...instances.map((instance) => ({ instance }))] });
 		for (const instance of instances) {
 			for (const [name, definition] of Object.entries(instance.ownedFlags)) {
-				registerFlag(cloned._node, name, definition, "owned");
+				registerFlag(
+					cloned._node,
+					name,
+					definition,
+					"owned",
+					checked || this._checkedMaterialization,
+				);
+			}
+		}
+		if (checked) {
+			checkExtensionFlagRelations({ ...cloned._node, subCommands: {} }, this._node.extensions);
+			if (instances.some((instance) => Object.keys(instance.ownedFlags).length > 0)) {
+				// These recipes run later and inherit the newly supplied owned flags.
+				cloned._node.checkedExtensions = new Set([
+					...this._node.checkedExtensions,
+					...this._node.extensions
+						.filter((extension) => extension.commands?.length)
+						.map((extension) => extension.id),
+				]);
 			}
 		}
 		return cloned;
@@ -1079,41 +1546,111 @@ export class Crust<
 	 * contribute. Repeated calls accumulate Extensions in registration order,
 	 * except that registering an `ExtensionId` again keeps only the last
 	 * registration — its contributions and providers replace the earlier ones
-	 * and its hooks run once, at the later position. Replacement is
-	 * runtime-only: contributions already merged into the builder's static
-	 * types stay visible, so invoking a replaced literal Extension's commands
-	 * through typed `run()` fails at runtime with `COMMAND_NOT_FOUND`.
+	 * and its hooks run once, at the later position. ID deduplication is
+	 * runtime-only, so removed paths can remain statically visible and reject
+	 * with `COMMAND_NOT_FOUND`. Canonical checked replacements use the new
+	 * shape; open replacements and ambiguous aliases require checked invocation.
 	 * Required root metadata keys are checked against the constructor's inferred
 	 * metadata by TypeScript, not at runtime.
 	 * Command definition builders do not expose this method.
 	 */
 	extend<const Es extends readonly Extension<any, any, any, any, DefinedRootMetaKeys<Meta>>[]>(
-		...extensions: Es &
-			ValidateDeclaredDeps<MergeContext<Ctx, ExtensionsProvidesOutput<Es>>, Es> &
-			// Contributed command trees count as existing spellings: prepare
-			// materializes commands before injecting Extension flags, so a shared
-			// spelling makes injectExtensionFlag throw on every invocation.
-			ValidateExtensionFlags<
-				Es,
-				Sp | CollisionSp["tree"] | DefinitionTreeSpellings<ExtensionCommands<Es>>
+		...extensions: Es & {
+			[I in keyof Es]: (string extends Sp | Sibs | CollisionSp["tree"] | keyof Ctx
+				? RuntimeRequiredBrand
+				: {}) &
+				(IsStaticTuple<Es> extends true ? {} : RuntimeRequiredBrand) &
+				KnownExtensions<Es>[I] &
+				(ExtensionCommandDefs<Es[I]> extends ValidateDefinitionFlags<
+					ExtensionCommandDefs<Es[I]>,
+					LocalSpellingsOf<CtxFlags>
+				>
+					? {}
+					: RuntimeRequiredBrand) &
+				ValidateDeclaredDeps<MergeProviders<Ctx, ExtensionsProvidesOutput<Es>>, Es>[I] &
+				DeclaredDependencyValuesBrand<
+					CollisionSp["demands"],
+					MergeProviders<Ctx, ExtensionsProvidesOutput<Es>>
+				> &
+				DescendantValuesBrand<Tree, ExtensionDemandValues<Es>> &
+				DefinitionDescendantValuesBrand<
+					ExtensionCommands<Es>,
+					CollisionSp["demands"] & ExtensionDemandValues<Es>
+				> &
+				ExtensionCheckAt<
+					ValidateExtensionFlags<
+						Es,
+						Sp | CollisionSp["tree"] | DefinitionTreeSpellings<ExtensionCommands<Es>>
+					>,
+					I
+				> &
+				ExtensionCheckAt<ValidateExtensionCommands<Es, Sibs>, I> &
+				ExtensionCheckAt<ValidateExtensionProvides<Es, Ctx>, I>;
+		}
+	): AfterExtend<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Es, Meta>;
+	extend<const Es extends readonly Extension<any, any, any, any, DefinedRootMetaKeys<Meta>>[]>(
+		extensions: RuntimeInput<
+			Es & ValidateDeclaredValues<MergeProviders<Ctx, ExtensionsProvidesOutput<Es>>, NoInfer<Es>>
+		> &
+			DeclaredDependencyValuesBrand<
+				CollisionSp["demands"],
+				MergeProviders<Ctx, ExtensionsProvidesOutput<NoInfer<Es>>>
 			> &
-			ValidateExtensionCommands<Es, Sibs> &
-			ValidateExtensionProvides<Es, Ctx>
+			DescendantValuesBrand<Tree, ExtensionDemandValues<NoInfer<Es>>> &
+			DefinitionDescendantValuesBrand<
+				ExtensionCommands<NoInfer<Es>>,
+				CollisionSp["demands"] & ExtensionDemandValues<NoInfer<Es>>
+			>,
+	): AfterExtend<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Es, Meta>;
+	extend<const Es extends readonly Extension<any, any, any, any, DefinedRootMetaKeys<Meta>>[]>(
+		...inputs: Es | [RuntimeInput<Es>]
 	): AfterExtend<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Es, Meta> {
+		const checked = inputs.length === 1 && isRuntimeInput<unknown>(inputs[0]);
+		// SAFETY: overloads admit one envelope or an Extension tuple.
+		const extensions = (checked ? runtimeInputValue(inputs[0]) : (inputs as Es)).map(extensionData);
 		// SAFETY: composition checked metadata compatibility; runtime storage erases hook requirements.
-		const activeExtensions = dedupeExtensions([
-			...this._node.extensions,
-			...extensions,
-		] as Extension[]);
+		const registrations = [...this._node.extensions, ...extensions] as Extension[];
+		const activeExtensions = dedupeExtensions(registrations);
+		const node = installExtensionContexts(
+			this._node,
+			activeExtensions,
+			new Set(extensions.map((extension) => extension.id)),
+			checked,
+			registrations.filter((extension) => !activeExtensions.includes(extension)),
+		);
+		if (checked) {
+			checkExtensionFlagRelations(node, activeExtensions);
+			validateContextAvailability(
+				node.contexts.map(({ instance }) => instance),
+				extensions.flatMap((extension) => [...extension.uses, ...(extension.provides ?? [])]),
+			);
+		}
+		const checkedExtensions = new Set(this._node.checkedExtensions);
+		if (
+			checked &&
+			extensions.some(
+				(extension) =>
+					Object.keys(extension.flags ?? {}).length > 0 ||
+					extension.provides?.some(
+						(instance: AnyContextInstance) => Object.keys(instance.ownedFlags).length > 0,
+					),
+			)
+		) {
+			// Earlier recipes run later against these additions, not their original destination.
+			for (const extension of activeExtensions) {
+				if (extension.commands?.length) checkedExtensions.add(extension.id);
+			}
+		}
+		for (const extension of extensions) {
+			if (checked) checkedExtensions.add(extension.id);
+			else checkedExtensions.delete(extension.id);
+		}
 		return this._clone<
 			AfterExtend<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Es, Meta>
 		>({
-			...installExtensionContexts(
-				this._node,
-				activeExtensions,
-				new Set(extensions.map((extension) => extension.id)),
-			),
+			...node,
 			extensions: activeExtensions,
+			checkedExtensions,
 		});
 	}
 
@@ -1124,13 +1661,26 @@ export class Crust<
 	 */
 	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
 		...definitions: Ds &
+			(string extends Sibs ? RuntimeRequiredBrand : {}) &
+			KnownDefinitionAliases<Ds> &
 			ValidateCommandDefinitions<Ds, Sibs> &
 			ValidateDeclaredDeps<Ctx, Ds> &
-			ValidateDefinitionFlags<Ds, CollisionSp["extension"]>
+			DefinitionDescendantValuesBrand<Ds, CollisionSp["demands"]> &
+			ValidateDefinitionFlags<Ds, CollisionSp["extension"] | LocalSpellingsOf<CtxFlags>>
+	): AfterAdd<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Ds, Meta>;
+	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
+		definitions: RuntimeInput<Ds & ValidateDeclaredValues<Ctx, NoInfer<Ds>>> &
+			DefinitionDescendantValuesBrand<NoInfer<Ds>, CollisionSp["demands"]>,
+	): AfterAdd<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Ds, Meta>;
+	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
+		...inputs: Ds | [RuntimeInput<Ds>]
 	): AfterAdd<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Ds, Meta> {
+		const checked = inputs.length === 1 && isRuntimeInput<unknown>(inputs[0]);
+		// SAFETY: overloads admit exactly one envelope or the definition tuple.
+		const definitions = checked ? runtimeInputValue(inputs[0]) : (inputs as Ds);
 		return this._addDefinitions<
 			AfterAdd<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Ds, Meta>
-		>(definitions);
+		>(definitions, checked);
 	}
 
 	/**
@@ -1145,15 +1695,77 @@ export class Crust<
 	 * expose this method.
 	 */
 	command<const N extends string, B extends AnyCommandDefinitionBuilder>(
-		// ShapeFlagCollisionBrand keeps parity with `.add()`'s ValidateDefinitionFlags:
-		// the recipe's whole tree (including nested `.add()` children, which the seeded
-		// `Sp` cannot see) is checked against registered Extension flag spellings.
 		name: N &
-			EmptyNameBrand<N> &
-			ValidateInlineCommandDeps<Ctx, B> &
-			ShapeFlagCollisionBrand<ShapeOfBuilder<B>, CollisionSp["extension"]>,
+			CommandNameBrand<N> &
+			CommandCollisionBrand<N, Sibs> &
+			(string extends Sibs ? RuntimeRequiredBrand : {}),
+		recipe: ((
+			command: CommandDefinitionBuilder<
+				{},
+				[],
+				Ctx,
+				never,
+				LocalSpellingsOf<CtxFlags>,
+				{},
+				CtxFlags
+			>,
+		) => B &
+			// Include nested children, whose flags are not in the seeded spelling set.
+			ShapeFlagCollisionBrand<ShapeOfBuilder<B>, CollisionSp["extension"]> &
+			ValidateInlineCommandDeps<Ctx, NoInfer<B>>) &
+			NoInfer<DescendantValuesBrand<{ child: ShapeOfBuilder<B> }, CollisionSp["demands"]>>,
+	): AfterAdd<
+		Flags,
+		A,
+		Ctx,
+		Sibs,
+		Sp,
+		Tree,
+		CtxFlags,
+		CollisionSp,
+		Result,
+		readonly [CommandDefinition<N, readonly [], ShapeOfBuilder<B>, DepsOfBuilder<B>>],
+		Meta
+	>;
+	command<const N extends string, B extends AnyCommandDefinitionBuilder>(
+		name: RuntimeInput<N>,
+		recipe: ((
+			command: CommandDefinitionBuilder<
+				{},
+				[],
+				Ctx,
+				never,
+				LocalSpellingsOf<CtxFlags>,
+				{},
+				CtxFlags
+			>,
+		) => B & DeclaredDependencyValuesBrand<DepsOfBuilder<NoInfer<B>>, Ctx>) &
+			NoInfer<DescendantValuesBrand<{ child: ShapeOfBuilder<B> }, CollisionSp["demands"]>>,
+	): AfterAdd<
+		Flags,
+		A,
+		Ctx,
+		Sibs,
+		Sp,
+		Tree,
+		CtxFlags,
+		CollisionSp,
+		Result,
+		readonly [CommandDefinition<N, readonly [], ShapeOfBuilder<B>, DepsOfBuilder<B>>],
+		Meta
+	>;
+	command<const N extends string, B extends AnyCommandDefinitionBuilder>(
+		name: N | RuntimeInput<N>,
 		recipe: (
-			command: CommandDefinitionBuilder<{}, [], Ctx, never, SpellingsOf<CtxFlags>, {}, CtxFlags>,
+			command: CommandDefinitionBuilder<
+				{},
+				[],
+				Ctx,
+				never,
+				LocalSpellingsOf<CtxFlags>,
+				{},
+				CtxFlags
+			>,
 		) => B,
 	): AfterAdd<
 		Flags,
@@ -1172,7 +1784,7 @@ export class Crust<
 		// SAFETY: the seeded recipe generics restate runtime facts — materialization
 		// seeds the child node from this node's contexts and owned flags.
 		const define = defineCommand as unknown as (
-			name: string,
+			name: string | RuntimeInput<string>,
 			recipe: CommandRecipe,
 		) => CommandDefinition;
 		// SAFETY: the erased recipe still returns the builder it receives; materialization re-validates that at runtime.
@@ -1192,10 +1804,11 @@ export class Crust<
 				readonly [CommandDefinition<N, readonly [], ShapeOfBuilder<B>, DepsOfBuilder<B>>],
 				Meta
 			>
-		>([definition]);
+		>([definition], isRuntimeInput(name));
 	}
 
-	private _addDefinitions<Out>(definitions: readonly CommandDefinition[]): Out {
+	private _addDefinitions<Out>(definitions: readonly CommandDefinition[], checked = false): Out {
+		checked ||= this._checkedMaterialization;
 		// Keep partial additions private if a duplicate or recipe throws. Every
 		// recipe inherits from the original parent, never from earlier siblings.
 		const subCommands = { ...this._node.subCommands };
@@ -1203,14 +1816,38 @@ export class Crust<
 			// FIX_COMMAND_COLLISION owns literal names; this owns dynamic `.add()`,
 			// where a silent replacement makes the earlier command unreachable.
 			// Extension-contributed commands keep documented last-write-wins.
-			if (Object.hasOwn(subCommands, definition.name)) {
+			if (checked && Object.hasOwn(subCommands, definition.name)) {
 				throw new CrustError(
 					"DEFINITION",
 					`Command name "${definition.name}" is already registered on this command`,
 					{ subject: "command", name: definition.name, reason: "command-collision" },
 				);
 			}
-			const childNode = materializeCommandDefinition(definition, this._node);
+			const childNode = materializeCommandDefinition(definition, this._node, undefined, checked);
+			if (checked) {
+				checkExtensionFlagRelations(
+					{ ...this._node, subCommands: { [definition.name]: childNode } },
+					this._node.extensions,
+				);
+				const spellings = [childNode.meta.name, ...(childNode.meta.aliases ?? [])];
+				for (const sibling of Object.values(subCommands)) {
+					if (
+						[sibling.meta.name, ...(sibling.meta.aliases ?? [])].some((name) =>
+							spellings.includes(name),
+						)
+					) {
+						throw new CrustError(
+							"DEFINITION",
+							`Command "${definition.name}" collides with an existing command`,
+							{
+								subject: "command",
+								name: definition.name,
+								reason: "command-collision",
+							},
+						);
+					}
+				}
+			}
 			subCommands[definition.name] = childNode;
 		}
 
@@ -1247,7 +1884,21 @@ export class Crust<
 	 *             exposed to Command Actions and Extensions
 	 */
 	async run<const Path extends CommandPath<Tree>, const Input>(
-		path: Path,
+		path: Path & KnownCommandPath<Path>,
+		input: RuntimeInput<Input>,
+		...validation: Input extends CompatibleRunValue<RunInputPayload, Input>
+			? readonly [io?: Partial<InvocationIO>]
+			: readonly [invalidInput: never]
+	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>>;
+	async run<const Input>(
+		path: RuntimeInput<readonly string[]>,
+		input: RuntimeInput<Input>,
+		...validation: Input extends CompatibleRunValue<RunInputPayload, Input>
+			? readonly [io?: Partial<InvocationIO>]
+			: readonly [invalidInput: never]
+	): Promise<RunOutcome<unknown>>;
+	async run<const Path extends CommandPath<Tree>, const Input>(
+		path: Path & KnownCommandPath<Path>,
 		input: Input,
 		...validation: Input extends CompatibleRunInput<
 			CommandShapeAt<CommandShape<A, Flags, Tree, Result>, NoInfer<Path>>,
@@ -1257,18 +1908,24 @@ export class Crust<
 			: readonly [invalidInput: never]
 	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>>;
 	async run<const Path extends CommandPath<Tree>>(
-		path: Path,
+		path: Path & KnownCommandPath<Path>,
 		...args: RunArguments<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>>
 	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>>;
-	async run(path: readonly string[], ...args: readonly unknown[]): Promise<RunOutcome<unknown>> {
+	async run(
+		pathInput: readonly string[] | RuntimeInput<readonly string[]>,
+		...args: readonly unknown[]
+	): Promise<RunOutcome<unknown>> {
+		const path = isRuntimeInput(pathInput) ? runtimeInputValue(pathInput) : pathInput;
+		const input = args[0];
+		const checked = isRuntimeInput(input);
 		// SAFETY: the public overloads constrain structured input to this runtime value union.
-		const structuredInput = (args[0] ?? {}) as RunInputPayload;
+		const structuredInput = (checked ? runtimeInputValue(input) : (input ?? {})) as RunInputPayload;
 		// SAFETY: the public overloads constrain the second argument to invocation IO.
 		const io = args[1] as Partial<InvocationIO> | undefined;
 		// Programmatic calls preserve raw failures and never change process status.
 		return await runInvocation(
 			this._node,
-			{ path, input: structuredInput },
+			{ path, input: structuredInput, checked },
 			io,
 			materializeCommandDefinition,
 		);
@@ -1294,24 +1951,15 @@ export class Crust<
 	}
 }
 
-// `.use()` is a compile-time demand: it feeds the recipe builder's `Deps`
-// generic and the sealed definition's `_deps` phantom, while invocation
-// resolves values from the provided path contexts, so nothing is recorded at
-// runtime. The implementation lives on the prototype because recipes execute
-// against Crust instances, while Crust's declared type omits it — root
-// applications supply Contexts with `.provide()`.
-function useContextDemand(this: AnyCrust, ...factories: AnyContextFactory[]): AnyCrust {
-	for (const factory of factories) {
-		// oxlint-disable-next-line anti-slop/no-runtime-typeof -- recipes are an authoring boundary: the demand/supply mixup (`.use(logger())`) must fail loud here, not lazily at invocation.
-		if (typeof factory !== "function" || typeof factory.contextName !== "string") {
-			throw new CrustError(
-				"DEFINITION",
-				`.use() expects Context factories (e.g. \`.use(logger)\`); call \`.provide(logger())\` to supply a Context value`,
-				{ subject: "context", name: String(factory), reason: "use-expects-factory" },
-			);
-		}
-	}
-	return this;
+// Root applications supply Contexts with .provide(); only recipes expose .use().
+function useContextDemand(this: ErasedCrust, ...factories: AnyContextFactory[]): ErasedCrust {
+	// SAFETY: reuse the same runtime builder representation and preserve its lineage anchor.
+	const cloned = Object.create(Crust.prototype) as ErasedCrust;
+	cloned._node = cloneCommandNode(this._node);
+	cloned._node.demands = [...this._node.demands, ...factories.map(contextFactoryData)];
+	cloned._ancestorOwnedFlags = this._ancestorOwnedFlags;
+	cloned._checkedMaterialization = this._checkedMaterialization;
+	return cloned;
 }
 Object.defineProperty(Crust.prototype, "use", {
 	value: useContextDemand,

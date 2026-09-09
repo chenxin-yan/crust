@@ -5,7 +5,7 @@ import type {
 	ValidateCommandDefinitions,
 	ValidateExtensionCommands,
 } from "./commands.brands.ts";
-type Def<Name extends string, Aliases extends readonly string[] = readonly string[]> = {
+type Def<Name extends string, Aliases extends readonly string[] = readonly []> = {
 	readonly name: Name;
 	readonly _aliases?: Aliases;
 };
@@ -48,7 +48,7 @@ type Def<Name extends string, Aliases extends readonly string[] = readonly strin
 }
 
 {
-	// brands Extension command collisions and lets widened commands opt out
+	// brands Extension command collisions, including an open command namespace
 	type Ext<Commands extends readonly unknown[]> = { readonly commands?: Commands };
 	type AppCollision = ValidateExtensionCommands<
 		readonly [Ext<readonly [Def<"inspect", readonly ["scan"]>]>],
@@ -73,7 +73,9 @@ type Def<Name extends string, Aliases extends readonly string[] = readonly strin
 		>
 	>;
 	type _clean = Expect<Equal<Extract<keyof Clean[0], "FIX_COMMAND_COLLISION">, never>>;
-	type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_COMMAND_COLLISION">, never>>;
+	type _widened = Expect<
+		Equal<Extract<keyof Widened[0], "FIX_COMMAND_COLLISION">, "FIX_COMMAND_COLLISION">
+	>;
 }
 
 {

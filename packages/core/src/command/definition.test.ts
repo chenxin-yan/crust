@@ -5,6 +5,7 @@ import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { defineExtensionId } from "../identity.ts";
+import { runtime } from "../runtime.ts";
 import { type CommandDefinitionBuilder, Crust, defineCommand } from "./crust.ts";
 
 describe("command definitions", () => {
@@ -114,7 +115,7 @@ describe("command definitions", () => {
 		);
 		const app = new Crust("cli").add(outer);
 
-		await expect(app.run(["outer", "nested"], { flags: { late: true } } as never)).rejects.toThrow(
+		await expect(app.run(["outer", "nested"], runtime({ flags: { late: true } }))).rejects.toThrow(
 			/Unknown flag/,
 		);
 	});
@@ -137,7 +138,7 @@ describe("command definitions", () => {
 		const app = new Crust("cli").add(outer);
 
 		await expect(
-			app.run(["outer", "before"], { flags: { "api-key": "secret" } } as never),
+			app.run(["outer", "before"], runtime({ flags: { "api-key": "secret" } })),
 		).rejects.toThrow(/Unknown flag/);
 		await app.run(["outer", "after"], { flags: { "api-key": "secret" } });
 		expect(calls).toEqual(["secret"]);
@@ -208,7 +209,7 @@ describe("command definitions", () => {
 		const definition = defineCommand("users", (command) => command.action(() => {}));
 		const app = new Crust("cli").flags({ name: "secret", type: "string" }).add(definition);
 
-		await expect(app.run(["users"], { flags: { secret: "value" } } as never)).rejects.toThrow(
+		await expect(app.run(["users"], runtime({ flags: { secret: "value" } }))).rejects.toThrow(
 			/Unknown flag/,
 		);
 	});
@@ -216,11 +217,10 @@ describe("command definitions", () => {
 	it("rejects a recipe-provided Context flag colliding with an ancestor Context's flag", () => {
 		const db = defineContext("db", { flags: [{ name: "conn", type: "string" }] }, () => ({}));
 		const cache = defineContext("cache", { flags: [{ name: "conn", type: "number" }] }, () => ({}));
-		// Fully typed: the sealed recipe cannot see ancestor spellings, so this
-		// compiles — the collision is caught when the definition materializes.
+		// Checked attachment validates the sealed recipe against this destination.
 		const sub = defineCommand("sub", (cmd) => cmd.provide(cache()).action(() => {}));
 		const app = new Crust("cli").provide(db());
-		expect(() => app.add(sub)).toThrow(
+		expect(() => app.add(runtime([sub]))).toThrow(
 			'Flag "conn" collides with existing flag "conn" on command "sub"',
 		);
 	});
@@ -232,7 +232,7 @@ describe("command definitions", () => {
 		const sub = defineCommand("sub", (cmd) =>
 			cmd.provide(db.of({ kind: "double" })).action(() => {}),
 		);
-		expect(() => new Crust("cli").provide(db()).add(sub)).toThrow(
+		expect(() => new Crust("cli").provide(db()).add(runtime([sub]))).toThrow(
 			expect.objectContaining({
 				code: "DEFINITION",
 				details: { subject: "flag", name: "conn", reason: "flag-collision" },
@@ -275,7 +275,7 @@ describe("command definitions", () => {
 				events.push("first");
 				return command;
 			});
-			const duplicate = defineCommand(name, (command) => {
+			const duplicate = defineCommand(runtime(name), (command) => {
 				events.push("duplicate");
 				return command;
 			});
@@ -284,7 +284,7 @@ describe("command definitions", () => {
 				return command;
 			});
 
-			expect(() => receiver.add(first, duplicate, later)).toThrow(
+			expect(() => receiver.add(runtime([first, duplicate, later]))).toThrow(
 				expect.objectContaining({
 					code: "DEFINITION",
 					message: `Command name "${name}" is already registered on this command`,

@@ -3,6 +3,7 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { runtime } from "@crustjs/core";
 import { Crust, defineCommand } from "@crustjs/core";
 
 import {
@@ -69,28 +70,30 @@ function getProcessStdout(): string {
 
 function buildCli() {
 	return new Crust("mycli", { description: "Test CLI", version: "1.2.3" })
-		.extend(completion())
+		.extend(runtime([completion()]))
 		.add(
-			defineCommand("build", { description: "Build artifact" }, (cmd) =>
-				cmd
-					.flags({ name: "target", type: "string", choices: ["browser", "bun", "node"] })
-					.action(() => {}),
-			),
-			defineCommand("deploy", { description: "Deploy", aliases: ["dep"] }, (cmd) =>
-				cmd
-					.add(
-						defineCommand("prod", { description: "Production deploy" }, (sub) =>
-							sub
-								.flags({
-									name: "env",
-									type: "string",
-									choices: ["dev", "staging", "prod"],
-								})
-								.action(() => {}),
-						),
-					)
-					.action(() => {}),
-			),
+			runtime([
+				defineCommand("build", { description: "Build artifact" }, (cmd) =>
+					cmd
+						.flags({ name: "target", type: "string", choices: ["browser", "bun", "node"] })
+						.action(() => {}),
+				),
+				defineCommand("deploy", { description: "Deploy", aliases: ["dep"] }, (cmd) =>
+					cmd
+						.add(
+							defineCommand("prod", { description: "Production deploy" }, (sub) =>
+								sub
+									.flags({
+										name: "env",
+										type: "string",
+										choices: ["dev", "staging", "prod"],
+									})
+									.action(() => {}),
+							),
+						)
+						.action(() => {}),
+				),
+			]),
 		)
 		.action(() => {});
 }
@@ -98,7 +101,7 @@ function buildCli() {
 describe("completion", () => {
 	it("exposes options: command name override", async () => {
 		const app = new Crust("mycli")
-			.extend(completion({ command: "shell-completion" }))
+			.extend(runtime([completion({ command: "shell-completion" })]))
 			.action(() => {});
 		const root = await app.snapshot();
 		expect(Object.keys(root.subCommands)).toContain("shell-completion");
@@ -106,14 +109,14 @@ describe("completion", () => {
 
 	it("uses the explicit version option as an override", async () => {
 		const app = new Crust("mycli", { version: "1.2.3" })
-			.extend(completion({ version: "2.0.0" }))
+			.extend(runtime([completion({ version: "2.0.0" })]))
 			.action(() => {});
 		await app.execute({ argv: ["completion", "bash"] });
 		expect(getStdout()).toStartWith("# completion script for mycli v2.0.0");
 	});
 
 	it("reports a missing version", async () => {
-		const app = new Crust("mycli").extend(completion()).action(() => {});
+		const app = new Crust("mycli").extend(runtime([completion()])).action(() => {});
 		await app.execute({ argv: ["completion", "bash"] });
 		expect(stderrChunks.join("\n")).toContain("completion extension requires a version");
 		expect(process.exitCode).toBe(1);

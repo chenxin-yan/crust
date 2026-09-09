@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { stripVTControlCharacters } from "node:util";
 
+import { runtime } from "@crustjs/core";
 import {
 	Crust,
 	defineCommand,
@@ -302,13 +303,14 @@ describe("built-in extensions", () => {
 		})
 			.extend(
 				defineExtension(defineExtensionId("docs"), {
-					sections: () => [
-						{
-							command: ["build"],
-							title: "Build notes",
-							body: "Build body\nSecond line",
-						},
-					],
+					sections: () =>
+						runtime([
+							{
+								command: ["build"],
+								title: "Build notes",
+								body: "Build body\nSecond line",
+							},
+						]),
 				}),
 			)
 			.extend(help())

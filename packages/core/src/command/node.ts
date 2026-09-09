@@ -1,8 +1,8 @@
-import type { ContextInstance } from "../api/context.ts";
+import type { AnyContextFactory, AnyContextInstance } from "../api/context.ts";
 import type { Extension } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
-import { addFlagSpellingEntries, type FlagSpelling } from "../parsing/spellings.ts";
+import { addFlagSpellingEntries, normalizeFlag, type FlagSpelling } from "../parsing/spellings.ts";
 import type { ArgsDef, CommandMeta, FlagDef, FlagsDef } from "../types.ts";
 import type { CrustCommandContext } from "./crust.ts";
 
@@ -11,7 +11,7 @@ import type { CrustCommandContext } from "./crust.ts";
 export type CommandAction = (ctx: CrustCommandContext) => unknown;
 
 export interface CommandContext {
-	instance: ContextInstance;
+	instance: AnyContextInstance;
 	extensionId?: ExtensionId;
 }
 
@@ -44,8 +44,16 @@ export interface CommandNode {
 	subCommands: Record<string, CommandNode>;
 	/** Contexts available to this command in provide order (construction order is pull-driven). */
 	contexts: CommandContext[];
+	/** Declared command demands; consumed only by checked composition. */
+	demands: readonly AnyContextFactory[];
 	/** Extensions registered via `.extend()` (root builder only) */
 	extensions: Extension[];
+	/** Checked mode belongs to each deferred Extension registration. */
+	checkedExtensions: ReadonlySet<ExtensionId>;
+	/** Actual same-ID replacement can retire canonical keys retained by the authoring type. */
+	retiredFlagNames: ReadonlySet<string>;
+	/** Retired recursive keys also apply to children materialized after replacement. */
+	retiredRecursiveFlagNames: ReadonlySet<string>;
 	/** The Command Action */
 	run?: CommandAction;
 }
@@ -71,7 +79,11 @@ export function createCommandNode(name: string): CommandNode {
 		args: [],
 		subCommands: {},
 		contexts: [],
+		demands: [],
 		extensions: [],
+		checkedExtensions: new Set(),
+		retiredFlagNames: new Set(),
+		retiredRecursiveFlagNames: new Set(),
 		run: undefined,
 	};
 }
@@ -82,28 +94,26 @@ export function registerFlag(
 	name: string,
 	def: FlagDef,
 	source: "local" | "owned",
+	checked = false,
 ): void {
-	const incomingSpellings = [name, def.short, ...(def.aliases ?? [])].filter(
-		(spelling): spelling is string => spelling !== undefined,
-	);
-	if (new Set(incomingSpellings).size !== incomingSpellings.length) {
-		throw new CrustError(
-			"DEFINITION",
-			`Flag "${name}" repeats one of its own spellings on command "${node.meta.name}"`,
-			{ subject: "flag", name, reason: "flag-collision" },
+	def = normalizeFlag(name, def, false);
+	if (checked) {
+		const incomingSpellings = [name, def.short, ...(def.aliases ?? [])].filter(
+			(spelling): spelling is string => spelling !== undefined,
 		);
-	}
-	const existingName = Object.hasOwn(node.effectiveFlags, name)
-		? name
-		: incomingSpellings
-				.map((spelling) => node.flagSpellings.get(spelling)?.canonicalName)
-				.find((existing) => existing !== undefined);
-	if (existingName !== undefined) {
-		throw new CrustError(
-			"DEFINITION",
-			`Flag "${name}" collides with existing flag "${existingName}" on command "${node.meta.name}"`,
-			{ subject: "flag", name, reason: "flag-collision" },
-		);
+		// Only consuming checked operations inspect destination relations.
+		const existingName = Object.hasOwn(node.effectiveFlags, name)
+			? name
+			: incomingSpellings
+					.map((spelling) => node.flagSpellings.get(spelling)?.canonicalName)
+					.find((existing) => existing !== undefined);
+		if (existingName !== undefined) {
+			throw new CrustError(
+				"DEFINITION",
+				`Flag "${name}" collides with existing flag "${existingName}" on command "${node.meta.name}"`,
+				{ subject: "flag", name, reason: "flag-collision" },
+			);
+		}
 	}
 	(source === "local" ? node.localFlags : node.ownedFlags)[name] = def;
 	node.effectiveFlags[name] = def;

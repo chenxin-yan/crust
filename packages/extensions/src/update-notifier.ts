@@ -432,9 +432,8 @@ function resolveUpdateCommand(
  * await app.execute();
  * ```
  */
-export const updateNotifier: ExtensionFactory<[options: UpdateNotifierOptions]> = defineExtension(
-	UPDATE_NOTIFIER,
-	(options) => {
+export const updateNotifier: ExtensionFactory<[options: UpdateNotifierOptions], {}, [], [], []> =
+	defineExtension(UPDATE_NOTIFIER, (options) => {
 		const {
 			currentVersion,
 			packageName,
@@ -544,8 +543,7 @@ export const updateNotifier: ExtensionFactory<[options: UpdateNotifierOptions]> 
 				},
 			},
 		};
-	},
-);
+	});
 
 // ────────────────────────────────────────────────────────────────────────────
 // Internal — Update notice output
