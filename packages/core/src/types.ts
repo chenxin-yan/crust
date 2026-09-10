@@ -3,6 +3,7 @@ import type { BaseValueType } from "@crustjs/utils/primitive";
 import type { InferOutput, StandardSchema } from "@crustjs/utils/schema";
 
 import type { ExtensionId } from "./identity.ts";
+import type { RunInputPayload } from "./parsing/parser.ts";
 import type { IsClosedName, IsStaticTuple, IsUnion, Simplify } from "./validation/shared.ts";
 
 /** Injectable output callbacks threaded through one invocation. */
@@ -49,17 +50,13 @@ type Resolve<T extends ValueType> = {
  * with a literal `choices` tuple narrow to the union of those literals.
  * Otherwise it delegates to {@link Resolve} on the declared `type`.
  */
-type ResolveBaseType<F> = F extends {
-	parse: (raw: string) => infer R;
-}
-	? R
-	: "parse" extends keyof F
-		? F["parse"] extends infer Parse
-			? Parse extends (raw: string) => infer R
-				? R
-				: ResolveUnparsedType<F>
-			: never
-		: ResolveUnparsedType<F>;
+type ResolveBaseType<F> = "parse" extends keyof F
+	? F["parse"] extends infer Parse
+		? Parse extends (raw: string) => infer R
+			? R
+			: ResolveUnparsedType<F>
+		: never
+	: ResolveUnparsedType<F>;
 
 type ResolveUnparsedType<F> = F extends {
 	type: "string";
@@ -665,9 +662,7 @@ export type InputFlags<F extends FlagsDef> =
 					>;
 				}
 			> &
-				(string extends keyof F
-					? NonNullable<import("./parsing/parser.ts").RunInputPayload["flags"]>
-					: {});
+				(string extends keyof F ? NonNullable<RunInputPayload["flags"]> : {});
 
 // ────────────────────────────────────────────────────────────────────────────
 // CommandMeta — Command metadata
@@ -675,15 +670,14 @@ export type InputFlags<F extends FlagsDef> =
 
 export type SectionConsumer = ExtensionId | { readonly id: ExtensionId };
 
-export type SectionAudience =
-	| { readonly only: readonly [SectionConsumer, ...SectionConsumer[]]; readonly except?: never }
-	| { readonly except: readonly [SectionConsumer, ...SectionConsumer[]]; readonly only?: never }
+type Audience<C> =
+	| { readonly only: C; readonly except?: never }
+	| { readonly except: C; readonly only?: never }
 	| { readonly only?: never; readonly except?: never };
 
-type ResolvedSectionAudience =
-	| { readonly only: readonly [ExtensionId, ...ExtensionId[]]; readonly except?: never }
-	| { readonly except: readonly [ExtensionId, ...ExtensionId[]]; readonly only?: never }
-	| { readonly only?: never; readonly except?: never };
+export type SectionAudience = Audience<readonly [SectionConsumer, ...SectionConsumer[]]>;
+
+type ResolvedSectionAudience = Audience<readonly [ExtensionId, ...ExtensionId[]]>;
 
 type SectionContent = {
 	readonly title: string;
@@ -694,12 +688,7 @@ type SectionContent = {
 export type CommandSectionInput = SectionContent & SectionAudience;
 
 /** Typed dynamic audiences may be empty until their consuming operation checks them. */
-export type RuntimeCommandSectionInput = SectionContent &
-	(
-		| { readonly only: readonly SectionConsumer[]; readonly except?: never }
-		| { readonly except: readonly SectionConsumer[]; readonly only?: never }
-		| { readonly only?: never; readonly except?: never }
-	);
+export type RuntimeCommandSectionInput = SectionContent & Audience<readonly SectionConsumer[]>;
 
 /** A validated documentation section rendered after built-in command documentation. */
 export type CommandSection = SectionContent & ResolvedSectionAudience;

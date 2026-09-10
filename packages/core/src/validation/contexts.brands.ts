@@ -8,7 +8,7 @@ import type {
 } from "../api/context.ts";
 import type { ExtensionData } from "../api/extension.ts";
 import type { CommandDefinitionData } from "../command/crust.ts";
-import type { DefName, Overlap } from "./shared.ts";
+import type { CollisionBrand, DefName } from "./shared.ts";
 
 /** Canonical names claimed by more than one instance in the same `.provide()` call. */
 type DuplicateContextNames<
@@ -18,14 +18,13 @@ type DuplicateContextNames<
 	? (DefName<Head> & Seen) | DuplicateContextNames<Tail, Seen | DefName<Head>>
 	: never;
 
-type DuplicateContextBrand<C, Existing extends string> =
-	Overlap<DefName<C>, Existing> extends infer Duplicate extends string
-		? [Duplicate] extends [never]
-			? {}
-			: {
-					readonly FIX_DUPLICATE_CONTEXT: `Context "${Duplicate}" is already provided on this command path`;
-				}
-		: never;
+type DuplicateContextBrand<C, Existing extends string> = CollisionBrand<
+	DefName<C>,
+	Existing,
+	"FIX_DUPLICATE_CONTEXT",
+	"Context ",
+	" is already provided on this command path"
+>;
 
 /**
  * Brand instances whose name is already provided on this builder chain or
@@ -62,14 +61,13 @@ type ExtensionProvidedNames<E> =
 		? InstanceNames<P>
 		: never;
 
-type ExtensionContextBrand<E, Existing extends string> =
-	Overlap<ExtensionProvidedNames<E>, Existing> extends infer Duplicate extends string
-		? [Duplicate] extends [never]
-			? {}
-			: {
-					readonly FIX_DUPLICATE_CONTEXT: `Extension-provided Context "${Duplicate}" is already provided on this command path`;
-				}
-		: never;
+type ExtensionContextBrand<E, Existing extends string> = CollisionBrand<
+	ExtensionProvidedNames<E>,
+	Existing,
+	"FIX_DUPLICATE_CONTEXT",
+	"Extension-provided Context ",
+	" is already provided on this command path"
+>;
 
 type ValidateExtensionProvidesWorker<
 	Es extends readonly unknown[],

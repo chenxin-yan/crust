@@ -242,11 +242,7 @@ function resolveFlags<F extends FlagsDef, V>(
 	for (const name of Object.keys(values)) {
 		// Read known values only during binding, so own getters run once.
 		// hasOwn prevents inherited Object.prototype keys becoming ghost flags.
-		if (
-			!Object.hasOwn(flagsDef, name) &&
-			Object.hasOwn(values, name) &&
-			values[name] !== undefined
-		) {
+		if (!Object.hasOwn(flagsDef, name) && values[name] !== undefined) {
 			throw new CrustError("PARSE", `Unknown flag "--${name}"`, {
 				flag: name,
 				reason: "unknown-flag",
@@ -476,7 +472,7 @@ function coerceStructuredFlag(name: string, def: FlagDef, value: RunInputValue):
 			coerceStructuredValue(def, item, label, i),
 		);
 	}
-	return coerceStructuredValue(def, value, label, undefined);
+	return coerceStructuredValue(def, value, label);
 }
 
 /** Both front doors share binding, defaults, and canonical flag validation. */
@@ -531,20 +527,16 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 	command: CommandNode & { args: A; effectiveFlags: F },
 	input: RunInputPayload,
 ): ParseResult<A, F> {
-	for (const key of Object.keys(input)) {
-		if (key !== "args" && key !== "flags" && key !== "raw") {
-			// SAFETY: key is an own enumerable input key; only omission is inspected, not its value type.
-			if (input[key as keyof RunInputPayload] !== undefined) {
-				throw new CrustError("PARSE", `Unknown input section "${key}"`);
-			}
-		}
+	const { args: inputArgs, flags: inputFlags, raw, ...rest } = input;
+	for (const [key, value] of Object.entries(rest)) {
+		if (value !== undefined) throw new CrustError("PARSE", `Unknown input section "${key}"`);
 	}
 	const positionals: RunInputValue[] = [];
 	let omittedArgument: string | undefined;
 	for (const definition of command.args) {
 		const value =
-			input.args && Object.hasOwn(input.args, definition.name)
-				? input.args[definition.name]
+			inputArgs && Object.hasOwn(inputArgs, definition.name)
+				? inputArgs[definition.name]
 				: undefined;
 		if (value === undefined) {
 			omittedArgument = definition.name;
@@ -561,17 +553,21 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 				},
 			);
 		}
-		if (definition.variadic && !Array.isArray(value)) {
-			throw new CrustError("PARSE", `Expected an occurrence array for <${definition.name}>`);
+		if (definition.variadic) {
+			if (!Array.isArray(value)) {
+				throw new CrustError("PARSE", `Expected an occurrence array for <${definition.name}>`);
+			}
+			positionals.push(...value);
+		} else {
+			// A non-variadic JSON array is one positional value.
+			positionals.push(value);
 		}
-		// A non-variadic JSON array is one positional value.
-		positionals.push(...(definition.variadic && Array.isArray(value) ? value : [value]));
 	}
 	// Only named records carry argument names to validate; argv has positional tokens.
-	for (const name of Object.keys(input.args ?? {})) {
+	for (const name of Object.keys(inputArgs ?? {})) {
 		if (
 			!command.args.some((definition) => definition.name === name) &&
-			input.args?.[name] !== undefined
+			inputArgs?.[name] !== undefined
 		) {
 			throw new CrustError("PARSE", `Unknown argument "${name}"`, {
 				argument: name,
@@ -582,11 +578,11 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 	const { args, flags } = bind(
 		command,
 		positionals,
-		input.flags ?? {},
-		(def, value, label, index) => coerceStructuredValue(def, value, label, index),
-		(name, def, value) => coerceStructuredFlag(name, def, value),
+		inputFlags ?? {},
+		coerceStructuredValue,
+		coerceStructuredFlag,
 	);
-	return { args, flags, excessArgs: [], rawArgs: [...(input.raw ?? [])] };
+	return { args, flags, excessArgs: [], rawArgs: [...(raw ?? [])] };
 }
 
 /**

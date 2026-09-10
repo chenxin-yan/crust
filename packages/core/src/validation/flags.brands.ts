@@ -3,10 +3,11 @@ import type { ExtensionData } from "../api/extension.ts";
 import type { CommandDefinitionData } from "../command/crust.ts";
 import type { FlagsDef, NamedFlagDef, NamedFlagsRecord } from "../types.ts";
 import type {
+	CollisionBrand,
 	DefName,
-	Overlap,
+	EmptyLiteralNameBrand,
+	HasClosedNames,
 	IsStaticTuple,
-	IsUnion,
 	IsClosedName,
 	LocalValueBrand,
 	UnionToIntersection,
@@ -17,15 +18,13 @@ import type {
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Brand an incoming definition when one of its spellings is already claimed. */
-type ExistingFlagCollisionBrand<F, Existing extends string> = string extends Existing
-	? {}
-	: Overlap<DefName<F> | ExtractAllAliases<F>, Existing> extends infer Collision extends string
-		? [Collision] extends [never]
-			? {}
-			: {
-					readonly FIX_ALIAS_COLLISION: `Flag spelling "${Collision}" collides with an existing flag`;
-				}
-		: never;
+type ExistingFlagCollisionBrand<F, Existing extends string> = CollisionBrand<
+	DefName<F> | ExtractAllAliases<F>,
+	Existing,
+	"FIX_ALIAS_COLLISION",
+	"Flag spelling ",
+	" collides with an existing flag"
+>;
 
 /** Reject `__proto__`, which mutates the prototype of plain-object flag registries. */
 type ReservedSpellingBrand<F> = "__proto__" extends DefName<F> | ExtractAllAliases<F>
@@ -39,8 +38,10 @@ type EmptySpellingError = {
 };
 
 /** Reject empty flag names, including empty members of a name union. */
-export type EmptyFlagSpellingBrand<Name extends string> =
-	IsClosedName<Name> extends true ? ("" extends Name ? EmptySpellingError : {}) : {};
+export type EmptyFlagSpellingBrand<Name extends string> = EmptyLiteralNameBrand<
+	Name,
+	EmptySpellingError
+>;
 
 /** Reject empty spellings: their CLI tokens (`--`, `-`) are unparseable, so the flag can never be supplied. */
 type EmptySpellingBrand<F> = "" extends DefName<F> | ExtractAllAliases<F> ? EmptySpellingError : {};
@@ -122,20 +123,9 @@ export type SpellingsOf<F extends FlagsDef> = string extends keyof F
 					[K in keyof F & string]: ExtractAllAliases<F[K]>;
 			  }[keyof F & string];
 
-/**
- * Detects whether a single alias literal starts with `"no-"`.
- * Resolves to the offending alias, or `never` when it is clean.
- */
-type NoPrefixedAlias<A> = A extends `no-${string}` ? A : never;
-
-/**
- * Collects all `"no-"`-prefixed alias literals from a flag definition.
- * Checks both `short` and `aliases` fields.
- * Non-narrowed `string` types resolve to `never` to avoid false positives.
- */
-type NoPrefixedAliases<F> =
-	| NoPrefixedAlias<ExtractShort<F>>
-	| NoPrefixedAlias<ExtractLongAliases<F>>;
+type NoPrefixBrand<S extends string> = [Extract<S, `no-${string}`>] extends [never]
+	? {}
+	: { readonly FIX_NO_PREFIX: "Names must not start with no-" };
 
 // ────────────────────────────────────────────────────────────────────────────
 // Context-owned flag validation (compile-time, per-instance granularity)
@@ -149,17 +139,13 @@ export type ContextOwnedFlags<C> = C extends AnyContextInstance
 		? OF
 		: {};
 
-type ContextFlagCollisionBrand<C, Existing extends string> = string extends
-	| Existing
-	| LocalSpellingsOf<ContextOwnedFlags<C>>
-	? {}
-	: Overlap<LocalSpellingsOf<ContextOwnedFlags<C>>, Existing> extends infer Collision extends string
-		? [Collision] extends [never]
-			? {}
-			: {
-					readonly FIX_ALIAS_COLLISION: `Flag spelling "${Collision}" collides with an existing flag`;
-				}
-		: never;
+type ContextFlagCollisionBrand<C, Existing extends string> = CollisionBrand<
+	LocalSpellingsOf<ContextOwnedFlags<C>>,
+	Existing,
+	"FIX_ALIAS_COLLISION",
+	"Flag spelling ",
+	" collides with an existing flag"
+>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Extension flag validation (compile-time, per-extension granularity)
@@ -193,17 +179,13 @@ export type ExtensionSpellings<E> =
 				? ProvidedContextSpellings<P>
 				: never);
 
-type ExtensionFlagCollisionBrand<E, Existing extends string> = string extends
-	| ExtensionSpellings<E>
-	| Existing
-	? {}
-	: Overlap<ExtensionSpellings<E>, Existing> extends infer Collision extends string
-		? [Collision] extends [never]
-			? {}
-			: {
-					readonly FIX_ALIAS_COLLISION: `Extension flag spelling "${Collision}" collides with an existing flag`;
-				}
-		: never;
+type ExtensionFlagCollisionBrand<E, Existing extends string> = CollisionBrand<
+	ExtensionSpellings<E>,
+	Existing,
+	"FIX_ALIAS_COLLISION",
+	"Extension flag spelling ",
+	" collides with an existing flag"
+>;
 
 /**
  * Validate each Extension's contributed flag spellings against accumulated
@@ -254,17 +236,13 @@ export type DefinitionTreeSpellings<Ds extends readonly unknown[]> = DefinitionS
  * (via {@link ValidateDefinitionFlags}) and inline `.command()`, whose recipe
  * builder exposes a shape instead of a definition tuple.
  */
-export type ShapeFlagCollisionBrand<S, Ext extends string> = [Ext] extends [never]
-	? {}
-	: string extends ShapeSpellings<S> | Ext
-		? {}
-		: Overlap<ShapeSpellings<S>, Ext> extends infer Collision extends string
-			? [Collision] extends [never]
-				? {}
-				: {
-						readonly FIX_ALIAS_COLLISION: `Flag spelling "${Collision}" collides with a registered Extension flag`;
-					}
-			: never;
+export type ShapeFlagCollisionBrand<S, Ext extends string> = CollisionBrand<
+	ShapeSpellings<S>,
+	Ext,
+	"FIX_ALIAS_COLLISION",
+	"Flag spelling ",
+	" collides with a registered Extension flag"
+>;
 
 type DefinitionFlagCollisionBrand<D, Ext extends string> =
 	CommandDefinitionData<D> extends {
@@ -334,22 +312,15 @@ export type LocalFlagBrand<F> = UnionToIntersection<
 	F extends unknown ? LocalFlagBranchBrand<F> : never
 >;
 
-type LocalFlagBranchBrand<F> = LocalFlagValuesBrand<F> &
-	(Extract<DefName<F>, `no-${string}`> extends never
-		? {}
-		: { readonly FIX_NO_PREFIX: "Names must not start with no-" }) &
-	([DefName<F> & ExtractAllAliases<F>] extends [never]
-		? {}
-		: { readonly FIX_ALIAS_COLLISION: "Flag repeats one of its own spellings" });
-
-type LocalFlagValuesBrand<F> = LocalValueBrand<F> &
+type LocalFlagBranchBrand<F> = LocalValueBrand<F> &
 	OwnAliasesBrand<F> &
 	ShortLengthBrand<F> &
 	ReservedSpellingBrand<F> &
 	EmptySpellingBrand<F> &
-	(NoPrefixedAliases<F> extends never
+	NoPrefixBrand<DefName<F> | ExtractAllAliases<F>> &
+	([DefName<F> & ExtractAllAliases<F>] extends [never]
 		? {}
-		: { readonly FIX_NO_PREFIX: "Names must not start with no-" });
+		: { readonly FIX_ALIAS_COLLISION: "Flag repeats one of its own spellings" });
 
 /** Validate provable local fields and destination relations without inventing names for open inputs. */
 export type ValidateLocalFlagDefs<
@@ -378,24 +349,17 @@ type LocalFlagTupleChecks<
 
 /** An open collection is not an empty or guaranteed-present flag record. */
 type KnownNamedFlag<D> = D extends NamedFlagDef
-	? IsClosedName<D["name"]> extends true
-		? IsUnion<D["name"]> extends true
-			? never
-			: D
+	? HasClosedNames<readonly [D]> extends true
+		? D
 		: never
 	: never;
 
-export type AttachedFlags<Defs extends readonly NamedFlagDef[]> = (
-	number extends Defs["length"] ? false : IsUnion<Defs> extends true ? false : true
-) extends true
-	? true extends {
-			[I in keyof Defs]:
-				| IsUnion<Defs[I]["name"]>
-				| (IsClosedName<Defs[I]["name"]> extends true ? false : true);
-		}[number]
-		? FlagsDef & NamedFlagsRecord<readonly KnownNamedFlag<Defs[number]>[]>
-		: NamedFlagsRecord<Defs>
-	: FlagsDef;
+export type AttachedFlags<Defs extends readonly NamedFlagDef[]> =
+	HasClosedNames<Defs> extends true
+		? NamedFlagsRecord<Defs>
+		: IsStaticTuple<Defs> extends true
+			? FlagsDef & NamedFlagsRecord<readonly KnownNamedFlag<Defs[number]>[]>
+			: FlagsDef;
 export type AttachedSpellings<Defs extends readonly NamedFlagDef[]> =
 	IsStaticTuple<Defs> extends true
 		? false extends { [I in keyof Defs]: HasClosedFlagSpellings<Defs[I]> }[number]
@@ -405,9 +369,7 @@ export type AttachedSpellings<Defs extends readonly NamedFlagDef[]> =
 
 export type LocalFlagNameBrand<N extends string> = EmptyFlagSpellingBrand<N> &
 	ReservedSpellingBrand<{ name: N }> &
-	(Extract<N, `no-${string}`> extends never
-		? {}
-		: { readonly FIX_NO_PREFIX: "Names must not start with no-" });
+	NoPrefixBrand<N>;
 
 /** Broad structural builder holders must not default their spelling state to empty. */
 export type LocalSpellingsOf<F extends FlagsDef> = string extends keyof F

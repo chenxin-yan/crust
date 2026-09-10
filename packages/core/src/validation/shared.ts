@@ -35,14 +35,7 @@ export type UnionToIntersection<U> = (U extends unknown ? (x: U) => void : never
 	? I
 	: never;
 
-export type IsUnion<T> = true extends UnionMemberDiffers<T> ? true : false;
-
-// Overlapping members can produce boolean; any differing member still makes a union.
-type UnionMemberDiffers<T, Whole = T> = T extends unknown
-	? [Whole] extends [T]
-		? false
-		: true
-	: never;
+export type IsUnion<T> = [T] extends [UnionToIntersection<T>] ? false : true;
 
 /**
  * `true` only for a single statically known fixed-length tuple whose members
@@ -59,20 +52,39 @@ export type IsStaticTuple<Cs extends readonly unknown[]> = number extends Cs["le
 			? false
 			: true;
 
-/**
- * The members of union `S` that overlap with `Existing`, or `never` when
- * disjoint. Callers pattern-match the result with their own
- * `extends infer C extends string` to embed the colliding literal(s) in a
- * brand message.
- */
+/** Whether a fixed tuple has one closed canonical name per slot. */
+export type HasClosedNames<Ds extends readonly unknown[]> = number extends Ds["length"]
+	? false
+	: IsUnion<Ds> extends true
+		? false
+		: false extends {
+					[I in keyof Ds]: Ds[I] extends { name: infer N extends string }
+						? IsUnion<N> extends true
+							? false
+							: IsClosedName<N>
+						: false;
+			  }[number]
+			? false
+			: true;
+
 export type Overlap<S, Existing extends string> = S & Existing;
 
+/** Brand statically known spelling collisions while allowing open names. */
+export type CollisionBrand<
+	S extends string,
+	Existing extends string,
+	Key extends string,
+	Before extends string,
+	After extends string,
+> = string extends S | Existing
+	? {}
+	: [S & Existing] extends [never]
+		? {}
+		: { readonly [K in Key]: `${Before}"${S & Existing}"${After}` };
+
 /** Brand a statically known empty literal while allowing widened and generic names. */
-/* oxlint-disable anti-slop/no-unsafe-dictionary-type -- indexed type preserves deferred generic-name behavior while unknown means unbranded. */
-export type EmptyLiteralNameBrand<Name extends string, Err> = ({
-	readonly "": Err;
-} & Record<string, unknown>)[Name];
-/* oxlint-enable anti-slop/no-unsafe-dictionary-type */
+export type EmptyLiteralNameBrand<Name extends string, Err> =
+	IsClosedName<Name> extends true ? ("" extends Name ? Err : {}) : {};
 
 /**
  * Brand a definition whose custom parser can return a Promise — parse results

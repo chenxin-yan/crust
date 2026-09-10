@@ -1,7 +1,9 @@
 import type { ExtensionData } from "../api/extension.ts";
 import type { CommandDefinitionData } from "../command/crust.ts";
 import type {
+	CollisionBrand,
 	DefName,
+	HasClosedNames,
 	IsClosedName,
 	IsStaticTuple,
 	IsUnion,
@@ -62,33 +64,7 @@ export type ValidateCommandConfig<Name extends string, C> = AliasShapeBrand<Name
 
 type EmptyNameError = { readonly FIX_EMPTY_NAME: "Command name must be a non-empty string" };
 
-// ECMAScript String.trim whitespace, matching canonical command-name validation.
-type TrimWhitespace =
-	| " "
-	| "\t"
-	| "\n"
-	| "\r"
-	| "\v"
-	| "\f"
-	| "\u00a0"
-	| "\u1680"
-	| "\u2000"
-	| "\u2001"
-	| "\u2002"
-	| "\u2003"
-	| "\u2004"
-	| "\u2005"
-	| "\u2006"
-	| "\u2007"
-	| "\u2008"
-	| "\u2009"
-	| "\u200a"
-	| "\u2028"
-	| "\u2029"
-	| "\u202f"
-	| "\u205f"
-	| "\u3000"
-	| "\ufeff";
+type TrimWhitespace = " " | "\t" | "\n" | "\r";
 
 type BlankName<Name extends string> = Name extends `${TrimWhitespace}${infer Tail}`
 	? BlankName<Tail>
@@ -140,15 +116,13 @@ type SelfAliasBrand<D> =
 export type CommandCollisionBrand<
 	Spellings extends string,
 	Existing extends string,
-> = string extends Existing | Spellings
-	? {}
-	: Overlap<Spellings, Existing> extends infer Collision extends string
-		? [Collision] extends [never]
-			? {}
-			: {
-					readonly FIX_COMMAND_COLLISION: `Command name or alias "${Collision}" collides with a sibling command`;
-				}
-		: never;
+> = CollisionBrand<
+	Spellings,
+	Existing,
+	"FIX_COMMAND_COLLISION",
+	"Command name or alias ",
+	" collides with a sibling command"
+>;
 
 /**
  * Validate definitions against existing siblings and definitions earlier in
@@ -171,9 +145,6 @@ export type ValidateCommandDefinitions<
 		: never
 	: Ds;
 
-// The IsUnion guard keeps a conditionally selected Extension
-// (`cond ? extA : extB`) runtime-only: a naked conditional would distribute
-// and accept each branch's commands independently.
 export type ExtensionCommandDefs<E> = [E] extends [never]
 	? readonly []
 	: ExtensionData<E> extends {
@@ -191,17 +162,13 @@ export type ExtensionsCommandSpellings<Es extends readonly unknown[]> =
 			? never
 			: string;
 
-type ExtensionCommandCollisionBrand<E, Existing extends string> = string extends
-	| ExtensionCommandSpellings<E>
-	| Existing
-	? {}
-	: Overlap<ExtensionCommandSpellings<E>, Existing> extends infer Collision extends string
-		? [Collision] extends [never]
-			? {}
-			: {
-					readonly FIX_COMMAND_COLLISION: `Extension command "${Collision}" collides with an existing command`;
-				}
-		: never;
+type ExtensionCommandCollisionBrand<E, Existing extends string> = CollisionBrand<
+	ExtensionCommandSpellings<E>,
+	Existing,
+	"FIX_COMMAND_COLLISION",
+	"Extension command ",
+	" collides with an existing command"
+>;
 
 /**
  * Validate each Extension's contributed command spellings against existing
@@ -251,15 +218,11 @@ export type LocalCommandConfigBrand<N extends string, C> = ValidateCommandConfig
 export type AttachedCommandSpellings<Ds extends readonly unknown[]> = [Ds] extends [readonly []]
 	? never
 	: IsStaticTuple<Ds> extends true
-		? false extends {
-				[I in keyof Ds]: Ds[I] extends { name: infer N extends string }
-					? IsUnion<N> extends true
-						? false
-						: false extends IsClosedName<N> | IsClosedName<DefinitionAliases<Ds[I]>[number]>
-							? false
-							: true
-					: false;
-			}[number]
-			? string
-			: CommandDefinitionSpellings<Ds[number]>
+		? HasClosedNames<Ds> extends true
+			? false extends {
+					[I in keyof Ds]: IsClosedName<DefinitionAliases<Ds[I]>[number]>;
+				}[number]
+				? string
+				: CommandDefinitionSpellings<Ds[number]>
+			: string
 		: string;
