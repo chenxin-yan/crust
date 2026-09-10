@@ -1,7 +1,6 @@
 import type { Extension } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
-import { cloneFlagSpellings } from "../parsing/spellings.ts";
 import type {
 	CommandSection,
 	RuntimeCommandSectionInput,
@@ -82,7 +81,12 @@ export function cloneCommandNode(node: CommandNode): CommandNode {
 		localFlags: { ...node.localFlags },
 		ownedFlags: { ...node.ownedFlags },
 		effectiveFlags: { ...node.effectiveFlags },
-		flagSpellings: cloneFlagSpellings(node.flagSpellings, node.effectiveFlags),
+		flagSpellings: new Map(
+			[...node.flagSpellings].map(([spelling, entry]) => [
+				spelling,
+				{ ...entry, def: node.effectiveFlags[entry.canonicalName]! },
+			]),
+		),
 		args: [...node.args],
 		subCommands,
 		contexts: node.contexts.map((context) => ({ ...context })),

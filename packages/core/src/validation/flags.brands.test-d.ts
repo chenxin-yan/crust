@@ -1,6 +1,7 @@
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import type { NamedFlagDef } from "../types.ts";
 import type {
+	ContextOwnedFlags,
 	DefinitionTreeSpellings,
 	ProvideChecks,
 	SpellingsOf,
@@ -135,3 +136,11 @@ type _noPrefix = Expect<
 		"Names must not start with no-"
 	>
 >;
+
+{
+	// distributes over a Context union: one flagless member must not erase the others' owned flags
+	type Owner = { readonly _ownedFlags?: { alpha: { type: "string" } } };
+	type Plain = { readonly _ownedFlags?: {} };
+	type _union = Expect<Equal<ContextOwnedFlags<Owner | Plain>, { alpha: { type: "string" } } | {}>>;
+	type _never = Expect<Equal<ContextOwnedFlags<never>, never>>;
+}

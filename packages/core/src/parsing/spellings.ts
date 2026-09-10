@@ -48,21 +48,6 @@ export function isFlagNegatable(def: FlagDef): boolean {
 	return def.type === "boolean" && def.noNegate !== true;
 }
 
-/** Add one flag to a command's cached spelling table. */
-export function addFlagSpellingEntries(
-	spellings: Map<string, FlagSpelling>,
-	canonicalName: string,
-	def: FlagDef,
-): void {
-	for (const [spelling, entry] of spellings) {
-		if (entry.canonicalName === canonicalName) spellings.delete(spelling);
-	}
-	const entry = { canonicalName, def, negatable: isFlagNegatable(def) } as const;
-	spellings.set(canonicalName, { ...entry, kind: "canonical" });
-	if (def.short !== undefined) spellings.set(def.short, { ...entry, kind: "short" });
-	for (const alias of def.aliases ?? []) spellings.set(alias, { ...entry, kind: "alias" });
-}
-
 /** Convert named authoring definitions to the runtime flag record. */
 export function toFlagsRecord(definitions: readonly NamedFlagDef[]): FlagsDef {
 	const flags: FlagsDef = {};
@@ -83,18 +68,6 @@ export function toFlagsRecord(definitions: readonly NamedFlagDef[]): FlagsDef {
 		flags[name] = normalized;
 	}
 	return flags;
-}
-
-/** Clone a cached table while rebinding entries to cloned flag definitions. */
-export function cloneFlagSpellings(
-	spellings: ReadonlyMap<string, FlagSpelling>,
-	flags: FlagsDef,
-): Map<string, FlagSpelling> {
-	return new Map(
-		[...spellings]
-			.filter(([, entry]) => Object.hasOwn(flags, entry.canonicalName))
-			.map(([spelling, entry]) => [spelling, { ...entry, def: flags[entry.canonicalName]! }]),
-	);
 }
 
 /** Copy only definition-owned collections, not JSON/URL/schema payloads. */

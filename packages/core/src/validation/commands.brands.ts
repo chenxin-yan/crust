@@ -7,7 +7,6 @@ import type {
 	IsClosedName,
 	IsStaticTuple,
 	IsUnion,
-	Overlap,
 	UnionToIntersection,
 } from "./shared.ts";
 
@@ -130,14 +129,14 @@ export type CommandDefinitionSpellings<D> = D extends unknown
 
 // Catches `.as()` renames that land on one of the definition's own aliases
 // (config-time AliasShapeError compares aliases against the original name only).
-type SelfAliasBrand<D> =
-	Overlap<DefName<D>, NarrowAliases<DefinitionAliases<D>>> extends infer Dup extends string
-		? [Dup] extends [never]
-			? {}
-			: {
-					readonly FIX_ALIAS_SHAPE: `Command "${Dup}" must not list its own canonical name as an alias`;
-				}
-		: never;
+type SelfAliasBrand<D> = DefName<D> & NarrowAliases<DefinitionAliases<D>> extends infer Dup extends
+	string
+	? [Dup] extends [never]
+		? {}
+		: {
+				readonly FIX_ALIAS_SHAPE: `Command "${Dup}" must not list its own canonical name as an alias`;
+			}
+	: never;
 
 export type CommandCollisionBrand<
 	Spellings extends string,

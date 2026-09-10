@@ -300,6 +300,34 @@ it("ignores enumerable symbol properties without reading them", async () => {
 	expect(read).toBe(false);
 });
 
+it("reads each known section once and rejects an unknown section before reading later ones", async () => {
+	const app = new Crust("app").action(() => "ok");
+	let flagReads = 0;
+	const readOnce = {
+		get flags() {
+			flagReads++;
+			return {};
+		},
+	};
+	expect(await app.run([], readOnce)).toMatchObject({ status: "completed", result: "ok" });
+	expect(flagReads).toBe(1);
+
+	let lateRead = false;
+	const unknownFirst = {
+		bogus: 1,
+		get raw() {
+			lateRead = true;
+			return undefined;
+		},
+	};
+	const erased: AnyCrust = app;
+	expect(await erased.run([], unknownFirst)).toMatchObject({
+		status: "failed",
+		error: { code: "PARSE" },
+	});
+	expect(lateRead).toBe(false);
+});
+
 it("accepts args, flags and raw sections and treats undefined unknown keys as omitted", async () => {
 	const app = new Crust("app")
 		.args({ name: "file", type: "string", required: true })

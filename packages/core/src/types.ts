@@ -677,8 +677,6 @@ type Audience<C> =
 
 export type SectionAudience = Audience<readonly [SectionConsumer, ...SectionConsumer[]]>;
 
-type ResolvedSectionAudience = Audience<readonly [ExtensionId, ...ExtensionId[]]>;
-
 type SectionContent = {
 	readonly title: string;
 	readonly body: string;
@@ -691,7 +689,7 @@ export type CommandSectionInput = SectionContent & SectionAudience;
 export type RuntimeCommandSectionInput = SectionContent & Audience<readonly SectionConsumer[]>;
 
 /** A validated documentation section rendered after built-in command documentation. */
-export type CommandSection = SectionContent & ResolvedSectionAudience;
+export type CommandSection = SectionContent & Audience<readonly [ExtensionId, ...ExtensionId[]]>;
 
 /** Metadata describing a CLI command */
 export interface CommandMeta {

@@ -67,8 +67,6 @@ export type HasClosedNames<Ds extends readonly unknown[]> = number extends Ds["l
 			? false
 			: true;
 
-export type Overlap<S, Existing extends string> = S & Existing;
-
 /** Brand statically known spelling collisions while allowing open names. */
 export type CollisionBrand<
 	S extends string,

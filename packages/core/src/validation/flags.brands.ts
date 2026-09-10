@@ -130,12 +130,13 @@ type NoPrefixBrand<S extends string> = [Extract<S, `no-${string}`>] extends [nev
 // Context-owned flag validation (compile-time, per-instance granularity)
 // ────────────────────────────────────────────────────────────────────────────
 
-export type ContextOwnedFlags<C> =
-	DefiningOf<C> extends {
-		readonly _ownedFlags?: infer OF extends FlagsDef;
-	}
+// Distributive over C: a union of Contexts must yield the union of their owned flags, not
+// a single inference over the whole union (which collapses to {} when one member owns none).
+export type ContextOwnedFlags<C> = C extends unknown
+	? DefiningOf<C> extends { readonly _ownedFlags?: infer OF extends FlagsDef }
 		? OF
-		: {};
+		: {}
+	: never;
 
 type ContextFlagCollisionBrand<C, Existing extends string> = CollisionBrand<
 	LocalSpellingsOf<ContextOwnedFlags<C>>,

@@ -3,8 +3,8 @@ import type { Extension } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
 import {
-	addFlagSpellingEntries,
 	flagSpellings,
+	isFlagNegatable,
 	normalizeFlag,
 	type FlagSpelling,
 } from "../parsing/spellings.ts";
@@ -109,5 +109,8 @@ export function registerFlag(
 
 	(source === "local" ? node.localFlags : node.ownedFlags)[name] = def;
 	node.effectiveFlags[name] = def;
-	addFlagSpellingEntries(node.flagSpellings, name, def);
+	const entry = { canonicalName: name, def, negatable: isFlagNegatable(def) } as const;
+	node.flagSpellings.set(name, { ...entry, kind: "canonical" });
+	if (def.short !== undefined) node.flagSpellings.set(def.short, { ...entry, kind: "short" });
+	for (const alias of def.aliases ?? []) node.flagSpellings.set(alias, { ...entry, kind: "alias" });
 }

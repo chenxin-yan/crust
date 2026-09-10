@@ -362,7 +362,7 @@ export interface CommandDefinition<
 	};
 }
 
-/** @internal Private recipe metadata survives public phantom-field overrides. */
+/** @internal */
 export type CommandDefinitionData<D> = D extends {
 	readonly [commandDefinitionInternal]: infer Data;
 }
