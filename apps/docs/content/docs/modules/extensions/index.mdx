@@ -16,7 +16,7 @@ bun add @crustjs/extensions
 ## Usage
 
 ```ts
-import { Crust, runtime } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import {
   completion,
   didYouMean,
@@ -29,14 +29,12 @@ import pkg from "../package.json";
 
 const app = new Crust("my-cli", { version: pkg.version })
   .extend(
-    runtime([
-      noColor(),
-      help(),
-      version(),
-      didYouMean(),
-      completion(),
-      updateNotifier({ packageName: pkg.name }),
-    ]),
+    noColor(),
+    help(),
+    version(),
+    didYouMean(),
+    completion(),
+    updateNotifier({ packageName: pkg.name }),
   )
   .action(({ stdout }) => stdout("Hello"));
 

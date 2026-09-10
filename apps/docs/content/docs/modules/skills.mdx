@@ -50,17 +50,15 @@ Include the directory in the published package:
 For an entry at `src/cli.ts` and build output in `dist/`, point the extension at `dist/skills` with a module-relative file URL:
 
 ```ts
-import { Crust, runtime } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { skill } from "@crustjs/skills";
 
 export const app = new Crust("my-cli", { description: "My CLI", version: "1.2.3" })
   .extend(
-    runtime([
-      skill({
-        distDir: new URL("../dist/skills", import.meta.url),
-        extras: [new URL("../skills-src/deployment-guide", import.meta.url)],
-      }),
-    ]),
+    skill({
+      distDir: new URL("../dist/skills", import.meta.url),
+      extras: [new URL("../skills-src/deployment-guide", import.meta.url)],
+    }),
   )
   .action(() => {});
 ```

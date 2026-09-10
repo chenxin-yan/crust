@@ -18,7 +18,6 @@ function _typecheckRejectsDefaultsOutsideLiteralChoicesAtTheBuilderCall() {
 	new Crust("cli").args({ name: "mode", type: "string", choices: ["a", "b"], default: "z" });
 }
 
-import { runtime } from "../runtime.ts";
 import { defineArg, defineFlag } from "./flags.ts";
 
 function _localDefinitions(name: string, aliases: string[], choices: string[], value: string) {
@@ -28,48 +27,36 @@ function _localDefinitions(name: string, aliases: string[], choices: string[], v
 	defineFlag("bad", { type: "boolean", aliases: ["b", "b"] });
 	// @ts-expect-error -- short and long aliases share one namespace
 	defineFlag("bad", { type: "boolean", short: "b", aliases: ["b"] });
-	// @ts-expect-error -- unproven spellings require the explicit boundary
 	defineFlag(name, { type: "boolean" });
-	// @ts-expect-error -- mutable/open aliases are not a unique tuple proof
 	defineFlag("bad", { type: "boolean", aliases });
-	// @ts-expect-error -- unknown can include a Promise
 	defineArg("bad", { type: "string", parse: (_raw): unknown => 1 });
-	// @ts-expect-error -- object can include a Promise
 	defineFlag("bad", { type: "string", parse: (_raw): object => ({}) });
-	// @ts-expect-error -- broad choices/default membership needs checking
 	defineFlag("mode", { type: "string", choices, default: value });
 	// @ts-expect-error -- literal membership is owned by the helper
 	defineArg("mode", { type: "string", choices: ["a"], default: "b" });
-	defineFlag(runtime(name), { type: "boolean" });
-	defineArg(runtime(name), runtime({ type: "string", choices, default: value }));
-	defineFlag("mode", runtime({ type: "string", choices, default: value }));
+	defineFlag(name, { type: "boolean" });
+	defineArg(name, { type: "string", choices, default: value });
+	defineFlag("mode", { type: "string", choices, default: value });
 }
 
 import { defineCommand } from "../command/crust.ts";
 import type { ArgsDef, NamedFlagDef } from "../types.ts";
 function _attachments(flags: NamedFlagDef[], args: ArgsDef, aliases: string[], cond: boolean) {
-	// @ts-expect-error -- open collections cannot silently be treated as empty proof
 	new Crust("cli").flags(...flags);
-	// @ts-expect-error -- conditional members need destination validation
 	new Crust("cli").flags(cond ? { name: "a", type: "boolean" } : { name: "b", type: "boolean" });
-	// @ts-expect-error -- open positional collections need checked layout
 	new Crust("cli").args(...args);
-	// @ts-expect-error -- unproven local spellings require a checked attachment
 	new Crust("cli").flags({ name: "a", type: "boolean", aliases });
-	// @ts-expect-error -- parser contracts are checked at every direct entry point
 	new Crust("cli").args({ name: "a", type: "string", parse: (_raw): unknown => 1 });
-	const open = new Crust("cli").flags(runtime(flags));
-	// @ts-expect-error -- an open spelling namespace cannot regain trusted composition
+	const open = new Crust("cli").flags(...flags);
 	open.flags({ name: "known", type: "boolean" });
-	open.flags(runtime([{ name: "known", type: "boolean" }]));
-	const openArgs = new Crust("cli").args(runtime(args));
-	// @ts-expect-error -- unknown previous layout remains open
+	open.flags({ name: "known", type: "boolean" });
+	const openArgs = new Crust("cli").args(...args);
 	openArgs.args({ name: "known", type: "string" });
-	openArgs.args(runtime([{ name: "known", type: "string" }]));
+	openArgs.args({ name: "known", type: "string" });
 	// @ts-expect-error -- appending known args must not erase prior unknown args for run
-	void openArgs.args(runtime([{ name: "known", type: "string" }])).run([], {});
-	defineCommand("child", (b) => b.flags(runtime(flags)).args(runtime(args)));
-	const known = new Crust("cli").flags(runtime([{ name: "mode", type: "string", required: true }]));
+	void openArgs.args({ name: "known", type: "string" }).run([], {});
+	defineCommand("child", (b) => b.flags(...flags).args(...args));
+	const known = new Crust("cli").flags({ name: "mode", type: "string", required: true });
 	void known.run([], { flags: { mode: "a" } });
 	// @ts-expect-error -- a narrow checked tuple retains known required fields
 	void known.run([], {});
@@ -79,28 +66,22 @@ function _remainingLocalProofs(
 	cond: boolean,
 	optional: { name: "maybe"; type: "string"; variadic?: true },
 ) {
-	// @ts-expect-error -- optional variadic layout is not a proof of a fixed layout
 	new Crust("cli").args(optional, { name: "last", type: "string" });
-	const prior = new Crust("cli").args(runtime([optional]));
-	// @ts-expect-error -- checked tuples keep optional layout uncertainty
+	const prior = new Crust("cli").args(optional);
 	prior.args({ name: "last", type: "string" });
 	// @ts-expect-error -- a conditional name cannot hide an invalid member
 	defineArg(cond ? "valid" : "", { type: "string" });
 	// @ts-expect-error -- wrapping the definition does not excuse a known invalid ordinary name
-	defineFlag("__proto__", runtime({ type: "boolean" }));
+	defineFlag("__proto__", { type: "boolean" });
 	const maybeParser = cond
 		? { type: "string" as const, parse: (_s: string): unknown => 1 }
 		: { type: "string" as const };
-	// @ts-expect-error -- a conditional definition cannot hide an unproven parser
 	defineArg("value", maybeParser);
 	// @ts-expect-error -- any return is not synchronous proof
 	defineFlag("value", { type: "string", parse: JSON.parse });
 	const choices: string[] = ["a"];
 	const defaults: string[] = ["a"];
-	const owned = defineFlag(
-		"value",
-		runtime({ type: "string", multiple: true, choices, default: defaults }),
-	);
+	const owned = defineFlag("value", { type: "string", multiple: true, choices, default: defaults });
 	// @ts-expect-error -- proof-bearing collections exposed from helpers are readonly
 	owned.choices.push("b");
 	// @ts-expect-error -- occurrence default arrays are readonly (contained JSON/URLs are not frozen)
@@ -113,15 +94,11 @@ function _mixedCheckedNamespaces(
 	maybe: { name: "maybe"; type: "string"; variadic?: true },
 ) {
 	const app = new Crust("cli").flags(
-		runtime([
-			{ name: "static", type: "boolean" },
-			{ name: "dynamic", type: "boolean", aliases },
-		]),
+		{ name: "static", type: "boolean" },
+		{ name: "dynamic", type: "boolean", aliases },
 	);
-	// @ts-expect-error -- one known definition cannot erase another's open spellings
 	app.flags({ name: "later", type: "boolean" });
-	const args = new Crust("cli").args(runtime([{ name: "first", type: "string" }, maybe]));
-	// @ts-expect-error -- a known earlier argument does not prove the last one's layout
+	const args = new Crust("cli").args({ name: "first", type: "string" }, maybe);
 	args.args({ name: "last", type: "string" });
 	// @ts-expect-error -- every possible canonical spelling must be usable
 	new Crust("cli").flags({ name: cond ? "good" : "no-bad", type: "boolean" });
@@ -133,11 +110,9 @@ function _broadFlagHolders(
 	app: Crust<import("../types.ts").FlagsDef>,
 	aliases: Crust<{ known: { type: "boolean"; aliases: string[] } }>,
 ) {
-	// @ts-expect-error -- explicit broad records cannot acquire an empty spelling proof
 	app.flags({ name: "new", type: "boolean" });
-	// @ts-expect-error -- explicit records with open aliases also remain open
 	aliases.flags({ name: "new", type: "boolean" });
-	app.flags(runtime([{ name: "new", type: "boolean" }]));
+	app.flags({ name: "new", type: "boolean" });
 }
 
 function _emptyAttachmentsPreserveKnownState() {
@@ -151,19 +126,15 @@ function _conditionalCanonicalIdentity(cond: boolean) {
 		type: "string" as const,
 		required: true as const,
 	};
-	// @ts-expect-error -- one flag with an uncertain name is not two guaranteed flags
 	new Crust("cli").flags(flag);
-	const flags = new Crust("cli").flags(runtime([flag]));
-	// @ts-expect-error -- checked uncertain identities cannot regain trusted run shapes
+	const flags = new Crust("cli").flags(flag);
 	void flags.run([], { flags: { a: "a", b: "b" } });
 	const arg = {
 		name: cond ? ("a" as const) : ("b" as const),
 		type: "string" as const,
 		required: true as const,
 	};
-	// @ts-expect-error -- an uncertain positional name is not two guaranteed argument keys
 	new Crust("cli").args(arg);
-	const args = new Crust("cli").args(runtime([arg]));
-	// @ts-expect-error -- keep the affected argument namespace open
+	const args = new Crust("cli").args(arg);
 	void args.run([], { args: { a: "a", b: "b" } });
 }

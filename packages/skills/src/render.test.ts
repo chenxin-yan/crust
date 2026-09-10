@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { CommandDefinition, AnyCrust, ArgDef, CommandSection, FlagDef } from "@crustjs/core";
-import { Crust, runtime, defineCommand, defineContext, defineFlag } from "@crustjs/core";
+import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
 
 import { buildManifest } from "./manifest.ts";
 import { renderSkill } from "./render.ts";
@@ -30,11 +30,11 @@ type CommandFixture = Parameters<typeof makeCommand>[0];
 
 function fixtureDefinition(fixture: CommandFixture): CommandDefinition<any, any, any, any> {
 	const { name, ...meta } = fixture.meta;
-	return defineCommand(runtime(name), runtime(meta), (command) => {
+	return defineCommand(name, meta, (command) => {
 		const configured = command
-			.args(runtime(fixture.args ?? []))
-			.flags(runtime(Object.entries(fixture.flags ?? {}).map(([name, def]) => ({ name, ...def }))))
-			.add(runtime(Object.values(fixture.subCommands ?? {}).map(fixtureDefinition)));
+			.args(...(fixture.args ?? []))
+			.flags(...Object.entries(fixture.flags ?? {}).map(([name, def]) => ({ name, ...def })))
+			.add(...Object.values(fixture.subCommands ?? {}).map(fixtureDefinition));
 		return fixture.run ? configured.action(fixture.run) : configured;
 	});
 }
@@ -42,10 +42,10 @@ function fixtureDefinition(fixture: CommandFixture): CommandDefinition<any, any,
 async function snapshotFixture(fixture: CommandFixture | AnyCrust) {
 	if ("snapshot" in fixture) return await fixture.snapshot();
 	const { name, ...meta } = fixture.meta;
-	const root = new Crust(runtime(name), runtime(meta))
-		.args(runtime(fixture.args ?? []))
-		.flags(runtime(Object.entries(fixture.flags ?? {}).map(([name, def]) => ({ name, ...def }))))
-		.add(runtime(Object.values(fixture.subCommands ?? {}).map(fixtureDefinition)));
+	const root = new Crust(name, meta)
+		.args(...(fixture.args ?? []))
+		.flags(...Object.entries(fixture.flags ?? {}).map(([name, def]) => ({ name, ...def })))
+		.add(...Object.values(fixture.subCommands ?? {}).map(fixtureDefinition));
 	return await (fixture.run ? root.action(fixture.run) : root).snapshot();
 }
 

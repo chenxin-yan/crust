@@ -3,7 +3,7 @@ title: Testing
 description: Test Crust applications with captured output and fake interactive terminals.
 ---
 
-`@crustjs/testing` provides application-level test helpers for `@crustjs/core`. It captures ordinary command output and drives actions that use built-in `@crustjs/prompts` prompts.
+`@crustjs/testing` provides application-level test helpers for `@crustjs/core`. It captures terminal execution and drives actions that use built-in `@crustjs/prompts` prompts; ordinary output capture belongs to core `app.run()`.
 
 ## Install
 
@@ -15,7 +15,7 @@ The required peers are `@crustjs/core`, `@crustjs/progress`, and `@crustjs/promp
 
 ## Application contracts
 
-`captureRun()` and `runInteractive()` accept a `Crust` application and infer its command tree. Their command path, argument object, and flag object are checked from the definitions added to that application. Misspelled command, argument, or flag names fail TypeScript checking and editor completion suggests valid names.
+Core `app.run()` and the `runInteractive()` helper infer the application's command tree. Their command path, argument object, and flag object are checked from the definitions added to that application. Misspelled command, argument, or flag names fail TypeScript checking and editor completion suggests valid names.
 
 `captureExecute()` instead accepts the structural `ExecutableApp` contract. Its `CaptureIO` option type is exported as `Partial<InvocationIO>`:
 
@@ -25,16 +25,14 @@ The required peers are `@crustjs/core`, `@crustjs/progress`, and `@crustjs/promp
 
 An inert `CommandDefinition` must first be added to a `Crust` application before using the typed helpers.
 
-## `captureRun(app, path, input?)`
+## `app.run(path, input?)`
 
 Run an application with captured output and the selected action's inferred result. Each `ctx.stdout()`/`ctx.stderr()` call is one line (matching the terminal defaults), and the returned `stdout` and `stderr` fields join those lines with `"\n"`. The `completed` branch owns the action's awaited `result`, the `finished` branch owns the finishing Extension's `by` identity, and the `failed` branch owns the thrown `error`. Output written before failure is retained. Narrow with `captured.status`.
 
 With the default capture setup, prompt and progress output is bridged into captured `stderr` through a non-TTY, line-buffered adapter. A spinner contributes its final line without animation. Capturing output does not provide interactive input; use `runInteractive()` to drive prompts.
 
 ```ts
-import { captureRun } from "@crustjs/testing";
-
-const captured = await captureRun(app, ["build"], {
+const captured = await app.run(["build"], {
   args: { entry: "src/cli.ts" },
   flags: { minify: true },
 });
@@ -47,10 +45,10 @@ if (captured.status === "finished") {
 }
 ```
 
-The return type is `CapturedRun`, a union of completed, finished, and failed branches:
+The core return type is `RunOutcome`, a union of completed, finished, and failed branches:
 
 ```ts
-export type CapturedRun<Result = unknown> = {
+export type RunOutcome<Result> = {
   readonly stdout: string;
   readonly stderr: string;
 } & (
@@ -62,7 +60,7 @@ export type CapturedRun<Result = unknown> = {
 
 ## `captureExecute(app, argv)`
 
-Drive the terminal `execute()` path in-process. Unlike `captureRun()`, this exercises `execute()`'s returned exit-code protocol — `0` on success, `1` for rendered failures, `130` for `AbortError` cancellation — and the Extension `onError` rendering chain, so exit codes and rendered failure output are assertable without spawning a subprocess. The previous process exit code is restored after capture; an unset exit code is restored as `0`.
+Drive the terminal `execute()` path in-process. Unlike `app.run()`, this exercises `execute()`'s returned exit-code protocol — `0` on success, `1` for rendered failures, `130` for `AbortError` cancellation — and the Extension `onError` rendering chain, so exit codes and rendered failure output are assertable without spawning a subprocess. The previous process exit code is restored after capture; an unset exit code is restored as `0`.
 
 ```ts
 import { captureExecute } from "@crustjs/testing";
@@ -73,7 +71,7 @@ expect(result.exitCode).toBe(1);
 expect(result.stderr).toContain("Unknown flag");
 ```
 
-Use this raw-argv path for parser syntax such as short bundles and misspellings. Statically declared `defineExtension()` commands appear in the typed `captureRun()` and `runInteractive()` paths; use `captureExecute()` for dynamically assembled or type-widened Extension contributions.
+Use this raw-argv path for parser syntax such as short bundles and misspellings. Statically declared `defineExtension()` commands appear in the typed `app.run()` and `runInteractive()` paths; use `captureExecute()` for dynamically assembled or type-widened Extension contributions.
 
 The return type is `CapturedExecute`:
 
@@ -83,7 +81,7 @@ The return type is `CapturedExecute`:
 
 Run an application against a fake TTY. Use `waitFor()` before sending input with `type()` or `keys()`, then await `done`. See the [prompt testing helpers](/docs/modules/prompts#testing-custom-prompts) for the `keys()` vocabulary.
 
-`waitFor(pattern, timeoutMs?)` polls the terminal (default timeout 5000ms). It fails fast instead of hanging: if the application throws before the pattern matches, `waitFor()` rethrows that error; if the application completes without matching, or the timeout elapses, it throws with the current screen contents.
+`waitFor(pattern, timeoutMs?)` polls the terminal (default timeout 5000ms). It fails fast instead of hanging: if the application returns a failed outcome before the pattern matches, `waitFor()` throws its error; if the application completes without matching, or the timeout elapses, it throws with the current screen contents.
 
 ```ts
 import { runInteractive } from "@crustjs/testing";
@@ -96,6 +94,8 @@ await run.done;
 ```
 
 `screen()` returns the ANSI-stripped terminal screen. One ambient [`withTerminalIO`](/docs/modules/progress#output-sinks) scope routes prompt frames, `ctx.stderr()` output, and `@crustjs/progress` indicators into that screen and the transcript scanned by `waitFor()`.
+
+`done` rejects with the error from a failed core outcome, including primitive thrown values. Completed and finished outcomes resolve it. `ctx.stdout()` is not included in `screen()`; use core `app.run()` for stdout assertions.
 
 The return type is `InteractiveRun`:
 

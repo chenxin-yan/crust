@@ -40,4 +40,4 @@ Suggestions compare the unknown token with visible sibling command names and ali
 
 During argv routing, an unknown subcommand produces `COMMAND_NOT_FOUND` only when its parent has no Command Action. An action-bearing parent treats the unknown token as a positional argument, so `didYouMean()` does not suggest a command for that typo. See [subcommand routing](/docs/guide/subcommands#unknown-commands).
 
-`app.run(path, input)` does not run presentation hooks; a command path forced past its static types throws the original `COMMAND_NOT_FOUND` error instead.
+`app.run(path, input)` does not run presentation hooks; a command path forced past its static types returns a failed outcome carrying the original `COMMAND_NOT_FOUND` error instead.

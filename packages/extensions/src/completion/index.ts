@@ -10,7 +10,6 @@ import {
 	defineCommand,
 	defineExtension,
 	defineExtensionId,
-	runtime,
 } from "@crustjs/core";
 import { buildCommandDocumentation } from "@crustjs/core/tooling";
 
@@ -173,62 +172,59 @@ export function renderFishCompletion(
  * defaults to the snapshot's `meta.name`, unless `options.binName` is set.
  */
 export const completion: ExtensionFactory<[options?: CompletionOptions], {}, [], []> =
-	defineExtension(
-		COMPLETION,
-		runtime((options: CompletionOptions = {}) => {
-			const subcommandName = options.command ?? "completion";
+	defineExtension(COMPLETION, (options: CompletionOptions = {}) => {
+		const subcommandName = options.command ?? "completion";
 
-			const completionCommand = defineCommand(
-				runtime(subcommandName),
-				{ description: "Generate shell tab-completion scripts" },
-				(cmd) =>
-					cmd
-						.args({
-							name: "shell",
-							type: "string",
-							required: true,
-							description: "Shell to generate completion for",
-							choices: SUPPORTED_SHELLS,
-						})
-						.flags({
-							name: "output-dir",
-							type: "string",
-							description:
-								"Write all supported shells' scripts into this directory instead of printing to stdout",
-						})
-						.action(async (context) => {
-							const outputDir = context.flags["output-dir"];
-							if (outputDir === undefined) {
-								context.stdout(
-									renderCompletionScript(context.args.shell, context.rootCommand, options),
-								);
-								return;
-							}
+		const completionCommand = defineCommand(
+			subcommandName,
+			{ description: "Generate shell tab-completion scripts" },
+			(cmd) =>
+				cmd
+					.args({
+						name: "shell",
+						type: "string",
+						required: true,
+						description: "Shell to generate completion for",
+						choices: SUPPORTED_SHELLS,
+					})
+					.flags({
+						name: "output-dir",
+						type: "string",
+						description:
+							"Write all supported shells' scripts into this directory instead of printing to stdout",
+					})
+					.action(async (context) => {
+						const outputDir = context.flags["output-dir"];
+						if (outputDir === undefined) {
+							context.stdout(
+								renderCompletionScript(context.args.shell, context.rootCommand, options),
+							);
+							return;
+						}
 
-							// File path: write **all** supported shells. This matches
-							// the packaging-time use case — distributors generate every
-							// supported file in one invocation regardless of which
-							// shell they nominally requested.
-							await writeCompletionFiles(resolvePath(outputDir), context.rootCommand, options);
-						}),
-			);
+						// File path: write **all** supported shells. This matches
+						// the packaging-time use case — distributors generate every
+						// supported file in one invocation regardless of which
+						// shell they nominally requested.
+						await writeCompletionFiles(resolvePath(outputDir), context.rootCommand, options);
+					}),
+		);
 
-			return {
-				commands: [completionCommand],
-				build: async ({ snapshot, outDir }: ExtensionBuildContext) => {
-					const dir = join(outDir, "completions");
-					await mkdir(outDir, { recursive: true });
-					const stagedDir = await mkdtemp(join(outDir, ".completions-"));
-					try {
-						// Keep previous artifacts until validation, rendering, and writes succeed.
-						await writeCompletionFiles(stagedDir, snapshot, options);
-						// The hook owns this directory; remove stale scripts after a binary rename.
-						await rm(dir, { recursive: true, force: true });
-						await rename(stagedDir, dir);
-					} finally {
-						await rm(stagedDir, { recursive: true, force: true });
-					}
-				},
-			};
-		}),
-	);
+		return {
+			commands: [completionCommand],
+			build: async ({ snapshot, outDir }: ExtensionBuildContext) => {
+				const dir = join(outDir, "completions");
+				await mkdir(outDir, { recursive: true });
+				const stagedDir = await mkdtemp(join(outDir, ".completions-"));
+				try {
+					// Keep previous artifacts until validation, rendering, and writes succeed.
+					await writeCompletionFiles(stagedDir, snapshot, options);
+					// The hook owns this directory; remove stale scripts after a binary rename.
+					await rm(dir, { recursive: true, force: true });
+					await rename(stagedDir, dir);
+				} finally {
+					await rm(stagedDir, { recursive: true, force: true });
+				}
+			},
+		};
+	});

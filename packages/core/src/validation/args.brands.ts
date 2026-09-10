@@ -4,11 +4,8 @@ import type {
 	DefaultWithinChoicesBrand,
 	DefName,
 	Overlap,
-	KnownNameBrand,
-	RuntimeRequiredBrand,
 	IsUnion,
 	IsClosedName,
-	IsStaticTuple,
 	LocalValueBrand,
 } from "./shared.ts";
 
@@ -30,7 +27,8 @@ type DuplicateArgBrand<A, Existing extends string> =
 type EmptyArgNameError = { readonly FIX_EMPTY_NAME: "Argument names must be non-empty" };
 
 /** Reject empty argument names, including empty members of a name union. */
-export type EmptyArgNameBrand<Name extends string> = "" extends Name ? EmptyArgNameError : {};
+export type EmptyArgNameBrand<Name extends string> =
+	IsClosedName<Name> extends true ? ("" extends Name ? EmptyArgNameError : {}) : {};
 
 // An empty name renders as "<>" in help/snapshot labels and validation messages.
 type EmptyArgDefinitionNameBrand<A> = "" extends DefName<A> ? EmptyArgNameError : {};
@@ -40,7 +38,7 @@ type ArgChecks<A, Existing extends string, Local extends boolean> = A &
 	(Local extends true
 		? A extends { name: string }
 			? LocalArgBrand<A>
-			: RuntimeRequiredBrand
+			: {}
 		: AsyncParseBrand<A> & DefaultWithinChoicesBrand<A>) &
 	EmptyArgDefinitionNameBrand<A>;
 
@@ -77,7 +75,9 @@ export type ValidateVariadicArgs<
 					...ValidateVariadicArgs<Tail, Existing | DefName<Head>, Local>,
 				]
 		: readonly [ArgChecks<Head, Existing, Local>]
-	: A;
+	: Local extends true
+		? { [I in keyof A]: ArgChecks<A[I], Existing, Local> }
+		: A;
 
 type BrandVariadicPosition<A extends readonly object[]> = {
 	[I in keyof A]: A[I] & {
@@ -97,43 +97,24 @@ export type AppendArgsChecks<
 
 // ────────────────────────────────────────────────────────────────────────────
 
-export type LocalArgBrand<A extends { name: string }> = KnownNameBrand<A["name"]> &
-	(IsUnion<A["name"]> extends true ? RuntimeRequiredBrand : {}) &
-	EmptyArgDefinitionNameBrand<A> &
-	LocalValueBrand<A> &
-	KnownArgLayoutBrand<A>;
+export type LocalArgBrand<A extends { name: string }> = EmptyArgDefinitionNameBrand<A> &
+	LocalValueBrand<A>;
 
 export type LocalAppendArgsChecks<A extends ArgsDef, NewA extends ArgsDef> = AppendArgsChecks<
 	A,
 	NewA,
 	true
-> &
-	(IsStaticTuple<A> extends true ? {} : RuntimeRequiredBrand) &
-	(IsStaticTuple<NewA> extends true ? {} : RuntimeRequiredBrand) &
-	KnownNameBrand<A[number]["name"]> &
-	(true extends {
-		[I in keyof A]: "FIX_RUNTIME_INPUT" extends keyof KnownArgLayoutBrand<A[I]> ? true : false;
-	}[number]
-		? RuntimeRequiredBrand
-		: {});
-
-/** An optional variadic field can change whether a later append is legal. */
-type KnownArgLayoutBrand<A> = "variadic" extends keyof A
-	? [A] extends [{ variadic: true }]
-		? {}
-		: [A] extends [{ variadic?: never }]
-			? {}
-			: RuntimeRequiredBrand
-	: {};
+>;
 
 /** Conditional collections and uncertain canonical identities cannot promise every alternative output key. */
-export type AttachedArgs<A extends ArgsDef> =
-	IsStaticTuple<A> extends true
-		? true extends {
-				[I in keyof A]:
-					| IsUnion<A[I]["name"]>
-					| (IsClosedName<A[I]["name"]> extends true ? false : true);
-			}[number]
-			? ArgsDef
-			: A
-		: ArgsDef;
+export type AttachedArgs<A extends ArgsDef> = (
+	number extends A["length"] ? false : IsUnion<A> extends true ? false : true
+) extends true
+	? true extends {
+			[I in keyof A]:
+				| IsUnion<A[I]["name"]>
+				| (IsClosedName<A[I]["name"]> extends true ? false : true);
+		}[number]
+		? ArgsDef
+		: A
+	: ArgsDef;

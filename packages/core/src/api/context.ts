@@ -1,6 +1,5 @@
 import { CrustError, type CaughtError } from "../errors.ts";
 import { toFlagsRecord } from "../parsing/spellings.ts";
-import { isRuntimeInput, runtimeInputValue, type RuntimeInput } from "../runtime.ts";
 import type { FlagsDef, InferFlags, InvocationIO, MergeFlags, NamedFlagDef } from "../types.ts";
 import type {
 	AttachedFlags,
@@ -10,12 +9,10 @@ import type {
 import type {
 	Awaitable,
 	MergeProviders,
-	KnownNameBrand,
 	IsStaticTuple,
 	IsUnion,
 	IsClosedName,
 	UnionToIntersection,
-	RuntimeRequiredBrand,
 } from "../validation/shared.ts";
 
 /** Upper bound for phantom name-to-value context maps. */
@@ -54,22 +51,14 @@ type ValidateContextConfig<R extends ContextConfig> = {
 	readonly flags?: R["flags"] extends readonly NamedFlagDef[]
 		? ValidateLocalFlagDefs<R["flags"], never>
 		: "flags" extends keyof R
-			? RuntimeRequiredBrand
+			? {}
 			: never;
 	readonly uses?: R["uses"] extends readonly AnyContextFactory[]
-		? R["uses"] & KnownContextFactories<R["uses"]>
+		? R["uses"]
 		: "uses" extends keyof R
-			? RuntimeRequiredBrand
+			? {}
 			: never;
 };
-
-export type KnownContextFactories<Fs extends readonly AnyContextFactory[]> =
-	IsStaticTuple<Fs> extends true
-		? {
-				[I in keyof Fs]: KnownNameBrand<Fs[I]["contextName"]> &
-					(IsUnion<Fs[I]["contextName"]> extends true ? RuntimeRequiredBrand : {});
-			}
-		: RuntimeRequiredBrand;
 
 interface ContextSetupInput<OF extends FlagsDef = FlagsDef> extends InvocationIO {
 	readonly flags: InferFlags<OF>;
@@ -262,7 +251,7 @@ function isContextSetup(value: ContextConfig | ErasedContextSetup): value is Era
 
 /** Define a named, lazy command dependency. Declared `uses` are exposed on `ctx`. */
 export function defineContext<Name extends string, Value, Options = void>(
-	name: (Name & KnownNameBrand<Name>) | RuntimeInput<Name>,
+	name: Name,
 	setup: (input: ContextSetup<Options>) => Awaitable<Value>,
 ): ContextFactory<Name, Options, Value>;
 export function defineContext<
@@ -271,37 +260,25 @@ export function defineContext<
 	Value,
 	Options = void,
 >(
-	name: (Name & KnownNameBrand<Name>) | RuntimeInput<Name>,
+	name: Name,
 	config: R & ValidateContextConfig<R> & ContextConfig,
 	setup: (
 		input: ContextSetup<Options, OwnedFlagsOf<R>, ContextDependencies<UsesOf<R>>>,
 	) => Awaitable<Value>,
 ): ContextFactory<Name, Options, Value, OwnedFlagsOf<R>, ContextDependencies<UsesOf<R>>>;
-export function defineContext<
-	Name extends string,
-	const R extends ContextConfig,
-	Value,
-	Options = void,
->(
-	name: (Name & KnownNameBrand<Name>) | RuntimeInput<Name>,
-	config: RuntimeInput<R>,
-	setup: (
-		input: ContextSetup<Options, OwnedFlagsOf<R>, ContextDependencies<UsesOf<R>>>,
-	) => Awaitable<Value>,
-): ContextFactory<Name, Options, Value, OwnedFlagsOf<R>, ContextDependencies<UsesOf<R>>>;
+
 export function defineContext(
-	nameInput: string | RuntimeInput<string>,
-	configOrSetup: ContextConfig | RuntimeInput<ContextConfig> | ErasedContextSetup,
+	nameInput: string,
+	configOrSetup: ContextConfig | ErasedContextSetup,
 	maybeSetup?: ErasedContextSetup,
 ): AnyContextFactory {
-	const name = isRuntimeInput(nameInput) ? runtimeInputValue(nameInput) : nameInput;
-	const checked = isRuntimeInput(configOrSetup);
-	const configuration = checked ? runtimeInputValue(configOrSetup) : configOrSetup;
+	const name = nameInput;
+	const configuration = configOrSetup;
 	const hasConfig = !isContextSetup(configuration);
 	const config = hasConfig ? configuration : {};
 	// Authoring overloads require setup in both call forms.
 	const setup = hasConfig ? maybeSetup! : configuration;
-	const ownedFlags = Object.freeze(toFlagsRecord(config.flags ?? [], checked));
+	const ownedFlags = Object.freeze(toFlagsRecord(config.flags ?? []));
 	const uses = Object.freeze((config.uses ?? []).map(contextFactoryData));
 	const instance = (
 		instanceUses: readonly AnyContextFactory[],

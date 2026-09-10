@@ -36,9 +36,9 @@ class CrustError<C extends CrustErrorCode = CrustErrorCode> extends Error {
 Use `code` or `.is(code)` instead of matching messages. The constructor's details argument is optional for codes whose entry in `CrustErrorDetailsMap` includes `undefined`; `COMMAND_NOT_FOUND` requires its details payload.
 
 ```ts
-try {
-  await app.run(path, input);
-} catch (error) {
+const outcome = await app.run(path, input);
+if (outcome.status === "failed") {
+  const { error } = outcome;
   if (error instanceof CrustError && error.is("VALIDATION")) {
     for (const issue of error.details?.issues ?? []) {
       console.error(`${issue.path}: ${issue.message}`);
@@ -93,7 +93,9 @@ Standard Schema failures are aggregated into one `VALIDATION` error. Paths are n
 
 ## Propagation boundaries
 
-`.run(path, input, io)` throws the original error without rendering it or changing process status, unless disposal also fails. Combined invocation and disposal failures produce a `SuppressedError`; see [Error flow](/docs/guide/lifecycle#error-flow). Context setup and Command Action failures are not wrapped in `CrustError`. Pulling an unprovided Context is a `DEFINITION` `CrustError` with `details.reason === "missing-context"`; its message names the Context, identifies the requesting setup when applicable, and recommends `.provide()`. A dynamic pull cycle reports `context-cycle`. Pulling a flag-owning Context before validation reports `flags-before-validation`. Pulling after invocation Contexts have been disposed reports `context-after-disposal`. This includes `onError` calls for post-run or disposal failures after cleanup. For failures raised during dispatch before `postRun`, `onError` runs while Contexts are still live.
+Authoring and attachment errors still throw at the consuming operation, and `snapshot()` preparation errors still reject. Only public `run()` invocation failures become returned outcomes.
+
+`.run(path, input, io)` returns a quiet `failed` outcome containing the original error and any captured output, without changing process status. If disposal also fails, it retains the combined escaping failure. Combined invocation and disposal failures produce a `SuppressedError`; see [Error flow](/docs/guide/lifecycle#error-flow). Context setup and Command Action failures are not wrapped in `CrustError`. Pulling an unprovided Context is a `DEFINITION` `CrustError` with `details.reason === "missing-context"`; its message names the Context, identifies the requesting setup when applicable, and recommends `.provide()`. A dynamic pull cycle reports `context-cycle`. Pulling a flag-owning Context before validation reports `flags-before-validation`. Pulling after invocation Contexts have been disposed reports `context-after-disposal`. This includes `onError` calls for post-run or disposal failures after cleanup. For failures raised during dispatch before `postRun`, `onError` runs while Contexts are still live.
 
 ```ts
 const failure = new Error("database unavailable");
@@ -101,17 +103,18 @@ const app = new Crust("my-cli").action(() => {
   throw failure;
 });
 
-await app.run([]); // throws the same `failure` object
+const outcome = await app.run([]);
+// outcome is { status: "failed", error: failure, stdout: "", stderr: "" }
 ```
 
 `.execute()` renders a failure once, sets `process.exitCode = 1`, and resolves. Extension `onError` hooks can render or delegate presentation but cannot turn the invocation into success.
 
-Core treats any `Error` whose `name` is `"AbortError"` as cancellation, including the `DOMException` thrown by prompts. Programmatic `.run()` throws it unless disposal also fails. Terminal `.execute()` sets exit code `130` and offers it to Extension `onError` hooks; the default renderer stays silent when no hook claims it.
+Core treats any `Error` whose `name` is `"AbortError"` as cancellation, including the `DOMException` thrown by prompts. Programmatic `.run()` returns it in the `failed` branch unless disposal also fails. Terminal `.execute()` sets exit code `130` and offers it to Extension `onError` hooks; the default renderer stays silent when no hook claims it.
 
 ```ts
-try {
-  await app.run(path, input);
-} catch (error) {
+const outcome = await app.run(path, input);
+if (outcome.status === "failed") {
+  const { error } = outcome;
   if (error instanceof Error && error.name === "AbortError") {
     // cancellation
   }

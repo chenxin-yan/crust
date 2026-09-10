@@ -2,7 +2,6 @@ import { describe, expect, it } from "bun:test";
 
 import { Crust, defineCommand } from "../command/crust.ts";
 import { defineExtensionId } from "../identity.ts";
-import { runtime } from "../runtime.ts";
 import { defineContext } from "./context.ts";
 import { defineExtension } from "./extension.ts";
 import { defineFlag, defineArg } from "./flags.ts";
@@ -15,7 +14,8 @@ describe("checked Extension attachment", () => {
 			return "db";
 		});
 		const extension = defineExtension(defineExtensionId("db"), { uses: [db] });
-		expect(() => new Crust("app").extend(runtime([extension]))).toThrow("No provider for Context");
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		expect(() => new Crust("app").extend(extension)).toThrow("No provider for Context");
 		expect(calls).toBe(0);
 	});
 	it("checks delayed command demands when the recipe is consumed", async () => {
@@ -26,7 +26,9 @@ describe("checked Extension attachment", () => {
 		});
 		const command = defineCommand("child", (c) => c.use(db).action(() => 1));
 		const extension = defineExtension(defineExtensionId("commands"), { commands: [command] });
-		const app = new Crust("app").extend(runtime([extension]));
+		const registrations1 = [extension];
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		const app = new Crust("app").extend(...registrations1);
 		await expect(app.snapshot()).rejects.toThrow("No provider for Context");
 		expect(calls).toBe(0);
 	});
@@ -36,17 +38,17 @@ describe("checked Extension attachment", () => {
 		});
 		const copy = { ...extension, commands: [] };
 		const app = new Crust("app").extend(copy);
-		expect(await app.run(["child"])).toEqual({ status: "completed", result: 42 });
+		expect(await app.run(["child"])).toMatchObject({ status: "completed", result: 42 });
 	});
 });
 
 it("checked Extension commands replace canonical action results in registration order", async () => {
 	const name: string = "child";
-	const commands = [defineCommand(runtime(name), (c) => c.action(() => "replacement"))];
+	const commands = [defineCommand(name, (c) => c.action(() => "replacement"))];
 	const app = new Crust("app")
 		.command("child", (c) => c.action(() => 42))
-		.extend(runtime([defineExtension(defineExtensionId("replace"), runtime({ commands }))]));
-	expect(await app.run(["child"], runtime({}))).toEqual({
+		.extend(defineExtension(defineExtensionId("replace"), { commands }));
+	expect(await app.run(["child"], {})).toMatchObject({
 		status: "completed",
 		result: "replacement",
 	});
@@ -68,12 +70,9 @@ it("keeps compatible hook providers and unrelated descendant replacements lazy",
 			},
 		},
 	});
-	const app = new Crust("app")
-		.provide(text())
-		.add(compatible)
-		.extend(runtime([hook]));
+	const app = new Crust("app").provide(text()).add(compatible).extend(hook);
 	expect(calls).toBe(0);
-	expect(await app.run(["child"])).toEqual({ status: "completed", result: 42 });
+	expect(await app.run(["child"])).toMatchObject({ status: "completed", result: 42 });
 	expect(seen).toEqual(["CHILD"]);
 	expect(calls).toBe(0);
 	const unrelated = defineCommand("other", (c) =>
@@ -83,7 +82,7 @@ it("keeps compatible hook providers and unrelated descendant replacements lazy",
 	const noHook = defineExtension(defineExtensionId("commands"), { commands: [command] });
 	expect(
 		await new Crust("app").provide(text()).extend(noHook).add(unrelated).run(["other"]),
-	).toEqual({ status: "completed", result: 7 });
+	).toMatchObject({ status: "completed", result: 7 });
 });
 
 it("checks pending Extension flag relations at the consuming checked operation", () => {
@@ -91,19 +90,29 @@ it("checks pending Extension flag relations at the consuming checked operation",
 		flags: [{ name: "token", type: "string" }],
 	});
 	const root = new Crust("app").extend(ext);
-	expect(() => root.flags(runtime([{ name: "token", type: "number" }]))).toThrow("collides");
+	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+	expect(() => root.flags({ name: "token", type: "number" })).toThrow("collides");
 	const owner = defineContext("owner", { flags: [{ name: "token", type: "number" }] }, () => 1);
-	expect(() => root.provide(runtime([owner()]))).toThrow("collides");
+	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+	expect(() => root.provide(owner())).toThrow("collides");
 	const child = defineCommand("child", (c) => c.flags({ name: "token", type: "number" }));
-	expect(() => root.add(runtime([child]))).toThrow("collides");
+	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+	expect(() => root.add(child)).toThrow("collides");
 	expect(() =>
-		new Crust("app").flags({ name: "token", type: "number" }).extend(runtime([ext])),
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		new Crust("app").flags({ name: "token", type: "number" }).extend(ext),
 	).toThrow("collides");
 });
 
-it("trusted synchronous parser results do not undergo dynamic Promise inspection", async () => {
+it("opaque synchronous parser payloads retain identity without then or prototype probing", async () => {
 	const value = new Proxy(
-		{ value: 42 },
+		{
+			value: 42,
+			// oxlint-disable-next-line unicorn/no-thenable -- hostile payload fixture proves no generic thenable probing.
+			get then() {
+				throw new Error("unnecessary then inspection");
+			},
+		},
 		{
 			getPrototypeOf() {
 				throw new Error("unnecessary Promise inspection");
@@ -112,21 +121,22 @@ it("trusted synchronous parser results do not undergo dynamic Promise inspection
 	);
 	const app = new Crust("app")
 		.flags({ name: "value", type: "string", parse: () => value })
-		.action(({ flags }) => flags.value);
+		// Nest the payload to avoid ordinary async return-value thenable assimilation.
+		.action(({ flags }) => ({ value: flags.value }));
 	const outcome = await app.run([], { flags: { value: "input" } });
 	expect(outcome.status).toBe("completed");
-	if (outcome.status === "completed") expect(outcome.result).toBe(value);
+	if (outcome.status === "completed") expect(outcome.result.value).toBe(value);
 });
 
 it("locally proven helper results cannot be rewritten before checked consumption", async () => {
-	const flag = defineFlag(runtime("token"), runtime({ type: "string", short: "t" }));
+	const flag = defineFlag("token", { type: "string", short: "t" });
 	expect(() => Object.assign(flag, { short: "too-long" })).toThrow();
 	expect(
 		await new Crust("app")
-			.flags(runtime([flag]))
+			.flags(flag)
 			.action(({ flags }) => flags.token)
 			.run([], { flags: { token: "safe" } }),
-	).toEqual({ status: "completed", result: "safe" });
+	).toMatchObject({ status: "completed", result: "safe" });
 });
 
 it("keeps canonical precedence and earliest-alias routing under checked replacement", async () => {
@@ -134,35 +144,35 @@ it("keeps canonical precedence and earliest-alias routing under checked replacem
 	const incoming = defineCommand("incoming", { aliases: ["shared", "old"] }, (c) =>
 		c.action(() => "new"),
 	);
-	const app = new Crust("app")
-		.add(old)
-		.extend(runtime([defineExtension(defineExtensionId("alias"), { commands: [incoming] })]));
-	expect(await app.run(["shared"], runtime({}))).toEqual({ status: "completed", result: 42 });
-	expect(await app.run(["old"], runtime({}))).toEqual({ status: "completed", result: 42 });
-	const canonical = new Crust("app").add(old).extend(
-		runtime([
-			defineExtension(defineExtensionId("canonical"), {
-				commands: [defineCommand("shared", (c) => c.action(() => true))],
-			}),
-		]),
-	);
-	expect(await canonical.run(["shared"])).toEqual({ status: "completed", result: true });
-	const replaced = new Crust("app").add(old).extend(
-		runtime([
-			defineExtension(defineExtensionId("replace"), {
-				commands: [defineCommand("old", (c) => c.action(() => "replacement"))],
-			}),
-		]),
-	);
-	await expect(replaced.run(["shared"])).rejects.toMatchObject({ code: "COMMAND_NOT_FOUND" });
-	expect(await replaced.run(["old"])).toEqual({ status: "completed", result: "replacement" });
+	const registrations2 = [defineExtension(defineExtensionId("alias"), { commands: [incoming] })];
+	const app = new Crust("app").add(old).extend(...registrations2);
+	expect(await app.run(["shared"], {})).toMatchObject({ status: "completed", result: 42 });
+	expect(await app.run(["old"], {})).toMatchObject({ status: "completed", result: 42 });
+	const registrations3 = [
+		defineExtension(defineExtensionId("canonical"), {
+			commands: [defineCommand("shared", (c) => c.action(() => true))],
+		}),
+	];
+	const canonical = new Crust("app").add(old).extend(...registrations3);
+	expect(await canonical.run(["shared"])).toMatchObject({ status: "completed", result: true });
+	const registrations4 = [
+		defineExtension(defineExtensionId("replace"), {
+			commands: [defineCommand("old", (c) => c.action(() => "replacement"))],
+		}),
+	];
+	const replaced = new Crust("app").add(old).extend(...registrations4);
+	await expect(replaced.run(["shared"])).resolves.toMatchObject({
+		status: "failed",
+		error: { code: "COMMAND_NOT_FOUND" },
+	});
+	expect(await replaced.run(["old"])).toMatchObject({ status: "completed", result: "replacement" });
 });
 
 it("owns the checked parser function instead of rereading the mutable author object", async () => {
 	const definition = { name: "value", type: "string" as const, parse: () => 1 };
-	const app = new Crust("app").flags(runtime([definition])).action(({ flags }) => flags.value);
+	const app = new Crust("app").flags(definition).action(({ flags }) => flags.value);
 	definition.parse = () => 2;
-	expect(await app.run([], runtime({ flags: { value: "input" } }))).toEqual({
+	expect(await app.run([], { flags: { value: "input" } })).toMatchObject({
 		status: "completed",
 		result: 1,
 	});
@@ -171,9 +181,9 @@ it("owns the checked parser function instead of rereading the mutable author obj
 it("checked optional parsers preserve both executable output branches", async () => {
 	for (const parse of [undefined, (raw: string) => Number(raw)]) {
 		const app = new Crust("app")
-			.flags(runtime([defineFlag("value", runtime({ type: "string", parse }))]))
+			.flags(defineFlag("value", { type: "string", parse }))
 			.action(({ flags }) => flags.value);
-		expect(await app.run([], { flags: { value: "42" } })).toEqual({
+		expect(await app.run([], { flags: { value: "42" } })).toMatchObject({
 			status: "completed",
 			result: parse ? 42 : "42",
 		});
@@ -192,14 +202,12 @@ it("checks Extension config flag relations before trusted reuse, including each 
 		() => 2,
 	);
 	const config = { flags: [{ name: "token", type: "boolean" as const }], provides: [owner()] };
-	expect(() => defineExtension(defineExtensionId("direct"), runtime(config))).toThrow("collides");
-	const factory = defineExtension(
-		defineExtensionId("factory"),
-		runtime(() => config),
-	);
+	expect(() => defineExtension(defineExtensionId("direct"), config)).toThrow("collides");
+	const factory = defineExtension(defineExtensionId("factory"), () => config);
 	expect(() => factory()).toThrow("collides");
 	expect(() =>
-		defineExtension(defineExtensionId("peers"), runtime({ provides: [owner(), peer()] })),
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		defineExtension(defineExtensionId("peers"), { provides: [owner(), peer()] }),
 	).toThrow("collides");
 });
 
@@ -210,34 +218,29 @@ it("keeps same-name Context replacement order inside checked Extension configs",
 		{ flags: [{ name: "current", type: "string" }] },
 		() => "current",
 	);
-	const ext = defineExtension(
-		defineExtensionId("replacement"),
-		runtime({ provides: [old(), current()] }),
-	);
-	const app = new Crust("app").extend(runtime([ext])).action(({ ctx }) => ctx.owner);
-	expect(await app.run([], runtime({}))).toEqual({ status: "completed", result: "current" });
+	const ext = defineExtension(defineExtensionId("replacement"), { provides: [old(), current()] });
+	const app = new Crust("app").extend(ext).action(({ ctx }) => ctx.owner);
+	expect(await app.run([], {})).toMatchObject({ status: "completed", result: "current" });
 	const emptyOld = defineContext("empty", () => "old");
 	const emptyNew = defineContext("empty", () => "new");
-	const empty = defineExtension(
-		defineExtensionId("empty-replacement"),
-		runtime({ provides: [emptyOld(), emptyNew()] }),
-	);
+	const empty = defineExtension(defineExtensionId("empty-replacement"), {
+		provides: [emptyOld(), emptyNew()],
+	});
 	expect(
 		await new Crust("app")
-			.extend(runtime([empty]))
+			.extend(empty)
 			.action(({ ctx }) => ctx.empty)
-			.run([], runtime({})),
-	).toEqual({ status: "completed", result: "new" });
+			.run([], {}),
+	).toMatchObject({ status: "completed", result: "new" });
 	expect(() =>
-		defineExtension(defineExtensionId("repeated-owned"), runtime({ provides: [old(), old()] })),
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		defineExtension(defineExtensionId("repeated-owned"), { provides: [old(), old()] }),
 	).toThrow("collides");
 	expect(() =>
-		defineExtension(
-			defineExtensionId("bad-default"),
-			runtime({
-				flags: [{ name: "mode", type: "string", choices: ["allowed"], default: "forbidden" }],
-			}),
-		),
+		defineExtension(defineExtensionId("bad-default"), {
+			// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+			flags: [{ name: "mode", type: "string", choices: ["allowed"], default: "forbidden" }],
+		}),
 	).toThrow("default must be one of choices");
 });
 
@@ -256,7 +259,8 @@ it("checked providers validate pending contributed commands lazily against final
 		commands: [defineCommand("parent", (c) => c.add(child))],
 	});
 	const root = new Crust("app").extend(ext);
-	const app = root.provide(runtime([owner()]));
+	const registrations5 = [owner()];
+	const app = root.provide(...registrations5);
 	expect(recipes).toBe(0);
 	expect(setups).toBe(0);
 	await expect(app.snapshot()).rejects.toThrow("collides");
@@ -275,8 +279,8 @@ it("a dynamic helper name does not inspect trusted parser results", async () => 
 			},
 		},
 	);
-	const flag = defineFlag(runtime("value"), { type: "string", parse: () => value });
-	const arg = defineArg(runtime("value"), { type: "string", parse: () => value });
+	const flag = defineFlag("value", { type: "string", parse: () => value });
+	const arg = defineArg("value", { type: "string", parse: () => value });
 	const flags = new Crust("app").flags(flag).action(({ flags }) => flags.value);
 	const args = new Crust("app").args(arg).action(({ args }) => args.value);
 	for (const outcome of [
@@ -286,22 +290,26 @@ it("a dynamic helper name does not inspect trusted parser results", async () => 
 		expect(outcome.status).toBe("completed");
 		if (outcome.status === "completed") expect(outcome.result).toBe(value);
 	}
-	expect(() => defineFlag(runtime("no-value"), { type: "string" })).toThrow("must not start");
-	expect(() => defineFlag(runtime("alias"), { type: "string", aliases: ["alias"] })).toThrow(
-		"repeats",
-	);
-	expect(() => defineArg(runtime(""), { type: "string" })).toThrow("non-empty");
+	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+	expect(() => defineFlag("no-value", { type: "string" })).toThrow("must not start");
+	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+	expect(() => defineFlag("alias", { type: "string", aliases: ["alias"] })).toThrow("repeats");
+	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+	expect(() => defineArg("", { type: "string" })).toThrow("non-empty");
 });
 
 it("checked invocation owns uncertain choices, requiredness and noNegate", async () => {
 	const choices: string[] = ["allowed"];
 	const app = new Crust("app")
-		.flags(defineFlag("mode", runtime({ type: "string", choices })))
+		.flags(defineFlag("mode", { type: "string", choices }))
 		.action(({ flags }) => flags.mode);
-	await expect(app.run([], runtime({ flags: { mode: "forbidden" } }))).rejects.toThrow(
-		"Expected one of",
-	);
-	expect(await app.run([], runtime({ flags: { mode: "allowed" } }))).toEqual({
+	const invocation1: import("../index.ts").AnyCrust = app;
+	await expect(invocation1.run([], { flags: { mode: "forbidden" } })).resolves.toMatchObject({
+		status: "failed",
+		error: expect.objectContaining({ message: expect.stringContaining("Expected one of") }),
+	});
+	const invocation2: import("../index.ts").AnyCrust = app;
+	expect(await invocation2.run([], { flags: { mode: "allowed" } })).toMatchObject({
 		status: "completed",
 		result: "allowed",
 	});
@@ -311,11 +319,19 @@ it("checked invocation owns uncertain choices, requiredness and noNegate", async
 		required: true,
 		default: undefined,
 	});
-	await expect(required.run([], runtime({}))).rejects.toThrow("Missing required flag");
+	const invocation3: import("../index.ts").AnyCrust = required;
+	await expect(invocation3.run([], {})).resolves.toMatchObject({
+		status: "failed",
+		error: expect.objectContaining({ message: expect.stringContaining("Missing required flag") }),
+	});
 	const toggle = new Crust("app").flags({ name: "yes", type: "boolean", noNegate: true });
-	await expect(toggle.run([], runtime({ flags: { yes: false } }))).rejects.toThrow(
-		"does not support negation",
-	);
+	const invocation4: import("../index.ts").AnyCrust = toggle;
+	await expect(invocation4.run([], { flags: { yes: false } })).resolves.toMatchObject({
+		status: "failed",
+		error: expect.objectContaining({
+			message: expect.stringContaining("does not support negation"),
+		}),
+	});
 });
 
 it("checked uncertain occurrence layouts preserve schema ownership and variadic output", async () => {
@@ -335,15 +351,17 @@ it("checked uncertain occurrence layouts preserve schema ownership and variadic 
 			.flags({ name: "value", type: "string", schema, multiple })
 			.action(({ flags }) => flags.value);
 		const value = multiple ? ["raw"] : "raw";
-		expect(await app.run([], runtime({ flags: { value } }))).toEqual({
+		const invocation5: import("../index.ts").AnyCrust = app;
+		expect(await invocation5.run([], { flags: { value } })).toMatchObject({
 			status: "completed",
 			result: value,
 		});
 		expect(calls).toBe(1);
 		const arg = new Crust("app")
-			.args(runtime([{ name: "value", type: "string", variadic: multiple }]))
+			.args({ name: "value", type: "string", variadic: multiple })
 			.action(({ args }) => args.value);
-		expect(await arg.run([], runtime({ args: { value } }))).toEqual({
+		const invocation6: import("../index.ts").AnyCrust = arg;
+		expect(await invocation6.run([], { args: { value } })).toMatchObject({
 			status: "completed",
 			result: value,
 		});
@@ -372,19 +390,16 @@ it("checked Extensions validate earlier pending commands against new flags and p
 					})
 				: defineExtension(defineExtensionId("addition"), { provides: [owner()] });
 		const root = new Crust("app").extend(pending);
-		const app = root.extend(runtime([addition]));
+		const app = root.extend(addition);
 		expect(recipes).toBe(0);
 		expect(setups).toBe(0);
 		await expect(app.snapshot()).rejects.toThrow("collides");
 		expect(recipes).toBe(1);
 		expect(setups).toBe(0);
 		await expect(root.snapshot()).resolves.toBeDefined();
-		await expect(
-			new Crust("app")
-				.extend(runtime([addition]))
-				.extend(runtime([pending]))
-				.snapshot(),
-		).rejects.toThrow("collides");
+		await expect(new Crust("app").extend(addition).extend(pending).snapshot()).rejects.toThrow(
+			"collides",
+		);
 	}
 });
 
@@ -398,31 +413,38 @@ it("checked inputs validate open inherited flags without changing positional pro
 	const child = defineCommand("child", (c) =>
 		c.add(defineCommand("leaf", (c) => c.action(() => "leaf"))),
 	);
-	const inherited = new Crust("app").provide(runtime(providers)).add(runtime([child]));
-	await expect(inherited.run(["child", "leaf"], runtime({}))).rejects.toThrow(
-		"Missing required flag",
-	);
-	expect(await inherited.run(["child", "leaf"], runtime({ flags: { token: "ok" } }))).toEqual({
+	const inherited = new Crust("app").provide(...providers).add(child);
+	await expect(inherited.run(["child", "leaf"], {})).resolves.toMatchObject({
+		status: "failed",
+		error: expect.objectContaining({ message: expect.stringContaining("Missing required flag") }),
+	});
+	expect(await inherited.run(["child", "leaf"], { flags: { token: "ok" } })).toMatchObject({
 		status: "completed",
 		result: "leaf",
 	});
 	expect(
-		await new Crust("app").add(child).provide(runtime(providers)).run(["child", "leaf"]),
-	).toEqual({ status: "completed", result: "leaf" });
+		await new Crust("app")
+			.add(child)
+			.provide(...providers)
+			.run(["child", "leaf"]),
+	).toMatchObject({ status: "completed", result: "leaf" });
 	for (const recursive of [true, false]) {
 		const ext = defineExtension(defineExtensionId("recursive"), {
 			flags: [{ name: "token", type: "string", required: true, recursive }],
 		});
 		for (const app of [
 			new Crust("app").add(child).extend(ext),
-			new Crust("app").extend(ext).add(runtime([child])),
+			new Crust("app").extend(ext).add(child),
 		]) {
 			if (recursive)
-				await expect(app.run(["child", "leaf"], runtime({}))).rejects.toThrow(
-					"Missing required flag",
-				);
+				await expect(app.run(["child", "leaf"], {})).resolves.toMatchObject({
+					status: "failed",
+					error: expect.objectContaining({
+						message: expect.stringContaining("Missing required flag"),
+					}),
+				});
 			else
-				expect(await app.run(["child", "leaf"], runtime({}))).toEqual({
+				expect(await app.run(["child", "leaf"], {})).toMatchObject({
 					status: "completed",
 					result: "leaf",
 				});
@@ -435,35 +457,47 @@ it("checked invocation validates the actual conditional argument and template ch
 		const definitions = condition
 			? ([{ name: "a", type: "string", required: true }] as const)
 			: ([{ name: "b", type: "string", required: true }] as const);
-		const app = new Crust("app").args(runtime(definitions)).action(() => "ok");
-		await expect(app.run([], runtime({}))).rejects.toThrow("Missing required argument");
-		expect(
-			await app.run([], runtime({ args: condition ? { a: "value" } : { b: "value" } })),
-		).toEqual({ status: "completed", result: "ok" });
+		const app = new Crust("app").args(...definitions).action(() => "ok");
+		await expect(app.run([], {})).resolves.toMatchObject({
+			status: "failed",
+			error: expect.objectContaining({
+				message: expect.stringContaining("Missing required argument"),
+			}),
+		});
+		expect(await app.run([], { args: condition ? { a: "value" } : { b: "value" } })).toMatchObject({
+			status: "completed",
+			result: "ok",
+		});
 	}
 	const choice: `mode-${string}` = `mode-${Math.random()}`;
 	const app = new Crust("app").flags({ name: "mode", type: "string", choices: [choice] });
-	await expect(app.run([], runtime({ flags: { mode: "mode-other" } }))).rejects.toThrow(
-		"Expected one of",
-	);
-	await expect(app.run([], runtime({ flags: { mode: choice } }))).resolves.toMatchObject({
+	const invocation7: import("../index.ts").AnyCrust = app;
+	await expect(invocation7.run([], { flags: { mode: "mode-other" } })).resolves.toMatchObject({
+		status: "failed",
+		error: expect.objectContaining({ message: expect.stringContaining("Expected one of") }),
+	});
+	const invocation8: import("../index.ts").AnyCrust = app;
+	await expect(invocation8.run([], { flags: { mode: choice } })).resolves.toMatchObject({
 		status: "completed",
 	});
 });
 
 it("checked template identities validate actual names and required values", async () => {
 	const name: `mode-${string}` = `mode-${Math.random()}`;
-	const flag = defineFlag(runtime(name), { type: "string", required: true });
-	const app = new Crust("app").flags(runtime([flag]));
-	await expect(app.run([], runtime({}))).rejects.toThrow("Missing required flag");
-	await expect(app.run([], runtime({ flags: { [name]: "ok" } }))).resolves.toMatchObject({
+	const flag = defineFlag(name, { type: "string", required: true });
+	const app = new Crust("app").flags(flag);
+	await expect(app.run([], {})).resolves.toMatchObject({
+		status: "failed",
+		error: expect.objectContaining({ message: expect.stringContaining("Missing required flag") }),
+	});
+	await expect(app.run([], { flags: { [name]: "ok" } })).resolves.toMatchObject({
 		status: "completed",
 	});
 	const blank: `${string} ` = " ";
-	expect(() => new Crust(runtime(blank))).toThrow("non-empty");
-	expect(() => defineCommand(runtime(blank), (c) => c)).toThrow("non-empty");
+	expect(() => new Crust(blank)).toThrow("non-empty");
+	expect(() => defineCommand(blank, (c) => c)).toThrow("non-empty");
 	// Context names have no command-name grammar.
-	expect(defineContext(runtime(blank), () => 1).contextName).toBe(blank);
+	expect(defineContext(blank, () => 1).contextName).toBe(blank);
 });
 
 it("checked Extension additions preserve nonrecursive flags and same-id replacement", async () => {
@@ -474,9 +508,11 @@ it("checked Extension additions preserve nonrecursive flags and same-id replacem
 	const local = defineExtension(defineExtensionId("local"), {
 		flags: [{ name: "token", type: "string", recursive: false }],
 	});
-	await expect(root.extend(runtime([local])).snapshot()).resolves.toBeDefined();
+	const registrations2 = [local];
+	await expect(root.extend(...registrations2).snapshot()).resolves.toBeDefined();
 	const replacement = defineExtension(id, { flags: [{ name: "token", type: "string" }] });
-	const snapshot = await root.extend(runtime([replacement])).snapshot();
+	const registrations3 = [replacement];
+	const snapshot = await root.extend(...registrations3).snapshot();
 	expect(snapshot.subCommands).toEqual({});
 });
 
@@ -488,11 +524,17 @@ it("rejects supplied flag keys retired by same-ID Extension replacement", async 
 	const replacement = defineExtension(id, { flags: [{ name: "newFlag", type: "boolean" }] });
 	await expect(
 		original.extend(replacement).run([], { flags: { oldFlag: "supplied" } }),
-	).rejects.toMatchObject({ code: "PARSE", message: 'Unknown flag "--oldFlag"' });
+	).resolves.toMatchObject({
+		status: "failed",
+		error: { code: "PARSE", message: 'Unknown flag "--oldFlag"' },
+	});
 	await expect(
-		original.extend(runtime([replacement])).run([], runtime({ flags: { oldFlag: "supplied" } })),
-	).rejects.toMatchObject({ code: "PARSE", message: 'Unknown flag "--oldFlag"' });
-	expect(await original.run([], { flags: { oldFlag: "supplied" } })).toEqual({
+		original.extend(replacement).run([], { flags: { oldFlag: "supplied" } }),
+	).resolves.toMatchObject({
+		status: "failed",
+		error: { code: "PARSE", message: 'Unknown flag "--oldFlag"' },
+	});
+	expect(await original.run([], { flags: { oldFlag: "supplied" } })).toMatchObject({
 		status: "completed",
 		result: "supplied",
 	});
@@ -507,19 +549,32 @@ it("rejects retired recursive keys on existing and later descendants and same-ca
 	const original = new Crust("app").extend(old).add(child);
 	await expect(
 		original.extend(replacement).run(["child", "grand"], { flags: { oldFlag: "value" } }),
-	).rejects.toThrow('Unknown flag "--oldFlag"');
+	).resolves.toMatchObject({
+		status: "failed",
+		error: expect.objectContaining({
+			message: expect.stringContaining('Unknown flag "--oldFlag"'),
+		}),
+	});
 	const later = new Crust("app").extend(old, replacement).add(child);
-	await expect(later.run(["child", "grand"], { flags: { oldFlag: "value" } })).rejects.toThrow(
-		'Unknown flag "--oldFlag"',
-	);
+	await expect(
+		later.run(["child", "grand"], { flags: { oldFlag: "value" } }),
+	).resolves.toMatchObject({
+		status: "failed",
+		error: expect.objectContaining({
+			message: expect.stringContaining('Unknown flag "--oldFlag"'),
+		}),
+	});
 	const pendingExtension = defineExtension(defineExtensionId("later-recipe"), {
 		commands: [defineCommand("pending", (c) => c.action(() => "pending"))],
 	});
 	const pending = new Crust("app").extend(old, replacement, pendingExtension);
-	await expect(pending.run(["pending"], { flags: { oldFlag: "value" } })).rejects.toThrow(
-		'Unknown flag "--oldFlag"',
-	);
-	expect(await original.run(["child", "grand"], { flags: { oldFlag: "original" } })).toEqual({
+	await expect(pending.run(["pending"], { flags: { oldFlag: "value" } })).resolves.toMatchObject({
+		status: "failed",
+		error: expect.objectContaining({
+			message: expect.stringContaining('Unknown flag "--oldFlag"'),
+		}),
+	});
+	expect(await original.run(["child", "grand"], { flags: { oldFlag: "original" } })).toMatchObject({
 		status: "completed",
 		result: "grand",
 	});
@@ -543,20 +598,35 @@ it("rejects retired Extension provider flags in both registration forms without 
 	const original = new Crust("app").extend(old).add(child);
 	await expect(
 		original.extend(replacement).run(["child", "grand"], { flags: { provided: "value" } }),
-	).rejects.toThrow('Unknown flag "--provided"');
+	).resolves.toMatchObject({
+		status: "failed",
+		error: expect.objectContaining({
+			message: expect.stringContaining('Unknown flag "--provided"'),
+		}),
+	});
 	await expect(
 		new Crust("app").extend(old, replacement).run([], { flags: { provided: "value" } }),
-	).rejects.toThrow('Unknown flag "--provided"');
-	await expect(
-		original
-			.extend(runtime([replacement]))
-			.run(["child", "grand"], runtime({ flags: { provided: "value" } })),
-	).rejects.toThrow('Unknown flag "--provided"');
-	expect(setups).toBe(0);
-	expect(await original.run(["child", "grand"], { flags: { provided: "original" } })).toEqual({
-		status: "completed",
-		result: "grand",
+	).resolves.toMatchObject({
+		status: "failed",
+		error: expect.objectContaining({
+			message: expect.stringContaining('Unknown flag "--provided"'),
+		}),
 	});
+	await expect(
+		original.extend(replacement).run(["child", "grand"], { flags: { provided: "value" } }),
+	).resolves.toMatchObject({
+		status: "failed",
+		error: expect.objectContaining({
+			message: expect.stringContaining('Unknown flag "--provided"'),
+		}),
+	});
+	expect(setups).toBe(0);
+	expect(await original.run(["child", "grand"], { flags: { provided: "original" } })).toMatchObject(
+		{
+			status: "completed",
+			result: "grand",
+		},
+	);
 });
 
 it("keeps surviving and reintroduced keys and nonrecursive replacement scope", async () => {
@@ -566,15 +636,22 @@ it("keeps surviving and reintroduced keys and nonrecursive replacement scope", a
 	});
 	const original = new Crust("app").extend(old).command("child", (c) => c.action(() => "child"));
 	const removed = original.extend(defineExtension(id, {}));
-	await expect(removed.run([], { flags: { local: "value" } })).rejects.toThrow(
-		'Unknown flag "--local"',
-	);
-	expect(await removed.run(["child"])).toEqual({ status: "completed", result: "child" });
-	expect(await removed.extend(runtime([old])).run([], { flags: { local: "value" } })).toEqual({
+	await expect(removed.run([], { flags: { local: "value" } })).resolves.toMatchObject({
+		status: "failed",
+		error: expect.objectContaining({ message: expect.stringContaining('Unknown flag "--local"') }),
+	});
+	expect(await removed.run(["child"])).toMatchObject({ status: "completed", result: "child" });
+	const registrations4 = [old];
+	expect(
+		await removed.extend(...registrations4).run([], { flags: { local: "value" } }),
+	).toMatchObject({
 		status: "completed",
 		result: undefined,
 	});
-	expect(await original.extend(runtime([old])).run([], { flags: { local: "value" } })).toEqual({
+	const registrations5 = [old];
+	expect(
+		await original.extend(...registrations5).run([], { flags: { local: "value" } }),
+	).toMatchObject({
 		status: "completed",
 		result: undefined,
 	});
@@ -582,37 +659,45 @@ it("keeps surviving and reintroduced keys and nonrecursive replacement scope", a
 	const recursive = defineExtension(id, {
 		flags: [{ name: "local", type: "string", required: true }],
 	});
+	const registrations6 = [old];
 	const narrowed = new Crust("app")
 		.extend(recursive)
 		.command("child", (c) => c.action(() => "child"))
-		.extend(runtime([old]));
-	expect(await narrowed.run([], { flags: { local: "value" } })).toEqual({
+		.extend(...registrations6);
+	expect(await narrowed.run([], { flags: { local: "value" } })).toMatchObject({
 		status: "completed",
 		result: undefined,
 	});
-	await expect(narrowed.run(["child"], { flags: { local: "value" } })).rejects.toThrow(
-		'Unknown flag "--local"',
-	);
+	await expect(narrowed.run(["child"], { flags: { local: "value" } })).resolves.toMatchObject({
+		status: "failed",
+		error: expect.objectContaining({ message: expect.stringContaining('Unknown flag "--local"') }),
+	});
 });
 
 it("checked positional input enforces the actual uncertain kind, including local helpers", async () => {
 	const build = (type: "string" | "number") =>
 		new Crust("app").args({ name: "value", type, required: true }).action(({ args }) => args.value);
-	await expect(build("string").run([], runtime({ args: { value: 42 } }))).rejects.toThrow(
-		"Expected string",
-	);
-	expect(await build("number").run([], runtime({ args: { value: 42 } }))).toEqual({
+	const invocation9: import("../index.ts").AnyCrust = build("string");
+	await expect(invocation9.run([], { args: { value: 42 } })).resolves.toMatchObject({
+		status: "failed",
+		error: expect.objectContaining({ message: expect.stringContaining("Expected string") }),
+	});
+	const invocation10: import("../index.ts").AnyCrust = build("number");
+	expect(await invocation10.run([], { args: { value: 42 } })).toMatchObject({
 		status: "completed",
 		result: 42,
 	});
 	const helper = (type: "string" | "number") =>
 		new Crust("app")
-			.args(runtime([defineArg("value", runtime({ type, required: true }))]))
+			.args(defineArg("value", { type, required: true }))
 			.action(({ args }) => args.value);
-	await expect(helper("number").run([], runtime({ args: { value: "text" } }))).rejects.toThrow(
-		"Expected number",
-	);
-	expect(await helper("string").run([], runtime({ args: { value: "text" } }))).toEqual({
+	const invocation11: import("../index.ts").AnyCrust = helper("number");
+	await expect(invocation11.run([], { args: { value: "text" } })).resolves.toMatchObject({
+		status: "failed",
+		error: expect.objectContaining({ message: expect.stringContaining("Expected number") }),
+	});
+	const invocation12: import("../index.ts").AnyCrust = helper("string");
+	expect(await invocation12.run([], { args: { value: "text" } })).toMatchObject({
 		status: "completed",
 		result: "text",
 	});
@@ -625,9 +710,12 @@ it("does not mistake inherited object names for surviving replacement flags", as
 	});
 	const replacement = defineExtension(id, { flags: [{ name: "other", type: "boolean" }] });
 	const app = new Crust("app").extend(old, replacement);
-	await expect(app.run([], { flags: { toString: "value" } })).rejects.toThrow(
-		'Unknown flag "--toString"',
-	);
+	await expect(app.run([], { flags: { toString: "value" } })).resolves.toMatchObject({
+		status: "failed",
+		error: expect.objectContaining({
+			message: expect.stringContaining('Unknown flag "--toString"'),
+		}),
+	});
 });
 
 it("retires actually inherited provider flags even below a later Context shadow", async () => {
@@ -643,12 +731,23 @@ it("retires actually inherited provider flags even below a later Context shadow"
 	const original = new Crust("app").extend(old).add(child);
 	await expect(
 		original.extend(defineExtension(id, {})).run(["child"], { flags: { inherited: "value" } }),
-	).rejects.toThrow('Unknown flag "--inherited"');
+	).resolves.toMatchObject({
+		status: "failed",
+		error: expect.objectContaining({
+			message: expect.stringContaining('Unknown flag "--inherited"'),
+		}),
+	});
 	// Reinstalling the root provider still skips a more specific child Context.
+	const registrations7 = [old];
 	await expect(
-		original.extend(runtime([old])).run(["child"], { flags: { inherited: "value" } }),
-	).rejects.toThrow('Unknown flag "--inherited"');
-	expect(await original.run(["child"], { flags: { inherited: "value" } })).toEqual({
+		original.extend(...registrations7).run(["child"], { flags: { inherited: "value" } }),
+	).resolves.toMatchObject({
+		status: "failed",
+		error: expect.objectContaining({
+			message: expect.stringContaining('Unknown flag "--inherited"'),
+		}),
+	});
+	expect(await original.run(["child"], { flags: { inherited: "value" } })).toMatchObject({
 		status: "completed",
 		result: "child",
 	});
@@ -659,49 +758,67 @@ it("consumes each conditional helper branch without losing requiredness or negat
 		const definition: { type: "string"; required: true } | { type: "string" } = condition
 			? { type: "string", required: true }
 			: { type: "string" };
-		const flag = defineFlag("mode", runtime(definition));
-		const arg = defineArg("mode", runtime(definition));
+		const flag = defineFlag("mode", definition);
+		const arg = defineArg("mode", definition);
 		const boolean: { type: "boolean"; noNegate: true } | { type: "boolean" } = condition
 			? { type: "boolean", noNegate: true }
 			: { type: "boolean" };
 		return {
-			flag: new Crust("app").flags(runtime([flag])).action(({ flags }) => flags.mode),
-			arg: new Crust("app").args(runtime([arg])).action(({ args }) => args),
-			child: new Crust("app").add(
-				runtime([defineCommand("child", (c) => c.flags(runtime([flag])))]),
-			),
+			flag: new Crust("app").flags(flag).action(({ flags }) => flags.mode),
+			arg: new Crust("app").args(arg).action(({ args }) => args),
+			child: new Crust("app").add(defineCommand("child", (c) => c.flags(...[flag]))),
 			toggle: new Crust("app")
-				.flags(runtime([defineFlag("toggle", runtime(boolean))]))
+				.flags(defineFlag("toggle", boolean))
 				.action(({ flags }) => flags.toggle),
 		};
 	};
 	const required = build(true);
-	await expect(required.flag.run([], runtime({}))).rejects.toThrow(
-		'Missing required flag "--mode"',
-	);
-	await expect(required.arg.run([], runtime({}))).rejects.toThrow(
-		'Missing required argument "<mode>"',
-	);
-	await expect(required.child.run(["child"], runtime({}))).rejects.toThrow(
-		'Missing required flag "--mode"',
-	);
-	await expect(required.toggle.run([], runtime({ flags: { toggle: false } }))).rejects.toThrow(
-		"does not support negation",
-	);
+	const invocation13: import("../index.ts").AnyCrust = required.flag;
+	await expect(invocation13.run([], {})).resolves.toMatchObject({
+		status: "failed",
+		error: expect.objectContaining({
+			message: expect.stringContaining('Missing required flag "--mode"'),
+		}),
+	});
+	const invocation14: import("../index.ts").AnyCrust = required.arg;
+	await expect(invocation14.run([], {})).resolves.toMatchObject({
+		status: "failed",
+		error: expect.objectContaining({
+			message: expect.stringContaining('Missing required argument "<mode>"'),
+		}),
+	});
+	const invocation15: import("../index.ts").AnyCrust = required.child;
+	await expect(invocation15.run(["child"], {})).resolves.toMatchObject({
+		status: "failed",
+		error: expect.objectContaining({
+			message: expect.stringContaining('Missing required flag "--mode"'),
+		}),
+	});
+	const invocation16: import("../index.ts").AnyCrust = required.toggle;
+	await expect(invocation16.run([], { flags: { toggle: false } })).resolves.toMatchObject({
+		status: "failed",
+		error: expect.objectContaining({
+			message: expect.stringContaining("does not support negation"),
+		}),
+	});
 	const optional = build(false);
-	expect(await optional.flag.run([], runtime({}))).toEqual({
+	const invocation17: import("../index.ts").AnyCrust = optional.flag;
+	expect(await invocation17.run([], {})).toMatchObject({
 		status: "completed",
 		result: undefined,
 	});
-	expect(await optional.arg.run([], runtime({}))).toEqual({
+	const invocation18: import("../index.ts").AnyCrust = optional.arg;
+	expect(await invocation18.run([], {})).toMatchObject({
 		status: "completed",
 		result: { mode: undefined },
 	});
-	expect(await optional.toggle.run([], runtime({ flags: { toggle: false } }))).toEqual({
+	const invocation19: import("../index.ts").AnyCrust = optional.toggle;
+	expect(await invocation19.run([], { flags: { toggle: false } })).toMatchObject({
 		status: "completed",
 		result: false,
 	});
-	expect(await required.flag.run([], runtime({ flags: { mode: "value" } }))).toEqual({
+	const invocation20: import("../index.ts").AnyCrust = required.flag;
+	expect(await invocation20.run([], { flags: { mode: "value" } })).toMatchObject({
 		status: "completed",
 		result: "value",
 	});
@@ -712,19 +829,22 @@ it("preserves conditional helper parsers, defaults and their actual outputs", as
 		const parsed: { type: "string"; parse: (raw: string) => number } | { type: "string" } =
 			condition ? { type: "string", parse: Number } : { type: "string" };
 		const app = new Crust("app")
-			.flags(runtime([defineFlag("value", runtime(parsed))]))
-			.args(runtime([defineArg("value", runtime(parsed))]))
+			.flags(defineFlag("value", parsed))
+			.args(defineArg("value", parsed))
 			.action(({ flags, args }) => [flags.value, args]);
-		expect(await app.run([], runtime({ flags: { value: "12" }, args: { value: "12" } }))).toEqual({
+		const invocation21: import("../index.ts").AnyCrust = app;
+		expect(
+			await invocation21.run([], { flags: { value: "12" }, args: { value: "12" } }),
+		).toMatchObject({
 			status: "completed",
 			result: condition ? [12, { value: 12 }] : ["12", { value: "12" }],
 		});
 		const defaults: { type: "string"; required: true; default: "a" } | { type: "string" } =
 			condition ? { type: "string", required: true, default: "a" } : { type: "string" };
 		const defaulted = new Crust("app")
-			.flags(runtime([defineFlag("mode", runtime(defaults))]))
+			.flags(defineFlag("mode", defaults))
 			.action(({ flags }) => flags.mode);
-		expect(await defaulted.run([], runtime({}))).toEqual({
+		expect(await defaulted.run([], {})).toMatchObject({
 			status: "completed",
 			result: condition ? "a" : undefined,
 		});
@@ -754,13 +874,13 @@ it("keeps compatible conditional descendant providers lazy in either hook attach
 		const nested = defineCommand("nested", (c) => c.add(leaf));
 		const root = new Crust("app").provide(text());
 		const before = root.extend(demand).add(nested);
-		const after = root.add(runtime([nested])).extend(runtime([demand]));
+		const after = root.add(nested).extend(demand);
 		expect(setups).toBe(0);
 		await before.snapshot();
 		await after.snapshot();
 		expect(setups).toBe(0);
-		await before.run(["nested", "leaf"]);
-		await after.run(["nested", "leaf"]);
+		expect((await before.run(["nested", "leaf"])).status).not.toBe("failed");
+		expect((await after.run(["nested", "leaf"])).status).not.toBe("failed");
 		expect(setups).toBe(2);
 	}
 });

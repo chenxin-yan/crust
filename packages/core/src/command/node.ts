@@ -44,16 +44,10 @@ export interface CommandNode {
 	subCommands: Record<string, CommandNode>;
 	/** Contexts available to this command in provide order (construction order is pull-driven). */
 	contexts: CommandContext[];
-	/** Declared command demands; consumed only by checked composition. */
+	/** Declared command demands; validated when recipes are materialized. */
 	demands: readonly AnyContextFactory[];
 	/** Extensions registered via `.extend()` (root builder only) */
 	extensions: Extension[];
-	/** Checked mode belongs to each deferred Extension registration. */
-	checkedExtensions: ReadonlySet<ExtensionId>;
-	/** Actual same-ID replacement can retire canonical keys retained by the authoring type. */
-	retiredFlagNames: ReadonlySet<string>;
-	/** Retired recursive keys also apply to children materialized after replacement. */
-	retiredRecursiveFlagNames: ReadonlySet<string>;
 	/** The Command Action */
 	run?: CommandAction;
 }
@@ -81,9 +75,6 @@ export function createCommandNode(name: string): CommandNode {
 		contexts: [],
 		demands: [],
 		extensions: [],
-		checkedExtensions: new Set(),
-		retiredFlagNames: new Set(),
-		retiredRecursiveFlagNames: new Set(),
 		run: undefined,
 	};
 }
@@ -94,27 +85,26 @@ export function registerFlag(
 	name: string,
 	def: FlagDef,
 	source: "local" | "owned",
-	checked = false,
 ): void {
-	def = normalizeFlag(name, def, false);
-	if (checked) {
-		const incomingSpellings = [name, def.short, ...(def.aliases ?? [])].filter(
-			(spelling): spelling is string => spelling !== undefined,
+	def = normalizeFlag(name, def);
+
+	const incomingSpellings = [name, def.short, ...(def.aliases ?? [])].filter(
+		(spelling): spelling is string => spelling !== undefined,
+	);
+	// Inspect destination relations before installing a new contribution.
+	const existingName = Object.hasOwn(node.effectiveFlags, name)
+		? name
+		: incomingSpellings
+				.map((spelling) => node.flagSpellings.get(spelling)?.canonicalName)
+				.find((existing) => existing !== undefined);
+	if (existingName !== undefined) {
+		throw new CrustError(
+			"DEFINITION",
+			`Flag "${name}" collides with existing flag "${existingName}" on command "${node.meta.name}"`,
+			{ subject: "flag", name, reason: "flag-collision" },
 		);
-		// Only consuming checked operations inspect destination relations.
-		const existingName = Object.hasOwn(node.effectiveFlags, name)
-			? name
-			: incomingSpellings
-					.map((spelling) => node.flagSpellings.get(spelling)?.canonicalName)
-					.find((existing) => existing !== undefined);
-		if (existingName !== undefined) {
-			throw new CrustError(
-				"DEFINITION",
-				`Flag "${name}" collides with existing flag "${existingName}" on command "${node.meta.name}"`,
-				{ subject: "flag", name, reason: "flag-collision" },
-			);
-		}
 	}
+
 	(source === "local" ? node.localFlags : node.ownedFlags)[name] = def;
 	node.effectiveFlags[name] = def;
 	addFlagSpellingEntries(node.flagSpellings, name, def);

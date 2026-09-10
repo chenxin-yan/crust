@@ -1,14 +1,12 @@
 import type { ExtensionData } from "../api/extension.ts";
 import type { CommandDefinitionData } from "../command/crust.ts";
-import type { DefinitionTreeSpellings } from "./flags.brands.ts";
 import type {
 	DefName,
 	IsClosedName,
-	KnownNameBrand,
 	IsStaticTuple,
 	IsUnion,
 	Overlap,
-	RuntimeRequiredBrand,
+	UnionToIntersection,
 } from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -98,10 +96,10 @@ type BlankName<Name extends string> = Name extends `${TrimWhitespace}${infer Tai
 		? true
 		: false;
 
-/** Existing canonical-name restrictions; other whitespace and dashes remain valid. */
+/** Runtime checks own open names; provably invalid literal members remain errors. */
 export type CommandNameBrand<Name extends string> =
 	IsClosedName<Name> extends false
-		? { readonly FIX_DYNAMIC_NAME: "Use runtime(name) for an unproven command name" }
+		? {}
 		: true extends BlankName<Name>
 			? EmptyNameError
 			: "__proto__" extends Name
@@ -139,8 +137,12 @@ type SelfAliasBrand<D> =
 				}
 		: never;
 
-export type CommandCollisionBrand<Spellings extends string, Existing extends string> =
-	Overlap<Spellings, Existing> extends infer Collision extends string
+export type CommandCollisionBrand<
+	Spellings extends string,
+	Existing extends string,
+> = string extends Existing | Spellings
+	? {}
+	: Overlap<Spellings, Existing> extends infer Collision extends string
 		? [Collision] extends [never]
 			? {}
 			: {
@@ -189,8 +191,11 @@ export type ExtensionsCommandSpellings<Es extends readonly unknown[]> =
 			? never
 			: string;
 
-type ExtensionCommandCollisionBrand<E, Existing extends string> =
-	Overlap<ExtensionCommandSpellings<E>, Existing> extends infer Collision extends string
+type ExtensionCommandCollisionBrand<E, Existing extends string> = string extends
+	| ExtensionCommandSpellings<E>
+	| Existing
+	? {}
+	: Overlap<ExtensionCommandSpellings<E>, Existing> extends infer Collision extends string
 		? [Collision] extends [never]
 			? {}
 			: {
@@ -218,52 +223,43 @@ export type ValidateExtensionCommands<
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Local metadata checks; unrelated description/version/usage text has no grammar. */
-type SectionTextBrand<S> = [S] extends [
-	{ title: infer T extends string; body: infer B extends string },
-]
-	? string extends T | B
-		? RuntimeRequiredBrand
-		: true extends BlankName<T> | BlankName<B>
-			? { readonly FIX_SECTION_TEXT: "Section title/body must be nonblank" }
-			: Extract<T, `${string}\r${string}` | `${string}\n${string}`> extends never
-				? {}
-				: { readonly FIX_SECTION_TEXT: "Section title must be a single line" }
-	: RuntimeRequiredBrand;
+type SectionTextBrand<S> = S extends { title: infer T extends string; body: infer B extends string }
+	? true extends BlankName<T> | BlankName<B>
+		? { readonly FIX_SECTION_TEXT: "Section title/body must be nonblank" }
+		: Extract<T, `${string}\r${string}` | `${string}\n${string}`> extends never
+			? {}
+			: { readonly FIX_SECTION_TEXT: "Section title must be a single line" }
+	: {};
 
 export type LocalSectionsBrand<C> = "sections" extends keyof C
 	? C extends { sections: infer S extends readonly unknown[] }
-		? { readonly sections: { [I in keyof S]: S[I] & SectionTextBrand<S[I]> } }
-		: RuntimeRequiredBrand
-	: {};
-
-export type KnownCommandAliasesBrand<C> = "aliases" extends keyof C
-	? C extends { aliases: infer A extends readonly string[] }
-		? IsStaticTuple<A> extends true
-			? KnownNameBrand<A[number]>
-			: RuntimeRequiredBrand
-		: RuntimeRequiredBrand
+		? {
+				readonly sections: {
+					[I in keyof S]: S[I] &
+						UnionToIntersection<SectionTextBrand<S[I]>> &
+						(S[I] extends { only: readonly [] } | { except: readonly [] }
+							? { readonly FIX_SECTION_AUDIENCE: "Section audience must be nonempty" }
+							: {});
+				};
+			}
+		: {}
 	: {};
 
 export type LocalCommandConfigBrand<N extends string, C> = ValidateCommandConfig<N, C> &
-	KnownCommandAliasesBrand<C> &
 	LocalSectionsBrand<C>;
-
-/** Local command identity and collection cardinality must remain provable at attachment. */
-export type KnownDefinitionAliases<Ds extends readonly unknown[]> = (IsStaticTuple<Ds> extends true
-	? {}
-	: RuntimeRequiredBrand) & {
-	[I in keyof Ds]: Ds[I] &
-		(Ds[I] extends { name: infer N extends string }
-			? KnownNameBrand<N> & (IsUnion<N> extends true ? RuntimeRequiredBrand : {})
-			: RuntimeRequiredBrand) &
-		KnownCommandAliasesBrand<{ aliases: DefinitionAliases<Ds[I]> }> &
-		(string extends DefinitionTreeSpellings<readonly [Ds[I]]> ? RuntimeRequiredBrand : {});
-};
 
 export type AttachedCommandSpellings<Ds extends readonly unknown[]> = [Ds] extends [readonly []]
 	? never
 	: IsStaticTuple<Ds> extends true
-		? "FIX_RUNTIME_INPUT" extends keyof KnownDefinitionAliases<Ds>[number]
+		? false extends {
+				[I in keyof Ds]: Ds[I] extends { name: infer N extends string }
+					? IsUnion<N> extends true
+						? false
+						: false extends IsClosedName<N> | IsClosedName<DefinitionAliases<Ds[I]>[number]>
+							? false
+							: true
+					: false;
+			}[number]
 			? string
 			: CommandDefinitionSpellings<Ds[number]>
 		: string;

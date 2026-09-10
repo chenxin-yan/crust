@@ -1,6 +1,8 @@
 # @crustjs/testing
 
-Typed testing helpers for Crust CLI applications.
+Typed terminal testing helpers for Crust CLI applications.
+
+Use core `app.run(path, input)` for quiet captured output and typed completed/finished/failed outcomes. `captureExecute(app, argv)` tests terminal parsing, error presentation, and exit codes. `runInteractive(app, path, input)` drives fake-terminal prompts and propagates failed outcomes through `done` and `waitFor`.
 
 ## Install
 

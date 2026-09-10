@@ -77,9 +77,7 @@ import type {
 		>
 	>;
 	type _clean = Expect<Equal<Extract<keyof Clean[0], "FIX_ALIAS_COLLISION">, never>>;
-	type _widened = Expect<
-		Equal<Extract<keyof Widened[0], "FIX_RUNTIME_INPUT">, "FIX_RUNTIME_INPUT">
-	>;
+	type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_ALIAS_COLLISION">, never>>;
 }
 
 {

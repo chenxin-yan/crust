@@ -3,7 +3,6 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { runtime } from "@crustjs/core";
 import { Crust, defineCommand } from "@crustjs/core";
 import { buildCommandDocumentation } from "@crustjs/core/tooling";
 
@@ -249,9 +248,7 @@ describe("completion · --output-dir traversal", () => {
 			stderrChunks.push(args.map((a) => String(a)).join(" "));
 		};
 		try {
-			const cli = new Crust("real")
-				.extend(runtime([completion({ binName: "../pwn" })]))
-				.action(() => {});
+			const cli = new Crust("real").extend(completion({ binName: "../pwn" })).action(() => {});
 			await cli.execute({ argv: ["completion", "bash"] });
 		} finally {
 			console.error = origError;

@@ -6,7 +6,6 @@ import {
 	defineCommand,
 	defineExtension,
 	defineExtensionId,
-	runtime,
 } from "./index.ts";
 
 describe("runtime structured invocation", () => {
@@ -17,25 +16,43 @@ describe("runtime structured invocation", () => {
 				{ name: "tag", type: "string", multiple: true, choices: ["ok"] },
 				{ name: "yes", type: "boolean", noNegate: true },
 			);
-		await expect(app.run([], runtime({ flags: { tag: "ok" } }))).rejects.toThrow(
-			"occurrence array",
-		);
-		await expect(app.run([], runtime({ args: { first: "a", rest: "b" } }))).rejects.toThrow(
-			"occurrence array",
-		);
-		await expect(app.run([], runtime({ flags: { tag: ["wrong"] } }))).rejects.toThrow(
-			"Expected one of: ok",
-		);
-		await expect(app.run([], runtime({ flags: { yes: false } }))).rejects.toThrow(
-			"does not support negation",
-		);
-		await expect(app.run([], runtime({ flags: { other: true } }))).rejects.toThrow("Unknown flag");
-		await expect(app.run([], runtime({ args: { other: "a" } }))).rejects.toThrow(
-			"Unknown argument",
-		);
-		await expect(app.run([], runtime({ args: { rest: ["b"] } }))).rejects.toThrow(
-			"omitted argument",
-		);
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		await expect(app.run([], { flags: { tag: "ok" } })).resolves.toMatchObject({
+			status: "failed",
+			error: expect.objectContaining({ message: expect.stringContaining("occurrence array") }),
+		});
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		await expect(app.run([], { args: { first: "a", rest: "b" } })).resolves.toMatchObject({
+			status: "failed",
+			error: expect.objectContaining({ message: expect.stringContaining("occurrence array") }),
+		});
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		await expect(app.run([], { flags: { tag: ["wrong"] } })).resolves.toMatchObject({
+			status: "failed",
+			error: expect.objectContaining({ message: expect.stringContaining("Expected one of: ok") }),
+		});
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		await expect(app.run([], { flags: { yes: false } })).resolves.toMatchObject({
+			status: "failed",
+			error: expect.objectContaining({
+				message: expect.stringContaining("does not support negation"),
+			}),
+		});
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		await expect(app.run([], { flags: { other: true } })).resolves.toMatchObject({
+			status: "failed",
+			error: expect.objectContaining({ message: expect.stringContaining("Unknown flag") }),
+		});
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		await expect(app.run([], { args: { other: "a" } })).resolves.toMatchObject({
+			status: "failed",
+			error: expect.objectContaining({ message: expect.stringContaining("Unknown argument") }),
+		});
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		await expect(app.run([], { args: { rest: ["b"] } })).resolves.toMatchObject({
+			status: "failed",
+			error: expect.objectContaining({ message: expect.stringContaining("omitted argument") }),
+		});
 	});
 
 	it("preserves URL and JSON identity and rejects wrong value kinds", async () => {
@@ -44,22 +61,24 @@ describe("runtime structured invocation", () => {
 			.action(({ flags }) => flags);
 		const endpoint = new URL("https://example.com");
 		const config = { nested: [true, null, 3] };
-		const result = await app.run(runtime([]), runtime({ flags: { endpoint, config } }));
-		expect(result).toEqual({ status: "completed", result: { endpoint, config } });
+		const result = await app.run([], { flags: { endpoint, config } });
+		expect(result).toMatchObject({ status: "completed", result: { endpoint, config } });
 		if (result.status === "completed") {
-			// Known-path invocation retains the result type even with checked input.
-			const known = await app.run([], runtime({ flags: { endpoint, config } }));
-			if (known.status === "completed") {
-				expect(known.result.endpoint).toBe(endpoint);
-				expect(known.result.config).toBe(config);
-			}
+			expect(result.result.endpoint).toBe(endpoint);
+			expect(result.result.config).toBe(config);
 		}
 		await expect(
-			app.run([], runtime({ flags: { endpoint: "https://example.com" } })),
-		).rejects.toThrow("Expected url");
-		await expect(app.run([], runtime({ flags: { config: [endpoint] } }))).rejects.toThrow(
-			"Expected json",
-		);
+			// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+			app.run([], { flags: { endpoint: "https://example.com" } }),
+		).resolves.toMatchObject({
+			status: "failed",
+			error: expect.objectContaining({ message: expect.stringContaining("Expected url") }),
+		});
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		await expect(app.run([], { flags: { config: [endpoint] } })).resolves.toMatchObject({
+			status: "failed",
+			error: expect.objectContaining({ message: expect.stringContaining("Expected json") }),
+		});
 	});
 
 	it("lets finishing hooks skip required and schema validation after binding", async () => {
@@ -85,43 +104,54 @@ describe("runtime structured invocation", () => {
 					hooks: { preRun: ({ finish }) => finish() },
 				}),
 			);
-		expect(await app.run([], runtime({}))).toEqual({
+		const invocation1: import("./index.ts").AnyCrust = app;
+		expect(await invocation1.run([], {})).toMatchObject({
 			status: "finished",
 			by: defineExtensionId("finish"),
 		});
 		expect(schemas).toBe(0);
-		await expect(app.run([], runtime({ flags: { config: 3 } }))).rejects.toThrow("Expected string");
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		await expect(app.run([], { flags: { config: 3 } })).resolves.toMatchObject({
+			status: "failed",
+			error: expect.objectContaining({ message: expect.stringContaining("Expected string") }),
+		});
 	});
 
 	it("checks dynamic values against the selected command", async () => {
 		const app = new Crust("run")
 			.flags({ name: "count", type: "number" })
 			.action(({ flags }) => flags.count);
-		expect(await app.run([], runtime({ flags: { count: 3 } }))).toEqual({
+		expect(await app.run([], { flags: { count: 3 } })).toMatchObject({
 			status: "completed",
 			result: 3,
 		});
-		await expect(app.run([], runtime({ flags: { count: "wrong" } }))).rejects.toThrow(
-			"Expected number for --count",
-		);
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		await expect(app.run([], { flags: { count: "wrong" } })).resolves.toMatchObject({
+			status: "failed",
+			error: expect.objectContaining({
+				message: expect.stringContaining("Expected number for --count"),
+			}),
+		});
 	});
 });
 
 describe("runtime command names", () => {
 	it("validates at consumption, not when wrapping", () => {
-		const name = runtime(" \t");
+		const name = " \t";
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		expect(() => new Crust(name)).toThrow("Command name must be a non-empty string");
-		expect(() => defineCommand(runtime("__proto__"), (command) => command)).toThrow(
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		expect(() => defineCommand("__proto__", (command) => command)).toThrow(
 			'Command name "__proto__" is reserved',
 		);
 	});
 
 	it("preserves independent inputs and selected results", async () => {
 		const name: string = "generated";
-		const app = new Crust(runtime(name))
+		const app = new Crust(name)
 			.args({ name: "file", type: "string", required: true })
 			.action(({ args }) => args.file);
-		expect(await app.run([], { args: { file: "input" } })).toEqual({
+		expect(await app.run([], { args: { file: "input" } })).toMatchObject({
 			status: "completed",
 			result: "input",
 		});
@@ -129,13 +159,16 @@ describe("runtime command names", () => {
 
 	it("checks renamed names against carried aliases", () => {
 		const command = defineCommand("source", { aliases: ["alias", "alias"] }, (builder) => builder);
-		expect(command.as(runtime("target")).name).toBe("target");
-		expect(() => command.as(runtime("alias"))).toThrow("canonical name");
-		expect(() => command.as(runtime("__proto__"))).toThrow("reserved");
+		expect(command.as("target").name).toBe("target");
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		expect(() => command.as("alias")).toThrow("canonical name");
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		expect(() => command.as("__proto__")).toThrow("reserved");
 	});
 
 	it("checks dynamic inline names", () => {
-		expect(() => new Crust("root").command(runtime(""), (command) => command)).toThrow(
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		expect(() => new Crust("root").command("", (command) => command)).toThrow(
 			"Command name must be a non-empty string",
 		);
 	});
@@ -145,21 +178,20 @@ describe("local metadata boundaries", () => {
 	it("checks metadata at consumption without narrowing independent inputs", async () => {
 		const title = "Notes" as string;
 		const audience = [defineExtensionId("help")];
-		const config = runtime({ sections: [{ title, body: "text", only: audience }] });
+		const config = { sections: [{ title, body: "text", only: audience }] };
 		const app = new Crust("cli", config).flags({ name: "verbose", type: "boolean" });
 		audience.length = 0;
 		expect((await app.snapshot()).meta.sections?.[0]?.only?.map(String)).toEqual(["help"]);
 		expect(() => new Crust("cli", config)).toThrow("invalid documentation sections");
-		expect(() => defineCommand("child", runtime({ aliases: ["bad alias"] }), (b) => b)).toThrow(
-			"alias",
-		);
-		expect(() => defineCommand("child", runtime({ aliases: ["child"] }), (b) => b)).toThrow(
-			"alias",
-		);
-		expect(() => new Crust("cli", runtime({ sections: [{ title: "\n", body: "text" }] }))).toThrow(
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		expect(() => defineCommand("child", { aliases: ["bad alias"] }, (b) => b)).toThrow("alias");
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		expect(() => defineCommand("child", { aliases: ["child"] }, (b) => b)).toThrow("alias");
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		expect(() => new Crust("cli", { sections: [{ title: "\n", body: "text" }] })).toThrow(
 			"sections",
 		);
-		const child = defineCommand("child", runtime({ aliases: ["c", "c"] }), (b) => b);
+		const child = defineCommand("child", { aliases: ["c", "c"] }, (b) => b);
 		expect((await new Crust("cli").add(child).snapshot()).subCommands.child?.meta.aliases).toEqual([
 			"c",
 			"c",
@@ -178,11 +210,13 @@ it("checks command relations at each actual destination and keeps Context setup 
 		command.flags({ name: "token", type: "number" }),
 	);
 	const definitions = [definition];
-	expect(() => new Crust("first").add(runtime(definitions))).not.toThrow();
-	expect(() => new Crust("second").provide(owner()).add(runtime(definitions))).toThrow("collides");
+	expect(() => new Crust("first").add(...definitions)).not.toThrow();
+	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+	expect(() => new Crust("second").provide(owner()).add(...definitions)).toThrow("collides");
 	const demand = defineCommand("demand", (command) => command.use(owner));
-	expect(() => new Crust("missing").add(runtime([demand]))).toThrow("owner");
-	const app = new Crust("present").provide(owner()).add(runtime([demand]));
+	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+	expect(() => new Crust("missing").add(demand)).toThrow("owner");
+	const app = new Crust("present").provide(owner()).add(demand);
 	await app.snapshot();
 	expect(setups).toBe(0);
 });
@@ -190,7 +224,7 @@ it("checks command relations at each actual destination and keeps Context setup 
 it("checks each future Extension section result when prepared", async () => {
 	let title = "Notes";
 	const docs = defineExtension(defineExtensionId("future"), {
-		sections: () => runtime([{ command: [], title, body: "Body" }]),
+		sections: () => [{ command: [], title, body: "Body" }],
 	});
 	const first = new Crust("one").extend(docs);
 	expect((await first.snapshot()).meta.sections?.[0]?.title).toBe("Notes");
@@ -201,6 +235,6 @@ it("checks each future Extension section result when prepared", async () => {
 it("checks the actual name on a copied command definition", () => {
 	const original = defineCommand("original", { aliases: ["alias"] }, (command) => command);
 	for (const name of [" ", "__proto__", "alias"]) {
-		expect(() => new Crust("cli").add(runtime([{ ...original, name }]))).toThrow();
+		expect(() => new Crust("cli").add({ ...original, name })).toThrow();
 	}
 });

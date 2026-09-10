@@ -5,7 +5,6 @@ import { defineContext } from "../api/context.ts";
 import { defineExtension, type Extension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { defineExtensionId } from "../identity.ts";
-import { runtime } from "../runtime.ts";
 import { Crust, defineCommand } from "./crust.ts";
 
 // Compile-time regression checks; intentionally never invoked.
@@ -106,10 +105,8 @@ function _typecheckRejectsSiblingCommandSpellingCollisionsAtTheCallSite() {
 	);
 
 	const dynamicName = "dynamic" as string;
-	const dynamic = defineCommand(runtime(dynamicName), (command) => command);
-	new Crust("cli")
-		.add(runtime([dynamic]))
-		.add(runtime([defineCommand("static", (command) => command)]));
+	const dynamic = defineCommand(dynamicName, (command) => command);
+	new Crust("cli").add(dynamic).add(defineCommand("static", (command) => command));
 }
 
 // rejects invalid command alias shapes at defineCommand()
@@ -240,23 +237,23 @@ function _typecheckBrandsStaticallyKnownExtensionCommandCollisionsAtExtend() {
 	void app.extend(collidingAlias);
 	// @ts-expect-error -- command name collides with an earlier Extension alias (FIX_COMMAND_COLLISION)
 	void new Crust("cli").extend(first).extend(second);
-	void app.extend(runtime([dynamic]));
+	void app.extend(dynamic);
 	void app.extend(clean);
 }
 
 // brands duplicate command spellings within one Extension at defineExtension()
 function _typecheckBrandsDuplicateCommandSpellingsWithinOneExtensionAtDefineExtension() {
 	void defineExtension(defineExtensionId("self-name-collision"), {
-		// @ts-expect-error -- duplicate canonical name within one Extension (FIX_COMMAND_COLLISION)
 		commands: [
 			defineCommand("dup", (command) => command),
+			// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
 			defineCommand("dup", (command) => command),
 		],
 	});
 	void defineExtension(defineExtensionId("self-alias-collision"), {
-		// @ts-expect-error -- canonical name matches an earlier alias within one Extension (FIX_COMMAND_COLLISION)
 		commands: [
 			defineCommand("deploy", { aliases: ["d"] }, (command) => command),
+			// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
 			defineCommand("d", (command) => command),
 		],
 	});

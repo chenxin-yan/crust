@@ -99,7 +99,7 @@ const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
 const target = defineArg("target", { type: "string", required: true });
 ```
 
-`defineFlag(name, def)` returns a `NamedFlagDef`; `defineArg(name, def)` returns an `ArgDef`. Statically known empty names fail typecheck with `FIX_EMPTY_SPELLING` for flags and `FIX_EMPTY_NAME` for arguments; widened names require `runtime(name)`. Use `runtime(def)` when local spellings, synchronous parser results, or default/choice membership cannot be proven; either argument may be wrapped independently. Helpers return owned readonly definitions, including copied alias/choice and multiple-default arrays. Local checking is not destination collision proof. `UnnamedArgDef` is the `defineArg` input shape — an `ArgDef` without its `name`.
+`defineFlag(name, def)` returns a named flag definition; `defineArg(name, def)` returns a named argument definition. Literal fields retain inference and provably invalid names/defaults/parsers fail typecheck. Broad names and dynamic definitions use the same helpers and are checked automatically at consumption. Helpers own readonly structural arrays, without cloning payloads; local proof does not certify another destination. `UnnamedArgDef` is the argument helper input without its name.
 
 ### `CommandMeta`
 
@@ -120,7 +120,7 @@ type SectionAudience =
 type CommandSectionInput = { readonly title: string; readonly body: string } & SectionAudience;
 ```
 
-`SectionConsumer` identifies a renderer: a branded `ExtensionId`, or any value exposing one at `.id` (such as the help, man, and skills Extension factory values). `SectionAudience` is the optional `only`/`except` scoping accepted on authored sections, and `CommandSectionInput` is the ordinary command-authoring shape. Extension section callbacks retain their consumption-time validation for dynamic contributions. `CommandSection` is the validated section stored on snapshot `meta.sections`, with its audience consumers resolved to nonempty readonly `ExtensionId` tuples. Checked metadata accepts typed dynamic audience arrays and checks nonemptiness when consumed.
+`SectionConsumer` identifies a renderer: a branded `ExtensionId`, or any value exposing one at `.id` (such as the help, man, and skills Extension factory values). `SectionAudience` is the optional `only`/`except` scoping accepted on authored sections, and `CommandSectionInput` is the ordinary command-authoring shape. Extension section callbacks retain their consumption-time validation for dynamic contributions. `CommandSection` is the validated section stored on snapshot `meta.sections`, with its audience consumers resolved to nonempty readonly `ExtensionId` tuples. Metadata accepts typed dynamic audience arrays and checks nonemptiness when consumed.
 
 ## Command Snapshots
 
@@ -159,15 +159,26 @@ type Path = CommandPath<Tree>; // e.g. readonly [] | readonly ["greet"]
 type GreetInput = RunInput<CommandShapeAt<(typeof app)["_types"]["shape"], readonly ["greet"]>>;
 ```
 
-`InputArgs` requires supplied positional values to form a prefix. Defaults do not fill gaps, and a required trailing argument requires all preceding positions. Open argument lists, widened positional names, and open flag records do not prove structured input; use checked invocation through `runtime(input)`.
+`InputArgs` requires a supplied prefix: defaults do not fill gaps, and required trailing arguments require preceding positions. Known choices, required fields, and paths remain strict. Conditional definitions retain conservative obligations; fully erased/open shapes accept broad structured input while preserving independently known facts. See [Runtime input](/docs/guide/types#runtime-input).
 
-`Crust` defaults its argument state to `[]`. Use `AnyCrust` for completed-app inspection, `execute()`, and checked `run()` only; it has no authoring methods and cannot be assigned back to an empty root. Keep authoring builders inferred, or use explicit `Crust<Flags, ArgsDef>` for an open argument state. Neither proves input validity. Prefer inferred builders; explicit earlier class type arguments prevent inference of the trailing name parameter and require `runtime(name)`.
+`Crust` defaults its argument state to `[]`. Prefer inferred authoring builders. `AnyCrust` is for completed-app inspection, `execute()`, and broad `run()` with an unknown action result; it has no authoring methods and cannot be assigned back to an empty root. `Crust<Flags, ArgsDef>` intentionally describes an open argument state.
 
 `Crust._types` is a supported type-level seam for accessing an application's inferred flags, arguments, Contexts, command tree, command shape, and authored root metadata (`rootMeta`); it has no runtime value.
 
-### `RuntimeInput<T>`
+### `RunOutcome<Result>`
 
-`runtime(value)` returns an opaque `RuntimeInput<T>`, not a value assignable to `T`. It performs no validation or copying; the consuming operation validates it. There is no public unwrap function. See [Runtime input](/docs/guide/types#runtime-input) for checked names, local definitions/configs, flag/argument collections, input, and dynamic paths. The API accepts typed dynamic data, not arbitrary `unknown` objects.
+```ts
+type RunOutcome<Result> = {
+  readonly stdout: string;
+  readonly stderr: string;
+} & (
+  | { readonly status: "completed"; readonly result: Result }
+  | { readonly status: "finished"; readonly by: ExtensionId }
+  | { readonly status: "failed"; readonly error: unknown }
+);
+```
+
+Core `run()` is quiet, captures output, and returns invocation failures instead of rejecting them. Narrow `status` before reading the branch-specific field. See [capture semantics](/docs/api/crust#runpath-input-io) for live sinks, output boundaries, and memory cost. This differs from the internal hook-facing `InvocationOutcome`, which does not carry captured output or action results.
 
 ## Parser boundary types
 
@@ -231,7 +242,7 @@ type ContextBag<Deps> = {
   name="ContextInstance"
 />
 
-Attach helper-created instances with `.provide()`, or `.provide(runtime(instances))` for unproven collections. Owned-flag/dependency state cannot be erased into an explicitly empty `ContextInstance` holder. The default open instantiation is not an existential upper bound; prefer inference or a generic identity helper. Construction stays lazy.
+Attach helper-created instances with `.provide()`, or `.provide(...instances)` for dynamic collections. Owned-flag/dependency state cannot be erased into an explicitly empty `ContextInstance` holder. The default open instantiation is not an existential upper bound; prefer inference or a generic identity helper. Construction stays lazy.
 
 ### `FactoryValueOf<F>`
 
@@ -260,7 +271,7 @@ The upper bound for the name/value registry accumulated by `.provide()` and Exte
   name="ExtensionConfig"
 />
 
-`commands` entries are `defineCommand()` definitions contributed at the application root. `sections(snapshot)` returns `runtime(contributions)` containing plain-text sections targeted by canonical command paths relative to that root; contributions append to each target's `meta.sections` in Extension registration order. `build(ctx)` generates artifacts in Extension registration order when invoked by build tooling and may be async; its errors propagate to the caller. See [Extensions](/docs/guide/extensions).
+`commands` entries are `defineCommand()` definitions contributed at the application root. `sections(snapshot)` returns an array of plain-text sections targeted by canonical command paths relative to that root; contributions append to each target's `meta.sections` in Extension registration order. `build(ctx)` generates artifacts in Extension registration order when invoked by build tooling and may be async; its errors propagate to the caller. See [Extensions](/docs/guide/extensions).
 
 ### `ExtensionSectionContribution`
 
@@ -270,7 +281,7 @@ type ExtensionSectionContribution = RuntimeCommandSectionInput & {
 };
 ```
 
-The entry shape inside the wrapped collection returned by `ExtensionConfig.sections(snapshot)`. `RuntimeCommandSectionInput` accepts typed audience arrays whose nonemptiness is checked at consumption: a plain-text section plus the required canonical `command` path it targets, relative to the application root (`[]` targets the root command).
+The entry shape inside the collection returned by `ExtensionConfig.sections(snapshot)`. `RuntimeCommandSectionInput` accepts typed audience arrays whose nonemptiness is checked at consumption: a plain-text section plus the required canonical `command` path it targets, relative to the application root (`[]` targets the root command).
 
 ### `ExtensionBuildContext`
 
@@ -293,7 +304,7 @@ The build context contains the frozen root Command Snapshot and the resolved abs
 | ----------------------------- | ---------------------------------------------------------------------------------------------- |
 | `ExtensionFactory<Args = []>` | Callable Extension constructor with a readonly `id: ExtensionId`; valid as a `SectionConsumer` |
 
-`defineExtension(id, factory)` wraps a config-returning callback, preserving its parameters and inferring its flags, dependencies, providers, and commands. Each call follows the object form's normalization and freezing path. `ExtensionFactory<Args, Deps, Provides, Defs, Commands, MetaKeys>` accepts optional contribution and metadata-key type parameters. Broad contribution annotations require checked attachment. Preserve literal tuples in published annotations when ordinary `.extend()` should remain available; `MetaKeys` defaults to `never`, meaning no required metadata. An annotation for a metadata-requiring factory must preserve those keys. See [authoring an Extension](/docs/guide/extensions#author-an-extension).
+`defineExtension(id, factory)` wraps a config-returning callback, preserving its parameters and inferring its flags, dependencies, providers, and commands. Each call follows the object form's normalization and freezing path. `ExtensionFactory<Args, Deps, Provides, Defs, Commands, MetaKeys>` accepts optional contribution and metadata-key type parameters. Broad contribution annotations keep namespaces open. Preserve literal tuples in published annotations for precise typed invocation; `MetaKeys` defaults to `never`, meaning no required metadata. An annotation for a metadata-requiring factory must preserve those keys. See [authoring an Extension](/docs/guide/extensions#author-an-extension).
 
 ### `RootMetaKey` and `DefineExtensionWith`
 

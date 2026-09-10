@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
 
-import { runtime } from "@crustjs/core";
 import { Crust, defineCommand, defineExtension, defineExtensionId } from "@crustjs/core";
 import { help } from "@crustjs/extensions";
 
@@ -176,14 +175,13 @@ describe("renderManPageMdoc", () => {
 		})
 			.extend(
 				defineExtension(defineExtensionId("docs"), {
-					sections: () =>
-						runtime([
-							{
-								command: [],
-								title: "C:\\paths",
-								body: "'quoted lines are escaped.",
-							},
-						]),
+					sections: () => [
+						{
+							command: [],
+							title: "C:\\paths",
+							body: "'quoted lines are escaped.",
+						},
+					],
 				}),
 			)
 			.flags({ name: "verbose", type: "boolean" })

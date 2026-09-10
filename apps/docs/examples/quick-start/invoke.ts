@@ -6,18 +6,7 @@ const app = new Crust("my-cli")
   .action(({ args, flags, stdout }) => stdout(`${flags.greet}, ${args.name}!`));
 
 //#region run
-const output: string[] = [];
-
-const outcome = await app.run(
-  [],
-  { args: { name: "Ada" }, flags: { greet: "Hi" } },
-  {
-    stdout: (line) => output.push(line),
-    stderr: (line) => output.push(line),
-  },
-);
-
-if (outcome.status === "finished") {
-  throw new Error(`Invocation finished early by ${outcome.by}`);
-}
+const outcome = await app.run([], { args: { name: "Ada" }, flags: { greet: "Hi" } });
+if (outcome.status === "failed") throw outcome.error;
+if (outcome.status === "completed") console.log(outcome.stdout); // Hi, Ada!
 //#endregion

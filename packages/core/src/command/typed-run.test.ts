@@ -3,7 +3,6 @@ import { describe, expect, it } from "bun:test";
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { defineExtension, type Extension } from "../api/extension.ts";
 import { defineExtensionId } from "../identity.ts";
-import { runtime } from "../runtime.ts";
 import type { CommandShapeAt, RunInput, RunOutcome } from "./crust.ts";
 import { Crust, defineCommand } from "./crust.ts";
 interface StructuredRunCapture {
@@ -34,8 +33,8 @@ describe("typed programmatic invocation", () => {
 			Equal<typeof childResult, Promise<RunOutcome<{ kind: "child"; size: number }>>>
 		>;
 
-		expect(await rootResult).toEqual({ status: "completed", result: { kind: "root" } });
-		expect(await childResult).toEqual({
+		expect(await rootResult).toMatchObject({ status: "completed", result: { kind: "root" } });
+		expect(await childResult).toMatchObject({
 			status: "completed",
 			result: { kind: "child", size: 42 },
 		});
@@ -74,7 +73,7 @@ describe("typed programmatic invocation", () => {
 
 		const pending = app.run(["scan"], { flags: { trace: true } });
 		type _result = Expect<Equal<typeof pending, Promise<RunOutcome<{ kind: "extension" }>>>>;
-		expect(await pending).toEqual({ status: "completed", result: { kind: "extension" } });
+		expect(await pending).toMatchObject({ status: "completed", result: { kind: "extension" } });
 	});
 
 	it("keeps widened Extension commands runtime-only", async () => {
@@ -88,10 +87,9 @@ describe("typed programmatic invocation", () => {
 				),
 			],
 		});
-		const app = new Crust("cli").extend(runtime([dynamic]));
+		const app = new Crust("cli").extend(dynamic);
 
 		function typecheckHarness() {
-			// @ts-expect-error -- widened Extension commands are not statically known paths
 			void app.run(["generated"]);
 		}
 		void typecheckHarness;
@@ -109,26 +107,27 @@ describe("typed programmatic invocation", () => {
 		const widened: Extension = defineExtension(defineExtensionId("dyn"), {
 			commands: [defineCommand("generated", (command) => command.action(() => {}))],
 		});
-		const app = new Crust("cli").extend(runtime([lit, widened]));
+		const app = new Crust("cli").extend(lit, widened);
 
-		const pending = app.run(["inspect"], runtime({}));
+		const pending = app.run(["inspect"], {});
 		type _result = Expect<Equal<typeof pending, Promise<RunOutcome<unknown>>>>;
-		expect(await pending).toEqual({ status: "completed", result: { kind: "lit" } });
+		expect(await pending).toMatchObject({ status: "completed", result: { kind: "lit" } });
 	});
 
 	it("surfaces delayed checked recipe failures before typed dispatch", async () => {
 		const app = new Crust("cli").extend(
-			runtime([
-				defineExtension(defineExtensionId("failure"), {
-					commands: [
-						defineCommand("child", () => {
-							throw new Error("recipe failed");
-						}),
-					],
-				}),
-			]),
+			defineExtension(defineExtensionId("failure"), {
+				commands: [
+					defineCommand("child", () => {
+						throw new Error("recipe failed");
+					}),
+				],
+			}),
 		);
-		await expect(app.run([])).rejects.toThrow("recipe failed");
+		await expect(app.run([])).resolves.toMatchObject({
+			status: "failed",
+			error: expect.objectContaining({ message: expect.stringContaining("recipe failed") }),
+		});
 	});
 
 	it("awaits async action results", async () => {
@@ -136,7 +135,7 @@ describe("typed programmatic invocation", () => {
 		const pending = app.run([]);
 		type _result = Expect<Equal<typeof pending, Promise<RunOutcome<{ ok: true }>>>>;
 
-		expect(await pending).toEqual({ status: "completed", result: { ok: true } });
+		expect(await pending).toMatchObject({ status: "completed", result: { ok: true } });
 	});
 
 	it("returns the finishing Extension when preRun finishes before the action", async () => {
@@ -148,7 +147,7 @@ describe("typed programmatic invocation", () => {
 		const pending = app.run([]);
 		type _result = Expect<Equal<typeof pending, Promise<RunOutcome<{ ran: true }>>>>;
 
-		expect(await pending).toEqual({ status: "finished", by: gateId });
+		expect(await pending).toMatchObject({ status: "finished", by: gateId });
 	});
 
 	it("binds structured input directly against the selected command", async () => {
@@ -180,11 +179,15 @@ describe("typed programmatic invocation", () => {
 			}),
 		);
 
-		await app.run(["remote-add"], {
-			args: { name: "origin", count: 2, files: ["a.ts", "b.ts"] },
-			flags: { fetch: true, tag: ["one", "-two"], config: { force: true }, offset: -3 },
-			raw: ["--literal"],
-		});
+		expect(
+			(
+				await app.run(["remote-add"], {
+					args: { name: "origin", count: 2, files: ["a.ts", "b.ts"] },
+					flags: { fetch: true, tag: ["one", "-two"], config: { force: true }, offset: -3 },
+					raw: ["--literal"],
+				})
+			).status,
+		).not.toBe("failed");
 
 		expect(received).toEqual({
 			args: { name: "origin", count: 2, files: ["a.ts", "b.ts"] },
@@ -198,9 +201,13 @@ describe("typed programmatic invocation", () => {
 			.args({ name: "source", type: "string" }, { name: "destination", type: "string" })
 			.action(() => {});
 
-		await expect(app.run([], runtime({ args: { destination: "out" } }))).rejects.toMatchObject({
-			code: "PARSE",
-			details: { reason: "positional-gap" },
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		await expect(app.run([], { args: { destination: "out" } })).resolves.toMatchObject({
+			status: "failed",
+			error: {
+				code: "PARSE",
+				details: { reason: "positional-gap" },
+			},
 		});
 	});
 
@@ -208,7 +215,7 @@ describe("typed programmatic invocation", () => {
 		const app = new Crust("cli")
 			.args({ name: "source", type: "string" })
 			.action(({ args }) => args.source);
-		expect(await app.run([], { args: { source: "-unsafe" } })).toEqual({
+		expect(await app.run([], { args: { source: "-unsafe" } })).toMatchObject({
 			status: "completed",
 			result: "-unsafe",
 		});
@@ -230,13 +237,13 @@ describe("typed programmatic invocation", () => {
 				),
 			);
 		for (const target of ["build", "compile"]) {
-			expect(await app.run([], { args: { target } })).toEqual({
+			expect(await app.run([], { args: { target } })).toMatchObject({
 				status: "completed",
 				result: target,
 			});
 			expect(ran).toBe("root");
 		}
-		await app.run(["build"]);
+		expect((await app.run(["build"])).status).not.toBe("failed");
 		expect(ran).toBe("build");
 	});
 
@@ -249,10 +256,14 @@ describe("typed programmatic invocation", () => {
 				received = { args, flags };
 			});
 
-		await app.run([], {
-			args: { payload: [1, 2] as const },
-			flags: { config: [3, 4] as const },
-		});
+		expect(
+			(
+				await app.run([], {
+					args: { payload: [1, 2] as const },
+					flags: { config: [3, 4] as const },
+				})
+			).status,
+		).not.toBe("failed");
 
 		expect(received).toEqual({ args: { payload: [1, 2] }, flags: { config: [3, 4] } });
 	});
@@ -261,7 +272,7 @@ describe("typed programmatic invocation", () => {
 		const app = new Crust("cli")
 			.flags({ name: "config", type: "json" })
 			.action(({ flags }) => flags.config);
-		await expect(app.run([], { flags: { config: undefined } })).resolves.toEqual({
+		await expect(app.run([], { flags: { config: undefined } })).resolves.toMatchObject({
 			status: "completed",
 			result: undefined,
 		});
@@ -278,28 +289,38 @@ describe("typed programmatic invocation", () => {
 				{ name: "defaulted", type: "string", multiple: true, default: ["fallback"] },
 			)
 			.action(({ flags }) => flags);
-		expect(await app.run([], { flags: { optional: [], defaulted: [] } })).toEqual({
+		expect(await app.run([], { flags: { optional: [], defaulted: [] } })).toMatchObject({
 			status: "completed",
 			result: { optional: undefined, defaulted: ["fallback"] },
 		});
 		const required = new Crust("cli")
 			.flags({ name: "tag", type: "string", multiple: true, required: true })
 			.action(() => {});
-		await expect(required.run([], { flags: { tag: [] } })).rejects.toThrow(
-			'Missing required flag "--tag"',
-		);
+		await expect(required.run([], { flags: { tag: [] } })).resolves.toMatchObject({
+			status: "failed",
+			error: expect.objectContaining({
+				message: expect.stringContaining('Missing required flag "--tag"'),
+			}),
+		});
 	});
 
 	it("rejects unknown structured arguments and flags", async () => {
 		const app = new Crust("cli").args({ name: "source", type: "string" }).action(() => {});
 
-		await expect(app.run([], runtime({ args: { bogus: "x" } }))).rejects.toMatchObject({
-			code: "PARSE",
-			details: { reason: "unknown-argument", argument: "bogus" },
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		await expect(app.run([], { args: { bogus: "x" } })).resolves.toMatchObject({
+			status: "failed",
+			error: {
+				code: "PARSE",
+				details: { reason: "unknown-argument", argument: "bogus" },
+			},
 		});
-		await expect(app.run([], runtime({ flags: { bogus: true } }))).rejects.toMatchObject({
-			code: "PARSE",
-			details: { reason: "unknown-flag", flag: "bogus" },
+		await expect(app.run([], { flags: { bogus: true } })).resolves.toMatchObject({
+			status: "failed",
+			error: {
+				code: "PARSE",
+				details: { reason: "unknown-flag", flag: "bogus" },
+			},
 		});
 	});
 
@@ -312,9 +333,12 @@ describe("typed programmatic invocation", () => {
 				defineCommand("internal", { hidden: true }, (command) => command.action(() => {})),
 			);
 
-		await expect(app.run(["missing"] as never, {} as never)).rejects.toMatchObject({
-			code: "COMMAND_NOT_FOUND",
-			details: { input: "missing", available: ["visible"] },
+		await expect(app.run(["missing"] as never, {} as never)).resolves.toMatchObject({
+			status: "failed",
+			error: {
+				code: "COMMAND_NOT_FOUND",
+				details: { input: "missing", available: ["visible"] },
+			},
 		});
 	});
 });

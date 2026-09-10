@@ -131,7 +131,6 @@ export type InvocationInput =
 	| {
 			readonly path: readonly string[];
 			readonly input: RunInputPayload;
-			readonly checked: boolean;
 	  };
 
 interface ResolvedInput {
@@ -149,7 +148,6 @@ function resolveStructuredInput(
 	root: CommandNode,
 	path: readonly string[],
 	input: RunInputPayload,
-	checked: boolean,
 ): ResolvedInput {
 	const route = resolveCommand(root, [...path]);
 	if (route.argv.length > 0) {
@@ -166,7 +164,7 @@ function resolveStructuredInput(
 			parentCommand,
 		});
 	}
-	return { argv: path, route, parsed: parseStructured(route.command, input, checked) };
+	return { argv: path, route, parsed: parseStructured(route.command, input) };
 }
 
 /** Resolve, parse, and run one invocation without rendering failures. */
@@ -176,14 +174,14 @@ async function dispatch(
 	io: InvocationIO,
 	onExtensionContext?: (context: ExtensionContext) => void,
 	onFailure?: (error: CaughtError, context: ExtensionContext) => Promise<ExtensionId | undefined>,
-): Promise<RunOutcome<unknown>> {
+): Promise<{ status: "completed"; result: unknown } | { status: "finished"; by: ExtensionId }> {
 	const { rootNode, extensions } = prepared;
 
 	// Routing and syntax parsing — failures flow directly to the caller.
 	const { argv, route, parsed } =
 		"argv" in input
 			? resolveArgvInput(rootNode, input.argv)
-			: resolveStructuredInput(rootNode, input.path, input.input, input.checked);
+			: resolveStructuredInput(rootNode, input.path, input.input);
 	const resolvedNode = route.command;
 
 	// One resource scope and resolver span pre-run, the action, and post-run.
@@ -209,7 +207,7 @@ async function dispatch(
 	onExtensionContext?.(extensionContext);
 
 	const terminal = async () => {
-		validateParsed(resolvedNode, parsed, !("argv" in input) && !input.checked);
+		validateParsed(resolvedNode, parsed);
 
 		// Standard Schemas on arg/flag definitions own value validation and
 		// transformation; actions and flag-owning Contexts receive schema outputs.
@@ -351,17 +349,36 @@ function hasInjectedIO(io: Partial<InvocationIO> | undefined): boolean {
 	return io !== undefined && Object.keys(io).length > 0;
 }
 
-/** Programmatic boundary: throw raw failures and leave process status untouched. */
+/** Quiet programmatic boundary: capture output and the failure escaping the complete lifecycle. */
 export async function runInvocation(
 	node: CommandNode,
 	input: InvocationInput,
 	io: Partial<InvocationIO> | undefined,
 	materializeCommandDefinition: MaterializeCommandDefinition,
 ): Promise<RunOutcome<unknown>> {
-	const resolvedIO: InvocationIO = { ...DEFAULT_IO, ...io };
-	const prepared = prepareInvocation(node, materializeCommandDefinition);
-	const invoke = () => dispatch(input, prepared, resolvedIO);
-	return await (hasInjectedIO(io) ? withAmbientTerminalIO(resolvedIO, invoke) : invoke());
+	const stdout: string[] = [];
+	const stderr: string[] = [];
+	try {
+		// Keep the same per-invocation callback snapshot semantics as execute.
+		const sinks = { ...io };
+		const resolvedIO: InvocationIO = {
+			stdout(text) {
+				stdout.push(text);
+				sinks.stdout?.(text);
+			},
+			stderr(text) {
+				stderr.push(text);
+				sinks.stderr?.(text);
+			},
+		};
+		const outcome = await withAmbientTerminalIO(resolvedIO, async () => {
+			const prepared = prepareInvocation(node, materializeCommandDefinition);
+			return await dispatch(input, prepared, resolvedIO);
+		});
+		return { ...outcome, stdout: stdout.join("\n"), stderr: stderr.join("\n") };
+	} catch (error) {
+		return { status: "failed", error, stdout: stdout.join("\n"), stderr: stderr.join("\n") };
+	}
 }
 
 /** Terminal CLI boundary: render failures and set the process exit status. */

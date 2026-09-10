@@ -8,15 +8,7 @@ import type {
 } from "../api/context.ts";
 import type { ExtensionData } from "../api/extension.ts";
 import type { CommandDefinitionData } from "../command/crust.ts";
-import type { LocalSpellingsOf, ContextOwnedFlags } from "./flags.brands.ts";
-import type {
-	DefName,
-	KnownNameBrand,
-	Overlap,
-	IsStaticTuple,
-	IsUnion,
-	RuntimeRequiredBrand,
-} from "./shared.ts";
+import type { DefName, Overlap } from "./shared.ts";
 
 /** Canonical names claimed by more than one instance in the same `.provide()` call. */
 type DuplicateContextNames<
@@ -101,7 +93,7 @@ export type ValidateExtensionProvides<
 > = ValidateExtensionProvidesWorker<Es, string extends keyof Ctx ? never : keyof Ctx & string>;
 
 // Widened instances (Deps = any, or a string-indexed Deps map) opt out to
-// checked availability. Callback value contracts still use ValidateContextValues.
+// runtime availability. Opaque values still use the declared dependency brands.
 type ProvidedDepsOf<C> =
 	IsAny<C> extends true
 		? {}
@@ -152,9 +144,7 @@ type MismatchedDependencyBrand<C, KnownValues> =
 export type ValidateContextDeps<
 	Ctx extends ContextMap,
 	Cs extends readonly AnyContextInstance[],
-	Known extends string =
-		| (string extends keyof Ctx ? never : keyof Ctx & string)
-		| DefName<Cs[number]>,
+	Known extends string = (keyof Ctx & string) | DefName<Cs[number]>,
 	KnownValues extends ContextMap = (string extends keyof Ctx ? {} : Ctx) & ContextsOutput<Cs>,
 > = {
 	[I in keyof Cs]: Cs[I] &
@@ -180,7 +170,7 @@ export type MissingDeclaredDependencyBrand<
 	T,
 	Known extends string,
 > = string extends keyof DeclaredDepsOf<T>
-	? RuntimeRequiredBrand
+	? {}
 	: Exclude<keyof DeclaredDepsOf<T> & string, Known> extends infer Missing extends string
 		? [Missing] extends [never]
 			? {}
@@ -190,14 +180,11 @@ export type MissingDeclaredDependencyBrand<
 /** Brand sealed units whose declared dependencies are absent at a composition site. */
 export type ValidateDeclaredDeps<Ctx extends ContextMap, Items extends readonly unknown[]> = {
 	[I in keyof Items]: Items[I] &
-		MissingDeclaredDependencyBrand<
-			Items[I],
-			string extends keyof Ctx ? never : keyof Ctx & string
-		> &
+		MissingDeclaredDependencyBrand<Items[I], keyof Ctx & string> &
 		DeclaredDependencyValuesBrand<DeclaredDepsOf<Items[I]>, Ctx>;
 };
 
-/** Callback values stay TypeScript-owned, including at checked composition. */
+/** Callback values stay TypeScript-owned, including at dynamic composition. */
 export type DeclaredDependencyValuesBrand<Deps, Values> =
 	MismatchedDependencyNames<Deps, Values> extends infer Names extends string
 		? [Names] extends [never]
@@ -207,22 +194,7 @@ export type DeclaredDependencyValuesBrand<Deps, Values> =
 				}
 		: never;
 
-export type ValidateDeclaredValues<Ctx, Items extends readonly unknown[]> = {
-	[I in keyof Items]: DeclaredDependencyValuesBrand<DeclaredDepsOf<Items[I]>, Ctx>;
-};
-
-/** A trusted provider collection must prove names, owned spellings, and demands. */
-export type KnownContextInstances<Cs extends readonly AnyContextInstance[]> =
-	(IsStaticTuple<Cs> extends true ? {} : RuntimeRequiredBrand) & {
-		[I in keyof Cs]: Cs[I] &
-			Pick<ContextInstanceData<Cs[I]>, "name"> &
-			KnownNameBrand<Cs[I]["name"]> &
-			(IsUnion<Cs[I]["name"]> extends true ? RuntimeRequiredBrand : {}) &
-			(string extends keyof ContextDepsOf<Cs[I]> ? RuntimeRequiredBrand : {}) &
-			(string extends LocalSpellingsOf<ContextOwnedFlags<Cs[I]>> ? RuntimeRequiredBrand : {});
-	};
-
-/** Checked provider collections still need evidence for opaque setup result contracts. */
-export type ValidateContextValues<Ctx, Cs extends readonly AnyContextInstance[]> = {
-	[I in keyof Cs]: DeclaredDependencyValuesBrand<ContextDepsOf<Cs[I]>, Ctx>;
+/** Structural provider copies retain their defining name. */
+export type KnownContextInstances<Cs extends readonly AnyContextInstance[]> = {
+	[I in keyof Cs]: Cs[I] & Pick<ContextInstanceData<Cs[I]>, "name">;
 };

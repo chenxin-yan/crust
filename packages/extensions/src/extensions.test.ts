@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { stripVTControlCharacters } from "node:util";
 
-import { runtime } from "@crustjs/core";
 import {
 	Crust,
 	defineCommand,
@@ -303,21 +302,21 @@ describe("built-in extensions", () => {
 		})
 			.extend(
 				defineExtension(defineExtensionId("docs"), {
-					sections: () =>
-						runtime([
-							{
-								command: ["build"],
-								title: "Build notes",
-								body: "Build body\nSecond line",
-							},
-						]),
+					sections: () => [
+						{
+							command: ["build"],
+							title: "Build notes",
+							body: "Build body\nSecond line",
+						},
+					],
 				}),
 			)
 			.extend(help())
 			.add(defineCommand("build", (build) => build.action(() => {})));
 
-		await app.run([]);
-		const rootOutput = stripAnsi(getStdout());
+		const outcome = await app.run([]);
+		expect(outcome.status).toBe("finished");
+		const rootOutput = stripAnsi(outcome.stdout);
 		expect(rootOutput).toContain("Root notes:\n  Root body");
 		expect(rootOutput).not.toContain("Build notes:");
 		expect(rootOutput.indexOf("Root notes:")).toBeGreaterThan(rootOutput.indexOf("Options:"));

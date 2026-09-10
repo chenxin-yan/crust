@@ -45,12 +45,9 @@ interface CommandDefinitionBuilder<
   Sp extends string = LocalSpellingsOf<Flags>,
 > {
   flags(...defs: readonly NamedFlagDef[]): CommandDefinitionBuilder;
-  flags(defs: RuntimeInput<readonly NamedFlagDef[]>): CommandDefinitionBuilder;
   args(...defs: ArgsDef): CommandDefinitionBuilder;
-  args(defs: RuntimeInput<ArgsDef>): CommandDefinitionBuilder;
   use(...factories: readonly [AnyContextFactory, ...AnyContextFactory[]]): CommandDefinitionBuilder;
   provide(...instances: readonly AnyContextInstance[]): CommandDefinitionBuilder;
-  provide(instances: RuntimeInput<readonly AnyContextInstance[]>): CommandDefinitionBuilder;
   add(...definitions: readonly CommandDefinition[]): CommandDefinitionBuilder;
   action<R>(action: (ctx: CrustCommandContext<A, Flags, Ctx>) => R): CommandDefinitionBuilder;
 }
@@ -69,7 +66,7 @@ interface CommandDefinition<
 > {
   readonly name: Name;
   as<const N extends string>(
-    name: (N & CommandNameBrand<N>) | RuntimeInput<N>,
+    name: N & CommandNameBrand<N>,
   ): CommandDefinition<N, Aliases, Shape, Deps>;
 }
 ```
@@ -80,12 +77,12 @@ A `CommandDefinition` is a frozen value carrying its name, static config, and co
 
 ```ts
 defineCommand<const Name extends string>(
-  name: (Name & CommandNameBrand<Name>) | RuntimeInput<Name>,
+  name: (Name & CommandNameBrand<Name>),
   recipe: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
 ): CommandDefinition<Name>;
 
 defineCommand<const Name extends string, const C extends CommandConfig>(
-  name: (Name & CommandNameBrand<Name>) | RuntimeInput<Name>,
+  name: (Name & CommandNameBrand<Name>),
   config: C & ValidateCommandConfig<Name, C>,
   recipe: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
 ): CommandDefinition<Name, AliasesOf<C>>;
@@ -114,7 +111,7 @@ const deploy = defineCommand("deploy", { description: "Deploy an application" },
 );
 ```
 
-The recipe does not execute when the definition is created. It executes once for each `.add()`, so keep configuration side-effect-free. Statically blank names and `__proto__` fail typecheck at command authoring and renaming. Widened or generic names require `runtime(name)` and are checked when consumed, including equality to a carried alias. TypeScript validates the definition shape; materialization checks at runtime that the recipe returns the seeded builder and does not register nested Extensions, because those behaviors are not type-expressible. The `.use()` factory-only contract belongs to TypeScript. Core retains the declared factory references so checked attachment can verify availability without running setup.
+The recipe executes once for each `.add()`, not when the definition is created; keep configuration side-effect-free. Statically blank names and `__proto__` fail typecheck. Broad string names are supported and checked when consumed, including equality to a carried alias; unresolved generics may require a validated parameter constraint. Materialization verifies that the recipe returns its seeded builder and does not register nested Extensions. Declared Context availability is checked without running setup; factory and callback value contracts remain TypeScript-owned.
 
 ## Constructor
 
@@ -134,17 +131,17 @@ class Crust<
 >
 
 new Crust(
-  name: (Name & CommandNameBrand<Name>) | RuntimeInput<Name>,
-  meta?: Meta | RuntimeInput<Meta>
+  name: (Name & CommandNameBrand<Name>),
+  meta?: Meta
   // Overloads enforce local proof, allowed keys, and required metadata.
 )
 ```
 
 <auto-type-table path="../../../../../packages/core/src/command/crust.ts" name="RootCommandMeta" />
 
-Creates a root command builder. Metadata is optional unless an installed Extension requires it. `Meta` retains the inferred constructor metadata through fluent calls; `.extend()` checks it against [extension-owned requirements](/docs/guide/extensions#required-root-metadata). Optional or widened metadata cannot promise a required field. Statically known extra root keys are rejected, including on pretyped metadata objects. Generic wrappers must also rule out extra keys; `M extends RootCommandMeta` alone is not sufficient. Broad metadata with unproven sections requires `runtime(meta)`; metadata requirements remain type-owned, including on checked configs.
+Creates a root command builder. Metadata is optional unless an installed Extension requires it. `Meta` retains inferred metadata through fluent calls; `.extend()` checks [Extension-owned requirements](/docs/guide/extensions#required-root-metadata). Optional or widened metadata cannot promise a required field. Known extra root keys are rejected, including on pretyped objects. Generic wrappers must also rule out extra keys; `M extends RootCommandMeta` alone is insufficient. Dynamic section facts are automatically checked at consumption; metadata value requirements remain type-owned.
 
-Root metadata is declared at construction because aliases and hidden state only apply to subcommands. `version` is the application version exposed on `CommandSnapshot.meta.version` for Extensions and tooling. `sections` accepts the same ordered plain-text entries as subcommand metadata and is normalized immediately. Trusted literals are type-checked; `runtime(meta)` validates unproven local section facts when consumed.
+Root metadata belongs in the constructor because aliases and hidden state apply only to subcommands. `version` is exposed on the root snapshot. `sections` accepts ordered plain-text entries and is normalized immediately. Literal mistakes are also type-checked.
 
 ```ts
 const app = new Crust("my-cli", {
@@ -154,11 +151,11 @@ const app = new Crust("my-cli", {
 });
 ```
 
-Definition aliases must be non-empty, contain no whitespace, not start with `-`, differ from their command's canonical name, and not collide with sibling names or aliases. TypeScript reports known alias-shape violations at `defineCommand()` with `FIX_ALIAS_SHAPE` and sibling collisions at `.add()` with `FIX_COMMAND_COLLISION`. `defineCommand(name, runtime(config), recipe)` checks unproven alias grammar and self-alias equality. Ordinary `.add()` requires statically known names and aliases to establish sibling compatibility; use `.add(runtime(definitions))` for dynamic attachment. Local checking is not destination proof. Repeated aliases within one command remain allowed. Checked command names also reject equality to a carried alias.
+Definition aliases must be non-empty, contain no whitespace, not start with `-`, differ from their canonical name, and not collide with sibling names or aliases. TypeScript reports known alias-shape violations at `defineCommand()` and sibling collisions at `.add()`; the actual grammar and destination are automatically checked too. Spread dynamic collections with `.add(...definitions)`. Repeated aliases within one command remain allowed.
 
 ## Chaining semantics
 
-Variadic builder methods accumulate across calls: `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` preserve earlier registrations — with one exception: `.extend()` deduplicates by `ExtensionId`, keeping only the last registration for a given id. TypeScript brands reject statically known invalid definitions and collisions at compile time. On checked `runtime(...)` operations, `DEFINITION` checks cover flag spelling collisions and reserved names, duplicate or misplaced arguments, and duplicate `.add()` command names. Checked Extension operations also reject flag collisions, including Context-owned flags from providers. Dynamic Extension-contributed commands instead replace commands with the same canonical name at preparation time, as described under [`.extend()`](#extendextensions). Ordinary sibling alias compatibility and Extension metadata requirements remain type-owned. Recipe behavior, Context lifecycle, documentation sections, and argv input retain their runtime checks.
+Variadic `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` accumulate across calls. `.extend()` deduplicates `ExtensionId`s last-registration-wins. TypeScript rejects statically known invalid definitions and collisions; automatic consumption checks cover observable names, spellings, positional layout, Context availability, and destination flag relations. Dynamic Extension commands retain canonical last-write-wins during preparation. Existing static duplicate-context/command/owned-flag checks still protect earlier typed consumers; runtime replacement is not proof that opaque callbacks are compatible.
 
 ## `.args(...defs)`
 
@@ -168,7 +165,7 @@ args<const NewA extends ArgsDef>(
 ): Crust
 ```
 
-Defines positional arguments; repeated calls append in call order. Unproven collections/layout use `.args(runtime(defs))`; open previous layout stays open. Pass values from `defineArg(name, def)` or inline literals. Duplicate names fail typecheck with `FIX_DUPLICATE_ARG`, Promise-returning custom parsers fail with `FIX_ASYNC_PARSE`, and only the final argument across all calls may be variadic.
+Defines positional arguments; repeated calls append in call order. Use `.args(...defs)` for dynamic collections; open previous layout stays open. Pass values from `defineArg(name, def)` or inline literals. Duplicate names fail typecheck with `FIX_DUPLICATE_ARG`, Promise-returning custom parsers fail with `FIX_ASYNC_PARSE`, and only the final argument across all calls may be variadic.
 
 ```ts
 const app = new Crust("copy").args(
@@ -191,7 +188,7 @@ flags<const Defs extends readonly NamedFlagDef[]>(
 ): Crust
 ```
 
-Defines local flags from named flag definitions — values from `defineFlag(name, def)` or inline literals carrying `name`. Helper results are shallow-frozen: they retain local proof that later checked consumers reuse. Structural arrays are copied, but JSON/URL/schema payloads are not cloned or frozen. Flag names omit the `--` prefix.
+Defines local flags from named flag definitions — values from `defineFlag(name, def)` or inline literals carrying `name`. Helper results are shallow-frozen: they retain local proof that later consumers reuse. Structural arrays are copied, but JSON/URL/schema payloads are not cloned or frozen. Flag names omit the `--` prefix.
 
 ```ts
 const app = new Crust("serve").flags(
@@ -201,7 +198,7 @@ const app = new Crust("serve").flags(
 );
 ```
 
-Repeated `.flags()` calls accumulate local flags and cache their statically known spellings — the union of flag names and aliases that `LocalSpellingsOf` computes — in the `Sp` parameter. Statically known spelling collisions fail typecheck with `FIX_ALIAS_COLLISION`. Open or conditional collections, broad spellings, and unproven local parsers/defaults require `.flags(runtime(defs))`. Keep the concrete builder type when using this checked form; `AnyCrust` exposes completed applications only, not authoring methods; an open spelling namespace cannot regain trusted composition merely by adding known flags. A narrow wrapped tuple preserves independently known fields. Local helpers and attachments reject known repeated own aliases and invalid short lengths. Promise-returning parsers fail with `FIX_ASYNC_PARSE`; unproven return contracts require the checked form.
+Repeated `.flags()` calls accumulate local flags and their known spellings in `Sp`. TypeScript rejects known spelling collisions, repeated own aliases, invalid short lengths, and Promise-returning parsers. Spread dynamic collections with `.flags(...defs)`; their actual constraints are checked automatically. Keep concrete builder types when authoring: `AnyCrust` exposes completed apps only. Open namespaces stay conservative, while independently known fields retain their types. Parsers are not called during authoring and must return synchronously when invoked.
 
 Flags declared here are local to this command. Context-owned flags are the propagation mechanism for descendant parsers; downstream code receives their derived Context capability. Boolean flags support generated `--no-<spelling>` negation for the canonical name and every long alias; `noNegate: true` rejects negation with a `PARSE` error and hides the generated label from help, completion, and man output. Names and aliases beginning with `no-` are reserved.
 
@@ -217,17 +214,14 @@ const app = new Crust("serve").flags({
 
 ## `.provide(...instances)`
 
-The checked form is `.provide(runtime(instances))`. Contexts must come from `defineContext()`; attachment consumes immutable private defining data rather than overwritten public fields on structural copies. Same-name value replacement is supported on the checked path only when owned flag spellings do not collide and applicable callback-value demands remain satisfied. Opaque callback values are not runtime-decoded.
+Use `.provide(...instances)` for literal or dynamic collections. Contexts must originate from `defineContext()`; attachment consumes private defining data rather than overwritten fields on structural copies. Runtime same-name replacement requires noncolliding owned flags; statically known duplicates remain rejected where they would endanger earlier consumers. Applicable callback-value demands remain enforced by TypeScript, not runtime reflection.
 
 ```ts
 provide<const Cs extends readonly AnyContextInstance[]>(
   ...instances: KnownContextInstances<Cs> & ProvideChecks<Sp, Cs>
     & ValidateContextNames<Ctx, Cs> & ValidateContextDeps<Ctx, Cs>,
 ): Crust
-provide<const Cs extends readonly AnyContextInstance[]>(
-  instances: RuntimeInput<Cs>,
-): Crust
-// Simplified: both overloads retain callback-value demands and refine the returned provider/flag state.
+// Simplified: the signature also retains callback-value demands and refines provider/flag state.
 
 ```
 
@@ -248,7 +242,7 @@ const app = new Crust("my-cli")
   });
 ```
 
-Declared dependencies (Context `uses`, command `.use()`, Extension `uses`) are checked at composition time. Dependencies may appear in either order within one `.provide()` call; across calls, provide dependencies first. Use `.provide(runtime(instances))` and `.add(runtime(definitions))` for unproven collections or destination relations. These checked operations verify declared availability without running setup. `.use()` retains factory references but does not perform factory-shape validation. Actual missing-provider, cycle, and lifecycle checks remain at invocation.
+Declared dependencies (Context `uses`, command `.use()`, Extension `uses`) are checked at composition. Dependencies may appear in either order within one `.provide()` call; across calls, provide dependencies first. Dynamic collections use the same variadic methods. Declared availability is checked without setup. `.use()` retains factory references rather than reflecting callback values. Invocation still checks missing providers, cycles, and lifecycle misuse.
 
 A Context's top-level `flags` are installed as propagating flags on this builder and later-added descendants, without mutating the original definitions. Dependencies construct recursively on the first pull.
 
@@ -258,12 +252,11 @@ Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in re
 
 ```ts
 extend(...extensions: readonly Extension[]): Crust
-extend(extensions: RuntimeInput<readonly Extension[]>): Crust
 ```
 
-Registers application-wide Extensions. Repeated calls accumulate in registration order, with duplicate `ExtensionId`s deduplicated last-registration-wins. Statically known contributed command names and aliases must not collide (`FIX_COMMAND_COLLISION`); use `.extend(runtime(extensions))` for dynamic collections or replacements. Metadata demands remain TypeScript-owned even on this checked path. `.extend()` exists on `Crust` roots and is intentionally absent from `CommandDefinitionBuilder`.
+Registers application-wide Extensions. Calls accumulate in registration order, with duplicate `ExtensionId`s deduplicated last-registration-wins. Statically known contributed names, aliases, and owned flags must not collide. Spread genuinely dynamic collections with `.extend(...extensions)`; metadata and callback demands remain type-owned. `.extend()` is root-only, not part of `CommandDefinitionBuilder`.
 
-Extensions must originate from `defineExtension()`. Core consumes immutable private defining data through structural copies; changing public contribution fields on a spread does not redefine that Extension. The checked collection validates declared availability without constructing Contexts; contributed command recipes are checked when prepared.
+Extensions must originate from `defineExtension()`. Core consumes immutable private defining data through structural copies; changing public contribution fields on a spread does not redefine that Extension. Attachment validates declared availability without constructing Contexts; contributed command recipes are checked when prepared.
 
 ```ts
 import { help, version } from "@crustjs/extensions";
@@ -325,7 +318,7 @@ const app = new Crust("my-cli").add(
 );
 ```
 
-Statically known sibling name and alias collisions fail at `.add()` with `FIX_COMMAND_COLLISION`; alias shape violations fail at `defineCommand()` with `FIX_ALIAS_SHAPE`. Use `.add(runtime(definitions))` for dynamically assembled definitions. It rejects duplicate names/aliases among materialized siblings and checks declared availability at the materialized destination without running setup. Pending Extension commands still follow their last-write-wins policy at preparation. Materialization always checks that each recipe returns its seeded builder and does not register nested Extensions. Checked materialization also validates Context-owned flag relations against ancestors; trusted attachment proves those relations statically.
+Statically known sibling collisions fail at `.add()` with `FIX_COMMAND_COLLISION`; alias grammar fails at `defineCommand()` with `FIX_ALIAS_SHAPE`. Spread dynamic definitions with `.add(...definitions)`. Materialization checks actual sibling spellings, declared availability, inherited Context-owned flag relations, and seeded-builder identity without running setup. Pending Extension commands retain last-write-wins at preparation.
 
 A definition can add other definitions. Context providers are inherited on the materialized command path; a nested definition accesses one by declaring its factory with `.use()` and awaiting the corresponding `ctx` property.
 
@@ -341,7 +334,7 @@ The typed [`run()`](#runpath-input-io) shape of an added definition merges the C
 
 ```ts
 command<const N extends string, B extends CommandDefinitionBuilder>(
-  name: (N & CommandNameBrand<N>) | RuntimeInput<N>,
+  name: (N & CommandNameBrand<N>),
   recipe: (command: CommandDefinitionBuilder) => B,
 ): Crust
 ```
@@ -386,47 +379,45 @@ run(path, input?, io?): Promise<RunOutcome<R>>
 Invokes an application programmatically with a command path and structured input inferred from the application. Editors complete command names at each path level plus the selected command's argument and flag names. Required inputs, input value types, and the selected action's awaited return type are inferred by TypeScript.
 
 ```ts
-const stdout: string[] = [];
-const outcome = await app.run(
-  ["greet"],
-  { args: { name: "Ada" }, flags: { loud: true } },
-  {
-    stdout: (text) => stdout.push(text),
-    stderr: (text) => stdout.push(text),
-  },
-);
+const outcome = await app.run(["greet"], { args: { name: "Ada" }, flags: { loud: true } });
+if (outcome.status === "failed") throw outcome.error;
 if (outcome.status === "completed") {
-  // outcome.result is the awaited return value of the "greet" action.
-  console.log(outcome.result);
+  console.log(outcome.stdout, outcome.result);
 } else {
-  // outcome.by identifies the Extension whose preRun hook finished first.
   console.log(`Finished by ${outcome.by}`);
 }
 ```
 
-Structured values are bound directly against the selected command's argument and flag definitions — no argv is produced — and then flow through the normal schema, Context, and Command Action pipeline. `parse` runs on the supplied string exactly as for argv; choice membership is TypeScript-owned for ordinary `run()` and runtime-checked for argv and `runtime(input)`. `type: "path"` values are resolved, and number, boolean, `URL`, and JSON values are passed through unchanged. Scalar arguments and flags declared with `type: "json"` accept JSON primitives, structurally JSON-compatible object types (including named interfaces), and mutable or readonly arrays/tuples; variadic JSON arguments and multiple JSON flags require a mutable array of JSON values as repeated occurrences. `Date`, `bigint`, functions, and other non-JSON values are excluded from JSON inputs. JSON objects and arrays retain their identity; no serialization check or copy is performed. `undefined` is treated as an omitted optional input. Multiple-flag arrays preserve occurrence order; an empty array means zero occurrences and uses the default, if any. When `io` contains at least one callback, the resolved callbacks are also ambient for the full invocation: progress indicators and prompt output default to the injected `stderr` callback. Progress uses non-TTY static lines, and prompt input remains a separate `PromptIO` concern.
+Structured values bind directly against selected definitions — no argv is produced — then flow through schemas, Contexts, and the action. Observable value kinds and choices are checked automatically. Custom parsers and schemas receive their raw contract, usually strings, even when action output is a number, union, or object. Paths are normalized; JSON/URL payloads retain identity. Scalar JSON inputs accept JSON primitives, structurally compatible named interfaces, and readonly arrays/tuples; repeated JSON inputs use mutable occurrence arrays. Types exclude `Date`, `bigint`, functions, and other non-JSON inputs; this is not an arbitrary unknown-value decoder or serialization pass. `undefined` omits optional input. Empty multiple arrays mean zero occurrences and use a default if present.
 
-Supplied positional values must form a prefix in definition order, even when an earlier argument has a default. Required core variadics without defaults require nonempty tuples. Omission requires every definition alternative to be optional or have a definitely present default. Widened or conditional choice collections cannot prove supplied membership, even after local definition checking: use `runtime(input)`. Definition unions require checked supplied values even when their primitive kind agrees. A possibly enabled `noNegate` on a single definition accepts only `true` on the trusted path. Uncertain primitive kinds or occurrence layouts require checked supplied values; safe omission and unrelated known inputs remain available. Conditional flag-record types cannot prove a trusted input, even when their possible keys are disjoint. These rules apply to direct calls and exported input types.
+Supplied positionals must form a prefix, including across defaulted positions. Required core variadics without defaults need nonempty tuples. Omission requires every definition alternative to permit it. Conditional choices, primitive kinds, and occurrence layouts remain conservative; automatic checks do not manufacture a static proof. Independently known inputs remain strict. See [Runtime input](/docs/guide/types#runtime-input).
 
-Use `app.run(path, runtime(input), io?)` for typed dynamic input. Core checks it against the selected command's actual definitions, including value kinds, occurrence arrays, names, positional order, choices, and `noNegate`; the result type remains path-specific. For a dynamic path, `app.run(runtime(path), runtime(input), io?)` returns `Promise<RunOutcome<unknown>>`. Broad app holders such as `AnyCrust` require checked invocation. The wrapper itself does not validate or snapshot input, and it is not an `unknown` decoder. See [Runtime input](/docs/guide/types#runtime-input).
+A known literal contract accepts valid literals, choice unions, and honestly narrowed strings — not broad strings, wrong primitives, missing required inputs, invalid paths, or fresh-object typo keys. Standard TypeScript structural assignability allows predeclared objects to carry extra keys; Core rejects supplied unknown keys from either form before action, including top-level sections other than `args`, `flags`, and `raw`. Keys with `undefined` values are treated as omitted. Assertions do not validate input. A genuinely dynamic `AnyCrust` view supports broad paths and structured input with `RunOutcome<unknown>`; it is a completed-app view, not authoring authority or an escape hatch for static callers.
 
 Each declared own argument or flag value is read once during binding; name validation does not invoke its getter again.
 
-Actual same-ID Extension replacement can remove canonical flag keys still retained by the builder's accumulated type. Runtime identity owns this check: `run()` rejects a supplied retired key when no current definition supplies it, including affected descendant and provider-owned flags. Surviving or reintroduced keys remain valid. This does not update an earlier action's assumptions about removed flags; in particular, omitting a removed defaulted flag can still give that action `undefined`.
+Actual same-ID Extension replacement can remove canonical flag keys still retained by the builder's accumulated type. Automatic binding returns a failed outcome for a supplied retired key when no current definition supplies it, including affected descendant and provider-owned flags. Surviving or reintroduced keys remain valid. This does not update an earlier action's assumptions about removed flags; in particular, omitting a removed defaulted flag can still give that action `undefined`.
 
 The optional `raw` array reaches the Command Action unchanged as `rawArgs`, equivalent to tokens after a `--` separator in terminal input:
 
 ```ts
-await app.run(["exec"], { args: { command: "lint" }, raw: ["--fix", "src"] });
+const outcome = await app.run(["exec"], { args: { command: "lint" }, raw: ["--fix", "src"] });
+if (outcome.status === "failed") throw outcome.error;
 ```
 
-Positional values may begin with `-` or equal a subcommand name or alias; the typed path alone selects the command. `run()` rejects unknown path segments even when the nearest resolved parent has an action. By contrast, argv routing can treat unmatched tokens as positionals; see [Unknown commands](/docs/guide/subcommands#unknown-commands). `ExtensionContext.argv` contains only that path for `run()` invocations. Use `execute({ argv })` when testing raw terminal syntax.
+Positional values may begin with `-` or equal a subcommand name or alias; the typed path alone selects the command. `run()` returns a failed outcome for unknown path segments even when the nearest resolved parent has an action. By contrast, argv routing can treat unmatched tokens as positionals; see [Unknown commands](/docs/guide/subcommands#unknown-commands). `ExtensionContext.argv` contains only that path for `run()` invocations. Use `execute({ argv })` when testing raw terminal syntax.
 
-`run()` resolves to a `RunOutcome`: `{ status: "completed", result }` carries the selected Command Action's awaited return value after successful cleanup (including `undefined` from actionless or `void` actions), while `{ status: "finished", by }` identifies the Extension whose `preRun` hook finished the invocation first. It does not render errors, run Extension `onError` hooks, or change `process.exitCode`. Definition, parse, Context, Command Action, and cancellation failures are thrown unchanged unless disposal also fails, producing a combined failure. See [Error flow](/docs/guide/lifecycle#error-flow). Extension preparation happens before structured input is bound, so preparation errors can surface before dispatch.
+`run()` is quiet by default and resolves after cleanup to core `RunOutcome`: every branch carries readonly `stdout` and `stderr` strings. `completed` owns the awaited action `result` (including `undefined` for actionless/void actions), `finished` owns the finishing Extension `by`, and `failed` owns the original escaping `error`, including `undefined`, `null`, and other primitives. Preparation, binding, hooks, action, cancellation, and cleanup failures retain partial output. It never presents errors, invokes `onError`, or changes `process.exitCode`. Combined cleanup failures retain existing [disposal semantics](/docs/guide/lifecycle#error-flow). Authoring/attachment errors still throw at consumption; `snapshot()` preparation still rejects.
+
+Captured callback payloads are joined with `"\n"`, without a synthetic trailing newline. Multiline payloads are not split or trimmed. Separate streams do not promise combined chronological ordering or byte-perfect terminal transcripts. Memory is proportional to emitted output.
+
+Optional `io.stdout`/`io.stderr` sinks receive writes live, once each, after capture. Omitted channels stay quiet. A sink throw becomes an invocation failure, retaining the write that triggered it. No callbacks or actions are rerun for capture.
+
+Core threads invocation-owned IO through the ambient terminal seam: default prompt/progress output reaches captured stderr, with line buffering and non-TTY progress output. Prompt input remains separate. Explicit terminal streams take precedence. Nested/concurrent invocations have isolated capture. Direct `console`/process writes, subprocesses, files, and explicit prompt streams are not intercepted. For terminal interaction use `execute()` or [runInteractive](/docs/modules/testing#runinteractiveapp-path-input).
 
 Prepared invocations are cached once per immutable builder and shared by subsequent `run()`, `execute()`, and `snapshot()` calls on that builder. Command recipes, Extension commands and flags, and section callbacks therefore prepare once; a later fluent call returns a new builder with its own preparation.
 
-Commands and flags declared directly in `defineExtension()` participate in typed paths and inputs. Recursive Extension flags (the default) appear on root and descendant inputs; `recursive: false` appears only on the root. A widened `boolean` scope leaves descendant inputs open and requires checked invocation. Contributions hidden behind a widened `Extension` type, assembled dynamically or conditionally (including variable-length arrays), selected conditionally, or held in a variable-length list require `.extend(runtime(extensions))` and remain runtime-only and require `run(runtime(path), runtime(input))` or `execute({ argv })`. Statically known Extension command collisions — inside one `defineExtension()` tuple, with authored commands, or with other Extensions — fail typecheck with `FIX_COMMAND_COLLISION`, and statically known Extension flags colliding with a contributed command's local flags fail with `FIX_ALIAS_COLLISION`; dynamically assembled commands keep last-write-wins at prepare time — namespace Extension command names to avoid that mismatch.
+Literal Extension commands and flags participate in typed paths and inputs. Recursive flags reach descendants; `recursive: false` flags stay root-only. Widened or dynamically assembled contributions retain conservative open namespaces, with unknown action results on unknowable paths. Dynamic collections use `.extend(...extensions)` without a wrapper. Known command/flag collisions remain compile errors; supported dynamic canonical replacements retain last-write-wins at preparation.
 
 ## `.execute(options?)`
 

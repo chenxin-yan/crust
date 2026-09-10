@@ -2,7 +2,6 @@ import type { Equal, Expect } from "../tests/helpers.ts";
 import {
 	Crust,
 	defineCommand,
-	runtime,
 	type AnyCrust,
 	type ArgsDef,
 	type CommandShape,
@@ -10,7 +9,6 @@ import {
 	type InputFlags,
 	type RunInput,
 	type RunOutcome,
-	type RuntimeInput,
 	defineFlag,
 	defineArg,
 	defineExtension,
@@ -25,59 +23,45 @@ function _checkedInvocation(
 	void root.run([]);
 	// @ts-expect-error -- a fresh root has no positional definitions
 	void root.run([], { args: { unknown: "value" } });
-	// @ts-expect-error -- a broad holder cannot prove input keys or requiredness
 	void broad.run([]);
-	// @ts-expect-error -- any state cannot regain trust through the compatibility overload
 	void broad.run([], {});
-	// @ts-expect-error -- an open argument state needs checked invocation
 	void openArgs.run([], {});
-	void broad.run(runtime([]), runtime({}));
-	// @ts-expect-error -- an unproven path must also cross the checked boundary
-	void broad.run(path, runtime({}));
-	void openArgs.run([], runtime({}));
+	void broad.run([], {});
+	void broad.run(path, {});
+	void openArgs.run([], {});
 	const app = root.action(() => "known" as const);
-	const known = app.run([], runtime({}));
+	const known = app.run([], {});
 	type _known = Expect<Equal<typeof known, Promise<RunOutcome<"known">>>>;
-	const dynamic = app.run(runtime([]), runtime({}));
-	type _dynamic = Expect<Equal<typeof dynamic, Promise<RunOutcome<unknown>>>>;
+	const dynamic = app.run([], {});
+	type _dynamic = Expect<Equal<typeof dynamic, Promise<RunOutcome<"known">>>>;
 	interface Payload {
 		ok: boolean;
 	}
 	const payload: Payload = { ok: true };
 	const jsonApp = root.flags({ name: "config", type: "json" }, { name: "endpoint", type: "url" });
-	void jsonApp.run(
-		[],
-		runtime({ flags: { config: payload, endpoint: new URL("https://example.com") } }),
-	);
-	void jsonApp.run(runtime([]), runtime({ flags: { config: payload } }));
+	void jsonApp.run([], { flags: { config: payload, endpoint: new URL("https://example.com") } });
+	void jsonApp.run([], { flags: { config: payload } });
 }
 
 function _explicitConstructorArguments() {
-	// @ts-expect-error -- explicit earlier generics prevent inference of the name parameter
 	new Crust<{}>("root");
-	void new Crust<{}>(runtime("root")).run([]);
+	void new Crust<{}>("root").run([]);
 }
 
 function _widenedArgumentName(name: string) {
-	const app = new Crust("open").args(runtime([{ name, type: "string" }]));
-	// @ts-expect-error -- fixed length does not prove a widened positional name
+	const app = new Crust("open").args({ name, type: "string" });
 	void app.run([], { args: { arbitrary: "value" } });
-	void app.run([], runtime({ args: { [name]: "value" } }));
+	void app.run([], { args: { [name]: "value" } });
 }
 
 function _checkedCommandNames(name: string) {
-	// @ts-expect-error -- wrapping is explicit, not a phantom brand on the value
-	const plain: string = runtime(name);
-	// @ts-expect-error -- arbitrary objects cannot construct the private envelope
-	const forged: RuntimeInput<string> = { value: name };
-	// @ts-expect-error -- broad names need a consuming runtime boundary
+	const plain: string = name;
 	new Crust(name);
-	// @ts-expect-error -- broad helper names need a consuming runtime boundary
 	defineCommand(name, (command) => command);
 	// @ts-expect-error -- a dynamic name does not erase known alias grammar
-	defineCommand(runtime(name), { aliases: ["bad alias"] }, (command) => command);
-	defineCommand(runtime(name), { aliases: ["alternate"] }, (command) => command);
-	const app = new Crust(runtime(name))
+	defineCommand(name, { aliases: ["bad alias"] }, (command) => command);
+	defineCommand(name, { aliases: ["alternate"] }, (command) => command);
+	const app = new Crust(name)
 		.flags({ name: "verbose", type: "boolean" })
 		.args({ name: "file", type: "string", required: true })
 		.action(({ args }) => args.file);
@@ -87,14 +71,16 @@ function _checkedCommandNames(name: string) {
 	void app.run([]);
 	// @ts-expect-error -- independent known flags retain value types
 	void app.run([], { args: { file: "input" }, flags: { verbose: "true" } });
-	void [plain, forged];
+	void plain;
 }
 
 function _genericCommandName<Name extends string>(name: Name) {
 	// @ts-expect-error -- a generic string constraint does not prove canonical validity
 	defineCommand(name, (command) => command);
-	const command = defineCommand(runtime(name), (builder) => builder);
-	const renamed = command.as(runtime(name));
+	// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
+	const command = defineCommand(name, (builder) => builder);
+	// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
+	const renamed = command.as(name);
 	type _name = Expect<Equal<typeof renamed.name, Name>>;
 	return command;
 }
@@ -112,13 +98,11 @@ function _localMetadata(
 	new Crust("cli", { sections: [{ title: " ", body: "text" }] });
 	// @ts-expect-error -- titles are single line
 	defineCommand("child", { sections: [{ title: "a\nb", body: "text" }] }, (b) => b);
-	// @ts-expect-error -- broad invariant-bearing title requires a checked config
 	new Crust("cli", { sections: [{ title, body: "text" }] });
-	// @ts-expect-error -- broad aliases require checked config
 	defineCommand("child", { aliases }, (b) => b);
-	new Crust("cli", runtime({ sections: [{ title, body: "text", only }] }));
-	defineCommand("child", runtime({ aliases, sections: [{ title, body: "text" }] }), (b) => b);
-	defineCommand(runtime("child"), runtime({ aliases }), (b) => b);
+	new Crust("cli", { sections: [{ title, body: "text", only }] });
+	defineCommand("child", { aliases, sections: [{ title, body: "text" }] }, (b) => b);
+	defineCommand("child", { aliases }, (b) => b);
 }
 
 function _conditionalSectionText(cond: boolean) {
@@ -130,29 +114,27 @@ function _conditionalSectionText(cond: boolean) {
 }
 
 function _localAliasProofIsNotDestinationProof(aliases: string[]) {
-	const dynamic = defineCommand("child", runtime({ aliases }), (b) => b);
-	// @ts-expect-error -- broad local aliases need the next-stage checked destination owner
+	const dynamic = defineCommand("child", { aliases }, (b) => b);
 	new Crust("cli").add(dynamic);
-	// @ts-expect-error -- recipes cannot bypass the same destination requirement
 	defineCommand("parent", (b) => b.add(dynamic));
-	new Crust("cli").add(defineCommand("child", runtime({ aliases: ["c", "c"] }), (b) => b));
+	new Crust("cli").add(defineCommand("child", { aliases: ["c", "c"] }, (b) => b));
 }
 
 function _rootVersionOwnership() {
 	// @ts-expect-error -- versions belong to the root, not command configs
 	defineCommand("child", { version: "1" }, (b) => b);
 	// @ts-expect-error -- the checked envelope does not widen the structural config contract
-	defineCommand("child", runtime({ version: "1" }), (b) => b);
+	defineCommand("child", { version: "1" }, (b) => b);
 }
 
 function _sectionShapesStayTyped() {
 	// @ts-expect-error -- an envelope is not an unknown decoder
-	new Crust("cli", runtime({ sections: [{ title: 1, body: "text" }] }));
+	new Crust("cli", { sections: [{ title: 1, body: "text" }] });
 	// @ts-expect-error -- consumer identities are branded, including on checked configs
-	new Crust("cli", runtime({ sections: [{ title: "Notes", body: "text", only: ["unbranded"] }] }));
+	new Crust("cli", { sections: [{ title: "Notes", body: "text", only: ["unbranded"] }] });
 	new Crust("cli", {
-		// @ts-expect-error -- audiences remain mutually exclusive
 		sections: [
+			// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
 			{
 				title: "Notes",
 				body: "text",
@@ -168,14 +150,11 @@ function _overlappingFlagContributions(
 		| { name: "mode"; type: "string" }
 		| { name: "mode"; type: "string"; aliases: readonly ["m"] },
 ) {
-	// @ts-expect-error -- a structurally overlapping union still has uncertain spellings
 	new Crust("cli").flags(flag);
-	// @ts-expect-error -- recipe inference must not erase the narrower union member
 	defineCommand("child", (command) => command.flags(flag));
-	const checked = new Crust("cli").flags(runtime([flag]));
-	// @ts-expect-error -- checked union contributions do not prove a closed namespace
+	const checked = new Crust("cli").flags(flag);
 	checked.flags({ name: "next", type: "boolean" });
-	checked.flags(runtime([{ name: "next", type: "boolean" }]));
+	checked.flags({ name: "next", type: "boolean" });
 }
 
 type FlagBatch<Defs extends readonly { name: string; type: "boolean" }[] = []> =
@@ -194,33 +173,29 @@ function _largeFlagBatch(defs: FlagBatch) {
 
 import { defineContext, type NamedFlagDef } from "./index.ts";
 function _contextBoundaries(name: string, flags: readonly NamedFlagDef[]) {
-	// @ts-expect-error -- broad Context names need explicit consumption
 	defineContext(name, () => 1);
-	// @ts-expect-error -- open owned flags cannot be treated as locally proven
 	defineContext("auth", { flags }, () => 1);
 	// @ts-expect-error -- Context config closes the same local spelling proof
 	defineContext("auth", { flags: [{ name: "token", type: "string", short: "xx" }] }, () => 1);
 	const auth = defineContext(
-		runtime(name),
+		name,
 		{ flags: [{ name: "token", type: "string" }] },
 		({ flags }) => flags.token,
 	);
-	const checked = defineContext("auth", runtime({ flags }), () => 1);
+	const checked = defineContext("auth", { flags }, () => 1);
 	void [auth, checked];
 }
 
 function _providedContextCollections(
 	instances: readonly ReturnType<ReturnType<typeof defineContext>>[],
 ) {
-	// @ts-expect-error -- open provider tuples cannot become empty Context state
 	new Crust("cli").provide(...instances);
-	new Crust("cli").provide(runtime(instances));
+	new Crust("cli").provide(...instances);
 }
 
 function _commandCompositionBoundary(definitions: readonly ReturnType<typeof defineCommand>[]) {
-	// @ts-expect-error -- an open child collection cannot manufacture an empty tree
 	new Crust("cli").add(...definitions);
-	const app = new Crust("cli").flags({ name: "known", type: "number" }).add(runtime(definitions));
+	const app = new Crust("cli").flags({ name: "known", type: "number" }).add(...definitions);
 	void app.run([], { flags: { known: 1 } });
 	// @ts-expect-error -- opening child paths does not erase root flag value types
 	void app.run([], { flags: { known: "wrong" } });
@@ -249,15 +224,15 @@ function _contextProofCannotBeForged() {
 }
 
 function _checkedExtensionConfigMetadata() {
-	const requiresVersion = defineExtension<"version">()(defineExtensionId("version"), runtime({}));
+	const requiresVersion = defineExtension<"version">()(defineExtensionId("version"), {});
 	// @ts-expect-error -- checked local configs do not erase TS-owned metadata requirements
 	new Crust("missing").extend(requiresVersion);
 	new Crust("present", { version: "1" }).extend(requiresVersion);
 }
 
 function _uncertainContextIdentity(name: "a" | "b") {
-	const factory = defineContext(runtime(name), () => 1);
-	new Crust("cli").provide(runtime([factory()])).action(async ({ ctx }) => {
+	const factory = defineContext(name, () => 1);
+	new Crust("cli").provide(factory()).action(async ({ ctx }) => {
 		// @ts-expect-error -- one dynamic provider does not promise every alternative name
 		const value: number = await ctx.a;
 		void value;
@@ -265,7 +240,7 @@ function _uncertainContextIdentity(name: "a" | "b") {
 }
 
 // @ts-expect-error The typed dynamic envelope does not decode arbitrary objects or erase audience XOR.
-new Crust("app", runtime({ sections: [{ title: "Notes", body: "Body", only: [], except: [] }] }));
+new Crust("app", { sections: [{ title: "Notes", body: "Body", only: [], except: [] }] });
 
 function _uncertainRequiredFlags(defaultValue: string | undefined, required: true | undefined) {
 	const absent = new Crust("app").flags({
@@ -290,7 +265,8 @@ function _uncertainRequiredFlags(defaultValue: string | undefined, required: tru
 	// @ts-expect-error -- a possibly required flag must be supplied
 	void maybeRequired.run([], {});
 	void maybeRequired.run([], { flags: { token: "value" } });
-	void maybeRequired.run([], runtime({}));
+	// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
+	void maybeRequired.run([], {});
 	type RequiredInput = import("./types.ts").InputFlags<{
 		token: { type: "string"; required: true; default: string | undefined };
 	}>;
@@ -312,7 +288,6 @@ function _localInputHolders() {
 	// @ts-expect-error -- optional positional proof cannot erase to a fresh root
 	const _erasedArg: Crust = arg;
 	const broad: AnyCrust = flag;
-	// @ts-expect-error -- a broad completed holder cannot regain trusted invocation
 	void broad.run([]);
 	function identity<T extends AnyCrust>(app: T): T {
 		return app;
@@ -336,7 +311,8 @@ function _unprovenChoices(
 	// @ts-expect-error -- compatibility must not bypass choice membership
 	void app.run([], assigned);
 	void app.run([], { flags: { safe: true } });
-	void app.run([], runtime(assigned));
+	// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
+	void app.run([], assigned);
 	const local = importFlag(choices);
 	// @ts-expect-error -- a locally checked definition is not future input proof
 	void new Crust("app").flags(local).run([], { flags: { mode: "forbidden" } });
@@ -360,7 +336,7 @@ function _unprovenChoices(
 }
 
 function importFlag(choices: string[]) {
-	return defineFlag("mode", runtime({ type: "string", choices }));
+	return defineFlag("mode", { type: "string", choices });
 }
 
 function _possibleNoNegate(noNegate: true | undefined) {
@@ -375,7 +351,8 @@ function _possibleNoNegate(noNegate: true | undefined) {
 	const _flags: Flags = { yes: false };
 	void app.run([], { flags: { yes: true } });
 	void app.run([]);
-	void app.run([], runtime(assigned));
+	// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
+	void app.run([], assigned);
 }
 
 function _conditionalValueContracts(
@@ -389,27 +366,23 @@ function _conditionalValueContracts(
 	// @ts-expect-error -- a possible occurrence array cannot accept a scalar unchecked
 	void app.run([], { flags: { value: "text" } });
 	void app.run([]);
-	void app.run([], runtime({ flags: { value: "text" } }));
-	const arg = new Crust("app").args(
-		runtime([{ name: "value", type: "string", variadic: multiple }]),
-	);
+	// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
+	void app.run([], { flags: { value: "text" } });
+	const arg = new Crust("app").args({ name: "value", type: "string", variadic: multiple });
 	// @ts-expect-error -- possible variadic input cannot accept an unchecked scalar
 	void arg.run([], { args: { value: "text" } });
-	const parser = new Crust("app").flags(
-		runtime([defineFlag("value", runtime({ type: "string", parse }))]),
-	);
+	const parser = new Crust("app").flags(defineFlag("value", { type: "string", parse }));
 	// Safe in either parser branch: the input is always raw string.
 	void parser.run([], { flags: { value: "text" } });
 	const definition =
 		Math.random() > 0.5 ? { name: "value", type: "number" as const } : { name: "value", schema };
-	const mixed = new Crust("app").args(runtime([definition]));
-	// @ts-expect-error -- an uncertain core/schema discriminator cannot certify either raw input
+	const mixed = new Crust("app").args(definition);
 	void mixed.run([], { args: { value: 42 } });
 }
 
 function _optionalParserOutput(parse: ((raw: string) => number) | undefined) {
-	const definition = defineFlag("value", runtime({ type: "string", parse }));
-	new Crust("app").flags(runtime([definition])).action(({ flags }) => {
+	const definition = defineFlag("value", { type: "string", parse });
+	new Crust("app").flags(definition).action(({ flags }) => {
 		// @ts-expect-error -- absent parser yields string, present parser yields number
 		const wrong: string | undefined = flags.value;
 		const correct: string | number | undefined = flags.value;
@@ -423,13 +396,11 @@ function _conditionalRequiredArg(required: true | undefined) {
 }
 
 function _conditionalOutputs(variadic: true | undefined, defaultValue: string | undefined) {
-	new Crust("app")
-		.args(runtime([{ name: "value", type: "string", variadic }]))
-		.action(({ args }) => {
-			// @ts-expect-error -- checked optional variadic may produce an array
-			const _scalar: string | undefined = args.value;
-			const _correct: string | string[] | undefined = args.value;
-		});
+	new Crust("app").args({ name: "value", type: "string", variadic }).action(({ args }) => {
+		// @ts-expect-error -- checked optional variadic may produce an array
+		const _scalar: string | undefined = args.value;
+		const _correct: string | string[] | undefined = args.value;
+	});
 	new Crust("app")
 		.flags({ name: "value", type: "string", default: defaultValue })
 		.action(({ flags }) => {
@@ -440,13 +411,13 @@ function _conditionalOutputs(variadic: true | undefined, defaultValue: string | 
 
 function _conditionalDefinitions(toggle: boolean) {
 	const value = toggle ? { type: "string" as const } : { type: "number" as const };
-	const app = new Crust("app").flags(runtime([{ name: "value", ...value }]));
+	const app = new Crust("app").flags({ name: "value", ...value });
 	// @ts-expect-error -- possible primitive kinds do not certify one supplied kind
 	void app.run([], { flags: { value: 42 } });
 	const choices = toggle
 		? { type: "string" as const, choices: ["one"] as const }
 		: { type: "string" as const, choices: ["two"] as const };
-	const selected = new Crust("app").flags(runtime([{ name: "value", ...choices }]));
+	const selected = new Crust("app").flags({ name: "value", ...choices });
 	// @ts-expect-error -- a union of definitions cannot prove one choice member
 	void selected.run([], { flags: { value: "one" } });
 }
@@ -478,26 +449,25 @@ function _openInheritedFlags(recursive: boolean) {
 	const child = defineCommand("child", (c) =>
 		c.add(defineCommand("leaf", (c) => c.action(() => 1))),
 	);
-	const inherited = new Crust("app").provide(runtime(providers)).add(runtime([child]));
-	// @ts-expect-error -- an open inherited namespace cannot prove requiredness
+	const inherited = new Crust("app").provide(...providers).add(child);
 	void inherited.run(["child"]);
-	// @ts-expect-error -- uncertainty reaches grandchildren too
 	void inherited.run(["child", "leaf"]);
-	void inherited.run(["child", "leaf"], runtime({ flags: { token: "ok" } }));
+	void inherited.run(["child", "leaf"], { flags: { token: "ok" } });
 	// Ordinary providers added later do not retroactively reach materialized children.
-	void new Crust("app").add(child).provide(runtime(providers)).run(["child", "leaf"]);
+	void new Crust("app")
+		.add(child)
+		.provide(...providers)
+		.run(["child", "leaf"]);
 	const ext = defineExtension(defineExtensionId("recursive-open"), {
 		flags: [{ name: "token", type: "string", required: true, recursive }],
 	});
 	const after = new Crust("app").add(child).extend(ext);
-	const before = new Crust("app").extend(ext).add(runtime([child]));
-	// @ts-expect-error -- boolean-recursive flags leave descendant input open
+	const before = new Crust("app").extend(ext).add(child);
 	void after.run(["child", "leaf"]);
-	// @ts-expect-error -- attachment order cannot close recursive uncertainty
 	void before.run(["child", "leaf"]);
 	void after.run([], { flags: { token: "ok" } });
 	void before.run([], { flags: { token: "ok" } });
-	void after.run(["child", "leaf"], runtime({ flags: { token: "ok" } }));
+	void after.run(["child", "leaf"], { flags: { token: "ok" } });
 }
 
 function _infiniteNames(
@@ -507,76 +477,47 @@ function _infiniteNames(
 	mixed: "fixed" | `mode-${string}`,
 	branded: string & { readonly brand: unique symbol },
 ) {
-	// @ts-expect-error -- an infinite name domain is not a finite identity
 	defineFlag(name, { type: "string", required: true });
-	// @ts-expect-error -- numeric templates are also infinite
 	defineArg(numeric, { type: "string", required: true });
-	// @ts-expect-error -- templates can include entirely blank actual names
 	new Crust(blank);
-	// @ts-expect-error -- reusable commands use the same closed-name proof
 	defineCommand(name, (c) => c);
-	// @ts-expect-error -- Context names must be finite too
 	defineContext(name, () => 1);
-	// @ts-expect-error -- a finite member cannot mask an infinite union member
 	defineFlag(mixed, { type: "string" });
-	// @ts-expect-error -- branding a string is not evidence of its spelling
 	defineFlag(branded, { type: "string" });
-	const flag = defineFlag(runtime(name), { type: "string", required: true });
-	// @ts-expect-error -- local checking does not prove a destination identity
+	const flag = defineFlag(name, { type: "string", required: true });
 	new Crust("app").flags(flag);
-	const flags = new Crust("app").flags(runtime([flag]));
-	// @ts-expect-error -- checked infinite identities do not manufacture all template keys
+	const flags = new Crust("app").flags(flag);
 	void flags.run([]);
-	void flags.run([], runtime({ flags: { [name]: "ok" } }));
-	const args = new Crust("app").args(
-		runtime([defineArg(runtime(numeric), { type: "string", required: true })]),
-	);
-	// @ts-expect-error -- positional identities remain open after local checking
+	void flags.run([], { flags: { [name]: "ok" } });
+	const args = new Crust("app").args(defineArg(numeric, { type: "string", required: true }));
 	void args.run([]);
-	const command = defineCommand(runtime(name), (c) =>
+	const command = defineCommand(name, (c) =>
 		c.args({ name: "value", type: "string", required: true }),
 	);
-	// @ts-expect-error -- checked command identities still require checked destination composition
 	new Crust("app").add(command);
-	const tree = new Crust("app").add(runtime([command]));
-	// @ts-expect-error -- no possible command key has a guaranteed shape
+	const tree = new Crust("app").add(command);
 	void tree.run([name]);
 	void tree.run([]);
-	void tree.run(runtime([name]), runtime({ args: { value: "ok" } }));
-	const provider = defineContext(runtime(name), () => 1);
-	// @ts-expect-error -- checked Context names cannot become trusted provider identities
+	void tree.run([name], { args: { value: "ok" } });
+	const provider = defineContext(name, () => 1);
 	new Crust("app").provide(provider());
-	// @ts-expect-error -- nor can a factory certify availability of every possible name
 	defineCommand("consumer", (c) => c.use(provider));
-	const provided = new Crust("app").provide(runtime([provider()]));
-	// @ts-expect-error -- later trusted provider composition cannot use a fake closed namespace
+	const provided = new Crust("app").provide(provider());
 	provided.provide(defineContext("other", () => 1)());
 	void provided.run([]);
-	const alias = defineFlag("safe", runtime({ type: "string", aliases: [name] as const }));
-	// @ts-expect-error -- infinite aliases leave destination relations unproven
+	const alias = defineFlag("safe", { type: "string", aliases: [name] as const });
 	new Crust("app").flags(alias);
-	const aliased = new Crust("app").flags(runtime([alias]));
+	const aliased = new Crust("app").flags(alias);
 	void aliased.run([], { flags: { safe: "ok" } });
-	// @ts-expect-error -- known canonical value does not close its alias namespace
 	aliased.flags({ name: "other", type: "boolean" });
-	const ext = defineExtension(
-		defineExtensionId("infinite-recursive"),
-		runtime({ flags: [flag] as const }),
-	);
-	const extended = new Crust("app").add(defineCommand("child", (c) => c)).extend(runtime([ext]));
-	// @ts-expect-error -- recursive checked template flags must stay open in descendants
+	const ext = defineExtension(defineExtensionId("infinite-recursive"), { flags: [flag] as const });
+	const extended = new Crust("app").add(defineCommand("child", (c) => c)).extend(ext);
 	void extended.run(["child"]);
 	const replacement = new Crust("app")
 		.add(defineCommand("known", (c) => c))
 		.extend(
-			runtime([
-				defineExtension(
-					defineExtensionId("open-replacement"),
-					runtime({ commands: [command] as const }),
-				),
-			]),
+			defineExtension(defineExtensionId("open-replacement"), { commands: [command] as const }),
 		);
-	// @ts-expect-error -- a template-named replacement cannot promise its child shape
 	void replacement.run([name]);
 }
 
@@ -585,18 +526,12 @@ function _finiteAndConditionalNames(name: `mode-${"a" | "b"}`) {
 	const arg = defineArg(name, { type: "string", required: true });
 	const command = defineCommand(name, (c) => c);
 	const provider = defineContext(name, () => 1);
-	// @ts-expect-error -- a finite union still identifies only one actual flag
 	new Crust("app").flags(flag);
-	// @ts-expect-error -- checked finite unions stay open
-	void new Crust("app").flags(runtime([flag])).run([]);
-	// @ts-expect-error -- conditional positional names stay open
-	void new Crust("app").args(runtime([arg])).run([]);
-	// @ts-expect-error -- conditional child names must not manufacture guaranteed keys
-	void new Crust("app").add(runtime([command])).run([name]);
-	// @ts-expect-error -- even a literal alternative is not a guaranteed child
-	void new Crust("app").add(runtime([command])).run(["mode-a"]);
-	// @ts-expect-error -- conditional provider names leave subsequent relations open
-	new Crust("app").provide(runtime([provider()])).provide(defineContext("other", () => 1)());
+	void new Crust("app").flags(flag).run([]);
+	void new Crust("app").args(arg).run([]);
+	void new Crust("app").add(command).run([name]);
+	void new Crust("app").add(command).run(["mode-a"]);
+	new Crust("app").provide(provider()).provide(defineContext("other", () => 1)());
 	void new Crust("app").flags(defineFlag("mode-a", { type: "string" })).run([]);
 	void new Crust("app")
 		.flags(defineFlag("mode", { type: "string", choices: ["mode-a", "mode-b"] }))
@@ -609,7 +544,8 @@ function _finiteAndConditionalNames(name: `mode-${"a" | "b"}`) {
 function _genericNameWrapper<N extends string>(name: N) {
 	// @ts-expect-error -- a generic constraint is not local name evidence
 	defineFlag(name, { type: "string" });
-	return defineFlag(runtime(name), { type: "string" });
+	// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
+	return defineFlag(name, { type: "string" });
 }
 void new Crust("app").flags(_genericNameWrapper("known")).run([]);
 
@@ -617,10 +553,8 @@ function _conditionalArgumentTuples(condition: boolean) {
 	const a = defineArg("a", { type: "string", required: true });
 	const b = defineArg("b", { type: "string", required: true });
 	const definitions = condition ? ([a] as const) : ([b] as const);
-	const app = new Crust("app").args(runtime(definitions));
-	// @ts-expect-error -- a conditional tuple is not an empty argument namespace
+	const app = new Crust("app").args(...definitions);
 	void app.run([]);
-	// @ts-expect-error -- the actual argument name is unproven
 	void app.run([], { args: { a: "ok" } });
 	type Input = RunInput<CommandShape<typeof definitions>>;
 	// @ts-expect-error -- exported input types must not collapse disjoint required keys to empty
@@ -630,19 +564,18 @@ function _conditionalArgumentTuples(condition: boolean) {
 	// @ts-expect-error -- the public positional input contract retains conditional uncertainty
 	const args: Args = {};
 	void args;
-	void app.run([], runtime({ args: condition ? { a: "ok" } : { b: "ok" } }));
+	void app.run([], { args: condition ? { a: "ok" } : { b: "ok" } });
 	const tree = new Crust("app")
 		.flags({ name: "root", type: "string", required: true })
 		.add(defineCommand("safe", (c) => c.action(() => "safe" as const)))
-		.add(defineCommand("conditional", (c) => c.args(runtime(definitions))));
+		.add(defineCommand("conditional", (c) => c.args(...definitions)));
 	void tree.run([], { flags: { root: "ok" } });
 	// @ts-expect-error -- independent root requiredness survives the conditional child
 	void tree.run([]);
 	const safe = tree.run(["safe"]);
 	type _safe = Expect<Equal<typeof safe, Promise<RunOutcome<"safe">>>>;
-	// @ts-expect-error -- the affected child alone requires checked input
 	void tree.run(["conditional"]);
-	void tree.run(["conditional"], runtime({ args: condition ? { a: "ok" } : { b: "ok" } }));
+	void tree.run(["conditional"], { args: condition ? { a: "ok" } : { b: "ok" } });
 }
 
 function _infiniteChoiceMembers(choice: `mode-${string}`, numeric: `${number}`) {
@@ -652,8 +585,9 @@ function _infiniteChoiceMembers(choice: `mode-${string}`, numeric: `${number}`) 
 	// @ts-expect-error -- one actual choice does not prove every member of its template domain
 	void app.run([], { flags: { mode: "mode-other" } });
 	void app.run([]);
-	void app.run([], runtime({ flags: { mode: choice } }));
-	const checked = new Crust("app").flags(defineFlag("mode", runtime({ type: "string", choices })));
+	// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
+	void app.run([], { flags: { mode: choice } });
+	const checked = new Crust("app").flags(defineFlag("mode", { type: "string", choices }));
 	// @ts-expect-error -- local checking cannot prove an infinite set of supplied values
 	void checked.run([], { flags: { mode: "mode-other" } });
 	type Input = InputFlags<{
@@ -662,9 +596,7 @@ function _infiniteChoiceMembers(choice: `mode-${string}`, numeric: `${number}`) 
 	// @ts-expect-error -- assigned exported inputs use the same membership proof
 	const input: Input = { mode: "mode-other" };
 	void input;
-	// @ts-expect-error -- default membership is not proven by a template-valued tuple slot
 	defineFlag("mode", { type: "string", choices, default: "mode-other" });
-	// @ts-expect-error -- argument defaults use that same owner
 	defineArg("mode", { type: "string", choices, default: "mode-other" });
 	const args = new Crust("app").args(defineArg("mode", { type: "string", choices: [numeric] }));
 	// @ts-expect-error -- fixed-length numeric choice tuples are not finite identity evidence
@@ -679,39 +611,21 @@ function _disjointOpenProviderFlags(condition: boolean) {
 	const b = defineContext("b", { flags: [{ name: "b", type: "string", required: true }] }, () => 1);
 	const providers = condition ? [a()] : [b()];
 	const child = defineCommand("child", (c) => c);
-	const app = new Crust("app").provide(runtime(providers)).add(runtime([child]));
-	// @ts-expect-error -- disjoint possible owned flags are not an empty namespace
+	const app = new Crust("app").provide(...providers).add(child);
 	void app.run(["child"]);
-	// @ts-expect-error -- the root retains that same uncertainty
 	void app.run([]);
-	const ext = defineExtension(
-		defineExtensionId("disjoint-owned"),
-		runtime({ provides: providers }),
-	);
-	void new Crust("app")
-		.add(child)
-		.extend(runtime([ext]))
-		// @ts-expect-error -- Extension provider inheritance retains disjoint open namespaces too
-		.run(["child"]);
+	const ext = defineExtension(defineExtensionId("disjoint-owned"), { provides: providers });
+	void new Crust("app").add(child).extend(ext).run(["child"]);
 }
 
 function _nonrecursiveTemplateFlags(name: `mode-${string}`) {
-	const ext = defineExtension(
-		defineExtensionId("local-template"),
-		runtime({
-			flags: [{ name, type: "string", required: true, recursive: false }] as const,
-		}),
-	);
+	const ext = defineExtension(defineExtensionId("local-template"), {
+		flags: [{ name, type: "string", required: true, recursive: false }] as const,
+	});
 	const child = defineCommand("child", (c) => c.action(() => "safe" as const));
 	// A definitely nonrecursive contribution cannot affect either child attachment order.
-	void new Crust("app")
-		.add(child)
-		.extend(runtime([ext]))
-		.run(["child"]);
-	void new Crust("app")
-		.extend(runtime([ext]))
-		.add(runtime([child]))
-		.run(["child"]);
+	void new Crust("app").add(child).extend(ext).run(["child"]);
+	void new Crust("app").extend(ext).add(child).run(["child"]);
 }
 
 function _templateSpellingEntryPoints(
@@ -719,32 +633,23 @@ function _templateSpellingEntryPoints(
 	numeric: `${number}`,
 	branded: "mode-known" & { readonly brand: unique symbol },
 ) {
-	// @ts-expect-error -- inline authoring uses the shared finite-name proof
 	new Crust("app").flags({ name, type: "string" });
-	// @ts-expect-error -- inline positional authoring does too
 	new Crust("app").args({ name: numeric, type: "string" });
-	// @ts-expect-error -- inline command sugar cannot bypass that proof
 	new Crust("app").command(name, (c) => c);
-	// @ts-expect-error -- a branded spelling is not an enumerable identity
 	defineArg(branded, { type: "string" });
-	// @ts-expect-error -- one fixed alias slot can still carry infinitely many spellings
 	defineFlag("safe", { type: "string", aliases: [name] });
-	// @ts-expect-error -- command aliases have the same requirement
 	defineCommand("safe", { aliases: [name] }, (c) => c);
-	const command = defineCommand("safe", runtime({ aliases: [name] as const }), (c) =>
+	const command = defineCommand("safe", { aliases: [name] as const }, (c) =>
 		c.args({ name: "value", type: "string", required: true }),
 	);
-	const app = new Crust("app").add(runtime([command]));
+	const app = new Crust("app").add(command);
 	void app.run(["safe"], { args: { value: "ok" } });
 	// @ts-expect-error -- known canonical requirements remain known despite open aliases
 	void app.run(["safe"]);
-	// @ts-expect-error -- the possible alias namespace remains open
 	void app.run(["mode-other"]);
-	const inline = new Crust("app").command(runtime(name), (c) => c);
-	// @ts-expect-error -- checked inline names must not manufacture concrete paths
+	const inline = new Crust("app").command(name, (c) => c);
 	void inline.run(["mode-other"]);
 	type Flags = InputFlags<Record<`mode-${string}`, { type: "string"; required: true }>>;
-	// @ts-expect-error -- exported record inputs also need closed keys
 	const flags: Flags = {};
 	void flags;
 	type Args = InputArgs<readonly [{ name: `${number}`; type: "string"; required: true }]>;
@@ -759,19 +664,20 @@ function _uncertainPositionalKind(type: "string" | "number", condition: boolean)
 	void root.run([], { args: { value: 42 } });
 	// @ts-expect-error -- either actual kind can reject a string
 	void root.run([], { args: { value: "text" } });
-	void root.run([], runtime({ args: { value: 42 } }));
+	// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
+	void root.run([], { args: { value: 42 } });
 	const child = defineCommand("child", (c) => c.args({ name: "value", type, required: true }));
 	// @ts-expect-error -- descendants retain the same uncertain input kind
 	void new Crust("app").add(child).run(["child"], { args: { value: 42 } });
-	const arg = defineArg("value", runtime({ type, required: true }));
+	const arg = defineArg("value", { type, required: true });
 	// @ts-expect-error -- checked local definitions do not prove a future supplied kind
-	void new Crust("app").args(runtime([arg])).run([], { args: { value: 42 } });
+	void new Crust("app").args(arg).run([], { args: { value: 42 } });
 	const conditional = defineArg(
 		"value",
-		runtime(condition ? { type: "string", required: true } : { type: "number", required: true }),
+		condition ? { type: "string", required: true } : { type: "number", required: true },
 	);
 	// @ts-expect-error -- definition unions cannot distribute into permissive value unions
-	void new Crust("app").args(runtime([conditional])).run([], { args: { value: 42 } });
+	void new Crust("app").args(conditional).run([], { args: { value: 42 } });
 	const input: InputArgs<readonly [{ name: "value"; type: typeof type; required: true }]> = {
 		// @ts-expect-error -- exported inputs retain discriminator uncertainty
 		value: 42,
@@ -814,40 +720,41 @@ function _conditionalLocalHelperProof(condition: boolean) {
 	const required: { type: "string"; required: true } | { type: "string" } = condition
 		? { type: "string", required: true }
 		: { type: "string" };
-	const flag = defineFlag("mode", runtime(required));
-	const app = new Crust("app").flags(runtime([flag]));
+	const flag = defineFlag("mode", required);
+	const app = new Crust("app").flags(flag);
 	// @ts-expect-error A conditional helper cannot erase a possible requirement.
 	void app.run([]);
-	void app.run([], runtime({ flags: { mode: "value" } }));
-	const arg = defineArg("mode", runtime(required));
+	// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
+	void app.run([], { flags: { mode: "value" } });
+	const arg = defineArg("mode", required);
 	// @ts-expect-error The same proof must survive argument normalization.
-	void new Crust("app").args(runtime([arg])).run([]);
-	const child = defineCommand("child", (c) => c.flags(runtime([flag])));
+	void new Crust("app").args(arg).run([]);
+	const child = defineCommand("child", (c) => c.flags(flag));
 	// @ts-expect-error Checked descendants retain conditional helper uncertainty.
-	void new Crust("app").add(runtime([child])).run(["child"]);
+	void new Crust("app").add(child).run(["child"]);
 
 	const boolean: { type: "boolean"; noNegate: true } | { type: "boolean" } = condition
 		? { type: "boolean", noNegate: true }
 		: { type: "boolean" };
-	const toggle = defineFlag("toggle", runtime(boolean));
+	const toggle = defineFlag("toggle", boolean);
 	// @ts-expect-error The actual helper definition may prohibit false.
-	void new Crust("app").flags(runtime([toggle])).run([], { flags: { toggle: false } });
+	void new Crust("app").flags(toggle).run([], { flags: { toggle: false } });
 
 	const parsed: { type: "string"; parse: (raw: string) => number } | { type: "string" } = condition
 		? { type: "string", parse: Number }
 		: { type: "string" };
-	const value = defineFlag("value", runtime(parsed));
-	const argument = defineArg("value", runtime(parsed));
+	const value = defineFlag("value", parsed);
+	const argument = defineArg("value", parsed);
 	type ParsedDefinition =
 		| Readonly<{ name: "value"; type: "string"; parse: (raw: string) => number }>
 		| Readonly<{ name: "value"; type: "string" }>;
 	type _parsedFlag = Expect<Equal<typeof value, ParsedDefinition>>;
 	type _parsedArg = Expect<Equal<typeof argument, ParsedDefinition>>;
-	new Crust("app").flags(runtime([value])).action(({ flags }) => {
+	new Crust("app").flags(value).action(({ flags }) => {
 		// @ts-expect-error A conditional parser may return a number.
 		flags.value?.toUpperCase();
 	});
-	new Crust("app").args(runtime([argument])).action(({ args }) => {
+	new Crust("app").args(argument).action(({ args }) => {
 		// @ts-expect-error An open argument attachment cannot promise a string output.
 		args.value?.toUpperCase();
 	});
@@ -861,7 +768,7 @@ function _conditionalLocalHelperProof(condition: boolean) {
 	const defaults: { type: "string"; default: "a" } | { type: "string"; default: "b" } = condition
 		? { type: "string", default: "a" }
 		: { type: "string", default: "b" };
-	const defaulted = defineFlag("defaulted", runtime(defaults));
+	const defaulted = defineFlag("defaulted", defaults);
 	type _defaults = Expect<Equal<typeof defaulted.default, "a" | "b">>;
 	// @ts-expect-error Normalized helper fields remain readonly in every branch.
 	defaulted.default = "a";
@@ -937,7 +844,7 @@ function _conditionalHelperReadonlyCollections(condition: boolean) {
 		| { type: "string" } = condition
 		? { type: "string", multiple: true, aliases: ["m"], choices: ["a"], default: ["a"] }
 		: { type: "string" };
-	const flag = defineFlag("mode", runtime(definition));
+	const flag = defineFlag("mode", definition);
 	type _normalized = Expect<
 		Equal<
 			typeof flag,
@@ -956,6 +863,6 @@ function _conditionalHelperReadonlyCollections(condition: boolean) {
 	const json: { type: "json"; default: typeof payload } | { type: "json" } = condition
 		? { type: "json", default: payload }
 		: { type: "json" };
-	const data = defineFlag("data", runtime(json));
+	const data = defineFlag("data", json);
 	if ("default" in data) data.default.value = 2; // Payload mutability is not definition proof.
 }

@@ -4,7 +4,6 @@ import type { CommandSnapshot } from "../command/snapshot.ts";
 import type { CaughtError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
 import { toFlagsRecord } from "../parsing/spellings.ts";
-import { isRuntimeInput, runtimeInputValue, runtime, type RuntimeInput } from "../runtime.ts";
 import type {
 	CommandMeta,
 	RuntimeCommandSectionInput,
@@ -16,23 +15,16 @@ import type {
 	ParsedArgValue,
 	ParsedFlagValue,
 } from "../types.ts";
-import type { KnownDefinitionAliases } from "../validation/commands.brands.ts";
 import type { ValidateCommandDefinitions } from "../validation/commands.brands.ts";
 import type { KnownContextInstances } from "../validation/contexts.brands.ts";
 import type { DeclaredDepsOf } from "../validation/contexts.brands.ts";
 import type {
-	KnownFlagSpellings,
 	ProvideChecks,
 	ProvidedContextSpellings,
 	ValidateLocalFlagDefs,
 } from "../validation/flags.brands.ts";
-import type {
-	Awaitable,
-	IsStaticTuple,
-	IsUnion,
-	RuntimeRequiredBrand,
-} from "../validation/shared.ts";
-import { contextInstanceData, contextFactoryData, type KnownContextFactories } from "./context.ts";
+import type { Awaitable } from "../validation/shared.ts";
+import { contextInstanceData, contextFactoryData } from "./context.ts";
 import type {
 	AnyContextFactory,
 	ContextBag,
@@ -277,7 +269,7 @@ export interface ExtensionConfig<
 	readonly provides?: Provides;
 	readonly sections?: (
 		snapshot: RootCommandSnapshot<MetaKeys>,
-	) => RuntimeInput<readonly ExtensionSectionContribution[]>;
+	) => readonly ExtensionSectionContribution[];
 	readonly build?: (ctx: ExtensionBuildContext<MetaKeys>) => void | Promise<void>;
 	readonly hooks?: ExtensionHooks<Defs, ContextDependencies<Uses>, MetaKeys>;
 }
@@ -288,12 +280,12 @@ type ValidateExtensionConfig<
 	Commands extends readonly CommandDefinition<any, any, any, any>[],
 	Uses extends readonly AnyContextFactory[],
 > = {
-	readonly uses?: Uses & KnownContextFactories<Uses>;
+	readonly uses?: Uses;
 	// Pairwise like `.add()`: runtime installation is keyed by canonical name
 	// (last write wins) while typed paths union every matching shape, so a
 	// duplicate name or shared alias inside one Extension would retype run()
 	// against a command that cannot dispatch.
-	readonly commands?: KnownDefinitionAliases<Commands> & ValidateCommandDefinitions<Commands>;
+	readonly commands?: ValidateCommandDefinitions<Commands>;
 	// Provided Context-owned spellings count as existing: a declared flag
 	// colliding with the same Extension's provided flag would silently retype
 	// the Context's setup flags at parse time.
@@ -340,7 +332,7 @@ export interface Extension<
 	readonly provides?: Provides;
 	readonly sections?: (
 		snapshot: RootCommandSnapshot<MetaKeys>,
-	) => RuntimeInput<readonly ExtensionSectionContribution[]>;
+	) => readonly ExtensionSectionContribution[];
 	readonly build?: (ctx: ExtensionBuildContext<MetaKeys>) => void | Promise<void>;
 	readonly hooks?: ExtensionHooks<any, Deps, MetaKeys>;
 	readonly _deps?: Deps;
@@ -368,21 +360,6 @@ export type ExtensionsProvidesOutput<Es extends readonly AnyExtension[]> = Es ex
 				? {}
 				: Record<string, ContextValue>
 			: {};
-
-/** A trusted attachment needs a fixed collection with closed contribution namespaces. */
-export type KnownExtensions<Es extends readonly AnyExtension[]> = (IsStaticTuple<Es> extends true
-	? {}
-	: RuntimeRequiredBrand) & {
-	[I in keyof Es]: IsUnion<Es[I]> extends true
-		? RuntimeRequiredBrand
-		: ExtensionData<Es[I]> extends Extension<infer D, infer P, infer F, infer C, RootMetaKey, any>
-			? (string extends keyof D ? RuntimeRequiredBrand : {}) &
-					(IsStaticTuple<F> extends true ? {} : RuntimeRequiredBrand) &
-					(P extends KnownContextInstances<P> ? {} : RuntimeRequiredBrand) &
-					(C extends KnownDefinitionAliases<C> ? {} : RuntimeRequiredBrand) &
-					(F extends { [K in keyof F]: KnownFlagSpellings<F[K]> } ? {} : RuntimeRequiredBrand)
-			: RuntimeRequiredBrand;
-};
 
 /** A callable Extension constructor whose identity is also a section consumer. */
 export type ExtensionFactory<
@@ -436,46 +413,6 @@ export interface DefineExtensionWith<MetaKeys extends RootMetaKey> {
 		id: ExtensionId,
 		config?: ExtensionConfig<Defs, Uses, Provides, Commands, MetaKeys> &
 			ValidateExtensionConfig<Defs, Provides, Commands, Uses>,
-	): Extension<
-		ContextDependencies<Uses> &
-			ContextsDependencies<Provides> &
-			CommandDefinitionsDependencies<Commands>,
-		Provides,
-		Defs,
-		Commands,
-		MetaKeys,
-		ContextDependencies<Uses>
-	>;
-	<
-		Args extends readonly unknown[],
-		const Defs extends readonly NamedExtensionFlagDef[] = [],
-		const Uses extends readonly AnyContextFactory[] = [],
-		const Provides extends readonly AnyContextInstance[] = [],
-		const Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
-	>(
-		id: ExtensionId,
-		factory: RuntimeInput<
-			(...args: Args) => ExtensionConfig<Defs, Uses, Provides, Commands, MetaKeys>
-		>,
-	): ExtensionFactory<
-		Args,
-		ContextDependencies<Uses> &
-			ContextsDependencies<Provides> &
-			CommandDefinitionsDependencies<Commands>,
-		Provides,
-		Defs,
-		Commands,
-		MetaKeys,
-		ContextDependencies<Uses>
-	>;
-	<
-		const Defs extends readonly NamedExtensionFlagDef[] = [],
-		const Uses extends readonly AnyContextFactory[] = [],
-		const Provides extends readonly AnyContextInstance[] = [],
-		const Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
-	>(
-		id: ExtensionId,
-		config: RuntimeInput<ExtensionConfig<Defs, Uses, Provides, Commands, MetaKeys>>,
 	): Extension<
 		ContextDependencies<Uses> &
 			ContextsDependencies<Provides> &
@@ -548,74 +485,32 @@ export function defineExtension<
 	never,
 	ContextDependencies<Uses>
 >;
-export function defineExtension<
-	Args extends readonly unknown[],
-	const Defs extends readonly NamedExtensionFlagDef[] = [],
-	const Uses extends readonly AnyContextFactory[] = [],
-	const Provides extends readonly AnyContextInstance[] = [],
-	const Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
->(
-	id: ExtensionId,
-	factory: RuntimeInput<(...args: Args) => ExtensionConfig<Defs, Uses, Provides, Commands>>,
-): ExtensionFactory<
-	Args,
-	ContextDependencies<Uses> &
-		ContextsDependencies<Provides> &
-		CommandDefinitionsDependencies<Commands>,
-	Provides,
-	Defs,
-	Commands,
-	never,
-	ContextDependencies<Uses>
->;
-export function defineExtension<
-	const Defs extends readonly NamedExtensionFlagDef[] = [],
-	const Uses extends readonly AnyContextFactory[] = [],
-	const Provides extends readonly AnyContextInstance[] = [],
-	const Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
->(
-	id: ExtensionId,
-	config: RuntimeInput<ExtensionConfig<Defs, Uses, Provides, Commands>>,
-): Extension<
-	ContextDependencies<Uses> &
-		ContextsDependencies<Provides> &
-		CommandDefinitionsDependencies<Commands>,
-	Provides,
-	Defs,
-	Commands,
-	never,
-	ContextDependencies<Uses>
->;
+
 export function defineExtension(
 	id?: ExtensionId,
-	configInput:
-		| ExtensionConfig
-		| ErasedExtensionFactory
-		| RuntimeInput<ExtensionConfig | ErasedExtensionFactory> = {},
+	configInput: ExtensionConfig | ErasedExtensionFactory = {},
 ): Extension<any> | ExtensionFactory<any[], any> | DefineExtensionWith<never> {
 	// Metadata requirements are erased, so specialization needs no runtime state.
 	if (id === undefined) return defineExtension;
-	const checked = isRuntimeInput(configInput);
-	const config = checked ? runtimeInputValue(configInput) : configInput;
+	const config = configInput;
 	if (isExtensionFactory(config)) {
 		return Object.assign(
 			(...args: any[]) => {
 				const produced = config(...args);
-				return checked ? defineExtension(id, runtime(produced)) : defineExtension(id, produced);
+				return defineExtension(id, produced);
 			},
 			{ id },
 		);
 	}
-	const ownedFlags = Object.freeze(toFlagsRecord(config.flags ?? [], checked));
-	if (checked) {
-		const destination = createCommandNode(id);
-		for (const [name, def] of Object.entries(ownedFlags))
-			registerFlag(destination, name, def, "owned", true);
-		// Value replacement is name-based; the installer retains every provider's owned flags.
-		for (const instance of config.provides ?? []) {
-			for (const [name, def] of Object.entries(contextInstanceData(instance).ownedFlags)) {
-				registerFlag(destination, name, def, "owned", true);
-			}
+	const ownedFlags = Object.freeze(toFlagsRecord(config.flags ?? []));
+
+	const destination = createCommandNode(id);
+	for (const [name, def] of Object.entries(ownedFlags))
+		registerFlag(destination, name, def, "owned");
+	// Value replacement is name-based; the installer retains every provider's owned flags.
+	for (const instance of config.provides ?? []) {
+		for (const [name, def] of Object.entries(contextInstanceData(instance).ownedFlags)) {
+			registerFlag(destination, name, def, "owned");
 		}
 	}
 

@@ -1,7 +1,6 @@
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { Crust, defineCommand } from "../command/crust.ts";
 import { defineExtensionId } from "../identity.ts";
-import { runtime } from "../runtime.ts";
 import { type AnyContextFactory, defineContext } from "./context.ts";
 import { defineExtension } from "./extension.ts";
 import { defineFlag } from "./flags.ts";
@@ -50,9 +49,8 @@ function _typecheckChecksDependencyGraphsAtEveryCompositionBoundary() {
 
 	// A widened factory requires explicit checked attachment.
 	const widened: AnyContextFactory = config;
-	// @ts-expect-error -- widened factory state cannot be proven
 	new Crust("cli").provide(widened(undefined));
-	new Crust("cli").provide(runtime([widened(undefined)]));
+	new Crust("cli").provide(widened(undefined));
 
 	const invalidCompositions = () => {
 		// @ts-expect-error -- db's transitive dependency closure is unsatisfied

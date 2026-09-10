@@ -5,7 +5,6 @@ import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { defineExtensionId } from "../identity.ts";
-import { runtime } from "../runtime.ts";
 import { type CommandDefinitionBuilder, Crust, defineCommand } from "./crust.ts";
 
 describe("command definitions", () => {
@@ -98,10 +97,14 @@ describe("command definitions", () => {
 				}),
 		);
 
-		await new Crust("cli").add(definition).run(["copy"], {
-			args: { source: "from", destination: "to" },
-			flags: { verbose: true, output: "dist" },
-		});
+		expect(
+			(
+				await new Crust("cli").add(definition).run(["copy"], {
+					args: { source: "from", destination: "to" },
+					flags: { verbose: true, output: "dist" },
+				})
+			).status,
+		).not.toBe("failed");
 		expect(received).toEqual({
 			args: { source: "from", destination: "to" },
 			flags: { verbose: true, output: "dist" },
@@ -115,9 +118,10 @@ describe("command definitions", () => {
 		);
 		const app = new Crust("cli").add(outer);
 
-		await expect(app.run(["outer", "nested"], runtime({ flags: { late: true } }))).rejects.toThrow(
-			/Unknown flag/,
-		);
+		await expect(app.run(["outer", "nested"], { flags: { late: true } })).resolves.toMatchObject({
+			status: "failed",
+			error: expect.objectContaining({ message: expect.stringMatching(/Unknown flag/) }),
+		});
 	});
 
 	it("propagates Context-owned flags only to definitions added after provide()", async () => {
@@ -138,9 +142,14 @@ describe("command definitions", () => {
 		const app = new Crust("cli").add(outer);
 
 		await expect(
-			app.run(["outer", "before"], runtime({ flags: { "api-key": "secret" } })),
-		).rejects.toThrow(/Unknown flag/);
-		await app.run(["outer", "after"], { flags: { "api-key": "secret" } });
+			app.run(["outer", "before"], { flags: { "api-key": "secret" } }),
+		).resolves.toMatchObject({
+			status: "failed",
+			error: expect.objectContaining({ message: expect.stringMatching(/Unknown flag/) }),
+		});
+		expect((await app.run(["outer", "after"], { flags: { "api-key": "secret" } })).status).not.toBe(
+			"failed",
+		);
 		expect(calls).toEqual(["secret"]);
 	});
 
@@ -162,7 +171,9 @@ describe("command definitions", () => {
 		const deploy = defineCommand("deploy", (command) => command.use(db).use(logging).add(status));
 		const app = new Crust("cli").provide(logging(), db()).add(deploy);
 
-		await app.run(["deploy", "status"], { flags: { verbose: true } });
+		expect((await app.run(["deploy", "status"], { flags: { verbose: true } })).status).not.toBe(
+			"failed",
+		);
 
 		expect(calls).toEqual(["database:true"]);
 	});
@@ -180,7 +191,7 @@ describe("command definitions", () => {
 		);
 		const app = new Crust("cli").provide(logging(), db()).add(status);
 
-		await app.run(["status"]);
+		expect((await app.run(["status"])).status).not.toBe("failed");
 
 		expect(calls).toEqual(["database:true"]);
 
@@ -209,9 +220,10 @@ describe("command definitions", () => {
 		const definition = defineCommand("users", (command) => command.action(() => {}));
 		const app = new Crust("cli").flags({ name: "secret", type: "string" }).add(definition);
 
-		await expect(app.run(["users"], runtime({ flags: { secret: "value" } }))).rejects.toThrow(
-			/Unknown flag/,
-		);
+		await expect(app.run(["users"], { flags: { secret: "value" } })).resolves.toMatchObject({
+			status: "failed",
+			error: expect.objectContaining({ message: expect.stringMatching(/Unknown flag/) }),
+		});
 	});
 
 	it("rejects a recipe-provided Context flag colliding with an ancestor Context's flag", () => {
@@ -220,7 +232,8 @@ describe("command definitions", () => {
 		// Checked attachment validates the sealed recipe against this destination.
 		const sub = defineCommand("sub", (cmd) => cmd.provide(cache()).action(() => {}));
 		const app = new Crust("cli").provide(db());
-		expect(() => app.add(runtime([sub]))).toThrow(
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		expect(() => app.add(sub)).toThrow(
 			'Flag "conn" collides with existing flag "conn" on command "sub"',
 		);
 	});
@@ -232,7 +245,8 @@ describe("command definitions", () => {
 		const sub = defineCommand("sub", (cmd) =>
 			cmd.provide(db.of({ kind: "double" })).action(() => {}),
 		);
-		expect(() => new Crust("cli").provide(db()).add(runtime([sub]))).toThrow(
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		expect(() => new Crust("cli").provide(db()).add(sub)).toThrow(
 			expect.objectContaining({
 				code: "DEFINITION",
 				details: { subject: "flag", name: "conn", reason: "flag-collision" },
@@ -275,7 +289,7 @@ describe("command definitions", () => {
 				events.push("first");
 				return command;
 			});
-			const duplicate = defineCommand(runtime(name), (command) => {
+			const duplicate = defineCommand(name, (command) => {
 				events.push("duplicate");
 				return command;
 			});
@@ -284,7 +298,7 @@ describe("command definitions", () => {
 				return command;
 			});
 
-			expect(() => receiver.add(runtime([first, duplicate, later]))).toThrow(
+			expect(() => receiver.add(first, duplicate, later)).toThrow(
 				expect.objectContaining({
 					code: "DEFINITION",
 					message: `Command name "${name}" is already registered on this command`,
@@ -323,8 +337,8 @@ describe("command definitions", () => {
 		expect(Object.keys(app._node.subCommands)).toEqual(["existing", "build", "publish"]);
 		expect(app._node.subCommands).not.toBe(receiver._node.subCommands);
 
-		await app.run(["build"]);
-		await app.run(["publish"]);
+		expect((await app.run(["build"])).status).not.toBe("failed");
+		expect((await app.run(["publish"])).status).not.toBe("failed");
 
 		expect(ran).toEqual(["build", "publish"]);
 		expect(configured).toEqual(["build", "publish"]);

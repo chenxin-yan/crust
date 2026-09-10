@@ -5,7 +5,6 @@ import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
-import { runtime } from "../runtime.ts";
 import { Crust, defineCommand } from "./crust.ts";
 import { createCommandNode, registerFlag } from "./node.ts";
 import { snapshotCommand } from "./snapshot.ts";
@@ -122,7 +121,7 @@ describe("command metadata sections", () => {
 				expect(snapshot.meta.sections).toEqual([{ title: "Root guide", body: "Root body" }]);
 				expect(snapshot.subCommands.build).toBeDefined();
 				expect(snapshot.subCommands.generated).toBeDefined();
-				return runtime([
+				return [
 					{ command: [], title: "First root", body: "First body" },
 					{ command: ["build"], title: "First build", body: "Build body" },
 					{
@@ -130,12 +129,12 @@ describe("command metadata sections", () => {
 						title: "Generated guide",
 						body: "Generated body",
 					},
-				]);
+				];
 			},
 		});
 		const second = defineExtension(defineExtensionId("second"), {
 			commands: [defineCommand("generated", (command) => command)],
-			sections: () => runtime([{ command: [], title: "Second root", body: "Second body" }]),
+			sections: () => [{ command: [], title: "Second root", body: "Second body" }],
 		});
 		const app = new Crust("cli", {
 			sections: [{ title: "Root guide", body: "Root body" }],
@@ -184,15 +183,14 @@ describe("command metadata sections", () => {
 			)
 			.extend(
 				defineExtension(defineExtensionId("docs"), {
-					sections: () =>
-						runtime([
-							{
-								command: ["build"],
-								title: "Human notes",
-								body: "Human body",
-								except: [agentDocs.id, { id: terminal }],
-							},
-						]),
+					sections: () => [
+						{
+							command: ["build"],
+							title: "Human notes",
+							body: "Human body",
+							except: [agentDocs.id, { id: terminal }],
+						},
+					],
 				}),
 			);
 
@@ -214,7 +212,7 @@ describe("command metadata sections", () => {
 			const app = new Crust("cli")
 				.extend(
 					defineExtension(defineExtensionId("docs"), {
-						sections: () => runtime([{ command, title: "Notes", body: "Body" }]),
+						sections: () => [{ command, title: "Notes", body: "Body" }],
 					}),
 				)
 				.add(defineCommand("build", { aliases: ["b"] }, (builder) => builder));
@@ -239,7 +237,7 @@ describe("command metadata sections", () => {
 			[{ title: "Notes", body: "Body", except: [] }],
 		];
 		for (const sections of badSections) {
-			expect(() => new Crust("cli", runtime({ sections }))).toThrow(
+			expect(() => new Crust("cli", { sections })).toThrow(
 				expect.objectContaining({
 					code: "DEFINITION",
 					details: {
@@ -261,7 +259,7 @@ describe("command metadata sections", () => {
 		for (const contributions of badReturns) {
 			const app = new Crust("cli").extend(
 				defineExtension(defineExtensionId("docs"), {
-					sections: () => runtime(contributions),
+					sections: () => contributions,
 				}),
 			);
 			await expect(app.snapshot()).rejects.toMatchObject({
@@ -277,11 +275,12 @@ describe("command metadata sections", () => {
 
 	it("rejects CR/LF in authored and contributed section titles", async () => {
 		expect(
-			() => new Crust("cli", runtime({ sections: [{ title: "Injected\nheading", body: "Body" }] })),
+			// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+			() => new Crust("cli", { sections: [{ title: "Injected\nheading", body: "Body" }] }),
 		).toThrow(CrustError);
 		const contributed = new Crust("cli").extend(
 			defineExtension(defineExtensionId("docs"), {
-				sections: () => runtime([{ command: [], title: "Injected\rheading", body: "Body" }]),
+				sections: () => [{ command: [], title: "Injected\rheading", body: "Body" }],
 			}),
 		);
 

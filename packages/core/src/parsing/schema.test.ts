@@ -38,7 +38,7 @@ describe("Standard Schema on arg definitions", () => {
 			received = args.port;
 		});
 
-		await app.run([], { args: { port: "8080" } });
+		expect((await app.run([], { args: { port: "8080" } })).status).not.toBe("failed");
 		expect(received).toBe(8080);
 	});
 
@@ -49,16 +49,19 @@ describe("Standard Schema on arg definitions", () => {
 			received = args.port;
 		});
 
-		await app.run([], { args: { port: "8080" } });
+		expect((await app.run([], { args: { port: "8080" } })).status).not.toBe("failed");
 		expect(received).toBeUndefined();
 	});
 
 	it("schema owns requiredness: a missing arg reaches the schema as undefined", async () => {
 		const app = new Crust("cli").args({ name: "port", schema: port() }).action(() => {});
 
-		await expect(app.run([])).rejects.toMatchObject({
-			code: "VALIDATION",
-			details: { issues: [{ message: "port is required", path: "args.port" }] },
+		await expect(app.run([])).resolves.toMatchObject({
+			status: "failed",
+			error: {
+				code: "VALIDATION",
+				details: { issues: [{ message: "port is required", path: "args.port" }] },
+			},
 		});
 	});
 
@@ -74,7 +77,7 @@ describe("Standard Schema on arg definitions", () => {
 				received = args.files;
 			});
 
-		await app.run([], { args: { files: ["a.txt", "b.txt"] } });
+		expect((await app.run([], { args: { files: ["a.txt", "b.txt"] } })).status).not.toBe("failed");
 		expect(received).toEqual(["A.TXT", "B.TXT"]);
 	});
 
@@ -95,7 +98,7 @@ describe("Standard Schema on arg definitions", () => {
 			received = args.name;
 		});
 
-		await app.run([], { args: { name: "chenxin" } });
+		expect((await app.run([], { args: { name: "chenxin" } })).status).not.toBe("failed");
 		expect(received).toBe("CHENXIN");
 	});
 });
@@ -109,7 +112,7 @@ describe("Standard Schema on flag definitions", () => {
 				received = flags.port;
 			});
 
-		await app.run([], { flags: { port: "9090" } });
+		expect((await app.run([], { flags: { port: "9090" } })).status).not.toBe("failed");
 		expect(received).toBe(9090);
 	});
 
@@ -124,10 +127,10 @@ describe("Standard Schema on flag definitions", () => {
 				received = flags.loud;
 			});
 
-		await app.run([], { flags: { loud: true } });
+		expect((await app.run([], { flags: { loud: true } })).status).not.toBe("failed");
 		expect(received).toBe("on");
 
-		await app.run([]);
+		expect((await app.run([])).status).not.toBe("failed");
 		expect(received).toBe("off");
 	});
 
@@ -137,18 +140,16 @@ describe("Standard Schema on flag definitions", () => {
 			.flags({ name: "port", type: "string", schema: port() })
 			.action(() => {});
 
-		try {
-			await app.run([], { args: { input: "oops" }, flags: { port: "nope" } });
-			expect.unreachable("should have thrown");
-		} catch (error) {
-			expect(error).toBeInstanceOf(CrustError);
-			const crustError = error as CrustError<"VALIDATION">;
-			expect(crustError.is("VALIDATION")).toBe(true);
-			expect(crustError.details?.issues.map((issue) => issue.path).sort()).toEqual([
-				"args.input",
-				"flags.port",
-			]);
-		}
+		const outcome = await app.run([], { args: { input: "oops" }, flags: { port: "nope" } });
+		expect(outcome.status).toBe("failed");
+		if (outcome.status !== "failed") throw new Error("Expected failure");
+		expect(outcome.error).toBeInstanceOf(CrustError);
+		if (!(outcome.error instanceof CrustError) || !outcome.error.is("VALIDATION"))
+			throw outcome.error;
+		expect(outcome.error.details?.issues.map((issue) => issue.path).sort()).toEqual([
+			"args.input",
+			"flags.port",
+		]);
 	});
 
 	it("--no-<name> negation delivers raw false to a schema boolean flag", async () => {
@@ -160,7 +161,7 @@ describe("Standard Schema on flag definitions", () => {
 				received = flags.loud;
 			});
 
-		await app.run([], { flags: { loud: false } });
+		expect((await app.run([], { flags: { loud: false } })).status).not.toBe("failed");
 		expect(received).toBe("false");
 	});
 
@@ -175,7 +176,7 @@ describe("Standard Schema on flag definitions", () => {
 				received = flags.tag;
 			});
 
-		await app.run([], { flags: { tag: ["a", "b"] } });
+		expect((await app.run([], { flags: { tag: ["a", "b"] } })).status).not.toBe("failed");
 		expect(received).toBe("a,b");
 	});
 });
@@ -200,7 +201,7 @@ describe("schema interaction with Extensions", () => {
 				actionSaw = flags.port;
 			});
 
-		await app.run([], { flags: { port: "8080" } });
+		expect((await app.run([], { flags: { port: "8080" } })).status).not.toBe("failed");
 
 		expect(preRunSaw).toBe("8080"); // raw, pre-validation
 		expect(actionSaw).toBe(8080); // schema output
@@ -221,7 +222,7 @@ describe("schema interaction with Extensions", () => {
 			.extend(gate)
 			.action(() => {});
 
-		await app.run([], { flags: { x: "whatever" } });
+		expect((await app.run([], { flags: { x: "whatever" } })).status).not.toBe("failed");
 		expect(validated).toBe(false);
 	});
 });

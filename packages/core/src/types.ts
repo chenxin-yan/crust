@@ -106,8 +106,8 @@ interface StringArgDef<ParseOutput = unknown> extends ArgDefBase {
 	/**
 	 * Static enum of valid values for this argument.
 	 *
-	 * Checked for argv and `runtime(input)` before `parse` runs; ordinary
-	 * typed input proves membership statically. Passing a checked value outside
+	 * Checked for argv and structured invocation input before `parse` runs.
+	 * Typed input also proves membership statically. Passing a value outside
 	 * `choices` throws `CrustError("PARSE", …)` before any `parse` transform
 	 * is applied. Also consumed by shell-completion extensions
 	 * (e.g. `@crustjs/extensions`) to emit value candidates.
@@ -269,8 +269,8 @@ type StringFlagFields<Default, ParseOutput> = {
 	/**
 	 * Static enum of valid values for this flag.
 	 *
-	 * Checked for argv and `runtime(input)` before `parse` runs; ordinary
-	 * typed input proves membership statically. Passing a checked value outside
+	 * Checked for argv and structured invocation input before `parse` runs.
+	 * Typed input also proves membership statically. Passing a value outside
 	 * `choices` throws `CrustError("PARSE", …)` before any `parse` transform
 	 * is applied. Also consumed by shell-completion extensions.
 	 */
@@ -388,8 +388,10 @@ export type NamedFlagDef = FlagDef & { readonly name: string };
  * The `extends infer R extends FlagsDef` step defers evaluation so the
  * result satisfies `FlagsDef` in generic positions.
  */
+type FlagWithoutName<D> = D extends unknown ? Omit<D, "name"> : never;
+
 export type NamedFlagsRecord<Defs extends readonly NamedFlagDef[]> = {
-	[D in Defs[number] as D["name"]]: Omit<D, "name">;
+	[K in Defs[number]["name"]]: FlagWithoutName<Extract<Defs[number], { name: K }>>;
 } extends infer R extends FlagsDef
 	? R
 	: never;
@@ -649,18 +651,23 @@ type RequiredFlagNames<F extends FlagsDef> = {
 }[keyof F];
 
 /** Flag values accepted by typed programmatic invocation before parsing/validation. */
+type KnownFlags<F extends FlagsDef> = { [K in keyof F as string extends K ? never : K]: F[K] };
+
 export type InputFlags<F extends FlagsDef> =
 	IsUnion<F> extends true
 		? never
-		: IsClosedName<keyof F & string> extends false
-			? never
-			: Simplify<
-					{
-						[K in RequiredFlagNames<F>]-?: InputFlagValue<F[K]>;
-					} & {
-						[K in Exclude<keyof F, RequiredFlagNames<F>>]?: InputFlagValue<F[K]>;
-					}
-				>;
+		: Simplify<
+				{
+					[K in RequiredFlagNames<KnownFlags<F>>]-?: InputFlagValue<KnownFlags<F>[K]>;
+				} & {
+					[K in Exclude<keyof KnownFlags<F>, RequiredFlagNames<KnownFlags<F>>>]?: InputFlagValue<
+						KnownFlags<F>[K]
+					>;
+				}
+			> &
+				(string extends keyof F
+					? NonNullable<import("./parsing/parser.ts").RunInputPayload["flags"]>
+					: {});
 
 // ────────────────────────────────────────────────────────────────────────────
 // CommandMeta — Command metadata

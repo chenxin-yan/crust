@@ -86,7 +86,14 @@ function lineBufferedOutput(io: AmbientTerminalIO): TerminalOutput {
 export function withAmbientTerminalIO<T>(io: AmbientTerminalIO, fn: () => T): T {
 	const current = storage.getStore();
 	return withTerminalIO(
-		{ input: current?.input, output: current?.output ?? lineBufferedOutput(io) },
+		{
+			input: current?.input,
+			// Replace an enclosing invocation's bridge, but preserve explicitly supplied terminal streams.
+			output:
+				current?.output && !ambientCallbacks.has(current.output)
+					? current.output
+					: lineBufferedOutput(io),
+		},
 		fn,
 	);
 }

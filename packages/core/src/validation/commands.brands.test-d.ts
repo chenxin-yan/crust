@@ -73,9 +73,7 @@ type Def<Name extends string, Aliases extends readonly string[] = readonly []> =
 		>
 	>;
 	type _clean = Expect<Equal<Extract<keyof Clean[0], "FIX_COMMAND_COLLISION">, never>>;
-	type _widened = Expect<
-		Equal<Extract<keyof Widened[0], "FIX_COMMAND_COLLISION">, "FIX_COMMAND_COLLISION">
-	>;
+	type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_COMMAND_COLLISION">, never>>;
 }
 
 {

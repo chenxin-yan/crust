@@ -59,9 +59,9 @@ export interface CrustErrorDetailsMap {
  *
  * @example
  * ```ts
- * try {
- *   await app.run(path, input);
- * } catch (err) {
+ * const outcome = await app.run(path, input);
+ * if (outcome.status === "failed") {
+ *   const err = outcome.error;
  *   if (err instanceof CrustError) {
  *     switch (err.code) {
  *       case "VALIDATION":
@@ -99,9 +99,9 @@ export interface CrustErrorJson<C extends CrustErrorCode> {
  * ```ts
  * import { CrustError } from "@crustjs/core";
  *
- * try {
- *   await app.run(["deploy"], { args: { target: "prod" } });
- * } catch (err) {
+ * const outcome = await app.run(["deploy"], { args: { target: "prod" } });
+ * if (outcome.status === "failed") {
+ *   const err = outcome.error;
  *   if (err instanceof CrustError) {
  *     console.error(`[${err.code}] ${err.message}`);
  *   }

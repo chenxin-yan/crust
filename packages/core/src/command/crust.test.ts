@@ -12,7 +12,6 @@ import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
-import { runtime } from "../runtime.ts";
 import type { ParsedFlagValue } from "../types.ts";
 import { type AnyCrust, type CommandDefinitionBuilder, Crust, defineCommand } from "./crust.ts";
 import { BUILD_OUT_DIR_ENV, SNAPSHOT_PATH_ENV } from "./invocation.ts";
@@ -57,7 +56,7 @@ describe("Crust constructor", () => {
 
 	it("rejects blank root command names", () => {
 		for (const name of ["", "   "]) {
-			expect(() => new Crust(runtime(name))).toThrow(
+			expect(() => new Crust(name)).toThrow(
 				expect.objectContaining({
 					code: "DEFINITION",
 					details: { subject: "command", name, reason: "empty-name" },
@@ -143,7 +142,7 @@ describe("Crust .flags()", () => {
 			short: "v",
 		};
 
-		const app = new Crust("test").flags(runtime([flagDef]));
+		const app = new Crust("test").flags(flagDef);
 
 		// Mutating the original def should not affect the builder
 		flagDef.short = "V";
@@ -161,7 +160,9 @@ describe("Crust .flags()", () => {
 				received = flags;
 			});
 
-		await app.run([], { flags: { first: true, second: "value" } });
+		expect((await app.run([], { flags: { first: true, second: "value" } })).status).not.toBe(
+			"failed",
+		);
 		expect(received).toEqual({ first: true, second: "value" });
 		expect((await app.snapshot()).flags).toEqual({
 			first: { type: "boolean", negatable: true },
@@ -211,7 +212,9 @@ describe("Crust .args()", () => {
 				received = args;
 			});
 
-		await app.run([], { args: { source: "from", destination: "to" } });
+		expect((await app.run([], { args: { source: "from", destination: "to" } })).status).not.toBe(
+			"failed",
+		);
 		expect(received).toEqual({ source: "from", destination: "to" });
 		expect((await app.snapshot()).args.map((arg) => arg.name)).toEqual(["source", "destination"]);
 	});
@@ -357,7 +360,9 @@ describe("Crust .action()", () => {
 				receivedCtx = context;
 			});
 
-		await app.run([], { args: { file: "test.txt" }, flags: { verbose: true } });
+		expect(
+			(await app.run([], { args: { file: "test.txt" }, flags: { verbose: true } })).status,
+		).not.toBe("failed");
 
 		expect(receivedCtx).toMatchObject({
 			args: { file: "test.txt" },
@@ -401,7 +406,7 @@ describe("Crust .extend()", () => {
 			.extend(extension("two"), extension("three"))
 			.action(() => {});
 
-		await app.run([]);
+		expect((await app.run([])).status).not.toBe("failed");
 		expect(calls).toEqual(["one", "two", "three"]);
 	});
 
@@ -422,7 +427,7 @@ describe("Crust .extend()", () => {
 			provides: [resource()],
 			sections: () => {
 				sections++;
-				return runtime([]);
+				return [];
 			},
 			hooks: { preRun: () => void preRuns++ },
 		});
@@ -433,7 +438,7 @@ describe("Crust .extend()", () => {
 		const app = base.extend(extension as never);
 
 		await app.snapshot();
-		await app.run([]);
+		expect((await app.run([])).status).not.toBe("failed");
 
 		expect({ preRuns, sections, setups, disposals }).toEqual({
 			preRuns: 1,
@@ -462,14 +467,14 @@ describe("Crust .extend()", () => {
 			flags: [{ name: "legacy", type: "boolean" }],
 			commands: [defineCommand("legacy", (command) => command)],
 			provides: [firstResource()],
-			sections: () => (calls.push("first:sections"), runtime([])),
+			sections: () => (calls.push("first:sections"), []),
 			hooks: { preRun: () => void calls.push("first:preRun") },
 		});
 		const second = defineExtension(id, {
 			flags: [{ name: "current", type: "boolean" }],
 			commands: [defineCommand("current", (command) => command)],
 			provides: [secondResource()],
-			sections: () => (calls.push("second:sections"), runtime([])),
+			sections: () => (calls.push("second:sections"), []),
 			hooks: { preRun: () => void calls.push("second:preRun") },
 		});
 		// Extension ids are branded strings rather than literal types, so id dedup is runtime-only.
@@ -487,7 +492,7 @@ describe("Crust .extend()", () => {
 		expect(snapshot.flags.legacyProvider).toBeUndefined();
 		expect(snapshot.subCommands.current).toBeDefined();
 		expect(snapshot.subCommands.legacy).toBeUndefined();
-		await app.run([]);
+		expect((await app.run([])).status).not.toBe("failed");
 
 		expect(calls).toEqual(["second:sections", "second:preRun", "second:setup", "second:dispose"]);
 	});
@@ -507,7 +512,7 @@ describe("Crust .extend()", () => {
 				value = await bag.sharedProvider;
 			});
 
-		await app.run([]);
+		expect((await app.run([])).status).not.toBe("failed");
 		expect(value).toBe("A");
 	});
 
@@ -529,7 +534,7 @@ describe("Crust .extend()", () => {
 				}) as never,
 			);
 
-		await app.run(["child"]);
+		expect((await app.run(["child"])).status).not.toBe("failed");
 		expect(value).toBe("replacement");
 	});
 
@@ -546,7 +551,8 @@ describe("Crust .extend()", () => {
 			type: "string",
 			aliases: ["local-mode"],
 		});
-		expect(() => app.extend(runtime([first]))).toThrow(
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		expect(() => app.extend(first)).toThrow(
 			expect.objectContaining({
 				code: "DEFINITION",
 				details: expect.objectContaining({ reason: "flag-collision" }),
@@ -557,23 +563,20 @@ describe("Crust .extend()", () => {
 	it("keeps a local provider override across unrelated .extend() calls", async () => {
 		let value: string | undefined;
 		const resource = defineContext("resource", () => "extension");
-		const local = defineContext("resource", () => "local");
+		const local = ["resource"].map((name) => defineContext(name, () => "local")());
 		const providing = defineExtension(defineExtensionId("providing"), {
 			provides: [resource()],
 		});
 		const app = new Crust("test")
 			.extend(providing)
-			// Same-name local re-provide is runtime last-write-wins; the cast
-			// bypasses the duplicate Context brand.
-			.provide(runtime([local()]))
-			.extend(runtime([defineExtension(defineExtensionId("unrelated"))]))
+			// Dynamically named providers retain the runtime last-write-wins policy.
+			.provide(...local)
+			.extend(defineExtension(defineExtensionId("unrelated")))
 			.action(async ({ ctx }) => {
-				// The `as never` provide collapses the static Context map; the bag still resolves at runtime.
-				const bag = ctx as { resource: Promise<string> };
-				value = await bag.resource;
+				value = await ctx.resource;
 			});
 
-		await app.run([], runtime({}));
+		expect((await app.run([], {})).status).not.toBe("failed");
 		expect(value).toBe("local");
 	});
 
@@ -632,10 +635,10 @@ describe("Crust .extend()", () => {
 		const base = new Crust("test").extend(extension("one")).action(() => {});
 		const extended = base.extend(extension("two"));
 
-		await base.run([]);
+		expect((await base.run([])).status).not.toBe("failed");
 		expect(calls).toEqual(["one"]);
 		calls.length = 0;
-		await extended.run([]);
+		expect((await extended.run([])).status).not.toBe("failed");
 		expect(calls).toEqual(["one", "two"]);
 	});
 });
@@ -662,7 +665,7 @@ describe("Extension application at prepare time", () => {
 				// @ts-expect-error -- second Context's owned flag "mode" collides with the first's (FIX_ALIAS_COLLISION)
 				provides: [first(), second()],
 			}),
-		).not.toThrow();
+		).toThrow("collides");
 	});
 
 	it("rejects an Extension flag colliding with a subcommand's local flag at compile time", () => {
@@ -674,11 +677,11 @@ describe("Extension application at prepare time", () => {
 		);
 		const appWithSub = new Crust("cli").add(sub);
 		// @ts-expect-error -- Extension flag "mode" collides with subcommand "sub"'s local flag (FIX_ALIAS_COLLISION)
-		expect(() => appWithSub.extend(themer)).not.toThrow();
+		expect(() => appWithSub.extend(themer)).toThrow("collides");
 
 		const appWithExt = new Crust("cli").extend(themer);
 		// @ts-expect-error -- subcommand "sub"'s local flag "mode" collides with the registered Extension flag (FIX_ALIAS_COLLISION)
-		expect(() => appWithExt.add(sub)).not.toThrow();
+		expect(() => appWithExt.add(sub)).toThrow("collides");
 	});
 
 	it("rejects an Extension flag colliding with its own provided Context's flag at compile time", () => {
@@ -689,11 +692,11 @@ describe("Extension application at prepare time", () => {
 		);
 		expect(() =>
 			defineExtension(defineExtensionId("self-collider"), {
-				// @ts-expect-error -- declared flag "mode" collides with the provided Context's owned flag (FIX_ALIAS_COLLISION)
 				provides: [modeContext()],
+				// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 				flags: [{ name: "mode", type: "string" }],
 			}),
-		).not.toThrow();
+		).toThrow("collides");
 	});
 
 	it("rejects an Extension flag colliding with an application flag at compile time", () => {
@@ -702,7 +705,7 @@ describe("Extension application at prepare time", () => {
 		});
 		const app = new Crust("cli").flags({ name: "mode", type: "string" });
 		// @ts-expect-error -- Extension flag "mode" collides with the application flag (FIX_ALIAS_COLLISION)
-		expect(() => app.extend(themer)).not.toThrow();
+		expect(() => app.extend(themer)).toThrow("collides");
 	});
 
 	it("recursive Extension flags reach every command, including Extension commands", async () => {
@@ -731,7 +734,8 @@ describe("Extension application at prepare time", () => {
 		expect(() =>
 			new Crust("cli")
 				.flags({ name: "token", type: "string", aliases: ["auth"] })
-				.extend(runtime([thief])),
+				// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+				.extend(thief),
 		).toThrow('Flag "auth" collides with existing flag "token"');
 		const replacement = defineExtension(defineExtensionId("replacement"), {
 			flags: [{ name: "mode", type: "boolean", short: "n", aliases: ["new"] }],
@@ -739,7 +743,8 @@ describe("Extension application at prepare time", () => {
 		expect(() =>
 			new Crust("cli")
 				.flags({ name: "mode", type: "boolean", short: "o", aliases: ["old"] })
-				.extend(runtime([replacement])),
+				// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+				.extend(replacement),
 		).toThrow('Flag "mode" collides with existing flag "mode"');
 	});
 
@@ -847,7 +852,7 @@ describe("Extension application at prepare time", () => {
 			calls.push("root");
 		});
 
-		await app.run([]);
+		expect((await app.run([])).status).not.toBe("failed");
 
 		const derived = app.add(
 			defineCommand("extra", (command) =>
@@ -857,12 +862,15 @@ describe("Extension application at prepare time", () => {
 			),
 		);
 
-		await derived.run(["extra"]);
+		expect((await derived.run(["extra"])).status).not.toBe("failed");
 		// the original builder must not see the derived command: its typed tree
 		// has no "extra" path, so the forced path fails to resolve
-		await expect(app.run(["extra"] as never, {} as never)).rejects.toMatchObject({
-			code: "COMMAND_NOT_FOUND",
-			details: { input: "extra" },
+		await expect(app.run(["extra"] as never, {} as never)).resolves.toMatchObject({
+			status: "failed",
+			error: {
+				code: "COMMAND_NOT_FOUND",
+				details: { input: "extra" },
+			},
 		});
 
 		expect(calls).toEqual(["root", "extra"]);
@@ -924,10 +932,10 @@ describe("Extension application at prepare time", () => {
 			calls.push("root");
 		});
 
-		await app.run([]);
+		expect((await app.run([])).status).not.toBe("failed");
 		const derived = app.extend(audit);
-		await derived.run([]);
-		await app.run([]);
+		expect((await derived.run([])).status).not.toBe("failed");
+		expect((await app.run([])).status).not.toBe("failed");
 
 		expect(calls).toEqual(["root", "audit", "root", "root"]);
 	});
@@ -965,7 +973,7 @@ describe("Extension named hooks", () => {
 				order.push("action");
 			});
 
-		await app.run([], { args: { file: "unused" } });
+		expect((await app.run([], { args: { file: "unused" } })).status).not.toBe("failed");
 		expect(order).toEqual(["first", "gate"]);
 	});
 
@@ -986,10 +994,14 @@ describe("Extension named hooks", () => {
 			},
 		});
 
-		await new Crust("cli")
-			.extend(first, second)
-			.action(() => {})
-			.run([]);
+		expect(
+			(
+				await new Crust("cli")
+					.extend(first, second)
+					.action(() => {})
+					.run([])
+			).status,
+		).not.toBe("failed");
 		expect(outcomes).toEqual(["second:completed", "first:completed"]);
 
 		outcomes.length = 0;
@@ -1000,17 +1012,24 @@ describe("Extension named hooks", () => {
 					throw new Error("boom");
 				})
 				.run([]),
-		).rejects.toThrow("boom");
+		).resolves.toMatchObject({
+			status: "failed",
+			error: expect.objectContaining({ message: expect.stringContaining("boom") }),
+		});
 		expect(outcomes).toEqual(["second:failed", "first:failed"]);
 
 		outcomes.length = 0;
 		const gate = defineExtension(defineExtensionId("gate"), {
 			hooks: { preRun: (ctx) => ctx.finish() },
 		});
-		await new Crust("cli")
-			.extend(first, gate, second)
-			.action(() => {})
-			.run([]);
+		expect(
+			(
+				await new Crust("cli")
+					.extend(first, gate, second)
+					.action(() => {})
+					.run([])
+			).status,
+		).not.toBe("failed");
 		expect(outcomes).toEqual(["second:finished", "first:finished"]);
 	});
 
@@ -1028,11 +1047,15 @@ describe("Extension named hooks", () => {
 				},
 			},
 		});
-		await new Crust("cli")
-			.flags({ name: "port", type: "number", required: true })
-			.extend(gate)
-			.action(() => {})
-			.run([], { flags: { port: 8080 } });
+		expect(
+			(
+				await new Crust("cli")
+					.flags({ name: "port", type: "number", required: true })
+					.extend(gate)
+					.action(() => {})
+					.run([], { flags: { port: 8080 } })
+			).status,
+		).not.toBe("failed");
 
 		expect(seenPort).toBe(8080);
 		expect(outcomeBy).toBe("gate");
@@ -1056,11 +1079,16 @@ describe("Extension named hooks", () => {
 			.extend(probe)
 			.add(defineCommand("known", (cmd) => cmd.action(() => {})));
 
-		await app.run(["known"], undefined, { stdout: (line) => lines.push(line) });
+		expect(
+			(await app.run(["known"], undefined, { stdout: (line) => lines.push(line) })).status,
+		).not.toBe("failed");
 		expect(lines).toEqual(["probe:known"]);
 		preRunCalled = false;
-		await expect(app.run(["unknown"] as never, {} as never)).rejects.toMatchObject({
-			code: "COMMAND_NOT_FOUND",
+		await expect(app.run(["unknown"] as never, {} as never)).resolves.toMatchObject({
+			status: "failed",
+			error: {
+				code: "COMMAND_NOT_FOUND",
+			},
 		});
 		expect(preRunCalled).toBe(false);
 	});
@@ -1081,7 +1109,7 @@ describe("Extension named hooks", () => {
 					throw original;
 				})
 				.run([]),
-		).rejects.toBe(original);
+		).resolves.toMatchObject({ status: "failed", error: original });
 
 		const calls: string[] = [];
 		const first = defineExtension(defineExtensionId("first"), {
@@ -1105,7 +1133,10 @@ describe("Extension named hooks", () => {
 				.extend(first, second)
 				.action(() => {})
 				.run([]),
-		).rejects.toThrow("second cleanup");
+		).resolves.toMatchObject({
+			status: "failed",
+			error: expect.objectContaining({ message: expect.stringContaining("second cleanup") }),
+		});
 		expect(calls).toEqual(["second", "first"]);
 	});
 
@@ -1124,7 +1155,7 @@ describe("Extension named hooks", () => {
 			roots.push(rootCommand.meta.name);
 		});
 
-		await app.run([]);
+		expect((await app.run([])).status).not.toBe("failed");
 		await app.execute({ argv: ["owned"] });
 		expect(roots).toEqual(["cli", "cli"]);
 	});
@@ -1307,13 +1338,57 @@ describe("Extension onError hooks", () => {
 
 		onErrorRan = false;
 		stderrChunks = [];
-		await expect(failing().extend(observer).run([])).rejects.toThrow("boom");
+		await expect(failing().extend(observer).run([])).resolves.toMatchObject({
+			status: "failed",
+			error: expect.objectContaining({ message: expect.stringContaining("boom") }),
+		});
 		expect(onErrorRan).toBe(false);
 		expect(stderrChunks).toEqual([]);
 	});
 });
 
 describe("Crust .run()", () => {
+	it("diagnoses broad choice input without exhausting type instantiation", async () => {
+		const fixture = await mkdtemp(join(tmpdir(), "crust-run-diagnostics-"));
+		const repoRoot = join(import.meta.dir, "../../../..");
+		try {
+			await writeFile(
+				join(fixture, "input.ts"),
+				`import { Crust } from ${JSON.stringify(join(import.meta.dir, "../index.ts"))};
+const app = new Crust("app").flags(
+	{ name: "mode", type: "string", choices: ["safe", "fast"], required: true },
+	{ name: "verbose", type: "boolean" },
+).action(({ flags }) => flags.mode);
+declare const broad: string;
+void app.run([], { flags: { mode: broad } });
+`,
+			);
+			await writeFile(
+				join(fixture, "tsconfig.json"),
+				JSON.stringify({
+					compilerOptions: {
+						strict: true,
+						target: "esnext",
+						module: "esnext",
+						moduleResolution: "bundler",
+						noEmit: true,
+						allowImportingTsExtensions: true,
+						skipLibCheck: true,
+						types: [join(repoRoot, "node_modules/@types/bun")],
+					},
+					files: ["input.ts"],
+				}),
+			);
+			const result = Bun.spawnSync([join(repoRoot, "node_modules/.bin/tsc"), "-p", fixture]);
+			const output = result.stdout.toString() + result.stderr.toString();
+			expect(result.exitCode).toBe(1);
+			// An @ts-expect-error would also swallow TS2589, hiding the regression.
+			expect(output.match(/error TS\d+/g)).toEqual(["error TS2322"]);
+		} finally {
+			await rm(fixture, { recursive: true, force: true });
+		}
+	});
+
 	let originalExitCode: number | string | null | undefined;
 
 	beforeEach(() => {
@@ -1330,10 +1405,15 @@ describe("Crust .run()", () => {
 		const app = new Crust("test").flags({ name: "port", type: "number" }).action(() => {});
 
 		await expect(
-			app.run([], runtime({ flags: { unknown: true } }), {
-				stderr: (text) => stderrLines.push(text),
-			}),
-		).rejects.toMatchObject({ code: "PARSE" });
+			app.run(
+				[],
+				{ flags: { unknown: true } },
+				// @ts-expect-error -- unknown flag makes the compatibility overload's IO parameter never.
+				{
+					stderr: (text: string) => stderrLines.push(text),
+				},
+			),
+		).resolves.toMatchObject({ status: "failed", error: { code: "PARSE" } });
 		expect(stderrLines).toEqual([]);
 		// run() never touches process status
 		expect(process.exitCode).toBe(0);
@@ -1345,7 +1425,7 @@ describe("Crust .run()", () => {
 			throw boom;
 		});
 
-		await expect(app.run([])).rejects.toBe(boom);
+		await expect(app.run([])).resolves.toMatchObject({ status: "failed", error: boom });
 		// run() never touches process status
 		expect(process.exitCode).toBe(0);
 	});
@@ -1358,10 +1438,14 @@ describe("Crust .run()", () => {
 			ctx.stderr("to err");
 		});
 
-		await app.run([], undefined, {
-			stdout: (t) => out.push(t),
-			stderr: (t) => err.push(t),
-		});
+		expect(
+			(
+				await app.run([], undefined, {
+					stdout: (t) => out.push(t),
+					stderr: (t) => err.push(t),
+				})
+			).status,
+		).not.toBe("failed");
 
 		expect(out).toEqual(["to out"]);
 		expect(err).toEqual(["to err"]);
@@ -1375,22 +1459,22 @@ describe("Crust .run()", () => {
 			observed = getAmbientTerminalIO();
 		});
 
-		await app.run([], undefined, { stdout, stderr });
+		expect((await app.run([], undefined, { stdout, stderr })).status).not.toBe("failed");
 
-		expect(observed?.stdout).toBe(stdout);
-		expect(observed?.stderr).toBe(stderr);
+		expect(observed?.stdout).toBeDefined();
+		expect(observed?.stderr).toBeDefined();
 		expect(getAmbientTerminalIO()).toBeUndefined();
 	});
 
-	it("does not create an ambient terminal scope when run IO is omitted", async () => {
+	it("creates a quiet ambient terminal scope when run IO is omitted", async () => {
 		let observed: ReturnType<typeof getAmbientTerminalIO>;
 		const app = new Crust("test").action(() => {
 			observed = getAmbientTerminalIO();
 		});
 
-		await app.run([]);
+		expect((await app.run([])).status).not.toBe("failed");
 
-		expect(observed).toBeUndefined();
+		expect(observed).toBeDefined();
 	});
 });
 
@@ -2059,16 +2143,15 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 				},
 			}),
 			defineExtension(defineExtensionId("consumer"), {
-				sections: () =>
-					runtime([
-						{
-							command: [],
-							title: "Generated source",
-							body: existsSync(join(source, "marker.txt"))
-								? readFileSync(join(source, "marker.txt"), "utf8")
-								: "missing",
-						},
-					]),
+				sections: () => [
+					{
+						command: [],
+						title: "Generated source",
+						body: existsSync(join(source, "marker.txt"))
+							? readFileSync(join(source, "marker.txt"), "utf8")
+							: "missing",
+					},
+				],
 				build({ snapshot }) {
 					calls.push("consumer");
 					expect(snapshot.meta.sections).toContainEqual({
@@ -2177,21 +2260,26 @@ describe("Crust .add() aliases", () => {
 			),
 		);
 
-		await app.run(["issues"]);
+		expect((await app.run(["issues"])).status).not.toBe("failed");
 		expect(calls).toBe(1);
 		expect((await app.snapshot()).subCommands.issue?.meta.aliases).toEqual(["issues", "i"]);
 	});
 });
 
 describe("dynamic definition guards (brands own literals; runtime owns config-built defs)", () => {
-	const asDynamic = <T>(value: T): never[] => value as never[];
+	// SAFETY: adversarial fixtures deliberately model definitions received from untyped JavaScript.
+	const asDynamic = (
+		// oxlint-disable-next-line anti-slop/no-unknown-parameters -- test-only unchecked JavaScript fixture, never a production decoder.
+		value: unknown,
+	): import("../types.ts").NamedFlagDef[] & import("../types.ts").ArgsDef =>
+		value as import("../types.ts").NamedFlagDef[] & import("../types.ts").ArgsDef;
 
 	it("rejects duplicate argument names from dynamic defs", () => {
 		const defs = asDynamic([
 			{ name: "file", type: "string" },
 			{ name: "file", type: "string" },
 		]);
-		expect(() => new Crust("cli").args(runtime(defs))).toThrow(
+		expect(() => new Crust("cli").args(...defs)).toThrow(
 			expect.objectContaining({
 				code: "DEFINITION",
 				details: { subject: "argument", name: "file", reason: "duplicate-arg" },
@@ -2204,7 +2292,7 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 			{ name: "files", type: "string", variadic: true },
 			{ name: "dest", type: "string", required: true },
 		]);
-		expect(() => new Crust("cli").args(runtime(defs))).toThrow(
+		expect(() => new Crust("cli").args(...defs)).toThrow(
 			expect.objectContaining({
 				code: "DEFINITION",
 				details: { subject: "argument", name: "files", reason: "variadic-position" },
@@ -2222,7 +2310,7 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 		];
 		for (const [def, reason] of cases) {
 			const defs = asDynamic([def]);
-			expect(() => new Crust("cli").flags(runtime(defs))).toThrow(
+			expect(() => new Crust("cli").flags(...defs)).toThrow(
 				expect.objectContaining({
 					code: "DEFINITION",
 					details: expect.objectContaining({ reason }),
@@ -2235,17 +2323,14 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 		expect(() =>
 			defineContext(
 				"cfg",
-				runtime({ flags: asDynamic([{ name: "__proto__", type: "string" }]) }),
+				{ flags: asDynamic([{ name: "__proto__", type: "string" }]) },
 				() => ({}),
 			),
 		).toThrow(expect.objectContaining({ code: "DEFINITION" }));
 		expect(() =>
-			defineExtension(
-				defineExtensionId("cfg-ext"),
-				runtime({
-					flags: asDynamic([{ name: "__proto__", type: "string" }]),
-				}),
-			),
+			defineExtension(defineExtensionId("cfg-ext"), {
+				flags: asDynamic([{ name: "__proto__", type: "string" }]),
+			}),
 		).toThrow(expect.objectContaining({ code: "DEFINITION" }));
 	});
 
@@ -2254,7 +2339,7 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 		const sameName = asDynamic([{ name: "mode", type: "boolean" }]);
 		const aliasSteal = asDynamic([{ name: "method", type: "string", short: "m" }]);
 		for (const defs of [sameName, aliasSteal]) {
-			expect(() => app.flags(runtime(defs))).toThrow(
+			expect(() => app.flags(...defs)).toThrow(
 				expect.objectContaining({
 					code: "DEFINITION",
 					details: expect.objectContaining({ reason: "flag-collision" }),
@@ -2269,7 +2354,7 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 			{ name: "mode", type: "string", aliases: ["mode"] },
 			{ name: "mode", type: "string", aliases: ["m", "m"] },
 		]) {
-			expect(() => new Crust("cli").flags(runtime(asDynamic([definition])))).toThrow(
+			expect(() => new Crust("cli").flags(...asDynamic([definition]))).toThrow(
 				expect.objectContaining({
 					code: "DEFINITION",
 					details: { subject: "flag", name: "mode", reason: "flag-collision" },
@@ -2282,7 +2367,8 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 		const first = defineCommand("deploy", (cmd) => cmd.action(() => {}));
 		const second = defineCommand("deploy", (cmd) => cmd.action(() => {}));
 		const app = new Crust("cli").add(first);
-		expect(() => app.add(runtime([second]))).toThrow(
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		expect(() => app.add(second)).toThrow(
 			expect.objectContaining({
 				code: "DEFINITION",
 				details: { subject: "command", name: "deploy", reason: "command-collision" },
@@ -2291,7 +2377,8 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 	});
 
 	it("rejects __proto__ as a command name", () => {
-		expect(() => new Crust(runtime("__proto__"))).toThrow(
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		expect(() => new Crust("__proto__")).toThrow(
 			expect.objectContaining({
 				code: "DEFINITION",
 				details: { subject: "command", name: "__proto__", reason: "reserved-name" },

@@ -8,7 +8,7 @@ The completion Extension contributes a `completion <shell>` root command and a b
 ## Usage
 
 ```ts
-import { Crust, defineCommand, runtime } from "@crustjs/core";
+import { Crust, defineCommand } from "@crustjs/core";
 import { completion } from "@crustjs/extensions";
 
 const app = new Crust("my-cli", { version: "1.2.3" })
@@ -19,12 +19,12 @@ const app = new Crust("my-cli", { version: "1.2.3" })
         .action(() => {}),
     ),
   )
-  .extend(runtime([completion()]));
+  .extend(completion());
 
 await app.execute();
 ```
 
-The command name is configurable, so attach this dynamic command contribution with `.extend(runtime([completion(options)]))`.
+The command name is configurable, so attach this dynamic command contribution with `.extend(completion(options))`.
 
 Set the version in the root metadata as above, or pass `completion({ version })`. The `version()` Extension only handles the version flag; an override passed to `version(value)` does not set root metadata for completion.
 

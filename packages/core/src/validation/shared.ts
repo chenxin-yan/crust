@@ -20,7 +20,7 @@ export type MergeProviders<A, B> = keyof A extends never
 
 /**
  * Extract the narrowed canonical `name` literal from a definition.
- * Open name domains carry no spelling proof; checked attachment must retain
+ * Open name domains carry no spelling proof; attachment must retain
  * their uncertainty rather than treating this absence as an empty namespace.
  */
 export type DefName<T> = T extends { name: infer N extends string }
@@ -114,11 +114,6 @@ export type DefaultWithinChoicesBrand<T> = T extends {
 				: {}
 	: {};
 
-/** A local authoring fact too broad to establish without consuming runtime(...). */
-export type RuntimeRequiredBrand = {
-	readonly FIX_RUNTIME_INPUT: "Use runtime(...) for unproven definitions or collections";
-};
-
 /** Finite literal domains have required record keys; infinite templates and branded strings do not.
  * Distribute first so a finite union member cannot hide an open member's index signature.
  */
@@ -128,34 +123,7 @@ export type IsClosedName<N extends string> = false extends (
 	? false
 	: true;
 
-export type KnownNameBrand<N extends string> =
-	IsClosedName<N> extends true ? {} : RuntimeRequiredBrand;
-
-/** Unlike the transitional graph brands, local definitions cannot opt out by widening. */
-export type LocalValueBrand<T> = (IsUnion<T> extends true ? RuntimeRequiredBrand : {}) &
-	("parse" extends keyof T
-		? T extends { parse: (...args: never[]) => infer R }
-			? Promise<unknown> extends R
-				? RuntimeRequiredBrand
-				: AsyncParseBrand<T>
-			: T extends { parse?: never }
-				? {}
-				: RuntimeRequiredBrand
-		: {}) &
-	(T extends { choices: infer C extends readonly string[]; default: infer D }
-		? IsStaticTuple<C> extends true
-			? IsClosedName<C[number]> extends false
-				? RuntimeRequiredBrand
-				: D extends readonly string[]
-					? string extends D[number]
-						? RuntimeRequiredBrand
-						: DefaultWithinChoicesBrand<T>
-					: string extends D
-						? RuntimeRequiredBrand
-						: DefaultWithinChoicesBrand<T>
-			: RuntimeRequiredBrand
-		: "choices" extends keyof T
-			? "default" extends keyof T
-				? RuntimeRequiredBrand
-				: {}
-			: {});
+/** Reject independently provable invalid local values, including members of uncertain definitions. */
+export type LocalValueBrand<T> = UnionToIntersection<
+	T extends unknown ? AsyncParseBrand<T> & DefaultWithinChoicesBrand<T> : never
+>;

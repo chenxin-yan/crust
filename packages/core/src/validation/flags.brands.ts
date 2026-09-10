@@ -5,12 +5,11 @@ import type { FlagsDef, NamedFlagDef, NamedFlagsRecord } from "../types.ts";
 import type {
 	DefName,
 	Overlap,
-	KnownNameBrand,
-	RuntimeRequiredBrand,
 	IsStaticTuple,
 	IsUnion,
 	IsClosedName,
 	LocalValueBrand,
+	UnionToIntersection,
 } from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -18,8 +17,9 @@ import type {
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Brand an incoming definition when one of its spellings is already claimed. */
-type ExistingFlagCollisionBrand<F, Existing extends string> =
-	Overlap<DefName<F> | ExtractAllAliases<F>, Existing> extends infer Collision extends string
+type ExistingFlagCollisionBrand<F, Existing extends string> = string extends Existing
+	? {}
+	: Overlap<DefName<F> | ExtractAllAliases<F>, Existing> extends infer Collision extends string
 		? [Collision] extends [never]
 			? {}
 			: {
@@ -39,7 +39,8 @@ type EmptySpellingError = {
 };
 
 /** Reject empty flag names, including empty members of a name union. */
-export type EmptyFlagSpellingBrand<Name extends string> = "" extends Name ? EmptySpellingError : {};
+export type EmptyFlagSpellingBrand<Name extends string> =
+	IsClosedName<Name> extends true ? ("" extends Name ? EmptySpellingError : {}) : {};
 
 /** Reject empty spellings: their CLI tokens (`--`, `-`) are unparseable, so the flag can never be supplied. */
 type EmptySpellingBrand<F> = "" extends DefName<F> | ExtractAllAliases<F> ? EmptySpellingError : {};
@@ -55,7 +56,7 @@ type OwnAliasesBrand<F> = F extends { aliases: infer Aliases extends readonly st
 	? RepeatedAliases<Aliases, ExtractShort<F>> extends infer Duplicate extends string
 		? [Duplicate] extends [never]
 			? {}
-			: { readonly FIX_ALIAS_COLLISION: `Flag repeats its own spelling "${Duplicate}"` }
+			: { readonly FIX_ALIAS_COLLISION: "Flag repeats one of its own spellings" }
 		: never
 	: {};
 
@@ -148,8 +149,11 @@ export type ContextOwnedFlags<C> = C extends AnyContextInstance
 		? OF
 		: {};
 
-type ContextFlagCollisionBrand<C, Existing extends string> =
-	Overlap<LocalSpellingsOf<ContextOwnedFlags<C>>, Existing> extends infer Collision extends string
+type ContextFlagCollisionBrand<C, Existing extends string> = string extends
+	| Existing
+	| LocalSpellingsOf<ContextOwnedFlags<C>>
+	? {}
+	: Overlap<LocalSpellingsOf<ContextOwnedFlags<C>>, Existing> extends infer Collision extends string
 		? [Collision] extends [never]
 			? {}
 			: {
@@ -192,7 +196,7 @@ export type ExtensionSpellings<E> =
 type ExtensionFlagCollisionBrand<E, Existing extends string> = string extends
 	| ExtensionSpellings<E>
 	| Existing
-	? RuntimeRequiredBrand
+	? {}
 	: Overlap<ExtensionSpellings<E>, Existing> extends infer Collision extends string
 		? [Collision] extends [never]
 			? {}
@@ -253,7 +257,7 @@ export type DefinitionTreeSpellings<Ds extends readonly unknown[]> = DefinitionS
 export type ShapeFlagCollisionBrand<S, Ext extends string> = [Ext] extends [never]
 	? {}
 	: string extends ShapeSpellings<S> | Ext
-		? RuntimeRequiredBrand
+		? {}
 		: Overlap<ShapeSpellings<S>, Ext> extends infer Collision extends string
 			? [Collision] extends [never]
 				? {}
@@ -306,34 +310,37 @@ export type ProvideChecks<Sp extends string, Cs extends readonly unknown[]> = Cs
 
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Local spelling proof, separate from collisions at an eventual destination. */
-export type KnownFlagSpellings<F> = F extends { name: infer N extends string }
-	? KnownNameBrand<N> &
-			("short" extends keyof F
-				? F extends { short: infer S extends string }
-					? KnownNameBrand<S>
-					: RuntimeRequiredBrand
-				: {}) &
-			("aliases" extends keyof F
-				? F extends { aliases: infer A extends readonly string[] }
-					? IsStaticTuple<A> extends true
-						? KnownNameBrand<A[number]>
-						: RuntimeRequiredBrand
-					: RuntimeRequiredBrand
-				: {})
-	: RuntimeRequiredBrand;
+/** Whether canonical and alias spellings form a closed, fixed local namespace. */
+type HasClosedFlagSpellings<F> = F extends { name: infer N extends string }
+	? false extends
+			| IsClosedName<N>
+			| ("short" extends keyof F
+					? F extends { short: infer S extends string }
+						? IsClosedName<S>
+						: false
+					: true)
+			| ("aliases" extends keyof F
+					? F extends { aliases: infer A extends readonly string[] }
+						? false extends IsStaticTuple<A> | IsClosedName<A[number]>
+							? false
+							: true
+						: false
+					: true)
+		? false
+		: true
+	: false;
 
-export type LocalFlagBrand<F> = KnownFlagSpellings<F> &
-	LocalFlagValuesBrand<F> &
+export type LocalFlagBrand<F> = UnionToIntersection<
+	F extends unknown ? LocalFlagBranchBrand<F> : never
+>;
+
+type LocalFlagBranchBrand<F> = LocalFlagValuesBrand<F> &
 	(Extract<DefName<F>, `no-${string}`> extends never
 		? {}
 		: { readonly FIX_NO_PREFIX: "Names must not start with no-" }) &
 	([DefName<F> & ExtractAllAliases<F>] extends [never]
 		? {}
-		: { readonly FIX_ALIAS_COLLISION: "Aliases must not equal the canonical name" });
-
-export type LocalFlagFieldsBrand<F> = KnownFlagSpellings<F & { name: never }> &
-	LocalFlagValuesBrand<F>;
+		: { readonly FIX_ALIAS_COLLISION: "Flag repeats one of its own spellings" });
 
 type LocalFlagValuesBrand<F> = LocalValueBrand<F> &
 	OwnAliasesBrand<F> &
@@ -342,16 +349,13 @@ type LocalFlagValuesBrand<F> = LocalValueBrand<F> &
 	EmptySpellingBrand<F> &
 	(NoPrefixedAliases<F> extends never
 		? {}
-		: { readonly FIX_NO_PREFIX: "Aliases must not start with no-" });
+		: { readonly FIX_NO_PREFIX: "Names must not start with no-" });
 
-/** Trusted authoring and composition require closed local spelling proof. */
+/** Validate provable local fields and destination relations without inventing names for open inputs. */
 export type ValidateLocalFlagDefs<
 	Defs extends readonly NamedFlagDef[],
 	Existing extends string,
-> = Defs &
-	LocalFlagTupleChecks<Defs, Existing> &
-	(IsUnion<Defs> extends true ? RuntimeRequiredBrand : {}) &
-	(string extends Existing ? RuntimeRequiredBrand : {});
+> = Defs & UnionToIntersection<LocalFlagTupleChecks<Defs, Existing>>;
 
 // Accumulate only errors: rebuilding a validated tuple forces structural comparison
 // of every FlagDef variant during inference. The tail also rejects optional/rest slots.
@@ -366,41 +370,40 @@ type LocalFlagTupleChecks<
 	? LocalFlagTupleChecks<
 			Tail,
 			Existing | DefName<Head> | ExtractAllAliases<Head>,
-			Errors &
-				LocalFlagBrand<Head> &
-				(IsUnion<Head["name"]> extends true ? RuntimeRequiredBrand : {}) &
-				ExistingFlagCollisionBrand<Head, Existing>
+			Errors & LocalFlagBrand<Head> & ExistingFlagCollisionBrand<Head, Existing>
 		>
 	: Defs extends readonly []
 		? Errors
-		: RuntimeRequiredBrand;
+		: Errors & LocalFlagBrand<Defs[number]>;
 
-/** A checked open collection is not an empty or guaranteed-present flag record. */
-export type AttachedFlags<Defs extends readonly NamedFlagDef[]> =
-	IsStaticTuple<Defs> extends true
-		? true extends {
-				[I in keyof Defs]:
-					| IsUnion<Defs[I]["name"]>
-					| (IsClosedName<Defs[I]["name"]> extends true ? false : true);
-			}[number]
-			? FlagsDef
-			: NamedFlagsRecord<Defs>
-		: FlagsDef;
+/** An open collection is not an empty or guaranteed-present flag record. */
+type KnownNamedFlag<D> = D extends NamedFlagDef
+	? IsClosedName<D["name"]> extends true
+		? IsUnion<D["name"]> extends true
+			? never
+			: D
+		: never
+	: never;
+
+export type AttachedFlags<Defs extends readonly NamedFlagDef[]> = (
+	number extends Defs["length"] ? false : IsUnion<Defs> extends true ? false : true
+) extends true
+	? true extends {
+			[I in keyof Defs]:
+				| IsUnion<Defs[I]["name"]>
+				| (IsClosedName<Defs[I]["name"]> extends true ? false : true);
+		}[number]
+		? FlagsDef & NamedFlagsRecord<readonly KnownNamedFlag<Defs[number]>[]>
+		: NamedFlagsRecord<Defs>
+	: FlagsDef;
 export type AttachedSpellings<Defs extends readonly NamedFlagDef[]> =
 	IsStaticTuple<Defs> extends true
-		? true extends {
-				[I in keyof Defs]: IsUnion<Defs[I]["name"]> extends true
-					? true
-					: "FIX_RUNTIME_INPUT" extends keyof KnownFlagSpellings<Defs[I]>
-						? true
-						: false;
-			}[number]
+		? false extends { [I in keyof Defs]: HasClosedFlagSpellings<Defs[I]> }[number]
 			? string
 			: SpellingsOf<NamedFlagsRecord<Defs>>
 		: string;
 
-export type LocalFlagNameBrand<N extends string> = KnownNameBrand<N> &
-	EmptyFlagSpellingBrand<N> &
+export type LocalFlagNameBrand<N extends string> = EmptyFlagSpellingBrand<N> &
 	ReservedSpellingBrand<{ name: N }> &
 	(Extract<N, `no-${string}`> extends never
 		? {}
@@ -410,9 +413,7 @@ export type LocalFlagNameBrand<N extends string> = KnownNameBrand<N> &
 export type LocalSpellingsOf<F extends FlagsDef> = string extends keyof F
 	? string
 	: true extends {
-				[K in keyof F]: "FIX_RUNTIME_INPUT" extends keyof KnownFlagSpellings<F[K] & { name: K }>
-					? true
-					: false;
+				[K in keyof F]: HasClosedFlagSpellings<F[K] & { name: K }> extends false ? true : false;
 		  }[keyof F]
 		? string
 		: SpellingsOf<F>;

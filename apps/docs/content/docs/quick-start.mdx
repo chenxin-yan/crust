@@ -34,7 +34,7 @@ Inline `.command()` suits app-local leaf commands. Extract to `defineCommand` an
 
 <include lang="ts">../../examples/quick-start/invoke.ts#run</include>
 
-`run()` throws the original error and does not set `process.exitCode`. Use `execute()` only at the terminal entrypoint.
+`run()` is quiet and returns captured `stdout`/`stderr` with a completed, finished, or failed outcome. It does not set `process.exitCode`. Use `execute()` only at the terminal entrypoint.
 
 ## Next steps
 

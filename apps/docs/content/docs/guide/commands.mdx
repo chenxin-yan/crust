@@ -72,20 +72,12 @@ await app.execute();
 Use `run()` from tests or another program:
 
 ```ts
-const output: string[] = [];
-const diagnostics: string[] = [];
-
-await app.run(
-  [],
-  { args: { name: "Ada" } },
-  {
-    stdout: (line) => output.push(line),
-    stderr: (line) => diagnostics.push(line),
-  },
-);
+const outcome = await app.run([], { args: { name: "Ada" } });
+if (outcome.status === "failed") throw outcome.error;
+console.log(outcome.stdout);
 ```
 
-`run()` resolves to a status-discriminated outcome: `completed` carries the action result, while `finished` names the Extension whose `preRun` hook ended the invocation. It throws failures to the caller, including [combined invocation and disposal failures](/docs/guide/lifecycle#error-flow). `execute()` presents errors through Extension `onError` hooks, sets `process.exitCode`, and resolves. See [Execution Model](/docs/guide/lifecycle).
+`run()` is quiet and captures `stdout` and `stderr` on every outcome. `completed` carries the action result, `finished` names the finishing Extension, and `failed` carries the original escaping failure, including [combined invocation and disposal failures](/docs/guide/lifecycle#error-flow). Always inspect the outcome so action errors are not silently ignored. `execute()` streams output, presents errors through Extension `onError` hooks, sets `process.exitCode`, and returns an exit code. See [Execution Model](/docs/guide/lifecycle).
 
 A parent with a Command Action treats unmatched argv command tokens as positional arguments. Typed `run()` rejects unknown path segments. See [Unknown commands](/docs/guide/subcommands#unknown-commands).
 

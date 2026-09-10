@@ -2,7 +2,6 @@ import type { Extension } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
 import { cloneFlagSpellings } from "../parsing/spellings.ts";
-import { runtimeInputValue } from "../runtime.ts";
 import type {
 	CommandSection,
 	RuntimeCommandSectionInput,
@@ -18,7 +17,6 @@ export type MaterializeCommandDefinition = (
 	definition: CommandDefinition,
 	parent: CommandNode,
 	extensionName?: string,
-	checked?: boolean,
 ) => CommandNode;
 
 /** Inject an Extension-owned flag into a node and, when recursive, its descendants. */
@@ -27,12 +25,11 @@ function injectExtensionFlag(
 	name: string,
 	def: FlagDef,
 	recursive: boolean,
-	checked = false,
 ): void {
-	registerFlag(node, name, def, "owned", checked);
+	registerFlag(node, name, def, "owned");
 	if (!recursive) return;
 	for (const sub of Object.values(node.subCommands)) {
-		injectExtensionFlag(sub, name, def, true, checked);
+		injectExtensionFlag(sub, name, def, true);
 	}
 }
 
@@ -43,31 +40,22 @@ export function applyExtensionCommands(
 	materializeCommandDefinition: MaterializeCommandDefinition,
 ): void {
 	for (const definition of extension.commands ?? []) {
-		const node = materializeCommandDefinition(
-			definition,
-			root,
-			extension.id,
-			root.checkedExtensions.has(extension.id),
+		const node = materializeCommandDefinition(definition, root, extension.id);
+
+		checkExtensionFlagRelations(
+			{ ...root, subCommands: { [definition.name]: node } },
+			root.extensions,
 		);
-		if (root.checkedExtensions.has(extension.id)) {
-			checkExtensionFlagRelations(
-				{ ...root, subCommands: { [definition.name]: node } },
-				root.extensions,
-			);
-		}
+
 		root.subCommands[definition.name] = node;
 	}
 }
 
 /** Inject one Extension's owned flags across a cloned tree. */
-export function applyExtensionFlags(
-	root: CommandNode,
-	extension: Extension,
-	checked = false,
-): void {
+export function applyExtensionFlags(root: CommandNode, extension: Extension): void {
 	for (const [name, defWithScope] of Object.entries(extension.flags ?? {})) {
 		const { recursive = true, ...def } = defWithScope;
-		injectExtensionFlag(root, name, def, recursive, checked);
+		injectExtensionFlag(root, name, def, recursive);
 	}
 }
 
@@ -78,7 +66,7 @@ export function checkExtensionFlagRelations(
 ): void {
 	if (extensions.length === 0) return;
 	const copy = cloneCommandNode(node);
-	for (const extension of extensions) applyExtensionFlags(copy, extension, true);
+	for (const extension of extensions) applyExtensionFlags(copy, extension);
 }
 
 /** Deep-clone a command subtree without mutating the builder graph. */
@@ -123,21 +111,20 @@ function invalidSections({ subject, name }: SectionOwner): CrustError {
 function normalizeSection(
 	section: RuntimeCommandSectionInput,
 	owner: SectionOwner,
-	checked: boolean,
 ): CommandSection {
 	const { title, body, only, except } = section;
 	if (
-		checked &&
-		(!title.trim() ||
-			/[\r\n]/.test(title) ||
-			!body.trim() ||
-			only?.length === 0 ||
-			except?.length === 0)
+		!title.trim() ||
+		/[\r\n]/.test(title) ||
+		!body.trim() ||
+		only?.length === 0 ||
+		except?.length === 0 ||
+		(only !== undefined && except !== undefined)
 	) {
 		throw invalidSections(owner);
 	}
 	const audience = (ids: readonly SectionConsumer[]): readonly [ExtensionId, ...ExtensionId[]] => {
-		// SAFETY: trusted signatures or checked consumption establish nonemptiness; consumers carry minted IDs.
+		// SAFETY: normalization establishes nonemptiness; consumers carry minted IDs.
 		/* oxlint-disable anti-slop/no-runtime-typeof -- SectionConsumer is a typed minted ID or an object carrying one, not unvalidated data. */
 		return Object.freeze(
 			ids.map((consumer) => (typeof consumer === "string" ? consumer : consumer.id)),
@@ -154,11 +141,8 @@ function normalizeSection(
 export function validateCommandSections(
 	name: string,
 	sections: readonly RuntimeCommandSectionInput[],
-	checked = false,
 ): CommandSection[] {
-	return sections.map((section) =>
-		normalizeSection(section, { subject: "command", name }, checked),
-	);
+	return sections.map((section) => normalizeSection(section, { subject: "command", name }));
 }
 
 function contributionTarget(
@@ -195,55 +179,11 @@ export function applyExtensionSections(
 ): void {
 	if (!extension.sections) return;
 	const owner: SectionOwner = { subject: "extension", name: extension.id };
-	const contributions = runtimeInputValue(extension.sections(snapshot));
+	const contributions = extension.sections(snapshot);
 	for (const contribution of contributions) {
-		const section = normalizeSection(contribution, owner, true);
+		const section = normalizeSection(contribution, owner);
 		const target = contributionTarget(root, contribution.command, extension);
 		target.meta.sections = [...(target.meta.sections ?? []), section];
-	}
-}
-
-/** Record only retired canonical keys; value validation remains owned by typed or checked input. */
-function retireExtensionFlags(root: CommandNode, removed: Extension, replacement: Extension): void {
-	for (const [name, def] of Object.entries(removed.flags ?? {})) {
-		const current =
-			replacement.flags && Object.hasOwn(replacement.flags, name)
-				? replacement.flags[name]
-				: undefined;
-		const recursive = def.recursive !== false && (!current || current.recursive === false);
-		const walk = (node: CommandNode, local: boolean): void => {
-			if (local) node.retiredFlagNames = new Set([...node.retiredFlagNames, name]);
-			if (!recursive) return;
-			node.retiredRecursiveFlagNames = new Set([...node.retiredRecursiveFlagNames, name]);
-			for (const child of Object.values(node.subCommands)) walk(child, true);
-		};
-		walk(root, !current);
-	}
-	// Already-installed providers are compared per node after pruning/reinstallation below.
-	if (root.extensions.includes(removed)) return;
-	for (const instance of removed.provides ?? []) {
-		const current = replacement.provides?.filter((provider) => provider.name === instance.name);
-		const names = Object.keys(instance.ownedFlags).filter(
-			(name) => !current?.some((provider) => Object.hasOwn(provider.ownedFlags, name)),
-		);
-		if (names.length === 0) continue;
-		const walk = (node: CommandNode): void => {
-			node.retiredFlagNames = new Set([...node.retiredFlagNames, ...names]);
-			node.retiredRecursiveFlagNames = new Set([...node.retiredRecursiveFlagNames, ...names]);
-			const inherited = new WeakSet(node.contexts.map((context) => context.instance));
-			for (const child of Object.values(node.subCommands)) {
-				// Match provider installation scope: a more specific Context shadows this provider.
-				if (
-					child.contexts.some(
-						(context) =>
-							context.instance.name === instance.name && !inherited.has(context.instance),
-					)
-				)
-					continue;
-				walk(child);
-			}
-		};
-		walk(root);
 	}
 }
 
@@ -251,8 +191,6 @@ export function installExtensionContexts(
 	node: CommandNode,
 	extensions: readonly Extension[],
 	reRegisteredIds: ReadonlySet<Extension["id"]>,
-	checked = false,
-	replacedExtensions: readonly Extension[] = [],
 ): CommandNode {
 	// Rebuild Extension providers from the deduplicated list so replacing an id
 	// cannot leave the earlier registration's eager Context installs behind.
@@ -261,14 +199,6 @@ export function installExtensionContexts(
 	// promises flag definition order, so pruning in place (instead of
 	// regrouping locals before Extensions) keeps both observable orders.
 	const cloned = cloneCommandNode(node);
-	for (const removed of replacedExtensions) {
-		// SAFETY: deduplication removes registrations only when a same-ID replacement survives.
-		retireExtensionFlags(
-			cloned,
-			removed,
-			extensions.find((entry) => entry.id === removed.id)!,
-		);
-	}
 	// ponytail: O(n²) includes over an already-deduped list, fine for handfuls of extensions.
 	const kept = new Set(
 		extensions
@@ -309,7 +239,7 @@ export function installExtensionContexts(
 			target.contexts.push(...registrations);
 			for (const instance of installed) {
 				for (const [name, def] of Object.entries(instance.ownedFlags)) {
-					registerFlag(target, name, def, "owned", checked);
+					registerFlag(target, name, def, "owned");
 				}
 			}
 			// A Context provided locally on a descendant is more specific than a
@@ -324,26 +254,6 @@ export function installExtensionContexts(
 			}
 		};
 		walk(cloned, new Set());
-	}
-	const retireRemovedProviders = (before: CommandNode, after: CommandNode): void => {
-		const names = before.contexts.flatMap(({ instance, extensionId }) =>
-			extensionId !== undefined && !kept.has(extensionId)
-				? Object.keys(instance.ownedFlags).filter(
-						(name) => !Object.hasOwn(after.effectiveFlags, name),
-					)
-				: [],
-		);
-		if (names.length > 0) {
-			after.retiredFlagNames = new Set([...after.retiredFlagNames, ...names]);
-			after.retiredRecursiveFlagNames = new Set([...after.retiredRecursiveFlagNames, ...names]);
-		}
-		for (const [name, child] of Object.entries(before.subCommands)) {
-			// Context installation preserves the existing command tree.
-			retireRemovedProviders(child, after.subCommands[name]!);
-		}
-	};
-	if (node.extensions.some((extension) => reRegisteredIds.has(extension.id))) {
-		retireRemovedProviders(node, cloned);
 	}
 	return cloned;
 }

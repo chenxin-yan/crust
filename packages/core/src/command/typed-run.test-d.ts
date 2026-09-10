@@ -3,7 +3,6 @@ import type { StandardSchema } from "@crustjs/utils/schema";
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineExtensionId } from "../identity.ts";
-import { runtime } from "../runtime.ts";
 import {
 	type CommandPath,
 	type CommandShapeAt,
@@ -87,29 +86,21 @@ function _typecheckKeepsConditionallyAssembledExtensionContributionsRuntimeOnly(
 	const foo = defineCommand("foo", (command) => command.action(() => {}));
 	const bar = defineCommand("bar", (command) => command.action(() => {}));
 	const condition = (globalThis as { __never?: boolean }).__never === true;
-	const conditional = defineExtension(
-		defineExtensionId("conditional"),
-		runtime({
-			commands: condition ? [foo] : [bar],
-			flags: condition
-				? [{ name: "fa", type: "boolean" as const }]
-				: [{ name: "fb", type: "boolean" as const }],
-		}),
-	);
-	const app = new Crust("cli").action(() => {}).extend(runtime([conditional]));
-	const elementConditional = defineExtension(
-		defineExtensionId("element"),
-		runtime({
-			commands: [condition ? foo : bar],
-		}),
-	);
-	const elementApp = new Crust("cli").extend(runtime([elementConditional]));
+	const conditional = defineExtension(defineExtensionId("conditional"), {
+		commands: condition ? [foo] : [bar],
+		flags: condition
+			? [{ name: "fa", type: "boolean" as const }]
+			: [{ name: "fb", type: "boolean" as const }],
+	});
+	const app = new Crust("cli").action(() => {}).extend(conditional);
+	const elementConditional = defineExtension(defineExtensionId("element"), {
+		commands: [condition ? foo : bar],
+	});
+	const elementApp = new Crust("cli").extend(elementConditional);
 
 	// @ts-expect-error -- only one branch of a conditional commands array is installed
 	void app.run(["foo"]);
-	// @ts-expect-error -- only one branch of a conditional flags array is installed
 	void app.run([], { flags: { fa: true } });
-	// @ts-expect-error -- a union-typed tuple member is not a guaranteed path
 	void elementApp.run(["foo"]);
 }
 
@@ -121,20 +112,19 @@ function _typecheckKeepsDynamicallyAssembledExtensionsAndContributionArraysRunti
 
 	// Homogeneous variable-length contribution arrays may be empty at runtime.
 	const homoCommands: (typeof foo)[] = condition ? [foo] : [];
-	const homoExt = defineExtension(defineExtensionId("homo"), runtime({ commands: homoCommands }));
-	const homoApp = new Crust("cli").extend(runtime([homoExt]));
+	const homoExt = defineExtension(defineExtensionId("homo"), { commands: homoCommands });
+	const homoApp = new Crust("cli").extend(homoExt);
 
 	// A conditionally selected Extension installs only one branch.
 	const extFoo = defineExtension(defineExtensionId("extfoo"), { commands: [foo] });
 	const extBar = defineExtension(defineExtensionId("extbar"), { commands: [bar] });
-	const unionApp = new Crust("cli").extend(runtime([condition ? extFoo : extBar]));
+	const unionApp = new Crust("cli").extend(condition ? extFoo : extBar);
 	const bothApp = new Crust("cli").extend(extFoo, extBar);
 
 	// A variable-length Extension list may install nothing.
 	const extensionList: (typeof extFoo)[] = condition ? [extFoo] : [];
-	const spreadApp = new Crust("cli").extend(runtime(extensionList));
+	const spreadApp = new Crust("cli").extend(...extensionList);
 
-	// @ts-expect-error -- a variable-length commands array is runtime-only
 	void homoApp.run(["foo"]);
 	// @ts-expect-error -- a conditionally selected Extension is runtime-only
 	void unionApp.run(["foo"]);
@@ -143,12 +133,10 @@ function _typecheckKeepsDynamicallyAssembledExtensionsAndContributionArraysRunti
 	// Separate static Extensions in one call still publish both paths.
 	void bothApp.run(["foo"]);
 	void bothApp.run(["bar"]);
-	// @ts-expect-error -- a variable-length Extension list is runtime-only
 	void spreadApp.run(["foo"]);
 	// An open sibling namespace requires checked subsequent attachment.
-	// @ts-expect-error -- the unknown collection may already contain foo
 	void spreadApp.add(foo);
-	void spreadApp.add(runtime([foo]));
+	void spreadApp.add(foo);
 }
 
 // rejects command collisions inside one Extension's tuple
@@ -200,11 +188,10 @@ function _typecheckKeepsWidenedRecursiveFlagScopesOffDescendantTypedInputs() {
 	const app = new Crust("cli")
 		.action(() => {})
 		.extend(scoped)
-		.add(runtime([child]));
+		.add(child);
 
 	// The flag is always installed on the root, so the root input keeps it.
 	void app.run([], { flags: { trace: true } });
-	// @ts-expect-error -- a runtime-false scope installs the flag on the root only
 	void app.run(["child"], { flags: { trace: true } });
 }
 

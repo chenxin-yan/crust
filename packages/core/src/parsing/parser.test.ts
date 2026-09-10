@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { resolve } from "node:path";
+import { runInNewContext } from "node:vm";
 
 import { makeNode } from "../../tests/helpers.ts";
 import { Crust } from "../command/crust.ts";
 import { createCommandNode, registerFlag } from "../command/node.ts";
 import { CrustError } from "../errors.ts";
-import { runtime } from "../runtime.ts";
 import type { ArgDef } from "../types.ts";
 import { parseArgs, parseStructured, validateParsed } from "./parser.ts";
 
@@ -935,16 +935,36 @@ describe("parseArgs — url/path/json types", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — parse escape hatch", () => {
+	it("rejects cross-realm native Promise outputs before action and contains rejections", async () => {
+		for (const expression of ["Promise.resolve(42)", "Promise.reject(new Error('foreign'))"]) {
+			const promise: unknown = runInNewContext(expression);
+			expect(promise instanceof Promise).toBe(false);
+			const parse: DynamicParser = () => promise;
+			let called = false;
+			const app = new Crust("test").flags({ name: "n", type: "string", parse }).action(() => {
+				called = true;
+			});
+			expect(await app.run([], { flags: { n: "42" } })).toMatchObject({
+				status: "failed",
+				error: { message: expect.stringContaining("parse must be synchronous") },
+			});
+			expect(called).toBe(false);
+		}
+	});
+
 	it("checks each dynamic parser result and contains rejected Promises", async () => {
 		const asyncParse: DynamicParser = async (raw) => raw;
 		const rejecting: DynamicParser = async () => {
 			throw new Error("boom");
 		};
 		for (const parse of [asyncParse, rejecting]) {
-			const app = new Crust("test").flags(runtime([{ name: "n", type: "string", parse }]));
-			await expect(app.run([], { flags: { n: "42" } })).rejects.toThrow(
-				"parse must be synchronous",
-			);
+			const app = new Crust("test").flags({ name: "n", type: "string", parse });
+			await expect(app.run([], { flags: { n: "42" } })).resolves.toMatchObject({
+				status: "failed",
+				error: expect.objectContaining({
+					message: expect.stringContaining("parse must be synchronous"),
+				}),
+			});
 		}
 	});
 
@@ -1192,15 +1212,19 @@ describe("parseArgs \u2014 default coercion symmetry", () => {
 	it("checks dynamic defaults against choices when definitions are consumed", () => {
 		const choices: string[] = ["a", "b"];
 		expect(() =>
-			new Crust("test").flags(runtime([{ name: "mode", type: "string", choices, default: "z" }])),
+			new Crust("test").flags({ name: "mode", type: "string", choices, default: "z" }),
 		).toThrow("default must be one of choices");
 		expect(() =>
-			new Crust("test").flags(
-				runtime([{ name: "tags", type: "string", multiple: true, choices, default: ["a", "z"] }]),
-			),
+			new Crust("test").flags({
+				name: "tags",
+				type: "string",
+				multiple: true,
+				choices,
+				default: ["a", "z"],
+			}),
 		).toThrow("default must be one of choices");
 		expect(() =>
-			new Crust("test").args(runtime([{ name: "mode", type: "string", choices, default: "z" }])),
+			new Crust("test").args({ name: "mode", type: "string", choices, default: "z" }),
 		).toThrow("default must be one of choices");
 	});
 });
@@ -1321,10 +1345,10 @@ describe("parseStructured", () => {
 			{ args: { port: 80 }, flags: { port: 80 } },
 		);
 		expect(seen).toEqual(["80", "80"]);
-		expect(() => parseStructured(command, { flags: { port: "90" } }, true)).toThrow(
+		expect(() => parseStructured(command, { flags: { port: "90" } })).toThrow(
 			'Invalid value "90" for --port. Expected one of: 80',
 		);
-		expect(() => parseStructured(command, { args: { port: "90" } }, true)).toThrow(
+		expect(() => parseStructured(command, { args: { port: "90" } })).toThrow(
 			'Invalid value "90" for <port>. Expected one of: 80',
 		);
 		expect(seen).toEqual(["80", "80"]);
@@ -1336,7 +1360,7 @@ describe("parseStructured", () => {
 			"b",
 			"-a",
 		]);
-		expect(() => parseStructured(command, { flags: { tag: "a" } }, true)).toThrow(
+		expect(() => parseStructured(command, { flags: { tag: "a" } })).toThrow(
 			"Expected an occurrence array",
 		);
 	});
@@ -1389,7 +1413,7 @@ describe("parseStructured", () => {
 			[{ flags: { format: "x" } }, "unknown-flag"],
 			[{ flags: { constructor: "x" } }, "unknown-flag"],
 		] as const) {
-			expect(() => parseStructured(command, input, true)).toThrow(
+			expect(() => parseStructured(command, input)).toThrow(
 				expect.objectContaining({ code: "PARSE", details: expect.objectContaining({ reason }) }),
 			);
 		}

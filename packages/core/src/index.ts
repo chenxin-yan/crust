@@ -1,5 +1,3 @@
-export { runtime, type RuntimeInput } from "./runtime.ts";
-
 // Contexts and Extensions
 export type {
 	AnyContextFactory,

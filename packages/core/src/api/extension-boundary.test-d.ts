@@ -7,7 +7,6 @@ import {
 	type CommandShape,
 } from "../command/crust.ts";
 import { defineExtensionId } from "../identity.ts";
-import { runtime } from "../runtime.ts";
 import { defineContext } from "./context.ts";
 import { defineExtension, type Extension } from "./extension.ts";
 
@@ -40,27 +39,24 @@ const result = contributed.run(["child"], { flags: { trace: true } });
 type _Result = Expect<Equal<typeof result, Promise<import("../index.ts").RunOutcome<number>>>>;
 const needsVersion = defineExtension<"version">()(id);
 // @ts-expect-error Checked collections retain erased metadata requirements.
-new Crust("app").extend(runtime([needsVersion]));
-new Crust("app", { version: "1" }).extend(runtime([needsVersion]));
+new Crust("app").extend(needsVersion);
+new Crust("app", { version: "1" }).extend(needsVersion);
 const list = [empty];
-// @ts-expect-error An open collection is not a proven empty contribution.
 new Crust("app").extend(...list);
-new Crust("app").extend(runtime(list));
+new Crust("app").extend(...list);
 declare const broad: Extension;
-// @ts-expect-error Broad contributions require explicit consumption.
 new Crust("app").extend(broad);
-new Crust("app").extend(runtime([broad]));
+new Crust("app").extend(broad);
 const choice = Math.random()
 	? empty
 	: defineExtension(id, { flags: [{ name: "trace", type: "boolean" }] });
-// @ts-expect-error Conditional contributions cannot be treated as empty.
 new Crust("app").extend(choice);
-new Crust("app").extend(runtime([choice]));
+new Crust("app").extend(choice);
 function generic<E extends Extension>(extension: E) {
 	// @ts-expect-error Unresolved contributions cannot use the trusted path.
 	new Crust("app").extend(extension);
 	// @ts-expect-error Unresolved generic callback value contracts also need static proof.
-	new Crust("app").extend(runtime([extension]));
+	new Crust("app").extend(extension);
 }
 void generic;
 new Crust("app").extend();
@@ -123,11 +119,10 @@ function _completedHolder() {
 	// @ts-expect-error Completed-application holders cannot regenerate empty-root proof.
 	const regained: Crust = broad;
 	// @ts-expect-error Completed holders are not an authoring escape hatch.
-	broad.provide(runtime([db()]));
+	broad.provide(db());
 	void broad.execute();
 	void broad.snapshot();
-	void broad.run(runtime([]), runtime({}));
-	// @ts-expect-error Unknown input namespaces require checked invocation.
+	void broad.run([], {});
 	void broad.run([]);
 	function identity<B extends import("../command/crust.ts").AnyCrust>(builder: B): B {
 		return builder;
@@ -141,28 +136,26 @@ function _completedHolder() {
 
 function _checkedReplacementProof() {
 	const name: string = "child";
-	const commands = [defineCommand(runtime(name), (c) => c.action(() => "replacement"))];
+	const commands = [defineCommand(name, (c) => c.action(() => "replacement"))];
 	const app = new Crust("app")
 		.flags({ name: "root", type: "number" })
 		.command("child", (c) => c.action(() => 42))
-		.extend(runtime([defineExtension(id, runtime({ commands }))]));
-	// @ts-expect-error Open replacements cannot retain trusted child inputs/results.
+		.extend(defineExtension(id, { commands }));
 	void app.run(["child"]);
 	void app.run([], { flags: { root: 1 } });
-	const narrow = new Crust("app")
+	const replacements = [
+		defineExtension(id, {
+			commands: [defineCommand("child", (c) => c.action(() => "replacement"))],
+		}),
+	];
+	const dynamic = new Crust("app")
 		.command("child", (c) => c.action(() => 42))
 		.command("sibling", (c) => c.action(() => true))
-		.extend(
-			runtime([
-				defineExtension(id, {
-					commands: [defineCommand("child", (c) => c.action(() => "replacement"))],
-				}),
-			]),
-		);
-	const result = narrow.run(["child"]);
-	type _result = Expect<Equal<typeof result, Promise<import("../index.ts").RunOutcome<string>>>>;
-	const sibling = narrow.run(["sibling"]);
-	type _sibling = Expect<Equal<typeof sibling, Promise<import("../index.ts").RunOutcome<boolean>>>>;
+		.extend(...replacements);
+	const result = dynamic.run(["child"]);
+	type _result = Expect<Equal<typeof result, Promise<import("../index.ts").RunOutcome<unknown>>>>;
+	const sibling = dynamic.run(["sibling"]);
+	type _sibling = Expect<Equal<typeof sibling, Promise<import("../index.ts").RunOutcome<unknown>>>>;
 }
 
 function _recipeHolderProof() {
@@ -196,21 +189,15 @@ function _recipeHolderProof() {
 
 function _openInlineOwnedFlags() {
 	const name: string = "token";
-	const owner = defineContext(
-		runtime("owner"),
-		runtime({ flags: [{ name, type: "string" }] }),
-		() => 1,
-	);
-	const app = new Crust("app").provide(runtime([owner()]));
+	const owner = defineContext("owner", { flags: [{ name, type: "string" }] }, () => 1);
+	const app = new Crust("app").provide(owner());
 	app.command("child", (c) => {
-		// @ts-expect-error Open inherited spellings require checked recipe attachment.
 		return c.flags({ name: "token", type: "number" });
 	});
-	app.command(runtime("child"), (c) => {
-		// @ts-expect-error A checked name does not prove a recipe's local flag relations.
+	app.command("child", (c) => {
 		return c.flags({ name: "token", type: "number" });
 	});
-	app.command(runtime("child"), (c) => c.flags(runtime([{ name: "safe", type: "number" }])));
+	app.command("child", (c) => c.flags({ name: "safe", type: "number" }));
 }
 
 function _demandValues() {
@@ -224,18 +211,19 @@ function _demandValues() {
 	// @ts-expect-error A name does not prove the command's demanded value type.
 	app.add(command);
 	// @ts-expect-error Checked availability cannot reflect erased callback value types.
-	app.add(runtime([command]));
+	app.add(command);
 	// @ts-expect-error Extension demands retain their value contracts.
 	app.extend(extension);
 	// @ts-expect-error Checked Extension collections retain value contracts.
-	app.extend(runtime([extension]));
+	app.extend(extension);
 	// @ts-expect-error Inline demands also compare provider values.
 	app.command("child", (c) => c.use(text));
 	// @ts-expect-error Checked inline names do not erase value contracts.
-	app.command(runtime("child"), (c) => c.use(text));
+	app.command("child", (c) => c.use(text));
 	new Crust("app").provide(text()).add(command);
-	new Crust("app").provide(text()).add(runtime([command]));
-	new Crust("app").add(runtime([command])); // Missing names are checked at consumption.
+	new Crust("app").provide(text()).add(command);
+	// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
+	new Crust("app").add(command); // Missing names are checked at consumption.
 }
 
 function _descendantExtensionDemand() {
@@ -258,12 +246,12 @@ function _descendantExtensionDemand() {
 		.provide(text())
 		.extend(extension)
 		// @ts-expect-error Checked child collections cannot erase callback value contracts.
-		.add(runtime([child]));
+		.add(child);
 	new Crust("app")
 		.provide(text())
 		.add(child)
 		// @ts-expect-error Checked Extension collections cannot erase descendant value contracts.
-		.extend(runtime([extension]));
+		.extend(extension);
 	const compatible = defineCommand("child", (c) => c.provide(text()));
 	new Crust("app").provide(text()).extend(extension).add(compatible);
 	new Crust("app").provide(text()).add(compatible).extend(extension);
@@ -274,29 +262,29 @@ function _dynamicDemandValues() {
 	const text = defineContext("db", () => "db");
 	const extension = defineExtension(id, { uses: [text] });
 	const unknownProvider = defineContext("db", (): unknown => 42);
-	const unknownChild = defineCommand("child", (c) => c.provide(runtime([unknownProvider()])));
+	const unknownChild = defineCommand("child", (c) => c.provide(unknownProvider()));
 	new Crust("app")
 		.provide(text())
 		.extend(extension)
 		// @ts-expect-error Unknown shadowing cannot establish a string demand.
-		.add(runtime([unknownChild]));
+		.add(unknownChild);
 	const dynamicName: string = "db";
-	const homogeneous = defineContext(runtime(dynamicName), () => "compatible");
+	const homogeneous = defineContext(dynamicName, () => "compatible");
 	const providers = [homogeneous()];
-	new Crust("app").provide(runtime(providers)).extend(runtime([extension]));
-	const unknowns = [defineContext(runtime(dynamicName), (): unknown => 42)()];
+	new Crust("app").provide(...providers).extend(extension);
+	const unknowns = [defineContext(dynamicName, (): unknown => 42)()];
 	// @ts-expect-error A potentially applicable unknown provider is not string proof.
-	new Crust("app").provide(runtime(unknowns)).extend(runtime([extension]));
+	new Crust("app").provide(...unknowns).extend(extension);
 	new Crust("app")
 		.provide(text())
 		.extend(extension)
 		// @ts-expect-error A later checked replacement must preserve previously declared hook demands.
-		.provide(runtime([unknownProvider()]));
+		.provide(unknownProvider());
 	new Crust("app")
 		.provide(text())
 		.extend(extension)
 		// @ts-expect-error Inline checked descendants must preserve retained hook demands.
-		.command(runtime("child"), (c) => c.provide(runtime([unknownProvider()])));
+		.command("child", (c) => c.provide(unknownProvider()));
 }
 
 function _contributedDemandValues() {
@@ -313,17 +301,17 @@ function _contributedDemandValues() {
 		.provide(text())
 		.extend(demand)
 		// @ts-expect-error Checked contributed provider replacement retains prior hook contracts.
-		.extend(runtime([defineExtension(defineExtensionId("provider"), { provides: [number()] })]));
+		.extend(defineExtension(defineExtensionId("provider"), { provides: [number()] }));
 	// @ts-expect-error An open holder cannot erase a concrete provider shape.
 	const broad: import("../command/crust.ts").CommandDefinition = child;
 	new Crust("app")
 		.provide(text())
 		.extend(demand)
 		// @ts-expect-error A broad child holder cannot certify unknown descendant providers.
-		.add(runtime([broad]));
+		.add(broad);
 	const dependent = defineContext("dependent", { uses: [text] }, () => true);
 	// @ts-expect-error Checked Context dependency names do not establish promised values.
-	new Crust("app").provide(number()).provide(runtime([dependent()]));
+	new Crust("app").provide(number()).provide(dependent());
 }
 
 function _onlyHookDemandsAreApplicationWide() {
@@ -332,10 +320,7 @@ function _onlyHookDemandsAreApplicationWide() {
 	const command = defineCommand("consumer", (c) => c.use(text));
 	const extension = defineExtension(id, { commands: [command] });
 	new Crust("app").provide(text()).extend(extension).add(unrelated);
-	new Crust("app")
-		.provide(text())
-		.add(unrelated)
-		.extend(runtime([extension]));
+	new Crust("app").provide(text()).add(unrelated).extend(extension);
 }
 
 function _hookDemandProofCannotBeErased() {
@@ -355,7 +340,7 @@ function _commandLocalDemandValues() {
 	const number = defineContext("db", () => 42);
 	defineCommand("child", (c) => {
 		// @ts-expect-error Local checked providers cannot invalidate an existing demand.
-		return c.use(text).provide(runtime([number()]));
+		return c.use(text).provide(number());
 	});
 	defineCommand("child", (c) => {
 		// @ts-expect-error Demands also compare previously provided local values.
@@ -365,20 +350,18 @@ function _commandLocalDemandValues() {
 
 function _replacementOrderAndFixedDynamicNames() {
 	const name: string = "child";
-	const open = defineExtension(
-		id,
-		runtime({ commands: [defineCommand(runtime(name), (c) => c.action(() => "dynamic"))] }),
-	);
+	const open = defineExtension(id, {
+		commands: [defineCommand(name, (c) => c.action(() => "dynamic"))],
+	});
 	const root = new Crust("app").command("child", (c) => c.action(() => 42));
-	const replaced = root.extend(runtime([open]));
-	// @ts-expect-error A fixed tuple does not make a dynamic canonical name proven.
+	const replaced = root.extend(open);
 	void replaced.run(["child"]);
 	const last = defineExtension(defineExtensionId("last"), {
 		commands: [defineCommand("child", (c) => c.action(() => true))],
 	});
-	const commands = [defineCommand(runtime(name), (c) => c.action(() => "dynamic"))];
-	const broad = defineExtension(id, runtime({ commands }));
-	const restored = root.extend(runtime([broad, last]));
+	const commands = [defineCommand(name, (c) => c.action(() => "dynamic"))];
+	const broad = defineExtension(id, { commands });
+	const restored = root.extend(broad, last);
 	const result = restored.run(["child"]);
 	type _result = Expect<Equal<typeof result, Promise<import("../index.ts").RunOutcome<boolean>>>>;
 }
@@ -388,25 +371,19 @@ function _checkedAliasReplacementProof() {
 	const incoming = defineCommand("incoming", { aliases: ["shared", "old"] }, (c) =>
 		c.action(() => "new"),
 	);
-	const app = new Crust("app")
-		.add(old)
-		.extend(runtime([defineExtension(id, { commands: [incoming] })]));
-	// @ts-expect-error Competing aliases cannot certify the newly registered action's shape.
+	const aliases = [defineExtension(id, { commands: [incoming] })];
+	const app = new Crust("app").add(old).extend(...aliases);
 	void app.run(["shared"]);
-	// @ts-expect-error The tree does not distinguish an existing canonical key from its aliases.
 	void app.run(["old"]);
-	const unknown = app.run(["shared"], runtime({}));
+	const unknown = app.run(["shared"], {});
 	type _unknown = Expect<Equal<typeof unknown, Promise<import("../index.ts").RunOutcome<unknown>>>>;
-	const canonical = new Crust("app")
-		.add(old)
-		.extend(
-			runtime([
-				defineExtension(id, { commands: [defineCommand("shared", (c) => c.action(() => true))] }),
-			]),
-		);
+	const replacements = [
+		defineExtension(id, { commands: [defineCommand("shared", (c) => c.action(() => true))] }),
+	];
+	const canonical = new Crust("app").add(old).extend(...replacements);
 	const result = canonical.run(["shared"]);
 	type _canonical = Expect<
-		Equal<typeof result, Promise<import("../index.ts").RunOutcome<boolean>>>
+		Equal<typeof result, Promise<import("../index.ts").RunOutcome<unknown>>>
 	>;
 }
 
@@ -423,7 +400,8 @@ function _providersAfterPendingCommands() {
 	new Crust("app").extend(nested).provide(owner());
 	// Ordinary children have already materialized; later providers remain positional.
 	new Crust("app").add(child).provide(owner());
-	new Crust("app").extend(ext).provide(runtime([owner()]));
+	// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
+	new Crust("app").extend(ext).provide(owner());
 }
 
 function _conditionalDescendantDemand(condition: boolean) {
@@ -438,30 +416,30 @@ function _conditionalDescendantDemand(condition: boolean) {
 	// @ts-expect-error Retained demands apply to every conditional recipe branch.
 	root.extend(demand).add(child);
 	// @ts-expect-error Checked child attachment cannot erase provider value contracts.
-	root.extend(demand).add(runtime([child]));
+	root.extend(demand).add(child);
 	// @ts-expect-error Checked demand attachment checks every existing child branch.
-	root.add(runtime([child])).extend(runtime([demand]));
+	root.add(child).extend(demand);
 	// @ts-expect-error Inline recipes retain every provider branch.
-	root.extend(demand).command("child", (c) => (condition ? c.provide(runtime([number()])) : c));
+	root.extend(demand).command("child", (c) => (condition ? c.provide(number()) : c));
 	root
 		.extend(demand)
 		// @ts-expect-error Checked inline recipes retain every provider branch.
-		.command(runtime("child"), (c) => (condition ? c.provide(runtime([number()])) : c));
+		.command("child", (c) => (condition ? c.provide(number()) : c));
 	// @ts-expect-error Later hooks check existing conditional inline recipes.
-	root.command("child", (c) => (condition ? c.provide(runtime([number()])) : c)).extend(demand);
+	root.command("child", (c) => (condition ? c.provide(number()) : c)).extend(demand);
 	root
-		.command(runtime("child"), (c) => (condition ? c.provide(runtime([number()])) : c))
+		.command("child", (c) => (condition ? c.provide(number()) : c))
 		// @ts-expect-error Checked later hooks check existing conditional inline recipes.
-		.extend(runtime([demand]));
+		.extend(demand);
 	const contribution = defineExtension(defineExtensionId("conditional"), { commands: [child] });
 	// @ts-expect-error Contributed conditional recipes must satisfy existing hooks.
 	root.extend(demand).extend(contribution);
 	// @ts-expect-error Later hooks must check contributed conditional recipes.
 	root.extend(contribution).extend(demand);
 	// @ts-expect-error Checked contributed recipes retain obligations.
-	root.extend(runtime([demand])).extend(runtime([contribution]));
+	root.extend(demand).extend(contribution);
 	// @ts-expect-error Checked later hooks retain obligations.
-	root.extend(runtime([contribution])).extend(runtime([demand]));
+	root.extend(contribution).extend(demand);
 
 	const leaf = defineCommand("leaf", (c) => c.provide(number()));
 	const nested = defineCommand("nested", (c) => (condition ? c.add(leaf) : c));
@@ -470,9 +448,9 @@ function _conditionalDescendantDemand(condition: boolean) {
 	// @ts-expect-error Nested conditional children preserve retained demands.
 	root.extend(demand).add(nested);
 	// @ts-expect-error Checked nested conditional children preserve retained demands.
-	root.extend(runtime([demand])).add(runtime([nested]));
+	root.extend(demand).add(nested);
 	// @ts-expect-error Existing checked nested conditional children preserve later demands.
-	root.add(runtime([nested])).extend(runtime([demand]));
+	root.add(nested).extend(demand);
 	const mixed = defineCommand("mixed", (c) =>
 		condition ? c.provide(number()) : c.provide(other()),
 	);
@@ -481,14 +459,14 @@ function _conditionalDescendantDemand(condition: boolean) {
 	const unknown = defineContext("db", (): unknown => 42);
 	const uncertain = defineCommand("uncertain", (c) => (condition ? c.provide(unknown()) : c));
 	// @ts-expect-error Unknown outputs remain unproven even beside an empty branch.
-	root.add(uncertain).extend(runtime([demand]));
+	root.add(uncertain).extend(demand);
 
 	const compatible = defineCommand("compatible", (c) => (condition ? c.provide(text()) : c));
 	root.extend(demand).add(compatible);
 	root.add(compatible).extend(demand);
-	root.extend(runtime([demand])).add(runtime([compatible]));
-	root.add(runtime([compatible])).extend(runtime([demand]));
-	root.extend(demand).command("inline", (c) => (condition ? c.provide(runtime([text()])) : c));
+	root.extend(demand).add(compatible);
+	root.add(compatible).extend(demand);
+	root.extend(demand).command("inline", (c) => (condition ? c.provide(text()) : c));
 	const compatibleContribution = defineExtension(defineExtensionId("compatible"), {
 		commands: [compatible],
 	});
@@ -521,14 +499,14 @@ function _conditionalProviderAndChildHolders(
 	const demand = defineExtension(id, { uses: [text] });
 	const root = new Crust("app").provide(text());
 	// @ts-expect-error A supported provider-record holder cannot erase an incompatible branch.
-	root.extend(demand).add(runtime([child]));
+	root.extend(demand).add(child);
 	// @ts-expect-error Later hooks inspect each provider-record alternative too.
-	root.add(runtime([child])).extend(runtime([demand]));
+	root.add(child).extend(demand);
 	// @ts-expect-error A conditional child-record holder cannot hide its nested provider.
-	root.extend(demand).add(runtime([nested]));
+	root.extend(demand).add(nested);
 	// @ts-expect-error Later hooks inspect each child-record alternative too.
-	root.add(runtime([nested])).extend(runtime([demand]));
-	root.extend(demand).add(runtime([compatible]));
-	root.add(runtime([compatible])).extend(runtime([demand]));
-	root.add(runtime([child]));
+	root.add(nested).extend(demand);
+	root.extend(demand).add(compatible);
+	root.add(compatible).extend(demand);
+	root.add(child);
 }

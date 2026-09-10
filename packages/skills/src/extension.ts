@@ -10,7 +10,6 @@ import {
 	defineCommand,
 	defineExtension,
 	defineExtensionId,
-	runtime,
 } from "@crustjs/core";
 import { spinner } from "@crustjs/progress";
 import { confirm, multiselect, select } from "@crustjs/prompts";
@@ -195,21 +194,20 @@ async function buildSkills(options: SkillOptions, context: ExtensionBuildContext
 
 export const skill: ExtensionFactory<[options: SkillOptions], {}, [], []> = defineExtension(
 	SKILLS,
-	runtime((options: SkillOptions) => {
+	(options: SkillOptions) => {
 		const commandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
 		return {
 			commands: [buildSkillCommand(commandName, options)],
 			// Skills are loaded when a snapshot is prepared, not at construction, so
 			// help and man pages reflect the packaged directory as it exists at render time.
-			sections: (snapshot: CommandSnapshot) =>
-				runtime([
-					{
-						command: [],
-						title: SKILLS_SECTION_TITLE,
-						body: formatSkillDocumentation(options.distDir, commandName, snapshot.meta.name),
-						except: [SKILLS],
-					},
-				]),
+			sections: (snapshot: CommandSnapshot) => [
+				{
+					command: [],
+					title: SKILLS_SECTION_TITLE,
+					body: formatSkillDocumentation(options.distDir, commandName, snapshot.meta.name),
+					except: [SKILLS],
+				},
+			],
 			build: (context: ExtensionBuildContext) => buildSkills(options, context),
 			hooks: {
 				async preRun(context: ExtensionContext) {
@@ -218,7 +216,7 @@ export const skill: ExtensionFactory<[options: SkillOptions], {}, [], []> = defi
 				},
 			},
 		};
-	}),
+	},
 );
 
 async function reconcileSkill(opts: {
@@ -359,7 +357,7 @@ async function reconcileSkill(opts: {
 
 function buildSkillCommand(commandName: string, options: SkillOptions) {
 	return defineCommand(
-		runtime(commandName),
+		commandName,
 		{ description: "Manage agent skill installations" },
 		(command) =>
 			command
