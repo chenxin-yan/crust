@@ -187,6 +187,17 @@ function _providedContextCollections(
 	new Crust("cli").provide(...instances);
 }
 
+function _broadProviderValueEvidence(name: string) {
+	const text = defineContext("db", () => "ok");
+	const numeric = defineContext(name, () => 42);
+	const dependent = defineContext("consumer", { uses: [text] }, async ({ ctx }) =>
+		(await ctx.db).toUpperCase(),
+	);
+	// @ts-expect-error -- a broad-named number provider cannot satisfy the string dependency
+	new Crust("app").provide(numeric()).provide(dependent());
+	new Crust("app").provide(defineContext(name, () => "ok")()).provide(dependent());
+}
+
 function _commandCompositionBoundary(definitions: readonly ReturnType<typeof defineCommand>[]) {
 	new Crust("cli").add(...definitions);
 	const app = new Crust("cli").flags({ name: "known", type: "number" }).add(...definitions);

@@ -137,12 +137,20 @@ type MismatchedDependencyBrand<C, KnownValues> =
 				}
 		: never;
 
+// A broad-named provider (Record<string, V>) may satisfy any dependency name, but V is
+// still evidence against the declared value type. Only a fully unknown registry opts out.
+type KnownValuesOf<Ctx> = string extends keyof Ctx
+	? unknown extends Ctx[keyof Ctx & string]
+		? {}
+		: Ctx
+	: Ctx;
+
 /** Brand provided instances whose transitive dependency closure is unsatisfied. */
 export type ValidateContextDeps<
 	Ctx extends ContextMap,
 	Cs extends readonly AnyContextInstance[],
 	Known extends string = (keyof Ctx & string) | DefName<Cs[number]>,
-	KnownValues extends ContextMap = (string extends keyof Ctx ? {} : Ctx) & ContextsOutput<Cs>,
+	KnownValues extends ContextMap = KnownValuesOf<Ctx> & ContextsOutput<Cs>,
 > = {
 	[I in keyof Cs]: Cs[I] &
 		MissingDependencyBrand<Cs[I], Known> &
