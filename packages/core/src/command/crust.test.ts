@@ -341,6 +341,17 @@ describe("Crust .add() with inline definitions", () => {
 		expect(subCommands.sub1?.flags.a).toBeDefined();
 		expect(subCommands.sub2?.flags.b).toBeDefined();
 	});
+
+	it("rejects a nested definition with a missing Context demand", () => {
+		const db = defineContext("db", () => "db");
+		const nested = defineCommand("grandchild", (command) => command.use(db));
+		const definition = defineCommand("child", (command) =>
+			// @ts-expect-error -- runtime regression deliberately exercises the consuming check.
+			command.add(nested),
+		);
+
+		expect(() => new Crust("cli").add(definition)).toThrow('No provider for Context "db"');
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────

@@ -83,10 +83,5 @@ export type AppendArgsChecks<A extends ArgsDef, NewA extends ArgsDef> = A extend
 		: ValidateVariadicArgs<NewA, ArgNames<A>>
 	: ValidateVariadicArgs<NewA>;
 
-export type LocalAppendArgsChecks<A extends ArgsDef, NewA extends ArgsDef> = AppendArgsChecks<
-	A,
-	NewA
->;
-
 /** Conditional collections and uncertain canonical identities cannot promise every alternative output key. */
 export type AttachedArgs<A extends ArgsDef> = HasClosedNames<A> extends true ? A : ArgsDef;

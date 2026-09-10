@@ -1,6 +1,6 @@
 import type { StandardSchema } from "@crustjs/utils/schema";
 
-import type { Equal, Expect } from "../../tests/helpers.ts";
+import type { Equal, Expect, Repeat } from "../../tests/helpers.ts";
 import type { InferArgValue, InputArgs } from "../types.ts";
 import { Crust, type RunInput } from "./crust.ts";
 
@@ -164,10 +164,7 @@ function _thirtyArgumentChain() {
 	void app.run([], { args: { a29: "last" } });
 }
 
-type HundredPositions<Defs extends readonly { name: string; type: "string" }[] = []> =
-	Defs["length"] extends 100
-		? Defs
-		: HundredPositions<readonly [...Defs, { name: `p${Defs["length"]}`; type: "string" }]>;
+type HundredPositions = Repeat<100, "p", { readonly type: "string" }>;
 
 function _hundredPositionPrefixes(
 	app: Crust<{}, HundredPositions>,

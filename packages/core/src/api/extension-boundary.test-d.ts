@@ -3,6 +3,7 @@ import type { Equal, Expect } from "../../tests/helpers.ts";
 import {
 	Crust,
 	defineCommand,
+	type AnyCommandDefinitionBuilder,
 	type AnyCrust,
 	type CommandDefinition,
 	type CommandDefinitionBuilder,
@@ -65,23 +66,18 @@ function _privateCommandProof() {
 	const child = defineCommand("child", (c) =>
 		c.flags({ name: "token", type: "string" }).action(() => 42),
 	);
-	const copy = {
-		...child,
-		_shape: { args: [] as const, flags: {}, children: {}, result: "fake" },
-		_deps: {},
-		_aliases: [] as const,
-	};
+	const copy = { ...child };
 	const app = new Crust("app").add(copy);
 	const outcome = app.run(["child"], { flags: { token: "value" } });
 	type _result = Expect<Equal<typeof outcome, Promise<RunOutcome<number>>>>;
 	new Crust("app")
 		.provide(defineContext("owner", { flags: [{ name: "token", type: "string" }] }, () => 1)())
-		// @ts-expect-error Public phantom fields cannot erase carried flag relations.
+		// @ts-expect-error Structural copies retain carried flag relations.
 		.add(copy);
 	const db = defineContext("db", () => 1);
 	const demanding = defineCommand("demand", (c) => c.use(db));
-	// @ts-expect-error Public phantom fields cannot erase declared demands.
-	new Crust("app").add({ ...demanding, _deps: {} });
+	// @ts-expect-error Structural copies retain declared demands.
+	new Crust("app").add({ ...demanding });
 }
 
 function _holderErasure() {
@@ -159,9 +155,7 @@ function _recipeHolderProof() {
 		// @ts-expect-error A public default holder cannot erase a recipe's local flags.
 		return erase(c.flags({ name: "token", type: "number" }));
 	});
-	function identity<
-		B extends CommandDefinitionBuilder<any, any, any, any, any, any, any, any, any>,
-	>(b: B): B {
+	function identity<B extends AnyCommandDefinitionBuilder>(b: B): B {
 		return b;
 	}
 	const child = defineCommand("child", (c) => identity(c.flags({ name: "token", type: "number" })));

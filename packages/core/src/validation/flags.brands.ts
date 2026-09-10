@@ -1,4 +1,4 @@
-import type { AnyContextInstance, ContextInstanceData } from "../api/context.ts";
+import type { ContextInstanceData } from "../api/context.ts";
 import type { ExtensionData } from "../api/extension.ts";
 import type { CommandDefinitionData } from "../command/crust.ts";
 import type { FlagsDef, NamedFlagDef, NamedFlagsRecord } from "../types.ts";
@@ -131,11 +131,10 @@ type NoPrefixBrand<S extends string> = [Extract<S, `no-${string}`>] extends [nev
 // Context-owned flag validation (compile-time, per-instance granularity)
 // ────────────────────────────────────────────────────────────────────────────
 
-export type ContextOwnedFlags<C> = C extends AnyContextInstance
-	? ContextInstanceData<C> extends { readonly _ownedFlags?: infer OF extends FlagsDef }
-		? OF
-		: {}
-	: C extends { readonly _ownedFlags?: infer OF extends FlagsDef }
+export type ContextOwnedFlags<C> =
+	ContextInstanceData<C> extends {
+		readonly _ownedFlags?: infer OF extends FlagsDef;
+	}
 		? OF
 		: {};
 

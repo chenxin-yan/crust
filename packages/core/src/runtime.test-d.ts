@@ -1,6 +1,6 @@
 import type { StandardSchema } from "@crustjs/utils/schema";
 
-import type { Equal, Expect } from "../tests/helpers.ts";
+import type { Equal, Expect, Repeat } from "../tests/helpers.ts";
 import {
 	Crust,
 	defineCommand,
@@ -156,10 +156,7 @@ function _overlappingFlagContributions(
 	checked.flags({ name: "next", type: "boolean" });
 }
 
-type FlagBatch<Defs extends readonly { name: string; type: "boolean" }[] = []> =
-	Defs["length"] extends 100
-		? Defs
-		: FlagBatch<[...Defs, { name: `flag-${Defs["length"]}`; type: "boolean" }]>;
+type FlagBatch = Repeat<100, "flag-", { readonly type: "boolean" }>;
 
 function _largeFlagBatch(defs: FlagBatch) {
 	new Crust("cli").flags(...defs).action(({ flags }) => {

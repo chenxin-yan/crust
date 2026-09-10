@@ -40,7 +40,7 @@ import type {
 	MergeFlags,
 	NamedFlagDef,
 } from "../types.ts";
-import type { LocalAppendArgsChecks, AttachedArgs } from "../validation/args.brands.ts";
+import type { AppendArgsChecks, AttachedArgs } from "../validation/args.brands.ts";
 import type {
 	AttachedCommandSpellings,
 	CommandCollisionBrand,
@@ -304,7 +304,7 @@ export type RootCommandMeta = Pick<CommandMeta, "description" | "version" | "usa
 	readonly sections?: readonly RuntimeCommandSectionInput[];
 };
 
-type AnyCommandDefinitionBuilder = CommandDefinitionBuilder<
+export type AnyCommandDefinitionBuilder = CommandDefinitionBuilder<
 	any,
 	any,
 	any,
@@ -365,12 +365,6 @@ export interface CommandDefinition<
 				? unknown
 				: (state: [CommandInputShape<Shape>, Deps]) => void;
 	};
-	/** @internal — phantom carrying configured alias literals for add-time checks */
-	readonly _aliases?: Aliases;
-	/** @internal — phantom carrying args, flags, and descendants for typed invocation */
-	readonly _shape?: Shape;
-	/** @internal — phantom carrying the declared dependency closure */
-	readonly _deps?: Deps;
 }
 
 /** @internal Private recipe metadata survives public phantom-field overrides. */
@@ -430,17 +424,10 @@ function materializeCommandDefinition(
 
 	const childNode = cloneCommandNode(configured._node);
 
-	const validate = (node: CommandNode): void => {
-		validateContextAvailability(
-			node.contexts.map(({ instance }) => instance),
-			[
-				...node.demands,
-				...node.contexts.slice(parent.contexts.length).map(({ instance }) => instance),
-			],
-		);
-		for (const descendant of Object.values(node.subCommands)) validate(descendant);
-	};
-	validate(childNode);
+	validateContextAvailability(
+		childNode.contexts.map(({ instance }) => instance),
+		childNode.demands,
+	);
 
 	childNode.meta = { name, ...internal.meta };
 	return childNode;
@@ -477,9 +464,6 @@ export interface CommandDefinitionBuilder<
 			state: [CommandInputShape<CommandShape<A, Flags, Tree, Result, Providers>>, Deps],
 		) => void;
 	};
-	readonly _shape?: CommandShape<A, Flags, Tree, Result, Providers>;
-	/** @internal — declared dependency closure. */
-	readonly _deps?: Deps;
 	flags<const Defs extends readonly NamedFlagDef[]>(
 		...defs: ValidateLocalFlagDefs<Defs, Sp>
 	): CommandDefinitionBuilder<
@@ -496,7 +480,7 @@ export interface CommandDefinitionBuilder<
 	>;
 
 	args<const NewA extends ArgsDef>(
-		...defs: NewA & LocalAppendArgsChecks<A, NewA>
+		...defs: NewA & AppendArgsChecks<A, NewA>
 	): CommandDefinitionBuilder<
 		Flags,
 		AppendedArgs<A, NewA>,
@@ -1270,7 +1254,7 @@ export class Crust<
 	 * @returns A new `Crust` instance with the combined args
 	 */
 	args<const NewA extends ArgsDef>(
-		...defs: NewA & LocalAppendArgsChecks<A, NewA>
+		...defs: NewA & AppendArgsChecks<A, NewA>
 	): AfterArgs<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, NewA, Meta>;
 
 	args<const NewA extends ArgsDef>(
