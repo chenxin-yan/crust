@@ -1,3 +1,5 @@
+import type { StandardSchema } from "@crustjs/utils/schema";
+
 import type { Equal, Expect } from "../tests/helpers.ts";
 import {
 	Crust,
@@ -11,8 +13,12 @@ import {
 	type RunOutcome,
 	defineFlag,
 	defineArg,
+	defineContext,
 	defineExtension,
+	defineExtensionId,
+	type NamedFlagDef,
 } from "./index.ts";
+import type { CommandSectionInput } from "./types.ts";
 
 function _checkedInvocation(
 	broad: AnyCrust,
@@ -26,14 +32,10 @@ function _checkedInvocation(
 	void broad.run([]);
 	void broad.run([], {});
 	void openArgs.run([], {});
-	void broad.run([], {});
 	void broad.run(path, {});
-	void openArgs.run([], {});
 	const app = root.action(() => "known" as const);
 	const known = app.run([], {});
 	type _known = Expect<Equal<typeof known, Promise<RunOutcome<"known">>>>;
-	const dynamic = app.run([], {});
-	type _dynamic = Expect<Equal<typeof dynamic, Promise<RunOutcome<"known">>>>;
 	interface Payload {
 		ok: boolean;
 	}
@@ -76,21 +78,18 @@ function _checkedCommandNames(name: string) {
 
 function _genericCommandName<Name extends string>(name: Name) {
 	// @ts-expect-error -- a generic string constraint does not prove canonical validity
-	defineCommand(name, (command) => command);
-	// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
 	const command = defineCommand(name, (builder) => builder);
-	// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
+	// @ts-expect-error -- a generic name does not prove valid renaming
 	const renamed = command.as(name);
 	type _name = Expect<Equal<typeof renamed.name, Name>>;
 	return command;
 }
 
-import { defineExtensionId } from "./identity.ts";
-import type { CommandSectionInput } from "./types.ts";
 function _localMetadata(
 	title: string,
 	aliases: string[],
 	only: ReturnType<typeof defineExtensionId>[],
+	text: string,
 ) {
 	// @ts-expect-error -- audiences are constructively nonempty
 	const _empty: CommandSectionInput = { title: "Notes", body: "text", only: [] };
@@ -102,7 +101,10 @@ function _localMetadata(
 	defineCommand("child", { aliases }, (b) => b);
 	new Crust("cli", { sections: [{ title, body: "text", only }] });
 	defineCommand("child", { aliases, sections: [{ title, body: "text" }] }, (b) => b);
-	defineCommand("child", { aliases }, (b) => b);
+	// @ts-expect-error -- a dynamic body cannot hide a known invalid title
+	new Crust("app", { sections: [{ title: "two\nlines", body: text }] });
+	// @ts-expect-error -- a dynamic title cannot hide a known invalid body
+	new Crust("app", { sections: [{ title: text, body: " " }] });
 }
 
 function _conditionalSectionText(cond: boolean) {
@@ -123,8 +125,6 @@ function _localAliasProofIsNotDestinationProof(aliases: string[]) {
 function _rootVersionOwnership() {
 	// @ts-expect-error -- versions belong to the root, not command configs
 	defineCommand("child", { version: "1" }, (b) => b);
-	// @ts-expect-error -- the checked envelope does not widen the structural config contract
-	defineCommand("child", { version: "1" }, (b) => b);
 }
 
 function _sectionShapesStayTyped() {
@@ -134,7 +134,7 @@ function _sectionShapesStayTyped() {
 	new Crust("cli", { sections: [{ title: "Notes", body: "text", only: ["unbranded"] }] });
 	new Crust("cli", {
 		sections: [
-			// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
+			// @ts-expect-error -- section audiences cannot specify both only and except
 			{
 				title: "Notes",
 				body: "text",
@@ -154,7 +154,6 @@ function _overlappingFlagContributions(
 	defineCommand("child", (command) => command.flags(flag));
 	const checked = new Crust("cli").flags(flag);
 	checked.flags({ name: "next", type: "boolean" });
-	checked.flags({ name: "next", type: "boolean" });
 }
 
 type FlagBatch<Defs extends readonly { name: string; type: "boolean" }[] = []> =
@@ -171,7 +170,6 @@ function _largeFlagBatch(defs: FlagBatch) {
 	});
 }
 
-import { defineContext, type NamedFlagDef } from "./index.ts";
 function _contextBoundaries(name: string, flags: readonly NamedFlagDef[]) {
 	defineContext(name, () => 1);
 	defineContext("auth", { flags }, () => 1);
@@ -189,7 +187,6 @@ function _contextBoundaries(name: string, flags: readonly NamedFlagDef[]) {
 function _providedContextCollections(
 	instances: readonly ReturnType<ReturnType<typeof defineContext>>[],
 ) {
-	new Crust("cli").provide(...instances);
 	new Crust("cli").provide(...instances);
 }
 
@@ -265,9 +262,7 @@ function _uncertainRequiredFlags(defaultValue: string | undefined, required: tru
 	// @ts-expect-error -- a possibly required flag must be supplied
 	void maybeRequired.run([], {});
 	void maybeRequired.run([], { flags: { token: "value" } });
-	// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
-	void maybeRequired.run([], {});
-	type RequiredInput = import("./types.ts").InputFlags<{
+	type RequiredInput = InputFlags<{
 		token: { type: "string"; required: true; default: string | undefined };
 	}>;
 	// @ts-expect-error -- exported input retains a possible requirement
@@ -311,15 +306,13 @@ function _unprovenChoices(
 	// @ts-expect-error -- compatibility must not bypass choice membership
 	void app.run([], assigned);
 	void app.run([], { flags: { safe: true } });
-	// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
-	void app.run([], assigned);
 	const local = importFlag(choices);
 	// @ts-expect-error -- a locally checked definition is not future input proof
 	void new Crust("app").flags(local).run([], { flags: { mode: "forbidden" } });
-	type Flags = import("./types.ts").InputFlags<{ mode: { type: "string"; choices: string[] } }>;
+	type Flags = InputFlags<{ mode: { type: "string"; choices: string[] } }>;
 	// @ts-expect-error -- exported flags cannot prove widened membership
 	const _flags: Flags = { mode: "forbidden" };
-	type Args = import("./types.ts").InputArgs<[{ name: "mode"; type: "string"; choices: string[] }]>;
+	type Args = InputArgs<[{ name: "mode"; type: "string"; choices: string[] }]>;
 	// @ts-expect-error -- arguments use the same membership owner
 	const _args: Args = { mode: "forbidden" };
 	void new Crust("app")
@@ -346,28 +339,24 @@ function _possibleNoNegate(noNegate: true | undefined) {
 	const assigned = { flags: { yes: false } };
 	// @ts-expect-error -- assigned input cannot bypass possible noNegate
 	void app.run([], assigned);
-	type Flags = import("./types.ts").InputFlags<{ yes: { type: "boolean"; noNegate?: true } }>;
+	type Flags = InputFlags<{ yes: { type: "boolean"; noNegate?: true } }>;
 	// @ts-expect-error -- exported input retains possible noNegate
 	const _flags: Flags = { yes: false };
 	void app.run([], { flags: { yes: true } });
 	void app.run([]);
-	// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
-	void app.run([], assigned);
 }
 
 function _conditionalValueContracts(
 	multiple: true | undefined,
 	parse: ((raw: string) => number) | undefined,
 ) {
-	const schema: import("@crustjs/utils/schema").StandardSchema = {
+	const schema: StandardSchema = {
 		"~standard": { version: 1, vendor: "test", validate: (value) => ({ value }) },
 	};
 	const app = new Crust("app").flags({ name: "value", type: "string", schema, multiple });
 	// @ts-expect-error -- a possible occurrence array cannot accept a scalar unchecked
 	void app.run([], { flags: { value: "text" } });
 	void app.run([]);
-	// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
-	void app.run([], { flags: { value: "text" } });
 	const arg = new Crust("app").args({ name: "value", type: "string", variadic: multiple });
 	// @ts-expect-error -- possible variadic input cannot accept an unchecked scalar
 	void arg.run([], { args: { value: "text" } });
@@ -485,7 +474,6 @@ function _infiniteNames(
 	defineFlag(mixed, { type: "string" });
 	defineFlag(branded, { type: "string" });
 	const flag = defineFlag(name, { type: "string", required: true });
-	new Crust("app").flags(flag);
 	const flags = new Crust("app").flags(flag);
 	void flags.run([]);
 	void flags.run([], { flags: { [name]: "ok" } });
@@ -494,19 +482,16 @@ function _infiniteNames(
 	const command = defineCommand(name, (c) =>
 		c.args({ name: "value", type: "string", required: true }),
 	);
-	new Crust("app").add(command);
 	const tree = new Crust("app").add(command);
 	void tree.run([name]);
 	void tree.run([]);
 	void tree.run([name], { args: { value: "ok" } });
 	const provider = defineContext(name, () => 1);
-	new Crust("app").provide(provider());
 	defineCommand("consumer", (c) => c.use(provider));
 	const provided = new Crust("app").provide(provider());
 	provided.provide(defineContext("other", () => 1)());
 	void provided.run([]);
 	const alias = defineFlag("safe", { type: "string", aliases: [name] as const });
-	new Crust("app").flags(alias);
 	const aliased = new Crust("app").flags(alias);
 	void aliased.run([], { flags: { safe: "ok" } });
 	aliased.flags({ name: "other", type: "boolean" });
@@ -543,8 +528,6 @@ function _finiteAndConditionalNames(name: `mode-${"a" | "b"}`) {
 
 function _genericNameWrapper<N extends string>(name: N) {
 	// @ts-expect-error -- a generic constraint is not local name evidence
-	defineFlag(name, { type: "string" });
-	// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
 	return defineFlag(name, { type: "string" });
 }
 void new Crust("app").flags(_genericNameWrapper("known")).run([]);
@@ -585,7 +568,7 @@ function _infiniteChoiceMembers(choice: `mode-${string}`, numeric: `${number}`) 
 	// @ts-expect-error -- one actual choice does not prove every member of its template domain
 	void app.run([], { flags: { mode: "mode-other" } });
 	void app.run([]);
-	// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
+	// @ts-expect-error -- an infinite choice domain does not prove supplied membership
 	void app.run([], { flags: { mode: choice } });
 	const checked = new Crust("app").flags(defineFlag("mode", { type: "string", choices }));
 	// @ts-expect-error -- local checking cannot prove an infinite set of supplied values
@@ -664,8 +647,6 @@ function _uncertainPositionalKind(type: "string" | "number", condition: boolean)
 	void root.run([], { args: { value: 42 } });
 	// @ts-expect-error -- either actual kind can reject a string
 	void root.run([], { args: { value: "text" } });
-	// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
-	void root.run([], { args: { value: 42 } });
 	const child = defineCommand("child", (c) => c.args({ name: "value", type, required: true }));
 	// @ts-expect-error -- descendants retain the same uncertain input kind
 	void new Crust("app").add(child).run(["child"], { args: { value: 42 } });
@@ -724,7 +705,7 @@ function _conditionalLocalHelperProof(condition: boolean) {
 	const app = new Crust("app").flags(flag);
 	// @ts-expect-error A conditional helper cannot erase a possible requirement.
 	void app.run([]);
-	// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
+	// @ts-expect-error -- a conditional helper does not prove supplied value compatibility
 	void app.run([], { flags: { mode: "value" } });
 	const arg = defineArg("mode", required);
 	// @ts-expect-error The same proof must survive argument normalization.

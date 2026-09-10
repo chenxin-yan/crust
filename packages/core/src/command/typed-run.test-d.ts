@@ -134,8 +134,6 @@ function _typecheckKeepsDynamicallyAssembledExtensionsAndContributionArraysRunti
 	void bothApp.run(["foo"]);
 	void bothApp.run(["bar"]);
 	void spreadApp.run(["foo"]);
-	// An open sibling namespace requires checked subsequent attachment.
-	void spreadApp.add(foo);
 	void spreadApp.add(foo);
 }
 

@@ -13,7 +13,6 @@ function _typecheckPreservesCommandArgumentAndFlagTypesFromTheApplication() {
 	);
 	const app = new Crust("cli").add(deploy);
 
-	void app.run(["deploy"], { args: { target: "prod" }, flags: { force: true } });
 	void runInteractive(app, ["deploy"], { args: { target: "prod" } });
 	// @ts-expect-error -- command paths come from the application tree
 	void runInteractive(app, ["deply"], { args: { target: "prod" } });

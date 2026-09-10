@@ -1,5 +1,10 @@
 /* oxlint-disable anti-slop/no-unknown-returns, anti-slop/no-known-value-widening -- compile-only probes deliberately expose unproven parser contracts. */
-import { Crust } from "../command/crust.ts";
+import { Crust, defineCommand } from "../command/crust.ts";
+import { defineExtensionId } from "../identity.ts";
+import type { ArgsDef, FlagsDef, NamedFlagDef } from "../types.ts";
+import { defineContext } from "./context.ts";
+import { defineExtension } from "./extension.ts";
+import { defineArg, defineFlag } from "./flags.ts";
 
 // Compile-time regression checks; intentionally never invoked.
 // rejects invalid choice defaults and reserved spellings at the builder call
@@ -18,8 +23,6 @@ function _typecheckRejectsDefaultsOutsideLiteralChoicesAtTheBuilderCall() {
 	new Crust("cli").args({ name: "mode", type: "string", choices: ["a", "b"], default: "z" });
 }
 
-import { defineArg, defineFlag } from "./flags.ts";
-
 function _localDefinitions(name: string, aliases: string[], choices: string[], value: string) {
 	// @ts-expect-error -- helpers own local spelling checks, not just attachments
 	defineFlag("bad", { type: "boolean", short: "xx" });
@@ -34,13 +37,9 @@ function _localDefinitions(name: string, aliases: string[], choices: string[], v
 	defineFlag("mode", { type: "string", choices, default: value });
 	// @ts-expect-error -- literal membership is owned by the helper
 	defineArg("mode", { type: "string", choices: ["a"], default: "b" });
-	defineFlag(name, { type: "boolean" });
 	defineArg(name, { type: "string", choices, default: value });
-	defineFlag("mode", { type: "string", choices, default: value });
 }
 
-import { defineCommand } from "../command/crust.ts";
-import type { ArgsDef, NamedFlagDef } from "../types.ts";
 function _attachments(flags: NamedFlagDef[], args: ArgsDef, aliases: string[], cond: boolean) {
 	new Crust("cli").flags(...flags);
 	new Crust("cli").flags(cond ? { name: "a", type: "boolean" } : { name: "b", type: "boolean" });
@@ -49,9 +48,7 @@ function _attachments(flags: NamedFlagDef[], args: ArgsDef, aliases: string[], c
 	new Crust("cli").args({ name: "a", type: "string", parse: (_raw): unknown => 1 });
 	const open = new Crust("cli").flags(...flags);
 	open.flags({ name: "known", type: "boolean" });
-	open.flags({ name: "known", type: "boolean" });
 	const openArgs = new Crust("cli").args(...args);
-	openArgs.args({ name: "known", type: "string" });
 	openArgs.args({ name: "known", type: "string" });
 	// @ts-expect-error -- appending known args must not erase prior unknown args for run
 	void openArgs.args({ name: "known", type: "string" }).run([], {});
@@ -107,12 +104,11 @@ function _mixedCheckedNamespaces(
 }
 
 function _broadFlagHolders(
-	app: Crust<import("../types.ts").FlagsDef>,
+	app: Crust<FlagsDef>,
 	aliases: Crust<{ known: { type: "boolean"; aliases: string[] } }>,
 ) {
 	app.flags({ name: "new", type: "boolean" });
 	aliases.flags({ name: "new", type: "boolean" });
-	app.flags({ name: "new", type: "boolean" });
 }
 
 function _emptyAttachmentsPreserveKnownState() {
@@ -126,7 +122,6 @@ function _conditionalCanonicalIdentity(cond: boolean) {
 		type: "string" as const,
 		required: true as const,
 	};
-	new Crust("cli").flags(flag);
 	const flags = new Crust("cli").flags(flag);
 	void flags.run([], { flags: { a: "a", b: "b" } });
 	const arg = {
@@ -134,7 +129,50 @@ function _conditionalCanonicalIdentity(cond: boolean) {
 		type: "string" as const,
 		required: true as const,
 	};
-	new Crust("cli").args(arg);
 	const args = new Crust("cli").args(arg);
 	void args.run([], { args: { a: "a", b: "b" } });
+}
+
+function _mixedDefinitions(condition: boolean, name: string, invalidName: "" | "valid") {
+	const mixed = condition
+		? { type: "string" as const, short: "long" as const }
+		: { type: "string" as const };
+	// @ts-expect-error -- an uncertain definition cannot hide a known invalid short spelling
+	defineFlag(name, mixed);
+	// @ts-expect-error -- one valid branch cannot hide an invalid flag name
+	defineFlag(invalidName, { type: "string" });
+	// @ts-expect-error -- overlapping collision diagnostics must not cancel each other out
+	defineFlag("value", { type: "string", short: "v", aliases: ["value", "v"] });
+}
+
+function _openInvalidDefinitions(condition: boolean) {
+	const args: { name: string; type: "string"; choices: readonly ["ok"]; default: "bad" }[] = [];
+	// @ts-expect-error -- an open collection must retain independently invalid default membership
+	new Crust("app").args(...args);
+	const flags = condition
+		? ([{ name: "ok", type: "string" } as const] as const)
+		: ([{ name: "bad", type: "string", short: "long" } as const] as const);
+	// @ts-expect-error -- an uncertain collection must not hide its independently invalid branch
+	new Crust("app").flags(...flags);
+	// @ts-expect-error -- multiple reserved-prefix diagnostics must not cancel each other out
+	new Crust("app").flags({ name: "no-value", type: "string", aliases: ["no-alias"] });
+}
+
+function _otherFlagSpellingEntryPoints() {
+	defineContext(
+		"context",
+		// @ts-expect-error -- Context flags use the same local spelling contract
+		{ flags: [{ name: "flag", type: "boolean", aliases: ["f", "f"] }] },
+		() => true,
+	);
+	defineExtension(defineExtensionId("extension"), {
+		// @ts-expect-error -- Extension flags use the same local spelling contract
+		flags: [{ name: "flag", type: "boolean", short: "ff" }],
+	});
+	defineCommand("child", (command) =>
+		command
+			// @ts-expect-error -- recipe flags use the same local spelling contract
+			.flags({ name: "flag", type: "boolean", aliases: ["f", "f"] }),
+	);
+	new Crust("cli").flags({ name: "flag", type: "boolean", short: "f", aliases: ["again"] });
 }

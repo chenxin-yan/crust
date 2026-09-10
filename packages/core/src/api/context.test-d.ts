@@ -47,9 +47,7 @@ function _typecheckChecksDependencyGraphsAtEveryCompositionBoundary() {
 	});
 	new Crust("cli").provide(config(), db()).extend(extension);
 
-	// A widened factory requires explicit checked attachment.
 	const widened: AnyContextFactory = config;
-	new Crust("cli").provide(widened(undefined));
 	new Crust("cli").provide(widened(undefined));
 
 	const invalidCompositions = () => {

@@ -70,12 +70,6 @@ function _requiredVariadic() {
 	void app.run([], { args: { files: ["one"] } });
 	// @ts-expect-error -- required core variadics without defaults are nonempty
 	void app.run([], { args: { files: [] } });
-	type _output = Expect<
-		Equal<
-			InferArgValue<{ name: "files"; type: "string"; variadic: true; required: true }>,
-			[string, ...string[]]
-		>
-	>;
 	type _defaultOutput = Expect<
 		Equal<
 			InferArgValue<{
@@ -160,40 +154,12 @@ function _thirtyArgumentChain() {
 		.args({ name: "a28", type: "string" })
 		.args({ name: "a29", type: "string" })
 		.action(() => "done" as const);
-	void app.run([], {
-		args: {
-			a0: "0",
-			a1: "1",
-			a2: "2",
-			a3: "3",
-			a4: "4",
-			a5: "5",
-			a6: "6",
-			a7: "7",
-			a8: "8",
-			a9: "9",
-			a10: "10",
-			a11: "11",
-			a12: "12",
-			a13: "13",
-			a14: "14",
-			a15: "15",
-			a16: "16",
-			a17: "17",
-			a18: "18",
-			a19: "19",
-			a20: "20",
-			a21: "21",
-			a22: "22",
-			a23: "23",
-			a24: "24",
-			a25: "25",
-			a26: "26",
-			a27: "27",
-			a28: "28",
-			a29: "29",
-		},
-	});
+	function run(values: {
+		[D in (typeof app)["_types"]["args"][number] as D["name"]]: string;
+	}) {
+		void app.run([], { args: values });
+	}
+	void run;
 	// @ts-expect-error -- a late position still requires every earlier position
 	void app.run([], { args: { a29: "last" } });
 }

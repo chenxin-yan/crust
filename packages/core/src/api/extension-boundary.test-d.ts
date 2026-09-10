@@ -3,63 +3,63 @@ import type { Equal, Expect } from "../../tests/helpers.ts";
 import {
 	Crust,
 	defineCommand,
+	type AnyCrust,
 	type CommandDefinition,
+	type CommandDefinitionBuilder,
 	type CommandShape,
 } from "../command/crust.ts";
 import { defineExtensionId } from "../identity.ts";
-import { defineContext } from "./context.ts";
+import type { RunOutcome } from "../index.ts";
+import { defineContext, type ContextInstance } from "./context.ts";
 import { defineExtension, type Extension } from "./extension.ts";
 
 const id = defineExtensionId("boundary");
-const empty = defineExtension(id);
-const nested = new Crust("app").extend(
-	defineExtension(id, {
-		build({ snapshot }) {
-			const name: string = snapshot.meta.name;
-			void name;
-		},
-	}),
-	defineExtension(defineExtensionId("second")),
-);
-void nested.run([]);
-const contributed = new Crust("app").extend(
-	defineExtension(id, {
-		flags: [{ name: "trace", type: "boolean" }],
-		provides: [defineContext("logger", () => "logger")()],
-		commands: [defineCommand("child", (command) => command.action(() => 42))],
-		hooks: {
-			preRun({ flags }) {
-				const trace: boolean | undefined = flags.trace;
-				void trace;
+
+function _extensionBoundary(broad: Extension) {
+	const empty = defineExtension(id);
+	const nested = new Crust("app").extend(
+		defineExtension(id, {
+			build({ snapshot }) {
+				const name: string = snapshot.meta.name;
+				void name;
 			},
-		},
-	}),
-);
-const result = contributed.run(["child"], { flags: { trace: true } });
-type _Result = Expect<Equal<typeof result, Promise<import("../index.ts").RunOutcome<number>>>>;
-const needsVersion = defineExtension<"version">()(id);
-// @ts-expect-error Checked collections retain erased metadata requirements.
-new Crust("app").extend(needsVersion);
-new Crust("app", { version: "1" }).extend(needsVersion);
-const list = [empty];
-new Crust("app").extend(...list);
-new Crust("app").extend(...list);
-declare const broad: Extension;
-new Crust("app").extend(broad);
-new Crust("app").extend(broad);
-const choice = Math.random()
-	? empty
-	: defineExtension(id, { flags: [{ name: "trace", type: "boolean" }] });
-new Crust("app").extend(choice);
-new Crust("app").extend(choice);
-function generic<E extends Extension>(extension: E) {
-	// @ts-expect-error Unresolved contributions cannot use the trusted path.
-	new Crust("app").extend(extension);
-	// @ts-expect-error Unresolved generic callback value contracts also need static proof.
-	new Crust("app").extend(extension);
+		}),
+		defineExtension(defineExtensionId("second")),
+	);
+	void nested.run([]);
+	const contributed = new Crust("app").extend(
+		defineExtension(id, {
+			flags: [{ name: "trace", type: "boolean" }],
+			provides: [defineContext("logger", () => "logger")()],
+			commands: [defineCommand("child", (command) => command.action(() => 42))],
+			hooks: {
+				preRun({ flags }) {
+					const trace: boolean | undefined = flags.trace;
+					void trace;
+				},
+			},
+		}),
+	);
+	const result = contributed.run(["child"], { flags: { trace: true } });
+	type _Result = Expect<Equal<typeof result, Promise<RunOutcome<number>>>>;
+	const needsVersion = defineExtension<"version">()(id);
+	// @ts-expect-error Checked collections retain erased metadata requirements.
+	new Crust("app").extend(needsVersion);
+	new Crust("app", { version: "1" }).extend(needsVersion);
+	const list = [empty];
+	new Crust("app").extend(...list);
+	new Crust("app").extend(broad);
+	const choice = Math.random()
+		? empty
+		: defineExtension(id, { flags: [{ name: "trace", type: "boolean" }] });
+	new Crust("app").extend(choice);
+	function generic<E extends Extension>(extension: E) {
+		// @ts-expect-error Unresolved generic contributions cannot use the trusted path.
+		new Crust("app").extend(extension);
+	}
+	void generic;
+	new Crust("app").extend();
 }
-void generic;
-new Crust("app").extend();
 
 function _privateCommandProof() {
 	const child = defineCommand("child", (c) =>
@@ -73,7 +73,7 @@ function _privateCommandProof() {
 	};
 	const app = new Crust("app").add(copy);
 	const outcome = app.run(["child"], { flags: { token: "value" } });
-	type _result = Expect<Equal<typeof outcome, Promise<import("../index.ts").RunOutcome<number>>>>;
+	type _result = Expect<Equal<typeof outcome, Promise<RunOutcome<number>>>>;
 	new Crust("app")
 		.provide(defineContext("owner", { flags: [{ name: "token", type: "string" }] }, () => 1)())
 		// @ts-expect-error Public phantom fields cannot erase carried flag relations.
@@ -88,12 +88,7 @@ function _holderErasure() {
 	const db = defineContext("db", () => 1);
 	const command = defineCommand("demand", (c) => c.use(db));
 	// @ts-expect-error A typed holder cannot erase privately retained demands.
-	const erasedCommand: import("../command/crust.ts").CommandDefinition<
-		"demand",
-		readonly [],
-		import("../command/crust.ts").CommandShape<[], {}>,
-		{}
-	> = command;
+	const erasedCommand: CommandDefinition<"demand", readonly [], CommandShape<[], {}>> = command;
 	const extension = defineExtension(id, { uses: [db] });
 	// @ts-expect-error An empty Extension holder cannot erase demands.
 	const erasedExtension: Extension<{}, [], [], []> = extension;
@@ -103,7 +98,7 @@ function _holderErasure() {
 		() => 1,
 	)();
 	// @ts-expect-error An empty Context holder cannot erase owned flag state.
-	const erasedContext: import("./context.ts").ContextInstance<"owned", number, {}, {}> = instance;
+	const erasedContext: ContextInstance<"owned", number, {}, {}> = instance;
 	const app = new Crust("app").flags({ name: "token", type: "string", required: true });
 	// @ts-expect-error Fresh-root defaults cannot be a holder for a nonempty root.
 	const erasedRoot: Crust = app;
@@ -115,7 +110,7 @@ function _completedHolder() {
 	const root = new Crust("app").provide(db());
 	// @ts-expect-error A root holder cannot erase provided Context expectations.
 	const empty: Crust = root;
-	const broad: import("../command/crust.ts").AnyCrust = root;
+	const broad: AnyCrust = root;
 	// @ts-expect-error Completed-application holders cannot regenerate empty-root proof.
 	const regained: Crust = broad;
 	// @ts-expect-error Completed holders are not an authoring escape hatch.
@@ -124,7 +119,7 @@ function _completedHolder() {
 	void broad.snapshot();
 	void broad.run([], {});
 	void broad.run([]);
-	function identity<B extends import("../command/crust.ts").AnyCrust>(builder: B): B {
+	function identity<B extends AnyCrust>(builder: B): B {
 		return builder;
 	}
 	identity(root).action(async ({ ctx }) => {
@@ -153,31 +148,19 @@ function _checkedReplacementProof() {
 		.command("sibling", (c) => c.action(() => true))
 		.extend(...replacements);
 	const result = dynamic.run(["child"]);
-	type _result = Expect<Equal<typeof result, Promise<import("../index.ts").RunOutcome<unknown>>>>;
+	type _result = Expect<Equal<typeof result, Promise<RunOutcome<unknown>>>>;
 	const sibling = dynamic.run(["sibling"]);
-	type _sibling = Expect<Equal<typeof sibling, Promise<import("../index.ts").RunOutcome<unknown>>>>;
+	type _sibling = Expect<Equal<typeof sibling, Promise<RunOutcome<unknown>>>>;
 }
 
 function _recipeHolderProof() {
-	const erase = (
-		b: import("../command/crust.ts").CommandDefinitionBuilder,
-	): import("../command/crust.ts").CommandDefinitionBuilder => b;
+	const erase = (b: CommandDefinitionBuilder): CommandDefinitionBuilder => b;
 	defineCommand("child", (c) => {
 		// @ts-expect-error A public default holder cannot erase a recipe's local flags.
 		return erase(c.flags({ name: "token", type: "number" }));
 	});
 	function identity<
-		B extends import("../command/crust.ts").CommandDefinitionBuilder<
-			any,
-			any,
-			any,
-			any,
-			any,
-			any,
-			any,
-			any,
-			any
-		>,
+		B extends CommandDefinitionBuilder<any, any, any, any, any, any, any, any, any>,
 	>(b: B): B {
 		return b;
 	}
@@ -194,9 +177,6 @@ function _openInlineOwnedFlags() {
 	app.command("child", (c) => {
 		return c.flags({ name: "token", type: "number" });
 	});
-	app.command("child", (c) => {
-		return c.flags({ name: "token", type: "number" });
-	});
 	app.command("child", (c) => c.flags({ name: "safe", type: "number" }));
 }
 
@@ -210,20 +190,13 @@ function _demandValues() {
 	const app = new Crust("app").provide(number());
 	// @ts-expect-error A name does not prove the command's demanded value type.
 	app.add(command);
-	// @ts-expect-error Checked availability cannot reflect erased callback value types.
-	app.add(command);
 	// @ts-expect-error Extension demands retain their value contracts.
-	app.extend(extension);
-	// @ts-expect-error Checked Extension collections retain value contracts.
 	app.extend(extension);
 	// @ts-expect-error Inline demands also compare provider values.
 	app.command("child", (c) => c.use(text));
-	// @ts-expect-error Checked inline names do not erase value contracts.
-	app.command("child", (c) => c.use(text));
 	new Crust("app").provide(text()).add(command);
-	new Crust("app").provide(text()).add(command);
-	// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
-	new Crust("app").add(command); // Missing names are checked at consumption.
+	// @ts-expect-error -- missing provider "db"
+	new Crust("app").add(command);
 }
 
 function _descendantExtensionDemand() {
@@ -242,16 +215,7 @@ function _descendantExtensionDemand() {
 	new Crust("app").provide(text()).add(child).extend(extension);
 	// @ts-expect-error Future descendants must satisfy retained hook demands.
 	new Crust("app").provide(text()).extend(extension).add(child);
-	new Crust("app")
-		.provide(text())
-		.extend(extension)
-		// @ts-expect-error Checked child collections cannot erase callback value contracts.
-		.add(child);
-	new Crust("app")
-		.provide(text())
-		.add(child)
-		// @ts-expect-error Checked Extension collections cannot erase descendant value contracts.
-		.extend(extension);
+
 	const compatible = defineCommand("child", (c) => c.provide(text()));
 	new Crust("app").provide(text()).extend(extension).add(compatible);
 	new Crust("app").provide(text()).add(compatible).extend(extension);
@@ -303,7 +267,7 @@ function _contributedDemandValues() {
 		// @ts-expect-error Checked contributed provider replacement retains prior hook contracts.
 		.extend(defineExtension(defineExtensionId("provider"), { provides: [number()] }));
 	// @ts-expect-error An open holder cannot erase a concrete provider shape.
-	const broad: import("../command/crust.ts").CommandDefinition = child;
+	const broad: CommandDefinition = child;
 	new Crust("app")
 		.provide(text())
 		.extend(demand)
@@ -363,7 +327,7 @@ function _replacementOrderAndFixedDynamicNames() {
 	const broad = defineExtension(id, { commands });
 	const restored = root.extend(broad, last);
 	const result = restored.run(["child"]);
-	type _result = Expect<Equal<typeof result, Promise<import("../index.ts").RunOutcome<boolean>>>>;
+	type _result = Expect<Equal<typeof result, Promise<RunOutcome<boolean>>>>;
 }
 
 function _checkedAliasReplacementProof() {
@@ -376,15 +340,13 @@ function _checkedAliasReplacementProof() {
 	void app.run(["shared"]);
 	void app.run(["old"]);
 	const unknown = app.run(["shared"], {});
-	type _unknown = Expect<Equal<typeof unknown, Promise<import("../index.ts").RunOutcome<unknown>>>>;
+	type _unknown = Expect<Equal<typeof unknown, Promise<RunOutcome<unknown>>>>;
 	const replacements = [
 		defineExtension(id, { commands: [defineCommand("shared", (c) => c.action(() => true))] }),
 	];
 	const canonical = new Crust("app").add(old).extend(...replacements);
 	const result = canonical.run(["shared"]);
-	type _canonical = Expect<
-		Equal<typeof result, Promise<import("../index.ts").RunOutcome<unknown>>>
-	>;
+	type _canonical = Expect<Equal<typeof result, Promise<RunOutcome<unknown>>>>;
 }
 
 function _providersAfterPendingCommands() {
@@ -400,8 +362,6 @@ function _providersAfterPendingCommands() {
 	new Crust("app").extend(nested).provide(owner());
 	// Ordinary children have already materialized; later providers remain positional.
 	new Crust("app").add(child).provide(owner());
-	// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
-	new Crust("app").extend(ext).provide(owner());
 }
 
 function _conditionalDescendantDemand(condition: boolean) {
@@ -415,30 +375,17 @@ function _conditionalDescendantDemand(condition: boolean) {
 	root.add(child).extend(demand);
 	// @ts-expect-error Retained demands apply to every conditional recipe branch.
 	root.extend(demand).add(child);
-	// @ts-expect-error Checked child attachment cannot erase provider value contracts.
-	root.extend(demand).add(child);
-	// @ts-expect-error Checked demand attachment checks every existing child branch.
-	root.add(child).extend(demand);
+
 	// @ts-expect-error Inline recipes retain every provider branch.
 	root.extend(demand).command("child", (c) => (condition ? c.provide(number()) : c));
-	root
-		.extend(demand)
-		// @ts-expect-error Checked inline recipes retain every provider branch.
-		.command("child", (c) => (condition ? c.provide(number()) : c));
+
 	// @ts-expect-error Later hooks check existing conditional inline recipes.
 	root.command("child", (c) => (condition ? c.provide(number()) : c)).extend(demand);
-	root
-		.command("child", (c) => (condition ? c.provide(number()) : c))
-		// @ts-expect-error Checked later hooks check existing conditional inline recipes.
-		.extend(demand);
+
 	const contribution = defineExtension(defineExtensionId("conditional"), { commands: [child] });
 	// @ts-expect-error Contributed conditional recipes must satisfy existing hooks.
 	root.extend(demand).extend(contribution);
 	// @ts-expect-error Later hooks must check contributed conditional recipes.
-	root.extend(contribution).extend(demand);
-	// @ts-expect-error Checked contributed recipes retain obligations.
-	root.extend(demand).extend(contribution);
-	// @ts-expect-error Checked later hooks retain obligations.
 	root.extend(contribution).extend(demand);
 
 	const leaf = defineCommand("leaf", (c) => c.provide(number()));
@@ -447,10 +394,7 @@ function _conditionalDescendantDemand(condition: boolean) {
 	root.add(nested).extend(demand);
 	// @ts-expect-error Nested conditional children preserve retained demands.
 	root.extend(demand).add(nested);
-	// @ts-expect-error Checked nested conditional children preserve retained demands.
-	root.extend(demand).add(nested);
-	// @ts-expect-error Existing checked nested conditional children preserve later demands.
-	root.add(nested).extend(demand);
+
 	const mixed = defineCommand("mixed", (c) =>
 		condition ? c.provide(number()) : c.provide(other()),
 	);
@@ -462,8 +406,6 @@ function _conditionalDescendantDemand(condition: boolean) {
 	root.add(uncertain).extend(demand);
 
 	const compatible = defineCommand("compatible", (c) => (condition ? c.provide(text()) : c));
-	root.extend(demand).add(compatible);
-	root.add(compatible).extend(demand);
 	root.extend(demand).add(compatible);
 	root.add(compatible).extend(demand);
 	root.extend(demand).command("inline", (c) => (condition ? c.provide(text()) : c));

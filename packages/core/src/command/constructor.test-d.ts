@@ -16,13 +16,15 @@ function _commandNames() {
 	defineCommand("-leading", (builder) => builder);
 }
 
-function _constructorNames() {
+function _constructorNames(invalidName: "" | "valid") {
 	// @ts-expect-error -- blank literal root names cannot route
 	new Crust("");
 	// @ts-expect-error -- whitespace-only root names match trim validation
 	new Crust(" \t\n");
 	// @ts-expect-error -- reserved record key
 	new Crust("__proto__");
+	// @ts-expect-error -- one valid branch cannot hide an invalid root name
+	new Crust(invalidName);
 	new Crust("two words");
 	new Crust("-leading");
 	const broad: Crust = new Crust("literal");

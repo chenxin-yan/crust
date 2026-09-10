@@ -246,14 +246,14 @@ function _typecheckBrandsDuplicateCommandSpellingsWithinOneExtensionAtDefineExte
 	void defineExtension(defineExtensionId("self-name-collision"), {
 		commands: [
 			defineCommand("dup", (command) => command),
-			// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
+			// @ts-expect-error -- duplicate canonical name within one Extension (FIX_COMMAND_COLLISION)
 			defineCommand("dup", (command) => command),
 		],
 	});
 	void defineExtension(defineExtensionId("self-alias-collision"), {
 		commands: [
 			defineCommand("deploy", { aliases: ["d"] }, (command) => command),
-			// @ts-expect-error -- ordinary APIs retain known-invalid contracts; erasure is required for uncertain invocation.
+			// @ts-expect-error -- command name collides with an Extension alias (FIX_COMMAND_COLLISION)
 			defineCommand("d", (command) => command),
 		],
 	});
