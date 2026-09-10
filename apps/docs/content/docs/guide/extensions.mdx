@@ -54,16 +54,18 @@ type DocsFlags = readonly [
     readonly default: boolean | undefined;
   },
 ];
-export const docs: ExtensionFactory<[options?: DocsOptions], {}, [], DocsFlags, []> =
-  defineExtension(DOCS, (options = {}) => ({
+export const docs: ExtensionFactory<[options?: DocsOptions], {}, [], DocsFlags> = defineExtension(
+  DOCS,
+  (options = {}) => ({
     flags: [{ name: "verbose", type: "boolean", default: options.verbose }],
-  }));
+  }),
+);
 // docs.id === DOCS; docs({ verbose: true }).id === DOCS
 ```
 
 Authors not building with `isolatedDeclarations` can omit the annotation (`export const docs = defineExtension(DOCS, (options?: DocsOptions) => ({ … }))`) and get full inference.
 
-Keep published contribution types precise: an empty tuple means no contributions, while a widened `ExtensionFactory` annotation opens those namespaces. Core consumes the private defining Extension through structural copies; replacing public flags, commands, providers, or hooks on a spread does not redefine it. Use `defineExtension()` for a new definition.
+`ExtensionFactory` defaults to closed contribution sets: `{}` dependencies and empty provider, flag, and command tuples. Explicitly use the broad upper bound for a parameter when its namespace must remain open. Preserve literal tuples for known contributions. Core consumes the private defining Extension through structural copies; replacing public flags, commands, providers, or hooks on a spread does not redefine it. Use `defineExtension()` for a new definition.
 
 ## Required root metadata
 

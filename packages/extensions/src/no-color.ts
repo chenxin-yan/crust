@@ -44,7 +44,7 @@ const colorFlags = [
  * mid-flight (the env is process-global); the ambient values are restored
  * once all runs finish.
  */
-export const noColor: ExtensionFactory<[], {}, [], typeof colorFlags, []> = defineExtension(
+export const noColor: ExtensionFactory<[], {}, [], typeof colorFlags> = defineExtension(
 	NO_COLOR,
 	() => ({
 		flags: colorFlags,

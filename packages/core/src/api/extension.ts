@@ -357,18 +357,18 @@ export type ExtensionsProvidesOutput<Es extends readonly AnyExtension[]> = Es ex
 				: Record<string, ContextValue>
 			: {};
 
-/** A callable Extension constructor whose identity is also a section consumer. */
+/**
+ * A callable Extension constructor whose identity is also a section consumer.
+ * Contribution parameters default to closed sets. Use `ContextMap`,
+ * `readonly AnyContextInstance[]`, `readonly NamedExtensionFlagDef[]`, or
+ * `readonly CommandDefinition<any, any, any, any>[]` to keep a namespace open.
+ */
 export type ExtensionFactory<
 	Args extends readonly unknown[] = [],
-	Deps extends ContextMap = ContextMap,
-	Provides extends readonly AnyContextInstance[] = readonly AnyContextInstance[],
-	Defs extends readonly NamedExtensionFlagDef[] = readonly NamedExtensionFlagDef[],
-	Commands extends readonly CommandDefinition<any, any, any, any>[] = readonly CommandDefinition<
-		any,
-		any,
-		any,
-		any
-	>[],
+	Deps extends ContextMap = {},
+	Provides extends readonly AnyContextInstance[] = [],
+	Defs extends readonly NamedExtensionFlagDef[] = [],
+	Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
 	MetaKeys extends RootMetaKey = never,
 	HookDeps extends ContextMap = Deps,
 > = ((...args: Args) => Extension<Deps, Provides, Defs, Commands, MetaKeys, HookDeps>) & {

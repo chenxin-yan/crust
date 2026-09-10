@@ -21,7 +21,7 @@ export interface ManOptions {
 }
 
 /** Adds build-time mdoc generation for the application. */
-export const man: ExtensionFactory<[options?: ManOptions], {}, [], [], []> = defineExtension(
+export const man: ExtensionFactory<[options?: ManOptions]> = defineExtension(
 	MAN,
 	(options = {}) => {
 		const section = options.section ?? 1;

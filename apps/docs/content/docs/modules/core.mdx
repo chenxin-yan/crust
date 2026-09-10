@@ -139,20 +139,20 @@ Core threads invocation IO through the existing ambient terminal seam, isolating
 
 ## Extension types
 
-| Type                           | Description                                                                                                 |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| `Extension`                    | Identified frozen Extension value                                                                           |
-| `ExtensionFactory<Args>`       | Callable Extension constructor with a readonly `.id`; broad annotations retain open contribution namespaces |
-| `ExtensionBuildContext`        | Frozen root snapshot and resolved output directory for artifact generation                                  |
-| `ExtensionConfig`              | Owned flags, commands, section contributions, build generation, and hooks                                   |
-| `ExtensionFlagDef`             | Extension-owned flag with optional `recursive` scope                                                        |
-| `ExtensionContext`             | Readonly invocation view with inferred Extension-owned flags and `finish()`                                 |
-| `ExtensionHooks`               | Typed `preRun`, `postRun`, and `onError` hook slots                                                         |
-| `InferExtensionFlags`          | Syntax-parsed values inferred from an Extension's contributed flags                                         |
-| `NamedExtensionFlagDef`        | Named Extension flag accepted by `ExtensionConfig.flags`                                                    |
-| `ExtensionSectionContribution` | Section contributed by an Extension to command documentation                                                |
-| `Finished`                     | Opaque token returned by `ExtensionContext.finish()`                                                        |
-| `InvocationOutcome`            | Completed, short-circuited, or failed invocation result                                                     |
+| Type                           | Description                                                                                         |
+| ------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `Extension`                    | Identified frozen Extension value                                                                   |
+| `ExtensionFactory<Args>`       | Callable Extension constructor with a readonly `.id`; contribution namespaces are closed by default |
+| `ExtensionBuildContext`        | Frozen root snapshot and resolved output directory for artifact generation                          |
+| `ExtensionConfig`              | Owned flags, commands, section contributions, build generation, and hooks                           |
+| `ExtensionFlagDef`             | Extension-owned flag with optional `recursive` scope                                                |
+| `ExtensionContext`             | Readonly invocation view with inferred Extension-owned flags and `finish()`                         |
+| `ExtensionHooks`               | Typed `preRun`, `postRun`, and `onError` hook slots                                                 |
+| `InferExtensionFlags`          | Syntax-parsed values inferred from an Extension's contributed flags                                 |
+| `NamedExtensionFlagDef`        | Named Extension flag accepted by `ExtensionConfig.flags`                                            |
+| `ExtensionSectionContribution` | Section contributed by an Extension to command documentation                                        |
+| `Finished`                     | Opaque token returned by `ExtensionContext.finish()`                                                |
+| `InvocationOutcome`            | Completed, short-circuited, or failed invocation result                                             |
 
 ## Error types
 

@@ -108,16 +108,13 @@ const helpFlags = [
 	{ name: "help", type: "boolean", short: "h", noNegate: true, description: "Show help" },
 ] as const;
 
-export const help: ExtensionFactory<[], {}, [], typeof helpFlags, []> = defineExtension(
-	HELP,
-	() => ({
-		flags: helpFlags,
-		hooks: {
-			preRun(context) {
-				if (context.flags.help !== true && context.command.hasAction) return;
-				context.stdout(renderHelp(context.command, context.commandPath));
-				return context.finish();
-			},
+export const help: ExtensionFactory<[], {}, [], typeof helpFlags> = defineExtension(HELP, () => ({
+	flags: helpFlags,
+	hooks: {
+		preRun(context) {
+			if (context.flags.help !== true && context.command.hasAction) return;
+			context.stdout(renderHelp(context.command, context.commandPath));
+			return context.finish();
 		},
-	}),
-);
+	},
+}));
