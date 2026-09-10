@@ -1,5 +1,4 @@
 import type { CommandDefinition, RootCommandMeta } from "../command/crust.ts";
-import { createCommandNode, registerFlag } from "../command/node.ts";
 import type { CommandSnapshot } from "../command/snapshot.ts";
 import type { CaughtError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
@@ -16,24 +15,28 @@ import type {
 	ParsedFlagValue,
 } from "../types.ts";
 import type { ValidateCommandDefinitions } from "../validation/commands.brands.ts";
-import type { KnownContextInstances } from "../validation/contexts.brands.ts";
-import type { DeclaredDepsOf } from "../validation/contexts.brands.ts";
+import type { DeclaredDepsOf, KnownContextInstances } from "../validation/contexts.brands.ts";
 import type {
 	ProvideChecks,
 	ProvidedContextSpellings,
 	ValidateLocalFlagDefs,
 } from "../validation/flags.brands.ts";
-import type { Awaitable } from "../validation/shared.ts";
-import { contextInstanceData, contextFactoryData } from "./context.ts";
-import type {
-	AnyContextFactory,
-	ContextBag,
-	ContextDependencies,
-	AnyContextInstance,
-	ContextValue,
-	ContextMap,
-	ContextsDependencies,
-	ContextsOutput,
+import type { Awaitable, MergeProviders } from "../validation/shared.ts";
+import {
+	contextFactoryData,
+	contextInstanceData,
+	definingOf,
+	seal,
+	type AnyContextFactory,
+	type AnyContextInstance,
+	type ContextBag,
+	type ContextDependencies,
+	type ContextMap,
+	type ContextValue,
+	type ContextsDependencies,
+	type ContextsOutput,
+	type Defining,
+	type DefiningOf,
 } from "./context.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -295,12 +298,10 @@ type ValidateExtensionConfig<
 	readonly provides?: KnownContextInstances<Provides> & ProvideChecks<never, Provides>;
 };
 
-const extensionInternal: unique symbol = Symbol("crust.extension");
-
 /** @internal Retain defining data through public structural copies. */
-export type ExtensionData<E> = E extends { readonly [extensionInternal]: infer Data } ? Data : E;
-export function extensionData<E extends AnyExtension>(extension: E): E[typeof extensionInternal] {
-	return extension[extensionInternal];
+export type ExtensionData<E> = DefiningOf<E>;
+export function extensionData<E extends AnyExtension>(extension: E): DefiningOf<E> {
+	return definingOf(extension);
 }
 
 declare const extensionHookProof: unique symbol;
@@ -317,9 +318,7 @@ export interface Extension<
 	>[],
 	out MetaKeys extends RootMetaKey = never,
 	HookDeps extends ContextMap = Deps,
-> {
-	/** @internal Immutable defining Extension; public copies cannot replace its proof. */
-	readonly [extensionInternal]: Extension<Deps, Provides, FlagDefs, Commands, MetaKeys, HookDeps>;
+> extends Defining<Extension<Deps, Provides, FlagDefs, Commands, MetaKeys, HookDeps>> {
 	/** @internal Hook demands are distinct from command/provider attachment dependencies. */
 	readonly _hookDeps?: HookDeps;
 	readonly [extensionHookProof]?: (deps: HookDeps) => void;
@@ -349,10 +348,7 @@ export type ExtensionsProvidesOutput<Es extends readonly AnyExtension[]> = Es ex
 	infer H,
 	...infer T extends readonly AnyExtension[],
 ]
-	? import("../validation/shared.ts").MergeProviders<
-			ExtensionProvidesOutput<H>,
-			ExtensionsProvidesOutput<T>
-		>
+	? MergeProviders<ExtensionProvidesOutput<H>, ExtensionsProvidesOutput<T>>
 	: Es extends readonly []
 		? {}
 		: Es[number] extends Extension<any, infer P, any, any, RootMetaKey>
@@ -488,31 +484,23 @@ export function defineExtension<
 
 export function defineExtension(
 	id?: ExtensionId,
-	configInput: ExtensionConfig | ErasedExtensionFactory = {},
+	config: ExtensionConfig | ErasedExtensionFactory = {},
 ): Extension<any> | ExtensionFactory<any[], any> | DefineExtensionWith<never> {
 	// Metadata requirements are erased, so specialization needs no runtime state.
 	if (id === undefined) return defineExtension;
-	const config = configInput;
-	if (isExtensionFactory(config)) {
-		return Object.assign(
-			(...args: any[]) => {
-				const produced = config(...args);
-				return defineExtension(id, produced);
-			},
-			{ id },
-		);
-	}
+	if (isExtensionFactory(config))
+		return Object.assign((...args: any[]) => defineExtension(id, config(...args)), { id });
 	const ownedFlags = Object.freeze(toFlagsRecord(config.flags ?? []));
 
-	const destination = createCommandNode(id);
-	for (const [name, def] of Object.entries(ownedFlags))
-		registerFlag(destination, name, def, "owned");
-	// Value replacement is name-based; the installer retains every provider's owned flags.
-	for (const instance of config.provides ?? []) {
-		for (const [name, def] of Object.entries(contextInstanceData(instance).ownedFlags)) {
-			registerFlag(destination, name, def, "owned");
-		}
-	}
+	toFlagsRecord([
+		...(config.flags ?? []),
+		...(config.provides ?? []).flatMap((instance) =>
+			Object.entries(contextInstanceData(instance).ownedFlags).map(([name, def]) => ({
+				...def,
+				name,
+			})),
+		),
+	]);
 
 	// SAFETY: the runtime registry erases Defs after the overloads contextually typed every hook.
 	const extension = {
@@ -525,5 +513,5 @@ export function defineExtension(
 		id,
 		...(config.flags === undefined ? {} : { flags: ownedFlags }),
 	} as Extension;
-	return Object.freeze(Object.assign(extension, { [extensionInternal]: extension }));
+	return seal(extension);
 }

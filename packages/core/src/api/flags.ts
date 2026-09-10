@@ -10,24 +10,22 @@ type OmitName<T> = T extends { name: string } ? Omit<T, "name"> : never;
 /** A positional argument definition without its name — the `defineArg` input shape. */
 export type UnnamedArgDef = OmitName<ArgDef>;
 
+type Frozen<T> = {
+	readonly [K in keyof T]: K extends
+		| "aliases"
+		| "choices"
+		| (T extends { multiple: true } ? "default" : never)
+		? Readonly<T[K]>
+		: T[K];
+};
+
 // Preserve conditional fields before mapping the normalized readonly definition.
-type Named<N extends string, D> = D extends unknown
-	? {
-			readonly [K in keyof ({ readonly name: N } & D)]: K extends "aliases" | "choices"
-				? Readonly<({ readonly name: N } & D)[K]>
-				: K extends "default"
-					? D extends { multiple: true }
-						? Readonly<({ readonly name: N } & D)[K]>
-						: ({ readonly name: N } & D)[K]
-					: ({ readonly name: N } & D)[K];
-		}
-	: never;
-type Errors<T> = Pick<T, Extract<keyof T, `FIX_${string}`>>;
+type Named<N extends string, D> = D extends unknown ? Frozen<{ name: N } & D> : never;
 
 /** Define and own one flag locally; attachment checks destination collisions. */
 export function defineFlag<const N extends string, const D extends FlagDef>(
 	name: N & LocalFlagNameBrand<N>,
-	def: D & Errors<LocalFlagBrand<{ name: N } & D>>,
+	def: D & LocalFlagBrand<{ name: N } & D>,
 ): Named<N, D>;
 
 export function defineFlag(name: string, def: FlagDef): NamedFlagDef {
