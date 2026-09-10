@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
+import { unwrap } from "../../tests/helpers.ts";
 import { defineExtension, type Extension } from "../api/extension.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { CommandShapeAt, RunInput, RunOutcome } from "./crust.ts";
@@ -124,10 +125,7 @@ describe("typed programmatic invocation", () => {
 				],
 			}),
 		);
-		await expect(app.run([])).resolves.toMatchObject({
-			status: "failed",
-			error: expect.objectContaining({ message: expect.stringContaining("recipe failed") }),
-		});
+		await expect(unwrap(app.run([]))).rejects.toThrow("recipe failed");
 	});
 
 	it("awaits async action results", async () => {
@@ -179,15 +177,13 @@ describe("typed programmatic invocation", () => {
 			}),
 		);
 
-		expect(
-			(
-				await app.run(["remote-add"], {
-					args: { name: "origin", count: 2, files: ["a.ts", "b.ts"] },
-					flags: { fetch: true, tag: ["one", "-two"], config: { force: true }, offset: -3 },
-					raw: ["--literal"],
-				})
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			app.run(["remote-add"], {
+				args: { name: "origin", count: 2, files: ["a.ts", "b.ts"] },
+				flags: { fetch: true, tag: ["one", "-two"], config: { force: true }, offset: -3 },
+				raw: ["--literal"],
+			}),
+		);
 
 		expect(received).toEqual({
 			args: { name: "origin", count: 2, files: ["a.ts", "b.ts"] },
@@ -202,12 +198,9 @@ describe("typed programmatic invocation", () => {
 			.action(() => {});
 
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		await expect(app.run([], { args: { destination: "out" } })).resolves.toMatchObject({
-			status: "failed",
-			error: {
-				code: "PARSE",
-				details: { reason: "positional-gap" },
-			},
+		await expect(unwrap(app.run([], { args: { destination: "out" } }))).rejects.toMatchObject({
+			code: "PARSE",
+			details: { reason: "positional-gap" },
 		});
 	});
 
@@ -243,7 +236,7 @@ describe("typed programmatic invocation", () => {
 			});
 			expect(ran).toBe("root");
 		}
-		expect((await app.run(["build"])).status).not.toBe("failed");
+		await unwrap(app.run(["build"]));
 		expect(ran).toBe("build");
 	});
 
@@ -256,14 +249,12 @@ describe("typed programmatic invocation", () => {
 				received = { args, flags };
 			});
 
-		expect(
-			(
-				await app.run([], {
-					args: { payload: [1, 2] as const },
-					flags: { config: [3, 4] as const },
-				})
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			app.run([], {
+				args: { payload: [1, 2] as const },
+				flags: { config: [3, 4] as const },
+			}),
+		);
 
 		expect(received).toEqual({ args: { payload: [1, 2] }, flags: { config: [3, 4] } });
 	});
@@ -296,31 +287,22 @@ describe("typed programmatic invocation", () => {
 		const required = new Crust("cli")
 			.flags({ name: "tag", type: "string", multiple: true, required: true })
 			.action(() => {});
-		await expect(required.run([], { flags: { tag: [] } })).resolves.toMatchObject({
-			status: "failed",
-			error: expect.objectContaining({
-				message: expect.stringContaining('Missing required flag "--tag"'),
-			}),
-		});
+		await expect(unwrap(required.run([], { flags: { tag: [] } }))).rejects.toThrow(
+			'Missing required flag "--tag"',
+		);
 	});
 
 	it("rejects unknown structured arguments and flags", async () => {
 		const app = new Crust("cli").args({ name: "source", type: "string" }).action(() => {});
 
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		await expect(app.run([], { args: { bogus: "x" } })).resolves.toMatchObject({
-			status: "failed",
-			error: {
-				code: "PARSE",
-				details: { reason: "unknown-argument", argument: "bogus" },
-			},
+		await expect(unwrap(app.run([], { args: { bogus: "x" } }))).rejects.toMatchObject({
+			code: "PARSE",
+			details: { reason: "unknown-argument", argument: "bogus" },
 		});
-		await expect(app.run([], { flags: { bogus: true } })).resolves.toMatchObject({
-			status: "failed",
-			error: {
-				code: "PARSE",
-				details: { reason: "unknown-flag", flag: "bogus" },
-			},
+		await expect(unwrap(app.run([], { flags: { bogus: true } }))).rejects.toMatchObject({
+			code: "PARSE",
+			details: { reason: "unknown-flag", flag: "bogus" },
 		});
 	});
 
@@ -333,12 +315,10 @@ describe("typed programmatic invocation", () => {
 				defineCommand("internal", { hidden: true }, (command) => command.action(() => {})),
 			);
 
-		await expect(app.run(["missing"] as never, {} as never)).resolves.toMatchObject({
-			status: "failed",
-			error: {
-				code: "COMMAND_NOT_FOUND",
-				details: { input: "missing", available: ["visible"] },
-			},
+		// @ts-expect-error -- deliberately exercise an unknown command path.
+		await expect(unwrap(app.run(["missing"]))).rejects.toMatchObject({
+			code: "COMMAND_NOT_FOUND",
+			details: { input: "missing", available: ["visible"] },
 		});
 	});
 });

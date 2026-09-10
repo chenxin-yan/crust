@@ -2,6 +2,8 @@ import { describe, expect, it } from "bun:test";
 
 import type { StandardSchema } from "@crustjs/utils/schema";
 
+import { unwrap } from "../../tests/helpers.ts";
+
 type StandardInput = Parameters<StandardSchema["~standard"]["validate"]>[0];
 
 import { defineExtension } from "../api/extension.ts";
@@ -38,7 +40,7 @@ describe("Standard Schema on arg definitions", () => {
 			received = args.port;
 		});
 
-		expect((await app.run([], { args: { port: "8080" } })).status).not.toBe("failed");
+		await unwrap(app.run([], { args: { port: "8080" } }));
 		expect(received).toBe(8080);
 	});
 
@@ -49,19 +51,16 @@ describe("Standard Schema on arg definitions", () => {
 			received = args.port;
 		});
 
-		expect((await app.run([], { args: { port: "8080" } })).status).not.toBe("failed");
+		await unwrap(app.run([], { args: { port: "8080" } }));
 		expect(received).toBeUndefined();
 	});
 
 	it("schema owns requiredness: a missing arg reaches the schema as undefined", async () => {
 		const app = new Crust("cli").args({ name: "port", schema: port() }).action(() => {});
 
-		await expect(app.run([])).resolves.toMatchObject({
-			status: "failed",
-			error: {
-				code: "VALIDATION",
-				details: { issues: [{ message: "port is required", path: "args.port" }] },
-			},
+		await expect(unwrap(app.run([]))).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: { issues: [{ message: "port is required", path: "args.port" }] },
 		});
 	});
 
@@ -77,7 +76,7 @@ describe("Standard Schema on arg definitions", () => {
 				received = args.files;
 			});
 
-		expect((await app.run([], { args: { files: ["a.txt", "b.txt"] } })).status).not.toBe("failed");
+		await unwrap(app.run([], { args: { files: ["a.txt", "b.txt"] } }));
 		expect(received).toEqual(["A.TXT", "B.TXT"]);
 	});
 
@@ -98,7 +97,7 @@ describe("Standard Schema on arg definitions", () => {
 			received = args.name;
 		});
 
-		expect((await app.run([], { args: { name: "chenxin" } })).status).not.toBe("failed");
+		await unwrap(app.run([], { args: { name: "chenxin" } }));
 		expect(received).toBe("CHENXIN");
 	});
 });
@@ -112,7 +111,7 @@ describe("Standard Schema on flag definitions", () => {
 				received = flags.port;
 			});
 
-		expect((await app.run([], { flags: { port: "9090" } })).status).not.toBe("failed");
+		await unwrap(app.run([], { flags: { port: "9090" } }));
 		expect(received).toBe(9090);
 	});
 
@@ -127,10 +126,10 @@ describe("Standard Schema on flag definitions", () => {
 				received = flags.loud;
 			});
 
-		expect((await app.run([], { flags: { loud: true } })).status).not.toBe("failed");
+		await unwrap(app.run([], { flags: { loud: true } }));
 		expect(received).toBe("on");
 
-		expect((await app.run([])).status).not.toBe("failed");
+		await unwrap(app.run([]));
 		expect(received).toBe("off");
 	});
 
@@ -161,7 +160,7 @@ describe("Standard Schema on flag definitions", () => {
 				received = flags.loud;
 			});
 
-		expect((await app.run([], { flags: { loud: false } })).status).not.toBe("failed");
+		await unwrap(app.run([], { flags: { loud: false } }));
 		expect(received).toBe("false");
 	});
 
@@ -176,7 +175,7 @@ describe("Standard Schema on flag definitions", () => {
 				received = flags.tag;
 			});
 
-		expect((await app.run([], { flags: { tag: ["a", "b"] } })).status).not.toBe("failed");
+		await unwrap(app.run([], { flags: { tag: ["a", "b"] } }));
 		expect(received).toBe("a,b");
 	});
 });
@@ -201,7 +200,7 @@ describe("schema interaction with Extensions", () => {
 				actionSaw = flags.port;
 			});
 
-		expect((await app.run([], { flags: { port: "8080" } })).status).not.toBe("failed");
+		await unwrap(app.run([], { flags: { port: "8080" } }));
 
 		expect(preRunSaw).toBe("8080"); // raw, pre-validation
 		expect(actionSaw).toBe(8080); // schema output
@@ -222,7 +221,7 @@ describe("schema interaction with Extensions", () => {
 			.extend(gate)
 			.action(() => {});
 
-		expect((await app.run([], { flags: { x: "whatever" } })).status).not.toBe("failed");
+		await unwrap(app.run([], { flags: { x: "whatever" } }));
 		expect(validated).toBe(false);
 	});
 });

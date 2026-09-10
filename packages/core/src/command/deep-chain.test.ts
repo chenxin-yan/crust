@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
+import { unwrap } from "../../tests/helpers.ts";
 import { defineContext } from "../api/context.ts";
 import { Crust } from "./crust.ts";
 
@@ -122,7 +123,7 @@ describe("deep builder chains", () => {
 				type _Last = Expect<Equal<typeof flags.f60, boolean | undefined>>;
 				seen.push(flags.f01, flags.f60);
 			});
-		expect((await app.run([], { flags: { f01: true, f60: true } })).status).not.toBe("failed");
+		await unwrap(app.run([], { flags: { f01: true, f60: true } }));
 		expect(seen).toEqual([true, true]);
 	});
 
@@ -164,18 +165,13 @@ describe("deep builder chains", () => {
 				type _Last = Expect<Equal<typeof args.a30, string>>;
 				seen.push(args.a01, args.a30);
 			});
-		expect(
-			(
-				await app.run([], {
-					args: Object.fromEntries(
-						Array.from({ length: 30 }, (_, i) => [
-							`a${String(i + 1).padStart(2, "0")}`,
-							`v${i + 1}`,
-						]),
-					),
-				} as never)
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			app.run([], {
+				args: Object.fromEntries(
+					Array.from({ length: 30 }, (_, i) => [`a${String(i + 1).padStart(2, "0")}`, `v${i + 1}`]),
+				),
+			} as never),
+		);
 		expect(seen).toEqual(["v1", "v30"]);
 	});
 
@@ -229,7 +225,7 @@ describe("deep builder chains", () => {
 				type _Last = Expect<Equal<typeof last, number>>;
 				seen.push(first, last);
 			});
-		expect((await app.run([])).status).not.toBe("failed");
+		await unwrap(app.run([]));
 		expect(seen).toEqual([1, 40]);
 	});
 });

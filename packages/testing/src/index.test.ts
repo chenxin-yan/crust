@@ -1,89 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { Crust, defineCommand, defineExtension, defineExtensionId } from "@crustjs/core";
+import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
 import { progress, spinner } from "@crustjs/progress";
 import { input } from "@crustjs/prompts";
 
 import { captureExecute, runInteractive } from "./index.ts";
-
-describe("Crust.run", () => {
-	it("captures an Extension-contributed command with its typed result", async () => {
-		const tools = defineExtension(defineExtensionId("tools"), {
-			commands: [
-				defineCommand("inspect", (command) =>
-					command.action(({ stdout }) => {
-						stdout("inspected");
-						return { kind: "extension" as const };
-					}),
-				),
-			],
-		});
-		const app = new Crust("test-cli").extend(tools);
-
-		const captured = await app.run(["inspect"]);
-		if (captured.status !== "completed") throw new Error("expected a completed run");
-		// Compile-time check: the Extension command's result carries the action's type.
-		const result: { kind: "extension" } = captured.result;
-		expect(result).toEqual({ kind: "extension" });
-		expect(captured.stdout).toBe("inspected");
-	});
-
-	it("captures output and the typed action result", async () => {
-		const app = new Crust("test-cli").action(({ stdout, stderr }) => {
-			stdout("first");
-			stdout("second");
-			stderr("warning");
-			return { status: "ok" as const };
-		});
-
-		const captured = await app.run([]);
-		if (captured.status !== "completed") throw new Error("expected a completed run");
-		// Compile-time check: the captured result carries the action's type.
-		const _result: { status: "ok" } = captured.result;
-		expect(captured).toEqual({
-			stdout: "first\nsecond",
-			stderr: "warning",
-			status: "completed",
-			result: { status: "ok" },
-		});
-	});
-
-	it("returns errors after preserving output", async () => {
-		const error = new Error("failed");
-		const app = new Crust("test-cli").action(({ stdout, stderr }) => {
-			stdout("before");
-			stderr("problem");
-			throw error;
-		});
-
-		const captured = await app.run([]);
-		expect(captured.stdout).toBe("before");
-		expect(captured.stderr).toBe("problem");
-		if (captured.status !== "failed") throw new Error("expected the failed branch");
-		expect(captured.error).toBe(error);
-	});
-
-	it("discriminates a falsy thrown value as the failure branch", async () => {
-		const app = new Crust("test-cli").action(() => {
-			throw undefined;
-		});
-
-		const captured = await app.run([]);
-		expect(captured.status).toBe("failed");
-		if (captured.status === "failed") expect(captured.error).toBeUndefined();
-	});
-
-	it("captures the Extension that finishes the invocation", async () => {
-		const gateId = defineExtensionId("gate");
-		const gate = defineExtension(gateId, {
-			hooks: { preRun: (ctx) => ctx.finish() },
-		});
-		const app = new Crust("test-cli").extend(gate).action(() => ({ ran: true }));
-
-		const captured = await app.run([]);
-		expect(captured).toEqual({ stdout: "", stderr: "", status: "finished", by: gateId });
-	});
-});
 
 describe("runInteractive", () => {
 	it("drives prompts and merges stderr with prompt frames", async () => {

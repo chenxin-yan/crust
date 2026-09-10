@@ -1,53 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
-import type { CommandDefinition, AnyCrust, ArgDef, CommandSection, FlagDef } from "@crustjs/core";
+import type { ArgDef } from "@crustjs/core";
 import { Crust, defineCommand, defineExtensionId } from "@crustjs/core";
 
+import { makeCommand, snapshotFixture } from "../tests/fixtures.ts";
 import { SKILLS } from "./extension.ts";
 import { buildManifest } from "./manifest.ts";
-
-// ────────────────────────────────────────────────────────────────────────────
-// Helper — builds a CommandNode for introspection tests
-// ────────────────────────────────────────────────────────────────────────────
-
-function makeCommand(opts: {
-	meta: {
-		name: string;
-		description?: string;
-		usage?: string;
-		hidden?: boolean;
-		sections?: readonly CommandSection[];
-	};
-	args?: readonly ArgDef[];
-	flags?: Record<string, FlagDef>;
-	run?: () => void;
-	subCommands?: Record<string, CommandFixture>;
-}): CommandFixture {
-	return opts;
-}
-
-type CommandFixture = Parameters<typeof makeCommand>[0];
-
-function fixtureDefinition(fixture: CommandFixture): CommandDefinition<any, any, any, any> {
-	const { name, ...meta } = fixture.meta;
-	return defineCommand(name, meta, (command) => {
-		const configured = command
-			.args(...(fixture.args ?? []))
-			.flags(...Object.entries(fixture.flags ?? {}).map(([name, def]) => ({ name, ...def })))
-			.add(...Object.values(fixture.subCommands ?? {}).map(fixtureDefinition));
-		return fixture.run ? configured.action(fixture.run) : configured;
-	});
-}
-
-async function snapshotFixture(fixture: CommandFixture | AnyCrust) {
-	if ("snapshot" in fixture) return await fixture.snapshot();
-	const { name, hidden: _hidden, ...meta } = fixture.meta;
-	const root = new Crust(name, meta)
-		.args(...(fixture.args ?? []))
-		.flags(...Object.entries(fixture.flags ?? {}).map(([name, def]) => ({ name, ...def })))
-		.add(...Object.values(fixture.subCommands ?? {}).map(fixtureDefinition));
-	return await (fixture.run ? root.action(fixture.run) : root).snapshot();
-}
 
 // ────────────────────────────────────────────────────────────────────────────
 // buildManifest — basic root command behavior

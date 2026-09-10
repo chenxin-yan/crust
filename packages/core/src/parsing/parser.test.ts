@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { resolve } from "node:path";
 import { runInNewContext } from "node:vm";
 
-import { makeNode } from "../../tests/helpers.ts";
+import { makeNode, unwrap } from "../../tests/helpers.ts";
 import { Crust } from "../command/crust.ts";
 import { createCommandNode, registerFlag } from "../command/node.ts";
 import { CrustError } from "../errors.ts";
@@ -959,12 +959,9 @@ describe("parseArgs — parse escape hatch", () => {
 		};
 		for (const parse of [asyncParse, rejecting]) {
 			const app = new Crust("test").flags({ name: "n", type: "string", parse });
-			await expect(app.run([], { flags: { n: "42" } })).resolves.toMatchObject({
-				status: "failed",
-				error: expect.objectContaining({
-					message: expect.stringContaining("parse must be synchronous"),
-				}),
-			});
+			await expect(unwrap(app.run([], { flags: { n: "42" } }))).rejects.toThrow(
+				"parse must be synchronous",
+			);
 		}
 	});
 

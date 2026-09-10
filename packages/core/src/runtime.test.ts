@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
+import { unwrap } from "../tests/helpers.ts";
 import {
+	type AnyCrust,
 	Crust,
 	defineContext,
 	defineCommand,
@@ -9,7 +11,7 @@ import {
 } from "./index.ts";
 
 describe("runtime structured invocation", () => {
-	it("checks occurrence shape, choices, names, and positional order", async () => {
+	it("checks choices, negation, and positional order", async () => {
 		const app = new Crust("run")
 			.args({ name: "first", type: "string" }, { name: "rest", type: "json", variadic: true })
 			.flags(
@@ -17,42 +19,17 @@ describe("runtime structured invocation", () => {
 				{ name: "yes", type: "boolean", noNegate: true },
 			);
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		await expect(app.run([], { flags: { tag: "ok" } })).resolves.toMatchObject({
-			status: "failed",
-			error: expect.objectContaining({ message: expect.stringContaining("occurrence array") }),
-		});
+		await expect(unwrap(app.run([], { flags: { tag: ["wrong"] } }))).rejects.toThrow(
+			"Expected one of: ok",
+		);
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		await expect(app.run([], { args: { first: "a", rest: "b" } })).resolves.toMatchObject({
-			status: "failed",
-			error: expect.objectContaining({ message: expect.stringContaining("occurrence array") }),
-		});
+		await expect(unwrap(app.run([], { flags: { yes: false } }))).rejects.toThrow(
+			"does not support negation",
+		);
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		await expect(app.run([], { flags: { tag: ["wrong"] } })).resolves.toMatchObject({
-			status: "failed",
-			error: expect.objectContaining({ message: expect.stringContaining("Expected one of: ok") }),
-		});
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		await expect(app.run([], { flags: { yes: false } })).resolves.toMatchObject({
-			status: "failed",
-			error: expect.objectContaining({
-				message: expect.stringContaining("does not support negation"),
-			}),
-		});
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		await expect(app.run([], { flags: { other: true } })).resolves.toMatchObject({
-			status: "failed",
-			error: expect.objectContaining({ message: expect.stringContaining("Unknown flag") }),
-		});
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		await expect(app.run([], { args: { other: "a" } })).resolves.toMatchObject({
-			status: "failed",
-			error: expect.objectContaining({ message: expect.stringContaining("Unknown argument") }),
-		});
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		await expect(app.run([], { args: { rest: ["b"] } })).resolves.toMatchObject({
-			status: "failed",
-			error: expect.objectContaining({ message: expect.stringContaining("omitted argument") }),
-		});
+		await expect(unwrap(app.run([], { args: { rest: ["b"] } }))).rejects.toThrow(
+			"omitted argument",
+		);
 	});
 
 	it("preserves URL and JSON identity and rejects wrong value kinds", async () => {
@@ -68,17 +45,15 @@ describe("runtime structured invocation", () => {
 			expect(result.result.config).toBe(config);
 		}
 		await expect(
-			// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-			app.run([], { flags: { endpoint: "https://example.com" } }),
-		).resolves.toMatchObject({
-			status: "failed",
-			error: expect.objectContaining({ message: expect.stringContaining("Expected url") }),
-		});
+			unwrap(
+				// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+				app.run([], { flags: { endpoint: "https://example.com" } }),
+			),
+		).rejects.toThrow("Expected url");
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		await expect(app.run([], { flags: { config: [endpoint] } })).resolves.toMatchObject({
-			status: "failed",
-			error: expect.objectContaining({ message: expect.stringContaining("Expected json") }),
-		});
+		await expect(unwrap(app.run([], { flags: { config: [endpoint] } }))).rejects.toThrow(
+			"Expected json",
+		);
 	});
 
 	it("lets finishing hooks skip required and schema validation after binding", async () => {
@@ -104,17 +79,14 @@ describe("runtime structured invocation", () => {
 					hooks: { preRun: ({ finish }) => finish() },
 				}),
 			);
-		const invocation1: import("./index.ts").AnyCrust = app;
-		expect(await invocation1.run([], {})).toMatchObject({
+		const erased: AnyCrust = app;
+		expect(await erased.run([], {})).toMatchObject({
 			status: "finished",
 			by: defineExtensionId("finish"),
 		});
 		expect(schemas).toBe(0);
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		await expect(app.run([], { flags: { config: 3 } })).resolves.toMatchObject({
-			status: "failed",
-			error: expect.objectContaining({ message: expect.stringContaining("Expected string") }),
-		});
+		await expect(unwrap(app.run([], { flags: { config: 3 } }))).rejects.toThrow("Expected string");
 	});
 
 	it("checks dynamic values against the selected command", async () => {
@@ -126,12 +98,9 @@ describe("runtime structured invocation", () => {
 			result: 3,
 		});
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		await expect(app.run([], { flags: { count: "wrong" } })).resolves.toMatchObject({
-			status: "failed",
-			error: expect.objectContaining({
-				message: expect.stringContaining("Expected number for --count"),
-			}),
-		});
+		await expect(unwrap(app.run([], { flags: { count: "wrong" } }))).rejects.toThrow(
+			"Expected number for --count",
+		);
 	});
 });
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
+import { unwrap } from "../../tests/helpers.ts";
 import { Crust, defineCommand } from "../command/crust.ts";
 import type { CaughtError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
@@ -71,7 +72,7 @@ describe("defineContext()", () => {
 		const app = new Crust("cli").provide(fake).action(async ({ ctx }) => {
 			seen.push((await ctx.db).url);
 		});
-		expect((await app.run([])).status).not.toBe("failed");
+		await unwrap(app.run([]));
 		expect(seen).toEqual(["fake://db"]);
 	});
 });
@@ -87,7 +88,7 @@ describe("Crust .provide()", () => {
 			seen.push((await ctx.db).url);
 		});
 
-		expect((await app.run([])).status).not.toBe("failed");
+		await unwrap(app.run([]));
 		expect(seen).toEqual(["memory://x"]);
 	});
 
@@ -104,7 +105,7 @@ describe("Crust .provide()", () => {
 			type _B = Expect<Equal<typeof bValue, string>>;
 		});
 
-		expect((await app.run([])).status).not.toBe("failed");
+		await unwrap(app.run([]));
 		expect(seen).toEqual(["value-a:value-b"]);
 	});
 
@@ -122,7 +123,7 @@ describe("Crust .provide()", () => {
 		);
 		const root = new Crust("cli").provide(db()).add(sub);
 
-		expect((await root.run(["sub", "g"])).status).not.toBe("failed");
+		await unwrap(root.run(["sub", "g"]));
 
 		expect(seen).toEqual(["root-db"]);
 	});
@@ -140,11 +141,11 @@ describe("Crust .provide()", () => {
 			.add(defineCommand("b", (cmd) => cmd.action(() => {})));
 
 		// "a" never pulls the inherited Context, so setup never runs.
-		expect((await app.run(["a"])).status).not.toBe("failed");
+		await unwrap(app.run(["a"]));
 		expect(built).toBe(0);
 
 		// Unused providers remain lazy on every command path.
-		expect((await app.run(["b"])).status).not.toBe("failed");
+		await unwrap(app.run(["b"]));
 		expect(built).toBe(0);
 	});
 
@@ -178,7 +179,7 @@ describe("Crust .provide()", () => {
 			),
 		);
 
-		expect((await app.run(["query"])).status).not.toBe("failed");
+		await unwrap(app.run(["query"]));
 
 		// A ≥3-node chain distinguishes true transitivity from a one-hop keep.
 		expect(builtNames).toEqual(["base", "mid", "db"]);
@@ -211,7 +212,7 @@ describe("Crust .provide()", () => {
 			.provide(a(), b(), c(), d())
 			.add(defineCommand("go", (cmd) => cmd.use(d).action(async ({ ctx }) => void (await ctx.d))));
 
-		expect((await app.run(["go"])).status).not.toBe("failed");
+		await unwrap(app.run(["go"]));
 
 		expect(builtNames.slice().sort()).toEqual(["a", "b", "c", "d"]);
 		expect(builtNames[0]).toBe("a");
@@ -246,7 +247,7 @@ describe("Crust .provide()", () => {
 			),
 		);
 
-		expect((await app.run(["account"])).status).not.toBe("failed");
+		await unwrap(app.run(["account"]));
 
 		expect(builtNames).toEqual(["session", "user"]);
 		expect(seen).toEqual(["user(session)"]);
@@ -296,7 +297,7 @@ describe("Context-owned flags", () => {
 			type _ActionApiKey = Expect<Equal<(typeof flags)["api-key"], string | undefined>>;
 			seen.push((await ctx.auth).apiKey);
 		});
-		expect((await app.run([], { flags: { "api-key": "secret" } })).status).not.toBe("failed");
+		await unwrap(app.run([], { flags: { "api-key": "secret" } }));
 
 		expect(seen).toEqual(["secret", "secret"]);
 	});
@@ -310,14 +311,12 @@ describe("Context-owned flags", () => {
 			return {};
 		});
 
-		expect(
-			(
-				await new Crust("cli")
-					.provide(server())
-					.action(async ({ ctx }) => void (await ctx.server))
-					.run([], { flags: { port: "8080" } })
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			new Crust("cli")
+				.provide(server())
+				.action(async ({ ctx }) => void (await ctx.server))
+				.run([], { flags: { port: "8080" } }),
+		);
 
 		expect(seen).toEqual([8080]);
 	});
@@ -334,17 +333,15 @@ describe("Context-owned flags", () => {
 			return {};
 		});
 
-		expect(
-			(
-				await new Crust("cli")
-					.provide(auth(), location())
-					.action(async ({ ctx }) => {
-						await ctx.auth;
-						await ctx.location;
-					})
-					.run([], { flags: { "api-key": "secret", region: "us" } })
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			new Crust("cli")
+				.provide(auth(), location())
+				.action(async ({ ctx }) => {
+					await ctx.auth;
+					await ctx.location;
+				})
+				.run([], { flags: { "api-key": "secret", region: "us" } }),
+		);
 
 		expect(seen).toEqual([["api-key"], ["region"]]);
 	});
@@ -374,9 +371,7 @@ describe("Context-owned flags", () => {
 			log.debug("debug");
 		});
 
-		expect((await app.run([], { flags: { verbose: true } }, { stdout, stderr })).status).not.toBe(
-			"failed",
-		);
+		await unwrap(app.run([], { flags: { verbose: true } }, { stdout, stderr }));
 		expect(messages).toEqual(["debug"]);
 	});
 
@@ -391,19 +386,17 @@ describe("Context-owned flags", () => {
 			}),
 		);
 
-		expect(
-			(
-				await new Crust("cli")
-					.provide(auth())
-					.add(deploy)
-					.run(["deploy"], { flags: { "api-key": "secret" } })
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			new Crust("cli")
+				.provide(auth())
+				.add(deploy)
+				.run(["deploy"], { flags: { "api-key": "secret" } }),
+		);
 		expect(seen).toEqual(["secret"]);
 	});
 
 	it("keeps owned flags when later .flags() calls accumulate local flags", async () => {
-		expect.assertions(3);
+		expect.assertions(2);
 		const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
 		const app = new Crust("cli")
 			.provide(auth())
@@ -413,9 +406,7 @@ describe("Context-owned flags", () => {
 				expect(flags.verbose).toBe(true);
 			});
 
-		expect((await app.run([], { flags: { "api-key": "secret", verbose: true } })).status).not.toBe(
-			"failed",
-		);
+		await unwrap(app.run([], { flags: { "api-key": "secret", verbose: true } }));
 	});
 
 	it("allows one owning factory on sibling command branches", async () => {
@@ -431,35 +422,33 @@ describe("Context-owned flags", () => {
 			);
 		const app = new Crust("cli").add(branch("first"), branch("second"));
 
-		expect((await app.run(["first"], { flags: { "api-key": "one" } })).status).not.toBe("failed");
-		expect((await app.run(["second"], { flags: { "api-key": "two" } })).status).not.toBe("failed");
+		await unwrap(app.run(["first"], { flags: { "api-key": "one" } }));
+		await unwrap(app.run(["second"], { flags: { "api-key": "two" } }));
 
 		expect(seen).toEqual(["first:one", "second:two"]);
 	});
 
 	it("retains owned flags on .of() test doubles", async () => {
-		expect.assertions(4);
+		expect.assertions(3);
 		const auth = defineContext("auth", { flags: [apiKey] }, () => ({ real: true }));
 		const fake = auth.of({ real: false });
 		expect(fake.ownedFlags["api-key"]).toBeDefined();
 
-		expect(
-			(
-				await new Crust("cli")
-					.provide(fake)
-					.action(async ({ flags, ctx }) => {
-						expect(flags["api-key"]).toBe("fake-key");
-						expect((await ctx.auth).real).toBe(false);
-					})
-					.run([], { flags: { "api-key": "fake-key" } })
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			new Crust("cli")
+				.provide(fake)
+				.action(async ({ flags, ctx }) => {
+					expect(flags["api-key"]).toBe("fake-key");
+					expect((await ctx.auth).real).toBe(false);
+				})
+				.run([], { flags: { "api-key": "fake-key" } }),
+		);
 	});
 });
 
 describe("Context setup dependencies", () => {
 	it("types and resolves declared Context bags in two- and three-argument setups", async () => {
-		expect.assertions(2);
+		expect.assertions(1);
 		const session = defineContext("session", () => ({ userId: "yan" }));
 		const user = defineContext("user", { uses: [session] }, async ({ ctx }) => {
 			const value = await ctx.session;
@@ -474,44 +463,38 @@ describe("Context setup dependencies", () => {
 			async ({ ctx }) => await ctx.user,
 		);
 
-		expect(
-			(
-				await new Crust("cli")
-					.provide(session(), user(), configured())
-					.action(async ({ ctx }) => expect(await ctx.configured).toBe("yan"))
-					.run([])
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			new Crust("cli")
+				.provide(session(), user(), configured())
+				.action(async ({ ctx }) => expect(await ctx.configured).toBe("yan"))
+				.run([]),
+		);
 	});
 
 	it("exposes the transitive dependency closure at runtime", async () => {
-		expect.assertions(2);
+		expect.assertions(1);
 		const base = defineContext("base", () => "base");
 		const mid = defineContext("mid", { uses: [base] }, async ({ ctx }) => await ctx.base);
 		const db = defineContext("db", { uses: [mid] }, async ({ ctx }) => await ctx.base);
 
-		expect(
-			(
-				await new Crust("cli")
-					.provide(db(), mid(), base())
-					.action(async ({ ctx }) => expect(await ctx.db).toBe("base"))
-					.run([])
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			new Crust("cli")
+				.provide(db(), mid(), base())
+				.action(async ({ ctx }) => expect(await ctx.db).toBe("base"))
+				.run([]),
+		);
 	});
 
 	it("deduplicates repeated dependency names in a setup bag", async () => {
-		expect.assertions(2);
+		expect.assertions(1);
 		const base = defineContext("base", () => "base");
 		const db = defineContext("db", { uses: [base, base] }, async ({ ctx }) => await ctx.base);
-		expect(
-			(
-				await new Crust("cli")
-					.provide(base(), db())
-					.action(async ({ ctx }) => expect(await ctx.db).toBe("base"))
-					.run([])
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			new Crust("cli")
+				.provide(base(), db())
+				.action(async ({ ctx }) => expect(await ctx.db).toBe("base"))
+				.run([]),
+		);
 	});
 
 	it("only constructs conditionally pulled dependencies", async () => {
@@ -524,28 +507,24 @@ describe("Context setup dependencies", () => {
 				options ? await ctx.remote : { id: 0 },
 		);
 
-		expect(
-			(
-				await new Crust("cli")
-					.provide(remote(), cache(false))
-					.action(async ({ ctx }) => void (await ctx.cache))
-					.run([])
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			new Crust("cli")
+				.provide(remote(), cache(false))
+				.action(async ({ ctx }) => void (await ctx.cache))
+				.run([]),
+		);
 		expect(setups).toBe(0);
-		expect(
-			(
-				await new Crust("cli")
-					.provide(remote(), cache(true))
-					.action(async ({ ctx }) => void (await ctx.cache))
-					.run([])
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			new Crust("cli")
+				.provide(remote(), cache(true))
+				.action(async ({ ctx }) => void (await ctx.cache))
+				.run([]),
+		);
 		expect(setups).toBe(1);
 	});
 
 	it("shares dependencies in a concurrent diamond without reporting a cycle", async () => {
-		expect.assertions(3);
+		expect.assertions(2);
 		let baseSetups = 0;
 		const base = defineContext("base", async () => ({ id: ++baseSetups }));
 		const left = defineContext("left", { uses: [base] }, async ({ ctx }) => (await ctx.base).id);
@@ -553,48 +532,42 @@ describe("Context setup dependencies", () => {
 		const top = defineContext("top", { uses: [left, right] }, async ({ ctx }) =>
 			Promise.all([ctx.left, ctx.right]),
 		);
-		expect(
-			(
-				await new Crust("cli")
-					.provide(top(), right(), base(), left())
-					.action(async ({ ctx }) => {
-						expect(await ctx.top).toEqual([1, 1]);
-					})
-					.run([])
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			new Crust("cli")
+				.provide(top(), right(), base(), left())
+				.action(async ({ ctx }) => {
+					expect(await ctx.top).toEqual([1, 1]);
+				})
+				.run([]),
+		);
 		expect(baseSetups).toBe(1);
 	});
 
 	it("accepts dependencies in the same call in any order and across ordered calls", async () => {
-		expect.assertions(4);
+		expect.assertions(2);
 		const base = defineContext("base", () => "base");
 		const dependent = defineContext(
 			"dependent",
 			{ uses: [base] },
 			async ({ ctx }) => await ctx.base,
 		);
-		expect(
-			(
-				await new Crust("cli")
-					.provide(dependent(), base())
-					.action(async ({ ctx }) => expect(await ctx.dependent).toBe("base"))
-					.run([])
-			).status,
-		).not.toBe("failed");
-		expect(
-			(
-				await new Crust("cli")
-					.provide(base())
-					.provide(dependent())
-					.action(async ({ ctx }) => expect(await ctx.dependent).toBe("base"))
-					.run([])
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			new Crust("cli")
+				.provide(dependent(), base())
+				.action(async ({ ctx }) => expect(await ctx.dependent).toBe("base"))
+				.run([]),
+		);
+		await unwrap(
+			new Crust("cli")
+				.provide(base())
+				.provide(dependent())
+				.action(async ({ ctx }) => expect(await ctx.dependent).toBe("base"))
+				.run([]),
+		);
 	});
 
 	it("lets .of() cut the dependency graph while retaining owned flags", async () => {
-		expect.assertions(2);
+		expect.assertions(1);
 		const token = defineFlag("token", { type: "string" });
 		const missing = defineContext("missing", () => "real");
 		const db = defineContext(
@@ -605,11 +578,11 @@ describe("Context setup dependencies", () => {
 		const app = new Crust("cli").provide(db.of("fake")).action(async ({ ctx }) => {
 			expect(await ctx.db).toBe("fake");
 		});
-		expect((await app.run([], { flags: { token: "x" } })).status).not.toBe("failed");
+		await unwrap(app.run([], { flags: { token: "x" } }));
 	});
 
 	it("exposes the typed transitive closure above an .of() cut", async () => {
-		expect.assertions(2);
+		expect.assertions(1);
 		const config = defineContext("config", () => ({ url: "memory://" }));
 		const db = defineContext("db", { uses: [config] }, async ({ ctx }) => ({
 			url: (await ctx.config).url,
@@ -620,14 +593,12 @@ describe("Context setup dependencies", () => {
 			const url = (await ctx.config).url;
 			return `report:${url}`;
 		});
-		expect(
-			(
-				await new Crust("cli")
-					.provide(db.of({ url: "fake" }), config(), report())
-					.action(async ({ ctx }) => expect(await ctx.report).toBe("report:memory://"))
-					.run([])
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			new Crust("cli")
+				.provide(db.of({ url: "fake" }), config(), report())
+				.action(async ({ ctx }) => expect(await ctx.report).toBe("report:memory://"))
+				.run([]),
+		);
 	});
 
 	it("fails loud when a transitive dependency above an .of() cut is unprovided", async () => {
@@ -651,9 +622,7 @@ describe("Context setup dependencies", () => {
 				},
 			},
 		});
-		expect(
-			(await new Crust("cli").provide(db.of("fake"), config()).extend(observer).run([])).status,
-		).not.toBe("failed");
+		await unwrap(new Crust("cli").provide(db.of("fake"), config()).extend(observer).run([]));
 		expect(seen).toBe("memory://");
 	});
 });
@@ -671,11 +640,8 @@ describe("Context dependency runtime boundaries", () => {
 		// though .extend() typechecked against the root's final Ctx.
 		const app = new Crust("cli").add(child).provide(logger()).extend(observer);
 
-		await expect(app.run(["child"])).resolves.toMatchObject({
-			status: "failed",
-			error: {
-				details: { name: "logger", reason: "missing-context" },
-			},
+		await expect(unwrap(app.run(["child"]))).rejects.toMatchObject({
+			details: { name: "logger", reason: "missing-context" },
 		});
 		// The root path is healthy: logger was provided before .extend().
 		await expect(app.run([])).resolves.toMatchObject({ status: "completed", result: undefined });
@@ -698,8 +664,8 @@ describe("Context dependency runtime boundaries", () => {
 			.extend(provider)
 			.action(async ({ ctx }) => void values.push(await ctx.service));
 
-		expect((await app.run(["child"])).status).not.toBe("failed");
-		expect((await app.run([])).status).not.toBe("failed");
+		await unwrap(app.run(["child"]));
+		await unwrap(app.run([]));
 		expect(values).toEqual(["local", "extension"]);
 	});
 
@@ -717,9 +683,7 @@ describe("Context dependency runtime boundaries", () => {
 				},
 			},
 		});
-		expect(
-			(await new Crust("cli").extend(providerExtension).extend(consumerExtension).run([])).status,
-		).not.toBe("failed");
+		await unwrap(new Crust("cli").extend(providerExtension).extend(consumerExtension).run([]));
 		expect(seen).toBe("logger");
 	});
 
@@ -730,11 +694,8 @@ describe("Context dependency runtime boundaries", () => {
 		const b = defineContext("b", { uses: [aFactory] }, async ({ ctx }) => await ctx.a);
 		const app = new Crust("cli").provide(a(), b()).action(async ({ ctx }) => void (await ctx.a));
 
-		await expect(app.run([])).resolves.toMatchObject({
-			status: "failed",
-			error: {
-				details: { reason: "context-cycle" },
-			},
+		await expect(unwrap(app.run([]))).rejects.toMatchObject({
+			details: { reason: "context-cycle" },
 		});
 	});
 
@@ -811,17 +772,15 @@ describe("lazy Context bags", () => {
 			uses: [wrapper],
 			hooks: { preRun: async ({ ctx }) => void (await ctx.wrapper) },
 		});
-		expect(
-			(
-				await new Crust("cli")
-					.provide(gate(), wrapper())
-					.extend(observer)
-					.action(async ({ ctx }) => {
-						expect(await ctx.wrapper).toBe("degraded");
-					})
-					.run([], { flags: { token: "x" } })
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			new Crust("cli")
+				.provide(gate(), wrapper())
+				.extend(observer)
+				.action(async ({ ctx }) => {
+					expect(await ctx.wrapper).toBe("degraded");
+				})
+				.run([], { flags: { token: "x" } }),
+		);
 		expect(setups).toBe(1);
 	});
 
@@ -845,7 +804,7 @@ describe("lazy Context bags", () => {
 			.extend(observer)
 			.action(async ({ ctx }) => void seen.push((await ctx.service).id));
 
-		expect((await app.run([])).status).not.toBe("failed");
+		await unwrap(app.run([]));
 		expect(setups).toBe(1);
 		expect(seen).toEqual([1, 1, 1]);
 	});
@@ -858,7 +817,7 @@ describe("lazy Context bags", () => {
 			expect(first).toBe(second);
 		});
 
-		expect((await app.run([])).status).not.toBe("failed");
+		await unwrap(app.run([]));
 		expect(setups).toBe(1);
 	});
 
@@ -875,12 +834,12 @@ describe("lazy Context bags", () => {
 		);
 		const app = new Crust("cli").extend(provider, consumer).add(command);
 
-		expect((await app.run(["run"])).status).not.toBe("failed");
+		await unwrap(app.run(["run"]));
 		expect(events).toEqual(["extension", "extension"]);
 	});
 
 	it("resolves dependencies across Extension providers regardless of order", async () => {
-		expect.assertions(2);
+		expect.assertions(1);
 		const base = defineContext("base", () => "base");
 		const service = defineContext(
 			"service",
@@ -893,14 +852,12 @@ describe("lazy Context bags", () => {
 		const baseProvider = defineExtension(defineExtensionId("base-provider"), {
 			provides: [base()],
 		});
-		expect(
-			(
-				await new Crust("cli")
-					.extend(serviceProvider, baseProvider)
-					.action(async ({ ctx }) => expect(await ctx.service).toBe("service:base"))
-					.run([])
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			new Crust("cli")
+				.extend(serviceProvider, baseProvider)
+				.action(async ({ ctx }) => expect(await ctx.service).toBe("service:base"))
+				.run([]),
+		);
 	});
 
 	it("attributes nested preRun flag rejection to the flag-owning Context", async () => {
@@ -916,11 +873,8 @@ describe("lazy Context bags", () => {
 			.extend(extension)
 			.action(() => {});
 
-		await expect(app.run([], { flags: { token: "secret" } })).resolves.toMatchObject({
-			status: "failed",
-			error: {
-				details: { name: "auth", reason: "flags-before-validation" },
-			},
+		await expect(unwrap(app.run([], { flags: { token: "secret" } }))).rejects.toMatchObject({
+			details: { name: "auth", reason: "flags-before-validation" },
 		});
 	});
 
@@ -941,7 +895,7 @@ describe("lazy Context bags", () => {
 			.extend(extension)
 			.action(async ({ ctx }) => expect(await ctx.service).toBe("secret"));
 
-		expect((await app.run([], { flags: { token: "secret" } })).status).not.toBe("failed");
+		await unwrap(app.run([], { flags: { token: "secret" } }));
 		expect(serviceSetups).toBe(2);
 	});
 
@@ -966,7 +920,7 @@ describe("lazy Context bags", () => {
 			.extend(extension)
 			.action(async ({ ctx }) => expect(await ctx.service).toBe("secret"));
 
-		expect((await app.run([], { flags: { token: "secret" } })).status).not.toBe("failed");
+		await unwrap(app.run([], { flags: { token: "secret" } }));
 		expect(serviceSetups).toBe(2);
 	});
 
@@ -1012,43 +966,39 @@ describe("lazy Context bags", () => {
 				await expect(ctx.service).rejects.toBe(replacement);
 			});
 
-		expect((await app.run([], { flags: { token: "secret" } })).status).not.toBe("failed");
+		await unwrap(app.run([], { flags: { token: "secret" } }));
 		expect(setups).toBe(1);
 	});
 
 	it("memoizes ordinary setup rejections", async () => {
-		expect.assertions(4);
+		expect.assertions(3);
 		let setups = 0;
 		const failure = new Error("failed");
 		const service = defineContext("service", () => {
 			setups++;
 			throw failure;
 		});
-		expect(
-			(
-				await new Crust("cli")
-					.provide(service())
-					.action(async ({ ctx }) => {
-						await expect(ctx.service).rejects.toBe(failure);
-						await expect(ctx.service).rejects.toBe(failure);
-					})
-					.run([])
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			new Crust("cli")
+				.provide(service())
+				.action(async ({ ctx }) => {
+					await expect(ctx.service).rejects.toBe(failure);
+					await expect(ctx.service).rejects.toBe(failure);
+				})
+				.run([]),
+		);
 		expect(setups).toBe(1);
 	});
 
 	it("allows nested flag-free pulls in preRun", async () => {
-		expect.assertions(2);
+		expect.assertions(1);
 		const base = defineContext("base", () => "ok");
 		const service = defineContext("service", { uses: [base] }, async ({ ctx }) => await ctx.base);
 		const extension = defineExtension(defineExtensionId("consumer"), {
 			uses: [service],
 			hooks: { preRun: async (ctx) => expect(await ctx.ctx.service).toBe("ok") },
 		});
-		expect(
-			(await new Crust("cli").provide(base(), service()).extend(extension).run([])).status,
-		).not.toBe("failed");
+		await unwrap(new Crust("cli").provide(base(), service()).extend(extension).run([]));
 	});
 
 	it("rejects flag-owning Contexts after finish skips validation", async () => {
@@ -1066,11 +1016,8 @@ describe("lazy Context bags", () => {
 			.extend(extension)
 			.action(() => {});
 
-		await expect(app.run([])).resolves.toMatchObject({
-			status: "failed",
-			error: {
-				details: { reason: "flags-before-validation" },
-			},
+		await expect(unwrap(app.run([]))).rejects.toMatchObject({
+			details: { reason: "flags-before-validation" },
 		});
 	});
 });
@@ -1109,7 +1056,7 @@ describe("Context disposal", () => {
 			.extend(observer)
 			.action(async ({ ctx }) => (await ctx.resource).use());
 
-		expect((await app.run([])).status).not.toBe("failed");
+		await unwrap(app.run([]));
 		expect(events).toEqual(["use", "use", "postRun", "dispose"]);
 	});
 
@@ -1151,16 +1098,14 @@ describe("Context disposal", () => {
 			},
 		}));
 		const alias = defineContext("alias", { uses: [db] }, async ({ ctx }) => await ctx.db);
-		expect(
-			(
-				await new Crust("cli")
-					.provide(db(), alias())
-					.action(async ({ ctx }) => {
-						expect(await ctx.alias).toBe(await ctx.db);
-					})
-					.run([])
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			new Crust("cli")
+				.provide(db(), alias())
+				.action(async ({ ctx }) => {
+					expect(await ctx.alias).toBe(await ctx.db);
+				})
+				.run([]),
+		);
 		expect(disposals).toBe(1);
 	});
 
@@ -1175,16 +1120,14 @@ describe("Context disposal", () => {
 			};
 			return value;
 		});
-		expect(
-			(
-				await new Crust("cli")
-					.provide(bare(), decorated())
-					.action(async ({ ctx }) => {
-						await ctx.decorated;
-					})
-					.run([])
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			new Crust("cli")
+				.provide(bare(), decorated())
+				.action(async ({ ctx }) => {
+					await ctx.decorated;
+				})
+				.run([]),
+		);
 		expect(disposals).toBe(1);
 	});
 
@@ -1205,10 +1148,7 @@ describe("Context disposal", () => {
 			await Promise.all([ctx.fast, ctx.slow]);
 		});
 
-		await expect(app.run([])).resolves.toMatchObject({
-			status: "failed",
-			error: expect.objectContaining({ message: expect.stringContaining("boom") }),
-		});
+		await expect(unwrap(app.run([]))).rejects.toThrow("boom");
 		expect(disposals).toBe(1);
 	});
 
@@ -1226,7 +1166,7 @@ describe("Context disposal", () => {
 				log.push("run");
 			});
 
-		expect((await app.run([])).status).not.toBe("failed");
+		await unwrap(app.run([]));
 
 		expect(log).toEqual(["run", "dispose:second", "dispose:first"]);
 	});
@@ -1248,17 +1188,15 @@ describe("Context disposal", () => {
 		});
 
 		// derived provided first, but base constructs first — so base disposes last
-		expect(
-			(
-				await new Crust("cli")
-					.provide(derived(), base())
-					.action(async ({ ctx }) => {
-						await ctx.derived;
-						log.push("run");
-					})
-					.run([])
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			new Crust("cli")
+				.provide(derived(), base())
+				.action(async ({ ctx }) => {
+					await ctx.derived;
+					log.push("run");
+				})
+				.run([]),
+		);
 
 		expect(log).toEqual(["run", "dispose:derived", "dispose:base"]);
 	});
@@ -1293,10 +1231,7 @@ describe("Context disposal", () => {
 				log.push("run");
 			});
 
-		await expect(app.run([])).resolves.toMatchObject({
-			status: "failed",
-			error: expect.objectContaining({ message: expect.stringContaining("setup failed") }),
-		});
+		await expect(unwrap(app.run([]))).rejects.toThrow("setup failed");
 		expect(log).toEqual(["dispose:ok"]);
 	});
 
@@ -1316,10 +1251,7 @@ describe("Context disposal", () => {
 			events.push("handled");
 		});
 
-		await expect(app.run([])).resolves.toMatchObject({
-			status: "failed",
-			error: expect.objectContaining({ message: expect.stringContaining("Unauthenticated") }),
-		});
+		await expect(unwrap(app.run([]))).rejects.toThrow("Unauthenticated");
 		expect(events).toEqual(["disposed"]);
 	});
 });
@@ -1475,8 +1407,6 @@ describe("inline .command()", () => {
 		});
 		new Crust("trusted").provide(logger()).add(command);
 		expect(reads).toBe(0);
-		new Crust("checked").provide(logger()).add(command);
-		expect(reads).toBe(0);
 	});
 
 	it("rejects an inline command name that is already registered", () => {
@@ -1505,75 +1435,74 @@ describe("checked Context definitions", () => {
 		expect(setups).toBe(0);
 		expect(defineContext("empty", () => 1)().name).toBe("empty");
 	});
-});
 
-it("checks provider availability at consumption without eager setup", async () => {
-	let setups = 0;
-	const source = defineContext("source", () => {
-		setups++;
-		return 1;
-	});
-	const dependent = defineContext("dependent", { uses: [source] }, () => {
-		setups++;
-		return 2;
-	});
-	const instances = [dependent()];
-	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-	expect(() => new Crust("missing").provide(...instances)).toThrow("source");
-	const app = new Crust("present").provide(source()).provide(...instances);
-	instances.length = 0;
-	expect(setups).toBe(0);
-	expect(
-		(await app.action(async ({ ctx }) => expect(await ctx.dependent).toBe(2)).run([])).status,
-	).not.toBe("failed");
-	expect(setups).toBe(1);
-});
-
-it("preserves value-only Context replacement but rejects overlapping owned flags", async () => {
-	const source = defineContext("source", () => 1);
-	const providers = ["source"].map((name) => defineContext(name, () => 2)());
-	const app = new Crust("replace").provide(source()).provide(...providers);
-	expect(
-		(await app.action(async ({ ctx }) => expect(await ctx.source).toBe(2)).run([])).status,
-	).not.toBe("failed");
-	const auth = defineContext(
-		"auth",
-		{ flags: [{ name: "token", type: "string", aliases: ["t"] }] },
-		() => 1,
-	);
-	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-	expect(() => new Crust("same-owner").provide(auth()).provide(auth.of(2))).toThrow("collides");
-	const other = defineContext(
-		"auth",
-		{ flags: [{ name: "other", type: "string", short: "t" }] },
-		() => 2,
-	);
-	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-	expect(() => new Crust("same-owner-alias").provide(auth()).provide(other())).toThrow("collides");
-});
-
-it("consumes privately owned Context data through structural copies", async () => {
-	const dep = defineContext("dep", () => 1);
-	const real = defineContext(
-		"real",
-		{ uses: [dep], flags: [{ name: "token", type: "string" }] },
-		() => 2,
-	);
-	const altered = {
-		...real(),
-		uses: [],
-		setup: () => 99,
-		ownedFlags: { fake: { type: "boolean" as const } },
-	};
-	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-	expect(() => new Crust("missing").provide(altered)).toThrow("dep");
-	const app = new Crust("present")
-		.provide(dep())
-		.provide(altered)
-		.action(async ({ ctx, flags }) => {
-			expect(await ctx.real).toBe(2);
-			expect(flags.token).toBe("original");
+	it("checks provider availability at consumption without eager setup", async () => {
+		let setups = 0;
+		const source = defineContext("source", () => {
+			setups++;
+			return 1;
 		});
-	expect((await app.run([], { flags: { token: "original" } })).status).not.toBe("failed");
-	expect(Object.keys((await app.snapshot()).flags)).toEqual(["token"]);
+		const dependent = defineContext("dependent", { uses: [source] }, () => {
+			setups++;
+			return 2;
+		});
+		const instances = [dependent()];
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		expect(() => new Crust("missing").provide(...instances)).toThrow("source");
+		const app = new Crust("present").provide(source()).provide(...instances);
+		instances.length = 0;
+		expect(setups).toBe(0);
+		await unwrap(app.action(async ({ ctx }) => expect(await ctx.dependent).toBe(2)).run([]));
+		expect(setups).toBe(1);
+	});
+
+	it("preserves value-only Context replacement but rejects overlapping owned flags", async () => {
+		const source = defineContext("source", () => 1);
+		const name: string = "source";
+		const providers = [defineContext(name, () => 2)()];
+		const app = new Crust("replace").provide(source()).provide(...providers);
+		await unwrap(app.action(async ({ ctx }) => expect(await ctx.source).toBe(2)).run([]));
+		const auth = defineContext(
+			"auth",
+			{ flags: [{ name: "token", type: "string", aliases: ["t"] }] },
+			() => 1,
+		);
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		expect(() => new Crust("same-owner").provide(auth()).provide(auth.of(2))).toThrow("collides");
+		const other = defineContext(
+			"auth",
+			{ flags: [{ name: "other", type: "string", short: "t" }] },
+			() => 2,
+		);
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		expect(() => new Crust("same-owner-alias").provide(auth()).provide(other())).toThrow(
+			"collides",
+		);
+	});
+
+	it("consumes privately owned Context data through structural copies", async () => {
+		const dep = defineContext("dep", () => 1);
+		const real = defineContext(
+			"real",
+			{ uses: [dep], flags: [{ name: "token", type: "string" }] },
+			() => 2,
+		);
+		const altered = {
+			...real(),
+			uses: [],
+			setup: () => 99,
+			ownedFlags: { fake: { type: "boolean" as const } },
+		};
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		expect(() => new Crust("missing").provide(altered)).toThrow("dep");
+		const app = new Crust("present")
+			.provide(dep())
+			.provide(altered)
+			.action(async ({ ctx, flags }) => {
+				expect(await ctx.real).toBe(2);
+				expect(flags.token).toBe("original");
+			});
+		await unwrap(app.run([], { flags: { token: "original" } }));
+		expect(Object.keys((await app.snapshot()).flags)).toEqual(["token"]);
+	});
 });

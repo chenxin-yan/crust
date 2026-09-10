@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
+import { unwrap } from "../../tests/helpers.ts";
 import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
@@ -97,14 +98,12 @@ describe("command definitions", () => {
 				}),
 		);
 
-		expect(
-			(
-				await new Crust("cli").add(definition).run(["copy"], {
-					args: { source: "from", destination: "to" },
-					flags: { verbose: true, output: "dist" },
-				})
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			new Crust("cli").add(definition).run(["copy"], {
+				args: { source: "from", destination: "to" },
+				flags: { verbose: true, output: "dist" },
+			}),
+		);
 		expect(received).toEqual({
 			args: { source: "from", destination: "to" },
 			flags: { verbose: true, output: "dist" },
@@ -118,10 +117,9 @@ describe("command definitions", () => {
 		);
 		const app = new Crust("cli").add(outer);
 
-		await expect(app.run(["outer", "nested"], { flags: { late: true } })).resolves.toMatchObject({
-			status: "failed",
-			error: expect.objectContaining({ message: expect.stringMatching(/Unknown flag/) }),
-		});
+		await expect(unwrap(app.run(["outer", "nested"], { flags: { late: true } }))).rejects.toThrow(
+			/Unknown flag/,
+		);
 	});
 
 	it("propagates Context-owned flags only to definitions added after provide()", async () => {
@@ -142,14 +140,9 @@ describe("command definitions", () => {
 		const app = new Crust("cli").add(outer);
 
 		await expect(
-			app.run(["outer", "before"], { flags: { "api-key": "secret" } }),
-		).resolves.toMatchObject({
-			status: "failed",
-			error: expect.objectContaining({ message: expect.stringMatching(/Unknown flag/) }),
-		});
-		expect((await app.run(["outer", "after"], { flags: { "api-key": "secret" } })).status).not.toBe(
-			"failed",
-		);
+			unwrap(app.run(["outer", "before"], { flags: { "api-key": "secret" } })),
+		).rejects.toThrow(/Unknown flag/);
+		await unwrap(app.run(["outer", "after"], { flags: { "api-key": "secret" } }));
 		expect(calls).toEqual(["secret"]);
 	});
 
@@ -171,9 +164,7 @@ describe("command definitions", () => {
 		const deploy = defineCommand("deploy", (command) => command.use(db).use(logging).add(status));
 		const app = new Crust("cli").provide(logging(), db()).add(deploy);
 
-		expect((await app.run(["deploy", "status"], { flags: { verbose: true } })).status).not.toBe(
-			"failed",
-		);
+		await unwrap(app.run(["deploy", "status"], { flags: { verbose: true } }));
 
 		expect(calls).toEqual(["database:true"]);
 	});
@@ -191,7 +182,7 @@ describe("command definitions", () => {
 		);
 		const app = new Crust("cli").provide(logging(), db()).add(status);
 
-		expect((await app.run(["status"])).status).not.toBe("failed");
+		await unwrap(app.run(["status"]));
 
 		expect(calls).toEqual(["database:true"]);
 
@@ -220,10 +211,9 @@ describe("command definitions", () => {
 		const definition = defineCommand("users", (command) => command.action(() => {}));
 		const app = new Crust("cli").flags({ name: "secret", type: "string" }).add(definition);
 
-		await expect(app.run(["users"], { flags: { secret: "value" } })).resolves.toMatchObject({
-			status: "failed",
-			error: expect.objectContaining({ message: expect.stringMatching(/Unknown flag/) }),
-		});
+		await expect(unwrap(app.run(["users"], { flags: { secret: "value" } }))).rejects.toThrow(
+			/Unknown flag/,
+		);
 	});
 
 	it("rejects a recipe-provided Context flag colliding with an ancestor Context's flag", () => {
@@ -337,8 +327,8 @@ describe("command definitions", () => {
 		expect(Object.keys(app._node.subCommands)).toEqual(["existing", "build", "publish"]);
 		expect(app._node.subCommands).not.toBe(receiver._node.subCommands);
 
-		expect((await app.run(["build"])).status).not.toBe("failed");
-		expect((await app.run(["publish"])).status).not.toBe("failed");
+		await unwrap(app.run(["build"]));
+		await unwrap(app.run(["publish"]));
 
 		expect(ran).toEqual(["build", "publish"]);
 		expect(configured).toEqual(["build", "publish"]);

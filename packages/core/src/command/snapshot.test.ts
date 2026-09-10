@@ -293,4 +293,14 @@ describe("command metadata sections", () => {
 			},
 		});
 	});
+	it("rejects mutually exclusive section audiences at authoring", () => {
+		const id = defineExtensionId("audience");
+		expect(
+			() =>
+				new Crust("app", {
+					// @ts-expect-error deliberately invalid authoring from an untyped caller
+					sections: [{ title: "Notes", body: "text", only: [id], except: [id] }],
+				}),
+		).toThrow("invalid documentation sections");
+	});
 });

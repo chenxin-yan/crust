@@ -1,4 +1,4 @@
-import type { AnyCrust } from "../src/command/crust.ts";
+import type { AnyCrust, RunOutcome } from "../src/command/crust.ts";
 import type { CommandAction, CommandNode } from "../src/command/node.ts";
 import { createCommandNode, registerFlag } from "../src/command/node.ts";
 import type { ArgsDef, CommandMeta, FlagsDef } from "../src/types.ts";
@@ -36,6 +36,14 @@ export interface RunResult {
 	stdout: string;
 	stderr: string;
 	exitCode: number;
+}
+
+export async function unwrap<Result>(
+	pending: Promise<RunOutcome<Result>>,
+): Promise<Exclude<RunOutcome<Result>, { status: "failed" }>> {
+	const outcome = await pending;
+	if (outcome.status === "failed") throw outcome.error;
+	return outcome;
 }
 
 /**

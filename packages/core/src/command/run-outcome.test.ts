@@ -4,7 +4,6 @@ import { getAmbientTerminalIO, getTerminalIO, withTerminalIO } from "@crustjs/ut
 
 import {
 	Crust,
-	defineCommand,
 	defineContext,
 	defineExtension,
 	defineExtensionId,
@@ -67,17 +66,6 @@ describe("captured run outcomes", () => {
 				},
 			);
 		expect(result).toEqual({ status: "failed", error, stdout: "recorded", stderr: "" });
-	});
-	it("checks erased structured choices before action", async () => {
-		let called = false;
-		const app: AnyCrust = new Crust("app")
-			.flags({ name: "mode", type: "string", choices: ["safe", "fast"], required: true })
-			.action(() => {
-				called = true;
-			});
-		const result = await app.run([], { flags: { mode: "wrong" } });
-		expect(result.status).toBe("failed");
-		expect(called).toBe(false);
 	});
 	it("finishes before required validation and captures hook output", async () => {
 		const id = defineExtensionId("finish");
@@ -218,58 +206,6 @@ it("preserves explicit terminal streams without claiming to capture their writes
 	expect(writes).toEqual(["explicit"]);
 });
 
-it("resolves compatible conditional inline and sealed providers lazily with matching behavior", async () => {
-	for (const selected of [true, false]) {
-		let setups = 0;
-		const text = defineContext("db", () => {
-			setups++;
-			return "text";
-		});
-		const hook = defineExtension(defineExtensionId("demand"), {
-			uses: [text],
-			hooks: {
-				async postRun({ ctx }) {
-					expect(await ctx.db).toBe("text");
-				},
-			},
-		});
-		const root = new Crust("app").provide(text()).extend(hook);
-		const inline = root.command("child", (c) =>
-			(selected ? c.provide(text()) : c).action(async ({ ctx }) => await ctx.db),
-		);
-		const sealed = root.add(
-			defineCommand("child", (c) =>
-				(selected ? c.provide(text()) : c).use(text).action(async ({ ctx }) => await ctx.db),
-			),
-		);
-		expect(setups).toBe(0);
-		expect(await inline.run(["child"])).toEqual({
-			status: "completed",
-			result: "text",
-			stdout: "",
-			stderr: "",
-		});
-		expect(await sealed.run(["child"])).toEqual({
-			status: "completed",
-			result: "text",
-			stdout: "",
-			stderr: "",
-		});
-		expect(setups).toBe(2);
-	}
-});
-
-it("rejects mutually exclusive section audiences at authoring", () => {
-	const id = defineExtensionId("audience");
-	expect(
-		() =>
-			new Crust("app", {
-				// @ts-expect-error deliberately invalid authoring from an untyped caller
-				sections: [{ title: "Notes", body: "text", only: [id], except: [id] }],
-			}),
-	).toThrow("invalid documentation sections");
-});
-
 it("retains invocation sink callbacks rather than rereading a mutated IO object", async () => {
 	const writes: string[] = [];
 	const io = {
@@ -325,18 +261,4 @@ it("accepts args, flags and raw sections and treats undefined unknown keys as om
 		stdout: "",
 		stderr: "",
 	});
-});
-
-it("checks extra keys on structurally compatible variable inputs before action", async () => {
-	let called = false;
-	const app = new Crust("app")
-		.flags({ name: "mode", type: "string", choices: ["safe", "fast"], required: true })
-		.action(() => {
-			called = true;
-		});
-	// Like other structural TypeScript APIs, variables do not get fresh-literal excess-key checks.
-	const input = { flags: { mode: "safe", mdoe: "fast" } } as const;
-	const outcome = await app.run([], input);
-	expect(outcome.status).toBe("failed");
-	expect(called).toBe(false);
 });

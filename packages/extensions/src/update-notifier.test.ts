@@ -1114,10 +1114,10 @@ describe("updateNotifier post-run hook", () => {
 					throw new Error("command failed");
 				});
 
-			const outcome = await app.run([]);
-			expect(outcome.status).toBe("failed");
-			if (outcome.status !== "failed") throw new Error("expected failed outcome");
-			expect(outcome.error).toEqual(new Error("command failed"));
+			expect(await app.run([])).toMatchObject({
+				status: "failed",
+				error: new Error("command failed"),
+			});
 
 			expect(fetchCalled).toBe(false);
 		});

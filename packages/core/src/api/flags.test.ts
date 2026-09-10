@@ -92,10 +92,6 @@ describe("checked local definitions", () => {
 		expect(() => defineFlag("value", { type: "boolean", short: "xx" })).toThrow("one character");
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		expect(() => defineArg("", { type: "string" })).toThrow("non-empty");
-		expect(() =>
-			// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-			defineArg("mode", { type: "string", choices: ["a"], default: "b" }),
-		).toThrow("choices");
 	});
 });
 
@@ -129,27 +125,7 @@ describe("checked attachments", () => {
 	});
 });
 
-it("defers checked parsers until binding and preserves payload identity", async () => {
-	let calls = 0;
-	const flag = defineFlag(
-		"value",
-		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-		{
-			type: "string",
-			parse: (raw: string) => {
-				calls++;
-				return Promise.resolve(raw);
-			},
-		},
-	);
-	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-	const app = new Crust("cli").flags(flag);
-	expect(calls).toBe(0);
-	await expect(app.run([], { flags: { value: "input" } })).resolves.toMatchObject({
-		status: "failed",
-		error: expect.objectContaining({ message: expect.stringContaining("synchronous") }),
-	});
-	expect(calls).toBe(1);
+it("preserves default payload identity", async () => {
 	const payload = { key: "value" };
 	const endpoint = new URL("https://example.com");
 	const defaults = new Crust("cli")

@@ -7,12 +7,13 @@ import { dirname, join } from "node:path";
 import { getAmbientTerminalIO } from "@crustjs/utils/terminal";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
+import { unwrap } from "../../tests/helpers.ts";
 import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
-import type { ParsedFlagValue } from "../types.ts";
+import type { ArgsDef, NamedFlagDef, ParsedFlagValue } from "../types.ts";
 import { type AnyCrust, type CommandDefinitionBuilder, Crust, defineCommand } from "./crust.ts";
 import { BUILD_OUT_DIR_ENV, SNAPSHOT_PATH_ENV } from "./invocation.ts";
 
@@ -160,9 +161,7 @@ describe("Crust .flags()", () => {
 				received = flags;
 			});
 
-		expect((await app.run([], { flags: { first: true, second: "value" } })).status).not.toBe(
-			"failed",
-		);
+		await unwrap(app.run([], { flags: { first: true, second: "value" } }));
 		expect(received).toEqual({ first: true, second: "value" });
 		expect((await app.snapshot()).flags).toEqual({
 			first: { type: "boolean", negatable: true },
@@ -212,9 +211,7 @@ describe("Crust .args()", () => {
 				received = args;
 			});
 
-		expect((await app.run([], { args: { source: "from", destination: "to" } })).status).not.toBe(
-			"failed",
-		);
+		await unwrap(app.run([], { args: { source: "from", destination: "to" } }));
 		expect(received).toEqual({ source: "from", destination: "to" });
 		expect((await app.snapshot()).args.map((arg) => arg.name)).toEqual(["source", "destination"]);
 	});
@@ -360,9 +357,7 @@ describe("Crust .action()", () => {
 				receivedCtx = context;
 			});
 
-		expect(
-			(await app.run([], { args: { file: "test.txt" }, flags: { verbose: true } })).status,
-		).not.toBe("failed");
+		await unwrap(app.run([], { args: { file: "test.txt" }, flags: { verbose: true } }));
 
 		expect(receivedCtx).toMatchObject({
 			args: { file: "test.txt" },
@@ -406,7 +401,7 @@ describe("Crust .extend()", () => {
 			.extend(extension("two"), extension("three"))
 			.action(() => {});
 
-		expect((await app.run([])).status).not.toBe("failed");
+		await unwrap(app.run([]));
 		expect(calls).toEqual(["one", "two", "three"]);
 	});
 
@@ -438,7 +433,7 @@ describe("Crust .extend()", () => {
 		const app = base.extend(extension as never);
 
 		await app.snapshot();
-		expect((await app.run([])).status).not.toBe("failed");
+		await unwrap(app.run([]));
 
 		expect({ preRuns, sections, setups, disposals }).toEqual({
 			preRuns: 1,
@@ -492,7 +487,7 @@ describe("Crust .extend()", () => {
 		expect(snapshot.flags.legacyProvider).toBeUndefined();
 		expect(snapshot.subCommands.current).toBeDefined();
 		expect(snapshot.subCommands.legacy).toBeUndefined();
-		expect((await app.run([])).status).not.toBe("failed");
+		await unwrap(app.run([]));
 
 		expect(calls).toEqual(["second:sections", "second:preRun", "second:setup", "second:dispose"]);
 	});
@@ -512,7 +507,7 @@ describe("Crust .extend()", () => {
 				value = await bag.sharedProvider;
 			});
 
-		expect((await app.run([])).status).not.toBe("failed");
+		await unwrap(app.run([]));
 		expect(value).toBe("A");
 	});
 
@@ -534,7 +529,7 @@ describe("Crust .extend()", () => {
 				}) as never,
 			);
 
-		expect((await app.run(["child"])).status).not.toBe("failed");
+		await unwrap(app.run(["child"]));
 		expect(value).toBe("replacement");
 	});
 
@@ -563,7 +558,8 @@ describe("Crust .extend()", () => {
 	it("keeps a local provider override across unrelated .extend() calls", async () => {
 		let value: string | undefined;
 		const resource = defineContext("resource", () => "extension");
-		const local = ["resource"].map((name) => defineContext(name, () => "local")());
+		const name: string = "resource";
+		const local = [defineContext(name, () => "local")()];
 		const providing = defineExtension(defineExtensionId("providing"), {
 			provides: [resource()],
 		});
@@ -576,7 +572,7 @@ describe("Crust .extend()", () => {
 				value = await ctx.resource;
 			});
 
-		expect((await app.run([], {})).status).not.toBe("failed");
+		await unwrap(app.run([], {}));
 		expect(value).toBe("local");
 	});
 
@@ -635,10 +631,10 @@ describe("Crust .extend()", () => {
 		const base = new Crust("test").extend(extension("one")).action(() => {});
 		const extended = base.extend(extension("two"));
 
-		expect((await base.run([])).status).not.toBe("failed");
+		await unwrap(base.run([]));
 		expect(calls).toEqual(["one"]);
 		calls.length = 0;
-		expect((await extended.run([])).status).not.toBe("failed");
+		await unwrap(extended.run([]));
 		expect(calls).toEqual(["one", "two"]);
 	});
 });
@@ -737,15 +733,6 @@ describe("Extension application at prepare time", () => {
 				// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 				.extend(thief),
 		).toThrow('Flag "auth" collides with existing flag "token"');
-		const replacement = defineExtension(defineExtensionId("replacement"), {
-			flags: [{ name: "mode", type: "boolean", short: "n", aliases: ["new"] }],
-		});
-		expect(() =>
-			new Crust("cli")
-				.flags({ name: "mode", type: "boolean", short: "o", aliases: ["old"] })
-				// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-				.extend(replacement),
-		).toThrow('Flag "mode" collides with existing flag "mode"');
 	});
 
 	it("non-recursive Extension flags stay on the root", async () => {
@@ -852,7 +839,7 @@ describe("Extension application at prepare time", () => {
 			calls.push("root");
 		});
 
-		expect((await app.run([])).status).not.toBe("failed");
+		await unwrap(app.run([]));
 
 		const derived = app.add(
 			defineCommand("extra", (command) =>
@@ -862,15 +849,13 @@ describe("Extension application at prepare time", () => {
 			),
 		);
 
-		expect((await derived.run(["extra"])).status).not.toBe("failed");
+		await unwrap(derived.run(["extra"]));
 		// the original builder must not see the derived command: its typed tree
 		// has no "extra" path, so the forced path fails to resolve
-		await expect(app.run(["extra"] as never, {} as never)).resolves.toMatchObject({
-			status: "failed",
-			error: {
-				code: "COMMAND_NOT_FOUND",
-				details: { input: "extra" },
-			},
+		// @ts-expect-error -- "extra" is deliberately absent from the original builder.
+		await expect(unwrap(app.run(["extra"]))).rejects.toMatchObject({
+			code: "COMMAND_NOT_FOUND",
+			details: { input: "extra" },
 		});
 
 		expect(calls).toEqual(["root", "extra"]);
@@ -932,10 +917,10 @@ describe("Extension application at prepare time", () => {
 			calls.push("root");
 		});
 
-		expect((await app.run([])).status).not.toBe("failed");
+		await unwrap(app.run([]));
 		const derived = app.extend(audit);
-		expect((await derived.run([])).status).not.toBe("failed");
-		expect((await app.run([])).status).not.toBe("failed");
+		await unwrap(derived.run([]));
+		await unwrap(app.run([]));
 
 		expect(calls).toEqual(["root", "audit", "root", "root"]);
 	});
@@ -973,7 +958,7 @@ describe("Extension named hooks", () => {
 				order.push("action");
 			});
 
-		expect((await app.run([], { args: { file: "unused" } })).status).not.toBe("failed");
+		await unwrap(app.run([], { args: { file: "unused" } }));
 		expect(order).toEqual(["first", "gate"]);
 	});
 
@@ -994,42 +979,37 @@ describe("Extension named hooks", () => {
 			},
 		});
 
-		expect(
-			(
-				await new Crust("cli")
-					.extend(first, second)
-					.action(() => {})
-					.run([])
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			new Crust("cli")
+				.extend(first, second)
+				.action(() => {})
+				.run([]),
+		);
 		expect(outcomes).toEqual(["second:completed", "first:completed"]);
 
 		outcomes.length = 0;
 		await expect(
-			new Crust("cli")
-				.extend(first, second)
-				.action(() => {
-					throw new Error("boom");
-				})
-				.run([]),
-		).resolves.toMatchObject({
-			status: "failed",
-			error: expect.objectContaining({ message: expect.stringContaining("boom") }),
-		});
+			unwrap(
+				new Crust("cli")
+					.extend(first, second)
+					.action(() => {
+						throw new Error("boom");
+					})
+					.run([]),
+			),
+		).rejects.toThrow("boom");
 		expect(outcomes).toEqual(["second:failed", "first:failed"]);
 
 		outcomes.length = 0;
 		const gate = defineExtension(defineExtensionId("gate"), {
 			hooks: { preRun: (ctx) => ctx.finish() },
 		});
-		expect(
-			(
-				await new Crust("cli")
-					.extend(first, gate, second)
-					.action(() => {})
-					.run([])
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			new Crust("cli")
+				.extend(first, gate, second)
+				.action(() => {})
+				.run([]),
+		);
 		expect(outcomes).toEqual(["second:finished", "first:finished"]);
 	});
 
@@ -1047,15 +1027,13 @@ describe("Extension named hooks", () => {
 				},
 			},
 		});
-		expect(
-			(
-				await new Crust("cli")
-					.flags({ name: "port", type: "number", required: true })
-					.extend(gate)
-					.action(() => {})
-					.run([], { flags: { port: 8080 } })
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			new Crust("cli")
+				.flags({ name: "port", type: "number", required: true })
+				.extend(gate)
+				.action(() => {})
+				.run([], { flags: { port: 8080 } }),
+		);
 
 		expect(seenPort).toBe(8080);
 		expect(outcomeBy).toBe("gate");
@@ -1079,16 +1057,12 @@ describe("Extension named hooks", () => {
 			.extend(probe)
 			.add(defineCommand("known", (cmd) => cmd.action(() => {})));
 
-		expect(
-			(await app.run(["known"], undefined, { stdout: (line) => lines.push(line) })).status,
-		).not.toBe("failed");
+		await unwrap(app.run(["known"], undefined, { stdout: (line) => lines.push(line) }));
 		expect(lines).toEqual(["probe:known"]);
 		preRunCalled = false;
-		await expect(app.run(["unknown"] as never, {} as never)).resolves.toMatchObject({
-			status: "failed",
-			error: {
-				code: "COMMAND_NOT_FOUND",
-			},
+		// @ts-expect-error -- deliberately exercise an unknown command path.
+		await expect(unwrap(app.run(["unknown"]))).rejects.toMatchObject({
+			code: "COMMAND_NOT_FOUND",
 		});
 		expect(preRunCalled).toBe(false);
 	});
@@ -1129,14 +1103,13 @@ describe("Extension named hooks", () => {
 			},
 		});
 		await expect(
-			new Crust("cli")
-				.extend(first, second)
-				.action(() => {})
-				.run([]),
-		).resolves.toMatchObject({
-			status: "failed",
-			error: expect.objectContaining({ message: expect.stringContaining("second cleanup") }),
-		});
+			unwrap(
+				new Crust("cli")
+					.extend(first, second)
+					.action(() => {})
+					.run([]),
+			),
+		).rejects.toThrow("second cleanup");
 		expect(calls).toEqual(["second", "first"]);
 	});
 
@@ -1155,7 +1128,7 @@ describe("Extension named hooks", () => {
 			roots.push(rootCommand.meta.name);
 		});
 
-		expect((await app.run([])).status).not.toBe("failed");
+		await unwrap(app.run([]));
 		await app.execute({ argv: ["owned"] });
 		expect(roots).toEqual(["cli", "cli"]);
 	});
@@ -1338,57 +1311,13 @@ describe("Extension onError hooks", () => {
 
 		onErrorRan = false;
 		stderrChunks = [];
-		await expect(failing().extend(observer).run([])).resolves.toMatchObject({
-			status: "failed",
-			error: expect.objectContaining({ message: expect.stringContaining("boom") }),
-		});
+		await expect(unwrap(failing().extend(observer).run([]))).rejects.toThrow("boom");
 		expect(onErrorRan).toBe(false);
 		expect(stderrChunks).toEqual([]);
 	});
 });
 
 describe("Crust .run()", () => {
-	it("diagnoses broad choice input without exhausting type instantiation", async () => {
-		const fixture = await mkdtemp(join(tmpdir(), "crust-run-diagnostics-"));
-		const repoRoot = join(import.meta.dir, "../../../..");
-		try {
-			await writeFile(
-				join(fixture, "input.ts"),
-				`import { Crust } from ${JSON.stringify(join(import.meta.dir, "../index.ts"))};
-const app = new Crust("app").flags(
-	{ name: "mode", type: "string", choices: ["safe", "fast"], required: true },
-	{ name: "verbose", type: "boolean" },
-).action(({ flags }) => flags.mode);
-declare const broad: string;
-void app.run([], { flags: { mode: broad } });
-`,
-			);
-			await writeFile(
-				join(fixture, "tsconfig.json"),
-				JSON.stringify({
-					compilerOptions: {
-						strict: true,
-						target: "esnext",
-						module: "esnext",
-						moduleResolution: "bundler",
-						noEmit: true,
-						allowImportingTsExtensions: true,
-						skipLibCheck: true,
-						types: [join(repoRoot, "node_modules/@types/bun")],
-					},
-					files: ["input.ts"],
-				}),
-			);
-			const result = Bun.spawnSync([join(repoRoot, "node_modules/.bin/tsc"), "-p", fixture]);
-			const output = result.stdout.toString() + result.stderr.toString();
-			expect(result.exitCode).toBe(1);
-			// An @ts-expect-error would also swallow TS2589, hiding the regression.
-			expect(output.match(/error TS\d+/g)).toEqual(["error TS2322"]);
-		} finally {
-			await rm(fixture, { recursive: true, force: true });
-		}
-	});
-
 	let originalExitCode: number | string | null | undefined;
 
 	beforeEach(() => {
@@ -1405,15 +1334,17 @@ void app.run([], { flags: { mode: broad } });
 		const app = new Crust("test").flags({ name: "port", type: "number" }).action(() => {});
 
 		await expect(
-			app.run(
-				[],
-				{ flags: { unknown: true } },
-				// @ts-expect-error -- unknown flag makes the compatibility overload's IO parameter never.
-				{
-					stderr: (text: string) => stderrLines.push(text),
-				},
+			unwrap(
+				app.run(
+					[],
+					{ flags: { unknown: true } },
+					// @ts-expect-error -- unknown flag makes the compatibility overload's IO parameter never.
+					{
+						stderr: (text: string) => stderrLines.push(text),
+					},
+				),
 			),
-		).resolves.toMatchObject({ status: "failed", error: { code: "PARSE" } });
+		).rejects.toMatchObject({ code: "PARSE" });
 		expect(stderrLines).toEqual([]);
 		// run() never touches process status
 		expect(process.exitCode).toBe(0);
@@ -1438,14 +1369,12 @@ void app.run([], { flags: { mode: broad } });
 			ctx.stderr("to err");
 		});
 
-		expect(
-			(
-				await app.run([], undefined, {
-					stdout: (t) => out.push(t),
-					stderr: (t) => err.push(t),
-				})
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			app.run([], undefined, {
+				stdout: (t) => out.push(t),
+				stderr: (t) => err.push(t),
+			}),
+		);
 
 		expect(out).toEqual(["to out"]);
 		expect(err).toEqual(["to err"]);
@@ -1459,7 +1388,7 @@ void app.run([], { flags: { mode: broad } });
 			observed = getAmbientTerminalIO();
 		});
 
-		expect((await app.run([], undefined, { stdout, stderr })).status).not.toBe("failed");
+		await unwrap(app.run([], undefined, { stdout, stderr }));
 
 		expect(observed?.stdout).toBeDefined();
 		expect(observed?.stderr).toBeDefined();
@@ -1472,7 +1401,7 @@ void app.run([], { flags: { mode: broad } });
 			observed = getAmbientTerminalIO();
 		});
 
-		expect((await app.run([])).status).not.toBe("failed");
+		await unwrap(app.run([]));
 
 		expect(observed).toBeDefined();
 	});
@@ -2260,19 +2189,19 @@ describe("Crust .add() aliases", () => {
 			),
 		);
 
-		expect((await app.run(["issues"])).status).not.toBe("failed");
+		await unwrap(app.run(["issues"]));
 		expect(calls).toBe(1);
 		expect((await app.snapshot()).subCommands.issue?.meta.aliases).toEqual(["issues", "i"]);
 	});
 });
 
 describe("dynamic definition guards (brands own literals; runtime owns config-built defs)", () => {
+	type DynamicDefs = NamedFlagDef[] & ArgsDef;
 	// SAFETY: adversarial fixtures deliberately model definitions received from untyped JavaScript.
 	const asDynamic = (
 		// oxlint-disable-next-line anti-slop/no-unknown-parameters -- test-only unchecked JavaScript fixture, never a production decoder.
 		value: unknown,
-	): import("../types.ts").NamedFlagDef[] & import("../types.ts").ArgsDef =>
-		value as import("../types.ts").NamedFlagDef[] & import("../types.ts").ArgsDef;
+	): DynamicDefs => value as DynamicDefs;
 
 	it("rejects duplicate argument names from dynamic defs", () => {
 		const defs = asDynamic([

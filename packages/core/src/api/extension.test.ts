@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
+import { unwrap } from "../../tests/helpers.ts";
 import {
 	Crust,
 	defineCommand,
@@ -88,17 +89,15 @@ describe("defineExtension", () => {
 		expect(emit.id).toBe(HELP);
 		expect(instance.id).toBe(HELP);
 		expect(Object.isFrozen(instance)).toBe(true);
-		expect(
-			(
-				await new Crust("app", {
-					version: "1.2.3",
-					sections: [{ title: "Example", body: "app", only: [emit] }],
-				})
-					.extend(instance)
-					.action(() => {})
-					.run([], {}, { stdout: (line) => output.push(line) })
-			).status,
-		).not.toBe("failed");
+		await unwrap(
+			new Crust("app", {
+				version: "1.2.3",
+				sections: [{ title: "Example", body: "app", only: [emit] }],
+			})
+				.extend(instance)
+				.action(() => {})
+				.run([], {}, { stdout: (line) => output.push(line) }),
+		);
 		expect(output).toEqual(["release:1.2.3"]);
 	});
 
