@@ -1,5 +1,4 @@
-import type { ContextInstanceData } from "../api/context.ts";
-import type { ExtensionData } from "../api/extension.ts";
+import type { DefiningOf } from "../api/context.ts";
 import type { CommandDefinitionData } from "../command/crust.ts";
 import type { FlagsDef, NamedFlagDef, NamedFlagsRecord } from "../types.ts";
 import type {
@@ -132,7 +131,7 @@ type NoPrefixBrand<S extends string> = [Extract<S, `no-${string}`>] extends [nev
 // ────────────────────────────────────────────────────────────────────────────
 
 export type ContextOwnedFlags<C> =
-	ContextInstanceData<C> extends {
+	DefiningOf<C> extends {
 		readonly _ownedFlags?: infer OF extends FlagsDef;
 	}
 		? OF
@@ -153,7 +152,7 @@ type ContextFlagCollisionBrand<C, Existing extends string> = CollisionBrand<
 /** Declared flag literals carried by an Extension's `_flagDefs` phantom; widened Extensions opt out. */
 export type ExtensionFlagDefsOf<E> = [E] extends [never]
 	? readonly []
-	: ExtensionData<E> extends {
+	: DefiningOf<E> extends {
 				readonly _flagDefs?: infer D extends readonly NamedFlagDef[];
 		  }
 		? D
@@ -174,7 +173,7 @@ export type ExtensionSpellings<E> =
 	| AttachedSpellings<ExtensionFlagDefsOf<E>>
 	| ([E] extends [never]
 			? never
-			: ExtensionData<E> extends { readonly provides?: infer P extends readonly unknown[] }
+			: DefiningOf<E> extends { readonly provides?: infer P extends readonly unknown[] }
 				? ProvidedContextSpellings<P>
 				: never);
 

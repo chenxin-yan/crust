@@ -2,11 +2,10 @@ import type {
 	ContextValue,
 	ContextDepsOf,
 	AnyContextInstance,
-	ContextInstanceData,
+	DefiningOf,
 	ContextMap,
 	ContextsOutput,
 } from "../api/context.ts";
-import type { ExtensionData } from "../api/extension.ts";
 import type { CommandDefinitionData } from "../command/crust.ts";
 import type { CollisionBrand, DefName } from "./shared.ts";
 
@@ -55,7 +54,7 @@ type InstanceNames<P extends readonly unknown[]> = P extends readonly [
 
 /** Statically known names of an Extension's provided Contexts; widened Extensions opt out. */
 type ExtensionProvidedNames<E> =
-	ExtensionData<E> extends {
+	DefiningOf<E> extends {
 		readonly provides?: infer P extends readonly unknown[];
 	}
 		? InstanceNames<P>
@@ -155,7 +154,7 @@ type IsAny<T> = 0 extends 1 & T ? true : false;
 export type DeclaredDepsOf<T> =
 	IsAny<T> extends true
 		? Record<string, ContextValue>
-		: CommandDefinitionData<ExtensionData<T>> extends {
+		: CommandDefinitionData<DefiningOf<T>> extends {
 					readonly _deps?: infer D extends ContextMap;
 			  }
 			? IsAny<D> extends true
@@ -194,5 +193,5 @@ export type DeclaredDependencyValuesBrand<Deps, Values> =
 
 /** Structural provider copies retain their defining name. */
 export type KnownContextInstances<Cs extends readonly AnyContextInstance[]> = {
-	[I in keyof Cs]: Cs[I] & Pick<ContextInstanceData<Cs[I]>, "name">;
+	[I in keyof Cs]: Cs[I] & Pick<DefiningOf<Cs[I]>, "name">;
 };

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import type { Equal, Expect } from "../../tests/helpers.ts";
+import { type Equal, type Expect, unwrap } from "../../tests/helpers.ts";
 import { Crust } from "../command/crust.ts";
 import { defineArg, defineFlag } from "./flags.ts";
 
@@ -92,6 +92,10 @@ describe("checked local definitions", () => {
 		expect(() => defineFlag("value", { type: "boolean", short: "xx" })).toThrow("one character");
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		expect(() => defineArg("", { type: "string" })).toThrow("non-empty");
+		expect(() =>
+			// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises helper validation.
+			defineArg("mode", { type: "string", choices: ["a"], default: "b" }),
+		).toThrow("choices");
 	});
 });
 
@@ -123,6 +127,26 @@ describe("checked attachments", () => {
 		defaults[0] = "b";
 		expect(await attached.run([], {})).toMatchObject({ result: ["a"] });
 	});
+});
+
+it("defers helper parsers until invocation and calls them once", async () => {
+	let calls = 0;
+	const flag = defineFlag(
+		"value",
+		// @ts-expect-error -- runtime regression deliberately exercises Promise rejection.
+		{
+			type: "string",
+			parse: (raw: string) => {
+				calls++;
+				return Promise.resolve(raw);
+			},
+		},
+	);
+	// @ts-expect-error -- runtime regression deliberately consumes the invalid helper.
+	const app = new Crust("cli").flags(flag);
+	expect(calls).toBe(0);
+	await expect(unwrap(app.run([], { flags: { value: "input" } }))).rejects.toThrow("synchronous");
+	expect(calls).toBe(1);
 });
 
 it("preserves default payload identity", async () => {

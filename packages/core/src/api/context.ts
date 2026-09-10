@@ -40,17 +40,6 @@ export function seal<T extends object>(value: T): T & Defining<T> {
 	return Object.freeze(Object.assign(value, { [defining]: value }));
 }
 
-/** @internal Consume the immutable source, not public fields overwritten by an object spread. */
-export function contextInstanceData<C extends AnyContextInstance>(instance: C): DefiningOf<C> {
-	return definingOf(instance);
-}
-/** @internal Factory metadata is likewise owned by its defining helper. */
-export function contextFactoryData<F extends AnyContextFactory>(factory: F): DefiningOf<F> {
-	return definingOf(factory);
-}
-export type ContextInstanceData<C> = DefiningOf<C>;
-type ContextFactoryData<F> = DefiningOf<F>;
-
 /** Lazy, invocation-scoped Context values. Reading a property starts construction. */
 export type ContextBag<Deps extends ContextMap = {}> = {
 	readonly [K in keyof Deps]: Promise<Deps[K]>;
@@ -139,7 +128,7 @@ type NamedOutput<Name extends string, Value> =
 			: { [K in Name]: Awaited<Value> };
 
 export type ContextOutput<C> = C extends AnyContextInstance
-	? ContextInstanceData<C> extends ContextInstance<infer Name, infer Value, any, any>
+	? DefiningOf<C> extends ContextInstance<infer Name, infer Value, any, any>
 		? NamedOutput<Name, Value>
 		: never
 	: never;
@@ -169,10 +158,6 @@ export type ContextsOwnedFlags<Cs extends readonly AnyContextInstance[]> =
 			? {}
 			: FlagsDef;
 
-function sourceName(source: AnyContextInstance | AnyContextFactory): string {
-	return "contextName" in source ? source.contextName : source.name;
-}
-
 /** Check only declared availability; setup, callback values, and cycles belong to invocation. */
 export function validateContextAvailability(
 	contexts: readonly AnyContextInstance[],
@@ -183,7 +168,7 @@ export function validateContextAvailability(
 	const visit = (source: AnyContextInstance | AnyContextFactory): void => {
 		if (visited.has(source)) return;
 		visited.add(source);
-		const name = sourceName(source);
+		const name = "contextName" in source ? source.contextName : source.name;
 		if (!names.has(name)) {
 			throw new CrustError("DEFINITION", `No provider for Context "${name}"`, {
 				subject: "context",
@@ -197,7 +182,7 @@ export function validateContextAvailability(
 }
 
 export type FactoryOutput<F> = F extends AnyContextFactory
-	? ContextFactoryData<F> extends ContextFactory<infer Name, any, infer Value, any, any>
+	? DefiningOf<F> extends ContextFactory<infer Name, any, infer Value, any, any>
 		? NamedOutput<Name, Value>
 		: never
 	: never;
@@ -210,7 +195,7 @@ export type FactoriesOutput<Fs extends readonly AnyContextFactory[]> = Fs extend
 	: {};
 
 type FactoryDeps<F> = F extends AnyContextFactory
-	? ContextFactoryData<F> extends ContextFactory<any, any, any, any, infer Deps>
+	? DefiningOf<F> extends ContextFactory<any, any, any, any, infer Deps>
 		? Deps
 		: {}
 	: {};
@@ -227,7 +212,7 @@ export type ContextDependencies<Uses extends readonly AnyContextFactory[]> =
 		: Record<string, ContextValue>;
 
 export type ContextDepsOf<C> = C extends AnyContextInstance
-	? ContextInstanceData<C> extends { readonly _deps?: infer Deps extends ContextMap }
+	? DefiningOf<C> extends { readonly _deps?: infer Deps extends ContextMap }
 		? Deps
 		: {}
 	: {};
@@ -288,7 +273,7 @@ export function defineContext(
 	// Authoring overloads require setup in both call forms.
 	const setup = hasConfig ? maybeSetup! : configOrSetup;
 	const ownedFlags = Object.freeze(toFlagsRecord(config.flags ?? []));
-	const uses = Object.freeze((config.uses ?? []).map(contextFactoryData));
+	const uses = Object.freeze((config.uses ?? []).map(definingOf));
 	const instance = (
 		instanceUses: readonly AnyContextFactory[],
 		run: AnyContextInstance["setup"],
@@ -581,7 +566,7 @@ export function createContextResolver(
 	): ContextBag<Deps> => {
 		const bag: Record<string, Promise<ContextValue>> = {};
 		const add = (source: AnyContextFactory | AnyContextInstance): void => {
-			const name = sourceName(source);
+			const name = "contextName" in source ? source.contextName : source.name;
 			if (Object.hasOwn(bag, name)) return;
 			Object.defineProperty(bag, name, {
 				enumerable: true,

@@ -1362,7 +1362,7 @@ describe("parseStructured", () => {
 		);
 	});
 
-	it("spreads variadic values in definition order", () => {
+	it("spreads variadic values in definition order", async () => {
 		const command = makeNode({
 			meta: "test",
 			args: [
@@ -1374,6 +1374,16 @@ describe("parseStructured", () => {
 			first: "-first",
 			rest: ["b", "a"],
 		});
+		const app = new Crust("run").args(
+			{ name: "first", type: "string" },
+			{ name: "rest", type: "string", variadic: true },
+		);
+		await expect(
+			unwrap(
+				// @ts-expect-error -- runtime regression deliberately supplies a scalar variadic.
+				app.run([], { args: { first: "a", rest: "b" } }),
+			),
+		).rejects.toThrow("occurrence array");
 	});
 
 	it("keeps scalar JSON arrays intact and passes raw input verbatim", () => {

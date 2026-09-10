@@ -23,8 +23,6 @@ import type {
 } from "../validation/flags.brands.ts";
 import type { Awaitable, MergeProviders } from "../validation/shared.ts";
 import {
-	contextFactoryData,
-	contextInstanceData,
 	definingOf,
 	seal,
 	type AnyContextFactory,
@@ -298,12 +296,6 @@ type ValidateExtensionConfig<
 	readonly provides?: KnownContextInstances<Provides> & ProvideChecks<never, Provides>;
 };
 
-/** @internal Retain defining data through public structural copies. */
-export type ExtensionData<E> = DefiningOf<E>;
-export function extensionData<E extends AnyExtension>(extension: E): DefiningOf<E> {
-	return definingOf(extension);
-}
-
 declare const extensionHookProof: unique symbol;
 
 export interface Extension<
@@ -341,7 +333,7 @@ export interface Extension<
 export type AnyExtension = Extension<any, any, any, any, RootMetaKey>;
 
 export type ExtensionProvidesOutput<E> =
-	ExtensionData<E> extends Extension<any, infer Provides, any, any, RootMetaKey>
+	DefiningOf<E> extends Extension<any, infer Provides, any, any, RootMetaKey>
 		? ContextsOutput<Provides>
 		: {};
 export type ExtensionsProvidesOutput<Es extends readonly AnyExtension[]> = Es extends readonly [
@@ -495,7 +487,7 @@ export function defineExtension(
 	toFlagsRecord([
 		...(config.flags ?? []),
 		...(config.provides ?? []).flatMap((instance) =>
-			Object.entries(contextInstanceData(instance).ownedFlags).map(([name, def]) => ({
+			Object.entries(definingOf(instance).ownedFlags).map(([name, def]) => ({
 				...def,
 				name,
 			})),
@@ -505,10 +497,8 @@ export function defineExtension(
 	// SAFETY: the runtime registry erases Defs after the overloads contextually typed every hook.
 	const extension = {
 		...config,
-		uses: Object.freeze((config.uses ?? []).map(contextFactoryData)),
-		...(config.provides
-			? { provides: Object.freeze(config.provides.map(contextInstanceData)) }
-			: {}),
+		uses: Object.freeze((config.uses ?? []).map(definingOf)),
+		...(config.provides ? { provides: Object.freeze(config.provides.map(definingOf)) } : {}),
 		...(config.commands ? { commands: Object.freeze([...config.commands]) } : {}),
 		id,
 		...(config.flags === undefined ? {} : { flags: ownedFlags }),

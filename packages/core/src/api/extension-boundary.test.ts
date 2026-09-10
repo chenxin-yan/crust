@@ -228,6 +228,12 @@ it("keeps same-name Context replacement order inside checked Extension configs",
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		defineExtension(defineExtensionId("repeated-owned"), { provides: [old(), old()] }),
 	).toThrow("collides");
+	expect(() =>
+		defineExtension(defineExtensionId("bad-default"), {
+			// @ts-expect-error -- runtime regression deliberately exercises helper validation.
+			flags: [{ name: "mode", type: "string", choices: ["allowed"], default: "forbidden" }],
+		}),
+	).toThrow("default must be one of choices");
 });
 
 it("checked providers validate pending contributed commands lazily against final owned flags", async () => {
@@ -380,6 +386,24 @@ it("checked Extensions validate earlier pending commands against new flags and p
 			"collides",
 		);
 	}
+});
+
+it("validates extension flags against the final replaced command tree", async () => {
+	const first = defineExtension(defineExtensionId("first"), {
+		commands: [defineCommand("child", (c) => c.flags({ name: "token", type: "boolean" }))],
+	});
+	const recursive = defineExtension(defineExtensionId("recursive-token"), {
+		flags: [{ name: "token", type: "string", recursive: true }],
+	});
+	const replacement = defineExtension(defineExtensionId("replacement"), {
+		commands: [defineCommand("child", (c) => c.action(() => "replacement"))],
+	});
+	// @ts-expect-error -- static tuples reject the transient collision; runtime validates the final replaced tree.
+	const app = new Crust("app").extend(first, recursive, replacement);
+	expect(await app.run(["child"])).toMatchObject({
+		status: "completed",
+		result: "replacement",
+	});
 });
 
 it("checked inputs validate open inherited flags without changing positional provider scope", async () => {
@@ -654,7 +678,8 @@ it("retires actually inherited provider flags even below a later Context shadow"
 });
 
 it("consumes each conditional helper branch without losing requiredness or negation", async () => {
-	const build = (condition: boolean) => {
+	type ConditionalApps = Record<"flag" | "arg" | "child" | "toggle", AnyCrust>;
+	const build = (condition: boolean): ConditionalApps => {
 		const definition: { type: "string"; required: true } | { type: "string" } = condition
 			? { type: "string", required: true }
 			: { type: "string" };
@@ -674,37 +699,30 @@ it("consumes each conditional helper branch without losing requiredness or negat
 		};
 	};
 	const required = build(true);
-	const requiredFlag: AnyCrust = required.flag;
-	await expect(unwrap(requiredFlag.run([], {}))).rejects.toThrow('Missing required flag "--mode"');
-	const requiredArg: AnyCrust = required.arg;
-	await expect(unwrap(requiredArg.run([], {}))).rejects.toThrow(
+	await expect(unwrap(required.flag.run([], {}))).rejects.toThrow('Missing required flag "--mode"');
+	await expect(unwrap(required.arg.run([], {}))).rejects.toThrow(
 		'Missing required argument "<mode>"',
 	);
-	const requiredChild: AnyCrust = required.child;
-	await expect(unwrap(requiredChild.run(["child"], {}))).rejects.toThrow(
+	await expect(unwrap(required.child.run(["child"], {}))).rejects.toThrow(
 		'Missing required flag "--mode"',
 	);
-	const requiredToggle: AnyCrust = required.toggle;
-	await expect(unwrap(requiredToggle.run([], { flags: { toggle: false } }))).rejects.toThrow(
+	await expect(unwrap(required.toggle.run([], { flags: { toggle: false } }))).rejects.toThrow(
 		"does not support negation",
 	);
 	const optional = build(false);
-	const optionalFlag: AnyCrust = optional.flag;
-	expect(await optionalFlag.run([], {})).toMatchObject({
+	expect(await optional.flag.run([], {})).toMatchObject({
 		status: "completed",
 		result: undefined,
 	});
-	const optionalArg: AnyCrust = optional.arg;
-	expect(await optionalArg.run([], {})).toMatchObject({
+	expect(await optional.arg.run([], {})).toMatchObject({
 		status: "completed",
 		result: { mode: undefined },
 	});
-	const optionalToggle: AnyCrust = optional.toggle;
-	expect(await optionalToggle.run([], { flags: { toggle: false } })).toMatchObject({
+	expect(await optional.toggle.run([], { flags: { toggle: false } })).toMatchObject({
 		status: "completed",
 		result: false,
 	});
-	expect(await requiredFlag.run([], { flags: { mode: "value" } })).toMatchObject({
+	expect(await required.flag.run([], { flags: { mode: "value" } })).toMatchObject({
 		status: "completed",
 		result: "value",
 	});

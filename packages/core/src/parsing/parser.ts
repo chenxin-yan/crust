@@ -527,9 +527,11 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 	command: CommandNode & { args: A; effectiveFlags: F },
 	input: RunInputPayload,
 ): ParseResult<A, F> {
-	const { args: inputArgs, flags: inputFlags, raw, ...rest } = input;
-	for (const [key, value] of Object.entries(rest)) {
-		if (value !== undefined) throw new CrustError("PARSE", `Unknown input section "${key}"`);
+	const { args: inputArgs, flags: inputFlags, raw } = input;
+	for (const [key, value] of Object.entries(input)) {
+		if (key !== "args" && key !== "flags" && key !== "raw" && value !== undefined) {
+			throw new CrustError("PARSE", `Unknown input section "${key}"`);
+		}
 	}
 	const positionals: RunInputValue[] = [];
 	let omittedArgument: string | undefined;

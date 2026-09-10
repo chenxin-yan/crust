@@ -1,10 +1,6 @@
 import type { JsonCompatible, JsonValue } from "@crustjs/utils/json";
 
-import {
-	validateContextAvailability,
-	contextInstanceData,
-	contextFactoryData,
-} from "../api/context.ts";
+import { validateContextAvailability, definingOf } from "../api/context.ts";
 import type {
 	AnyContextFactory,
 	ContextBag,
@@ -14,15 +10,14 @@ import type {
 	ContextMap,
 	ContextsOutput,
 	ContextsOwnedFlags,
+	DefiningOf,
 } from "../api/context.ts";
 import type {
-	ExtensionData,
 	AnyExtension,
 	Extension,
 	ExtensionsProvidesOutput,
 	RootMetaKey,
 } from "../api/extension.ts";
-import { extensionData } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
 import type { RunInputPayload } from "../parsing/parser.ts";
@@ -651,12 +646,12 @@ type ExtensionCommands<Es extends readonly AnyExtension[]> = Es extends readonly
 
 type ExtensionProviders<E> = [E] extends [never]
 	? []
-	: ExtensionData<E> extends { provides?: infer P extends readonly AnyContextInstance[] }
+	: DefiningOf<E> extends { provides?: infer P extends readonly AnyContextInstance[] }
 		? P
 		: [];
 type ExtensionOwnDefs<E> = [E] extends [never]
 	? []
-	: ExtensionData<E> extends { _flagDefs?: infer F extends readonly NamedFlagDef[] }
+	: DefiningOf<E> extends { _flagDefs?: infer F extends readonly NamedFlagDef[] }
 		? F
 		: [];
 
@@ -1062,7 +1057,7 @@ type AfterAdd<
 
 type ExtensionDemandValues<Es extends readonly AnyExtension[]> =
 	UnionToIntersection<
-		ExtensionData<Es[number]> extends { readonly _hookDeps?: infer H extends ContextMap }
+		DefiningOf<Es[number]> extends { readonly _hookDeps?: infer H extends ContextMap }
 			? H
 			: Record<string, ContextValue>
 	> extends infer D extends ContextMap
@@ -1311,7 +1306,7 @@ export class Crust<
 	provide<const Cs extends readonly AnyContextInstance[]>(
 		...inputs: Cs
 	): AfterProvide<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Cs, Meta> {
-		const instances = inputs.map(contextInstanceData);
+		const instances = inputs.map(definingOf);
 		validateContextAvailability(
 			[...this._node.contexts.map(({ instance }) => instance), ...instances],
 			instances,
@@ -1406,7 +1401,7 @@ export class Crust<
 	extend<const Es extends readonly Extension<any, any, any, any, DefinedRootMetaKeys<Meta>>[]>(
 		...inputs: Es
 	): AfterExtend<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Es, Meta> {
-		const extensions = inputs.map(extensionData);
+		const extensions = inputs.map(definingOf);
 		// SAFETY: composition checked metadata compatibility; runtime storage erases hook requirements.
 		const activeExtensions = dedupeExtensions([
 			...this._node.extensions,
@@ -1666,7 +1661,7 @@ export class Crust<
 // Root applications supply Contexts with .provide(); only recipes expose .use().
 function useContextDemand(this: ErasedCrust, ...factories: AnyContextFactory[]): ErasedCrust {
 	return this._clone({
-		demands: [...this._node.demands, ...factories.map(contextFactoryData)],
+		demands: [...this._node.demands, ...factories.map(definingOf)],
 	});
 }
 Object.defineProperty(Crust.prototype, "use", {

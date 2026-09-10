@@ -36,15 +36,6 @@ export function flagSpellings(name: string, def: FlagDef): string[] {
 	return [name, ...(def.short === undefined ? [] : [def.short]), ...(def.aliases ?? [])];
 }
 
-/** Validate every spelling before storing a flag definition. */
-export function assertDefinableFlag(name: string, def: FlagDef): void {
-	for (const [index, spelling] of flagSpellings(name, def).entries()) {
-		const kind =
-			index === 0 ? "canonical" : def.short !== undefined && index === 1 ? "short" : "alias";
-		assertUsableSpelling(spelling, kind);
-	}
-}
-
 export interface FlagSpelling {
 	canonicalName: string;
 	def: FlagDef;
@@ -66,16 +57,10 @@ export function addFlagSpellingEntries(
 	for (const [spelling, entry] of spellings) {
 		if (entry.canonicalName === canonicalName) spellings.delete(spelling);
 	}
-	const entry = {
-		canonicalName,
-		def,
-		negatable: isFlagNegatable(def),
-	} as const;
-	for (const [index, spelling] of flagSpellings(canonicalName, def).entries()) {
-		const kind =
-			index === 0 ? "canonical" : def.short !== undefined && index === 1 ? "short" : "alias";
-		spellings.set(spelling, { ...entry, kind });
-	}
+	const entry = { canonicalName, def, negatable: isFlagNegatable(def) } as const;
+	spellings.set(canonicalName, { ...entry, kind: "canonical" });
+	if (def.short !== undefined) spellings.set(def.short, { ...entry, kind: "short" });
+	for (const alias of def.aliases ?? []) spellings.set(alias, { ...entry, kind: "alias" });
 }
 
 /** Convert named authoring definitions to the runtime flag record. */
@@ -133,7 +118,9 @@ export function ownDefinition<const D extends ArgDef | FlagDef>(def: D): D {
 }
 
 export function normalizeFlag<const D extends FlagDef>(name: string, def: D): D {
-	assertDefinableFlag(name, def);
+	assertUsableSpelling(name, "canonical");
+	if (def.short !== undefined) assertUsableSpelling(def.short, "short");
+	for (const alias of def.aliases ?? []) assertUsableSpelling(alias, "alias");
 	const spellings = flagSpellings(name, def);
 	if (new Set(spellings).size !== spellings.length) {
 		throw new CrustError("DEFINITION", `Flag "${name}" repeats one of its own spellings`, {

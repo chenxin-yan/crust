@@ -161,7 +161,7 @@ Variadic `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()
 
 ```ts
 args<const NewA extends ArgsDef>(
-  ...defs: NewA & LocalAppendArgsChecks<A, NewA>,
+  ...defs: NewA & AppendArgsChecks<A, NewA>,
 ): Crust
 ```
 
@@ -188,7 +188,7 @@ flags<const Defs extends readonly NamedFlagDef[]>(
 ): Crust
 ```
 
-Defines local flags from named flag definitions — values from `defineFlag(name, def)` or inline literals carrying `name`. Helper results are shallow-frozen: they retain local proof that later consumers reuse. Structural arrays are copied, but JSON/URL/schema payloads are not cloned or frozen. Flag names omit the `--` prefix.
+Defines local flags from named flag definitions — values from `defineFlag(name, def)` or inline literals carrying `name`. Helpers shallow-freeze owned copies of structural arrays; each consuming boundary validates them again. JSON/URL/schema payloads are not cloned or frozen. Flag names omit the `--` prefix.
 
 ```ts
 const app = new Crust("serve").flags(

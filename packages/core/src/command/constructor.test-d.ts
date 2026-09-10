@@ -5,11 +5,15 @@ function _commandNames() {
 	defineCommand("__proto__", (command) => command);
 	// @ts-expect-error -- whitespace-only names cannot route
 	defineCommand(" \t", {}, (command) => command);
+	// @ts-expect-error -- statically blank name
+	defineCommand("\v", (command) => command);
 	const command = defineCommand("valid", (builder) => builder);
 	// @ts-expect-error -- renaming cannot introduce a reserved canonical name
 	command.as("__proto__");
 	// @ts-expect-error -- renaming cannot introduce a blank canonical name
 	command.as("\n");
+	// @ts-expect-error -- statically blank name
+	command.as("\u2003");
 	// @ts-expect-error -- inline commands share canonical-name restrictions
 	new Crust("root").command("__proto__", (builder) => builder);
 	defineCommand("two words", (builder) => builder);
@@ -21,6 +25,8 @@ function _constructorNames(invalidName: "" | "valid") {
 	new Crust("");
 	// @ts-expect-error -- whitespace-only root names match trim validation
 	new Crust(" \t\n");
+	// @ts-expect-error -- statically blank name
+	new Crust("\u00a0");
 	// @ts-expect-error -- reserved record key
 	new Crust("__proto__");
 	// @ts-expect-error -- one valid branch cannot hide an invalid root name

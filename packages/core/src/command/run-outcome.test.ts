@@ -206,6 +206,33 @@ it("preserves explicit terminal streams without claiming to capture their writes
 	expect(writes).toEqual(["explicit"]);
 });
 
+it("resolves conditional inline providers once for the action and postRun", async () => {
+	for (const selected of [true, false]) {
+		let setups = 0;
+		const db = defineContext("db", () => {
+			setups++;
+			return "text";
+		});
+		const hook = defineExtension(defineExtensionId("demand"), {
+			uses: [db],
+			hooks: {
+				async postRun({ ctx }) {
+					expect(await ctx.db).toBe("text");
+				},
+			},
+		});
+		const app = new Crust("app")
+			.provide(db())
+			.extend(hook)
+			.command("child", (c) =>
+				(selected ? c.provide(db()) : c).action(async ({ ctx }) => await ctx.db),
+			);
+		expect(setups).toBe(0);
+		expect(await app.run(["child"])).toMatchObject({ status: "completed", result: "text" });
+		expect(setups).toBe(1);
+	}
+});
+
 it("retains invocation sink callbacks rather than rereading a mutated IO object", async () => {
 	const writes: string[] = [];
 	const io = {
@@ -223,6 +250,19 @@ it("retains invocation sink callbacks rather than rereading a mutated IO object"
 	expect(outcome.status).toBe("completed");
 	expect(outcome.stdout).toBe("line");
 	expect(writes).toEqual(["original:line"]);
+});
+
+it("rejects invalid structured values before running the action", async () => {
+	let called = false;
+	const app: AnyCrust = new Crust("app")
+		.flags({ name: "mode", type: "string", choices: ["safe", "fast"], required: true })
+		.action(() => {
+			called = true;
+		});
+	for (const input of [{ flags: { mode: "wrong" } }, { flags: { mode: "safe", mdoe: "fast" } }]) {
+		expect((await app.run([], input)).status).toBe("failed");
+	}
+	expect(called).toBe(false);
 });
 
 it.each(["flgas", "arg", "raww"])(
@@ -243,6 +283,22 @@ it.each(["flgas", "arg", "raww"])(
 		expect(called).toBe(false);
 	},
 );
+
+it("ignores enumerable symbol properties without reading them", async () => {
+	let read = false;
+	const input = Object.defineProperty({}, Symbol("ignored"), {
+		enumerable: true,
+		get() {
+			read = true;
+			throw new Error("symbol property was read");
+		},
+	});
+	expect(await new Crust("app").action(() => "ok").run([], input)).toMatchObject({
+		status: "completed",
+		result: "ok",
+	});
+	expect(read).toBe(false);
+});
 
 it("accepts args, flags and raw sections and treats undefined unknown keys as omitted", async () => {
 	const app = new Crust("app")
