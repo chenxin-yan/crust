@@ -10,17 +10,8 @@ import type {
 import { withTerminalIO } from "@crustjs/prompts";
 import { createPromptIO, type Key } from "@crustjs/prompts/testing";
 
-/** Structural io shape shared by `run()` and `execute()` captures. */
+/** Structural io shape accepted by {@link captureExecute}. */
 export type CaptureIO = Partial<InvocationIO>;
-
-// Indexed access into the `_types` phantom instead of conditionally inferring
-// all nine `Crust` generics — the conditional forced a full structural match
-// (and union distribution) per helper call.
-type AppTree<App extends AnyCrust> = App["_types"]["tree"];
-type ShapeAtPath<App extends AnyCrust, Path extends CommandPath<AppTree<App>>> = CommandShapeAt<
-	App["_types"]["shape"],
-	Path
->;
 
 /** Minimal structural surface of `execute()` invoked by {@link captureExecute}. */
 export interface ExecutableApp {
@@ -86,30 +77,27 @@ export interface InteractiveRun {
 }
 
 /** Run an application with fake terminal streams for its prompts and stderr output. */
-export function runInteractive<App extends AnyCrust, const Path extends CommandPath<AppTree<App>>>(
+export function runInteractive<
+	App extends AnyCrust,
+	const Path extends CommandPath<App["_types"]["tree"]>,
+>(
 	app: App,
 	path: Path,
-	...args: RunInputArguments<ShapeAtPath<App, Path>>
+	...args: RunInputArguments<CommandShapeAt<App["_types"]["shape"], Path>>
 ): InteractiveRun {
 	const harness = createPromptIO();
 	const output = harness.io.output;
 	const [input] = args;
 	const done = withTerminalIO(harness.io, () =>
+		// SAFETY: Path + RunInputArguments constrain input to App; AnyCrust.run erases the link.
 		app
-			.run(
-				// SAFETY: the public Path constraint and RunInputArguments link this input
-				// to App; TypeScript loses that dependent relation through AnyCrust.run.
-				path as never,
-				// SAFETY: validated statically by the same public dependent-generic contract.
-				input as never,
-				{
-					stdout: () => {},
-					stderr: (text) => {
-						// Line-oriented like core's console.error default.
-						output.write(`${text}\n`);
-					},
+			.run(path as never, input as never, {
+				stdout: () => {},
+				stderr: (text) => {
+					// Line-oriented like core's console.error default.
+					output.write(`${text}\n`);
 				},
-			)
+			})
 			.then((outcome) => {
 				if (outcome.status === "failed") throw outcome.error;
 			}),
@@ -120,14 +108,16 @@ export function runInteractive<App extends AnyCrust, const Path extends CommandP
 	let settled = false;
 	let failed = false;
 	let failure: unknown;
-	const recordFailure = <Failure>(caught: Failure): void => {
-		settled = true;
-		failed = true;
-		failure = caught;
-	};
-	done.then(() => {
-		settled = true;
-	}, recordFailure);
+	done.then(
+		() => {
+			settled = true;
+		},
+		(cause: unknown) => {
+			settled = true;
+			failed = true;
+			failure = cause;
+		},
+	);
 
 	return {
 		waitFor: async (pattern, timeoutMs = 5000) => {

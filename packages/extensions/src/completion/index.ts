@@ -5,7 +5,6 @@ import {
 	CrustError,
 	type CommandSnapshot,
 	type ExtensionFactory,
-	type ExtensionBuildContext,
 	type ExtensionId,
 	defineCommand,
 	defineExtension,
@@ -172,7 +171,7 @@ export function renderFishCompletion(
  * defaults to the snapshot's `meta.name`, unless `options.binName` is set.
  */
 export const completion: ExtensionFactory<[options?: CompletionOptions], {}, [], []> =
-	defineExtension(COMPLETION, (options: CompletionOptions = {}) => {
+	defineExtension(COMPLETION, (options = {}) => {
 		const subcommandName = options.command ?? "completion";
 
 		const completionCommand = defineCommand(
@@ -212,7 +211,7 @@ export const completion: ExtensionFactory<[options?: CompletionOptions], {}, [],
 
 		return {
 			commands: [completionCommand],
-			build: async ({ snapshot, outDir }: ExtensionBuildContext) => {
+			build: async ({ snapshot, outDir }) => {
 				const dir = join(outDir, "completions");
 				await mkdir(outDir, { recursive: true });
 				const stagedDir = await mkdtemp(join(outDir, ".completions-"));

@@ -1,11 +1,9 @@
 import { join, relative } from "node:path";
 
 import {
-	type ExtensionFactory,
-	type ExtensionContext,
-	type CommandSnapshot,
-	type ExtensionId,
 	type ExtensionBuildContext,
+	type ExtensionFactory,
+	type ExtensionId,
 	type InvocationIO,
 	defineCommand,
 	defineExtension,
@@ -194,13 +192,13 @@ async function buildSkills(options: SkillOptions, context: ExtensionBuildContext
 
 export const skill: ExtensionFactory<[options: SkillOptions], {}, [], []> = defineExtension(
 	SKILLS,
-	(options: SkillOptions) => {
+	(options) => {
 		const commandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
 		return {
 			commands: [buildSkillCommand(commandName, options)],
 			// Skills are loaded when a snapshot is prepared, not at construction, so
 			// help and man pages reflect the packaged directory as it exists at render time.
-			sections: (snapshot: CommandSnapshot) => [
+			sections: (snapshot) => [
 				{
 					command: [],
 					title: SKILLS_SECTION_TITLE,
@@ -208,9 +206,9 @@ export const skill: ExtensionFactory<[options: SkillOptions], {}, [], []> = defi
 					except: [SKILLS],
 				},
 			],
-			build: (context: ExtensionBuildContext) => buildSkills(options, context),
+			build: (context) => buildSkills(options, context),
 			hooks: {
-				async preRun(context: ExtensionContext) {
+				async preRun(context) {
 					if (context.commandPath[1] === commandName || options.autoUpdate === false) return;
 					await autoRepairSkills(options, context);
 				},
