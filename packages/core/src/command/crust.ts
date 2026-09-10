@@ -26,7 +26,7 @@ import { extensionData } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
 import type { RunInputPayload } from "../parsing/parser.ts";
-import { cloneFlagSpellings, normalizeArg, normalizeFlag } from "../parsing/spellings.ts";
+import { normalizeArg } from "../parsing/spellings.ts";
 import type {
 	ArgsDef,
 	CommandMeta,
@@ -397,10 +397,7 @@ function materializeCommandDefinition(
 		reason,
 	});
 
-	// SAFETY: materialization owns the normalized name and initializes every builder field.
-	const child = Object.create(Crust.prototype) as Crust;
-	child._node = createCommandNode(name);
-	child._ancestorOwnedFlags = {};
+	const child = new Crust(name);
 	for (const [flagName, def] of Object.entries(parent.ownedFlags)) {
 		registerFlag(child._node, flagName, def, "owned");
 	}
@@ -753,11 +750,11 @@ type ReplacementTree<Tree, D extends CommandDefinition<any, any, any, any>, CF e
 // Extension commands replace canonical children; an open contribution can replace any child.
 type ReplacedTree<
 	Tree,
-	Commands extends readonly CommandDefinition<any, any, any, any>[],
+	Commands extends readonly unknown[],
 	CF extends FlagsDef,
 > = Commands extends readonly [
 	infer H extends CommandDefinition<any, any, any, any>,
-	...infer T extends readonly CommandDefinition<any, any, any, any>[],
+	...infer T extends readonly unknown[],
 ]
 	? ReplacedTree<
 			IsClosedName<H["name"]> extends false
@@ -777,22 +774,7 @@ type ReplacedExtensionTree<
 	Es extends readonly AnyExtension[],
 	CF extends FlagsDef,
 > = Es extends readonly [infer H extends AnyExtension, ...infer T extends readonly AnyExtension[]]
-	? ReplacedExtensionTree<
-			ReplacedTree<
-				Tree,
-				ExtensionCommandDefs<H> extends infer Ds extends readonly CommandDefinition<
-					any,
-					any,
-					any,
-					any
-				>[]
-					? Ds
-					: readonly CommandDefinition<any, any, any, any>[],
-				CF
-			>,
-			T,
-			CF
-		>
+	? ReplacedExtensionTree<ReplacedTree<Tree, ExtensionCommandDefs<H>, CF>, T, CF>
 	: ExtensionCommandDefs<Es[number]>[number] extends never
 		? Tree
 		: Record<string, CommandShape>;
@@ -807,10 +789,9 @@ type ExtendedTree<
 	: TreeWithInheritedFlags<ReplacedExtensionTree<Tree, Es, InheritedFlags>, RecursiveFlags>;
 
 function resolveCommandName<Name extends string>(
-	input: Name,
+	name: Name,
 	aliases: readonly string[] = [],
 ): Name {
-	const name = input;
 	if (name.trim() === "") {
 		throw new CrustError("DEFINITION", "Command name must be a non-empty string", {
 			subject: "command",
@@ -881,7 +862,7 @@ export function defineCommand(
 	const name = resolveCommandName(nameInput, config.aliases);
 
 	for (const alias of config.aliases ?? []) {
-		if (alias === "" || /[ \t\n\r\v\f]/.test(alias) || alias.startsWith("-") || alias === name) {
+		if (alias === "" || /[ \t\n\r\v\f]/.test(alias) || alias.startsWith("-")) {
 			throw new CrustError("DEFINITION", `Command "${name}" has an invalid alias "${alias}"`);
 		}
 	}
@@ -956,6 +937,8 @@ type CollisionSpellings<
 	readonly tree: Tree;
 };
 
+type AnyCollisionSpellings = CollisionSpellings<string, string, ContextMap, string>;
+
 type AfterFlags<
 	Flags extends FlagsDef,
 	A extends ArgsDef,
@@ -964,7 +947,7 @@ type AfterFlags<
 	Sp extends string,
 	Tree extends object,
 	CtxFlags extends FlagsDef,
-	CollisionSp extends CollisionSpellings<string, string, ContextMap, string>,
+	CollisionSp extends AnyCollisionSpellings,
 	Result,
 	Defs extends readonly NamedFlagDef[],
 	Meta extends RootCommandMeta | undefined,
@@ -989,7 +972,7 @@ type AfterArgs<
 	Sp extends string,
 	Tree extends object,
 	CtxFlags extends FlagsDef,
-	CollisionSp extends CollisionSpellings<string, string, ContextMap, string>,
+	CollisionSp extends AnyCollisionSpellings,
 	Result,
 	NewA extends ArgsDef,
 	Meta extends RootCommandMeta | undefined,
@@ -1003,7 +986,7 @@ type AfterProvide<
 	Sp extends string,
 	Tree extends object,
 	CtxFlags extends FlagsDef,
-	CollisionSp extends CollisionSpellings<string, string, ContextMap, string>,
+	CollisionSp extends AnyCollisionSpellings,
 	Result,
 	Cs extends readonly AnyContextInstance[],
 	Meta extends RootCommandMeta | undefined,
@@ -1028,7 +1011,7 @@ type AfterAction<
 	Sp extends string,
 	Tree extends object,
 	CtxFlags extends FlagsDef,
-	CollisionSp extends CollisionSpellings<string, string, ContextMap, string>,
+	CollisionSp extends AnyCollisionSpellings,
 	R,
 	Meta extends RootCommandMeta | undefined,
 > = Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Awaited<R>, Meta>;
@@ -1041,7 +1024,7 @@ type AfterExtend<
 	Sp extends string,
 	Tree extends object,
 	CtxFlags extends FlagsDef,
-	CollisionSp extends CollisionSpellings<string, string, ContextMap, string>,
+	CollisionSp extends AnyCollisionSpellings,
 	Result,
 	Es extends readonly AnyExtension[],
 	Meta extends RootCommandMeta | undefined,
@@ -1071,7 +1054,7 @@ type AfterAdd<
 	Sp extends string,
 	Tree extends object,
 	CtxFlags extends FlagsDef,
-	CollisionSp extends CollisionSpellings<string, string, ContextMap, string>,
+	CollisionSp extends AnyCollisionSpellings,
 	Result,
 	Ds extends readonly CommandDefinition<any, any, any, any>[],
 	Meta extends RootCommandMeta | undefined,
@@ -1143,7 +1126,7 @@ export type AnyCrust = Pick<
 		string,
 		CommandTree,
 		FlagsDef,
-		CollisionSpellings<string, string, ContextMap, string>,
+		AnyCollisionSpellings,
 		unknown,
 		RootCommandMeta
 	>,
@@ -1163,7 +1146,7 @@ export class Crust<
 	Sp extends string = LocalSpellingsOf<Flags>,
 	Tree extends object = {},
 	CtxFlags extends FlagsDef = {},
-	CollisionSp extends CollisionSpellings<string, string, ContextMap, string> = CollisionSpellings,
+	CollisionSp extends AnyCollisionSpellings = CollisionSpellings,
 	Result = void,
 	const out Meta extends RootCommandMeta | undefined = {},
 	// Constructors cannot declare generics; append Name to preserve explicit type-argument order.
@@ -1215,8 +1198,7 @@ export class Crust<
 		nameInput: Name & CommandNameBrand<Name>,
 		...metadata: [meta?: RootCommandMeta | undefined]
 	) {
-		const metaInput = metadata[0];
-		const meta: RootCommandMeta = metaInput ?? {};
+		const meta: RootCommandMeta = metadata[0] ?? {};
 		const name = resolveCommandName(nameInput);
 		this._node = createCommandNode(name);
 		if (meta.description !== undefined) this._node.meta.description = meta.description;
@@ -1228,28 +1210,14 @@ export class Crust<
 		this._ancestorOwnedFlags = {};
 	}
 
-	/**
-	 * @internal — Clone this builder with a new node, preserving generics.
-	 */
-	private _clone<Out = this>(nodeOverrides: Partial<CommandNode>): Out {
+	/** @internal — Clone this builder with a new node, preserving generics. */
+	_clone<Out = this>(nodeOverrides: Partial<CommandNode>): Out {
 		// SAFETY: the clone uses the same prototype and receives every instance field below.
 		const cloned = Object.create(Object.getPrototypeOf(this)) as this;
-		const effectiveFlags = { ...this._node.effectiveFlags };
 		const newNode: CommandNode = {
-			...this._node,
+			...cloneCommandNode({ ...this._node, subCommands: {} }),
 			// Descendants are immutable builder values; sharing them avoids recursive clones.
-			localFlags: { ...this._node.localFlags },
-			ownedFlags: { ...this._node.ownedFlags },
-			effectiveFlags,
-			flagSpellings: cloneFlagSpellings(this._node.flagSpellings, effectiveFlags),
-			args: [...this._node.args],
-			// A supplied replacement wins even when explicitly undefined at runtime.
-			...(Object.hasOwn(nodeOverrides, "subCommands")
-				? {}
-				: { subCommands: { ...this._node.subCommands } }),
-			contexts: [...this._node.contexts],
-			extensions: [...this._node.extensions],
-			meta: { ...this._node.meta },
+			subCommands: { ...this._node.subCommands },
 			...nodeOverrides,
 		};
 		cloned._node = newNode;
@@ -1282,7 +1250,7 @@ export class Crust<
 			AfterFlags<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Defs, Meta>
 		>({});
 		for (const def of defs) {
-			const { name, ...rest } = normalizeFlag(def.name, def);
+			const { name, ...rest } = def;
 			// SAFETY: removing name from a NamedFlagDef leaves its discriminated FlagDef.
 			registerFlag(cloned._node, name, rest, "local");
 		}
@@ -1308,7 +1276,7 @@ export class Crust<
 	args<const NewA extends ArgsDef>(
 		...defs: NewA
 	): AfterArgs<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, NewA, Meta> {
-		const combined = [...this._node.args, ...defs.map((definition) => normalizeArg(definition))];
+		const combined = [...this._node.args, ...defs.map(normalizeArg)];
 
 		const seen = new Set<string>();
 		for (const [index, definition] of combined.entries()) {
@@ -1428,7 +1396,8 @@ export class Crust<
 				? {}
 				: {
 						readonly FIX_ALIAS_COLLISION: "Extension command flags collide with inherited Context flags";
-					}) & {} & ValidateDeclaredDeps<MergeProviders<Ctx, ExtensionsProvidesOutput<Es>>, Es>[I] &
+					}) &
+				ValidateDeclaredDeps<MergeProviders<Ctx, ExtensionsProvidesOutput<Es>>, Es>[I] &
 				DeclaredDependencyValuesBrand<
 					CollisionSp["demands"],
 					MergeProviders<Ctx, ExtensionsProvidesOutput<Es>>
@@ -1455,8 +1424,10 @@ export class Crust<
 	): AfterExtend<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Es, Meta> {
 		const extensions = inputs.map(extensionData);
 		// SAFETY: composition checked metadata compatibility; runtime storage erases hook requirements.
-		const registrations = [...this._node.extensions, ...extensions] as Extension[];
-		const activeExtensions = dedupeExtensions(registrations);
+		const activeExtensions = dedupeExtensions([
+			...this._node.extensions,
+			...extensions,
+		] as Extension[]);
 		const node = installExtensionContexts(
 			this._node,
 			activeExtensions,
@@ -1601,20 +1572,10 @@ export class Crust<
 			// FIX_COMMAND_COLLISION owns literal names; this owns dynamic `.add()`,
 			// where a silent replacement makes the earlier command unreachable.
 			// Extension-contributed commands keep documented last-write-wins.
-			if (Object.hasOwn(subCommands, definition.name)) {
-				throw new CrustError(
-					"DEFINITION",
-					`Command name "${definition.name}" is already registered on this command`,
-					{ subject: "command", name: definition.name, reason: "command-collision" },
-				);
-			}
-			const childNode = materializeCommandDefinition(definition, this._node);
-
-			checkExtensionFlagRelations(
-				{ ...this._node, subCommands: { [definition.name]: childNode } },
-				this._node.extensions,
-			);
-			const spellings = [childNode.meta.name, ...(childNode.meta.aliases ?? [])];
+			const spellings = [
+				definition.name,
+				...(definition[commandDefinitionInternal].meta.aliases ?? []),
+			];
 			for (const sibling of Object.values(subCommands)) {
 				if (
 					[sibling.meta.name, ...(sibling.meta.aliases ?? [])].some((name) =>
@@ -1623,7 +1584,7 @@ export class Crust<
 				) {
 					throw new CrustError(
 						"DEFINITION",
-						`Command "${definition.name}" collides with an existing command`,
+						`Command name "${definition.name}" is already registered on this command`,
 						{
 							subject: "command",
 							name: definition.name,
@@ -1632,7 +1593,12 @@ export class Crust<
 					);
 				}
 			}
+			const childNode = materializeCommandDefinition(definition, this._node);
 
+			checkExtensionFlagRelations(
+				{ ...this._node, subCommands: { [definition.name]: childNode } },
+				this._node.extensions,
+			);
 			subCommands[definition.name] = childNode;
 		}
 
@@ -1651,18 +1617,9 @@ export class Crust<
 	}
 
 	/**
-	 * Invoke this application programmatically: resolve the typed path, bind structured input directly,
-	 * run the Extension hooks, and execute the selected Command Action.
-	 *
-	 * Quiet by default: captures line callback payloads joined with '\n', without
-	 * a synthetic trailing newline. Explicit IO callbacks receive each write once.
-	 * Capture memory is proportional to output. Direct console/process, subprocess,
-	 * file and explicit terminal-stream writes are not intercepted.
-	 * Returns completed, finished, or failed after cleanup, preserving the original
-	 * escaping failure, including primitives and cancellation. Never presents errors,
-	 * invokes onError, or changes process status; execute is the terminal adapter.
-	 * Known input values and fresh-literal keys are checked statically. Variables
-	 * retain structural assignability; actual unknown keys are rejected at runtime.
+	 * Programmatically invoke a typed command, quietly capturing its output.
+	 * Returns completed, finished, or failed after cleanup without presenting errors.
+	 * Use {@link execute} as the streaming terminal adapter.
 	 *
 	 * @param path - Typed path to the command to invoke (`[]` selects the root)
 	 * @param input - Structured argument, flag, and raw values
@@ -1688,14 +1645,9 @@ export class Crust<
 			? readonly [io?: Partial<InvocationIO>]
 			: readonly [invalidInput: never]
 	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>>;
-	async run(
-		pathInput: readonly string[],
-		...args: readonly unknown[]
-	): Promise<RunOutcome<unknown>> {
-		const path = pathInput;
-		const input = args[0];
+	async run(path: readonly string[], ...args: readonly unknown[]): Promise<RunOutcome<unknown>> {
 		// SAFETY: the public overloads constrain structured input to this runtime value union.
-		const structuredInput = (input ?? {}) as RunInputPayload;
+		const structuredInput = (args[0] ?? {}) as RunInputPayload;
 		// SAFETY: the public overloads constrain the second argument to invocation IO.
 		const io = args[1] as Partial<InvocationIO> | undefined;
 		// Programmatic calls capture failures and never change process status.
@@ -1729,12 +1681,9 @@ export class Crust<
 
 // Root applications supply Contexts with .provide(); only recipes expose .use().
 function useContextDemand(this: ErasedCrust, ...factories: AnyContextFactory[]): ErasedCrust {
-	// SAFETY: reuse the same runtime builder representation and preserve its lineage anchor.
-	const cloned = Object.create(Crust.prototype) as ErasedCrust;
-	cloned._node = cloneCommandNode(this._node);
-	cloned._node.demands = [...this._node.demands, ...factories.map(contextFactoryData)];
-	cloned._ancestorOwnedFlags = this._ancestorOwnedFlags;
-	return cloned;
+	return this._clone({
+		demands: [...this._node.demands, ...factories.map(contextFactoryData)],
+	});
 }
 Object.defineProperty(Crust.prototype, "use", {
 	value: useContextDemand,

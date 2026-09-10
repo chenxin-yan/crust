@@ -31,14 +31,18 @@ function assertUsableSpelling(spelling: string, kind: "canonical" | "short" | "a
 	}
 }
 
-/**
- * Called by normalizeFlag on unowned definitions, before a plain-object
- * registry could swallow a reserved __proto__ key.
- */
+/** All canonical, short, and alias spellings carried by a flag definition. */
+export function flagSpellings(name: string, def: FlagDef): string[] {
+	return [name, ...(def.short === undefined ? [] : [def.short]), ...(def.aliases ?? [])];
+}
+
+/** Validate every spelling before storing a flag definition. */
 export function assertDefinableFlag(name: string, def: FlagDef): void {
-	assertUsableSpelling(name, "canonical");
-	if (def.short !== undefined) assertUsableSpelling(def.short, "short");
-	for (const alias of def.aliases ?? []) assertUsableSpelling(alias, "alias");
+	for (const [index, spelling] of flagSpellings(name, def).entries()) {
+		const kind =
+			index === 0 ? "canonical" : def.short !== undefined && index === 1 ? "short" : "alias";
+		assertUsableSpelling(spelling, kind);
+	}
 }
 
 export interface FlagSpelling {
@@ -67,30 +71,31 @@ export function addFlagSpellingEntries(
 		def,
 		negatable: isFlagNegatable(def),
 	} as const;
-	spellings.set(canonicalName, { ...entry, kind: "canonical" });
-	if (def.short) spellings.set(def.short, { ...entry, kind: "short" });
-	for (const alias of def.aliases ?? []) spellings.set(alias, { ...entry, kind: "alias" });
+	for (const [index, spelling] of flagSpellings(canonicalName, def).entries()) {
+		const kind =
+			index === 0 ? "canonical" : def.short !== undefined && index === 1 ? "short" : "alias";
+		spellings.set(spelling, { ...entry, kind });
+	}
 }
 
 /** Convert named authoring definitions to the runtime flag record. */
 export function toFlagsRecord(definitions: readonly NamedFlagDef[]): FlagsDef {
 	const flags: FlagsDef = {};
-	const spellings = new Map<string, FlagSpelling>();
+	const seen = new Set<string>();
 	for (const definition of definitions) {
-		const { name, ...flag } = normalizeFlag(definition.name, definition);
-
-		for (const spelling of [name, flag.short, ...(flag.aliases ?? [])]) {
-			if (spelling !== undefined && spellings.has(spelling)) {
+		const { name, ...flag } = definition;
+		const normalized = normalizeFlag(name, flag);
+		for (const spelling of flagSpellings(name, normalized)) {
+			if (seen.has(spelling)) {
 				throw new CrustError("DEFINITION", `Flag "${name}" collides with an existing flag`, {
 					subject: "flag",
 					name,
 					reason: "flag-collision",
 				});
 			}
+			seen.add(spelling);
 		}
-		addFlagSpellingEntries(spellings, name, flag);
-
-		flags[name] = ownDefinition(flag);
+		flags[name] = normalized;
 	}
 	return flags;
 }
@@ -107,12 +112,8 @@ export function cloneFlagSpellings(
 	);
 }
 
-/** Private local provenance survives internal sharing, not author spreads or destination changes. */
-const localDefinition: unique symbol = Symbol("crust.localDefinition");
-
-/** Copy only the collections that carry local proof, not JSON/URL/schema payloads. */
+/** Copy only definition-owned collections, not JSON/URL/schema payloads. */
 export function ownDefinition<const D extends ArgDef | FlagDef>(def: D): D {
-	if (localDefinition in def) return def;
 	if (def.choices && def.default !== undefined) {
 		const values = "multiple" in def && def.multiple ? def.default : [def.default];
 		for (const value of values) {
@@ -121,44 +122,34 @@ export function ownDefinition<const D extends ArgDef | FlagDef>(def: D): D {
 			}
 		}
 	}
-	// Helper results expose the local-proof cache: Object.assign must not rewrite facts
-	// before later consumption skips already-established local validation.
-	const owned = {
+	return Object.freeze({
 		...def,
 		...("aliases" in def && def.aliases ? { aliases: Object.freeze([...def.aliases]) } : {}),
 		...(def.choices ? { choices: Object.freeze([...def.choices]) } : {}),
 		...("multiple" in def && def.multiple && Array.isArray(def.default)
 			? { default: Object.freeze([...def.default]) }
 			: {}),
-	};
-	Object.defineProperty(owned, localDefinition, { value: true });
-	return Object.freeze(owned);
+	});
 }
 
 export function normalizeFlag<const D extends FlagDef>(name: string, def: D): D {
-	if (!(localDefinition in def)) {
-		assertDefinableFlag(name, def);
-		const spellings = [
+	assertDefinableFlag(name, def);
+	const spellings = flagSpellings(name, def);
+	if (new Set(spellings).size !== spellings.length) {
+		throw new CrustError("DEFINITION", `Flag "${name}" repeats one of its own spellings`, {
+			subject: "flag",
 			name,
-			...(def.short === undefined ? [] : [def.short]),
-			...(def.aliases ?? []),
-		];
-		if (new Set(spellings).size !== spellings.length) {
-			throw new CrustError("DEFINITION", `Flag "${name}" repeats one of its own spellings`, {
-				subject: "flag",
-				name,
-				reason: "flag-collision",
-			});
-		}
-		if (def.short !== undefined && def.short.length !== 1) {
-			throw new CrustError("DEFINITION", "Short flags must be one character");
-		}
+			reason: "flag-collision",
+		});
+	}
+	if (def.short !== undefined && def.short.length !== 1) {
+		throw new CrustError("DEFINITION", "Short flags must be one character");
 	}
 	return ownDefinition(def);
 }
 
 export function normalizeArg<const D extends ArgDef>(def: D): D {
-	if (!(localDefinition in def) && def.name === "") {
+	if (def.name === "") {
 		throw new CrustError("DEFINITION", "Argument names must be non-empty", {
 			subject: "argument",
 			name: def.name,

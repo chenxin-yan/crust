@@ -40,14 +40,11 @@ export function applyExtensionCommands(
 	materializeCommandDefinition: MaterializeCommandDefinition,
 ): void {
 	for (const definition of extension.commands ?? []) {
-		const node = materializeCommandDefinition(definition, root, extension.id);
-
-		checkExtensionFlagRelations(
-			{ ...root, subCommands: { [definition.name]: node } },
-			root.extensions,
+		root.subCommands[definition.name] = materializeCommandDefinition(
+			definition,
+			root,
+			extension.id,
 		);
-
-		root.subCommands[definition.name] = node;
 	}
 }
 

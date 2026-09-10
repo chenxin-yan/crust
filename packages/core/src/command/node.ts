@@ -2,7 +2,12 @@ import type { AnyContextFactory, AnyContextInstance } from "../api/context.ts";
 import type { Extension } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
-import { addFlagSpellingEntries, normalizeFlag, type FlagSpelling } from "../parsing/spellings.ts";
+import {
+	addFlagSpellingEntries,
+	flagSpellings,
+	normalizeFlag,
+	type FlagSpelling,
+} from "../parsing/spellings.ts";
 import type { ArgsDef, CommandMeta, FlagDef, FlagsDef } from "../types.ts";
 import type { CrustCommandContext } from "./crust.ts";
 
@@ -88,10 +93,7 @@ export function registerFlag(
 ): void {
 	def = normalizeFlag(name, def);
 
-	const incomingSpellings = [name, def.short, ...(def.aliases ?? [])].filter(
-		(spelling): spelling is string => spelling !== undefined,
-	);
-	// Inspect destination relations before installing a new contribution.
+	const incomingSpellings = flagSpellings(name, def);
 	const existingName = Object.hasOwn(node.effectiveFlags, name)
 		? name
 		: incomingSpellings
