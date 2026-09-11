@@ -148,7 +148,8 @@ The priority is `--name`, the project package name, then the entry filename. Der
 ```sh
 crust build --no-minify
 crust build --runtime deno --minify
-# error: --minify is not supported with --runtime deno
+# Error: --minify is not supported with --runtime deno.
+#   deno compile has no minification step; drop the flag.
 ```
 
 Minification defaults to on for Bun and Node. Deno has no minification step and rejects explicit `--minify`.
@@ -159,11 +160,12 @@ Minification defaults to on for Bun and Node. Deno has no minification step and 
 crust build --env-file .env.production
 ```
 
-See [build-time constants](/docs/guide/environment#build-time-constants) for `PUBLIC_*` embedding, ordered `--env-file` inputs, and Deno behavior.
+See [build-time constants](/docs/guide/environment#build-time-constants) for `PUBLIC_*` embedding, explicit `--env-file` inputs, and Deno behavior.
 
 ## Pre-compile snapshot preparation
 
 ```sh
+# With @crustjs/man registered:
 crust build
 # Preparing Command Snapshot...
 #   crust:man  1 file  man/my-cli.1
@@ -177,7 +179,9 @@ The entry module's top-level side effects do run, and preparation has a 30-secon
 crust build --no-validate
 ```
 
-This skips runtime validation and Extension build hooks. For snapshot re-evaluation, see [Command Snapshot](/docs/api/crust#snapshot); for hook inputs, artifacts, and reports, see [Extension build context](/docs/api/types#extensionbuildcontext), [build artifacts](/docs/api/types#buildartifacts), and [Build Report](/docs/api/types#buildreport).
+This skips runtime validation and Extension build hooks. With `--package`, it also stages no existing artifact directories. For snapshot re-evaluation, see [Command Snapshot](/docs/api/crust#snapshot); for hook inputs, artifacts, and reports, see [Extension build context](/docs/api/types#extensionbuildcontext), [build artifacts](/docs/api/types#buildartifacts), and [Build Report](/docs/api/types#buildreport).
+
+Each build hook must own and clean a unique top-level directory in the artifact output directory. The `bin` directory is reserved for generated npm executables. `--stage-dir` must not contain the artifact output directory because staging replaces its contents.
 
 Raw build output has no npm `files` list. Distribute Extension artifact directories beside raw binaries, or use `--package` to stage them with npm metadata.
 
@@ -212,7 +216,7 @@ If `bin` is an object, it must contain one entry. A string is accepted, and an o
      └── bin/my-cli-bun-darwin-arm64
 ```
 
-The root package contains a Node launcher and optional dependencies on platform packages. Each platform package contains its Bun binary; discovered Extension artifact directories are copied to the root and beside each platform binary.
+The root package contains a Node launcher and optional dependencies on platform packages. Each platform package contains its Bun binary; discovered Extension artifact directories are copied to the root and beside each platform binary. The `man/` and `skills/` entries above appear only when those Extensions are registered.
 
 The staged root metadata includes those discovered directories in `files`:
 
@@ -224,7 +228,7 @@ The staged root metadata includes those discovered directories in `files`:
 
 The manifest records package metadata and publishes platform packages before the root:
 
-```json title="dist/npm/manifest.json"
+```json title="dist/npm/manifest.json (excerpt)"
 {
   "packages": [
     { "target": "linux-x64", "dir": "linux-x64" },
@@ -236,12 +240,14 @@ The manifest records package metadata and publishes platform packages before the
 
 ### Publishing with `crust publish`
 
+The dry-run transcript below is an excerpt for the two targets shown above:
+
 ```sh
 crust publish --dry-run
 # Publish order: linux-x64 -> darwin-arm64 -> root
-#   → linux-x64: bun publish --access public --no-git-checks
-#   → darwin-arm64: bun publish --access public --no-git-checks
-#   → root: bun publish --access public --no-git-checks
+#   → linux-x64: <path-to-executable> publish --access public --no-git-checks
+#   → darwin-arm64: <path-to-executable> publish --access public --no-git-checks
+#   → root: <path-to-executable> publish --access public --no-git-checks
 ```
 
 `crust publish` reads `manifest.json`, verifies staged metadata, and stops on the first failed publish. `--access`, `--tag`, and `--registry` change publish options; `--no-verify` skips verification.

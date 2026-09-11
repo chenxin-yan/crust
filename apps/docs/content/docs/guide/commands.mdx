@@ -125,6 +125,8 @@ Start with one `src/cli.ts`. Extract to `defineCommand` when a command needs its
 
 ## Unknown commands
 
+<include lang="ts">../../../examples/guide/commands.ts#routing</include>
+
 <include lang="ts">../../../examples/guide/commands.ts#unknown</include>
 
 An unknown command-path segment makes `run()` return a failed `COMMAND_NOT_FOUND` outcome. For argv routing with `execute()`, an unmatched token produces the same error only when the parent has no Command Action; a parent action can instead receive the token as a positional argument.

@@ -35,6 +35,8 @@ Use `defineExtension(id, factory)` when callers need to configure the Extension.
 
 The curried form declares metadata that must exist on the root. `.extend()` rejects the commented call at type-check time, while the versioned root gives hooks a required `string`.
 
+Neither [`bun build`](https://bun.sh/docs/bundler) nor `crust build` runs a TypeScript check. Use `tsc --noEmit && crust build` so missing required metadata fails before the build.
+
 ## Owned flags and commands
 
 <include lang="ts" meta='title="diagnostics.ts"'>
@@ -71,10 +73,10 @@ A build hook receives the frozen Command Snapshot and absolute output directory,
 
 ```text
 Preparing Command Snapshot...
-  acme:manifest  1 file  manifest.json
+  acme:manifest  1 file  acme-manifest/manifest.json
 ```
 
-See [`snapshot()`](/docs/api/crust#snapshot) for snapshot preparation during builds.
+For package staging, each build hook must own and clean a unique top-level directory under the artifact output directory. See [`snapshot()`](/docs/api/crust#snapshot) for snapshot preparation during builds.
 
 ## Dependency injection
 

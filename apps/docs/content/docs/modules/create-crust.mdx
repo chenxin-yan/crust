@@ -20,19 +20,27 @@ The optional directory argument sets the destination. Without it, the directory 
 ## Prompt behavior
 
 ```sh
-bunx create-crust@latest my-cli --distribution runtime --no-install
-# Distribution mode starts at "Bun runtime package".
-# Install dependencies starts at "No".
+bunx create-crust@latest my-cli --distribution runtime --no-install --no-git
+# ✓ Scaffolding project...
+#
+# Created my-cli!
+#
+# Next steps:
+#   cd ./my-cli
+#   bun run dev
+#   bun run build
 ```
 
-Explicit flags set the corresponding prompt's initial value. The distribution select and install or Git confirms still run in a TTY; the overwrite confirm runs only when the destination already needs an overwrite decision.
+The supplied directory and flags skip their prompts.
 
-| Flag                             | Initial value or behavior                                                                            |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `--distribution binary\|runtime` | Selects the initial distribution; default is `binary`                                                |
-| `--install`, `--no-install`      | Starts the install confirm at yes or no; default is yes                                              |
-| `--git`, `--no-git`              | Starts the Git confirm at yes or no; default is yes; no prompt appears inside an existing repository |
-| `--overwrite`, `--no-overwrite`  | Starts the conditional overwrite confirm at yes or no; default is no                                 |
+Explicit flags skip the corresponding prompts rather than selecting an initial answer. The overwrite prompt appears only when the destination needs an overwrite decision; `--overwrite` accepts immediately, while `--no-overwrite` aborts immediately.
+
+| Flag                             | Behavior when supplied                                                                                 |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `--distribution binary\|runtime` | Skips the distribution prompt; without the flag, the prompt defaults to `binary`                       |
+| `--install`, `--no-install`      | Skips the install prompt with yes or no; without either flag, the prompt defaults to yes               |
+| `--git`, `--no-git`              | Skips the Git prompt with yes or no; no prompt or initialization occurs inside an existing repository  |
+| `--overwrite`, `--no-overwrite`  | Skips the conditional overwrite prompt; yes continues immediately and no prints `Aborted.` and returns |
 
 The CLI collects prompt answers before writing files. It then scaffolds the project and optionally installs dependencies and initializes Git.
 

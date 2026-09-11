@@ -39,7 +39,7 @@ Use `run()` to capture stdout, stderr, and the Command Action outcome without te
 
 <include lang="ts">../../../examples/modules/testing.ts#execute</include>
 
-`captureExecute()` drives raw argv through `execute()` in-process and returns `stdout`, `stderr`, and `exitCode`. Use it for parser errors, rendered failures, and Extension `onError` output.
+`captureExecute()` drives raw argv through `execute()` in-process and returns `stdout`, `stderr`, and `exitCode`. It restores the previous process exit state after capture. Use it for parser errors, rendered failures, and Extension `onError` output.
 
 <auto-type-table path="../../../../../packages/testing/src/index.ts" name="CapturedExecute" />
 
@@ -47,9 +47,11 @@ Use `run()` to capture stdout, stderr, and the Command Action outcome without te
 
 <include lang="ts">../../../examples/modules/testing.ts#interactive</include>
 
-`waitFor()` polls the ANSI-stripped screen and defaults to a 5000 ms timeout. Call `type()` or `keys()` after the expected prompt appears, then await `done`.
+`waitFor()` polls the ANSI-stripped screen and defaults to a 5000 ms timeout. It fails as soon as the invocation fails or completes without a match, rather than waiting for the timeout. Call `type()` or `keys()` after the expected prompt appears, then await `done`.
 
-One ambient [`withTerminalIO`](/docs/modules/progress#output-sinks) scope sends prompts, progress, and `ctx.stderr()` to the fake screen. `ctx.stdout()` is not included, so use `run()` for stdout assertions.
+`done` rejects with the error from a failed outcome. One ambient [`withTerminalIO`](/docs/modules/progress#output-sinks) scope sends prompts, progress, and `ctx.stderr()` to the fake screen.
+
+`ctx.stdout()` is not included, so use `run()` for stdout assertions.
 
 <auto-type-table path="../../../../../packages/testing/src/index.ts" name="InteractiveRun" />
 

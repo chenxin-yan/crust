@@ -100,4 +100,14 @@ mkdir -p "${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions"
 my-cli completion bash > "${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions/my-cli"
 ```
 
-Saved files avoid running the generator at shell startup. Regenerate or replace them after CLI changes, following the target shell or package manager's completion-file conventions.
+Saved files avoid running the generator at shell startup. Autoloading the Bash file requires [bash-completion to be installed and initialized](https://github.com/scop/bash-completion#installation).
+
+For Zsh, initialize its [completion system](https://zsh.sourceforge.io/Doc/Release/Completion-System.html) and explicitly source the saved file:
+
+```sh
+mkdir -p ~/.zsh/completions
+my-cli completion zsh > ~/.zsh/completions/_my-cli
+source ~/.zsh/completions/_my-cli # after compinit or framework initialization
+```
+
+Crust's generated Zsh script misses the first Tab completion when loaded from `$fpath` for binary names containing `-` or `.`. Explicit sourcing avoids that issue. Regenerate or replace saved files after CLI changes.

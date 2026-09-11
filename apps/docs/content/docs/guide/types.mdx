@@ -17,13 +17,15 @@ new Crust("inspect")
 
 Arguments and flags support `string`, `number`, `boolean`, `url`, `path`, and `json`. The `type` selects built-in conversion and, for flags, token consumption; a failed conversion produces a `PARSE` error.
 
+Number conversion uses `Number()`, including converting `""` to `0`. Boolean positional arguments recognize only `"true"` and `"1"` as true; all other strings become false.
+
 ## Custom parsing
 
 ```ts
 new Crust("schedule")
   .flags({ name: "date", type: "string", parse: (raw) => new Date(raw) })
   .action(({ flags }) => {
-    flags.date; // Date
+    flags.date; // Date | undefined
   });
 ```
 
@@ -68,39 +70,9 @@ Custom parsers and schemas receive raw input, while the Command Action receives 
 
 ## Schema-backed definitions
 
-```ts
-import { z } from "zod";
+<include lang="ts">../../../examples/guide/types.ts#schema</include>
 
-const command = new Crust("serve")
-  .args({ name: "port", schema: z.coerce.number().int().positive() })
-  .flags(
-    { name: "host", type: "string", schema: z.string().default("localhost") },
-    { name: "workers", type: "string", schema: z.coerce.number().int().positive() },
-  )
-  .action(({ args, flags }) => {
-    args.port; // number
-    flags.host; // string
-    flags.workers; // number
-  });
-```
-
-Put a Standard Schema on a plain definition's `schema` key. The schema receives the raw value and owns coercion, defaults, requiredness, and validation; the Command Action receives its output type.
-
-```ts
-import { CrustError } from "@crustjs/core";
-
-const outcome = await command.run([], {
-  args: { port: "not-a-number" },
-  flags: { workers: "not-a-number" },
-});
-if (outcome.status === "failed" && outcome.error instanceof CrustError) {
-  console.error(outcome.error.code);
-  for (const issue of outcome.error.details?.issues ?? []) console.error(issue.path);
-}
-// VALIDATION
-// args.port
-// flags.workers
-```
+Put a Standard Schema on a plain definition's `schema` key. The schema receives the raw value and owns coercion, defaults, requiredness, and validation; the Command Action receives its output type. Unlike `parse`, Standard Schema validation may be asynchronous.
 
 Schema failures from one invocation are aggregated into one `VALIDATION` error. See [`run()` validation](/docs/api/crust#runpath-input-io), [`ArgDef`](/docs/api/types#argdef), and [`FlagDef`](/docs/api/types#flagdef) for the complete contract.
 

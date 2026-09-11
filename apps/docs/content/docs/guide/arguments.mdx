@@ -26,13 +26,13 @@ const copy = new Crust("copy")
   .action(({ args }) => args.files); // string[]
 ```
 
-Only the final argument can be variadic, and its Command Action value is an array. See [structured invocation](/docs/api/crust#runpath-input-io) for required variadics and typed `run()` input.
+Only the final argument can be variadic, and a core-value variadic's Command Action value is an array. See [structured invocation](/docs/api/crust#runpath-input-io) for required variadics and typed `run()` input.
 
 ## Choices
 
 <include lang="ts">../../../examples/guide/arguments.ts#choices</include>
 
-Use `choices` for a static string set. An invalid supplied choice produces a `PARSE` failure, while a literal choices tuple narrows the inferred value to its string union.
+Use `choices` for a static string set. An invalid supplied choice produces a `PARSE` failure, while a literal choices tuple narrows the inferred value to its string union. Every default must belong to the choice set: known literal mismatches fail type checking with `FIX_DEFAULT_CHOICE`, while widened or dynamic mismatches throw a `DEFINITION` error.
 
 ## Standard Schemas
 
@@ -47,6 +47,8 @@ new Crust("serve")
 See [Schema-backed definitions](/docs/guide/types#schema-backed-definitions) for schema input, output, and definition rules.
 
 ## Excess and raw tokens
+
+<include lang="ts">../../../examples/guide/arguments.ts#excess</include>
 
 ```sh
 $ bun run cli.ts first second

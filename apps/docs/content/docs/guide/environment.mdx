@@ -5,26 +5,33 @@ description: Separate runtime secrets from public build-time constants.
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-<include lang="ts" src="../../examples/guide/build.ts" region="runtime-secret" />
+<include lang="ts">../../../examples/guide/build.ts#runtime-secret</include>
 
 Crust adds no environment variable abstraction. For Bun's `.env` loading order and shell precedence, see [Bun's environment variable documentation](https://bun.sh/docs/runtime/env).
 
 ## Build-time constants
 
+<include lang="ts" meta='title="src/cli.ts"'>
+  ../../../examples/guide/build.ts
+</include>
+
+Save the combined example as `src/cli.ts`, then build and run it with an explicit environment file:
+
 ```sh
-printf 'PUBLIC_API_ORIGIN=https://api.dev.example.com\n' > .env
 cat > .env.production <<'EOF'
 PUBLIC_API_ORIGIN=https://api.example.com
 API_TOKEN=private-value
 EOF
-crust build --env-file .env --env-file .env.production --target bun-linux-x64-baseline --name deploy
-grep -a -o 'https://api.example.com' dist/deploy
+crust build --env-file .env.production --target bun-linux-x64-baseline --name deploy
+# Building .../src/cli.ts → <path-to-executable>...
+# ✓ Built successfully: <path-to-executable>
+env -u PUBLIC_API_ORIGIN -u API_TOKEN ./dist/deploy origin
 grep -a -o 'private-value' dist/deploy || echo 'private-value: not embedded'
 # https://api.example.com
 # private-value: not embedded
 ```
 
-`--env-file` is repeatable, and later files override earlier files. Crust passes the files to Bun in order and limits embedded values to `PUBLIC_*` keys.
+`--env-file` is repeatable. Crust passes each file to Bun and limits embedded values to `PUBLIC_*` keys.
 
 <Callout type="warn">
   Embedded `PUBLIC_*` values are visible in the binary. Never use that prefix for secrets.
@@ -36,3 +43,5 @@ grep -a -o 'private-value' dist/deploy || echo 'private-value: not embedded'
 | Public API origins, public build labels     | `PUBLIC_*` build-time constants |
 
 `--env-file` works for Bun and Node builds. `crust build --runtime deno` rejects it because Deno has no matching `PUBLIC_*` filter, so load Deno configuration at runtime instead.
+
+Explicit env files also reach snapshot preparation, so environment-dependent definitions and Extensions use the same values as compilation.

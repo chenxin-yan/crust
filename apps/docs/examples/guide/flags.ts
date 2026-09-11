@@ -1,6 +1,6 @@
+//#region definitions
 import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
 
-//#region definitions
 const command = new Crust("serve")
   .flags(
     { name: "color", type: "boolean", aliases: ["colour"] },
@@ -13,6 +13,8 @@ const command = new Crust("serve")
       `color=${flags.color ?? true} targets=${flags.target?.join(",") ?? ""} runtime=${flags.runtime} tag=${flags.tag ?? "none"}`,
     ),
   );
+
+await command.execute();
 //#endregion
 
 //#region contexts
@@ -30,5 +32,4 @@ const deploy = defineCommand("deploy", (command) =>
 const app = new Crust("app").provide(logging()).add(deploy);
 //#endregion
 
-await command.execute();
 void app;

@@ -1,6 +1,6 @@
+//#region intro
 import { Crust, CrustError, type AnyCrust } from "@crustjs/core";
 
-//#region intro
 const greet = new Crust("greet", { description: "Print a greeting" })
   .args({ name: "name", type: "string", required: true })
   .flags({ name: "loud", type: "boolean", short: "l" })
@@ -21,9 +21,11 @@ const inspect = new Crust("inspect")
   });
 //#endregion
 
+//#region routing
 const routingApp = new Crust("tool")
   .command("build", (command) => command.action(() => "built"))
   .command("dev", (command) => command.action(() => "started"));
+//#endregion
 
 //#region unknown
 const dynamicApp: AnyCrust = routingApp;

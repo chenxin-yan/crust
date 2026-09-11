@@ -16,7 +16,7 @@ $ bun run flags.ts --no-colour
 color=false targets= runtime=bun tag=none
 ```
 
-Use one character for `short`; names in `aliases` use two dashes. Boolean flags accept `--no-<flag>` unless `noNegate` is true; see the [`flags()` contract](/docs/api/crust#flagsdefs) for all accepted spellings.
+Use one character for `short`; names in `aliases` use two dashes. Boolean flags accept `--no-<flag>` unless `noNegate` is true, but they do not accept assignments such as `--name=true`. See the [`flags()` contract](/docs/api/crust#flagsdefs) for all accepted spellings.
 
 ## Required and defaulted values
 
@@ -47,7 +47,7 @@ $ echo $?
 1
 ```
 
-Choices are supported on string flags, and an invalid value produces a `PARSE` failure. A literal choices tuple narrows the inferred value to its string union.
+Choices are supported on string flags, and an invalid value produces a `PARSE` failure. A literal choices tuple narrows the inferred value to its string union. Every default must belong to the choice set: known literal mismatches fail type checking with `FIX_DEFAULT_CHOICE`, while widened or dynamic mismatches throw a `DEFINITION` error.
 
 ## Reusing flag definitions
 

@@ -79,7 +79,9 @@ test("collects a name", async () => {
 
 Use `runInteractive()` when a Command Action renders a built-in prompt. Its `type()` and `keys()` methods send terminal input, while `waitFor()` and `screen()` observe prompt, progress, and `stderr` output in one transcript.
 
-`stdout` does not appear in `screen()`, so use `app.run()` for stdout assertions. See [`runInteractive()`](/docs/modules/testing#runinteractiveapp-path-input) for completion and timeout behavior, and see the [prompt testing helpers](/docs/modules/prompts#testing-custom-prompts) for supported key names.
+`stdout` does not appear in `screen()`, so use `app.run()` for stdout assertions. The `done` promise rejects with the original application failure, while completed and finished runs resolve it.
+
+`waitFor()` stops when the run settles. It rethrows an application failure, or reports that the run completed before the pattern matched. See [`runInteractive()`](/docs/modules/testing#runinteractiveapp-path-input) for timeout behavior, and see the [prompt testing helpers](/docs/modules/prompts#testing-custom-prompts) for supported key names.
 
 ## For custom prompt authors
 

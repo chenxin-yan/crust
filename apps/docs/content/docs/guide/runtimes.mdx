@@ -22,8 +22,8 @@ deno add npm:@crustjs/core
 ## Deno permissions
 
 ```sh
-# Scope each permission to what this CLI uses.
-deno run --allow-run=git --allow-read=. --allow-write=./dist --allow-env=NO_COLOR ./src/cli.ts
+# Scope file and subprocess permissions to what this CLI uses.
+deno run --allow-run=git --allow-read=. --allow-write=./dist --allow-env ./src/cli.ts
 ```
 
 Deno applies its permission sandbox to library code. See [Deno permissions](https://docs.deno.com/runtime/fundamentals/security/) for the host runtime rules and flag syntax.

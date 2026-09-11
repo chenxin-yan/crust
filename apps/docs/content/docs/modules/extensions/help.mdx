@@ -28,7 +28,7 @@ Options:
 ## Section consumer
 
 ```ts
-const app = new Crust("my-cli", {
+const documentedApp = new Crust("my-cli", {
   sections: [{ title: "Example", body: "my-cli deploy", only: [help] }],
 });
 ```
@@ -42,4 +42,4 @@ const text = renderHelp(await app.snapshot());
 // => "my-cli - My CLI\n\nUsage:\n  my-cli [options] ..."
 ```
 
-`renderHelp(command, path?)` renders a Command Snapshot without running the app. `path` defaults to the root command name.
+`renderHelp(command, path?)` renders a Command Snapshot without running the app. `path` defaults to the supplied snapshot's `meta.name`.

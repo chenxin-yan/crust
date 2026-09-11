@@ -1,3 +1,13 @@
+//#region excess
+import { Crust as ExcessCrust } from "@crustjs/core";
+
+const oneInputCommand = new ExcessCrust("cli")
+  .args({ name: "input", type: "string", required: true })
+  .action(() => {});
+
+if (import.meta.main) process.exit(await oneInputCommand.execute());
+//#endregion
+
 import { Crust, CrustError, type AnyCrust } from "@crustjs/core";
 
 //#region definitions

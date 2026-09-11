@@ -58,13 +58,17 @@ handle.stop("success", "Deployed"); // ✓ Deployed
 
 <include lang="ts">../../../examples/modules/progress.ts#progress</include>
 
-`progress()` renders `<message> (<current>/<total>)`. `advance()` changes the count and may replace the message.
+`progress()` renders `<message> (<current>/<total>)`. `advance()` defaults to one unit, changes the count, and may replace the message.
 
 ```text
 ✓ Files complete (2/2)
 ```
 
 <auto-type-table path="../../../../../packages/progress/src/progress.ts" name="ProgressOptions" />
+
+Calling `advance()` before `start()` changes the count without repainting. The updated count appears after the handle starts or in its final line.
+
+<auto-type-table path="../../../../../packages/progress/src/progress.ts" name="ProgressHandle" />
 
 ### SIGINT policy
 

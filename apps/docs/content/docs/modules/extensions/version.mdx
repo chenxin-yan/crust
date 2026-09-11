@@ -24,7 +24,7 @@ version("1.2.3");
 version(() => process.env.APP_VERSION ?? "dev");
 ```
 
-Without an explicit value, `version()` requires root `version` metadata. A value typed `string | undefined` still requires that metadata, as described by [`RootMetaKey`](/docs/api/types#rootmetakey-and-defineextensionwith).
+Without an explicit value, `version()` requires root `version` metadata. A value typed `string | undefined` still requires that metadata, as described by [`RootMetaKey`](/docs/api/types#rootmetakey-and-defineextensionwith). An explicit value affects only the version flag and does not populate root metadata for completion, skills, or other Extensions.
 
 ## Options
 

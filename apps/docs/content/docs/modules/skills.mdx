@@ -17,6 +17,8 @@ bun add @crustjs/skills
 
 `writeSkills()` generates one skill from `app` and copies any authored `extras`. It replaces a dedicated output directory named `skills` and returns paths relative to that directory.
 
+Keep authored extras outside that replaced output directory. An authored skill with the generated skill's name replaces the generated skill.
+
 Each skill has its own directory:
 
 ```text
@@ -25,7 +27,10 @@ dist/skills/
     ├── SKILL.md
     └── commands/
         ├── my-cli.md
-        └── deploy.md
+        ├── deploy.md
+        ├── skill.md
+        └── skill/
+            └── update.md
 ```
 
 Use `writeSkillsFromSnapshot()` when a prepared Command Snapshot is available. Omit `app` only when at least one authored extra is provided.
@@ -36,12 +41,17 @@ Use `writeSkillsFromSnapshot()` when a prepared Command Snapshot is available. O
 
 The Extension registers `my-cli skill` and `my-cli skill update`. It also adds an `Agent skills` section to root help and generated man pages.
 
+The help section includes this escaped excerpt:
+
 ```text
-Agent skills
-  Source: dist/skills/my-cli
+Agent skills:
+  my-cli \u2014 Manage deployments
+    Source: dist/skills/my-cli
 ```
 
 `distDir` is read at runtime. The build hook writes generated and authored skills to the build output, and reports those files as artifacts owned by `crust:skills`.
+
+Generated man pages can embed source paths resolved on the build machine. Run builds from the project root that contains the packaged skills directory to avoid absolute build-machine paths.
 
 ```sh
 my-cli skill
@@ -50,6 +60,8 @@ my-cli skill update
 ```
 
 `--scope` accepts `project` or `global`. With `--all`, scope comes from `--scope`, then `defaultScope`, then `global`; without `--all`, an interactive run prompts when neither setting is supplied.
+
+In that prompt, deselecting an agent with an installed link removes its link. It does not merely skip a new installation.
 
 <auto-type-table path="../../../../../packages/skills/src/types.ts" name="SkillOptions" />
 
@@ -98,14 +110,7 @@ The root exports the option, result, status, source, scope, agent, and packaged-
 
 ## Command sections
 
-```ts
-const deploy = defineCommand("deploy", {
-  sections: [
-    { title: "Safety", body: "Run preview first." },
-    { title: "Agent procedure", body: "Inspect preview output.", only: [skill] },
-  ],
-});
-```
+<include lang="ts">../../../examples/modules/skills.ts#sections</include>
 
 Command metadata sections appear in generated skill documentation. Passing the `skill` factory in `only` limits a section to the skills renderer.
 

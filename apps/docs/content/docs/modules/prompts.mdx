@@ -18,7 +18,8 @@ bun add @crustjs/prompts
 Built-in prompts return the submitted value. `input()` and `password()` also accept a Standard Schema v1 `schema` or a throw-based `validate` callback, but not both.
 
 ```text
-┃ Project name? crust-app
+┃ Project name?
+  crust-app│
 ✓ Project name? crust-app
 ```
 
@@ -85,7 +86,7 @@ Password input masks active text and shows a fixed-length mask after submission.
 const proceed = await confirm({ message: "Continue?", default: false });
 ```
 
-Confirm returns a boolean. Arrow keys and Tab toggle the value; `y` and `h` select true, while `n` and `l` select false.
+Confirm returns a boolean. Left, Right, and Tab toggle the value; `y` and `h` select true, while `n` and `l` select false.
 
 <auto-type-table path="../../../../../packages/prompts/src/prompts/confirm.ts" name="ConfirmOptions" />
 
@@ -133,6 +134,7 @@ Multifilter combines fuzzy matching with multi-selection and returns values in o
 
 ```text
 ┃ Project name?
+  │
   Name is required
 ```
 

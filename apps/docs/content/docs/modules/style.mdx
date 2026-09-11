@@ -46,7 +46,7 @@ The resolved `ColorDepth` is `"truecolor" | "256" | "16" | "none"`. Read `style.
 
 <include lang="ts">../../../examples/modules/style.ts#control</include>
 
-Default exports use `process.stdout.isTTY`, `NO_COLOR`, `FORCE_COLOR`, `COLORTERM`, and `TERM`. `NO_COLOR` disables colors, while `FORCE_COLOR=0` disables all ANSI and other `FORCE_COLOR` values force ANSI output.
+Default exports use `process.stdout.isTTY`, `NO_COLOR`, `FORCE_COLOR`, `COLORTERM`, and `TERM`. `FORCE_COLOR=0` and `FORCE_COLOR=false` disable all ANSI, while any other `FORCE_COLOR` value forces ANSI and overrides `NO_COLOR`. Without `FORCE_COLOR`, a non-empty `NO_COLOR` disables colors; forced values `1`, `2`, and `3` select 16-color, 256-color, and truecolor depth.
 
 `createStyle({ mode: "always" })` enables all ANSI at truecolor depth. `mode: "never"` returns plain text, and `mode: "auto"` accepts `overrides` for deterministic tests.
 

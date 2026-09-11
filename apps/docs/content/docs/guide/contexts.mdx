@@ -13,7 +13,7 @@ The action never reads `ctx.cache`, so the setup log is absent.
 
 <include lang="ts">../../../examples/guide/contexts.ts#owned-flags</include>
 
-`.provide()` installs a Context's flags on the provider command and descendants added later. Setup receives its validated owned flag values, whether terminal syntax puts them before or after the subcommand.
+`.provide()` installs a Context's flags on the provider command and descendants added later. Setup receives its validated owned flag values, whether terminal syntax puts them before or after the subcommand. A `preRun` hook cannot access a Context that owns flags, directly or transitively; see [`ExtensionHooks`](/docs/api/types#extensionhooks).
 
 ## Context dependencies
 

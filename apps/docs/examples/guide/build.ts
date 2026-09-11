@@ -1,6 +1,6 @@
+//#region runtime-secret
 import { Crust } from "@crustjs/core";
 
-//#region runtime-secret
 const deploy = new Crust("deploy").action(({ stdout }) => {
   const token = process.env.API_TOKEN;
   if (!token) throw new Error("Missing API_TOKEN");

@@ -24,6 +24,6 @@ my-cli --no-color        # NO_COLOR=1; FORCE_COLOR is cleared
 my-cli deploy --no-color # the flag is recursive
 ```
 
-The Extension restores the previous environment values after the command finishes. Register it before Extensions such as `help()` that may finish in `preRun`, because later `preRun` hooks are then skipped.
+The Extension restores the previous environment values after the command finishes. For overlapping programmatic runs, opposing values are last-writer-wins while active, and previous ambient values return only after the last run finishes. Register it before Extensions such as `help()` that may finish in `preRun`, because later `preRun` hooks are then skipped.
 
 When neither flag is present, the Extension leaves the environment unchanged. `@crustjs/style` remains responsible for environment and TTY-based color detection.

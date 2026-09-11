@@ -15,16 +15,16 @@ The package supports Bun 1.3.14+, Node 22+, and Deno 2.8+.
 
 ## Quick example
 
-<include lang="ts" meta='title="src/cli.ts"' region="quick">
-  ../../../examples/modules/core.ts
+<include lang="ts" meta='title="src/cli.ts"'>
+  ../../../examples/modules/core.ts#quick
 </include>
 
 The root action prints `hello!` when `verbose` is true. The `wave` command is an app-local leaf command; use [`defineCommand()`](/docs/api/crust#commandname-recipe) for a reusable definition.
 
 ## Context-owned flags
 
-<include lang="ts" meta='title="src/cli.ts"' region="context">
-  ../../../examples/modules/core.ts
+<include lang="ts" meta='title="src/cli.ts"'>
+  ../../../examples/modules/core.ts#context
 </include>
 
 A Context can own the flags needed by its setup. `.provide()` installs that Context on the current command and commands added later; see [Contexts](/docs/guide/contexts).
@@ -103,4 +103,13 @@ const documentation = buildCommandDocumentation(snapshot);
 const visible = visibleSectionsFor(snapshot, defineExtensionId("acme:web-docs"));
 ```
 
-`@crustjs/core/tooling` contains build-time helpers for Command Snapshots, documentation trees, section filtering, and default formatting. Application authoring and invocation APIs stay at the package root; renderer packages normally call the tooling helpers for you.
+| Export                                                                             | Role                                                               |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `BUILD_OUT_DIR_ENV` / `SNAPSHOT_PATH_ENV`                                          | Environment variable names for the first-party subprocess protocol |
+| `buildCommandDocumentation()`                                                      | Builds a renderer-ready documentation tree from a Command Snapshot |
+| `formatDefault()` / `formatDescription()`                                          | Formats input defaults and descriptions                            |
+| `isListed()` / `sectionsFor()` / `visibleSectionsFor()`                            | Filters commands and sections for an Extension identity            |
+| `CommandDocumentation` / `DocumentationArg` / `DocumentationFlag` / `UsageSegment` | Documentation model types                                          |
+| `CommandSnapshot`                                                                  | Command Snapshot type used by tooling consumers                    |
+
+`@crustjs/core/tooling` contains build-time helpers for Command Snapshots, documentation trees, section filtering, formatting, and the first-party subprocess protocol. Application authoring and invocation APIs stay at the package root.

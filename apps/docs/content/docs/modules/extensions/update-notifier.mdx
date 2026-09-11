@@ -75,17 +75,8 @@ updateNotifier({
 
 The default adapter stores state under the package's platform state directory. Set `cache: false` to skip all cache reads and writes.
 
-```ts
-import type { UpdateNotifierCacheAdapter } from "@crustjs/extensions";
-
-const adapter: UpdateNotifierCacheAdapter = {
-  read: async () => state,
-  write: async (nextState) => {
-    state = nextState;
-  },
-};
-
-updateNotifier({ packageName: "my-cli", cache: { adapter } });
-```
+<include lang="ts" meta='title="cache-adapter.ts"'>
+  ../../../../examples/modules/extensions/update-notifier-cache.ts
+</include>
 
 A custom adapter reads `UpdateNotifierState | null | undefined` and writes `UpdateNotifierState`. Adapter failures are treated as soft failures.

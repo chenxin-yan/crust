@@ -87,7 +87,7 @@ An explicit `{ file, directory }` object sets custom Unix permission bits.
 const state = await store.read();
 ```
 
-`read()` parses the file, coerces core number and boolean strings, merges missing defaults, and validates fields. It does not write merged defaults to disk.
+`read()` parses the file, coerces core number and boolean strings, merges missing defaults, and validates fields. Only the strings `"true"` and `"1"` coerce to boolean `true`; every other string coerces to `false`. It does not write merged defaults to disk.
 
 ### `store.write(state)`
 
@@ -158,6 +158,10 @@ Defaults are merged in memory only. Array defaults are copied so callers do not 
 Core field validators run on read and mutation and throw to reject a value. They may return `{ value }` to transform within the declared field type.
 
 A schema-backed field gives validation, transformation, defaults, and optionality to its Standard Schema. It cannot also declare a Crust `default` or `validate` callback.
+
+On reads, schema transform output for existing values is discarded; only output for a missing value can supply a default or optional value. Mutations revalidate transformed output and reject read-unstable transforms.
+
+Mutations also reject values changed by JSON serialization, including `NaN`, `Infinity`, `-0`, sparse arrays, and objects with `undefined` properties.
 
 ## Error handling
 
