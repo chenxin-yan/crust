@@ -97,6 +97,9 @@ function normalizeArtifactPath(path: string): string {
 	if (normalized === ".." || normalized.startsWith("../")) {
 		throw new Error(`Artifact path "${path}" escapes outDir.`);
 	}
+	if (normalized === "." || normalized === "./") {
+		throw new Error(`Artifact path "${path}" must name a file inside outDir.`);
+	}
 	return normalized;
 }
 

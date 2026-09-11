@@ -29,6 +29,11 @@ export const man: ExtensionFactory<[options?: ManOptions]> = defineExtension(
 			async build({ snapshot, outDir }) {
 				const { writeManPage } = await import("./write-man-page.ts");
 				const name = options.name ?? snapshot.meta.name;
+				// The name is a filename segment; separators would make the written
+				// path diverge from the artifact path core reports.
+				if (/[\\/]/.test(name)) {
+					throw new Error(`Manual name "${name}" must not contain path separators.`);
+				}
 				const outfile = join("man", `${name}.${section}`);
 				await writeManPage({
 					root: snapshot,

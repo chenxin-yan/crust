@@ -88,4 +88,15 @@ describe("man Extension", () => {
 
 		expect(await readFile(join(outDir, "man", "my-tool.1"), "utf8")).toContain(".Nm my-tool");
 	});
+
+	it("rejects names containing path separators", async () => {
+		const outDir = await mkdtemp(join(tmpdir(), "crust-man-extension-"));
+		directories.push(outDir);
+		const extension = man({ name: "foo\\bar" });
+		const snapshot = await new Crust("demo").extend(extension).snapshot();
+
+		await expect(extension.build?.({ snapshot, outDir })).rejects.toThrow(
+			"must not contain path separators",
+		);
+	});
 });
