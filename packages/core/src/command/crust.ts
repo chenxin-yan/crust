@@ -83,7 +83,6 @@ import type {
 } from "../validation/shared.ts";
 import {
 	cloneCommandNode,
-	checkExtensionFlagRelations,
 	installExtensionContexts,
 	validateCommandSections,
 } from "./extensions-install.ts";
@@ -376,7 +375,6 @@ function materializeCommandDefinition(
 ): CommandNode {
 	const internal = definition[commandDefinitionInternal];
 	const name = definition.name;
-	if (name !== internal.name) resolveCommandName(name, internal.meta.aliases);
 	const owner = extensionName
 		? `Extension "${extensionName}" command "${name}"`
 		: `Command "${name}"`;
@@ -1233,7 +1231,6 @@ export class Crust<
 			// SAFETY: removing name from a NamedFlagDef leaves its discriminated FlagDef.
 			registerFlag(cloned._node, name, rest, "local");
 		}
-		checkExtensionFlagRelations({ ...cloned._node, subCommands: {} }, this._node.extensions);
 		return cloned;
 	}
 
@@ -1324,8 +1321,6 @@ export class Crust<
 			}
 		}
 
-		checkExtensionFlagRelations({ ...cloned._node, subCommands: {} }, this._node.extensions);
-
 		return cloned;
 	}
 
@@ -1413,7 +1408,6 @@ export class Crust<
 			new Set(extensions.map((extension) => extension.id)),
 		);
 
-		checkExtensionFlagRelations(node, activeExtensions);
 		validateContextAvailability(
 			node.contexts.map(({ instance }) => instance),
 			activeExtensions.flatMap((extension) => [...extension.uses, ...(extension.provides ?? [])]),
@@ -1573,11 +1567,6 @@ export class Crust<
 				}
 			}
 			const childNode = materializeCommandDefinition(definition, this._node);
-
-			checkExtensionFlagRelations(
-				{ ...this._node, subCommands: { [definition.name]: childNode } },
-				this._node.extensions,
-			);
 			subCommands[definition.name] = childNode;
 		}
 

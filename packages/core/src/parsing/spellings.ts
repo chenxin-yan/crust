@@ -49,9 +49,12 @@ export function isFlagNegatable(def: FlagDef): boolean {
 }
 
 /** Convert named authoring definitions to the runtime flag record. */
-export function toFlagsRecord(definitions: readonly NamedFlagDef[]): FlagsDef {
-	const flags: FlagsDef = {};
-	const seen = new Set<string>();
+export function toFlagsRecord(
+	definitions: readonly NamedFlagDef[],
+	initial: Readonly<FlagsDef> = {},
+): FlagsDef {
+	const flags: FlagsDef = { ...initial };
+	const seen = new Set(Object.entries(initial).flatMap(([name, def]) => flagSpellings(name, def)));
 	for (const definition of definitions) {
 		const { name, ...flag } = definition;
 		const normalized = normalizeFlag(name, flag);

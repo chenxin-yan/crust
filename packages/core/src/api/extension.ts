@@ -484,15 +484,15 @@ export function defineExtension(
 		return Object.assign((...args: any[]) => defineExtension(id, config(...args)), { id });
 	const ownedFlags = Object.freeze(toFlagsRecord(config.flags ?? []));
 
-	toFlagsRecord([
-		...(config.flags ?? []),
-		...(config.provides ?? []).flatMap((instance) =>
+	toFlagsRecord(
+		(config.provides ?? []).flatMap((instance) =>
 			Object.entries(definingOf(instance).ownedFlags).map(([name, def]) => ({
 				...def,
 				name,
 			})),
 		),
-	]);
+		ownedFlags,
+	);
 
 	// SAFETY: the runtime registry erases Defs after the overloads contextually typed every hook.
 	const extension = {

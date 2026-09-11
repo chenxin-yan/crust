@@ -675,7 +675,7 @@ describe("Extension application at prepare time", () => {
 		).toThrow("collides");
 	});
 
-	it("rejects an Extension flag colliding with a subcommand's local flag at compile time", () => {
+	it("rejects an Extension flag colliding with a subcommand's local flag at preparation", async () => {
 		const themer = defineExtension(defineExtensionId("themer"), {
 			flags: [{ name: "mode", type: "boolean" }],
 		});
@@ -684,11 +684,13 @@ describe("Extension application at prepare time", () => {
 		);
 		const appWithSub = new Crust("cli").add(sub);
 		// @ts-expect-error -- Extension flag "mode" collides with subcommand "sub"'s local flag (FIX_ALIAS_COLLISION)
-		expect(() => appWithSub.extend(themer)).toThrow("collides");
+		const extended = appWithSub.extend(themer);
+		await expect(extended.snapshot()).rejects.toThrow("collides");
 
 		const appWithExt = new Crust("cli").extend(themer);
 		// @ts-expect-error -- subcommand "sub"'s local flag "mode" collides with the registered Extension flag (FIX_ALIAS_COLLISION)
-		expect(() => appWithExt.add(sub)).toThrow("collides");
+		const added = appWithExt.add(sub);
+		await expect(added.snapshot()).rejects.toThrow("collides");
 	});
 
 	it("rejects an Extension flag colliding with its own provided Context's flag at compile time", () => {
@@ -706,13 +708,14 @@ describe("Extension application at prepare time", () => {
 		).toThrow("collides");
 	});
 
-	it("rejects an Extension flag colliding with an application flag at compile time", () => {
+	it("rejects an Extension flag colliding with an application flag at preparation", async () => {
 		const themer = defineExtension(defineExtensionId("themer"), {
 			flags: [{ name: "mode", type: "boolean" }],
 		});
 		const app = new Crust("cli").flags({ name: "mode", type: "string" });
 		// @ts-expect-error -- Extension flag "mode" collides with the application flag (FIX_ALIAS_COLLISION)
-		expect(() => app.extend(themer)).toThrow("collides");
+		const extended = app.extend(themer);
+		await expect(extended.snapshot()).rejects.toThrow("collides");
 	});
 
 	it("recursive Extension flags reach every command, including Extension commands", async () => {
@@ -734,16 +737,16 @@ describe("Extension application at prepare time", () => {
 		expect(seen[0]?.debug).toBe(true);
 	});
 
-	it("checks dynamic Extension flag collisions at attachment", () => {
+	it("checks dynamic Extension flag collisions at preparation", async () => {
 		const thief = defineExtension(defineExtensionId("thief"), {
 			flags: [{ name: "auth", type: "boolean" }],
 		});
-		expect(() =>
-			new Crust("cli")
-				.flags({ name: "token", type: "string", aliases: ["auth"] })
-				// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-				.extend(thief),
-		).toThrow('Flag "auth" collides with existing flag "token"');
+		const app = new Crust("cli").flags({ name: "token", type: "string", aliases: ["auth"] });
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		const extended = app.extend(thief);
+		await expect(extended.snapshot()).rejects.toThrow(
+			'Flag "auth" collides with existing flag "token"',
+		);
 	});
 
 	it("non-recursive Extension flags stay on the root", async () => {

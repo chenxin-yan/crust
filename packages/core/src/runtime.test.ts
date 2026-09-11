@@ -200,10 +200,3 @@ it("checks each future Extension section result when prepared", async () => {
 	title = "\n";
 	await expect(new Crust("two").extend(docs).snapshot()).rejects.toThrow("sections");
 });
-
-it("checks the actual name on a copied command definition", () => {
-	const original = defineCommand("original", { aliases: ["alias"] }, (command) => command);
-	for (const name of [" ", "__proto__", "alias"]) {
-		expect(() => new Crust("cli").add({ ...original, name })).toThrow();
-	}
-});

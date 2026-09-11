@@ -527,16 +527,6 @@ export function parseStructured<A extends ArgsDef = ArgsDef, F extends FlagsDef 
 	command: CommandNode & { args: A; effectiveFlags: F },
 	input: RunInputPayload,
 ): ParseResult<A, F> {
-	// Object.keys, not entries: known sections must be read exactly once (below), and an
-	// unknown section must be rejected before any later getter runs.
-	for (const key of Object.keys(input)) {
-		if (key !== "args" && key !== "flags" && key !== "raw") {
-			// SAFETY: key is an own enumerable input key; only omission is inspected, not its value type.
-			if (input[key as keyof RunInputPayload] !== undefined) {
-				throw new CrustError("PARSE", `Unknown input section "${key}"`);
-			}
-		}
-	}
 	const { args: inputArgs, flags: inputFlags, raw } = input;
 	const positionals: RunInputValue[] = [];
 	let omittedArgument: string | undefined;

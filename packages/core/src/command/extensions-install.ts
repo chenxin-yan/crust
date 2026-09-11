@@ -55,16 +55,6 @@ export function applyExtensionFlags(root: CommandNode, extension: Extension): vo
 	}
 }
 
-/** Check registered but not yet injected flags without executing future recipes or hooks. */
-export function checkExtensionFlagRelations(
-	node: CommandNode,
-	extensions: readonly Extension[],
-): void {
-	if (extensions.length === 0) return;
-	const copy = cloneCommandNode(node);
-	for (const extension of extensions) applyExtensionFlags(copy, extension);
-}
-
 /** Deep-clone a command subtree without mutating the builder graph. */
 export function cloneCommandNode(node: CommandNode): CommandNode {
 	const subCommands: Record<string, CommandNode> = {};

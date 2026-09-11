@@ -25,7 +25,7 @@ It requires an explicit typed command path and binds structured input directly. 
 
 ## Successful invocation order
 
-1. **Prepare definitions** — apply Extensions and validate deferred recipes, flag relations, and documentation sections. Authoring and attachment already check observable local and destination constraints; TypeScript also rejects provably invalid definitions. Dynamic Extension commands replace existing canonical names; dynamic duplicate Context names without owned-flag collisions use last-write-wins. Canonical names beat aliases, and the first-registered alias wins among colliding aliases.
+1. **Prepare definitions** — apply Extensions and validate deferred recipes, flag relations, and documentation sections. Authoring and attachment already check applicable local constraints and Context availability; TypeScript also rejects provably invalid definitions. Dynamic Extension commands replace existing canonical names; dynamic duplicate Context names without owned-flag collisions use last-write-wins. Canonical names beat aliases, and the first-registered alias wins among colliding aliases.
 2. **Route** — resolve the command path.
 3. **Parse or bind input** — `execute()` parses tokens; `run()` binds own properties directly. Both check observable value kinds and choices, apply string parsers and path normalization, and resolve defaults.
 4. **Run `preRun` hooks** — invoke hooks in registration order. Flagless Contexts remain lazy. Returning `ctx.finish()` skips remaining hooks, required checks, schemas, and the action.

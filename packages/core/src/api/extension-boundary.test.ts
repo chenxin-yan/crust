@@ -87,16 +87,18 @@ it("keeps compatible hook providers and unrelated descendant replacements lazy",
 	).toMatchObject({ status: "completed", result: 7 });
 });
 
-it("checks pending Extension flag relations at the consuming checked operation", () => {
+it("checks pending Extension flag relations at preparation", async () => {
 	const ext = defineExtension(defineExtensionId("pending"), {
 		flags: [{ name: "token", type: "string" }],
 	});
 	const root = new Crust("app").extend(ext);
 	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-	expect(() => root.flags({ name: "token", type: "number" })).toThrow("collides");
+	const withFlag = root.flags({ name: "token", type: "number" });
+	await expect(withFlag.snapshot()).rejects.toThrow("collides");
 	const owner = defineContext("owner", { flags: [{ name: "token", type: "number" }] }, () => 1);
 	// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-	expect(() => root.provide(owner())).toThrow("collides");
+	const withProvider = root.provide(owner());
+	await expect(withProvider.snapshot()).rejects.toThrow("collides");
 });
 
 it("opaque synchronous parser payloads retain identity without then or prototype probing", async () => {
@@ -386,6 +388,22 @@ it("checked Extensions validate earlier pending commands against new flags and p
 			"collides",
 		);
 	}
+});
+
+it("allows an Extension flag when its command replaces the colliding app child", async () => {
+	// Dynamic names bypass the closed tuple's transient collision proof; preparation checks the final tree.
+	const child: string = "child";
+	const token: string = "token";
+	const replacement = defineExtension(defineExtensionId("replacement"), {
+		commands: [defineCommand(child, (c) => c.action(() => "replacement"))],
+		flags: [{ name: token, type: "string" }],
+	});
+	const root = new Crust("app").add(
+		defineCommand(child, (c) => c.flags({ name: token, type: "string" }).action(() => "old")),
+	);
+	const app = root.extend(replacement);
+	await expect(app.snapshot()).resolves.toBeDefined();
+	expect(await app.run(["child"])).toMatchObject({ status: "completed", result: "replacement" });
 });
 
 it("validates extension flags against the final replaced command tree", async () => {

@@ -265,25 +265,6 @@ it("rejects invalid structured values before running the action", async () => {
 	expect(called).toBe(false);
 });
 
-it.each(["flgas", "arg", "raww"])(
-	"checks unknown payload section %s before action",
-	async (key) => {
-		let called = false;
-		const app = new Crust("app")
-			.flags({ name: "mode", type: "string", default: "safe" })
-			.action(() => {
-				called = true;
-			});
-		const input = { flags: { mode: "safe" }, [key]: {} };
-		const outcome = await app.run([], input);
-		expect(outcome.status).toBe("failed");
-		if (outcome.status === "failed") {
-			expect(outcome.error).toMatchObject({ code: "PARSE" });
-		}
-		expect(called).toBe(false);
-	},
-);
-
 it("ignores enumerable symbol properties without reading them", async () => {
 	let read = false;
 	const input = Object.defineProperty({}, Symbol("ignored"), {
@@ -300,7 +281,7 @@ it("ignores enumerable symbol properties without reading them", async () => {
 	expect(read).toBe(false);
 });
 
-it("reads each known section once and rejects an unknown section before reading later ones", async () => {
+it("reads each known section once", async () => {
 	const app = new Crust("app").action(() => "ok");
 	let flagReads = 0;
 	const readOnce = {
@@ -311,21 +292,6 @@ it("reads each known section once and rejects an unknown section before reading 
 	};
 	expect(await app.run([], readOnce)).toMatchObject({ status: "completed", result: "ok" });
 	expect(flagReads).toBe(1);
-
-	let lateRead = false;
-	const unknownFirst = {
-		bogus: 1,
-		get raw() {
-			lateRead = true;
-			return undefined;
-		},
-	};
-	const erased: AnyCrust = app;
-	expect(await erased.run([], unknownFirst)).toMatchObject({
-		status: "failed",
-		error: { code: "PARSE" },
-	});
-	expect(lateRead).toBe(false);
 });
 
 it("accepts args, flags and raw sections and treats undefined unknown keys as omitted", async () => {

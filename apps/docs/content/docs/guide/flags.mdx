@@ -11,7 +11,7 @@ See [`FlagDef`](/docs/api/types#flagdef) for the complete definition.
 
 Repeated `.flags()` calls accumulate: `.flags(a).flags(b)` defines both flags. A statically known name, short form, or alias collision with an earlier call or an existing Context-owned flag fails typecheck with `FIX_ALIAS_COLLISION` at the call that introduces it.
 
-Builder chaining accumulates `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()`; duplicate Extension IDs keep the last registration. TypeScript rejects provable definition and collision errors. Spread dynamic collections with `.flags(...defs)` or `.args(...defs)`. Their actual local and destination constraints are automatically checked, including already-registered Extension flags; invalid definitions throw `DEFINITION` at consumption.
+Builder chaining accumulates `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()`; duplicate Extension IDs keep the last registration. TypeScript rejects provable definition and collision errors. Spread dynamic collections with `.flags(...defs)` or `.args(...defs)`. Builder calls check actual local constraints; preparation with `snapshot()`, `run()`, or `execute()` checks destination relations with Extension flags. Invalid definitions throw `DEFINITION` errors.
 
 ## Aliases and negation
 

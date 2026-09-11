@@ -33,11 +33,15 @@ Use `parse` for a small synchronous transformation when a full schema is unneces
 
 The Command Action receives the return type. A parser must be synchronous: TypeScript rejects Promise-returning parsers with `FIX_ASYNC_PARSE`.
 
-## Compile-time definition checks
+## Compile-time checks
 
-Crust checks literal command, flag, argument, Context, and Extension definitions with TypeScript. `FIX_*` diagnostics identify invalid names, aliases, defaults, asynchronous parsers, positional ordering, and composition demands. Authoring, attachment, deferred definition consumption, and invocation also automatically check observable constraints where the actual destination is known. There is no checking switch or wrapper.
+TypeScript checks literal command, flag, argument, Context, and Extension definitions. `FIX_*` diagnostics identify invalid names, aliases, defaults, asynchronous parsers, positional ordering, and composition demands.
 
-Normalized definitions own copies of structural collections and are validated at each consuming boundary. JSON, URL, schema, callback, and Context-option payloads retain identity. Context setup stays lazy. Callback values and Extension metadata requirements remain TypeScript-owned, not reflected or decoded at runtime.
+## Runtime checks
+
+JavaScript runtime checks are separate: helper and builder calls validate dynamic names and spellings; preparation with `snapshot()`, `run()`, or `execute()` validates Extension flag relations and deferred recipes and sections; invocation validates argv and structured values. There is no checking switch or wrapper.
+
+Normalized definitions own copies of structural collections. JSON, URL, schema, callback, and Context-option payloads retain identity. Context setup stays lazy. Callback values and Extension metadata requirements remain TypeScript-owned, not reflected or decoded at runtime.
 
 ## Runtime input
 
@@ -49,7 +53,7 @@ Narrow dynamic input honestly before calling a known application:
 
 <include lang="ts">../../../examples/guide/invocation.ts#narrowing</include>
 
-TypeScript uses ordinary structural assignability: a predeclared object may carry extra keys, whereas a fresh object literal rejects them even alongside otherwise valid required fields. Core rejects actual unknown keys from either form before the action. Assertions are not validation; invalid asserted inputs still produce failed outcomes.
+TypeScript uses ordinary structural assignability: a predeclared object may carry extra keys, whereas a fresh object literal rejects them even alongside otherwise valid required fields. Core rejects supplied unknown argument or flag keys before the action. Assertions are not validation; invalid asserted inputs still produce failed outcomes.
 
 Supplied positional values must form a prefix, even across defaulted positions. Required core variadics without defaults need nonempty tuples. Conditional definitions remain conservative: omission is safe only when every alternative permits it, and uncertain choices, primitive kinds, or occurrence layouts cannot certify supplied values. Independently known inputs remain strict.
 
