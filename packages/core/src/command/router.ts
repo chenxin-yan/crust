@@ -218,9 +218,9 @@ export function resolveCommand(command: CommandNode, argv: string[]): CommandRou
 		const parentCommand = snapshotCommand(current);
 		throw new CrustError("COMMAND_NOT_FOUND", `Unknown command "${candidate}".`, {
 			input: candidate,
-			available: Object.entries(parentCommand.subCommands)
-				.filter(([, child]) => isListed(child))
-				.map(([name]) => name),
+			available: Object.entries(parentCommand.subCommands).flatMap(([name, child]) =>
+				isListed(child) ? [name] : [],
+			),
 			commandPath: [...path],
 			parentCommand,
 		});

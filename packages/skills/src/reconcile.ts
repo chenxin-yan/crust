@@ -28,9 +28,9 @@ export function planReconcile(options: {
 	readonly universal: readonly AgentTarget[];
 }): ReconcilePlan {
 	const { statusMap, choices, selected, universal } = options;
-	const installed = [...statusMap.values()]
-		.filter((entry) => entry.status === "linked" || entry.status === "dangling")
-		.map((entry) => entry.agent);
+	const installed = [...statusMap.values()].flatMap((entry) =>
+		entry.status === "linked" || entry.status === "dangling" ? [entry.agent] : [],
+	);
 	const toInstall = selected.filter((agent) => statusMap.get(agent)?.status !== "linked");
 	const keptDirs = new Set(selected.map((agent) => statusMap.get(agent)?.outputDir));
 	const toUninstall = installed.filter(

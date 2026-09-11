@@ -44,9 +44,10 @@ export async function setupListPrompt<T, Answer extends T | readonly T[]>(
 				? (options.default as readonly T[])
 				: [options.default as T];
 	const selected = new Set(
-		defaults
-			.map((value) => choices.findIndex((choice) => choice.value === value))
-			.filter((index) => index !== -1),
+		defaults.flatMap((value) => {
+			const index = choices.findIndex((choice) => choice.value === value);
+			return index === -1 ? [] : [index];
+		}),
 	);
 	const defaultCursor =
 		defaults.length === 0 ? -1 : choices.findIndex((choice) => choice.value === defaults[0]);

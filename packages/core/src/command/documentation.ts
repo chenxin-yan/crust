@@ -185,9 +185,9 @@ function buildNode(command: CommandSnapshot, path: readonly string[]): CommandDo
 			variadic: arg.variadic === true,
 		}),
 	);
-	const children = Object.entries(command.subCommands)
-		.filter(([, child]) => isListed(child))
-		.map(([name, child]) => buildNode(child, [...path, name]));
+	const children = Object.entries(command.subCommands).flatMap(([name, child]) =>
+		isListed(child) ? [buildNode(child, [...path, name])] : [],
+	);
 	const flags = documentationFlags(command.flags);
 	const usageSegments: UsageSegment[] = command.meta.usage
 		? [{ kind: "custom", text: command.meta.usage }]

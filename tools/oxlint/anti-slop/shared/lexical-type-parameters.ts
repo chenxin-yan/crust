@@ -16,6 +16,7 @@ function collectInferTypeParameterNames(
 	if (node.type === "TSInferType") names.add(node.typeParameter.name.name);
 	const untypedNode: unknown = node;
 	// SAFETY: visitor keys only name ESTree child-node fields for this node kind.
+	// oxlint-disable-next-line anti-slop/no-widen-then-assert -- ESTree node interfaces have no index signature; this is the generic child-walk boundary.
 	const record = untypedNode as Readonly<
 		Record<string, ESTree.Node | readonly ESTree.Node[] | null | undefined>
 	>;
