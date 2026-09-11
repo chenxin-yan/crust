@@ -67,7 +67,7 @@ describe("command definitions", () => {
 	it("rejects Extensions registered inside command definitions", () => {
 		const nestedExtension = defineCommand("bad", (command) => {
 			// SAFETY: deliberately escape the sealed recipe surface to verify its runtime guard.
-			// oxlint-disable-next-line anti-slop/no-chained-type-assertions -- Crust's declared type omits the builder-only `.use()`, so the escape must pass through unknown.
+			// oxlint-disable-next-line anti-slop/no-chained-type-assertions -- exercising the runtime guard requires deliberately escaping the recipe capability.
 			return (command as unknown as Crust).extend(
 				defineExtension(defineExtensionId("nested")),
 			) as never;

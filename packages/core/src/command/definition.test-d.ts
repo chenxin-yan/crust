@@ -2,7 +2,7 @@ import type { Equal, Expect } from "../../tests/helpers.ts";
 import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineExtensionId } from "../identity.ts";
-import { type CommandDefinitionBuilder, Crust, defineCommand } from "./crust.ts";
+import { Crust, defineCommand } from "./crust.ts";
 
 // Compile-time regression checks; intentionally never invoked.
 // infers pulled Context values while preserving fluent action types
@@ -28,30 +28,51 @@ function _typecheckInfersPulledContextValuesWhilePreservingFluentActionTypes() {
 	new Crust("cli").provide(auth()).add(definition);
 }
 
-// keeps root-only methods off the definition builder
-function _typecheckKeepsRootOnlyMethodsOffTheDefinitionBuilder() {
-	type _NoExtend = Expect<
-		Equal<"extend" extends keyof CommandDefinitionBuilder ? true : false, false>
-	>;
-	type _NoCommand = Expect<
-		Equal<"command" extends keyof CommandDefinitionBuilder ? true : false, false>
-	>;
-	// `.use()` is a recipe-builder surface; Crust's declared type omits it.
-	type _HasUse = Expect<Equal<"use" extends keyof CommandDefinitionBuilder ? true : false, true>>;
-	type _NoCrustUse = Expect<Equal<"use" extends keyof Crust ? true : false, false>>;
-	// `.command()` is root-only: on Crust, not on the definition builder.
-	type _CrustCommand = Expect<Equal<"command" extends keyof Crust ? true : false, true>>;
+// a recipe with a required arg that nests a flagged child must still satisfy the erased recipe bound
+// (a partially-`any` Crust bound falls back to structural checks and rejects the args tuple)
+function _typecheckNestedFlaggedDefinitionAfterArgsSatisfiesErasedBuilder() {
+	defineCommand("parent", (command) =>
+		command
+			.args({ name: "source", type: "string", required: true })
+			.add(
+				defineCommand("child", (child) =>
+					child.flags({ name: "mode", type: "string" }).action(() => {}),
+				),
+			)
+			.action(({ args }) => {
+				type _Source = Expect<Equal<typeof args.source, string>>;
+			}),
+	);
+}
+
+// capability constraints keep root-only operations uncallable in recipes across fluent transitions
+function _typecheckRestrictsBuilderCapabilities() {
+	const auth = defineContext("auth", () => ({ user: "yan" }));
+	const extension = defineExtension(defineExtensionId("nested"));
+	const app = new Crust("app");
+
+	// @ts-expect-error -- Context demand declarations are recipe-only
+	app.use(auth);
+	app.command("child", (command) => command);
+	app.extend(extension);
 
 	defineCommand("configured", (command) => {
-		// @ts-expect-error -- Extensions are root-only
-		command.extend(defineExtension(defineExtensionId("nested")));
 		const configured = command
-			.args({ name: "target", type: "string" })
 			.flags({ name: "force", type: "boolean" })
-			.provide(defineContext("region", () => "us")());
-		type _StillNoExtend = Expect<
-			Equal<"extend" extends keyof typeof configured ? true : false, false>
-		>;
+			.use(auth)
+			.action(async ({ ctx }) => (await ctx.auth).user);
+
+		// @ts-expect-error -- Extensions are root-only
+		configured.extend(extension);
+		// @ts-expect-error -- Inline commands are root-only
+		configured.command("nested", (child) => child);
+		// @ts-expect-error -- Programmatic invocation is root-only
+		void configured.run([]);
+		// @ts-expect-error -- CLI execution is root-only
+		void configured.execute();
+		// @ts-expect-error -- Snapshots are root-only
+		void configured.snapshot();
+
 		return configured;
 	});
 }
