@@ -23,17 +23,3 @@ Before submitting:
 ## Changesets
 
 Do not edit `CHANGELOG.md` manually. Run `bunx changeset` to record user-visible changes; release tooling consumes them. Skip changesets for changes with no end-user behavior impact (internal refactors, tests, docs, CI, tooling).
-
-## Agent skills
-
-### Issue tracker
-
-Issues are tracked in GitHub Issues (`chenxin-yan/crust`) via the `gh` CLI. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Default five-role vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Create `CONTEXT.md` and `docs/adr/` at the repo root lazily when domain terms or architecture decisions need recording. See `docs/agents/domain.md`.
