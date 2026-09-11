@@ -31,6 +31,7 @@ function unwrapTypeParentheses(type: ESTree.TSType): ESTree.TSType {
 
 // Refreshed per file in `Program`; every caller compares against built-in utility names.
 let shadowedBuiltIns: ReadonlySet<string> = new Set();
+let typeAliases: ReadonlyMap<string, ESTree.TSTypeAliasDeclaration> = new Map();
 
 /** Name of a built-in type reference, or null when the file declares/imports its own binding. */
 function typeReferenceName(type: ESTree.TSTypeReference): string | null {
@@ -88,11 +89,27 @@ function isBroadRecordType(type: ESTree.TSType): boolean {
 	);
 }
 
-function broadTypeKind(type: ESTree.TSType): BroadTypeKind | null {
+function broadTypeKind(
+	type: ESTree.TSType,
+	visitedAliases: ReadonlySet<string> = new Set(),
+): BroadTypeKind | null {
 	const unwrapped = unwrapTypeParentheses(type);
 	if (unwrapped.type === "TSUnknownKeyword" || unwrapped.type === "TSAnyKeyword") return "top";
 	if (unwrapped.type === "TSObjectKeyword") return "object";
-	return isBroadRecordType(unwrapped) ? "record" : null;
+	if (isBroadRecordType(unwrapped)) return "record";
+	// `type Payload = unknown` is as broad as `unknown`; follow non-generic module-level aliases.
+	if (unwrapped.type !== "TSTypeReference" || unwrapped.typeName.type !== "Identifier") return null;
+	const name = unwrapped.typeName.name;
+	const alias = typeAliases.get(name);
+	if (
+		alias === undefined ||
+		(alias.typeParameters !== null && alias.typeParameters !== undefined) ||
+		unwrapped.typeArguments?.params.length ||
+		visitedAliases.has(name)
+	) {
+		return null;
+	}
+	return broadTypeKind(alias.typeAnnotation, new Set([...visitedAliases, name]));
 }
 
 function assertedExpression(
@@ -365,7 +382,9 @@ export const noWidenThenAssertRule = defineRule({
 		return {
 			Program(node) {
 				scopes = context.sourceCode.scopeManager.scopes;
-				shadowedBuiltIns = createTypeEnvironment(node).shadowedBuiltIns;
+				const environment = createTypeEnvironment(node);
+				shadowedBuiltIns = environment.shadowedBuiltIns;
+				typeAliases = environment.aliases;
 			},
 			TSAsExpression: checkAssertion,
 			TSTypeAssertion: checkAssertion,

@@ -11,6 +11,8 @@ tester.run("anti-slop/no-widen-then-assert", noWidenThenAssertRule, {
 		"type Record<K, V> = { key: K; value: V }; const source = { id: 'first' }; const widened: Record<string, unknown> = source; const asserted = widened as { id: string };",
 		"import { Readonly } from './local'; const source = { id: 'first' }; const widened: Readonly<Record<string, unknown>> = source; const asserted = widened as { id: string };",
 		"declare const input: unknown; const parsed = input as { readonly id: string };",
+		"type Payload = unknown; declare const source: Payload; const widened: unknown = source; const parsed = widened as { id: string };",
+		"type Payload<T> = T; const source = { id: 'first' }; const widened: Payload<unknown> = source; const parsed = widened as { id: string };",
 	],
 	invalid: [
 		{
@@ -19,6 +21,14 @@ tester.run("anti-slop/no-widen-then-assert", noWidenThenAssertRule, {
 		},
 		{
 			code: "const source = { id: 'second' }; const widened: Readonly<Record<string, unknown>> = source; const parsed = widened as { id: string };",
+			errors: [error],
+		},
+		{
+			code: "type Payload = unknown; const source = { id: 'second' }; const widened: Payload = source; const parsed = widened as { id: string };",
+			errors: [error],
+		},
+		{
+			code: "type Dict = Record<string, unknown>; type Payload = Dict; const source = { id: 'second' }; const widened: Payload = source; const parsed = widened as { id: string };",
 			errors: [error],
 		},
 	],
