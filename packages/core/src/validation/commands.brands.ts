@@ -223,15 +223,17 @@ type SectionTextBrand<S> = S extends { title: infer T extends string; body: infe
 			: { readonly FIX_SECTION_TEXT: "Section title must be a single line" }
 	: {};
 
+type SectionAudienceBrand<S> = S extends { only: readonly [] } | { except: readonly [] }
+	? { readonly FIX_SECTION_AUDIENCE: "Section audience must be nonempty" }
+	: {};
+
 export type LocalSectionsBrand<C> = "sections" extends keyof C
 	? C extends { sections: infer S extends readonly unknown[] }
 		? {
 				readonly sections: {
 					[I in keyof S]: S[I] &
 						UnionToIntersection<SectionTextBrand<S[I]>> &
-						(S[I] extends { only: readonly [] } | { except: readonly [] }
-							? { readonly FIX_SECTION_AUDIENCE: "Section audience must be nonempty" }
-							: {});
+						UnionToIntersection<SectionAudienceBrand<S[I]>>;
 				};
 			}
 		: {}

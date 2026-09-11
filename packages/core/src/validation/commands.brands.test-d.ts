@@ -1,6 +1,7 @@
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import type {
 	CommandDefinitionSpellings,
+	LocalSectionsBrand,
 	ValidateCommandConfig,
 	ValidateCommandDefinitions,
 	ValidateExtensionCommands,
@@ -150,6 +151,26 @@ type Def<Name extends string, Aliases extends readonly string[] = readonly []> =
 			'Subcommand "issue" alias "issue" must not equal its own canonical name'
 		>
 	>;
+}
+
+{
+	// brands an empty audience even when another section-union branch is valid
+	type Mixed = LocalSectionsBrand<{
+		sections: readonly [
+			| { readonly title: "Bad"; readonly body: "Body"; readonly only: readonly [] }
+			| { readonly title: "Good"; readonly body: "Body" },
+		];
+	}>;
+	type Valid = LocalSectionsBrand<{
+		sections: readonly [
+			| { readonly title: "One"; readonly body: "Body" }
+			| { readonly title: "Two"; readonly body: "Body" },
+		];
+	}>;
+	type _mixed = Expect<
+		Equal<Mixed["sections"][0]["FIX_SECTION_AUDIENCE"], "Section audience must be nonempty">
+	>;
+	type _valid = Expect<Equal<Extract<keyof Valid["sections"][0], "FIX_SECTION_AUDIENCE">, never>>;
 }
 
 {

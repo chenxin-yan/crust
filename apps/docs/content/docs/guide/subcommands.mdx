@@ -81,6 +81,6 @@ Finalize `.provide()` calls on the parent builder before `.add()`. [Flags owned 
 
 ## Unknown commands
 
-During argv routing with `execute()`, an unmatched subcommand token produces `CrustError` code `COMMAND_NOT_FOUND` when the parent has no Command Action. A parent with an action treats that token as a positional argument instead; parsing or validation may then reject it. Typed `run()` always rejects unknown command-path segments rather than treating them as arguments.
+During argv routing with `execute()`, an unmatched subcommand token produces `CrustError` code `COMMAND_NOT_FOUND` when the parent has no Command Action. A parent with an action treats that token as a positional argument instead; parsing or validation may then reject it. Typed `run()` resolves a failed outcome carrying `COMMAND_NOT_FOUND` for unknown command-path segments rather than treating them as arguments.
 
 `COMMAND_NOT_FOUND` details include the input, visible available commands, the command path, and a readonly snapshot of the parent command. Hidden commands are omitted from `available`. The official `didYouMean()` Extension uses this error to suggest nearby names; it cannot suggest a correction when argv routing treats the typo as a positional argument.

@@ -90,7 +90,7 @@ export type EmptyLiteralNameBrand<Name extends string, Err> =
  * union-aware (a sometimes-async `cond ? Promise.resolve(x) : x` parser is
  * caught) while `any`-returning parsers stay unbranded.
  */
-export type AsyncParseBrand<T> = T extends { parse: (...args: never[]) => infer R }
+export type AsyncParseBrand<T> = T extends { parse?: (...args: never[]) => infer R }
 	? Extract<R, Promise<unknown>> extends never
 		? {}
 		: {

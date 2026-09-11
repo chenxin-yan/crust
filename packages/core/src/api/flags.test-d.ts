@@ -23,6 +23,29 @@ function _typecheckRejectsDefaultsOutsideLiteralChoicesAtTheBuilderCall() {
 	new Crust("cli").args({ name: "mode", type: "string", choices: ["a", "b"], default: "z" });
 }
 
+function _optionalParserDefinitions() {
+	type OptionalAsyncDefinition = {
+		readonly type: "string";
+		readonly parse?: (raw: string) => Promise<number>;
+	};
+	const asyncDefinition: OptionalAsyncDefinition = {
+		type: "string",
+		parse: async (raw) => Number(raw),
+	};
+	// @ts-expect-error -- optional declared parsers must still be synchronous when present
+	defineFlag("port", asyncDefinition);
+
+	type OptionalSyncDefinition = {
+		readonly type: "string";
+		readonly parse?: (raw: string) => number;
+	};
+	const syncDefinition: OptionalSyncDefinition = {
+		type: "string",
+		parse: (raw) => Number(raw),
+	};
+	defineFlag("port", syncDefinition);
+}
+
 function _localDefinitions(name: string, aliases: string[], choices: string[], value: string) {
 	// @ts-expect-error -- helpers own local spelling checks, not just attachments
 	defineFlag("bad", { type: "boolean", short: "xx" });

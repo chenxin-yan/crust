@@ -60,7 +60,7 @@ type CrustErrorCode = "DEFINITION" | "PARSE" | "VALIDATION" | "COMMAND_NOT_FOUND
 | `VALIDATION`        | Required-value or Standard Schema validation failed                                                     |
 | `COMMAND_NOT_FOUND` | An unknown command under the [routing rules](/docs/guide/subcommands#unknown-commands)                  |
 
-With `execute()`, an unmatched subcommand token becomes a positional argument if the parent has a Command Action. Without an action, the parent reports `COMMAND_NOT_FOUND`. Typed `run()` always rejects unknown path segments.
+With `execute()`, an unmatched subcommand token becomes a positional argument if the parent has a Command Action. Without an action, the parent reports `COMMAND_NOT_FOUND`. Typed `run()` resolves a failed outcome carrying `COMMAND_NOT_FOUND` for unknown path segments.
 
 ## Details
 
