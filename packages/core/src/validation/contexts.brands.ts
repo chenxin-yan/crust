@@ -112,8 +112,9 @@ type MissingDependencyBrand<C, Known extends string> =
 // A same-name provider must also deliver the value type the consumer's
 // declared factory promises; name-only matching would compile-cleanly mistype
 // `ctx.<name>`. Explicit `any` opts out of TypeScript guarantees; there is no
-// runtime reflection of erased callback values. Unknown values remain unproven.
-// Inspect each possible provider record before common keys can hide a replacement.
+// runtime reflection of erased callback values. Known-name unknown values retain
+// normal assignability; an unknown value under an open index signature remains
+// unproven. Inspect each possible provider record before common keys can hide a replacement.
 type MismatchedDependencyNames<Deps, KnownValues> = keyof Deps extends never
 	? never
 	: KnownValues extends unknown
@@ -122,9 +123,11 @@ type MismatchedDependencyNames<Deps, KnownValues> = keyof Deps extends never
 					? never
 					: IsAny<Deps[K]> extends true
 						? never
-						: KnownValues[K] extends Deps[K]
+						: [unknown, string] extends [KnownValues[K], keyof KnownValues]
 							? never
-							: K;
+							: KnownValues[K] extends Deps[K]
+								? never
+								: K;
 			}[keyof Deps & keyof KnownValues & string]
 		: never;
 
@@ -137,20 +140,12 @@ type MismatchedDependencyBrand<C, KnownValues> =
 				}
 		: never;
 
-// A broad-named provider (Record<string, V>) may satisfy any dependency name, but V is
-// still evidence against the declared value type. Only a fully unknown registry opts out.
-type KnownValuesOf<Ctx> = string extends keyof Ctx
-	? unknown extends Ctx[keyof Ctx & string]
-		? {}
-		: Ctx
-	: Ctx;
-
 /** Brand provided instances whose transitive dependency closure is unsatisfied. */
 export type ValidateContextDeps<
 	Ctx extends ContextMap,
 	Cs extends readonly AnyContextInstance[],
 	Known extends string = (keyof Ctx & string) | DefName<Cs[number]>,
-	KnownValues extends ContextMap = KnownValuesOf<Ctx> & ContextsOutput<Cs>,
+	KnownValues extends ContextMap = Ctx & ContextsOutput<Cs>,
 > = {
 	[I in keyof Cs]: Cs[I] &
 		MissingDependencyBrand<Cs[I], Known> &

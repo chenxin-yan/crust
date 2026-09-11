@@ -55,7 +55,7 @@ Supplied positional values must form a prefix, even across defaulted positions. 
 
 Dynamic authoring uses the same APIs: `new Crust(name)`, `defineCommand(name, config, recipe)`, `defineFlag(name, def)`, and `defineContext(name, config, setup)`. Spread collections into variadic attachment methods: `.flags(...defs)`, `.args(...defs)`, `.provide(...instances)`, `.add(...definitions)`, and root-only `.extend(...extensions)`. Invalid observable definitions throw at their consuming operation. Deferred section callbacks and recipes are checked when prepared, without running Context setup early.
 
-A broad string name does not establish a particular literal key; open namespaces stay open. Finite unions do not establish every alternative key either. Known-invalid members of a union remain rejected. Unresolved generic names may need a validated parameter constraint; ordinary broad strings are supported.
+A broad string name does not establish a particular literal key; open namespaces stay open. Finite unions do not establish every alternative key either. Known-invalid members of a finite union remain rejected; a union with an open template member is treated as open, with runtime validation still applying. Unresolved generic names may need a validated parameter constraint; ordinary broad strings are supported.
 
 <include lang="ts">../../../examples/guide/invocation.ts#dynamic</include>
 

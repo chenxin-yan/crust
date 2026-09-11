@@ -231,7 +231,7 @@ function _dynamicDemandValues() {
 	const providers = [homogeneous()];
 	new Crust("app").provide(...providers).extend(extension);
 	const unknowns = [defineContext(dynamicName, (): unknown => 42)()];
-	// @ts-expect-error A potentially applicable unknown provider is not string proof.
+	// A fully open unknown-valued provider collection has no provable mismatch.
 	new Crust("app").provide(...unknowns).extend(extension);
 	new Crust("app")
 		.provide(text())
@@ -262,11 +262,8 @@ function _contributedDemandValues() {
 		.extend(defineExtension(defineExtensionId("provider"), { provides: [number()] }));
 	// @ts-expect-error An open holder cannot erase a concrete provider shape.
 	const broad: CommandDefinition = child;
-	new Crust("app")
-		.provide(text())
-		.extend(demand)
-		// @ts-expect-error A broad child holder cannot certify unknown descendant providers.
-		.add(broad);
+	// A broad child holder has no statically known descendant value mismatch.
+	new Crust("app").provide(text()).extend(demand).add(broad);
 	const dependent = defineContext("dependent", { uses: [text] }, () => true);
 	// @ts-expect-error Checked Context dependency names do not establish promised values.
 	new Crust("app").provide(number()).provide(dependent());

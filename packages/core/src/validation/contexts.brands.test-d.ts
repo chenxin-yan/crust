@@ -68,6 +68,22 @@ type NameBrandOf<T> = Extract<keyof T, "FIX_DUPLICATE_CONTEXT">;
 	type _broadSatisfied = Expect<
 		Equal<Extract<keyof BroadSatisfied[0], "FIX_DEPENDENCY_TYPE">, never>
 	>;
+
+	// A known literal provider retains its value evidence beside an unknown index signature.
+	type MixedMismatch = ValidateContextDeps<
+		Omit<Record<string, ContextValue>, "db"> & { db: number },
+		readonly [StringConsumer]
+	>;
+	type _mixedMismatch = Expect<
+		Equal<Extract<keyof MixedMismatch[0], "FIX_DEPENDENCY_TYPE">, "FIX_DEPENDENCY_TYPE">
+	>;
+	type MixedSatisfied = ValidateContextDeps<
+		Omit<Record<string, ContextValue>, "db"> & { db: string },
+		readonly [StringConsumer]
+	>;
+	type _mixedSatisfied = Expect<
+		Equal<Extract<keyof MixedSatisfied[0], "FIX_DEPENDENCY_TYPE">, never>
+	>;
 }
 
 {

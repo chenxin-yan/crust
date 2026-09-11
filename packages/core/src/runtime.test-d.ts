@@ -196,6 +196,13 @@ function _broadProviderValueEvidence(name: string) {
 	// @ts-expect-error -- a broad-named number provider cannot satisfy the string dependency
 	new Crust("app").provide(numeric()).provide(dependent());
 	new Crust("app").provide(defineContext(name, () => "ok")()).provide(dependent());
+
+	// oxlint-disable-next-line anti-slop/no-unknown-returns, anti-slop/no-known-value-widening -- regression models an explicitly opaque broad provider.
+	const unknownProvider = defineContext(name, (): unknown => null);
+	const literalNumeric = defineContext("db", () => 42);
+	// @ts-expect-error -- the literal provider retains its number evidence beside the unknown provider
+	new Crust("app").provide(unknownProvider()).provide(literalNumeric()).provide(dependent());
+	new Crust("app").provide(unknownProvider()).provide(text()).provide(dependent());
 }
 
 function _commandCompositionBoundary(definitions: readonly ReturnType<typeof defineCommand>[]) {
