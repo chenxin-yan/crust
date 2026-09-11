@@ -78,7 +78,17 @@ const flags = {
 } satisfies FlagsDef;
 ```
 
-The schema receives the raw `string | undefined` or `boolean | undefined`. With `multiple: true`, it receives `string[]` or `boolean[]` when the flag appears at least once, and `undefined` when omitted. Variadic arguments, by contrast, always supply an array. `required`, `default`, `choices`, and `parse` cannot be mixed into schema mode.
+The schema receives the raw `string | undefined` or `boolean | undefined`. With `multiple: true`, it receives `string[]` or `boolean[]` when the flag appears at least once, and `undefined` when omitted. Variadic arguments, by contrast, always supply an array.
+
+`required`, `default`, `choices`, and `parse` cannot be mixed into schema mode.
+
+### `MergeFlags`
+
+```ts
+type MergeFlags<Base extends FlagsDef, Override extends FlagsDef> = Base & Override;
+```
+
+The intersection of two flag definition maps.
 
 ### `NamedFlagDef`
 
@@ -99,13 +109,17 @@ const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
 const target = defineArg("target", { type: "string", required: true });
 ```
 
-`defineFlag(name, def)` returns a named flag definition; `defineArg(name, def)` returns a named argument definition. Literal fields retain inference and provably invalid names/defaults/parsers fail typecheck. Broad names and dynamic definitions use the same helpers and are checked automatically at consumption. Helpers own readonly structural arrays, without cloning payloads; local proof does not certify another destination. `UnnamedArgDef` is the argument helper input without its name.
+`defineFlag(name, def)` returns a named flag definition; `defineArg(name, def)` returns a named argument definition. Literal fields retain inference and provably invalid names/defaults/parsers fail typecheck. Broad names and dynamic definitions use the same helpers and are checked automatically at consumption.
+
+Helpers own readonly structural arrays, without cloning payloads; local proof does not certify another destination. `UnnamedArgDef` is the argument helper input without its name.
 
 ### `CommandMeta`
 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="CommandMeta" />
 
-`version` is the application version declared through `new Crust(name, { version })`; it is available on the root `CommandSnapshot.meta` for Extensions and tooling. `sections` is an ordered list of plain-text `{ title, body }` entries, optionally scoped to renderer identities with `only` or `except` audiences. At consumption, audience filtering runs first, then entries with the same exact, case-sensitive title merge at their first position with bodies joined by a single newline. Declare sections in the metadata passed to `new Crust()` or `defineCommand()`; help and man render them after their built-in sections. `hidden` removes a command from user-facing help, completion, man-page, typo-suggestion, and skill listings without disabling direct routing.
+`version` is the application version declared through `new Crust(name, { version })`; it is available on the root `CommandSnapshot.meta` for Extensions and tooling. `sections` is an ordered list of plain-text `{ title, body }` entries, optionally scoped to renderer identities with `only` or `except` audiences. At consumption, audience filtering runs first, then entries with the same exact, case-sensitive title merge at their first position with bodies joined by a single newline.
+
+Declare sections in the metadata passed to `new Crust()` or `defineCommand()`; help and man render them after their built-in sections. `hidden` removes a command from user-facing help, completion, man-page, typo-suggestion, and skill listings without disabling direct routing.
 
 ### `SectionConsumer`, `SectionAudience`, `CommandSectionInput`, and `CommandSection`
 
@@ -120,7 +134,9 @@ type SectionAudience =
 type CommandSectionInput = { readonly title: string; readonly body: string } & SectionAudience;
 ```
 
-`SectionConsumer` identifies a renderer: a branded `ExtensionId`, or any value exposing one at `.id` (such as the help, man, and skills Extension factory values). `SectionAudience` is the optional `only`/`except` scoping accepted on authored sections, and `CommandSectionInput` is the ordinary command-authoring shape. Extension section callbacks retain their consumption-time validation for dynamic contributions. `CommandSection` is the validated section stored on snapshot `meta.sections`, with its audience consumers resolved to nonempty readonly `ExtensionId` tuples. Metadata accepts typed dynamic audience arrays and checks nonemptiness when consumed.
+`SectionConsumer` identifies a renderer: a branded `ExtensionId`, or any value exposing one at `.id` (such as the help, man, and skills Extension factory values). `SectionAudience` is the optional `only`/`except` scoping accepted on authored sections, and `CommandSectionInput` is the ordinary command-authoring shape. Extension section callbacks retain their consumption-time validation for dynamic contributions.
+
+`CommandSection` is the validated section stored on snapshot `meta.sections`, with its audience consumers resolved to nonempty readonly `ExtensionId` tuples. Metadata accepts typed dynamic audience arrays and checks nonemptiness when consumed.
 
 ## Command Snapshots
 
@@ -143,13 +159,17 @@ Command Snapshots are readonly, serializable descriptions. They omit Command Act
 
 <auto-type-table path="../../../../../packages/core/src/command/snapshot.ts" name="FlagSnapshot" />
 
-Snapshots omit schemas and parse functions. Every flag snapshot includes `negatable`, derived from the parser's spelling policy. `URL` defaults become strings, and array defaults are recursively copied and frozen. Object-valued JSON defaults, including objects inside arrays, remain shared references; treat them as immutable.
+Snapshots omit schemas and parse functions. Every flag snapshot includes `negatable`, derived from the parser's spelling policy. `URL` defaults become strings, and array defaults are recursively copied and frozen.
+
+Object-valued JSON defaults, including objects inside arrays, remain shared references; treat them as immutable.
 
 ## Typed invocation
 
 [Exact declarations](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts).
 
-Types inferred from the application definition that back [`run(path, input?, io?)`](/docs/api/crust#runpath-input-io) and the [`@crustjs/testing`](/docs/modules/testing) helpers. `CommandTree` is the compile-time tree accumulated by `.add()`; `CommandPath` enumerates every valid path through it (including the root path `[]`); `CommandShapeAt` resolves the `CommandShape` a path selects; and `RunInput` is the structured `args`/`flags`/`raw` input for that shape, built from the pre-parse `InputArgs` and `InputFlags` value types. When calling `run()`, inputs declared with `type: "json"` accept JSON primitives, structurally JSON-compatible object types (including named interfaces), and mutable or readonly arrays/tuples (`RunInput` itself and the testing helpers constrain leaves to `JsonValue`); variadic JSON arguments and multiple JSON flags use a mutable array whose items are JSON values. Inputs declared with `type: "url"` accept `URL`; `Date`, `bigint`, functions, and other non-JSON values are excluded from JSON inputs. `RunInputArguments` and `RunArguments` are the tuple types that make `input` optional when the selected command requires nothing; `RunOutcome` is the status-discriminated value `run()` resolves to. `AnyCrust` accepts any fully-built application.
+Types inferred from the application definition that back [`run(path, input?, io?)`](/docs/api/crust#runpath-input-io) and the [`@crustjs/testing`](/docs/modules/testing) helpers. `CommandTree` is the compile-time tree accumulated by `.add()`; `CommandPath` enumerates every valid path through it (including the root path `[]`); `CommandShapeAt` resolves the `CommandShape` a path selects; and `RunInput` is the structured `args`/`flags`/`raw` input for that shape, built from the pre-parse `InputArgs` and `InputFlags` value types. When calling `run()`, inputs declared with `type: "json"` accept JSON primitives, structurally JSON-compatible object types (including named interfaces), and mutable or readonly arrays/tuples (`RunInput` itself and the testing helpers constrain leaves to `JsonValue`); variadic JSON arguments and multiple JSON flags use a mutable array whose items are JSON values.
+
+Inputs declared with `type: "url"` accept `URL`; `Date`, `bigint`, functions, and other non-JSON values are excluded from JSON inputs. `RunInputArguments` and `RunArguments` are the tuple types that make `input` optional when the selected command requires nothing; `RunOutcome` is the status-discriminated value `run()` resolves to. `AnyCrust` accepts any fully-built application.
 
 ```ts
 import type { CommandPath, CommandShapeAt, RunInput } from "@crustjs/core";
@@ -159,9 +179,13 @@ type Path = CommandPath<Tree>; // e.g. readonly [] | readonly ["greet"]
 type GreetInput = RunInput<CommandShapeAt<(typeof app)["_types"]["shape"], readonly ["greet"]>>;
 ```
 
-`InputArgs` requires a supplied prefix: defaults do not fill gaps, and required trailing arguments require preceding positions. Known choices, required fields, and paths remain strict. Conditional definitions retain conservative obligations; fully erased/open shapes accept broad structured input while preserving independently known facts. See [Typed input](/docs/guide/lifecycle#typed-input).
+`InputArgs` requires a supplied prefix: defaults do not fill gaps, and required trailing arguments require preceding positions. Known choices, required fields, and paths remain strict. Conditional definitions retain conservative obligations; fully erased/open shapes accept broad structured input while preserving independently known facts.
 
-`Crust` defaults its argument state to `[]`. Prefer inferred authoring builders. `AnyCrust` is for completed-app inspection, `execute()`, and broad `run()` with an unknown action result; it has no authoring methods and cannot be assigned back to an empty root. `Crust<Flags, ArgsDef>` intentionally describes an open argument state.
+See [Typed input](/docs/guide/lifecycle#typed-input).
+
+`Crust` defaults its argument state to `[]`. Prefer inferred authoring builders.
+
+`AnyCrust` is for completed-app inspection, `execute()`, and broad `run()` with an unknown action result; it has no authoring methods and cannot be assigned back to an empty root. `Crust<Flags, ArgsDef>` intentionally describes an open argument state.
 
 `Crust._types` is a supported type-level seam for accessing an application's inferred flags, arguments, Contexts, command tree, command shape, and authored root metadata (`rootMeta`); it has no runtime value.
 
@@ -178,11 +202,15 @@ type RunOutcome<Result> = {
 );
 ```
 
-Core `run()` is quiet, captures output, and returns invocation failures instead of rejecting them. Narrow `status` before reading the branch-specific field. See [capture semantics](/docs/api/crust#runpath-input-io) for live sinks, output boundaries, and memory cost. This differs from the internal hook-facing `InvocationOutcome`, which does not carry captured output or action results.
+Core `run()` is quiet, captures output, and returns invocation failures instead of rejecting them. Narrow `status` before reading the branch-specific field. See [capture semantics](/docs/api/crust#runpath-input-io) for live sinks, output boundaries, and memory cost.
+
+This differs from the internal hook-facing `InvocationOutcome`, which does not carry captured output or action results.
 
 ## Parser boundary types
 
-`ParseResult<A, F>` is the syntax-parsed result before required-value and Standard Schema validation. Required core variadics still have ordinary array types here, because binding can produce an empty array before a finishing hook skips validation. Its generic `args` and `flags` preserve definition-specific raw value types; `ParsedArgValue` and `ParsedFlagValue` are the runtime-erased fallbacks for widened definitions. Its `excessArgs` holds positionals before `--` that no declared argument consumed (validation rejects them); its `rawArgs` holds tokens after `--`. `ValidatedInput<A, F>` is the validated boundary passed onward to Command Actions, with `InferArgs<A>` and `InferFlags<F>` applied.
+`ParseResult<A, F>` is the syntax-parsed result before required-value and Standard Schema validation. Required core variadics still have ordinary array types here, because binding can produce an empty array before a finishing hook skips validation. Its generic `args` and `flags` preserve definition-specific raw value types; `ParsedArgValue` and `ParsedFlagValue` are the runtime-erased fallbacks for widened definitions.
+
+Its `excessArgs` holds positionals before `--` that no declared argument consumed (validation rejects them); its `rawArgs` holds tokens after `--`. `ValidatedInput<A, F>` is the validated boundary passed onward to Command Actions, with `InferArgs<A>` and `InferFlags<F>` applied.
 
 Most application authors consume the inferred Action context rather than naming these types directly. They are exported for parser integrations and tooling that need to distinguish syntax parsing from schema-validated values.
 
@@ -203,7 +231,9 @@ The same injectable callbacks are passed to the Command Action and every Context
   name="CrustCommandContext"
 />
 
-`Ctx` (default `{}`) is the inferred Context registry for the command path; it backs the lazy `ctx` bag as `ContextBag<Ctx>`. `rootCommand` is the readonly serializable snapshot of the application root, including Extension contributions. `InferArgs` and `InferFlags` are internal type plumbing, not root exports. `.args()`, `.flags()`, and `.provide()` infer these fields without explicit generic arguments.
+`Ctx` (default `{}`) is the inferred Context registry for the command path; it backs the lazy `ctx` bag as `ContextBag<Ctx>`. `rootCommand` is the readonly serializable snapshot of the application root, including Extension contributions. `InferArgs` and `InferFlags` are internal type plumbing, not root exports.
+
+`.args()`, `.flags()`, and `.provide()` infer these fields without explicit generic arguments.
 
 ## Context types
 
@@ -219,7 +249,9 @@ interface ContextFactory<Name extends string, Options, Value, OF, Deps> {
 }
 ```
 
-`defineContext(name, setup)` and `defineContext(name, config, setup)` always return a factory. Invoke it even when `Options` is `void`. `contextName` is the bag property name. `.of(value)` creates a precomputed instance with no dependencies while retaining owned flags.
+`defineContext(name, setup)` and `defineContext(name, config, setup)` always return a factory. Invoke it even when `Options` is `void`. `contextName` is the bag property name.
+
+`.of(value)` creates a precomputed instance with no dependencies while retaining owned flags.
 
 ### `ContextConfig`, `ContextSetup`, and `ContextBag`
 
@@ -233,7 +265,9 @@ type ContextBag<Deps> = {
 };
 ```
 
-`flags` declares propagating flags. `uses` declares Context dependencies and determines the exact lazy bag exposed to setup. Reading a property starts memoized construction; destructuring therefore starts construction immediately. Setup also receives the invocation's `stdout` and `stderr` callbacks.
+`flags` declares propagating flags. `uses` declares Context dependencies and determines the exact lazy bag exposed to setup. Reading a property starts memoized construction; destructuring therefore starts construction immediately.
+
+Setup also receives the invocation's `stdout` and `stderr` callbacks.
 
 ### `ContextInstance`
 
@@ -242,7 +276,9 @@ type ContextBag<Deps> = {
   name="ContextInstance"
 />
 
-Attach helper-created instances with `.provide()`, or `.provide(...instances)` for dynamic collections. Owned-flag/dependency state cannot be erased into an explicitly empty `ContextInstance` holder. The default open instantiation is not an existential upper bound; prefer inference or a generic identity helper. Construction stays lazy.
+Attach helper-created instances with `.provide()`, or `.provide(...instances)` for dynamic collections. Owned-flag/dependency state cannot be erased into an explicitly empty `ContextInstance` holder. The default open instantiation is not an existential upper bound; prefer inference or a generic identity helper.
+
+Construction stays lazy.
 
 ### `FactoryValueOf<F>`
 
@@ -258,7 +294,17 @@ Extracts the awaited value type a Context factory produces: `FactoryValueOf<type
 type ContextMap = object;
 ```
 
-The upper bound for the name/value registry accumulated by `.provide()` and Extension `provides`. It is a phantom constraint: the builder infers the concrete property map, so consumer-defined context shapes do not need a string index signature. Command actions receive `ContextBag<Ctx>` for that inferred registry. Reusable command definitions and Extensions expose only Contexts declared through `.use()` (command definitions) or the `uses` config field (Extensions).
+The upper bound for the name/value registry accumulated by `.provide()` and Extension `provides`. It is a phantom constraint: the builder infers the concrete property map, so consumer-defined context shapes do not need a string index signature. Command actions receive `ContextBag<Ctx>` for that inferred registry.
+
+Reusable command definitions and Extensions expose only Contexts declared through `.use()` (command definitions) or the `uses` config field (Extensions).
+
+### `MergeContext`
+
+```ts
+type MergeContext<A, B> = A & B;
+```
+
+The intersection of two Context maps.
 
 ## Extension types
 
@@ -271,7 +317,9 @@ The upper bound for the name/value registry accumulated by `.provide()` and Exte
   name="ExtensionConfig"
 />
 
-`commands` entries are `defineCommand()` definitions contributed at the application root. `sections(snapshot)` returns an array of plain-text sections targeted by canonical command paths relative to that root; contributions append to each target's `meta.sections` in Extension registration order. Renderers filter audiences and merge exact same-title entries while preserving this body order. `build(ctx)` generates artifacts in Extension registration order when invoked by build tooling and may be async. It may return `BuildArtifacts`; its errors propagate to the caller. See [Extensions](/docs/guide/extensions).
+`commands` entries are `defineCommand()` definitions contributed at the application root. `sections(snapshot)` returns an array of plain-text sections targeted by canonical command paths relative to that root; contributions append to each target's `meta.sections` in Extension registration order. Renderers filter audiences and merge exact same-title entries while preserving this body order.
+
+`build(ctx)` generates artifacts in Extension registration order when invoked by build tooling and may be async. It may return `BuildArtifacts`; its errors propagate to the caller. See [Extensions](/docs/guide/extensions).
 
 ### `ExtensionSectionContribution`
 
@@ -315,15 +363,31 @@ One entry per executed build hook, in execution order. `files` is `"unknown"` wh
 
 ### `ExtensionFactory`
 
-| Type                                                                              | Description                                                                                                     |
-| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `ExtensionFactory<Args = [], Deps = {}, Provides = [], Defs = [], Commands = []>` | Callable Extension constructor with a readonly `id: ExtensionId`; contribution namespaces are closed by default |
+```ts
+type ExtensionFactory<
+  Args extends readonly unknown[] = [],
+  Deps extends ContextMap = {},
+  Provides extends readonly AnyContextInstance[] = [],
+  Defs extends readonly NamedExtensionFlagDef[] = [],
+  Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
+  MetaKeys extends RootMetaKey = never,
+  HookDeps extends ContextMap = Deps,
+> = ((...args: Args) => Extension<Deps, Provides, Defs, Commands, MetaKeys, HookDeps>) & {
+  readonly id: ExtensionId;
+};
+```
 
-`defineExtension(id, factory)` wraps a config-returning callback, preserving its parameters and inferring its flags, dependencies, providers, and commands. Each call follows the object form's normalization and freezing path. `ExtensionFactory<Args, Deps, Provides, Defs, Commands, MetaKeys>` accepts optional contribution and metadata-key type parameters. Preserve literal tuples in published annotations for precise typed invocation. To keep a namespace open, explicitly use `ContextMap`, `readonly ContextInstance[]`, `readonly NamedExtensionFlagDef[]`, or `readonly CommandDefinition<any, any, any, any>[]` for its parameter. `MetaKeys` defaults to `never`, meaning no required metadata. An annotation for a metadata-requiring factory must preserve those keys. See [authoring an Extension](/docs/guide/extensions#author-an-extension).
+`defineExtension(id, factory)` wraps a config-returning callback, preserving its parameters and inferring its flags, dependencies, providers, and commands. Each call follows the object form's normalization and freezing path. Contribution namespaces are closed by default.
+
+Preserve literal tuples in published annotations for precise typed invocation. To keep a namespace open, explicitly use `ContextMap`, `readonly ContextInstance[]`, `readonly NamedExtensionFlagDef[]`, or `readonly CommandDefinition<any, any, any, any>[]` for its parameter. `MetaKeys` defaults to `never`, meaning no required metadata.
+
+`HookDeps` defaults to `Deps`. An annotation for a metadata-requiring factory must preserve its metadata keys. See [authoring an Extension](/docs/guide/extensions#author-an-extension).
 
 ### `RootMetaKey` and `DefineExtensionWith`
 
-`RootMetaKey` is `keyof RootCommandMeta`. `defineExtension<MetaKeys>()` returns `DefineExtensionWith<MetaKeys>`, whose config and factory overloads infer the remaining types. Required fields retain their schema types and become non-optional in root snapshots passed to hooks, `build`, and `sections`. `.extend()` checks that the root's inferred metadata supplies them.
+`RootMetaKey` is `keyof RootCommandMeta`. `defineExtension<MetaKeys>()` returns `DefineExtensionWith<MetaKeys>`, whose config and factory overloads infer the remaining types. Required fields retain their schema types and become non-optional in root snapshots passed to hooks, `build`, and `sections`.
+
+`.extend()` checks that the root's inferred metadata supplies them.
 
 Use the [curried declaration](/docs/guide/extensions#required-root-metadata) to require keys without losing flag, Context, or factory-argument inference. These requirements are compile-time-only.
 
@@ -363,7 +427,13 @@ Infers the syntax-parsed values from an Extension's named-definition array and e
   name="ExtensionHooks"
 />
 
-`preRun` runs in `.extend()` order after routing and input binding (argv parsing for `execute()`, structured binding for typed `run()`), before validation. Its declared Context bag is lazy, but accessing a flag-owning Context directly or transitively rejects before validation; a later post-validation access re-executes that Context's setup from the start. Return `ctx.finish()` to end successfully. `onError` is used by `.execute()` only. For failures raised during dispatch before `postRun`, it settles before `postRun`; return `true` after rendering to stop the chain, or a falsy value to continue to Core's renderer. `postRun` is the reverse-`.extend()`-order `finally` hook: it can pull or reuse Contexts, observes any failed-outcome attribution from `onError`, and runs for every Extension after a completed, finished, or failed invocation. Invocation Contexts remain available through `postRun`, and disposal follows. An `onError` call for a post-run or disposal failure runs after cleanup, with Context pulls unavailable. Routing and parse failures use a fallback context with no available Contexts. See [Error flow](/docs/guide/error-handling#error-flow).
+`preRun` runs in `.extend()` order after routing and input binding (argv parsing for `execute()`, structured binding for typed `run()`), before validation. Its declared Context bag is lazy, but accessing a flag-owning Context directly or transitively rejects before validation; a later post-validation access re-executes that Context's setup from the start. Return `ctx.finish()` to end successfully.
+
+`onError` is used by `.execute()` only. For failures raised during dispatch before `postRun`, it settles before `postRun`; return `true` after rendering to stop the chain, or a falsy value to continue to Core's renderer. `postRun` is the reverse-`.extend()`-order `finally` hook: it can pull or reuse Contexts, observes any failed-outcome attribution from `onError`, and runs for every Extension after a completed, finished, or failed invocation.
+
+Invocation Contexts remain available through `postRun`, and disposal follows. An `onError` call for a post-run or disposal failure runs after cleanup, with Context pulls unavailable. Routing and parse failures use a fallback context with no available Contexts.
+
+See [Error flow](/docs/guide/error-handling#error-flow).
 
 ### `Finished`
 

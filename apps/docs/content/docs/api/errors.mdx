@@ -93,9 +93,11 @@ Standard Schema failures are aggregated into one `VALIDATION` error. Paths are n
 
 ## Propagation boundaries
 
-Authoring and attachment errors still throw at the consuming operation, and `snapshot()` preparation errors still reject. Only public `run()` invocation failures become returned outcomes.
+Authoring and attachment errors throw at the consuming operation, and `snapshot()` preparation errors reject. Public `run()` captures preparation and invocation failures as returned outcomes.
 
-`.run(path, input, io)` returns a quiet `failed` outcome containing the original error and any captured output, without changing process status. If disposal also fails, it retains the combined escaping failure. Combined invocation and disposal failures produce a `SuppressedError`; see [Error flow](/docs/guide/error-handling#error-flow). Context setup and Command Action failures are not wrapped in `CrustError`. Pulling an unprovided Context is a `DEFINITION` `CrustError` with `details.reason === "missing-context"`; its message names the Context, identifies the requesting setup when applicable, and recommends `.provide()`. A dynamic pull cycle reports `context-cycle`. Pulling a flag-owning Context before validation reports `flags-before-validation`. Pulling after invocation Contexts have been disposed reports `context-after-disposal`. This includes `onError` calls for post-run or disposal failures after cleanup. For failures raised during dispatch before `postRun`, `onError` runs while Contexts are still live.
+Routing and parse failures occur before `preRun`, `postRun`, and invocation Context setup. A failure from `preRun`, validation, schema application, Context construction, or the Command Action becomes a failed lifecycle outcome passed to every `postRun` hook in reverse registration order. Constructed Contexts remain available through `postRun` and are disposed after the hooks complete, including after failure.
+
+An invocation failure takes precedence over `postRun` failures. After a completed or finished invocation, the first `postRun` failure becomes the escaping error after the remaining hooks run.
 
 ```ts
 const failure = new Error("database unavailable");
@@ -107,9 +109,19 @@ const outcome = await app.run([]);
 // outcome is { status: "failed", error: failure, stdout: "", stderr: "" }
 ```
 
-`.execute()` renders a failure once, sets `process.exitCode = 1`, and resolves. Extension `onError` hooks can render or delegate presentation but cannot turn the invocation into success.
+`.run(path, input, io)` returns a quiet `failed` outcome containing the error that escapes the complete lifecycle and all captured output, including cleanup output. It does not change `process.exitCode`, and Extension `onError` hooks never run. If invocation and disposal both fail, the escaping error is a `SuppressedError` whose `error` is the disposal failure and whose `suppressed` value is the invocation failure.
 
-Core treats any `Error` whose `name` is `"AbortError"` as cancellation, including the `DOMException` thrown by prompts. Programmatic `.run()` returns it in the `failed` branch unless disposal also fails. Terminal `.execute()` sets exit code `130` and offers it to Extension `onError` hooks; the default renderer stays silent when no hook claims it.
+Context setup and Command Action failures are not wrapped in `CrustError`.
+
+Pulling an unprovided Context produces a `DEFINITION` `CrustError` with `details.reason === "missing-context"`. Its message names the Context, identifies the requesting setup when applicable, and recommends `.provide()`. A dynamic pull cycle reports `context-cycle`.
+
+Pulling a flag-owning Context before validation reports `flags-before-validation`, and pulling after disposal reports `context-after-disposal`.
+
+`.execute()` sets `process.exitCode = 1`, renders a failure once, and returns `1`. Non-cancellation preparation failures render directly because no successfully applied Extension hook chain is available.
+
+Extension `onError` hooks handle presentation only and cannot change a failed invocation into success. After preparation, `execute()` calls them in registration order until a hook returns a truthy value; otherwise Core renders the error to `stderr`.
+
+Routing and parse failures receive a fallback hook context with empty `args` and `flags` and unavailable Contexts. For failures raised during dispatch, `onError` runs before `postRun` while Contexts are live. For `postRun` or disposal failures, it runs after cleanup, so Context pulls reject with `context-after-disposal`.
 
 ```ts
 const outcome = await app.run(path, input);
@@ -121,4 +133,6 @@ if (outcome.status === "failed") {
 }
 ```
 
-`toJSON()` returns `code`, `message`, and `details`. It intentionally omits `cause`.
+Any `Error` whose `name` is `"AbortError"` is cancellation. `run()` returns cancellation in a `failed` outcome unless disposal changes the escaping failure. `execute()` sets and returns exit code `130`; after successful preparation it offers the error to `onError` hooks, and Core renders nothing when no hook claims it.
+
+`toJSON()` returns `code`, `message`, and `details`. It omits `cause`.
