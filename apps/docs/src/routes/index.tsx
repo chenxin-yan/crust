@@ -175,7 +175,7 @@ const MODULES: Array<{
   },
 ];
 
-const PUBLISHED_PACKAGES = MODULES.filter((m) => !m.upcoming).map((m) => m.pkg);
+const PUBLISHED_PACKAGES = MODULES.flatMap((m) => (m.upcoming ? [] : [m.pkg]));
 
 type ReleaseChannel = "alpha" | "beta";
 
