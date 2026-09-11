@@ -277,10 +277,9 @@
     },
     "packages/tui": {
       "name": "@crustjs/tui",
-      "version": "0.0.1",
+      "version": "0.0.0",
       "devDependencies": {
         "@crustjs/config": "workspace:*",
-        "@crustjs/utils": "workspace:*",
         "@opentui/core": "^0.5.11",
         "tsdown": "catalog:",
       },

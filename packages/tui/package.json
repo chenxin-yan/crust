@@ -55,7 +55,6 @@
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
-		"@crustjs/utils": "workspace:*",
 		"@opentui/core": "^0.5.11",
 		"tsdown": "catalog:"
 	},
