@@ -1,6 +1,8 @@
 import { defineRule } from "@oxlint/plugins";
 import type { ESTree, Variable } from "@oxlint/plugins";
 
+import { createTypeEnvironment } from "../shared/dictionary-types.ts";
+
 type BroadTypeKind = "top" | "object" | "record";
 
 type KnownValueEvidence = {
@@ -27,8 +29,13 @@ function unwrapTypeParentheses(type: ESTree.TSType): ESTree.TSType {
 	return current;
 }
 
+// Refreshed per file in `Program`; every caller compares against built-in utility names.
+let shadowedBuiltIns: ReadonlySet<string> = new Set();
+
+/** Name of a built-in type reference, or null when the file declares/imports its own binding. */
 function typeReferenceName(type: ESTree.TSTypeReference): string | null {
-	return type.typeName.type === "Identifier" ? type.typeName.name : null;
+	if (type.typeName.type !== "Identifier") return null;
+	return shadowedBuiltIns.has(type.typeName.name) ? null : type.typeName.name;
 }
 
 function isUnknownOrAnyType(type: ESTree.TSType): boolean {
@@ -356,8 +363,9 @@ export const noWidenThenAssertRule = defineRule({
 		};
 
 		return {
-			Program() {
+			Program(node) {
 				scopes = context.sourceCode.scopeManager.scopes;
+				shadowedBuiltIns = createTypeEnvironment(node).shadowedBuiltIns;
 			},
 			TSAsExpression: checkAssertion,
 			TSTypeAssertion: checkAssertion,

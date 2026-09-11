@@ -157,9 +157,9 @@ function resolveStructuredInput(
 		const parentCommand = snapshotCommand(route.command);
 		throw new CrustError("COMMAND_NOT_FOUND", `Unknown command "${candidate}".`, {
 			input: candidate,
-			available: Object.entries(parentCommand.subCommands)
-				.filter(([, child]) => isListed(child))
-				.map(([name]) => name),
+			available: Object.entries(parentCommand.subCommands).flatMap(([name, child]) =>
+				isListed(child) ? [name] : [],
+			),
 			commandPath: route.commandPath,
 			parentCommand,
 		});

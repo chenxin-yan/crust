@@ -20,6 +20,11 @@ diverges deliberately.
 - `no-module-mocking`: also detects Bun `mock.module` (`bun:test`) and Jest `setMock`;
   resolves namespace imports.
 - `no-unknown-parameters`: local `allowInBoundaryFunctions` option.
+- `shared/array-method`: `isKnownArrayExpression` also accepts unshadowed `Object.entries/keys/values`
+  and `Array.from` results, so `Object.entries(x).filter().map()` is flagged; `isGlobalOwner` lives
+  here instead of inside `no-reduce-accumulator-copy`.
+- `no-widen-then-assert`: `Record`/`Readonly`/`PropertyKey` are only treated as built-ins when the
+  file does not declare or import its own binding (reuses `createTypeEnvironment`).
 - Helpers split into `shared/{parameters,scope,type-aliases}.ts`; upstream later grew an
   identical `shared/scope.ts` and a `shared/type-alias-resolution.ts`.
 - Formatted with repo `oxfmt` (tabs); linted by the repo config including these rules,

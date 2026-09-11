@@ -3,6 +3,7 @@ import type { ESTree, SourceCode, Variable } from "@oxlint/plugins";
 
 import {
 	arrayMethodTarget,
+	isGlobalOwner,
 	isKnownArrayExpression,
 	resolveArrayBinding,
 	unwrapArrayExpression,
@@ -64,13 +65,6 @@ function referencesAccumulator(
 	return false;
 }
 
-function isGlobalCopyOwner(sourceCode: SourceCode, node: ESTree.Node, name: string): boolean {
-	node = unwrapArrayExpression(node);
-	if (node.type !== "Identifier" || node.name !== name) return false;
-	const variable = resolveArrayBinding(sourceCode, node);
-	return variable === null || variable.defs.length === 0;
-}
-
 /** Reject non-spread copies of reducer accumulators; pair with oxc/no-accumulating-spread. */
 export const noReduceAccumulatorCopyRule = defineRule({
 	meta: {
@@ -104,7 +98,7 @@ export const noReduceAccumulatorCopyRule = defineRule({
 				let copiesAccumulator = false;
 				if (
 					method.name === "assign" &&
-					isGlobalCopyOwner(context.sourceCode, method.object, "Object")
+					isGlobalOwner(context.sourceCode, method.object, "Object")
 				) {
 					const target = node.arguments[0];
 					copiesAccumulator =
@@ -113,7 +107,7 @@ export const noReduceAccumulatorCopyRule = defineRule({
 						node.arguments.slice(1).some(isAccumulator);
 				} else if (
 					method.name === "from" &&
-					isGlobalCopyOwner(context.sourceCode, method.object, "Array")
+					isGlobalOwner(context.sourceCode, method.object, "Array")
 				) {
 					const source = node.arguments[0];
 					copiesAccumulator = source !== undefined && isAccumulator(source);

@@ -18,6 +18,7 @@ tester.run("anti-slop/no-array-filter-map", noArrayFilterMapRule, {
 		"const custom = { filter() { return this; }, map() {} }; custom.filter(active).map(email);",
 		"function collect(unknownReceiver) { return unknownReceiver.filter(active).map(email); }",
 		"const users = fetchUsers(); users.filter(active).map(email);",
+		"const Object = { entries: () => custom }; Object.entries(users).filter(active).map(email);",
 		"const users = []; function collect(users) { return users.filter(active).map(email); }",
 		"let users = []; users = iterator; users.filter(active).map(email);",
 		"const users = []; users[method](active).map(email);",
@@ -25,6 +26,8 @@ tester.run("anti-slop/no-array-filter-map", noArrayFilterMapRule, {
 	],
 	invalid: [
 		{ code: "[].filter(active).map(email);", errors: [error] },
+		{ code: "Object.entries(users).filter(active).map(email);", errors: [error] },
+		{ code: "Array.from(users).map(email).filter(Boolean);", errors: [error] },
 		{
 			code: "[].map(user => user.active ? user.email : undefined).filter(email => email !== undefined);",
 			errors: [error],

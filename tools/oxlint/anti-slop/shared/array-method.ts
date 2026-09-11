@@ -61,6 +61,22 @@ function isArrayAnnotation(type: ESTree.TSType): boolean {
 	);
 }
 
+/** Static factories whose result is always an array: method name → owning global. */
+const ARRAY_FACTORIES: ReadonlyMap<string, string> = new Map([
+	["entries", "Object"],
+	["keys", "Object"],
+	["values", "Object"],
+	["from", "Array"],
+]);
+
+/** True when `node` is the unshadowed global binding `name` (e.g. `Object`, `Array`). */
+export function isGlobalOwner(sourceCode: SourceCode, node: ESTree.Node, name: string): boolean {
+	node = unwrapArrayExpression(node);
+	if (node.type !== "Identifier" || node.name !== name) return false;
+	const variable = resolveArrayBinding(sourceCode, node);
+	return variable === null || variable.defs.length === 0;
+}
+
 /** Recognize local array evidence; unknown receivers and iterator pipelines are deliberately excluded. */
 export function isKnownArrayExpression(
 	sourceCode: SourceCode,
@@ -71,8 +87,10 @@ export function isKnownArrayExpression(
 	if (node.type === "ArrayExpression") return true;
 	if (node.type === "CallExpression") {
 		const method = arrayMethodTarget(node.callee);
+		if (method === null) return false;
+		const owner = ARRAY_FACTORIES.get(method.name);
+		if (owner !== undefined && isGlobalOwner(sourceCode, method.object, owner)) return true;
 		return (
-			method !== null &&
 			[
 				"map",
 				"filter",
@@ -82,8 +100,7 @@ export function isKnownArrayExpression(
 				"toSorted",
 				"toReversed",
 				"toSpliced",
-			].includes(method.name) &&
-			isKnownArrayExpression(sourceCode, method.object, visited)
+			].includes(method.name) && isKnownArrayExpression(sourceCode, method.object, visited)
 		);
 	}
 	if (node.type !== "Identifier") return false;
