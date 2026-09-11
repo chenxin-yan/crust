@@ -105,7 +105,7 @@ const target = defineArg("target", { type: "string", required: true });
 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="CommandMeta" />
 
-`version` is the application version declared through `new Crust(name, { version })`; it is available on the root `CommandSnapshot.meta` for Extensions and tooling. `sections` is an ordered list of plain-text `{ title, body }` entries, optionally scoped to renderer identities with `only` or `except` audiences. Declare sections in the metadata passed to `new Crust()` or `defineCommand()`; help and man render them after their built-in sections. `hidden` removes a command from user-facing help, completion, man-page, typo-suggestion, and skill listings without disabling direct routing.
+`version` is the application version declared through `new Crust(name, { version })`; it is available on the root `CommandSnapshot.meta` for Extensions and tooling. `sections` is an ordered list of plain-text `{ title, body }` entries, optionally scoped to renderer identities with `only` or `except` audiences. At consumption, audience filtering runs first, then entries with the same exact, case-sensitive title merge at their first position with bodies joined by a single newline. Declare sections in the metadata passed to `new Crust()` or `defineCommand()`; help and man render them after their built-in sections. `hidden` removes a command from user-facing help, completion, man-page, typo-suggestion, and skill listings without disabling direct routing.
 
 ### `SectionConsumer`, `SectionAudience`, `CommandSectionInput`, and `CommandSection`
 
@@ -133,7 +133,7 @@ Command Snapshots are readonly, serializable descriptions. They omit Command Act
   name="CommandSnapshot"
 />
 
-`flags` contains effective local and Context-owned flags. `meta.sections` contains frozen authored and Extension-contributed sections for that command. Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details receive snapshots rather than mutable runtime internals.
+`flags` contains effective local and Context-owned flags. `meta.sections` contains the individual frozen authored and Extension-contributed sections for that command; same-title merging happens only when a renderer consumes them. Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details receive snapshots rather than mutable runtime internals.
 
 ### `ArgSnapshot`
 
@@ -271,7 +271,7 @@ The upper bound for the name/value registry accumulated by `.provide()` and Exte
   name="ExtensionConfig"
 />
 
-`commands` entries are `defineCommand()` definitions contributed at the application root. `sections(snapshot)` returns an array of plain-text sections targeted by canonical command paths relative to that root; contributions append to each target's `meta.sections` in Extension registration order. `build(ctx)` generates artifacts in Extension registration order when invoked by build tooling and may be async; its errors propagate to the caller. See [Extensions](/docs/guide/extensions).
+`commands` entries are `defineCommand()` definitions contributed at the application root. `sections(snapshot)` returns an array of plain-text sections targeted by canonical command paths relative to that root; contributions append to each target's `meta.sections` in Extension registration order. Renderers filter audiences and merge exact same-title entries while preserving this body order. `build(ctx)` generates artifacts in Extension registration order when invoked by build tooling and may be async; its errors propagate to the caller. See [Extensions](/docs/guide/extensions).
 
 ### `ExtensionSectionContribution`
 

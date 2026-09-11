@@ -44,6 +44,55 @@ describe("sectionsFor", () => {
 		]) as CommandSection[];
 		expect(sectionsFor(sections, agentDocs)).toEqual(sections);
 	});
+
+	it("merges same-title sections at their first position with a single newline", () => {
+		expect(
+			sectionsFor(
+				[
+					{ title: "Examples", body: "First example" },
+					{ title: "Notes", body: "A note" },
+					{ title: "Examples", body: "Second example" },
+				],
+				terminal,
+			),
+		).toEqual([
+			{ title: "Examples", body: "First example\nSecond example" },
+			{ title: "Notes", body: "A note" },
+		]);
+	});
+
+	it("merges after audience filtering and omits the consumed audience", () => {
+		const shared = { title: "Examples", body: "Shared example" } as const;
+		const agentTargeted = {
+			title: "Examples",
+			body: "Agent example",
+			only: [agentDocs],
+		} as const;
+		const terminalTargeted = {
+			title: "Examples",
+			body: "Terminal example",
+			only: [terminal],
+		} as const;
+		const sections = [shared, agentTargeted, terminalTargeted] as const;
+
+		expect(sectionsFor(sections, agentDocs)).toEqual([
+			{ title: "Examples", body: "Shared example\nAgent example" },
+		]);
+		expect(sectionsFor(sections, terminal)).toEqual([
+			{ title: "Examples", body: "Shared example\nTerminal example" },
+		]);
+		expect(sectionsFor(sections, defineExtensionId("other"))).toEqual([shared]);
+	});
+
+	it("leaves distinct and differently cased titles separate", () => {
+		const sections = [
+			{ title: "Examples", body: "First" },
+			{ title: "examples", body: "Second" },
+			{ title: "Notes", body: "Third" },
+		] as const;
+
+		expect(sectionsFor(sections, terminal)).toEqual(sections);
+	});
 });
 
 describe("visibleSectionsFor", () => {

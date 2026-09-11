@@ -413,6 +413,10 @@ describe("renderSkill", () => {
 							body: "Prefer preview flags before executing changes.",
 						},
 						{
+							title: "Preview",
+							body: "Review the generated plan.",
+						},
+						{
 							title: "Safety",
 							body: "Call out risky production operations explicitly.",
 						},
@@ -430,8 +434,9 @@ describe("renderSkill", () => {
 			const deploy = findFile(files, "commands/deploy.md");
 
 			expect(deploy?.content).toContain(
-				"## Preview\nPrefer preview flags before executing changes.",
+				"## Preview\nPrefer preview flags before executing changes.\nReview the generated plan.",
 			);
+			expect(String(deploy?.content).match(/^## Preview$/gm)).toHaveLength(1);
 			expect(deploy?.content).toContain(
 				"## Safety\nCall out risky production operations explicitly.",
 			);

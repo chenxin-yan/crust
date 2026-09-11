@@ -7,16 +7,25 @@ export function isListed(command: CommandSnapshot): boolean {
 	return command.meta.hidden !== true;
 }
 
-/** Select sections visible to the given consumer. */
+/** Select and merge sections visible to the given consumer. */
 export function sectionsFor(
 	sections: readonly CommandSection[] | undefined,
 	consumer: ExtensionId,
 ): readonly CommandSection[] {
-	return (sections ?? []).filter((section) => {
+	const visible = (sections ?? []).filter((section) => {
 		if (section.only) return section.only.includes(consumer);
 		if (section.except) return !section.except.includes(consumer);
 		return true;
 	});
+	const merged = new Map<string, CommandSection>();
+	for (const section of visible) {
+		const existing = merged.get(section.title);
+		merged.set(
+			section.title,
+			existing ? { title: section.title, body: `${existing.body}\n${section.body}` } : section,
+		);
+	}
+	return [...merged.values()];
 }
 
 /** Collect section-bearing visible commands in canonical path order. The root path is `[]`. */

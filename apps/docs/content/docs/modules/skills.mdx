@@ -143,7 +143,7 @@ await uninstallSkill({ name: "my-cli" });
 
 ## Command sections
 
-Add agent-facing guidance to a command's metadata. Each section is rendered as a Markdown heading and body in that command's generated documentation. Sections are shared with every renderer by default; pass the `skill` (`crust:skills`) factory for agent-only guidance:
+Add agent-facing guidance to a command's metadata. Each section is rendered as a Markdown heading and body in that command's generated documentation. After audience filtering, entries with the same exact, case-sensitive title share one heading at the first entry's position, with bodies joined by a single newline. Sections are shared with every renderer by default; pass the `skill` (`crust:skills`) factory for agent-only guidance:
 
 ```ts
 import { defineCommand } from "@crustjs/core";

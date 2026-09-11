@@ -178,6 +178,11 @@ describe("renderManPageMdoc", () => {
 					sections: () => [
 						{
 							command: [],
+							title: "Extra notes",
+							body: "Extension details.",
+						},
+						{
+							command: [],
 							title: "C:\\paths",
 							body: "'quoted lines are escaped.",
 						},
@@ -190,7 +195,10 @@ describe("renderManPageMdoc", () => {
 		const root = await app.snapshot();
 		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
 
-		expect(mdoc).toContain(".Sh EXTRA NOTES\n\\&.config is supported.\nMore details.");
+		expect(mdoc).toContain(
+			".Sh EXTRA NOTES\n\\&.config is supported.\nMore details.\nExtension details.",
+		);
+		expect(mdoc.match(/^\.Sh EXTRA NOTES$/gm)).toHaveLength(1);
 		expect(mdoc.indexOf(".Sh EXTRA NOTES")).toBeGreaterThan(mdoc.indexOf(".Sh OPTIONS"));
 		// Extension-contributed section renders after authored ones, with roff escaping.
 		expect(mdoc).toContain(".Sh C:\\ePATHS\n\\&'quoted lines are escaped.");
