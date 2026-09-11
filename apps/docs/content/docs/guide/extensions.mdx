@@ -14,8 +14,8 @@ An Extension is an app-wide capability that owns any flags and commands it contr
 See the [Extensions module](/docs/modules/extensions) for each capability's options.
 
 <Callout type="warn">
-  `.extend()` is root-only. `CommandDefinitionBuilder` does not expose it, so Extensions cannot be
-  registered inside `defineCommand()` callbacks.
+  `.extend()` is root-only. Recipe builders share the `Crust` type, but their capability makes this
+  method uncallable inside `defineCommand()` callbacks.
 </Callout>
 
 Two consequences of the root-only model:

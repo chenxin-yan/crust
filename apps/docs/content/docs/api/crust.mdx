@@ -28,7 +28,7 @@ A sealed command declares consumed Context factories with `.use(...factories)` â
 ### `CommandDefinitionBuilder`
 
 <Callout type="info">
-  These signatures are simplified for readability. The exported interfaces use const generics,
+  These signatures are simplified for readability. The exported declarations use const generics,
   validation intersections, and refined return types; use your editor's `@crustjs/core` type hints
   for the exact signatures. The [source
   declarations](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts)
@@ -37,23 +37,17 @@ A sealed command declares consumed Context factories with `.use(...factories)` â
 </Callout>
 
 ```ts
-interface CommandDefinitionBuilder<
+// Simplified: the complete alias also carries tree, result, dependency, and provider state.
+type CommandDefinitionBuilder<
   Flags,
   A,
   Ctx,
   Sibs extends string = never,
   Sp extends string = LocalSpellingsOf<Flags>,
-> {
-  flags(...defs: readonly NamedFlagDef[]): CommandDefinitionBuilder;
-  args(...defs: ArgsDef): CommandDefinitionBuilder;
-  use(...factories: readonly [AnyContextFactory, ...AnyContextFactory[]]): CommandDefinitionBuilder;
-  provide(...instances: readonly AnyContextInstance[]): CommandDefinitionBuilder;
-  add(...definitions: readonly CommandDefinition[]): CommandDefinitionBuilder;
-  action<R>(action: (ctx: CrustCommandContext<A, Flags, Ctx>) => R): CommandDefinitionBuilder;
-}
+> = Crust<Flags, A, Ctx, Sibs, Sp, {}, {}, CollisionSpellings, void, {}, string, "recipe">;
 ```
 
-This is the configure-only builder passed to a `defineCommand()` recipe. Its fluent methods preserve and refine argument, accumulated flag, and provided Context types. Each factory passed to `.use()` accumulates its value and transitive dependency closure into the action's typed `ctx` and into the sealed definition's declared dependencies. `Sibs` accumulates the sibling command names and aliases registered through `.add()`, and `Sp` caches the known flag spellings accumulated through `.flags()` and `.provide()`. Both are defaulted parameters. It intentionally has no `.extend()`, `.run()`, or `.execute()` methods.
+This is the configure-only `Crust` capability passed to a `defineCommand()` recipe. Its fluent methods preserve and refine argument, accumulated flag, and provided Context types. Each factory passed to `.use()` accumulates its value and transitive dependency closure into the action's typed `ctx` and into the sealed definition's declared dependencies. `Sibs` accumulates the sibling command names and aliases registered through `.add()`, and `Sp` caches the known flag spellings accumulated through `.flags()` and `.provide()`. Both are defaulted parameters. Root-only methods remain visible in `keyof`, but their `_types.caps: "app"` `this` constraint makes them uncallable on recipes; `.use()` symmetrically requires `_types.caps: "recipe"`.
 
 ### `CommandDefinition`
 
@@ -128,6 +122,7 @@ class Crust<
   Result = void,
   const Meta = {},
   const Name extends string = string,
+  Caps extends "app" | "recipe" = "app",
 >
 
 new Crust(
@@ -254,7 +249,7 @@ Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in re
 extend(...extensions: readonly Extension[]): Crust
 ```
 
-Registers application-wide Extensions. Calls accumulate in registration order, with duplicate `ExtensionId`s deduplicated last-registration-wins. Statically known contributed names, aliases, and owned flags must not collide. Spread genuinely dynamic collections with `.extend(...extensions)`; metadata and callback demands remain type-owned. `.extend()` is root-only, not part of `CommandDefinitionBuilder`.
+Registers application-wide Extensions. Calls accumulate in registration order, with duplicate `ExtensionId`s deduplicated last-registration-wins. Statically known contributed names, aliases, and owned flags must not collide. Spread genuinely dynamic collections with `.extend(...extensions)`; metadata and callback demands remain type-owned. `.extend()` is root-only: its `_types.caps: "app"` `this` constraint makes recipe calls fail typecheck.
 
 Extensions must originate from `defineExtension()`. Core consumes immutable private defining data through structural copies; changing public contribution fields on a spread does not redefine that Extension. Attachment validates declared availability without constructing Contexts; contributed command recipes are checked when prepared.
 
@@ -352,7 +347,7 @@ const app = new Crust("my-cli").provide(logging()).command("up", (command) =>
 
 The recipe builder is seeded with the Contexts and Context-owned flags accumulated on the builder so far â€” the call site â€” so the inline action's `ctx` is typed without `.use()` declarations. Contexts provided after the `.command()` call are not visible to it, matching the positional semantics of `.provide()`. Inline `.use()` demands that the call site does not satisfy fail typecheck with `FIX_MISSING_DEPENDENCY`.
 
-Use `.command()` for short, app-local leaf commands; extract to `defineCommand` when a command needs its own file, reuse, or a package. `.command()` exists on `Crust` roots and is intentionally absent from `CommandDefinitionBuilder`.
+Use `.command()` for short, app-local leaf commands; extract to `defineCommand` when a command needs its own file, reuse, or a package. `.command()` is root-only: its `_types.caps: "app"` `this` constraint makes recipe calls fail typecheck.
 
 ## `.snapshot()`
 
