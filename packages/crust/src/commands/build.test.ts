@@ -495,8 +495,9 @@ describe("buildCommand error handling", () => {
 		writeFileSync(
 			join(tmpDir, "src", "cli.ts"),
 			`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(corePath)};\n` +
-				`const artifact = defineExtension(defineExtensionId("artifact"), { build: ({ outDir }) => Bun.write(outDir + "/artifact.txt", "built") });\n` +
-				`await new Crust("fixture").extend(artifact).action(() => {}).execute();\n`,
+				`const artifact = defineExtension(defineExtensionId("artifact"), { build: async ({ outDir }) => { await Bun.write(outDir + "/artifact.txt", "built"); return ["artifact.txt", "second.txt", "third.txt", "fourth.txt"]; } });\n` +
+				`const unknown = defineExtension(defineExtensionId("unknown-extension"), { build() {} });\n` +
+				`await new Crust("fixture").extend(artifact, unknown).action(() => {}).execute();\n`,
 		);
 
 		process.cwd = () => tmpDir;
@@ -513,6 +514,11 @@ describe("buildCommand error handling", () => {
 			]);
 
 			expect(result.exitCode).toBe(0);
+			expect(result.stdout).toContain(
+				"Preparing Command Snapshot...\n" +
+					"  artifact           4 files  artifact.txt, second.txt, third.txt, +1 more\n" +
+					"  unknown-extension  ran (artifacts not reported)",
+			);
 			expect(readFileSync(join(tmpDir, "out", "custom", "artifact.txt"), "utf-8")).toBe("built");
 		} finally {
 			process.cwd = originalCwd;

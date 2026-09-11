@@ -54,8 +54,20 @@ describe("writeSkills", () => {
 		const bundleDir = await createBundle("deployment-guide", "Deployment guidance");
 		const outDir = join(tempRoot, "skills");
 
-		await writeSkills({ app: createApp(), outDir, version: "1.2.3", extras: [bundleDir] });
+		const artifacts = await writeSkills({
+			app: createApp(),
+			outDir,
+			version: "1.2.3",
+			extras: [bundleDir],
+		});
 
+		expect(artifacts).toEqual([
+			join("deployment-guide", "SKILL.md"),
+			join("deployment-guide", "references", "guide.md"),
+			join("demo", "SKILL.md"),
+			join("demo", "commands", "demo.md"),
+			join("demo", "commands", "serve.md"),
+		]);
 		expect((await readdir(tempRoot)).sort()).toEqual(["deployment-guide", "skills"]);
 		expect(await readFile(join(outDir, "demo", "SKILL.md"), "utf8")).toContain("name: demo");
 		const serve = await readFile(join(outDir, "demo", "commands", "serve.md"), "utf8");

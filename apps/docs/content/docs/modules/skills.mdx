@@ -18,7 +18,7 @@ The **packaged skills directory** is the `skills/` directory shipped in your npm
 - A **generated skill**, rendered from the command tree and its `meta.sections`.
 - Any **authored skills**, included from hand-written skill directories via `extras`.
 
-The `skill()` Extension owns its build output. During `crust build`, it renders the generated skill from the prepared Command Snapshot and any configured `extras` into `<outdir>/skills`, so the packaged directory always matches the built command tree. `crust build --package` includes the resulting directory in the staged root package. No `--skills` build flag is needed; `--no-validate` skips all Extension build hooks.
+The `skill()` Extension owns its build output. During `crust build`, it renders the generated skill from the prepared Command Snapshot and any configured `extras` into `<outdir>/skills`, reporting each file as an artifact owned by `crust:skills`, so the packaged directory always matches the built command tree. `crust build --package` includes the resulting directory in the staged root package. No `--skills` build flag is needed; `--no-validate` skips all Extension build hooks.
 
 ```ts
 import { writeSkills } from "@crustjs/skills";
@@ -33,7 +33,7 @@ await writeSkills({
 });
 ```
 
-Omit `app` to write only authored `extras`; at least one of the two is required. For a custom pipeline with a prepared Command Snapshot instead of a live app, call `writeSkillsFromSnapshot(snapshot, options)`. `outDir` must be a dedicated directory named `skills`, not the working directory, an ancestor of it, or the filesystem root. Each skill gets its own `skills/<name>/` directory containing `SKILL.md` and any supporting files. `writeSkills()` and `writeSkillsFromSnapshot()` replace `outDir` on every build and never write to an agent directory.
+Omit `app` to write only authored `extras`; at least one of the two is required. For a custom pipeline with a prepared Command Snapshot instead of a live app, call `writeSkillsFromSnapshot(snapshot, options)`. Both functions return the files they wrote as paths relative to their `outDir` argument. `outDir` must be a dedicated directory named `skills`, not the working directory, an ancestor of it, or the filesystem root. Each skill gets its own `skills/<name>/` directory containing `SKILL.md` and any supporting files. `writeSkills()` and `writeSkillsFromSnapshot()` replace `outDir` on every build and never write to an agent directory.
 
 Include the directory in the published package:
 

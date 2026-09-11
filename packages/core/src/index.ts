@@ -11,6 +11,8 @@ export type {
 } from "./api/context.ts";
 export { defineContext } from "./api/context.ts";
 export type {
+	BuildArtifacts,
+	BuildReport,
 	Extension,
 	ExtensionFactory,
 	DefineExtensionWith,

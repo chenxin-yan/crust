@@ -253,8 +253,13 @@ describe("completion build hook", () => {
 
 	it("writes all three shell files under outDir/completions", async () => {
 		const snapshot = await buildCli().snapshot();
-		await completion().build?.({ snapshot, outDir: tmpDir });
+		const artifacts = await completion().build?.({ snapshot, outDir: tmpDir });
 
+		expect(artifacts).toEqual([
+			join("completions", "mycli"),
+			join("completions", "_mycli"),
+			join("completions", "mycli.fish"),
+		]);
 		expect(await readdir(tmpDir)).toEqual(["completions"]);
 		const dir = join(tmpDir, "completions");
 		expect((await readdir(dir)).sort()).toEqual(["_mycli", "mycli", "mycli.fish"]);

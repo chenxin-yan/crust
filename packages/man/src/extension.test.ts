@@ -29,8 +29,9 @@ describe("man Extension", () => {
 			.extend(extension)
 			.snapshot();
 
-		await extension.build?.({ snapshot, outDir });
+		const artifacts = await extension.build?.({ snapshot, outDir });
 
+		expect(artifacts).toEqual([join("man", "demo.5")]);
 		const output = await readFile(join(outDir, "man", "demo.5"), "utf8");
 		expect(output).toContain(".Dt DEMO 5");
 		expect(output).not.toContain(outDir);
@@ -86,5 +87,16 @@ describe("man Extension", () => {
 		await extension.build?.({ snapshot, outDir });
 
 		expect(await readFile(join(outDir, "man", "my-tool.1"), "utf8")).toContain(".Nm my-tool");
+	});
+
+	it("rejects names containing path separators", async () => {
+		const outDir = await mkdtemp(join(tmpdir(), "crust-man-extension-"));
+		directories.push(outDir);
+		const extension = man({ name: "foo\\bar" });
+		const snapshot = await new Crust("demo").extend(extension).snapshot();
+
+		await expect(extension.build?.({ snapshot, outDir })).rejects.toThrow(
+			"must not contain path separators",
+		);
 	});
 });

@@ -2036,6 +2036,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 						expect(snapshot.meta.name).toBe("build-subprocess");
 						expect(receivedOutDir).toBe(outDir);
 						calls.push("first");
+						return ["first\\one.txt", "nested/../first-two.txt"];
 					},
 				}),
 				defineExtension(defineExtensionId("runtime-only")),
@@ -2052,6 +2053,12 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
 
 		expect(calls).toEqual(["first", "second"]);
+		expect(JSON.parse(await readFile(join(dirname(path), "build-report.json"), "utf8"))).toEqual({
+			extensions: [
+				{ id: "first", files: ["first/one.txt", "first-two.txt"] },
+				{ id: "second", files: "unknown" },
+			],
+		});
 	});
 
 	it("runs only the last build hook for a duplicate Extension id", async () => {
@@ -2151,6 +2158,32 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
 
 		expect(errorCalls).toEqual(['Extension "broken" build failed: disk full']);
+	});
+
+	it.each([
+		["an absolute", (outDir: string) => join(outDir, "artifact.txt"), "must be relative"],
+		["an escaping", () => "../artifact.txt", "escapes outDir"],
+		["a drive-relative", () => "C:../outside.txt", "must be relative"],
+		["a normalized drive-relative", () => "nested/../C:/outside.txt", "must be relative"],
+		["an empty", () => "", "must name a file"],
+		["an outDir-relative dot", () => "./", "must name a file"],
+		["a collapsed dot", () => "nested/..", "must name a file"],
+	])("rejects %s reported artifact path", async (_label, artifactPath, message) => {
+		const path = await snapshotPath();
+		const outDir = join(dirname(path), "output");
+		process.env[SNAPSHOT_PATH_ENV] = path;
+		process.env[BUILD_OUT_DIR_ENV] = outDir;
+		const app = new Crust("build-subprocess").extend(
+			defineExtension(defineExtensionId("unsafe"), {
+				build: () => [artifactPath(outDir)],
+			}),
+		);
+
+		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
+
+		expect(errorCalls).toHaveLength(1);
+		expect(errorCalls[0]).toStartWith('Extension "unsafe" build failed:');
+		expect(errorCalls[0]).toContain(message);
 	});
 });
 

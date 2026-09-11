@@ -112,8 +112,9 @@ describe("skill extension packaged directory", () => {
 		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
 		const outDir = join(tempRoot, "dist");
 
-		await extension.build?.({ snapshot, outDir });
+		const artifacts = await extension.build?.({ snapshot, outDir });
 
+		expect(artifacts).toEqual([join("skills", "guide", "SKILL.md")]);
 		expect(await readdir(join(outDir, "skills"))).toEqual(["guide"]);
 	});
 
