@@ -44,20 +44,7 @@ type CommandDefinitionBuilder<
   Ctx,
   Sibs extends string = never,
   Sp extends string = LocalSpellingsOf<Flags>,
-> = Crust<
-  Flags,
-  A,
-  Ctx,
-  Sibs,
-  Sp,
-  {},
-  {},
-  CollisionSpellings,
-  void,
-  {},
-  string,
-  "recipe"
->;
+> = Crust<Flags, A, Ctx, Sibs, Sp, {}, {}, CollisionSpellings, void, {}, string, "recipe">;
 ```
 
 This is the configure-only `Crust` capability passed to a `defineCommand()` recipe. Its fluent methods preserve and refine argument, accumulated flag, and provided Context types. Each factory passed to `.use()` accumulates its value and transitive dependency closure into the action's typed `ctx` and into the sealed definition's declared dependencies. `Sibs` accumulates the sibling command names and aliases registered through `.add()`, and `Sp` caches the known flag spellings accumulated through `.flags()` and `.provide()`. Both are defaulted parameters. Root-only methods remain visible in `keyof`, but their `_types.caps: "app"` `this` constraint makes them uncallable on recipes; `.use()` symmetrically requires `_types.caps: "recipe"`.
