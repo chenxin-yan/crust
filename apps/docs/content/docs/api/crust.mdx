@@ -38,7 +38,13 @@ A sealed command declares consumed Context factories with `.use(...factories)` â
 
 ```ts
 // Simplified: the complete alias also carries tree, result, dependency, and provider state.
-type CommandDefinitionBuilder<Flags, A, Ctx, Sibs, Sp> = Crust<
+type CommandDefinitionBuilder<
+  Flags,
+  A,
+  Ctx,
+  Sibs extends string = never,
+  Sp extends string = LocalSpellingsOf<Flags>,
+> = Crust<
   Flags,
   A,
   Ctx,
