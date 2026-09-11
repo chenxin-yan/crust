@@ -11,7 +11,14 @@ Use `execute()` at a CLI entrypoint:
 await app.execute();
 ```
 
-It reads `process.argv.slice(2)` by default, presents dispatch failures through Extension `onError` hooks, sets `process.exitCode` to `1` (or `130` for cancellation), and resolves. Preparation failures render directly to `stderr` because the Extensions that would handle them have not been applied successfully.
+During development, run the terminal entrypoint from source:
+
+```sh
+bun run src/cli.ts --help
+bun --watch src/cli.ts
+```
+
+It reads `process.argv.slice(2)` by default, streams output, presents dispatch failures through Extension `onError` hooks, sets `process.exitCode` to `1` (or `130` for cancellation), and returns an exit code. Preparation failures render directly to `stderr` because the Extensions that would handle them have not been applied successfully.
 
 Use `run()` for programmatic invocation:
 
@@ -21,7 +28,33 @@ if (outcome.status === "failed") throw outcome.error;
 console.log(outcome.stdout);
 ```
 
-It requires an explicit typed command path and binds structured input directly. It is quiet by default, captures `stdout`/`stderr`, and does not modify `process.exitCode`. The outcome is `completed` with an action `result`, `finished` with an Extension `by`, or `failed` with the original escaping `error`. Optional per-invocation writers forward output live while retaining capture. For genuinely dynamic paths, use an `AnyCrust` completed-app view with an unknown result; see [Runtime input](/docs/guide/types#runtime-input).
+It requires an explicit typed command path and binds structured input directly. It is quiet by default, captures `stdout`/`stderr` on every outcome, and does not modify `process.exitCode`. The outcome is `completed` with an action `result`, `finished` with an Extension `by`, or `failed` with the original escaping `error`, including [combined invocation and disposal failures](/docs/guide/error-handling#error-flow). Optional per-invocation writers forward output live while retaining capture. Always inspect the outcome so action errors are not silently ignored. For genuinely dynamic paths, use an `AnyCrust` completed-app view with an unknown result; see [Typed input](#typed-input).
+
+A parent with a Command Action treats unmatched argv command tokens as positional arguments. Typed `run()` resolves a failed outcome carrying `COMMAND_NOT_FOUND` for unknown path segments. See [Unknown commands](/docs/guide/commands#unknown-commands).
+
+## Typed input
+
+Automatic checking does not weaken a known input contract. Literal choices complete in the editor; broad strings, wrong literals, wrong primitives, missing required fields, invalid positional shapes, and fresh-object typo keys are compile errors.
+
+<include lang="ts">../../../examples/guide/invocation.ts#strict</include>
+
+Narrow dynamic input honestly before calling a known application:
+
+<include lang="ts">../../../examples/guide/invocation.ts#narrowing</include>
+
+TypeScript uses ordinary structural assignability: a predeclared object may carry extra keys, whereas a fresh object literal rejects them even alongside otherwise valid required fields. Core rejects supplied unknown argument or flag keys before the action. Assertions are not validation; invalid asserted inputs still produce failed outcomes.
+
+Supplied positional values must form a prefix, even across defaulted positions. Required core variadics without defaults need nonempty tuples. Conditional definitions remain conservative: omission is safe only when every alternative permits it, and uncertain choices, primitive kinds, or occurrence layouts cannot certify supplied values. Independently known inputs remain strict.
+
+Dynamic authoring uses the same APIs: `new Crust(name)`, `defineCommand(name, config, recipe)`, `defineFlag(name, def)`, and `defineContext(name, config, setup)`. Spread collections into variadic attachment methods: `.flags(...defs)`, `.args(...defs)`, `.provide(...instances)`, `.add(...definitions)`, and root-only `.extend(...extensions)`. Invalid observable definitions throw at their consuming operation. Deferred section callbacks and recipes are checked when prepared, without running Context setup early.
+
+A broad string name does not establish a particular literal key; open namespaces stay open. Finite unions do not establish every alternative key either. Known-invalid members of a finite union remain rejected; a union with an open template member is treated as open, with runtime validation still applying. Unresolved generic names may need a validated parameter constraint; ordinary broad strings are supported.
+
+<include lang="ts">../../../examples/guide/invocation.ts#dynamic</include>
+
+Use `AnyCrust` only for genuinely dynamic completed-app inspection and invocation. It accepts broad structured inputs and returns an unknown action result, not an authoring builder. Do not erase a known application to silence an input error. Keep authoring builders inferred; a bare `Crust` has an empty argument tuple, while `Crust<Flags, ArgsDef>` deliberately describes an open argument state.
+
+This is not an arbitrary `unknown` decoder or JSON configuration loader. Decode external data first. Callback values stay TypeScript-owned; see [Runtime checks](/docs/guide/types#runtime-checks).
 
 ## Successful invocation order
 
@@ -38,17 +71,7 @@ It requires an explicit typed command path and binds structured input directly. 
 
 ## Error flow
 
-Authoring and attachment errors still throw at consumption, and `snapshot()` preparation errors still reject. The public `run()` boundary captures preparation and invocation failures as outcomes.
-
-Preparation, routing, and parse failures occur before `preRun` and `postRun`. A failure from `preRun`, validation, schema application, Context construction, or the Command Action still runs every `postRun` hook. The original invocation failure wins over post-run hook failures; after a successful or finished invocation, the first post-run failure fails the invocation after remaining hooks run. Context disposal is LIFO. Crust uses native `AsyncDisposableStack` semantics where available; on Node 22, its fallback aggregates multiple disposal failures in an `AggregateError` rather than a native `SuppressedError` chain.
-
-With `run()`, the original value is retained in a `failed` outcome unless disposal also fails. Partial output is retained, including cleanup output. If both invocation and disposal fail, `await using` combines them in a `SuppressedError`: `.error` holds the disposal failure and `.suppressed` holds the invocation failure. This is separate from the disposal stack's aggregation of multiple cleanup failures. Action and Context failures are not converted to `CrustError`.
-
-For `execute()` failures raised during dispatch before `postRun`, Crust invokes Extension `onError` hooks in registration order while Contexts are live, allowing cleanup hooks to observe the handling Extension in `outcome.by`. A hook returns `true` when it rendered the failure; falsy results continue to the next hook and then Core's default renderer, which leaves `by` undefined. `onError` is presentation only and never runs for `run()`.
-
-Routing and parse failures use a fallback hook context with empty `args` and `flags` and no available Contexts. If `postRun` or disposal fails after an otherwise successful or finished invocation, `onError` runs after cleanup and Context pulls reject with `context-after-disposal`. A failure already rendered during dispatch is not presented again after cleanup.
-
-Any `Error` whose `name` is `"AbortError"`, including a `DOMException`, is cancellation. `execute()` sets status `130`, offers the error to `onError` hooks (so an application can render "Operation cancelled" centrally), and renders nothing by default when no hook claims it. `run()` returns it in a `failed` outcome.
+`run()` captures preparation, invocation, and cleanup failures in its outcome. `execute()` presents dispatch failures through Extension hooks and sets the terminal status. See [Error flow](/docs/guide/error-handling#error-flow) for hook, disposal, and cancellation behavior.
 
 ## Setup and cleanup
 

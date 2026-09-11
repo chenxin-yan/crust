@@ -52,6 +52,60 @@ Reusable commands declare demand with `.use(...factories)` — `.use(logger)` de
 
 A later `.provide()` does not backfill already-added children. Extension `provides` differ: `.extend()` installs them and their owned flags across the existing tree, while preserving more-specific local providers on descendants. Later-added descendants inherit them too. This runtime scope does not relax the composition-time dependency checks above.
 
+## Contexts in command trees
+
+A definition declares Context capabilities with `.use(...factories)` (variadic, accumulating across calls) and awaits them from its typed `ctx` bag. The app decides where to provide them:
+
+```ts
+import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
+
+const verbose = defineFlag("verbose", { type: "boolean" });
+const logging = defineContext("logging", { flags: [verbose] }, ({ flags, stderr }) => ({
+  debug(message: string) {
+    if (flags.verbose) stderr(message);
+  },
+}));
+const repository = defineContext("repository", () => ({
+  defaultBranch: "main",
+}));
+
+const clone = defineCommand("clone", (command) =>
+  command
+    .use(logging, repository)
+    .args({ name: "url", type: "url", required: true })
+    .action(async ({ args, ctx, stdout }) => {
+      (await ctx.logging).debug(`cloning ${args.url}`);
+      stdout((await ctx.repository).defaultBranch);
+    }),
+);
+
+const app = new Crust("git").provide(logging(), repository()).add(clone);
+```
+
+A missing declared Context is a type error at `.add()`. Dynamically assembled paths retain the lazy bag's missing-provider guard when invoked.
+
+Adding materializes a fresh command scope seeded with the parent's current Context path. Nested definitions declare inherited providers with `.use()`, and a definition can `.provide()` for its own descendants:
+
+```ts
+const environment = defineFlag("environment", { type: "string" });
+const deployment = defineContext("deployment", { flags: [environment] }, ({ flags }) => flags);
+
+const status = defineCommand("status", (command) =>
+  command
+    .use(logging)
+    .use(deployment)
+    .action(async ({ ctx }) => {
+      (await ctx.logging).debug(`environment: ${(await ctx.deployment).environment}`);
+    }),
+);
+
+const deploy = defineCommand("deploy", (command) =>
+  command.use(logging).provide(deployment()).add(status),
+);
+
+const app = new Crust("app").provide(logging()).add(deploy);
+```
+
 ## Dynamic definitions and attachment
 
 Use `defineContext(name, config, setup)` for literal or dynamic names and configuration. Observable local facts and destination relations are checked automatically. Context setup values remain TypeScript-owned, not runtime-decoded.

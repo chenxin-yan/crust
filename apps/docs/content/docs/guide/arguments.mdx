@@ -61,8 +61,6 @@ As with flags, a literal choices tuple narrows the argument's inferred type to t
 
 ## Standard Schemas
 
-A `schema` receives the raw positional token (`string | undefined`, or `string[]` for a variadic argument) and determines the Command Action's output type:
-
 ```ts
 import { z } from "zod";
 
@@ -73,7 +71,7 @@ new Crust("serve")
   });
 ```
 
-A schema cannot be combined with core value options — see [Schema-backed definitions](/docs/guide/types#schema-backed-definitions) for the full rule.
+See [Schema-backed definitions](/docs/guide/types#schema-backed-definitions) for schema input, output, and definition rules.
 
 ## Excess and raw tokens
 

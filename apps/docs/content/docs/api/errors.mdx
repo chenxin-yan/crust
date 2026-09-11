@@ -58,7 +58,7 @@ type CrustErrorCode = "DEFINITION" | "PARSE" | "VALIDATION" | "COMMAND_NOT_FOUND
 | `DEFINITION`        | Malformed dynamic definition or collision, recipe, Extension, Context, or documentation-section failure |
 | `PARSE`             | Argv syntax, structured `run()` input binding, or built-in value parsing failed                         |
 | `VALIDATION`        | Required-value or Standard Schema validation failed                                                     |
-| `COMMAND_NOT_FOUND` | An unknown command under the [routing rules](/docs/guide/subcommands#unknown-commands)                  |
+| `COMMAND_NOT_FOUND` | An unknown command under the [routing rules](/docs/guide/commands#unknown-commands)                  |
 
 With `execute()`, an unmatched subcommand token becomes a positional argument if the parent has a Command Action. Without an action, the parent reports `COMMAND_NOT_FOUND`. Typed `run()` resolves a failed outcome carrying `COMMAND_NOT_FOUND` for unknown path segments.
 
@@ -95,7 +95,7 @@ Standard Schema failures are aggregated into one `VALIDATION` error. Paths are n
 
 Authoring and attachment errors still throw at the consuming operation, and `snapshot()` preparation errors still reject. Only public `run()` invocation failures become returned outcomes.
 
-`.run(path, input, io)` returns a quiet `failed` outcome containing the original error and any captured output, without changing process status. If disposal also fails, it retains the combined escaping failure. Combined invocation and disposal failures produce a `SuppressedError`; see [Error flow](/docs/guide/lifecycle#error-flow). Context setup and Command Action failures are not wrapped in `CrustError`. Pulling an unprovided Context is a `DEFINITION` `CrustError` with `details.reason === "missing-context"`; its message names the Context, identifies the requesting setup when applicable, and recommends `.provide()`. A dynamic pull cycle reports `context-cycle`. Pulling a flag-owning Context before validation reports `flags-before-validation`. Pulling after invocation Contexts have been disposed reports `context-after-disposal`. This includes `onError` calls for post-run or disposal failures after cleanup. For failures raised during dispatch before `postRun`, `onError` runs while Contexts are still live.
+`.run(path, input, io)` returns a quiet `failed` outcome containing the original error and any captured output, without changing process status. If disposal also fails, it retains the combined escaping failure. Combined invocation and disposal failures produce a `SuppressedError`; see [Error flow](/docs/guide/error-handling#error-flow). Context setup and Command Action failures are not wrapped in `CrustError`. Pulling an unprovided Context is a `DEFINITION` `CrustError` with `details.reason === "missing-context"`; its message names the Context, identifies the requesting setup when applicable, and recommends `.provide()`. A dynamic pull cycle reports `context-cycle`. Pulling a flag-owning Context before validation reports `flags-before-validation`. Pulling after invocation Contexts have been disposed reports `context-after-disposal`. This includes `onError` calls for post-run or disposal failures after cleanup. For failures raised during dispatch before `postRun`, `onError` runs while Contexts are still live.
 
 ```ts
 const failure = new Error("database unavailable");

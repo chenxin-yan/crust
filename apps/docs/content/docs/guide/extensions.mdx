@@ -225,7 +225,7 @@ Failures before dispatch do not enter the hook chain. Extension application and 
 
 <include lang="ts">../../../examples/extensions/hooks.ts#service-errors</include>
 
-Rendering never turns a failure into success, and programmatic `run()` returns failed outcomes instead of invoking `onError` — see [Error flow](/docs/guide/lifecycle#error-flow). For failures raised during dispatch before `postRun`, `onError` settles before `postRun`, so cleanup hooks observe the attributed outcome and invocation Contexts remain available until cleanup completes. Post-run or disposal failures after an otherwise successful or finished invocation reach `onError` after cleanup, when Context pulls reject.
+Rendering never turns a failure into success, and programmatic `run()` returns failed outcomes instead of invoking `onError` — see [Error flow](/docs/guide/error-handling#error-flow). For failures raised during dispatch before `postRun`, `onError` settles before `postRun`, so cleanup hooks observe the attributed outcome and invocation Contexts remain available until cleanup completes. Post-run or disposal failures after an otherwise successful or finished invocation reach `onError` after cleanup, when Context pulls reject.
 
 Unlike `preRun`/`postRun`, `onError` does not infer owned flags: routing and syntax-parse failures render with a fallback context whose `flags` are empty, so the hook's `ctx.flags` stays `Record<string, unknown>`. That fallback context's lazy `ctx` bag rejects every Context pull with `DEFINITION` reason `context-after-disposal`, even though no invocation Contexts were constructed.
 

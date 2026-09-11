@@ -1,5 +1,5 @@
 ---
-title: Building & Distribution
+title: Build and Distribution
 description: Build your CLI for Bun, Deno, or Node with crust build.
 ---
 
@@ -164,17 +164,7 @@ crust build --no-minify
 
 ## Environment Variables
 
-Bun and Node builds embed only `PUBLIC_*` values as build-time constants. `--env-file` is repeatable and uses the same Bun bundler semantics for both runtimes. Deno builds reject `--env-file`: `deno compile` embeds every variable from the file into the binary — secrets included — with no `PUBLIC_*` filter, so Crust refuses rather than leak. Load configuration at runtime instead.
-
-```sh
-crust build --env-file .env.production
-```
-
-<Callout type="warn">
-  `PUBLIC_*` values are embedded in the binary and are therefore public.
-</Callout>
-
-See [Environment Variables](/docs/guide/environment) for the full env model, including runtime env, Bun `.env` loading, and recommended config patterns.
+See [build-time constants](/docs/guide/environment#build-time-constants) for `PUBLIC_*` embedding, `--env-file` behavior, and runtime configuration.
 
 ## Pre-compile snapshot preparation
 

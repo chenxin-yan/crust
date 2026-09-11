@@ -1,6 +1,6 @@
 ---
 title: Commands
-description: Define immutable, typed commands and Command Actions.
+description: Define immutable, typed commands, Command Actions, and nested command trees.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
@@ -21,32 +21,9 @@ const app = new Crust("greet", { description: "Print a greeting" })
 await app.execute();
 ```
 
-## Immutable builders
-
-Every builder method returns a new `Crust` value. Keep the returned value:
-
-```ts
-const base = new Crust("app", { description: "My app" });
-const withFlags = base.flags({ name: "verbose", type: "boolean" });
-```
-
-Static root metadata belongs in the constructor. Subcommand metadata belongs in `defineCommand()` config:
-
-```ts
-import { defineCommand } from "@crustjs/core";
-
-const greet = defineCommand(
-  "greet",
-  { description: "Print a greeting", aliases: ["hello"] },
-  (command) => command.action(() => {}),
-);
-```
-
-Fluent methods remain immutable, permitting safe composition while preserving input inference.
-
 ## Command Action context
 
-`.action()` receives a typed `CrustCommandContext`:
+A Command Action receives validated `args`, `flags`, Context values under `ctx`, forwarded `rawArgs`, a readonly `command` snapshot, and injectable writers through a typed `CrustCommandContext`:
 
 <auto-type-table
   path="../../../../../packages/core/src/command/crust.ts"
@@ -61,28 +38,111 @@ const command = new Crust("inspect").action(({ command, stdout }) => {
 
 Throw ordinary errors from Command Actions. Crust does not wrap them.
 
-## Invocation
+## Immutable builders
 
-Use `execute()` at the terminal boundary:
-
-```ts
-await app.execute();
-```
-
-Use `run()` from tests or another program:
+Every builder method returns a new `Crust` value. Keep the returned value:
 
 ```ts
-const outcome = await app.run([], { args: { name: "Ada" } });
-if (outcome.status === "failed") throw outcome.error;
-console.log(outcome.stdout);
+const base = new Crust("app", { description: "My app" });
+const withFlags = base.flags({ name: "verbose", type: "boolean" });
 ```
 
-`run()` is quiet and captures `stdout` and `stderr` on every outcome. `completed` carries the action result, `finished` names the finishing Extension, and `failed` carries the original escaping failure, including [combined invocation and disposal failures](/docs/guide/lifecycle#error-flow). Always inspect the outcome so action errors are not silently ignored. `execute()` streams output, presents errors through Extension `onError` hooks, sets `process.exitCode`, and returns an exit code. See [Execution Model](/docs/guide/lifecycle).
+Fluent methods remain immutable, permitting safe composition while preserving input inference.
 
-A parent with a Command Action treats unmatched argv command tokens as positional arguments. Typed `run()` resolves a failed outcome carrying `COMMAND_NOT_FOUND` for unknown path segments. See [Unknown commands](/docs/guide/subcommands#unknown-commands).
+## Subcommands
+
+Routing consumes command names before parsing the resolved command's arguments and flags. Nest to any depth.
+
+For app-local leaf commands, chain `.command(name, recipe)` on the root:
+
+```ts
+const app = new Crust("my-cli").command("build", (command) =>
+  command
+    .flags({ name: "minify", type: "boolean" })
+    .action(({ flags, stdout }) => stdout(`minify: ${flags.minify ?? false}`)),
+);
+```
+
+For commands that need their own file, reuse, or a package, `defineCommand(name, recipe)` creates an inert definition that carries its name; `.add(...definitions)` materializes definitions as child commands:
+
+<include lang="ts">../../../examples/guide/subcommands.ts</include>
+
+Static root metadata belongs in the constructor. Subcommand metadata belongs in `defineCommand()` config, and metadata aliases route to the same command:
+
+```ts
+import { defineCommand } from "@crustjs/core";
+
+const greet = defineCommand(
+  "greet",
+  { description: "Print a greeting", aliases: ["hello"] },
+  (command) => command.action(() => {}),
+);
+```
+
+`.add()` creates a fresh command node. Use `.as(name)` to add one definition under different names:
+
+```ts
+const app = new Crust("git").add(clone, clone.as("copy"));
+```
+
+Definitions can `.add()` other definitions. Definitions that declare Context dependencies with `.use()` are covered in [Contexts in command trees](/docs/guide/contexts#contexts-in-command-trees).
 
 <Callout type="info">
   A command without a Command Action is valid when it owns subcommands. Invoking it directly
   resolves to `{ status: "completed", result: undefined }`; register the `help()` Extension to
   present the container's help instead.
 </Callout>
+
+## Split across files
+
+### Shared definitions
+
+Keep shared Context factories and their owned flag definitions in a dependency-free module:
+
+<include lang="ts" meta='title="src/shared.ts"'>
+  ../../../examples/split-files/shared.ts
+</include>
+
+Here `logger` owns `--verbose`, so its setup consumes the raw flag and commands depend only on the derived logger value. The flag definition and its consumer stay together.
+
+### Standalone command definition
+
+A command file imports `defineCommand` and the shared values, never the application builder:
+
+<include lang="ts" meta='title="src/commands/greet.ts"'>
+  ../../../examples/split-files/commands/greet.ts
+</include>
+
+The action pulls typed dependencies from their factories. The exported definition is inert and carries its own name: importing it does not build or run a command.
+
+### Completed root
+
+Define the root and its application-wide Extensions independently:
+
+<include lang="ts" meta='title="src/app.ts"'>
+  ../../../examples/split-files/app.ts
+</include>
+
+### Add and execute
+
+The composition root imports both sides:
+
+<include lang="ts" meta='title="src/cli.ts"'>
+  ../../../examples/split-files/cli.ts
+</include>
+
+Because `.provide(logger())` precedes `.add()`, the logger and its owned `--verbose` flag are available on the command path. The `.use(logger)` contract is checked when the definition is added.
+
+### Inline or split?
+
+Start with one `src/cli.ts`. Use inline `.command(name, recipe)` on the root for app-local leaf commands that stay short. Extract to `defineCommand` when a command needs its own file, reuse, or a package; the `.use()` contract keeps its dependencies explicit and type-checkable either way. Keep Extensions at the root and place reusable setup in [Contexts](/docs/guide/contexts).
+
+## Unknown commands
+
+During argv routing with `execute()`, an unmatched subcommand token produces `CrustError` code `COMMAND_NOT_FOUND` when the parent has no Command Action. A parent with an action treats that token as a positional argument instead; parsing or validation may then reject it. Typed `run()` resolves a failed outcome carrying `COMMAND_NOT_FOUND` for unknown command-path segments rather than treating them as arguments.
+
+`COMMAND_NOT_FOUND` details include the input, visible available commands, the command path, and a readonly snapshot of the parent command. Hidden commands are omitted from `available`. The official `didYouMean()` Extension uses this error to suggest nearby names; it cannot suggest a correction when argv routing treats the typo as a positional argument.
+
+## Invocation
+
+Use `execute()` at the terminal entrypoint and `run()` for programmatic invocation. See the [execution model](/docs/guide/lifecycle) for both modes.
