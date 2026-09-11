@@ -134,6 +134,11 @@ const MODULES: Array<{
     doc: "modules/progress",
   },
   {
+    pkg: "@crustjs/tui",
+    desc: "OpenTUI adapter",
+    doc: "modules/tui",
+  },
+  {
     pkg: "@crustjs/prompts",
     desc: "Interactive prompts",
     doc: "modules/prompts",

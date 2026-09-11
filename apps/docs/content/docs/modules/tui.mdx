@@ -1,0 +1,67 @@
+---
+title: "TUI"
+description: OpenTUI renderer lifecycle for Crust command actions.
+---
+
+`@crustjs/tui` is a small, renderer-agnostic adapter that gates terminal access, creates an OpenTUI renderer, and keeps a command action alive until the renderer is destroyed.
+
+<Callout type="warn" title="Bun only">
+  `@crustjs/tui` requires Bun 1.3.14 or newer. Unlike the other Crust libraries, it does not support
+  Node.js or Deno because OpenTUI uses a native Zig library over FFI.
+</Callout>
+
+## Install
+
+Install the adapter, OpenTUI core, and the framework renderer your application uses:
+
+```sh
+bun add @crustjs/tui @opentui/core
+bun add @opentui/solid solid-js # Solid
+bun add @opentui/react react     # React
+```
+
+## `runTui(mount, config?)`
+
+```ts
+function runTui(mount: TuiMount, config?: CliRendererConfig): Promise<void>;
+```
+
+`runTui()` requires both the configured (or process) stdin and stdout to be TTYs. It throws a `NonInteractiveError` before creating a renderer otherwise. Match this portable convention with `error.name === "NonInteractiveError"`.
+
+The renderer defaults to `screenMode: "alternate-screen"`, `consoleMode: "disabled"`, and `exitOnCtrlC: true`; explicit config values win. The promise resolves when the renderer is destroyed: call `renderer.destroy()` to quit (in components, via `useRenderer()` from `@opentui/solid` or `@opentui/react`). This also covers destruction while `mount` is still pending. A mounting error destroys the renderer before being rethrown.
+
+With the default Ctrl+C handling, cancellation destroys the renderer and rejects with an error named `"AbortError"`. Crust `execute()` maps that cancellation to exit code 130 without default error output. Set `exitOnCtrlC: false` when the application owns cancellation.
+
+### Solid
+
+```tsx
+import { Crust } from "@crustjs/core";
+import { runTui } from "@crustjs/tui";
+import { render } from "@opentui/solid";
+
+new Crust("app").action(() => runTui((r) => render(() => <App />, r)));
+```
+
+### React
+
+```tsx
+import { Crust } from "@crustjs/core";
+import { runTui } from "@crustjs/tui";
+import { createRoot } from "@opentui/react";
+
+new Crust("app").action(() => runTui((r) => createRoot(r).render(<App />)));
+```
+
+### Core
+
+```ts
+import { Crust } from "@crustjs/core";
+import { runTui } from "@crustjs/tui";
+import { TextRenderable } from "@opentui/core";
+
+new Crust("app").action(() =>
+  runTui((r) => {
+    r.root.add(new TextRenderable(r, { content: "Hello" }));
+  }),
+);
+```
