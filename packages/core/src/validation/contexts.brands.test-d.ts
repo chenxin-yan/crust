@@ -57,6 +57,33 @@ type NameBrandOf<T> = Extract<keyof T, "FIX_DUPLICATE_CONTEXT">;
 	type _any = Expect<Equal<Extract<keyof AnyValue[0], "FIX_DEPENDENCY_TYPE">, never>>;
 	type Widened = ValidateContextDeps<Record<string, ContextValue>, readonly [Consumer]>;
 	type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_DEPENDENCY_TYPE">, never>>;
+
+	// A broad-named provider may satisfy the name, but its value type is still evidence.
+	type StringConsumer = ContextInstance<"consumer", string, {}, { db: string }>;
+	type BroadMismatch = ValidateContextDeps<Record<string, number>, readonly [StringConsumer]>;
+	type _broadMismatch = Expect<
+		Equal<Extract<keyof BroadMismatch[0], "FIX_DEPENDENCY_TYPE">, "FIX_DEPENDENCY_TYPE">
+	>;
+	type BroadSatisfied = ValidateContextDeps<Record<string, string>, readonly [StringConsumer]>;
+	type _broadSatisfied = Expect<
+		Equal<Extract<keyof BroadSatisfied[0], "FIX_DEPENDENCY_TYPE">, never>
+	>;
+
+	// A known literal provider retains its value evidence beside an unknown index signature.
+	type MixedMismatch = ValidateContextDeps<
+		Omit<Record<string, ContextValue>, "db"> & { db: number },
+		readonly [StringConsumer]
+	>;
+	type _mixedMismatch = Expect<
+		Equal<Extract<keyof MixedMismatch[0], "FIX_DEPENDENCY_TYPE">, "FIX_DEPENDENCY_TYPE">
+	>;
+	type MixedSatisfied = ValidateContextDeps<
+		Omit<Record<string, ContextValue>, "db"> & { db: string },
+		readonly [StringConsumer]
+	>;
+	type _mixedSatisfied = Expect<
+		Equal<Extract<keyof MixedSatisfied[0], "FIX_DEPENDENCY_TYPE">, never>
+	>;
 }
 
 {

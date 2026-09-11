@@ -33,11 +33,47 @@ Use `parse` for a small synchronous transformation when a full schema is unneces
 
 The Command Action receives the return type. A parser must be synchronous: TypeScript rejects Promise-returning parsers with `FIX_ASYNC_PARSE`.
 
-## Compile-time definition checks
+## Compile-time checks
 
-Crust is TypeScript-first: command, flag, argument, Context, and Extension definitions are checked at compile time. `FIX_*` brands let the editor point at collisions, invalid alias shapes, asynchronous parsers, duplicate names, and invalid variadic positions. For definitions TypeScript cannot see — flags built from config objects, duplicate or misplaced arguments, dynamic `.add()` name collisions — core repeats the checks at runtime and throws `DEFINITION` errors.
+TypeScript checks literal command, flag, argument, Context, and Extension definitions. `FIX_*` diagnostics identify invalid names, aliases, defaults, asynchronous parsers, positional ordering, and composition demands.
 
-Argv remains untrusted input. Parsing, built-in conversion, required values, choices, and Standard Schema validation still run for every invocation. Context dependency declarations are checked statically; lazy bag access retains runtime guards for missing providers on dynamically assembled paths, dependency cycles, and lifecycle misuse.
+## Runtime checks
+
+JavaScript runtime checks are separate: helper and builder calls validate dynamic names and spellings; preparation with `snapshot()`, `run()`, or `execute()` validates Extension flag relations and deferred recipes and sections; invocation validates argv and structured values. There is no checking switch or wrapper.
+
+Normalized definitions own copies of structural collections. JSON, URL, schema, callback, and Context-option payloads retain identity. Context setup stays lazy. Callback values and Extension metadata requirements remain TypeScript-owned, not reflected or decoded at runtime.
+
+## Runtime input
+
+Automatic checking does not weaken a known input contract. Literal choices complete in the editor; broad strings, wrong literals, wrong primitives, missing required fields, invalid positional shapes, and fresh-object typo keys are compile errors.
+
+<include lang="ts">../../../examples/guide/invocation.ts#strict</include>
+
+Narrow dynamic input honestly before calling a known application:
+
+<include lang="ts">../../../examples/guide/invocation.ts#narrowing</include>
+
+TypeScript uses ordinary structural assignability: a predeclared object may carry extra keys, whereas a fresh object literal rejects them even alongside otherwise valid required fields. Core rejects supplied unknown argument or flag keys before the action. Assertions are not validation; invalid asserted inputs still produce failed outcomes.
+
+Supplied positional values must form a prefix, even across defaulted positions. Required core variadics without defaults need nonempty tuples. Conditional definitions remain conservative: omission is safe only when every alternative permits it, and uncertain choices, primitive kinds, or occurrence layouts cannot certify supplied values. Independently known inputs remain strict.
+
+Dynamic authoring uses the same APIs: `new Crust(name)`, `defineCommand(name, config, recipe)`, `defineFlag(name, def)`, and `defineContext(name, config, setup)`. Spread collections into variadic attachment methods: `.flags(...defs)`, `.args(...defs)`, `.provide(...instances)`, `.add(...definitions)`, and root-only `.extend(...extensions)`. Invalid observable definitions throw at their consuming operation. Deferred section callbacks and recipes are checked when prepared, without running Context setup early.
+
+A broad string name does not establish a particular literal key; open namespaces stay open. Finite unions do not establish every alternative key either. Known-invalid members of a finite union remain rejected; a union with an open template member is treated as open, with runtime validation still applying. Unresolved generic names may need a validated parameter constraint; ordinary broad strings are supported.
+
+<include lang="ts">../../../examples/guide/invocation.ts#dynamic</include>
+
+Use `AnyCrust` only for genuinely dynamic completed-app inspection and invocation. It accepts broad structured inputs and returns an unknown action result, not an authoring builder. Do not erase a known application to silence an input error. Keep authoring builders inferred; a bare `Crust` has an empty argument tuple, while `Crust<Flags, ArgsDef>` deliberately describes an open argument state.
+
+This is not an arbitrary `unknown` decoder or JSON configuration loader. Decode external data first. Runtime checks do not inspect opaque callback value contracts.
+
+### Raw input versus action output
+
+Custom parsers and schemas receive raw inputs, not their transformed action output. A string parser still takes a string even if it returns a number. A string schema flag accepts a broad string even if the schema produces a narrow union:
+
+<include lang="ts">../../../examples/guide/invocation.ts#raw</include>
+
+Required and schema checks run after `preRun`, so returning `ctx.finish()` can skip them. Custom parsers must remain synchronous when invoked.
 
 ## Schema-backed definitions
 
@@ -72,10 +108,10 @@ All schema failures in an invocation are aggregated into one `CrustError` with c
 ```ts
 import { CrustError } from "@crustjs/core";
 
-try {
-  // `command` is the schema-backed "serve" example above.
-  await command.run([] as const, { args: { port: "not-a-number" } });
-} catch (error) {
+// `command` is the schema-backed "serve" example above.
+const outcome = await command.run([], { args: { port: "not-a-number" } });
+if (outcome.status === "failed") {
+  const { error } = outcome;
   if (error instanceof CrustError && error.is("VALIDATION")) {
     for (const issue of error.details?.issues ?? []) {
       console.error(issue.path, issue.message);

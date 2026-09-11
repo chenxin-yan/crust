@@ -253,7 +253,7 @@ function _typecheckBrandsDuplicateCommandSpellingsWithinOneExtensionAtDefineExte
 	void defineExtension(defineExtensionId("self-alias-collision"), {
 		commands: [
 			defineCommand("deploy", { aliases: ["d"] }, (command) => command),
-			// @ts-expect-error -- canonical name matches an earlier alias within one Extension (FIX_COMMAND_COLLISION)
+			// @ts-expect-error -- command name collides with an Extension alias (FIX_COMMAND_COLLISION)
 			defineCommand("d", (command) => command),
 		],
 	});

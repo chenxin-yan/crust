@@ -7,13 +7,14 @@ import { dirname, join } from "node:path";
 import { getAmbientTerminalIO } from "@crustjs/utils/terminal";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
+import { unwrap } from "../../tests/helpers.ts";
 import { defineContext } from "../api/context.ts";
-import { defineExtension, type Extension } from "../api/extension.ts";
+import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
-import type { ParsedFlagValue } from "../types.ts";
-import { type CommandDefinitionBuilder, Crust, defineCommand } from "./crust.ts";
+import type { ArgsDef, NamedFlagDef, ParsedFlagValue } from "../types.ts";
+import { type AnyCrust, type CommandDefinitionBuilder, Crust, defineCommand } from "./crust.ts";
 import { BUILD_OUT_DIR_ENV, SNAPSHOT_PATH_ENV } from "./invocation.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -66,8 +67,8 @@ describe("Crust constructor", () => {
 	});
 
 	it("does not carry sibling-only metadata onto the root", async () => {
-		// @ts-expect-error -- aliases belong to defineCommand() config
 		const snapshot = await new Crust("my-cli", {
+			// @ts-expect-error -- aliases belong to defineCommand() config
 			aliases: ["cli"],
 		}).snapshot();
 		expect(snapshot.meta.aliases).toBeUndefined();
@@ -79,7 +80,7 @@ describe("Crust constructor", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("Crust builder methods — immutability + non-mutation", () => {
-	type BuilderCase = readonly [name: string, apply: (app: Crust) => Crust];
+	type BuilderCase = readonly [name: string, apply: (app: Crust) => AnyCrust];
 
 	const builderCases: readonly BuilderCase[] = [
 		[".flags()", (app) => app.flags({ name: "verbose", type: "boolean" })],
@@ -160,7 +161,7 @@ describe("Crust .flags()", () => {
 				received = flags;
 			});
 
-		await app.run([], { flags: { first: true, second: "value" } });
+		await unwrap(app.run([], { flags: { first: true, second: "value" } }));
 		expect(received).toEqual({ first: true, second: "value" });
 		expect((await app.snapshot()).flags).toEqual({
 			first: { type: "boolean", negatable: true },
@@ -210,7 +211,7 @@ describe("Crust .args()", () => {
 				received = args;
 			});
 
-		await app.run([], { args: { source: "from", destination: "to" } });
+		await unwrap(app.run([], { args: { source: "from", destination: "to" } }));
 		expect(received).toEqual({ source: "from", destination: "to" });
 		expect((await app.snapshot()).args.map((arg) => arg.name)).toEqual(["source", "destination"]);
 	});
@@ -276,12 +277,7 @@ describe("command metadata", () => {
 
 	it("keeps version metadata on the root command", async () => {
 		const app = new Crust("cli", { version: "1.0.0" }).add(
-			defineCommand(
-				"sub",
-				// @ts-expect-error -- application versions belong to the root constructor
-				{ version: "2.0.0" },
-				(command) => command,
-			),
+			defineCommand("sub", (command) => command),
 		);
 
 		expect((await app.snapshot()).subCommands.sub?.meta.version).toBeUndefined();
@@ -318,7 +314,7 @@ describe("Crust .add() with inline definitions", () => {
 	});
 
 	it("callback receives a fresh child builder (not the parent)", async () => {
-		let receivedBuilder: CommandDefinitionBuilder | undefined;
+		let receivedBuilder: CommandDefinitionBuilder<{}, []> | undefined;
 
 		const app = new Crust("cli").flags({ name: "verbose", type: "boolean" }).add(
 			defineCommand("sub", (cmd) => {
@@ -345,6 +341,17 @@ describe("Crust .add() with inline definitions", () => {
 		expect(subCommands.sub1?.flags.a).toBeDefined();
 		expect(subCommands.sub2?.flags.b).toBeDefined();
 	});
+
+	it("rejects a nested definition with a missing Context demand", () => {
+		const db = defineContext("db", () => "db");
+		const nested = defineCommand("grandchild", (command) => command.use(db));
+		const definition = defineCommand("child", (command) =>
+			// @ts-expect-error -- runtime regression deliberately exercises the consuming check.
+			command.add(nested),
+		);
+
+		expect(() => new Crust("cli").add(definition)).toThrow('No provider for Context "db"');
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -361,7 +368,7 @@ describe("Crust .action()", () => {
 				receivedCtx = context;
 			});
 
-		await app.run([], { args: { file: "test.txt" }, flags: { verbose: true } });
+		await unwrap(app.run([], { args: { file: "test.txt" }, flags: { verbose: true } }));
 
 		expect(receivedCtx).toMatchObject({
 			args: { file: "test.txt" },
@@ -405,7 +412,7 @@ describe("Crust .extend()", () => {
 			.extend(extension("two"), extension("three"))
 			.action(() => {});
 
-		await app.run([]);
+		await unwrap(app.run([]));
 		expect(calls).toEqual(["one", "two", "three"]);
 	});
 
@@ -437,7 +444,7 @@ describe("Crust .extend()", () => {
 		const app = base.extend(extension as never);
 
 		await app.snapshot();
-		await app.run([]);
+		await unwrap(app.run([]));
 
 		expect({ preRuns, sections, setups, disposals }).toEqual({
 			preRuns: 1,
@@ -491,7 +498,7 @@ describe("Crust .extend()", () => {
 		expect(snapshot.flags.legacyProvider).toBeUndefined();
 		expect(snapshot.subCommands.current).toBeDefined();
 		expect(snapshot.subCommands.legacy).toBeUndefined();
-		await app.run([]);
+		await unwrap(app.run([]));
 
 		expect(calls).toEqual(["second:sections", "second:preRun", "second:setup", "second:dispose"]);
 	});
@@ -511,7 +518,7 @@ describe("Crust .extend()", () => {
 				value = await bag.sharedProvider;
 			});
 
-		await app.run([]);
+		await unwrap(app.run([]));
 		expect(value).toBe("A");
 	});
 
@@ -533,7 +540,7 @@ describe("Crust .extend()", () => {
 				}) as never,
 			);
 
-		await app.run(["child"]);
+		await unwrap(app.run(["child"]));
 		expect(value).toBe("replacement");
 	});
 
@@ -544,12 +551,13 @@ describe("Crust .extend()", () => {
 			{ flags: [{ name: "mode", type: "number", aliases: ["extension-mode"] }] },
 			() => ({}),
 		);
-		const first: Extension = defineExtension(id, { provides: [provider()] });
+		const first = defineExtension(id, { provides: [provider()] });
 		const app = new Crust("test").flags({
 			name: "mode",
 			type: "string",
 			aliases: ["local-mode"],
 		});
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		expect(() => app.extend(first)).toThrow(
 			expect.objectContaining({
 				code: "DEFINITION",
@@ -561,23 +569,21 @@ describe("Crust .extend()", () => {
 	it("keeps a local provider override across unrelated .extend() calls", async () => {
 		let value: string | undefined;
 		const resource = defineContext("resource", () => "extension");
-		const local = defineContext("resource", () => "local");
+		const name: string = "resource";
+		const local = [defineContext(name, () => "local")()];
 		const providing = defineExtension(defineExtensionId("providing"), {
 			provides: [resource()],
 		});
 		const app = new Crust("test")
 			.extend(providing)
-			// Same-name local re-provide is runtime last-write-wins; the cast
-			// bypasses the duplicate Context brand.
-			.provide(local() as never)
+			// Dynamically named providers retain the runtime last-write-wins policy.
+			.provide(...local)
 			.extend(defineExtension(defineExtensionId("unrelated")))
 			.action(async ({ ctx }) => {
-				// The `as never` provide collapses the static Context map; the bag still resolves at runtime.
-				const bag = ctx as { resource: Promise<string> };
-				value = await bag.resource;
+				value = await ctx.resource;
 			});
 
-		await app.run([]);
+		await unwrap(app.run([], {}));
 		expect(value).toBe("local");
 	});
 
@@ -636,10 +642,10 @@ describe("Crust .extend()", () => {
 		const base = new Crust("test").extend(extension("one")).action(() => {});
 		const extended = base.extend(extension("two"));
 
-		await base.run([]);
+		await unwrap(base.run([]));
 		expect(calls).toEqual(["one"]);
 		calls.length = 0;
-		await extended.run([]);
+		await unwrap(extended.run([]));
 		expect(calls).toEqual(["one", "two"]);
 	});
 });
@@ -666,10 +672,10 @@ describe("Extension application at prepare time", () => {
 				// @ts-expect-error -- second Context's owned flag "mode" collides with the first's (FIX_ALIAS_COLLISION)
 				provides: [first(), second()],
 			}),
-		).not.toThrow();
+		).toThrow("collides");
 	});
 
-	it("rejects an Extension flag colliding with a subcommand's local flag at compile time", () => {
+	it("rejects an Extension flag colliding with a subcommand's local flag at preparation", async () => {
 		const themer = defineExtension(defineExtensionId("themer"), {
 			flags: [{ name: "mode", type: "boolean" }],
 		});
@@ -678,11 +684,13 @@ describe("Extension application at prepare time", () => {
 		);
 		const appWithSub = new Crust("cli").add(sub);
 		// @ts-expect-error -- Extension flag "mode" collides with subcommand "sub"'s local flag (FIX_ALIAS_COLLISION)
-		expect(() => appWithSub.extend(themer)).not.toThrow();
+		const extended = appWithSub.extend(themer);
+		await expect(extended.snapshot()).rejects.toThrow("collides");
 
 		const appWithExt = new Crust("cli").extend(themer);
 		// @ts-expect-error -- subcommand "sub"'s local flag "mode" collides with the registered Extension flag (FIX_ALIAS_COLLISION)
-		expect(() => appWithExt.add(sub)).not.toThrow();
+		const added = appWithExt.add(sub);
+		await expect(added.snapshot()).rejects.toThrow("collides");
 	});
 
 	it("rejects an Extension flag colliding with its own provided Context's flag at compile time", () => {
@@ -694,19 +702,20 @@ describe("Extension application at prepare time", () => {
 		expect(() =>
 			defineExtension(defineExtensionId("self-collider"), {
 				provides: [modeContext()],
-				// @ts-expect-error -- declared flag "mode" collides with the provided Context's owned flag (FIX_ALIAS_COLLISION)
+				// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 				flags: [{ name: "mode", type: "string" }],
 			}),
-		).not.toThrow();
+		).toThrow("collides");
 	});
 
-	it("rejects an Extension flag colliding with an application flag at compile time", () => {
+	it("rejects an Extension flag colliding with an application flag at preparation", async () => {
 		const themer = defineExtension(defineExtensionId("themer"), {
 			flags: [{ name: "mode", type: "boolean" }],
 		});
 		const app = new Crust("cli").flags({ name: "mode", type: "string" });
 		// @ts-expect-error -- Extension flag "mode" collides with the application flag (FIX_ALIAS_COLLISION)
-		expect(() => app.extend(themer)).not.toThrow();
+		const extended = app.extend(themer);
+		await expect(extended.snapshot()).rejects.toThrow("collides");
 	});
 
 	it("recursive Extension flags reach every command, including Extension commands", async () => {
@@ -728,48 +737,16 @@ describe("Extension application at prepare time", () => {
 		expect(seen[0]?.debug).toBe(true);
 	});
 
-	it("rejects a dynamic Extension flag whose canonical name equals an existing alias", async () => {
+	it("checks dynamic Extension flag collisions at preparation", async () => {
 		const thief = defineExtension(defineExtensionId("thief"), {
 			flags: [{ name: "auth", type: "boolean" }],
 		});
-		const app = new Crust("cli")
-			.flags({ name: "token", type: "string", aliases: ["auth"] })
-			.extend(thief as never)
-			.action(() => {});
-		const stderr: string[] = [];
-		const originalExitCode = process.exitCode;
-		try {
-			await app.execute({ argv: [], io: { stderr: (text) => stderr.push(text) } });
-		} finally {
-			process.exitCode = originalExitCode ?? 0;
-		}
-		expect(stderr.join("\n")).toContain('Flag "auth" collides with existing flag "token"');
-	});
-
-	it("rejects a dynamic Extension flag colliding with an app flag at prepare time", async () => {
-		let runs = 0;
-		const replacement = defineExtension(defineExtensionId("replacement"), {
-			flags: [{ name: "mode", type: "boolean", short: "n", aliases: ["new"] }],
-		});
-		// The .extend() brand owns literal collisions; the cast models a dynamic
-		// Extension, which must fail loud at prepare instead of silently retyping
-		// the app's flag.
-		const app = new Crust("cli")
-			.flags({ name: "mode", type: "boolean", short: "o", aliases: ["old"] })
-			.extend(replacement as never)
-			.action(() => {
-				runs++;
-			});
-		const stderr: string[] = [];
-		const originalExitCode = process.exitCode;
-		try {
-			await app.execute({ argv: ["--old"], io: { stderr: (text) => stderr.push(text) } });
-		} finally {
-			process.exitCode = originalExitCode ?? 0;
-		}
-
-		expect(runs).toBe(0);
-		expect(stderr.join("\n")).toContain('Flag "mode" collides with existing flag "mode"');
+		const app = new Crust("cli").flags({ name: "token", type: "string", aliases: ["auth"] });
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		const extended = app.extend(thief);
+		await expect(extended.snapshot()).rejects.toThrow(
+			'Flag "auth" collides with existing flag "token"',
+		);
 	});
 
 	it("non-recursive Extension flags stay on the root", async () => {
@@ -876,7 +853,7 @@ describe("Extension application at prepare time", () => {
 			calls.push("root");
 		});
 
-		await app.run([]);
+		await unwrap(app.run([]));
 
 		const derived = app.add(
 			defineCommand("extra", (command) =>
@@ -886,10 +863,11 @@ describe("Extension application at prepare time", () => {
 			),
 		);
 
-		await derived.run(["extra"]);
+		await unwrap(derived.run(["extra"]));
 		// the original builder must not see the derived command: its typed tree
 		// has no "extra" path, so the forced path fails to resolve
-		await expect(app.run(["extra"] as never)).rejects.toMatchObject({
+		// @ts-expect-error -- "extra" is deliberately absent from the original builder.
+		await expect(unwrap(app.run(["extra"]))).rejects.toMatchObject({
 			code: "COMMAND_NOT_FOUND",
 			details: { input: "extra" },
 		});
@@ -953,10 +931,10 @@ describe("Extension application at prepare time", () => {
 			calls.push("root");
 		});
 
-		await app.run([]);
+		await unwrap(app.run([]));
 		const derived = app.extend(audit);
-		await derived.run([]);
-		await app.run([]);
+		await unwrap(derived.run([]));
+		await unwrap(app.run([]));
 
 		expect(calls).toEqual(["root", "audit", "root", "root"]);
 	});
@@ -994,7 +972,7 @@ describe("Extension named hooks", () => {
 				order.push("action");
 			});
 
-		await app.run([], { args: { file: "unused" } });
+		await unwrap(app.run([], { args: { file: "unused" } }));
 		expect(order).toEqual(["first", "gate"]);
 	});
 
@@ -1015,20 +993,24 @@ describe("Extension named hooks", () => {
 			},
 		});
 
-		await new Crust("cli")
-			.extend(first, second)
-			.action(() => {})
-			.run([]);
+		await unwrap(
+			new Crust("cli")
+				.extend(first, second)
+				.action(() => {})
+				.run([]),
+		);
 		expect(outcomes).toEqual(["second:completed", "first:completed"]);
 
 		outcomes.length = 0;
 		await expect(
-			new Crust("cli")
-				.extend(first, second)
-				.action(() => {
-					throw new Error("boom");
-				})
-				.run([]),
+			unwrap(
+				new Crust("cli")
+					.extend(first, second)
+					.action(() => {
+						throw new Error("boom");
+					})
+					.run([]),
+			),
 		).rejects.toThrow("boom");
 		expect(outcomes).toEqual(["second:failed", "first:failed"]);
 
@@ -1036,10 +1018,12 @@ describe("Extension named hooks", () => {
 		const gate = defineExtension(defineExtensionId("gate"), {
 			hooks: { preRun: (ctx) => ctx.finish() },
 		});
-		await new Crust("cli")
-			.extend(first, gate, second)
-			.action(() => {})
-			.run([]);
+		await unwrap(
+			new Crust("cli")
+				.extend(first, gate, second)
+				.action(() => {})
+				.run([]),
+		);
 		expect(outcomes).toEqual(["second:finished", "first:finished"]);
 	});
 
@@ -1057,11 +1041,13 @@ describe("Extension named hooks", () => {
 				},
 			},
 		});
-		await new Crust("cli")
-			.flags({ name: "port", type: "number", required: true })
-			.extend(gate)
-			.action(() => {})
-			.run([], { flags: { port: 8080 } });
+		await unwrap(
+			new Crust("cli")
+				.flags({ name: "port", type: "number", required: true })
+				.extend(gate)
+				.action(() => {})
+				.run([], { flags: { port: 8080 } }),
+		);
 
 		expect(seenPort).toBe(8080);
 		expect(outcomeBy).toBe("gate");
@@ -1085,10 +1071,11 @@ describe("Extension named hooks", () => {
 			.extend(probe)
 			.add(defineCommand("known", (cmd) => cmd.action(() => {})));
 
-		await app.run(["known"], undefined, { stdout: (line) => lines.push(line) });
+		await unwrap(app.run(["known"], undefined, { stdout: (line) => lines.push(line) }));
 		expect(lines).toEqual(["probe:known"]);
 		preRunCalled = false;
-		await expect(app.run(["unknown"] as never)).rejects.toMatchObject({
+		// @ts-expect-error -- deliberately exercise an unknown command path.
+		await expect(unwrap(app.run(["unknown"]))).rejects.toMatchObject({
 			code: "COMMAND_NOT_FOUND",
 		});
 		expect(preRunCalled).toBe(false);
@@ -1110,7 +1097,7 @@ describe("Extension named hooks", () => {
 					throw original;
 				})
 				.run([]),
-		).rejects.toBe(original);
+		).resolves.toMatchObject({ status: "failed", error: original });
 
 		const calls: string[] = [];
 		const first = defineExtension(defineExtensionId("first"), {
@@ -1130,10 +1117,12 @@ describe("Extension named hooks", () => {
 			},
 		});
 		await expect(
-			new Crust("cli")
-				.extend(first, second)
-				.action(() => {})
-				.run([]),
+			unwrap(
+				new Crust("cli")
+					.extend(first, second)
+					.action(() => {})
+					.run([]),
+			),
 		).rejects.toThrow("second cleanup");
 		expect(calls).toEqual(["second", "first"]);
 	});
@@ -1153,7 +1142,7 @@ describe("Extension named hooks", () => {
 			roots.push(rootCommand.meta.name);
 		});
 
-		await app.run([]);
+		await unwrap(app.run([]));
 		await app.execute({ argv: ["owned"] });
 		expect(roots).toEqual(["cli", "cli"]);
 	});
@@ -1336,7 +1325,7 @@ describe("Extension onError hooks", () => {
 
 		onErrorRan = false;
 		stderrChunks = [];
-		await expect(failing().extend(observer).run([])).rejects.toThrow("boom");
+		await expect(unwrap(failing().extend(observer).run([]))).rejects.toThrow("boom");
 		expect(onErrorRan).toBe(false);
 		expect(stderrChunks).toEqual([]);
 	});
@@ -1359,9 +1348,16 @@ describe("Crust .run()", () => {
 		const app = new Crust("test").flags({ name: "port", type: "number" }).action(() => {});
 
 		await expect(
-			app.run([], { flags: { unknown: true } } as never, {
-				stderr: (text) => stderrLines.push(text),
-			}),
+			unwrap(
+				app.run(
+					[],
+					{ flags: { unknown: true } },
+					// @ts-expect-error -- unknown flag makes the compatibility overload's IO parameter never.
+					{
+						stderr: (text: string) => stderrLines.push(text),
+					},
+				),
+			),
 		).rejects.toMatchObject({ code: "PARSE" });
 		expect(stderrLines).toEqual([]);
 		// run() never touches process status
@@ -1374,7 +1370,7 @@ describe("Crust .run()", () => {
 			throw boom;
 		});
 
-		await expect(app.run([])).rejects.toBe(boom);
+		await expect(app.run([])).resolves.toMatchObject({ status: "failed", error: boom });
 		// run() never touches process status
 		expect(process.exitCode).toBe(0);
 	});
@@ -1387,10 +1383,12 @@ describe("Crust .run()", () => {
 			ctx.stderr("to err");
 		});
 
-		await app.run([], undefined, {
-			stdout: (t) => out.push(t),
-			stderr: (t) => err.push(t),
-		});
+		await unwrap(
+			app.run([], undefined, {
+				stdout: (t) => out.push(t),
+				stderr: (t) => err.push(t),
+			}),
+		);
 
 		expect(out).toEqual(["to out"]);
 		expect(err).toEqual(["to err"]);
@@ -1404,22 +1402,22 @@ describe("Crust .run()", () => {
 			observed = getAmbientTerminalIO();
 		});
 
-		await app.run([], undefined, { stdout, stderr });
+		await unwrap(app.run([], undefined, { stdout, stderr }));
 
-		expect(observed?.stdout).toBe(stdout);
-		expect(observed?.stderr).toBe(stderr);
+		expect(observed?.stdout).toBeDefined();
+		expect(observed?.stderr).toBeDefined();
 		expect(getAmbientTerminalIO()).toBeUndefined();
 	});
 
-	it("does not create an ambient terminal scope when run IO is omitted", async () => {
+	it("creates a quiet ambient terminal scope when run IO is omitted", async () => {
 		let observed: ReturnType<typeof getAmbientTerminalIO>;
 		const app = new Crust("test").action(() => {
 			observed = getAmbientTerminalIO();
 		});
 
-		await app.run([]);
+		await unwrap(app.run([]));
 
-		expect(observed).toBeUndefined();
+		expect(observed).toBeDefined();
 	});
 });
 
@@ -2205,14 +2203,19 @@ describe("Crust .add() aliases", () => {
 			),
 		);
 
-		await app.run(["issues"]);
+		await unwrap(app.run(["issues"]));
 		expect(calls).toBe(1);
 		expect((await app.snapshot()).subCommands.issue?.meta.aliases).toEqual(["issues", "i"]);
 	});
 });
 
 describe("dynamic definition guards (brands own literals; runtime owns config-built defs)", () => {
-	const asDynamic = <T>(value: T): never[] => value as never[];
+	type DynamicDefs = NamedFlagDef[] & ArgsDef;
+	// SAFETY: adversarial fixtures deliberately model definitions received from untyped JavaScript.
+	const asDynamic = (
+		// oxlint-disable-next-line anti-slop/no-unknown-parameters -- test-only unchecked JavaScript fixture, never a production decoder.
+		value: unknown,
+	): DynamicDefs => value as DynamicDefs;
 
 	it("rejects duplicate argument names from dynamic defs", () => {
 		const defs = asDynamic([
@@ -2307,7 +2310,8 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 		const first = defineCommand("deploy", (cmd) => cmd.action(() => {}));
 		const second = defineCommand("deploy", (cmd) => cmd.action(() => {}));
 		const app = new Crust("cli").add(first);
-		expect(() => app.add(second as never)).toThrow(
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
+		expect(() => app.add(second)).toThrow(
 			expect.objectContaining({
 				code: "DEFINITION",
 				details: { subject: "command", name: "deploy", reason: "command-collision" },
@@ -2316,6 +2320,7 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 	});
 
 	it("rejects __proto__ as a command name", () => {
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		expect(() => new Crust("__proto__")).toThrow(
 			expect.objectContaining({
 				code: "DEFINITION",

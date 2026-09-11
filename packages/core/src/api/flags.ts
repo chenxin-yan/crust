@@ -1,6 +1,8 @@
-import type { ArgDef, FlagDef } from "../types.ts";
+import { normalizeFlag, normalizeArg } from "../parsing/spellings.ts";
+import type { ArgDef, FlagDef, NamedFlagDef } from "../types.ts";
 import type { EmptyArgNameBrand } from "../validation/args.brands.ts";
-import type { EmptyFlagSpellingBrand } from "../validation/flags.brands.ts";
+import type { LocalFlagBrand, LocalFlagNameBrand } from "../validation/flags.brands.ts";
+import type { LocalValueBrand } from "../validation/shared.ts";
 
 /** Distribute `Omit<_, "name">` over the {@link ArgDef} union. */
 type OmitName<T> = T extends { name: string } ? Omit<T, "name"> : never;
@@ -8,30 +10,34 @@ type OmitName<T> = T extends { name: string } ? Omit<T, "name"> : never;
 /** A positional argument definition without its name — the `defineArg` input shape. */
 export type UnnamedArgDef = OmitName<ArgDef>;
 
-/* oxlint-disable anti-slop/no-known-value-widening -- inline mapped returns keep exported inferred declarations flat and nameable without exposing the internal Simplify helper. */
+type Frozen<T> = {
+	readonly [K in keyof T]: K extends
+		| "aliases"
+		| "choices"
+		| (T extends { multiple: true } ? "default" : never)
+		? Readonly<T[K]>
+		: T[K];
+};
 
-/**
- * Define one named flag while preserving its literal definition type.
- *
- * The returned value carries its `name` and is attached with the variadic
- * `.flags(...defs)` or owned by a Context.
- */
+// Preserve conditional fields before mapping the normalized readonly definition.
+type Named<N extends string, D> = D extends unknown ? Frozen<{ name: N } & D> : never;
+
+/** Define and own one flag locally; attachment checks destination collisions. */
 export function defineFlag<const N extends string, const D extends FlagDef>(
-	name: N & EmptyFlagSpellingBrand<N>,
-	def: D,
-): { [K in keyof ({ readonly name: N } & D)]: ({ readonly name: N } & D)[K] } {
-	return { ...def, name };
+	name: N & LocalFlagNameBrand<N>,
+	def: D & LocalFlagBrand<{ name: N } & D>,
+): Named<N, D>;
+
+export function defineFlag(name: string, def: FlagDef): NamedFlagDef {
+	return normalizeFlag(name, { ...def, name });
 }
 
-/**
- * Define one named positional argument while preserving its literal
- * definition type. Attach with the variadic `.args(...defs)`.
- */
+/** Define and own one positional argument; layout belongs to its consuming command. */
 export function defineArg<const N extends string, const D extends UnnamedArgDef>(
 	name: N & EmptyArgNameBrand<N>,
-	def: D,
-): { [K in keyof ({ readonly name: N } & D)]: ({ readonly name: N } & D)[K] } {
-	return { ...def, name };
-}
+	def: D & LocalValueBrand<D>,
+): Named<N, D>;
 
-/* oxlint-enable anti-slop/no-known-value-widening */
+export function defineArg(name: string, def: UnnamedArgDef): ArgDef {
+	return normalizeArg({ ...def, name });
+}

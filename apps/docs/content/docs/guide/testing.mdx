@@ -5,7 +5,7 @@ description: Test Crust applications and custom prompts without process-global s
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-`@crustjs/testing` runs a Crust application with captured output or fake terminal streams. It is for application developers. Its required peers are `@crustjs/core`, `@crustjs/progress`, and `@crustjs/prompts`; install any your project does not already have. TypeScript is an optional peer.
+Core `app.run()` already captures ordinary command output. `@crustjs/testing` adds terminal execution capture and fake interactive streams. It is for application developers. Its required peers are `@crustjs/core`, `@crustjs/progress`, and `@crustjs/prompts`; install any your project does not already have. TypeScript is an optional peer.
 
 ```sh
 bun add -d @crustjs/testing
@@ -13,18 +13,17 @@ bun add -d @crustjs/testing
 
 ## Capture command output
 
-Use `captureRun()` for commands that write ordinary stdout or stderr or return a value. Each `ctx.stdout()`/`ctx.stderr()` call is captured as one line, joined with `"\n"` (matching the terminal defaults). The capture is a status-discriminated union: `completed` carries the action's inferred `result`, `finished` names the Extension whose `preRun` hook ended the invocation, and `failed` carries the thrown value without discarding earlier output.
+Use `app.run()` for commands that write ordinary stdout or stderr or return a value. Each `ctx.stdout()`/`ctx.stderr()` call is captured as one line, joined with `"\n"` (matching the terminal defaults). The capture is a status-discriminated union: `completed` carries the action's inferred `result`, `finished` names the Extension whose `preRun` hook ended the invocation, and `failed` carries the thrown value without discarding earlier output.
 
 With the default capture setup, prompt and progress output is line-buffered into captured `stderr` through a non-TTY adapter. A spinner emits only its final line. This captures output but does not supply interactive input; use `runInteractive()` to drive prompts.
 
 ```ts
 import { expect, test } from "bun:test";
-import { captureRun } from "@crustjs/testing";
 
 import { app } from "./cli.ts";
 
 test("greets a name", async () => {
-  const captured = await captureRun(app, [], { args: { name: "Ada" } });
+  const captured = await app.run([], { args: { name: "Ada" } });
 
   expect(captured.stdout).toBe("Hello, Ada!");
   expect(captured.stderr).toBe("");
@@ -68,7 +67,7 @@ See [Contexts](/docs/guide/contexts#test-doubles).
 
 ## Test interactive commands
 
-Use `runInteractive()` when an action renders a built-in prompt. Its `type()` and `keys()` methods send terminal input. See the [prompt testing helpers](/docs/modules/prompts#testing-custom-prompts) for supported key names. One ambient terminal-IO scope routes prompt frames, progress indicators, and `ctx.stderr()` text into the same transcript, so `waitFor()` and `screen()` observe the same terminal output. Calls to `ctx.stdout()` are discarded and never appear in `screen()`; use `captureRun()` when stdout assertions matter. Application code can use either package's `withTerminalIO()` export; `withPromptIO()` and `withProgressSink()` remain focused aliases.
+Use `runInteractive()` when an action renders a built-in prompt. Its `type()` and `keys()` methods send terminal input. See the [prompt testing helpers](/docs/modules/prompts#testing-custom-prompts) for supported key names. One ambient terminal-IO scope routes prompt frames, progress indicators, and `ctx.stderr()` text into the same transcript, so `waitFor()` and `screen()` observe the same terminal output. Calls to `ctx.stdout()` are discarded and never appear in `screen()`; use `app.run()` when stdout assertions matter. Application code can use either package's `withTerminalIO()` export; `withPromptIO()` and `withProgressSink()` remain focused aliases.
 
 ```ts
 import { expect, test } from "bun:test";
@@ -88,9 +87,9 @@ test("collects a name", async () => {
 });
 ```
 
-`done` rejects with the original application error, matching `app.run()`. `waitFor()` never hangs on a failed or finished run: it rethrows the application error, or throws with the current screen when the pattern can no longer match or its timeout (default 5000ms) elapses.
+`done` explicitly propagates a failed `app.run()` outcome as a rejection with the original error, including primitive thrown values; completed and finished outcomes resolve it. `waitFor()` never hangs on a failed or finished run: it rethrows the application error, or throws with the current screen when the pattern can no longer match or its timeout (default 5000ms) elapses.
 
-Use `captureExecute(app, argv)` for raw parser behavior such as short-flag bundles, `--flag=value`, and invalid spellings. Statically declared `defineExtension()` commands appear in the typed `captureRun()` and `runInteractive()` paths; use `captureExecute()` for dynamically assembled or type-widened Extension contributions.
+Use `captureExecute(app, argv)` for raw parser behavior such as short-flag bundles, `--flag=value`, and invalid spellings. Statically declared `defineExtension()` commands appear in the typed `app.run()` and `runInteractive()` paths; use `captureExecute()` for dynamically assembled or type-widened Extension contributions.
 
 ## For custom prompt authors
 

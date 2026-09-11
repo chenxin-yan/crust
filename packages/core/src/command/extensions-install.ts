@@ -1,7 +1,13 @@
 import type { Extension } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
-import { defineExtensionId, type ExtensionId } from "../identity.ts";
-import type { CommandSection, CommandSectionInput, FlagDef, FlagsDef } from "../types.ts";
+import type { ExtensionId } from "../identity.ts";
+import type {
+	CommandSection,
+	RuntimeCommandSectionInput,
+	SectionConsumer,
+	FlagDef,
+	FlagsDef,
+} from "../types.ts";
 import type { CommandDefinition } from "./crust.ts";
 import { registerFlag, type CommandContext, type CommandNode } from "./node.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
@@ -33,8 +39,11 @@ export function applyExtensionCommands(
 	materializeCommandDefinition: MaterializeCommandDefinition,
 ): void {
 	for (const definition of extension.commands ?? []) {
-		const node = materializeCommandDefinition(definition, root, extension.id);
-		root.subCommands[definition.name] = node;
+		root.subCommands[definition.name] = materializeCommandDefinition(
+			definition,
+			root,
+			extension.id,
+		);
 	}
 }
 
@@ -59,25 +68,22 @@ export function cloneCommandNode(node: CommandNode): CommandNode {
 		// Section objects/arrays are never mutated in place (prepare replaces
 		// them wholesale), so sharing them here is safe.
 		meta: { ...node.meta },
-		localFlags: {},
-		ownedFlags: {},
-		effectiveFlags: {},
-		flagSpellings: new Map(),
-		args: node.args.map((def) => ({ ...def })),
+		localFlags: { ...node.localFlags },
+		ownedFlags: { ...node.ownedFlags },
+		effectiveFlags: { ...node.effectiveFlags },
+		flagSpellings: new Map(
+			[...node.flagSpellings].map(([spelling, entry]) => [
+				spelling,
+				{ ...entry, def: node.effectiveFlags[entry.canonicalName]! },
+			]),
+		),
+		args: [...node.args],
 		subCommands,
 		contexts: node.contexts.map((context) => ({ ...context })),
+		demands: [...node.demands],
 		extensions: [...node.extensions],
 		run: node.run,
 	};
-	for (const [name, def] of Object.entries(node.effectiveFlags)) {
-		const source = Object.hasOwn(node.localFlags, name) ? "local" : "owned";
-		registerFlag(
-			cloned,
-			name,
-			{ ...def, aliases: def.aliases ? [...def.aliases] : undefined },
-			source,
-		);
-	}
 	return cloned;
 }
 
@@ -93,65 +99,41 @@ function invalidSections({ subject, name }: SectionOwner): CrustError {
 	);
 }
 
-function hasId<T>(value: T): value is T & { readonly id?: unknown } {
-	return (
-		((typeof value === "object" && value !== null) || typeof value === "function") && "id" in value
-	);
-}
-
-function isString<T>(value: T): value is T & string {
-	return typeof value === "string";
-}
-
-function isText<T>(value: T): value is T & string {
-	return typeof value === "string" && !!value.trim();
-}
-
-function parseExtensionId(consumer: unknown, owner: SectionOwner): ExtensionId {
-	const id = isString(consumer) ? consumer : hasId(consumer) ? consumer.id : undefined;
-	if (!isText(id) || id !== id.trim()) throw invalidSections(owner);
-	return defineExtensionId(id);
-}
-
-function validateSectionAudienceIds(ids: unknown, owner: SectionOwner): readonly ExtensionId[] {
-	if (!Array.isArray(ids) || ids.length === 0) throw invalidSections(owner);
-	return Object.freeze(ids.map((consumer) => parseExtensionId(consumer, owner)));
-}
-
-function validateSection(section: unknown, owner: SectionOwner): CommandSection {
-	// SAFETY: optional-field probe of an unvalidated section; every field is checked below.
-	const { title, body, only, except } = (section ?? {}) as {
-		title?: unknown;
-		body?: unknown;
-		only?: unknown;
-		except?: unknown;
+function normalizeSection(
+	section: RuntimeCommandSectionInput,
+	owner: SectionOwner,
+): CommandSection {
+	const { title, body, only, except } = section;
+	if (
+		!title.trim() ||
+		/[\r\n]/.test(title) ||
+		!body.trim() ||
+		only?.length === 0 ||
+		except?.length === 0 ||
+		(only !== undefined && except !== undefined)
+	) {
+		throw invalidSections(owner);
+	}
+	const audience = (ids: readonly SectionConsumer[]): readonly [ExtensionId, ...ExtensionId[]] => {
+		// SAFETY: normalization establishes nonemptiness; consumers carry minted IDs.
+		/* oxlint-disable anti-slop/no-runtime-typeof -- SectionConsumer is a typed minted ID or an object carrying one, not unvalidated data. */
+		return Object.freeze(
+			ids.map((consumer) => (typeof consumer === "string" ? consumer : consumer.id)),
+		) as readonly [ExtensionId, ...ExtensionId[]];
+		/* oxlint-enable anti-slop/no-runtime-typeof */
 	};
-	if (!isText(title) || /[\r\n]/.test(title) || !isText(body)) {
-		throw invalidSections(owner);
-	}
-	// The SectionAudience union owns literals; this runtime branch owns the
-	// dynamic path (Extension `sections` callbacks, config-built objects), where
-	// both fields would otherwise freeze and `sectionsFor()` would silently
-	// ignore `except`.
-	if (only !== undefined && except !== undefined) {
-		throw invalidSections(owner);
-	}
-	if (only !== undefined) {
-		return Object.freeze({ title, body, only: validateSectionAudienceIds(only, owner) });
-	}
-	if (except !== undefined) {
-		return Object.freeze({ title, body, except: validateSectionAudienceIds(except, owner) });
-	}
-	return Object.freeze({ title, body });
+	return Object.freeze({
+		title,
+		body,
+		...(only ? { only: audience(only) } : except ? { except: audience(except) } : {}),
+	});
 }
 
 export function validateCommandSections(
 	name: string,
-	sections: readonly CommandSectionInput[],
+	sections: readonly RuntimeCommandSectionInput[],
 ): CommandSection[] {
-	const owner: SectionOwner = { subject: "command", name };
-	if (!Array.isArray(sections)) throw invalidSections(owner);
-	return sections.map((section) => validateSection(section, owner));
+	return sections.map((section) => normalizeSection(section, { subject: "command", name }));
 }
 
 function contributionTarget(
@@ -189,14 +171,8 @@ export function applyExtensionSections(
 	if (!extension.sections) return;
 	const owner: SectionOwner = { subject: "extension", name: extension.id };
 	const contributions = extension.sections(snapshot);
-	if (!Array.isArray(contributions)) throw invalidSections(owner);
 	for (const contribution of contributions) {
-		// validateSection rejects null/non-object contributions, so reading
-		// `.command` afterwards is safe.
-		const section = validateSection(contribution, owner);
-		if (!Array.isArray(contribution.command) || !contribution.command.every(isString)) {
-			throw invalidSections(owner);
-		}
+		const section = normalizeSection(contribution, owner);
 		const target = contributionTarget(root, contribution.command, extension);
 		target.meta.sections = [...(target.meta.sections ?? []), section];
 	}

@@ -1,10 +1,10 @@
 import type { ArgsDef } from "../types.ts";
 import type {
-	AsyncParseBrand,
-	DefaultWithinChoicesBrand,
+	CollisionBrand,
 	DefName,
 	EmptyLiteralNameBrand,
-	Overlap,
+	HasClosedNames,
+	LocalValueBrand,
 } from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -13,18 +13,17 @@ import type {
 
 type ArgNames<A extends readonly object[]> = DefName<A[number]>;
 
-type DuplicateArgBrand<A, Existing extends string> =
-	Overlap<DefName<A>, Existing> extends infer Duplicate extends string
-		? [Duplicate] extends [never]
-			? {}
-			: {
-					readonly FIX_DUPLICATE_ARG: `Argument name "${Duplicate}" is already defined`;
-				}
-		: never;
+type DuplicateArgBrand<A, Existing extends string> = CollisionBrand<
+	DefName<A>,
+	Existing,
+	"FIX_DUPLICATE_ARG",
+	"Argument name ",
+	" is already defined"
+>;
 
 type EmptyArgNameError = { readonly FIX_EMPTY_NAME: "Argument names must be non-empty" };
 
-/** Brand a statically known empty argument name while allowing widened and generic names. */
+/** Reject empty argument names, including empty members of a name union. */
 export type EmptyArgNameBrand<Name extends string> = EmptyLiteralNameBrand<Name, EmptyArgNameError>;
 
 // An empty name renders as "<>" in help/snapshot labels and validation messages.
@@ -32,8 +31,7 @@ type EmptyArgDefinitionNameBrand<A> = "" extends DefName<A> ? EmptyArgNameError 
 
 type ArgChecks<A, Existing extends string> = A &
 	DuplicateArgBrand<A, Existing> &
-	AsyncParseBrand<A> &
-	DefaultWithinChoicesBrand<A> &
+	LocalValueBrand<A> &
 	EmptyArgDefinitionNameBrand<A>;
 
 /**
@@ -68,7 +66,7 @@ export type ValidateVariadicArgs<
 					...ValidateVariadicArgs<Tail, Existing | DefName<Head>>,
 				]
 		: readonly [ArgChecks<Head, Existing>]
-	: A;
+	: { [I in keyof A]: ArgChecks<A[I], Existing> };
 
 type BrandVariadicPosition<A extends readonly object[]> = {
 	[I in keyof A]: A[I] & {
@@ -85,4 +83,5 @@ export type AppendArgsChecks<A extends ArgsDef, NewA extends ArgsDef> = A extend
 		: ValidateVariadicArgs<NewA, ArgNames<A>>
 	: ValidateVariadicArgs<NewA>;
 
-// ────────────────────────────────────────────────────────────────────────────
+/** Conditional collections and uncertain canonical identities cannot promise every alternative output key. */
+export type AttachedArgs<A extends ArgsDef> = HasClosedNames<A> extends true ? A : ArgsDef;

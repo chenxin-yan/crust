@@ -314,8 +314,9 @@ describe("built-in extensions", () => {
 			.extend(help())
 			.add(defineCommand("build", (build) => build.action(() => {})));
 
-		await app.run([]);
-		const rootOutput = stripAnsi(getStdout());
+		const outcome = await app.run([]);
+		expect(outcome.status).toBe("finished");
+		const rootOutput = stripAnsi(outcome.stdout);
 		expect(rootOutput).toContain("Root notes:\n  Root body");
 		expect(rootOutput).not.toContain("Build notes:");
 		expect(rootOutput.indexOf("Root notes:")).toBeGreaterThan(rootOutput.indexOf("Options:"));

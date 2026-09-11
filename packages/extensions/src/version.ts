@@ -1,5 +1,5 @@
 import {
-	type DefineExtensionWith,
+	type Extension,
 	type RootMetaKey,
 	type ExtensionId,
 	type ExtensionContext,
@@ -22,8 +22,18 @@ export interface VersionOptions {
 	readonly format?: "plain" | ((version: string, context: ExtensionContext) => string);
 }
 
-// ReturnType uses DefineExtensionWith's last (config) overload to retain the registration type.
-type VersionRegistration<K extends RootMetaKey> = ReturnType<DefineExtensionWith<K>>;
+const versionFlags = [
+	{
+		name: "version",
+		type: "boolean",
+		short: "v",
+		noNegate: true,
+		description: "Show version number",
+		recursive: false,
+	},
+] as const;
+
+type VersionRegistration<K extends RootMetaKey> = Extension<{}, [], typeof versionFlags, [], K>;
 
 /** Explicit values supply their own version; omitted values require root metadata. */
 export interface VersionExtension {
@@ -38,16 +48,7 @@ function makeVersion<K extends RootMetaKey>(
 ): VersionRegistration<K> {
 	const { format } = options;
 	return defineExtension<K>()(VERSION, {
-		flags: [
-			{
-				name: "version",
-				type: "boolean",
-				short: "v",
-				noNegate: true,
-				description: "Show version number",
-				recursive: false,
-			},
-		],
+		flags: versionFlags,
 		hooks: {
 			preRun(context) {
 				if (context.commandPath.length !== 1 || context.flags.version !== true) return;

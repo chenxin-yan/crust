@@ -66,7 +66,7 @@ function freezeTree(node: CommandNode): void {
 	Object.freeze(node.localFlags);
 	Object.freeze(node.ownedFlags);
 	Object.freeze(node.effectiveFlags);
-	// Section objects are already frozen by validateSection.
+	// Section objects are already frozen during normalization.
 	if (node.meta.sections) Object.freeze(node.meta.sections);
 	Object.freeze(node.meta);
 	Object.freeze(node.contexts);
@@ -128,7 +128,10 @@ export function prepareInvocation(
 /** An invocation starts from terminal argv or a typed path plus structured values. */
 export type InvocationInput =
 	| { readonly argv: readonly string[] }
-	| { readonly path: readonly string[]; readonly input: RunInputPayload };
+	| {
+			readonly path: readonly string[];
+			readonly input: RunInputPayload;
+	  };
 
 interface ResolvedInput {
 	argv: readonly string[];
@@ -171,7 +174,7 @@ async function dispatch(
 	io: InvocationIO,
 	onExtensionContext?: (context: ExtensionContext) => void,
 	onFailure?: (error: CaughtError, context: ExtensionContext) => Promise<ExtensionId | undefined>,
-): Promise<RunOutcome<unknown>> {
+): Promise<{ status: "completed"; result: unknown } | { status: "finished"; by: ExtensionId }> {
 	const { rootNode, extensions } = prepared;
 
 	// Routing and syntax parsing — failures flow directly to the caller.
@@ -346,17 +349,36 @@ function hasInjectedIO(io: Partial<InvocationIO> | undefined): boolean {
 	return io !== undefined && Object.keys(io).length > 0;
 }
 
-/** Programmatic boundary: throw raw failures and leave process status untouched. */
+/** Quiet programmatic boundary: capture output and the failure escaping the complete lifecycle. */
 export async function runInvocation(
 	node: CommandNode,
 	input: InvocationInput,
 	io: Partial<InvocationIO> | undefined,
 	materializeCommandDefinition: MaterializeCommandDefinition,
 ): Promise<RunOutcome<unknown>> {
-	const resolvedIO: InvocationIO = { ...DEFAULT_IO, ...io };
-	const prepared = prepareInvocation(node, materializeCommandDefinition);
-	const invoke = () => dispatch(input, prepared, resolvedIO);
-	return await (hasInjectedIO(io) ? withAmbientTerminalIO(resolvedIO, invoke) : invoke());
+	const stdout: string[] = [];
+	const stderr: string[] = [];
+	try {
+		// Keep the same per-invocation callback snapshot semantics as execute.
+		const sinks = { ...io };
+		const resolvedIO: InvocationIO = {
+			stdout(text) {
+				stdout.push(text);
+				sinks.stdout?.(text);
+			},
+			stderr(text) {
+				stderr.push(text);
+				sinks.stderr?.(text);
+			},
+		};
+		const outcome = await withAmbientTerminalIO(resolvedIO, async () => {
+			const prepared = prepareInvocation(node, materializeCommandDefinition);
+			return await dispatch(input, prepared, resolvedIO);
+		});
+		return { ...outcome, stdout: stdout.join("\n"), stderr: stderr.join("\n") };
+	} catch (error) {
+		return { status: "failed", error, stdout: stdout.join("\n"), stderr: stderr.join("\n") };
+	}
 }
 
 /** Terminal CLI boundary: render failures and set the process exit status. */

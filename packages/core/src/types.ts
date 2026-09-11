@@ -3,7 +3,8 @@ import type { BaseValueType } from "@crustjs/utils/primitive";
 import type { InferOutput, StandardSchema } from "@crustjs/utils/schema";
 
 import type { ExtensionId } from "./identity.ts";
-import type { Simplify } from "./validation/shared.ts";
+import type { RunInputPayload } from "./parsing/parser.ts";
+import type { IsClosedName, IsStaticTuple, IsUnion, Simplify } from "./validation/shared.ts";
 
 /** Injectable output callbacks threaded through one invocation. */
 export interface InvocationIO {
@@ -44,19 +45,27 @@ type Resolve<T extends ValueType> = {
  * Resolve the inferred runtime type for a flag/arg definition.
  *
  * When the def declares a `parse` escape hatch (only allowed on `"string"`
- * variants), the inferred type is `ReturnType<typeof parse>`. String defs
+ * variants), the inferred type is `ReturnType<typeof parse>`. Optional parsers
+ * also retain the unparsed output branch. String defs
  * with a literal `choices` tuple narrow to the union of those literals.
  * Otherwise it delegates to {@link Resolve} on the declared `type`.
  */
-type ResolveBaseType<F> = F extends {
-	parse: (raw: string) => infer R;
+type ResolveBaseType<F> = "parse" extends keyof F
+	? F["parse"] extends infer Parse
+		? Parse extends (raw: string) => infer R
+			? R
+			: ResolveUnparsedType<F>
+		: never
+	: ResolveUnparsedType<F>;
+
+type ResolveUnparsedType<F> = F extends {
+	type: "string";
+	choices: readonly (infer C extends string)[];
 }
-	? R
-	: F extends { type: "string"; choices: readonly (infer C extends string)[] }
-		? C
-		: F extends { type: infer T extends ValueType }
-			? Resolve<T>
-			: never;
+	? C
+	: F extends { type: infer T extends ValueType }
+		? Resolve<T>
+		: never;
 
 // ────────────────────────────────────────────────────────────────────────────
 // ArgDef — Positional argument definition (discriminated by `type`)
@@ -71,8 +80,7 @@ interface ArgDefBase {
 	/**
 	 * When `true`, the parser throws if the argument is not provided.
 	 *
-	 * For variadic args, this means the array cannot be empty — the runtime
-	 * value is still `T[]`, just rejected when it has length 0.
+	 * For variadic args without a default, the validated output is a nonempty tuple.
 	 */
 	required?: true;
 	/** Not supported with core value options — see {@link SchemaArgDef} */
@@ -80,10 +88,9 @@ interface ArgDefBase {
 	/**
 	 * When `true`, collects all remaining positional values into an array.
 	 *
-	 * The inferred TypeScript type is always `T[]` — never `T[] | undefined` —
-	 * regardless of `required` or `default`. `required` only controls whether
-	 * an empty array fails validation; it does not change the runtime shape
-	 * or the inferred type.
+	 * The validated output is always an array, never `undefined`.
+	 * Required core variadics without defaults infer `[T, ...T[]]` after
+	 * required validation; other core variadics infer `T[]`.
 	 */
 	variadic?: true;
 }
@@ -96,7 +103,8 @@ interface StringArgDef<ParseOutput = unknown> extends ArgDefBase {
 	/**
 	 * Static enum of valid values for this argument.
 	 *
-	 * Validated at parse time before `parse` runs. Passing a value outside
+	 * Checked for argv and structured invocation input before `parse` runs.
+	 * Typed input also proves membership statically. Passing a value outside
 	 * `choices` throws `CrustError("PARSE", …)` before any `parse` transform
 	 * is applied. Also consumed by shell-completion extensions
 	 * (e.g. `@crustjs/extensions`) to emit value candidates.
@@ -231,7 +239,7 @@ interface FlagDefBase {
 	/** Single-character short alias (e.g. `"v"` → `-v`) */
 	short?: string;
 	/** Additional aliases (e.g. `["out"]` → `--out`); one-character aliases also accept one dash. */
-	aliases?: string[];
+	aliases?: readonly string[];
 	/** When `true`, the parser throws if the flag is not provided */
 	required?: true;
 	/** Not supported with core value options — see {@link SchemaStringFlagDef} */
@@ -258,7 +266,8 @@ type StringFlagFields<Default, ParseOutput> = {
 	/**
 	 * Static enum of valid values for this flag.
 	 *
-	 * Validated at parse time before `parse` runs. Passing a value outside
+	 * Checked for argv and structured invocation input before `parse` runs.
+	 * Typed input also proves membership statically. Passing a value outside
 	 * `choices` throws `CrustError("PARSE", …)` before any `parse` transform
 	 * is applied. Also consumed by shell-completion extensions.
 	 */
@@ -296,7 +305,7 @@ type TypedFlagDef<T extends ValueType, ParseOutput = unknown> = SingleFlagBase &
 /** A repeatable core flag for the declared value type. */
 type TypedMultiFlagDef<T extends ValueType, ParseOutput = unknown> = MultiFlagBase & {
 	type: T;
-} & CoreFlagFields<T, Resolve<T>[], ParseOutput>;
+} & CoreFlagFields<T, readonly Resolve<T>[], ParseOutput>;
 
 /** Shared fields for schema-backed flags (exclusive mode) */
 interface SchemaFlagBase extends Omit<FlagDefBase, "schema" | "required"> {
@@ -376,8 +385,10 @@ export type NamedFlagDef = FlagDef & { readonly name: string };
  * The `extends infer R extends FlagsDef` step defers evaluation so the
  * result satisfies `FlagsDef` in generic positions.
  */
+type FlagWithoutName<D> = D extends unknown ? Omit<D, "name"> : never;
+
 export type NamedFlagsRecord<Defs extends readonly NamedFlagDef[]> = {
-	[D in Defs[number] as D["name"]]: Omit<D, "name">;
+	[K in Defs[number]["name"]]: FlagWithoutName<Extract<Defs[number], { name: K }>>;
 } extends infer R extends FlagsDef
 	? R
 	: never;
@@ -404,31 +415,37 @@ export type MergeFlags<Base extends FlagsDef, Override extends FlagsDef> = Base 
 /**
  * Infer the resolved type for a single ArgDef:
  *
- * - **variadic** → `primitive[]` (always an array, never `undefined`,
- *   regardless of `required` or `default`)
+ * - **variadic** → `[primitive, ...primitive[]]` when required without a default,
+ *   otherwise `primitive[]` (always an array, never `undefined`)
  * - **required** or **has default** → `primitive` (non-optional)
  * - otherwise → `primitive | undefined`
  *
- * The variadic branch is checked first and takes precedence. Combining
- * `variadic: true` with `required: true` keeps the inferred type as `T[]`;
- * `required` only gates empty-array validation, not the type.
+ * Required core variadics without defaults resolve to nonempty tuples.
+ * Schema-backed and default-backed arguments retain their own output contracts.
  */
 export type InferArgValue<A extends ArgDef> = A extends {
 	schema: infer S extends StandardSchema;
 }
 	? InferOutput<S>
 	: A extends { variadic: true }
-		? ResolveBaseType<A>[]
-		: A extends { required: true }
-			? ResolveBaseType<A>
-			: // Narrow on `default` presence, not its type. When `parse` is
-				// present the raw default is a string while `ResolveBaseType<A>`
-				// is the parsed return type, so a typed-default check would miss.
-				// ArgDef's discriminated interfaces already constrain the default
-				// shape at the call site.
-				A extends { default: unknown }
-				? ResolveBaseType<A>
-				: ResolveBaseType<A> | undefined;
+		? A extends { required: true; default?: never }
+			? [ResolveBaseType<A>, ...ResolveBaseType<A>[]]
+			: ResolveBaseType<A>[]
+		:
+				| ("variadic" extends keyof A
+						? true extends A["variadic"]
+							? ResolveBaseType<A>[]
+							: never
+						: never)
+				| (A extends { required: true }
+						? ResolveBaseType<A>
+						: // Defaults are raw inputs; only a definitely present default
+							// guarantees presence after its parser runs.
+							A extends { default: infer Default }
+							? undefined extends Default
+								? ResolveBaseType<A> | undefined
+								: ResolveBaseType<A>
+							: ResolveBaseType<A> | undefined);
 
 type DuplicateArgNames<
 	A extends readonly ArgDef[],
@@ -494,8 +511,10 @@ export type InferFlagValue<F extends FlagDef> = F extends {
 				: ResolveBaseType<F>[] | undefined
 		: F extends { required: true }
 			? ResolveBaseType<F>
-			: F extends { default: unknown }
-				? ResolveBaseType<F>
+			: F extends { default: infer Default }
+				? undefined extends Default
+					? ResolveBaseType<F> | undefined
+					: ResolveBaseType<F>
 				: ResolveBaseType<F> | undefined;
 
 /**
@@ -518,64 +537,132 @@ export type InferFlags<F> = F extends FlagsDef
 // Programmatic invocation input types
 // ────────────────────────────────────────────────────────────────────────────
 
-type InputBaseValue<D> = D extends { type: "boolean"; noNegate: true }
-	? true
-	: D extends { schema: StandardSchema }
-		? D extends { type: "boolean" }
-			? boolean
-			: string
-		: D extends { type: "json" }
-			? JsonValue
-			: D extends { choices: readonly (infer Choice extends string)[] }
-				? Choice
-				: D extends { parse: (raw: string) => infer _ParseOutput }
-					? string
-					: D extends { type: infer T extends ValueType }
-						? Resolve<T>
-						: never;
+// Conditional definitions cannot certify supplied values; inspect before distribution.
+type InputBaseValue<D> = true extends IsUnion<D> | IsUnion<D[keyof D & "type"]>
+	? never
+	: D extends { type: "boolean" }
+		? "noNegate" extends keyof D
+			? true extends D["noNegate"]
+				? true
+				: boolean
+			: boolean
+		: D extends { schema: StandardSchema }
+			? D extends { type: "boolean" }
+				? boolean
+				: string
+			: D extends { type: "json" }
+				? JsonValue
+				: "choices" extends keyof D
+					? Exclude<D["choices"], undefined> extends infer Choices extends readonly string[]
+						? [Choices] extends [never]
+							? D extends { type: infer T extends ValueType }
+								? Resolve<T>
+								: never
+							: IsStaticTuple<Choices> extends true
+								? IsClosedName<Choices[number]> extends true
+									? Choices[number]
+									: never
+								: never
+						: never
+					: D extends { parse: (raw: string) => infer _ParseOutput }
+						? string
+						: D extends { type: infer T extends ValueType }
+							? Resolve<T>
+							: never;
 
-type InputArgValue<D> = D extends { variadic: true } ? InputBaseValue<D>[] : InputBaseValue<D>;
-type InputFlagValue<D> = D extends { multiple: true } ? InputBaseValue<D>[] : InputBaseValue<D>;
+// Resolve the shared input kind before occurrence handling distributes definition unions.
+type InputArgValue<D extends ArgDef, Value = InputBaseValue<D>> = [Value] extends [never]
+	? never
+	: D extends { variadic: true }
+		? RequiredArgNames<[D]> extends never
+			? Value[]
+			: [Value, ...Value[]]
+		: "variadic" extends keyof D
+			? true extends D["variadic"]
+				? never
+				: Value
+			: Value;
+type InputFlagValue<D, Value = InputBaseValue<D>> = [Value] extends [never]
+	? never
+	: D extends { multiple: true }
+		? Value[]
+		: "multiple" extends keyof D
+			? true extends D["multiple"]
+				? never
+				: Value
+			: Value;
 
 type RequiredArgNames<A extends ArgsDef> = A[number] extends infer D
-	? D extends { name: infer N extends string; required: true }
-		? // A default satisfies `required` at parse time, so the input stays optional.
-			D extends { default: unknown }
-			? never
-			: N
+	? D extends { name: infer N extends string }
+		? "required" extends keyof D
+			? true extends D["required"]
+				? D extends { default: infer Default }
+					? undefined extends Default
+						? N
+						: never
+					: N
+				: never
+			: never
 		: never
 	: never;
 
-/** Values accepted by typed programmatic invocation before parsing/validation. */
-export type InputArgs<A extends ArgsDef> = Simplify<
-	{
-		[
-			D in A[number] as D["name"] extends RequiredArgNames<A> ? D["name"] : never
-		]-?: InputArgValue<D>;
-	} & {
-		[
-			D in A[number] as D["name"] extends RequiredArgNames<A> ? never : D["name"]
-		]?: InputArgValue<D>;
-	}
->;
+type InputArgsPrefixes<
+	Remaining extends ArgsDef,
+	Supplied = {},
+	Prefixes = never,
+> = Remaining extends readonly [infer Head extends ArgDef, ...infer Tail extends ArgsDef]
+	? InputArgsPrefixes<
+			Tail,
+			Supplied & { [K in Head["name"]]: InputArgValue<Head> },
+			| Prefixes
+			| (RequiredArgNames<Remaining> extends never
+					? Simplify<Supplied & { [D in Remaining[number] as D["name"]]?: never }>
+					: never)
+		>
+	: Prefixes | Simplify<Supplied>;
+
+/** Supplied positional values form a prefix; defaults do not fill input gaps. */
+export type InputArgs<A extends ArgsDef> = number extends A["length"]
+	? never
+	: IsUnion<A> extends true
+		? never
+		: IsClosedName<A[number]["name"]> extends true
+			? InputArgsPrefixes<A>
+			: never;
+
+// Distribute before inspecting keys: each alternative must permit omission.
+type RequiredFlagName<D, K> = D extends unknown
+	? "required" extends keyof D
+		? true extends D["required"]
+			? D extends { default: infer Default }
+				? undefined extends Default
+					? K
+					: never
+				: K
+			: never
+		: never
+	: never;
 
 type RequiredFlagNames<F extends FlagsDef> = {
-	// A default satisfies `required` at parse time, so the input stays optional.
-	[K in keyof F]: F[K] extends { required: true }
-		? F[K] extends { default: unknown }
-			? never
-			: K
-		: never;
+	[K in keyof F]-?: RequiredFlagName<F[K], K>;
 }[keyof F];
 
 /** Flag values accepted by typed programmatic invocation before parsing/validation. */
-export type InputFlags<F extends FlagsDef> = Simplify<
-	{
-		[K in RequiredFlagNames<F>]-?: InputFlagValue<F[K]>;
-	} & {
-		[K in Exclude<keyof F, RequiredFlagNames<F>>]?: InputFlagValue<F[K]>;
-	}
->;
+type KnownFlags<F extends FlagsDef> = { [K in keyof F as string extends K ? never : K]: F[K] };
+
+export type InputFlags<F extends FlagsDef> =
+	IsUnion<F> extends true
+		? never
+		: Simplify<
+				{
+					[K in RequiredFlagNames<KnownFlags<F>>]-?: InputFlagValue<KnownFlags<F>[K]>;
+				} & {
+					[K in Exclude<keyof KnownFlags<F>, RequiredFlagNames<KnownFlags<F>>>]?: InputFlagValue<
+						KnownFlags<F>[K]
+					>;
+				}
+			> &
+				(string extends keyof F ? NonNullable<RunInputPayload["flags"]> : {});
 
 // ────────────────────────────────────────────────────────────────────────────
 // CommandMeta — Command metadata
@@ -583,15 +670,12 @@ export type InputFlags<F extends FlagsDef> = Simplify<
 
 export type SectionConsumer = ExtensionId | { readonly id: ExtensionId };
 
-export type SectionAudience =
-	| { readonly only: readonly SectionConsumer[]; readonly except?: never }
-	| { readonly except: readonly SectionConsumer[]; readonly only?: never }
+type Audience<C> =
+	| { readonly only: C; readonly except?: never }
+	| { readonly except: C; readonly only?: never }
 	| { readonly only?: never; readonly except?: never };
 
-type ResolvedSectionAudience =
-	| { readonly only: readonly ExtensionId[]; readonly except?: never }
-	| { readonly except: readonly ExtensionId[]; readonly only?: never }
-	| { readonly only?: never; readonly except?: never };
+export type SectionAudience = Audience<readonly [SectionConsumer, ...SectionConsumer[]]>;
 
 type SectionContent = {
 	readonly title: string;
@@ -601,8 +685,11 @@ type SectionContent = {
 /** A plain-text documentation section accepted from command and Extension authors. */
 export type CommandSectionInput = SectionContent & SectionAudience;
 
+/** Typed dynamic audiences may be empty until their consuming operation checks them. */
+export type RuntimeCommandSectionInput = SectionContent & Audience<readonly SectionConsumer[]>;
+
 /** A validated documentation section rendered after built-in command documentation. */
-export type CommandSection = SectionContent & ResolvedSectionAudience;
+export type CommandSection = SectionContent & Audience<readonly [ExtensionId, ...ExtensionId[]]>;
 
 /** Metadata describing a CLI command */
 export interface CommandMeta {
@@ -693,7 +780,9 @@ export type RawArgValue<D extends ArgDef> = D extends { schema: StandardSchema }
 	? D extends { variadic: true }
 		? string[]
 		: string | undefined
-	: InferArgValue<D> | undefined;
+	: D extends { variadic: true }
+		? ResolveBaseType<D>[] | undefined
+		: InferArgValue<D> | undefined;
 
 /** Runtime-erased syntax-parsed flag value. */
 export type ParsedFlagValue = RawFlagValue<FlagDef>;

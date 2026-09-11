@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
+import { unwrap } from "../../tests/helpers.ts";
 import { defineContext } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
@@ -97,10 +98,12 @@ describe("command definitions", () => {
 				}),
 		);
 
-		await new Crust("cli").add(definition).run(["copy"], {
-			args: { source: "from", destination: "to" },
-			flags: { verbose: true, output: "dist" },
-		});
+		await unwrap(
+			new Crust("cli").add(definition).run(["copy"], {
+				args: { source: "from", destination: "to" },
+				flags: { verbose: true, output: "dist" },
+			}),
+		);
 		expect(received).toEqual({
 			args: { source: "from", destination: "to" },
 			flags: { verbose: true, output: "dist" },
@@ -114,7 +117,7 @@ describe("command definitions", () => {
 		);
 		const app = new Crust("cli").add(outer);
 
-		await expect(app.run(["outer", "nested"], { flags: { late: true } } as never)).rejects.toThrow(
+		await expect(unwrap(app.run(["outer", "nested"], { flags: { late: true } }))).rejects.toThrow(
 			/Unknown flag/,
 		);
 	});
@@ -137,9 +140,9 @@ describe("command definitions", () => {
 		const app = new Crust("cli").add(outer);
 
 		await expect(
-			app.run(["outer", "before"], { flags: { "api-key": "secret" } } as never),
+			unwrap(app.run(["outer", "before"], { flags: { "api-key": "secret" } })),
 		).rejects.toThrow(/Unknown flag/);
-		await app.run(["outer", "after"], { flags: { "api-key": "secret" } });
+		await unwrap(app.run(["outer", "after"], { flags: { "api-key": "secret" } }));
 		expect(calls).toEqual(["secret"]);
 	});
 
@@ -161,7 +164,7 @@ describe("command definitions", () => {
 		const deploy = defineCommand("deploy", (command) => command.use(db).use(logging).add(status));
 		const app = new Crust("cli").provide(logging(), db()).add(deploy);
 
-		await app.run(["deploy", "status"], { flags: { verbose: true } });
+		await unwrap(app.run(["deploy", "status"], { flags: { verbose: true } }));
 
 		expect(calls).toEqual(["database:true"]);
 	});
@@ -179,7 +182,7 @@ describe("command definitions", () => {
 		);
 		const app = new Crust("cli").provide(logging(), db()).add(status);
 
-		await app.run(["status"]);
+		await unwrap(app.run(["status"]));
 
 		expect(calls).toEqual(["database:true"]);
 
@@ -208,7 +211,7 @@ describe("command definitions", () => {
 		const definition = defineCommand("users", (command) => command.action(() => {}));
 		const app = new Crust("cli").flags({ name: "secret", type: "string" }).add(definition);
 
-		await expect(app.run(["users"], { flags: { secret: "value" } } as never)).rejects.toThrow(
+		await expect(unwrap(app.run(["users"], { flags: { secret: "value" } }))).rejects.toThrow(
 			/Unknown flag/,
 		);
 	});
@@ -216,10 +219,10 @@ describe("command definitions", () => {
 	it("rejects a recipe-provided Context flag colliding with an ancestor Context's flag", () => {
 		const db = defineContext("db", { flags: [{ name: "conn", type: "string" }] }, () => ({}));
 		const cache = defineContext("cache", { flags: [{ name: "conn", type: "number" }] }, () => ({}));
-		// Fully typed: the sealed recipe cannot see ancestor spellings, so this
-		// compiles — the collision is caught when the definition materializes.
+		// Checked attachment validates the sealed recipe against this destination.
 		const sub = defineCommand("sub", (cmd) => cmd.provide(cache()).action(() => {}));
 		const app = new Crust("cli").provide(db());
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		expect(() => app.add(sub)).toThrow(
 			'Flag "conn" collides with existing flag "conn" on command "sub"',
 		);
@@ -232,6 +235,7 @@ describe("command definitions", () => {
 		const sub = defineCommand("sub", (cmd) =>
 			cmd.provide(db.of({ kind: "double" })).action(() => {}),
 		);
+		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 		expect(() => new Crust("cli").provide(db()).add(sub)).toThrow(
 			expect.objectContaining({
 				code: "DEFINITION",
@@ -323,8 +327,8 @@ describe("command definitions", () => {
 		expect(Object.keys(app._node.subCommands)).toEqual(["existing", "build", "publish"]);
 		expect(app._node.subCommands).not.toBe(receiver._node.subCommands);
 
-		await app.run(["build"]);
-		await app.run(["publish"]);
+		await unwrap(app.run(["build"]));
+		await unwrap(app.run(["publish"]));
 
 		expect(ran).toEqual(["build", "publish"]);
 		expect(configured).toEqual(["build", "publish"]);

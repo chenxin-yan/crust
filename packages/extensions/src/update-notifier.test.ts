@@ -1092,7 +1092,9 @@ describe("updateNotifier post-run hook", () => {
 					executionOrder.push("command");
 				});
 
-			await app.run([], undefined, { stderr: () => executionOrder.push("notice") });
+			expect(
+				(await app.run([], undefined, { stderr: () => executionOrder.push("notice") })).status,
+			).toBe("completed");
 
 			expect(executionOrder).toEqual(["command", "notice"]);
 		});
@@ -1112,7 +1114,10 @@ describe("updateNotifier post-run hook", () => {
 					throw new Error("command failed");
 				});
 
-			await expect(app.run([])).rejects.toThrow("command failed");
+			expect(await app.run([])).toMatchObject({
+				status: "failed",
+				error: new Error("command failed"),
+			});
 
 			expect(fetchCalled).toBe(false);
 		});
@@ -1191,7 +1196,9 @@ describe("updateNotifier post-run hook", () => {
 				)
 				.action(() => {});
 
-			await app.run([], undefined, { stderr: (text) => stderr.push(text) });
+			const outcome = await app.run([], undefined, { stderr: (text) => stderr.push(text) });
+			expect(outcome.status).toBe("completed");
+			expect(outcome.stderr).toBe(stderr.join("\n"));
 
 			expect(stderr.join("\n")).toContain("Update available");
 			expect(stderr.join("\n")).toContain("5.0.0");

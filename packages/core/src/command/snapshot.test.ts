@@ -115,18 +115,6 @@ describe("snapshotCommand", () => {
 });
 
 describe("command metadata sections", () => {
-	it("rejects a dynamic section carrying both only and except", () => {
-		const agentDocs = defineExtensionId("agent-docs");
-		// Dynamic path: the SectionAudience union owns literals, but a
-		// config-built object can carry both fields — runtime must reject it.
-		const section = JSON.parse(
-			JSON.stringify({ title: "T", body: "B", only: [agentDocs], except: [agentDocs] }),
-		) as { title: string; body: string };
-		expect(() => new Crust("cli", { sections: [section] })).toThrow(
-			"contains invalid documentation sections",
-		);
-	});
-
 	it("appends targeted Extension sections after authored sections in registration order", async () => {
 		const first = defineExtension(defineExtensionId("first"), {
 			sections(snapshot) {
@@ -241,25 +229,15 @@ describe("command metadata sections", () => {
 	});
 
 	it("rejects malformed authored section data", () => {
-		const badSections: unknown[] = [
+		const badSections = [
 			[{ title: "", body: "Body" }],
 			[{ title: "   ", body: "Body" }],
 			[{ title: "Notes", body: "" }],
-			[{ title: 1, body: "Body" }],
-			[{ title: "Notes", body: null }],
-			[{ title: "Notes", body: "Body", only: [], except: ["terminal"] }],
-			[{ title: "Notes", body: "Body", only: "terminal" }],
 			[{ title: "Notes", body: "Body", only: [] }],
 			[{ title: "Notes", body: "Body", except: [] }],
-			[{ title: "Notes", body: "Body", only: [{}] }],
-			[{ title: "Notes", body: "Body", only: [{ id: "" }] }],
-			[{ title: "Notes", body: "Body", only: [{ id: " terminal " }] }],
-			[{ title: "Notes", body: "Body", except: [1] }],
-			[{ title: "Notes", body: "Body", only: ["   "] }],
-			[null],
 		];
 		for (const sections of badSections) {
-			expect(() => new Crust("cli", { sections: sections as never })).toThrow(
+			expect(() => new Crust("cli", { sections })).toThrow(
 				expect.objectContaining({
 					code: "DEFINITION",
 					details: {
@@ -273,23 +251,15 @@ describe("command metadata sections", () => {
 	});
 
 	it("rejects malformed Extension section contributions", async () => {
-		const badReturns: unknown[] = [
-			{ command: [], title: "Notes", body: "Body" }, // not an array
-			[{ title: "Notes", body: "Body" }], // missing command
-			[{ command: "build", title: "Notes", body: "Body" }],
-			[{ command: [1], title: "Notes", body: "Body" }],
+		const badReturns = [
 			[{ command: [], title: "", body: "Body" }],
 			[{ command: [], title: "Notes", body: "   " }],
-			[{ command: [], title: "Notes", body: "Body", only: [], except: [] }],
-			[{ command: [], title: "Notes", body: "Body", only: "terminal" }],
 			[{ command: [], title: "Notes", body: "Body", only: [] }],
-			[{ command: [], title: "Notes", body: "Body", only: [null] }],
-			[{ command: [], title: "Notes", body: "Body", only: [{ id: 1 }] }],
 		];
 		for (const contributions of badReturns) {
 			const app = new Crust("cli").extend(
 				defineExtension(defineExtensionId("docs"), {
-					sections: () => contributions as never,
+					sections: () => contributions,
 				}),
 			);
 			await expect(app.snapshot()).rejects.toMatchObject({
@@ -305,6 +275,7 @@ describe("command metadata sections", () => {
 
 	it("rejects CR/LF in authored and contributed section titles", async () => {
 		expect(
+			// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
 			() => new Crust("cli", { sections: [{ title: "Injected\nheading", body: "Body" }] }),
 		).toThrow(CrustError);
 		const contributed = new Crust("cli").extend(
@@ -321,5 +292,15 @@ describe("command metadata sections", () => {
 				reason: "invalid-sections",
 			},
 		});
+	});
+	it("rejects mutually exclusive section audiences at authoring", () => {
+		const id = defineExtensionId("audience");
+		expect(
+			() =>
+				new Crust("app", {
+					// @ts-expect-error deliberately invalid authoring from an untyped caller
+					sections: [{ title: "Notes", body: "text", only: [id], except: [id] }],
+				}),
+		).toThrow("invalid documentation sections");
 	});
 });

@@ -4,22 +4,22 @@ import { defineArg, defineFlag } from "../api/flags.ts";
 import { defineCommand } from "../command/crust.ts";
 
 describe("direct definition name brands", () => {
-	it("keeps generic wrappers and widened string names accepted", () => {
-		function myFlag<Name extends string>(name: Name) {
+	it("checks dynamic command names", () => {
+		function myFlag(name: string) {
 			return defineFlag(name, { type: "string" });
 		}
-		function myArg<Name extends string>(name: Name) {
+		function myArg(name: string) {
 			return defineArg(name, { type: "string" });
 		}
-		function myCommand<Name extends string>(name: Name) {
+		function myCommand(name: string) {
 			return defineCommand(name, (builder) => builder);
 		}
-		function renameCommand<Name extends string>(name: Name) {
+		function renameCommand(name: string) {
 			return myCommand("source").as(name);
 		}
 
 		const dynamicName = "dynamic" as string;
-		// Direct widened calls take the eager indexed-access path, not the deferred generic one.
+		// Broad string names are checked at each consuming operation.
 		expect(defineFlag(dynamicName, { type: "string" }).name).toBe("dynamic");
 		expect(myFlag(dynamicName).name).toBe("dynamic");
 		expect(myArg(dynamicName).name).toBe("dynamic");

@@ -48,7 +48,8 @@ describe("sectionsFor", () => {
 
 describe("visibleSectionsFor", () => {
 	it("collects audience-visible sections in canonical path order and skips hidden trees", async () => {
-		const section = (title: string) => ({ title, body: `${title} body` });
+		const section = <const T extends string>(title: T) =>
+			({ title, body: `${title} body` }) as const;
 		const app = new Crust("demo", {
 			sections: [section("Root"), { ...section("Agents"), only: [agentDocs] }],
 		})

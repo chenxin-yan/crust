@@ -1,9 +1,10 @@
 import { join, relative } from "node:path";
 
 import {
+	type CommandDefinition,
+	type ExtensionBuildContext,
 	type ExtensionFactory,
 	type ExtensionId,
-	type ExtensionBuildContext,
 	type InvocationIO,
 	defineCommand,
 	defineExtension,
@@ -190,32 +191,36 @@ async function buildSkills(options: SkillOptions, context: ExtensionBuildContext
 	else await writeSkillsFromSnapshot(context.snapshot, writeOptions);
 }
 
-export const skill: ExtensionFactory<[options: SkillOptions]> = defineExtension(
-	SKILLS,
-	(options) => {
-		const commandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
-		return {
-			commands: [buildSkillCommand(commandName, options)],
-			// Skills are loaded when a snapshot is prepared, not at construction, so
-			// help and man pages reflect the packaged directory as it exists at render time.
-			sections: (snapshot) => [
-				{
-					command: [],
-					title: SKILLS_SECTION_TITLE,
-					body: formatSkillDocumentation(options.distDir, commandName, snapshot.meta.name),
-					except: [SKILLS],
-				},
-			],
-			build: (context) => buildSkills(options, context),
-			hooks: {
-				async preRun(context) {
-					if (context.commandPath[1] === commandName || options.autoUpdate === false) return;
-					await autoRepairSkills(options, context);
-				},
+// Configurable command names require an open command namespace.
+export const skill: ExtensionFactory<
+	[options: SkillOptions],
+	{},
+	[],
+	[],
+	readonly CommandDefinition<any, any, any, any>[]
+> = defineExtension(SKILLS, (options) => {
+	const commandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
+	return {
+		commands: [buildSkillCommand(commandName, options)],
+		// Skills are loaded when a snapshot is prepared, not at construction, so
+		// help and man pages reflect the packaged directory as it exists at render time.
+		sections: (snapshot) => [
+			{
+				command: [],
+				title: SKILLS_SECTION_TITLE,
+				body: formatSkillDocumentation(options.distDir, commandName, snapshot.meta.name),
+				except: [SKILLS],
 			},
-		};
-	},
-);
+		],
+		build: (context) => buildSkills(options, context),
+		hooks: {
+			async preRun(context) {
+				if (context.commandPath[1] === commandName || options.autoUpdate === false) return;
+				await autoRepairSkills(options, context);
+			},
+		},
+	};
+});
 
 async function reconcileSkill(opts: {
 	packagedSkill: PackagedSkill;

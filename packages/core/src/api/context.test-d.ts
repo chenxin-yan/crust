@@ -47,8 +47,6 @@ function _typecheckChecksDependencyGraphsAtEveryCompositionBoundary() {
 	});
 	new Crust("cli").provide(config(), db()).extend(extension);
 
-	// A factory widened to AnyContextFactory opts out of the compile-time
-	// dependency brand; wiring stays runtime-checked.
 	const widened: AnyContextFactory = config;
 	new Crust("cli").provide(widened(undefined));
 
@@ -92,6 +90,8 @@ function _typecheckBrandsInlineUseDemandsThatTheCallSiteDoesNotProvide() {
 			.provide(db.of({ url: "fake" }))
 			// @ts-expect-error -- db's transitive config dependency is still unmet
 			.command("query", (cmd) => cmd.use(db).action(() => {}));
+		// @ts-expect-error -- .use() takes factories; instances belong to .provide()
+		new Crust("cli").provide(config(), db()).command("query", (cmd) => cmd.use(db()));
 	};
 	void invalidCompositions;
 }

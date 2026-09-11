@@ -25,7 +25,7 @@ Two consequences of the root-only model:
 
 ## Author an Extension
 
-`defineExtension(id, config?)` returns a frozen plain value; omitted config defaults to `{}`. The config can contain `flags`, `commands`, `uses`, `provides`, `sections`, `build`, and `hooks`:
+`defineExtension(id, config?)` returns a frozen helper-owned value; omitted config defaults to `{}`. The config can contain `flags`, `commands`, `uses`, `provides`, `sections`, `build`, and `hooks`:
 
 <include lang="ts" meta='title="diagnostics.ts"'>
   ../../../examples/extensions/diagnostics.ts
@@ -33,7 +33,7 @@ Two consequences of the root-only model:
 
 Official Extension identities use the `crust:` namespace, reserved by convention for official Crust identities (the prefix is not enforced at runtime). Third-party packages should namespace published Extension ids with their own prefix; application-local ids can remain plain.
 
-Packages that publish a configurable Extension factory use `defineExtension(id, factory)`. The callback returns config; each call builds a frozen Extension with normalized flags and the same id. The returned factory exposes a readonly `id`, so consumers can pass it to `only` or `except` without constructing an Extension. Official Extension factories expose the same identity contract.
+Packages publish configurable factories with `defineExtension(id, factory)`, also supported by the curried metadata form. Each call validates and normalizes the produced config into a frozen Extension with the same id; creating the factory does not run it. Dynamic config uses the same APIs without wrappers. The returned factory exposes readonly `id` for section audiences without constructing an Extension. Official factories share this contract.
 
 ```ts
 import {
@@ -47,7 +47,14 @@ const DOCS: ExtensionId = defineExtensionId("acme:docs");
 interface DocsOptions {
   readonly verbose?: boolean;
 }
-export const docs: ExtensionFactory<[options?: DocsOptions]> = defineExtension(
+type DocsFlags = readonly [
+  {
+    readonly name: "verbose";
+    readonly type: "boolean";
+    readonly default: boolean | undefined;
+  },
+];
+export const docs: ExtensionFactory<[options?: DocsOptions], {}, [], DocsFlags> = defineExtension(
   DOCS,
   (options = {}) => ({
     flags: [{ name: "verbose", type: "boolean", default: options.verbose }],
@@ -57,6 +64,8 @@ export const docs: ExtensionFactory<[options?: DocsOptions]> = defineExtension(
 ```
 
 Authors not building with `isolatedDeclarations` can omit the annotation (`export const docs = defineExtension(DOCS, (options?: DocsOptions) => ({ … }))`) and get full inference.
+
+`ExtensionFactory` defaults to closed contribution sets: `{}` dependencies and empty provider, flag, and command tuples. Explicitly use the broad upper bound for a parameter when its namespace must remain open. Preserve literal tuples for known contributions. Core consumes the private defining Extension through structural copies; replacing public flags, commands, providers, or hooks on a spread does not redefine it. Use `defineExtension()` for a new definition.
 
 ## Required root metadata
 
@@ -88,13 +97,13 @@ const rootOnlyVersion = defineExtension(defineExtensionId("version"), {
 
 Ordinary command flags are always local; Context-owned flags are the application-level propagation mechanism.
 
-Extension commands are `defineCommand()` definitions attached at the root. `new Crust()` creates only the application root; every contributed command is a definition. Their names, aliases, inputs, and action results flow into typed `run()` and `captureRun()` paths. Recursive Extension flags appear on root and descendant typed inputs; `recursive: false` flags appear only on the root input, as does a flag whose `recursive` scope is a widened `boolean` (a runtime-`false` scope installs it on the root only). Their `.action()` callbacks receive the same typed action context as application commands, including `rootCommand` and the lazy Context bag.
+Extension commands are `defineCommand()` definitions attached at the root. Literal names, aliases, inputs, and action results flow into typed `run()` and `runInteractive()` paths. Recursive flags reach root and descendants; `recursive: false` stays root-only, while a widened scope leaves descendants conservative. Actions receive the normal typed context, including `rootCommand` and the lazy Context bag.
 
-Only contributions preserved as literals by `defineExtension()` can be represented statically. An Extension annotated with a widened `Extension` type, one whose contribution arrays are assembled dynamically or conditionally (`condition ? [foo] : [bar]`, `[condition ? foo : bar]`, a variable-length `(typeof foo)[]` array), an Extension selected conditionally (`.extend(condition ? a : b)`), or a variable-length Extension list (`.extend(...list)`) remains runtime-only; invoke those paths with `execute({ argv })`.
+Keep literal contributions inferred for precise paths, inputs, and results. Dynamic or widened contributions use ordinary `.extend(...extensions)` and retain conservative open namespaces rather than false empty-state proof. Known independent root inputs remain strict; unknowable paths have unknown results. Use `execute({ argv })` for terminal syntax or a genuinely dynamic completed-app `AnyCrust` view for broad structured invocation.
 
-Extension contributions are applied in `.extend()` registration order. Extension flag spellings — declared flags and provided Context-owned flags alike — must not collide with application flags (root or any subcommand's) or with earlier Extensions: `.extend()` and `.add()` reject statically known collisions at compile time (`FIX_ALIAS_COLLISION`). At runtime, dynamically assembled declared Extension flag collisions fail during invocation preparation, while provided Context-owned collisions throw from `.extend()`; both use a `DEFINITION` error because a silent overwrite would retype an already-bound action's flag at parse time. Statically declared Extension flags are also checked against the local flags of commands contributed in the same call: preparation materializes contributed commands before injecting Extension flags, so a shared spelling would throw on every invocation. `provides` Context names likewise must not replace a Context already on the path: statically known replacements are rejected at `.extend()` (`FIX_DUPLICATE_CONTEXT`); dynamically assembled duplicate names keep last-write-wins when their owned flag spellings do not collide. Extension command spellings likewise must not collide within one `defineExtension()` tuple, with already-added application commands, or with other statically declared Extension commands: `defineExtension()`, `.extend()`, and `.add()` reject statically known collisions at compile time (`FIX_COMMAND_COLLISION`) because runtime preparation would otherwise dispatch a command that typed `run()` was not checked against. Dynamically assembled commands keep deterministic last-write-wins at prepare time, so namespace Extension-owned command names and aliases to avoid accidental overrides. During routing, canonical command names beat aliases; among colliding aliases, the alias of the earliest-inserted sibling wins (replacing an existing canonical command keeps its original insertion slot).
+Extension contributions are applied in `.extend()` registration order. Extension flag spellings — declared flags and provided Context-owned flags alike — must not collide with application flags (root or any subcommand's) or with earlier Extensions: `.extend()` and `.add()` reject statically known collisions at compile time (`FIX_ALIAS_COLLISION`). Preparation with `snapshot()`, `run()`, or `execute()` checks destination flag relations after contributed command recipes execute; failures use `DEFINITION` errors. Statically declared Extension flags are also checked against the local flags of commands contributed in the same call: preparation materializes contributed commands before injecting Extension flags, so a shared spelling would throw on every invocation. Only the final tree is checked: a contributed command that a later Extension replaces is never flag-checked. `provides` Context names likewise must not replace a Context already on the path: statically known replacements are rejected at `.extend()` (`FIX_DUPLICATE_CONTEXT`); dynamically assembled duplicate names keep last-write-wins when their owned flag spellings do not collide. Extension command spellings likewise must not collide within one `defineExtension()` tuple, with already-added application commands, or with other statically declared Extension commands: `defineExtension()`, `.extend()`, and `.add()` reject statically known collisions at compile time (`FIX_COMMAND_COLLISION`) because runtime preparation would otherwise dispatch a command that typed `run()` was not checked against. Dynamically assembled commands keep deterministic last-write-wins at prepare time, so namespace Extension-owned command names and aliases to avoid accidental overrides. During routing, canonical command names beat aliases; among colliding aliases, the alias of the earliest-inserted sibling wins (replacing an existing canonical command keeps its original insertion slot).
 
-Registering an `ExtensionId` more than once keeps only its last registration. Its contributions and providers come from that registration, and its lifecycle, section, and build hooks run once. Re-registering the same id with statically known literal commands or flags is still rejected by `FIX_COMMAND_COLLISION` or `FIX_ALIAS_COLLISION`; widen the replacement to `Extension` when its contributions are assembled dynamically. Replacement is runtime-only: the discarded registration's contributions already merged into the builder's static types remain visible, so its commands stay accepted by typed `run()` and fail at runtime with `COMMAND_NOT_FOUND` — invoke dynamically replaced paths with `execute({ argv })`.
+Registering an `ExtensionId` more than once keeps only the last registration and runs its hooks once. Known duplicate contributed commands, flags, and Contexts still fail typecheck to protect earlier typed consumers. Genuinely dynamic replacement collections keep runtime last-write-wins, but discarded contributions/demands may remain conservatively visible in static state. Open command contributions can replace any child, so child input/result proof stays open rather than retaining a stale action result. Actual supplied keys removed by replacement fail binding; omitting a retired defaulted flag can still leave an earlier action observing `undefined`. Runtime canonical precedence and earliest-alias routing are unchanged.
 
 ## Command sections
 
@@ -113,6 +122,8 @@ const deploy = defineCommand(
 Extensions can append sections to any command while the application prepares. The `sections` field is a contribution point into the target commands' `meta.sections`, not documentation of the Extension itself:
 
 ```ts
+import { defineExtension, defineExtensionId } from "@crustjs/core";
+
 const guidance = defineExtension(defineExtensionId("guidance"), {
   sections: () => [
     { command: [], title: "Environment", body: "Set DEPLOY_TOKEN before running." },
@@ -121,7 +132,7 @@ const guidance = defineExtension(defineExtensionId("guidance"), {
 });
 ```
 
-`command` is a canonical path relative to the root; `[]` targets the root. Unknown paths and aliases are rejected with a `DEFINITION` error instead of being silently omitted. Contributions are appended after authored `meta.sections`, in Extension registration order. The callback receives a frozen snapshot containing the fully materialized command tree and authored sections; renderers consume only each target command's merged `meta.sections`.
+The callback returns an array of contributions: each result is validated when the tree is prepared, including text, audiences, and actual canonical destinations. `command` is a canonical path relative to the root; `[]` targets the root. Unknown paths and aliases are rejected with a `DEFINITION` error instead of being silently omitted. Contributions are appended after authored `meta.sections`, in Extension registration order. The callback receives a frozen snapshot containing the fully materialized command tree and authored sections; renderers consume only each target command's merged `meta.sections`.
 
 Titles must be non-empty single lines, and bodies are non-empty plain text so the same content is safe for terminal help and mdoc output.
 
@@ -175,9 +186,9 @@ const logging = defineExtension(defineExtensionId("logging"), {
 });
 ```
 
-Unlike a later `.provide()` call, Extension `provides` installs Contexts and their owned flags across existing descendants as well as the root, preserving more-specific local providers on descendants. Later-added descendants inherit them too. Register a provider Extension before `.add()` when a definition declares its Contexts with `.use()` so dependency checks pass.
+Unlike a later `.provide()` call, Extension `provides` installs Contexts and their owned flags across existing descendants as well as the root, preserving more-specific local providers on descendants. Later-added descendants inherit them too. TypeScript compares declared callback value contracts on every attachment. Hook demands apply to effective descendant providers, including every branch of conditional and nested recipes, regardless of attachment order. An empty alternative cannot hide an incompatible provider in another branch. Command-only attachment demands do not constrain unrelated siblings. Unknown outputs cannot satisfy known demanded values by hiding a collection's shape. Register a provider Extension before `.add()` when a definition declares its Contexts with `.use()` so dependency checks pass.
 
-Extension providers use the same compile-time name and owned-flag collision brands as `.provide()`; widened or dynamically assembled owned-flag collisions throw a `DEFINITION` error from `.extend()`. Duplicate Context names without owned-flag collisions remain last-write-wins. Resolution is lazy and memoized for the invocation.
+Extension providers use the same compile-time name and owned-flag collision brands as `.provide()`; widened or dynamically assembled owned-flag collisions throw a `DEFINITION` error from `.extend()`, because provided Contexts are installed immediately; only pending Extension `flags` wait for preparation. Duplicate Context names without owned-flag collisions remain last-write-wins. Owned canonical/alias overlap still rejects for the same Context name. Resolution is lazy and memoized for the invocation.
 
 A `preRun` hook runs before flag validation, so it cannot pull a Context that owns flags. A flagless Context may pull other flagless Contexts, but its pull of a flag-owning Context rejects. That rejection is not memoized: after validation, the next pull re-runs the whole setup from the start, so a setup that acquires resources before the failing pull leaks them and repeats its side effects. Pull dependencies before acquiring resources. Flag-owning Contexts are available from the action and from `postRun` after validation; they remain unavailable after `ctx.finish()`, which skips validation. Values stay live through all `postRun` hooks and are disposed afterwards.
 
@@ -212,7 +223,7 @@ Failures before dispatch do not enter the hook chain. Extension application and 
 
 <include lang="ts">../../../examples/extensions/hooks.ts#service-errors</include>
 
-Rendering never turns a failure into success, and programmatic `run()` throws failures instead of invoking `onError` — see [Error flow](/docs/guide/lifecycle#error-flow). For failures raised during dispatch before `postRun`, `onError` settles before `postRun`, so cleanup hooks observe the attributed outcome and invocation Contexts remain available until cleanup completes. Post-run or disposal failures after an otherwise successful or finished invocation reach `onError` after cleanup, when Context pulls reject.
+Rendering never turns a failure into success, and programmatic `run()` returns failed outcomes instead of invoking `onError` — see [Error flow](/docs/guide/lifecycle#error-flow). For failures raised during dispatch before `postRun`, `onError` settles before `postRun`, so cleanup hooks observe the attributed outcome and invocation Contexts remain available until cleanup completes. Post-run or disposal failures after an otherwise successful or finished invocation reach `onError` after cleanup, when Context pulls reject.
 
 Unlike `preRun`/`postRun`, `onError` does not infer owned flags: routing and syntax-parse failures render with a fallback context whose `flags` are empty, so the hook's `ctx.flags` stays `Record<string, unknown>`. That fallback context's lazy `ctx` bag rejects every Context pull with `DEFINITION` reason `context-after-disposal`, even though no invocation Contexts were constructed.
 

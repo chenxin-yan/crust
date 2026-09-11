@@ -17,9 +17,9 @@ Crust uses exactly four framework error codes:
 ```ts
 import { CrustError } from "@crustjs/core";
 
-try {
-  await app.run(path, input);
-} catch (error) {
+const outcome = await app.run(path, input);
+if (outcome.status === "failed") {
+  const { error } = outcome;
   if (error instanceof CrustError && error.is("VALIDATION")) {
     console.error(error.details?.issues);
   }
@@ -30,15 +30,15 @@ A `CrustError` exposes `code`, `message`, `details`, optional `cause`, `.is(code
 
 ## Trust boundaries
 
-Crust checks developer-authored definitions at compile time through TypeScript. `FIX_*` brands report malformed definitions and collisions at their call sites. Runtime checks cover empty or reserved flag spellings, flag and Extension-flag collisions, duplicate or misplaced arguments, and duplicate `.add()` command names, throwing `DEFINITION` at composition or preparation. Dynamic Extension commands instead replace commands with the same canonical name. Command alias rules remain compile-time-only.
+Crust checks developer-authored definitions at compile time through TypeScript. `FIX_*` brands report malformed definitions and collisions at their call sites. Runtime checks cover empty or reserved flag spellings, flag and Extension-flag collisions, duplicate or misplaced arguments, and duplicate `.add()` command names, throwing `DEFINITION` at composition or preparation. Dynamic Extension commands instead replace commands with the same canonical name. Alias grammar and actual sibling collisions are also checked when consumed.
 
-Argv is untrusted and remains runtime-validated. Invalid tokens, choices, and built-in conversions throw `PARSE`; missing values and Standard Schema issues throw `VALIDATION`. Structured `run()` binding can also throw `PARSE`, for example when a later argument is supplied after an omitted earlier one, or an untyped caller supplies an unknown argument or flag name. Declared Context dependencies are checked statically; lazy bag access retains runtime `DEFINITION` guards for missing providers on dynamically assembled paths, dependency cycles, and lifecycle misuse. Materialization retains runtime checks that a command recipe returns the seeded builder and does not register nested Extensions, because recipe behavior is dynamic. Snapshot preparation also retains runtime checks for authored and Extension-contributed documentation sections.
+Argv is untrusted and remains runtime-validated. Invalid tokens, choices, and built-in conversions throw `PARSE`; missing values and Standard Schema issues throw `VALIDATION`. Structured `run()` binding can also return a failed outcome carrying `PARSE`, for example when a later argument is supplied after an omitted earlier one, or an untyped caller supplies an unknown argument or flag name. Declared Context dependencies are checked statically; lazy bag access retains runtime `DEFINITION` guards for missing providers on dynamically assembled paths, dependency cycles, and lifecycle misuse. Materialization retains runtime checks that a command recipe returns the seeded builder and does not register nested Extensions, because recipe behavior is dynamic. Snapshot preparation also retains runtime checks for authored and Extension-contributed documentation sections.
 
 `COMMAND_NOT_FOUND` details contain `input`, `available`, `commandPath`, and `parentCommand`, a readonly serializable Command Snapshot. `available` contains only visible child command names; hidden commands remain invocable but are omitted from user-facing choices.
 
 ## Application errors pass through
 
-Errors from Command Actions and Context construction are not converted to `CrustError`. A single disposal failure after an otherwise successful invocation is likewise rethrown unchanged. Disposal stacks combine multiple cleanup failures as a native `SuppressedError` chain or, on the Node 22 fallback, an `AggregateError`. If invocation and disposal both fail, `await using` throws a `SuppressedError` with the disposal failure in `.error` and the invocation failure in `.suppressed`. See [Error flow](/docs/guide/lifecycle#error-flow).
+Errors from Command Actions and Context construction are not converted to `CrustError`. A single disposal failure after an otherwise successful invocation is likewise retained unchanged in the failed outcome. Disposal stacks combine multiple cleanup failures as a native `SuppressedError` chain or, on the Node 22 fallback, an `AggregateError`. If invocation and disposal both fail, `await using` throws a `SuppressedError` with the disposal failure in `.error` and the invocation failure in `.suppressed`. See [Error flow](/docs/guide/lifecycle#error-flow).
 
 When cleanup succeeds, the original application error reaches the caller:
 
@@ -48,11 +48,8 @@ const app = new Crust("app").action(() => {
   throw failure;
 });
 
-try {
-  await app.run([]);
-} catch (error) {
-  console.assert(error === failure);
-}
+const outcome = await app.run([]);
+if (outcome.status === "failed") console.assert(outcome.error === failure);
 ```
 
 Use ordinary application error classes when callers need to distinguish domain failures.
@@ -67,16 +64,16 @@ A hook returns `true` after rendering, or a falsy value to delegate to the next 
 
 Failures before dispatch bypass the hook chain. Extension application and command-tree materialization failures render directly to `io.stderr`; snapshot preparation and build-hook failures are printed directly.
 
-`run()` never invokes these hooks. It throws the invocation or combined cleanup failure and leaves rendering and exit status to its caller.
+`run()` never invokes these hooks. It returns the invocation or combined cleanup failure in a `failed` outcome, leaving rendering and exit status to its caller.
 
 ## Cancellation
 
 Core treats any `Error` whose `name` is `"AbortError"` as cancellation. This includes the `DOMException` thrown by prompts:
 
 ```ts
-try {
-  await app.run(path, input);
-} catch (error) {
+const outcome = await app.run(path, input);
+if (outcome.status === "failed") {
+  const { error } = outcome;
   if (error instanceof Error && error.name === "AbortError") {
     return;
   }
@@ -99,4 +96,4 @@ const cancelMessage = defineExtension(defineExtensionId("cancel-message"), {
 });
 ```
 
-When no hook claims it, cancellation stays silent — there is no default rendering. `run()` throws the same exception unless disposal also fails.
+When no hook claims it, cancellation stays silent — there is no default rendering. `run()` returns the same exception in the `failed` branch unless disposal also fails.

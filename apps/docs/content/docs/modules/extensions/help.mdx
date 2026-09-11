@@ -20,9 +20,7 @@ my-cli -h
 my-cli deploy --help
 ```
 
-```ts
-const help: ExtensionFactory;
-```
+The factory preserves its literal owned-flag types for ordinary `.extend()` attachment.
 
 `help()` owns a recursive boolean `help` flag with short name `h`. Its `preRun` hook writes help through `ctx.stdout` and returns `ctx.finish()` when `--help` is present. A container command with no Command Action also displays help.
 

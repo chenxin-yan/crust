@@ -1,4 +1,4 @@
-import type { AnyCrust } from "../src/command/crust.ts";
+import type { AnyCrust, RunOutcome } from "../src/command/crust.ts";
 import type { CommandAction, CommandNode } from "../src/command/node.ts";
 import { createCommandNode, registerFlag } from "../src/command/node.ts";
 import type { ArgsDef, CommandMeta, FlagsDef } from "../src/types.ts";
@@ -6,6 +6,20 @@ import type { ArgsDef, CommandMeta, FlagsDef } from "../src/types.ts";
 export type Expect<T extends true> = T;
 export type Equal<A, B> =
 	(<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+
+export type Repeat<
+	Count extends number,
+	Prefix extends string,
+	Definition extends object,
+	Definitions extends readonly object[] = [],
+> = Definitions["length"] extends Count
+	? Definitions
+	: Repeat<
+			Count,
+			Prefix,
+			Definition,
+			readonly [...Definitions, Definition & { readonly name: `${Prefix}${Definitions["length"]}` }]
+		>;
 
 export function makeNode<
 	const A extends ArgsDef = ArgsDef,
@@ -36,6 +50,14 @@ export interface RunResult {
 	stdout: string;
 	stderr: string;
 	exitCode: number;
+}
+
+export async function unwrap<Result>(
+	pending: Promise<RunOutcome<Result>>,
+): Promise<Exclude<RunOutcome<Result>, { status: "failed" }>> {
+	const outcome = await pending;
+	if (outcome.status === "failed") throw outcome.error;
+	return outcome;
 }
 
 /**

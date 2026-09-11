@@ -5,7 +5,7 @@ import type { ExtensionId } from "../identity.ts";
 import { toFlagsRecord } from "../parsing/spellings.ts";
 import type {
 	CommandMeta,
-	CommandSectionInput,
+	RuntimeCommandSectionInput,
 	FlagDef,
 	InferFlags,
 	InvocationIO,
@@ -15,21 +15,26 @@ import type {
 	ParsedFlagValue,
 } from "../types.ts";
 import type { ValidateCommandDefinitions } from "../validation/commands.brands.ts";
-import type { DeclaredDepsOf } from "../validation/contexts.brands.ts";
+import type { DeclaredDepsOf, KnownContextInstances } from "../validation/contexts.brands.ts";
 import type {
 	ProvideChecks,
 	ProvidedContextSpellings,
-	ValidateNamedFlagDefs,
+	ValidateLocalFlagDefs,
 } from "../validation/flags.brands.ts";
-import type { Awaitable } from "../validation/shared.ts";
-import type {
-	AnyContextFactory,
-	ContextBag,
-	ContextDependencies,
-	ContextInstance,
-	ContextMap,
-	ContextsDependencies,
-	ContextsOutput,
+import type { Awaitable, MergeProviders } from "../validation/shared.ts";
+import {
+	definingOf,
+	seal,
+	type AnyContextFactory,
+	type AnyContextInstance,
+	type ContextBag,
+	type ContextDependencies,
+	type ContextMap,
+	type ContextValue,
+	type ContextsDependencies,
+	type ContextsOutput,
+	type Defining,
+	type DefiningOf,
 } from "./context.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -230,7 +235,7 @@ export type InferExtensionFlags<Defs extends readonly NamedExtensionFlagDef[]> =
 };
 
 /** A documentation section an Extension contributes to one command path. */
-export type ExtensionSectionContribution = CommandSectionInput & {
+export type ExtensionSectionContribution = RuntimeCommandSectionInput & {
 	readonly command: readonly string[];
 };
 
@@ -243,12 +248,14 @@ type CommandDefinitionsDependencies<
 	? // A `never` element (e.g. a `{} as never` cast) would distribute DeclaredDepsOf
 		// to `never` and poison the whole dependency intersection.
 		([H] extends [never] ? {} : DeclaredDepsOf<H>) & CommandDefinitionsDependencies<T>
-	: {};
+	: Commands extends readonly []
+		? {}
+		: Record<string, ContextValue>;
 
 export interface ExtensionConfig<
 	Defs extends readonly NamedExtensionFlagDef[] = readonly NamedExtensionFlagDef[],
 	Uses extends readonly AnyContextFactory[] = readonly AnyContextFactory[],
-	Provides extends readonly ContextInstance[] = readonly ContextInstance[],
+	Provides extends readonly AnyContextInstance[] = readonly AnyContextInstance[],
 	Commands extends readonly CommandDefinition<any, any, any, any>[] = readonly CommandDefinition<
 		any,
 		any,
@@ -270,9 +277,11 @@ export interface ExtensionConfig<
 
 type ValidateExtensionConfig<
 	Defs extends readonly NamedExtensionFlagDef[],
-	Provides extends readonly ContextInstance[],
+	Provides extends readonly AnyContextInstance[],
 	Commands extends readonly CommandDefinition<any, any, any, any>[],
+	Uses extends readonly AnyContextFactory[],
 > = {
+	readonly uses?: Uses;
 	// Pairwise like `.add()`: runtime installation is keyed by canonical name
 	// (last write wins) while typed paths union every matching shape, so a
 	// duplicate name or shared alias inside one Extension would retype run()
@@ -281,15 +290,17 @@ type ValidateExtensionConfig<
 	// Provided Context-owned spellings count as existing: a declared flag
 	// colliding with the same Extension's provided flag would silently retype
 	// the Context's setup flags at parse time.
-	readonly flags?: ValidateNamedFlagDefs<Defs, ProvidedContextSpellings<Provides>>;
+	readonly flags?: ValidateLocalFlagDefs<Defs, ProvidedContextSpellings<Provides>>;
 	// Pairwise like `.provide()`: two provided Contexts sharing a spelling would
 	// let the later parser schema feed the earlier Context's static flag types.
-	readonly provides?: ProvideChecks<never, Provides>;
+	readonly provides?: KnownContextInstances<Provides> & ProvideChecks<never, Provides>;
 };
+
+declare const extensionHookProof: unique symbol;
 
 export interface Extension<
 	Deps extends ContextMap = ContextMap,
-	Provides extends readonly ContextInstance[] = readonly ContextInstance[],
+	Provides extends readonly AnyContextInstance[] = readonly AnyContextInstance[],
 	FlagDefs extends readonly NamedExtensionFlagDef[] = readonly NamedExtensionFlagDef[],
 	Commands extends readonly CommandDefinition<any, any, any, any>[] = readonly CommandDefinition<
 		any,
@@ -298,7 +309,11 @@ export interface Extension<
 		any
 	>[],
 	out MetaKeys extends RootMetaKey = never,
-> {
+	HookDeps extends ContextMap = Deps,
+> extends Defining<Extension<Deps, Provides, FlagDefs, Commands, MetaKeys, HookDeps>> {
+	/** @internal Hook demands are distinct from command/provider attachment dependencies. */
+	readonly _hookDeps?: HookDeps;
+	readonly [extensionHookProof]?: (deps: HookDeps) => void;
 	readonly id: ExtensionId;
 	readonly flags?: Readonly<Record<string, ExtensionFlagDef>>;
 	/** @internal — phantom carrying declared flag literals for extend-time collision checks */
@@ -318,28 +333,37 @@ export interface Extension<
 export type AnyExtension = Extension<any, any, any, any, RootMetaKey>;
 
 export type ExtensionProvidesOutput<E> =
-	E extends Extension<any, infer Provides, any, any, RootMetaKey> ? ContextsOutput<Provides> : {};
+	DefiningOf<E> extends Extension<any, infer Provides, any, any, RootMetaKey>
+		? ContextsOutput<Provides>
+		: {};
 export type ExtensionsProvidesOutput<Es extends readonly AnyExtension[]> = Es extends readonly [
 	infer H,
 	...infer T extends readonly AnyExtension[],
 ]
-	? ExtensionProvidesOutput<H> & ExtensionsProvidesOutput<T>
-	: {};
+	? MergeProviders<ExtensionProvidesOutput<H>, ExtensionsProvidesOutput<T>>
+	: Es extends readonly []
+		? {}
+		: Es[number] extends Extension<any, infer P, any, any, RootMetaKey>
+			? P[number] extends never
+				? {}
+				: Record<string, ContextValue>
+			: {};
 
-/** A callable Extension constructor whose identity is also a section consumer. */
+/**
+ * A callable Extension constructor whose identity is also a section consumer.
+ * Contribution parameters default to closed sets. Use `ContextMap`,
+ * `readonly AnyContextInstance[]`, `readonly NamedExtensionFlagDef[]`, or
+ * `readonly CommandDefinition<any, any, any, any>[]` to keep a namespace open.
+ */
 export type ExtensionFactory<
 	Args extends readonly unknown[] = [],
-	Deps extends ContextMap = ContextMap,
-	Provides extends readonly ContextInstance[] = readonly ContextInstance[],
-	Defs extends readonly NamedExtensionFlagDef[] = readonly NamedExtensionFlagDef[],
-	Commands extends readonly CommandDefinition<any, any, any, any>[] = readonly CommandDefinition<
-		any,
-		any,
-		any,
-		any
-	>[],
+	Deps extends ContextMap = {},
+	Provides extends readonly AnyContextInstance[] = [],
+	Defs extends readonly NamedExtensionFlagDef[] = [],
+	Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
 	MetaKeys extends RootMetaKey = never,
-> = ((...args: Args) => Extension<Deps, Provides, Defs, Commands, MetaKeys>) & {
+	HookDeps extends ContextMap = Deps,
+> = ((...args: Args) => Extension<Deps, Provides, Defs, Commands, MetaKeys, HookDeps>) & {
 	readonly id: ExtensionId;
 };
 
@@ -349,14 +373,14 @@ export interface DefineExtensionWith<MetaKeys extends RootMetaKey> {
 		Args extends readonly unknown[],
 		const Defs extends readonly NamedExtensionFlagDef[] = [],
 		const Uses extends readonly AnyContextFactory[] = [],
-		const Provides extends readonly ContextInstance[] = [],
+		const Provides extends readonly AnyContextInstance[] = [],
 		const Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
 	>(
 		id: ExtensionId,
 		factory: (
 			...args: Args
 		) => ExtensionConfig<Defs, Uses, Provides, Commands, MetaKeys> &
-			ValidateExtensionConfig<Defs, Provides, Commands>,
+			ValidateExtensionConfig<Defs, Provides, Commands, Uses>,
 	): ExtensionFactory<
 		Args,
 		ContextDependencies<Uses> &
@@ -365,17 +389,18 @@ export interface DefineExtensionWith<MetaKeys extends RootMetaKey> {
 		Provides,
 		Defs,
 		Commands,
-		MetaKeys
+		MetaKeys,
+		ContextDependencies<Uses>
 	>;
 	<
 		const Defs extends readonly NamedExtensionFlagDef[] = [],
 		const Uses extends readonly AnyContextFactory[] = [],
-		const Provides extends readonly ContextInstance[] = [],
+		const Provides extends readonly AnyContextInstance[] = [],
 		const Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
 	>(
 		id: ExtensionId,
 		config?: ExtensionConfig<Defs, Uses, Provides, Commands, MetaKeys> &
-			ValidateExtensionConfig<Defs, Provides, Commands>,
+			ValidateExtensionConfig<Defs, Provides, Commands, Uses>,
 	): Extension<
 		ContextDependencies<Uses> &
 			ContextsDependencies<Provides> &
@@ -383,11 +408,11 @@ export interface DefineExtensionWith<MetaKeys extends RootMetaKey> {
 		Provides,
 		Defs,
 		Commands,
-		MetaKeys
+		MetaKeys,
+		ContextDependencies<Uses>
 	>;
 }
-
-type ErasedExtensionFactory = (...args: any[]) => ExtensionConfig;
+type ErasedExtensionFactory = (...args: any[]) => ExtensionConfig<any, any, any, any>;
 
 function isExtensionFactory(
 	value: ExtensionConfig | ErasedExtensionFactory,
@@ -410,14 +435,14 @@ export function defineExtension<
 	Args extends readonly unknown[],
 	const Defs extends readonly NamedExtensionFlagDef[] = [],
 	const Uses extends readonly AnyContextFactory[] = [],
-	const Provides extends readonly ContextInstance[] = [],
+	const Provides extends readonly AnyContextInstance[] = [],
 	const Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
 >(
 	id: ExtensionId,
 	factory: (
 		...args: Args
 	) => ExtensionConfig<Defs, Uses, Provides, Commands> &
-		ValidateExtensionConfig<Defs, Provides, Commands>,
+		ValidateExtensionConfig<Defs, Provides, Commands, Uses>,
 ): ExtensionFactory<
 	Args,
 	ContextDependencies<Uses> &
@@ -425,41 +450,58 @@ export function defineExtension<
 		CommandDefinitionsDependencies<Commands>,
 	Provides,
 	Defs,
-	Commands
+	Commands,
+	never,
+	ContextDependencies<Uses>
 >;
 export function defineExtension<
 	const Defs extends readonly NamedExtensionFlagDef[] = [],
 	const Uses extends readonly AnyContextFactory[] = [],
-	const Provides extends readonly ContextInstance[] = [],
+	const Provides extends readonly AnyContextInstance[] = [],
 	const Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
 >(
 	id: ExtensionId,
 	config?: ExtensionConfig<Defs, Uses, Provides, Commands> &
-		ValidateExtensionConfig<Defs, Provides, Commands>,
+		ValidateExtensionConfig<Defs, Provides, Commands, Uses>,
 ): Extension<
 	ContextDependencies<Uses> &
 		ContextsDependencies<Provides> &
 		CommandDefinitionsDependencies<Commands>,
 	Provides,
 	Defs,
-	Commands
+	Commands,
+	never,
+	ContextDependencies<Uses>
 >;
+
 export function defineExtension(
 	id?: ExtensionId,
 	config: ExtensionConfig | ErasedExtensionFactory = {},
-): Extension | ExtensionFactory<any[]> | DefineExtensionWith<never> {
+): Extension<any> | ExtensionFactory<any[], any> | DefineExtensionWith<never> {
 	// Metadata requirements are erased, so specialization needs no runtime state.
 	if (id === undefined) return defineExtension;
-	if (isExtensionFactory(config)) {
+	if (isExtensionFactory(config))
 		return Object.assign((...args: any[]) => defineExtension(id, config(...args)), { id });
-	}
-	const ownedFlags = toFlagsRecord(config.flags ?? []);
+	const ownedFlags = Object.freeze(toFlagsRecord(config.flags ?? []));
+
+	toFlagsRecord(
+		(config.provides ?? []).flatMap((instance) =>
+			Object.entries(definingOf(instance).ownedFlags).map(([name, def]) => ({
+				...def,
+				name,
+			})),
+		),
+		ownedFlags,
+	);
 
 	// SAFETY: the runtime registry erases Defs after the overloads contextually typed every hook.
-	return Object.freeze({
+	const extension = {
 		...config,
-		uses: Object.freeze([...(config.uses ?? [])]),
+		uses: Object.freeze((config.uses ?? []).map(definingOf)),
+		...(config.provides ? { provides: Object.freeze(config.provides.map(definingOf)) } : {}),
+		...(config.commands ? { commands: Object.freeze([...config.commands]) } : {}),
 		id,
 		...(config.flags === undefined ? {} : { flags: ownedFlags }),
-	}) as Extension;
+	} as Extension;
+	return seal(extension);
 }

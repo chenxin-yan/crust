@@ -7,15 +7,26 @@ export type Simplify<T> = { [K in keyof T]: T[K] };
 // Flat intersections keep chained composition at constant instantiation depth.
 export type MergeContext<A, B> = A & B;
 
+/** Provider replacement is last-write-wins; an open name may leave any earlier value in place. */
+export type MergeProviders<A, B> = keyof A extends never
+	? B
+	: keyof B extends never
+		? A
+		: string extends keyof B
+			? Record<string, A[keyof A] | B[string]>
+			: [keyof A & keyof B] extends [never]
+				? A & B
+				: Omit<A, keyof B> & B;
+
 /**
  * Extract the narrowed canonical `name` literal from a definition.
- * Resolves to `never` when no `name` field exists or when the type is the
- * broad `string` (not a narrowed literal), so widened defs opt out of checks.
+ * Open name domains carry no spelling proof; attachment must retain
+ * their uncertainty rather than treating this absence as an empty namespace.
  */
 export type DefName<T> = T extends { name: infer N extends string }
-	? string extends N
-		? never
-		: N
+	? IsClosedName<N> extends true
+		? N
+		: never
 	: never;
 
 export type UnionToIntersection<U> = (U extends unknown ? (x: U) => void : never) extends (
@@ -41,20 +52,37 @@ export type IsStaticTuple<Cs extends readonly unknown[]> = number extends Cs["le
 			? false
 			: true;
 
-/**
- * The members of union `S` that overlap with `Existing`, or `never` when
- * disjoint. Callers pattern-match the result with their own
- * `extends infer C extends string` to embed the colliding literal(s) in a
- * brand message.
- */
-export type Overlap<S, Existing extends string> = S & Existing;
+/** Whether a fixed tuple has one closed canonical name per slot. */
+export type HasClosedNames<Ds extends readonly unknown[]> = number extends Ds["length"]
+	? false
+	: IsUnion<Ds> extends true
+		? false
+		: false extends {
+					[I in keyof Ds]: Ds[I] extends { name: infer N extends string }
+						? IsUnion<N> extends true
+							? false
+							: IsClosedName<N>
+						: false;
+			  }[number]
+			? false
+			: true;
+
+/** Brand statically known spelling collisions while allowing open names. */
+export type CollisionBrand<
+	S extends string,
+	Existing extends string,
+	Key extends string,
+	Before extends string,
+	After extends string,
+> = string extends S | Existing
+	? {}
+	: [S & Existing] extends [never]
+		? {}
+		: { readonly [K in Key]: `${Before}"${S & Existing}"${After}` };
 
 /** Brand a statically known empty literal while allowing widened and generic names. */
-/* oxlint-disable anti-slop/no-unsafe-dictionary-type -- indexed type preserves deferred generic-name behavior while unknown means unbranded. */
-export type EmptyLiteralNameBrand<Name extends string, Err> = ({
-	readonly "": Err;
-} & Record<string, unknown>)[Name];
-/* oxlint-enable anti-slop/no-unsafe-dictionary-type */
+export type EmptyLiteralNameBrand<Name extends string, Err> =
+	IsClosedName<Name> extends true ? ("" extends Name ? Err : {}) : {};
 
 /**
  * Brand a definition whose custom parser can return a Promise — parse results
@@ -62,7 +90,7 @@ export type EmptyLiteralNameBrand<Name extends string, Err> = ({
  * union-aware (a sometimes-async `cond ? Promise.resolve(x) : x` parser is
  * caught) while `any`-returning parsers stay unbranded.
  */
-export type AsyncParseBrand<T> = T extends { parse: (...args: never[]) => infer R }
+export type AsyncParseBrand<T> = T extends { parse?: (...args: never[]) => infer R }
 	? Extract<R, Promise<unknown>> extends never
 		? {}
 		: {
@@ -95,3 +123,17 @@ export type DefaultWithinChoicesBrand<T> = T extends {
 							}
 				: {}
 	: {};
+
+/** Finite literal domains have required record keys; infinite templates and branded strings do not.
+ * Distribute first so a finite union member cannot hide an open member's index signature.
+ */
+export type IsClosedName<N extends string> = false extends (
+	N extends unknown ? ({} extends Record<N, true> ? false : true) : never
+)
+	? false
+	: true;
+
+/** Reject independently provable invalid local values, including members of uncertain definitions. */
+export type LocalValueBrand<T> = UnionToIntersection<
+	T extends unknown ? AsyncParseBrand<T> & DefaultWithinChoicesBrand<T> : never
+>;

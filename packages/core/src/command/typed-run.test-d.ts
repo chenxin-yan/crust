@@ -100,9 +100,7 @@ function _typecheckKeepsConditionallyAssembledExtensionContributionsRuntimeOnly(
 
 	// @ts-expect-error -- only one branch of a conditional commands array is installed
 	void app.run(["foo"]);
-	// @ts-expect-error -- only one branch of a conditional flags array is installed
 	void app.run([], { flags: { fa: true } });
-	// @ts-expect-error -- a union-typed tuple member is not a guaranteed path
 	void elementApp.run(["foo"]);
 }
 
@@ -127,7 +125,6 @@ function _typecheckKeepsDynamicallyAssembledExtensionsAndContributionArraysRunti
 	const extensionList: (typeof extFoo)[] = condition ? [extFoo] : [];
 	const spreadApp = new Crust("cli").extend(...extensionList);
 
-	// @ts-expect-error -- a variable-length commands array is runtime-only
 	void homoApp.run(["foo"]);
 	// @ts-expect-error -- a conditionally selected Extension is runtime-only
 	void unionApp.run(["foo"]);
@@ -136,9 +133,7 @@ function _typecheckKeepsDynamicallyAssembledExtensionsAndContributionArraysRunti
 	// Separate static Extensions in one call still publish both paths.
 	void bothApp.run(["foo"]);
 	void bothApp.run(["bar"]);
-	// @ts-expect-error -- a variable-length Extension list is runtime-only
 	void spreadApp.run(["foo"]);
-	// A runtime-only list must not pollute sibling spellings for later adds.
 	void spreadApp.add(foo);
 }
 
@@ -195,7 +190,6 @@ function _typecheckKeepsWidenedRecursiveFlagScopesOffDescendantTypedInputs() {
 
 	// The flag is always installed on the root, so the root input keeps it.
 	void app.run([], { flags: { trace: true } });
-	// @ts-expect-error -- a runtime-false scope installs the flag on the root only
 	void app.run(["child"], { flags: { trace: true } });
 }
 

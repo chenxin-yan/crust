@@ -122,7 +122,7 @@ function _metadataRequirements() {
 		never,
 		{},
 		{},
-		{ extension: never; tree: never },
+		{ extension: never; tree: never; demands: {}; pending: never },
 		void,
 		{ version: string }
 	>;

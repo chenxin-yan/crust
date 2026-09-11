@@ -1,13 +1,25 @@
 import { describe, expect, it } from "bun:test";
 import { resolve } from "node:path";
+import { runInNewContext } from "node:vm";
 
-import { makeNode } from "../../tests/helpers.ts";
+import { makeNode, unwrap } from "../../tests/helpers.ts";
+import { Crust } from "../command/crust.ts";
 import { createCommandNode, registerFlag } from "../command/node.ts";
 import { CrustError } from "../errors.ts";
 import type { ArgDef } from "../types.ts";
 import { parseArgs, parseStructured, validateParsed } from "./parser.ts";
 
 type DynamicParser = NonNullable<Extract<ArgDef, { type: "string" }>["parse"]>;
+
+it("leaves required variadics empty until required validation", () => {
+	const command = {
+		...createCommandNode("raw"),
+		args: [{ name: "files", type: "string", required: true, variadic: true }] as const,
+	};
+	const parsed = parseArgs(command, []);
+	expect(parsed.args.files).toEqual([]);
+	expect(() => validateParsed(command, parsed)).toThrow('Missing required argument "<files>"');
+});
 
 // ────────────────────────────────────────────────────────────────────────────
 // Boolean flags
@@ -923,27 +935,34 @@ describe("parseArgs — url/path/json types", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("parseArgs — parse escape hatch", () => {
-	it("rejects an async parse with a PARSE error (dynamic path; brand owns literals)", () => {
-		// Typed `(raw: string) => unknown` accepts an async implementation, so
-		// the AsyncParseBrand never fires; without the runtime guard the pending
-		// Promise becomes the flag value and a rejection escapes the pipeline.
-		const asyncParse: DynamicParser = async (raw) => raw;
-		const cmd = makeNode({
-			meta: "test",
-			flags: { n: { type: "string", parse: asyncParse } },
-		});
-		expect(() => parseArgs(cmd, ["--n", "42"])).toThrow("parse must be synchronous");
+	it("rejects cross-realm native Promise outputs before action and contains rejections", async () => {
+		for (const expression of ["Promise.resolve(42)", "Promise.reject(new Error('foreign'))"]) {
+			const promise: unknown = runInNewContext(expression);
+			expect(promise instanceof Promise).toBe(false);
+			const parse: DynamicParser = () => promise;
+			let called = false;
+			const app = new Crust("test").flags({ name: "n", type: "string", parse }).action(() => {
+				called = true;
+			});
+			expect(await app.run([], { flags: { n: "42" } })).toMatchObject({
+				status: "failed",
+				error: { message: expect.stringContaining("parse must be synchronous") },
+			});
+			expect(called).toBe(false);
+		}
+	});
 
-		// Rejecting parser: the guard must throw synchronously, not leak an
-		// unhandled rejection.
+	it("checks each dynamic parser result and contains rejected Promises", async () => {
+		const asyncParse: DynamicParser = async (raw) => raw;
 		const rejecting: DynamicParser = async () => {
 			throw new Error("boom");
 		};
-		const cmd2 = makeNode({
-			meta: "test",
-			flags: { n: { type: "string", parse: rejecting } },
-		});
-		expect(() => parseArgs(cmd2, ["--n", "42"])).toThrow("parse must be synchronous");
+		for (const parse of [asyncParse, rejecting]) {
+			const app = new Crust("test").flags({ name: "n", type: "string", parse });
+			await expect(unwrap(app.run([], { flags: { n: "42" } }))).rejects.toThrow(
+				"parse must be synchronous",
+			);
+		}
 	});
 
 	it("runs parse on the raw argv value", () => {
@@ -1187,33 +1206,23 @@ describe("parseArgs \u2014 default coercion symmetry", () => {
 		expect(result.flags.mode).toBe("a");
 	});
 
-	it("rejects a dynamic flag default outside the choices list when argv is absent", () => {
-		// Widened choices/defaults (e.g. loaded from config) opt out of the
-		// FIX_DEFAULT_CHOICE brand; parse time is their single validation home.
+	it("checks dynamic defaults against choices when definitions are consumed", () => {
 		const choices: string[] = ["a", "b"];
-		const cmd = makeNode({
-			meta: "test",
-			flags: { mode: { type: "string", choices, default: "z" } },
-		});
-		expect(() => parseArgs(cmd, [])).toThrow(/Invalid value "z" for --mode/);
-	});
-
-	it("rejects each element of a dynamic multiple-flag default outside choices", () => {
-		const cmd = makeNode({
-			meta: "test",
-			flags: {
-				tags: { type: "string", multiple: true, choices: ["a", "b"], default: ["a", "z"] },
-			},
-		});
-		expect(() => parseArgs(cmd, [])).toThrow(/Invalid value "z" for --tags/);
-	});
-
-	it("rejects a dynamic arg default outside the choices list when positional is absent", () => {
-		const cmd = makeNode({
-			meta: "test",
-			args: [{ name: "mode", type: "string", choices: ["a", "b"], default: "z" }],
-		});
-		expect(() => parseArgs(cmd, [])).toThrow(/Invalid value "z"/);
+		expect(() =>
+			new Crust("test").flags({ name: "mode", type: "string", choices, default: "z" }),
+		).toThrow("default must be one of choices");
+		expect(() =>
+			new Crust("test").flags({
+				name: "tags",
+				type: "string",
+				multiple: true,
+				choices,
+				default: ["a", "z"],
+			}),
+		).toThrow("default must be one of choices");
+		expect(() =>
+			new Crust("test").args({ name: "mode", type: "string", choices, default: "z" }),
+		).toThrow("default must be one of choices");
 	});
 });
 
@@ -1342,16 +1351,18 @@ describe("parseStructured", () => {
 		expect(seen).toEqual(["80", "80"]);
 	});
 
-	it("preserves multiple flag order and wraps a scalar occurrence", () => {
+	it("preserves multiple flag order and rejects checked scalar occurrences", () => {
 		const command = makeNode({ meta: "test", flags: { tag: { type: "string", multiple: true } } });
 		expect(parseStructured(command, { flags: { tag: ["b", "-a"] } }).flags.tag).toEqual([
 			"b",
 			"-a",
 		]);
-		expect(parseStructured(command, { flags: { tag: "a" } }).flags.tag).toEqual(["a"]);
+		expect(() => parseStructured(command, { flags: { tag: "a" } })).toThrow(
+			"Expected an occurrence array",
+		);
 	});
 
-	it("spreads variadic values in definition order", () => {
+	it("spreads variadic values in definition order", async () => {
 		const command = makeNode({
 			meta: "test",
 			args: [
@@ -1363,6 +1374,16 @@ describe("parseStructured", () => {
 			first: "-first",
 			rest: ["b", "a"],
 		});
+		const app = new Crust("run").args(
+			{ name: "first", type: "string" },
+			{ name: "rest", type: "string", variadic: true },
+		);
+		await expect(
+			unwrap(
+				// @ts-expect-error -- runtime regression deliberately supplies a scalar variadic.
+				app.run([], { args: { first: "a", rest: "b" } }),
+			),
+		).rejects.toThrow("occurrence array");
 	});
 
 	it("keeps scalar JSON arrays intact and passes raw input verbatim", () => {

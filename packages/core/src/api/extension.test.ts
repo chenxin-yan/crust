@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
+import { unwrap } from "../../tests/helpers.ts";
 import {
 	Crust,
 	defineCommand,
@@ -88,13 +89,15 @@ describe("defineExtension", () => {
 		expect(emit.id).toBe(HELP);
 		expect(instance.id).toBe(HELP);
 		expect(Object.isFrozen(instance)).toBe(true);
-		await new Crust("app", {
-			version: "1.2.3",
-			sections: [{ title: "Example", body: "app", only: [emit] }],
-		})
-			.extend(instance)
-			.action(() => {})
-			.run([], {}, { stdout: (line) => output.push(line) });
+		await unwrap(
+			new Crust("app", {
+				version: "1.2.3",
+				sections: [{ title: "Example", body: "app", only: [emit] }],
+			})
+				.extend(instance)
+				.action(() => {})
+				.run([], {}, { stdout: (line) => output.push(line) }),
+		);
 		expect(output).toEqual(["release:1.2.3"]);
 	});
 
@@ -104,6 +107,25 @@ describe("defineExtension", () => {
 		});
 		expect<Extension>(extension).toEqual(help());
 		expect(Object.isFrozen(extension)).toBe(true);
-		expect(defineExtension(HELP)).toEqual({ id: HELP, uses: [] });
+		expect(defineExtension(HELP)).toMatchObject({ id: HELP, uses: [] });
 	});
+});
+
+it("checks every future Extension factory config and snapshots contribution arrays", async () => {
+	const id = defineExtensionId("checked-factory");
+	const factory = defineExtension(id, (short: string) => ({
+		flags: [{ name: "verbose", type: "boolean" as const, short }],
+	}));
+	expect(factory("v").id).toBe(id);
+	expect(() => factory("long")).toThrow("one character");
+	const commands = [defineCommand("child", (command) => command)];
+	const extension = defineExtension(id, { commands });
+	commands.length = 0;
+	expect(extension.commands).toHaveLength(1);
+	const versioned = defineExtension<"version">()(id, {
+		sections: () => [{ command: [], title: "Notes", body: "Body" }],
+	});
+	expect(
+		(await new Crust("cli", { version: "1" }).extend(versioned).snapshot()).meta.sections,
+	).toEqual([{ title: "Notes", body: "Body" }]);
 });

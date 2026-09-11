@@ -1,11 +1,12 @@
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import type {
 	CommandDefinitionSpellings,
+	LocalSectionsBrand,
 	ValidateCommandConfig,
 	ValidateCommandDefinitions,
 	ValidateExtensionCommands,
 } from "./commands.brands.ts";
-type Def<Name extends string, Aliases extends readonly string[] = readonly string[]> = {
+type Def<Name extends string, Aliases extends readonly string[] = readonly []> = {
 	readonly name: Name;
 	readonly _aliases?: Aliases;
 };
@@ -48,7 +49,7 @@ type Def<Name extends string, Aliases extends readonly string[] = readonly strin
 }
 
 {
-	// brands Extension command collisions and lets widened commands opt out
+	// brands Extension command collisions, including an open command namespace
 	type Ext<Commands extends readonly unknown[]> = { readonly commands?: Commands };
 	type AppCollision = ValidateExtensionCommands<
 		readonly [Ext<readonly [Def<"inspect", readonly ["scan"]>]>],
@@ -150,6 +151,26 @@ type Def<Name extends string, Aliases extends readonly string[] = readonly strin
 			'Subcommand "issue" alias "issue" must not equal its own canonical name'
 		>
 	>;
+}
+
+{
+	// brands an empty audience even when another section-union branch is valid
+	type Mixed = LocalSectionsBrand<{
+		sections: readonly [
+			| { readonly title: "Bad"; readonly body: "Body"; readonly only: readonly [] }
+			| { readonly title: "Good"; readonly body: "Body" },
+		];
+	}>;
+	type Valid = LocalSectionsBrand<{
+		sections: readonly [
+			| { readonly title: "One"; readonly body: "Body" }
+			| { readonly title: "Two"; readonly body: "Body" },
+		];
+	}>;
+	type _mixed = Expect<
+		Equal<Mixed["sections"][0]["FIX_SECTION_AUDIENCE"], "Section audience must be nonempty">
+	>;
+	type _valid = Expect<Equal<Extract<keyof Valid["sections"][0], "FIX_SECTION_AUDIENCE">, never>>;
 }
 
 {

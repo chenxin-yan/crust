@@ -46,11 +46,34 @@ const database = defineContext("db", { uses: [config] }, async ({ ctx }) => {
 new Crust("app").provide(database(), config());
 ```
 
-Dependencies remain lazy: `config` starts only if setup accesses `ctx.config`. A `.provide()` call verifies the transitive dependency closure at the type level. Dependencies may appear in either order within one call; across calls, provide dependencies first so the next call can be checked.
+Dependencies remain lazy: `config` starts only if setup accesses `ctx.config`. A `.provide()` call verifies the transitive dependency closure at the type level: a dependency must be provided on the path (`FIX_MISSING_DEPENDENCY`) and the provided value must satisfy the declared type (`FIX_DEPENDENCY_TYPE`), including providers with a broad `string` name whose value type is known. Dependencies may appear in either order within one call; across calls, provide dependencies first so the next call can be checked.
 
 Reusable commands declare demand with `.use(...factories)` — `.use(logger)` demands (a factory), `.provide(logger())` supplies (an instance) — and Extensions declare theirs with the `uses` config field. `.add()` and `.extend()` validate those declarations against Contexts already provided on the builder. Put `.provide()` or provider `.extend()` calls before `.add()`.
 
 A later `.provide()` does not backfill already-added children. Extension `provides` differ: `.extend()` installs them and their owned flags across the existing tree, while preserving more-specific local providers on descendants. Later-added descendants inherit them too. This runtime scope does not relax the composition-time dependency checks above.
+
+## Dynamic definitions and attachment
+
+Use `defineContext(name, config, setup)` for literal or dynamic names and configuration. Observable local facts and destination relations are checked automatically. Context setup values remain TypeScript-owned, not runtime-decoded.
+
+```ts
+import { Crust, defineCommand, defineContext } from "@crustjs/core";
+
+const aliases: string[] = ["t"];
+const auth = defineContext(
+  "auth",
+  {
+    flags: [{ name: "token", type: "string", aliases }],
+  },
+  () => ({ ok: true }),
+);
+const child = defineCommand("child", (command) => command.use(auth));
+const app = new Crust("cli").provide(auth()).add(child);
+```
+
+`.provide(...instances)` validates declared availability and flag relations against the destination. `.add(...definitions)` validates sibling spellings, inherited owned flags, and materialized demands. Neither runs setup or moves invocation-dependent cycle detection earlier. Local validity is not reusable proof for another destination.
+
+Factories and instances must originate from `defineContext()`. Core retains their immutable defining data privately: spreading an instance and overwriting public `ownedFlags`, `uses`, or `setup` does not redefine what Core consumes. Use a new definition or `.of()` instead. Attachment also rejects a public name that contradicts the defining instance. Structural arrays are copied; Context options and produced values are not cloned or frozen.
 
 ## Test doubles
 
@@ -81,4 +104,6 @@ const database = defineContext("db", async ({ options }: { options: { url: strin
 
 ## Collisions
 
-Context names, dependencies, and owned flag spellings are checked statically. Dynamically assembled owned-flag collisions throw a `DEFINITION` error from `.provide()` rather than overwriting an existing flag. Duplicate Context names without owned-flag collisions remain last-write-wins. Missing providers, cycles, and lifecycle misuse retain runtime `CrustError` guards because they depend on the invocation path.
+Context names, dependencies, and owned flag spellings are checked statically. Known duplicate local providers within one `.provide()` call and along an unconditional builder chain remain compile errors to protect typed consumers; conditional builder branches are not tracked. Supported dynamic replacements do not relax callback demands. Dynamically assembled owned-flag collisions throw a `DEFINITION` error from `.provide()` rather than overwriting an existing flag. Dynamic same-name replacement without owned-flag collisions remains last-write-wins. Overlapping canonical names or aliases still reject, even when both instances have the same Context name; `.of()` does not bypass owned-flag collisions. Missing providers, cycles, and lifecycle misuse retain runtime `CrustError` guards because they depend on the invocation path.
+
+Context callback values remain TypeScript-owned even in dynamic collections: a same-name provider must satisfy each applicable declared value contract. Extension hook demands apply on every command path, so statically named incompatible or unknown descendant replacements are rejected in either attachment order; fully open unknown-valued collections have no provable mismatch and opt out. Compatible replacements, and unrelated descendant replacements with no applicable demand, remain supported. Core checks missing names at consumption without invoking setup or reflecting callback result types.

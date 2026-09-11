@@ -1,18 +1,44 @@
 import { CrustError, type CaughtError } from "../errors.ts";
 import { toFlagsRecord } from "../parsing/spellings.ts";
+import type { FlagsDef, InferFlags, InvocationIO, MergeFlags, NamedFlagDef } from "../types.ts";
 import type {
-	FlagsDef,
-	InferFlags,
-	InvocationIO,
-	MergeFlags,
-	NamedFlagDef,
-	NamedFlagsRecord,
-} from "../types.ts";
-import type { ContextOwnedFlags, ValidateNamedFlagDefs } from "../validation/flags.brands.ts";
-import type { Awaitable } from "../validation/shared.ts";
+	AttachedFlags,
+	ContextOwnedFlags,
+	ValidateLocalFlagDefs,
+} from "../validation/flags.brands.ts";
+import type {
+	Awaitable,
+	MergeProviders,
+	IsStaticTuple,
+	IsUnion,
+	IsClosedName,
+	UnionToIntersection,
+} from "../validation/shared.ts";
 
 /** Upper bound for phantom name-to-value context maps. */
 export type ContextMap = object;
+
+const defining: unique symbol = Symbol("crust.defining");
+declare const contextProof: unique symbol;
+
+/** @internal Immutable defining data retained through public structural copies. */
+export interface Defining<T> {
+	readonly [defining]: T;
+}
+
+/** @internal */
+export type DefiningOf<T> = T extends Defining<unknown> ? T[typeof defining] : T;
+
+/** @internal */
+export function definingOf<T extends Defining<unknown>>(value: T): DefiningOf<T> {
+	// SAFETY: T's Defining constraint proves the indexed value is DefiningOf<T>.
+	return value[defining] as DefiningOf<T>;
+}
+
+/** @internal */
+export function seal<T extends object>(value: T): T & Defining<T> {
+	return Object.freeze(Object.assign(value, { [defining]: value }));
+}
 
 /** Lazy, invocation-scoped Context values. Reading a property starts construction. */
 export type ContextBag<Deps extends ContextMap = {}> = {
@@ -26,8 +52,15 @@ export interface ContextConfig {
 
 type ValidateContextConfig<R extends ContextConfig> = {
 	readonly flags?: R["flags"] extends readonly NamedFlagDef[]
-		? ValidateNamedFlagDefs<R["flags"]>
-		: never;
+		? ValidateLocalFlagDefs<R["flags"], never>
+		: "flags" extends keyof R
+			? {}
+			: never;
+	readonly uses?: R["uses"] extends readonly AnyContextFactory[]
+		? R["uses"]
+		: "uses" extends keyof R
+			? {}
+			: never;
 };
 
 interface ContextSetupInput<OF extends FlagsDef = FlagsDef> extends InvocationIO {
@@ -38,9 +71,12 @@ interface ContextSetupInput<OF extends FlagsDef = FlagsDef> extends InvocationIO
 export interface ContextInstance<
 	Name extends string = string,
 	Value = unknown,
-	OF extends FlagsDef = {},
-	Deps extends ContextMap = {},
-> {
+	OF extends FlagsDef = FlagsDef,
+	Deps extends ContextMap = Record<string, ContextValue>,
+> extends Defining<ContextInstance<Name, Value, OF, Deps>> {
+	readonly [contextProof]?: string extends keyof OF | keyof Deps
+		? unknown
+		: (state: [OF, Deps]) => void;
 	readonly name: Name;
 	readonly ownedFlags: FlagsDef;
 	/** @internal — declared direct dependency factories */
@@ -51,8 +87,11 @@ export interface ContextInstance<
 	readonly _deps?: Deps;
 }
 
+/** @internal Existential registry constraint; never evidence for trusted attachment. */
+export type AnyContextInstance = ContextInstance<string, unknown, any, any>;
+
 /** Whatever a Context setup produces, erased at the runtime registry. */
-export type ContextValue = Awaited<ReturnType<ContextInstance["setup"]>>;
+export type ContextValue = Awaited<ReturnType<AnyContextInstance["setup"]>>;
 
 export interface ContextSetup<
 	Options,
@@ -70,40 +109,83 @@ export interface ContextFactory<
 	Value,
 	OF extends FlagsDef = {},
 	Deps extends ContextMap = {},
-> {
+> extends Defining<ContextFactory<Name, Options, Value, OF, Deps>> {
 	(options: Options): ContextInstance<Name, Value, OF, Deps>;
 	readonly contextName: Name;
 	/** @internal — declared direct dependency factories */
 	readonly uses: readonly AnyContextFactory[];
-	of(value: Value): ContextInstance<Name, Value, OF>;
+	of(value: Value): ContextInstance<Name, Value, OF, {}>;
 	readonly _deps?: Deps;
 }
 
 export type AnyContextFactory = ContextFactory<string, any, any, any, any>;
 
-export type ContextOutput<C> =
-	C extends ContextInstance<infer Name, infer Value, any, any>
-		? { [K in Name]: Awaited<Value> }
-		: never;
+type NamedOutput<Name extends string, Value> =
+	IsClosedName<Name> extends false
+		? Record<string, Awaited<Value>>
+		: IsUnion<Name> extends true
+			? Record<string, Awaited<Value>>
+			: { [K in Name]: Awaited<Value> };
 
-export type ContextsOutput<Cs extends readonly ContextInstance[]> = Cs extends readonly [
-	infer H,
-	...infer T extends readonly ContextInstance[],
-]
-	? ContextOutput<H> & ContextsOutput<T>
-	: {};
+export type ContextOutput<C> = C extends AnyContextInstance
+	? DefiningOf<C> extends ContextInstance<infer Name, infer Value, any, any>
+		? NamedOutput<Name, Value>
+		: never
+	: never;
 
-export type ContextsOwnedFlags<Cs extends readonly ContextInstance[]> = Cs extends readonly [
-	infer H,
-	...infer T extends readonly ContextInstance[],
-]
-	? MergeFlags<ContextOwnedFlags<H>, ContextsOwnedFlags<T>>
-	: {};
+export type ContextsOutput<Cs extends readonly AnyContextInstance[]> =
+	IsStaticTuple<Cs> extends true
+		? Cs extends readonly [infer H, ...infer T extends readonly AnyContextInstance[]]
+			? MergeProviders<ContextOutput<H>, ContextsOutput<T>>
+			: {}
+		: Cs[number] extends never
+			? {}
+			: Record<
+					string,
+					ContextOutput<Cs[number]> extends infer O
+						? O extends unknown
+							? O[keyof O]
+							: never
+						: never
+				>;
 
-export type FactoryOutput<F> =
-	F extends ContextFactory<infer Name, any, infer Value, any, any>
-		? { [K in Name]: Awaited<Value> }
-		: never;
+export type ContextsOwnedFlags<Cs extends readonly AnyContextInstance[]> =
+	IsStaticTuple<Cs> extends true
+		? Cs extends readonly [infer H, ...infer T extends readonly AnyContextInstance[]]
+			? MergeFlags<ContextOwnedFlags<H>, ContextsOwnedFlags<T>>
+			: {}
+		: keyof UnionToIntersection<ContextOwnedFlags<Cs[number]>> extends never
+			? {}
+			: FlagsDef;
+
+/** Check only declared availability; setup, callback values, and cycles belong to invocation. */
+export function validateContextAvailability(
+	contexts: readonly AnyContextInstance[],
+	sources: readonly (AnyContextInstance | AnyContextFactory)[],
+): void {
+	const names = new Set(contexts.map((instance) => instance.name));
+	const visited = new Set<AnyContextInstance | AnyContextFactory>();
+	const visit = (source: AnyContextInstance | AnyContextFactory): void => {
+		if (visited.has(source)) return;
+		visited.add(source);
+		const name = "contextName" in source ? source.contextName : source.name;
+		if (!names.has(name)) {
+			throw new CrustError("DEFINITION", `No provider for Context "${name}"`, {
+				subject: "context",
+				name,
+				reason: "missing-context",
+			});
+		}
+		for (const dependency of source.uses) visit(dependency);
+	};
+	for (const source of sources) visit(source);
+}
+
+export type FactoryOutput<F> = F extends AnyContextFactory
+	? DefiningOf<F> extends ContextFactory<infer Name, any, infer Value, any, any>
+		? NamedOutput<Name, Value>
+		: never
+	: never;
 
 export type FactoriesOutput<Fs extends readonly AnyContextFactory[]> = Fs extends readonly [
 	infer H,
@@ -112,7 +194,11 @@ export type FactoriesOutput<Fs extends readonly AnyContextFactory[]> = Fs extend
 	? FactoryOutput<H> & FactoriesOutput<T>
 	: {};
 
-type FactoryDeps<F> = F extends ContextFactory<any, any, any, any, infer Deps> ? Deps : {};
+type FactoryDeps<F> = F extends AnyContextFactory
+	? DefiningOf<F> extends ContextFactory<any, any, any, any, infer Deps>
+		? Deps
+		: {}
+	: {};
 type FactoriesDeps<Fs extends readonly AnyContextFactory[]> = Fs extends readonly [
 	infer H,
 	...infer T extends readonly AnyContextFactory[],
@@ -120,13 +206,19 @@ type FactoriesDeps<Fs extends readonly AnyContextFactory[]> = Fs extends readonl
 	? FactoryDeps<H> & FactoriesDeps<T>
 	: {};
 
-export type ContextDependencies<Uses extends readonly AnyContextFactory[]> = FactoriesOutput<Uses> &
-	FactoriesDeps<Uses>;
+export type ContextDependencies<Uses extends readonly AnyContextFactory[]> =
+	IsStaticTuple<Uses> extends true
+		? FactoriesOutput<Uses> & FactoriesDeps<Uses>
+		: Record<string, ContextValue>;
 
-export type ContextDepsOf<C> = C extends ContextInstance<any, any, any, infer Deps> ? Deps : {};
-export type ContextsDependencies<Cs extends readonly ContextInstance[]> = Cs extends readonly [
+export type ContextDepsOf<C> = C extends AnyContextInstance
+	? DefiningOf<C> extends { readonly _deps?: infer Deps extends ContextMap }
+		? Deps
+		: {}
+	: {};
+export type ContextsDependencies<Cs extends readonly AnyContextInstance[]> = Cs extends readonly [
 	infer H,
-	...infer T extends readonly ContextInstance[],
+	...infer T extends readonly AnyContextInstance[],
 ]
 	? ContextDepsOf<H> & ContextsDependencies<T>
 	: {};
@@ -134,18 +226,20 @@ export type ContextsDependencies<Cs extends readonly ContextInstance[]> = Cs ext
 export type OwnedFlagsOf<R extends ContextConfig> = R extends {
 	flags: infer F extends readonly NamedFlagDef[];
 }
-	? NamedFlagsRecord<F>
-	: {};
+	? AttachedFlags<F>
+	: "flags" extends keyof R
+		? FlagsDef
+		: {};
 
 export type UsesOf<R extends ContextConfig> = R extends {
 	uses: infer Uses extends readonly AnyContextFactory[];
 }
 	? Uses
-	: readonly [];
+	: "uses" extends keyof R
+		? readonly AnyContextFactory[]
+		: readonly [];
 
-type ErasedContextSetup = (
-	input: ContextSetup<never, FlagsDef, ContextMap>,
-) => Awaitable<ContextValue>;
+type ErasedContextSetup = (input: never) => Awaitable<ContextValue>;
 
 function isContextSetup(value: ContextConfig | ErasedContextSetup): value is ErasedContextSetup {
 	return typeof value === "function";
@@ -168,6 +262,7 @@ export function defineContext<
 		input: ContextSetup<Options, OwnedFlagsOf<R>, ContextDependencies<UsesOf<R>>>,
 	) => Awaitable<Value>,
 ): ContextFactory<Name, Options, Value, OwnedFlagsOf<R>, ContextDependencies<UsesOf<R>>>;
+
 export function defineContext(
 	name: string,
 	configOrSetup: ContextConfig | ErasedContextSetup,
@@ -175,29 +270,29 @@ export function defineContext(
 ): AnyContextFactory {
 	const hasConfig = !isContextSetup(configOrSetup);
 	const config = hasConfig ? configOrSetup : {};
-	const setup = hasConfig ? maybeSetup : configOrSetup;
-	if (!setup) throw new CrustError("DEFINITION", `Context "${name}" requires a setup function`);
-	const ownedFlags = toFlagsRecord(config.flags ?? []);
-	const uses = Object.freeze([...(config.uses ?? [])]);
-	const factory = (options: Parameters<AnyContextFactory>[0]): ContextInstance => ({
-		name,
-		ownedFlags,
-		uses,
-		setup: (input) => {
-			// SAFETY: public overloads pair the stored setup with this exact merged input shape.
+	// Authoring overloads require setup in both call forms.
+	const setup = hasConfig ? maybeSetup! : configOrSetup;
+	const ownedFlags = Object.freeze(toFlagsRecord(config.flags ?? []));
+	const uses = Object.freeze((config.uses ?? []).map(definingOf));
+	const instance = (
+		instanceUses: readonly AnyContextFactory[],
+		run: AnyContextInstance["setup"],
+	): AnyContextInstance => {
+		const value = { name, ownedFlags, uses: instanceUses, setup: run };
+		// SAFETY: seal installs the private defining proof before this runtime value is erased.
+		return seal(value) as AnyContextInstance;
+	};
+	const factory = (options: Parameters<AnyContextFactory>[0]): AnyContextInstance =>
+		instance(uses, (input) => {
+			// SAFETY: public overloads pair setup with exactly this merged input shape.
 			return setup({ options, ...input } as never);
-		},
-	});
+		});
 	factory.contextName = name;
 	factory.uses = uses;
-	factory.of = (value: ContextValue): ContextInstance => ({
-		name,
-		ownedFlags,
-		uses: [],
-		setup: () => value,
-	});
+	factory.of = (value: ContextValue): AnyContextInstance =>
+		instance(Object.freeze([]), () => value);
 	// SAFETY: the mutable factory is fully populated before widening to the runtime registry type.
-	return factory as AnyContextFactory;
+	return seal(factory) as AnyContextFactory;
 }
 
 export type FactoryValueOf<F extends AnyContextFactory> =
@@ -296,7 +391,7 @@ type ValidatedFlags = InferFlags<FlagsDef>;
 
 export interface ContextResolver {
 	bag<Deps extends ContextMap>(
-		sources: readonly (AnyContextFactory | ContextInstance)[],
+		sources: readonly (AnyContextFactory | AnyContextInstance)[],
 	): ContextBag<Deps>;
 	setValidatedFlags(flags: ValidatedFlags): void;
 	settle(): Promise<void>;
@@ -304,7 +399,7 @@ export interface ContextResolver {
 
 /** Internal lazy invocation container. Public consumers receive scoped Context bags. */
 export function createContextResolver(
-	contexts: readonly ContextInstance[],
+	contexts: readonly AnyContextInstance[],
 	io: InvocationIO,
 	disposal: DisposalScope,
 ): ContextResolver {
@@ -466,11 +561,11 @@ export function createContextResolver(
 	};
 
 	const makeBag = <Deps extends ContextMap>(
-		sources: readonly (AnyContextFactory | ContextInstance)[],
+		sources: readonly (AnyContextFactory | AnyContextInstance)[],
 		origin: Entry | null,
 	): ContextBag<Deps> => {
 		const bag: Record<string, Promise<ContextValue>> = {};
-		const add = (source: AnyContextFactory | ContextInstance): void => {
+		const add = (source: AnyContextFactory | AnyContextInstance): void => {
 			const name = "contextName" in source ? source.contextName : source.name;
 			if (Object.hasOwn(bag, name)) return;
 			Object.defineProperty(bag, name, {

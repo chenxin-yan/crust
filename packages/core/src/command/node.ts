@@ -1,8 +1,13 @@
-import type { ContextInstance } from "../api/context.ts";
+import type { AnyContextFactory, AnyContextInstance } from "../api/context.ts";
 import type { Extension } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
-import { addFlagSpellingEntries, type FlagSpelling } from "../parsing/spellings.ts";
+import {
+	flagSpellings,
+	isFlagNegatable,
+	normalizeFlag,
+	type FlagSpelling,
+} from "../parsing/spellings.ts";
 import type { ArgsDef, CommandMeta, FlagDef, FlagsDef } from "../types.ts";
 import type { CrustCommandContext } from "./crust.ts";
 
@@ -11,7 +16,7 @@ import type { CrustCommandContext } from "./crust.ts";
 export type CommandAction = (ctx: CrustCommandContext) => unknown;
 
 export interface CommandContext {
-	instance: ContextInstance;
+	instance: AnyContextInstance;
 	extensionId?: ExtensionId;
 }
 
@@ -44,6 +49,8 @@ export interface CommandNode {
 	subCommands: Record<string, CommandNode>;
 	/** Contexts available to this command in provide order (construction order is pull-driven). */
 	contexts: CommandContext[];
+	/** Declared command demands; validated when recipes are materialized. */
+	demands: readonly AnyContextFactory[];
 	/** Extensions registered via `.extend()` (root builder only) */
 	extensions: Extension[];
 	/** The Command Action */
@@ -71,6 +78,7 @@ export function createCommandNode(name: string): CommandNode {
 		args: [],
 		subCommands: {},
 		contexts: [],
+		demands: [],
 		extensions: [],
 		run: undefined,
 	};
@@ -83,16 +91,9 @@ export function registerFlag(
 	def: FlagDef,
 	source: "local" | "owned",
 ): void {
-	const incomingSpellings = [name, def.short, ...(def.aliases ?? [])].filter(
-		(spelling): spelling is string => spelling !== undefined,
-	);
-	if (new Set(incomingSpellings).size !== incomingSpellings.length) {
-		throw new CrustError(
-			"DEFINITION",
-			`Flag "${name}" repeats one of its own spellings on command "${node.meta.name}"`,
-			{ subject: "flag", name, reason: "flag-collision" },
-		);
-	}
+	def = normalizeFlag(name, def);
+
+	const incomingSpellings = flagSpellings(name, def);
 	const existingName = Object.hasOwn(node.effectiveFlags, name)
 		? name
 		: incomingSpellings
@@ -105,7 +106,11 @@ export function registerFlag(
 			{ subject: "flag", name, reason: "flag-collision" },
 		);
 	}
+
 	(source === "local" ? node.localFlags : node.ownedFlags)[name] = def;
 	node.effectiveFlags[name] = def;
-	addFlagSpellingEntries(node.flagSpellings, name, def);
+	const entry = { canonicalName: name, def, negatable: isFlagNegatable(def) } as const;
+	node.flagSpellings.set(name, { ...entry, kind: "canonical" });
+	if (def.short !== undefined) node.flagSpellings.set(def.short, { ...entry, kind: "short" });
+	for (const alias of def.aliases ?? []) node.flagSpellings.set(alias, { ...entry, kind: "alias" });
 }

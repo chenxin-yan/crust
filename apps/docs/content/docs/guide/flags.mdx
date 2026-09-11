@@ -11,7 +11,7 @@ See [`FlagDef`](/docs/api/types#flagdef) for the complete definition.
 
 Repeated `.flags()` calls accumulate: `.flags(a).flags(b)` defines both flags. A statically known name, short form, or alias collision with an earlier call or an existing Context-owned flag fails typecheck with `FIX_ALIAS_COLLISION` at the call that introduces it.
 
-Builder chaining follows the same accumulation rule for `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` (except duplicate `ExtensionId`s, where `.extend()` keeps only the last registration). TypeScript checks statically known definitions. Core also checks flag spelling collisions and reserved names, duplicate or misplaced arguments, and dynamic `.add()` name collisions at runtime, throwing `DEFINITION` errors.
+Builder chaining accumulates `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()`; duplicate Extension IDs keep the last registration. TypeScript rejects provable definition and collision errors. Spread dynamic collections with `.flags(...defs)` or `.args(...defs)`. Builder calls check actual local constraints; preparation with `snapshot()`, `run()`, or `execute()` checks destination relations with Extension flags. Invalid definitions throw `DEFINITION` errors.
 
 ## Aliases and negation
 
@@ -48,7 +48,7 @@ Both values are non-optional in the Command Action. Other flags include `undefin
 .flags({ name: "target", type: "string", choices: ["bun", "node"] })
 ```
 
-Choices are supported on string flags. When `choices` and `default` are literals, TypeScript reports `FIX_DEFAULT_CHOICE` if the default falls outside the set. Widened `string[]` choices opt out of that compile-time comparison. An argv value outside the choices is a `PARSE` error during invocation.
+Choices are supported on string flags. When `choices` and `default` are literals, TypeScript reports `FIX_DEFAULT_CHOICE` if the default falls outside the set. Defaults against dynamic choices are checked automatically when consumed. Incoming choices are also checked for both argv and structured invocation; an invalid supplied value produces a `PARSE` failure.
 
 When the choices list is a literal tuple (an inline array as above, or a variable declared `as const`), the flag's inferred type narrows to the union of those literals — `"bun" | "node"` here instead of `string`. A widened `string[]` variable keeps the type as plain `string`.
 

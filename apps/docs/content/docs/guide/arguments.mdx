@@ -43,7 +43,9 @@ new Crust("copy")
   });
 ```
 
-A variadic value is always an array. Adding `required: true` to the definition above rejects an empty array.
+A core variadic value is always an array. With `required: true` and no default, typed input requires a nonempty tuple and the validated action value is `[T, ...T[]]`. Optional and default-backed variadics remain `T[]`; schema-backed arguments keep the schema's output type. Before required validation, parser results can still contain an empty array.
+
+Structured `run()` arguments must form a supplied prefix in definition order. Supplying a later position requires every earlier position, even one with a default. Defaults do not fill positional gaps. See [structured invocation](/docs/api/crust#runpath-input-io) for dynamic input.
 
 ## Choices
 
@@ -53,7 +55,7 @@ Use `choices` for a static string set:
 .args({ name: "target", type: "string", choices: ["bun", "node"] })
 ```
 
-When `choices` and `default` are literals, TypeScript reports `FIX_DEFAULT_CHOICE` if the default falls outside the set. Widened `string[]` choices opt out of that compile-time comparison. An argv value outside the choices is a `PARSE` error during invocation.
+When `choices` and `default` are literals, TypeScript reports `FIX_DEFAULT_CHOICE` if the default falls outside the set. Defaults against dynamic choices are checked automatically when consumed. Incoming choices are also checked for both argv and structured invocation; an invalid supplied value produces a `PARSE` failure.
 
 As with flags, a literal choices tuple narrows the argument's inferred type to the union of those literals (`"bun" | "node"` above); a widened `string[]` keeps it as `string`.
 
