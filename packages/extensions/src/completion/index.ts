@@ -102,14 +102,17 @@ async function writeCompletionFiles(
 	dir: string,
 	root: CommandSnapshot,
 	options: CompletionRenderOptions,
-): Promise<void> {
+): Promise<readonly string[]> {
 	const { spec, binName, version } = prepareRender(root, options);
 	await mkdir(dir, { recursive: true });
+	const filenames: string[] = [];
 	for (const shell of SUPPORTED_SHELLS) {
 		const filename = filenameForShell(shell, binName);
 		const script = SHELL_RENDERERS[shell](spec, binName, version);
 		await writeFile(join(dir, filename), script, "utf8");
+		filenames.push(filename);
 	}
+	return filenames;
 }
 
 function renderCompletionScript(
@@ -224,10 +227,11 @@ export const completion: ExtensionFactory<
 			const stagedDir = await mkdtemp(join(outDir, ".completions-"));
 			try {
 				// Keep previous artifacts until validation, rendering, and writes succeed.
-				await writeCompletionFiles(stagedDir, snapshot, options);
+				const filenames = await writeCompletionFiles(stagedDir, snapshot, options);
 				// The hook owns this directory; remove stale scripts after a binary rename.
 				await rm(dir, { recursive: true, force: true });
 				await rename(stagedDir, dir);
+				return filenames.map((filename) => join("completions", filename));
 			} finally {
 				await rm(stagedDir, { recursive: true, force: true });
 			}

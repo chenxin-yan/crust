@@ -67,6 +67,17 @@ type RootCommandSnapshot<K extends RootMetaKey> = CommandSnapshot & {
 	readonly meta: Readonly<Required<Pick<CommandMeta, K>>>;
 };
 
+/** Artifact paths relative to `outDir`. */
+export type BuildArtifacts = readonly string[];
+
+/** Artifacts reported by Extension build hooks, in hook execution order. */
+export interface BuildReport {
+	readonly extensions: readonly {
+		readonly id: ExtensionId;
+		readonly files: readonly string[] | "unknown";
+	}[];
+}
+
 /** Build-time context passed to an Extension's artifact generator. */
 export interface ExtensionBuildContext<MetaKeys extends RootMetaKey = never> {
 	/**
@@ -271,7 +282,9 @@ export interface ExtensionConfig<
 	readonly sections?: (
 		snapshot: RootCommandSnapshot<MetaKeys>,
 	) => readonly ExtensionSectionContribution[];
-	readonly build?: (ctx: ExtensionBuildContext<MetaKeys>) => void | Promise<void>;
+	readonly build?: (
+		ctx: ExtensionBuildContext<MetaKeys>,
+	) => BuildArtifacts | void | Promise<BuildArtifacts | void>;
 	readonly hooks?: ExtensionHooks<Defs, ContextDependencies<Uses>, MetaKeys>;
 }
 
@@ -324,7 +337,9 @@ export interface Extension<
 	readonly sections?: (
 		snapshot: RootCommandSnapshot<MetaKeys>,
 	) => readonly ExtensionSectionContribution[];
-	readonly build?: (ctx: ExtensionBuildContext<MetaKeys>) => void | Promise<void>;
+	readonly build?: (
+		ctx: ExtensionBuildContext<MetaKeys>,
+	) => BuildArtifacts | void | Promise<BuildArtifacts | void>;
 	readonly hooks?: ExtensionHooks<any, Deps, MetaKeys>;
 	readonly _deps?: Deps;
 }

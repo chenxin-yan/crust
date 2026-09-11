@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { text } from "node:stream/consumers";
 
-import type { InvocationIO } from "@crustjs/core";
+import type { BuildReport, InvocationIO } from "@crustjs/core";
 import { BUILD_OUT_DIR_ENV, type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
 import { yellow } from "@crustjs/style";
 import { isErrnoException } from "@crustjs/utils/error";
@@ -411,8 +411,8 @@ export async function execDenoBuild(
  * Prepare a CLI entry's Command Snapshot in the user's project context.
  *
  * The entry runs as a subprocess with `CRUST_INTERNAL_SNAPSHOT_PATH` pointing
- * to a temporary file. `.execute()` validates and writes the command graph,
- * then exits before any following entrypoint code can run.
+ * to a temporary file. `.execute()` validates and writes the command graph and
+ * adjacent Build Report, then exits before any following entrypoint code can run.
  *
  * Uses `process.execPath` (the current binary) with `BUN_BE_BUN=1` so
  * compiled standalone executables can run arbitrary `.ts` files without a
@@ -426,10 +426,11 @@ export async function buildEntrypoint(
 	envFiles: readonly string[],
 	io: InvocationIO,
 	cwd: string,
-): Promise<CommandSnapshot> {
+): Promise<{ snapshot: CommandSnapshot; build: BuildReport }> {
 	const absoluteEntry = resolve(entryPath);
 	const snapshotDir = await mkdtemp(join(tmpdir(), "crust-snapshot-"));
 	const snapshotPath = join(snapshotDir, "command.json");
+	const buildReportPath = join(snapshotDir, "build-report.json");
 
 	try {
 		const spawnedAt = Date.now();
@@ -492,12 +493,35 @@ export async function buildEntrypoint(
 			}
 			throw error;
 		}
+		let snapshot: CommandSnapshot;
 		try {
 			// SAFETY: the paired core snapshot writer serializes a prepared CommandSnapshot to this private path.
-			return JSON.parse(serialized) as CommandSnapshot;
+			snapshot = JSON.parse(serialized) as CommandSnapshot;
 		} catch (error) {
 			throw new Error(
 				`Entry produced an invalid Command Snapshot.\n  Ensure ${absoluteEntry} uses a compatible @crustjs/core version.`,
+				{ cause: error },
+			);
+		}
+
+		let serializedBuild: string;
+		try {
+			serializedBuild = await readFile(buildReportPath, "utf8");
+		} catch (error) {
+			if (isErrnoException(error) && error.code === "ENOENT") {
+				throw new Error(
+					`Entry produced a Command Snapshot without a Build Report.\n  Ensure ${absoluteEntry} uses a compatible @crustjs/core version.`,
+					{ cause: error },
+				);
+			}
+			throw error;
+		}
+		try {
+			// SAFETY: the paired core build writer serializes a BuildReport to this private path.
+			return { snapshot, build: JSON.parse(serializedBuild) as BuildReport };
+		} catch (error) {
+			throw new Error(
+				`Entry produced an invalid Build Report.\n  Ensure ${absoluteEntry} uses a compatible @crustjs/core version.`,
 				{ cause: error },
 			);
 		}

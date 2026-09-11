@@ -1,7 +1,7 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-import { defineCommand, type InvocationIO } from "@crustjs/core";
+import { defineCommand, type BuildReport, type InvocationIO } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
 import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
 
@@ -78,6 +78,33 @@ function resolveBuildRuntimeFromPackageJson(
 	throw new Error(
 		`Invalid package.json crust.runtime ${JSON.stringify(configured)}. Valid runtimes: ${BUILD_RUNTIMES.join(", ")}`,
 	);
+}
+
+function printBuildReport(report: BuildReport, stdout: InvocationIO["stdout"]): void {
+	if (report.extensions.length === 0) return;
+	stdout("Preparing Command Snapshot...");
+	const idWidth = Math.max(...report.extensions.map(({ id }) => id.length));
+	const countWidth = Math.max(
+		0,
+		...report.extensions.flatMap(({ files }) =>
+			files === "unknown"
+				? []
+				: [`${files.length} ${files.length === 1 ? "file" : "files"}`.length],
+		),
+	);
+	for (const { id, files } of report.extensions) {
+		const prefix = `  ${id.padEnd(idWidth)}  `;
+		if (files === "unknown") {
+			stdout(`${prefix}ran (artifacts not reported)`);
+			continue;
+		}
+		const count = `${files.length} ${files.length === 1 ? "file" : "files"}`;
+		const listed = files.slice(0, 3);
+		const paths = [...listed, ...(files.length > 3 ? [`+${files.length - 3} more`] : [])].join(
+			", ",
+		);
+		stdout(`${prefix}${count.padEnd(countWidth)}${paths ? `  ${paths}` : ""}`);
+	}
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -667,7 +694,14 @@ export const buildCommand = defineCommand(
 				const plan = planBuild(flags, cwd);
 				for (const warning of plan.warnings) stderr(warning);
 				if (plan.validate) {
-					await buildEntrypoint(plan.entryPath, plan.outDir, plan.envFiles, io, cwd);
+					const { build } = await buildEntrypoint(
+						plan.entryPath,
+						plan.outDir,
+						plan.envFiles,
+						io,
+						cwd,
+					);
+					printBuildReport(build, stdout);
 				}
 
 				if (plan.runtime === "bun" && plan.mode === "package") {

@@ -31,22 +31,25 @@ export interface WriteSkillsOptions {
 /**
  * Renders generated and authored skills into a package-ready skill source.
  */
-export async function writeSkills({ app, ...options }: WriteSkillsOptions): Promise<void> {
-	await writeSkillSource(await app?.snapshot(), options);
+export async function writeSkills({
+	app,
+	...options
+}: WriteSkillsOptions): Promise<readonly string[]> {
+	return await writeSkillSource(await app?.snapshot(), options);
 }
 
 /** Renders skills from a Command Snapshot prepared in this or another process. */
 export async function writeSkillsFromSnapshot(
 	snapshot: CommandSnapshot,
 	options: Omit<WriteSkillsOptions, "app">,
-): Promise<void> {
-	await writeSkillSource(snapshot, options);
+): Promise<readonly string[]> {
+	return await writeSkillSource(snapshot, options);
 }
 
 async function writeSkillSource(
 	snapshot: CommandSnapshot | undefined,
 	options: Omit<WriteSkillsOptions, "app">,
-): Promise<void> {
+): Promise<readonly string[]> {
 	if (snapshot === undefined && (options.extras?.length ?? 0) === 0) {
 		throw new Error("Nothing to write: provide an app or at least one extra skill directory.");
 	}
@@ -98,9 +101,11 @@ async function writeSkillSource(
 		);
 	}
 	await rm(outDir, { recursive: true, force: true });
+	const written: string[] = [];
 	for (const [name, files] of skills) {
-		await writeFiles(join(outDir, name), files);
+		written.push(...(await writeFiles(join(outDir, name), files)).map((path) => join(name, path)));
 	}
+	return written;
 }
 
 function validateSkillName(name: string): void {
@@ -111,10 +116,14 @@ function validateSkillName(name: string): void {
 	}
 }
 
-async function writeFiles(baseDir: string, files: readonly RenderedFile[]): Promise<void> {
+async function writeFiles(
+	baseDir: string,
+	files: readonly RenderedFile[],
+): Promise<readonly string[]> {
 	for (const file of files) {
 		const filePath = join(baseDir, file.path);
 		await mkdir(dirname(filePath), { recursive: true });
 		await writeFile(filePath, file.content);
 	}
+	return files.map((file) => file.path);
 }

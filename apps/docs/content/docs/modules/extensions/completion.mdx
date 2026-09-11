@@ -126,7 +126,7 @@ Use pre-generated files for packaging or to avoid generator startup cost. Genera
 
 ### Build artifacts
 
-With `completion()` registered, `crust build` writes all three shell files through its build hook:
+With `completion()` registered, `crust build` writes all three shell files through its build hook and reports them as artifacts owned by `crust:completion`:
 
 - `<outdir>/completions/<bin>` for bash
 - `<outdir>/completions/_<bin>` for zsh

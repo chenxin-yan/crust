@@ -1,10 +1,12 @@
 import { writeFile } from "node:fs/promises";
+import { dirname, join, posix, win32 } from "node:path";
 
 import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
 
 import { createContextResolver, DisposalStack } from "../api/context.ts";
 import {
 	finishInvocation,
+	type BuildReport,
 	type Extension,
 	type ExtensionContext,
 	type InvocationOutcome,
@@ -49,8 +51,8 @@ interface PreparedInvocation {
  *
  * When set to a non-empty file path, `.execute()` prepares the command tree,
  * validates its documentation sections, optionally runs Extension build hooks when the
- * build output directory is set, writes its final JSON snapshot, and exits without dispatching
- * a Command Action. In-process callers use `Crust.snapshot()`.
+ * build output directory is set, writes its final JSON snapshot and Build Report, and exits
+ * without dispatching a Command Action. In-process callers use `Crust.snapshot()`.
  */
 export const SNAPSHOT_PATH_ENV = "CRUST_INTERNAL_SNAPSHOT_PATH";
 export const BUILD_OUT_DIR_ENV = "CRUST_INTERNAL_BUILD_OUT_DIR";
@@ -78,6 +80,24 @@ function freezeTree(node: CommandNode): void {
 
 function isSymbol<T>(value: T): value is T & symbol {
 	return typeof value === "symbol";
+}
+
+function normalizeArtifactPath(path: string): string {
+	const normalized = posix.normalize(path.replaceAll("\\", "/"));
+	const drivePrefix = /^[A-Za-z]:/;
+	if (
+		posix.isAbsolute(normalized) ||
+		win32.isAbsolute(path) ||
+		win32.isAbsolute(normalized) ||
+		drivePrefix.test(path) ||
+		drivePrefix.test(normalized)
+	) {
+		throw new Error(`Artifact path "${path}" must be relative to outDir.`);
+	}
+	if (normalized === ".." || normalized.startsWith("../")) {
+		throw new Error(`Artifact path "${path}" escapes outDir.`);
+	}
+	return normalized;
 }
 
 const preparedInvocations = new WeakMap<CommandNode, PreparedInvocation>();
@@ -406,10 +426,15 @@ export async function executeInvocation(
 			let snapshot = takeSnapshot();
 			const buildOutDir = process.env[BUILD_OUT_DIR_ENV];
 			if (buildOutDir) {
+				const extensions: Array<BuildReport["extensions"][number]> = [];
 				for (const extension of base.extensions) {
 					if (!extension.build) continue;
 					try {
-						await extension.build({ snapshot, outDir: buildOutDir });
+						const artifacts = await extension.build({ snapshot, outDir: buildOutDir });
+						extensions.push({
+							id: extension.id,
+							files: artifacts === undefined ? "unknown" : artifacts.map(normalizeArtifactPath),
+						});
 					} catch (error) {
 						const message = error instanceof Error ? error.message : String(error);
 						throw new Error(`Extension "${extension.id}" build failed: ${message}`, {
@@ -420,6 +445,10 @@ export async function executeInvocation(
 					// afterwards lets later hooks observe its outputs without mutating the frozen tree.
 					snapshot = takeSnapshot();
 				}
+				await writeFile(
+					join(dirname(snapshotPath), "build-report.json"),
+					JSON.stringify({ extensions } satisfies BuildReport),
+				);
 			}
 			await writeFile(snapshotPath, JSON.stringify(snapshot));
 		} catch (error) {

@@ -29,14 +29,21 @@ describe("buildEntrypoint", () => {
 				`await Bun.write(${JSON.stringify(trailingMarker)}, "ran");\n`,
 		);
 
-		const root = await buildEntrypoint(entry, join(directory, "dist"), [], io, directory);
+		const { snapshot, build } = await buildEntrypoint(
+			entry,
+			join(directory, "dist"),
+			[],
+			io,
+			directory,
+		);
 
-		expect(root.meta).toMatchObject({ name: "fixture", description: "Fixture CLI" });
-		expect(root.hasAction).toBe(true);
+		expect(snapshot.meta).toMatchObject({ name: "fixture", description: "Fixture CLI" });
+		expect(snapshot.hasAction).toBe(true);
+		expect(build).toEqual({ extensions: [] });
 		await expect(access(trailingMarker)).rejects.toThrow();
 	});
 
-	it("runs Extension build hooks and returns their names", async () => {
+	it("runs Extension build hooks and returns their artifact report", async () => {
 		const directory = await mkdtemp(join(tmpdir(), "crust-entry-build-test-"));
 		tempDirs.push(directory);
 		const entry = join(directory, "cli.ts");
@@ -44,14 +51,17 @@ describe("buildEntrypoint", () => {
 		await writeFile(
 			entry,
 			`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(coreUrl)};\n` +
-				`const artifact = defineExtension(defineExtensionId("artifact"), { build: ({ outDir }) => Bun.write(outDir + "/artifact.txt", "built") });\n` +
+				`const artifact = defineExtension(defineExtensionId("artifact"), { build: async ({ outDir }) => { await Bun.write(outDir + "/artifact.txt", "built"); return ["artifact.txt"]; } });\n` +
 				`const app = new Crust("fixture").extend(artifact).action(() => {});\n` +
 				`await app.execute();\n`,
 		);
 
-		const snapshot = await buildEntrypoint(entry, outDir, [], io, directory);
+		const result = await buildEntrypoint(entry, outDir, [], io, directory);
 
-		expect(snapshot.meta.name).toBe("fixture");
+		expect(result.snapshot.meta.name).toBe("fixture");
+		expect(result.build.extensions).toHaveLength(1);
+		expect(String(result.build.extensions[0]?.id)).toBe("artifact");
+		expect(result.build.extensions[0]?.files).toEqual(["artifact.txt"]);
 		expect(await Bun.file(join(outDir, "artifact.txt")).text()).toBe("built");
 	});
 
@@ -111,6 +121,20 @@ describe("buildEntrypoint", () => {
 		await expect(
 			buildEntrypoint(entry, join(directory, "dist"), [], io, directory),
 		).rejects.toThrow("Entry exited without producing a Command Snapshot");
+	});
+
+	it("explains when core produces a snapshot without a build report", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "crust-entry-report-test-"));
+		tempDirs.push(directory);
+		const entry = join(directory, "cli.ts");
+		await writeFile(
+			entry,
+			`await Bun.write(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!, JSON.stringify({ meta: { name: "old-core" } }));\n`,
+		);
+
+		await expect(
+			buildEntrypoint(entry, join(directory, "dist"), [], io, directory),
+		).rejects.toThrow("Command Snapshot without a Build Report");
 	});
 
 	it("rethrows the entry's error when the subprocess exits non-zero", async () => {

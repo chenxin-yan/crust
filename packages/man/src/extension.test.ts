@@ -29,8 +29,9 @@ describe("man Extension", () => {
 			.extend(extension)
 			.snapshot();
 
-		await extension.build?.({ snapshot, outDir });
+		const artifacts = await extension.build?.({ snapshot, outDir });
 
+		expect(artifacts).toEqual([join("man", "demo.5")]);
 		const output = await readFile(join(outDir, "man", "demo.5"), "utf8");
 		expect(output).toContain(".Dt DEMO 5");
 		expect(output).not.toContain(outDir);

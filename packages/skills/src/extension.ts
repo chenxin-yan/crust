@@ -178,7 +178,10 @@ function formatSkillDocumentation(
 	}
 }
 
-async function buildSkills(options: SkillOptions, context: ExtensionBuildContext): Promise<void> {
+async function buildSkills(
+	options: SkillOptions,
+	context: ExtensionBuildContext,
+): Promise<readonly string[]> {
 	const { writeSkills, writeSkillsFromSnapshot } = await import("./build.ts");
 	const writeOptions = {
 		outDir: join(context.outDir, "skills"),
@@ -187,8 +190,11 @@ async function buildSkills(options: SkillOptions, context: ExtensionBuildContext
 		description: options.description,
 		extras: options.extras,
 	};
-	if (options.generated === false) await writeSkills(writeOptions);
-	else await writeSkillsFromSnapshot(context.snapshot, writeOptions);
+	const files =
+		options.generated === false
+			? await writeSkills(writeOptions)
+			: await writeSkillsFromSnapshot(context.snapshot, writeOptions);
+	return files.map((file) => join("skills", file));
 }
 
 // Configurable command names require an open command namespace.
