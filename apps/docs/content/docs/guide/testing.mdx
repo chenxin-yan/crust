@@ -5,7 +5,9 @@ description: Test Crust applications and custom prompts without process-global s
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-Core `app.run()` already captures ordinary command output. `@crustjs/testing` adds terminal execution capture and fake interactive streams. It is for application developers. Its required peers are `@crustjs/core`, `@crustjs/progress`, and `@crustjs/prompts`; install any your project does not already have. TypeScript is an optional peer.
+Core `app.run()` captures ordinary command output. `@crustjs/testing` adds terminal execution capture and fake interactive streams for application tests.
+
+Its required peers are `@crustjs/core`, `@crustjs/progress`, and `@crustjs/prompts`; install any your project does not already have. TypeScript is an optional peer.
 
 ```sh
 bun add -d @crustjs/testing
@@ -13,27 +15,15 @@ bun add -d @crustjs/testing
 
 ## Capture command output
 
-Use `app.run()` for commands that write ordinary stdout or stderr or return a value. Each `ctx.stdout()`/`ctx.stderr()` call is captured as one line, joined with `"\n"` (matching the terminal defaults). The capture is a status-discriminated union: `completed` carries the action's inferred `result`, `finished` names the Extension whose `preRun` hook ended the invocation, and `failed` carries the thrown value without discarding earlier output.
+<include lang="ts">../../../examples/guide/testing.ts#capture-output</include>
 
-With the default capture setup, prompt and progress output is line-buffered into captured `stderr` through a non-TTY adapter. A spinner emits only its final line. This captures output but does not supply interactive input; use `runInteractive()` to drive prompts.
+Each `ctx.stdout()` or `ctx.stderr()` payload is captured unchanged, and payloads from separate calls are joined with `"\n"`. Embedded newlines remain in the captured string.
 
-```ts
-import { expect, test } from "bun:test";
+Use `app.run()` when you need ordinary output or the Command Action result. See the [full `run()` contract](/docs/api/crust#runpath-input-io) for outcome and failure behavior.
 
-import { app } from "./cli.ts";
-
-test("greets a name", async () => {
-  const captured = await app.run([], { args: { name: "Ada" } });
-
-  expect(captured.stdout).toBe("Hello, Ada!");
-  expect(captured.stderr).toBe("");
-  expect(captured.status).toBe("completed");
-});
-```
+Default prompt and progress output reaches captured `stderr` through a non-TTY adapter. A spinner emits only its final line, but this capture does not provide interactive input.
 
 ## Capture terminal execution
-
-Use `captureExecute()` to exercise the terminal `execute()` path, including Extension error rendering and the exit code established through `process.exitCode`. It captures stdout and stderr, restores the previous process exit code afterward, and reports cancellation as exit code `130`. An unset previous exit code is restored as `0`.
 
 ```ts
 import { expect, test } from "bun:test";
@@ -50,9 +40,11 @@ test("renders invalid input", async () => {
 });
 ```
 
-## Fake a Context
+Use `captureExecute()` for the terminal `execute()` path, including Extension error rendering and exit codes. It captures output and restores the prior process exit state after the test.
 
-Every `defineContext()` factory carries `.of(value)`, which produces an instance returning the precomputed value without running setup. Provide it in place of the real Context when composing an application for a test:
+See [`captureExecute()`](/docs/modules/testing#captureexecuteapp-argv) for raw argv and cancellation behavior.
+
+## Fake a Context
 
 ```ts
 import { Crust } from "@crustjs/core";
@@ -63,11 +55,9 @@ const app = new Crust("my-cli")
   .action(async ({ ctx, stdout }) => stdout((await ctx.database).query("select 1")));
 ```
 
-See [Contexts](/docs/guide/contexts#test-doubles).
+Every `defineContext()` factory carries `.of(value)`, which provides a precomputed value without running setup. See [Context test doubles](/docs/guide/contexts#test-doubles).
 
 ## Test interactive commands
-
-Use `runInteractive()` when an action renders a built-in prompt. Its `type()` and `keys()` methods send terminal input. See the [prompt testing helpers](/docs/modules/prompts#testing-custom-prompts) for supported key names. One ambient terminal-IO scope routes prompt frames, progress indicators, and `ctx.stderr()` text into the same transcript, so `waitFor()` and `screen()` observe the same terminal output. Calls to `ctx.stdout()` are discarded and never appear in `screen()`; use `app.run()` when stdout assertions matter. Application code can use either package's `withTerminalIO()` export; `withPromptIO()` and `withProgressSink()` remain focused aliases.
 
 ```ts
 import { expect, test } from "bun:test";
@@ -87,18 +77,11 @@ test("collects a name", async () => {
 });
 ```
 
-`done` explicitly propagates a failed `app.run()` outcome as a rejection with the original error, including primitive thrown values; completed and finished outcomes resolve it. `waitFor()` never hangs on a failed or finished run: it rethrows the application error, or throws with the current screen when the pattern can no longer match or its timeout (default 5000ms) elapses.
+Use `runInteractive()` when a Command Action renders a built-in prompt. Its `type()` and `keys()` methods send terminal input, while `waitFor()` and `screen()` observe prompt, progress, and `stderr` output in one transcript.
 
-Use `captureExecute(app, argv)` for raw parser behavior such as short-flag bundles, `--flag=value`, and invalid spellings. Statically declared `defineExtension()` commands appear in the typed `app.run()` and `runInteractive()` paths; use `captureExecute()` for dynamically assembled or type-widened Extension contributions.
+`stdout` does not appear in `screen()`, so use `app.run()` for stdout assertions. See [`runInteractive()`](/docs/modules/testing#runinteractiveapp-path-input) for completion and timeout behavior, and see the [prompt testing helpers](/docs/modules/prompts#testing-custom-prompts) for supported key names.
 
 ## For custom prompt authors
-
-<Callout type="warn" title="Built-in prompts are already covered">
-  You do not test built-in prompts. The library covers them. Use this only when authoring a custom
-  `(options, io?)` prompt.
-</Callout>
-
-Use `@crustjs/prompts/testing` directly for custom prompt functions:
 
 ```ts
 import { expect, test } from "bun:test";
@@ -114,3 +97,9 @@ test("collects a name", async () => {
   expect(await prompt.answer).toBe("Ada");
 });
 ```
+
+<Callout type="warn" title="Built-in prompts are already covered">
+  Do not test built-in prompts here. Use this helper only for a custom `(options, io?)` prompt.
+</Callout>
+
+Use `@crustjs/prompts/testing` directly for custom prompt functions.

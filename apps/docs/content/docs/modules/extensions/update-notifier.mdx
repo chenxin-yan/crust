@@ -5,17 +5,24 @@ description: Check npm for a newer stable version after a command succeeds.
 
 ## Usage
 
-```ts
-import { Crust } from "@crustjs/core";
-import { updateNotifier } from "@crustjs/extensions";
-import pkg from "../package.json";
+<include lang="ts" meta='title="cli.ts"'>
+  ../../../../examples/modules/extensions/update-notifier.ts
+</include>
 
-const app = new Crust("my-cli", { version: pkg.version })
-  .extend(updateNotifier({ packageName: pkg.name }))
-  .action(({ stdout }) => stdout("Done"));
+When the registry reports version `2.0.0`, combined stdout and stderr show the completed action followed by this notice:
 
-await app.execute();
+```text
+Done
+
+╭──────────────────────────────────────╮
+│                                      │
+│   Update available  1.2.3 → 2.0.0    │
+│   Run npm install -g my-cli@latest   │
+│                                      │
+╰──────────────────────────────────────╯
 ```
+
+The hook checks only after a completed Command Action. Network, registry, cache, and response failures do not change a successful outcome.
 
 ## API
 
@@ -23,22 +30,21 @@ await app.execute();
 const updateNotifier: ExtensionFactory<[options: UpdateNotifierOptions]>;
 ```
 
-<auto-type-table
-  path="../../../../../../packages/extensions/src/update-notifier.ts"
-  name="UpdateNotifierOptions"
-/>
+| Option           | Type                                                                | Default                          |
+| ---------------- | ------------------------------------------------------------------- | -------------------------------- |
+| `packageName`    | `string`                                                            | Required                         |
+| `currentVersion` | `string`                                                            | Root command `meta.version`      |
+| `timeoutMs`      | `number`                                                            | `5_000`                          |
+| `registryUrl`    | `string`                                                            | `"https://registry.npmjs.org"`   |
+| `updateCommand`  | `string \| UpdateCommandResolver \| { scope: "global" \| "local" }` | No command                       |
+| `updateDocsUrl`  | `string`                                                            | No URL                           |
+| `cache`          | `false \| UpdateNotifierCacheConfig`                                | Built-in cache, 24-hour interval |
 
-The `postRun` hook checks for an update only after a Command Action completes successfully. It reads the root `CommandSnapshot.meta.version` by default; `currentVersion` remains an override. If neither version is available, the hook throws a `DEFINITION` error before any network or cache work, failing the invocation despite the successful action. Network, registry, cache, and response failures are swallowed so the notifier does not fail a successful command. It does not check after `ctx.finish()` short-circuits such as `--help`. The notice is written through the invocation's stderr callback (process stderr under `execute()`). Version comparison follows SemVer precedence, so a stable release is considered newer than its prerelease.
+The current version must come from `currentVersion` or root metadata. If neither exists, the hook throws `DEFINITION` before network or cache work.
 
-The hook awaits the registry check and cache reads and writes after the action, delaying invocation completion. `timeoutMs` defaults to 5,000 ms and limits only the network request, not cache operations or the entire hook.
-
-By default, notifier state is persisted at `stateDir(packageName)` using `@crustjs/store`; package names are URL-encoded for the state directory (`@scope/cli` → `%40scope%2Fcli`) so distinct packages never share state, and cached state from a different `registryUrl` is discarded. A fresh cached result is reused for 24 hours and duplicate notices for the same version are suppressed across sequential process invocations (best-effort: concurrent invocations may race and double-notice). A corrupt state file is treated as empty and repaired on the next successful check. Set `cache: false` to opt out, pass `cache: { intervalMs }` to tune the built-in cache interval, or provide a custom adapter to control persistence.
-
-By default, the notice reports only the available version. Configure `updateCommand` with a fixed string, a `{ scope: "global" | "local" }` object that generates a command for the detected package manager, or an exported `UpdateCommandResolver` callback receiving `{ packageName, packageManager }`. Set `updateDocsUrl` to link to update instructions. Automatic package-manager detection uses `npm_config_user_agent` when available, falling back to `npm_execpath` and the runtime executable name before defaulting to npm.
+The network timeout does not bound cache operations or the whole hook. Version comparison follows SemVer precedence, and notices for the same latest version are suppressed across sequential cached invocations.
 
 ## Update command
-
-Generate the standard global update command for the detected package manager. When Yarn is detected, global scope uses `npm install -g <package>@latest` instead:
 
 ```ts
 updateNotifier({
@@ -47,7 +53,7 @@ updateNotifier({
 });
 ```
 
-Use a fixed command or generate one from package information:
+A string displays a fixed command. A resolver receives `{ packageName, packageManager }`, while a scope creates the standard command for npm, pnpm, Yarn, or Bun.
 
 ```ts
 updateNotifier({
@@ -56,61 +62,22 @@ updateNotifier({
 });
 ```
 
+Package-manager detection checks `npm_config_user_agent`, then `npm_execpath`, then the runtime executable name, and defaults to npm. Yarn global updates use `npm install -g <package>@latest`.
+
 ## Cache
 
-The built-in cache is enabled automatically; no setup is required:
-
-```ts
-updateNotifier({ packageName: "my-cli" });
-```
-
-Tune the check interval while keeping the built-in persistence:
-
 ```ts
 updateNotifier({
   packageName: "my-cli",
-  cache: { intervalMs: 60 * 60 * 1000 }, // 1 hour
+  cache: { intervalMs: 60 * 60 * 1000 },
 });
 ```
 
-Disable all cache reads and writes when every invocation should check the registry:
+The default adapter stores state under the package's platform state directory. Set `cache: false` to skip all cache reads and writes.
 
 ```ts
-updateNotifier({
-  packageName: "my-cli",
-  cache: false,
-});
-```
+import type { UpdateNotifierCacheAdapter } from "@crustjs/extensions";
 
-For custom persistence, provide an adapter:
-
-<auto-type-table
-  path="../../../../../../packages/extensions/src/update-notifier.ts"
-  name="UpdateNotifierCacheConfig"
-/>
-
-<auto-type-table
-  path="../../../../../../packages/extensions/src/update-notifier.ts"
-  name="UpdateNotifierCacheAdapter"
-/>
-
-The adapter reads and writes the exported `UpdateNotifierState` shape:
-
-<auto-type-table
-  path="../../../../../../packages/extensions/src/update-notifier.ts"
-  name="UpdateNotifierState"
-/>
-
-The package exports `UpdateCommandResolver`, `UpdateNotifierCacheAdapter`, `UpdateNotifierCacheConfig`, `UpdateNotifierPackageManager`, and `UpdateNotifierState` alongside `UpdateNotifierOptions`.
-
-```ts
-import {
-  updateNotifier,
-  type UpdateNotifierCacheAdapter,
-  type UpdateNotifierState,
-} from "@crustjs/extensions";
-
-let state: UpdateNotifierState | undefined;
 const adapter: UpdateNotifierCacheAdapter = {
   read: async () => state,
   write: async (nextState) => {
@@ -118,9 +85,7 @@ const adapter: UpdateNotifierCacheAdapter = {
   },
 };
 
-const notifier = updateNotifier({
-  packageName: "my-cli",
-  currentVersion: "1.2.3",
-  cache: { adapter, intervalMs: 60 * 60 * 1000 },
-});
+updateNotifier({ packageName: "my-cli", cache: { adapter } });
 ```
+
+A custom adapter reads `UpdateNotifierState | null | undefined` and writes `UpdateNotifierState`. Adapter failures are treated as soft failures.

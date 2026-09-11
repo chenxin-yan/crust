@@ -5,60 +5,37 @@ description: Add a root-only version flag.
 
 ## Usage
 
-```ts
-import { Crust } from "@crustjs/core";
-import { version } from "@crustjs/extensions";
-
-const app = new Crust("my-cli", { version: "1.2.3" }).extend(version()).action(() => {});
-
-await app.execute();
-```
+<include lang="ts" meta='title="cli.ts"'>
+  ../../../../examples/modules/extensions/version.ts
+</include>
 
 ```sh
 $ my-cli --version
 my-cli v1.2.3
 ```
 
+`version()` owns the root-only `--version` and `-v` flag. It writes through the invocation's stdout callback and finishes before the Command Action.
+
 ## API
 
-[Exact declarations](https://github.com/chenxin-yan/crust/blob/main/packages/extensions/src/version.ts).
-
 ```ts
-type VersionValue = string | (() => string);
-
-interface VersionOptions {
-  readonly format?: "plain" | ((version: string, context: ExtensionContext) => string);
-}
-
-const version: VersionExtension;
+version();
+version("1.2.3");
+version(() => process.env.APP_VERSION ?? "dev");
 ```
 
-With no value override, `version()` requires root version metadata at `.extend()` time. TypeScript rejects `new Crust("my-cli").extend(version())`; supply `{ version: "1.2.3" }` to the constructor instead. The hook reads the version from the root Command Snapshot.
-
-An explicit `version("1.2.3")` or `version(() => "1.2.3")` supplies its own value and needs no root version metadata. An override typed `string | undefined`, including `version(undefined, options)`, conservatively requires root metadata. Providers must return a definite string. Overrides affect only this flag; they do not populate metadata for completion, skills, or other Extensions.
-
-There is no runtime missing-version check. Run strict `tsc --noEmit` or your project's `check:types` script to enforce the requirement. JavaScript, `any`, assertions, and transpile-only builds can bypass it. See [required root metadata](/docs/guide/extensions#required-root-metadata) for the extension-authoring contract.
-
-Pass a function to resolve an override only when the flag is handled:
-
-```ts
-const app = new Crust("my-cli").extend(version(() => process.env.APP_VERSION ?? "dev"));
-```
-
-`version()` owns a root-only boolean `version` flag with short name `v`. It prints through `ctx.stdout` and short-circuits the Command Action only for a root invocation with `--version` or `-v`; subcommands do not receive this flag and reject `--version` as unknown unless they define their own flag with that name.
+Without an explicit value, `version()` requires root `version` metadata. A value typed `string | undefined` still requires that metadata, as described by [`RootMetaKey`](/docs/api/types#rootmetakey-and-defineextensionwith).
 
 ## Options
-
-### `format`
-
-Control the printed line. `"plain"` prints the bare version, which scripts can capture via `$(my-cli --version)`:
 
 ```ts
 version("1.2.3", { format: "plain" });
 // $ my-cli --version
 // 1.2.3
-
-version("1.2.3", { format: (v, ctx) => `${ctx.rootCommand.meta.name}/${v}` });
-// $ my-cli --version
-// my-cli/1.2.3
 ```
+
+| Option   | Type                                                                  | Default                         |
+| -------- | --------------------------------------------------------------------- | ------------------------------- |
+| `format` | `"plain" \| ((version: string, context: ExtensionContext) => string)` | `` `${rootName} v${version}` `` |
+
+A format function returns the line written for the flag. An explicit value may be a string or a function that resolves a string when the flag is handled.

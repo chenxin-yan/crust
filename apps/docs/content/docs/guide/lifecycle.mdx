@@ -5,80 +5,66 @@ description: Understand preparation, invocation, cleanup, and terminal error pre
 
 ## Two invocation modes
 
-Use `execute()` at a CLI entrypoint:
-
 ```ts
-await app.execute();
+const app = new Crust("hello").action(() => "ok");
+const exitCode = await app.execute({ argv: [] }); // 0
+const outcome = await app.run([], {});
+// { status: "completed", result: "ok", stdout: "", stderr: "" }
 ```
 
-During development, run the terminal entrypoint from source:
+`execute()` is the terminal entrypoint: it reads argv, streams output, presents failures, and sets `process.exitCode` for them. `run()` takes a typed command path and structured input, then returns a captured `completed`, `finished`, or `failed` outcome after cleanup.
 
-```sh
-bun run src/cli.ts --help
-bun --watch src/cli.ts
-```
-
-It reads `process.argv.slice(2)` by default, streams output, presents dispatch failures through Extension `onError` hooks, sets `process.exitCode` to `1` (or `130` for cancellation), and returns an exit code. Preparation failures render directly to `stderr` because the Extensions that would handle them have not been applied successfully.
-
-Use `run()` for programmatic invocation:
-
-```ts
-const outcome = await app.run(["deploy"], { flags: { "dry-run": true } });
-if (outcome.status === "failed") throw outcome.error;
-console.log(outcome.stdout);
-```
-
-It requires an explicit typed command path and binds structured input directly. It is quiet by default, captures `stdout`/`stderr` on every outcome, and does not modify `process.exitCode`. The outcome is `completed` with an action `result`, `finished` with an Extension `by`, or `failed` with the original escaping `error`, including [combined invocation and disposal failures](/docs/guide/error-handling#error-flow). Optional per-invocation writers forward output live while retaining capture. Always inspect the outcome so action errors are not silently ignored. For genuinely dynamic paths, use an `AnyCrust` completed-app view with an unknown result; see [Typed input](#typed-input).
-
-A parent with a Command Action treats unmatched argv command tokens as positional arguments. Typed `run()` resolves a failed outcome carrying `COMMAND_NOT_FOUND` for unknown path segments. See [Unknown commands](/docs/guide/commands#unknown-commands).
+See [`execute()` options](/docs/api/crust#executeoptions) and [`run()` input and outcomes](/docs/api/crust#runpath-input-io) for the full contracts.
 
 ## Typed input
 
-Automatic checking does not weaken a known input contract. Literal choices complete in the editor; broad strings, wrong literals, wrong primitives, missing required fields, invalid positional shapes, and fresh-object typo keys are compile errors.
-
 <include lang="ts">../../../examples/guide/invocation.ts#strict</include>
 
-Narrow dynamic input honestly before calling a known application:
+Known command paths check required input, primitive kinds, and literal choices before invocation. See [`run()` input](/docs/api/crust#runpath-input-io) and [typed invocation](/docs/api/types#typed-invocation) for the full rules.
 
 <include lang="ts">../../../examples/guide/invocation.ts#narrowing</include>
 
-TypeScript uses ordinary structural assignability: a predeclared object may carry extra keys, whereas a fresh object literal rejects them even alongside otherwise valid required fields. Core rejects supplied unknown argument or flag keys before the action. Assertions are not validation; invalid asserted inputs still produce failed outcomes.
-
-Supplied positional values must form a prefix, even across defaulted positions. Required core variadics without defaults need nonempty tuples. Conditional definitions remain conservative: omission is safe only when every alternative permits it, and uncertain choices, primitive kinds, or occurrence layouts cannot certify supplied values. Independently known inputs remain strict.
-
-Dynamic authoring uses the same APIs: `new Crust(name)`, `defineCommand(name, config, recipe)`, `defineFlag(name, def)`, and `defineContext(name, config, setup)`. Spread collections into variadic attachment methods: `.flags(...defs)`, `.args(...defs)`, `.provide(...instances)`, `.add(...definitions)`, and root-only `.extend(...extensions)`. Invalid observable definitions throw at their consuming operation. Deferred section callbacks and recipes are checked when prepared, without running Context setup early.
-
-A broad string name does not establish a particular literal key; open namespaces stay open. Finite unions do not establish every alternative key either. Known-invalid members of a finite union remain rejected; a union with an open template member is treated as open, with runtime validation still applying. Unresolved generic names may need a validated parameter constraint; ordinary broad strings are supported.
+Narrow dynamic values before passing them to a known application.
 
 <include lang="ts">../../../examples/guide/invocation.ts#dynamic</include>
 
-Use `AnyCrust` only for genuinely dynamic completed-app inspection and invocation. It accepts broad structured inputs and returns an unknown action result, not an authoring builder. Do not erase a known application to silence an input error. Keep authoring builders inferred; a bare `Crust` has an empty argument tuple, while `Crust<Flags, ArgsDef>` deliberately describes an open argument state.
-
-This is not an arbitrary `unknown` decoder or JSON configuration loader. Decode external data first. Callback values stay TypeScript-owned; see [Runtime checks](/docs/guide/types#runtime-checks).
+Use `AnyCrust` for a genuinely dynamic completed application, where paths and input are broad and the Command Action result is unknown.
 
 ## Successful invocation order
 
-1. **Prepare definitions** — apply Extensions and validate deferred recipes, flag relations, and documentation sections. Authoring and attachment already check applicable local constraints and Context availability; TypeScript also rejects provably invalid definitions. Dynamic Extension commands replace existing canonical names; dynamic duplicate Context names without owned-flag collisions use last-write-wins. Canonical names beat aliases, and the first-registered alias wins among colliding aliases.
-2. **Route** — resolve the command path.
-3. **Parse or bind input** — `execute()` parses tokens; `run()` binds own properties directly. Both check observable value kinds and choices, apply string parsers and path normalization, and resolve defaults.
-4. **Run `preRun` hooks** — invoke hooks in registration order. Flagless Contexts remain lazy. Returning `ctx.finish()` skips remaining hooks, required checks, schemas, and the action.
-5. **Validate structure** — enforce requiredness and post-transform rules.
-6. **Apply schemas** — validate and transform schema-backed inputs, aggregating issues.
-7. **Resolve Contexts on demand** — construct each declared Context once with validated owned flags.
-8. **Run the Command Action**.
-9. **Run `postRun` hooks** — reverse registration order with completed, finished, or failed lifecycle outcome; Contexts remain available.
-10. **Dispose Contexts** — reverse construction order, including after failure. Public outcomes settle only after cleanup.
+<include lang="ts">../../../examples/guide/lifecycle.ts#order</include>
+
+The captured output shows that cleanup finishes before `run()` returns.
+
+1. Prepare the command tree by applying Extensions, recipes, flags, and sections.
+2. Route the command path.
+3. Parse argv for `execute()`, or bind structured input for `run()`.
+4. Run Extension `preRun` hooks in registration order.
+5. Check required values and positional structure.
+6. Apply Standard Schemas and aggregate their issues.
+7. Construct declared Contexts when first pulled.
+8. Run the Command Action.
+9. Run Extension `postRun` hooks in reverse registration order.
+10. Settle Context setup, then dispose constructed Contexts in reverse order.
 
 ## Error flow
+
+```ts
+const outcome = await app.run([], {});
+if (outcome.status === "failed") console.error(outcome.error);
+// run() returns the escaping error instead of presenting it.
+```
 
 `run()` captures preparation, invocation, and cleanup failures in its outcome. `execute()` presents dispatch failures through Extension hooks and sets the terminal status. See [Error flow](/docs/guide/error-handling#error-flow) for hook, disposal, and cancellation behavior.
 
 ## Setup and cleanup
 
-Choose the mechanism that matches the setup's scope:
+```ts
+const database = defineContext("database", ({ stdout }) => ({
+  [Symbol.dispose]() {
+    stdout("database closed");
+  },
+}));
+```
 
-- use a Context for command-specific setup and native disposal
-- use Extension `preRun` and `postRun` for app-wide behavior around an invocation
-- keep ordinary local setup in the Command Action when it is not reusable
-
-This keeps dependency construction lazy and guarantees reverse-order cleanup.
+Use a Context for lazy command-specific setup and disposal. Use Extension hooks for app-wide work around an invocation, and keep one-off setup in the Command Action.

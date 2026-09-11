@@ -1,105 +1,41 @@
 ---
-title: Error Handling
+title: Error handling
 description: Handle Crust failures, application errors, and cancellation.
 ---
 
 ## CrustError
 
-Crust uses exactly four framework error codes:
+<include lang="ts">../../../examples/guide/error-handling.ts#crust-error</include>
+
+Narrow a failed outcome with `instanceof CrustError`, then use `.is()` to narrow its code and details. Crust uses four codes; see the [error codes and details](/docs/api/errors#codes) for the full reference and [compile-time and runtime checks](/docs/guide/types#compile-time-checks) for what is checked where.
 
 | Code                | Meaning                                                                                                 |
 | ------------------- | ------------------------------------------------------------------------------------------------------- |
 | `DEFINITION`        | A malformed dynamic definition or collision, recipe, Extension, Context, or documentation-section error |
 | `PARSE`             | Argv syntax, structured `run()` input binding, or built-in conversion failure                           |
-| `VALIDATION`        | Missing/invalid values or aggregated Standard Schema issues                                             |
-| `COMMAND_NOT_FOUND` | An unknown command under the [routing rules](/docs/guide/commands#unknown-commands)                  |
-
-```ts
-import { CrustError } from "@crustjs/core";
-
-const outcome = await app.run(path, input);
-if (outcome.status === "failed") {
-  const { error } = outcome;
-  if (error instanceof CrustError && error.is("VALIDATION")) {
-    console.error(error.details?.issues);
-  }
-}
-```
-
-A `CrustError` exposes `code`, `message`, `details`, optional `cause`, `.is(code)`, and `toJSON()`.
-
-`COMMAND_NOT_FOUND` details contain `input`, `available`, `commandPath`, and `parentCommand`, a readonly serializable Command Snapshot. `available` contains only visible child command names; hidden commands remain invocable but are omitted from user-facing choices.
-
-## Trust boundaries
-
-See [compile-time and runtime checks](/docs/guide/types#compile-time-checks) for definition and input trust boundaries.
-
-## Application errors pass through
-
-When cleanup succeeds, the original application error reaches the caller:
-
-```ts
-const failure = new Error("service unavailable");
-const app = new Crust("app").action(() => {
-  throw failure;
-});
-
-const outcome = await app.run([]);
-if (outcome.status === "failed") console.assert(outcome.error === failure);
-```
-
-Use ordinary application error classes when callers need to distinguish domain failures.
+| `VALIDATION`        | Missing or invalid values, including Standard Schema issues                                             |
+| `COMMAND_NOT_FOUND` | An unknown command under the [routing rules](/docs/guide/commands#unknown-commands)                     |
 
 ## Error flow
 
-Authoring and attachment errors still throw at consumption, and `snapshot()` preparation errors still reject. The public `run()` boundary captures preparation and invocation failures as outcomes.
+<include lang="ts">../../../examples/guide/error-handling.ts#cleanup</include>
 
-Preparation, routing, and parse failures occur before `preRun` and `postRun`. A failure from `preRun`, validation, schema application, Context construction, or the Command Action still runs every `postRun` hook. The original invocation failure wins over post-run hook failures; after a successful or finished invocation, the first post-run failure fails the invocation after remaining hooks run. Context disposal is LIFO. Crust uses native `AsyncDisposableStack` semantics where available; on Node 22, its fallback aggregates multiple disposal failures in an `AggregateError` rather than a native `SuppressedError` chain.
+A Command Action failure still runs `postRun` hooks, then disposes pulled Context values. The [propagation boundaries](/docs/api/errors#propagation-boundaries) cover failures from other lifecycle phases.
 
-With `run()`, the original value is retained in a `failed` outcome unless disposal also fails. A single disposal failure after an otherwise successful invocation is likewise retained unchanged. Partial output is retained, including cleanup output. If both invocation and disposal fail, `await using` combines them in a `SuppressedError`: `.error` holds the disposal failure and `.suppressed` holds the invocation failure. This is separate from the disposal stack's aggregation of multiple cleanup failures. Action and Context failures are not converted to `CrustError`.
+### Failed outcomes
 
-For `execute()` failures raised during dispatch before `postRun`, Crust invokes Extension `onError` hooks in registration order while Contexts are live, allowing cleanup hooks to observe the handling Extension in `outcome.by`. A hook returns `true` when it rendered the failure; falsy results continue to the next hook and then Core's default renderer, which leaves `by` undefined. `onError` is presentation only and never runs for `run()`.
+<include lang="ts">../../../examples/guide/error-handling.ts#failed-outcome</include>
 
-Routing and parse failures use a fallback hook context with empty `args` and `flags` and no available Contexts. If `postRun` or disposal fails after an otherwise successful or finished invocation, `onError` runs after cleanup and Context pulls reject with `context-after-disposal`. A failure already rendered during dispatch is not presented again after cleanup.
+`run()` returns the application error in a `failed` outcome and keeps output written before cleanup completes. See [`run()` input, output, and failure behavior](/docs/api/crust#runpath-input-io) for the full contract.
 
-Any `Error` whose `name` is `"AbortError"`, including a `DOMException`, is cancellation. `execute()` sets status `130`, offers the error to `onError` hooks (so an application can render "Operation cancelled" centrally), and renders nothing by default when no hook claims it. `run()` returns it in a `failed` outcome.
+### Terminal presentation
 
-## Terminal presentation
+<include lang="ts">../../../examples/guide/error-handling.ts#terminal-presentation</include>
 
-Customize terminal presentation with an Extension `onError` hook:
-
-<include lang="ts">../../../examples/extensions/hooks.ts#service-errors</include>
-
-Core establishes a nonzero status before invoking the chain, so presentation cannot turn a failure into success.
-
-Failures before dispatch bypass the hook chain. Extension application and command-tree materialization failures render directly to `io.stderr`; snapshot preparation and build-hook failures are printed directly.
+`execute()` offers a failure to `onError` hooks and returns the terminal exit code. Returning `true` claims the failure, so Core does not render it again.
 
 ## Cancellation
 
-Handle cancellation returned by `run()`:
+<include lang="ts">../../../examples/guide/error-handling.ts#cancellation</include>
 
-```ts
-const outcome = await app.run(path, input);
-if (outcome.status === "failed") {
-  const { error } = outcome;
-  if (error instanceof Error && error.name === "AbortError") {
-    return;
-  }
-  throw error;
-}
-```
-
-An Extension `onError` hook can render a cancellation message in one place:
-
-```ts
-const cancelMessage = defineExtension(defineExtensionId("cancel-message"), {
-  hooks: {
-    onError(error, ctx) {
-      if (error instanceof Error && error.name === "AbortError") {
-        ctx.stderr("Operation cancelled");
-        return true;
-      }
-    },
-  },
-});
-```
+Treat an `AbortError` returned by `run()` as cancellation. The [propagation boundaries](/docs/api/errors#propagation-boundaries) describe terminal cancellation behavior.

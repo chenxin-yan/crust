@@ -5,28 +5,26 @@ description: Separate runtime secrets from public build-time constants.
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-Crust adds no environment-variable abstraction. Read runtime configuration from `process.env`; Bun loads `.env` files according to its normal runtime rules. When running with Node or Deno, load files explicitly with `node --env-file=.env` or `deno run --env-file=.env`, or supply variables through the shell.
+<include lang="ts" src="../../examples/guide/build.ts" region="runtime-secret" />
 
-```ts
-import { Crust } from "@crustjs/core";
-
-const deploy = new Crust("deploy").action(({ stdout }) => {
-  const token = process.env.API_TOKEN;
-  if (!token) throw new Error("Missing API_TOKEN");
-  stdout("Deploying");
-});
-```
+Crust adds no environment variable abstraction. For Bun's `.env` loading order and shell precedence, see [Bun's environment variable documentation](https://bun.sh/docs/runtime/env).
 
 ## Build-time constants
 
-`crust build` follows Bun's `PUBLIC_*` model. It can use Bun's auto-loaded current-directory environment or explicit repeatable `--env-file` flags:
-
 ```sh
-crust build --env-file .env.production
-crust build --env-file .env --env-file .env.local
+printf 'PUBLIC_API_ORIGIN=https://api.dev.example.com\n' > .env
+cat > .env.production <<'EOF'
+PUBLIC_API_ORIGIN=https://api.example.com
+API_TOKEN=private-value
+EOF
+crust build --env-file .env --env-file .env.production --target bun-linux-x64-baseline --name deploy
+grep -a -o 'https://api.example.com' dist/deploy
+grep -a -o 'private-value' dist/deploy || echo 'private-value: not embedded'
+# https://api.example.com
+# private-value: not embedded
 ```
 
-Later files override earlier files, and the shell environment wins. Only `PUBLIC_*` keys are eligible for embedding.
+`--env-file` is repeatable, and later files override earlier files. Crust passes the files to Bun in order and limits embedded values to `PUBLIC_*` keys.
 
 <Callout type="warn">
   Embedded `PUBLIC_*` values are visible in the binary. Never use that prefix for secrets.
@@ -37,6 +35,4 @@ Later files override earlier files, and the shell environment wins. Only `PUBLIC
 | API keys, tokens, private deployment config | Runtime environment             |
 | Public API origins, public build labels     | `PUBLIC_*` build-time constants |
 
-`--env-file` applies to Bun and Node builds only. `crust build --runtime deno` rejects it because `deno compile` embeds every variable from the file — secrets included — with no `PUBLIC_*` filter; load configuration at runtime instead (e.g. `deno run --env-file`).
-
-If Extension configuration reads environment values while definitions are prepared, pass the same `--env-file` values to `crust build` so its snapshot subprocess sees them. See [Building and Distribution](/docs/guide/build).
+`--env-file` works for Bun and Node builds. `crust build --runtime deno` rejects it because Deno has no matching `PUBLIC_*` filter, so load Deno configuration at runtime instead.

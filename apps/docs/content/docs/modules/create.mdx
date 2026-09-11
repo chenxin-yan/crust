@@ -3,11 +3,7 @@ title: "Create"
 description: Headless scaffolding engine for building create-xx tools.
 ---
 
-import { Callout } from "fumadocs-ui/components/callout";
-
-`@crustjs/create` is a headless scaffolding engine for building `npm create-xxx` / `bun create-xxx` tools. It handles the mechanical parts of scaffolding — copying template directories, interpolating variables, renaming dotfiles, resolving conflicts, and running post-scaffold steps — so you focus purely on template design and interactive flow.
-
-The library is **headless**: it has no opinions about prompts, CLI frameworks, or terminal UI. Pair it with `@crustjs/core` for command routing and `@crustjs/prompts` for interactive input.
+`@crustjs/create` copies template directories, interpolates variables, renames dotfiles, resolves conflicts, and runs post-scaffold steps. It does not provide prompts or terminal UI.
 
 ## Install
 
@@ -15,201 +11,99 @@ The library is **headless**: it has no opinions about prompts, CLI frameworks, o
 bun add @crustjs/create
 ```
 
-## Quick Example
+Pair it with any CLI and prompt libraries needed by your create tool.
 
-```ts title="src/index.ts"
-import { scaffold, runSteps } from "@crustjs/create";
+## Quick example
 
-// 1. Copy and interpolate the template
-const result = await scaffold({
-  template: "./templates/base",
-  dest: "./my-project",
-  context: { name: "my-app", description: "A cool CLI" },
-});
+<include lang="ts" meta='title="src/index.ts"'>
+  ../../../examples/modules/create.ts
+</include>
 
-console.log("Created files:", result.files);
+`scaffold()` returns every written path relative to the destination. After this example, the destination has this shape:
 
-// 2. Run post-scaffold automation
-await runSteps(
-  [{ type: "install" }, { type: "git-init", commit: "Initial commit" }, { type: "open-editor" }],
-  "./my-project",
-);
+```text
+my-project/
+├── .gitignore
+├── package.json
+└── src/
+    └── index.ts
 ```
 
-## How It Works
-
-1. You organize template files as real files on disk (not string constants).
-2. `scaffold()` copies the template directory to a destination, applying `{{var}}` interpolation to text files and renaming `_`-prefixed files to dotfiles.
-3. Binary files are detected automatically and copied as-is without interpolation.
-4. `runSteps()` executes post-scaffold automation declaratively — install dependencies, init git, open an editor.
-
-## Template Conventions
-
-### Variable Interpolation
-
-Template files can contain `{{var}}` placeholders that are replaced with values from the `context` object:
+## Template conventions
 
 ```json title="templates/base/package.json"
 {
   "name": "{{name}}",
-  "description": "{{description}}",
-  "author": "{{author}}"
+  "description": "{{description}}"
 }
 ```
 
-Only simple `{{identifier}}` patterns are supported — no conditionals, loops, or helpers. Whitespace inside braces is tolerated (`{{ name }}`). Missing variables are left untouched.
+Text files replace `{{identifier}}` placeholders from `context`; missing values remain unchanged. Files with a null byte in their first 8 KiB are copied without interpolation.
 
-### Dotfile Renaming
-
-Files prefixed with `_` are renamed to start with `.` during scaffold. This works around npm's behavior of stripping dotfiles during `npm publish`:
-
-| Template file  | Scaffolded as  |
-| -------------- | -------------- |
-| `_gitignore`   | `.gitignore`   |
-| `_env.example` | `.env.example` |
-
-Files starting with `__` (double underscore) are left unchanged, so directories like `__tests__` and `__mocks__` are preserved.
-
-### Binary Files
-
-Binary files (images, fonts, compiled assets) are detected by checking the first 8 KiB for a null byte and copied as-is without interpolation.
-
-### Template Composition
-
-Call `scaffold()` multiple times to layer templates — for example, a base template followed by a TypeScript-specific overlay:
-
-```ts
-// Base template
-await scaffold({
-  template: "./templates/base",
-  dest: projectDir,
-  context,
-});
-
-// TypeScript overlay
-await scaffold({
-  template: "./templates/typescript",
-  dest: projectDir,
-  context,
-  conflict: "overwrite",
-});
+```text
+templates/base/_gitignore   -> my-project/.gitignore
+templates/base/__tests__/   -> my-project/__tests__/
 ```
 
-## API
+A single leading `_` on a filename becomes `.`, while `__` stays unchanged. Call `scaffold()` more than once with `conflict: "overwrite"` to layer templates.
 
-### `scaffold(options)`
+## `scaffold(options)`
 
-Copy a template directory to a destination, applying variable interpolation and dotfile renaming.
-
-#### Parameters
+```ts
+function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult>;
+```
 
 <auto-type-table path="../../../../../packages/create/src/types.ts" name="ScaffoldOptions" />
-
-#### Template resolution
-
-The `template` input accepts three forms:
-
-1. A `file:` URL, typically created with `new URL("./templates", import.meta.url)`, is
-   resolved with `fileURLToPath()` so it remains relative to the calling module.
-2. An absolute string path is normalized with `path.resolve()`.
-3. A relative string path is resolved from the nearest `package.json` found by walking
-   up from `process.argv[1]`. This makes `"templates/base"` resolve from the consuming
-   package root instead of the current working directory.
-
-Resolution throws a descriptive `Error` when a URL does not use the `file:` protocol,
-when `process.argv[1]` is unavailable for a relative path, or when no enclosing
-`package.json` can be found. In the latter two cases, pass an absolute path or a
-`file:` URL instead.
-
-#### Returns
-
-`Promise<ScaffoldResult>`
-
 <auto-type-table path="../../../../../packages/create/src/types.ts" name="ScaffoldResult" />
 
-#### Throws
+A `file:` URL resolves relative to its module, an absolute string is normalized, and a relative string resolves from the nearest `package.json` above `process.argv[1]`. Resolution throws when the URL protocol is not `file:`, the relative source has no package root, or the resolved template is not a directory.
 
-- When the template URL does not use the `file:` protocol or a relative template cannot resolve from a package source.
-- When the resolved template does not exist or is not a directory.
-- When `conflict` is `"abort"` (default) and the destination is a non-empty directory.
+The default `conflict: "abort"` throws for a non-empty destination. `"overwrite"` replaces conflicting files and leaves unrelated destination files in place.
 
-### `runSteps(steps, cwd)`
+## `runSteps(steps, cwd)`
 
-Execute an array of post-scaffold steps sequentially. If any step fails, the error propagates immediately and remaining steps are skipped.
+```ts
+await runSteps(
+  [{ type: "install" }, { type: "git-init", commit: "Initial commit" }],
+  "./my-project",
+);
+```
 
-#### Parameters
-
-| Field   | Type                 | Description                                                      |
-| ------- | -------------------- | ---------------------------------------------------------------- |
-| `steps` | `PostScaffoldStep[]` | Array of step objects to execute in order                        |
-| `cwd`   | `string`             | Working directory for steps (typically the scaffold destination) |
-
-#### Step Types
+Steps run in order and stop at the first error.
 
 <auto-type-table path="../../../../../packages/create/src/types.ts" name="PostScaffoldStep" />
 
-- `{ type: "install" }` detects the package manager and installs dependencies.
-- `{ type: "git-init", commit?: string }` initializes Git and optionally creates a commit.
-- `{ type: "open-editor" }` opens `$EDITOR` or VS Code and does not fail when neither is found.
-- `{ type: "command", cmd: string, cwd?: string }` runs a command through the platform shell (`/bin/sh` on POSIX, `cmd.exe` on Windows); `cwd` overrides the working directory.
+| Step          | Behavior                                                              |
+| ------------- | --------------------------------------------------------------------- |
+| `install`     | Detect the package manager and install dependencies                   |
+| `git-init`    | Initialize Git and optionally create a commit                         |
+| `open-editor` | Open `$EDITOR` or VS Code; warn instead of failing when unavailable   |
+| `command`     | Run `cmd` through the platform shell, optionally in a different `cwd` |
 
-Use `install` for dependency installation. Prefer `command` for custom post-scaffold automation rather than manually shelling out to `npm install` / `bun install`.
-
-### `interpolate(content, context)`
-
-Interpolate `{{var}}` placeholders in a string with values from a context object.
+## Utilities
 
 ```ts
-import { interpolate } from "@crustjs/create";
-
-interpolate("Hello, {{name}}!", { name: "world" });
-// => "Hello, world!"
+interpolate("Hello, {{name}}!", { name: "world" }); // => "Hello, world!"
 ```
 
-### `detectPackageManager(cwd?)`
-
-Detect the package manager for a project directory.
-
-Detection strategy (first match wins):
-
-1. Check for lockfiles (`bun.lock` / `bun.lockb` / `pnpm-lock.yaml` / `yarn.lock` / `package-lock.json`)
-2. Parse the `npm_config_user_agent` environment variable
-3. Default to `"npm"`
-
-Returns a `PackageManager` — `"bun"`, `"pnpm"`, `"yarn"`, or `"npm"`.
-
-### `isInGitRepo(cwd?)`
-
-Check whether a directory is inside a Git work tree, including one rooted in a parent directory. `cwd` defaults to `process.cwd()`. Returns `false` when Git is unavailable or the directory is not in a repository.
+`interpolate()` replaces placeholders in a string. `detectPackageManager(cwd?)` checks lockfiles, then `npm_config_user_agent`, and defaults to npm; `isInGitRepo(cwd?)` reports whether the path is inside a Git work tree.
 
 ## Exports
 
-### Functions
+```ts
+import {
+  detectPackageManager,
+  interpolate,
+  isInGitRepo,
+  runSteps,
+  scaffold,
+} from "@crustjs/create";
+import type {
+  PackageManager,
+  PostScaffoldStep,
+  ScaffoldOptions,
+  ScaffoldResult,
+} from "@crustjs/create";
+```
 
-| Function               | Description                                           |
-| ---------------------- | ----------------------------------------------------- |
-| `scaffold`             | Copy and interpolate a template directory             |
-| `runSteps`             | Execute post-scaffold automation steps                |
-| `interpolate`          | Replace `{{var}}` placeholders in a string            |
-| `detectPackageManager` | Detect bun/npm/pnpm/yarn from lockfiles or user agent |
-| `isInGitRepo`          | Check whether a directory is inside a Git work tree   |
-
-### Types
-
-| Type               | Description                                          |
-| ------------------ | ---------------------------------------------------- |
-| `ScaffoldOptions`  | Configuration for `scaffold()`                       |
-| `ScaffoldResult`   | Result returned by `scaffold()`                      |
-| `PostScaffoldStep` | Discriminated union of step objects for `runSteps()` |
-| `PackageManager`   | `"npm" \| "pnpm" \| "bun" \| "yarn"`                 |
-
-## Design
-
-`@crustjs/create` is the scaffolding primitive between the CLI layer (`@crustjs/core`) and the interactive layer (`@crustjs/prompts`). Templates live as real files on disk, composition is explicit via multiple `scaffold()` calls, and post-scaffold automation is declarative.
-
-**Not included** (by design):
-
-- Interactive prompts (belongs in `@crustjs/prompts`)
-- Terminal UI / styled output (headless — no `@crustjs/style` dependency)
-- Template-level conditionals or loops (`{{#if}}`, `{{#each}}`)
-- Dynamic filename interpolation (filenames are static)
+The package root exports only the listed functions and types.

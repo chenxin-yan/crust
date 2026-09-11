@@ -3,7 +3,7 @@ title: Testing
 description: Test Crust applications with captured output and fake interactive terminals.
 ---
 
-`@crustjs/testing` provides application-level test helpers for `@crustjs/core`. It captures terminal execution and drives actions that use built-in `@crustjs/prompts` prompts; ordinary output capture belongs to core `app.run()`.
+`@crustjs/testing` adds helpers for raw `execute()` capture and fake interactive terminals. Use core `run()` for ordinary typed action tests.
 
 ## Install
 
@@ -11,96 +11,52 @@ description: Test Crust applications with captured output and fake interactive t
 bun add -d @crustjs/testing
 ```
 
-The required peers are `@crustjs/core`, `@crustjs/progress`, and `@crustjs/prompts`; install any your project does not already have. TypeScript is an optional peer.
+The required peer packages are `@crustjs/core`, `@crustjs/progress`, and `@crustjs/prompts`. TypeScript is an optional peer.
 
 ## Application contracts
 
-Core `app.run()` and the `runInteractive()` helper infer the application's command tree. Their command path, argument object, and flag object are checked from the definitions added to that application. Misspelled command, argument, or flag names fail TypeScript checking and editor completion suggests valid names.
-
-`captureExecute()` instead accepts the structural `ExecutableApp` contract. Its `CaptureIO` option type is exported as `Partial<InvocationIO>`:
-
-<auto-type-table path="../../../../../packages/testing/src/index.ts" name="ExecutableApp" />
-
-[Exact declarations for the helpers and result unions](https://github.com/chenxin-yan/crust/blob/main/packages/testing/src/index.ts).
-
-An inert `CommandDefinition` must first be added to a `Crust` application before using the typed helpers.
-
-## `app.run(path, input?)`
-
-Run an application with captured output and the selected action's inferred result. Each `ctx.stdout()`/`ctx.stderr()` call is one line (matching the terminal defaults), and the returned `stdout` and `stderr` fields join those lines with `"\n"`. The `completed` branch owns the action's awaited `result`, the `finished` branch owns the finishing Extension's `by` identity, and the `failed` branch owns the thrown `error`. Output written before failure is retained. Narrow with `captured.status`.
-
-With the default capture setup, prompt and progress output is bridged into captured `stderr` through a non-TTY, line-buffered adapter. A spinner contributes its final line without animation. Capturing output does not provide interactive input; use `runInteractive()` to drive prompts.
-
 ```ts
-const captured = await app.run(["build"], {
-  args: { entry: "src/cli.ts" },
-  flags: { minify: true },
-});
-
-if (captured.status === "failed") throw captured.error;
-if (captured.status === "finished") {
-  console.log(`Finished by ${captured.by}`);
-} else {
-  console.log(captured.stdout, captured.result);
+interface ExecutableApp {
+  execute(options?: { argv?: string[]; io?: CaptureIO }): Promise<number>;
 }
 ```
 
-The core return type is `RunOutcome`, a union of completed, finished, and failed branches:
+`captureExecute()` accepts this structural contract. `runInteractive()` accepts a Crust application and infers its command path and input.
+
+An inert definition must be added to an application before the typed helpers can address it. Core's typed invocation rules are documented under [`run()` path and input](/docs/api/crust#runpath-input-io).
+
+## `app.run(path, input?)`
 
 ```ts
-export type RunOutcome<Result> = {
-  readonly stdout: string;
-  readonly stderr: string;
-} & (
-  | { readonly status: "completed"; readonly result: Result }
-  | { readonly status: "finished"; readonly by: ExtensionId }
-  | { readonly status: "failed"; readonly error: unknown }
-);
+const outcome = await app.run(["build"], { flags: { minify: true } });
+if (outcome.status === "failed") throw outcome.error;
+expect(outcome.stdout).toContain("Built");
 ```
+
+Use `run()` to capture stdout, stderr, and the Command Action outcome without terminal parsing. See the [core `run()` reference](/docs/api/crust#runpath-input-io) for result branches and capture boundaries.
 
 ## `captureExecute(app, argv)`
 
-Drive the terminal `execute()` path in-process. Unlike `app.run()`, this exercises `execute()`'s returned exit-code protocol — `0` on success, `1` for rendered failures, `130` for `AbortError` cancellation — and the Extension `onError` rendering chain, so exit codes and rendered failure output are assertable without spawning a subprocess. The previous process exit code is restored after capture; an unset exit code is restored as `0`.
+<include lang="ts">../../../examples/modules/testing.ts#execute</include>
 
-```ts
-import { captureExecute } from "@crustjs/testing";
-
-const result = await captureExecute(app, ["deploy", "--bad-flag"]);
-
-expect(result.exitCode).toBe(1);
-expect(result.stderr).toContain("Unknown flag");
-```
-
-Use this raw-argv path for parser syntax such as short bundles and misspellings. Statically declared `defineExtension()` commands appear in the typed `app.run()` and `runInteractive()` paths; use `captureExecute()` for dynamically assembled or type-widened Extension contributions.
-
-The return type is `CapturedExecute`:
+`captureExecute()` drives raw argv through `execute()` in-process and returns `stdout`, `stderr`, and `exitCode`. Use it for parser errors, rendered failures, and Extension `onError` output.
 
 <auto-type-table path="../../../../../packages/testing/src/index.ts" name="CapturedExecute" />
 
 ## `runInteractive(app, path, input?)`
 
-Run an application against a fake TTY. Use `waitFor()` before sending input with `type()` or `keys()`, then await `done`. See the [prompt testing helpers](/docs/modules/prompts#testing-custom-prompts) for the `keys()` vocabulary.
+<include lang="ts">../../../examples/modules/testing.ts#interactive</include>
 
-`waitFor(pattern, timeoutMs?)` polls the terminal (default timeout 5000ms). It fails fast instead of hanging: if the application returns a failed outcome before the pattern matches, `waitFor()` throws its error; if the application completes without matching, or the timeout elapses, it throws with the current screen contents.
+`waitFor()` polls the ANSI-stripped screen and defaults to a 5000 ms timeout. Call `type()` or `keys()` after the expected prompt appears, then await `done`.
 
-```ts
-import { runInteractive } from "@crustjs/testing";
-
-const run = runInteractive(app, []);
-await run.waitFor(/Project name/);
-run.type("my-app");
-run.keys("return");
-await run.done;
-```
-
-`screen()` returns the ANSI-stripped terminal screen. One ambient [`withTerminalIO`](/docs/modules/progress#output-sinks) scope routes prompt frames, `ctx.stderr()` output, and `@crustjs/progress` indicators into that screen and the transcript scanned by `waitFor()`.
-
-`done` rejects with the error from a failed core outcome, including primitive thrown values. Completed and finished outcomes resolve it. `ctx.stdout()` is not included in `screen()`; use core `app.run()` for stdout assertions.
-
-The return type is `InteractiveRun`:
+One ambient [`withTerminalIO`](/docs/modules/progress#output-sinks) scope sends prompts, progress, and `ctx.stderr()` to the fake screen. `ctx.stdout()` is not included, so use `run()` for stdout assertions.
 
 <auto-type-table path="../../../../../packages/testing/src/index.ts" name="InteractiveRun" />
 
 ## Custom prompts
 
-This package intentionally does not re-export prompt-author helpers. For a custom `(options, io?)` prompt, use `renderPrompt()` from [`@crustjs/prompts/testing`](/docs/modules/prompts#testing-custom-prompts). Built-in prompts are covered by the library.
+```ts
+import { renderPrompt } from "@crustjs/prompts/testing";
+```
+
+`@crustjs/testing` does not re-export prompt-author helpers. Use [`renderPrompt()`](/docs/modules/prompts#testing-custom-prompts) for custom `(options, io?)` prompts.

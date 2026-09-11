@@ -1,13 +1,15 @@
 import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
 
-const stamp = defineExtension<"version">()(defineExtensionId("acme:stamp"), {
+export const stamp = defineExtension<"version">()(defineExtensionId("acme:stamp"), {
   hooks: {
     preRun(ctx) {
-      ctx.stdout(ctx.rootCommand.meta.version);
+      ctx.stdout(`version ${ctx.rootCommand.meta.version}`);
     },
   },
 });
 
-const app = new Crust("my-cli", { version: "1.2.3" }).extend(stamp).action(() => {});
+// new Crust("my-cli").extend(stamp);
+// Type error: the root metadata does not guarantee "version".
 
-await app.execute();
+const app = new Crust("my-cli", { version: "1.2.3" }).extend(stamp).action(() => {});
+console.log((await app.run([])).stdout); // => "version 1.2.3"

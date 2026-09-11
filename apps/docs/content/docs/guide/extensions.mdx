@@ -5,232 +5,99 @@ description: Install and author app-wide reusable capabilities.
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-An Extension is an app-wide capability that owns any flags and commands it contributes. Attach Extensions once, on the root builder:
+An Extension contributes app-wide behavior from the root builder.
 
 <include lang="ts" meta='title="cli.ts"'>
   ../../../examples/extensions/install.ts
 </include>
 
-See the [Extensions module](/docs/modules/extensions) for each capability's options.
+See the [Extensions module](/docs/modules/extensions) for the built-in packages.
 
 <Callout type="warn">
-  `.extend()` is root-only. Recipe builders share the `Crust` type, but their capability makes this
-  method uncallable inside `defineCommand()` callbacks.
+  `.extend()` is root-only. A builder inside a `defineCommand()` recipe cannot call root methods.
 </Callout>
-
-Two consequences of the root-only model:
-
-- Added definitions are materialized into ordinary command nodes before root Extensions prepare the application, so Extensions apply to every added command, inline or file-split.
-- Statically declared Extension commands and flags become typed `run()` and testing-harness inputs. Use a Context-owned flag when downstream actions need the flag as a typed action dependency.
 
 ## Author an Extension
 
-`defineExtension(id, config?)` returns a frozen helper-owned value; omitted config defaults to `{}`. The config can contain `flags`, `commands`, `uses`, `provides`, `sections`, `build`, and `hooks`:
-
-<include lang="ts" meta='title="diagnostics.ts"'>
-  ../../../examples/extensions/diagnostics.ts
+<include lang="ts" meta='title="preview.ts"'>
+  ../../../examples/extensions/diagnostics.ts#author
 </include>
 
-Official Extension identities use the `crust:` namespace, reserved by convention for official Crust identities (the prefix is not enforced at runtime). Third-party packages should namespace published Extension ids with their own prefix; application-local ids can remain plain.
+`defineExtension()` accepts flags, commands, Context dependencies, sections, build hooks, and invocation hooks. Here `preRun` prints a result and finishes before the Command Action.
 
-Packages publish configurable factories with `defineExtension(id, factory)`, also supported by the curried metadata form. Each call validates and normalizes the produced config into a frozen Extension with the same id; creating the factory does not run it. Dynamic config uses the same APIs without wrappers. The returned factory exposes readonly `id` for section audiences without constructing an Extension. Official factories share this contract.
-
-```ts
-import {
-  defineExtension,
-  defineExtensionId,
-  type ExtensionFactory,
-  type ExtensionId,
-} from "@crustjs/core";
-
-const DOCS: ExtensionId = defineExtensionId("acme:docs");
-interface DocsOptions {
-  readonly verbose?: boolean;
-}
-type DocsFlags = readonly [
-  {
-    readonly name: "verbose";
-    readonly type: "boolean";
-    readonly default: boolean | undefined;
-  },
-];
-export const docs: ExtensionFactory<[options?: DocsOptions], {}, [], DocsFlags> = defineExtension(
-  DOCS,
-  (options = {}) => ({
-    flags: [{ name: "verbose", type: "boolean", default: options.verbose }],
-  }),
-);
-// docs.id === DOCS; docs({ verbose: true }).id === DOCS
-```
-
-Authors not building with `isolatedDeclarations` can omit the annotation (`export const docs = defineExtension(DOCS, (options?: DocsOptions) => ({ … }))`) and get full inference.
-
-`ExtensionFactory` defaults to closed contribution sets: `{}` dependencies and empty provider, flag, and command tuples. Explicitly use the broad upper bound for a parameter when its namespace must remain open. Preserve literal tuples for known contributions. Core consumes the private defining Extension through structural copies; replacing public flags, commands, providers, or hooks on a spread does not redefine it. Use `defineExtension()` for a new definition.
+Use `defineExtension(id, factory)` when callers need to configure the Extension. See [`Extension` and `ExtensionFactory`](/docs/api/types#extension-types) for the full contribution types.
 
 ## Required root metadata
-
-Declare required metadata keys with `defineExtension<"version">()(id, configOrFactory)`. The first call fixes the keys; the second still infers flags, factory arguments, Contexts, and commands. Ordinary `defineExtension(id, configOrFactory)` calls declare no metadata requirements.
 
 <include lang="ts" meta='title="metadata.ts"'>
   ../../../examples/extensions/metadata.ts
 </include>
 
-The key argument is constrained to `keyof RootCommandMeta`, so editors suggest supported keys and reject typos such as `"versin"` or arbitrary fields. Use a union such as `"version" | "description"` to require multiple fields. Their types come from the metadata schema rather than a separate declaration.
-
-Declared fields are non-optional in every invocation hook's `ctx.rootCommand.meta`, in `build`'s `ctx.snapshot.meta`, and in the root snapshot passed to `sections`. Other fields keep their existing optional types. The resolved `ctx.command` is not refined, because it may be a subcommand. Requiring `"sections"` exposes normalized `CommandSection[]`, not authored `CommandSectionInput[]`.
-
-`.extend()` rejects a root whose inferred metadata does not guarantee every required field. Metadata state survives fluent calls. A field typed `string | undefined`, or a value widened to `RootCommandMeta`, cannot satisfy a required string. `satisfies RootCommandMeta` checks a configuration without widening its supplied fields. Typed unions and arrays of Extensions retain metadata requirements even when their contributed command and flag types are runtime-only.
-
-These checks require strict TypeScript checking, such as `tsc --noEmit`. They add no runtime metadata validation. JavaScript, `any`, assertions, or types that erase the requirement can bypass them. Neither `bun build` nor `crust build` runs a TypeScript check; use `tsc --noEmit && crust build` to enforce the contract in a build script.
+The curried form declares metadata that must exist on the root. `.extend()` rejects the commented call at type-check time, while the versioned root gives hooks a required `string`.
 
 ## Owned flags and commands
 
-Extension flags are a readonly array of named definitions. Use `defineFlag()` values for ordinary recursive flags, or write a named definition inline. Extension flags default to `recursive: true`, which contributes them to every command. The documented way to set the Extension-only `recursive` option for a root-only flag is an inline definition:
+<include lang="ts" meta='title="diagnostics.ts"'>
+  ../../../examples/extensions/diagnostics.ts#owned-command
+</include>
 
-```ts
-const rootOnlyVersion = defineExtension(defineExtensionId("version"), {
-  flags: [{ name: "version", type: "boolean", recursive: false }],
-});
-```
-
-`defineExtension()` infers owned flags in its hooks, so `ctx.flags.trace` in the example above is `boolean | undefined`; a root-only flag also includes `undefined` because a subcommand does not receive it. Other, command-specific flag names remain accessible as `unknown`. Hook contexts retain syntax-parsed values; schema validation produces separate values for Contexts and the Command Action.
-
-Ordinary command flags are always local; Context-owned flags are the application-level propagation mechanism.
-
-Extension commands are `defineCommand()` definitions attached at the root. Literal names, aliases, inputs, and action results flow into typed `run()` and `runInteractive()` paths. Recursive flags reach root and descendants; `recursive: false` stays root-only, while a widened scope leaves descendants conservative. Actions receive the normal typed context, including `rootCommand` and the lazy Context bag.
-
-Keep literal contributions inferred for precise paths, inputs, and results. Dynamic or widened contributions use ordinary `.extend(...extensions)` and retain conservative open namespaces rather than false empty-state proof. Known independent root inputs remain strict; unknowable paths have unknown results. Use `execute({ argv })` for terminal syntax or a genuinely dynamic completed-app `AnyCrust` view for broad structured invocation.
-
-Extension contributions are applied in `.extend()` registration order. Extension flag spellings — declared flags and provided Context-owned flags alike — must not collide with application flags (root or any subcommand's) or with earlier Extensions: `.extend()` and `.add()` reject statically known collisions at compile time (`FIX_ALIAS_COLLISION`). Preparation with `snapshot()`, `run()`, or `execute()` checks destination flag relations after contributed command recipes execute; failures use `DEFINITION` errors. Statically declared Extension flags are also checked against the local flags of commands contributed in the same call: preparation materializes contributed commands before injecting Extension flags, so a shared spelling would throw on every invocation. Only the final tree is checked: a contributed command that a later Extension replaces is never flag-checked. `provides` Context names likewise must not replace a Context already on the path: statically known replacements are rejected at `.extend()` (`FIX_DUPLICATE_CONTEXT`); dynamically assembled duplicate names keep last-write-wins when their owned flag spellings do not collide. Extension command spellings likewise must not collide within one `defineExtension()` tuple, with already-added application commands, or with other statically declared Extension commands: `defineExtension()`, `.extend()`, and `.add()` reject statically known collisions at compile time (`FIX_COMMAND_COLLISION`) because runtime preparation would otherwise dispatch a command that typed `run()` was not checked against. Dynamically assembled commands keep deterministic last-write-wins at prepare time, so namespace Extension-owned command names and aliases to avoid accidental overrides. During routing, canonical command names beat aliases; among colliding aliases, the alias of the earliest-inserted sibling wins (replacing an existing canonical command keeps its original insertion slot).
-
-Registering an `ExtensionId` more than once keeps only the last registration and runs its hooks once. Known duplicate contributed commands, flags, and Contexts still fail typecheck to protect earlier typed consumers. Genuinely dynamic replacement collections keep runtime last-write-wins, but discarded contributions/demands may remain conservatively visible in static state. Open command contributions can replace any child, so child input/result proof stays open rather than retaining a stale action result. Actual supplied keys removed by replacement fail binding; omitting a retired defaulted flag can still leave an earlier action observing `undefined`. Runtime canonical precedence and earliest-alias routing are unchanged.
+Extension commands attach at the root and appear in typed `run()` paths. Flags listed in an Extension are recursive by default; set `recursive: false` on an inline flag definition to keep it on the root.
 
 ## Command sections
 
-Sections are named documentation blocks — like man-page sections — that render into `--help`, man pages, and generated agent skills from a single declaration. Commands can declare plain-text documentation sections in their metadata. Help renders them after Options. Man-page generation emits root entries as mdoc sections and groups visible subcommand entries under subsections for their canonical command paths:
+<include lang="ts" meta='title="sections.ts"'>
+  ../../../examples/extensions/sections.ts
+</include>
 
-```ts
-const deploy = defineCommand(
-  "deploy",
-  {
-    sections: [{ title: "Examples", body: "deploy production\ndeploy staging" }],
-  },
-  (command) => command.action(() => {}),
-);
+The contribution targets the root with `command: []`. Help places it after Options:
+
+```text
+Options:
+  -h, --help                   Show help
+
+Environment:
+  Set DEPLOY_TOKEN before running.
 ```
 
-Extensions can append sections to any command while the application prepares. The `sections` field is a contribution point into the target commands' `meta.sections`, not documentation of the Extension itself:
-
-```ts
-import { defineExtension, defineExtensionId } from "@crustjs/core";
-
-const guidance = defineExtension(defineExtensionId("guidance"), {
-  sections: () => [
-    { command: [], title: "Environment", body: "Set DEPLOY_TOKEN before running." },
-    { command: ["deploy"], title: "Policy", body: "Production deploys require approval." },
-  ],
-});
-```
-
-The callback returns an array of contributions: each result is validated when the tree is prepared, including text, audiences, and actual canonical destinations. `command` is a canonical path relative to the root; `[]` targets the root. Unknown paths and aliases are rejected with a `DEFINITION` error instead of being silently omitted. Contributions are appended after authored `meta.sections`, in Extension registration order. The callback receives a frozen snapshot containing the fully materialized command tree and authored sections. At consumption, audience filtering runs first, then entries with the same exact, case-sensitive title merge at their first position with bodies joined by a single newline. Snapshots retain the individual entries.
-
-Titles must be non-empty single lines, and bodies are non-empty plain text so the same content is safe for terminal help and mdoc output.
-
-Sections are visible to every renderer by default. Pass renderer factories to the mutually exclusive `only` or `except` fields to narrow a section:
-
-```ts
-import { defineCommand } from "@crustjs/core";
-import { help } from "@crustjs/extensions";
-import { skill } from "@crustjs/skills";
-
-const deploy = defineCommand(
-  "deploy",
-  {
-    sections: [
-      { title: "Safety", body: "Use preview mode first." },
-      { title: "Agent notes", body: "Inspect the plan before deploying.", only: [skill] },
-      { title: "Examples", body: "deploy production", only: [help, skill] },
-    ],
-  },
-  (command) => command.action(() => {}),
-);
-```
-
-A renderer exposes its identity on its factory via `defineExtension(id, factory)`. Render-time helpers are imported from `@crustjs/core/tooling`: a single-command renderer selects and merges that command's sections with `sectionsFor()`, and a full-tree renderer uses `visibleSectionsFor(snapshot, consumer)`, which returns section-bearing visible commands in canonical path order, represents the root as `[]`, skips hidden command trees, and applies the same filtering and merging. Section audiences accept the factory itself, such as `only: [help]`, while renderer integrations pass a branded `ExtensionId` such as `help.id`. TypeScript requires branded identities rather than raw strings. Core does not maintain a fixed list of identities.
+Renderers handle audience filtering and same-title merging as described by [`snapshot()`](/docs/api/crust#snapshot).
 
 ## Build hooks
 
-`build(ctx)` generates artifacts when invoked by build tooling such as `crust build`; it does not run during ordinary `run()` or `execute()` dispatch. The snapshot subprocess invokes registered hooks in Extension registration order, so Extension presence is the source of intent. The context contains the frozen root Command Snapshot prepared before that hook starts and a resolved absolute `outDir`. After each hook, Crust re-evaluates section callbacks on a fresh copy of the materialized tree — command recipes still run once — so later hooks and the final snapshot observe earlier hook outputs. A hook cannot observe its own outputs through its initial `ctx.snapshot`; register a later renderer hook when those outputs must appear in an artifact.
+<include lang="ts" meta='title="build.ts"'>
+  ../../../examples/extensions/build.ts
+</include>
 
-Return a `BuildArtifacts` array of file paths relative to `outDir` to attribute output to the Extension id. Paths are normalized to POSIX-style separators; absolute or escaping paths fail the build. Returning nothing keeps existing hooks valid and records their artifacts as `"unknown"`, rather than as an empty list. Build hooks may be async; errors propagate with the Extension id. `crust build --no-validate` skips entry preparation and all build hooks.
+A build hook receives the frozen Command Snapshot and absolute output directory, then returns artifact paths relative to that directory. `crust build` attributes those paths to the Extension:
+
+```text
+Preparing Command Snapshot...
+  acme:manifest  1 file  manifest.json
+```
+
+See [`snapshot()`](/docs/api/crust#snapshot) for snapshot preparation during builds.
 
 ## Dependency injection
 
-Hooks and command actions share the Context system. An Extension declares consumed services with `uses`, and hooks await them from the same lazy bag:
+<include lang="ts" meta='title="providers.ts"'>
+  ../../../examples/extensions/providers.ts
+</include>
 
-```ts
-const telemetry = defineExtension(defineExtensionId("telemetry"), {
-  uses: [logger],
-  hooks: {
-    async preRun({ ctx }) {
-      const log = await ctx.logger;
-      log.info("start");
-    },
-  },
-});
-```
-
-An Extension can install services with `provides`; commands and other Extensions can consume them:
-
-```ts
-const logging = defineExtension(defineExtensionId("logging"), {
-  provides: [logger({ level: "info" })],
-});
-```
-
-Unlike a later `.provide()` call, Extension `provides` installs Contexts and their owned flags across existing descendants as well as the root, preserving more-specific local providers on descendants. Later-added descendants inherit them too. TypeScript compares declared callback value contracts on every attachment. Hook demands apply to effective descendant providers, including every branch of conditional and nested recipes, regardless of attachment order. An empty alternative cannot hide an incompatible provider in another branch. Command-only attachment demands do not constrain unrelated siblings. Unknown outputs cannot satisfy known demanded values by hiding a collection's shape. Register a provider Extension before `.add()` when a definition declares its Contexts with `.use()` so dependency checks pass.
-
-Extension providers use the same compile-time name and owned-flag collision brands as `.provide()`; widened or dynamically assembled owned-flag collisions throw a `DEFINITION` error from `.extend()`, because provided Contexts are installed immediately; only pending Extension `flags` wait for preparation. Duplicate Context names without owned-flag collisions remain last-write-wins. Owned canonical/alias overlap still rejects for the same Context name. Resolution is lazy and memoized for the invocation.
-
-A `preRun` hook runs before flag validation, so it cannot pull a Context that owns flags. A flagless Context may pull other flagless Contexts, but its pull of a flag-owning Context rejects. That rejection is not memoized: after validation, the next pull re-runs the whole setup from the start, so a setup that acquires resources before the failing pull leaks them and repeats its side effects. Pull dependencies before acquiring resources. Flag-owning Contexts are available from the action and from `postRun` after validation; they remain unavailable after `ctx.finish()`, which skips validation. Values stay live through all `postRun` hooks and are disposed afterwards.
+`provides` installs Context instances across the application tree. `uses` declares Context factories that an Extension's hooks consume through their lazy `ctx` bag.
 
 ## Hooks
 
-Hooks run after routing and input binding (argv parsing for `execute()`, structured binding for typed `run()`). Where each hook sits in the invocation, and how failures flow through them, is defined once in the [Execution Model](/docs/guide/lifecycle).
+<include lang="ts" meta='title="hooks.ts"'>
+  ../../../examples/extensions/hooks.ts
+</include>
 
-### `preRun`
-
-`preRun(ctx)` runs before validation and the Command Action, in `.extend()` order. Return `ctx.finish()` to end the invocation successfully and skip the remaining work:
-
-<include lang="ts">../../../examples/extensions/hooks.ts#cached</include>
-
-### `postRun`
-
-`postRun(ctx, outcome)` runs after every invocation that reached the hooks — including failures and `ctx.finish()` short-circuits — in reverse `.extend()` order. It is the cleanup and post-run side-effect slot. `outcome` is frozen:
-
-```ts
-type InvocationOutcome =
-  | { status: "completed" }
-  | { status: "finished"; by: ExtensionId }
-  | { status: "failed"; error: unknown; by?: ExtensionId };
-```
-
-For a finished invocation, `outcome.by` is the Extension id. A failed outcome carries `by` when an Extension handled it in `onError`; Core fallback rendering leaves `by` undefined. Official Extensions therefore report names such as `crust:help`; diagnostics that label an Extension use the same exact identity. The same context identity reaches all hooks for one invocation. Declare injectable services in `uses` and access them through `ctx`; a `WeakMap<ExtensionContext, State>` remains suitable for private per-invocation ephemera shared by a hook pair.
-
-### `onError`
-
-`onError(error, ctx)` presents failures reached during `execute()` dispatch, in `.extend()` order. Return `true` after rendering to stop presentation; return nothing (or `false`) to delegate to the next Extension and ultimately Core's default renderer. A hook that throws ends the chain: remaining hooks are skipped and Core's default renderer reports the original failure.
-
-Failures before dispatch do not enter the hook chain. Extension application and command-tree materialization failures render directly to `io.stderr`; snapshot preparation and build-hook failures are printed directly.
-
-<include lang="ts">../../../examples/extensions/hooks.ts#service-errors</include>
-
-Rendering never turns a failure into success, and programmatic `run()` returns failed outcomes instead of invoking `onError` — see [Error flow](/docs/guide/error-handling#error-flow). For failures raised during dispatch before `postRun`, `onError` settles before `postRun`, so cleanup hooks observe the attributed outcome and invocation Contexts remain available until cleanup completes. Post-run or disposal failures after an otherwise successful or finished invocation reach `onError` after cleanup, when Context pulls reject.
-
-Unlike `preRun`/`postRun`, `onError` does not infer owned flags: routing and syntax-parse failures render with a fallback context whose `flags` are empty, so the hook's `ctx.flags` stays `Record<string, unknown>`. That fallback context's lazy `ctx` bag rejects every Context pull with `DEFINITION` reason `context-after-disposal`, even though no invocation Contexts were constructed.
+`preRun` may finish an invocation, and `postRun` receives its completed, finished, or failed outcome. See [`ExtensionHooks`](/docs/api/types#extensionhooks) for hook contracts and the [execution model](/docs/guide/lifecycle) for ordering and error flow.
 
 ## Extension context
 
-Hooks receive a readonly `ExtensionContext`. The values are invocation data, not mutable command definitions:
+<include lang="ts" meta='title="context.ts"'>
+  ../../../examples/extensions/context.ts
+</include>
+
+Hooks receive a readonly invocation view with input, IO, lazy Contexts, and Command Snapshots.
 
 <auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="ExtensionContext" />
