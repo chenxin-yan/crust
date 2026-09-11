@@ -4,18 +4,20 @@ function isString(value: unknown): value is string {
 	return typeof value === "string";
 }
 
-/** Unwrap syntax-only wrappers when inspecting array methods and accumulator references. */
-export function unwrapArrayExpression(node: ESTree.Node): ESTree.Node {
-	while (
-		node.type === "ParenthesizedExpression" ||
+function unwrapOnce(node: ESTree.Node): ESTree.Node | null {
+	return node.type === "ParenthesizedExpression" ||
 		node.type === "ChainExpression" ||
 		node.type === "TSAsExpression" ||
 		node.type === "TSTypeAssertion" ||
 		node.type === "TSNonNullExpression" ||
 		node.type === "TSSatisfiesExpression"
-	) {
-		node = node.expression;
-	}
+		? node.expression
+		: null;
+}
+
+/** Unwrap syntax-only wrappers when inspecting array methods and accumulator references. */
+export function unwrapArrayExpression(node: ESTree.Node): ESTree.Node {
+	for (let inner = unwrapOnce(node); inner !== null; inner = unwrapOnce(node)) node = inner;
 	return node;
 }
 
@@ -83,6 +85,15 @@ export function isKnownArrayExpression(
 	node: ESTree.Node,
 	visited = new Set<Variable>(),
 ): boolean {
+	// `loadUsers() as User[]` is explicit array evidence even though the callee is unknown.
+	for (let current: ESTree.Node | null = node; current !== null; current = unwrapOnce(current)) {
+		if (
+			(current.type === "TSAsExpression" || current.type === "TSTypeAssertion") &&
+			isArrayAnnotation(current.typeAnnotation)
+		) {
+			return true;
+		}
+	}
 	node = unwrapArrayExpression(node);
 	if (node.type === "ArrayExpression") return true;
 	if (node.type === "CallExpression") {

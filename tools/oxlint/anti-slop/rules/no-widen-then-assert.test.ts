@@ -13,6 +13,8 @@ tester.run("anti-slop/no-widen-then-assert", noWidenThenAssertRule, {
 		"declare const input: unknown; const parsed = input as { readonly id: string };",
 		"type Payload = unknown; declare const source: Payload; const widened: unknown = source; const parsed = widened as { id: string };",
 		"type Payload<T> = T; const source = { id: 'first' }; const widened: Payload<unknown> = source; const parsed = widened as { id: string };",
+		"type Payload = unknown; function run() { type Payload = string; const source = { id: 'first' }; const widened: Payload = source; const parsed = widened as { id: string }; }",
+		"type Payload = unknown; function run<Payload>() { const source = { id: 'first' }; const widened: Payload = source; const parsed = widened as { id: string }; }",
 	],
 	invalid: [
 		{
@@ -29,6 +31,10 @@ tester.run("anti-slop/no-widen-then-assert", noWidenThenAssertRule, {
 		},
 		{
 			code: "type Dict = Record<string, unknown>; type Payload = Dict; const source = { id: 'second' }; const widened: Payload = source; const parsed = widened as { id: string };",
+			errors: [error],
+		},
+		{
+			code: "type Payload = string; function run() { type Payload = unknown; const source = { id: 'second' }; const widened: Payload = source; const parsed = widened as { id: string }; }",
 			errors: [error],
 		},
 	],

@@ -2,6 +2,7 @@ import { defineRule } from "@oxlint/plugins";
 import type { ESTree, Variable } from "@oxlint/plugins";
 
 import { createTypeEnvironment } from "../shared/dictionary-types.ts";
+import { lexicalTypeParameterNames } from "../shared/lexical-type-parameters.ts";
 
 type BroadTypeKind = "top" | "object" | "record";
 
@@ -32,6 +33,32 @@ function unwrapTypeParentheses(type: ESTree.TSType): ESTree.TSType {
 // Refreshed per file in `Program`; every caller compares against built-in utility names.
 let shadowedBuiltIns: ReadonlySet<string> = new Set();
 let typeAliases: ReadonlyMap<string, ESTree.TSTypeAliasDeclaration> = new Map();
+let visitorKeys: Readonly<Record<string, readonly string[]>> = {};
+
+/** Non-generic alias visible at `reference`; type parameters and block-level declarations shadow the module map. */
+function visibleAlias(
+	reference: ESTree.TSTypeReference,
+	name: string,
+): ESTree.TSTypeAliasDeclaration | null {
+	if (lexicalTypeParameterNames(reference, visitorKeys).has(name)) return null;
+	for (let current = reference.parent; current !== null; current = current.parent) {
+		if (current.type === "Program") break;
+		if (current.type !== "BlockStatement") continue;
+		for (const statement of current.body) {
+			if (statement.type === "TSTypeAliasDeclaration" && statement.id.name === name)
+				return statement;
+			if (
+				(statement.type === "TSInterfaceDeclaration" ||
+					statement.type === "TSEnumDeclaration" ||
+					statement.type === "ClassDeclaration") &&
+				statement.id?.name === name
+			) {
+				return null;
+			}
+		}
+	}
+	return typeAliases.get(name) ?? null;
+}
 
 /** Name of a built-in type reference, or null when the file declares/imports its own binding. */
 function typeReferenceName(type: ESTree.TSTypeReference): string | null {
@@ -100,9 +127,9 @@ function broadTypeKind(
 	// `type Payload = unknown` is as broad as `unknown`; follow non-generic module-level aliases.
 	if (unwrapped.type !== "TSTypeReference" || unwrapped.typeName.type !== "Identifier") return null;
 	const name = unwrapped.typeName.name;
-	const alias = typeAliases.get(name);
+	const alias = visibleAlias(unwrapped, name);
 	if (
-		alias === undefined ||
+		alias === null ||
 		(alias.typeParameters !== null && alias.typeParameters !== undefined) ||
 		unwrapped.typeArguments?.params.length ||
 		visitedAliases.has(name)
@@ -385,6 +412,7 @@ export const noWidenThenAssertRule = defineRule({
 				const environment = createTypeEnvironment(node);
 				shadowedBuiltIns = environment.shadowedBuiltIns;
 				typeAliases = environment.aliases;
+				visitorKeys = context.sourceCode.visitorKeys;
 			},
 			TSAsExpression: checkAssertion,
 			TSTypeAssertion: checkAssertion,

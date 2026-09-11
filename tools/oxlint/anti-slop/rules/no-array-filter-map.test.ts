@@ -23,6 +23,7 @@ tester.run("anti-slop/no-array-filter-map", noArrayFilterMapRule, {
 		"let users = []; users = iterator; users.filter(active).map(email);",
 		"const users = []; users[method](active).map(email);",
 		"const first = second; const second = first; first.filter(active).map(email);",
+		"(fetchUsers() as unknown).filter(active).map(email);",
 	],
 	invalid: [
 		{ code: "[].filter(active).map(email);", errors: [error] },
@@ -57,6 +58,12 @@ tester.run("anti-slop/no-array-filter-map", noArrayFilterMapRule, {
 		{ code: "const users = []; (users.filter(active)!).map(email);", errors: [error] },
 		{ code: "const users = []; users?.filter(active)?.map(email);", errors: [error] },
 		{ code: "const users = []; users.slice().filter(active).map(email);", errors: [error] },
+		{ code: "(fetchUsers() as User[]).filter(active).map(email);", errors: [error] },
+		{
+			code: "const users = fetchUsers() as readonly User[]; users.filter(active).map(email);",
+			errors: [error],
+		},
+		{ code: "(<User[]>fetchUsers())!.filter(active).map(email);", errors: [error] },
 		{
 			code: "const users = []; users.filter(active).map(email).filter(Boolean);",
 			errors: [error, error],
