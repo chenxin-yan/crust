@@ -312,7 +312,13 @@ describe("built-in extensions", () => {
 				}),
 			)
 			.extend(help())
-			.add(defineCommand("build", (build) => build.action(() => {})));
+			.add(
+				defineCommand(
+					"build",
+					{ sections: [{ title: "Build notes", body: "Authored body" }] },
+					(build) => build.action(() => {}),
+				),
+			);
 
 		const outcome = await app.run([]);
 		expect(outcome.status).toBe("finished");
@@ -324,7 +330,8 @@ describe("built-in extensions", () => {
 		stdoutChunks = [];
 		await app.execute({ argv: ["build", "--help"] });
 		const buildOutput = stripAnsi(getStdout());
-		expect(buildOutput).toContain("Build notes:\n  Build body\n  Second line");
+		expect(buildOutput).toContain("Build notes:\n  Authored body\n  Build body\n  Second line");
+		expect(buildOutput.match(/Build notes:/g)).toHaveLength(1);
 		expect(buildOutput).not.toContain("Root notes:");
 		expect(buildOutput.indexOf("Build notes:")).toBeGreaterThan(buildOutput.indexOf("Options:"));
 	});
