@@ -60,8 +60,35 @@ const fixtures = [
 	{ name: "indexed-length", args: ["Crust"] },
 	{ name: "parenthesized-indexed-length", args: ["Crust"] },
 	{ name: "argv-prefix", args: [] },
+	{ name: "arrays", args: ["Crust", "extra"] },
 	{ name: "runtime-free", args: [] },
 ] as const;
+
+const numberFuzzSeed = BigInt(process.env.CRUST_NUMBER_FUZZ_SEED ?? "0xc2a57");
+const numberFuzzSamples = 2_048;
+const uint64Mask = (1n << 64n) - 1n;
+
+function fuzzNumbers(seed: bigint, count: number): number[] {
+	let state = seed & uint64Mask || 1n;
+	const view = new DataView(new ArrayBuffer(8));
+	return Array.from({ length: count }, () => {
+		state ^= state >> 12n;
+		state ^= (state << 25n) & uint64Mask;
+		state ^= state >> 27n;
+		const bits = (state * 0x2545_f491_4f6c_dd1dn) & uint64Mask;
+		view.setBigUint64(0, bits);
+		return view.getFloat64(0);
+	});
+}
+
+function numberExpression(value: number): string {
+	const runtimeZero = "(process.argv.length - process.argv.length)";
+	if (Number.isNaN(value)) return `0 / ${runtimeZero}`;
+	if (value === Infinity) return `1 / ${runtimeZero}`;
+	if (value === -Infinity) return `-1 / ${runtimeZero}`;
+	if (Object.is(value, -0)) return `-${runtimeZero}`;
+	return String(value);
+}
 
 describe("compiler differential corpus", () => {
 	it("rejects a directory-valued output path", async () => {
@@ -85,6 +112,90 @@ describe("compiler differential corpus", () => {
 		);
 	}
 
+	it("rejects direct string-array logging", async () => {
+		const fixture = join(import.meta.dir, "fixtures", "array-log.ts");
+		const workspace = await mkdtemp(join(tmpdir(), "crust-array-log-"));
+		try {
+			await expect(compile(fixture, { outputPath: join(workspace, "binary") })).rejects.toThrow(
+				"Unsupported TypeScript CallExpression",
+			);
+		} finally {
+			await rm(workspace, { recursive: true, force: true });
+		}
+	}, 120_000);
+
+	it.each([
+		"console.log(process.argv);",
+		"console.log((process.argv.slice(2))!);",
+		"console.log(42, process.argv.slice(2));",
+		"function log(values: string[]): void { console.log(values); } log(process.argv.slice(2));",
+		"function args(): string[] { return process.argv.slice(2); } console.log(args());",
+	])("rejects string-array log arguments: %s", async (source) => {
+		const workspace = await mkdtemp(join(tmpdir(), "crust-array-log-"));
+		const fixture = join(workspace, "fixture.ts");
+		try {
+			await writeFile(fixture, source);
+			await expect(compile(fixture, { outputPath: join(workspace, "binary") })).rejects.toThrow(
+				"Unsupported TypeScript CallExpression",
+			);
+		} finally {
+			await rm(workspace, { recursive: true, force: true });
+		}
+	});
+
+	it.skipIf(goPath === null)(
+		"matches ECMAScript number formatting",
+		async () => {
+			if (nodePath === null) throw new Error("Node is required as the corpus reference runtime");
+
+			const values = [
+				0,
+				-0,
+				5e-324,
+				-5e-324,
+				2.2250738585072014e-308,
+				1e-7,
+				1e-6,
+				1e20,
+				1e21,
+				1_000_000_000_000_000_100,
+				1.2345678901234567,
+				Number.MAX_VALUE,
+				NaN,
+				Infinity,
+				-Infinity,
+				...fuzzNumbers(numberFuzzSeed, numberFuzzSamples),
+			];
+			const workspace = await mkdtemp(join(tmpdir(), "crust-number-fuzz-"));
+			const fixture = join(workspace, "numbers.ts");
+			let binary: string | undefined;
+			try {
+				await writeFile(
+					fixture,
+					values
+						.map((value) => {
+							const expression = numberExpression(value);
+							return `console.log(${expression});\nconsole.log(\`\${${expression}}\`);`;
+						})
+						.join("\n"),
+				);
+				binary = await compile(fixture);
+				try {
+					expect(run(binary)).toEqual(run(nodePath, [fixture]));
+				} catch (error) {
+					console.error(
+						`[compiler corpus] number fuzz failed; seed=0x${numberFuzzSeed.toString(16)}`,
+					);
+					throw error;
+				}
+			} finally {
+				if (binary) await rm(dirname(binary), { recursive: true, force: true });
+				await rm(workspace, { recursive: true, force: true });
+			}
+		},
+		120_000,
+	);
+
 	for (const fixtureName of ["unsafe-index-length.ts", "escaped-undefined.ts"]) {
 		it.skipIf(goPath === null)(
 			`throws when ${fixtureName} reads undefined length`,
@@ -95,11 +206,6 @@ describe("compiler differential corpus", () => {
 			120_000,
 		);
 	}
-
-	it("rejects direct array logging before emission", async () => {
-		const fixture = join(import.meta.dir, "fixtures", "array-log.ts");
-		await expect(compile(fixture)).rejects.toThrow("Unsupported TypeScript CallExpression");
-	});
 
 	it("rejects default parameters before emission", async () => {
 		const fixture = join(import.meta.dir, "fixtures", "default-parameter.ts");

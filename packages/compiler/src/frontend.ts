@@ -133,6 +133,7 @@ function lowerStatement(
 						))) ||
 			call.arguments.some((argument) => {
 				const type = checker.getTypeAtLocation(argument);
+				// Array string coercion is supported; Node's console inspection is deferred.
 				return (
 					checkerTypeIsStringArray(type) ||
 					Boolean(type.flags & (ts.TypeFlags.Never | ts.TypeFlags.Void | ts.TypeFlags.Undefined))
