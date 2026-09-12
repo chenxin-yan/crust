@@ -1,0 +1,55 @@
+name: CI Compiler
+
+on:
+  pull_request:
+    paths:
+      - "packages/compiler/**"
+      - "package.json"
+      - "bun.lock"
+      - "mise.toml"
+      - "turbo.json"
+      - ".github/workflows/ci-compiler.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  corpus:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: ci-compiler-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Node reference runtime
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: package.json
+
+      - name: Install pinned Go toolchain
+        uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # v4
+        with:
+          install_args: go
+
+      - name: Verify pinned Go toolchain
+        run: |
+          expected="go$(mise current go)"
+          actual="$(go env GOVERSION)"
+          [[ "$actual" == "$expected" ]] || { echo "::error::Compiler corpus requires $expected, found $actual"; exit 1; }
+          echo "Compiler corpus using $actual"
+
+      - name: Install dependencies
+        run: bun ci
+
+      - name: Run compiler differential corpus
+        run: bun turbo run test:corpus --filter=@crustjs/compiler
