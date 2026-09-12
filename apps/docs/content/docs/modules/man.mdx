@@ -3,19 +3,17 @@ title: "Man"
 description: Generate mdoc(7) manual pages from Crust Command Snapshots.
 ---
 
-`@crustjs/man` generates section 1 manual pages at build or publish time.
+`@crustjs/man` generates manual pages at build time. `crust publish` only reads and publishes output already staged by a package build.
 
 ## Install
 
 ```sh
-bun add @crustjs/man
+bun add -d @crustjs/man
 ```
 
-Peer dependency: `@crustjs/core`.
+The package has a peer dependency on `@crustjs/core`.
 
 ## `man(options?)`
-
-Register the build-only Extension to generate a manual whenever `crust build` prepares the application:
 
 ```ts
 import { Crust } from "@crustjs/core";
@@ -24,14 +22,32 @@ import { man } from "@crustjs/man";
 const app = new Crust("my-cli").extend(man());
 ```
 
-`man()` writes `<outdir>/man/<name>.1` and reports that relative path as a build artifact owned by `crust:man`. Pass `man({ section: 5 })` to select another section and filename, and `man({ name: "my-tool" })` when the installed command name differs from the application name (for example, `crust build --name` or a diverging npm `bin` key). Its options use the exported `ManOptions` type. The `man.id` static exposes the `crust:man` Extension identity for section filtering and integrations. Extension presence is the source of intent; there is no `--man` build flag. `crust build --no-validate` skips all build hooks, including this one. Package builds stage the generated directory and populate npm `files` and `man` metadata.
+```text
+dist/man/my-cli.1
+```
+
+`man()` registers a build hook that writes `man/<name>.<section>` under the build output directory. It reports that relative path as a build artifact owned by `crust:man`.
+
+```text
+.Dd March 1, 2026
+.Dt MY_CLI 1
+.Os
+.Sh NAME
+.Nm my-cli
+```
+
+Pass `man({ section: 5 })` to change the section and filename, or `man({ name: "my-tool" })` when the installed command name differs from the application name. The `man.id` static exposes the Extension identity used for section filtering.
 
 <auto-type-table path="../../../../../packages/man/src/extension.ts" name="ManOptions" />
 
 ## `writeManPage(options)`
 
 ```ts
-function writeManPage(options: WriteManPageOptions): Promise<void>;
+import { writeManPage } from "@crustjs/man";
+
+const root = await app.snapshot();
+await writeManPage({ root, name: "my-cli", outfile: "man/my-cli.1" });
+// Writes man/my-cli.1
 ```
 
 <auto-type-table
@@ -39,27 +55,18 @@ function writeManPage(options: WriteManPageOptions): Promise<void>;
   name="WriteManPageOptions"
 />
 
-`writeManPage` renders a prepared Command Snapshot, creates parent directories, and writes the page.
+`writeManPage()` renders a Command Snapshot, creates parent directories, and writes the page. `section` defaults to `1`; `date` overrides the `.Dd` value.
 
-```ts
-import { writeManPage } from "@crustjs/man";
-import { app } from "./cli.ts";
-
-const root = await app.snapshot();
-await writeManPage({
-  root,
-  name: "my-cli",
-  outfile: "man/my-cli.1",
-  section: 1,
-});
-```
-
-`section` defaults to `1`. `date` overrides the `.Dd` value. Without `date`, rendering uses `SOURCE_DATE_EPOCH` in UTC when set, then falls back to the current local date. Generated dates use the English `Month D, YYYY` form expected by mdoc.
+Without `date`, rendering uses `SOURCE_DATE_EPOCH` in UTC when set, then the current local date. Generated dates use the English `Month D, YYYY` form expected by mdoc.
 
 ## `renderManPageMdoc(options)`
 
 ```ts
-function renderManPageMdoc(options: RenderManPageMdocOptions): string;
+import { renderManPageMdoc } from "@crustjs/man";
+
+const root = await app.snapshot();
+const source = renderManPageMdoc({ root, name: "my-cli" });
+console.log(source.startsWith(".Dd ")); // => true
 ```
 
 <auto-type-table
@@ -67,47 +74,27 @@ function renderManPageMdoc(options: RenderManPageMdocOptions): string;
   name="RenderManPageMdocOptions"
 />
 
-Use this lower-level function when you want to render mdoc without writing a file. It does not accept a live command definition.
+`renderManPageMdoc()` returns mdoc text without writing a file. It accepts a prepared Command Snapshot, not a live definition.
+
+The renderer lists immediate visible children in the root summary and collects visible subcommand sections under `.Sh COMMANDS`. Sections targeted to `man` are audience-filtered, and same-title sections merge at their first position.
 
 ```ts
-import { renderManPageMdoc } from "@crustjs/man";
-import { app } from "./cli.ts";
-
-const root = await app.snapshot();
-const source = renderManPageMdoc({
-  root,
-  name: "my-cli",
-});
-```
-
-The renderer uses semantic mdoc(7) flag and argument macros. Its subcommand summary lists only the root command's immediate visible children. Root `meta.sections` visible to the `man` (`crust:man`) consumer are appended after the built-in sections as mdoc `.Sh` sections. After audience filtering, entries with the same exact, case-sensitive title render under one heading at the first entry's position, with bodies joined by a single newline. Sections on visible subcommands are collected recursively under `.Sh COMMANDS`, with one `.Ss` subsection per canonical command path.
-
-Target a section to man pages with `only: [man]`, or exclude it with `except: [man]`:
-
-```ts
-import { Crust } from "@crustjs/core";
-import { man } from "@crustjs/man";
-
-const documentedApp = new Crust("my-cli", {
+new Crust("my-cli", {
   sections: [{ title: "FILES", body: "~/.config/my-cli.json", only: [man] }],
 });
 ```
 
-Prepare the command tree through the supported `app.snapshot()` method before calling either API. The package uses `buildCommandDocumentation()` from `@crustjs/core/tooling` internally for its lockstep first-party rendering model.
+Use `only: [man]` to include a section only in manual pages, or `except: [man]` to omit it there.
 
 ## Package script
 
 ```json
 {
-  "scripts": {
-    "generate:man": "bun run scripts/generate-man.ts"
-  },
+  "scripts": { "generate:man": "bun run scripts/generate-man.ts" },
   "files": ["dist", "man"],
   "man": ["./man/my-cli.1"]
 }
 ```
-
-Preview and lint locally:
 
 ```sh
 bun run generate:man
@@ -115,4 +102,4 @@ man -l man/my-cli.1
 mandoc -T lint -W warning man/my-cli.1
 ```
 
-`writeManPage()` remains the lower-level API for custom pipelines that do not use the Extension build lifecycle.
+Use `writeManPage()` for a custom pipeline outside the Extension build lifecycle.

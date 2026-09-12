@@ -6,16 +6,13 @@
     "arguments",
     "flags",
     "types",
-    "subcommands",
-    "extensions",
     "contexts",
+    "extensions",
     "lifecycle",
-    "split-files",
-    "environment",
-    "runtimes",
     "error-handling",
-    "build",
-    "development",
-    "testing"
+    "testing",
+    "runtimes",
+    "environment",
+    "build"
   ]
 }

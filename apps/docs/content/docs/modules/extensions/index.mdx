@@ -3,9 +3,7 @@ title: Extensions
 description: Official application-wide capabilities for Crust CLIs.
 ---
 
-`@crustjs/extensions` provides the six official Extensions. Register them on the root builder with `.extend()`.
-
-Import every Extension from the package root; for example, `import { help } from "@crustjs/extensions"`.
+`@crustjs/extensions` exports six official Extensions and three completion renderers.
 
 ## Install
 
@@ -15,49 +13,23 @@ bun add @crustjs/extensions
 
 ## Usage
 
-```ts
-import { Crust } from "@crustjs/core";
-import {
-  completion,
-  didYouMean,
-  help,
-  noColor,
-  updateNotifier,
-  version,
-} from "@crustjs/extensions";
-import pkg from "../package.json";
+<include lang="ts" meta='title="cli.ts"'>
+  ../../../../examples/modules/extensions/index.ts
+</include>
 
-const app = new Crust("my-cli", { version: pkg.version })
-  .extend(
-    noColor(),
-    help(),
-    version(),
-    didYouMean(),
-    completion(),
-    updateNotifier({ packageName: pkg.name }),
-  )
-  .action(({ stdout }) => stdout("Hello"));
-
-await app.execute();
-```
+Register Extensions on the root builder. Contributions follow `.extend()` registration order, and their types and naming constraints are part of the [Extension contract](/docs/api/types#extension-types).
 
 ## Exports
 
-| Export                                                                        | Contribution                                        |
-| ----------------------------------------------------------------------------- | --------------------------------------------------- |
-| [`help()`](/docs/modules/extensions/help)                                     | Recursive `--help` / `-h` flag and help rendering   |
-| [`renderHelp(command, path?)`](/docs/modules/extensions/help)                 | Render help text from a Command Snapshot            |
-| [`version(value?, options?)`](/docs/modules/extensions/version)               | Root-only `--version` / `-v` flag                   |
-| [`completion(options?)`](/docs/modules/extensions/completion)                 | Static shell completion command and build artifacts |
-| [`renderBashCompletion(root, options?)`](/docs/modules/extensions/completion) | Render bash completion from a Command Snapshot      |
-| [`renderZshCompletion(root, options?)`](/docs/modules/extensions/completion)  | Render zsh completion from a Command Snapshot       |
-| [`renderFishCompletion(root, options?)`](/docs/modules/extensions/completion) | Render fish completion from a Command Snapshot      |
-| [`didYouMean(options?)`](/docs/modules/extensions/did-you-mean)               | `COMMAND_NOT_FOUND` presentation                    |
-| [`noColor()`](/docs/modules/extensions/no-color)                              | Recursive `--color` / `--no-color` flag             |
-| [`updateNotifier(options)`](/docs/modules/extensions/update-notifier)         | Post-action npm update notice                       |
-
-Extension factories return plain `Extension` values. Contributions are application-wide and applied in `.extend()` registration order. Extension flag spellings must not collide with existing flags, including subcommand-local flags: `.extend()` and `.add()` reject statically known collisions at compile time (`FIX_ALIAS_COLLISION`), and dynamically assembled Extension flag collisions fail at prepare time. Provided Context names must not replace a Context already on the path (`FIX_DUPLICATE_CONTEXT` for statically known names). Dynamically assembled Extension commands replace existing commands with the same canonical name at preparation time; duplicate `.add()` command names instead throw `DEFINITION`. During routing, canonical command names beat aliases; among colliding aliases, the alias of the earliest-inserted sibling wins, so namespace custom Extension contributions to avoid accidental overrides.
-
-`preRun` hooks run in registration order until one returns `ctx.finish()`. Later `preRun` hooks and the Command Action are skipped; all `postRun` hooks still run in reverse registration order. Register `noColor()` before `help()` so color flags affect help output.
-
-Use [`defineExtension(id, config?)`](/docs/guide/extensions) from `@crustjs/core` to author a custom Extension; omitted config defaults to `{}`. Extensions that need root metadata declare its keys with [`defineExtension<"version">()(id, configOrFactory)`](/docs/guide/extensions#required-root-metadata).
+| Export                                                                        | Contribution                                      |
+| ----------------------------------------------------------------------------- | ------------------------------------------------- |
+| [`help()`](/docs/modules/extensions/help)                                     | Recursive `--help` / `-h` flag and help rendering |
+| [`renderHelp(command, path?)`](/docs/modules/extensions/help)                 | Render help text from a Command Snapshot          |
+| [`version(value?, options?)`](/docs/modules/extensions/version)               | Root-only `--version` / `-v` flag                 |
+| [`completion(options?)`](/docs/modules/extensions/completion)                 | Shell completion command and build artifacts      |
+| [`renderBashCompletion(root, options?)`](/docs/modules/extensions/completion) | Render bash completion from a Command Snapshot    |
+| [`renderZshCompletion(root, options?)`](/docs/modules/extensions/completion)  | Render zsh completion from a Command Snapshot     |
+| [`renderFishCompletion(root, options?)`](/docs/modules/extensions/completion) | Render fish completion from a Command Snapshot    |
+| [`didYouMean(options?)`](/docs/modules/extensions/did-you-mean)               | `COMMAND_NOT_FOUND` presentation                  |
+| [`noColor()`](/docs/modules/extensions/no-color)                              | Recursive `--color` / `--no-color` flag           |
+| [`updateNotifier(options)`](/docs/modules/extensions/update-notifier)         | Post-action npm update notice                     |

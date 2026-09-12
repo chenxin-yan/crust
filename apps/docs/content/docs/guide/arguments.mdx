@@ -3,84 +3,62 @@ title: Arguments
 description: Define typed positional inputs for a command.
 ---
 
-`.args(...defs)` maps positional tokens to names in the order the definitions are passed. Repeated `.args()` calls append in call order. Duplicate names within or across calls fail typecheck with `FIX_DUPLICATE_ARG`. Pass values from `defineArg(name, def)` or inline literals:
+`.args(...defs)` maps positional tokens to names in definition order. Repeated calls append in call order, and duplicate names fail typecheck with `FIX_DUPLICATE_ARG`.
 
-```ts
-import { Crust } from "@crustjs/core";
+<include lang="ts">../../../examples/guide/arguments.ts#definitions</include>
 
-const command = new Crust("serve")
-  .args(
-    { name: "port", type: "number", default: 3000 },
-    { name: "host", type: "string", default: "localhost" },
-  )
-  .action(({ args, stdout }) => stdout(`${args.host}:${args.port}`));
-```
+Pass definitions from `defineArg(name, def)` or use inline literals as above.
 
 ## Required, optional, and defaulted
 
-```ts
-.args(
-  { name: "input", type: "path", required: true },
-  { name: "format", type: "string", default: "json" },
-  { name: "label", type: "string" },
-)
-```
+<include lang="ts">../../../examples/guide/arguments.ts#defaults</include>
 
-The inferred types are `string`, `string`, and `string | undefined`, respectively. See [`ArgDef`](/docs/api/types#argdef) for all properties.
+`input` is required, `format` resolves to its default when omitted, and `label` remains optional. Their inferred types are `string`, `string`, and `string | undefined`; see [`ArgDef`](/docs/api/types#argdef) for all properties.
 
 ## Variadic arguments
 
-Only the final argument can be variadic:
-
 ```ts
-new Crust("copy")
+const copy = new Crust("copy")
   .args(
     { name: "destination", type: "path", required: true },
     { name: "files", type: "path", variadic: true },
   )
-  .action(({ args }) => {
-    args.files; // string[]
-  });
+  .action(({ args }) => args.files); // string[]
 ```
 
-A core variadic value is always an array. With `required: true` and no default, typed input requires a nonempty tuple and the validated action value is `[T, ...T[]]`. Optional and default-backed variadics remain `T[]`; schema-backed arguments keep the schema's output type. Before required validation, parser results can still contain an empty array.
-
-Structured `run()` arguments must form a supplied prefix in definition order. Supplying a later position requires every earlier position, even one with a default. Defaults do not fill positional gaps. See [structured invocation](/docs/api/crust#runpath-input-io) for dynamic input.
+Only the final argument can be variadic, and a core-value variadic's Command Action value is an array. See [structured invocation](/docs/api/crust#runpath-input-io) for required variadics and typed `run()` input.
 
 ## Choices
 
-Use `choices` for a static string set:
+<include lang="ts">../../../examples/guide/arguments.ts#choices</include>
 
-```ts
-.args({ name: "target", type: "string", choices: ["bun", "node"] })
-```
-
-When `choices` and `default` are literals, TypeScript reports `FIX_DEFAULT_CHOICE` if the default falls outside the set. Defaults against dynamic choices are checked automatically when consumed. Incoming choices are also checked for both argv and structured invocation; an invalid supplied value produces a `PARSE` failure.
-
-As with flags, a literal choices tuple narrows the argument's inferred type to the union of those literals (`"bun" | "node"` above); a widened `string[]` keeps it as `string`.
+Use `choices` for a static string set. An invalid supplied choice produces a `PARSE` failure, while a literal choices tuple narrows the inferred value to its string union. Every default must belong to the choice set: known literal mismatches fail type checking with `FIX_DEFAULT_CHOICE`, while widened or dynamic mismatches throw a `DEFINITION` error.
 
 ## Standard Schemas
-
-A `schema` receives the raw positional token (`string | undefined`, or `string[]` for a variadic argument) and determines the Command Action's output type:
 
 ```ts
 import { z } from "zod";
 
 new Crust("serve")
   .args({ name: "port", schema: z.coerce.number().int().positive() })
-  .action(({ args }) => {
-    args.port; // number
-  });
+  .action(({ args }) => console.log(args.port)); // number
 ```
 
-A schema cannot be combined with core value options — see [Schema-backed definitions](/docs/guide/types#schema-backed-definitions) for the full rule.
+See [Schema-backed definitions](/docs/guide/types#schema-backed-definitions) for schema input, output, and definition rules.
 
 ## Excess and raw tokens
 
-Positionals before `--` must match a declared argument; excess values fail with a `VALIDATION` error. Commands that accept an open-ended list of values should declare a variadic argument; commands that forward opaque tokens should read them from `rawArgs` after `--`.
+<include lang="ts">../../../examples/guide/arguments.ts#excess</include>
 
-Tokens after `--` bypass argument and flag parsing and appear in `rawArgs`:
-
-```ts
-new Crust("wrap").action(({ rawArgs, stdout }) => stdout(rawArgs.join(" ")));
+```sh
+$ bun run cli.ts first second
+Error: Unexpected positional argument: "second"
+$ echo $?
+1
 ```
+
+Positionals before `--` must match a declared argument. Excess values fail with `VALIDATION`; use a variadic argument for an open-ended list.
+
+<include lang="ts">../../../examples/guide/arguments.ts#raw</include>
+
+Tokens after `--` bypass argument and flag parsing and appear in `rawArgs`. The `raw` field provides the same values to `run()`.

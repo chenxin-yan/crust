@@ -3,32 +3,27 @@ title: No Color
 description: Control terminal color with a recursive Extension flag.
 ---
 
-```ts
-import { Crust } from "@crustjs/core";
-import { noColor } from "@crustjs/extensions";
+## Usage
 
-const app = new Crust("my-cli").extend(noColor()).action(() => {});
-
-await app.execute();
-```
-
-The factory preserves its literal owned-flag types for ordinary `.extend()` attachment.
-
-Register `noColor()` before Extensions that finish in `preRun`, such as `help()`. Once a hook returns `ctx.finish()`, later `preRun` hooks are skipped, so a later `noColor()` cannot apply the color flags to help output.
-
-`noColor()` owns a recursive boolean `color` flag. Crust's normal boolean negation provides both forms:
+<include lang="ts" meta='title="cli.ts"'>
+  ../../../../examples/modules/extensions/no-color.ts
+</include>
 
 ```sh
-my-cli --color
-my-cli --no-color
-my-cli deploy --no-color
+$ my-cli --no-color
+FORCE_COLOR=unset NO_COLOR=1
 ```
 
-When the flag is passed, the Extension scopes the standard color environment variables around command execution:
+`noColor()` adds a recursive boolean `color` flag with no default. Normal boolean negation provides both `--color` and `--no-color`.
 
-- `--color` sets `FORCE_COLOR=3` and clears `NO_COLOR` — forces all ANSI on (truecolor), overriding non-TTY detection. Any `FORCE_COLOR`-aware library obeys it, and child processes inherit it.
-- `--no-color` sets `NO_COLOR=1` and clears `FORCE_COLOR` — suppresses colors per [no-color.org](https://no-color.org/), while non-color modifiers and hyperlinks keep following TTY detection.
+## Behavior
 
-Previous values are restored after the command finishes. Overlapping programmatic runs are last-writer-wins while active; the ambient environment is restored once the last run finishes.
+```sh
+my-cli --color           # FORCE_COLOR=3; NO_COLOR is cleared
+my-cli --no-color        # NO_COLOR=1; FORCE_COLOR is cleared
+my-cli deploy --no-color # the flag is recursive
+```
 
-The flag has no default. When it is omitted, the Extension changes nothing — environment-based color detection (`NO_COLOR`, `FORCE_COLOR`, TTY) remains the responsibility of `@crustjs/style`.
+The Extension restores the previous environment values after the command finishes. For overlapping programmatic runs, opposing values are last-writer-wins while active, and previous ambient values return only after the last run finishes. Register it before Extensions such as `help()` that may finish in `preRun`, because later `preRun` hooks are then skipped.
+
+When neither flag is present, the Extension leaves the environment unchanged. `@crustjs/style` remains responsible for environment and TTY-based color detection.

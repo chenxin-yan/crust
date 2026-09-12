@@ -1,99 +1,41 @@
 ---
-title: Error Handling
+title: Error handling
 description: Handle Crust failures, application errors, and cancellation.
 ---
 
 ## CrustError
 
-Crust uses exactly four framework error codes:
+<include lang="ts">../../../examples/guide/error-handling.ts#crust-error</include>
+
+Narrow a failed outcome with `instanceof CrustError`, then use `.is()` to narrow its code and details. Crust uses four codes; see the [error codes and details](/docs/api/errors#codes) for the full reference and [compile-time and runtime checks](/docs/guide/types#compile-time-checks) for what is checked where.
 
 | Code                | Meaning                                                                                                 |
 | ------------------- | ------------------------------------------------------------------------------------------------------- |
 | `DEFINITION`        | A malformed dynamic definition or collision, recipe, Extension, Context, or documentation-section error |
 | `PARSE`             | Argv syntax, structured `run()` input binding, or built-in conversion failure                           |
-| `VALIDATION`        | Missing/invalid values or aggregated Standard Schema issues                                             |
-| `COMMAND_NOT_FOUND` | An unknown command under the [routing rules](/docs/guide/subcommands#unknown-commands)                  |
+| `VALIDATION`        | Missing or invalid values, including Standard Schema issues                                             |
+| `COMMAND_NOT_FOUND` | An unknown command under the [routing rules](/docs/guide/commands#unknown-commands)                     |
 
-```ts
-import { CrustError } from "@crustjs/core";
+## Error flow
 
-const outcome = await app.run(path, input);
-if (outcome.status === "failed") {
-  const { error } = outcome;
-  if (error instanceof CrustError && error.is("VALIDATION")) {
-    console.error(error.details?.issues);
-  }
-}
-```
+<include lang="ts">../../../examples/guide/error-handling.ts#cleanup</include>
 
-A `CrustError` exposes `code`, `message`, `details`, optional `cause`, `.is(code)`, and `toJSON()`.
+A Command Action failure still runs `postRun` hooks, then disposes pulled Context values. The [propagation boundaries](/docs/api/errors#propagation-boundaries) cover failures from other lifecycle phases.
 
-## Trust boundaries
+### Failed outcomes
 
-Crust checks developer-authored definitions at compile time through TypeScript. `FIX_*` brands report malformed definitions and collisions at their call sites. Runtime checks cover empty or reserved flag spellings, flag and Extension-flag collisions, duplicate or misplaced arguments, and duplicate `.add()` command names, throwing `DEFINITION` at composition or preparation. Dynamic Extension commands instead replace commands with the same canonical name. Alias grammar and actual sibling collisions are also checked when consumed.
+<include lang="ts">../../../examples/guide/error-handling.ts#failed-outcome</include>
 
-Argv is untrusted and remains runtime-validated. Invalid tokens, choices, and built-in conversions throw `PARSE`; missing values and Standard Schema issues throw `VALIDATION`. Structured `run()` binding can also return a failed outcome carrying `PARSE`, for example when a later argument is supplied after an omitted earlier one, or an untyped caller supplies an unknown argument or flag name. Declared Context dependencies are checked statically; lazy bag access retains runtime `DEFINITION` guards for missing providers on dynamically assembled paths, dependency cycles, and lifecycle misuse. Materialization retains runtime checks that a command recipe returns the seeded builder and does not register nested Extensions, because recipe behavior is dynamic. Snapshot preparation also retains runtime checks for authored and Extension-contributed documentation sections.
+`run()` returns the application error in a `failed` outcome and keeps output written before cleanup completes. See [`run()` input, output, and failure behavior](/docs/api/crust#runpath-input-io) for the full contract.
 
-`COMMAND_NOT_FOUND` details contain `input`, `available`, `commandPath`, and `parentCommand`, a readonly serializable Command Snapshot. `available` contains only visible child command names; hidden commands remain invocable but are omitted from user-facing choices.
+### Terminal presentation
 
-## Application errors pass through
+<include lang="ts">../../../examples/guide/error-handling.ts#terminal-presentation</include>
 
-Errors from Command Actions and Context construction are not converted to `CrustError`. A single disposal failure after an otherwise successful invocation is likewise retained unchanged in the failed outcome. Disposal stacks combine multiple cleanup failures as a native `SuppressedError` chain or, on the Node 22 fallback, an `AggregateError`. If invocation and disposal both fail, `await using` throws a `SuppressedError` with the disposal failure in `.error` and the invocation failure in `.suppressed`. See [Error flow](/docs/guide/lifecycle#error-flow).
-
-When cleanup succeeds, the original application error reaches the caller:
-
-```ts
-const failure = new Error("service unavailable");
-const app = new Crust("app").action(() => {
-  throw failure;
-});
-
-const outcome = await app.run([]);
-if (outcome.status === "failed") console.assert(outcome.error === failure);
-```
-
-Use ordinary application error classes when callers need to distinguish domain failures.
-
-## Terminal presentation
-
-Extension `onError` hooks present failures reached during `execute()` dispatch:
-
-<include lang="ts">../../../examples/extensions/hooks.ts#service-errors</include>
-
-A hook returns `true` after rendering, or a falsy value to delegate to the next hook. Core's default renderer is last. Core establishes a nonzero status before invoking the chain, so presentation cannot turn a failure into success.
-
-Failures before dispatch bypass the hook chain. Extension application and command-tree materialization failures render directly to `io.stderr`; snapshot preparation and build-hook failures are printed directly.
-
-`run()` never invokes these hooks. It returns the invocation or combined cleanup failure in a `failed` outcome, leaving rendering and exit status to its caller.
+`execute()` offers a failure to `onError` hooks and returns the terminal exit code. Returning `true` claims the failure, so Core does not render it again.
 
 ## Cancellation
 
-Core treats any `Error` whose `name` is `"AbortError"` as cancellation. This includes the `DOMException` thrown by prompts:
+<include lang="ts">../../../examples/guide/error-handling.ts#cancellation</include>
 
-```ts
-const outcome = await app.run(path, input);
-if (outcome.status === "failed") {
-  const { error } = outcome;
-  if (error instanceof Error && error.name === "AbortError") {
-    return;
-  }
-  throw error;
-}
-```
-
-`execute()` sets `process.exitCode` to `130` and offers the `AbortError` to Extension `onError` hooks, so an application can render a cancellation message in one place:
-
-```ts
-const cancelMessage = defineExtension(defineExtensionId("cancel-message"), {
-  hooks: {
-    onError(error, ctx) {
-      if (error instanceof Error && error.name === "AbortError") {
-        ctx.stderr("Operation cancelled");
-        return true;
-      }
-    },
-  },
-});
-```
-
-When no hook claims it, cancellation stays silent — there is no default rendering. `run()` returns the same exception in the `failed` branch unless disposal also fails.
+Treat an `AbortError` returned by `run()` as cancellation. The [propagation boundaries](/docs/api/errors#propagation-boundaries) describe terminal cancellation behavior.

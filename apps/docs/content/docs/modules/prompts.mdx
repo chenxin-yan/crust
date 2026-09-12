@@ -1,19 +1,9 @@
 ---
 title: "Prompts"
-description: Interactive terminal prompts for CLI applications — input, password, confirm, select, multiselect, filter, and multifilter.
+description: Interactive input, password, confirm, select, multiselect, filter, and multifilter prompts.
 ---
 
-import { Callout } from "fumadocs-ui/components/callout";
-
-`@crustjs/prompts` provides interactive terminal prompts for building polished CLI experiences. It includes seven prompt types, a customizable theme system, fuzzy matching, and a low-level renderer for building custom prompts.
-
-<Callout>
-  Both `input()` and `password()` accept a Standard Schema v1 through the `schema` option. The
-  prompt resolves to the schema's transformed output type. Use `validate` only for a
-  throw-on-failure function; the two options are mutually exclusive.
-</Callout>
-
-Prompt UI renders to **stderr** by default, keeping piped stdout clean unless you override the output stream. Every prompt accepts an `initial` option to skip interactivity, which is useful for prefilling from CLI flags or CI environments.
+`@crustjs/prompts` exports seven terminal prompts, shared themes, injected terminal IO, and renderer helpers. Prompt UI writes to stderr by default.
 
 ## Install
 
@@ -21,476 +11,188 @@ Prompt UI renders to **stderr** by default, keeping piped stdout clean unless yo
 bun add @crustjs/prompts
 ```
 
-## Quick Example
+## Quick example
 
-```ts
-import { input, confirm, select, multiselect, filter, multifilter } from "@crustjs/prompts";
+<include lang="ts">../../../examples/modules/prompts.ts#builtins</include>
 
-const name = await input({ message: "Project name?" });
-const useTS = await confirm({ message: "Use TypeScript?" });
+Built-in prompts return the submitted value. `input()` and `password()` also accept a Standard Schema v1 `schema` or a throw-based `validate` callback, but not both.
 
-const framework = await select({
-  message: "Framework",
-  choices: ["react", "vue", "svelte"],
-});
-
-const features = await multiselect({
-  message: "Features",
-  choices: ["linting", "testing", "ci"],
-  required: true,
-});
-
-const language = await filter({
-  message: "Language",
-  choices: ["typescript", "javascript", "rust"],
-});
-
-const addons = await multifilter({
-  message: "Add-ons",
-  choices: ["tailwind", "testing", "storybook", "eslint"],
-});
+```text
+┃ Project name?
+  crust-app│
+✓ Project name? crust-app
 ```
 
 ## Injecting IO
 
-Every prompt accepts an optional second `io` argument. Input and output resolve from the explicit argument, the current `withTerminalIO()` scope, then `process.stdin` / `process.stderr`. `withPromptIO()` remains an output-compatible alias for prompt-focused code. The same ambient scope is shared with `@crustjs/progress`, so one scope can route prompts and indicators together.
+<include lang="ts">../../../examples/modules/prompts.ts#io</include>
 
-When `@crustjs/core` receives explicit invocation IO, its line-oriented `stderr(text)` callback is bridged into this scope as a non-TTY output. Core cannot supply an interactive input stream, so inject `PromptIO.input` explicitly (or use the testing helpers) when a test needs to drive a prompt. An existing terminal scope takes precedence over the Core bridge, and omitting invocation IO preserves the process-stream defaults.
+Each prompt accepts an optional second `PromptIO` argument with optional `input` and `output`. Resolution is explicit IO, ambient `withTerminalIO()` IO, then `process.stdin` and `process.stderr`.
 
-```ts
-import { select, withTerminalIO, type PromptIO } from "@crustjs/prompts";
+`withPromptIO()` is an output-compatible alias. The ambient scope is shared with `@crustjs/progress`.
 
-declare const io: PromptIO;
-
-const choice = await select({ message: "Pick one", choices: ["a", "b"] }, io);
-
-const scopedChoice = await withTerminalIO(io, () =>
-  select({ message: "Pick one", choices: ["a", "b"] }),
-);
-```
-
-`io` is a `PromptIO` object with optional `input` and `output` streams. Omit it in normal CLI code.
-
-## Testing Custom Prompts
-
-Use the `@crustjs/prompts/testing` subpath to drive a prompt with fake TTY streams. `screen()` returns the latest ANSI-stripped terminal frame, while `answer` resolves after submission.
+## Testing custom prompts
 
 ```ts
-import { expect, test } from "bun:test";
-import { renderPrompt } from "@crustjs/prompts/testing";
-
-import { myPrompt } from "./my-prompt.ts";
-
-test("accepts a name", async () => {
-  const prompt = renderPrompt(myPrompt, { message: "Name?" });
-
-  prompt.type("Ada");
-  prompt.keys("return");
-
-  expect(await prompt.answer).toBe("Ada");
-  expect(prompt.screen()).toContain("Ada");
-});
+const prompt = renderPrompt(myPrompt, { message: "Name?" });
+prompt.type("Ada");
+prompt.keys("return");
+expect(await prompt.answer).toBe("Ada");
 ```
 
-Custom prompt functions passed to `renderPrompt` must accept `(options, io?)`, like the built-in prompt functions. For lower-level setup, `createPromptIO({ isTTY: false })` provides fake non-interactive streams for testing `default` fallbacks. The subpath also exports `encodeKey` and the types `Key`, `NamedKey`, `PromptTestIO`, and `RenderedPrompt`; `keys()` autocompletes named key names while still accepting `ctrl+<letter>` and single characters.
+Import `renderPrompt` from `@crustjs/prompts/testing`. Its `screen()` method returns the latest ANSI-stripped frame, while `answer` settles after submission.
+
+The subpath also exports `createPromptIO`, `encodeKey`, and their key and harness types. Custom prompt functions passed to `renderPrompt` accept `(options, io?)`, like built-in prompts.
 
 ## Building custom prompts
 
-The package root exports the renderer pieces used by the built-in prompts:
+```ts
+import { runPrompt, submit, handleTextEdit, fuzzyFilter } from "@crustjs/prompts";
+```
 
-- `renderTextWithCursor` renders editable text with a themed cursor, or a styled placeholder when empty.
-- `highlightMatches` applies the theme's match style to fuzzy-match indices.
-- `formatPromptLine` and `formatSubmitted` assemble active and submitted prompt lines.
-- `renderChoiceList` renders a scrolled choice viewport with overflow indicators.
-- `PREFIX_SYMBOL`, `PREFIX_SUBMITTED`, `CURSOR_INDICATOR`, `SCROLL_INDICATOR`, `CHECKBOX_CHECKED`, and `CHECKBOX_UNCHECKED` are the shared prompt glyphs.
-
-Use these with `runPrompt`, `submit`, `handleTextEdit`, and `fuzzyFilter` to build prompts that follow the built-in rendering conventions.
+The root exports the renderer, submission, fuzzy matching, list rendering, line formatting, text editing, and shared glyph helpers used by the built-ins. Use these exports when a custom prompt should follow the same terminal behavior.
 
 ## Prompts
 
+```ts
+import { input, password, confirm, select, multiselect, filter, multifilter } from "@crustjs/prompts";
+```
+
+All prompt functions accept `(options, io?)`. Choice functions preserve literal choice value types when their choices are not widened.
+
 ### `input(options, io?)`
 
-Single-line text input with cursor editing, placeholder, default value, and validation.
-
 ```ts
-const name = await input({
-  message: "What is your name?",
-  placeholder: "John Doe",
-  default: "anonymous",
-  validate: (v) => {
-    if (v.length === 0) throw new Error("Name is required");
-  },
-});
+const name = await input({ message: "Name?", default: "anonymous" });
 ```
+
+Single-line text input supports cursor editing, placeholder text, defaults, and validation.
 
 <auto-type-table path="../../../../../packages/prompts/src/prompts/input.ts" name="InputOptions" />
 
-See [Validation](#validation) for the schema shape and typed return values.
-
 ### `password(options, io?)`
 
-Masked text input. Characters are displayed as the mask character, which defaults to `*`. After submission, a fixed-length mask is shown to avoid revealing password length.
-
 ```ts
-const secret = await password({
-  message: "Enter your password:",
-  validate: (v) => {
-    if (v.length < 8) throw new Error("Must be at least 8 characters");
-  },
-});
+const token = await password({ message: "Token?", mask: "*" });
 ```
 
-<auto-type-table
-  path="../../../../../packages/prompts/src/prompts/password.ts"
-  name="PasswordOptions"
-/>
+Password input masks active text and shows a fixed-length mask after submission. Its default mask is `*`.
 
-## Validation
-
-`input()` and `password()` expose two exclusive validation modes:
-
-- `validate`: a `(value: string) => void | Promise<void>` function that throws to reject input; its message renders inline and the prompt returns `string`.
-- `schema`: any [Standard Schema v1](https://standardschema.dev/) object (Zod, Valibot, Effect Schema, ArkType, and others); the prompt returns the schema's exact output type.
-
-A schema parses the raw submitted string, renders its first issue inline on rejection (falling back to `"Validation failed"`), and returns its transformed output on success. Async schemas are supported. Passing both `schema` and `validate` rejects immediately, before rendering.
-
-`initial` and non-TTY `default` are raw UI fallback values rather than semantic defaults. Crust parses them through `schema` before returning them, preserving the `Promise<Output>` contract. A rejected fallback rejects the prompt promise with `initial value rejected by schema: ...` or `default value rejected by schema: ...`, without rendering. Put semantic defaults inside the schema.
-
-```ts
-import { input } from "@crustjs/prompts";
-import { z } from "zod";
-
-const port = await input({
-  message: "Port?",
-  schema: z.coerce.number().int().min(1).max(65535),
-});
-//    ^? number
-```
-
-```ts
-import { input } from "@crustjs/prompts";
-import { Schema } from "effect";
-
-const Email = Schema.standardSchemaV1(Schema.String.pipe(Schema.pattern(/.+@.+/)));
-
-const email = await input({ message: "Email?", schema: Email });
-//    ^? string
-```
+<auto-type-table path="../../../../../packages/prompts/src/prompts/password.ts" name="PasswordOptions" />
 
 ### `confirm(options, io?)`
 
-Yes/no boolean prompt. Left, Right, and Tab toggle the current value; `y`/`h` set it to true, while `n`/`l` set it to false. Confirm with Enter.
-
 ```ts
-const proceed = await confirm({
-  message: "Accept the license?",
-  active: "Accept",
-  inactive: "Decline",
-  default: false,
-});
+const proceed = await confirm({ message: "Continue?", default: false });
 ```
 
-<auto-type-table
-  path="../../../../../packages/prompts/src/prompts/confirm.ts"
-  name="ConfirmOptions"
-/>
+Confirm returns a boolean. Left, Right, and Tab toggle the value; `y` and `h` select true, while `n` and `l` select false.
+
+<auto-type-table path="../../../../../packages/prompts/src/prompts/confirm.ts" name="ConfirmOptions" />
 
 ### `select(options, io?)`
 
-Single selection from a list. Navigate with Up/Down or `k`/`j`, then confirm with Enter. Scrolls when the list exceeds `maxVisible`.
-
 ```ts
-const port = await select({
-  message: "Choose a port",
-  choices: [
-    { label: "HTTP", value: 80 },
-    { label: "HTTPS", value: 443, hint: "recommended" },
-  ],
-  default: 443,
-});
+const runtime = await select({ message: "Runtime?", choices: ["bun", "node"] });
 ```
 
-When the choices list is written inline (or declared `as const`), the result narrows to the union of the choice values — `80 | 443` above, or `"react" | "vue" | "svelte"` for string choices. A widened `string[]` keeps `string`. The same applies to `multiselect`, `filter`, and `multifilter` (element type of the returned array).
+Select returns one choice value. Object-valued defaults match by reference, so pass the same object used in `choices`.
 
-For object-valued choices, `default` matches by reference equality. Pass the same object instance used in `choices`.
-
-<auto-type-table
-  path="../../../../../packages/prompts/src/prompts/select.ts"
-  name="SelectOptions"
-/>
+<auto-type-table path="../../../../../packages/prompts/src/prompts/select.ts" name="SelectOptions" />
 
 ### `multiselect(options, io?)`
 
-Checkbox-style multi-selection. Use Space to toggle, `a` to toggle all, `i` to invert, and Enter to confirm.
-
-When `max` is set, toggle-all and invert respect the constraint. Object values in `default` match choices by reference equality.
-
 ```ts
-const features = await multiselect({
-  message: "Enable features",
-  choices: [
-    { label: "TypeScript", value: "ts", hint: "recommended" },
-    { label: "ESLint", value: "eslint" },
-    { label: "Prettier", value: "prettier" },
-  ],
-  default: ["ts"],
-  required: true,
-  max: 2,
-});
+const tools = await multiselect({ message: "Tools?", choices: ["lint", "test"], max: 2 });
 ```
 
-<auto-type-table
-  path="../../../../../packages/prompts/src/prompts/multiselect.ts"
-  name="MultiselectOptions"
-/>
+Multiselect returns selected values in choice order. `required` prevents an empty submission, and `max` limits toggle-all and invert operations.
+
+<auto-type-table path="../../../../../packages/prompts/src/prompts/multiselect.ts" name="MultiselectOptions" />
 
 ### `filter(options, io?)`
 
-Fuzzy-search selection. Type to filter, navigate with Up/Down, and confirm with Enter. Matched characters are highlighted in results.
-
-Use `filter` when users should choose a single item from a long list and need search to narrow it quickly. For fuzzy multi-selection, use `multifilter`. Object values in `default` match choices by reference equality.
-
 ```ts
-const lang = await filter({
-  message: "Search for a language",
-  choices: ["TypeScript", "JavaScript", "Rust", "Python", "Go"],
-  placeholder: "Type to filter...",
-});
+const language = await filter({ message: "Language?", choices: ["TypeScript", "Rust"] });
 ```
 
-<auto-type-table
-  path="../../../../../packages/prompts/src/prompts/filter.ts"
-  name="FilterOptions"
-/>
+Filter fuzzy-matches typed text and returns one highlighted choice.
+
+<auto-type-table path="../../../../../packages/prompts/src/prompts/filter.ts" name="FilterOptions" />
 
 ### `multifilter(options, io?)`
 
-Fuzzy-search multi-selection. Type to filter, navigate with Up/Down, use Space to toggle the highlighted result, and confirm with Enter. Selected values are returned in original choice order.
-
-Use `multifilter` when the list is large enough that users need a search box before they can comfortably select multiple items.
-
-`filter` and `multifilter` mirror the `select` and `multiselect` split:
-
-- `filter` returns a single `T`
-- `multifilter` returns `T[]`
-
 ```ts
-const features = await multifilter({
-  message: "Enable features",
-  choices: [
-    { label: "TypeScript", value: "ts", hint: "recommended" },
-    { label: "ESLint", value: "eslint" },
-    { label: "Prettier", value: "prettier" },
-  ],
-  default: ["ts"],
-  required: true,
-});
+const features = await multifilter({ message: "Features?", choices: ["lint", "test"] });
 ```
 
-<auto-type-table
-  path="../../../../../packages/prompts/src/prompts/multifilter.ts"
-  name="MultifilterOptions"
-/>
+Multifilter combines fuzzy matching with multi-selection and returns values in original choice order.
+
+<auto-type-table path="../../../../../packages/prompts/src/prompts/multifilter.ts" name="MultifilterOptions" />
+
+## Validation
+
+```text
+┃ Project name?
+  │
+  Name is required
+```
+
+A `validate` callback throws to reject input, and its error message renders inline. A Standard Schema parses the raw string, returns its transformed output type, and renders the first issue or `Validation failed`.
+
+Async validators and schemas are supported. `initial` and non-TTY `default` values also pass through a configured schema before being returned.
 
 ## Themes
 
-All prompts share a theming system with 10 style slots. Each slot is a `StyleFn`, which is a `(text: string) => string` function from `@crustjs/style`.
+<include lang="ts">../../../examples/modules/prompts.ts#theme</include>
 
-The default theme's styling follows [`@crustjs/style` capability detection](/docs/modules/style#color-control), including `process.stdout.isTTY`, not the resolved prompt output. `NO_COLOR` disables colors but not modifiers, hyperlinks, or the renderer's cursor-control sequences.
+A `PromptTheme` contains `prefix`, `message`, `placeholder`, `cursor`, `selected`, `unselected`, `error`, `success`, `hint`, and `filterMatch`. Instance overrides from `createPrompts()` sit between `defaultTheme` and per-prompt overrides.
 
-### Default Theme
+Style capability behavior comes from [`@crustjs/style`](/docs/modules/style#color-control).
 
-| Slot          | Default | Used for                             |
-| ------------- | ------- | ------------------------------------ |
-| `prefix`      | `cyan`  | Prefix glyph before the message      |
-| `message`     | `bold`  | Prompt message text                  |
-| `placeholder` | `dim`   | Placeholder text in empty inputs     |
-| `cursor`      | `cyan`  | Cursor indicator in inputs and lists |
-| `selected`    | `cyan`  | Active or selected item              |
-| `unselected`  | `dim`   | Inactive or unselected items         |
-| `error`       | `red`   | Validation error messages            |
-| `success`     | `green` | Confirmed or submitted values        |
-| `hint`        | `dim`   | Hint text and scroll indicators      |
-| `filterMatch` | `cyan`  | Matched characters in filter results |
+## Non-interactive environments
 
-### Custom Themes
+```text
+# input({ message: "Name?", default: "ci-user" }) on a non-TTY
+ci-user
 
-There is no global theme state. Create a themed instance with `createPrompts` — it exposes the same prompt functions bound to your theme:
-
-```ts
-import { createPrompts } from "@crustjs/prompts";
-import { magenta, cyan, italic } from "@crustjs/style";
-
-// Partial overrides; unspecified slots keep their defaults
-const p = createPrompts({ theme: { prefix: magenta, success: cyan } });
-
-const name = await p.input({
-  message: "Name?",
-  theme: { message: italic },
-});
+# input({ message: "Name?" }) on a non-TTY
+NonInteractiveError: Prompts require an interactive terminal (TTY).
 ```
 
-The bare exports (`input`, `select`, …) use `defaultTheme`.
+Every prompt returns `initial` without rendering when it is provided. On a non-TTY, all prompts except `password()` can return an explicitly supplied `default`; otherwise they reject with `NonInteractiveError`.
 
-Theme resolution order, from lowest to highest priority:
+Ctrl+C rejects with a `DOMException` whose name is `AbortError`.
 
-1. `defaultTheme`
-2. Instance theme from `createPrompts()`
-3. Per-prompt overrides from the `theme` option
-
-## Non-Interactive Environments
-
-All prompts require an interactive input TTY unless a short-circuit value is available. Every prompt skips rendering when `initial` is provided, parsing it through `schema` when configured. In addition, `input`, `confirm`, `select`, `multiselect`, `filter`, and `multifilter` use an explicitly provided `default` when the resolved input is not a TTY. Otherwise, the prompt rejects with `NonInteractiveError`. See [Validation](#validation) for schema-backed fallback rejection.
+## Custom prompts
 
 ```ts
-import { input, NonInteractiveError } from "@crustjs/prompts";
-
-try {
-  const name = await input({
-    message: "Name?",
-    initial: process.env.CI ? "ci-user" : undefined,
-  });
-} catch (err) {
-  if (err instanceof NonInteractiveError) {
-    // Not a TTY and no initial value
-  }
-  if (err instanceof DOMException && err.name === "AbortError") {
-    // User pressed Ctrl+C
-  }
-}
-```
-
-For non-interactive async progress output, use [`@crustjs/progress`](/docs/modules/progress).
-
-## Custom Prompts
-
-The low-level `runPrompt(config, io?)` API lets you build custom interactive prompts with full control over state, rendering, and keypress handling.
-
-```ts
-import { runPrompt, submit } from "@crustjs/prompts";
-import type { KeypressEvent } from "@crustjs/prompts";
-
-interface CounterState {
-  count: number;
-}
-
-const result = await runPrompt<CounterState, number>({
+const result = await runPrompt({
   initialState: { count: 0 },
-  // theme is optional: partial overrides merge onto defaultTheme.
-  // Pass an instance theme (createPrompts().theme) to match themed prompts.
-  render: (state, theme) => `${theme.prefix("○")} Count: ${state.count}`,
-  handleKey: (key, state) => {
-    if (key.name === "return") return submit(state.count);
-    if (key.name === "up") return { count: state.count + 1 };
-    if (key.name === "down") return { count: state.count - 1 };
-    return state;
-  },
-  renderSubmitted: (state, value, theme) =>
-    `${theme.prefix("○")} Count: ${theme.success(String(value))}`,
+  render: (state) => `Count: ${state.count}`,
+  handleKey: (key, state) => key.name === "return" ? submit(state.count) : state,
 });
 ```
 
-### Text Editing Helper
+`runPrompt()` owns rendering, input, submission, cancellation, and theme merging. Only one prompt may use a given input or output stream at a time.
 
-For custom prompts that need text input, use the shared `handleTextEdit` helper instead of reimplementing cursor editing logic.
-
-```ts
-import { handleTextEdit } from "@crustjs/prompts";
-
-const edit = handleTextEdit(key, currentText, cursorPos);
-if (edit) {
-  return { ...state, text: edit.text, cursorPos: edit.cursorPos };
-}
-```
-
-`handleTextEdit` handles backspace, delete, left, right, home, end, and printable character insertion. It returns `null` for non-text-editing keys so you can handle them separately.
-
-Only one prompt can be active per input or output stream. Prompts on fully distinct streams can run concurrently; a second prompt sharing an input or output stream rejects with an error.
+Use `handleTextEdit()` for shared cursor editing. It returns `null` for keys it does not handle.
 
 ## Exports
 
-This is a curated overview of the [root exports](https://github.com/chenxin-yan/crust/blob/main/packages/prompts/src/index.ts), not an exhaustive type inventory. Custom-prompt test helpers live in the separate [`@crustjs/prompts/testing` subpath](#testing-custom-prompts).
+```ts
+import { input, runPrompt, createPrompts, defaultTheme } from "@crustjs/prompts";
+```
 
-### Prompt Functions
+The root includes all seven prompts, renderer and IO helpers, theme APIs, fuzzy and text-editing helpers, render-format helpers, glyphs, errors, and their public types. Testing helpers remain in `@crustjs/prompts/testing`.
 
-| Function      | Description                    |
-| ------------- | ------------------------------ |
-| `input`       | Single-line text input         |
-| `password`    | Masked password input          |
-| `confirm`     | Yes/no boolean prompt          |
-| `select`      | Single selection from a list   |
-| `multiselect` | Checkbox-style multi-selection |
-| `filter`      | Fuzzy-search selection         |
-| `multifilter` | Fuzzy-search multi-selection   |
-
-### Theme
-
-| Export          | Description                                            |
-| --------------- | ------------------------------------------------------ |
-| `defaultTheme`  | Default prompt theme                                   |
-| `createPrompts` | Create a themed instance exposing all prompt functions |
-
-### Renderer
-
-| Export                | Description                                                        |
-| --------------------- | ------------------------------------------------------------------ |
-| `runPrompt`           | Low-level prompt runner; accepts optional `PromptIO`               |
-| `submit`              | Create a submit result to resolve a prompt                         |
-| `assertTTY`           | Throw `NonInteractiveError` if the resolved input is not a TTY     |
-| `isTTY`               | Check whether the resolved or supplied input is an interactive TTY |
-| `resolvePromptIO`     | Resolve explicit, ambient, then process streams                    |
-| `withTerminalIO`      | Scope shared terminal IO for nested async UI calls                 |
-| `withPromptIO`        | Prompt-focused alias of `withTerminalIO`                           |
-| `PromptIO`            | Optional input/output streams for prompts                          |
-| `NonInteractiveError` | Error thrown when a TTY is required but absent                     |
-
-Ctrl+C cancellation rejects with a standard `DOMException` named `"AbortError"` — check `err.name === "AbortError"`.
-
-### Utilities
-
-| Export           | Description                                     |
-| ---------------- | ----------------------------------------------- |
-| `handleTextEdit` | Shared text-editing keypress handler            |
-| `fuzzyMatch`     | Score a query against a single candidate string |
-| `fuzzyFilter`    | Filter and rank choices by fuzzy query          |
-
-### Types
-
-| Type                      | Description                                                                         |
-| ------------------------- | ----------------------------------------------------------------------------------- |
-| `InputOptions<Output>`    | Options for `input()` (generic over schema output)                                  |
-| `PasswordOptions<Output>` | Options for `password()` (generic over schema output)                               |
-| `ConfirmOptions`          | Options for `confirm()`                                                             |
-| `SelectOptions<T>`        | Options for `select()`                                                              |
-| `MultiselectOptions<T>`   | Options for `multiselect()`                                                         |
-| `FilterOptions<T>`        | Options for `filter()`                                                              |
-| `MultifilterOptions<T>`   | Options for `multifilter()`                                                         |
-| `PromptInput`             | Input stream contract composing `PromptIO`                                          |
-| `PromptOutput`            | Output stream contract composing `PromptIO`                                         |
-| `PromptTheme`             | Complete theme with all style slots                                                 |
-| `PartialPromptTheme`      | Partial theme for overrides                                                         |
-| `CreatePromptsOptions`    | Options for `createPrompts()`                                                       |
-| `PromptsInstance`         | Themed prompt functions returned by `createPrompts()`                               |
-| `Choice<T>`               | Choice item: string or `{ label, value, hint? }`                                    |
-| `ChoiceValue<C>`          | Union of the values in a choices tuple (drives literal narrowing)                   |
-| `ValidateFn<T>`           | Validation function type — `(value: T) => void \| Promise<void>`, throws on failure |
-| `KeypressEvent`           | Structured keypress event                                                           |
-| `PromptConfig<S,T>`       | Configuration for `runPrompt()`                                                     |
-| `SubmitResult<T>`         | Submit action type                                                                  |
-| `HandleKeyResult<S,T>`    | Return type of keypress handlers                                                    |
-| `FuzzyMatchResult`        | Single fuzzy match result with score and indices                                    |
-| `FuzzyFilterResult<T>`    | Fuzzy filter result with item and match data                                        |
-| `TextEditState`           | Text plus cursor position for `handleTextEdit`                                      |
-| `TextEditResult`          | `TextEditState \| null`                                                             |
+See the source inventory in [`packages/prompts/src/index.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/prompts/src/index.ts).
 
 ## Design
 
-`@crustjs/prompts` is the interactive layer of the Crust ecosystem. It depends only on `@crustjs/style` for ANSI styling and has no other runtime dependencies.
+```text
+stdout: application data
+stderr: prompt frames
+```
 
-Key design decisions:
-
-- **stderr rendering by default**: Prompt UI writes to the resolved output stream — `process.stderr` unless IO is injected — keeping stdout clean for piped output.
-- **`initial` escape hatch**: Every prompt accepts `initial` to skip interactivity in CI and scripted usage.
-- **Single active prompt per stream**: Prompts on fully distinct input/output streams can run concurrently; concurrent calls sharing an input or output stream are rejected with a clear error.
-- **Composable themes**: Three-layer resolution with `StyleFn` slots from `@crustjs/style`.
-- **Shared text editing**: Common cursor-editing logic lives in `handleTextEdit` for consistency and reuse in custom prompts.
+The package depends on `@crustjs/style` for ANSI styling. It keeps prompt output off stdout by default and shares terminal IO with progress indicators.

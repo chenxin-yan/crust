@@ -11,208 +11,105 @@ description: Supported command-authoring runtime for Crust applications and Exte
 bun add @crustjs/core
 ```
 
+The package supports Bun 1.3.14+, Node 22+, and Deno 2.8+.
+
 ## Quick example
 
-```ts
-import { Crust } from "@crustjs/core";
+<include lang="ts" meta='title="src/cli.ts"'>
+  ../../../examples/modules/core.ts#quick
+</include>
 
-const app = new Crust("hello")
-  .flags({ name: "verbose", type: "boolean", short: "v" })
-  .action(({ flags, stdout }) => stdout(flags.verbose ? "hello!" : "hello"))
-  .command("wave", (command) => command.action(({ stdout }) => stdout("o/")));
-
-await app.execute();
-```
-
-Inline `.command()` defines app-local leaf subcommands; extract to [`defineCommand`](/docs/api/crust) when a command needs its own file, reuse, or a package. Commands declare Context demand with `.use(...factories)` and applications supply values with `.provide(...instances)`.
+The root action prints `hello!` when `verbose` is true. The `wave` command is an app-local leaf command; use [`defineCommand()`](/docs/api/crust#commandname-recipe) for a reusable definition.
 
 ## Context-owned flags
 
-Use top-level `ContextConfig.flags` when a flag exists to construct a dependency. The Context defines and consumes the flag once; `.provide()` installs it on the current command and later-added descendants:
+<include lang="ts" meta='title="src/cli.ts"'>
+  ../../../examples/modules/core.ts#context
+</include>
 
-```ts
-import { Crust, defineContext, defineFlag } from "@crustjs/core";
-
-const apiKey = defineFlag("api-key", { type: "string" });
-const api = defineContext("api", { flags: [apiKey] }, ({ flags }) => ({
-  apiKey: flags["api-key"],
-}));
-
-const app = new Crust("my-cli").provide(api());
-```
-
-Downstream commands and other Context setups call `await ctx.api`. See [Contexts](/docs/guide/contexts).
+A Context can own the flags needed by its setup. `.provide()` installs that Context on the current command and commands added later; see [Contexts](/docs/guide/contexts).
 
 ## Runtime exports
 
-| Export                                | Description                                                                                                                                                              |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [`Crust`](/docs/api/crust)            | Immutable command builder with Context `.provide()`, inline `.command()`, `.add()`, `.action()`, tooling `.snapshot()`, programmatic `.run()`, and terminal `.execute()` |
-| [`defineCommand`](/docs/api/crust)    | Create a named, inert reusable command definition; its builder declares Context demand with variadic `.use()`                                                            |
-| `defineContext(name, config?, setup)` | Define a named Context factory with optional owned flags; setup receives its declared lazy Context bag and invocation I/O                                                |
-| `defineExtension(id, config?)`        | Define a frozen, application-wide Extension value; config defaults to `{}`                                                                                               |
-| `defineExtension(id, factory)`        | Build an Extension factory with `.id` from a config-returning callback                                                                                                   |
-| `defineExtensionId(id)`               | Mint a branded Extension identity from a non-empty, already-trimmed string                                                                                               |
-| `defineFlag(name, definition)`        | Define one named flag, preserving its literal definition                                                                                                                 |
-| `defineArg(name, definition)`         | Define one named positional argument, preserving its literal definition                                                                                                  |
-| [`CrustError`](/docs/api/errors)      | Framework error for definition, routing, parsing, and validation failures                                                                                                |
-
-## Definition types
-
-These are curated type summaries, not an exhaustive export inventory. The [root barrel](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/index.ts) lists supported root exports; the [tooling barrel](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/tooling.ts) lists the separate subpath.
-
-| Type                                          | Description                                                                        |
-| --------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `ArgDef`                                      | Core-value or Standard Schema positional argument definition                       |
-| `ArgsDef`                                     | Readonly ordered argument definitions                                              |
-| [`CommandDefinition`](/docs/api/crust)        | Opaque inert command recipe                                                        |
-| [`CommandDefinitionBuilder`](/docs/api/crust) | Configure-only builder used by command definitions                                 |
-| [`CommandConfig`](/docs/api/crust)            | Static metadata for a reusable definition                                          |
-| `CommandMeta`                                 | Name, description, application version, usage, sections, aliases, and visibility   |
-| `CommandSection`                              | A titled documentation block with an optional consumer audience                    |
-| `CommandSectionInput`                         | Plain-text section (`title`, `body`) with an optional consumer audience            |
-| `SectionAudience`                             | Mutually exclusive `only`/`except` consumer lists on a section                     |
-| `SectionConsumer`                             | Extension identity or value exposing one at `.id`                                  |
-| `ExtensionId`                                 | Branded identity minted by `defineExtensionId()`                                   |
-| `ContextBag` / `FactoryValueOf`               | Lazy Context property bag and factory-value helper types                           |
-| [`RootCommandMeta`](/docs/api/crust)          | Root description, version, usage, and sections accepted by the `Crust` constructor |
-| `FlagDef`                                     | Core-value or Standard Schema flag definition                                      |
-| `FlagsDef`                                    | Flag-name-to-definition record                                                     |
-| `NamedFlagDef`                                | Flag definition carrying its `name` (the `.flags()` input shape)                   |
-| `UnnamedArgDef`                               | Argument definition without its `name` (the `defineArg` input)                     |
-| `ValueType`                                   | String, number, boolean, URL, path, or JSON value literal                          |
-
-See [Types](/docs/api/types) for field-level definitions.
-
-## Typed invocation types
-
-These types back [`run(path, input?, io?)`](/docs/api/crust) and the [`@crustjs/testing`](/docs/modules/testing) helpers.
-
-| Type                | Description                                                                 |
-| ------------------- | --------------------------------------------------------------------------- |
-| `AnyCrust`          | Completed-app inspection and invocation with unknown result; no authoring   |
-| `CommandTree`       | Compile-time command tree accumulated by `.add()`                           |
-| `CommandPath`       | Every valid typed path through a command tree, including the root path `[]` |
-| `CommandShape`      | Argument, flag, children, and action result shape of one command            |
-| `CommandShapeAt`    | Resolve the command shape at a typed path                                   |
-| `RunInput`          | Structured `args`, `flags`, and `raw` values accepted by `run()`            |
-| `RunOutcome`        | Captured output with completed/result, finished/by, or failed/error         |
-| `RunInputArguments` | Input tuple for a shape: optional when nothing is required                  |
-| `RunArguments`      | Full `run()` rest tuple: input plus optional invocation I/O                 |
-| `InputArgs`         | Pre-parse structured argument values for an argument definition list        |
-| `InputFlags`        | Pre-parse structured flag values for a flag definition record               |
-| `ParseResult`       | Syntax-parsed arguments, flags, and raw tokens before schema validation     |
-| `ValidatedInput`    | Fully validated argument and flag values passed beyond the parser boundary  |
-| `ParsedArgValue`    | Runtime-erased syntax-parsed positional value                               |
-| `ParsedFlagValue`   | Runtime-erased syntax-parsed flag value                                     |
-
-When calling `run()`, scalar JSON inputs accept JSON primitives, structurally compatible named interfaces, and mutable or readonly arrays/tuples; repeated JSON inputs use mutable occurrence arrays. URL inputs accept `URL` values. Types exclude non-JSON values such as `Date`, functions, and `bigint`. Payload identity is preserved without serialization or arbitrary unknown decoding. `undefined` omits optional input. Actual value kinds and input names are checked automatically.
-
-Structured positionals must form a prefix; defaults do not fill gaps. Required core variadics without defaults use nonempty tuples. Known inputs stay strict, including literal choices and fresh-object excess keys. Dynamic authoring uses the same APIs; spread collections into variadic methods. Genuinely dynamic `AnyCrust` views permit broad paths/inputs with unknown results. See [Runtime input](/docs/guide/types#runtime-input).
-
-`run()` is quiet and resolves after cleanup to `RunOutcome<R>`. Every branch has captured `stdout`/`stderr`: `completed` carries the typed action `result`, `finished` the finishing Extension `by`, and `failed` the original escaping `error` with partial output. It never presents errors or changes exit status. Inspect the status explicitly; `execute()` remains the live terminal adapter.
-
-## Command boundary types
-
-| Type                  | Description                                                          |
-| --------------------- | -------------------------------------------------------------------- |
-| `CrustCommandContext` | Typed context passed to a Command Action, including `rootCommand`    |
-| `InvocationIO`        | Injectable `stdout` and `stderr` callbacks shared with Context setup |
-| `CommandSnapshot`     | Readonly, serializable command description                           |
-| `ArgSnapshot`         | Serializable argument projection                                     |
-| `FlagSnapshot`        | Serializable flag projection                                         |
-
-Every `run()` owns a quiet output capture. Optional callbacks forward each write once after capture; omitted channels stay quiet and sink failures become failed outcomes. Callback payloads are joined with `"\n"` without a trailing newline, trimming, or splitting multiline writes. Capture memory is proportional to output; separate streams do not promise total ordering or byte-perfect transcripts.
-
-Core threads invocation IO through the existing ambient terminal seam, isolating nested/concurrent runs. Default prompt/progress output reaches captured stderr; progress uses non-TTY static lines. Prompt input is separate, and explicit terminal streams take precedence. Direct console/process writes, subprocesses, files, and explicit prompt streams are not intercepted. `execute()` without injected IO preserves native terminal behavior; use [runInteractive](/docs/modules/testing#runinteractiveapp-path-input) for fake-terminal interaction.
-
-## Context types
-
-| Type                | Description                                                               |
-| ------------------- | ------------------------------------------------------------------------- |
-| `ContextFactory`    | Factory returned by `defineContext()`, with `contextName` and `.of()`     |
-| `AnyContextFactory` | Shared constraint for factories accepted by `uses`                        |
-| `ContextInstance`   | Named lazy dependency attached with `.provide()`                          |
-| `ContextConfig`     | Flags owned by a Context and its declared `uses` dependencies             |
-| `ContextSetup`      | Typed setup input: `options`, `flags`, lazy bag `ctx`, and invocation I/O |
-| `ContextMap`        | Upper bound for accumulated command Context registries                    |
-
-## Extension types
-
-| Type                           | Description                                                                                         |
-| ------------------------------ | --------------------------------------------------------------------------------------------------- |
-| `Extension`                    | Identified frozen Extension value                                                                   |
-| `ExtensionFactory<Args>`       | Callable Extension constructor with a readonly `.id`; contribution namespaces are closed by default |
-| `ExtensionBuildContext`        | Frozen root snapshot and resolved output directory for artifact generation                          |
-| `ExtensionConfig`              | Owned flags, commands, section contributions, build generation, and hooks                           |
-| `ExtensionFlagDef`             | Extension-owned flag with optional `recursive` scope                                                |
-| `ExtensionContext`             | Readonly invocation view with inferred Extension-owned flags and `finish()`                         |
-| `ExtensionHooks`               | Typed `preRun`, `postRun`, and `onError` hook slots                                                 |
-| `InferExtensionFlags`          | Syntax-parsed values inferred from an Extension's contributed flags                                 |
-| `NamedExtensionFlagDef`        | Named Extension flag accepted by `ExtensionConfig.flags`                                            |
-| `ExtensionSectionContribution` | Section contributed by an Extension to command documentation                                        |
-| `Finished`                     | Opaque token returned by `ExtensionContext.finish()`                                                |
-| `InvocationOutcome`            | Completed, short-circuited, or failed invocation result                                             |
-
-## Error types
-
-| Type                          | Description                                                              |
-| ----------------------------- | ------------------------------------------------------------------------ |
-| `CrustErrorCode`              | Four codes: `DEFINITION`, `PARSE`, `VALIDATION`, and `COMMAND_NOT_FOUND` |
-| `CrustErrorDetails<C>`        | Details selected by an error code                                        |
-| `CrustErrorDetailsMap`        | Mapping from each code to its details type                               |
-| `CrustErrorJson<C>`           | Serializable shape returned by `CrustError<C>.toJSON()`                  |
-| `DefinitionErrorDetails`      | Definition subject, name, and reason                                     |
-| `ParseErrorDetails`           | Flag, argument, value, and reason                                        |
-| `ValidationErrorDetails`      | Aggregated `{ message, path }` issues                                    |
-| `CommandNotFoundErrorDetails` | Input, siblings, path, and parent Command Snapshot                       |
-
-## Section consumers
-
-A command section without an audience is available to every renderer. Use `only` or `except` with section consumers to narrow it; the two fields are mutually exclusive. A `SectionConsumer` is either a branded `ExtensionId` or an Extension/factory object carrying one, so official renderers can be passed directly while custom renderers can use their minted id:
-
 ```ts
 import {
+  Crust,
+  CrustError,
+  defineArg,
+  defineCommand,
+  defineContext,
+  defineExtension,
   defineExtensionId,
-  type CommandSection,
-  type CommandSnapshot,
-  type ExtensionId,
+  defineFlag,
 } from "@crustjs/core";
-import { sectionsFor, visibleSectionsFor } from "@crustjs/core/tooling";
-
-export const WEB_DOCS: ExtensionId = defineExtensionId("acme:web-docs");
-
-const sections: readonly CommandSection[] = [
-  { title: "Overview", body: "Visible everywhere." },
-  { title: "Web example", body: "Visible in web docs.", only: [WEB_DOCS] },
-];
-
-const webSections = sectionsFor(sections, WEB_DOCS);
-
-function collectWebSections(snapshot: CommandSnapshot) {
-  return visibleSectionsFor(snapshot, WEB_DOCS);
-}
 ```
 
-`visibleSectionsFor()` returns only section-bearing visible commands in canonical path order. The root path is `[]`; hidden commands and their descendants are skipped. Extension identities remain plain strings at runtime and match by value, so targeting remains stable when snapshots are cloned or serialized. Renderer packages expose their ids on factory statics; core has no built-in consumer registry. Official consumer ids use the `crust:` namespace, reserved by convention for official Crust identities. Third-party packages should namespace published ids with their own prefix, as in `acme:web-docs` above.
+| Export                                                  | Role                                                                      |
+| ------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [`Crust`](/docs/api/crust)                              | Root command builder with `run()`, `execute()`, and `snapshot()`          |
+| [`defineCommand()`](/docs/api/crust#commandname-recipe) | Creates an inert reusable command definition                              |
+| [`defineContext()`](/docs/api/crust#usefactories)       | Creates a named Context factory                                           |
+| [`defineExtension()`](/docs/api/crust#extendextensions) | Creates an Extension or Extension factory                                 |
+| `defineExtensionId()`                                   | Creates a branded Extension identity                                      |
+| `defineArg()` / `defineFlag()`                          | Creates named argument and flag definitions                               |
+| [`CrustError`](/docs/api/errors)                        | Framework error for definition, routing, parsing, and validation failures |
+
+## Definition and boundary types
+
+```ts
+import type {
+  ArgDef,
+  CommandSnapshot,
+  CrustCommandContext,
+  Extension,
+  FlagDef,
+  InvocationIO,
+} from "@crustjs/core";
+```
+
+The root barrel exports the command, Context, Extension, input, snapshot, and error types used by applications. See [Types](/docs/api/types) for their fields and constraints.
+
+| Type                                                       | Reference                                                                                      |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `ArgDef` / `FlagDef`                                       | [`ArgDef`](/docs/api/types#argdef) and [`FlagDef`](/docs/api/types#flagdef)                    |
+| `ContextBag` / `ContextFactory` / `ContextSetup`           | [Context types](/docs/api/types#context-types)                                                 |
+| `Extension` / `ExtensionFactory` / `ExtensionBuildContext` | [Extension types](/docs/api/types#extension-types)                                             |
+| `CommandSnapshot` / `ArgSnapshot` / `FlagSnapshot`         | [Command Snapshot](/docs/api/crust#snapshot)                                                   |
+| `BuildArtifacts`                                           | [`BuildArtifacts`](/docs/api/types#buildartifacts)                                             |
+| `BuildReport`                                              | [`BuildReport`](/docs/api/types#buildreport)                                                   |
+| `DefineExtensionWith` / `RootMetaKey`                      | [`RootMetaKey` and `DefineExtensionWith`](/docs/api/types#rootmetakey-and-defineextensionwith) |
+| `MergeFlags`                                               | [`MergeFlags`](/docs/api/types#mergeflags)                                                     |
+| `MergeContext`                                             | [`MergeContext`](/docs/api/types#mergecontext)                                                 |
+
+The [root barrel](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/index.ts) is the full supported export list.
+
+## Typed invocation
+
+```ts
+const outcome = await app.run(["wave"]);
+if (outcome.status === "completed") console.log(outcome.stdout); // => o/
+```
+
+`run()` returns a captured outcome after cleanup. See [`run()` input and I/O](/docs/api/crust#runpath-input-io) for typed paths, structured input, validation, output capture, and failure behavior.
 
 ## Tooling subpath
 
-Call `app.snapshot()` to prepare a frozen Command Snapshot for man-page, skill, and build generators. It materializes Extension contributions and command definitions and validates Extension-produced documentation sections without calling Command Actions. Command-authored sections are validated immediately by the constructor or `defineCommand()`. Authored and Extension-contributed documentation is available on each command under `meta.sections`.
+```ts
+import { defineExtensionId } from "@crustjs/core";
+import { buildCommandDocumentation, visibleSectionsFor } from "@crustjs/core/tooling";
 
-The package root contains invocation-time authoring and execution APIs. Build- and render-time helpers live under `@crustjs/core/tooling`:
+const snapshot = await app.snapshot();
+const documentation = buildCommandDocumentation(snapshot);
+const visible = visibleSectionsFor(snapshot, defineExtensionId("acme:web-docs"));
+```
 
-| Export                                                                             | Behavior                                                                                                                                                                                                |
-| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `isListed(command)`                                                                | Returns `false` only when `command.meta.hidden === true`.                                                                                                                                               |
-| `sectionsFor(sections, consumer)`                                                  | Applies `only` / `except` audience filters, then merges entries with the same exact title at their first position, joining bodies with a single newline.                                                |
-| `visibleSectionsFor(snapshot, consumer)`                                           | Returns section-bearing visible commands with the root at `[]`, each filtered and merged as by `sectionsFor()`; hidden subtrees are skipped and children are traversed by locale-sorted canonical name. |
-| `formatDefault(value)`                                                             | Formats declared defaults; arrays become comma-separated values and strings retain JSON quotes.                                                                                                         |
-| `formatDescription(description, default, choices, formatter?)`                     | Appends `[default: …]` and `[choices: …]` annotations in that order, optionally passing each annotation through `formatter`.                                                                            |
-| `buildCommandDocumentation(snapshot, path?)`                                       | Builds a presentation-neutral visible tree with resolved usage, unfiltered `sections`, argument tokens, and every accepted flag spelling. `children` preserve Command Snapshot insertion order.         |
-| `CommandDocumentation` / `DocumentationArg` / `DocumentationFlag` / `UsageSegment` | The model and component types returned by `buildCommandDocumentation()`.                                                                                                                                |
-| `SNAPSHOT_PATH_ENV` / `BUILD_OUT_DIR_ENV`                                          | Lockstep subprocess constants used for snapshot preparation and registered Extension `build` hooks.                                                                                                     |
+| Export                                                                             | Role                                                               |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `BUILD_OUT_DIR_ENV` / `SNAPSHOT_PATH_ENV`                                          | Environment variable names for the first-party subprocess protocol |
+| `buildCommandDocumentation()`                                                      | Builds a renderer-ready documentation tree from a Command Snapshot |
+| `formatDefault()` / `formatDescription()`                                          | Formats input defaults and descriptions                            |
+| `isListed()` / `sectionsFor()` / `visibleSectionsFor()`                            | Filters commands and sections for an Extension identity            |
+| `CommandDocumentation` / `DocumentationArg` / `DocumentationFlag` / `UsageSegment` | Documentation model types                                          |
+| `CommandSnapshot`                                                                  | Command Snapshot type used by tooling consumers                    |
 
-The subpath also re-exports `CommandSnapshot`. Except for that type consumed by `app.snapshot()`, these helpers are intended for first-party tooling that moves in lockstep with core.
-
-Use [`@crustjs/extensions`](/docs/modules/extensions) for the official Extensions and [`@crustjs/crust`](/docs/modules/crust) as a development dependency for build tooling.
+`@crustjs/core/tooling` contains build-time helpers for Command Snapshots, documentation trees, section filtering, formatting, and the first-party subprocess protocol. Application authoring and invocation APIs stay at the package root.

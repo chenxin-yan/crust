@@ -23,18 +23,11 @@ import {
 
 ## Reusable command definitions
 
-A sealed command declares consumed Context factories with `.use(...factories)` — `.use(logger)` is demand (a factory), `.provide(logger())` is supply (an instance). Like the other builder methods, `.use()` is variadic and accumulates across calls. Because declarations are type-only, `.use()` requires a statically known, non-empty factory tuple — an empty call or a widened array spread would declare nothing and fails typecheck. Actions and setup receive a typed lazy bag and await values with `await ctx.<name>`; missing wiring is reported at `.provide()`, `.add()`, or `.extend()`.
+A sealed command declares consumed Context factories with `.use(...factories)`: `.use(logger)` is demand (a factory), `.provide(logger())` is supply (an instance). Like the other builder methods, `.use()` is variadic and accumulates across calls. Because declarations are type-only, `.use()` requires a statically known, non-empty factory tuple; an empty call or a widened array spread would declare nothing and fails typecheck.
+
+Actions and setup receive a typed lazy bag and await values with `await ctx.<name>`; missing wiring is reported at `.provide()`, `.add()`, or `.extend()`.
 
 ### `CommandDefinitionBuilder`
-
-<Callout type="info">
-  These signatures are simplified for readability. The exported declarations use const generics,
-  validation intersections, and refined return types; use your editor's `@crustjs/core` type hints
-  for the exact signatures. The [source
-  declarations](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts)
-  preserve all overloads, generic constraints, and readonly modifiers; property tables below
-  summarize object fields, not those complete contracts.
-</Callout>
 
 ```ts
 // Simplified: the complete alias also carries tree, result, dependency, and provider state.
@@ -47,7 +40,9 @@ type CommandDefinitionBuilder<
 > = Crust<Flags, A, Ctx, Sibs, Sp, {}, {}, CollisionSpellings, void, {}, string, "recipe">;
 ```
 
-This is the configure-only `Crust` capability passed to a `defineCommand()` recipe. Its fluent methods preserve and refine argument, accumulated flag, and provided Context types. Each factory passed to `.use()` accumulates its value and transitive dependency closure into the action's typed `ctx` and into the sealed definition's declared dependencies. `Sibs` accumulates the sibling command names and aliases registered through `.add()`, and `Sp` caches the known flag spellings accumulated through `.flags()` and `.provide()`. Both are defaulted parameters. Root-only methods remain visible in `keyof`, but their `_types.caps: "app"` `this` constraint makes them uncallable on recipes; `.use()` symmetrically requires `_types.caps: "recipe"`.
+This is the configure-only `Crust` capability passed to a `defineCommand()` recipe. Its fluent methods preserve and refine argument, accumulated flag, and provided Context types. Each factory passed to `.use()` accumulates its value and transitive dependency closure into the action's typed `ctx` and into the sealed definition's declared dependencies.
+
+`Sibs` accumulates the sibling command names and aliases registered through `.add()`, and `Sp` caches the known flag spellings accumulated through `.flags()` and `.provide()`. Both are defaulted parameters. Root-only methods remain visible in `keyof`, but their `_types.caps: "app"` `this` constraint makes them uncallable on recipes; `.use()` symmetrically requires `_types.caps: "recipe"`.
 
 ### `CommandDefinition`
 
@@ -65,7 +60,9 @@ interface CommandDefinition<
 }
 ```
 
-A `CommandDefinition` is a frozen value carrying its name, static config, and configure recipe. `.as(name)` returns the same definition under a different name, so one definition can be added twice. Configured aliases travel with the renamed definition and must remain unique among siblings. It has no command node or execution methods.
+A `CommandDefinition` is a frozen value carrying its name, static config, and configure recipe. `.as(name)` returns the same definition under a different name, so one definition can be added twice. Configured aliases travel with the renamed definition and must remain unique among siblings.
+
+It has no command node or execution methods.
 
 ### `defineCommand(name, config?, recipe)`
 
@@ -81,6 +78,8 @@ defineCommand<const Name extends string, const C extends CommandConfig>(
   recipe: (command: CommandDefinitionBuilder) => CommandDefinitionBuilder,
 ): CommandDefinition<Name, AliasesOf<C>>;
 ```
+
+This sketch is simplified; the [first `defineCommand()` overload](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts#L720) starts the complete declaration.
 
 <auto-type-table path="../../../../../packages/core/src/command/crust.ts" name="CommandConfig" />
 
@@ -105,7 +104,9 @@ const deploy = defineCommand("deploy", { description: "Deploy an application" },
 );
 ```
 
-The recipe executes once for each `.add()`, not when the definition is created; keep configuration side-effect-free. Statically blank names and `__proto__` fail typecheck. Broad string names are supported and checked when consumed, including equality to a carried alias; unresolved generics may require a validated parameter constraint. Materialization verifies that the recipe returns its seeded builder and does not register nested Extensions. Declared Context availability is checked without running setup; factory and callback value contracts remain TypeScript-owned.
+The recipe executes once for each `.add()`, not when the definition is created, so configuration side effects repeat for every addition. Statically blank names and `__proto__` fail typecheck. Broad string names are supported and checked when consumed, including equality to a carried alias; unresolved generics may require a validated parameter constraint.
+
+Materialization verifies that the recipe returns its seeded builder and does not register nested Extensions. Declared Context availability is checked without running setup; factory and callback value contracts remain TypeScript-owned.
 
 ## Constructor
 
@@ -132,11 +133,19 @@ new Crust(
 )
 ```
 
+This sketch is simplified; the [first constructor overload](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts#L1173) starts the complete declaration.
+
 <auto-type-table path="../../../../../packages/core/src/command/crust.ts" name="RootCommandMeta" />
 
-Creates a root command builder. Metadata is optional unless an installed Extension requires it. `Meta` retains inferred metadata through fluent calls; `.extend()` checks [Extension-owned requirements](/docs/guide/extensions#required-root-metadata). Optional or widened metadata cannot promise a required field. Known extra root keys are rejected, including on pretyped objects. Generic wrappers must also rule out extra keys; `M extends RootCommandMeta` alone is insufficient. Dynamic section facts are automatically checked at consumption; metadata value requirements remain type-owned.
+Creates a root command builder. Metadata is optional unless an installed Extension requires it. `Meta` retains inferred metadata through fluent calls; `.extend()` checks [Extension-owned requirements](/docs/guide/extensions#required-root-metadata).
 
-Root metadata belongs in the constructor because aliases and hidden state apply only to subcommands. `version` is exposed on the root snapshot. `sections` accepts ordered plain-text entries and is normalized immediately. Literal mistakes are also type-checked.
+Optional or widened metadata cannot promise a required field. Known extra root keys are rejected, including on pretyped objects. Generic wrappers must also rule out extra keys; `M extends RootCommandMeta` alone is insufficient.
+
+Dynamic section facts are automatically checked at consumption; metadata value requirements remain type-owned.
+
+Root metadata belongs in the constructor because aliases and hidden state apply only to subcommands. `version` is exposed on the root snapshot. `sections` accepts ordered plain-text entries and is normalized immediately.
+
+Literal mistakes are also type-checked.
 
 ```ts
 const app = new Crust("my-cli", {
@@ -146,11 +155,15 @@ const app = new Crust("my-cli", {
 });
 ```
 
-Definition aliases must be non-empty, contain no whitespace, not start with `-`, differ from their canonical name, and not collide with sibling names or aliases. TypeScript reports known alias-shape violations at `defineCommand()` and sibling collisions at `.add()`; the actual grammar and destination are automatically checked too. Spread dynamic collections with `.add(...definitions)`. Repeated aliases within one command remain allowed.
+Definition aliases must be non-empty, contain no whitespace, not start with `-`, differ from their canonical name, and not collide with sibling names or aliases. TypeScript reports known alias-shape violations at `defineCommand()` and sibling collisions at `.add()`; the actual grammar and destination are automatically checked too. `.add(...definitions)` accepts dynamic collections.
+
+Repeated aliases within one command remain allowed.
 
 ## Chaining semantics
 
-Variadic `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` accumulate across calls. `.extend()` deduplicates `ExtensionId`s last-registration-wins. TypeScript rejects statically known invalid definitions and collisions; automatic consumption checks cover observable names, spellings, positional layout, Context availability, and destination flag relations. Dynamic Extension commands retain canonical last-write-wins during preparation. Existing static duplicate-context/command/owned-flag checks still protect earlier typed consumers; runtime replacement is not proof that opaque callbacks are compatible.
+Variadic `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` accumulate across calls. `.extend()` deduplicates `ExtensionId`s last-registration-wins. TypeScript rejects statically known invalid definitions and collisions; automatic consumption checks cover observable names, spellings, positional layout, Context availability, and destination flag relations.
+
+Dynamic Extension commands retain canonical last-write-wins during preparation. Existing static duplicate-context/command/owned-flag checks still protect earlier typed consumers; runtime replacement is not proof that opaque callbacks are compatible.
 
 ## `.args(...defs)`
 
@@ -160,7 +173,11 @@ args<const NewA extends ArgsDef>(
 ): Crust
 ```
 
-Defines positional arguments; repeated calls append in call order. Use `.args(...defs)` for dynamic collections; open previous layout stays open. Pass values from `defineArg(name, def)` or inline literals. Duplicate names fail typecheck with `FIX_DUPLICATE_ARG`, Promise-returning custom parsers fail with `FIX_ASYNC_PARSE`, and only the final argument across all calls may be variadic.
+This sketch is simplified; the [first `.args()` overload](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts#L1263) starts the complete declaration.
+
+Defines positional arguments; repeated calls append in call order. `.args(...defs)` accepts dynamic collections, and an open previous layout stays open. Definitions may come from `defineArg(name, def)` or inline literals.
+
+Duplicate names fail typecheck with `FIX_DUPLICATE_ARG`, Promise-returning custom parsers fail with `FIX_ASYNC_PARSE`, and only the final argument across all calls may be variadic.
 
 ```ts
 const app = new Crust("copy").args(
@@ -169,7 +186,7 @@ const app = new Crust("copy").args(
 );
 ```
 
-A definition can instead carry a Standard Schema. Schema-backed arguments receive the raw string, `undefined` when absent, or `string[]` when variadic. The schema owns coercion, defaults, requiredness, choices, and validation; do not mix it with `type`, `default`, `required`, `choices`, or `parse`.
+A definition can instead carry a Standard Schema. Schema-backed arguments receive the raw string, `undefined` when absent, or `string[]` when variadic. The schema owns coercion, defaults, requiredness, choices, and validation; it is mutually exclusive with `type`, `default`, `required`, `choices`, and `parse`.
 
 ```ts
 const app = new Crust("serve").args({ name: "port", schema: z.coerce.number().int().min(1) });
@@ -183,7 +200,11 @@ flags<const Defs extends readonly NamedFlagDef[]>(
 ): Crust
 ```
 
-Defines local flags from named flag definitions — values from `defineFlag(name, def)` or inline literals carrying `name`. Helpers shallow-freeze owned copies of structural arrays; each consuming boundary validates them again. JSON/URL/schema payloads are not cloned or frozen. Flag names omit the `--` prefix.
+This sketch is simplified; the [first `.flags()` overload](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts#L1234) starts the complete declaration.
+
+Defines local flags from named flag definitions: values from `defineFlag(name, def)` or inline literals carrying `name`. Helpers shallow-freeze owned copies of structural arrays; each consuming boundary validates them again. JSON/URL/schema payloads are not cloned or frozen.
+
+Flag names omit the `--` prefix.
 
 ```ts
 const app = new Crust("serve").flags(
@@ -193,11 +214,15 @@ const app = new Crust("serve").flags(
 );
 ```
 
-Repeated `.flags()` calls accumulate local flags and their known spellings in `Sp`. TypeScript rejects known spelling collisions, repeated own aliases, invalid short lengths, and Promise-returning parsers. Spread dynamic collections with `.flags(...defs)`; their actual constraints are checked automatically. Keep concrete builder types when authoring: `AnyCrust` exposes completed apps only. Open namespaces stay conservative, while independently known fields retain their types. Parsers are not called during authoring and must return synchronously when invoked.
+Repeated `.flags()` calls accumulate local flags and their known spellings in `Sp`. TypeScript rejects known spelling collisions, repeated own aliases, invalid short lengths, and Promise-returning parsers. `.flags(...defs)` accepts dynamic collections, whose actual constraints are checked automatically.
 
-Flags declared here are local to this command. Context-owned flags are the propagation mechanism for descendant parsers; downstream code receives their derived Context capability. Boolean flags support generated `--no-<spelling>` negation for the canonical name and every long alias; `noNegate: true` rejects negation with a `PARSE` error and hides the generated label from help, completion, and man output. Names and aliases beginning with `no-` are reserved.
+Concrete builder types carry authoring capabilities; `AnyCrust` exposes completed apps only. Open namespaces stay conservative, while independently known fields retain their types. Parsers are not called during authoring and must return synchronously when invoked.
 
-Schema-backed flags require `type: "string" | "boolean"` only to declare whether the flag consumes a token. Their schema owns the value rules and receives the raw parsed value, including `undefined` when omitted even with `multiple: true`. See [schema-backed flags](/docs/api/types#flagdef).
+Flags declared here are local to this command. Context-owned flags are the propagation mechanism for descendant parsers; downstream code receives their derived Context capability. Boolean flags support generated `--no-<spelling>` negation for the canonical name and every long alias; `noNegate: true` rejects negation with a `PARSE` error and hides the generated label from help, completion, and man output.
+
+Names and aliases beginning with `no-` are reserved.
+
+Schema-backed flags require `type: "string" | "boolean"` only to declare whether the flag consumes a token. Their schema owns the value rules and receives the raw parsed value, including `undefined` when omitted even with `multiple: true`. [Schema-backed flag details](/docs/api/types#flagdef) are part of the `FlagDef` reference.
 
 ```ts
 const app = new Crust("serve").flags({
@@ -207,18 +232,34 @@ const app = new Crust("serve").flags({
 });
 ```
 
+## `.use(...factories)`
+
+```ts
+use<const Fs extends readonly [AnyContextFactory, ...AnyContextFactory[]]>(
+  ...factories: Fs,
+): Crust
+```
+
+This sketch is simplified; the [first `.use()` overload](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts#L1304) starts the complete declaration.
+
+Declares the Context factories consumed by a definition recipe without providing instances. The variadic call requires a non-empty tuple, and repeated calls accumulate demands. The demands and their transitive dependencies are checked against available providers when the definition reaches `.add()`.
+
+`.use()` is recipe-only. Its capability-typed `this` parameter makes it unavailable on the root app.
+
 ## `.provide(...instances)`
 
-Use `.provide(...instances)` for literal or dynamic collections. Contexts must originate from `defineContext()`; attachment consumes private defining data rather than overwritten fields on structural copies. Runtime same-name replacement requires noncolliding owned flags; statically known duplicates remain rejected where they would endanger earlier consumers. Applicable callback-value demands remain enforced by TypeScript, not runtime reflection.
+`.provide(...instances)` accepts literal and dynamic collections. Contexts must originate from `defineContext()`; attachment consumes private defining data rather than overwritten fields on structural copies. Runtime same-name replacement requires noncolliding owned flags; statically known duplicates remain rejected where they would endanger earlier consumers.
+
+Applicable callback-value demands remain enforced by TypeScript, not runtime reflection.
 
 ```ts
 provide<const Cs extends readonly AnyContextInstance[]>(
   ...instances: KnownContextInstances<Cs> & ProvideChecks<Sp, Cs>
     & ValidateContextNames<Ctx, Cs> & ValidateContextDeps<Ctx, Cs>,
 ): Crust
-// Simplified: the signature also retains callback-value demands and refines provider/flag state.
-
 ```
+
+This sketch is simplified; the [first `.provide()` overload](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts#L1330) starts the complete declaration.
 
 Attaches Contexts produced by invoking `defineContext()` factories. Contexts are inherited by later-added descendants and constructed lazily when their bag property is accessed. The return type merges every instance's owned `flags` into the builder's accumulated flag type.
 
@@ -237,11 +278,15 @@ const app = new Crust("my-cli")
   });
 ```
 
-Declared dependencies (Context `uses`, command `.use()`, Extension `uses`) are checked at composition. Dependencies may appear in either order within one `.provide()` call; across calls, provide dependencies first. Dynamic collections use the same variadic methods. Declared availability is checked without setup. `.use()` retains factory references rather than reflecting callback values. Invocation still checks missing providers, cycles, and lifecycle misuse.
+Declared dependencies (Context `uses`, command `.use()`, Extension `uses`) are checked at composition. Dependencies may appear in either order within one `.provide()` call; across calls, dependency providers must precede their consumers. Dynamic collections use the same variadic methods.
+
+Declared availability is checked without setup. `.use()` retains factory references rather than reflecting callback values. Invocation still checks missing providers, cycles, and lifecycle misuse.
 
 A Context's top-level `flags` are installed as propagating flags on this builder and later-added descendants, without mutating the original definitions. Dependencies construct recursively on the first pull.
 
 Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in reverse construction order after post-run hooks. Context names, dependencies, and owned-flag collisions are checked by TypeScript; dynamically assembled owned-flag collisions throw a `DEFINITION` error from `.provide()`. Lazy bag access retains runtime `DEFINITION` guards for missing providers on dynamically assembled paths, dependency cycles, and lifecycle misuse.
+
+Dynamic same-name providers without owned-flag collisions use the last instance, while static duplicate names remain rejected. Overlapping owned flag names or aliases still throw when the instances share a Context name. Instances from `.of()` retain the factory's owned flags, so `.of()` does not bypass those collisions.
 
 ## `.extend(...extensions)`
 
@@ -249,7 +294,11 @@ Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in re
 extend(...extensions: readonly Extension[]): Crust
 ```
 
-Registers application-wide Extensions. Calls accumulate in registration order, with duplicate `ExtensionId`s deduplicated last-registration-wins. Statically known contributed names, aliases, and owned flags must not collide. Spread genuinely dynamic collections with `.extend(...extensions)`; metadata and callback demands remain type-owned. `.extend()` is root-only: its `_types.caps: "app"` `this` constraint makes recipe calls fail typecheck.
+This sketch is simplified; the [first `.extend()` overload](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts#L1404) starts the complete declaration.
+
+Registers application-wide Extensions. Calls accumulate in registration order, with duplicate `ExtensionId`s deduplicated last-registration-wins. Statically known contributed names, aliases, and owned flags must not collide.
+
+`.extend(...extensions)` accepts dynamic collections; metadata and callback demands remain type-owned. `.extend()` is root-only: its `_types.caps: "app"` `this` constraint makes recipe calls fail typecheck.
 
 Extensions must originate from `defineExtension()`. Core consumes immutable private defining data through structural copies; changing public contribution fields on a spread does not redefine that Extension. Attachment validates declared availability without constructing Contexts; contributed command recipes are checked when prepared.
 
@@ -261,9 +310,11 @@ const app = new Crust("my-cli", { version: "1.2.3" }).extend(help(), version());
 
 Added definitions become ordinary command nodes before root Extensions prepare the application, so root Extensions apply to them. Extension-contributed definitions are materialized when the application prepares.
 
-An Extension's `provides` instances and their owned flags are installed immediately across the root and existing descendants, preserving more-specific local providers on descendants. Later-added descendants inherit them too. Extension commands and declared flags are materialized during preparation. Statically known definitions are compile-time checked; preparation also checks dynamic flag collisions, recipe behavior, and documentation sections.
+An Extension's `provides` instances and their owned flags are installed immediately across the root and existing descendants, preserving more-specific local providers on descendants. Later-added descendants inherit them too. Extension commands and declared flags are materialized during preparation.
 
-See [Extensions](/docs/guide/extensions) for authoring custom Extensions.
+Statically known definitions are compile-time checked; preparation also checks dynamic flag collisions, recipe behavior, and documentation sections.
+
+[Extensions](/docs/guide/extensions) describes custom Extension authoring.
 
 ## `.action(action)`
 
@@ -273,7 +324,11 @@ action<R>(
 ): Crust
 ```
 
-Defines the Command Action. Its awaited return type is carried by the builder for typed `run()` calls. A later `.action()` call replaces both the action and its result type on the returned immutable builder. The action runs after routing, parsing, `preRun` hooks, and validation; Contexts construct on demand.
+This sketch is simplified; the [`.action()` declaration](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts#L1378) defines the complete signature.
+
+Defines the Command Action. Its awaited return type is carried by the builder for typed `run()` calls. A later `.action()` call replaces both the action and its result type on the returned immutable builder.
+
+The action runs after routing, parsing, `preRun` hooks, and validation; Contexts construct on demand.
 
 ```ts
 const app = new Crust("greet")
@@ -299,6 +354,8 @@ add<const Ds extends readonly CommandDefinition<any>[]>(
 >
 ```
 
+This sketch is simplified; the [first `.add()` overload](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts#L1470) starts the complete declaration.
+
 Materializes inert definitions as fresh child commands, each under its carried name. `.as(name)` renames a definition, so the same definition can route under different names:
 
 ```ts
@@ -313,16 +370,18 @@ const app = new Crust("my-cli").add(
 );
 ```
 
-Statically known sibling collisions fail at `.add()` with `FIX_COMMAND_COLLISION`; alias grammar fails at `defineCommand()` with `FIX_ALIAS_SHAPE`. Spread dynamic definitions with `.add(...definitions)`. Materialization checks actual sibling spellings, declared availability, inherited Context-owned flag relations, and seeded-builder identity without running setup. Pending Extension commands retain last-write-wins at preparation.
+Statically known sibling collisions fail at `.add()` with `FIX_COMMAND_COLLISION`; alias grammar fails at `defineCommand()` with `FIX_ALIAS_SHAPE`. `.add(...definitions)` accepts dynamic definitions. Materialization checks actual sibling spellings, declared availability, inherited Context-owned flag relations, and seeded-builder identity without running setup.
+
+Pending Extension commands retain last-write-wins at preparation.
 
 A definition can add other definitions. Context providers are inherited on the materialized command path; a nested definition accesses one by declaring its factory with `.use()` and awaiting the corresponding `ctx` property.
 
 The typed [`run()`](#runpath-input-io) shape of an added definition merges the Context-owned flags already provided on the parent path, matching the runtime parser: descendants accept inherited Context-owned flags, while parent-local flags stay excluded.
 
 <Callout type="info">
-  Finalize `.provide()` calls before `.add()`: a later `.provide()` does not backfill an
-  already-added definition. Extension `provides` also reach existing descendants, but register them
-  before `.add()` when a definition declares those dependencies with `.use()`.
+  A later `.provide()` does not backfill an already-added definition. Extension `provides` reach
+  existing descendants, but a definition's `.use()` demands require those providers to be
+  registered before `.add()`.
 </Callout>
 
 ## `.command(name, recipe)`
@@ -334,7 +393,9 @@ command<const N extends string, B extends CommandDefinitionBuilder>(
 ): Crust
 ```
 
-Defines an app-local leaf subcommand inline — root-only sugar for `.add(defineCommand(name, recipe))`:
+This sketch is simplified; the [first `.command()` overload](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts#L1497) starts the complete declaration.
+
+Defines an app-local leaf subcommand inline, as root-only sugar for `.add(defineCommand(name, recipe))`:
 
 ```ts
 const app = new Crust("my-cli").provide(logging()).command("up", (command) =>
@@ -345,9 +406,9 @@ const app = new Crust("my-cli").provide(logging()).command("up", (command) =>
 );
 ```
 
-The recipe builder is seeded with the Contexts and Context-owned flags accumulated on the builder so far — the call site — so the inline action's `ctx` is typed without `.use()` declarations. Contexts provided after the `.command()` call are not visible to it, matching the positional semantics of `.provide()`. Inline `.use()` demands that the call site does not satisfy fail typecheck with `FIX_MISSING_DEPENDENCY`.
+The recipe builder is seeded with the Contexts and Context-owned flags accumulated on the builder so far at the call site, so the inline action's `ctx` is typed without `.use()` declarations. Contexts provided after the `.command()` call are not visible to it, matching the positional semantics of `.provide()`. Inline `.use()` demands that the call site does not satisfy fail typecheck with `FIX_MISSING_DEPENDENCY`.
 
-Use `.command()` for short, app-local leaf commands; extract to `defineCommand` when a command needs its own file, reuse, or a package. `.command()` is root-only: its `_types.caps: "app"` `this` constraint makes recipe calls fail typecheck.
+`.command()` represents short, app-local leaf commands; `defineCommand` represents commands in separate files, reused commands, and packaged commands. `.command()` is root-only: its `_types.caps: "app"` `this` constraint makes recipe calls fail typecheck.
 
 ## `.snapshot()`
 
@@ -355,13 +416,21 @@ Use `.command()` for short, app-local leaf commands; extract to `defineCommand` 
 snapshot(): Promise<CommandSnapshot>
 ```
 
-Prepares a frozen Command Snapshot for tooling such as man-page, skill, and build generators. It materializes Extension contributions and validates sections returned by Extension callbacks. Command-authored sections are validated when defined. It does not call Command Actions.
+This sketch is simplified; the [`.snapshot()` declaration](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts#L1628) defines the complete signature.
+
+Prepares a frozen Command Snapshot for tooling such as man-page, skill, and build generators. It materializes Extension contributions and validates sections returned by Extension callbacks. Command-authored sections are validated when defined.
+
+It does not call Command Actions.
 
 ```ts
 import type { CommandSnapshot } from "@crustjs/core";
 
 const snapshot: CommandSnapshot = await app.snapshot();
 ```
+
+Section consumption filters entries for the consumer first, then merges entries with the same exact, case-sensitive title. Merged bodies retain source order and are joined with a newline.
+
+During artifact builds, section callbacks are re-evaluated after each build hook. Each later hook receives the refreshed frozen snapshot, while a hook's own outputs are absent from the snapshot passed to that hook.
 
 The `CommandSnapshot` type is exported from `@crustjs/core` and re-exported from the `@crustjs/core/tooling` subpath; see the [core module reference](/docs/modules/core).
 
@@ -370,6 +439,8 @@ The `CommandSnapshot` type is exported from `@crustjs/core` and re-exported from
 ```ts
 run(path, input?, io?): Promise<RunOutcome<R>>
 ```
+
+This sketch is simplified; the [first `.run()` overload](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts#L1644) starts the complete declaration.
 
 Invokes an application programmatically with a command path and structured input inferred from the application. Editors complete command names at each path level plus the selected command's argument and flag names. Required inputs, input value types, and the selected action's awaited return type are inferred by TypeScript.
 
@@ -383,15 +454,25 @@ if (outcome.status === "completed") {
 }
 ```
 
-Structured values bind directly against selected definitions — no argv is produced — then flow through schemas, Contexts, and the action. Observable value kinds and choices are checked automatically. Custom parsers and schemas receive their raw contract, usually strings, even when action output is a number, union, or object. Paths are normalized; JSON/URL payloads retain identity. Scalar JSON inputs accept JSON primitives, structurally compatible named interfaces, and readonly arrays/tuples; repeated JSON inputs use mutable occurrence arrays. Types exclude `Date`, `bigint`, functions, and other non-JSON inputs; this is not an arbitrary unknown-value decoder or serialization pass. `undefined` omits optional input. Empty multiple arrays mean zero occurrences and use a default if present.
+Structured values bind directly against selected definitions without producing argv, then flow through schemas, Contexts, and the action. Observable value kinds and choices are checked automatically. Custom parsers and schemas receive their raw contract, usually strings, even when action output is a number, union, or object.
 
-Supplied positionals must form a prefix, including across defaulted positions. Required core variadics without defaults need nonempty tuples. Omission requires every definition alternative to permit it. Conditional choices, primitive kinds, and occurrence layouts remain conservative; automatic checks do not manufacture a static proof. Independently known inputs remain strict. See [Runtime input](/docs/guide/types#runtime-input).
+Paths are normalized; JSON/URL payloads retain identity. Scalar JSON inputs accept JSON primitives, structurally compatible named interfaces, and readonly arrays/tuples; repeated JSON inputs use mutable occurrence arrays. Types exclude `Date`, `bigint`, functions, and other non-JSON inputs; this is not an arbitrary unknown-value decoder or serialization pass.
 
-A known literal contract accepts valid literals, choice unions, and honestly narrowed strings — not broad strings, wrong primitives, missing required inputs, invalid paths, or fresh-object typo keys. Standard TypeScript structural assignability allows predeclared objects to carry extra keys. Core rejects supplied unknown argument or flag keys before action. Keys with `undefined` values are treated as omitted. Assertions do not validate input. A genuinely dynamic `AnyCrust` view supports broad paths and structured input with `RunOutcome<unknown>`; it is a completed-app view, not authoring authority or an escape hatch for static callers.
+`undefined` omits optional input. Empty multiple arrays mean zero occurrences and use a default if present.
+
+Supplied positionals must form a prefix, including across defaulted positions. Required core variadics without defaults need nonempty tuples. Omission requires every definition alternative to permit it.
+
+Conditional choices, primitive kinds, and occurrence layouts remain conservative; automatic checks do not manufacture a static proof. Independently known inputs remain strict. [Typed input](/docs/guide/lifecycle#typed-input) covers the corresponding lifecycle concepts.
+
+A known literal contract accepts valid literals, choice unions, and honestly narrowed strings, not broad strings, wrong primitives, missing required inputs, invalid paths, or fresh-object typo keys. Standard TypeScript structural assignability allows predeclared objects to carry extra keys. Core rejects supplied unknown argument or flag keys before action.
+
+Keys with `undefined` values are treated as omitted. Assertions do not validate input. A genuinely dynamic `AnyCrust` view supports broad paths and structured input with `RunOutcome<unknown>`; it is a completed-app view, not authoring authority or an escape hatch for static callers.
 
 Each declared own argument or flag value is read once during binding; name validation does not invoke its getter again.
 
-Actual same-ID Extension replacement can remove canonical flag keys still retained by the builder's accumulated type. Automatic binding returns a failed outcome for a supplied retired key when no current definition supplies it, including affected descendant and provider-owned flags. Surviving or reintroduced keys remain valid. This does not update an earlier action's assumptions about removed flags; in particular, omitting a removed defaulted flag can still give that action `undefined`.
+Actual same-ID Extension replacement can remove canonical flag keys still retained by the builder's accumulated type. Automatic binding returns a failed outcome for a supplied retired key when no current definition supplies it, including affected descendant and provider-owned flags. Surviving or reintroduced keys remain valid.
+
+This does not update an earlier action's assumptions about removed flags; in particular, omitting a removed defaulted flag can still give that action `undefined`.
 
 The optional `raw` array reaches the Command Action unchanged as `rawArgs`, equivalent to tokens after a `--` separator in terminal input:
 
@@ -400,19 +481,35 @@ const outcome = await app.run(["exec"], { args: { command: "lint" }, raw: ["--fi
 if (outcome.status === "failed") throw outcome.error;
 ```
 
-Positional values may begin with `-` or equal a subcommand name or alias; the typed path alone selects the command. `run()` returns a failed outcome for unknown path segments even when the nearest resolved parent has an action. By contrast, argv routing can treat unmatched tokens as positionals; see [Unknown commands](/docs/guide/subcommands#unknown-commands). `ExtensionContext.argv` contains only that path for `run()` invocations. Use `execute({ argv })` when testing raw terminal syntax.
+Positional values may begin with `-` or equal a subcommand name or alias; the typed path alone selects the command. `run()` returns a failed outcome for unknown path segments even when the nearest resolved parent has an action. By contrast, argv routing can treat unmatched tokens as positionals; see [Unknown commands](/docs/guide/commands#unknown-commands).
 
-`run()` is quiet by default and resolves after cleanup to core `RunOutcome`: every branch carries readonly `stdout` and `stderr` strings. `completed` owns the awaited action `result` (including `undefined` for actionless/void actions), `finished` owns the finishing Extension `by`, and `failed` owns the original escaping `error`, including `undefined`, `null`, and other primitives. Preparation, binding, hooks, action, cancellation, and cleanup failures retain partial output. It never presents errors, invokes `onError`, or changes `process.exitCode`. Combined cleanup failures retain existing [disposal semantics](/docs/guide/lifecycle#error-flow). Authoring/attachment errors still throw at consumption; `snapshot()` preparation still rejects.
+A `COMMAND_NOT_FOUND` failure has `details.input`, `details.available`, `details.commandPath`, and `details.parentCommand`. `available` lists canonical names of non-hidden children only. `ExtensionContext.argv` contains only the path for `run()` invocations.
 
-Captured callback payloads are joined with `"\n"`, without a synthetic trailing newline. Multiline payloads are not split or trimmed. Separate streams do not promise combined chronological ordering or byte-perfect terminal transcripts. Memory is proportional to emitted output.
+`run()` is quiet by default and resolves after cleanup to core `RunOutcome`: every branch carries readonly `stdout` and `stderr` strings. `completed` owns the awaited action `result`, `finished` owns the finishing Extension `by`, and `failed` owns the original escaping `error`, including non-Error values.
 
-Optional `io.stdout`/`io.stderr` sinks receive writes live, once each, after capture. Omitted channels stay quiet. A sink throw becomes an invocation failure, retaining the write that triggered it. No callbacks or actions are rerun for capture.
+Preparation, binding, hooks, action, cancellation, and cleanup failures retain partial output. `run()` never presents errors, invokes `onError`, or changes `process.exitCode`. Authoring and attachment errors still throw at consumption, and `snapshot()` preparation still rejects.
 
-Core threads invocation-owned IO through the ambient terminal seam: default prompt/progress output reaches captured stderr, with line buffering and non-TTY progress output. Prompt input remains separate. Explicit terminal streams take precedence. Nested/concurrent invocations have isolated capture. Direct `console`/process writes, subprocesses, files, and explicit prompt streams are not intercepted. For terminal interaction use `execute()` or [runInteractive](/docs/modules/testing#runinteractiveapp-path-input).
+Schema failures from every schema evaluated in one invocation aggregate into one `CrustError` with code `VALIDATION`; `details.issues` contains the normalized issue list.
+
+When invocation and disposal both fail, the failed outcome contains a `SuppressedError` whose `.error` is the disposal failure and whose `.suppressed` is the invocation failure. One disposal failure after a successful invocation is retained unchanged. On the Node 22 fallback, multiple disposal failures aggregate in an `AggregateError`.
+
+Captured callback payloads are joined with `"\n"`, without a synthetic trailing newline. Multiline payloads are not split or trimmed. Separate streams do not promise combined chronological ordering or byte-perfect terminal transcripts.
+
+Memory is proportional to emitted output.
+
+Optional `io.stdout`/`io.stderr` sinks receive writes live, once each, after capture. Omitted channels stay quiet. A sink throw becomes an invocation failure, retaining the write that triggered it.
+
+No callbacks or actions are rerun for capture.
+
+Core threads invocation-owned IO through the ambient terminal seam: default prompt/progress output reaches captured stderr, with line buffering and non-TTY progress output. Prompt input remains separate. Explicit terminal streams take precedence.
+
+Nested/concurrent invocations have isolated capture. Direct `console`/process writes, subprocesses, files, and explicit prompt streams are not intercepted. Terminal interaction goes through `execute()` or [runInteractive](/docs/modules/testing#runinteractiveapp-path-input).
 
 Prepared invocations are cached once per immutable builder and shared by subsequent `run()`, `execute()`, and `snapshot()` calls on that builder. Command recipes, Extension commands and flags, and section callbacks therefore prepare once; a later fluent call returns a new builder with its own preparation.
 
-Literal Extension commands and flags participate in typed paths and inputs. Recursive flags reach descendants; `recursive: false` flags stay root-only. Widened or dynamically assembled contributions retain conservative open namespaces, with unknown action results on unknowable paths. Dynamic collections use `.extend(...extensions)` without a wrapper. Known command/flag collisions remain compile errors; supported dynamic canonical replacements retain last-write-wins at preparation.
+Literal Extension commands and flags participate in typed paths and inputs. Recursive flags reach descendants; `recursive: false` flags stay root-only. Widened or dynamically assembled contributions retain conservative open namespaces, with unknown action results on unknowable paths.
+
+Dynamic collections use `.extend(...extensions)` without a wrapper. Known command/flag collisions remain compile errors; supported dynamic canonical replacements retain last-write-wins at preparation.
 
 ## `.execute(options?)`
 
@@ -423,15 +520,20 @@ execute(options?: {
 }): Promise<number>
 ```
 
+This sketch is simplified; the [`.execute()` declaration](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts#L1693) defines the complete signature.
+
 Runs the terminal boundary. By default it parses `process.argv.slice(2)`; `options.argv` overrides it, while `options.io` captures rendered output in tests. Explicit IO also captures default `@crustjs/progress` output and `@crustjs/prompts` output for the full invocation; it does not provide prompt input.
 
 ```ts
 await app.execute();
 ```
 
-`execute()` resolves to the terminal exit code: `0` on success, `1` on failure, or `130` for cancellation. It still renders a failure once through Extension `onError` hooks ending in Core's renderer and sets `process.exitCode` on failure. Any `Error` whose `name` is `"AbortError"`, including a `DOMException`, is cancellation. It is offered to `onError` hooks and renders nothing when no hook claims it.
+`execute()` resolves to the terminal exit code: `0` on success, `1` on failure, or `130` for cancellation. It still renders a failure once through Extension `onError` hooks ending in Core's renderer and sets `process.exitCode` on failure. Any `Error` whose `name` is `"AbortError"`, including a `DOMException`, is cancellation.
+
+It is offered to `onError` hooks and renders nothing when no hook claims it.
 
 <Callout type="warn">
-  Use `.action(action)` to define behavior. `.run(path, input, io)` is only programmatic invocation;
-  `.execute()` is the terminal entry point. Command definitions are inert and expose neither.
+  `.action(action)` defines behavior. `.run(path, input, io)` is the programmatic invocation entry
+  point, and `.execute()` is the terminal entry point. Command definitions are inert and expose
+  neither.
 </Callout>

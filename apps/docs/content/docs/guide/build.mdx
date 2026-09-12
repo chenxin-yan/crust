@@ -1,12 +1,18 @@
 ---
-title: Building & Distribution
+title: Build and Distribution
 description: Build your CLI for Bun, Deno, or Node with crust build.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 
-The `crust build` command builds CLIs for Bun, Deno, or Node. Bun (the default) and Deno produce standalone executables; Node produces one bundled, executable JavaScript file. Select the runtime with `--runtime` or persist it in `package.json`. A malformed project `package.json` fails the build before output planning begins.
+```sh
+crust build
+```
+
+`crust build` reads `src/cli.ts` and writes to `dist` by default. Bun and Deno builds produce standalone executables, while Node builds produce an executable JavaScript bundle.
+
+Choose the runtime with `--runtime`, or set `crust.runtime` in `package.json`:
 
 ```json title="package.json"
 {
@@ -14,306 +20,252 @@ The `crust build` command builds CLIs for Bun, Deno, or Node. Bun (the default) 
 }
 ```
 
-The CLI flag overrides project configuration. Existing projects without `crust.runtime` continue to use Bun. Bun compilation prefers a `bun` executable on `PATH` and otherwise uses the runtime embedded in the packaged Crust executable. Deno builds require `deno` on `PATH`. Node builds use Crust's embedded Bun bundler, so users do not need Bun installed. The packaged `crust` command itself uses a Node launcher, so Node is required to start the build tool.
+The flag overrides project configuration, and Bun is the default. The packaged `crust` command uses a Node launcher, so Node is required to start the build tool.
 
-## Basic Usage
-
-By default, `crust build` reads `src/cli.ts` and writes build artifacts to `dist`.
+## Basic usage
 
 ```sh
-# Build for all platforms (default)
+# Default entry and output directory
 crust build
 
-# Build with a custom entry point
-crust build --entry src/main.ts
+# Custom entry and output name
+crust build --entry src/main.ts --name my-cli
 
-# Build for a specific Bun platform
+# One Bun target
 crust build --target bun-darwin-arm64
 
-# Build a Deno standalone executable
+# One Deno target
 crust build --runtime deno --target aarch64-apple-darwin
 
-# Build an executable Node.js bundle at dist/my-cli.js
+# One Node bundle
 crust build --runtime node --name my-cli
-
-# Build with explicit env files
-crust build --env-file .env.production
+# Building .../src/cli.ts → .../dist/my-cli.js...
+# ✓ Built successfully: .../dist/my-cli.js
 ```
 
-For the complete option reference, run:
+Bun compilation uses `bun` on `PATH` when available and otherwise uses the Bun runtime embedded in packaged Crust. Deno must be on `PATH` while building; Node builds use the Bun bundler available to Crust.
+
+Run `crust build --help` for all options.
+
+## Runtime outputs
 
 ```sh
-crust build --help
+crust build --target bun-linux-x64-baseline --name my-cli
+# dist/my-cli
+
+crust build --runtime deno --target x86_64-unknown-linux-gnu --name my-cli
+# dist/my-cli
+
+crust build --runtime node --name my-cli
+# dist/my-cli.js
 ```
 
-## Runtime Outputs
+| Runtime | Build tool                | Output                                     | End-user runtime |
+| ------- | ------------------------- | ------------------------------------------ | ---------------- |
+| Bun     | `bun build --compile`     | Standalone executable                      | None             |
+| Deno    | `deno compile`            | Standalone executable                      | None             |
+| Node    | `bun build --target node` | Executable `dist/<name>.js` with a shebang | Node             |
 
-| Runtime | Compiler                  | Output                                       | Additional requirements        |
-| ------- | ------------------------- | -------------------------------------------- | ------------------------------ |
-| Bun     | `bun build --compile`     | Standalone executable(s)                     | None when using packaged Crust |
-| Deno    | `deno compile`            | Standalone executable(s)                     | Deno on `PATH` while building  |
-| Node    | `bun build --target node` | Bundled `dist/<name>.js` with a Node shebang | Node on the end user's machine |
-
-Node produces a single portable JavaScript artifact, so it rejects `--target` and `--package`; resolver settings do not apply. Publish it as a normal npm package with its output path in `bin`.
+Node produces one JavaScript artifact, so it rejects `--target` and `--package`. Resolver settings do not apply to Node builds.
 
 ### Choosing targets
 
-Use canonical compiler names with `--target`, such as `bun-darwin-arm64` for Bun or `aarch64-apple-darwin` for Deno on Apple Silicon. Repeat `--target` to select multiple platforms, or omit it to build for all supported platforms of the selected runtime.
+```sh
+crust build --target bun-linux-x64-baseline --target bun-darwin-arm64
+```
 
-For the complete supported target lists, see `BUN_TARGET_NAMES` and `DENO_TARGET_NAMES` in the [build target definitions](https://github.com/chenxin-yan/crust/blob/main/packages/crust/src/utils/build-helpers.ts). These track `main`; `crust build --help` describes the option but does not list targets.
+Use canonical compiler target names. Repeat `--target` for selected platforms, or omit it to build every supported Bun or Deno target.
+
+See the current `BUN_TARGET_NAMES` and `DENO_TARGET_NAMES` in the [build target source](https://github.com/chenxin-yan/crust/blob/main/packages/crust/src/utils/build-helpers.ts).
 
 <Callout type="info">
-  Deno binaries are compiled with `-A` (all permissions granted). Crust core reads environment
-  variables before dispatch, so a sandboxed binary would crash on startup — and Bun- and Node-built
-  CLIs have no sandbox either, so this matches the other runtimes. A permission passthrough flag for
-  narrower grants is planned follow-up scope.
+  Deno binaries are compiled with all permissions. Bun and Node builds do not add a runtime sandbox.
 </Callout>
 
-## Multi-Target Build (Bun and Deno)
-
-For Bun or Deno, when no `--target` is specified (or multiple targets are given), `crust build` produces:
-
-1. **A binary for each platform** — named `dist/<name>-<target>` (e.g., `dist/my-cli-bun-darwin-arm64`)
-2. **A shell resolver** — `dist/cli` (customizable via `--resolver`) that detects the host platform and executes the correct binary, plus a `dist/cli.cmd` companion for Windows
+## Multi-target build (Bun and Deno)
 
 ```sh
-crust build
+crust build --name my-cli
+# Building .../src/cli.ts for 6 target(s)...
+# ✓ Built 6 target(s) successfully:
+# Resolver: .../dist/cli (+ .../dist/cli.cmd)
 ```
 
-Output:
+With no target or more than one target, Bun and Deno builds write one binary per platform plus shell and Windows resolver scripts:
 
+```text
+ dist/
+ ├── cli
+ ├── cli.cmd
+ ├── my-cli-bun-linux-x64-baseline
+ ├── my-cli-bun-linux-arm64
+ ├── my-cli-bun-darwin-x64
+ ├── my-cli-bun-darwin-arm64
+ ├── my-cli-bun-windows-x64-baseline.exe
+ └── my-cli-bun-windows-arm64.exe
 ```
-dist/
-├── cli                                  # Shell resolver (entry point)
-├── cli.cmd                              # Windows batch resolver
-├── my-cli-bun-linux-x64-baseline        # Linux x64 binary
-├── my-cli-bun-linux-arm64               # Linux ARM64 binary
-├── my-cli-bun-darwin-x64                # macOS Intel binary
-├── my-cli-bun-darwin-arm64              # macOS Apple Silicon binary
-├── my-cli-bun-windows-x64-baseline.exe  # Windows x64 binary
-└── my-cli-bun-windows-arm64.exe         # Windows ARM64 binary
+
+### The resolver script
+
+```json title="package.json"
+{
+  "bin": { "my-cli": "dist/cli" }
+}
 ```
 
-### The Resolver Script
+The Unix resolver detects the host with `uname`, makes the selected binary executable, then replaces itself with that binary. `dist/cli.cmd` handles Windows.
 
-The resolver (`dist/cli` by default) is a `#!/usr/bin/env bash` shell script that:
-
-1. Detects the platform via `uname -s` and `uname -m`
-2. Maps to the correct prebuilt binary
-3. Ensures execute permissions
-4. Replaces itself with the binary via `exec` (no child process overhead)
-
-A companion `dist/cli.cmd` Windows batch file is also generated for Windows support.
-
-This is what you point to in your `package.json`'s `bin` field. No runtime (Node.js or Bun) is required — the resolver directly executes the standalone binary.
-
-## Single-Target Build
-
-When exactly one `--target` is specified, `crust build` produces a single binary without a resolver:
+## Single-target build
 
 ```sh
-crust build --target bun-darwin-arm64
+crust build --target bun-darwin-arm64 --name my-cli
+# dist/my-cli
 ```
 
-Output:
+Exactly one target writes one binary and no resolver. A Windows target adds `.exe` to a derived output name.
 
-```
-dist/
-└── my-cli    # Single binary for macOS Apple Silicon
-```
-
-### Custom Output Path
-
-Use `--outfile` for single-target builds:
+### Custom output path
 
 ```sh
 crust build --target bun-linux-x64-baseline --outfile ./bin/my-cli
+# bin/my-cli
 ```
 
-<Callout type="warn">
-  `--outfile` can only be used with exactly one target. Use `--name` to set the base binary name
-  when building for multiple targets.
-</Callout>
+`--outfile` requires exactly one target. Use `--name` to set the base name for a multi-target build.
 
-## Binary Naming
-
-The binary name is resolved in this priority:
-
-1. **`--name` flag** — Explicit name
-2. **`package.json` name** — Read from `package.json` in the current directory (scoped names like `@scope/name` are stripped to `name`)
-3. **Entry filename** — The entry file name without extension (e.g., `cli.ts` → `cli`)
+## Binary naming
 
 ```sh
-# Explicit name
-crust build --name my-tool
-
-# From package.json
-crust build  # Uses package.json "name" field
-
-# From entry
-crust build --entry src/main.ts  # Uses "main" as the name
+crust build --name my-tool       # my-tool
+crust build                      # package.json name, without an npm scope
+crust build --entry src/main.ts  # main
 ```
 
-## Disabling Minification
+The priority is `--name`, the project package name, then the entry filename. Derived Node names receive `.js`, and derived Windows binary names receive `.exe`.
 
-Minification is enabled by default for Bun and Node. Deno builds never minify (`deno compile` has no minification step), and passing `--minify` explicitly with `--runtime deno` is an error. Disable it for Bun and Node with:
+## Disabling minification
 
 ```sh
 crust build --no-minify
+crust build --runtime deno --minify
+# Error: --minify is not supported with --runtime deno.
+#   deno compile has no minification step; drop the flag.
 ```
 
-## Environment Variables
+Minification defaults to on for Bun and Node. Deno has no minification step and rejects explicit `--minify`.
 
-Bun and Node builds embed only `PUBLIC_*` values as build-time constants. `--env-file` is repeatable and uses the same Bun bundler semantics for both runtimes. Deno builds reject `--env-file`: `deno compile` embeds every variable from the file into the binary — secrets included — with no `PUBLIC_*` filter, so Crust refuses rather than leak. Load configuration at runtime instead.
+## Environment variables
 
 ```sh
 crust build --env-file .env.production
 ```
 
-<Callout type="warn">
-  `PUBLIC_*` values are embedded in the binary and are therefore public.
-</Callout>
-
-See [Environment Variables](/docs/guide/environment) for the full env model, including runtime env, Bun `.env` loading, and recommended config patterns.
+See [build-time constants](/docs/guide/environment#build-time-constants) for `PUBLIC_*` embedding, explicit `--env-file` inputs, and Deno behavior.
 
 ## Pre-compile snapshot preparation
 
-By default, `crust build` materializes your full command tree before compiling. It evaluates the entry under Bun in a subprocess to prepare a Command Snapshot, forcing all command recipes and Extensions. This happens for every target runtime, including Node and Deno; packaged Crust uses its embedded Bun. Target-only APIs used during preparation can fail under Bun. TypeScript reports statically representable definition errors during compilation. Runtime materialization still validates dynamic or config-built definitions, materialized command recipes, and authored and Extension-contributed documentation sections.
+```sh
+# With @crustjs/man registered:
+crust build
+# Preparing Command Snapshot...
+#   crust:man  1 file  man/my-cli.1
+```
 
-In this subprocess, `.execute()` materializes the full command graph, including nested subcommands and Extension-owned flags and commands, validates documentation sections, runs Extension build hooks, writes the final JSON snapshot, and exits without executing Command Actions or code after `await app.execute()`.
+Before compilation, `crust build` runs the entry under Bun to prepare a Command Snapshot, validate the materialized command tree, and run Extension build hooks. Command Actions and code after `await app.execute()` do not run in this subprocess.
 
-<Callout type="warn">
-  Materialization imports your entry module, so its top-level side effects run before compilation.
-  Keep entry modules side-effect-free when possible. Use `--no-validate` when import-time side
-  effects are unavoidable.
-</Callout>
-
-The subprocess has a 30-second timeout covering entry evaluation and build hooks. A timeout fails the build.
-
-After preparing the initial snapshot, the same subprocess runs every registered Extension `build` hook in registration order. After each hook, Crust re-evaluates Extension section callbacks on a fresh copy of the materialized tree — command recipes still run once — so each later hook and the final snapshot observe outputs from earlier hooks. A hook receives the snapshot prepared before it starts, so it cannot observe its own outputs through that initial `ctx.snapshot`; register a later renderer hook when an artifact must include those outputs. Extension presence is the source of intent: for example, `man()` writes a manual and `skill()` writes packaged skills without Extension-specific build flags. Hook errors fail the build with the Extension id.
-
-Hooks may return the files they wrote as paths relative to `outDir`. `crust build` reports these artifacts by Extension id before compilation; hooks that return nothing are shown as having run without an artifact report. Reported paths are normalized to POSIX-style separators. Absolute paths and paths that escape `outDir` fail the build and identify the responsible Extension. The temporary Build Report is used only to communicate with the parent build process and is not written to `dist/`. Each build hook must own and clean a unique top-level directory in the artifact output directory. Top-level artifact directories are retained under `<outdir>` — or beside the binary when `--outfile` relocates it — and when `--package` is used they are staged into the root package and beside each platform binary, so executable-relative source resolution finds them at runtime. `--stage-dir` must not contain `--outdir`; staging replaces the stage directory and would delete the artifacts. The artifact name `bin` is reserved for the generated npm executables.
-
-Raw binaries do not embed these artifact directories. Include them beside the binary when distributing an archive. The generated binary template's `files` list includes only the resolver scripts and Bun binaries, not `man`, `skills`, or `completions`. Use `--package` for npm distribution with those directories, or include them explicitly in your own package's `files` list.
-
-If you pass `--env-file`, the snapshot subprocess receives the same explicit env-file inputs as the build step. This keeps Extension configuration and command definitions aligned with the final compilation.
-
-### Skipping snapshot preparation
-
-Snapshot preparation is enabled by default. To skip it:
+The entry module's top-level side effects do run, and preparation has a 30-second timeout. Use `--no-validate` only when those side effects or the project's module resolution prevent preparation:
 
 ```sh
 crust build --no-validate
 ```
 
-Use this escape hatch for entries with unavoidable import-time side effects. It can also help when the snapshot subprocess cannot resolve your project's dependencies in a particular environment (for example, a non-standard module resolution setup), or when the entry never calls `await app.execute()` — such entries fail with a missing-snapshot error. Skipping preparation removes its runtime definition and documentation validation and every Extension build hook. With `--package`, no artifact directories are staged, even if they already exist.
+This skips runtime validation and Extension build hooks. With `--package`, it also stages no existing artifact directories. For snapshot re-evaluation, see [Command Snapshot](/docs/api/crust#snapshot); for hook inputs, artifacts, and reports, see [Extension build context](/docs/api/types#extensionbuildcontext), [build artifacts](/docs/api/types#buildartifacts), and [Build Report](/docs/api/types#buildreport).
 
-## Per-OS Distribution with `--package`
+Each build hook must own and clean a unique top-level directory in the artifact output directory. The `bin` directory is reserved for generated npm executables. `--stage-dir` must not contain the artifact output directory because staging replaces its contents.
 
-`--package` currently supports Bun builds only. Deno and Node builds fail with guidance to publish their generated artifact directly. For distributing a Bun CLI via npm with platform-specific packages, use the `--package` flag. This creates a root package with optional dependencies on per-platform packages, enabling npm to install only the binary for the user's platform.
+Raw build output has no npm `files` list. Distribute Extension artifact directories beside raw binaries, or use `--package` to stage them with npm metadata.
+
+## Per-OS distribution with `--package`
 
 ```sh
-# Build and stage npm distribution packages
-crust build --package
-
-# Build for specific platforms only
 crust build --package --target bun-linux-x64-baseline --target bun-darwin-arm64
-
-# Use a custom staging directory
-crust build --package --stage-dir ./npm-packages
+# Staging 2 distribution target(s) in .../dist/npm...
+# ✓ Staged 3 npm package(s) successfully
+# Manifest: .../dist/npm/manifest.json
 ```
 
-Requirements:
+`--package` supports Bun builds and requires a project `package.json` with `name` and `version`. It rejects `--outfile`; use `--stage-dir` to change the staging directory.
 
-- A project `package.json` with `name` and `version`.
-- If `bin` is an object, it must contain exactly one entry. A string `bin` is supported; if omitted, Crust infers the command name.
-- No `--outfile`. Use `--stage-dir` to choose the staging destination.
+If `bin` is an object, it must contain one entry. A string is accepted, and an omitted `bin` uses the resolved binary name.
 
-### What `--package` Creates
+### What `--package` creates
 
-When using `--package`, instead of raw binaries, Crust creates:
-
-1. **A root package** — Contains the JS resolver and declares optional dependencies on platform packages
-2. **Per-platform packages** — One package per target containing that platform's binary and any staged Extension artifact directories
-3. **A manifest file** — `manifest.json` listing all staged packages and publish order
-
-```
-dist/npm/
-├── manifest.json              # Distribution manifest with publish order
-├── root/                      # Root package (resolver + metadata)
-│   ├── package.json
-│   └── bin/
-│       └── my-cli.js          # JS resolver
-├── linux-x64/                 # Linux x64 package
-│   ├── package.json
-│   └── bin/
-│       └── my-cli-bun-linux-x64-baseline
-├── linux-arm64/               # Linux ARM64 package
-│   ├── package.json
-│   └── bin/
-│       └── my-cli-bun-linux-arm64
-├── darwin-x64/                # macOS Intel package
-│   ├── package.json
-│   └── bin/
-│       └── my-cli-bun-darwin-x64
-├── darwin-arm64/              # macOS Apple Silicon package
-│   ├── package.json
-│   └── bin/
-│       └── my-cli-bun-darwin-arm64
-├── windows-x64/               # Windows x64 package
-│   ├── package.json
-│   └── bin/
-│       └── my-cli-bun-windows-x64-baseline.exe
-└── windows-arm64/             # Windows ARM64 package
-    ├── package.json
-    └── bin/
-        └── my-cli-bun-windows-arm64.exe
+```text
+ dist/npm/
+ ├── manifest.json
+ ├── root/
+ │   ├── package.json
+ │   ├── bin/my-cli.js
+ │   ├── man/
+ │   └── skills/
+ ├── linux-x64/
+ │   ├── package.json
+ │   └── bin/my-cli-bun-linux-x64-baseline
+ └── darwin-arm64/
+     ├── package.json
+     └── bin/my-cli-bun-darwin-arm64
 ```
 
-The root package exposes `bin/my-cli.js` as its `bin` entry. This is a small Node launcher, so end users need Node to start it; the platform binaries embed Bun. npm generates platform launchers from that entry during install.
+The root package contains a Node launcher and optional dependencies on platform packages. Each platform package contains its Bun binary; discovered Extension artifact directories are copied to the root and beside each platform binary. The `man/` and `skills/` entries above appear only when those Extensions are registered.
+
+The staged root metadata includes those discovered directories in `files`:
+
+```json title="dist/npm/root/package.json"
+{
+  "files": ["bin", "man", "skills"]
+}
+```
+
+The manifest records package metadata and publishes platform packages before the root:
+
+```json title="dist/npm/manifest.json (excerpt)"
+{
+  "packages": [
+    { "target": "linux-x64", "dir": "linux-x64" },
+    { "target": "darwin-arm64", "dir": "darwin-arm64" }
+  ],
+  "publishOrder": ["linux-x64", "darwin-arm64", "root"]
+}
+```
 
 ### Publishing with `crust publish`
 
-After staging with `--package`, use `crust publish` to publish all packages in the correct order:
+The dry-run transcript below is an excerpt for the two targets shown above:
 
 ```sh
-# Publish all staged packages
-crust publish
-
-# Dry run to see what would be published
 crust publish --dry-run
-
-# Publish with a specific tag
-crust publish --tag next
-
-# Publish from a custom staging directory
-crust publish --stage-dir ./npm-packages
+# Publish order: linux-x64 -> darwin-arm64 -> root
+#   → linux-x64: <path-to-executable> publish --access public --no-git-checks
+#   → darwin-arm64: <path-to-executable> publish --access public --no-git-checks
+#   → root: <path-to-executable> publish --access public --no-git-checks
 ```
 
-The publish command reads `manifest.json`, verifies staged directories and metadata, and publishes platform packages first, then the root package. It runs Bun's `publish` command with `--access public --no-git-checks` by default and stops on the first failed publish. `--access`, `--tag`, and `--registry` override the corresponding publish options. `--no-verify` skips staged metadata verification. `--dry-run` prints the order and commands without publishing; verification still runs unless disabled.
+`crust publish` reads `manifest.json`, verifies staged metadata, and stops on the first failed publish. `--access`, `--tag`, and `--registry` change publish options; `--no-verify` skips verification.
 
-For the complete publishing option reference, run:
+### Distribution package names
+
+```text
+my-cli        -> my-cli-linux-x64
+@scope/my-cli -> @scope/my-cli-linux-x64
+```
+
+Platform package names append the platform alias. Their `os` and `cpu` metadata lets npm choose the matching optional dependency.
+
+## package.json setup
 
 ```sh
-crust publish --help
+crust build --runtime bun
 ```
-
-### Distribution Package Names
-
-Per-platform packages are named by appending the platform suffix to your package name:
-
-| Root Package    | Platform Package                                              |
-| --------------- | ------------------------------------------------------------- |
-| `my-cli`        | `my-cli-linux-x64`, `my-cli-darwin-arm64`, etc.               |
-| `@scope/my-cli` | `@scope/my-cli-linux-x64`, `@scope/my-cli-darwin-arm64`, etc. |
-
-<Callout type="info">
-  Platform packages use npm's `os` and `cpu` fields so npm only installs the binary matching the
-  user's platform. The root package uses `optionalDependencies`, so missing platform packages don't
-  break installation.
-</Callout>
-
-## package.json Setup
 
 <Tabs items={["Bun standalone", "Deno standalone", "Node runtime package"]}>
 <Tab value="Bun standalone">
@@ -322,9 +274,7 @@ Per-platform packages are named by appending the platform suffix to your package
 {
   "name": "my-cli",
   "files": ["dist"],
-  "bin": {
-    "my-cli": "dist/cli"
-  },
+  "bin": { "my-cli": "dist/cli" },
   "scripts": {
     "build": "crust build",
     "prepack": "bun run build"
@@ -332,7 +282,7 @@ Per-platform packages are named by appending the platform suffix to your package
 }
 ```
 
-The `bin` field points to the resolver script, which handles platform detection and runs the correct compiled binary. Use `crust build --package` when publishing per-OS Bun packages.
+The resolver starts the matching standalone binary. Use `crust build --package` for split npm packages.
 
 </Tab>
 <Tab value="Deno standalone">
@@ -349,7 +299,7 @@ The `bin` field points to the resolver script, which handles platform detection 
 }
 ```
 
-The generated executable embeds Deno. Building requires Deno on `PATH`; running it does not.
+Building requires Deno on `PATH`; running the executable does not.
 
 </Tab>
 <Tab value="Node runtime package">
@@ -368,7 +318,7 @@ The generated executable embeds Deno. Building requires Deno on `PATH`; running 
 }
 ```
 
-The generated JavaScript file has a Node shebang and executable permissions. End users need Node, but not Bun. The bundle is ESM, so set `"type": "module"` in the published package (or rename the artifact to `.mjs`).
+End users need Node but not Bun. The bundle is ESM, so publish it from a package with `"type": "module"` or rename the output to `.mjs`.
 
 </Tab>
 </Tabs>

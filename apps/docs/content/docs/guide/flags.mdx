@@ -3,25 +3,20 @@ title: Flags
 description: Define typed named inputs, aliases, repeated values, and shared flag capabilities.
 ---
 
-`.flags(...defs)` takes named flag definitions — values from `defineFlag(name, def)` or inline literals carrying `name`:
+`.flags(...defs)` takes values from `defineFlag(name, def)` or inline literals carrying `name`.
 
-<include lang="ts">../../../examples/guide/flags.ts</include>
+<include lang="ts">../../../examples/guide/flags.ts#definitions</include>
 
-See [`FlagDef`](/docs/api/types#flagdef) for the complete definition.
-
-Repeated `.flags()` calls accumulate: `.flags(a).flags(b)` defines both flags. A statically known name, short form, or alias collision with an earlier call or an existing Context-owned flag fails typecheck with `FIX_ALIAS_COLLISION` at the call that introduces it.
-
-Builder chaining accumulates `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()`; duplicate Extension IDs keep the last registration. TypeScript rejects provable definition and collision errors. Spread dynamic collections with `.flags(...defs)` or `.args(...defs)`. Builder calls check actual local constraints; preparation with `snapshot()`, `run()`, or `execute()` checks destination relations with Extension flags. Invalid definitions throw `DEFINITION` errors.
+Repeated `.flags()` calls accumulate definitions. See [`FlagDef`](/docs/api/types#flagdef) for the complete definition and [`flags()`](/docs/api/crust#flagsdefs) for spelling and collision rules.
 
 ## Aliases and negation
 
-Use one character for `short`, such as `"o"` for `-o`. `aliases` adds alternate names with two dashes, such as `"out"` for `--out`. A one-character alias such as `"x"` accepts both `--x` and `-x`:
-
-```ts
-.flags({ name: "output", type: "path", short: "o", aliases: ["out"] })
+```sh
+$ bun run flags.ts --no-colour
+color=false targets= runtime=bun tag=none
 ```
 
-Boolean flags support `--no-<spelling>` negation for the canonical name and every long alias — an alias is a full synonym, so `--no-out` behaves like `--no-output`. Set `noNegate: true` to reject negation entirely (a `PARSE` error for any spelling). Boolean flags do not accept `--name=true`. Flag names, short forms, and aliases must be unique, and the `no-` prefix is reserved. TypeScript reports statically known violations as `FIX_ALIAS_COLLISION` or `FIX_NO_PREFIX`.
+Use one character for `short`; names in `aliases` use two dashes. Boolean flags accept `--no-<flag>` unless `noNegate` is true, but they do not accept assignments such as `--name=true`. See the [`flags()` contract](/docs/api/crust#flagsdefs) for all accepted spellings.
 
 ## Required and defaulted values
 
@@ -32,33 +27,31 @@ Boolean flags support `--no-<spelling>` negation for the canonical name and ever
 )
 ```
 
-Both values are non-optional in the Command Action. Other flags include `undefined` in their inferred type.
+Both values are non-optional in the Command Action. Flags without `required` or `default` include `undefined` in their inferred type.
 
 ## Repeated values
 
-```ts
-.flags({ name: "target", type: "string", multiple: true, short: "t" })
+```sh
+$ bun run flags.ts --target linux -t darwin
+color=true targets=linux,darwin runtime=bun tag=none
 ```
 
-`--target linux --target darwin` produces `string[]`. Repeated boolean flags also collect booleans when `multiple: true`.
+Set `multiple: true` to collect one value per occurrence in an array. Repeated boolean flags collect booleans in the same way.
 
 ## Choices
 
-```ts
-.flags({ name: "target", type: "string", choices: ["bun", "node"] })
+```sh
+$ bun run flags.ts --runtime deno
+Error: Invalid value "deno" for --runtime. Expected one of: bun, node
+$ echo $?
+1
 ```
 
-Choices are supported on string flags. When `choices` and `default` are literals, TypeScript reports `FIX_DEFAULT_CHOICE` if the default falls outside the set. Defaults against dynamic choices are checked automatically when consumed. Incoming choices are also checked for both argv and structured invocation; an invalid supplied value produces a `PARSE` failure.
-
-When the choices list is a literal tuple (an inline array as above, or a variable declared `as const`), the flag's inferred type narrows to the union of those literals — `"bun" | "node"` here instead of `string`. A widened `string[]` variable keeps the type as plain `string`.
+Choices are supported on string flags, and an invalid value produces a `PARSE` failure. A literal choices tuple narrows the inferred value to its string union. Every default must belong to the choice set: known literal mismatches fail type checking with `FIX_DEFAULT_CHOICE`, while widened or dynamic mismatches throw a `DEFINITION` error.
 
 ## Reusing flag definitions
 
-Flags declared with `.flags()` belong only to that command. Define a descriptor once and attach it to each command that parses the value directly:
-
 ```ts
-import { Crust, defineCommand, defineFlag } from "@crustjs/core";
-
 const format = defineFlag("format", { type: "string", default: "json" });
 const print = defineCommand("print", (command) => command.flags(format));
 const inspect = defineCommand("inspect", (command) => command.flags(format));
@@ -66,63 +59,39 @@ const inspect = defineCommand("inspect", (command) => command.flags(format));
 const app = new Crust("app").add(print, inspect);
 ```
 
-This keeps one source of truth without adding the flag to commands that do not use it.
+Attach one descriptor to each command that parses the value. This keeps one definition without adding the flag to unrelated commands.
 
 ## Propagating flags with Contexts
 
-When one flag configures shared behavior for a command subtree, let a Context own and consume it. Actions depend on the derived capability rather than the raw flag:
+<include lang="ts">../../../examples/guide/flags.ts#contexts</include>
 
-```ts
-import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
-
-const verbose = defineFlag("verbose", { type: "boolean" });
-const logging = defineContext("logging", { flags: [verbose] }, ({ flags, stderr }) => ({
-  debug(message: string) {
-    if (flags.verbose) stderr(message);
-  },
-}));
-
-const deploy = defineCommand("deploy", (command) =>
-  command.use(logging).action(async ({ ctx }) => (await ctx.logging).debug("deploying")),
-);
-
-const app = new Crust("app").provide(logging()).add(deploy);
-```
-
-The Context declares, parses, and consumes `--verbose`, then wraps the invocation's injected `stderr` as behavior. Actions call the logging capability without re-checking the flag. Renaming the flag or deriving log levels later changes the Context rather than every action.
-
-Flags installed by `.provide()` are parsed and shown in help at the provider and later-added descendants. Extension `provides` also reach existing descendants. They can appear before, between, or after subcommand names. Command-local flags do not propagate: writing one before a subcommand name is a `PARSE` error, because the routed subcommand cannot parse it. See [Contexts: Owned flags](/docs/guide/contexts#owned-flags).
-
-If an action needs the raw value, expose it from the owning Context as part of that capability. Cross-command dependencies are always Context capabilities; raw flags are never injected into an added action's types.
+A Context can own, parse, and consume a flag for a command subtree, leaving actions to depend on the derived capability. See [Context-owned flags](/docs/guide/contexts#owned-flags) for propagation and placement.
 
 ## Standard Schemas
-
-For a schema-backed flag, `type` controls token grammar only: `"string"` consumes a token and `"boolean"` does not. The schema owns the resulting value.
 
 ```ts
 import { z } from "zod";
 
 new Crust("serve")
   .flags({ name: "port", type: "string", schema: z.coerce.number().int() })
-  .action(({ flags }) => {
-    flags.port; // number
-  });
+  .action(({ flags }) => console.log(flags.port)); // number
 ```
 
-A schema cannot be combined with core value options — see [Schema-backed definitions](/docs/guide/types#schema-backed-definitions) for the full rule.
+See [Schema-backed definitions](/docs/guide/types#schema-backed-definitions) for schema input, output, and definition rules.
 
 ## Unsupported flag grammars
 
-Crust's parser is built on `node:util.parseArgs`, and three grammars found in some other CLI libraries are intentionally **not supported**. They conflict with `parseArgs` token rules or make flag/positional boundaries ambiguous. If your app needs one of them, rewrite argv app-side before `execute()`.
+```sh
+$ bun run flags.ts --tag
+Error: Option '--tag <value>' argument missing
+$ echo $?
+1
+```
 
-### Greedy multi-value flags
+A Crust flag is either boolean or value-taking. Rewrite unsupported forms before `execute()` if an upstream caller cannot use the supported form.
 
-Variadic options that consume every following token until the next flag (`--locales en fr de`) are not supported. Crust `multiple` flags require one option token per value — `--locales en --locales fr --locales de`. An unrepeated trailing value becomes an unmatched positional.
-
-### Optional-valued flags
-
-A Crust flag is either `boolean` or value-taking — there is no option that accepts both `--tag` and `--tag v1.2`, because whether the next token is the flag's value or a positional would depend on runtime lookahead. Split it into a boolean flag plus a value-taking flag (e.g. `--tag` and `--tag-name v1.2`).
-
-### Separated dash-leading values
-
-`--timeout -5` is rejected by `parseArgs` as ambiguous (`-5` looks like a flag). Use the `=` form: `--timeout=-5`.
+| Grammar | What happens | Write instead |
+| --- | --- | --- |
+| `--locales en fr` | `fr` is an excess positional | `--locales en --locales fr` |
+| Optional value `--tag [name]` | bare `--tag` is a `PARSE` failure | `--tag` plus `--tag-name value` |
+| Separated dash-leading value `--timeout -5` | `PARSE`: the value is ambiguous | `--timeout=-5` |

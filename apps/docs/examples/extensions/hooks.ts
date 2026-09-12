@@ -1,26 +1,23 @@
-import { defineExtension, defineExtensionId } from "@crustjs/core";
+import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
 
-//#region cached
-export const cached = defineExtension(defineExtensionId("cached"), {
-  flags: [{ name: "cached", type: "boolean" }],
+export const outcomes = defineExtension(defineExtensionId("acme:outcomes"), {
+  flags: [{ name: "finish", type: "boolean" }],
   hooks: {
     preRun(ctx) {
-      if (ctx.flags.cached !== true) return;
-      ctx.stdout("cached result");
-      return ctx.finish();
+      if (ctx.flags.finish === true) return ctx.finish();
+    },
+    postRun(ctx, outcome) {
+      ctx.stdout(`outcome: ${outcome.status}`);
     },
   },
 });
-//#endregion
 
-//#region service-errors
-export const serviceErrors = defineExtension(defineExtensionId("service-errors"), {
-  hooks: {
-    onError(error, ctx) {
-      if (!(error instanceof Error) || error.name !== "ServiceUnavailableError") return;
-      ctx.stderr(error.message);
-      return true;
-    },
-  },
+const completed = new Crust("app").extend(outcomes).action(() => {});
+console.log((await completed.run([])).stdout); // => "outcome: completed"
+console.log((await completed.run([], { flags: { finish: true } })).stdout);
+// => "outcome: finished"
+
+const failed = new Crust("app").extend(outcomes).action(() => {
+  throw new Error("boom");
 });
-//#endregion
+console.log((await failed.run([])).stdout); // => "outcome: failed"

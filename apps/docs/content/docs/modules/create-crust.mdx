@@ -3,21 +3,15 @@ title: "create-crust"
 description: Scaffold a new Crust CLI project interactively.
 ---
 
-`create-crust` generates a minimal Crust application and configures it for standalone binary or Bun runtime distribution.
+`create-crust` generates a minimal Crust application for standalone binary or Bun runtime distribution.
 
 ## Usage
 
-Run it through your runtime's package runner or create command:
-
 ```sh
 npm create crust@latest my-cli
-# or
 pnpm create crust@latest my-cli
-# or
 bunx create-crust@latest my-cli
-# or
 bun create crust@latest my-cli
-# or
 deno run -A npm:create-crust@latest my-cli
 ```
 
@@ -25,21 +19,51 @@ The optional directory argument sets the destination. Without it, the directory 
 
 ## Prompt behavior
 
-Explicit flags skip the corresponding prompts. Without those flags, prompts can also use defaults without rendering in non-interactive environments. For example, select Bun runtime distribution and decline dependency installation without either prompt:
-
 ```sh
-bunx create-crust@latest my-cli --distribution runtime --no-install
+bunx create-crust@latest my-cli --distribution runtime --no-install --no-git
+# ✓ Scaffolding project...
+#
+# Created my-cli!
+#
+# Next steps:
+#   cd ./my-cli
+#   bun run dev
+#   bun run build
 ```
 
-The prompt defaults and behavior are:
+The supplied directory and flags skip their prompts.
 
-- `--distribution`: Select `binary` for standalone executables or `runtime` for a JavaScript build run with Bun. The default is `binary`.
-- `--install` / `--no-install`: Install or skip dependencies. The default is to install.
-- `--git` / `--no-git`: Initialize or skip a Git repository. The default is to initialize; no repository is created when the destination is in a repo.
-- `--overwrite` / `--no-overwrite`: When the destination requires an overwrite decision, `--overwrite` overwrites conflicting files without confirmation; `--no-overwrite` aborts without prompting. The default is not to overwrite.
+Explicit flags skip the corresponding prompts rather than selecting an initial answer. The overwrite prompt appears only when the destination needs an overwrite decision; `--overwrite` accepts immediately, while `--no-overwrite` aborts immediately.
 
-The CLI collects every prompt before writing files, then scaffolds the project and optionally installs dependencies and initializes Git. The package name is inferred from the destination directory.
+| Flag                             | Behavior when supplied                                                                                 |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `--distribution binary\|runtime` | Skips the distribution prompt; without the flag, the prompt defaults to `binary`                       |
+| `--install`, `--no-install`      | Skips the install prompt with yes or no; without either flag, the prompt defaults to yes               |
+| `--git`, `--no-git`              | Skips the Git prompt with yes or no; no prompt or initialization occurs inside an existing repository  |
+| `--overwrite`, `--no-overwrite`  | Skips the conditional overwrite prompt; yes continues immediately and no prints `Aborted.` and returns |
 
-For the complete option definitions, see the [create-crust command source](https://github.com/chenxin-yan/crust/blob/main/packages/create-crust/src/index.ts), which tracks `main`.
+The CLI collects prompt answers before writing files. It then scaffolds the project and optionally installs dependencies and initializes Git.
 
-Generated projects use the single-file `src/cli.ts` starter. See [Build and distribution](/docs/guide/build) for standalone binary workflows. The Bun runtime template uses a separate build command, `bun build src/cli.ts --target bun --outfile dist/cli.js`, and runs the result with `bun run dist/cli.js`. This is not `crust build --runtime node` and does not run Crust snapshot preparation or Extension build hooks.
+## Generated project
+
+```text
+my-cli/
+├── .gitignore
+├── README.md
+├── package.json
+├── tsconfig.json
+└── src/
+    └── cli.ts
+```
+
+The package name comes from the destination directory. Both templates use the single-file `src/cli.ts` starter.
+
+```json title="runtime package scripts"
+{
+  "dev": "bun run src/cli.ts",
+  "build": "bun build src/cli.ts --target bun --outfile dist/cli.js",
+  "start": "bun run dist/cli.js"
+}
+```
+
+Binary distribution uses `crust build`, while runtime distribution uses `bun build`. The runtime build does not perform Crust snapshot preparation or run Extension build hooks; see [Build and distribute](/docs/guide/build) for the binary workflow.

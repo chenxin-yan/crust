@@ -1,10 +1,35 @@
-import { Crust } from "@crustjs/core";
+//#region definitions
+import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
 
 const command = new Crust("serve")
   .flags(
-    { name: "port", type: "number", default: 3000, short: "p" },
-    { name: "verbose", type: "boolean", short: "v" },
+    { name: "color", type: "boolean", aliases: ["colour"] },
+    { name: "target", type: "string", multiple: true, short: "t" },
+    { name: "runtime", type: "string", choices: ["bun", "node"], default: "bun" },
+    { name: "tag", type: "string" },
   )
-  .action(({ flags, stdout }) => stdout(`${flags.port} ${flags.verbose ?? false}`));
+  .action(({ flags, stdout }) =>
+    stdout(
+      `color=${flags.color ?? true} targets=${flags.target?.join(",") ?? ""} runtime=${flags.runtime} tag=${flags.tag ?? "none"}`,
+    ),
+  );
 
 await command.execute();
+//#endregion
+
+//#region contexts
+const verbose = defineFlag("verbose", { type: "boolean" });
+const logging = defineContext("logging", { flags: [verbose] }, ({ flags, stderr }) => ({
+  debug(message: string) {
+    if (flags.verbose) stderr(message);
+  },
+}));
+
+const deploy = defineCommand("deploy", (command) =>
+  command.use(logging).action(async ({ ctx }) => (await ctx.logging).debug("deploying")),
+);
+
+const app = new Crust("app").provide(logging()).add(deploy);
+//#endregion
+
+void app;

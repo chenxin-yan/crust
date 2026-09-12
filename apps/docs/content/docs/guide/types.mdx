@@ -1,11 +1,9 @@
 ---
-title: Types and Schemas
-description: Convert tokens with built-in types, custom parsing, or Standard Schemas.
+title: Values and Validation
+description: Convert and validate values with built-in types, custom parsing, or Standard Schemas.
 ---
 
 ## Built-in value types
-
-Arguments and flags support `string`, `number`, `boolean`, `url`, `path`, and `json`.
 
 ```ts
 new Crust("inspect")
@@ -17,153 +15,93 @@ new Crust("inspect")
   });
 ```
 
-`type` determines token consumption and built-in conversion. Invalid numbers, URLs, paths, and JSON produce `PARSE` errors. Number conversion follows `Number()`, so an empty token becomes `0`. Boolean positional arguments become `true` only for the exact tokens `"true"` and `"1"`; every other token becomes `false`. Use a string argument with `choices` or a schema when other spellings should be rejected.
+Arguments and flags support `string`, `number`, `boolean`, `url`, `path`, and `json`. The `type` selects built-in conversion and, for flags, token consumption; a failed conversion produces a `PARSE` error.
+
+Number conversion uses `Number()`, including converting `""` to `0`. Boolean positional arguments recognize only `"true"` and `"1"` as true; all other strings become false.
 
 ## Custom parsing
 
-Use `parse` for a small synchronous transformation when a full schema is unnecessary:
-
 ```ts
-.flags({
-  name: "date",
-  type: "string",
-  parse: (value) => new Date(value),
-})
-```
-
-The Command Action receives the return type. A parser must be synchronous: TypeScript rejects Promise-returning parsers with `FIX_ASYNC_PARSE`.
-
-## Compile-time checks
-
-TypeScript checks literal command, flag, argument, Context, and Extension definitions. `FIX_*` diagnostics identify invalid names, aliases, defaults, asynchronous parsers, positional ordering, and composition demands.
-
-## Runtime checks
-
-JavaScript runtime checks are separate: helper and builder calls validate dynamic names and spellings; preparation with `snapshot()`, `run()`, or `execute()` validates Extension flag relations and deferred recipes and sections; invocation validates argv and structured values. There is no checking switch or wrapper.
-
-Normalized definitions own copies of structural collections. JSON, URL, schema, callback, and Context-option payloads retain identity. Context setup stays lazy. Callback values and Extension metadata requirements remain TypeScript-owned, not reflected or decoded at runtime.
-
-## Runtime input
-
-Automatic checking does not weaken a known input contract. Literal choices complete in the editor; broad strings, wrong literals, wrong primitives, missing required fields, invalid positional shapes, and fresh-object typo keys are compile errors.
-
-<include lang="ts">../../../examples/guide/invocation.ts#strict</include>
-
-Narrow dynamic input honestly before calling a known application:
-
-<include lang="ts">../../../examples/guide/invocation.ts#narrowing</include>
-
-TypeScript uses ordinary structural assignability: a predeclared object may carry extra keys, whereas a fresh object literal rejects them even alongside otherwise valid required fields. Core rejects supplied unknown argument or flag keys before the action. Assertions are not validation; invalid asserted inputs still produce failed outcomes.
-
-Supplied positional values must form a prefix, even across defaulted positions. Required core variadics without defaults need nonempty tuples. Conditional definitions remain conservative: omission is safe only when every alternative permits it, and uncertain choices, primitive kinds, or occurrence layouts cannot certify supplied values. Independently known inputs remain strict.
-
-Dynamic authoring uses the same APIs: `new Crust(name)`, `defineCommand(name, config, recipe)`, `defineFlag(name, def)`, and `defineContext(name, config, setup)`. Spread collections into variadic attachment methods: `.flags(...defs)`, `.args(...defs)`, `.provide(...instances)`, `.add(...definitions)`, and root-only `.extend(...extensions)`. Invalid observable definitions throw at their consuming operation. Deferred section callbacks and recipes are checked when prepared, without running Context setup early.
-
-A broad string name does not establish a particular literal key; open namespaces stay open. Finite unions do not establish every alternative key either. Known-invalid members of a finite union remain rejected; a union with an open template member is treated as open, with runtime validation still applying. Unresolved generic names may need a validated parameter constraint; ordinary broad strings are supported.
-
-<include lang="ts">../../../examples/guide/invocation.ts#dynamic</include>
-
-Use `AnyCrust` only for genuinely dynamic completed-app inspection and invocation. It accepts broad structured inputs and returns an unknown action result, not an authoring builder. Do not erase a known application to silence an input error. Keep authoring builders inferred; a bare `Crust` has an empty argument tuple, while `Crust<Flags, ArgsDef>` deliberately describes an open argument state.
-
-This is not an arbitrary `unknown` decoder or JSON configuration loader. Decode external data first. Runtime checks do not inspect opaque callback value contracts.
-
-### Raw input versus action output
-
-Custom parsers and schemas receive raw inputs, not their transformed action output. A string parser still takes a string even if it returns a number. A string schema flag accepts a broad string even if the schema produces a narrow union:
-
-<include lang="ts">../../../examples/guide/invocation.ts#raw</include>
-
-Required and schema checks run after `preRun`, so returning `ctx.finish()` can skip them. Custom parsers must remain synchronous when invoked.
-
-## Schema-backed definitions
-
-Crust uses one Standard Schema contract across core, store, and prompts: put the schema on a plain definition's `schema` key. The schema receives the surface's raw value (including `undefined` when an argument or persisted field is missing), and the caller receives its exact output type. Any Standard Schema v1 vendor works, and validation may be synchronous or asynchronous.
-
-Standard Schema support adds no install-time dependency: Crust vendors the protocol types instead of requiring a separate specification package. Schema code runs only for definitions carrying `schema`.
-
-```ts
-import { z } from "zod";
-
-const command = new Crust("serve")
-  .args({ name: "port", schema: z.coerce.number().int().positive() })
-  .flags(
-    { name: "host", type: "string", schema: z.string().default("localhost") },
-    { name: "secure", type: "boolean", schema: z.boolean().default(false) },
-  )
-  .action(({ args, flags }) => {
-    args.port; // number
-    flags.host; // string
-    flags.secure; // boolean
+new Crust("schedule")
+  .flags({ name: "date", type: "string", parse: (raw) => new Date(raw) })
+  .action(({ flags }) => {
+    flags.date; // Date | undefined
   });
 ```
 
-For arguments, the schema receives `string | undefined`, or `string[]` for a variadic argument. For flags it receives `string | undefined` or `boolean | undefined`. With `multiple: true`, it receives `string[]` or `boolean[]` when the flag appears at least once, and `undefined` when omitted. Unlike repeated flags, variadic arguments always supply an array.
+Use `parse` for a small synchronous transformation when a full schema is unnecessary. The Command Action receives the parser's return type.
 
-On a schema-backed flag, `type` remains necessary to define token grammar: `"string"` consumes the next token, while `"boolean"` is a switch. It does not own output conversion.
-
-Schemas exclusively own coercion, defaults, requiredness, choices, and validation. Do not mix `schema` with core value options (`type` on arguments, or `default`, `required`, `choices`, and `parse`); TypeScript rejects invalid combinations.
-
-All schema failures in an invocation are aggregated into one `CrustError` with code `VALIDATION`:
+## Compile-time checks
 
 ```ts
-import { CrustError } from "@crustjs/core";
-
-// `command` is the schema-backed "serve" example above.
-const outcome = await command.run([], { args: { port: "not-a-number" } });
-if (outcome.status === "failed") {
-  const { error } = outcome;
-  if (error instanceof CrustError && error.is("VALIDATION")) {
-    for (const issue of error.details?.issues ?? []) {
-      console.error(issue.path, issue.message);
-    }
-  }
-}
+new Crust("fetch").args({
+  name: "remote",
+  type: "string",
+  parse: async (raw) => raw.trim(),
+});
+// FIX_ASYNC_PARSE: parse must be synchronous; do async work in run()
 ```
 
-Issue paths identify inputs, for example `args.port` or `flags.host`.
+TypeScript checks known definitions as they are authored and composed. `FIX_*` properties name the constraint and the change needed to satisfy it.
+
+## Runtime checks
+
+```ts
+const app = new Crust("serve").flags({ name: "port", type: "number" });
+const exitCode = await app.execute({ argv: ["--port", "oops"] });
+// stderr: Error: Expected number for --port, got "oops"
+// CrustError code: PARSE
+// exitCode === 1
+```
+
+Argv and dynamic definitions are checked when they are consumed. See [`run()` input validation](/docs/api/crust#runpath-input-io) and [`CrustError` codes](/docs/api/errors#codes) for the runtime boundaries and error details.
+
+| What | Checked by | When |
+| --- | --- | --- |
+| Known definitions and composition | TypeScript | Typecheck |
+| Dynamic definitions | Crust | Composition or preparation |
+| Argv and structured values | Crust | Invocation |
+
+## Raw input versus action output
+
+<include lang="ts">../../../examples/guide/invocation.ts#raw</include>
+
+Custom parsers and schemas receive raw input, while the Command Action receives transformed output. Required and schema checks run after `preRun`, so an Extension that returns `ctx.finish()` skips them.
+
+## Schema-backed definitions
+
+<include lang="ts">../../../examples/guide/types.ts#schema</include>
+
+Put a Standard Schema on a plain definition's `schema` key. The schema receives the raw value and owns coercion, defaults, requiredness, and validation; the Command Action receives its output type. Unlike `parse`, Standard Schema validation may be asynchronous.
+
+Schema failures from one invocation are aggregated into one `VALIDATION` error. See [`run()` validation](/docs/api/crust#runpath-input-io), [`ArgDef`](/docs/api/types#argdef), and [`FlagDef`](/docs/api/types#flagdef) for the complete contract.
 
 ### The same shape across packages
 
-Define a schema once and attach it with the same `schema` key:
-
 ```ts
-import { Crust } from "@crustjs/core";
-import { input } from "@crustjs/prompts";
-import { configDir, createStore } from "@crustjs/store";
-import { z } from "zod";
+const Port = z.coerce.number().default(3000);
 
-const Port = z.coerce.number().int().min(1).max(65535);
-
-new Crust("serve").flags({ name: "port", type: "string", schema: Port }).action(({ flags }) => {
-  flags.port; // number
-});
-
-const store = createStore({
-  dirPath: configDir("my-cli"),
-  name: "config",
-  fields: { port: { schema: Port.default(3000) } },
-});
-const config = await store.read();
-config.port; // number
-
-const port = await input({ message: "Port?", schema: Port });
-//    ^? number
+const portFlag = { name: "port", type: "string", schema: Port };
+const portField = { schema: Port };
+const portPrompt = { message: "Port?", schema: Port };
 ```
 
-A schema exclusively owns validation, transformation, semantic defaults, and optionality. Do not combine `schema` with core value options or a hand-written `validate` callback. Invalid combinations fail at the definition or call boundary.
+Core definitions, store fields, and prompts all use the `schema` key. Store values must also be JSON-compatible because they are persisted.
 
 ### Where defaults live
-
-Put semantic defaults in the schema everywhere:
 
 ```ts
 const Port = z.coerce.number().default(3000);
 ```
 
-Core arguments and flags and store fields do not accept an outer `default` beside `schema`. Prompt `initial` and `default` remain raw UI fallback values rather than schema defaults; Crust passes either value through `schema` before returning it. Store fields additionally require the schema's output to be recursively JSON-compatible (named interfaces are accepted; non-JSON properties are not) because values persist to JSON.
+Put semantic defaults in the schema. Prompt UI fallback values still pass through the schema before being returned.
 
 ## Choosing an approach
 
-- Use a built-in type for direct token conversion.
-- Use `parse` for one synchronous custom transform.
-- Use `schema` for validation, defaults, coercion, or an existing schema ecosystem.
+```ts
+.flags({ name: "count", type: "number" })
+.flags({ name: "date", type: "string", parse: (raw) => new Date(raw) })
+.flags({ name: "port", type: "string", schema: Port })
+```
+
+Use a built-in type for direct token conversion, `parse` for one synchronous transform, and `schema` for validation, defaults, coercion, or an existing schema library.
