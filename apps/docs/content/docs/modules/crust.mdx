@@ -21,7 +21,7 @@ crust build --runtime node --name my-cli
 # ✓ Built successfully: .../dist/my-cli.js
 ```
 
-[`crust build`](/docs/guide/build) validates and builds a CLI. [`crust publish`](/docs/guide/build#publishing-with-crust-publish) publishes npm packages staged by `crust build --package`.
+[`crust build`](/docs/guide/build-and-distribution) validates and builds a CLI. [`crust publish`](/docs/guide/build-and-distribution#publishing-with-crust-publish) publishes npm packages staged by `crust build --package`.
 
 ### `crust build` options
 
@@ -66,7 +66,7 @@ crust build --runtime node --outdir out
 # Node output: out/<name>.js
 ```
 
-Bun and Deno builds produce standalone binaries. Node builds produce one JavaScript bundle; see [Build and distribute](/docs/guide/build) for snapshot preparation and target rules.
+Bun and Deno builds produce standalone binaries. Node builds produce one JavaScript bundle; see [Build and distribution](/docs/guide/build-and-distribution) for snapshot preparation and target rules.
 
 ## Extension artifacts
 

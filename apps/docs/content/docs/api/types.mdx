@@ -381,7 +381,7 @@ type ExtensionFactory<
 
 Preserve literal tuples in published annotations for precise typed invocation. To keep a namespace open, explicitly use `ContextMap`, `readonly ContextInstance[]`, `readonly NamedExtensionFlagDef[]`, or `readonly CommandDefinition<any, any, any, any>[]` for its parameter. `MetaKeys` defaults to `never`, meaning no required metadata.
 
-`HookDeps` defaults to `Deps`. An annotation for a metadata-requiring factory must preserve its metadata keys. See [authoring an Extension](/docs/guide/extensions#author-an-extension).
+`HookDeps` defaults to `Deps`. An annotation for a metadata-requiring factory must preserve its metadata keys. See [authoring an Extension](/docs/guide/extensions#write-your-own).
 
 ### `RootMetaKey` and `DefineExtensionWith`
 
@@ -433,7 +433,7 @@ Infers the syntax-parsed values from an Extension's named-definition array and e
 
 Invocation Contexts remain available through `postRun`, and disposal follows. An `onError` call for a post-run or disposal failure runs after cleanup, with Context pulls unavailable. Routing and parse failures use a fallback context with no available Contexts.
 
-See [Error flow](/docs/guide/error-handling#error-flow).
+See [failure handling](/docs/guide/error-handling#fail-from-anywhere).
 
 ### `Finished`
 
