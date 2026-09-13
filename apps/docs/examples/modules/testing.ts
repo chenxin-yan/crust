@@ -1,6 +1,7 @@
 import { Crust, defineCommand } from "@crustjs/core";
 import { input } from "@crustjs/prompts";
-import { captureExecute, runInteractive } from "@crustjs/testing";
+import { captureExecute } from "@crustjs/testing";
+import { runInteractive } from "@crustjs/testing/interactive";
 
 const app = new Crust("my-cli").add(
   defineCommand("greet", (command) =>

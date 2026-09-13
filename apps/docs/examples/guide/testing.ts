@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 
 import { Crust } from "@crustjs/core";
 import { input } from "@crustjs/prompts";
-import { captureExecute, runInteractive } from "@crustjs/testing";
+import { captureExecute } from "@crustjs/testing";
+import { runInteractive } from "@crustjs/testing/interactive";
 
 //#region run
 const app = new Crust("app").action(({ stdout }) => {

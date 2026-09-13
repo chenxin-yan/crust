@@ -11,7 +11,7 @@ description: Test Crust applications with captured output and fake interactive t
 bun add -d @crustjs/testing
 ```
 
-The required peer packages are `@crustjs/core`, `@crustjs/progress`, and `@crustjs/prompts`. TypeScript is an optional peer.
+`@crustjs/core` is a required peer. `@crustjs/prompts` is an optional peer needed only by the `@crustjs/testing/interactive` entry point; the root entry point works without it. TypeScript is an optional peer.
 
 ## Application contracts
 
@@ -21,7 +21,7 @@ interface ExecutableApp {
 }
 ```
 
-`captureExecute()` accepts this structural contract. `runInteractive()` accepts a Crust application and infers its command path and input.
+`captureExecute()` accepts this structural contract. `runInteractive()` (from `@crustjs/testing/interactive`) accepts a Crust application and infers its command path and input.
 
 An inert definition must be added to an application before the typed helpers can address it. Core's typed invocation rules are documented under [`run()` path and input](/docs/api/crust#runpath-input-io).
 
@@ -45,6 +45,8 @@ Use `run()` to capture stdout, stderr, and the Command Action outcome without te
 
 ## `runInteractive(app, path, input?)`
 
+Import from `@crustjs/testing/interactive`; this entry point requires `@crustjs/prompts`.
+
 <include lang="ts">../../../examples/modules/testing.ts#interactive</include>
 
 `waitFor()` polls the ANSI-stripped screen and defaults to a 5000 ms timeout. It fails as soon as the invocation fails or completes without a match, rather than waiting for the timeout. Call `type()` or `keys()` after the expected prompt appears, then await `done`.
@@ -53,7 +55,7 @@ Use `run()` to capture stdout, stderr, and the Command Action outcome without te
 
 `ctx.stdout()` is not included, so use `run()` for stdout assertions.
 
-<auto-type-table path="../../../../../packages/testing/src/index.ts" name="InteractiveRun" />
+<auto-type-table path="../../../../../packages/testing/src/interactive.ts" name="InteractiveRun" />
 
 ## Custom prompts
 
