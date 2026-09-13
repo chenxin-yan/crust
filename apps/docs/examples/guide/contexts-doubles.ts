@@ -16,6 +16,7 @@ const query = defineCommand("query", (command) =>
   }),
 );
 
+// [!code highlight:4]
 const fakeDatabase = database.of({
   query: (sql: string) => `fake: ${sql}`,
   [Symbol.dispose]() {},
