@@ -62,35 +62,101 @@ Tokens after `--` bypass argument and flag parsing and reach the Command Action 
 
 ## Flags
 
-<include lang="ts">../../../examples/guide/flags.ts#definitions</include>
+Use boolean flags for switches and value-taking flags for named settings.
 
-Use boolean flags for switches and value-taking flags for named settings. This command also shows a long alias, a one-character `short` alias, a repeated value, a default, and choices.
-
-### Aliases and negation
+<include lang="ts" meta='title="src/cli.ts"'>
+  ../../../examples/guide/flags.ts
+</include>
 
 ```sh
-$ serve --no-colour
-color=false targets= runtime=bun tag=none
+$ serve --color --port 3000
+color=true port=3000
+$ serve
+color=undefined port=undefined
 ```
 
-Set `short` for a one-character alias and `aliases` for long aliases. Boolean flags accept `--no-<name>` unless `noNegate: true`; see the [`.flags()` contract](/docs/api/crust#flagsdefs) for accepted spellings.
+The definitions use `name: "color"` and `name: "port"` without dashes. A user types `--color --port 3000`, and the action reads `flags.color` and the converted number in `flags.port`.
+
+Without `required` or `default`, either flag may be omitted and its action value is `undefined`. When supplied, a value-taking flag needs one value, so `serve --port` fails. Built-in types convert CLI text and reject invalid input before the action runs:
+
+```sh
+$ serve --port nope
+Error: Expected number for --port, got "nope"
+```
 
 ### Required and defaulted values
 
-<include lang="ts">../../../examples/guide/flags.ts#required-defaulted</include>
+<include lang="ts" meta='title="src/publish.ts"'>
+  ../../../examples/guide/flags-required.ts
+</include>
 
-Set `required: true` when the user must supply a value, or use `default` when omission should choose a value. Both forms are non-optional in the Command Action.
+Use `default` when omission should choose a value. This success case omits `--registry`, so the action receives its `npm` default. The action does not print the token:
+
+```sh
+$ publish --token example
+publishing to npm
+```
+
+Set `required: true` when the user must supply a value. A missing required flag fails before the action runs:
+
+```sh
+$ publish
+Error: Missing required flag "--token"
+$ echo $?
+1
+```
+
+Both defaulted and required values are non-optional in the action.
+
+### Aliases and negation
+
+<include lang="ts" meta='title="src/serve.ts"'>
+  ../../../examples/guide/flags-aliases.ts
+</include>
+
+Set `short` for a one-character alias and `aliases` for long aliases. Every spelling writes to the property named by `name`:
+
+```sh
+$ serve --colour
+color=true
+$ serve -c
+color=true
+```
+
+Boolean flags also accept `--no-<name>` and `--no-<alias>` unless `noNegate: true`:
+
+```sh
+$ serve --no-colour
+color=false
+```
+
+See the [`.flags()` contract](/docs/api/crust#flagsdefs) for all accepted spellings.
 
 ### Repeated values
 
+<include lang="ts" meta='title="src/serve-values.ts"'>
+  ../../../examples/guide/flags-values.ts
+</include>
+
+Set `multiple: true` when a flag may occur more than once. Each occurrence contributes one value in order:
+
 ```sh
 $ serve --target linux -t darwin
-color=true targets=linux,darwin runtime=bun tag=none
+targets=linux,darwin runtime=bun tag=undefined
 ```
 
-Set `multiple: true` when a flag may occur more than once. The Command Action receives an array in occurrence order.
+Without a default, omitting a repeated flag gives `undefined`. Repeat the flag for every value. In `--target linux darwin`, `darwin` is a positional argument, not another target.
 
 ### Flag choices
+
+Use `choices` for a fixed set of strings. An accepted value reaches the action:
+
+```sh
+$ serve --runtime node
+targets=undefined runtime=node tag=undefined
+```
+
+An invalid value fails before the action runs:
 
 ```sh
 $ serve --runtime deno
@@ -99,33 +165,32 @@ $ echo $?
 1
 ```
 
-Use `choices` for a fixed set of string values. An invalid value fails before the Command Action runs.
+<span id="unsupported-flag-grammars" />
+
+### Values that start with `-`
+
+For a value-taking flag, attach a dash-leading value with `=` so it is not mistaken for another flag:
+
+```sh
+$ serve --tag=-nightly
+targets=undefined runtime=bun tag=-nightly
+```
 
 ### Reuse across commands
 
-<include lang="ts">../../../examples/guide/flags.ts#reuse</include>
+<include lang="ts" meta='title="src/tools.ts"'>
+  ../../../examples/guide/flags-reuse.ts
+</include>
 
-Use `defineFlag()` when several commands need the same definition. Attach it to each command that should parse the flag.
-
-## Unsupported flag grammars
+Use `defineFlag()` when several commands need the same definition. Attach it to every command that should parse the flag. Both commands above consume `format`:
 
 ```sh
-# Repeat the flag instead of adding bare values:
---locales en --locales fr
-
-# Split an optional-value flag into a boolean and a value flag:
---tag --tag-name nightly
-
-# Attach a dash-leading value with =:
---timeout=-5
+$ tools print --format yaml
+print as yaml
+$ tools inspect
+inspect as json
 ```
-
-Crust flags are either boolean or value-taking, so optional values, bare list items, and dash-leading values without `=` are not parsed. Use the spellings above instead.
 
 ## Validation
 
-```ts
-.flags({ name: "port", type: "number" })
-```
-
-Choose built-in conversion, a custom parser, or a Standard Schema in [Values and validation](/docs/guide/types).
+Built-in conversion covers common values such as the `number` flag above. For custom parsers and Standard Schemas, see [Values and validation](/docs/guide/types).

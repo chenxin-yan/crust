@@ -16,6 +16,13 @@ $ bun src/cli.ts
 Hello!
 ```
 
+Choose how to add subcommands based on your app's size and how you want to organize and reuse its commands:
+
+- **Define inline with `.command()`** for small CLIs or short subcommands used only by this app.
+- **Use `defineCommand()` with `.add()`** when a growing CLI needs separate command files or reusable definitions.
+
+You can use both approaches in the same app.
+
 ## Grow in one file
 
 Keep small subcommands alongside the root with `.command()`. Its callback defines the subcommand's flags and action.
