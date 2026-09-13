@@ -1,11 +1,15 @@
 ---
 title: Commands
-description: Compose an immutable command tree, then run it from one entrypoint.
+description: Define commands in one file or split them into modules.
 ---
 
-A Crust value is an immutable command tree; compose it, then call `execute()` once at the entrypoint.
+import { Step, Steps } from "fumadocs-ui/components/steps";
 
-<include lang="ts" meta='title="src/cli.ts"'>../../../examples/guide/hello.ts</include>
+Create a CLI with `new Crust(name)`, define what it does with `.action()`, and call `.execute()` to run it.
+
+<include lang="ts" meta='title="src/cli.ts"'>
+  ../../../examples/guide/hello.ts
+</include>
 
 ```sh
 $ bun src/cli.ts
@@ -14,27 +18,18 @@ Hello!
 
 ## Grow in one file
 
-<include lang="ts" meta='title="src/cli.ts"'>../../../examples/guide/commands.ts</include>
+Keep small subcommands alongside the root with `.command()`. Its callback defines the subcommand's flags and action.
+
+<include lang="ts" meta='title="src/cli.ts"'>
+  ../../../examples/guide/commands.ts
+</include>
 
 ```sh
 $ tool build --minify
 minify: true
 ```
 
-Use `.command()` for a short, app-local leaf command. Each builder call returns a new `Crust` value, so keep the returned value.
-
-When a command needs its own file or reuse, move it to a definition created with `defineCommand()` and attach it with `.add()`.
-
-## Unknown commands
-
-```sh
-$ tool deploy
-Error: Unknown command "deploy".
-$ echo $?
-1
-```
-
-A token that matches no subcommand is an unknown command when the current command has no Command Action; with an action, it is parsed as a positional argument. See the [`run()` routing contract](/docs/api/crust#runpath-input-io) for programmatic paths and error details.
+Here, `tool build --minify` runs the `build` action with `flags.minify` set to `true`. Add more `.command()` calls before `.execute()` as your CLI grows.
 
 ## Split across files
 
@@ -45,28 +40,55 @@ src/
 └── cli.ts
 ```
 
-Use this shape once commands need separate files. Command modules export definitions, `app.ts` owns the root, and only `cli.ts` executes the completed tree.
+Move a subcommand into its own file with `defineCommand()`, then attach it with `.add()`. Keep shared app setup in `app.ts` and the single `.execute()` call in `cli.ts`.
 
+<Steps>
+<Step>
 ### Define a command
 
 <include lang="ts" meta='title="src/commands/greet.ts"'>
   ../../../examples/split-files/commands/greet.ts
 </include>
 
-A definition is inert until a root adds it, so importing this file does not run the command. The optional second argument holds the description shown in help.
+Importing a command definition does not run its action. The optional second argument supplies metadata, such as the description shown in help. See the [`defineCommand()` options](/docs/api/crust#definecommandname-config-recipe) for aliases, custom usage, additional sections, and hiding commands from listings.
 
+</Step>
+<Step>
 ### Define the root
 
 <include lang="ts" meta='title="src/app.ts"'>
   ../../../examples/split-files/app.ts
 </include>
 
-Keep the root name, app-wide metadata, and [Extensions](/docs/guide/extensions) such as `help()` here.
+Set the CLI's name and description here, along with shared [Extensions](/docs/guide/extensions) such as `help()`.
 
+</Step>
+<Step>
 ### Compose and execute
 
 <include lang="ts" meta='title="src/cli.ts"'>
   ../../../examples/split-files/cli.ts
 </include>
 
-Use `execute()` in `cli.ts`; use [`run()` to capture values and errors](/docs/api/crust#runpath-input-io) in tests. Add every definition before the single `execute()` call.
+Add your commands before calling `.execute()`.
+
+```sh
+$ my-cli greet Ada
+Hello, Ada!
+```
+
+</Step>
+</Steps>
+
+## Unknown commands
+
+```sh
+$ tool deploy
+Error: Unknown command "deploy".
+$ echo $?
+1
+```
+
+The single-file `tool` example defines `build`, not `deploy`. Because `tool` has subcommands but no action of its own, an unrecognized name produces an error and exit code `1`.
+
+If the root has its own `.action()`, matching subcommands still take priority. Unmatched words are parsed as the root's [positional arguments](/docs/guide/inputs#arguments) instead.
