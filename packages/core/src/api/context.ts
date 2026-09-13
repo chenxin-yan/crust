@@ -66,6 +66,7 @@ type ValidateContextConfig<R extends ContextConfig> = {
 interface ContextSetupInput<OF extends FlagsDef = FlagsDef> extends InvocationIO {
 	readonly flags: InferFlags<OF>;
 	readonly ctx: ContextBag<ContextMap>;
+	readonly defer: (cleanup: () => void | PromiseLike<void>) => void;
 }
 
 export interface ContextInstance<
@@ -101,6 +102,11 @@ export interface ContextSetup<
 	readonly options: Options;
 	readonly flags: InferFlags<OF>;
 	readonly ctx: ContextBag<Deps>;
+	/**
+	 * Registers cleanup on the invocation's disposal stack: callbacks run after
+	 * post-run hooks in reverse registration order. Throws once setup has settled.
+	 */
+	readonly defer: (cleanup: () => void | PromiseLike<void>) => void;
 }
 
 export interface ContextFactory<
@@ -310,6 +316,13 @@ export interface DisposalScope {
 	defer(onDisposeAsync: () => void | PromiseLike<void>): void;
 }
 
+type DisposeCallback = () => void | PromiseLike<void>;
+
+// Untyped callers can still hand the fallback a non-function at runtime.
+function isDisposeCallback(value: DisposeCallback | undefined | null): value is DisposeCallback {
+	return typeof value === "function";
+}
+
 /**
  * Minimal `AsyncDisposableStack` stand-in for runtimes without the global
  * (Node 22): LIFO disposal of used resources and deferred callbacks,
@@ -323,18 +336,30 @@ export interface DisposalScope {
  */
 export class FallbackAsyncDisposableStack implements DisposalScope, AsyncDisposable {
 	#entries: (() => void | PromiseLike<void>)[] = [];
+	#disposed = false;
+
+	// Same class of error as the native stack, so a late registration fails loud
+	// on every runtime instead of silently leaking here.
+	#assertPending(): void {
+		if (this.#disposed) throw new ReferenceError("AsyncDisposableStack is already disposed");
+	}
 
 	use<T extends Disposable | AsyncDisposable>(value: T): T {
+		this.#assertPending();
 		const dispose = hasAsyncDispose(value) ? value[Symbol.asyncDispose] : value[Symbol.dispose];
 		this.#entries.push(() => dispose.call(value));
 		return value;
 	}
 
 	defer(onDisposeAsync: () => void | PromiseLike<void>): void {
+		this.#assertPending();
+		// Native rejects at registration; failing at teardown instead would hide the bug.
+		if (!isDisposeCallback(onDisposeAsync)) throw new TypeError("defer callback is not callable");
 		this.#entries.push(onDisposeAsync);
 	}
 
 	async [Symbol.asyncDispose](): Promise<void> {
+		this.#disposed = true;
 		const errors: unknown[] = [];
 		for (let index = this.#entries.length - 1; index >= 0; index--) {
 			try {
@@ -527,9 +552,21 @@ export function createContextResolver(
 						Object.keys(context.ownedFlags).map((flag) => [flag, validatedFlags?.[flag]]),
 					);
 					const value = await context.setup({
+						// Spread first: injected io is only typed as stdout/stderr, but runtime
+						// extras must not shadow the lifecycle fields below.
+						...io,
 						flags: ownedFlags,
 						ctx: makeBag(context.uses, current),
-						...io,
+						defer(cleanup) {
+							if (current.settled) {
+								throw new CrustError(
+									"DEFINITION",
+									`Context "${name}" cannot register cleanup after its setup has finished.`,
+									{ subject: "context", name, reason: "context-defer-after-setup" },
+								);
+							}
+							disposal.defer(cleanup);
+						},
 					});
 					registerDisposable(value, disposal, registered);
 					current.resolve(value);

@@ -31,6 +31,7 @@ describe("defineContext()", () => {
 				instance.setup({
 					flags: {},
 					ctx: {},
+					defer: () => {},
 					stdout: () => {},
 					stderr: () => {},
 				}),
@@ -49,6 +50,7 @@ describe("defineContext()", () => {
 				instance.setup({
 					flags: {},
 					ctx: {},
+					defer: () => {},
 					stdout: () => {},
 					stderr: () => {},
 				}),
@@ -1256,6 +1258,298 @@ describe("Context disposal", () => {
 	});
 });
 
+describe("Context setup defer()", () => {
+	const deferAfterSetupError = {
+		code: "DEFINITION",
+		message: 'Context "res" cannot register cleanup after its setup has finished.',
+		details: { subject: "context", name: "res", reason: "context-defer-after-setup" },
+	};
+
+	it("runs deferred cleanup after the action succeeds", async () => {
+		const log: string[] = [];
+		const res = defineContext("res", async ({ defer }) => {
+			await Promise.resolve();
+			defer(() => {
+				log.push("cleanup");
+			});
+			return "value";
+		});
+		await unwrap(
+			new Crust("cli")
+				.provide(res())
+				.action(async ({ ctx }) => {
+					await ctx.res;
+					log.push("run");
+				})
+				.run([]),
+		);
+		expect(log).toEqual(["run", "cleanup"]);
+	});
+
+	it("runs deferred cleanup after a failed action and rethrows the original error", async () => {
+		const log: string[] = [];
+		const boom = new Error("action failed");
+		const res = defineContext("res", ({ defer }) => {
+			defer(() => {
+				log.push("cleanup");
+			});
+			return "value";
+		});
+		const app = new Crust("cli").provide(res()).action(async ({ ctx }) => {
+			await ctx.res;
+			log.push("run");
+			throw boom;
+		});
+		await expect(app.run([])).resolves.toMatchObject({ status: "failed", error: boom });
+		expect(log).toEqual(["run", "cleanup"]);
+	});
+
+	it("runs multiple defers once each in reverse registration order", async () => {
+		const log: string[] = [];
+		const cleanup = () => {
+			log.push("same");
+		};
+		const res = defineContext("res", ({ defer }) => {
+			defer(() => {
+				log.push("first");
+			});
+			defer(cleanup);
+			defer(cleanup);
+			defer(() => {
+				log.push("last");
+			});
+			return "value";
+		});
+		await unwrap(
+			new Crust("cli")
+				.provide(res())
+				.action(async ({ ctx }) => {
+					await ctx.res;
+				})
+				.run([]),
+		);
+		expect(log).toEqual(["last", "same", "same", "first"]);
+	});
+
+	it("disposes the returned value before that setup's own defers", async () => {
+		const log: string[] = [];
+		const res = defineContext("res", ({ defer }) => {
+			defer(() => {
+				log.push("defer");
+			});
+			return {
+				[Symbol.dispose]() {
+					log.push("dispose");
+				},
+			};
+		});
+		await unwrap(
+			new Crust("cli")
+				.provide(res())
+				.action(async ({ ctx }) => {
+					await ctx.res;
+				})
+				.run([]),
+		);
+		expect(log).toEqual(["dispose", "defer"]);
+	});
+
+	it("runs defers registered before the setup throws", async () => {
+		const log: string[] = [];
+		const res = defineContext("res", ({ defer }) => {
+			defer(() => {
+				log.push("cleanup");
+			});
+			throw new Error("setup failed");
+		});
+		const app = new Crust("cli").provide(res()).action(async ({ ctx }) => {
+			await ctx.res;
+		});
+		await expect(unwrap(app.run([]))).rejects.toThrow("setup failed");
+		expect(log).toEqual(["cleanup"]);
+	});
+
+	it("rejects defer after the setup resolved", async () => {
+		let late: ContextSetup<undefined>["defer"] | undefined;
+		const res = defineContext("res", ({ defer }) => {
+			late = defer;
+			return "value";
+		});
+		await unwrap(
+			new Crust("cli")
+				.provide(res())
+				.action(async ({ ctx }) => {
+					await ctx.res;
+					expect(() => late!(() => {})).toThrow(expect.objectContaining(deferAfterSetupError));
+				})
+				.run([]),
+		);
+		expect(late).toBeDefined();
+	});
+
+	it("rejects defer after the setup rejected", async () => {
+		let late: ContextSetup<undefined>["defer"] | undefined;
+		const res = defineContext("res", ({ defer }) => {
+			late = defer;
+			throw new Error("setup failed");
+		});
+		const app = new Crust("cli").provide(res()).action(async ({ ctx }) => {
+			await ctx.res;
+		});
+		await expect(unwrap(app.run([]))).rejects.toThrow("setup failed");
+		expect(() => late!(() => {})).toThrow(expect.objectContaining(deferAfterSetupError));
+	});
+
+	it("awaits async defers, runs the rest when one rejects, and chains the errors", async () => {
+		const log: string[] = [];
+		const first = new Error("first failed");
+		const second = new Error("second failed");
+		const res = defineContext("res", ({ defer }) => {
+			defer(async () => {
+				await Promise.resolve();
+				log.push("first");
+				throw first;
+			});
+			defer(async () => {
+				// Slower than `first`: if callbacks ran concurrently, `first` would log first.
+				await new Promise((resolve) => setTimeout(resolve, 5));
+				log.push("second");
+				throw second;
+			});
+			return "value";
+		});
+		const app = new Crust("cli").provide(res()).action(async ({ ctx }) => {
+			await ctx.res;
+		});
+		// Bun has the native stack: the later-thrown error suppresses the earlier one.
+		await expect(app.run([])).resolves.toMatchObject({
+			status: "failed",
+			error: { error: first, suppressed: second },
+		});
+		expect(log).toEqual(["second", "first"]);
+	});
+
+	it("keeps the lifecycle defer when injected io carries an extra defer property", async () => {
+		const log: string[] = [];
+		const res = defineContext("res", ({ defer }) => {
+			defer(() => {
+				log.push("cleanup");
+			});
+			return "value";
+		});
+		// Structural typing lets a pre-declared io object smuggle extra keys past
+		// Partial<InvocationIO>; execute() spreads it through as-is (run() rebuilds it).
+		const io = { stdout: () => {}, stderr: () => {}, defer: () => log.push("hijacked") };
+		const app = new Crust("cli").provide(res()).action(async ({ ctx }) => {
+			await ctx.res;
+		});
+		expect(await app.execute({ argv: [], io })).toBe(0);
+		expect(log).toEqual(["cleanup"]);
+	});
+
+	it("skips setup and its defers for an .of() double", async () => {
+		const log: string[] = [];
+		const res = defineContext("res", ({ defer }) => {
+			log.push("setup");
+			defer(() => {
+				log.push("cleanup");
+			});
+			return "real";
+		});
+		await unwrap(
+			new Crust("cli")
+				.provide(res.of("fake"))
+				.action(async ({ ctx }) => {
+					expect(await ctx.res).toBe("fake");
+				})
+				.run([]),
+		);
+		expect(log).toEqual([]);
+	});
+
+	it("tears down in registration order when each setup acquires then defers", async () => {
+		const log: string[] = [];
+		const base = defineContext("base", ({ defer }) => {
+			defer(() => {
+				log.push("cleanup:base");
+			});
+			return "base";
+		});
+		const derived = defineContext("derived", { uses: [base] }, async ({ ctx, defer }) => {
+			await ctx.base;
+			defer(() => {
+				log.push("cleanup:derived");
+			});
+			return "derived";
+		});
+		// derived provided first, but base registers first, so base cleans up last
+		await unwrap(
+			new Crust("cli")
+				.provide(derived(), base())
+				.action(async ({ ctx }) => {
+					await ctx.derived;
+					log.push("run");
+				})
+				.run([]),
+		);
+		expect(log).toEqual(["run", "cleanup:derived", "cleanup:base"]);
+	});
+
+	it("tears down in registration order, not topology, when a setup defers before awaiting a dependency", async () => {
+		const log: string[] = [];
+		const base = defineContext("base", ({ defer }) => {
+			defer(() => {
+				log.push("cleanup:base");
+			});
+			return "base";
+		});
+		const derived = defineContext("derived", { uses: [base] }, async ({ ctx, defer }) => {
+			defer(() => {
+				log.push("cleanup:derived");
+			});
+			await ctx.base;
+			return "derived";
+		});
+		await unwrap(
+			new Crust("cli")
+				.provide(base(), derived())
+				.action(async ({ ctx }) => {
+					await ctx.derived;
+				})
+				.run([]),
+		);
+		// derived registered first, so its dependency is torn down before it
+		expect(log).toEqual(["cleanup:base", "cleanup:derived"]);
+	});
+
+	it("keeps defers from a flags-before-validation attempt and adds the retry's defers", async () => {
+		const log: string[] = [];
+		let attempts = 0;
+		const token = defineFlag("token", { type: "string" });
+		const auth = defineContext("auth", { flags: [token] }, ({ flags }) => flags.token);
+		const service = defineContext("service", { uses: [auth] }, async ({ ctx, defer }) => {
+			const attempt = ++attempts;
+			defer(() => {
+				log.push(`cleanup:${attempt}`);
+			});
+			return await ctx.auth;
+		});
+		const extension = defineExtension(defineExtensionId("consumer"), {
+			uses: [service],
+			hooks: { preRun: async (ctx) => void (await ctx.ctx.service.catch(() => undefined)) },
+		});
+		await unwrap(
+			new Crust("cli")
+				.provide(auth(), service())
+				.extend(extension)
+				.action(async ({ ctx }) => expect(await ctx.service).toBe("secret"))
+				.run([], { flags: { token: "secret" } }),
+		);
+		expect(attempts).toBe(2);
+		expect(log).toEqual(["cleanup:2", "cleanup:1"]);
+	});
+});
+
 // ────────────────────────────────────────────────────────────────────────────
 // FallbackAsyncDisposableStack (Node 22 lacks the AsyncDisposableStack global)
 // ────────────────────────────────────────────────────────────────────────────
@@ -1309,6 +1603,19 @@ describe("FallbackAsyncDisposableStack", () => {
 		};
 		await expect(run()).rejects.toThrow("boom");
 		expect(order).toEqual(["last", "first"]);
+	});
+
+	it("rejects use() and defer() after disposal like the native stack", async () => {
+		const disposal = new FallbackAsyncDisposableStack();
+		await disposal[Symbol.asyncDispose]();
+		expect(() => disposal.defer(() => {})).toThrow(ReferenceError);
+		expect(() => disposal.use({ [Symbol.dispose]() {} })).toThrow(ReferenceError);
+	});
+
+	it("rejects a non-callable defer at registration like the native stack", () => {
+		const disposal = new FallbackAsyncDisposableStack();
+		expect(() => disposal.defer(null as never)).toThrow(TypeError);
+		expect(() => new AsyncDisposableStack().defer(null as never)).toThrow(TypeError);
 	});
 });
 

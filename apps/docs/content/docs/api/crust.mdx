@@ -284,7 +284,7 @@ Declared availability is checked without setup. `.use()` retains factory referen
 
 A Context's top-level `flags` are installed as propagating flags on this builder and later-added descendants, without mutating the original definitions. Dependencies construct recursively on the first pull.
 
-Values implementing `Symbol.dispose` or `Symbol.asyncDispose` are disposed in reverse construction order after post-run hooks. Context names, dependencies, and owned-flag collisions are checked by TypeScript; dynamically assembled owned-flag collisions throw a `DEFINITION` error from `.provide()`. Lazy bag access retains runtime `DEFINITION` guards for missing providers on dynamically assembled paths, dependency cycles, and lifecycle misuse.
+Cleanup registered with setup's `defer(cleanup)` and values implementing `Symbol.dispose` or `Symbol.asyncDispose` run in reverse registration order after post-run hooks; a returned value registers when its setup succeeds, so it disposes before that setup's deferred callbacks. Calling `defer` after setup has settled throws a `DEFINITION` error. Context names, dependencies, and owned-flag collisions are checked by TypeScript; dynamically assembled owned-flag collisions throw a `DEFINITION` error from `.provide()`. Lazy bag access retains runtime `DEFINITION` guards for missing providers on dynamically assembled paths, dependency cycles, and lifecycle misuse.
 
 Dynamic same-name providers without owned-flag collisions use the last instance, while static duplicate names remain rejected. Overlapping owned flag names or aliases still throw when the instances share a Context name. Instances from `.of()` retain the factory's owned flags, so `.of()` does not bypass those collisions.
 
@@ -541,7 +541,7 @@ Both `.execute()` and `.run()` follow the same sequence. Steps 4 through 10 are 
 7. Construct declared Contexts when first pulled.
 8. Run the Command Action.
 9. Run Extension `postRun` hooks in reverse registration order, with the `completed`, `finished`, or `failed` outcome.
-10. Settle Context setup, then dispose constructed Contexts in reverse construction order.
+10. Settle Context setup, then run deferred cleanup and dispose constructed Contexts in reverse registration order.
 
 A failure in steps 4 through 8 still runs steps 9 and 10. See [propagation boundaries](/docs/api/errors#propagation-boundaries) for what each phase's failure becomes.
 
