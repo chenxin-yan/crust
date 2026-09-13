@@ -23,6 +23,8 @@ export const docs = defineDocs({
 export default defineConfig({
   plugins: [lastModified()],
   mdxOptions: {
+    // `npm` fences become npm/pnpm/yarn/bun tabs; one selection is shared and remembered site-wide.
+    remarkNpmOptions: { persist: { id: "package-manager" } },
     // Auto type table paths are relative to the MDX file that declares them.
     remarkPlugins: [[remarkAutoTypeTable, { generator: typeScriptGenerator }]],
     rehypeCodeOptions: {

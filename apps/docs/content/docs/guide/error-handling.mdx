@@ -1,99 +1,86 @@
 ---
-title: Error Handling
-description: Handle Crust failures, application errors, and cancellation.
+title: Error handling
+description: Handle application errors, validation failures, and cancellation.
 ---
 
-## CrustError
+Throw an `Error` with a message the user can act on. Crust prints the message and exits with status 1.
 
-Crust uses exactly four framework error codes:
+<include lang="ts">../../../examples/guide/error-handling-cli.ts</include>
 
-| Code                | Meaning                                                                                                 |
-| ------------------- | ------------------------------------------------------------------------------------------------------- |
-| `DEFINITION`        | A malformed dynamic definition or collision, recipe, Extension, Context, or documentation-section error |
-| `PARSE`             | Argv syntax, structured `run()` input binding, or built-in conversion failure                           |
-| `VALIDATION`        | Missing/invalid values or aggregated Standard Schema issues                                             |
-| `COMMAND_NOT_FOUND` | An unknown command under the [routing rules](/docs/guide/subcommands#unknown-commands)                  |
-
-```ts
-import { CrustError } from "@crustjs/core";
-
-const outcome = await app.run(path, input);
-if (outcome.status === "failed") {
-  const { error } = outcome;
-  if (error instanceof CrustError && error.is("VALIDATION")) {
-    console.error(error.details?.issues);
-  }
-}
+```sh
+$ deploy
+Error: Could not connect to api.example.com. Check your network connection.
+$ echo $?
+1
 ```
 
-A `CrustError` exposes `code`, `message`, `details`, optional `cause`, `.is(code)`, and `toJSON()`.
+## What your user sees
 
-## Trust boundaries
-
-Crust checks developer-authored definitions at compile time through TypeScript. `FIX_*` brands report malformed definitions and collisions at their call sites. Runtime checks cover empty or reserved flag spellings, flag and Extension-flag collisions, duplicate or misplaced arguments, and duplicate `.add()` command names, throwing `DEFINITION` at composition or preparation. Dynamic Extension commands instead replace commands with the same canonical name. Alias grammar and actual sibling collisions are also checked when consumed.
-
-Argv is untrusted and remains runtime-validated. Invalid tokens, choices, and built-in conversions throw `PARSE`; missing values and Standard Schema issues throw `VALIDATION`. Structured `run()` binding can also return a failed outcome carrying `PARSE`, for example when a later argument is supplied after an omitted earlier one, or an untyped caller supplies an unknown argument or flag name. Declared Context dependencies are checked statically; lazy bag access retains runtime `DEFINITION` guards for missing providers on dynamically assembled paths, dependency cycles, and lifecycle misuse. Materialization retains runtime checks that a command recipe returns the seeded builder and does not register nested Extensions, because recipe behavior is dynamic. Snapshot preparation also retains runtime checks for authored and Extension-contributed documentation sections.
-
-`COMMAND_NOT_FOUND` details contain `input`, `available`, `commandPath`, and `parentCommand`, a readonly serializable Command Snapshot. `available` contains only visible child command names; hidden commands remain invocable but are omitted from user-facing choices.
-
-## Application errors pass through
-
-Errors from Command Actions and Context construction are not converted to `CrustError`. A single disposal failure after an otherwise successful invocation is likewise retained unchanged in the failed outcome. Disposal stacks combine multiple cleanup failures as a native `SuppressedError` chain or, on the Node 22 fallback, an `AggregateError`. If invocation and disposal both fail, `await using` throws a `SuppressedError` with the disposal failure in `.error` and the invocation failure in `.suppressed`. See [Error flow](/docs/guide/lifecycle#error-flow).
-
-When cleanup succeeds, the original application error reaches the caller:
-
-```ts
-const failure = new Error("service unavailable");
-const app = new Crust("app").action(() => {
-  throw failure;
-});
-
-const outcome = await app.run([]);
-if (outcome.status === "failed") console.assert(outcome.error === failure);
+```sh
+$ greet
+Error: Missing required flag "--name"
+$ echo $?
+1
 ```
 
-Use ordinary application error classes when callers need to distinguish domain failures.
+Crust uses one terminal failure format whether the error comes from your code or from its checks.
 
-## Terminal presentation
+| Failure            | Stderr                                                                                                                                                                                                | Exit code |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------: |
+| Your `Error`       | `Error: Could not connect to api.example.com. Check your network connection.`                                                                                                                         |         1 |
+| A Crust check      | Missing flag: `Error: Missing required flag "--name"`<br />Bad choice: `Error: Invalid value "Linus" for --name. Expected one of: Ada, Grace`<br />Unknown command: `Error: Unknown command "stats".` |         1 |
+| Ctrl+C in a prompt | Nothing                                                                                                                                                                                               |       130 |
 
-Extension `onError` hooks present failures reached during `execute()` dispatch:
+## Let Crust validate
 
-<include lang="ts">../../../examples/extensions/hooks.ts#service-errors</include>
+<include lang="ts">../../../examples/guide/error-handling.ts#validation</include>
 
-A hook returns `true` after rendering, or a falsy value to delegate to the next hook. Core's default renderer is last. Core establishes a nonzero status before invoking the chain, so presentation cannot turn a failure into success.
+Prefer `required: true` to checking for a missing value in the Command Action. The declaration keeps help text, inferred types, and terminal messages in sync. Put allowed values in `choices` for the same reason.
 
-Failures before dispatch bypass the hook chain. Extension application and command-tree materialization failures render directly to `io.stderr`; snapshot preparation and build-hook failures are printed directly.
+## Fail from anywhere
 
-`run()` never invokes these hooks. It returns the invocation or combined cleanup failure in a `failed` outcome, leaving rendering and exit status to its caller.
+<include lang="ts">../../../examples/guide/error-handling.ts#cleanup</include>
+
+```sh
+$ deploy
+Error: Deployment service is unavailable. Try again later.
+Closed database
+$ echo $?
+1
+```
+
+An `Error` from the helper reaches the same renderer as one from a Command Action. Context disposal still runs after failure, so the Command Action does not need `try`/`finally` for Context cleanup.
+
+Do not call `process.exit()`. It stops the process before Crust can run cleanup.
+
+Do not catch an error just to print it. That hides the failure from `run()` and can leave the terminal exit code at 0.
 
 ## Cancellation
 
-Core treats any `Error` whose `name` is `"AbortError"` as cancellation. This includes the `DOMException` thrown by prompts:
+<include lang="ts">../../../examples/guide/error-handling.ts#cancellation</include>
 
-```ts
-const outcome = await app.run(path, input);
-if (outcome.status === "failed") {
-  const { error } = outcome;
-  if (error instanceof Error && error.name === "AbortError") {
-    return;
-  }
-  throw error;
-}
+```sh
+$ scaffold
+? Project name? ^C
+$ echo $?
+130
 ```
 
-`execute()` sets `process.exitCode` to `130` and offers the `AbortError` to Extension `onError` hooks, so an application can render a cancellation message in one place:
+Ctrl+C in a prompt prints no error and exits with status 130. To cancel from your own code, throw `new DOMException("Cancelled", "AbortError")`. Put file writes and other side effects after prompts so cancellation leaves nothing to undo.
 
-```ts
-const cancelMessage = defineExtension(defineExtensionId("cancel-message"), {
-  hooks: {
-    onError(error, ctx) {
-      if (error instanceof Error && error.name === "AbortError") {
-        ctx.stderr("Operation cancelled");
-        return true;
-      }
-    },
-  },
-});
+## Customize the message
+
+<include lang="ts">../../../examples/guide/error-handling.ts#custom-message</include>
+
+Extending the root with `configErrors` adds a hint for this known error class; returning `true` prevents the default renderer from printing it again. [`didYouMean()`](/docs/modules/extensions/did-you-mean) is the built-in example. See [Extension hooks](/docs/api/types#extensionhooks) for the hook contract.
+
+```text
+Error: Config file not found.
+Hint: Run init to create the config file.
 ```
 
-When no hook claims it, cancellation stays silent — there is no default rendering. `run()` returns the same exception in the `failed` branch unless disposal also fails.
+## In tests
+
+<include lang="ts">../../../examples/guide/error-handling.ts#tests</include>
+
+`run()` hands your `Error` back unchanged in a failed outcome; `captureExecute()` from [`@crustjs/testing`](/docs/guide/testing) shows what the terminal user would see. Errors raised by Crust itself are `CrustError` values; narrow them with `.is(code)` as shown in the [error reference](/docs/api/errors#codes).

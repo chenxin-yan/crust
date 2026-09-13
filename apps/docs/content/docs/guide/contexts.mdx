@@ -1,109 +1,93 @@
 ---
 title: Contexts
-description: Define lazy, typed dependencies with build-time wiring checks and native cleanup.
+description: Supply dependencies to commands with lazy setup, automatic cleanup, and test replacements.
 ---
 
-A Context is a named dependency. `defineContext()` returns a factory; invoke it for `.provide()`, then await its property on `ctx`.
+A Context is a named dependency, such as an API client or database connection, that the app creates and commands consume. This is dependency injection: commands declare what they need, the app decides how to build it, and Crust runs setup lazily and cleans up afterwards.
 
-<include lang="ts">../../../examples/guide/contexts.ts</include>
+Reach for a Context when several commands share a service, setup should run only when used, a resource must be released afterwards, or you want to swap in a fake for tests. For stateless helpers, a plain import is enough.
 
-Each property is lazy and memoized per invocation: unused providers do not run setup, and repeated or concurrent accesses return the same value. Accessing or destructuring a property starts construction, so destructure only dependencies you intend to construct eagerly.
+## Define and provide
 
-## Owned flags
+<include lang="ts" meta='title="status.ts"'>
+  ../../../examples/guide/contexts-provide.ts
+</include>
 
-A Context can own the flags used to construct its value. Attaching it with `.provide()` installs those flags on the provider command and later-added descendants. Setup receives the validated owned slice only.
-
-```ts
-import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
-
-const apiKey = defineFlag("api-key", { type: "string" });
-const api = defineContext("api", { flags: [apiKey] }, ({ flags }) => ({
-  get: (path: string) => `${flags["api-key"] ?? "anonymous"}:${path}`,
-}));
-
-const deploy = defineCommand("deploy", (command) =>
-  command.use(api).action(async ({ ctx, stdout }) => {
-    stdout((await ctx.api).get("/deploy"));
-  }),
-);
-
-const app = new Crust("app").provide(api()).add(deploy);
+```sh
+$ status
+https://api.example.com/status
 ```
 
-Both `app --api-key secret deploy` and `app deploy --api-key secret` work. Hooks run before validation, so a `preRun` hook cannot access a Context that owns flags, directly or transitively. Access it from the action or from `postRun` after validation; `ctx.finish()` skips validation, so its post-run path has the same restriction.
+`defineContext` returns a factory. `api()` creates an instance and `.provide()` attaches it to the app. In the action, `ctx.api` is the value setup returned; it is always awaited because setup may be asynchronous.
 
-## Context dependencies
+## Use from a reusable command
 
-Declare setup dependencies once with `uses`. Setup receives a bag containing exactly that declared dependency closure; undeclared property access is a type error.
+<include lang="ts" meta='title="app.ts"'>
+  ../../../examples/guide/contexts-use.ts#use
+</include>
 
-```ts
-const config = defineContext("config", () => ({ url: "postgres://localhost/app" }));
-const database = defineContext("db", { uses: [config] }, async ({ ctx }) => {
-  const cfg = await ctx.config;
-  return { query: (sql: string) => `${sql} on ${cfg.url}` };
-});
-
-new Crust("app").provide(database(), config());
+```sh
+$ app health
+https://api.example.com/health
 ```
 
-Dependencies remain lazy: `config` starts only if setup accesses `ctx.config`. A `.provide()` call verifies the transitive dependency closure at the type level: a dependency must be provided on the path (`FIX_MISSING_DEPENDENCY`) and the provided value must satisfy the declared type (`FIX_DEPENDENCY_TYPE`), including providers with a broad `string` name whose value type is known. Dependencies may appear in either order within one call; across calls, provide dependencies first so the next call can be checked.
+`.use(api)` declares that the [reusable command](/docs/guide/commands) needs `api`; it creates nothing. The app supplies the instance with `.provide(api())` and then adds the command. Reversing that order is a type error: `Uses Context "api" which is not provided`.
 
-Reusable commands declare demand with `.use(...factories)` — `.use(logger)` demands (a factory), `.provide(logger())` supplies (an instance) — and Extensions declare theirs with the `uses` config field. `.add()` and `.extend()` validate those declarations against Contexts already provided on the builder. Put `.provide()` or provider `.extend()` calls before `.add()`.
+## Setup and cleanup
 
-A later `.provide()` does not backfill already-added children. Extension `provides` differ: `.extend()` installs them and their owned flags across the existing tree, while preserving more-specific local providers on descendants. Later-added descendants inherit them too. This runtime scope does not relax the composition-time dependency checks above.
+<include lang="ts" meta='title="work.ts"'>
+  ../../../examples/guide/contexts-lifecycle.ts
+</include>
 
-## Dynamic definitions and attachment
-
-Use `defineContext(name, config, setup)` for literal or dynamic names and configuration. Observable local facts and destination relations are checked automatically. Context setup values remain TypeScript-owned, not runtime-decoded.
-
-```ts
-import { Crust, defineCommand, defineContext } from "@crustjs/core";
-
-const aliases: string[] = ["t"];
-const auth = defineContext(
-  "auth",
-  {
-    flags: [{ name: "token", type: "string", aliases }],
-  },
-  () => ({ ok: true }),
-);
-const child = defineCommand("child", (command) => command.use(auth));
-const app = new Crust("cli").provide(auth()).add(child);
+```sh
+$ work ping
+pong
+$ work query
+database opened
+select 1: ok
+database closed
+$ work fail
+database opened
+Error: query failed
+database closed
 ```
 
-`.provide(...instances)` validates declared availability and flag relations against the destination. `.add(...definitions)` validates sibling spellings, inherited owned flags, and materialized demands. Neither runs setup or moves invocation-dependent cycle detection earlier. Local validity is not reusable proof for another destination.
+Setup runs the first time a command reads `ctx.database`, so `ping` never opens it. Each invocation gets its own value. When the value has `[Symbol.dispose]` or `[Symbol.asyncDispose]`, Crust calls it after the action, including when the action throws.
 
-Factories and instances must originate from `defineContext()`. Core retains their immutable defining data privately: spreading an instance and overwriting public `ownedFlags`, `uses`, or `setup` does not redefine what Core consumes. Use a new definition or `.of()` instead. Attachment also rejects a public name that contradicts the defining instance. Structural arrays are copied; Context options and produced values are not cloned or frozen.
+## Flags owned by a Context
 
-## Test doubles
+<include lang="ts" meta='title="app.ts"'>
+  ../../../examples/guide/contexts-flags.ts
+</include>
 
-Every factory has `.of(value)`, which provides a precomputed value with the same name and type. A double has no dependency graph and retains the factory's owned flags.
-
-```ts
-const fake = database.of({ query: (sql) => `fake: ${sql}` });
-const app = new Crust("app").provide(fake).action(async ({ ctx, stdout }) => {
-  stdout((await ctx.db).query("select 1"));
-});
+```sh
+$ app deploy
+https://api.example.com/deploy
+$ app deploy --api-url https://staging.example.com
+https://staging.example.com/deploy
 ```
 
-## Cleanup
+When a flag configures the dependency rather than the command, list it in the Context's `flags`. `.provide()` installs it on that command and every command added below, and setup receives the validated value. See [`.provide()`](/docs/api/crust#provideinstances) for collision rules.
 
-Put cleanup on the constructed value using `Symbol.dispose` or `Symbol.asyncDispose`. Values are disposed in reverse construction order after all `postRun` hooks, on success or failure.
+## Contexts that use other Contexts
 
-```ts
-const database = defineContext("db", async ({ options }: { options: { url: string } }) => {
-  const connection = await connect(options.url);
-  return {
-    query: (sql: string) => connection.query(sql),
-    async [Symbol.asyncDispose]() {
-      await connection.close();
-    },
-  };
-});
+<include lang="ts" meta='title="app.ts"'>
+  ../../../examples/guide/contexts-uses.ts
+</include>
+
+```sh
+$ app regions
+https://eu.api.example.com/regions
 ```
 
-## Collisions
+List the factories a Context needs in `uses` and read them from `ctx` in setup, the same way an action does. Dependencies are lazy too: `config` is built only because `api` reads it. Provide every instance; order within one `.provide()` call does not matter.
 
-Context names, dependencies, and owned flag spellings are checked statically. Known duplicate local providers within one `.provide()` call and along an unconditional builder chain remain compile errors to protect typed consumers; conditional builder branches are not tracked. Supported dynamic replacements do not relax callback demands. Dynamically assembled owned-flag collisions throw a `DEFINITION` error from `.provide()` rather than overwriting an existing flag. Dynamic same-name replacement without owned-flag collisions remains last-write-wins. Overlapping canonical names or aliases still reject, even when both instances have the same Context name; `.of()` does not bypass owned-flag collisions. Missing providers, cycles, and lifecycle misuse retain runtime `CrustError` guards because they depend on the invocation path.
+## Replace a Context in tests
 
-Context callback values remain TypeScript-owned even in dynamic collections: a same-name provider must satisfy each applicable declared value contract. Extension hook demands apply on every command path, so statically named incompatible or unknown descendant replacements are rejected in either attachment order; fully open unknown-valued collections have no provable mismatch and opt out. Compatible replacements, and unrelated descendant replacements with no applicable demand, remain supported. Core checks missing names at consumption without invoking setup or reflecting callback result types.
+<include lang="ts" meta='title="work.test.ts"'>
+  ../../../examples/guide/contexts-doubles.ts
+</include>
+
+`database.of(value)` builds an instance that returns `value` without running setup, so the output has no `database opened` line. It keeps the Context's name and value type, which is why `query` is unchanged and the fake needs the same `[Symbol.dispose]`. See [Testing](/docs/guide/testing) for `run()`.
+
+For the full contracts, see [Context types](/docs/api/types#context-types) and [`.use()`](/docs/api/crust#usefactories).

@@ -3,19 +3,13 @@
   "icon": "Book",
   "pages": [
     "commands",
-    "arguments",
-    "flags",
-    "types",
-    "subcommands",
-    "extensions",
+    "arguments-and-flags",
+    "values-and-validation",
     "contexts",
-    "lifecycle",
-    "split-files",
-    "environment",
-    "runtimes",
+    "extensions",
     "error-handling",
-    "build",
-    "development",
-    "testing"
+    "testing",
+    "runtime-support",
+    "build-and-distribution"
   ]
 }

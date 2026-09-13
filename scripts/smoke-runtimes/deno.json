@@ -12,6 +12,7 @@
 		"@crustjs/skills": "../../packages/skills/dist/index.js",
 		"@crustjs/store": "../../packages/store/dist/index.js",
 		"@crustjs/style": "../../packages/style/dist/index.js",
-		"@crustjs/testing": "../../packages/testing/dist/index.js"
+		"@crustjs/testing": "../../packages/testing/dist/index.js",
+		"@crustjs/testing/interactive": "../../packages/testing/dist/interactive.js"
 	}
 }

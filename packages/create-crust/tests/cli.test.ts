@@ -2,6 +2,7 @@ import { afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import corePackage from "../../core/package.json";
 import crustPackage from "../../crust/package.json";
@@ -20,9 +21,9 @@ function makeTempRoot(label: string): string {
 
 async function runCreateCrust(
 	args: string[],
-	options?: { env?: Record<string, string>; cwd?: string },
+	options?: { env?: Record<string, string>; cwd?: string; entrypoint?: string },
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
-	const proc = Bun.spawn(["node", builtCliPath, ...args], {
+	const proc = Bun.spawn(["node", options?.entrypoint ?? builtCliPath, ...args], {
 		cwd: options?.cwd ?? packageRoot,
 		env: {
 			...process.env,
@@ -93,6 +94,30 @@ describe("create-crust CLI", () => {
 		expect(readFileSync(join(projectDir, "README.md"), "utf-8")).toContain("# my-cli");
 		expect(existsSync(join(projectDir, "node_modules"))).toBe(false);
 		expect(existsSync(join(projectDir, ".git"))).toBe(false);
+	}, 30_000);
+
+	it("finds its templates when launched through a .bin shim in another package root", async () => {
+		// npx and bun x run the CLI via <cache>/node_modules/.bin/create-crust, so process.argv[1]
+		// walks up to the cache's package.json, not to create-crust's own package root.
+		const tempRoot = makeTempRoot("create-crust-shim");
+		const binDir = join(tempRoot, "node_modules", ".bin");
+		mkdirSync(binDir, { recursive: true });
+		writeFileSync(join(tempRoot, "package.json"), '{"name":"launcher-cache"}', "utf-8");
+		const shim = join(binDir, "create-crust.mjs");
+		writeFileSync(shim, `await import(${JSON.stringify(pathToFileURL(builtCliPath).href)});\n`);
+		const projectDir = join(tempRoot, "my-cli");
+
+		const result = await runCreateCrust(
+			[projectDir, "--distribution", "binary", "--no-install", "--no-git"],
+			{ cwd: tempRoot, entrypoint: shim },
+		);
+
+		expect(result.stderr).not.toContain("Template directory");
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("Created my-cli!");
+		expect(existsSync(join(projectDir, "src", "cli.ts"))).toBe(true);
+		const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf-8"));
+		expect(pkg.scripts.dev).toBe("bun run src/cli.ts");
 	}, 30_000);
 
 	it("scaffolds the runtime distribution through the real CLI", async () => {

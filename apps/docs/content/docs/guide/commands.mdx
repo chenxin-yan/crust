@@ -1,88 +1,101 @@
 ---
 title: Commands
-description: Define immutable, typed commands and Command Actions.
+description: Define commands in one file or split them into modules.
 ---
 
-import { Callout } from "fumadocs-ui/components/callout";
+import { Step, Steps } from "fumadocs-ui/components/steps";
 
-A command combines metadata, inputs, dependencies, and one Command Action.
+Create a CLI with `new Crust(name)`, define what it does with `.action()`, and call `.execute()` to run it.
 
-```ts
-import { Crust } from "@crustjs/core";
+<include lang="ts" meta='title="src/cli.ts"'>
+  ../../../examples/guide/hello.ts
+</include>
 
-const app = new Crust("greet", { description: "Print a greeting" })
-  .args({ name: "name", type: "string", required: true })
-  .flags({ name: "loud", type: "boolean", short: "l" })
-  .action(({ args, flags, stdout }) => {
-    const text = `Hello, ${args.name}!`;
-    stdout(flags.loud ? text.toUpperCase() : text);
-  });
-
-await app.execute();
+```sh
+$ bun src/cli.ts
+Hello!
 ```
 
-## Immutable builders
+Choose how to add subcommands based on your app's size and how you want to organize and reuse its commands:
 
-Every builder method returns a new `Crust` value. Keep the returned value:
+- **Define inline with `.command()`** for small CLIs or short subcommands used only by this app.
+- **Use `defineCommand()` with `.add()`** when a growing CLI needs separate command files or reusable definitions.
 
-```ts
-const base = new Crust("app", { description: "My app" });
-const withFlags = base.flags({ name: "verbose", type: "boolean" });
+You can use both approaches in the same app.
+
+## Grow in one file
+
+Keep small subcommands alongside the root with `.command()`. Its callback defines the subcommand's flags and action.
+
+<include lang="ts" meta='title="src/cli.ts"'>
+  ../../../examples/guide/commands.ts
+</include>
+
+```sh
+$ tool build --minify
+minify: true
 ```
 
-Static root metadata belongs in the constructor. Subcommand metadata belongs in `defineCommand()` config:
+Here, `tool build --minify` runs the `build` action with `flags.minify` set to `true`. Add more `.command()` calls before `.execute()` as your CLI grows.
 
-```ts
-import { defineCommand } from "@crustjs/core";
+## Split across files
 
-const greet = defineCommand(
-  "greet",
-  { description: "Print a greeting", aliases: ["hello"] },
-  (command) => command.action(() => {}),
-);
+```text
+src/
+├── commands/greet.ts
+├── app.ts
+└── cli.ts
 ```
 
-Fluent methods remain immutable, permitting safe composition while preserving input inference.
+Move a subcommand into its own file with `defineCommand()`, then attach it with `.add()`. Keep shared app setup in `app.ts` and the single `.execute()` call in `cli.ts`.
 
-## Command Action context
+<Steps>
+<Step>
+### Define a command
 
-`.action()` receives a typed `CrustCommandContext`:
+<include lang="ts" meta='title="src/commands/greet.ts"'>
+  ../../../examples/split-files/commands/greet.ts
+</include>
 
-<auto-type-table
-  path="../../../../../packages/core/src/command/crust.ts"
-  name="CrustCommandContext"
-/>
+Importing a command definition does not run its action. The optional second argument supplies metadata, such as the description shown in help. See the [`defineCommand()` options](/docs/api/crust#definecommandname-config-recipe) for aliases, custom usage, additional sections, and hiding commands from listings.
 
-```ts
-const command = new Crust("inspect").action(({ command, stdout }) => {
-  stdout(command.meta.name);
-});
+</Step>
+<Step>
+### Define the root
+
+<include lang="ts" meta='title="src/app.ts"'>
+  ../../../examples/split-files/app.ts
+</include>
+
+Set the CLI's name and description here, along with shared [Extensions](/docs/guide/extensions) such as `help()`.
+
+</Step>
+<Step>
+### Compose and execute
+
+<include lang="ts" meta='title="src/cli.ts"'>
+  ../../../examples/split-files/cli.ts
+</include>
+
+Add your commands before calling `.execute()`.
+
+```sh
+$ my-cli greet Ada
+Hello, Ada!
 ```
 
-Throw ordinary errors from Command Actions. Crust does not wrap them.
+</Step>
+</Steps>
 
-## Invocation
+## Unknown commands
 
-Use `execute()` at the terminal boundary:
-
-```ts
-await app.execute();
+```sh
+$ tool deploy
+Error: Unknown command "deploy".
+$ echo $?
+1
 ```
 
-Use `run()` from tests or another program:
+The single-file `tool` example defines `build`, not `deploy`. Because `tool` has subcommands but no action of its own, an unrecognized name produces an error and exit code `1`.
 
-```ts
-const outcome = await app.run([], { args: { name: "Ada" } });
-if (outcome.status === "failed") throw outcome.error;
-console.log(outcome.stdout);
-```
-
-`run()` is quiet and captures `stdout` and `stderr` on every outcome. `completed` carries the action result, `finished` names the finishing Extension, and `failed` carries the original escaping failure, including [combined invocation and disposal failures](/docs/guide/lifecycle#error-flow). Always inspect the outcome so action errors are not silently ignored. `execute()` streams output, presents errors through Extension `onError` hooks, sets `process.exitCode`, and returns an exit code. See [Execution Model](/docs/guide/lifecycle).
-
-A parent with a Command Action treats unmatched argv command tokens as positional arguments. Typed `run()` resolves a failed outcome carrying `COMMAND_NOT_FOUND` for unknown path segments. See [Unknown commands](/docs/guide/subcommands#unknown-commands).
-
-<Callout type="info">
-  A command without a Command Action is valid when it owns subcommands. Invoking it directly
-  resolves to `{ status: "completed", result: undefined }`; register the `help()` Extension to
-  present the container's help instead.
-</Callout>
+If the root has its own `.action()`, matching subcommands still take priority. Unmatched words are parsed as the root's [positional arguments](/docs/guide/arguments-and-flags#arguments) instead.

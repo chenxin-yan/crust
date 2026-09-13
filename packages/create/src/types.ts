@@ -19,9 +19,9 @@ export interface ScaffoldOptions {
 	/**
 	 * Template directory source.
 	 *
-	 * - `string` absolute path: used as-is
-	 * - `string` relative path: resolved from the nearest package root of `process.argv[1]`
-	 * - `URL`: must be a `file:` URL (for module-relative templates)
+	 * - `URL`: `file:` URL. Use `new URL("../templates/base", import.meta.url)` for
+	 *   templates shipped inside the generator package; the module URL anchors the path.
+	 * - `string`: filesystem path resolved from the current working directory, like `dest`
 	 */
 	readonly template: string | URL;
 

@@ -1,7 +1,14 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
-
-import { resolveSourceDir } from "@crustjs/utils/source";
+import {
+	existsSync,
+	lstatSync,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import type { ScaffoldOptions, ScaffoldResult } from "./types.ts";
 
@@ -74,9 +81,9 @@ function isNonEmptyDir(dirPath: string): boolean {
  * and dotfile renaming.
  *
  * Template resolution:
- * - `string` absolute paths are used as-is
- * - `string` relative paths resolve from the nearest package root of `process.argv[1]`
- * - `URL` templates must be `file:` URLs (for module-relative templates)
+ * - `string` paths resolve from the current working directory, exactly like `dest`
+ * - `URL` templates must be `file:` URLs; use `new URL("../templates/base", import.meta.url)`
+ *   for templates shipped inside the generator package
  *
  * Call `scaffold()` multiple times to layer/compose templates — for example,
  * a base template followed by a TypeScript-specific overlay.
@@ -102,7 +109,7 @@ function isNonEmptyDir(dirPath: string): boolean {
 export async function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult> {
 	const { template, dest, context, conflict = "abort" } = options;
 
-	const templateDir = resolveSourceDir(template);
+	const templateDir = template instanceof URL ? fileURLToPath(template) : resolve(template);
 	const destDir = resolve(dest);
 
 	if (!existsSync(templateDir)) {
@@ -124,14 +131,16 @@ export async function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult
 		);
 	}
 
-	const templateFiles = readdirSync(templateDir, { recursive: true, withFileTypes: true })
-		.filter((entry) => entry.isFile())
-		.map((entry) => join(entry.parentPath, entry.name));
+	// Relative string listing, not Dirents: Yarn PnP's zip filesystem reports Dirent.parentPath
+	// as ".", which would make every template file resolve outside the destination.
+	// lstat keeps symlinks excluded, matching the former Dirent.isFile() filter.
+	const templateFiles = readdirSync(templateDir, { recursive: true, encoding: "utf8" }).filter(
+		(relFromTemplate) => lstatSync(join(templateDir, relFromTemplate)).isFile(),
+	);
 	const writtenFiles: string[] = [];
 
-	for (const absolutePath of templateFiles) {
-		// Compute relative path from template root
-		const relFromTemplate = relative(templateDir, absolutePath);
+	for (const relFromTemplate of templateFiles) {
+		const absolutePath = join(templateDir, relFromTemplate);
 
 		// Apply dotfile renaming convention
 		const destRelPath = renameDotfile(relFromTemplate);

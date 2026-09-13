@@ -29,6 +29,10 @@
 		".": {
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
+		},
+		"./interactive": {
+			"types": "./dist/interactive.d.ts",
+			"import": "./dist/interactive.js"
 		}
 	},
 	"publishConfig": {
@@ -52,11 +56,13 @@
 	},
 	"peerDependencies": {
 		"@crustjs/core": "workspace:^",
-		"@crustjs/progress": "workspace:0.x",
 		"@crustjs/prompts": "workspace:0.x",
 		"typescript": "^7.0.0"
 	},
 	"peerDependenciesMeta": {
+		"@crustjs/prompts": {
+			"optional": true
+		},
 		"typescript": {
 			"optional": true
 		}

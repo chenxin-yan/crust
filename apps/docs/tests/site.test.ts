@@ -3,6 +3,9 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 import { Glob, plugin } from "bun";
+import { remarkNpm } from "fumadocs-core/mdx-plugins";
+
+import docsConfig from "../source.config";
 
 // Keep Fumadocs URL generation real without compiling every MDX page.
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Adapt the Vite-only collection boundary; the actual Fumadocs loader still resolves every page.
@@ -34,7 +37,7 @@ plugin({
 });
 
 const { Route: sitemap } = await import("../src/routes/sitemap[.]xml");
-const { Route: landing } = await import("../src/routes/index");
+const { Route: landing, SCAFFOLD_COMMANDS } = await import("../src/routes/index");
 const { source } = await import("../src/lib/source");
 const { absoluteUrl } = await import("../src/lib/seo");
 
@@ -78,3 +81,44 @@ it("landing highlights the checked greeting example", async () => {
   const example = await readFile(new URL("../examples/landing/greet.ts", import.meta.url), "utf8");
   expect(code).toBe(example.trimEnd());
 }, 10000);
+
+it("landing scaffold tabs match the Quick Start `npm` fence and share its group", async () => {
+  const quickStart = await readFile(
+    new URL("../content/docs/quick-start.mdx", import.meta.url),
+    "utf8",
+  );
+  const scaffoldLine = /```npm\n(.*)\n/.exec(quickStart)?.[1];
+  expect(scaffoldLine).toBe(SCAFFOLD_COMMANDS.npm);
+
+  // The mdast subtree, typed only as far as this test reads it.
+  interface Node {
+    type: string;
+    lang?: string;
+    name?: string;
+    value?: string;
+    attributes?: { type: string; name: string; value: unknown }[];
+    children?: Node[];
+  }
+  const tree: Node = {
+    type: "root",
+    children: [{ type: "code", lang: "npm", value: scaffoldLine }],
+  };
+  // Same transform and options the docs build applies to that fence.
+  const remarkNpmOptions = { persist: { id: "package-manager" } };
+  expect(docsConfig.mdxOptions).toMatchObject({ remarkNpmOptions });
+  await remarkNpm(remarkNpmOptions)(tree as never, {} as never, () => {});
+  const attribute = (node: Node, name: string) =>
+    node.attributes?.find((entry) => entry.type === "mdxJsxAttribute" && entry.name === name)
+      ?.value;
+  const tabs = tree.children?.[0];
+  expect(tabs?.name).toBe("CodeBlockTabs");
+  expect(tabs && attribute(tabs, "groupId")).toBe("package-manager");
+  const commands = Object.fromEntries(
+    (tabs?.children ?? []).flatMap((child) =>
+      child.name === "CodeBlockTab"
+        ? [[attribute(child, "value"), child.children?.[0]?.value]]
+        : [],
+    ),
+  );
+  expect(commands).toEqual(SCAFFOLD_COMMANDS);
+});

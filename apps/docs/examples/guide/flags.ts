@@ -1,10 +1,9 @@
 import { Crust } from "@crustjs/core";
 
-const command = new Crust("serve")
-  .flags(
-    { name: "port", type: "number", default: 3000, short: "p" },
-    { name: "verbose", type: "boolean", short: "v" },
-  )
-  .action(({ flags, stdout }) => stdout(`${flags.port} ${flags.verbose ?? false}`));
+const serve = new Crust("serve")
+  .flags({ name: "color", type: "boolean" }, { name: "port", type: "number" })
+  .action(({ flags, stdout }) => {
+    stdout(`color=${String(flags.color)} port=${String(flags.port)}`);
+  });
 
-await command.execute();
+await serve.execute();

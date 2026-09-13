@@ -1,6 +1,6 @@
 import { Crust, defineCommand } from "@crustjs/core";
 
-import { runInteractive } from "./index.ts";
+import { runInteractive } from "./interactive.ts";
 
 // Compile-time regression checks; intentionally never invoked.
 // preserves command, argument, and flag types from the application

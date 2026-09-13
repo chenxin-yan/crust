@@ -1,44 +1,163 @@
 ---
 title: Quick Start
-description: Build and run a typed Crust command.
+description: Scaffold, run, and extend a typed Crust CLI.
 icon: Rocket
 ---
 
-## Create a project
+import { Callout } from "fumadocs-ui/components/callout";
+import { File, Files, Folder } from "fumadocs-ui/components/files";
+import { Step, Steps } from "fumadocs-ui/components/steps";
 
-```sh
-bun create crust my-cli
+## Create a new project
+
+<Steps>
+<Step>
+### Create a project
+
+```npm
+npx create-crust@latest my-cli
 cd my-cli
 ```
 
-The scaffolder asks for a distribution mode, then offers to install dependencies and initialize Git. Explicit flags skip the corresponding prompts; non-interactive runs can use prompt defaults. The generated project uses the single supported starter pattern:
+Pick a package manager once; the tabs remember it across the docs. `create-crust` detects the package manager that launched it and installs dependencies with the same one. The scaffolder creates:
 
-<include lang="ts" meta='title="src/cli.ts"'>
-  ../../examples/quick-start/starter.ts
-</include>
+<Files>
+  <Folder name="my-cli" defaultOpen>
+    <Folder name="src" defaultOpen>
+      <File name="cli.ts" />
+    </Folder>
+    <File name="package.json" />
+    <File name="tsconfig.json" />
+    <File name="README.md" />
+    <File name=".gitignore" />
+  </Folder>
+</Files>
 
-Run it directly:
+</Step>
+<Step>
+### Run it
+
+The generated `dev` script is `bun run src/cli.ts`, so [Bun](https://bun.sh) runs the CLI whichever package manager installed it.
 
 ```sh
-bun run src/cli.ts Ada --greet Welcome
+bun run dev Ada --greet Welcome
 # Welcome, Ada!
 ```
 
-## Add a subcommand
+The `help()` extension generates usage from the same definitions:
 
-<include lang="ts">../../examples/quick-start/subcommand.ts</include>
+```sh
+bun run dev --help
+```
 
-Inline `.command()` suits app-local leaf commands. Extract to `defineCommand` and [the split-file pattern](/docs/guide/split-files) when a command needs its own file, reuse, or a package.
+```
+my-cli - A CLI built with Crust
 
-## Invoke from code
+Usage:
+  my-cli [name] [options]
 
-<include lang="ts">../../examples/quick-start/invoke.ts#run</include>
+Arguments:
+  [name]             Your name [default: "world"]
 
-`run()` is quiet and returns captured `stdout`/`stderr` with a completed, finished, or failed outcome. It does not set `process.exitCode`. Use `execute()` only at the terminal entrypoint.
+Options:
+  -g, --greet                  Greeting to use [default: "Hello"]
+  -v, --version                Show version number
+  -h, --help                   Show help
+```
+
+</Step>
+<Step>
+### Add a subcommand
+
+Chain `.command()` onto the root:
+
+<include lang="ts" meta='title="src/cli.ts"'>
+  ../../examples/quick-start/subcommand.ts
+</include>
+
+```sh
+bun run dev build --minify
+# minify: true
+
+bun run dev Ada
+# Hello, Ada!
+```
+
+`my-cli build` routes to the subcommand; anything else still reaches the root action. Inline `.command()` suits app-local commands. Move to `defineCommand` and [split files](/docs/guide/commands#split-across-files) when a command needs its own file or reuse.
+
+</Step>
+<Step>
+### Build it
+
+```sh
+bun run build
+bun run start Ada
+```
+
+Standalone mode compiles a binary to `dist/cli`; runtime mode bundles to `dist/cli.js`. See [Build and distribution](/docs/guide/build-and-distribution) for cross-platform targets and npm packaging.
+
+<Callout type="info">
+  Both `create-crust` and `crust` CLI are built with crust. If you would like to see crust in
+  action. Check out the crust repo on GitHub
+</Callout>
+
+</Step>
+</Steps>
+
+## Add to an existing project
+
+<Steps>
+<Step>
+### Install
+
+```npm
+npm install @crustjs/core @crustjs/extensions
+npm install -D @crustjs/crust
+```
+
+`@crustjs/crust` is only needed for `crust build`. Skip it if you bundle with `bun build` or run the source directly. Deno projects install with `deno add npm:`; see [Runtime support](/docs/guide/runtime-support).
+
+</Step>
+<Step>
+### Configure `package.json`
+
+```json title="package.json"
+{
+  "type": "module",
+  "bin": { "my-cli": "dist/cli" },
+  "scripts": {
+    "dev": "bun run src/cli.ts",
+    "build": "crust build",
+    "start": "./dist/cli"
+  }
+}
+```
+
+`dev` runs the TypeScript source with Bun regardless of which package manager installed the dependencies. `crust build` reads `src/cli.ts` and writes to `dist` by default; pass `--entry` for a different file. `bin` points at the built resolver so `bun link` and npm installs expose the command.
+
+</Step>
+<Step>
+### Configure `tsconfig.json`
+
+The scaffolder ships this config. Match `types`, `module`, and `moduleResolution` if you merge into an existing one; the rest is strictness.
+
+<include lang="json" meta='title="tsconfig.json"'>
+  ../../../../packages/create-crust/templates/base/tsconfig.json
+</include>
+
+</Step>
+<Step>
+### Add the entrypoint
+
+Create `src/cli.ts` with the file from [Add a subcommand](#add-a-subcommand), then:
+
+```sh
+bun run dev --help
+```
+
+</Step>
+</Steps>
 
 ## Next steps
 
-- [Arguments](/docs/guide/arguments)
-- [Flags](/docs/guide/flags)
-- [Extensions](/docs/guide/extensions)
-- [Build and distribute](/docs/guide/build)
+The [Guide](/docs/guide) walks through each layer of a Crust application, from arguments and flags to Extensions, Contexts, testing, and distribution. Pick the topic you need next.

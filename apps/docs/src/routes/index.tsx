@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "fumadocs-ui/components/ui/tabs";
 import { HomeLayout } from "fumadocs-ui/layouts/home";
 import { useCallback, useState } from "react";
 import { createHighlighterCore } from "shiki/core";
@@ -15,6 +16,17 @@ import { buildPageMeta } from "@/lib/seo";
 import codeExampleSource from "../../examples/landing/greet.ts?raw";
 
 const CODE_EXAMPLE = codeExampleSource.trimEnd();
+
+// Docs `npm` fences share this group id (source.config.ts), so one selection follows the reader everywhere.
+const PACKAGE_MANAGER_GROUP_ID = "package-manager";
+
+// Must match what remarkNpm expands the Quick Start scaffold fence to; site.test.ts checks it.
+export const SCAFFOLD_COMMANDS = {
+  npm: "npx create-crust@latest my-cli",
+  pnpm: "pnpm dlx create-crust@latest my-cli",
+  yarn: "yarn dlx create-crust@latest my-cli",
+  bun: "bun x create-crust@latest my-cli",
+};
 
 let highlighterPromise: Promise<Awaited<ReturnType<typeof createHighlighterCore>>> | null = null;
 
@@ -92,15 +104,6 @@ export const Route = createFileRoute("/")({
     };
   },
 });
-
-const FEATURES = [
-  { id: "type-safe", title: "Type-Safe", desc: "Full inference. Zero casts." },
-  { id: "zero-deps", title: "Zero-Dep Core", desc: "No runtime dependencies in core." },
-  { id: "composable", title: "Composable", desc: "Modular packages." },
-  { id: "extensions", title: "Extensions", desc: "Application-wide capabilities." },
-  { id: "chainable", title: "Chainable", desc: "Fluent builder API." },
-  { id: "bun-native", title: "Bun Native", desc: "Built for Bun runtime." },
-];
 
 const MODULES: Array<{
   pkg: string;
@@ -234,12 +237,12 @@ const FALLBACK_HIGHLIGHTED_CODE = createFallbackHighlightedCode(CODE_EXAMPLE);
 
 function FurnaceHome() {
   const { highlightedCode, npmVersions } = Route.useLoaderData();
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
 
-  const handleCopy = useCallback(() => {
-    void navigator.clipboard.writeText("bun create crust my-cli");
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = useCallback((command: string) => {
+    void navigator.clipboard.writeText(command);
+    setCopied(command);
+    setTimeout(() => setCopied(null), 2000);
   }, []);
 
   return (
@@ -386,41 +389,60 @@ function FurnaceHome() {
           font-family: 'Fira Code', monospace;
         }
 
-        /* Feature card */
-        .fn-feature {
-          background: var(--fn-surface);
-          border: 1px solid var(--fn-border);
-          border-top: 2px solid var(--fn-molten);
-          padding: 20px;
-          transition: all 0.25s;
-          position: relative;
-        }
-        .fn-feature:hover {
-          border-top-width: 4px;
-          padding-top: 18px;
-        }
-
-        /* Install command — copy to clipboard */
-        .fn-install-cmd {
+        /* Install command — package manager tabs, click the command to copy */
+        .fn-install {
           margin-top: 28px;
-          padding: 12px 20px;
+          display: inline-flex;
+          flex-direction: column;
           background: var(--fn-surface);
           border: 1px solid var(--fn-border);
+          transition: border-color 0.2s;
+        }
+        .fn-install:has(.fn-install-cmd:hover) {
+          border-color: var(--fn-dim);
+        }
+        .fn-install:has(.fn-install-cmd:active) {
+          border-color: var(--fn-molten);
+        }
+        .fn-install-tabs {
+          display: flex;
+          border-bottom: 1px solid var(--fn-border);
+        }
+        .fn-install-tab {
+          padding: 6px 12px;
+          background: transparent;
+          border: none;
+          border-bottom: 1px solid transparent;
+          margin-bottom: -1px;
+          font-size: 11px;
+          color: var(--fn-dim);
+          cursor: pointer;
+          transition: color 0.2s, border-color 0.2s;
+        }
+        .fn-install-tab:hover {
+          color: var(--fn-primary);
+        }
+        .fn-install-tab[data-state="active"] {
+          color: var(--fn-molten);
+          border-bottom-color: var(--fn-molten);
+        }
+        .fn-install-tab:focus-visible,
+        .fn-install-panel:focus-visible,
+        .fn-install-cmd:focus-visible {
+          outline: 1px solid var(--fn-molten);
+          outline-offset: -1px;
+        }
+        .fn-install-cmd {
+          padding: 12px 20px;
+          background: transparent;
+          border: none;
           font-size: 14px;
           display: inline-flex;
           align-items: center;
           gap: 8px;
           cursor: pointer;
-          transition: border-color 0.2s;
-          position: relative;
           user-select: none;
           color: var(--fn-primary);
-        }
-        .fn-install-cmd:hover {
-          border-color: var(--fn-dim);
-        }
-        .fn-install-cmd:active {
-          border-color: var(--fn-molten);
         }
 
         /* Code block */
@@ -646,20 +668,13 @@ function FurnaceHome() {
           z-index: 2;
         }
 
-        /* Content section (features, modules) */
+        /* Content section (modules) */
         .fn-content-section {
           padding: 0 40px 64px;
           max-width: 1100px;
           margin: 0 auto;
           position: relative;
           z-index: 2;
-        }
-
-        /* Features grid */
-        .fn-features-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 12px;
         }
 
         /* Module info row (pkg name + desc) */
@@ -685,9 +700,6 @@ function FurnaceHome() {
             grid-template-columns: 1fr;
             gap: 32px;
           }
-          .fn-features-grid {
-            grid-template-columns: repeat(2, 1fr);
-          }
         }
 
         @media (max-width: 640px) {
@@ -696,9 +708,6 @@ function FurnaceHome() {
           }
           .fn-content-section {
             padding: 0 20px 48px;
-          }
-          .fn-features-grid {
-            grid-template-columns: 1fr;
           }
           .fn-footer {
             padding: 16px 20px;
@@ -722,7 +731,7 @@ function FurnaceHome() {
               className="fn-mono fn-dev-badge"
             >
               <span className="fn-dev-badge-dot" />
-              <span className="fn-dev-badge-status">Now in Alpha</span>
+              <span className="fn-dev-badge-status">Now in Beta</span>
               <span className="fn-dev-badge-sep" />
               <span className="fn-dev-badge-cta">
                 See Roadmap
@@ -766,23 +775,45 @@ function FurnaceHome() {
                   A TypeScript-first, Bun-native CLI framework with composable modules.
                 </p>
 
-                {/* Install — click to copy */}
-                <button type="button" className="fn-mono fn-install-cmd" onClick={handleCopy}>
-                  <span style={{ color: "var(--fn-molten)" }}>{">"}</span>
-                  <span>bun create crust my-cli</span>
-                  <span
-                    className="fn-mono"
-                    style={{
-                      fontSize: 10,
-                      color: copied ? "var(--fn-molten)" : "var(--fn-dim)",
-                      marginLeft: 8,
-                      transition: "color 0.2s",
-                      letterSpacing: 1,
-                    }}
-                  >
-                    {copied ? "COPIED!" : "COPY"}
-                  </span>
-                </button>
+                {/* Install — pick a package manager, click the command to copy */}
+                <Tabs
+                  className="fn-install"
+                  groupId={PACKAGE_MANAGER_GROUP_ID}
+                  persist
+                  defaultValue="npm"
+                >
+                  <TabsList className="fn-mono fn-install-tabs" aria-label="Package manager">
+                    {Object.keys(SCAFFOLD_COMMANDS).map((manager) => (
+                      <TabsTrigger key={manager} value={manager} className="fn-install-tab">
+                        {manager}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                  {Object.entries(SCAFFOLD_COMMANDS).map(([manager, command]) => (
+                    <TabsContent key={manager} value={manager} className="fn-install-panel">
+                      <button
+                        type="button"
+                        className="fn-mono fn-install-cmd"
+                        onClick={() => handleCopy(command)}
+                      >
+                        <span style={{ color: "var(--fn-molten)" }}>{">"}</span>
+                        <span>{command}</span>
+                        <span
+                          className="fn-mono"
+                          style={{
+                            fontSize: 10,
+                            color: copied === command ? "var(--fn-molten)" : "var(--fn-dim)",
+                            marginLeft: 8,
+                            transition: "color 0.2s",
+                            letterSpacing: 1,
+                          }}
+                        >
+                          {copied === command ? "COPIED!" : "COPY"}
+                        </span>
+                      </button>
+                    </TabsContent>
+                  ))}
+                </Tabs>
 
                 <div
                   style={{
@@ -817,51 +848,6 @@ function FurnaceHome() {
                   dangerouslySetInnerHTML={{ __html: highlightedCode }}
                 />
               </div>
-            </div>
-          </section>
-
-          {/* Features */}
-          <section className="fn-content-section">
-            <p
-              className="fn-mono"
-              style={{
-                fontSize: 10,
-                letterSpacing: 4,
-                color: "var(--fn-dim)",
-                textTransform: "uppercase",
-                marginBottom: 16,
-              }}
-            >
-              Features
-            </p>
-
-            <div className="fn-features-grid">
-              {FEATURES.map((f) => (
-                <div key={f.id} className="fn-feature">
-                  <h3
-                    className="fn-condensed"
-                    style={{
-                      fontSize: 16,
-                      fontWeight: 700,
-                      margin: "0 0 6px",
-                      letterSpacing: 1,
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    {f.title}
-                  </h3>
-                  <p
-                    style={{
-                      fontSize: 12,
-                      lineHeight: 1.5,
-                      color: "var(--fn-dim)",
-                      margin: 0,
-                    }}
-                  >
-                    {f.desc}
-                  </p>
-                </div>
-              ))}
             </div>
           </section>
 

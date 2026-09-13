@@ -5,46 +5,41 @@ description: Add help output to every command.
 
 ## Usage
 
-```ts
-import { Crust } from "@crustjs/core";
-import { help } from "@crustjs/extensions";
-
-const app = new Crust("my-cli", { description: "My CLI" }).extend(help()).action(() => {});
-
-await app.execute();
-```
+<include lang="ts" meta='title="cli.ts"'>
+  ../../../../examples/modules/extensions/help.ts
+</include>
 
 ```sh
-my-cli --help
-my-cli -h
-my-cli deploy --help
+$ my-cli --help
+my-cli - My CLI
+
+Usage:
+  my-cli [options]
+
+Commands:
+  deploy     Deploy the app
+
+Options:
+  -h, --help                   Show help
 ```
 
-The factory preserves its literal owned-flag types for ordinary `.extend()` attachment.
-
-`help()` owns a recursive boolean `help` flag with short name `h`. Its `preRun` hook writes help through `ctx.stdout` and returns `ctx.finish()` when `--help` is present. A container command with no Command Action also displays help.
-
-The renderer includes usage, visible subcommands, positional arguments, effective flags, aliases, defaults, choices, and the `meta.sections` visible to its `help.id` identity. Commands with `meta.hidden: true` stay routable but are omitted from listings.
+`help()` owns the recursive `--help` and `-h` flag. It also shows help when the selected command has no Command Action.
 
 ## Section consumer
 
-The `help` factory carries the `crust:help` consumer id used by the help renderer. Sections render everywhere by default; target help specifically with `only: [help]`, or omit a section from help with `except: [help]`:
-
 ```ts
-import { Crust } from "@crustjs/core";
-import { help } from "@crustjs/extensions";
-
 const documentedApp = new Crust("my-cli", {
-  sections: [{ title: "Terminal example", body: "my-cli deploy", only: [help] }],
+  sections: [{ title: "Example", body: "my-cli deploy", only: [help] }],
 });
 ```
+
+Use `help` as a section consumer to include or exclude sections from its output. Hidden commands remain routable but do not appear in command listings.
 
 ## `renderHelp`
 
 ```ts
-import { renderHelp } from "@crustjs/extensions";
-
-function renderHelp(command: CommandSnapshot, path?: readonly string[]): string;
+const text = renderHelp(await app.snapshot());
+// => "my-cli - My CLI\n\nUsage:\n  my-cli [options] ..."
 ```
 
-Renders help from a readonly Command Snapshot without executing an application. `path` defaults to `[command.meta.name]`.
+`renderHelp(command, path?)` renders a Command Snapshot without running the app. `path` defaults to the supplied snapshot's `meta.name`.

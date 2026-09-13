@@ -1,0 +1,32 @@
+---
+title: Runtime support
+description: Run Crust applications with Bun, Node.js, or Deno.
+---
+
+Crust application code is the same on Bun, Node.js, and Deno, so pick a runtime based on how you ship and operate the CLI.
+
+## Supported runtimes
+
+The Crust packages support Bun 1.3.14+, Node.js 22+, and Deno 2.8+. [`@crustjs/tui`](/docs/modules/tui) is Bun only because its OpenTUI peer is a native library, while the `crust` build CLI is Bun tooling distributed through a Node launcher.
+
+## Package manager and runtime
+
+The package manager installs dependencies; the runtime executes `src/cli.ts`. npm, pnpm, Yarn, and Bun all install the same packages for a Bun or Node.js project, so installing with Bun does not commit you to running on Bun, and installing with npm does not commit you to Node.js:
+
+```npm
+npm install @crustjs/core
+```
+
+Deno is not in that tab group; it installs npm packages through its own `npm:` specifier:
+
+```sh
+deno add npm:@crustjs/core
+```
+
+## Deno permissions
+
+```sh
+deno run --allow-run=git --allow-read=. --allow-write=./dist --allow-env ./src/cli.ts
+```
+
+Deno applies its permission sandbox to library code. See [Deno permissions](https://docs.deno.com/runtime/fundamentals/security/) for the runtime rules and flag syntax.

@@ -1,0 +1,119 @@
+---
+title: Values and validation
+description: Convert and validate values with built-in types, custom parsing, or Standard Schemas.
+---
+
+Command-line input starts as text. Each argument or flag definition picks one way to turn that text into a value:
+
+| Approach | Use when                                                          |
+| -------- | ----------------------------------------------------------------- |
+| `type`   | A built-in conversion is enough                                   |
+| `parse`  | You need one small synchronous transformation of a string         |
+| `schema` | A Standard Schema should own conversion, defaults, and validation |
+
+<include lang="ts" meta='title="wait.ts"'>
+  ../../../examples/guide/types-builtin.ts
+</include>
+
+```sh
+$ wait --seconds 1.5
+waiting 1500ms
+```
+
+The `number` type converts `1.5` before the Command Action runs, so `flags.seconds` is a `number`.
+
+## Built-in types
+
+| `type`    | Action value                                     |
+| --------- | ------------------------------------------------ |
+| `string`  | `string`                                         |
+| `number`  | `number`                                         |
+| `boolean` | `boolean`                                        |
+| `url`     | `URL`                                            |
+| `path`    | `string`, resolved against the working directory |
+| `json`    | `unknown`, the parsed token                      |
+
+With a built-in type, Crust also handles presence: `required` rejects a missing value, `default` fills one in, and `multiple` or `variadic` collects several. See [Arguments and Flags](/docs/guide/arguments-and-flags).
+
+## Custom parsing
+
+<include lang="ts" meta='title="deploy.ts"'>
+  ../../../examples/guide/types-parse.ts
+</include>
+
+```sh
+$ deploy --regions us,eu
+deploying to us and eu
+$ deploy
+deploying to the default region
+```
+
+`parse` runs once on the raw string and its return type becomes the action value, here `string[]`. It only converts. To reject a value, throw; the error is reported as `Failed to parse --regions: <message>`.
+
+## Schema-backed definitions
+
+<include lang="ts" meta='title="serve.ts"'>
+  ../../../examples/guide/types-schema.ts#schema
+</include>
+
+```sh
+$ serve 8080
+listening on port 8080
+$ serve
+listening on port 3000
+$ serve 70000
+Error: Invalid input:
+  - args.port: Too big: expected number to be <=65535
+```
+
+Put a schema from any [Standard Schema](https://standardschema.dev) library (Zod, Valibot, ArkType) on the `schema` key. Crust hands the schema the raw input and gives the Command Action the schema's output type. Every issue is reported in one message.
+
+### The schema owns the rules
+
+A schema definition cannot also set `parse`, `choices`, `default`, or `required`. Express those rules in the schema instead:
+
+| Rule           | Instead of               | Write in the schema (Zod shown)   |
+| -------------- | ------------------------ | --------------------------------- |
+| Text to number | `type: "number"`         | `z.coerce.number()`               |
+| Default        | `default: 3000`          | `.default(3000)`                  |
+| Optional       | leaving `required` unset | `.optional()`                     |
+| Required       | `required: true`         | a schema that rejects `undefined` |
+| Allowed values | `choices: ["a", "b"]`    | `z.enum(["a", "b"])`              |
+| Range or shape | `parse` plus a throw     | `.int().min(1).max(65535)`        |
+
+Presence follows the same rule. An omitted input reaches the schema as `undefined`: `.default(3000)` substitutes the default, `.optional()` lets `undefined` through as `number | undefined`, and a schema without either rejects the omission.
+
+### What the schema receives
+
+- An argument omits `type`. The schema receives `string | undefined`, or `string[]` with `variadic`.
+- A flag keeps `type: "string"` or `type: "boolean"` so the parser knows whether a value token follows. The schema receives `string | undefined` or `boolean | undefined`, or arrays with `multiple`.
+
+See [`ArgDef`](/docs/api/types#argdef) and [`FlagDef`](/docs/api/types#flagdef) for the full contracts.
+
+## What gets checked, and when
+
+### At compile time
+
+<include lang="ts">../../../examples/guide/types-schema.ts#compile-time</include>
+
+These lines continue `serve.ts` and only construct definitions. TypeScript rejects an asynchronous `parse` and a `type` on a schema argument, and accepts `type: "string"` on a schema flag; see the [`.args()`](/docs/api/crust#argsdefs) and [`.flags()`](/docs/api/crust#flagsdefs) contracts.
+
+TypeScript also infers the action value. For `type` or `parse`, it is the converted type, `T | undefined` unless `required` or `default` is set, and an array with `multiple` or `variadic`. For a schema, it is the schema's output type, which already reflects its defaults and optionality.
+
+### At runtime
+
+Crust converts and validates input before the Command Action. A failed conversion, a thrown `parse`, or a schema issue prints an error, exits with `1`, and skips the action:
+
+```sh
+$ wait --seconds soon
+Error: Expected number for --seconds, got "soon"
+$ echo $?
+1
+$ serve http
+Error: Invalid input:
+  - args.port: Invalid input: expected number, received NaN
+$ echo $?
+1
+```
+
+Conversion and `parse` failures use the `PARSE` code; schema failures use `VALIDATION`. See [`CrustError` codes](/docs/api/errors#codes).
