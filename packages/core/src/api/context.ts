@@ -66,6 +66,7 @@ type ValidateContextConfig<R extends ContextConfig> = {
 interface ContextSetupInput<OF extends FlagsDef = FlagsDef> extends InvocationIO {
 	readonly flags: InferFlags<OF>;
 	readonly ctx: ContextBag<ContextMap>;
+	readonly defer: (cleanup: () => void | PromiseLike<void>) => void;
 }
 
 export interface ContextInstance<
@@ -101,6 +102,11 @@ export interface ContextSetup<
 	readonly options: Options;
 	readonly flags: InferFlags<OF>;
 	readonly ctx: ContextBag<Deps>;
+	/**
+	 * Registers cleanup on the invocation's disposal stack: callbacks run after
+	 * post-run hooks in reverse registration order. Throws once setup has settled.
+	 */
+	readonly defer: (cleanup: () => void | PromiseLike<void>) => void;
 }
 
 export interface ContextFactory<
@@ -323,18 +329,28 @@ export interface DisposalScope {
  */
 export class FallbackAsyncDisposableStack implements DisposalScope, AsyncDisposable {
 	#entries: (() => void | PromiseLike<void>)[] = [];
+	#disposed = false;
+
+	// Same class of error as the native stack, so a late registration fails loud
+	// on every runtime instead of silently leaking here.
+	#assertPending(): void {
+		if (this.#disposed) throw new ReferenceError("AsyncDisposableStack is already disposed");
+	}
 
 	use<T extends Disposable | AsyncDisposable>(value: T): T {
+		this.#assertPending();
 		const dispose = hasAsyncDispose(value) ? value[Symbol.asyncDispose] : value[Symbol.dispose];
 		this.#entries.push(() => dispose.call(value));
 		return value;
 	}
 
 	defer(onDisposeAsync: () => void | PromiseLike<void>): void {
+		this.#assertPending();
 		this.#entries.push(onDisposeAsync);
 	}
 
 	async [Symbol.asyncDispose](): Promise<void> {
+		this.#disposed = true;
 		const errors: unknown[] = [];
 		for (let index = this.#entries.length - 1; index >= 0; index--) {
 			try {
@@ -529,6 +545,16 @@ export function createContextResolver(
 					const value = await context.setup({
 						flags: ownedFlags,
 						ctx: makeBag(context.uses, current),
+						defer(cleanup) {
+							if (current.settled) {
+								throw new CrustError(
+									"DEFINITION",
+									`Context "${name}" cannot register cleanup after its setup has finished.`,
+									{ subject: "context", name, reason: "context-defer-after-setup" },
+								);
+							}
+							disposal.defer(cleanup);
+						},
 						...io,
 					});
 					registerDisposable(value, disposal, registered);

@@ -267,7 +267,7 @@ type ContextBag<Deps> = {
 
 `flags` declares propagating flags. `uses` declares Context dependencies and determines the exact lazy bag exposed to setup. Reading a property starts memoized construction; destructuring therefore starts construction immediately.
 
-Setup also receives the invocation's `stdout` and `stderr` callbacks.
+Setup also receives the invocation's `stdout` and `stderr` callbacks, and `defer(cleanup)`. Deferred callbacks run after post-run hooks in reverse registration order, even when setup later throws; call `defer` right after acquiring each resource. `defer` throws a `DEFINITION` error once setup has settled.
 
 ### `ContextInstance`
 

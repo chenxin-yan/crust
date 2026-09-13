@@ -52,7 +52,9 @@ Error: query failed
 database closed
 ```
 
-Setup runs the first time a command reads `ctx.database`, so `ping` never opens it. Each invocation gets its own value. When the value has `[Symbol.dispose]` or `[Symbol.asyncDispose]`, Crust calls it after the action, including when the action throws.
+Setup runs the first time a command reads `ctx.database`, so `ping` never opens it. Each invocation gets its own value. `defer(cleanup)` registers cleanup for that value; Crust runs it after the action and `postRun` hooks, including when the action throws. Callbacks may be async and run in reverse registration order. Calling `defer` after setup has settled throws a `DEFINITION` error.
+
+When setup acquires several resources, call `defer` right after each acquire. Then a later failure in the same setup still releases what was already opened. Returned values that implement `[Symbol.dispose]` or `[Symbol.asyncDispose]` are still disposed automatically, before that setup's deferred callbacks.
 
 ## Flags owned by a Context
 
@@ -88,6 +90,6 @@ List the factories a Context needs in `uses` and read them from `ctx` in setup, 
   ../../../examples/guide/contexts-doubles.ts
 </include>
 
-`database.of(value)` builds an instance that returns `value` without running setup, so the output has no `database opened` line. It keeps the Context's name and value type, which is why `query` is unchanged and the fake needs the same `[Symbol.dispose]`. See [Testing](/docs/guide/testing) for `run()`.
+`database.of(value)` builds an instance that returns `value` without running setup, so neither `database opened` nor the deferred `database closed` runs. It keeps the Context's name and value type, which is why `query` is unchanged. See [Testing](/docs/guide/testing) for `run()`.
 
 For the full contracts, see [Context types](/docs/api/types#context-types) and [`.use()`](/docs/api/crust#usefactories).
