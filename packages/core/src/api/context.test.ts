@@ -1429,6 +1429,24 @@ describe("Context setup defer()", () => {
 		expect(log).toEqual(["second", "first"]);
 	});
 
+	it("keeps the lifecycle defer when injected io carries an extra defer property", async () => {
+		const log: string[] = [];
+		const res = defineContext("res", ({ defer }) => {
+			defer(() => {
+				log.push("cleanup");
+			});
+			return "value";
+		});
+		// Structural typing lets a pre-declared io object smuggle extra keys past
+		// Partial<InvocationIO>; execute() spreads it through as-is (run() rebuilds it).
+		const io = { stdout: () => {}, stderr: () => {}, defer: () => log.push("hijacked") };
+		const app = new Crust("cli").provide(res()).action(async ({ ctx }) => {
+			await ctx.res;
+		});
+		expect(await app.execute({ argv: [], io })).toBe(0);
+		expect(log).toEqual(["cleanup"]);
+	});
+
 	it("skips setup and its defers for an .of() double", async () => {
 		const log: string[] = [];
 		const res = defineContext("res", ({ defer }) => {
@@ -1592,6 +1610,12 @@ describe("FallbackAsyncDisposableStack", () => {
 		await disposal[Symbol.asyncDispose]();
 		expect(() => disposal.defer(() => {})).toThrow(ReferenceError);
 		expect(() => disposal.use({ [Symbol.dispose]() {} })).toThrow(ReferenceError);
+	});
+
+	it("rejects a non-callable defer at registration like the native stack", () => {
+		const disposal = new FallbackAsyncDisposableStack();
+		expect(() => disposal.defer(null as never)).toThrow(TypeError);
+		expect(() => new AsyncDisposableStack().defer(null as never)).toThrow(TypeError);
 	});
 });
 

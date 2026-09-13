@@ -316,6 +316,13 @@ export interface DisposalScope {
 	defer(onDisposeAsync: () => void | PromiseLike<void>): void;
 }
 
+type DisposeCallback = () => void | PromiseLike<void>;
+
+// Untyped callers can still hand the fallback a non-function at runtime.
+function isDisposeCallback(value: DisposeCallback | undefined | null): value is DisposeCallback {
+	return typeof value === "function";
+}
+
 /**
  * Minimal `AsyncDisposableStack` stand-in for runtimes without the global
  * (Node 22): LIFO disposal of used resources and deferred callbacks,
@@ -346,6 +353,8 @@ export class FallbackAsyncDisposableStack implements DisposalScope, AsyncDisposa
 
 	defer(onDisposeAsync: () => void | PromiseLike<void>): void {
 		this.#assertPending();
+		// Native rejects at registration; failing at teardown instead would hide the bug.
+		if (!isDisposeCallback(onDisposeAsync)) throw new TypeError("defer callback is not callable");
 		this.#entries.push(onDisposeAsync);
 	}
 
@@ -543,6 +552,9 @@ export function createContextResolver(
 						Object.keys(context.ownedFlags).map((flag) => [flag, validatedFlags?.[flag]]),
 					);
 					const value = await context.setup({
+						// Spread first: injected io is only typed as stdout/stderr, but runtime
+						// extras must not shadow the lifecycle fields below.
+						...io,
 						flags: ownedFlags,
 						ctx: makeBag(context.uses, current),
 						defer(cleanup) {
@@ -555,7 +567,6 @@ export function createContextResolver(
 							}
 							disposal.defer(cleanup);
 						},
-						...io,
 					});
 					registerDisposable(value, disposal, registered);
 					current.resolve(value);
