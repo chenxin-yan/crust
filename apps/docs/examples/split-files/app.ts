@@ -1,8 +1,6 @@
 import { Crust } from "@crustjs/core";
-import { help, version } from "@crustjs/extensions";
+import { help } from "@crustjs/extensions";
 
-import { logger } from "./shared.ts";
-
-export const app = new Crust("my-cli", { description: "A split-file CLI" })
-  .extend(version("0.2.0"), help())
-  .provide(logger());
+export const app = new Crust("my-cli", {
+  description: "Print greetings",
+}).extend(help());

@@ -56,6 +56,7 @@
         "tailwindcss": "^4.3.3",
         "typescript": "^7.0.2",
         "wrangler": "^4.129.0",
+        "zod": "4.5.4",
       },
     },
     "packages/config": {

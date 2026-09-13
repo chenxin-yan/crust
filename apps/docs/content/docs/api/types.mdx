@@ -181,7 +181,7 @@ type GreetInput = RunInput<CommandShapeAt<(typeof app)["_types"]["shape"], reado
 
 `InputArgs` requires a supplied prefix: defaults do not fill gaps, and required trailing arguments require preceding positions. Known choices, required fields, and paths remain strict. Conditional definitions retain conservative obligations; fully erased/open shapes accept broad structured input while preserving independently known facts.
 
-See [Typed input](/docs/guide/lifecycle#typed-input).
+See [`run()` input](/docs/api/crust#runpath-input-io).
 
 `Crust` defaults its argument state to `[]`. Prefer inferred authoring builders.
 

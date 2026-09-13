@@ -1,100 +1,9 @@
 ---
-title: Values and Validation
+title: Values and validation
 description: Convert and validate values with built-in types, custom parsing, or Standard Schemas.
 ---
 
-## Built-in value types
-
-```ts
-new Crust("inspect")
-  .args({ name: "file", type: "path", required: true })
-  .flags({ name: "config", type: "json" })
-  .action(({ args, flags }) => {
-    args.file; // string
-    flags.config; // unknown
-  });
-```
-
-Arguments and flags support `string`, `number`, `boolean`, `url`, `path`, and `json`. The `type` selects built-in conversion and, for flags, token consumption; a failed conversion produces a `PARSE` error.
-
-Number conversion uses `Number()`, including converting `""` to `0`. Boolean positional arguments recognize only `"true"` and `"1"` as true; all other strings become false.
-
-## Custom parsing
-
-```ts
-new Crust("schedule")
-  .flags({ name: "date", type: "string", parse: (raw) => new Date(raw) })
-  .action(({ flags }) => {
-    flags.date; // Date | undefined
-  });
-```
-
-Use `parse` for a small synchronous transformation when a full schema is unnecessary. The Command Action receives the parser's return type.
-
-## Compile-time checks
-
-```ts
-new Crust("fetch").args({
-  name: "remote",
-  type: "string",
-  parse: async (raw) => raw.trim(),
-});
-// FIX_ASYNC_PARSE: parse must be synchronous; do async work in run()
-```
-
-TypeScript checks known definitions as they are authored and composed. `FIX_*` properties name the constraint and the change needed to satisfy it.
-
-## Runtime checks
-
-```ts
-const app = new Crust("serve").flags({ name: "port", type: "number" });
-const exitCode = await app.execute({ argv: ["--port", "oops"] });
-// stderr: Error: Expected number for --port, got "oops"
-// CrustError code: PARSE
-// exitCode === 1
-```
-
-Argv and dynamic definitions are checked when they are consumed. See [`run()` input validation](/docs/api/crust#runpath-input-io) and [`CrustError` codes](/docs/api/errors#codes) for the runtime boundaries and error details.
-
-| What | Checked by | When |
-| --- | --- | --- |
-| Known definitions and composition | TypeScript | Typecheck |
-| Dynamic definitions | Crust | Composition or preparation |
-| Argv and structured values | Crust | Invocation |
-
-## Raw input versus action output
-
-<include lang="ts">../../../examples/guide/invocation.ts#raw</include>
-
-Custom parsers and schemas receive raw input, while the Command Action receives transformed output. Required and schema checks run after `preRun`, so an Extension that returns `ctx.finish()` skips them.
-
-## Schema-backed definitions
-
-<include lang="ts">../../../examples/guide/types.ts#schema</include>
-
-Put a Standard Schema on a plain definition's `schema` key. The schema receives the raw value and owns coercion, defaults, requiredness, and validation; the Command Action receives its output type. Unlike `parse`, Standard Schema validation may be asynchronous.
-
-Schema failures from one invocation are aggregated into one `VALIDATION` error. See [`run()` validation](/docs/api/crust#runpath-input-io), [`ArgDef`](/docs/api/types#argdef), and [`FlagDef`](/docs/api/types#flagdef) for the complete contract.
-
-### The same shape across packages
-
-```ts
-const Port = z.coerce.number().default(3000);
-
-const portFlag = { name: "port", type: "string", schema: Port };
-const portField = { schema: Port };
-const portPrompt = { message: "Port?", schema: Port };
-```
-
-Core definitions, store fields, and prompts all use the `schema` key. Store values must also be JSON-compatible because they are persisted.
-
-### Where defaults live
-
-```ts
-const Port = z.coerce.number().default(3000);
-```
-
-Put semantic defaults in the schema. Prompt UI fallback values still pass through the schema before being returned.
+Value definitions turn CLI text into action values; start with a built-in type, add `parse` for one synchronous conversion, and use a Standard Schema for richer validation.
 
 ## Choosing an approach
 
@@ -104,4 +13,55 @@ Put semantic defaults in the schema. Prompt UI fallback values still pass throug
 .flags({ name: "port", type: "string", schema: Port })
 ```
 
-Use a built-in type for direct token conversion, `parse` for one synchronous transform, and `schema` for validation, defaults, coercion, or an existing schema library.
+Use the first option that expresses the input rule. A Standard Schema is worth adding when it owns validation, defaults, coercion, or is already shared with other code.
+
+## Built-in value types
+
+<include lang="ts">../../../examples/guide/types.ts#builtin</include>
+
+Arguments and flags support `string`, `number`, `boolean`, `url`, `path`, and `json`. `path` resolves against the working directory, `url` returns a `URL`, and `json` parses the token; a token that fails conversion is rejected before the Command Action runs.
+
+## Custom parsing
+
+<include lang="ts">../../../examples/guide/types.ts#parse</include>
+
+Use `parse` for a small synchronous transformation. The Command Action receives the parser's return type.
+
+## Compile-time checks
+
+<include lang="ts">../../../examples/guide/types.ts#compile-time</include>
+
+TypeScript rejects known invalid definitions as you compose them; see the [`.args()`](/docs/api/crust#argsdefs) and [`.flags()`](/docs/api/crust#flagsdefs) contracts.
+
+## Runtime checks
+
+```ts
+const app = new Crust("serve").flags({ name: "port", type: "number" });
+const exitCode = await app.execute({ argv: ["--port", "oops"] });
+// stderr: Error: Expected number for --port, got "oops"
+// exitCode === 1
+```
+
+Input supplied at runtime is checked before the Command Action runs. See [`CrustError` codes](/docs/api/errors#codes) for error details.
+
+## Schema-backed definitions
+
+<include lang="ts">../../../examples/guide/types.ts#schema</include>
+
+```sh
+$ serve 8080
+listening on localhost:8080
+$ serve http
+Error: Invalid input:
+  - args.port: Invalid input: expected number, received NaN
+```
+
+Put a schema from any [Standard Schema](https://standardschema.dev) library (Zod, Valibot, ArkType) on a definition's `schema` key when the schema should own coercion, defaults, and validation. The Command Action receives the schema's output type, and every issue is reported in one message; see [`ArgDef`](/docs/api/types#argdef) and [`FlagDef`](/docs/api/types#flagdef) for the input contract.
+
+### Where defaults live
+
+```ts
+const Port = z.coerce.number().default(3000);
+```
+
+Put a semantic default in the schema. A prompt's UI fallback still passes through its schema before being returned.

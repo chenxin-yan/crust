@@ -1,41 +1,88 @@
 ---
 title: Error handling
-description: Handle Crust failures, application errors, and cancellation.
+description: Handle application errors, validation failures, and cancellation.
 ---
 
-## CrustError
+Throw an `Error` with a message the user can act on. Crust prints the message and exits with status 1.
 
-<include lang="ts">../../../examples/guide/error-handling.ts#crust-error</include>
+<include lang="ts">../../../examples/guide/error-handling-cli.ts</include>
 
-Narrow a failed outcome with `instanceof CrustError`, then use `.is()` to narrow its code and details. Crust uses four codes; see the [error codes and details](/docs/api/errors#codes) for the full reference and [compile-time and runtime checks](/docs/guide/types#compile-time-checks) for what is checked where.
+```sh
+$ deploy
+Error: Could not connect to api.example.com. Check your network connection.
+$ echo $?
+1
+```
 
-| Code                | Meaning                                                                                                 |
-| ------------------- | ------------------------------------------------------------------------------------------------------- |
-| `DEFINITION`        | A malformed dynamic definition or collision, recipe, Extension, Context, or documentation-section error |
-| `PARSE`             | Argv syntax, structured `run()` input binding, or built-in conversion failure                           |
-| `VALIDATION`        | Missing or invalid values, including Standard Schema issues                                             |
-| `COMMAND_NOT_FOUND` | An unknown command under the [routing rules](/docs/guide/commands#unknown-commands)                     |
+## What your user sees
 
-## Error flow
+```sh
+$ greet
+Error: Missing required flag "--name"
+$ echo $?
+1
+```
+
+Crust uses one terminal failure format whether the error comes from your code or from its checks.
+
+| Failure            | Stderr                                                                                                                                                                                                | Exit code |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------: |
+| Your `Error`       | `Error: Could not connect to api.example.com. Check your network connection.`                                                                                                                         |         1 |
+| A Crust check      | Missing flag: `Error: Missing required flag "--name"`<br />Bad choice: `Error: Invalid value "Linus" for --name. Expected one of: Ada, Grace`<br />Unknown command: `Error: Unknown command "stats".` |         1 |
+| Ctrl+C in a prompt | Nothing                                                                                                                                                                                               |       130 |
+
+## Let Crust validate
+
+<include lang="ts">../../../examples/guide/error-handling.ts#validation</include>
+
+Prefer `required: true` to checking for a missing value in the Command Action. The declaration keeps help text, inferred types, and terminal messages in sync. Put allowed values in `choices` for the same reason.
+
+<span id="error-flow" />
+
+## Fail from anywhere
 
 <include lang="ts">../../../examples/guide/error-handling.ts#cleanup</include>
 
-A Command Action failure still runs `postRun` hooks, then disposes pulled Context values. The [propagation boundaries](/docs/api/errors#propagation-boundaries) cover failures from other lifecycle phases.
+```sh
+$ deploy
+Error: Deployment service is unavailable. Try again later.
+Closed database
+$ echo $?
+1
+```
 
-### Failed outcomes
+An `Error` from the helper reaches the same renderer as one from a Command Action. Context disposal still runs after failure, so the Command Action does not need `try`/`finally` for Context cleanup.
 
-<include lang="ts">../../../examples/guide/error-handling.ts#failed-outcome</include>
+Do not call `process.exit()`. It stops the process before Crust can run cleanup.
 
-`run()` returns the application error in a `failed` outcome and keeps output written before cleanup completes. See [`run()` input, output, and failure behavior](/docs/api/crust#runpath-input-io) for the full contract.
-
-### Terminal presentation
-
-<include lang="ts">../../../examples/guide/error-handling.ts#terminal-presentation</include>
-
-`execute()` offers a failure to `onError` hooks and returns the terminal exit code. Returning `true` claims the failure, so Core does not render it again.
+Do not catch an error just to print it. That hides the failure from `run()` and can leave the terminal exit code at 0.
 
 ## Cancellation
 
 <include lang="ts">../../../examples/guide/error-handling.ts#cancellation</include>
 
-Treat an `AbortError` returned by `run()` as cancellation. The [propagation boundaries](/docs/api/errors#propagation-boundaries) describe terminal cancellation behavior.
+```sh
+$ scaffold
+? Project name? ^C
+$ echo $?
+130
+```
+
+Ctrl+C in a prompt prints no error and exits with status 130. To cancel from your own code, throw `new DOMException("Cancelled", "AbortError")`. Put file writes and other side effects after prompts so cancellation leaves nothing to undo.
+
+## Customize the message
+
+<include lang="ts">../../../examples/guide/error-handling.ts#custom-message</include>
+
+Extending the root with `configErrors` adds a hint for this known error class; returning `true` prevents the default renderer from printing it again. [`didYouMean()`](/docs/modules/extensions/did-you-mean) is the built-in example. See [Extension hooks](/docs/api/types#extensionhooks) for the hook contract.
+
+```text
+Error: Config file not found.
+Hint: Run init to create the config file.
+```
+
+## In tests
+
+<include lang="ts">../../../examples/guide/error-handling.ts#tests</include>
+
+`run()` hands your `Error` back unchanged in a failed outcome; `captureExecute()` from [`@crustjs/testing`](/docs/guide/testing) shows what the terminal user would see. Errors raised by Crust itself are `CrustError` values; narrow them with `.is(code)` as shown in the [error reference](/docs/api/errors#codes).

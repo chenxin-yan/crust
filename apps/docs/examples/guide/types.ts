@@ -1,55 +1,48 @@
-import { Crust, CrustError } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
+import { z } from "zod";
+
+//#region builtin
+const inspect = new Crust("inspect")
+  .args({ name: "file", type: "path", required: true })
+  .flags({ name: "config", type: "json" }, { name: "retries", type: "number" })
+  .action(({ args, flags }) => {
+    args.file; // string, resolved against the working directory
+    flags.config; // unknown
+    flags.retries; // number | undefined
+  });
+//#endregion
+
+//#region parse
+const schedule = new Crust("schedule")
+  .flags({ name: "date", type: "string", parse: (raw) => new Date(raw) })
+  .action(({ flags }) => {
+    flags.date; // Date | undefined
+  });
+//#endregion
+
+//#region compile-time
+// @ts-expect-error parse must be synchronous
+new Crust("fetch").args({
+  name: "remote",
+  type: "string",
+  parse: async (raw) => raw.trim(),
+});
+//#endregion
 
 //#region schema
-const positiveIntegerSchema = {
-  "~standard": {
-    version: 1 as const,
-    vendor: "example",
-    validate(value: unknown) {
-      const parsed = Number(value);
-      return Number.isInteger(parsed) && parsed > 0
-        ? { value: parsed }
-        : { issues: [{ message: "Expected a positive integer" }] };
-    },
-  },
-};
+const Port = z.coerce.number().int().min(1).max(65535);
 
-const hostSchema = {
-  "~standard": {
-    version: 1 as const,
-    vendor: "example",
-    validate(value: unknown) {
-      if (value === undefined) return { value: "localhost" };
-      return typeof value === "string" ? { value } : { issues: [{ message: "Expected a string" }] };
-    },
-  },
-};
-
-const command = new Crust("serve")
-  .args({ name: "port", schema: positiveIntegerSchema })
-  .flags(
-    { name: "host", type: "string", schema: hostSchema },
-    { name: "workers", type: "string", schema: positiveIntegerSchema },
-  )
-  .action(({ args, flags }) => {
+const serve = new Crust("serve")
+  .args({ name: "port", schema: Port })
+  .flags({ name: "host", type: "string", schema: z.string().default("localhost") })
+  .action(({ args, flags, stdout }) => {
     args.port; // number
     flags.host; // string
-    flags.workers; // number
+    stdout(`listening on ${flags.host}:${args.port}`);
   });
-
-const outcome = await command.run([], {
-  args: { port: "not-a-number" },
-  flags: { workers: "not-a-number" },
-});
-if (
-  outcome.status === "failed" &&
-  outcome.error instanceof CrustError &&
-  outcome.error.is("VALIDATION")
-) {
-  console.log(outcome.error.code);
-  for (const issue of outcome.error.details?.issues ?? []) console.log(issue.path);
-}
-// VALIDATION
-// args.port
-// flags.workers
 //#endregion
+
+void inspect;
+void schedule;
+const [name = "", ...argv] = process.argv.slice(2);
+if (name === "serve") await serve.execute({ argv });

@@ -1,51 +1,39 @@
-//#region excess
-import { Crust as ExcessCrust } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 
-const oneInputCommand = new ExcessCrust("cli")
-  .args({ name: "input", type: "string", required: true })
-  .action(() => {});
-
-if (import.meta.main) process.exit(await oneInputCommand.execute());
-//#endregion
-
-import { Crust, CrustError, type AnyCrust } from "@crustjs/core";
-
-//#region definitions
-const documentCommand = new Crust("convert")
+//#region defaults
+const convert = new Crust("convert")
   .args(
     { name: "input", type: "string", required: true },
     { name: "format", type: "string", default: "json" },
     { name: "label", type: "string" },
   )
-  .action(({ args, stdout }) =>
-    stdout(`${args.format}:${args.label ?? "<omitted>"}:${args.input}`),
-  );
+  .action(({ args, stdout }) => {
+    args.input; // string
+    args.format; // string
+    args.label; // string | undefined
+    stdout(`${args.input} -> ${args.format}${args.label ? ` (${args.label})` : ""}`);
+  });
 //#endregion
 
-//#region defaults
-const withDefaults = await documentCommand.run([], { args: { input: "data.csv" } });
-if (withDefaults.status === "completed") console.log(withDefaults.stdout); // json:<omitted>:data.csv
-
-const explicit = await documentCommand.run([], {
-  args: { input: "data.csv", format: "yaml", label: "weekly" },
-});
-if (explicit.status === "completed") console.log(explicit.stdout); // yaml:weekly:data.csv
+//#region variadic
+const copy = new Crust("copy")
+  .args(
+    { name: "destination", type: "path", required: true },
+    { name: "files", type: "path", variadic: true },
+  )
+  .action(({ args, stdout }) => stdout(`${args.files.length} files to ${args.destination}`));
 //#endregion
 
 //#region choices
-const runtimeCommand = new Crust("run")
+const run = new Crust("run")
   .args({ name: "runtime", type: "string", choices: ["bun", "node"] })
-  .action(() => {});
-const dynamicRuntime: AnyCrust = runtimeCommand;
-const invalid = await dynamicRuntime.run([], { args: { runtime: "deno" } });
-if (invalid.status === "failed" && invalid.error instanceof CrustError) {
-  console.log(invalid.error.code); // PARSE
-  console.log(invalid.error.message); // Invalid value "deno" for <runtime>. Expected one of: bun, node
-}
+  .action(({ args, stdout }) => stdout(`runtime: ${args.runtime}`));
 //#endregion
 
 //#region raw
-const wrapper = new Crust("wrap").action(({ rawArgs, stdout }) => stdout(rawArgs.join(" ")));
-const forwarded = await wrapper.run([], { raw: ["--watch", "src"] });
-if (forwarded.status === "completed") console.log(forwarded.stdout); // --watch src
+const wrap = new Crust("wrap").action(({ rawArgs, stdout }) => stdout(rawArgs.join(" ")));
 //#endregion
+
+const examples = { convert, copy, run, wrap };
+const [name = "", ...argv] = process.argv.slice(2);
+if (name in examples) await examples[name as keyof typeof examples].execute({ argv });

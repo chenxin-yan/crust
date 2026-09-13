@@ -27,5 +27,5 @@ export const diagnostics = defineExtension(defineExtensionId("acme:diagnostics")
 });
 
 const diagnosticsApp = new Crust("my-cli").extend(diagnostics);
-console.log((await diagnosticsApp.run(["doctor"])).stdout); // => "checking my-cli"
+console.log((await diagnosticsApp.run(["doctor"])).stdout); // => checking my-cli
 //#endregion

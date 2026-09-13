@@ -462,7 +462,7 @@ Paths are normalized; JSON/URL payloads retain identity. Scalar JSON inputs acce
 
 Supplied positionals must form a prefix, including across defaulted positions. Required core variadics without defaults need nonempty tuples. Omission requires every definition alternative to permit it.
 
-Conditional choices, primitive kinds, and occurrence layouts remain conservative; automatic checks do not manufacture a static proof. Independently known inputs remain strict. [Typed input](/docs/guide/lifecycle#typed-input) covers the corresponding lifecycle concepts.
+Conditional choices, primitive kinds, and occurrence layouts remain conservative; automatic checks do not manufacture a static proof. Independently known inputs remain strict. Narrow dynamic values before passing them to a known application, or use `AnyCrust` when paths and input are genuinely dynamic.
 
 A known literal contract accepts valid literals, choice unions, and honestly narrowed strings, not broad strings, wrong primitives, missing required inputs, invalid paths, or fresh-object typo keys. Standard TypeScript structural assignability allows predeclared objects to carry extra keys. Core rejects supplied unknown argument or flag keys before action.
 
@@ -527,6 +527,23 @@ Runs the terminal boundary. By default it parses `process.argv.slice(2)`; `optio
 ```ts
 await app.execute();
 ```
+
+### Invocation order
+
+Both `.execute()` and `.run()` follow the same sequence. Steps 4 through 10 are skipped when routing or argv parsing fails.
+
+1. Prepare the command tree by applying Extensions, recipes, flags, and sections.
+2. Route the command path.
+3. Parse argv for `.execute()`, or bind structured input for `.run()`.
+4. Run Extension `preRun` hooks in registration order; a hook that returns `ctx.finish()` ends the invocation here with a `finished` outcome.
+5. Check required values and positional structure.
+6. Apply Standard Schemas and aggregate their issues.
+7. Construct declared Contexts when first pulled.
+8. Run the Command Action.
+9. Run Extension `postRun` hooks in reverse registration order, with the `completed`, `finished`, or `failed` outcome.
+10. Settle Context setup, then dispose constructed Contexts in reverse construction order.
+
+A failure in steps 4 through 8 still runs steps 9 and 10. See [propagation boundaries](/docs/api/errors#propagation-boundaries) for what each phase's failure becomes.
 
 `execute()` resolves to the terminal exit code: `0` on success, `1` on failure, or `130` for cancellation. It still renders a failure once through Extension `onError` hooks ending in Core's renderer and sets `process.exitCode` on failure. Any `Error` whose `name` is `"AbortError"`, including a `DOMException`, is cancellation.
 

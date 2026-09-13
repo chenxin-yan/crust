@@ -1,7 +1,9 @@
 ---
-title: Runtime Support
-description: Use Crust libraries with Bun, Node.js, or Deno.
+title: Runtime support
+description: Run Crust applications with Bun, Node.js, or Deno.
 ---
+
+Crust application code is the same on Bun, Node.js, and Deno, so pick a runtime based on how you ship and operate the CLI.
 
 ## Supported runtimes
 
@@ -17,13 +19,12 @@ npm install @crustjs/core
 deno add npm:@crustjs/core
 ```
 
-`@crustjs/core`, `style`, `prompts`, `progress`, `store`, `skills`, `man`, `extensions`, and `testing` support Bun 1.3.14+, Node.js 22+, and Deno 2.8+, as do `create-crust` and `@crustjs/create`. [`@crustjs/tui`](/docs/modules/tui) is Bun only because OpenTUI uses a native library over FFI. The `crust` build CLI is Bun tooling, while its npm package and CLIs made with `crust build --package` use a Node launcher for standalone binaries that embed Bun.
+The Crust packages support Bun 1.3.14+, Node.js 22+, and Deno 2.8+. [`@crustjs/tui`](/docs/modules/tui) is Bun only because its OpenTUI peer is a native library, while the `crust` build CLI is Bun tooling distributed through a Node launcher.
 
 ## Deno permissions
 
 ```sh
-# Scope file and subprocess permissions to what this CLI uses.
 deno run --allow-run=git --allow-read=. --allow-write=./dist --allow-env ./src/cli.ts
 ```
 
-Deno applies its permission sandbox to library code. See [Deno permissions](https://docs.deno.com/runtime/fundamentals/security/) for the host runtime rules and flag syntax.
+Deno applies its permission sandbox to library code. See [Deno permissions](https://docs.deno.com/runtime/fundamentals/security/) for the runtime rules and flag syntax.

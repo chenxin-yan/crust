@@ -1,0 +1,131 @@
+---
+title: Arguments and Flags
+description: Choose and define typed positional and named command inputs.
+---
+
+Use a positional argument for the thing a command acts on, and a flag for how it should act.
+
+<include lang="ts">../../../examples/guide/inputs.ts</include>
+
+```sh
+$ convert report.md --format markdown
+Converting report.md as markdown
+```
+
+The Command Action receives both values under the names in their definitions.
+
+## Arguments
+
+<include lang="ts">../../../examples/guide/arguments.ts#defaults</include>
+
+```sh
+$ convert report.md
+report.md -> json
+$ convert report.md yaml draft
+report.md -> yaml (draft)
+```
+
+Positional values fill definitions in order. Set `required: true` when omission should fail, use `default` for a fallback, and leave both out for an optional value. These definitions infer `string`, `string`, and `string | undefined` in the Command Action; see [`ArgDef`](/docs/api/types#argdef) for the full definition.
+
+### Variadic arguments
+
+<include lang="ts">../../../examples/guide/arguments.ts#variadic</include>
+
+```sh
+$ copy dist a.ts b.ts
+2 files to /home/me/project/dist
+```
+
+Use a final variadic argument when the command accepts any number of values in that position. The Command Action receives those values as an array; `type: "path"` resolves each value against the working directory.
+
+### Choices
+
+<include lang="ts">../../../examples/guide/arguments.ts#choices</include>
+
+```sh
+$ run deno
+Error: Invalid value "deno" for <runtime>. Expected one of: bun, node
+```
+
+Use `choices` when the accepted strings are known in advance. The Command Action gets their string union, and an invalid value fails before the action runs.
+
+### Pass through raw tokens
+
+<include lang="ts">../../../examples/guide/arguments.ts#raw</include>
+
+```sh
+$ wrap -- --watch src
+--watch src
+```
+
+Tokens after `--` bypass argument and flag parsing and reach the Command Action as `rawArgs`. Use this for wrapper commands that pass options to another tool.
+
+## Flags
+
+<include lang="ts">../../../examples/guide/flags.ts#definitions</include>
+
+Use boolean flags for switches and value-taking flags for named settings. This command also shows a long alias, a one-character `short` alias, a repeated value, a default, and choices.
+
+### Aliases and negation
+
+```sh
+$ serve --no-colour
+color=false targets= runtime=bun tag=none
+```
+
+Set `short` for a one-character alias and `aliases` for long aliases. Boolean flags accept `--no-<name>` unless `noNegate: true`; see the [`.flags()` contract](/docs/api/crust#flagsdefs) for accepted spellings.
+
+### Required and defaulted values
+
+<include lang="ts">../../../examples/guide/flags.ts#required-defaulted</include>
+
+Set `required: true` when the user must supply a value, or use `default` when omission should choose a value. Both forms are non-optional in the Command Action.
+
+### Repeated values
+
+```sh
+$ serve --target linux -t darwin
+color=true targets=linux,darwin runtime=bun tag=none
+```
+
+Set `multiple: true` when a flag may occur more than once. The Command Action receives an array in occurrence order.
+
+### Flag choices
+
+```sh
+$ serve --runtime deno
+Error: Invalid value "deno" for --runtime. Expected one of: bun, node
+$ echo $?
+1
+```
+
+Use `choices` for a fixed set of string values. An invalid value fails before the Command Action runs.
+
+### Reuse across commands
+
+<include lang="ts">../../../examples/guide/flags.ts#reuse</include>
+
+Use `defineFlag()` when several commands need the same definition. Attach it to each command that should parse the flag.
+
+## Unsupported flag grammars
+
+```sh
+# Repeat the flag instead of adding bare values:
+--locales en --locales fr
+
+# Split an optional-value flag into a boolean and a value flag:
+--tag --tag-name nightly
+
+# Attach a dash-leading value with =:
+--timeout=-5
+```
+
+Crust flags are either boolean or value-taking, so optional values, bare list items, and dash-leading values without `=` are not parsed. Use the spellings above instead.
+
+## Validation
+
+```ts
+.flags({ name: "port", type: "number" })
+```
+
+Choose built-in conversion, a custom parser, or a Standard Schema in [Values and validation](/docs/guide/types).

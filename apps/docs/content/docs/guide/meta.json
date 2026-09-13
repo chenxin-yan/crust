@@ -3,16 +3,13 @@
   "icon": "Book",
   "pages": [
     "commands",
-    "arguments",
-    "flags",
+    "inputs",
     "types",
     "contexts",
     "extensions",
-    "lifecycle",
     "error-handling",
     "testing",
     "runtimes",
-    "environment",
     "build"
   ]
 }

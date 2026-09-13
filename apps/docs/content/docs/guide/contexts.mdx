@@ -1,52 +1,46 @@
 ---
 title: Contexts
-description: Define lazy, typed dependencies with build-time wiring checks and native cleanup.
+description: Share lazy setup, cleanup, and owned flags across commands.
 ---
 
-A Context is a named dependency that is constructed on first access and memoized for one invocation.
+Import a function by default. Reach for a Context when setup is lazy and shared across commands, needs cleanup, or should own a flag.
 
-<include lang="ts">../../../examples/guide/contexts.ts#lazy</include>
+<include lang="ts">../../../examples/guide/contexts.ts#basic</include>
 
-The action never reads `ctx.cache`, so the setup log is absent.
+```text
+https://api.example.com/status
+```
+
+The Context is built only when the Command Action reads `ctx.api`. Values under `ctx` are always awaited because setup may be asynchronous.
+
+## Setup and cleanup
+
+<include lang="ts">../../../examples/guide/contexts.ts#setup-cleanup</include>
+
+Contexts build on first use and dispose after the Command Action on success or failure. Put cleanup on the returned value as `[Symbol.dispose]` or `[Symbol.asyncDispose]` instead of adding `try`/`finally` to every action.
 
 ## Owned flags
 
 <include lang="ts">../../../examples/guide/contexts.ts#owned-flags</include>
 
-`.provide()` installs a Context's flags on the provider command and descendants added later. Setup receives its validated owned flag values, whether terminal syntax puts them before or after the subcommand. A `preRun` hook cannot access a Context that owns flags, directly or transitively; see [`ExtensionHooks`](/docs/api/types#extensionhooks).
+Let a Context own a flag when the flag configures that dependency rather than the command's work. `.provide()` makes the flag available to commands added below it, and setup receives the validated value.
+
+See [`.provide()`](/docs/api/crust#provideinstances) for attachment and collision rules.
 
 ## Context dependencies
 
 <include lang="ts">../../../examples/guide/contexts.ts#dependencies</include>
 
-Declare setup dependencies with `uses`, then await them through the setup's typed `ctx` bag. Dependencies stay lazy until read.
+Use `uses` when one Context needs another during setup. Each dependency remains lazy until its value is read from `ctx`.
 
 ## Contexts in command trees
 
 <include lang="ts">../../../examples/guide/contexts.ts#command-trees</include>
 
-A reusable definition declares demand with `.use(factory)`, while the app supplies an instance with `.provide(factory())`. Add the definition after its provider is available on that command path.
-
-## Dynamic definitions and attachment
-
-<include lang="ts">../../../examples/guide/contexts.ts#dynamic</include>
-
-Use `defineContext(name, config, setup)` when names or configuration come from runtime values. `.provide()` and `.add()` check the resulting definitions when they attach to a destination.
+A reusable definition declares what it needs with `.use(factory)`, while the app supplies an instance with `.provide(factory())`. Provide the Context before adding the definition on that command path.
 
 ## Test doubles
 
 <include lang="ts">../../../examples/guide/contexts.ts#doubles</include>
 
-`.of(value)` supplies a precomputed value with the same Context name and value type. Its setup has no dependencies, while its owned flags remain attached.
-
-## Cleanup
-
-<include lang="ts">../../../examples/guide/contexts.ts#cleanup</include>
-
-Return `Symbol.dispose` or `Symbol.asyncDispose` on constructed values. Cleanup runs after post-run hooks in reverse construction order, on both success and failure.
-
-## Collisions
-
-<include lang="ts">../../../examples/guide/contexts.ts#collisions</include>
-
-Dynamically assembled owned-flag collisions throw `CrustError` with code `DEFINITION`. See [`.provide()`](/docs/api/crust#provideinstances) for the complete attachment and collision contract.
+Use `.of(value)` to supply a precomputed value without running setup. It keeps the Context name and value type, so `status` runs unchanged against the fake.

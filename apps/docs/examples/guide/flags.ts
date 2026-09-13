@@ -1,6 +1,5 @@
 //#region definitions
-import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
-
+import { Crust, defineCommand, defineFlag } from "@crustjs/core";
 const command = new Crust("serve")
   .flags(
     { name: "color", type: "boolean", aliases: ["colour"] },
@@ -17,19 +16,20 @@ const command = new Crust("serve")
 await command.execute();
 //#endregion
 
-//#region contexts
-const verbose = defineFlag("verbose", { type: "boolean" });
-const logging = defineContext("logging", { flags: [verbose] }, ({ flags, stderr }) => ({
-  debug(message: string) {
-    if (flags.verbose) stderr(message);
-  },
-}));
-
-const deploy = defineCommand("deploy", (command) =>
-  command.use(logging).action(async ({ ctx }) => (await ctx.logging).debug("deploying")),
+//#region required-defaulted
+const publishCommand = new Crust("publish").flags(
+  { name: "token", type: "string", required: true },
+  { name: "registry", type: "string", default: "npm" },
 );
-
-const app = new Crust("app").provide(logging()).add(deploy);
 //#endregion
 
-void app;
+//#region reuse
+const format = defineFlag("format", { type: "string", default: "json" });
+const print = defineCommand("print", (builder) => builder.flags(format));
+const inspect = defineCommand("inspect", (builder) => builder.flags(format));
+
+const tools = new Crust("tools").add(print, inspect);
+//#endregion
+
+void publishCommand;
+void tools;
