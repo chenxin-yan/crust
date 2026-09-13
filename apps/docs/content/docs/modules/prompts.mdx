@@ -55,7 +55,15 @@ The root exports the renderer, submission, fuzzy matching, list rendering, line 
 ## Prompts
 
 ```ts
-import { input, password, confirm, select, multiselect, filter, multifilter } from "@crustjs/prompts";
+import {
+  input,
+  password,
+  confirm,
+  select,
+  multiselect,
+  filter,
+  multifilter,
+} from "@crustjs/prompts";
 ```
 
 All prompt functions accept `(options, io?)`. Choice functions preserve literal choice value types when their choices are not widened.
@@ -78,7 +86,10 @@ const token = await password({ message: "Token?", mask: "*" });
 
 Password input masks active text and shows a fixed-length mask after submission. Its default mask is `*`.
 
-<auto-type-table path="../../../../../packages/prompts/src/prompts/password.ts" name="PasswordOptions" />
+<auto-type-table
+  path="../../../../../packages/prompts/src/prompts/password.ts"
+  name="PasswordOptions"
+/>
 
 ### `confirm(options, io?)`
 
@@ -88,7 +99,10 @@ const proceed = await confirm({ message: "Continue?", default: false });
 
 Confirm returns a boolean. Left, Right, and Tab toggle the value; `y` and `h` select true, while `n` and `l` select false.
 
-<auto-type-table path="../../../../../packages/prompts/src/prompts/confirm.ts" name="ConfirmOptions" />
+<auto-type-table
+  path="../../../../../packages/prompts/src/prompts/confirm.ts"
+  name="ConfirmOptions"
+/>
 
 ### `select(options, io?)`
 
@@ -98,7 +112,10 @@ const runtime = await select({ message: "Runtime?", choices: ["bun", "node"] });
 
 Select returns one choice value. Object-valued defaults match by reference, so pass the same object used in `choices`.
 
-<auto-type-table path="../../../../../packages/prompts/src/prompts/select.ts" name="SelectOptions" />
+<auto-type-table
+  path="../../../../../packages/prompts/src/prompts/select.ts"
+  name="SelectOptions"
+/>
 
 ### `multiselect(options, io?)`
 
@@ -108,7 +125,10 @@ const tools = await multiselect({ message: "Tools?", choices: ["lint", "test"], 
 
 Multiselect returns selected values in choice order. `required` prevents an empty submission, and `max` limits toggle-all and invert operations.
 
-<auto-type-table path="../../../../../packages/prompts/src/prompts/multiselect.ts" name="MultiselectOptions" />
+<auto-type-table
+  path="../../../../../packages/prompts/src/prompts/multiselect.ts"
+  name="MultiselectOptions"
+/>
 
 ### `filter(options, io?)`
 
@@ -118,7 +138,10 @@ const language = await filter({ message: "Language?", choices: ["TypeScript", "R
 
 Filter fuzzy-matches typed text and returns one highlighted choice.
 
-<auto-type-table path="../../../../../packages/prompts/src/prompts/filter.ts" name="FilterOptions" />
+<auto-type-table
+  path="../../../../../packages/prompts/src/prompts/filter.ts"
+  name="FilterOptions"
+/>
 
 ### `multifilter(options, io?)`
 
@@ -128,7 +151,10 @@ const features = await multifilter({ message: "Features?", choices: ["lint", "te
 
 Multifilter combines fuzzy matching with multi-selection and returns values in original choice order.
 
-<auto-type-table path="../../../../../packages/prompts/src/prompts/multifilter.ts" name="MultifilterOptions" />
+<auto-type-table
+  path="../../../../../packages/prompts/src/prompts/multifilter.ts"
+  name="MultifilterOptions"
+/>
 
 ## Validation
 
@@ -170,7 +196,7 @@ Ctrl+C rejects with a `DOMException` whose name is `AbortError`.
 const result = await runPrompt({
   initialState: { count: 0 },
   render: (state) => `Count: ${state.count}`,
-  handleKey: (key, state) => key.name === "return" ? submit(state.count) : state,
+  handleKey: (key, state) => (key.name === "return" ? submit(state.count) : state),
 });
 ```
 

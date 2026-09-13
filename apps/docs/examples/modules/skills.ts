@@ -35,7 +35,7 @@ console.log(files);
 import { defineCommand as defineSectionCommand } from "@crustjs/core";
 import { skill as sectionSkill } from "@crustjs/skills";
 
-const documentedDeploy = defineSectionCommand(
+export const documentedDeploy = defineSectionCommand(
   "deploy",
   {
     sections: [

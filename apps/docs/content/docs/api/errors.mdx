@@ -58,7 +58,7 @@ type CrustErrorCode = "DEFINITION" | "PARSE" | "VALIDATION" | "COMMAND_NOT_FOUND
 | `DEFINITION`        | Malformed dynamic definition or collision, recipe, Extension, Context, or documentation-section failure |
 | `PARSE`             | Argv syntax, structured `run()` input binding, or built-in value parsing failed                         |
 | `VALIDATION`        | Required-value or Standard Schema validation failed                                                     |
-| `COMMAND_NOT_FOUND` | An unknown command under the [routing rules](/docs/guide/commands#unknown-commands)                  |
+| `COMMAND_NOT_FOUND` | An unknown command under the [routing rules](/docs/guide/commands#unknown-commands)                     |
 
 With `execute()`, an unmatched subcommand token becomes a positional argument if the parent has a Command Action. Without an action, the parent reports `COMMAND_NOT_FOUND`. Typed `run()` resolves a failed outcome carrying `COMMAND_NOT_FOUND` for unknown path segments.
 

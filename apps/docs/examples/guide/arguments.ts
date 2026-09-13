@@ -8,10 +8,10 @@ const convert = new Crust("convert")
     { name: "label", type: "string" },
   )
   .action(({ args, stdout }) => {
-    args.input; // string
-    args.format; // string
-    args.label; // string | undefined
-    stdout(`${args.input} -> ${args.format}${args.label ? ` (${args.label})` : ""}`);
+    const input = args.input; // string
+    const format = args.format; // string
+    const label = args.label; // string | undefined
+    stdout(`${input} -> ${format}${label ? ` (${label})` : ""}`);
   });
 //#endregion
 
@@ -36,4 +36,5 @@ const wrap = new Crust("wrap").action(({ rawArgs, stdout }) => stdout(rawArgs.jo
 
 const examples = { convert, copy, run, wrap };
 const [name = "", ...argv] = process.argv.slice(2);
-if (name in examples) await examples[name as keyof typeof examples].execute({ argv });
+const example = Object.entries(examples).find(([key]) => key === name)?.[1];
+if (example) await example.execute({ argv });

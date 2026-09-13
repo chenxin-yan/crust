@@ -25,11 +25,11 @@ crust build --runtime bun --target bun-linux-x64-baseline --name my-cli
 
 Bun is the default and `--runtime` overrides `"crust": { "runtime": "deno" }` in `package.json`; `--runtime node` writes an executable JavaScript bundle at `dist/<name>.js`.
 
-| Runtime | Output | Needed by the user |
-| --- | --- | --- |
-| Bun | Standalone executable | Nothing |
-| Deno | Standalone executable with all permissions | Nothing |
-| Node | Executable JavaScript bundle | Node |
+| Runtime | Output                                     | Needed by the user |
+| ------- | ------------------------------------------ | ------------------ |
+| Bun     | Standalone executable                      | Nothing            |
+| Deno    | Standalone executable with all permissions | Nothing            |
+| Node    | Executable JavaScript bundle               | Node               |
 
 Use `--entry` to replace `src/cli.ts`, `--outfile` for one exact output path, or `--name` for the derived filename. See all flags in the [`crust build` options](/docs/modules/crust#crust-build-options).
 
@@ -63,11 +63,11 @@ crust build --package --target bun-linux-x64-baseline --target bun-darwin-arm64
 
 `--package` stages Bun binaries as platform packages plus a root package with a Node launcher. It requires `name` and `version` in `package.json`.
 
-| Path | Contains |
-| --- | --- |
-| `dist/npm/root/` | Root `package.json`, launcher, and Extension artifacts |
-| `dist/npm/<platform>/` | One platform `package.json` and binary |
-| `dist/npm/manifest.json` | Staged package list and publish order |
+| Path                     | Contains                                               |
+| ------------------------ | ------------------------------------------------------ |
+| `dist/npm/root/`         | Root `package.json`, launcher, and Extension artifacts |
+| `dist/npm/<platform>/`   | One platform `package.json` and binary                 |
+| `dist/npm/manifest.json` | Staged package list and publish order                  |
 
 Platform package names append the platform alias, such as `my-cli-linux-x64` or `@scope/my-cli-linux-x64`; use `--stage-dir` to change the staging directory.
 
@@ -115,7 +115,8 @@ grep -a -o 'private-value' dist/deploy || echo 'private-value: not embedded'
 For Bun and Node builds, `--env-file` passes explicit files to the compiler, embeds only `PUBLIC_*` values, and reaches snapshot preparation.
 
 <Callout type="warn">
-  Embedded `PUBLIC_*` values are visible in the output. Keep secrets in runtime environment variables without that prefix.
+  Embedded `PUBLIC_*` values are visible in the output. Keep secrets in runtime environment
+  variables without that prefix.
 </Callout>
 
 Deno builds reject `--env-file`, so load their configuration at runtime instead.

@@ -38,12 +38,12 @@ cacheDir("my-cli");
 
 Choose the helper that matches user configuration, durable app data, runtime state, or regenerable cache data.
 
-| Helper | Linux and macOS | Windows | Environment variable |
-| --- | --- | --- | --- |
-| `configDir` | `~/.config/<app>` | `%APPDATA%\<app>` | `XDG_CONFIG_HOME` on Linux/macOS; `APPDATA` on Windows |
-| `dataDir` | `~/.local/share/<app>` | `%LOCALAPPDATA%\<app>\Data` | `XDG_DATA_HOME` on Linux/macOS; `LOCALAPPDATA` on Windows |
-| `stateDir` | `~/.local/state/<app>` | `%LOCALAPPDATA%\<app>\State` | `XDG_STATE_HOME` on Linux/macOS; `LOCALAPPDATA` on Windows |
-| `cacheDir` | `~/.cache/<app>` | `%LOCALAPPDATA%\<app>\Cache` | `XDG_CACHE_HOME` on Linux/macOS; `LOCALAPPDATA` on Windows |
+| Helper      | Linux and macOS        | Windows                      | Environment variable                                       |
+| ----------- | ---------------------- | ---------------------------- | ---------------------------------------------------------- |
+| `configDir` | `~/.config/<app>`      | `%APPDATA%\<app>`            | `XDG_CONFIG_HOME` on Linux/macOS; `APPDATA` on Windows     |
+| `dataDir`   | `~/.local/share/<app>` | `%LOCALAPPDATA%\<app>\Data`  | `XDG_DATA_HOME` on Linux/macOS; `LOCALAPPDATA` on Windows  |
+| `stateDir`  | `~/.local/state/<app>` | `%LOCALAPPDATA%\<app>\State` | `XDG_STATE_HOME` on Linux/macOS; `LOCALAPPDATA` on Windows |
+| `cacheDir`  | `~/.cache/<app>`       | `%LOCALAPPDATA%\<app>\Cache` | `XDG_CACHE_HOME` on Linux/macOS; `LOCALAPPDATA` on Windows |
 
 macOS uses the same XDG paths as Linux. Each helper accepts a `PlatformEnv` as its second argument for deterministic tests.
 

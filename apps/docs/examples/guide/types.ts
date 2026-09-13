@@ -5,18 +5,20 @@ import { z } from "zod";
 const inspect = new Crust("inspect")
   .args({ name: "file", type: "path", required: true })
   .flags({ name: "config", type: "json" }, { name: "retries", type: "number" })
-  .action(({ args, flags }) => {
-    args.file; // string, resolved against the working directory
-    flags.config; // unknown
-    flags.retries; // number | undefined
+  .action(({ args, flags, stdout }) => {
+    const file = args.file; // string, resolved against the working directory
+    const config = flags.config; // unknown
+    const retries = flags.retries; // number | undefined
+    stdout(`${file} config=${JSON.stringify(config)} retries=${retries ?? "not set"}`);
   });
 //#endregion
 
 //#region parse
 const schedule = new Crust("schedule")
   .flags({ name: "date", type: "string", parse: (raw) => new Date(raw) })
-  .action(({ flags }) => {
-    flags.date; // Date | undefined
+  .action(({ flags, stdout }) => {
+    const date = flags.date; // Date | undefined
+    stdout(`scheduled: ${date?.toLocaleString() ?? "not set"}`);
   });
 //#endregion
 
@@ -36,9 +38,9 @@ const serve = new Crust("serve")
   .args({ name: "port", schema: Port })
   .flags({ name: "host", type: "string", schema: z.string().default("localhost") })
   .action(({ args, flags, stdout }) => {
-    args.port; // number
-    flags.host; // string
-    stdout(`listening on ${flags.host}:${args.port}`);
+    const port = args.port; // number
+    const host = flags.host; // string
+    stdout(`listening on ${host}:${port}`);
   });
 //#endregion
 
