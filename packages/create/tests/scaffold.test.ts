@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { scaffold } from "../src/scaffold.ts";
 
@@ -209,6 +210,28 @@ describe("scaffold", () => {
 		expect(readOutputFile("readme.txt")).toBe("Hello world");
 	});
 
+	// Windows needs a privilege to create symlinks; the traversal itself is the same on every platform.
+	it.skipIf(process.platform === "win32")(
+		"skips symlinked files and writes only template-relative paths under dest",
+		async () => {
+			createTemplateFile("src/index.ts", "// {{name}}");
+			const outsideFile = join(tempDir, "outside.txt");
+			writeFileSync(outsideFile, "outside", "utf-8");
+			symlinkSync(outsideFile, join(templateDir, "linked.txt"));
+
+			const result = await scaffold({
+				template: templateDir,
+				dest: destDir,
+				context: { name: "my-app" },
+			});
+
+			expect(result.files).toEqual([join("src", "index.ts")]);
+			expect(result.files.some((file) => isAbsolute(file) || file.startsWith(".."))).toBe(false);
+			expect(existsSync(join(destDir, "linked.txt"))).toBe(false);
+			expect(readOutputFile(join("src", "index.ts"))).toBe("// my-app");
+		},
+	);
+
 	it("allows scaffold on an empty existing directory with conflict 'abort'", async () => {
 		// Create an empty destination directory
 		mkdirSync(destDir, { recursive: true });
@@ -277,9 +300,8 @@ describe("scaffold", () => {
 	it("resolves template from a file: URL", async () => {
 		createTemplateFile("hello.txt", "hi {{who}}");
 
-		const templateUrl = new URL(`file://${templateDir}`);
 		const result = await scaffold({
-			template: templateUrl,
+			template: pathToFileURL(templateDir),
 			dest: destDir,
 			context: { who: "URL" },
 		});
@@ -288,36 +310,42 @@ describe("scaffold", () => {
 		expect(readOutputFile("hello.txt")).toBe("hi URL");
 	});
 
-	it("resolves relative template string from package root", async () => {
-		const originalArgv1 = process.argv[1];
-		const hadArgv1 = process.argv.length > 1;
-		const packageRoot = join(tempDir, "my-generator");
-		const entryFile = join(packageRoot, "dist", "index.js");
-		const relativeTemplate = "templates/base";
-		const templateRoot = join(packageRoot, relativeTemplate);
-
-		mkdirSync(join(packageRoot, "dist"), { recursive: true });
-		writeFileSync(join(packageRoot, "package.json"), '{"name":"my-generator"}');
-		mkdirSync(templateRoot, { recursive: true });
-		writeFileSync(join(templateRoot, "hello.txt"), "hi {{who}}", "utf-8");
-
-		process.argv[1] = entryFile;
+	it("resolves a relative template string from the current working directory, like dest", async () => {
+		createTemplateFile("hello.txt", "hi {{who}}");
+		const originalCwd = process.cwd();
+		process.chdir(tempDir);
 
 		try {
 			const result = await scaffold({
-				template: relativeTemplate,
-				dest: destDir,
-				context: { who: "pkg-root" },
+				template: "template",
+				dest: "output",
+				context: { who: "cwd" },
 			});
 
 			expect(result.files).toContain("hello.txt");
-			expect(readOutputFile("hello.txt")).toBe("hi pkg-root");
+			expect(readOutputFile("hello.txt")).toBe("hi cwd");
 		} finally {
-			if (hadArgv1 && originalArgv1) {
-				process.argv[1] = originalArgv1;
-			} else {
-				process.argv.splice(1, 1);
-			}
+			process.chdir(originalCwd);
+		}
+	});
+
+	it("does not infer a package root for relative templates", async () => {
+		// A generator's own templates need an explicit module-relative file: URL;
+		// a bare relative string is looked up from cwd and reported as such.
+		const packageRoot = join(tempDir, "my-generator");
+		mkdirSync(join(packageRoot, "templates", "base"), { recursive: true });
+		writeFileSync(join(packageRoot, "package.json"), '{"name":"my-generator"}');
+		const originalArgv1 = process.argv[1];
+		process.argv[1] = join(packageRoot, "dist", "index.js");
+
+		try {
+			await expect(
+				scaffold({ template: "templates/base", dest: destDir, context: {} }),
+			).rejects.toThrow(
+				`Template directory "${join(process.cwd(), "templates", "base")}" does not exist`,
+			);
+		} finally {
+			process.argv[1] = originalArgv1 as string;
 		}
 	});
 
@@ -328,31 +356,7 @@ describe("scaffold", () => {
 				dest: destDir,
 				context: {},
 			}),
-		).rejects.toThrow("file: protocol");
-	});
-
-	it("throws for relative template when package root cannot be found", async () => {
-		const originalArgv1 = process.argv[1];
-		const hadArgv1 = process.argv.length > 1;
-		const fakeEntrypoint = join(tempDir, "no-package-root", "dist", "index.js");
-
-		process.argv[1] = fakeEntrypoint;
-
-		try {
-			await expect(
-				scaffold({
-					template: "templates/base",
-					dest: destDir,
-					context: {},
-				}),
-			).rejects.toThrow("no package.json was found");
-		} finally {
-			if (hadArgv1 && originalArgv1) {
-				process.argv[1] = originalArgv1;
-			} else {
-				process.argv.splice(1, 1);
-			}
-		}
+		).rejects.toThrow("The URL must be of scheme file");
 	});
 
 	it("throws when template directory does not exist", async () => {

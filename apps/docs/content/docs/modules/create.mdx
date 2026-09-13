@@ -7,8 +7,8 @@ description: Headless scaffolding engine for building create-xx tools.
 
 ## Install
 
-```sh
-bun add @crustjs/create
+```npm
+npm install @crustjs/create
 ```
 
 Pair it with any CLI and prompt libraries needed by your create tool.
@@ -19,7 +19,19 @@ Pair it with any CLI and prompt libraries needed by your create tool.
   ../../../examples/modules/create.ts
 </include>
 
-The template URL resolves from `src/index.ts` to the sibling `templates/base` directory. `scaffold()` returns every written path relative to the destination; the exact list depends on the files in that directory.
+`new URL("../templates/base", import.meta.url)` points at the `templates/base` directory next to this module's parent folder, so the template stays with the generator wherever it is installed or run from. `scaffold()` returns every written path relative to the destination; the exact list depends on the files in that directory.
+
+## Locating templates
+
+| `template` value                                | Resolves from                        | Use for                                                       |
+| ----------------------------------------------- | ------------------------------------ | ------------------------------------------------------------- |
+| `new URL("../templates/base", import.meta.url)` | The module that contains the call    | Templates shipped inside your generator package               |
+| `"./templates/base"`                            | The user's current working directory | Templates in the project where the command runs               |
+| `"/srv/templates/base"`                         | That exact filesystem path           | A location already resolved by your own code or configuration |
+
+A generator's templates belong to its package, but the package rarely runs from its own directory: `npx`, `bun x`, and global installs run it from a cache or install location while the user sits in their project. A relative string cannot express "next to my code" because `scaffold()` receives only the path text, not the file that wrote it. `import.meta.url` supplies that file, and `new URL()` resolves the path against it.
+
+String paths behave like `dest`: they resolve from the working directory, which is right when the template lives in the user's project or was supplied by the user. Convert an existing filesystem path to a URL with `pathToFileURL()` rather than concatenating `file://`.
 
 ## Template conventions
 
@@ -48,7 +60,7 @@ function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult>;
 <auto-type-table path="../../../../../packages/create/src/types.ts" name="ScaffoldOptions" />
 <auto-type-table path="../../../../../packages/create/src/types.ts" name="ScaffoldResult" />
 
-A `file:` URL resolves relative to its module, an absolute string is normalized, and a relative string resolves from the nearest `package.json` above `process.argv[1]`. Resolution throws when the URL protocol is not `file:`, the relative source has no package root, or the resolved template is not a directory.
+See [Locating templates](#locating-templates) for how `template` resolves. Resolution throws when the URL scheme is not `file:` or the resolved template is not a directory.
 
 The default `conflict: "abort"` throws for a non-empty destination. `"overwrite"` replaces conflicting files and leaves unrelated destination files in place.
 

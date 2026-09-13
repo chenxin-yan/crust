@@ -146,25 +146,27 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 		// Infer package name from directory
 		const name = dirName;
 
+		// Shipped templates belong to this module, not the user's working directory.
+		const templateUrl = (template: string) => new URL(`../templates/${template}`, import.meta.url);
 		// Scaffolding produces no console output, so it is safe inside a spinner.
 		const context = { name, ...CRUST_TEMPLATE_VERSION_CONTEXT };
 		await spinner({
 			message: "Scaffolding project...",
 			task: async () => {
 				await scaffold({
-					template: "templates/base",
+					template: templateUrl("base"),
 					dest: resolvedDir,
 					context,
 					...(overwrite ? { conflict: "overwrite" } : {}),
 				});
 				await scaffold({
-					template: "templates/minimal",
+					template: templateUrl("minimal"),
 					dest: resolvedDir,
 					context,
 					conflict: "overwrite",
 				});
 				await scaffold({
-					template: `templates/distribution/${distributionMode}`,
+					template: templateUrl(`distribution/${distributionMode}`),
 					dest: resolvedDir,
 					context,
 					conflict: "overwrite",
