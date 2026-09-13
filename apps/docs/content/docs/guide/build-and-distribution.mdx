@@ -81,12 +81,26 @@ crust publish
 
 The dry run prints the order and commands without publishing. The publish command reads the staged manifest, verifies package metadata, publishes platform packages before the root, and stops at the first failure; see its [options](/docs/modules/crust#crust-publish-options).
 
-```sh
+```sh tab="npm" tab-group="package-manager"
 npm install -g my-cli
 my-cli --help
 ```
 
-Users install the root package; npm pulls only the platform package for their machine.
+```sh tab="pnpm"
+pnpm add -g my-cli
+my-cli --help
+```
+
+```sh tab="yarn"
+yarn dlx my-cli --help
+```
+
+```sh tab="bun"
+bun add -g my-cli
+my-cli --help
+```
+
+Users install the root package; the package manager pulls only the platform package for their machine. Yarn 2+ has no global install, so Yarn users run the CLI once with `yarn dlx` or add it to a project and run it with `yarn my-cli`.
 
 ## Environment variables
 

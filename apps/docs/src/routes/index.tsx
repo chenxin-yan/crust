@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "fumadocs-ui/components/ui/tabs";
 import { HomeLayout } from "fumadocs-ui/layouts/home";
 import { useCallback, useState } from "react";
 import { createHighlighterCore } from "shiki/core";
@@ -15,6 +16,17 @@ import { buildPageMeta } from "@/lib/seo";
 import codeExampleSource from "../../examples/landing/greet.ts?raw";
 
 const CODE_EXAMPLE = codeExampleSource.trimEnd();
+
+// Docs `npm` fences share this group id (source.config.ts), so one selection follows the reader everywhere.
+const PACKAGE_MANAGER_GROUP_ID = "package-manager";
+
+// Must match what remarkNpm expands the Quick Start scaffold fence to; site.test.ts checks it.
+export const SCAFFOLD_COMMANDS = {
+  npm: "npx create-crust@latest my-cli",
+  pnpm: "pnpm dlx create-crust@latest my-cli",
+  yarn: "yarn dlx create-crust@latest my-cli",
+  bun: "bun x create-crust@latest my-cli",
+};
 
 let highlighterPromise: Promise<Awaited<ReturnType<typeof createHighlighterCore>>> | null = null;
 
@@ -225,12 +237,12 @@ const FALLBACK_HIGHLIGHTED_CODE = createFallbackHighlightedCode(CODE_EXAMPLE);
 
 function FurnaceHome() {
   const { highlightedCode, npmVersions } = Route.useLoaderData();
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
 
-  const handleCopy = useCallback(() => {
-    void navigator.clipboard.writeText("bun create crust my-cli");
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = useCallback((command: string) => {
+    void navigator.clipboard.writeText(command);
+    setCopied(command);
+    setTimeout(() => setCopied(null), 2000);
   }, []);
 
   return (
@@ -377,27 +389,60 @@ function FurnaceHome() {
           font-family: 'Fira Code', monospace;
         }
 
-        /* Install command — copy to clipboard */
-        .fn-install-cmd {
+        /* Install command — package manager tabs, click the command to copy */
+        .fn-install {
           margin-top: 28px;
-          padding: 12px 20px;
+          display: inline-flex;
+          flex-direction: column;
           background: var(--fn-surface);
           border: 1px solid var(--fn-border);
+          transition: border-color 0.2s;
+        }
+        .fn-install:has(.fn-install-cmd:hover) {
+          border-color: var(--fn-dim);
+        }
+        .fn-install:has(.fn-install-cmd:active) {
+          border-color: var(--fn-molten);
+        }
+        .fn-install-tabs {
+          display: flex;
+          border-bottom: 1px solid var(--fn-border);
+        }
+        .fn-install-tab {
+          padding: 6px 12px;
+          background: transparent;
+          border: none;
+          border-bottom: 1px solid transparent;
+          margin-bottom: -1px;
+          font-size: 11px;
+          color: var(--fn-dim);
+          cursor: pointer;
+          transition: color 0.2s, border-color 0.2s;
+        }
+        .fn-install-tab:hover {
+          color: var(--fn-primary);
+        }
+        .fn-install-tab[data-state="active"] {
+          color: var(--fn-molten);
+          border-bottom-color: var(--fn-molten);
+        }
+        .fn-install-tab:focus-visible,
+        .fn-install-panel:focus-visible,
+        .fn-install-cmd:focus-visible {
+          outline: 1px solid var(--fn-molten);
+          outline-offset: -1px;
+        }
+        .fn-install-cmd {
+          padding: 12px 20px;
+          background: transparent;
+          border: none;
           font-size: 14px;
           display: inline-flex;
           align-items: center;
           gap: 8px;
           cursor: pointer;
-          transition: border-color 0.2s;
-          position: relative;
           user-select: none;
           color: var(--fn-primary);
-        }
-        .fn-install-cmd:hover {
-          border-color: var(--fn-dim);
-        }
-        .fn-install-cmd:active {
-          border-color: var(--fn-molten);
         }
 
         /* Code block */
@@ -730,23 +775,45 @@ function FurnaceHome() {
                   A TypeScript-first, Bun-native CLI framework with composable modules.
                 </p>
 
-                {/* Install — click to copy */}
-                <button type="button" className="fn-mono fn-install-cmd" onClick={handleCopy}>
-                  <span style={{ color: "var(--fn-molten)" }}>{">"}</span>
-                  <span>bun create crust my-cli</span>
-                  <span
-                    className="fn-mono"
-                    style={{
-                      fontSize: 10,
-                      color: copied ? "var(--fn-molten)" : "var(--fn-dim)",
-                      marginLeft: 8,
-                      transition: "color 0.2s",
-                      letterSpacing: 1,
-                    }}
-                  >
-                    {copied ? "COPIED!" : "COPY"}
-                  </span>
-                </button>
+                {/* Install — pick a package manager, click the command to copy */}
+                <Tabs
+                  className="fn-install"
+                  groupId={PACKAGE_MANAGER_GROUP_ID}
+                  persist
+                  defaultValue="npm"
+                >
+                  <TabsList className="fn-mono fn-install-tabs" aria-label="Package manager">
+                    {Object.keys(SCAFFOLD_COMMANDS).map((manager) => (
+                      <TabsTrigger key={manager} value={manager} className="fn-install-tab">
+                        {manager}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                  {Object.entries(SCAFFOLD_COMMANDS).map(([manager, command]) => (
+                    <TabsContent key={manager} value={manager} className="fn-install-panel">
+                      <button
+                        type="button"
+                        className="fn-mono fn-install-cmd"
+                        onClick={() => handleCopy(command)}
+                      >
+                        <span style={{ color: "var(--fn-molten)" }}>{">"}</span>
+                        <span>{command}</span>
+                        <span
+                          className="fn-mono"
+                          style={{
+                            fontSize: 10,
+                            color: copied === command ? "var(--fn-molten)" : "var(--fn-dim)",
+                            marginLeft: 8,
+                            transition: "color 0.2s",
+                            letterSpacing: 1,
+                          }}
+                        >
+                          {copied === command ? "COPIED!" : "COPY"}
+                        </span>
+                      </button>
+                    </TabsContent>
+                  ))}
+                </Tabs>
 
                 <div
                   style={{

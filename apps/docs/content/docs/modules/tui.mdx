@@ -12,12 +12,20 @@ description: OpenTUI renderer lifecycle for Crust command actions.
 
 ## Install
 
-Install the adapter, OpenTUI core, and the framework renderer your application uses:
+Any package manager can install the packages; the application still has to run on Bun. Install the adapter and OpenTUI core:
 
-```sh
-bun add @crustjs/tui @opentui/core
-bun add @opentui/solid solid-js # Solid
-bun add @opentui/react react     # React
+```npm
+npm install @crustjs/tui @opentui/core
+```
+
+Then add one framework renderer. [Core](#core) needs neither.
+
+```npm title="Solid"
+npm install @opentui/solid solid-js
+```
+
+```npm title="React"
+npm install @opentui/react react
 ```
 
 ## `runTui(mount, config?)`

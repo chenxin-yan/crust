@@ -14,12 +14,12 @@ import { Step, Steps } from "fumadocs-ui/components/steps";
 <Step>
 ### Create a project
 
-```sh
-bun create crust my-cli
+```npm
+npx create-crust@latest my-cli
 cd my-cli
 ```
 
-The scaffolder creates:
+Pick a package manager once; the tabs remember it across the docs. `create-crust` detects the package manager that launched it and installs dependencies with the same one. The scaffolder creates:
 
 <Files>
   <Folder name="my-cli" defaultOpen>
@@ -36,6 +36,8 @@ The scaffolder creates:
 </Step>
 <Step>
 ### Run it
+
+The generated `dev` script is `bun run src/cli.ts`, so [Bun](https://bun.sh) runs the CLI whichever package manager installed it.
 
 ```sh
 bun run dev Ada --greet Welcome
@@ -108,12 +110,12 @@ Standalone mode compiles a binary to `dist/cli`; runtime mode bundles to `dist/c
 <Step>
 ### Install
 
-```sh
-bun add @crustjs/core @crustjs/extensions
-bun add -D @crustjs/crust
+```npm
+npm install @crustjs/core @crustjs/extensions
+npm install -D @crustjs/crust
 ```
 
-`@crustjs/crust` is only needed for `crust build`. Skip it if you bundle with `bun build` or run the source directly. For npm and Deno commands, see [Runtime support](/docs/guide/runtime-support).
+`@crustjs/crust` is only needed for `crust build`. Skip it if you bundle with `bun build` or run the source directly. Deno projects install with `deno add npm:`; see [Runtime support](/docs/guide/runtime-support).
 
 </Step>
 <Step>
@@ -131,7 +133,7 @@ bun add -D @crustjs/crust
 }
 ```
 
-`crust build` reads `src/cli.ts` and writes to `dist` by default; pass `--entry` for a different file. `bin` points at the built resolver so `bun link` and npm installs expose the command.
+`dev` runs the TypeScript source with Bun regardless of which package manager installed the dependencies. `crust build` reads `src/cli.ts` and writes to `dist` by default; pass `--entry` for a different file. `bin` points at the built resolver so `bun link` and npm installs expose the command.
 
 </Step>
 <Step>
