@@ -1,46 +1,114 @@
 ---
 title: Contexts
-description: Share lazy setup, cleanup, and owned flags across commands.
+description: Supply dependencies to commands with lazy setup, automatic cleanup, and test replacements.
 ---
 
-Import a function by default. Reach for a Context when setup is lazy and shared across commands, needs cleanup, or should own a flag.
+A Context supplies a named dependency, such as an API client or database connection, to commands. The app decides how to create it, and commands use the resulting value without constructing it themselves. This is dependency injection, with lazy setup and cleanup managed by Crust.
 
-<include lang="ts">../../../examples/guide/contexts.ts#basic</include>
+Use a Context for a service shared by several commands, setup that should run only when a command needs it, a resource that must be released afterwards, or a dependency you want to replace in tests. A plain imported function is still the right tool for stateless helpers.
 
-```text
+## Share a dependency
+
+### Define and provide it
+
+<include lang="ts" meta='title="status.ts"'>
+  ../../../examples/guide/contexts-provide.ts
+</include>
+
+```sh
+$ status
 https://api.example.com/status
 ```
 
-The Context is built only when the Command Action reads `ctx.api`. Values under `ctx` are always awaited because setup may be asynchronous.
+`defineContext("api", setup)` returns the factory `api`. Calling it, `api()`, creates an instance, and `.provide(api())` supplies that instance to the app. Inside the Command Action, `ctx.api` is the value returned by setup; it is always awaited because setup may be asynchronous.
 
-## Setup and cleanup
+### Use it from a reusable command
 
-<include lang="ts">../../../examples/guide/contexts.ts#setup-cleanup</include>
+<include lang="ts" meta='title="app.ts"'>
+  ../../../examples/guide/contexts-use.ts#use
+</include>
 
-Contexts build on first use and dispose after the Command Action on success or failure. Put cleanup on the returned value as `[Symbol.dispose]` or `[Symbol.asyncDispose]` instead of adding `try`/`finally` to every action.
+```sh
+$ app health
+https://api.example.com/health
+```
 
-## Owned flags
+A [reusable command](/docs/guide/commands) declares what it needs with `.use(api)`. This declaration names the factory; it neither constructs nor supplies a value. The app supplies the instance with `.provide(api())` and then adds the command. Providers reach the command they are called on and the commands added below it afterwards, so provide before `.add()`. The function below is never called; it exists to show the compile-time rejection:
 
-<include lang="ts">../../../examples/guide/contexts.ts#owned-flags</include>
+<include lang="ts">../../../examples/guide/contexts-use.ts#compile-time</include>
 
-Let a Context own a flag when the flag configures that dependency rather than the command's work. `.provide()` makes the flag available to commands added below it, and setup receives the validated value.
+TypeScript rejects the misordered `.add(health)` with `Uses Context "api" which is not provided`.
 
-See [`.provide()`](/docs/api/crust#provideinstances) for attachment and collision rules.
+## Manage setup and cleanup
 
-## Context dependencies
+### Initialize only when read
 
-<include lang="ts">../../../examples/guide/contexts.ts#dependencies</include>
+<include lang="ts" meta='title="work.ts"'>
+  ../../../examples/guide/contexts-lifecycle.ts#lazy
+</include>
 
-Use `uses` when one Context needs another during setup. Each dependency remains lazy until its value is read from `ctx`.
+```sh
+$ work ping
+pong
+$ work query
+database opened
+select 1: ok
+database closed
+```
 
-## Contexts in command trees
+Providing `database()` does not open anything. Setup runs the first time an invocation reads `await ctx.database`, so `ping` never prints `database opened`. Each invocation gets its own value and later reads within the same invocation reuse it. The `database closed` line and the `fail` command are covered next.
 
-<include lang="ts">../../../examples/guide/contexts.ts#command-trees</include>
+### Release resources after an invocation
 
-A reusable definition declares what it needs with `.use(factory)`, while the app supplies an instance with `.provide(factory())`. Provide the Context before adding the definition on that command path.
+<include lang="ts">../../../examples/guide/contexts-lifecycle.ts#cleanup</include>
 
-## Test doubles
+```sh
+$ work fail
+database opened
+Error: query failed
+database closed
+$ echo $?
+1
+```
 
-<include lang="ts">../../../examples/guide/contexts.ts#doubles</include>
+When setup returns a value with `[Symbol.dispose]` or `[Symbol.asyncDispose]`, Crust calls it after the Command Action finishes, whether the action succeeded or threw. Put cleanup on the value instead of adding `try`/`finally` to every action.
 
-Use `.of(value)` to supply a precomputed value without running setup. It keeps the Context name and value type, so `status` runs unchanged against the fake.
+## Configure and compose dependencies
+
+### Let a dependency own flags
+
+<include lang="ts" meta='title="app.ts"'>
+  ../../../examples/guide/contexts-flags.ts
+</include>
+
+```sh
+$ app deploy
+https://api.example.com/deploy
+$ app deploy --api-url https://staging.example.com
+https://staging.example.com/deploy
+```
+
+When a flag configures the dependency rather than the command's work, list it in the Context's `flags`. `.provide()` installs the flag on that command and the commands added below it, and setup receives the validated value in `flags`. Missing or invalid flags are reported before setup runs. See [`.provide()`](/docs/api/crust#provideinstances) for flag collision rules.
+
+### Use another Context during setup
+
+<include lang="ts" meta='title="app.ts"'>
+  ../../../examples/guide/contexts-uses.ts
+</include>
+
+```sh
+$ app regions
+https://eu.api.example.com/regions
+```
+
+List the factories a Context needs in `uses`, and its setup receives them in `ctx`, awaited the same way as in an action. A dependency is also lazy: `config` is built only because `api` reads it. The app provides every instance; within one `.provide()` call, order does not matter.
+
+## Replace a dependency in tests
+
+<include lang="ts" meta='title="work.test.ts"'>
+  ../../../examples/guide/contexts-doubles.ts
+</include>
+
+`database.of(value)` returns an instance that supplies `value` directly, so the real setup never runs: `outcome.stdout` contains neither `database opened` nor `database closed`. The instance keeps the Context name and value type, which is why the fake also carries `[Symbol.dispose]` and why `query` runs unchanged. See [Testing](/docs/guide/testing) for `run()` and the other test entry points.
+
+See the [Context types](/docs/api/types#context-types) and [`.use()`](/docs/api/crust#usefactories) for the complete contracts.
