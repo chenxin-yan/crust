@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/tui",
-	"version": "0.0.0",
+	"version": "0.0.1",
 	"description": "OpenTUI adapter for Crust commands",
 	"type": "module",
 	"sideEffects": false,
