@@ -58,38 +58,15 @@ The plain Linux targets link against glibc and do not start on musl-based distri
   `apk add libstdc++ libgcc`; `node:alpine` already includes them.
 </Callout>
 
-## Bun bundler plugins
+## Add Bun bundler plugins
 
 ```sh
-crust build --entry src/cli.tsx --bun-plugin @opentui/solid/bun-plugin --target bun-linux-x64
-# Building .../src/cli.tsx → .../dist/my-cli...
+crust build --bun-plugin ./build/plugin.ts
 ```
 
-Some libraries need a [Bun bundler plugin](https://bun.com/docs/bundler/plugins) at compile time — OpenTUI's Solid renderer, for example, ships its JSX transform as `@opentui/solid/bun-plugin`. `--bun-plugin <specifier>` is repeatable and applies, in order, to Bun standalone builds (including `--package`) and to `--runtime node` bundles; `--runtime deno` rejects it.
+`--bun-plugin` applies a [Bun bundler plugin](https://bun.com/docs/bundler/plugins) to Bun and Node builds; repeat it for several. The specifier is imported from your project (a bare name resolves from `node_modules`, a path from the project root) and must default-export the plugin. Deno builds reject the flag.
 
-Each specifier is imported from your project: bare names such as `@opentui/solid/bun-plugin` resolve from the project's `node_modules`, and paths such as `./build/plugin.ts` resolve against the project root. The module must default-export a plugin object with `name` and `setup`. If a library exports a factory instead, wrap it:
-
-```ts title="build/my-plugin.ts"
-import { createPlugin } from "some-library";
-
-export default createPlugin({ option: true });
-```
-
-With plugins present, Crust writes a small generated build script into the project root, runs it with `Bun.build` (same `--env-file`, `PUBLIC_*`, `--minify`, and target handling as the plain path), and deletes it afterwards. Put the flag in your `package.json` build script to make it part of every build:
-
-```json title="package.json"
-{
-  "scripts": {
-    "build": "crust build --bun-plugin @opentui/solid/bun-plugin"
-  }
-}
-```
-
-<Callout type="info">
-  Libraries with platform-specific optional dependencies (OpenTUI's `@opentui/core-<os>-<cpu>`
-  packages, for instance) only install the current platform's package by default. Before
-  cross-compiling, install every platform's package with `bun install --os "*" --cpu "*"`.
-</Callout>
+Validation runs the entry under Bun's runtime without bundler plugins, so a plugin that transforms sources at import time needs a matching runtime plugin in `bunfig.toml` `preload`; otherwise pass `--no-validate`.
 
 ## Prepare Extension artifacts
 
@@ -186,7 +163,7 @@ Deno builds reject `--env-file`, so load their configuration at runtime instead.
 
 ### Runtime autoloading
 
-Bun executables built by `crust build` still autoload `.env` from the directory they start in, but they do not read that directory's `bunfig.toml` (they are compiled with `--no-compile-autoload-bunfig`). A `preload` meant for the project that happens to be the current directory — such as `@opentui/solid/preload` — would otherwise crash your binary, or `crust` itself, before any of your code runs.
+Bun executables built by `crust build` autoload `.env` from the directory they start in, but not its `bunfig.toml`.
 
 ## Set up `package.json`
 
