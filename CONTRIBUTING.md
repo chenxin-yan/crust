@@ -153,7 +153,7 @@ Use the smallest accurate bump. Do not manually edit package versions or changel
 
 ### How releases run
 
-`.github/workflows/release.yml` runs on every push to `main`:
+`.github/workflows/release.yml` runs on pushes to `main` that touch package or release files:
 
 1. `select-mode` asks Changesets what to do: pending changesets → `version`; none pending but unpublished versions → `publish`; otherwise nothing.
 2. `version` runs `bun run packages:version` and opens or updates the `chore: release packages` PR. Merging that PR is the release.
