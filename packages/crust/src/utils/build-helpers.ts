@@ -1,10 +1,12 @@
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { once } from "node:events";
 import { existsSync, readFileSync } from "node:fs";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import { text } from "node:stream/consumers";
+import { pathToFileURL } from "node:url";
 
 import type { BuildReport, InvocationIO } from "@crustjs/core";
 import { BUILD_OUT_DIR_ENV, type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
@@ -277,7 +279,7 @@ export type BuildRunner = {
  * Fall back to the current executable with `BUN_BE_BUN=1` so packaged Crust
  * binaries still work in environments without a separate Bun install.
  */
-function resolveBunBuildRunner(): BuildRunner {
+export function resolveBunBuildRunner(): BuildRunner {
 	const bunPath = which("bun");
 	if (bunPath) {
 		return {
@@ -295,6 +297,176 @@ function resolveBunBuildRunner(): BuildRunner {
 	};
 }
 
+// Bun compiles its compiled-in default target — the host os/arch/libc with
+// `baseline: false` (src/options_types/compile_target.rs, `CompileTarget::default`
+// / `is_default`) — by copying the running executable onto itself; every other
+// target is downloaded clean. Inside a standalone Crust that base already
+// carries a bundle and the result segfaults on start, so the host target needs
+// either a real `bun` or the `-baseline` alias below.
+
+/**
+ * Bun's `-baseline` spelling of an x64 target, or null for arm64.
+ *
+ * Bun 1.4 ships one x64 build, so the alias yields the same executable (Bun
+ * 1.4.2 downloads a `bun-<target>-baseline-v1.4.2` base that is byte-identical
+ * to the plain one; checked for linux-x64-musl and darwin-x64), but `baseline:
+ * true` is never Bun's compiled-in default, so it is never the self-copy target.
+ * arm64 spellings with the suffix resolve to the plain aarch64 base instead.
+ */
+export function bunBaselineAlias(target: BunTarget): string | null {
+	return BUN_TARGETS.info[target].cpu === "x64" ? `${target}-baseline` : null;
+}
+
+/**
+ * Target string passed to Bun: the `-baseline` alias when the `BUN_BE_BUN`
+ * fallback runner would otherwise compile `target` by copying itself.
+ */
+export function bunCompileTarget(
+	target: BunTarget | undefined,
+	runner: BuildRunner,
+	host = hostTarget(BUN_TARGETS),
+): string | undefined {
+	if (target === undefined || target !== host || runner.env.BUN_BE_BUN !== "1") {
+		return target;
+	}
+	return bunBaselineAlias(target) ?? target;
+}
+
+/**
+ * Refuse the host target when only the `BUN_BE_BUN` fallback runner is
+ * available and no `-baseline` alias can stand in for it (arm64 hosts).
+ */
+export function assertTargetsBuildableWithoutBun(
+	targets: readonly BunTarget[],
+	host = hostTarget(BUN_TARGETS),
+): void {
+	if (
+		host === null ||
+		!targets.includes(host) ||
+		bunBaselineAlias(host) !== null ||
+		which("bun") !== null
+	) {
+		return;
+	}
+	const others = targets.filter((target) => target !== host);
+	const alternative =
+		others.length > 0
+			? `pass --target with the other targets (e.g. ${others.map((target) => `--target ${target}`).join(" ")})`
+			: "build a different target";
+	throw new Error(
+		`Cannot build ${host} without a separate bun executable on PATH.\n` +
+			"  Bun reuses the running crust executable as the base for its own platform, which yields a binary that crashes on start.\n" +
+			`  Install Bun (https://bun.sh), or ${alternative}.`,
+	);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Bun bundler plugins (--bun-plugin)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Module source the generated driver imports for a `--bun-plugin` specifier.
+ *
+ * Paths become file URLs resolved against the project; bare specifiers are
+ * imported as written so they resolve from the project's own node_modules.
+ */
+export function resolveBunPluginSource(specifier: string, cwd: string): string {
+	return specifier.startsWith(".") || isAbsolute(specifier)
+		? pathToFileURL(resolve(cwd, specifier)).href
+		: specifier;
+}
+
+type BunPluginDriverBuild = {
+	entrypoints: [string];
+	minify: boolean;
+	env: "PUBLIC_*";
+} & (
+	| { target: "bun"; compile: { target?: string; outfile: string; autoloadBunfig: false } }
+	| { target: "node"; format: "esm" }
+);
+
+export type BunPluginDriverOptions = {
+	plugins: Array<{ specifier: string; source: string }>;
+	build: BunPluginDriverBuild;
+	outfile: string;
+};
+
+/**
+ * Script that runs `Bun.build` with the project's bundler plugins.
+ *
+ * `bun build` has no plugin flag, so plugins are loaded by a generated script
+ * placed in the project root (project module resolution) and run with the
+ * same runner as the CLI path. Every value is embedded via JSON.stringify.
+ */
+export function createBunPluginDriverScript(options: BunPluginDriverOptions): string {
+	return `// Generated by crust build for --bun-plugin; deleted when the build finishes.
+const options = ${JSON.stringify(options)};
+const plugins = [];
+for (const { specifier, source } of options.plugins) {
+	let plugin;
+	try {
+		plugin = (await import(source)).default;
+	} catch (error) {
+		// Bun names this (soon deleted) driver as the importer; the project root is the useful location.
+		const message = (error instanceof Error ? error.message : String(error)).replace(\` imported from \${import.meta.path}\`, "");
+		console.error(\`--bun-plugin \${specifier} could not be imported from \${process.cwd()}: \${message}\`);
+		process.exit(1);
+	}
+	if (typeof plugin !== "object" || plugin === null || typeof plugin.name !== "string" || typeof plugin.setup !== "function") {
+		console.error(\`--bun-plugin \${specifier} must default-export a Bun bundler plugin ({ name, setup }). Wrap a plugin factory in a module that default-exports the created plugin.\`);
+		process.exit(1);
+	}
+	plugins.push(plugin);
+}
+const result = await Bun.build({ ...options.build, plugins, throw: false });
+if (!result.success) {
+	for (const log of result.logs) console.error(log);
+	process.exit(1);
+}
+if (options.build.target === "node") {
+	if (result.outputs.length !== 1) {
+		// Same refusal as \`bun build --outfile\`: a file-type asset import yields entry + asset.
+		console.error("error: cannot write multiple output files without an output directory");
+		process.exit(1);
+	}
+	await Bun.write(options.outfile, result.outputs[0]);
+}
+`;
+}
+
+async function runBunPluginDriver(
+	build: BunPluginDriverBuild,
+	outfilePath: string,
+	bunPlugins: readonly string[],
+	envFiles: readonly string[],
+	cwd: string,
+): Promise<void> {
+	const driverPath = join(cwd, `.crust-build-${randomBytes(6).toString("hex")}.ts`);
+	await writeFile(
+		driverPath,
+		createBunPluginDriverScript({
+			plugins: bunPlugins.map((specifier) => ({
+				specifier,
+				source: resolveBunPluginSource(specifier, cwd),
+			})),
+			build,
+			outfile: outfilePath,
+		}),
+	);
+	try {
+		// The runtime loads env files before the script runs, so `env: "PUBLIC_*"`
+		// inlines the same values as the CLI path's --env-file/--env flags.
+		await runBuildProcess(
+			resolveBunBuildRunner(),
+			[...toBunEnvFileArgs(envFiles), driverPath],
+			outfilePath,
+			cwd,
+		);
+	} finally {
+		await rm(driverPath, { force: true });
+	}
+}
+
 /**
  * Compile a single entry file to a standalone executable.
  *
@@ -308,6 +480,8 @@ function resolveBunBuildRunner(): BuildRunner {
  * @param minify - Whether to enable minification
  * @param target - Optional Bun compile target for cross-compilation
  * @param envFiles - Optional env files to load during build
+ * @param bunPlugins - Bun bundler plugin specifiers; when present the build
+ *   runs through the generated `Bun.build` driver instead of `bun build`
  * @throws {Error} If the build fails
  */
 export async function execBuild(
@@ -317,22 +491,48 @@ export async function execBuild(
 	target: BunTarget | undefined,
 	envFiles: readonly string[],
 	cwd: string,
+	bunPlugins: readonly string[] = [],
 ): Promise<void> {
 	const runner = resolveBunBuildRunner();
-	const args = createBunCompileArgs(entryPath, outfilePath, minify, target, envFiles);
+	const compileTarget = bunCompileTarget(target, runner);
+	if (bunPlugins.length > 0) {
+		await runBunPluginDriver(
+			{
+				entrypoints: [entryPath],
+				minify,
+				env: "PUBLIC_*",
+				target: "bun",
+				compile: {
+					...(compileTarget ? { target: compileTarget } : {}),
+					outfile: outfilePath,
+					autoloadBunfig: false,
+				},
+			},
+			outfilePath,
+			bunPlugins,
+			envFiles,
+			cwd,
+		);
+		return;
+	}
+	const args = createBunCompileArgs(entryPath, outfilePath, minify, compileTarget, envFiles);
 	await runBuildProcess(runner, args, outfilePath, cwd);
 }
 
-function createBunCompileArgs(
+export function createBunCompileArgs(
 	entryPath: string,
 	outfilePath: string,
 	minify: boolean,
-	target?: BunTarget,
+	target?: string,
 	envFiles: readonly string[] = [],
 ): string[] {
 	return [
 		"build",
 		"--compile",
+		// A standalone otherwise runs the bunfig.toml of whatever directory it is
+		// started in, so an unresolvable consumer `preload` would kill it before
+		// user code. `.env` autoloading is intentionally left on.
+		"--no-compile-autoload-bunfig",
 		...toBunEnvFileArgs(envFiles),
 		"--env=PUBLIC_*",
 		"--outfile",
@@ -411,14 +611,24 @@ export async function execNodeBuild(
 	minify: boolean,
 	envFiles: readonly string[],
 	cwd: string,
+	bunPlugins: readonly string[] = [],
 ): Promise<void> {
-	const runner = resolveBunBuildRunner();
-	await runBuildProcess(
-		runner,
-		createNodeBuildArgs(entryPath, outfilePath, minify, envFiles),
-		outfilePath,
-		cwd,
-	);
+	if (bunPlugins.length > 0) {
+		await runBunPluginDriver(
+			{ entrypoints: [entryPath], minify, env: "PUBLIC_*", target: "node", format: "esm" },
+			outfilePath,
+			bunPlugins,
+			envFiles,
+			cwd,
+		);
+	} else {
+		await runBuildProcess(
+			resolveBunBuildRunner(),
+			createNodeBuildArgs(entryPath, outfilePath, minify, envFiles),
+			outfilePath,
+			cwd,
+		);
+	}
 
 	const output = await readFile(outfilePath, "utf8");
 	const shebang = "#!/usr/bin/env node\n";

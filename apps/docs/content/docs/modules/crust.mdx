@@ -11,7 +11,7 @@ description: Build and distribute Crust applications for Bun, Deno, and Node.
 npm install -D @crustjs/crust
 ```
 
-The npm package is built with `crust build --package`, so its `bin` is a Node launcher that runs a platform-specific standalone executable with Bun embedded. Node is required to start it; a separate Bun installation is not.
+The npm package is built with `crust build --package`, so its `bin` is a Node launcher that runs a platform-specific standalone executable with Bun embedded. Node is required to start it; a separate Bun installation is not. Without `bun` on `PATH`, arm64 hosts cannot build their own target (Bun would copy the running `crust` executable onto itself); the error names the other targets, or install Bun.
 
 ## Commands
 
@@ -34,6 +34,7 @@ crust build --runtime node --name my-cli
 | `--runtime`                   | string: `bun \| deno \| node` | none         | Build runtime (overrides package.json crust.runtime; defaults to bun)                              |
 | `-t, --target`                | string, repeatable            | none         | Canonical compiler target(s). Omit to build all platforms for Bun or Deno.                         |
 | `--env-file`                  | string, repeatable            | none         | Explicit env file(s) used for build-time constants; repeatable                                     |
+| `--bun-plugin`                | string, repeatable            | none         | Bun bundler plugin module(s) to apply (default export); repeatable. Bun and Node builds only       |
 | `-d, --outdir`                | string                        | `dist`       | Output directory for build artifacts                                                               |
 | `-r, --resolver`              | string                        | `cli`        | Filename for the resolver script (multi-target builds, no extension)                               |
 | `--validate`, `--no-validate` | boolean                       | `true`       | Materialize command definitions before compiling; `--no-validate` also skips Extension build hooks |

@@ -58,6 +58,16 @@ The plain Linux targets link against glibc and do not start on musl-based distri
   `apk add libstdc++ libgcc`; `node:alpine` already includes them.
 </Callout>
 
+## Add Bun bundler plugins
+
+```sh
+crust build --bun-plugin ./build/plugin.ts
+```
+
+`--bun-plugin` applies a [Bun bundler plugin](https://bun.com/docs/bundler/plugins) to Bun and Node builds; repeat it for several. The specifier is imported from your project (a bare name resolves from `node_modules`, a path from the project root) and must default-export the plugin. Deno builds reject the flag.
+
+Validation runs the entry under Bun's runtime without bundler plugins, so a plugin that transforms sources at import time needs a matching runtime plugin in `bunfig.toml` `preload`; otherwise pass `--no-validate`.
+
 ## Prepare Extension artifacts
 
 ```sh
@@ -150,6 +160,10 @@ For Bun and Node builds, `--env-file` passes explicit files to the compiler, emb
 </Callout>
 
 Deno builds reject `--env-file`, so load their configuration at runtime instead.
+
+### Runtime autoloading
+
+Bun executables built by `crust build` autoload `.env` from the directory they start in, but not its `bunfig.toml`.
 
 ## Set up `package.json`
 

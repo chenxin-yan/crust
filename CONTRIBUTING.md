@@ -50,6 +50,8 @@ node scripts/smoke-runtimes/smoke.mjs
 deno run --allow-env --allow-read --allow-write --allow-run --config scripts/smoke-runtimes/deno.json scripts/smoke-runtimes/smoke.mjs
 ```
 
+The OpenTUI compile smoke installs pinned packages from npm, so it is opt-in: `CRUST_TUI_SMOKE=1 bun test packages/crust/tests/tui-build.smoke.test.ts` (Linux/macOS).
+
 Before opening a pull request, always run:
 
 ```sh

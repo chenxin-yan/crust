@@ -11,20 +11,22 @@ const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 
 import type { BunTarget } from "../utils/build-helpers.ts";
 import {
-	binaryFilename,
 	BUN_TARGETS,
+	binaryFilename,
+	bunBaselineAlias,
 	DENO_TARGETS,
+	hostTarget,
 	resolveBaseName,
 	resolveTargets,
 } from "../utils/build-helpers.ts";
 import {
+	type BuildFlags,
 	buildCommand,
 	generateCmdResolverFor,
 	generateResolverFor,
 	planBuild,
 	resolveEnvFilePaths,
 	writeResolver,
-	type BuildFlags,
 } from "./build.ts";
 
 describe("env file helpers", () => {
@@ -130,6 +132,11 @@ describe("planBuild", () => {
 			flags: { outfile: "dist/cli" },
 			error: "--outfile cannot be used when building for multiple targets",
 		},
+		{
+			name: "Deno builds with Bun bundler plugins",
+			flags: { runtime: "deno", "bun-plugin": ["@opentui/solid/bun-plugin"] },
+			error: "--bun-plugin is not supported with --runtime deno",
+		},
 	] as const) {
 		it(`rejects ${testCase.name}`, () => {
 			expect(() => planBuild({ ...baseFlags, ...testCase.flags } as BuildFlags, tmpDir)).toThrow(
@@ -137,6 +144,53 @@ describe("planBuild", () => {
 			);
 		});
 	}
+
+	it("keeps --bun-plugin specifiers in order and defaults to none", () => {
+		expect(planBuild(baseFlags, tmpDir).bunPlugins).toEqual([]);
+		expect(
+			planBuild(
+				{ ...baseFlags, "bun-plugin": ["./plugins/second.ts", "@opentui/solid/bun-plugin"] },
+				tmpDir,
+			).bunPlugins,
+		).toEqual(["./plugins/second.ts", "@opentui/solid/bun-plugin"]);
+		expect(
+			planBuild({ ...baseFlags, runtime: "node", "bun-plugin": ["./plugin.ts"] }, tmpDir),
+		).toMatchObject({ runtime: "node", bunPlugins: ["./plugin.ts"] });
+	});
+
+	// Only arm64 hosts hit the self-copy refusal; x64 hosts compile their own
+	// target through its -baseline alias, which Bun downloads clean.
+	const host = hostTarget(BUN_TARGETS);
+	const hostHasAlias = host !== null && bunBaselineAlias(host) !== null;
+
+	it.skipIf(host === null || hostHasAlias)(
+		"refuses the host target before planning outputs when bun is not on PATH",
+		() => {
+			const path = process.env.PATH;
+			process.env.PATH = "";
+			try {
+				expect(() => planBuild(baseFlags, tmpDir)).toThrow(
+					`Cannot build ${host} without a separate bun executable on PATH`,
+				);
+				expect(planBuild({ ...baseFlags, target: ["bun-linux-x64"] }, tmpDir).runtime).toBe("bun");
+			} finally {
+				process.env.PATH = path;
+			}
+		},
+	);
+
+	it.skipIf(!hostHasAlias)("plans every target when bun is not on PATH on an x64 host", () => {
+		const path = process.env.PATH;
+		process.env.PATH = "";
+		try {
+			const plan = planBuild(baseFlags, tmpDir);
+			expect(plan.runtime === "bun" && plan.mode === "binary" && plan.outputs.length).toBe(
+				BUN_TARGETS.targets.length,
+			);
+		} finally {
+			process.env.PATH = path;
+		}
+	});
 
 	it("plans runtime-specific outputs without executing a build", () => {
 		const plan = planBuild(
@@ -436,6 +490,15 @@ describe("buildCommand error handling", () => {
 		} finally {
 			rmSync(envDir, { recursive: true, force: true });
 		}
+		expect(
+			await executeBuildError("deno-bun-plugin", [
+				"--runtime",
+				"deno",
+				"--bun-plugin",
+				"@opentui/solid/bun-plugin",
+				"--no-validate",
+			]),
+		).toContain("--bun-plugin is not supported with --runtime deno");
 	});
 	it("sets exitCode and logs error when entry file is missing", async () => {
 		const originalCwd = process.cwd;
