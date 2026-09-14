@@ -61,7 +61,7 @@ The plain Linux targets link against glibc and do not start on musl-based distri
 ## Bun bundler plugins
 
 ```sh
-crust build --bun-plugin @opentui/solid/bun-plugin --target bun-linux-x64
+crust build --entry src/cli.tsx --bun-plugin @opentui/solid/bun-plugin --target bun-linux-x64
 # Building .../src/cli.tsx → .../dist/my-cli...
 ```
 
