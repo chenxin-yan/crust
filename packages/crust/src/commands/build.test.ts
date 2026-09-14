@@ -185,8 +185,13 @@ describe("resolveTarget", () => {
 		expect(() => resolveTargets(BUN_TARGETS, ["linux-arm32"])).toThrow(/Unknown target/);
 	});
 
-	it("rejects legacy -baseline names now that Bun ships one x64 binary", () => {
-		expect(() => resolveTargets(BUN_TARGETS, ["bun-linux-x64-baseline"])).toThrow(/Unknown target/);
+	it("rejects legacy -baseline names with a hint now that Bun ships one x64 binary", () => {
+		expect(() => resolveTargets(BUN_TARGETS, ["bun-linux-x64-baseline"])).toThrow(
+			'Unknown target "bun-linux-x64-baseline". Targets must use canonical Bun names. Did you mean "bun-linux-x64"?',
+		);
+		expect(() => resolveTargets(BUN_TARGETS, ["bun-windows-x64-baseline"])).toThrow(
+			'Did you mean "bun-windows-x64"?',
+		);
 	});
 });
 

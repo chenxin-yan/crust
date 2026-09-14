@@ -188,7 +188,11 @@ export function resolveTargets<T extends string>(
 		const exact = table.targets.find((target) => target === input);
 		if (exact) return exact;
 
-		const canonical = table.targets.find((target) => table.info[target].alias === input);
+		// Bun folded -baseline/-modern into one x64 binary; point old scripts at the canonical name.
+		const legacyName = input.replace(/-(?:baseline|modern)$/, "");
+		const canonical = table.targets.find(
+			(target) => table.info[target].alias === input || target === legacyName,
+		);
 		const hint = canonical ? ` Did you mean "${canonical}"?` : "";
 		const runtime = table.runtime === "Bun" ? "" : `${table.runtime} `;
 		throw new Error(

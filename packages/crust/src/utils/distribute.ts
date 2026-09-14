@@ -119,6 +119,7 @@ export type DistributionManifest = {
 		dir: string;
 		os: NpmOs;
 		cpu: NpmCpu;
+		libc?: NpmLibc;
 		bin: string;
 	}>;
 	publishOrder: string[];
@@ -457,6 +458,7 @@ function writeDistributionManifest(
 			dir: (relative(stageDir, target.packageDir) || ".").replaceAll("\\", "/"),
 			os: target.os,
 			cpu: target.cpu,
+			...(target.libc ? { libc: target.libc } : {}),
 			bin: target.binaryRelativePath.replaceAll("\\", "/"),
 		})),
 		publishOrder: [
