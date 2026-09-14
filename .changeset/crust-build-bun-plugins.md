@@ -1,5 +1,5 @@
 ---
-"@crustjs/crust": minor
+"@crustjs/crust": patch
 ---
 
 `crust build` gains a repeatable `--bun-plugin <specifier>` flag that loads Bun bundler plugins from your project (default export) for Bun standalone and Node builds — for example `crust build --bun-plugin @opentui/solid/bun-plugin` compiles OpenTUI Solid apps. Deno builds reject the flag.
