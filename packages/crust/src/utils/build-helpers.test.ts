@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -11,6 +11,12 @@ import {
 	bunBaselineAlias,
 	bunCompileTarget,
 	createBunCompileArgs,
+	createBunPluginDriverScript,
+	execBuild,
+	hostTarget,
+	resolveBunBuildRunner,
+	resolveBunPluginSource,
+	type BunPluginDriverOptions,
 } from "./build-helpers.ts";
 
 const coreUrl = import.meta.resolve("@crustjs/core");
@@ -25,6 +31,143 @@ async function withoutBunOnPath<T>(run: () => T): Promise<T> {
 		process.env.PATH = path;
 	}
 }
+
+describe("resolveBunBuildRunner", () => {
+	it("prefers bun on PATH and falls back to this executable as bun", async () => {
+		expect(resolveBunBuildRunner().command).toBe(Bun.which("bun")!);
+		const fallback = await withoutBunOnPath(() => resolveBunBuildRunner());
+		expect(fallback.command).toBe(process.execPath);
+		expect(fallback.env.BUN_BE_BUN).toBe("1");
+	});
+});
+
+describe("resolveBunPluginSource", () => {
+	it("imports bare specifiers from the project and paths as file URLs", () => {
+		const cwd = resolve("/projects/my cli");
+		expect(resolveBunPluginSource("@opentui/solid/bun-plugin", cwd)).toBe(
+			"@opentui/solid/bun-plugin",
+		);
+		expect(resolveBunPluginSource("./build/plugin.ts", cwd)).toBe(
+			pathToFileURL(resolve(cwd, "build/plugin.ts")).href,
+		);
+		expect(resolveBunPluginSource("../shared/plugin.ts", cwd)).toBe(
+			pathToFileURL(resolve(cwd, "../shared/plugin.ts")).href,
+		);
+		const absolute = resolve("/opt/plugins/plugin.ts");
+		expect(resolveBunPluginSource(absolute, cwd)).toBe(pathToFileURL(absolute).href);
+	});
+});
+
+describe("createBunPluginDriverScript", () => {
+	const awkward = String.raw`C:\Program Files\my "cli"\dist\my cli.exe`;
+
+	function embeddedOptions(script: string): BunPluginDriverOptions {
+		const line = script.split("\n").find((candidate) => candidate.startsWith("const options = "));
+		expect(line).toBeDefined();
+		// SAFETY: the driver embeds exactly one JSON.stringify(options) statement; the test round-trips it.
+		return JSON.parse(line!.slice("const options = ".length, -1)) as BunPluginDriverOptions;
+	}
+
+	it("embeds compile options as JSON so quotes, spaces, and backslashes survive", () => {
+		const options: BunPluginDriverOptions = {
+			plugins: [
+				{ specifier: "@opentui/solid/bun-plugin", source: "@opentui/solid/bun-plugin" },
+				{ specifier: './it\'s "quoted".ts', source: "file:///proj/it's%20%22quoted%22.ts" },
+			],
+			build: {
+				entrypoints: [String.raw`C:\Program Files\my "cli"\src\cli.tsx`],
+				minify: false,
+				env: "PUBLIC_*",
+				target: "bun",
+				compile: { target: "bun-windows-x64", outfile: awkward, autoloadBunfig: false },
+			},
+			outfile: awkward,
+		};
+		const script = createBunPluginDriverScript(options);
+		expect(embeddedOptions(script)).toEqual(options);
+		expect(script).toContain('"autoloadBunfig":false');
+		expect(script).toContain("throw: false");
+		expect(script).toContain("must default-export a Bun bundler plugin ({ name, setup })");
+	});
+
+	it("embeds Node bundle options and writes the single output to the outfile", () => {
+		const options: BunPluginDriverOptions = {
+			plugins: [{ specifier: "./plugin.ts", source: "file:///proj/plugin.ts" }],
+			build: {
+				entrypoints: ["/proj/src/cli.ts"],
+				minify: true,
+				env: "PUBLIC_*",
+				target: "node",
+				format: "esm",
+			},
+			outfile: "/proj/dist/cli.js",
+		};
+		expect(embeddedOptions(createBunPluginDriverScript(options))).toEqual(options);
+		expect(createBunPluginDriverScript(options)).toContain(
+			"await Bun.write(options.outfile, result.outputs[0])",
+		);
+	});
+});
+
+describe.skipIf(hostTarget(BUN_TARGETS) === null)("execBuild with --bun-plugin", () => {
+	const tempDirs: string[] = [];
+
+	afterEach(async () => {
+		await Promise.all(tempDirs.splice(0).map((path) => rm(path, { recursive: true, force: true })));
+	});
+
+	async function project(pluginSource: string): Promise<string> {
+		const directory = await mkdtemp(join(tmpdir(), "crust-bun-plugin-test-"));
+		tempDirs.push(directory);
+		await writeFile(join(directory, "cli.ts"), 'console.log("hello");\n');
+		await writeFile(join(directory, "plugin.ts"), pluginSource);
+		return directory;
+	}
+
+	async function leftoverDrivers(directory: string): Promise<string[]> {
+		return (await readdir(directory)).filter((name) => name.startsWith(".crust-build-"));
+	}
+
+	it("rejects a module that does not default-export a plugin and removes the driver", async () => {
+		const directory = await project(
+			"export default function createPlugin() { return { name: 'factory', setup() {} }; }\n",
+		);
+		await expect(
+			execBuild(
+				join(directory, "cli.ts"),
+				join(directory, "out"),
+				false,
+				hostTarget(BUN_TARGETS)!,
+				[],
+				directory,
+				["./plugin.ts"],
+			),
+		).rejects.toThrow(
+			"--bun-plugin ./plugin.ts must default-export a Bun bundler plugin ({ name, setup }). Wrap a plugin factory in a module that default-exports the created plugin.",
+		);
+		expect(await leftoverDrivers(directory)).toEqual([]);
+	});
+
+	it("fails with diagnostics when a plugin throws and removes the driver", async () => {
+		const directory = await project(
+			'export default { name: "broken", setup() { throw new Error("plugin exploded"); } };\n',
+		);
+		const outfile = join(directory, "out");
+		await expect(
+			execBuild(
+				join(directory, "cli.ts"),
+				outfile,
+				false,
+				hostTarget(BUN_TARGETS)!,
+				[],
+				directory,
+				["./plugin.ts"],
+			),
+		).rejects.toThrow(/Build failed for .*out[\s\S]*plugin exploded/);
+		expect(await leftoverDrivers(directory)).toEqual([]);
+		await expect(access(outfile)).rejects.toThrow();
+	});
+});
 
 const fallbackRunner = { command: process.execPath, env: { BUN_BE_BUN: "1" } };
 const realBunRunner = { command: "/usr/local/bin/bun", env: {} };

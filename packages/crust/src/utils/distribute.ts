@@ -518,6 +518,7 @@ type DistributeBuildPlan = {
 	targets: BunTarget[];
 	stageDir: string;
 	envFiles: readonly string[];
+	bunPlugins: readonly string[];
 	validate: boolean;
 	outDir: string;
 	userPackageJson: JsonValue | undefined;
@@ -530,6 +531,7 @@ type DistributeExecutor = (
 	target: BunTarget,
 	envFiles: readonly string[],
 	cwd: string,
+	bunPlugins: readonly string[],
 ) => Promise<void>;
 
 export async function runDistributeBuild(
@@ -583,6 +585,7 @@ export async function runDistributeBuild(
 			targetPackage.target,
 			plan.envFiles,
 			plan.cwd,
+			plan.bunPlugins,
 		);
 	}
 

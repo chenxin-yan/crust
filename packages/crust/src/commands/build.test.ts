@@ -132,6 +132,11 @@ describe("planBuild", () => {
 			flags: { outfile: "dist/cli" },
 			error: "--outfile cannot be used when building for multiple targets",
 		},
+		{
+			name: "Deno builds with Bun bundler plugins",
+			flags: { runtime: "deno", "bun-plugin": ["@opentui/solid/bun-plugin"] },
+			error: "--bun-plugin is not supported with --runtime deno",
+		},
 	] as const) {
 		it(`rejects ${testCase.name}`, () => {
 			expect(() => planBuild({ ...baseFlags, ...testCase.flags } as BuildFlags, tmpDir)).toThrow(
@@ -139,6 +144,19 @@ describe("planBuild", () => {
 			);
 		});
 	}
+
+	it("keeps --bun-plugin specifiers in order and defaults to none", () => {
+		expect(planBuild(baseFlags, tmpDir).bunPlugins).toEqual([]);
+		expect(
+			planBuild(
+				{ ...baseFlags, "bun-plugin": ["./plugins/second.ts", "@opentui/solid/bun-plugin"] },
+				tmpDir,
+			).bunPlugins,
+		).toEqual(["./plugins/second.ts", "@opentui/solid/bun-plugin"]);
+		expect(
+			planBuild({ ...baseFlags, runtime: "node", "bun-plugin": ["./plugin.ts"] }, tmpDir),
+		).toMatchObject({ runtime: "node", bunPlugins: ["./plugin.ts"] });
+	});
 
 	// Only arm64 hosts hit the self-copy refusal; x64 hosts compile their own
 	// target through its -baseline alias, which Bun downloads clean.
@@ -472,6 +490,15 @@ describe("buildCommand error handling", () => {
 		} finally {
 			rmSync(envDir, { recursive: true, force: true });
 		}
+		expect(
+			await executeBuildError("deno-bun-plugin", [
+				"--runtime",
+				"deno",
+				"--bun-plugin",
+				"@opentui/solid/bun-plugin",
+				"--no-validate",
+			]),
+		).toContain("--bun-plugin is not supported with --runtime deno");
 	});
 	it("sets exitCode and logs error when entry file is missing", async () => {
 		const originalCwd = process.cwd;

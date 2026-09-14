@@ -58,6 +58,39 @@ The plain Linux targets link against glibc and do not start on musl-based distri
   `apk add libstdc++ libgcc`; `node:alpine` already includes them.
 </Callout>
 
+## Bun bundler plugins
+
+```sh
+crust build --bun-plugin @opentui/solid/bun-plugin --target bun-linux-x64
+# Building .../src/cli.tsx → .../dist/my-cli...
+```
+
+Some libraries need a [Bun bundler plugin](https://bun.com/docs/bundler/plugins) at compile time — OpenTUI's Solid renderer, for example, ships its JSX transform as `@opentui/solid/bun-plugin`. `--bun-plugin <specifier>` is repeatable and applies, in order, to Bun standalone builds (including `--package`) and to `--runtime node` bundles; `--runtime deno` rejects it.
+
+Each specifier is imported from your project: bare names such as `@opentui/solid/bun-plugin` resolve from the project's `node_modules`, and paths such as `./build/plugin.ts` resolve against the project root. The module must default-export a plugin object with `name` and `setup`. If a library exports a factory instead, wrap it:
+
+```ts title="build/my-plugin.ts"
+import { createPlugin } from "some-library";
+
+export default createPlugin({ option: true });
+```
+
+With plugins present, Crust writes a small generated build script into the project root, runs it with `Bun.build` (same `--env-file`, `PUBLIC_*`, `--minify`, and target handling as the plain path), and deletes it afterwards. Put the flag in your `package.json` build script to make it part of every build:
+
+```json title="package.json"
+{
+  "scripts": {
+    "build": "crust build --bun-plugin @opentui/solid/bun-plugin"
+  }
+}
+```
+
+<Callout type="info">
+  Libraries with platform-specific optional dependencies (OpenTUI's `@opentui/core-<os>-<cpu>`
+  packages, for instance) only install the current platform's package by default. Before
+  cross-compiling, install every platform's package with `bun install --os "*" --cpu "*"`.
+</Callout>
+
 ## Prepare Extension artifacts
 
 ```sh

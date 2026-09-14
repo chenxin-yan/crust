@@ -19,6 +19,7 @@ function createPlan(
 		stageDir: string;
 		validate: boolean;
 		outDir: string;
+		bunPlugins: string[];
 	}> = {},
 ) {
 	return {
@@ -28,6 +29,7 @@ function createPlan(
 		targets: ["bun-darwin-arm64"] satisfies BunTarget[],
 		stageDir: join(cwd, ".stage"),
 		envFiles: [],
+		bunPlugins: [],
 		validate: false,
 		outDir: join(cwd, "dist"),
 		userPackageJson: packageJson,
@@ -42,6 +44,7 @@ const fakeExecutor = async (
 	_target: BunTarget,
 	_envFiles: readonly string[],
 	_cwd: string,
+	_bunPlugins: readonly string[],
 ) => {
 	writeFileSync(outfilePath, "fake binary\n");
 };
@@ -157,6 +160,31 @@ describe("runDistributeBuild", () => {
 			join(plan.stageDir, "linux-x64", "bin", "test-package-cli-bun-linux-x64"),
 			join(plan.stageDir, "linux-x64-musl", "bin", "test-package-cli-bun-linux-x64-musl"),
 			join(plan.stageDir, "windows-arm64", "bin", "test-package-cli-bun-windows-arm64.exe"),
+		]);
+	});
+
+	it("passes the Bun bundler plugins to every target build", async () => {
+		const plan = createPlan(
+			tmpDir,
+			{ name: "plugin-cli", version: "0.1.0" },
+			{
+				targets: ["bun-linux-x64", "bun-darwin-arm64"],
+				bunPlugins: ["@opentui/solid/bun-plugin", "./plugins/local.ts"],
+			},
+		);
+		const calls: Array<{ target: BunTarget; bunPlugins: readonly string[] }> = [];
+
+		await runDistributeBuild(plan, {
+			io,
+			execute: async (...args) => {
+				calls.push({ target: args[3], bunPlugins: args[6] });
+				await fakeExecutor(...args);
+			},
+		});
+
+		expect(calls).toEqual([
+			{ target: "bun-linux-x64", bunPlugins: plan.bunPlugins },
+			{ target: "bun-darwin-arm64", bunPlugins: plan.bunPlugins },
 		]);
 	});
 

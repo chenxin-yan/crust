@@ -360,6 +360,7 @@ export type BuildFlags = {
 	resolver: string;
 	validate: boolean;
 	"env-file"?: string[];
+	"bun-plugin"?: string[];
 	package: boolean;
 	"stage-dir": string;
 };
@@ -369,6 +370,7 @@ type CommonBuildPlan = {
 	userPackageJson: JsonValue | undefined;
 	entryPath: string;
 	envFiles: string[];
+	bunPlugins: string[];
 	outDir: string;
 	validate: boolean;
 	minify: boolean;
@@ -501,6 +503,12 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 				"  with no PUBLIC_* filter. Load configuration at runtime instead (e.g. deno run --env-file).",
 		);
 	}
+	const bunPlugins = flags["bun-plugin"] ?? [];
+	if (runtime === "deno" && bunPlugins.length > 0) {
+		throw new Error(
+			"--bun-plugin is not supported with --runtime deno.\n  deno compile has no Bun bundler; drop the flag or build with --runtime bun.",
+		);
+	}
 
 	const minify = runtime === "deno" ? false : (flags.minify ?? true);
 	const outDir = flags.outfile ? dirname(resolve(cwd, flags.outfile)) : resolve(cwd, flags.outdir);
@@ -509,6 +517,7 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 		userPackageJson,
 		entryPath,
 		envFiles,
+		bunPlugins,
 		outDir,
 		validate: flags.validate,
 		minify,
@@ -612,6 +621,7 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
  * crust build --target bun-linux-x64 --outfile ./my-cli     # Single target with custom output
  * crust build --runtime deno --target aarch64-apple-darwin
  * crust build --runtime node --outdir out               # Output out/<name>.js
+ * crust build --bun-plugin @opentui/solid/bun-plugin    # Bundle with a project Bun plugin
  * ```
  */
 export const buildCommand = defineCommand(
@@ -687,6 +697,13 @@ export const buildCommand = defineCommand(
 					description: "Explicit env file(s) used for build-time constants; repeatable",
 				},
 				{
+					name: "bun-plugin",
+					type: "string",
+					multiple: true,
+					description:
+						"Bun bundler plugin module(s) to apply (default export); repeatable. Bun and Node builds only",
+				},
+				{
 					name: "package",
 					type: "boolean",
 					description: "Stage per-platform Bun npm packages in dist/npm",
@@ -722,7 +739,14 @@ export const buildCommand = defineCommand(
 
 				if (plan.runtime === "node") {
 					stdout(`Building ${dim(plan.entryPath)} ${cyan("→")} ${dim(plan.outfilePath)}...`);
-					await execNodeBuild(plan.entryPath, plan.outfilePath, plan.minify, plan.envFiles, cwd);
+					await execNodeBuild(
+						plan.entryPath,
+						plan.outfilePath,
+						plan.minify,
+						plan.envFiles,
+						cwd,
+						plan.bunPlugins,
+					);
 					stdout(`${green("✓")} Built successfully: ${plan.outfilePath}`);
 					return;
 				}
@@ -732,7 +756,7 @@ export const buildCommand = defineCommand(
 						plan,
 						{
 							execute: (entry, outfile, target, envFiles) =>
-								execBuild(entry, outfile, plan.minify, target, envFiles, cwd),
+								execBuild(entry, outfile, plan.minify, target, envFiles, cwd, plan.bunPlugins),
 							writeResolver: (path, baseName, targets) =>
 								writeResolver(BUN_TARGETS, path, baseName, targets),
 						},
