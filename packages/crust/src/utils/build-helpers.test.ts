@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { access, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -13,6 +13,7 @@ import {
 	createBunCompileArgs,
 	createBunPluginDriverScript,
 	execBuild,
+	execNodeBuild,
 	hostTarget,
 	resolveBunBuildRunner,
 	resolveBunPluginSource,
@@ -90,7 +91,7 @@ describe("createBunPluginDriverScript", () => {
 		expect(script).toContain("must default-export a Bun bundler plugin ({ name, setup })");
 	});
 
-	it("embeds Node bundle options and writes the single output to the outfile", () => {
+	it("embeds Node bundle options and refuses to write more than one output", () => {
 		const options: BunPluginDriverOptions = {
 			plugins: [{ specifier: "./plugin.ts", source: "file:///proj/plugin.ts" }],
 			build: {
@@ -102,9 +103,11 @@ describe("createBunPluginDriverScript", () => {
 			},
 			outfile: "/proj/dist/cli.js",
 		};
-		expect(embeddedOptions(createBunPluginDriverScript(options))).toEqual(options);
-		expect(createBunPluginDriverScript(options)).toContain(
-			"await Bun.write(options.outfile, result.outputs[0])",
+		const script = createBunPluginDriverScript(options);
+		expect(embeddedOptions(script)).toEqual(options);
+		expect(script).toContain("await Bun.write(options.outfile, result.outputs[0])");
+		expect(script).toContain(
+			"error: cannot write multiple output files without an output directory",
 		);
 	});
 });
@@ -127,6 +130,42 @@ describe.skipIf(hostTarget(BUN_TARGETS) === null)("execBuild with --bun-plugin",
 	async function leftoverDrivers(directory: string): Promise<string[]> {
 		return (await readdir(directory)).filter((name) => name.startsWith(".crust-build-"));
 	}
+
+	it("names the project directory, not the deleted driver, when a plugin cannot be imported", async () => {
+		const directory = await project("");
+		const error = await execBuild(
+			join(directory, "cli.ts"),
+			join(directory, "out"),
+			false,
+			hostTarget(BUN_TARGETS)!,
+			[],
+			directory,
+			["./missing.ts"],
+		).catch((cause: unknown) => cause);
+		expect(error).toBeInstanceOf(Error);
+		expect((error as Error).message).toContain(
+			`--bun-plugin ./missing.ts could not be imported from ${await realpath(directory)}: Cannot find module '${join(await realpath(directory), "missing.ts")}'`,
+		);
+		expect((error as Error).message).not.toContain(".crust-build-");
+		expect(await leftoverDrivers(directory)).toEqual([]);
+	});
+
+	it("refuses a Node bundle with more than one output and removes the driver", async () => {
+		const directory = await project('export default { name: "noop", setup() {} };\n');
+		await writeFile(join(directory, "asset.bin"), "payload\n");
+		await writeFile(
+			join(directory, "cli.ts"),
+			'import asset from "./asset.bin" with { type: "file" };\nconsole.log(asset);\n',
+		);
+		const outfile = join(directory, "out.js");
+		await expect(
+			execNodeBuild(join(directory, "cli.ts"), outfile, false, [], directory, ["./plugin.ts"]),
+		).rejects.toThrow(
+			/Build failed for .*out\.js:\nerror: cannot write multiple output files without an output directory/,
+		);
+		expect(await leftoverDrivers(directory)).toEqual([]);
+		await expect(access(outfile)).rejects.toThrow();
+	});
 
 	it("rejects a module that does not default-export a plugin and removes the driver", async () => {
 		const directory = await project(

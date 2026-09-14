@@ -403,7 +403,15 @@ export function createBunPluginDriverScript(options: BunPluginDriverOptions): st
 const options = ${JSON.stringify(options)};
 const plugins = [];
 for (const { specifier, source } of options.plugins) {
-	const plugin = (await import(source)).default;
+	let plugin;
+	try {
+		plugin = (await import(source)).default;
+	} catch (error) {
+		// Bun names this (soon deleted) driver as the importer; the project root is the useful location.
+		const message = (error instanceof Error ? error.message : String(error)).replace(\` imported from \${import.meta.path}\`, "");
+		console.error(\`--bun-plugin \${specifier} could not be imported from \${process.cwd()}: \${message}\`);
+		process.exit(1);
+	}
 	if (typeof plugin !== "object" || plugin === null || typeof plugin.name !== "string" || typeof plugin.setup !== "function") {
 		console.error(\`--bun-plugin \${specifier} must default-export a Bun bundler plugin ({ name, setup }). Wrap a plugin factory in a module that default-exports the created plugin.\`);
 		process.exit(1);
@@ -415,7 +423,14 @@ if (!result.success) {
 	for (const log of result.logs) console.error(log);
 	process.exit(1);
 }
-if (options.build.target === "node") await Bun.write(options.outfile, result.outputs[0]);
+if (options.build.target === "node") {
+	if (result.outputs.length !== 1) {
+		// Same refusal as \`bun build --outfile\`: a file-type asset import yields entry + asset.
+		console.error("error: cannot write multiple output files without an output directory");
+		process.exit(1);
+	}
+	await Bun.write(options.outfile, result.outputs[0]);
+}
 `;
 }
 
