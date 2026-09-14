@@ -151,6 +151,18 @@ bun run changeset
 
 Use the smallest accurate bump. Do not manually edit package versions or changelog files unless the release workflow specifically requires it.
 
+### How releases run
+
+`.github/workflows/release.yml` runs on every push to `main`:
+
+1. `select-mode` asks Changesets what to do: pending changesets → `version`; none pending but unpublished versions → `publish`; otherwise nothing.
+2. `version` runs `bun run packages:version` and opens or updates the `chore: release packages` PR. Merging that PR is the release.
+3. `publish` builds and runs `bun run packages:publish` (`scripts/publish-packages.mjs`), which publishes each unpublished package in dependency order and then tags with `changeset git-tag`. Plain packages are packed with `bun pm pack` (so `workspace:` and `catalog:` ranges resolve) and uploaded with `npm publish`; `@crustjs/crust` runs its own `release` script, which publishes the platform packages and root via `crust publish`.
+
+npm authentication uses [trusted publishing](https://docs.npmjs.com/trusted-publishers) (OIDC), so the `publish` job has `id-token: write` and no long-lived token is needed. Each published package, including the six `@crustjs/crust-<platform>` packages, needs a trusted publisher on npmjs.com pointing at `chenxin-yan/crust` and workflow `release.yml`. A brand-new package cannot have one until it exists on npm, so its first publish falls back to the `NPM_TOKEN` secret; configure the trusted publisher after that release.
+
+Do not name a package script `publish`: it is an npm lifecycle hook that `bun publish` runs after uploading, and a `publish` script that itself publishes recurses into a "cannot publish over previously published version" failure.
+
 Official packages declare `@crustjs/core` peer dependencies as `workspace:^`. Bun packs this as a caret range from the versioned workspace core, excluding older, incompatible pre-1.0 APIs that `workspace:0.x` would accept. Adopting this policy uses an explicit minor changeset for every affected package, including `@crustjs/testing`, which is outside the fixed release cohort. Subsequent out-of-range core updates can cause Changesets to automatically re-release testing as a patch; review those computed bumps when planning compatibility changes.
 
 ## Pull Requests

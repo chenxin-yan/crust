@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 
 import { defineCommand, type InvocationIO } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
-import { runProcess } from "@crustjs/utils/process";
+import { runProcess, which } from "@crustjs/utils/process";
 
 import type { DistributionManifest } from "../utils/distribute.ts";
 
@@ -131,12 +131,15 @@ export function validatePublishManifest(stageDir: string, manifest: Distribution
 	}
 }
 
+// npm, not `bun publish`: only npm supports trusted publishing (OIDC) from CI
+// (oven-sh/bun#15601). Staged package.json files carry no workspace: ranges,
+// so npm can publish the directories directly.
 export function buildPublishCommand(args: {
 	access: string;
 	tag?: string;
 	registry?: string;
 }): string[] {
-	const command = [process.execPath, "publish", "--access", args.access, "--no-git-checks"];
+	const command = ["npm", "publish", "--access", args.access];
 
 	if (args.tag) {
 		command.push("--tag", args.tag);
@@ -154,13 +157,11 @@ async function defaultSpawnPublish(
 	command: string[],
 	io: InvocationIO,
 ): Promise<number> {
-	const { exitCode, stdout, stderr } = await runProcess(command[0]!, command.slice(1), {
-		cwd: dir,
-		env: {
-			...process.env,
-			BUN_BE_BUN: "1",
-		},
-	});
+	const npm = which(command[0]!);
+	if (!npm) {
+		throw new Error(`${command[0]} was not found on PATH; it is required to publish.`);
+	}
+	const { exitCode, stdout, stderr } = await runProcess(npm, command.slice(1), { cwd: dir });
 	if (stdout) io.stdout(stdout.replace(/\r?\n$/, ""));
 	if (stderr) io.stderr(stderr.replace(/\r?\n$/, ""));
 
@@ -197,7 +198,7 @@ export async function publishStagedPackages(
 		io.stdout(`\nPublishing ${bold(relativeDir)} from ${dim(dir)}...`);
 		const exitCode = await spawnPublish(dir, command, io);
 		if (exitCode !== 0) {
-			throw new Error(`bun publish failed for ${relativeDir} (${dir}) with exit code ${exitCode}`);
+			throw new Error(`npm publish failed for ${relativeDir} (${dir}) with exit code ${exitCode}`);
 		}
 	}
 
@@ -221,12 +222,12 @@ export const publishCommand = defineCommand(
 				{
 					name: "tag",
 					type: "string",
-					description: "Override the npm dist-tag passed to bun publish",
+					description: "Override the npm dist-tag passed to npm publish",
 				},
 				{
 					name: "access",
 					type: "string",
-					description: "npm access level passed to bun publish",
+					description: "npm access level passed to npm publish",
 					default: "public",
 				},
 				{
@@ -244,7 +245,7 @@ export const publishCommand = defineCommand(
 				{
 					name: "registry",
 					type: "string",
-					description: "Override the registry passed to bun publish",
+					description: "Override the registry passed to npm publish",
 				},
 			)
 			.action(async ({ flags, stdout, stderr }) => {

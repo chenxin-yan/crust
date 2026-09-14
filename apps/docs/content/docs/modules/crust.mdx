@@ -45,17 +45,19 @@ crust build --runtime node --name my-cli
 ```sh title="Dry-run output (excerpt)"
 crust publish --dry-run
 # Publish order: linux-x64 -> ... -> root
-#   → linux-x64: <path-to-executable> publish --access public --no-git-checks
+#   → linux-x64: npm publish --access public
 ```
+
+Publishing runs `npm publish` in each staged directory, so `npm` must be on `PATH`. npm is used instead of `bun publish` because it supports [trusted publishing](https://docs.npmjs.com/trusted-publishers) from CI; `bun publish` does not.
 
 | Option                    | Type    | Default    | Description                                              |
 | ------------------------- | ------- | ---------- | -------------------------------------------------------- |
 | `--stage-dir`             | string  | `dist/npm` | Directory containing a staged manifest.json              |
-| `--tag`                   | string  | none       | Override the npm dist-tag passed to bun publish          |
-| `--access`                | string  | `public`   | npm access level passed to bun publish                   |
+| `--tag`                   | string  | none       | Override the npm dist-tag passed to npm publish          |
+| `--access`                | string  | `public`   | npm access level passed to npm publish                   |
 | `--dry-run`               | boolean | `false`    | Print publish order and commands without publishing      |
 | `--verify`, `--no-verify` | boolean | `true`     | Verify staged directories and metadata before publishing |
-| `--registry`              | string  | none       | Override the registry passed to bun publish              |
+| `--registry`              | string  | none       | Override the registry passed to npm publish              |
 
 ## Distribution modes
 

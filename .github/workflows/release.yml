@@ -18,35 +18,101 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
-permissions:
-  contents: write
-  pull-requests: write
+# Reset at the top; each job declares exactly what it needs. Only `publish`
+# gets id-token: write (npm trusted publishing).
+permissions: {}
 
 jobs:
   ci:
     uses: ./.github/workflows/ci-packages.yml
+    permissions:
+      contents: read
 
-  release:
+  select-mode:
     needs: ci
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
+    permissions:
+      contents: read
     outputs:
-      published: ${{ steps.changesets.outputs.published }}
-      prNumber: ${{ steps.changesets.outputs.pr-number }}
+      mode: ${{ steps.select-mode.outputs.mode }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
-      # tsdown's bin runs under Node (engines ^22.18.0 || ^24.11.0 || >=26.0.0)
+      - name: Install dependencies
+        run: bun ci
+
+      - name: Select Changesets mode
+        id: select-mode
+        uses: changesets/action/select-mode@v2
+
+  version:
+    if: needs.select-mode.outputs.mode == 'version'
+    needs: select-mode
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      prNumber: ${{ steps.version.outputs.pr-number }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun ci
+
+      - name: Version packages and update release PR
+        id: version
+        uses: changesets/action/version@v2
+        with:
+          pr-title: "chore: release packages"
+          commit-message: "chore: version packages"
+          script: bun run packages:version
+
+  publish:
+    if: needs.select-mode.outputs.mode == 'publish'
+    needs: select-mode
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # git tags + GitHub releases
+      id-token: write # npm trusted publishing (OIDC)
+    outputs:
+      published: ${{ steps.publish.outputs.published }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # `changeset git-tag` needs existing tags to skip already-tagged versions.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      # Node for tsdown's bin (engines ^22.18.0 || ^24.11.0 || >=26.0.0) and npm
+      # for publishing. registry-url wires NODE_AUTH_TOKEN as the fallback
+      # credential for packages without a trusted publisher yet (first publish
+      # of a new package). npm prefers OIDC when the package is configured.
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
           node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
 
       - name: Install dependencies
         run: bun ci
@@ -62,23 +128,20 @@ jobs:
       - name: Build packages
         run: bun run build:pkgs
 
-      - name: Create release PR or publish
-        id: changesets
-        uses: changesets/action@v2
+      - name: Publish packages
+        id: publish
+        uses: changesets/action/publish@v2
         with:
-          pr-title: "chore: release packages"
-          commit-message: "chore: version packages"
-          version-script: bun run packages:version
-          publish-script: bun run packages:publish
+          script: bun run packages:publish
         env:
-          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   release-pr-size:
-    needs: release
+    needs: version
     # Runs when changesets created/updated the release PR (not on publish).
     # This job posts the size comment because pull_request workflows on
     # GITHUB_TOKEN-created PRs never auto-run (recursive-trigger prevention).
-    if: needs.release.outputs.prNumber != ''
+    if: needs.version.outputs.prNumber != ''
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -118,7 +181,7 @@ jobs:
       - name: Comment release size report
         env:
           GH_TOKEN: ${{ github.token }}
-          PR: ${{ needs.release.outputs.prNumber }}
+          PR: ${{ needs.version.outputs.prNumber }}
           REPO: ${{ github.repository }}
         run: |
           marker='<!-- package-size-release-report -->'
@@ -139,10 +202,12 @@ jobs:
           fi
 
   deploy-docs:
-    needs: release
-    if: needs.release.outputs.published == 'true'
+    needs: publish
+    if: needs.publish.outputs.published == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v7
