@@ -73,7 +73,9 @@ jobs:
             turbo-packages-${{ runner.os }}-
 
       - name: Build packages
-        run: bun turbo run build --filter='./packages/*'
+        # The smoke imports library packages only. @crustjs/crust is excluded because
+        # its build runs `crust build --package`, which needs Bun 1.4+ (engines.bun).
+        run: bun turbo run build --filter='./packages/*' --filter='!@crustjs/crust'
 
       - name: Smoke built distributions with ${{ matrix.runtime }}
         run: ${{ matrix.smoke }}

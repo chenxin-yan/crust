@@ -9,7 +9,7 @@ import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 Use `crust build` when your CLI is ready to run without its TypeScript source, then follow this path to an npm release.
 
 ```sh
-crust build --target bun-linux-x64-baseline --name my-cli
+crust build --target bun-linux-x64 --name my-cli
 ./dist/my-cli --help
 crust build --package
 crust publish --dry-run
@@ -19,7 +19,7 @@ crust publish
 ## Build for one runtime
 
 ```sh
-crust build --runtime bun --target bun-linux-x64-baseline --name my-cli
+crust build --runtime bun --target bun-linux-x64 --name my-cli
 # ✓ Built successfully: .../dist/my-cli
 ```
 
@@ -36,11 +36,27 @@ Use `--entry` to replace `src/cli.ts`, `--outfile` for one exact output path, or
 ## Build more than one target
 
 ```sh
-crust build --target bun-linux-x64-baseline --target bun-darwin-arm64 --name my-cli
+crust build --target bun-linux-x64 --target bun-darwin-arm64 --name my-cli
 # dist/cli, dist/cli.cmd, and one my-cli-* binary per target
 ```
 
 Repeat `--target` for the platforms you ship; omitting it builds every supported Bun or Deno target. A multi-target build writes platform binaries plus `cli` and `cli.cmd` resolver scripts, so `package.json` can point `bin` at `dist/cli`.
+
+| Bun target                                   | Deno target                                             | Platform alias                       |
+| -------------------------------------------- | ------------------------------------------------------- | ------------------------------------ |
+| `bun-linux-x64`, `bun-linux-arm64`           | `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu` | `linux-x64`, `linux-arm64`           |
+| `bun-linux-x64-musl`, `bun-linux-arm64-musl` | none                                                    | `linux-x64-musl`, `linux-arm64-musl` |
+| `bun-darwin-x64`, `bun-darwin-arm64`         | `x86_64-apple-darwin`, `aarch64-apple-darwin`           | `darwin-x64`, `darwin-arm64`         |
+| `bun-windows-x64`, `bun-windows-arm64`       | `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc`     | `windows-x64`, `windows-arm64`       |
+
+### Linux glibc and musl
+
+The plain Linux targets link against glibc and do not start on musl-based distributions such as Alpine; the `-musl` targets cover those. Both resolver scripts and the npm launcher detect the host C library and pick the matching binary, so shipping both is enough for the default `node:alpine` images.
+
+<Callout type="warn">
+  Bun's musl executables still load `libstdc++` and `libgcc` dynamically. A bare Alpine image needs
+  `apk add libstdc++ libgcc`; `node:alpine` already includes them.
+</Callout>
 
 ## Prepare Extension artifacts
 
@@ -57,7 +73,7 @@ Use `--no-validate` only when preparation cannot run; it skips Extension build h
 ## Stage npm packages
 
 ```sh
-crust build --package --target bun-linux-x64-baseline --target bun-darwin-arm64
+crust build --package --target bun-linux-x64 --target bun-darwin-arm64
 # Manifest: .../dist/npm/manifest.json (excerpt)
 ```
 
@@ -69,7 +85,7 @@ crust build --package --target bun-linux-x64-baseline --target bun-darwin-arm64
 | `dist/npm/<platform>/`   | One platform `package.json` and binary                 |
 | `dist/npm/manifest.json` | Staged package list and publish order                  |
 
-Platform package names append the platform alias, such as `my-cli-linux-x64` or `@scope/my-cli-linux-x64`; use `--stage-dir` to change the staging directory.
+Platform package names append the platform alias, such as `my-cli-linux-x64` or `@scope/my-cli-linux-x64`; use `--stage-dir` to change the staging directory. Linux packages also carry an npm `libc` field (`glibc` or `musl`), so package managers download only the platform package that matches the host.
 
 ## Publishing with `crust publish`
 
@@ -119,7 +135,7 @@ cat > .env.production <<'EOF'
 PUBLIC_API_ORIGIN=https://api.example.com
 API_TOKEN=private-value
 EOF
-crust build --env-file .env.production --target bun-linux-x64-baseline --name deploy
+crust build --env-file .env.production --target bun-linux-x64 --name deploy
 env -u PUBLIC_API_ORIGIN -u API_TOKEN ./dist/deploy origin
 # https://api.example.com
 grep -a -o 'private-value' dist/deploy || echo 'private-value: not embedded'

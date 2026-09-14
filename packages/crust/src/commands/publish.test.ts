@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -42,6 +42,7 @@ function writeStageFixture(tmpDir: string, manifest: DistributionManifest) {
 					bin: { [manifest.root.bin]: pkg.bin },
 					os: [pkg.os],
 					cpu: [pkg.cpu],
+					...(pkg.libc ? { libc: [pkg.libc] } : {}),
 				},
 				null,
 				2,
@@ -64,7 +65,8 @@ describe("publish manifest validation", () => {
 				dir: "linux-x64",
 				os: "linux",
 				cpu: "x64",
-				bin: "bin/demo-bun-linux-x64-baseline",
+				libc: "glibc",
+				bin: "bin/demo-bun-linux-x64",
 			},
 			{
 				target: "darwin-arm64",
@@ -101,6 +103,17 @@ describe("publish manifest validation", () => {
 		};
 
 		expect(() => validatePublishManifest(tmpDir, invalid)).toThrow(/root package last/);
+	});
+
+	it("rejects staged libc metadata that disagrees with the manifest", () => {
+		const stagedPath = join(tmpDir, "linux-x64", "package.json");
+		const staged = JSON.parse(readFileSync(stagedPath, "utf8"));
+		writeFileSync(stagedPath, JSON.stringify({ ...staged, libc: ["musl"] }));
+		expect(() => validatePublishManifest(tmpDir, manifest)).toThrow(/libc metadata/);
+
+		const { libc: _dropped, ...withoutLibc } = staged;
+		writeFileSync(stagedPath, JSON.stringify(withoutLibc));
+		expect(() => validatePublishManifest(tmpDir, manifest)).toThrow(/libc metadata/);
 	});
 
 	it("rejects missing staged directories", () => {

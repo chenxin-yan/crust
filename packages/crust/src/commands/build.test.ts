@@ -112,7 +112,7 @@ describe("planBuild", () => {
 		},
 		{
 			name: "Node builds with targets",
-			flags: { runtime: "node", target: ["bun-linux-x64-baseline"] },
+			flags: { runtime: "node", target: ["bun-linux-x64"] },
 			error: "--target cannot be used with --runtime node",
 		},
 		{
@@ -177,9 +177,7 @@ describe("resolveTarget", () => {
 			expect(() => resolveTargets(BUN_TARGETS, [alias])).toThrow(
 				`Unknown target "${alias}". Targets must use canonical Bun names. Did you mean "${target}"?`,
 			);
-			expect(() => resolveTargets(BUN_TARGETS, [alias])).toThrow(
-				/Valid targets: bun-linux-x64-baseline/,
-			);
+			expect(() => resolveTargets(BUN_TARGETS, [alias])).toThrow(/Valid targets: bun-linux-x64/);
 		}
 	});
 
@@ -265,17 +263,15 @@ describe("resolveBaseName", () => {
 
 describe("getBinaryFilename", () => {
 	it("returns <name>-<target> for non-Windows targets", () => {
-		expect(binaryFilename(BUN_TARGETS, "my-cli", "bun-linux-x64-baseline")).toBe(
-			"my-cli-bun-linux-x64-baseline",
-		);
+		expect(binaryFilename(BUN_TARGETS, "my-cli", "bun-linux-x64")).toBe("my-cli-bun-linux-x64");
 		expect(binaryFilename(BUN_TARGETS, "my-cli", "bun-darwin-arm64")).toBe(
 			"my-cli-bun-darwin-arm64",
 		);
 	});
 
 	it("appends .exe for Windows targets", () => {
-		expect(binaryFilename(BUN_TARGETS, "my-cli", "bun-windows-x64-baseline")).toBe(
-			"my-cli-bun-windows-x64-baseline.exe",
+		expect(binaryFilename(BUN_TARGETS, "my-cli", "bun-windows-x64")).toBe(
+			"my-cli-bun-windows-x64.exe",
 		);
 		expect(binaryFilename(BUN_TARGETS, "my-cli", "bun-windows-arm64")).toBe(
 			"my-cli-bun-windows-arm64.exe",
@@ -292,8 +288,11 @@ describe("generateResolverFor", () => {
 		const content = generateResolverFor(BUN_TARGETS, "my-cli", BUN_TARGETS.targets);
 		expect(content).toContain("Linux-x86_64)");
 		expect(content).toContain("Linux-aarch64)");
+		expect(content).toContain("Linux-x86_64-musl)");
+		expect(content).toContain("Linux-aarch64-musl)");
 		expect(content).toContain("Darwin-x86_64)");
 		expect(content).toContain("Darwin-arm64)");
+		expect(content).toContain("ldd --version 2>&1 | grep -qi musl");
 	});
 
 	it("excludes Windows targets from shell resolver", () => {
@@ -304,14 +303,15 @@ describe("generateResolverFor", () => {
 
 	it("maps to correct binary filenames", () => {
 		const content = generateResolverFor(BUN_TARGETS, "my-cli", BUN_TARGETS.targets);
-		expect(content).toContain('"my-cli-bun-linux-x64-baseline"');
+		expect(content).toContain('"my-cli-bun-linux-x64"');
 		expect(content).toContain('"my-cli-bun-linux-arm64"');
+		expect(content).toContain('"my-cli-bun-linux-x64-musl"');
 		expect(content).toContain('"my-cli-bun-darwin-x64"');
 		expect(content).toContain('"my-cli-bun-darwin-arm64"');
 	});
 
 	it("only includes targets that were built", () => {
-		const subset: BunTarget[] = ["bun-linux-x64-baseline", "bun-darwin-arm64"];
+		const subset: BunTarget[] = ["bun-linux-x64", "bun-darwin-arm64"];
 		const content = generateResolverFor(BUN_TARGETS, "my-cli", subset);
 		expect(content).toContain("Linux-x86_64)");
 		expect(content).toContain("Darwin-arm64)");
@@ -345,7 +345,7 @@ describe("Deno resolvers", () => {
 describe("generateCmdResolverFor", () => {
 	it("references the correct Windows binary filename", () => {
 		const content = generateCmdResolverFor(BUN_TARGETS, "my-cli", BUN_TARGETS.targets);
-		expect(content).toContain("my-cli-bun-windows-x64-baseline.exe");
+		expect(content).toContain("my-cli-bun-windows-x64.exe");
 		expect(content).toContain("my-cli-bun-windows-arm64.exe");
 	});
 
@@ -355,7 +355,7 @@ describe("generateCmdResolverFor", () => {
 	});
 
 	it("generates error stub when no Windows targets built", () => {
-		const unixOnly: BunTarget[] = ["bun-linux-x64-baseline", "bun-darwin-arm64"];
+		const unixOnly: BunTarget[] = ["bun-linux-x64", "bun-darwin-arm64"];
 		const content = generateCmdResolverFor(BUN_TARGETS, "my-cli", unixOnly);
 		expect(content).toContain("No Windows binary was built");
 	});
@@ -374,9 +374,7 @@ describe("writeResolver", () => {
 		try {
 			writeResolver(BUN_TARGETS, resolverPath, "my-cli", BUN_TARGETS.targets);
 			expect(readFileSync(resolverPath, "utf8")).toContain("Linux-x86_64)");
-			expect(readFileSync(`${resolverPath}.cmd`, "utf8")).toContain(
-				"my-cli-bun-windows-x64-baseline.exe",
-			);
+			expect(readFileSync(`${resolverPath}.cmd`, "utf8")).toContain("my-cli-bun-windows-x64.exe");
 		} finally {
 			rmSync(tmpDir, { recursive: true, force: true });
 		}
@@ -409,7 +407,7 @@ describe("buildCommand error handling", () => {
 				"--runtime",
 				"node",
 				"--target",
-				"bun-linux-x64-baseline",
+				"bun-linux-x64",
 				"--no-validate",
 			]),
 		).toContain("--target cannot be used with --runtime node");
@@ -452,7 +450,7 @@ describe("buildCommand error handling", () => {
 				"--entry",
 				"nonexistent.ts",
 				"--target",
-				"bun-linux-x64-baseline",
+				"bun-linux-x64",
 			]);
 
 			expect(result.exitCode).toBe(1);

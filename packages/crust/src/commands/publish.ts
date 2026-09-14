@@ -13,6 +13,7 @@ type PublishPackageJson = {
 	bin?: Record<string, string>;
 	os?: string[];
 	cpu?: string[];
+	libc?: string[];
 	optionalDependencies?: Record<string, string>;
 };
 
@@ -117,6 +118,13 @@ export function validatePublishManifest(stageDir: string, manifest: Distribution
 
 		if (!Array.isArray(stagedPackageJson.cpu) || stagedPackageJson.cpu[0] !== pkg.cpu) {
 			throw new Error(`Staged package ${pkg.dir} is missing correct cpu metadata.`);
+		}
+
+		// glibc and musl packages share os/cpu; a wrong or missing libc makes npm pick an unrunnable binary.
+		if (
+			pkg.libc ? stagedPackageJson.libc?.[0] !== pkg.libc : stagedPackageJson.libc !== undefined
+		) {
+			throw new Error(`Staged package ${pkg.dir} is missing correct libc metadata.`);
 		}
 
 		if (stagedPackageJson.bin?.[manifest.root.bin] !== pkg.bin) {

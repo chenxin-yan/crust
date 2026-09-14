@@ -26,6 +26,8 @@ export type TargetInfo = {
 	unameKey: string;
 	os: "linux" | "darwin" | "win32";
 	cpu: "x64" | "arm64";
+	/** C library the Linux binary links against; drives the npm `libc` field and launcher selection. */
+	libc?: "glibc" | "musl";
 };
 
 export type TargetTable<T extends string> = {
@@ -34,12 +36,15 @@ export type TargetTable<T extends string> = {
 	info: Record<T, TargetInfo>;
 };
 
+// Canonical x64 names need Bun 1.4+ (engines.bun): 1.3 still maps them to the AVX2 build.
 const BUN_TARGET_NAMES = [
-	"bun-linux-x64-baseline",
+	"bun-linux-x64",
 	"bun-linux-arm64",
+	"bun-linux-x64-musl",
+	"bun-linux-arm64-musl",
 	"bun-darwin-x64",
 	"bun-darwin-arm64",
-	"bun-windows-x64-baseline",
+	"bun-windows-x64",
 	"bun-windows-arm64",
 ] as const;
 
@@ -49,12 +54,13 @@ export const BUN_TARGETS = {
 	runtime: "Bun",
 	targets: BUN_TARGET_NAMES,
 	info: {
-		"bun-linux-x64-baseline": {
+		"bun-linux-x64": {
 			alias: "linux-x64",
 			platformKey: "linux-x64",
 			unameKey: "Linux-x86_64",
 			os: "linux",
 			cpu: "x64",
+			libc: "glibc",
 		},
 		"bun-linux-arm64": {
 			alias: "linux-arm64",
@@ -62,6 +68,23 @@ export const BUN_TARGETS = {
 			unameKey: "Linux-aarch64",
 			os: "linux",
 			cpu: "arm64",
+			libc: "glibc",
+		},
+		"bun-linux-x64-musl": {
+			alias: "linux-x64-musl",
+			platformKey: "linux-x64-musl",
+			unameKey: "Linux-x86_64-musl",
+			os: "linux",
+			cpu: "x64",
+			libc: "musl",
+		},
+		"bun-linux-arm64-musl": {
+			alias: "linux-arm64-musl",
+			platformKey: "linux-arm64-musl",
+			unameKey: "Linux-aarch64-musl",
+			os: "linux",
+			cpu: "arm64",
+			libc: "musl",
 		},
 		"bun-darwin-x64": {
 			alias: "darwin-x64",
@@ -77,7 +100,7 @@ export const BUN_TARGETS = {
 			os: "darwin",
 			cpu: "arm64",
 		},
-		"bun-windows-x64-baseline": {
+		"bun-windows-x64": {
 			alias: "windows-x64",
 			platformKey: "win32-x64",
 			unameKey: "Windows-x64",
@@ -115,6 +138,7 @@ export const DENO_TARGETS = {
 			unameKey: "Linux-x86_64",
 			os: "linux",
 			cpu: "x64",
+			libc: "glibc",
 		},
 		"aarch64-unknown-linux-gnu": {
 			alias: "linux-arm64",
@@ -122,6 +146,7 @@ export const DENO_TARGETS = {
 			unameKey: "Linux-aarch64",
 			os: "linux",
 			cpu: "arm64",
+			libc: "glibc",
 		},
 		"x86_64-apple-darwin": {
 			alias: "darwin-x64",
@@ -181,8 +206,23 @@ export function binaryFilename<T extends string>(
 	return `${baseName}-${target}${table.info[target].os === "win32" ? ".exe" : ""}`;
 }
 
+/** True on musl-based Linux (Alpine, Void, …). Mirrors the check in Bun's own npm installer. */
+export function isMuslHost(): boolean {
+	if (process.platform !== "linux") return false;
+	try {
+		// SAFETY: @types/node types the report as `object`; header.glibcVersionRuntime is a documented field.
+		const report = process.report?.getReport() as
+			| { header?: { glibcVersionRuntime?: string } }
+			| undefined;
+		if (report?.header) return report.header.glibcVersionRuntime === undefined;
+	} catch {
+		// process.report is unavailable in some embedders; fall through to the file probe.
+	}
+	return existsSync("/etc/alpine-release");
+}
+
 export function hostTarget<T extends string>(table: TargetTable<T>): T | null {
-	const platformKey = `${process.platform}-${process.arch}`;
+	const platformKey = `${process.platform}-${process.arch}${isMuslHost() ? "-musl" : ""}`;
 	return table.targets.find((target) => table.info[target].platformKey === platformKey) ?? null;
 }
 

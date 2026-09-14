@@ -118,15 +118,15 @@ function resolveInstalledCrustCli(projectDir: string): string {
 function hostCrustBuildTarget(): string {
 	const { platform, arch } = process;
 	if (platform === "win32") {
-		return arch === "arm64" ? "bun-windows-arm64" : "bun-windows-x64-baseline";
+		return arch === "arm64" ? "bun-windows-arm64" : "bun-windows-x64";
 	}
 	if (platform === "darwin") {
 		return arch === "arm64" ? "bun-darwin-arm64" : "bun-darwin-x64";
 	}
 	if (platform === "linux") {
-		return arch === "arm64" ? "bun-linux-arm64" : "bun-linux-x64-baseline";
+		return arch === "arm64" ? "bun-linux-arm64" : "bun-linux-x64";
 	}
-	return "bun-linux-x64-baseline";
+	return "bun-linux-x64";
 }
 
 function crustBuildArgv(crustCli: string): string[] {
