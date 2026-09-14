@@ -104,14 +104,14 @@ jobs:
         uses: oven-sh/setup-bun@v2
 
       # Node for tsdown's bin (engines ^22.18.0 || ^24.11.0 || >=26.0.0) and npm
-      # for publishing. registry-url wires NODE_AUTH_TOKEN as the fallback
-      # credential for packages without a trusted publisher yet (first publish
-      # of a new package). npm prefers OIDC when the package is configured.
+      # >= 11.5.1 for publishing. Auth is npm trusted publishing only: no token,
+      # no .npmrc. Every published package (including the @crustjs/crust-<platform>
+      # packages) needs a trusted publisher on npmjs.com for this repo and
+      # workflow file; a brand-new package must be published once by hand first.
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
           package-manager-cache: false
 
       - name: Install dependencies
@@ -133,8 +133,6 @@ jobs:
         uses: changesets/action/publish@v2
         with:
           script: bun run packages:publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   release-pr-size:
     needs: version
