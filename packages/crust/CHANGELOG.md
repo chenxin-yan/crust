@@ -1,5 +1,34 @@
 # @crustjs/crust
 
+## 0.2.1
+
+### Patch Changes
+
+- [#371](https://github.com/chenxin-yan/crust/pull/371) [`d103a76`](https://github.com/chenxin-yan/crust/commit/d103a7688dd3240c913596e46f6100b772ded80d) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Raise the supported Bun floor to 1.4.0.
+  
+  Every package now declares `engines.bun` as `>=1.4.0`, and Bun 1.3 is no longer tested. Bun 1.4 ships a single x64 binary, which is what lets `crust build` use the canonical `bun-linux-x64` and `bun-windows-x64` target names.
+
+- [#369](https://github.com/chenxin-yan/crust/pull/369) [`aea775a`](https://github.com/chenxin-yan/crust/commit/aea775a54ae0a891e9ef7547171aadcd3e0abe17) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Add musl Linux targets and drop the legacy `-baseline` target names.
+  
+  - `bun-linux-x64-musl` and `bun-linux-arm64-musl` join the default Bun target set. `--package` stages them as `<name>-linux-x64-musl` / `<name>-linux-arm64-musl` and writes an npm `libc` field on every Linux platform package, so npm and pnpm download only the glibc or musl package that matches the host. The generated Node launcher and shell resolver detect musl (Alpine, Void, …) and select the matching binary.
+  - `bun-linux-x64-baseline` and `bun-windows-x64-baseline` are replaced by `bun-linux-x64` and `bun-windows-x64`; Bun 1.4 ships one x64 binary and treats the suffix as a legacy alias. Binary filenames lose the suffix (`my-cli-bun-linux-x64-baseline` → `my-cli-bun-linux-x64`), and the old target names are rejected.
+  - The shell resolver written by multi-target builds is POSIX `sh`, so it runs on Alpine without Bash.
+  
+  ```sh
+  # before
+  crust build --target bun-linux-x64-baseline
+  # after
+  crust build --target bun-linux-x64 --target bun-linux-x64-musl
+  ```
+  
+  Bun's musl executables load `libstdc++` and `libgcc` dynamically; bare Alpine images need `apk add libstdc++ libgcc`.
+
+- [#370](https://github.com/chenxin-yan/crust/pull/370) [`0f43a93`](https://github.com/chenxin-yan/crust/commit/0f43a93aeade7a354d40540a2c08b1af7555e462) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `crust build` gains a repeatable `--bun-plugin <specifier>` flag that loads Bun bundler plugins from your project (default export) for Bun standalone and Node builds — for example `crust build --bun-plugin @opentui/solid/bun-plugin` compiles OpenTUI Solid apps. Deno builds reject the flag.
+  
+  Compiled executables no longer load the `bunfig.toml` of the directory they start in (`--no-compile-autoload-bunfig`), so a project `preload` such as `@opentui/solid/preload` can no longer crash your binary — or `crust` itself — before your code runs. `.env` autoloading is unchanged.
+  
+  Without a separate `bun` on `PATH`, `crust build` on arm64 hosts refuses a build whose targets include the host's own target (e.g. `bun-darwin-arm64` on Apple silicon): Bun would compile it by copying the running `crust` executable onto itself and emit a binary that crashes on start. The error names the other targets so you can rerun with explicit `--target`; install Bun to build the host target. On x64 hosts the same target is compiled through Bun's `-baseline` alias, which Bun downloads clean, so it builds without Bun installed.
+
 ## 0.2.0
 
 ### Minor Changes
