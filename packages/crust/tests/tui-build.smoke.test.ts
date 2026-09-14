@@ -16,7 +16,8 @@ import { hostTarget } from "./helpers.ts";
 // build needs `--bun-plugin @opentui/solid/bun-plugin`; core needs no plugin.
 // The project's bunfig preload stays in place during the build and at runtime.
 const enabled = process.env.CRUST_TUI_SMOKE === "1" && process.platform !== "win32";
-const fixtureDir = mkdtempSync(join(tmpdir(), "crust-tui-smoke-"));
+// Allocated in beforeAll so skipped runs leave no crust-tui-smoke-* directory behind.
+let fixtureDir = "";
 const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 
 const OPENTUI_VERSION = "0.5.11";
@@ -72,6 +73,7 @@ async function runInTerminal(
 
 describe.skipIf(!enabled)("crust build OpenTUI smoke (CRUST_TUI_SMOKE=1)", () => {
 	beforeAll(async () => {
+		fixtureDir = mkdtempSync(join(tmpdir(), "crust-tui-smoke-"));
 		mkdirSync(join(fixtureDir, "dist"), { recursive: true });
 		writeFileSync(
 			join(fixtureDir, "package.json"),
