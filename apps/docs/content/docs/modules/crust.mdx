@@ -11,7 +11,7 @@ description: Build and distribute Crust applications for Bun, Deno, and Node.
 npm install -D @crustjs/crust
 ```
 
-The npm package is built with `crust build --package`, so its `bin` is a Node launcher that runs a platform-specific standalone executable with Bun embedded. Node is required to start it; a separate Bun installation is not.
+The npm package is built with `crust build --package`, so its `bin` is a Node launcher that runs a platform-specific standalone executable with Bun embedded. Node is required to start it; a separate Bun installation is not. When `bun` is on `PATH`, `crust build` compiles with it and requires Bun 1.4 or newer: earlier releases select CPU-specific x64 builds for the canonical target names.
 
 ## Commands
 

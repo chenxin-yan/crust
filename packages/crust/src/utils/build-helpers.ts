@@ -300,6 +300,47 @@ function resolveBunBuildRunner(): BuildRunner {
 }
 
 /**
+ * Bun 1.4 collapsed the x64 `-baseline` and haswell builds into one binary, which
+ * is what lets the target table use the canonical `bun-linux-x64` names. On 1.3
+ * those names select the haswell build and the output crashes on older CPUs.
+ */
+export const MIN_BUN_COMPILER_VERSION = "1.4.0";
+
+export function assertBunCompilerVersion(version: string): void {
+	const parse = (v: string) => v.trim().split("-")[0]?.split(".").map(Number) ?? [];
+	const [major = 0, minor = 0, patch = 0] = parse(version);
+	const [minMajor = 0, minMinor = 0, minPatch = 0] = parse(MIN_BUN_COMPILER_VERSION);
+	const ok =
+		major !== minMajor
+			? major > minMajor
+			: minor !== minMinor
+				? minor > minMinor
+				: patch >= minPatch;
+	if (!ok) {
+		throw new Error(
+			`crust build requires Bun ${MIN_BUN_COMPILER_VERSION} or newer to compile executables; found ${version.trim()}.\n  Run \`bun upgrade\` or remove the older bun from PATH.`,
+		);
+	}
+}
+
+// One version probe per process: every target in a multi-target build shares the runner.
+let checkedRunner: string | undefined;
+
+async function ensureBunCompiler(runner: BuildRunner, cwd: string): Promise<void> {
+	if (checkedRunner === runner.command) return;
+	const { exitCode, stdout } = await runProcess(runner.command, ["--version"], {
+		env: runner.env,
+		cwd,
+		stdio: "collect",
+	});
+	if (exitCode !== 0) {
+		throw new Error(`Could not determine the Bun version of ${runner.command}.`);
+	}
+	assertBunCompilerVersion(stdout);
+	checkedRunner = runner.command;
+}
+
+/**
  * Compile a single entry file to a standalone executable.
  *
  * Uses `bun build --compile` as a subprocess so the standalone compiler runs
@@ -323,6 +364,7 @@ export async function execBuild(
 	cwd: string,
 ): Promise<void> {
 	const runner = resolveBunBuildRunner();
+	await ensureBunCompiler(runner, cwd);
 	const args = createBunCompileArgs(entryPath, outfilePath, minify, target, envFiles);
 	await runBuildProcess(runner, args, outfilePath, cwd);
 }
