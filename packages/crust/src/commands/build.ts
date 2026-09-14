@@ -6,6 +6,7 @@ import { bold, cyan, dim, green } from "@crustjs/style";
 import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
 
 import {
+	assertTargetsBuildableWithoutBun,
 	binaryFilename,
 	BUILD_RUNTIMES,
 	type BuildRuntime,
@@ -537,6 +538,7 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 	}
 	if (runtime === "bun") {
 		const targets = resolveTargets(BUN_TARGETS, flags.target);
+		assertTargetsBuildableWithoutBun(targets);
 		if (!flags.package && flags.outfile && targets.length > 1) {
 			throw new Error(
 				"--outfile cannot be used when building for multiple targets.\n  Use --name to set the base binary name instead.",

@@ -295,6 +295,69 @@ function resolveBunBuildRunner(): BuildRunner {
 	};
 }
 
+// Bun compiles its compiled-in default target — the host os/arch/libc with
+// `baseline: false` (src/options_types/compile_target.rs, `CompileTarget::default`
+// / `is_default`) — by copying the running executable onto itself; every other
+// target is downloaded clean. Inside a standalone Crust that base already
+// carries a bundle and the result segfaults on start, so the host target needs
+// either a real `bun` or the `-baseline` alias below.
+
+/**
+ * Bun's `-baseline` spelling of an x64 target, or null for arm64.
+ *
+ * Bun 1.4 ships one x64 build, so the alias yields the same executable (Bun
+ * 1.4.2 downloads a `bun-<target>-baseline-v1.4.2` base that is byte-identical
+ * to the plain one; checked for linux-x64-musl and darwin-x64), but `baseline:
+ * true` is never Bun's compiled-in default, so it is never the self-copy target.
+ * arm64 spellings with the suffix resolve to the plain aarch64 base instead.
+ */
+export function bunBaselineAlias(target: BunTarget): string | null {
+	return BUN_TARGETS.info[target].cpu === "x64" ? `${target}-baseline` : null;
+}
+
+/**
+ * Target string passed to Bun: the `-baseline` alias when the `BUN_BE_BUN`
+ * fallback runner would otherwise compile `target` by copying itself.
+ */
+export function bunCompileTarget(
+	target: BunTarget | undefined,
+	runner: BuildRunner,
+	host = hostTarget(BUN_TARGETS),
+): string | undefined {
+	if (target === undefined || target !== host || runner.env.BUN_BE_BUN !== "1") {
+		return target;
+	}
+	return bunBaselineAlias(target) ?? target;
+}
+
+/**
+ * Refuse the host target when only the `BUN_BE_BUN` fallback runner is
+ * available and no `-baseline` alias can stand in for it (arm64 hosts).
+ */
+export function assertTargetsBuildableWithoutBun(
+	targets: readonly BunTarget[],
+	host = hostTarget(BUN_TARGETS),
+): void {
+	if (
+		host === null ||
+		!targets.includes(host) ||
+		bunBaselineAlias(host) !== null ||
+		which("bun") !== null
+	) {
+		return;
+	}
+	const others = targets.filter((target) => target !== host);
+	const alternative =
+		others.length > 0
+			? `pass --target with the other targets (e.g. ${others.map((target) => `--target ${target}`).join(" ")})`
+			: "build a different target";
+	throw new Error(
+		`Cannot build ${host} without a separate bun executable on PATH.\n` +
+			"  Bun reuses the running crust executable as the base for its own platform, which yields a binary that crashes on start.\n" +
+			`  Install Bun (https://bun.sh), or ${alternative}.`,
+	);
+}
+
 /**
  * Compile a single entry file to a standalone executable.
  *
@@ -319,7 +382,13 @@ export async function execBuild(
 	cwd: string,
 ): Promise<void> {
 	const runner = resolveBunBuildRunner();
-	const args = createBunCompileArgs(entryPath, outfilePath, minify, target, envFiles);
+	const args = createBunCompileArgs(
+		entryPath,
+		outfilePath,
+		minify,
+		bunCompileTarget(target, runner),
+		envFiles,
+	);
 	await runBuildProcess(runner, args, outfilePath, cwd);
 }
 
@@ -327,7 +396,7 @@ export function createBunCompileArgs(
 	entryPath: string,
 	outfilePath: string,
 	minify: boolean,
-	target?: BunTarget,
+	target?: string,
 	envFiles: readonly string[] = [],
 ): string[] {
 	return [

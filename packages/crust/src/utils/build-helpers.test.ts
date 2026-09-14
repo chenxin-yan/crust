@@ -4,10 +4,118 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { buildEntrypoint, createBunCompileArgs } from "./build-helpers.ts";
+import {
+	assertTargetsBuildableWithoutBun,
+	BUN_TARGETS,
+	buildEntrypoint,
+	bunBaselineAlias,
+	bunCompileTarget,
+	createBunCompileArgs,
+} from "./build-helpers.ts";
 
 const coreUrl = import.meta.resolve("@crustjs/core");
 const io = { stdout: () => {}, stderr: () => {} };
+
+async function withoutBunOnPath<T>(run: () => T): Promise<T> {
+	const path = process.env.PATH;
+	process.env.PATH = "";
+	try {
+		return await run();
+	} finally {
+		process.env.PATH = path;
+	}
+}
+
+const fallbackRunner = { command: process.execPath, env: { BUN_BE_BUN: "1" } };
+const realBunRunner = { command: "/usr/local/bin/bun", env: {} };
+
+describe("bunBaselineAlias", () => {
+	it("maps every x64 target to its -baseline spelling and arm64 to nothing", () => {
+		expect(bunBaselineAlias("bun-linux-x64")).toBe("bun-linux-x64-baseline");
+		expect(bunBaselineAlias("bun-linux-x64-musl")).toBe("bun-linux-x64-musl-baseline");
+		expect(bunBaselineAlias("bun-darwin-x64")).toBe("bun-darwin-x64-baseline");
+		expect(bunBaselineAlias("bun-windows-x64")).toBe("bun-windows-x64-baseline");
+		expect(bunBaselineAlias("bun-linux-arm64")).toBeNull();
+		expect(bunBaselineAlias("bun-linux-arm64-musl")).toBeNull();
+		expect(bunBaselineAlias("bun-darwin-arm64")).toBeNull();
+		expect(bunBaselineAlias("bun-windows-arm64")).toBeNull();
+	});
+});
+
+describe("bunCompileTarget", () => {
+	it("substitutes the -baseline alias only for the self-copy target under the fallback runner", () => {
+		expect(bunCompileTarget("bun-linux-x64", fallbackRunner, "bun-linux-x64")).toBe(
+			"bun-linux-x64-baseline",
+		);
+		expect(bunCompileTarget("bun-windows-x64", fallbackRunner, "bun-windows-x64")).toBe(
+			"bun-windows-x64-baseline",
+		);
+		expect(bunCompileTarget("bun-darwin-arm64", fallbackRunner, "bun-linux-x64")).toBe(
+			"bun-darwin-arm64",
+		);
+		expect(bunCompileTarget("bun-linux-x64", fallbackRunner, null)).toBe("bun-linux-x64");
+		expect(bunCompileTarget(undefined, fallbackRunner, "bun-linux-x64")).toBeUndefined();
+	});
+
+	it("passes the canonical target to a real bun", () => {
+		expect(bunCompileTarget("bun-linux-x64", realBunRunner, "bun-linux-x64")).toBe("bun-linux-x64");
+	});
+
+	it("leaves an arm64 self-copy target alone; the guard refuses it earlier", () => {
+		expect(bunCompileTarget("bun-darwin-arm64", fallbackRunner, "bun-darwin-arm64")).toBe(
+			"bun-darwin-arm64",
+		);
+	});
+});
+
+describe("assertTargetsBuildableWithoutBun", () => {
+	it("refuses the self-copying target and lists the remaining targets when bun is absent", async () => {
+		await withoutBunOnPath(() => {
+			expect(() =>
+				assertTargetsBuildableWithoutBun(BUN_TARGETS.targets, "bun-darwin-arm64"),
+			).toThrow(
+				"Cannot build bun-darwin-arm64 without a separate bun executable on PATH.\n" +
+					"  Bun reuses the running crust executable as the base for its own platform, which yields a binary that crashes on start.\n" +
+					"  Install Bun (https://bun.sh), or pass --target with the other targets (e.g. --target bun-linux-x64 --target bun-linux-arm64 --target bun-linux-x64-musl --target bun-linux-arm64-musl --target bun-darwin-x64 --target bun-windows-x64 --target bun-windows-arm64).",
+			);
+			expect(() =>
+				assertTargetsBuildableWithoutBun(["bun-linux-arm64-musl"], "bun-linux-arm64-musl"),
+			).toThrow("Install Bun (https://bun.sh), or build a different target.");
+		});
+	});
+
+	it("keeps every other target buildable without bun", async () => {
+		await withoutBunOnPath(() => {
+			expect(() =>
+				assertTargetsBuildableWithoutBun(
+					["bun-linux-x64", "bun-darwin-x64", "bun-windows-arm64"],
+					"bun-darwin-arm64",
+				),
+			).not.toThrow();
+			expect(() => assertTargetsBuildableWithoutBun(BUN_TARGETS.targets, null)).not.toThrow();
+		});
+	});
+
+	it("allows an x64 self-copy target without bun because its -baseline alias is downloaded clean", async () => {
+		await withoutBunOnPath(() => {
+			for (const host of [
+				"bun-linux-x64",
+				"bun-linux-x64-musl",
+				"bun-darwin-x64",
+				"bun-windows-x64",
+			] as const) {
+				expect(() => assertTargetsBuildableWithoutBun(BUN_TARGETS.targets, host)).not.toThrow();
+			}
+		});
+	});
+
+	it("allows the self-copying target when bun is on PATH", () => {
+		expect(Bun.which("bun")).not.toBeNull();
+		expect(() =>
+			assertTargetsBuildableWithoutBun(BUN_TARGETS.targets, "bun-darwin-arm64"),
+		).not.toThrow();
+	});
+});
 
 describe("createBunCompileArgs", () => {
 	it("compiles without cwd bunfig autoloading and keeps env, outfile, minify, target order", () => {

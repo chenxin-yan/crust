@@ -11,20 +11,22 @@ const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 
 import type { BunTarget } from "../utils/build-helpers.ts";
 import {
-	binaryFilename,
 	BUN_TARGETS,
+	binaryFilename,
+	bunBaselineAlias,
 	DENO_TARGETS,
+	hostTarget,
 	resolveBaseName,
 	resolveTargets,
 } from "../utils/build-helpers.ts";
 import {
+	type BuildFlags,
 	buildCommand,
 	generateCmdResolverFor,
 	generateResolverFor,
 	planBuild,
 	resolveEnvFilePaths,
 	writeResolver,
-	type BuildFlags,
 } from "./build.ts";
 
 describe("env file helpers", () => {
@@ -137,6 +139,40 @@ describe("planBuild", () => {
 			);
 		});
 	}
+
+	// Only arm64 hosts hit the self-copy refusal; x64 hosts compile their own
+	// target through its -baseline alias, which Bun downloads clean.
+	const host = hostTarget(BUN_TARGETS);
+	const hostHasAlias = host !== null && bunBaselineAlias(host) !== null;
+
+	it.skipIf(host === null || hostHasAlias)(
+		"refuses the host target before planning outputs when bun is not on PATH",
+		() => {
+			const path = process.env.PATH;
+			process.env.PATH = "";
+			try {
+				expect(() => planBuild(baseFlags, tmpDir)).toThrow(
+					`Cannot build ${host} without a separate bun executable on PATH`,
+				);
+				expect(planBuild({ ...baseFlags, target: ["bun-linux-x64"] }, tmpDir).runtime).toBe("bun");
+			} finally {
+				process.env.PATH = path;
+			}
+		},
+	);
+
+	it.skipIf(!hostHasAlias)("plans every target when bun is not on PATH on an x64 host", () => {
+		const path = process.env.PATH;
+		process.env.PATH = "";
+		try {
+			const plan = planBuild(baseFlags, tmpDir);
+			expect(plan.runtime === "bun" && plan.mode === "binary" && plan.outputs.length).toBe(
+				BUN_TARGETS.targets.length,
+			);
+		} finally {
+			process.env.PATH = path;
+		}
+	});
 
 	it("plans runtime-specific outputs without executing a build", () => {
 		const plan = planBuild(
