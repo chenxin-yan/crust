@@ -26,8 +26,6 @@ describe("stringWidth", () => {
 	});
 
 	it("keeps the JavaScript fallback aligned with Bun", () => {
-		// Decomposed Hangul is intentionally covered above but excluded here: Bun 1.3.14
-		// reports four columns for the two-column grapheme due to Unicode implementation drift.
 		for (const value of [
 			"",
 			"plain ASCII",
@@ -37,6 +35,7 @@ describe("stringWidth", () => {
 			"☺️",
 			"1\uFE0F\u20E3",
 			"e\u0301",
+			"\u1112\u1161\u11AB",
 			"\u001b[31mred\u001b[0m",
 		]) {
 			const nativeWidth = Bun.stringWidth(value, { countAnsiEscapeCodes: false });
