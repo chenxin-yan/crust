@@ -114,8 +114,9 @@ function printBuildReport(report: BuildReport, stdout: InvocationIO["stdout"]): 
 /**
  * Generate the shell resolver script content (Unix).
  *
- * The resolver detects the platform via `uname -s` and `uname -m`,
- * maps to the correct prebuilt binary, ensures execute permissions,
+ * The resolver detects the platform via `uname -s` and `uname -m` (plus a
+ * `-musl` suffix on musl-based Linux), maps to the correct prebuilt binary,
+ * ensures execute permissions,
  * and execs it with all arguments forwarded.
  *
  * @param baseName - The base binary name
@@ -148,6 +149,10 @@ while [ -L "$source" ]; do
 done
 dir="$(cd "$(dirname "$source")" && pwd)"
 platform="$(uname -s)-$(uname -m)"
+# glibc and musl binaries are not interchangeable; musl's ldd identifies itself.
+if [ "$(uname -s)" = Linux ] && ldd --version 2>&1 | grep -qi musl; then
+	platform="$platform-musl"
+fi
 
 case "$platform" in
 ${caseBody}
@@ -596,9 +601,9 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
  * crust build --entry src/main.ts             # Custom entry point
  * crust build --name my-tool                  # Output as dist/my-tool-*
  * crust build --no-minify                     # Disable minification
- * crust build --target bun-linux-x64-baseline              # Build only for Linux x64
- * crust build --target bun-linux-x64-baseline --target bun-darwin-arm64  # Specific platforms only
- * crust build --target bun-linux-x64-baseline --outfile ./my-cli     # Single target with custom output
+ * crust build --target bun-linux-x64              # Build only for Linux x64
+ * crust build --target bun-linux-x64 --target bun-darwin-arm64  # Specific platforms only
+ * crust build --target bun-linux-x64 --outfile ./my-cli     # Single target with custom output
  * crust build --runtime deno --target aarch64-apple-darwin
  * crust build --runtime node --outdir out               # Output out/<name>.js
  * ```

@@ -68,7 +68,7 @@ describe("crust build --package integration", () => {
 		await runBuild([
 			"--package",
 			"--target",
-			"bun-linux-x64-baseline",
+			"bun-linux-x64",
 			"--target",
 			"bun-darwin-arm64",
 			"--stage-dir",
@@ -101,7 +101,7 @@ describe("crust build --package integration", () => {
 		await runBuild([
 			"--package",
 			"--target",
-			"bun-linux-x64-baseline",
+			"bun-linux-x64",
 			"--stage-dir",
 			".subset",
 			"--no-validate",

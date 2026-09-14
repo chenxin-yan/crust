@@ -64,7 +64,7 @@ describe("publish manifest validation", () => {
 				dir: "linux-x64",
 				os: "linux",
 				cpu: "x64",
-				bin: "bin/demo-bun-linux-x64-baseline",
+				bin: "bin/demo-bun-linux-x64",
 			},
 			{
 				target: "darwin-arm64",

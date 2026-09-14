@@ -70,7 +70,7 @@ describe("runDistributeBuild", () => {
 			bin: { "test-cli": "dist/cli" },
 		};
 		const plan = createPlan(tmpDir, packageJson, {
-			targets: ["bun-linux-x64-baseline", "bun-windows-arm64"],
+			targets: ["bun-linux-x64", "bun-linux-x64-musl", "bun-windows-arm64"],
 		});
 		const outputs: string[] = [];
 
@@ -96,7 +96,12 @@ describe("runDistributeBuild", () => {
 			expect.objectContaining({
 				target: "linux-x64",
 				name: "@scope/test-package-cli-linux-x64",
-				bin: "bin/test-package-cli-bun-linux-x64-baseline",
+				bin: "bin/test-package-cli-bun-linux-x64",
+			}),
+			expect.objectContaining({
+				target: "linux-x64-musl",
+				name: "@scope/test-package-cli-linux-x64-musl",
+				bin: "bin/test-package-cli-bun-linux-x64-musl",
 			}),
 			expect.objectContaining({
 				target: "windows-arm64",
@@ -104,7 +109,24 @@ describe("runDistributeBuild", () => {
 				bin: "bin/test-package-cli-bun-windows-arm64.exe",
 			}),
 		]);
-		expect(manifest.publishOrder).toEqual(["linux-x64", "windows-arm64", "root"]);
+		expect(manifest.publishOrder).toEqual(["linux-x64", "linux-x64-musl", "windows-arm64", "root"]);
+
+		// glibc and musl packages share os/cpu; `libc` is what lets npm skip the wrong one.
+		const platformPackage = (dir: string) =>
+			readJson<{ os: string[]; cpu: string[]; libc?: string[] }>(
+				join(plan.stageDir, dir, "package.json"),
+			);
+		expect(platformPackage("linux-x64")).toMatchObject({
+			os: ["linux"],
+			cpu: ["x64"],
+			libc: ["glibc"],
+		});
+		expect(platformPackage("linux-x64-musl")).toMatchObject({
+			os: ["linux"],
+			cpu: ["x64"],
+			libc: ["musl"],
+		});
+		expect(platformPackage("windows-arm64")).not.toHaveProperty("libc");
 
 		const rootPackage = readJson<{
 			files: string[];
@@ -114,6 +136,7 @@ describe("runDistributeBuild", () => {
 		expect(rootPackage.bin).toEqual({ "test-cli": "bin/test-cli.js" });
 		expect(rootPackage.optionalDependencies).toEqual({
 			"@scope/test-package-cli-linux-x64": "0.1.0",
+			"@scope/test-package-cli-linux-x64-musl": "0.1.0",
 			"@scope/test-package-cli-windows-arm64": "0.1.0",
 		});
 		const resolver = readFileSync(join(plan.stageDir, "root", "bin", "test-cli.js"), "utf8");
@@ -121,7 +144,9 @@ describe("runDistributeBuild", () => {
 		expect(resolver).toContain("const candidateOne = resolve(");
 		expect(resolver).toContain("const candidateTwo = resolve(");
 		expect(resolver).toContain("Unsupported platform:");
-		expect(resolver).toContain("Supported platforms: linux-x64, windows-arm64");
+		expect(resolver).toContain('"linux-x64-musl": {');
+		expect(resolver).toContain("glibcVersionRuntime");
+		expect(resolver).toContain("Supported platforms: linux-x64, linux-x64-musl, windows-arm64");
 		expect(resolver).toContain("Missing platform package");
 		expect(resolver).toContain("optional dependencies are enabled");
 		expect(resolver).toContain('child.on("error"');
@@ -129,7 +154,8 @@ describe("runDistributeBuild", () => {
 		expect(resolver).toContain("process.exit(code ?? 0)");
 		expect(readFileSync(join(plan.stageDir, "root", "LICENSE"), "utf8")).toBe("test license\n");
 		expect(outputs).toEqual([
-			join(plan.stageDir, "linux-x64", "bin", "test-package-cli-bun-linux-x64-baseline"),
+			join(plan.stageDir, "linux-x64", "bin", "test-package-cli-bun-linux-x64"),
+			join(plan.stageDir, "linux-x64-musl", "bin", "test-package-cli-bun-linux-x64-musl"),
 			join(plan.stageDir, "windows-arm64", "bin", "test-package-cli-bun-windows-arm64.exe"),
 		]);
 	});

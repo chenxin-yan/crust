@@ -39,6 +39,7 @@ const METADATA_KEYS = [
 
 type NpmOs = TargetInfo["os"];
 type NpmCpu = TargetInfo["cpu"];
+type NpmLibc = NonNullable<TargetInfo["libc"]>;
 type PlatformKey = (typeof BUN_TARGETS.info)[BunTarget]["platformKey"];
 type PublishPackageMetadata = {
 	name: string;
@@ -64,11 +65,14 @@ type RootPublishPackageJson = PublishPackageMetadata & {
 	optionalDependencies: Record<string, string>;
 	os?: never;
 	cpu?: never;
+	libc?: never;
 };
 
 type PlatformPublishPackageJson = PublishPackageMetadata & {
 	os: [NpmOs];
 	cpu: [NpmCpu];
+	/** Lets npm/pnpm skip the wrong-ABI Linux package; both share `os`/`cpu`. */
+	libc?: [NpmLibc];
 	optionalDependencies?: never;
 };
 
@@ -77,6 +81,7 @@ type UserPackageJson = Omit<PublishPackageMetadata, "bin"> & {
 	optionalDependencies?: Record<string, string>;
 	os?: [NpmOs];
 	cpu?: [NpmCpu];
+	libc?: [NpmLibc];
 };
 
 type DistributionMetadata = {
@@ -98,6 +103,7 @@ type DistributionTarget = {
 	binaryFilename: string;
 	os: NpmOs;
 	cpu: NpmCpu;
+	libc?: NpmLibc;
 };
 
 export type DistributionManifest = {
@@ -213,6 +219,7 @@ function buildDistributionPlatformPackageJson(
 		},
 		os: [target.os],
 		cpu: [target.cpu],
+		...(target.libc ? { libc: [target.libc] } : {}),
 	};
 }
 
@@ -293,6 +300,7 @@ function resolveDistributionTarget(
 		binaryFilename: filename,
 		os: info.os,
 		cpu: info.cpu,
+		...("libc" in info ? { libc: info.libc } : {}),
 	};
 }
 
@@ -322,7 +330,18 @@ import { fileURLToPath } from "node:url";
 
 const PLATFORMS = ${JSON.stringify(targetMap, null, "\t")};
 const dir = dirname(fileURLToPath(import.meta.url));
-const platformKey = \`\${process.platform}-\${process.arch}\`;
+
+// Same check as Bun's own npm installer: glibc reports its version, musl does not.
+function isMusl() {
+	try {
+		const report = process.report?.getReport();
+		if (report?.header) return report.header.glibcVersionRuntime === undefined;
+	} catch {}
+	return existsSync("/etc/alpine-release");
+}
+
+const platformKey =
+	\`\${process.platform}-\${process.arch}\` + (process.platform === "linux" && isMusl() ? "-musl" : "");
 const target = PLATFORMS[platformKey];
 
 if (!target) {
