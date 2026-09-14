@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
-import { access, readdir, readFile } from "node:fs/promises";
+import { access, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
@@ -46,7 +47,7 @@ async function loadWorkspacePackages() {
 		}
 
 		const packageJson = await readJson(packageJsonPath);
-		if (packageJson.private || !packageJson.scripts?.publish) {
+		if (packageJson.private) {
 			continue;
 		}
 
@@ -55,6 +56,10 @@ async function loadWorkspacePackages() {
 			version: packageJson.version,
 			dir,
 			relativeDir,
+			// Packages that publish more than themselves (crust's per-platform
+			// binaries) own their publish via a `release` script. Not `publish`:
+			// that is an npm lifecycle hook `bun publish` would re-run.
+			hasReleaseScript: Boolean(packageJson.scripts?.release),
 			dependencies: packageJson.dependencies ?? {},
 			optionalDependencies: packageJson.optionalDependencies ?? {},
 			peerDependencies: packageJson.peerDependencies ?? {},
@@ -170,6 +175,20 @@ async function runCommand(args, cwd) {
 	}
 }
 
+// Pack with Bun so workspace:/catalog: ranges resolve, then upload with npm,
+// which supports trusted publishing (OIDC); `bun publish` does not
+// (oven-sh/bun#15601).
+async function packAndPublish(pkg) {
+	const tmp = await mkdtemp(join(tmpdir(), "crust-publish-"));
+	const tarball = join(tmp, "package.tgz");
+	try {
+		await runCommand([process.execPath, "pm", "pack", "--quiet", "--filename", tarball], pkg.dir);
+		await runCommand(["npm", "publish", tarball, "--access", "public"], pkg.dir);
+	} finally {
+		await rm(tmp, { recursive: true, force: true });
+	}
+}
+
 async function main() {
 	const {
 		values: { "dry-run": dryRun },
@@ -200,7 +219,11 @@ async function main() {
 
 	for (const pkg of packagesToPublish) {
 		console.log(`\nPublishing ${pkg.name}@${pkg.version} from ${pkg.relativeDir}`);
-		await runCommand([process.execPath, "run", "publish"], pkg.dir);
+		if (pkg.hasReleaseScript) {
+			await runCommand([process.execPath, "run", "release"], pkg.dir);
+		} else {
+			await packAndPublish(pkg);
+		}
 	}
 
 	// Tag the whole cohort, not just this run's publishes: after a partial

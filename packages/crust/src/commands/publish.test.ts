@@ -110,17 +110,28 @@ describe("publish manifest validation", () => {
 		);
 	});
 
-	it("uses the current executable as bun with BUN_BE_BUN support", () => {
+	it("publishes with npm so trusted publishing works", () => {
 		expect(buildPublishCommand({ access: "public" })).toEqual([
-			process.execPath,
+			"npm",
 			"publish",
 			"--access",
 			"public",
-			"--no-git-checks",
+		]);
+		expect(
+			buildPublishCommand({ access: "restricted", tag: "next", registry: "https://r.example" }),
+		).toEqual([
+			"npm",
+			"publish",
+			"--access",
+			"restricted",
+			"--tag",
+			"next",
+			"--registry",
+			"https://r.example",
 		]);
 	});
 
-	it("supports dry-run without spawning bun publish", async () => {
+	it("supports dry-run without spawning npm publish", async () => {
 		const spawnPublish = mock(async () => 0);
 		await publishStagedPackages(
 			manifest,

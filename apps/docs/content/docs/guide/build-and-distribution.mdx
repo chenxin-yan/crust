@@ -79,7 +79,7 @@ crust publish --dry-run
 crust publish
 ```
 
-The dry run prints the order and commands without publishing. The publish command reads the staged manifest, verifies package metadata, publishes platform packages before the root, and stops at the first failure; see its [options](/docs/modules/crust#crust-publish-options).
+The dry run prints the order and commands without publishing. The publish command reads the staged manifest, verifies package metadata, publishes platform packages before the root with `npm publish`, and stops at the first failure; see its [options](/docs/modules/crust#crust-publish-options). Because npm does the upload, [trusted publishing](https://docs.npmjs.com/trusted-publishers) works from GitHub Actions: give the job `id-token: write` and configure a trusted publisher for the root package and each platform package.
 
 ```sh tab="npm" tab-group="package-manager"
 npm install -g my-cli
