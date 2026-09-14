@@ -151,6 +151,10 @@ For Bun and Node builds, `--env-file` passes explicit files to the compiler, emb
 
 Deno builds reject `--env-file`, so load their configuration at runtime instead.
 
+### Runtime autoloading
+
+Bun executables built by `crust build` still autoload `.env` from the directory they start in, but they do not read that directory's `bunfig.toml` (they are compiled with `--no-compile-autoload-bunfig`). A `preload` meant for the project that happens to be the current directory — such as `@opentui/solid/preload` — would otherwise crash your binary, or `crust` itself, before any of your code runs.
+
 ## Set up `package.json`
 
 <Tabs items={["Bun standalone", "Deno standalone", "Node runtime package"]}>

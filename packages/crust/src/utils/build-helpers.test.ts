@@ -4,10 +4,40 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { buildEntrypoint } from "./build-helpers.ts";
+import { buildEntrypoint, createBunCompileArgs } from "./build-helpers.ts";
 
 const coreUrl = import.meta.resolve("@crustjs/core");
 const io = { stdout: () => {}, stderr: () => {} };
+
+describe("createBunCompileArgs", () => {
+	it("compiles without cwd bunfig autoloading and keeps env, outfile, minify, target order", () => {
+		expect(
+			createBunCompileArgs("/p/src/cli.ts", "/p/dist/cli", true, "bun-darwin-arm64", ["/p/.env"]),
+		).toEqual([
+			"build",
+			"--compile",
+			"--no-compile-autoload-bunfig",
+			"--env-file",
+			"/p/.env",
+			"--env=PUBLIC_*",
+			"--outfile",
+			"/p/dist/cli",
+			"--minify",
+			"--target",
+			"bun-darwin-arm64",
+			"/p/src/cli.ts",
+		]);
+		expect(createBunCompileArgs("/p/src/cli.ts", "/p/dist/cli", false, undefined, [])).toEqual([
+			"build",
+			"--compile",
+			"--no-compile-autoload-bunfig",
+			"--env=PUBLIC_*",
+			"--outfile",
+			"/p/dist/cli",
+			"/p/src/cli.ts",
+		]);
+	});
+});
 
 describe("buildEntrypoint", () => {
 	const tempDirs: string[] = [];

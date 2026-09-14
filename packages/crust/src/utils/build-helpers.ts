@@ -323,7 +323,7 @@ export async function execBuild(
 	await runBuildProcess(runner, args, outfilePath, cwd);
 }
 
-function createBunCompileArgs(
+export function createBunCompileArgs(
 	entryPath: string,
 	outfilePath: string,
 	minify: boolean,
@@ -333,6 +333,10 @@ function createBunCompileArgs(
 	return [
 		"build",
 		"--compile",
+		// A standalone otherwise runs the bunfig.toml of whatever directory it is
+		// started in, so an unresolvable consumer `preload` would kill it before
+		// user code. `.env` autoloading is intentionally left on.
+		"--no-compile-autoload-bunfig",
 		...toBunEnvFileArgs(envFiles),
 		"--env=PUBLIC_*",
 		"--outfile",

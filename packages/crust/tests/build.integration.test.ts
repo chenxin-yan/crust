@@ -347,3 +347,107 @@ await app.execute();
 		},
 	);
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// Integration test: compiled executables ignore the cwd bunfig.toml but keep .env
+// ────────────────────────────────────────────────────────────────────────────
+
+describe.skipIf(getHostBunTarget() === null)(
+	"crust build integration — compiled executables and cwd autoloading",
+	() => {
+		const tmpDir = mkdtempSync(join(tmpdir(), "crust-build-autoload-"));
+		const crustPackageDir = resolve(import.meta.dir, "..");
+		const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
+		const originalCwd = process.cwd;
+		// A cwd whose bunfig preload cannot resolve: Bun standalones that autoload
+		// bunfig.toml die here with `preload not found` before any user code runs.
+		const preloadCwd = join(tmpDir, "unresolvable-preload");
+		const crustBinary = join(tmpDir, "crust-host");
+
+		beforeAll(async () => {
+			mkdirSync(preloadCwd, { recursive: true });
+			writeFileSync(join(preloadCwd, "bunfig.toml"), 'preload = ["@opentui/solid/preload"]\n');
+			writeFileSync(join(preloadCwd, ".env"), "PUBLIC_MESSAGE=from-cwd-env\n");
+
+			process.cwd = () => crustPackageDir;
+			try {
+				const { exitCode, stderr } = await captureExecute(new Crust("test").add(buildCommand), [
+					"build",
+					"--entry",
+					"src/cli.ts",
+					"--outfile",
+					crustBinary,
+					"--target",
+					getHostBunTarget()!,
+					"--no-validate",
+				]);
+				if (exitCode !== 0) throw new Error(stderr);
+			} finally {
+				process.cwd = originalCwd;
+			}
+		});
+
+		afterAll(() => {
+			process.cwd = originalCwd;
+			rmSync(tmpDir, { recursive: true, force: true });
+		});
+
+		it("starts crust's own executable from a cwd with an unresolvable bunfig preload", async () => {
+			const { exitCode, stdout, stderr } = await runProcess(crustBinary, ["--version"], {
+				cwd: preloadCwd,
+			});
+			expect(stderr).not.toContain("preload not found");
+			expect(exitCode).toBe(0);
+			expect(stdout).toContain("crust v");
+		});
+
+		it("keeps .env autoloading in compiled executables while ignoring the cwd bunfig", async () => {
+			const projectDir = join(tmpDir, "env-project");
+			mkdirSync(join(projectDir, "src"), { recursive: true });
+			writeFileSync(
+				join(projectDir, "src", "cli.ts"),
+				`console.log(process.env.PUBLIC_MESSAGE ?? "unset");\n`,
+			);
+			const outPath = join(projectDir, "dist", "env-cli");
+			process.cwd = () => projectDir;
+			const { exitCode, stderr } = await captureExecute(new Crust("test").add(buildCommand), [
+				"build",
+				"--outfile",
+				outPath,
+				"--target",
+				getHostBunTarget()!,
+				"--no-validate",
+			]);
+			process.cwd = originalCwd;
+			if (exitCode !== 0) throw new Error(stderr);
+
+			const run = await runProcess(outPath, [], { cwd: preloadCwd, env: {} });
+			expect(run.stderr).not.toContain("preload not found");
+			expect(run.exitCode).toBe(0);
+			expect(run.stdout.trim()).toBe("from-cwd-env");
+		});
+
+		it("still runs a resolvable project preload in the snapshot subprocess", async () => {
+			const projectDir = join(tmpDir, "preload-project");
+			mkdirSync(join(projectDir, "src"), { recursive: true });
+			writeFileSync(join(projectDir, "bunfig.toml"), 'preload = ["./preload.ts"]\n');
+			writeFileSync(join(projectDir, "preload.ts"), "globalThis.__crustPreloaded = true;\n");
+			writeFileSync(
+				join(projectDir, "src", "cli.ts"),
+				`import { Crust } from ${JSON.stringify(corePath)};
+if (globalThis.__crustPreloaded !== true) throw new Error("preload did not run");
+await new Crust("preload-cli").action(() => {}).execute();
+`,
+			);
+
+			const { exitCode, stderr } = await runProcess(
+				crustBinary,
+				["build", "--outfile", join(projectDir, "dist", "cli"), "--target", getHostBunTarget()!],
+				{ cwd: projectDir },
+			);
+			expect(stderr).toBe("");
+			expect(exitCode).toBe(0);
+			expect(existsSync(join(projectDir, "dist", "cli"))).toBe(true);
+		});
+	},
+);
