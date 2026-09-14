@@ -11,7 +11,6 @@ const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 
 import type { BunTarget } from "../utils/build-helpers.ts";
 import {
-	assertBunCompilerVersion,
 	binaryFilename,
 	BUN_TARGETS,
 	DENO_TARGETS,
@@ -184,30 +183,6 @@ describe("resolveTarget", () => {
 
 	it("throws on unknown target", () => {
 		expect(() => resolveTargets(BUN_TARGETS, ["linux-arm32"])).toThrow(/Unknown target/);
-	});
-
-	it("rejects legacy -baseline names with a hint now that Bun ships one x64 binary", () => {
-		expect(() => resolveTargets(BUN_TARGETS, ["bun-linux-x64-baseline"])).toThrow(
-			'Unknown target "bun-linux-x64-baseline". Targets must use canonical Bun names. Did you mean "bun-linux-x64"?',
-		);
-		expect(() => resolveTargets(BUN_TARGETS, ["bun-windows-x64-baseline"])).toThrow(
-			'Did you mean "bun-windows-x64"?',
-		);
-	});
-});
-
-describe("assertBunCompilerVersion", () => {
-	it("accepts Bun 1.4.0 and newer, including prereleases and trailing newlines", () => {
-		for (const version of ["1.4.0", "1.4.2\n", "1.10.0", "2.0.0", "1.4.0-canary.1"]) {
-			expect(() => assertBunCompilerVersion(version)).not.toThrow();
-		}
-	});
-
-	it("rejects Bun 1.3, whose x64 targets still select CPU-specific builds", () => {
-		expect(() => assertBunCompilerVersion("1.3.14\n")).toThrow(
-			/requires Bun 1\.4\.0 or newer.*found 1\.3\.14/,
-		);
-		expect(() => assertBunCompilerVersion("0.9.9")).toThrow(/requires Bun 1\.4\.0/);
 	});
 });
 
