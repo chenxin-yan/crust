@@ -36,7 +36,6 @@ export type TargetTable<T extends string> = {
 	info: Record<T, TargetInfo>;
 };
 
-// Canonical x64 names need Bun 1.4+ (engines.bun): 1.3 still maps them to the AVX2 build.
 const BUN_TARGET_NAMES = [
 	"bun-linux-x64",
 	"bun-linux-arm64",
