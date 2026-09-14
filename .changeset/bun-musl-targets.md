@@ -1,5 +1,5 @@
 ---
-"@crustjs/crust": minor
+"@crustjs/crust": patch
 ---
 
 Add musl Linux targets and drop the legacy `-baseline` target names.
