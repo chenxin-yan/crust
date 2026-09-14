@@ -73,3 +73,15 @@ new Crust("app").action(() =>
   }),
 );
 ```
+
+## Compiling
+
+```sh
+crust build --bun-plugin @opentui/solid/bun-plugin --target bun-linux-x64
+```
+
+Solid components need OpenTUI's JSX transform at compile time; Bun's built-in JSX leaves the tree static and the binary fails with `Orphan text error`. Pass the plugin to [`crust build --bun-plugin`](/docs/guide/build-and-distribution#bun-bundler-plugins); the `@opentui/solid/preload` entry in `bunfig.toml` only covers `bun run`, not compilation. React and core apps compile with a plain `crust build`.
+
+OpenTUI's native library ships as one optional package per platform, so cross-compiling needs them all installed: `bun install --os "*" --cpu "*"`.
+
+Binaries built by `crust build` do not load the `bunfig.toml` of the directory they start in, so the `preload` entry meant for development never crashes a compiled app (or `crust` itself) that happens to run from your project directory.
