@@ -9,7 +9,7 @@ import crustPackage from "../../crust/package.json";
 import extensionsPackage from "../../extensions/package.json";
 
 const packageRoot = resolve(import.meta.dir, "..");
-const builtCliPath = join(packageRoot, "dist", "index.js");
+const builtCliPath = join(packageRoot, ".crust", "root", "bin", "create-crust.js");
 const tempRoots: string[] = [];
 
 function makeTempRoot(label: string): string {
@@ -75,12 +75,14 @@ describe("create-crust CLI", () => {
 			name: "my-cli",
 			version: "0.0.0",
 			type: "module",
-			bin: { "my-cli": "dist/cli" },
+			crust: { runtime: "bun" },
+			bin: { "my-cli": ".crust/root/bin/my-cli.js" },
 			scripts: {
 				dev: "bun run src/cli.ts",
 				build: "crust build",
-				package: "crust build --package",
-				publish: "crust publish",
+				release: "crust publish",
+				start: "bun .crust/root/bin/my-cli.js",
+				"check:types": "tsc --noEmit",
 			},
 			dependencies: {
 				"@crustjs/core": `^${corePackage.version}`,
@@ -94,8 +96,9 @@ describe("create-crust CLI", () => {
 		// toMatchObject is partial: prove the imported packages left devDependencies.
 		expect(pkg.devDependencies["@crustjs/core"]).toBeUndefined();
 		expect(pkg.devDependencies["@crustjs/extensions"]).toBeUndefined();
-		expect(existsSync(join(projectDir, "tsconfig.json"))).toBe(true);
-		expect(pkg.crust).toBeUndefined();
+		expect(pkg.files).toBeUndefined();
+		expect(pkg.scripts.package).toBeUndefined();
+		expect(pkg.scripts.publish).toBeUndefined();
 		const tsconfig = JSON.parse(readFileSync(join(projectDir, "tsconfig.json"), "utf-8"));
 		expect(tsconfig.compilerOptions.lib).toEqual(["ESNext"]);
 		expect(tsconfig.compilerOptions.types).toEqual(["bun"]);
@@ -106,10 +109,14 @@ describe("create-crust CLI", () => {
 		expect(cli).toContain("version: pkg.version");
 		expect(cli).toContain("version()");
 		expect(cli).toContain('import pkg from "../package.json" with { type: "json" };');
-		expect(readFileSync(join(projectDir, ".gitignore"), "utf-8")).toContain("node_modules");
+		const gitignore = readFileSync(join(projectDir, ".gitignore"), "utf-8");
+		expect(gitignore).toContain("node_modules");
+		expect(gitignore).toContain(".crust");
 		const readme = readFileSync(join(projectDir, "README.md"), "utf-8");
 		expect(readme).toContain("# my-cli");
 		expect(readme).toContain("bun run dev");
+		expect(readme).toContain("bun run release");
+		expect(readme).not.toContain("dist/");
 		expect(readme).not.toContain("{{");
 		expect(existsSync(join(projectDir, "node_modules"))).toBe(false);
 		expect(existsSync(join(projectDir, ".git"))).toBe(false);
@@ -156,13 +163,12 @@ describe("create-crust CLI", () => {
 		const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf-8"));
 		expect(pkg).toMatchObject({
 			crust: { runtime: "node" },
-			files: ["dist"],
-			bin: { "node-cli": "dist/cli.js" },
+			bin: { "node-cli": ".crust/root/bin/node-cli.js" },
 			scripts: {
 				dev: "node src/cli.ts",
-				build: "crust build --name cli",
-				prepack: "npm run build",
-				start: "node dist/cli.js",
+				build: "crust build",
+				release: "crust publish",
+				start: "node .crust/root/bin/node-cli.js",
 				"check:types": "tsc --noEmit",
 			},
 			engines: { node: ">=22.18" },
@@ -175,6 +181,8 @@ describe("create-crust CLI", () => {
 				"@types/node": "^22",
 			},
 		});
+		expect(pkg.files).toBeUndefined();
+		expect(pkg.scripts.prepack).toBeUndefined();
 		expect(pkg.scripts.package).toBeUndefined();
 		expect(pkg.scripts.publish).toBeUndefined();
 		const tsconfig = JSON.parse(readFileSync(join(projectDir, "tsconfig.json"), "utf-8"));
@@ -205,18 +213,12 @@ describe("create-crust CLI", () => {
 		const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf-8"));
 		expect(pkg).toMatchObject({
 			crust: { runtime: "deno" },
-			files: [
-				"dist/cli",
-				"dist/cli.cmd",
-				"dist/*-unknown-linux-*",
-				"dist/*-apple-darwin",
-				"dist/*-pc-windows-*",
-			],
-			bin: { "deno-cli": "dist/cli" },
+			bin: { "deno-cli": ".crust/root/bin/deno-cli.js" },
 			scripts: {
 				dev: "deno run -A src/cli.ts",
 				build: "crust build",
-				start: "./dist/cli",
+				release: "crust publish",
+				start: "deno run -A .crust/root/bin/deno-cli.js",
 				"check:types": "deno check src/cli.ts",
 			},
 			dependencies: {
@@ -225,6 +227,7 @@ describe("create-crust CLI", () => {
 			},
 			devDependencies: { "@crustjs/crust": `^${crustPackage.version}` },
 		});
+		expect(pkg.files).toBeUndefined();
 		expect(pkg.scripts.package).toBeUndefined();
 		expect(pkg.scripts.publish).toBeUndefined();
 		expect(pkg.devDependencies.typescript).toBeUndefined();

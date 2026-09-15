@@ -4,7 +4,7 @@ import { once } from "node:events";
 import { existsSync, readFileSync } from "node:fs";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { text } from "node:stream/consumers";
 import { pathToFileURL } from "node:url";
 
@@ -12,7 +12,7 @@ import type { BuildReport, InvocationIO } from "@crustjs/core";
 import { BUILD_OUT_DIR_ENV, type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
 import { yellow } from "@crustjs/style";
 import { isErrnoException } from "@crustjs/utils/error";
-import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
+import type { JsonValue } from "@crustjs/utils/json";
 import { runProcess, which } from "@crustjs/utils/process";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -25,7 +25,6 @@ export type BuildRuntime = (typeof BUILD_RUNTIMES)[number];
 export type TargetInfo = {
 	alias: string;
 	platformKey: string;
-	unameKey: string;
 	os: "linux" | "darwin" | "win32";
 	cpu: "x64" | "arm64";
 	/** C library the Linux binary links against; drives the npm `libc` field and launcher selection. */
@@ -58,7 +57,6 @@ export const BUN_TARGETS = {
 		"bun-linux-x64": {
 			alias: "linux-x64",
 			platformKey: "linux-x64",
-			unameKey: "Linux-x86_64",
 			os: "linux",
 			cpu: "x64",
 			libc: "glibc",
@@ -66,7 +64,6 @@ export const BUN_TARGETS = {
 		"bun-linux-arm64": {
 			alias: "linux-arm64",
 			platformKey: "linux-arm64",
-			unameKey: "Linux-aarch64",
 			os: "linux",
 			cpu: "arm64",
 			libc: "glibc",
@@ -74,7 +71,6 @@ export const BUN_TARGETS = {
 		"bun-linux-x64-musl": {
 			alias: "linux-x64-musl",
 			platformKey: "linux-x64-musl",
-			unameKey: "Linux-x86_64-musl",
 			os: "linux",
 			cpu: "x64",
 			libc: "musl",
@@ -82,7 +78,6 @@ export const BUN_TARGETS = {
 		"bun-linux-arm64-musl": {
 			alias: "linux-arm64-musl",
 			platformKey: "linux-arm64-musl",
-			unameKey: "Linux-aarch64-musl",
 			os: "linux",
 			cpu: "arm64",
 			libc: "musl",
@@ -90,28 +85,24 @@ export const BUN_TARGETS = {
 		"bun-darwin-x64": {
 			alias: "darwin-x64",
 			platformKey: "darwin-x64",
-			unameKey: "Darwin-x86_64",
 			os: "darwin",
 			cpu: "x64",
 		},
 		"bun-darwin-arm64": {
 			alias: "darwin-arm64",
 			platformKey: "darwin-arm64",
-			unameKey: "Darwin-arm64",
 			os: "darwin",
 			cpu: "arm64",
 		},
 		"bun-windows-x64": {
 			alias: "windows-x64",
 			platformKey: "win32-x64",
-			unameKey: "Windows-x64",
 			os: "win32",
 			cpu: "x64",
 		},
 		"bun-windows-arm64": {
 			alias: "windows-arm64",
 			platformKey: "win32-arm64",
-			unameKey: "Windows-arm64",
 			os: "win32",
 			cpu: "arm64",
 		},
@@ -136,7 +127,6 @@ export const DENO_TARGETS = {
 		"x86_64-unknown-linux-gnu": {
 			alias: "linux-x64",
 			platformKey: "linux-x64",
-			unameKey: "Linux-x86_64",
 			os: "linux",
 			cpu: "x64",
 			libc: "glibc",
@@ -144,7 +134,6 @@ export const DENO_TARGETS = {
 		"aarch64-unknown-linux-gnu": {
 			alias: "linux-arm64",
 			platformKey: "linux-arm64",
-			unameKey: "Linux-aarch64",
 			os: "linux",
 			cpu: "arm64",
 			libc: "glibc",
@@ -152,28 +141,24 @@ export const DENO_TARGETS = {
 		"x86_64-apple-darwin": {
 			alias: "darwin-x64",
 			platformKey: "darwin-x64",
-			unameKey: "Darwin-x86_64",
 			os: "darwin",
 			cpu: "x64",
 		},
 		"aarch64-apple-darwin": {
 			alias: "darwin-arm64",
 			platformKey: "darwin-arm64",
-			unameKey: "Darwin-arm64",
 			os: "darwin",
 			cpu: "arm64",
 		},
 		"x86_64-pc-windows-msvc": {
 			alias: "windows-x64",
 			platformKey: "win32-x64",
-			unameKey: "Windows-x64",
 			os: "win32",
 			cpu: "x64",
 		},
 		"aarch64-pc-windows-msvc": {
 			alias: "windows-arm64",
 			platformKey: "win32-arm64",
-			unameKey: "Windows-arm64",
 			os: "win32",
 			cpu: "arm64",
 		},
@@ -240,24 +225,6 @@ export function readUserPackageJson(cwd: string): JsonValue | undefined {
 			{ cause: error },
 		);
 	}
-}
-
-function hasStringName(value: JsonValue | undefined): value is { name: string } {
-	return value !== undefined && isJsonObject(value) && typeof value.name === "string";
-}
-
-/** Resolve the base binary name from an explicit name, package name, or entry filename. */
-export function resolveBaseName(
-	name: string | undefined,
-	entry: string,
-	cwd: string,
-	packageJson: JsonValue | undefined,
-): string {
-	if (name) return name;
-
-	if (hasStringName(packageJson)) return packageJson.name.replace(/^@[^/]+\//, "");
-
-	return basename(entry).replace(/\.[^.]+$/, "");
 }
 
 function toBunEnvFileArgs(envFiles: readonly string[]): string[] {

@@ -40,15 +40,15 @@ Every generated project includes:
 - `README.md` — getting started instructions
 - `.gitignore` — sensible defaults for Node/Bun projects
 
-The runtime decides how the project runs in development and what `crust build` produces:
+Every project has the same scripts: `build` (`crust build`) stages the publishable npm package(s) in `.crust/`, `start` runs the built CLI from `.crust/root/bin/<name>.js`, and `release` (`crust publish`) publishes them. The runtime decides how the project runs in development and what `build` puts in `.crust/`:
 
-| Runtime | `dev`                    | `build` output                                     | Publishing                                                                  |
-| ------- | ------------------------ | -------------------------------------------------- | --------------------------------------------------------------------------- |
-| `bun`   | `bun run src/cli.ts`     | Standalone binaries per Bun target plus resolvers  | `package` stages per-platform npm packages, `publish` uploads them          |
-| `node`  | `node src/cli.ts`        | One JavaScript bundle at `dist/cli.js`             | `prepack` builds, then `npm publish` ships a package that needs Node 22.18+ |
-| `deno`  | `deno run -A src/cli.ts` | Standalone binaries per Deno target plus resolvers | Ship the executables yourself; `crust build --package` is Bun only          |
+| Runtime | `dev`                    | `build` output                                                                      |
+| ------- | ------------------------ | ----------------------------------------------------------------------------------- |
+| `bun`   | `bun run src/cli.ts`     | A root package with a Node launcher plus one standalone binary package per platform |
+| `node`  | `node src/cli.ts`        | A root package containing one JavaScript bundle that needs Node 22.18+              |
+| `deno`  | `deno run -A src/cli.ts` | A root package with a Node launcher plus one standalone binary package per platform |
 
-Every runtime puts the Crust packages your code imports (`@crustjs/core`, `@crustjs/extensions`) in `dependencies` and the build tool (`@crustjs/crust`) in `devDependencies`. Node and Deno projects set `"crust": { "runtime": ... }` in `package.json` so `crust build` picks the runtime without flags. See [Build and distribution](https://crustjs.com/docs/guide/build-and-distribution).
+Every runtime puts the Crust packages your code imports (`@crustjs/core`, `@crustjs/extensions`) in `dependencies` and the build tool (`@crustjs/crust`) in `devDependencies`, and sets `"crust": { "runtime": ... }` in `package.json` so `crust build` picks the runtime without flags. See [Build and distribution](https://crustjs.com/docs/guide/build-and-distribution).
 
 ## Documentation
 

@@ -109,25 +109,27 @@ console.log("hello from crust build test");
 		expect(stdout).toContain("Built successfully");
 	});
 
-	it("uses package.json name for output when no --outfile or --name", async () => {
+	it.skipIf(getHostBunTarget() === null)("defaults --outfile to the host target", async () => {
 		process.cwd = () => tmpDir;
-		mkdirSync(join(tmpDir, "dist"), { recursive: true });
+		const outPath = join(tmpDir, "dist", "host-cli");
 
 		const { stdout, exitCode } = await captureExecute(new Crust("test").add(buildCommand), [
 			"build",
 			"--entry",
 			"src/cli.ts",
 			"--no-validate",
-			"--target",
-			"bun-darwin-arm64",
+			"--outfile",
+			outPath,
 		]);
 
 		expect(exitCode).toBe(0);
-
-		// Single target without --outfile: uses dist/<package-name>
-		const expectedOut = resolve(tmpDir, "dist", "test-build-cli");
-		expect(existsSync(expectedOut)).toBe(true);
-		expect(stdout).toContain(expectedOut);
+		expect(stdout).toContain(outPath);
+		expect(existsSync(join(tmpDir, ".crust", "manifest.json"))).toBe(false);
+		const { exitCode: runExitCode, stdout: runStdout } = await runProcess(outPath, [], {
+			cwd: tmpDir,
+		});
+		expect(runExitCode).toBe(0);
+		expect(runStdout.trim()).toBe("hello from crust build test");
 	});
 
 	it.skipIf(getHostBunTarget() === null)(

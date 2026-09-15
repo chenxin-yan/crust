@@ -97,7 +97,7 @@
       "name": "create-crust",
       "version": "0.2.1",
       "bin": {
-        "create-crust": "dist/index.js",
+        "create-crust": ".crust/root/bin/create-crust.js",
       },
       "dependencies": {
         "@crustjs/core": "workspace:^",
@@ -107,8 +107,8 @@
       },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
+        "@crustjs/crust": "workspace:*",
         "@crustjs/extensions": "workspace:*",
-        "tsdown": "catalog:",
       },
     },
     "packages/crust": {

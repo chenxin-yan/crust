@@ -5,7 +5,7 @@ import { defineCommand, type InvocationIO } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
 import { runProcess, which } from "@crustjs/utils/process";
 
-import type { DistributionManifest } from "../utils/distribute.ts";
+import { CRUST_DIR, type DistributionManifest } from "../utils/distribute.ts";
 
 type PublishPackageJson = {
 	name?: string;
@@ -31,7 +31,7 @@ export function readPublishManifest(stageDir: string): DistributionManifest {
 	const manifestPath = join(stageDir, "manifest.json");
 	if (!existsSync(manifestPath)) {
 		throw new Error(
-			`Staged manifest not found at ${manifestPath}\n  Run \`crust build --package\` before \`crust publish\`.`,
+			`Staged manifest not found at ${manifestPath}\n  Run \`crust build\` before \`crust publish\`.`,
 		);
 	}
 
@@ -217,16 +217,10 @@ export async function publishStagedPackages(
 
 export const publishCommand = defineCommand(
 	"publish",
-	{ description: "Publish staged npm packages created by crust build --package" },
+	{ description: "Publish the npm packages staged in .crust/ by crust build" },
 	(command) =>
 		command
 			.flags(
-				{
-					name: "stage-dir",
-					type: "string",
-					description: "Directory containing a staged manifest.json",
-					default: "dist/npm",
-				},
 				{
 					name: "tag",
 					type: "string",
@@ -258,7 +252,7 @@ export const publishCommand = defineCommand(
 			)
 			.action(async ({ flags, stdout, stderr }) => {
 				const cwd = process.cwd();
-				const stageDir = resolve(cwd, flags["stage-dir"]);
+				const stageDir = resolve(cwd, CRUST_DIR);
 				const manifest = readPublishManifest(stageDir);
 
 				await publishStagedPackages(

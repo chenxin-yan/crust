@@ -3,20 +3,17 @@
 	"version": "0.0.0",
 	"type": "module",
 	"description": "A CLI built with Crust",
-	"files": [
-		"dist/cli",
-		"dist/cli.cmd",
-		"dist/*-bun-*"
-	],
+	"crust": {
+		"runtime": "bun"
+	},
 	"bin": {
-		"{{name}}": "dist/cli"
+		"{{name}}": ".crust/root/bin/{{name}}.js"
 	},
 	"scripts": {
 		"dev": "bun run src/cli.ts",
 		"build": "crust build",
-		"package": "crust build --package",
-		"publish": "crust publish",
-		"start": "./dist/cli",
+		"release": "crust publish",
+		"start": "bun .crust/root/bin/{{name}}.js",
 		"check:types": "tsc --noEmit"
 	},
 	"dependencies": {

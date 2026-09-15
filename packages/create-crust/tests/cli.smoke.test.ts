@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const builtCliPath = resolve(import.meta.dir, "..", "dist", "index.js");
+const builtCliPath = resolve(import.meta.dir, "..", ".crust", "root", "bin", "create-crust.js");
 const repoRoot = resolve(import.meta.dir, "..", "..", "..");
 const smokeRoot = join(process.env.RUNNER_TEMP ?? tmpdir(), "create-crust-smoke");
 const sampleDir = join(smokeRoot, "smoke-cli");
@@ -29,8 +29,8 @@ const localDependencyPackages = [
 	{
 		// The 0.2.0 cohort is unpublished until release; link the workspace
 		// package so the scaffolded project's devDependency resolves. Linked
-		// (not packed) because the publish `files` list ships only compiled
-		// binaries — the dev entry point is dist/cli.js.
+		// (not packed): the published layout is the staged `.crust/root`, while
+		// the workspace package's bin is the Bun bootstrap dist/cli.js.
 		name: "@crustjs/crust",
 		dir: "crust",
 		requiredBuildOutput: "dist/cli.js",
@@ -98,22 +98,6 @@ function assertSuccess(label: string, command: string[], cwd: string, result: Co
 	}
 }
 
-/** Published @crustjs/crust is either the staged root (bin/crust.js) or a dev build (dist/cli.js). */
-function resolveInstalledCrustCli(projectDir: string): string {
-	const pkgRoot = join(projectDir, "node_modules", "@crustjs", "crust");
-	const binJs = join(pkgRoot, "bin", "crust.js");
-	const distJs = join(pkgRoot, "dist", "cli.js");
-	if (existsSync(binJs)) {
-		return binJs;
-	}
-	if (existsSync(distJs)) {
-		return distJs;
-	}
-	throw new Error(
-		`Could not find crust CLI under ${pkgRoot} (expected bin/crust.js or dist/cli.js).`,
-	);
-}
-
 /** Host-only target avoids cross-compile downloads (flaky on Windows CI for Linux Bun artifacts). */
 function hostCrustBuildTarget(): string {
 	const { platform, arch } = process;
@@ -129,11 +113,10 @@ function hostCrustBuildTarget(): string {
 	return "bun-linux-x64";
 }
 
-function crustBuildArgv(crustCli: string): string[] {
-	const normalized = crustCli.replaceAll("\\", "/");
-	const useBun = normalized.endsWith("dist/cli.js");
-	const runner = useBun ? process.execPath : "node";
-	return [runner, crustCli, "build", "--target", hostCrustBuildTarget()];
+/** The linked workspace crust is the Bun bootstrap bundle, so run it with Bun. */
+function crustBuildArgv(projectDir: string, target: string): string[] {
+	const crustCli = join(projectDir, "node_modules", "@crustjs", "crust", "dist", "cli.js");
+	return [process.execPath, crustCli, "build", "--target", target];
 }
 
 async function packLocalDependencyPackages(): Promise<Record<string, string>> {
@@ -250,11 +233,8 @@ describe.skipIf(process.env.CREATE_CRUST_SMOKE !== "1")("create-crust smoke test
 		const checkTypes = await run(checkTypesCommand, sampleDir);
 		assertSuccess("generated project type-check", checkTypesCommand, sampleDir, checkTypes);
 
-		// Call the installed entry directly: npm may not link a .bin shim for
-		// the optional-deps meta package, and registry layout may be bin/crust.js
-		// (staged publish) or dist/cli.js (see packages/crust package.json "files").
-		const crustCli = resolveInstalledCrustCli(sampleDir);
-		const buildCommand = crustBuildArgv(crustCli);
+		const target = hostCrustBuildTarget();
+		const buildCommand = crustBuildArgv(sampleDir, target);
 
 		// GitHub-hosted Windows: project is often on D: while default TEMP/cache are on C:;
 		// Bun compile can fail extracting toolchains across volumes (oven-sh/bun#28327).
@@ -276,10 +256,19 @@ describe.skipIf(process.env.CREATE_CRUST_SMOKE !== "1")("create-crust smoke test
 		const build = await run(buildCommand, sampleDir, buildExtraEnv);
 		assertSuccess("generated project build", buildCommand, sampleDir, build);
 
-		const binaryName = basename(sampleDir);
-		const distEntries = readdirSync(join(sampleDir, "dist"));
+		const name = basename(sampleDir);
+		const crustDir = join(sampleDir, ".crust");
+		expect(existsSync(join(crustDir, "manifest.json"))).toBe(true);
+		expect(existsSync(join(crustDir, "root", "bin", `${name}.js`))).toBe(true);
+		const platformBin = join(crustDir, target.replace(/^bun-/, ""), "bin");
+		expect(readdirSync(platformBin)).toContain(
+			`${name}-${target}${process.platform === "win32" ? ".exe" : ""}`,
+		);
 
-		expect(distEntries).toContain(process.platform === "win32" ? `${binaryName}.exe` : binaryName);
+		const startCommand = ["node", join(crustDir, "root", "bin", `${name}.js`), "--help"];
+		const start = await run(startCommand, sampleDir);
+		assertSuccess("generated project start", startCommand, sampleDir, start);
+		expect(start.stdout).toContain(name);
 
 		cleanupSmokeRoot = true;
 	}, 180_000);

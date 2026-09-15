@@ -22,7 +22,7 @@ Keep authored extras outside that replaced output directory. An authored skill w
 Each skill has its own directory:
 
 ```text
-dist/skills/
+.crust/artifacts/skills/
 └── my-cli/
     ├── SKILL.md
     └── commands/
@@ -46,10 +46,10 @@ The help section includes this escaped excerpt:
 ```text
 Agent skills:
   my-cli \u2014 Manage deployments
-    Source: dist/skills/my-cli
+    Source: .crust/root/skills/my-cli
 ```
 
-`distDir` is read at runtime. The build hook writes generated and authored skills to the build output, and reports those files as artifacts owned by `crust:skills`.
+`distDir` is read at runtime, relative to the built entry: `crust build` stages the `skills` artifact beside `bin/` in the root package and beside each platform binary, so `new URL("../skills", import.meta.url)` resolves from `.crust/root/bin/my-cli.js`, and compiled executables fall back to the `skills` directory next to the binary. The build hook writes generated and authored skills to `.crust/artifacts/skills` and reports those files as artifacts owned by `crust:skills`.
 
 Generated man pages can embed source paths resolved on the build machine. Run builds from the project root that contains the packaged skills directory to avoid absolute build-machine paths.
 
@@ -68,8 +68,8 @@ In that prompt, deselecting an agent with an installed link removes its link. It
 ## Link lifecycle and ownership
 
 ```text
-project: .agents/skills/my-cli -> ../../dist/skills/my-cli
-global:  ~/.agents/skills/my-cli -> /package/dist/skills/my-cli
+project: .agents/skills/my-cli -> ../../node_modules/my-cli/skills/my-cli
+global:  ~/.agents/skills/my-cli -> /usr/lib/node_modules/my-cli/skills/my-cli
 ```
 
 Project links are relative and global links are absolute. The pre-run hook repairs stale or dangling Crust-owned links unless `autoUpdate: false`; it does not create links that were never installed.
@@ -128,7 +128,7 @@ Names contain 1 to 64 lowercase letters, digits, and hyphens. They cannot start 
 ## Source helpers and errors
 
 ```ts
-const root = resolveSkillSource(new URL("../dist/skills", import.meta.url));
+const root = resolveSkillSource(new URL("../skills", import.meta.url));
 const skills = loadPackagedSkills(root);
 ```
 

@@ -3,7 +3,7 @@ title: "Crust"
 description: Build and distribute Crust applications for Bun, Deno, and Node.
 ---
 
-`@crustjs/crust` provides the `crust` CLI. Bun and Deno targets are standalone executables; `--runtime node` emits bundled JavaScript.
+`@crustjs/crust` provides the `crust` CLI. `crust build` writes the publishable npm packages for your CLI to `.crust/`, and `crust publish` uploads them.
 
 ## Install
 
@@ -11,35 +11,32 @@ description: Build and distribute Crust applications for Bun, Deno, and Node.
 npm install -D @crustjs/crust
 ```
 
-The npm package is built with `crust build --package`, so its `bin` is a Node launcher that runs a platform-specific standalone executable with Bun embedded. Node is required to start it; a separate Bun installation is not. Without `bun` on `PATH`, arm64 hosts cannot build their own target (Bun would copy the running `crust` executable onto itself); the error names the other targets, or install Bun.
+The npm package is itself built with `crust build`, so its `bin` is a Node launcher that runs a platform-specific standalone executable with Bun embedded. Node is required to start it; a separate Bun installation is not. Without `bun` on `PATH`, arm64 hosts cannot build their own target (Bun would copy the running `crust` executable onto itself); the error names the other targets, or install Bun.
 
 ## Commands
 
 ```sh
-crust build --runtime node --name my-cli
-# Building .../src/cli.ts → .../dist/my-cli.js...
-# ✓ Built successfully: .../dist/my-cli.js
+crust build --target bun-linux-x64
+# Runtime: bun (default)
+# Staging 1 distribution target(s) in .../.crust...
+#   → linux-x64: .../.crust/linux-x64/bin/my-cli-bun-linux-x64
+# ✓ Staged 2 npm package(s) successfully: (excerpt)
 ```
 
-[`crust build`](/docs/guide/build-and-distribution) validates and builds a CLI. [`crust publish`](/docs/guide/build-and-distribution#publishing-with-crust-publish) publishes npm packages staged by `crust build --package`.
+[`crust build`](/docs/guide/build-and-distribution) validates your CLI and stages it in `.crust/`. [`crust publish`](/docs/guide/build-and-distribution#publish-with-crust-publish) publishes what `crust build` staged.
 
 ### `crust build` options
 
-| Option                        | Type                          | Default      | Description                                                                                                                |
-| ----------------------------- | ----------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| `-e, --entry`                 | string                        | `src/cli.ts` | Entry file path                                                                                                            |
-| `-o, --outfile`               | string                        | none         | Output file path (single-target builds only)                                                                               |
-| `-n, --name`                  | string                        | none         | Binary name (defaults to package.json name or entry filename)                                                              |
-| `--minify`, `--no-minify`     | boolean                       | none         | Minify the output (default for bun and node; unsupported for deno)                                                         |
-| `--runtime`                   | string: `bun \| deno \| node` | none         | Build runtime (overrides package.json crust.runtime; otherwise inferred from deno.json or @types/node, defaulting to bun)  |
-| `-t, --target`                | string, repeatable            | none         | Canonical compiler target(s). Omit to build all platforms for Bun or Deno.                                                 |
-| `--env-file`                  | string, repeatable            | none         | Explicit env file(s) used for build-time constants; repeatable                                                             |
-| `--bun-plugin`                | string, repeatable            | none         | Bun bundler plugin module(s) to apply (default export); repeatable. Bun and Node builds only                               |
-| `-d, --outdir`                | string                        | `dist`       | Output directory for build artifacts                                                                                       |
-| `-r, --resolver`              | string                        | `cli`        | Filename for the resolver script (multi-target builds, no extension)                                                       |
-| `--validate`, `--no-validate` | boolean                       | `true`       | Materialize command definitions before compiling; `--no-validate` also skips Extension build hooks                         |
-| `--package`                   | boolean                       | `false`      | Stage npm packages in dist/npm: a root package plus one per platform for Bun and Deno, a root-only bundle package for Node |
-| `--stage-dir`                 | string                        | `dist/npm`   | Directory to stage npm packages into when using `--package`                                                                |
+| Option                        | Type                          | Default      | Description                                                                                                               |
+| ----------------------------- | ----------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `-e, --entry`                 | string                        | `src/cli.ts` | Entry file path                                                                                                           |
+| `-o, --outfile`               | string                        | none         | Write one binary or bundle to this path instead of staging `.crust/` (one `--target`, or this machine's)                  |
+| `--minify`, `--no-minify`     | boolean                       | none         | Minify the output (default for bun and node; unsupported for deno)                                                        |
+| `--runtime`                   | string: `bun \| deno \| node` | none         | Build runtime (overrides package.json crust.runtime; otherwise inferred from deno.json or @types/node, defaulting to bun) |
+| `-t, --target`                | string, repeatable            | none         | Canonical compiler target(s). Omit to build all platforms for Bun or Deno.                                                |
+| `--env-file`                  | string, repeatable            | none         | Explicit env file(s) used for build-time constants; repeatable                                                            |
+| `--bun-plugin`                | string, repeatable            | none         | Bun bundler plugin module(s) to apply (default export); repeatable. Bun and Node builds only                              |
+| `--validate`, `--no-validate` | boolean                       | `true`       | Materialize command definitions before compiling; `--no-validate` also skips Extension build hooks                        |
 
 ### `crust publish` options
 
@@ -49,29 +46,19 @@ crust publish --dry-run
 #   → linux-x64: npm publish --access public
 ```
 
-Publishing runs `npm publish` in each staged directory, so `npm` must be on `PATH`. npm is used instead of `bun publish` because it supports [trusted publishing](https://docs.npmjs.com/trusted-publishers) from CI; `bun publish` does not.
+Publishing reads `.crust/manifest.json` and runs `npm publish` in each staged directory, so `npm` must be on `PATH`. npm is used instead of `bun publish` because it supports [trusted publishing](https://docs.npmjs.com/trusted-publishers) from CI; `bun publish` does not. Without a prior `crust build`, it fails with `Run crust build before crust publish`.
 
-| Option                    | Type    | Default    | Description                                              |
-| ------------------------- | ------- | ---------- | -------------------------------------------------------- |
-| `--stage-dir`             | string  | `dist/npm` | Directory containing a staged manifest.json              |
-| `--tag`                   | string  | none       | Override the npm dist-tag passed to npm publish          |
-| `--access`                | string  | `public`   | npm access level passed to npm publish                   |
-| `--dry-run`               | boolean | `false`    | Print publish order and commands without publishing      |
-| `--verify`, `--no-verify` | boolean | `true`     | Verify staged directories and metadata before publishing |
-| `--registry`              | string  | none       | Override the registry passed to npm publish              |
+| Option                    | Type    | Default  | Description                                              |
+| ------------------------- | ------- | -------- | -------------------------------------------------------- |
+| `--tag`                   | string  | none     | Override the npm dist-tag passed to npm publish          |
+| `--access`                | string  | `public` | npm access level passed to npm publish                   |
+| `--dry-run`               | boolean | `false`  | Print publish order and commands without publishing      |
+| `--verify`, `--no-verify` | boolean | `true`   | Verify staged directories and metadata before publishing |
+| `--registry`              | string  | none     | Override the registry passed to npm publish              |
 
-## Distribution modes
+## Build output
 
-```sh
-crust build --runtime bun --target bun-linux-x64
-crust build --runtime deno --target x86_64-unknown-linux-gnu
-crust build --runtime node --outdir out
-# Node output: out/<name>.js
-```
-
-Bun and Deno builds produce standalone binaries. Node builds produce one JavaScript bundle; see [Build and distribution](/docs/guide/build-and-distribution) for snapshot preparation and target rules.
-
-With `--package`, Bun and Deno stage a root package with a Node launcher plus one platform package per target, and Node stages a root-only package whose `bin/<command>.js` is the bundle. `crust publish` handles both shapes; see [Stage npm packages](/docs/guide/build-and-distribution#stage-npm-packages).
+`crust build` stages the publishable npm tree in `.crust/` (`manifest.json`, `root/`, one `<platform>/` per target for Bun and Deno, and `artifacts/` from Extension build hooks) and wipes it at the start of every staged build. `--outfile` skips staging and writes one binary or bundle instead, leaving any existing `.crust/` in place. See [Build](/docs/guide/build-and-distribution#build) for the tree, the launcher, and naming rules.
 
 ## `package.json` configuration
 
@@ -87,19 +74,19 @@ With `--package`, Bun and Deno stage a root package with a Node launcher plus on
 | Key             | Description                                                                                                                                                      |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `crust.runtime` | Build runtime when `--runtime` is omitted. Without it, `deno.json`/`deno.jsonc` selects Deno and `@types/node` without `@types/bun` selects Node; otherwise Bun. |
-| `crust.include` | Directories relative to the project root that `--package` copies into the staged root package (listed in `files`) and into each platform package's `bin/`.       |
+| `crust.include` | Directories relative to the project root that `crust build` copies into `.crust/root/` (listed in `files`) and into each platform package's `bin/`.              |
 
-`crust.include` entries must be existing directories inside the project (symlinks are copied dereferenced, so every symlink inside them must also resolve inside the project), cannot be named `bin`, and cannot repeat an Extension artifact directory name. Plain `crust build` ignores them.
+`crust.include` entries must be existing directories inside the project (symlinks are copied dereferenced, so every symlink inside them must also resolve inside the project), cannot be named `bin`, cannot be inside `.crust`, and cannot repeat an Extension artifact directory name.
 
 ## Extension artifacts
 
 ```text
-dist/
+.crust/artifacts/
 ├── man/<name>.1
 ├── skills/
 └── completions/
 ```
 
-Registered Extensions own build artifacts. `man()`, `skill()`, and `completion()` write the directories shown when registered, and package builds include their reported files.
+Registered Extensions own build artifacts. `man()`, `skill()`, and `completion()` write the directories shown when registered, and `crust build` copies each top-level directory into `.crust/root/` and every platform package's `bin/`.
 
-`--no-validate` skips snapshot preparation and all Extension build hooks. With `--package`, it also excludes artifact directories from staging.
+`--no-validate` skips snapshot preparation and all Extension build hooks, so no artifact directories are staged.

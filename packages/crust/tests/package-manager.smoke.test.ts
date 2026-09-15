@@ -13,7 +13,7 @@ import { hostTarget } from "./helpers.ts";
 const packageManager = process.env.CRUST_SMOKE_PM;
 const testRoot = mkdtempSync(join(tmpdir(), `crust-smoke-${packageManager ?? "skip"}-`));
 const sampleDir = join(testRoot, "sample");
-const stageDir = join(sampleDir, "dist", "npm");
+const stageDir = join(sampleDir, ".crust");
 const installDir = join(testRoot, `install-${packageManager ?? "skip"}`);
 const packDir = join(testRoot, "packs");
 
@@ -51,15 +51,7 @@ console.log(args.join(" ") || "resolver-ok");
 	const originalCwd = process.cwd;
 	process.cwd = () => sampleDir;
 	try {
-		const result = await captureExecute(app, [
-			"build",
-			"--package",
-			"--target",
-			target,
-			"--stage-dir",
-			"dist/npm",
-			"--no-validate",
-		]);
+		const result = await captureExecute(app, ["build", "--target", target, "--no-validate"]);
 		if (result.exitCode !== 0) throw new Error(result.stderr);
 	} finally {
 		process.cwd = originalCwd;

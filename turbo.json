@@ -6,7 +6,7 @@
 			"dependsOn": ["^build"],
 			// shared tsdown config lives at the repo root, outside package inputs
 			"inputs": ["$TURBO_DEFAULT$", "../../tsdown.config.ts"],
-			"outputs": ["dist/**", "!.dist/cache/**"]
+			"outputs": ["dist/**", "!.dist/cache/**", ".crust/**"]
 		},
 		"//#lint": {},
 		"//#format": {},

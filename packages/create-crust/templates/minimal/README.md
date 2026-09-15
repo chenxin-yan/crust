@@ -11,13 +11,16 @@ A CLI built with [Crust](https://crustjs.com).
 # Type-check
 {{run}} check:types
 
-# Build distribution output
+# Build into .crust/
 {{run}} build
+
+# Run the built CLI
+{{run}} start
 ```
 
 ## Publishing
 
-`{{run}} build` writes the distributable output to `dist/`. The remaining `package.json` scripts depend on the runtime you picked when scaffolding; see [Build and distribution](https://crustjs.com/docs/guide/build-and-distribution).
+`{{run}} build` stages the publishable npm package(s) in `.crust/`; `{{run}} release` publishes them. See [Build and distribution](https://crustjs.com/docs/guide/build-and-distribution).
 
 ## Usage
 
