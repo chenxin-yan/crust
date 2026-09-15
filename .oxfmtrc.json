@@ -10,7 +10,8 @@
 		"**/tests/fixtures/",
 		".worktrees/",
 		"apps/docs/.source/",
-		"apps/docs/src/routeTree.gen.ts"
+		"apps/docs/src/routeTree.gen.ts",
+		"packages/create-crust/templates/base/tsconfig.json"
 	],
 	"overrides": [
 		{

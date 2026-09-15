@@ -61,8 +61,8 @@ describe("create-crust CLI", () => {
 
 		const result = await runCreateCrust([
 			projectDir,
-			"--distribution",
-			"binary",
+			"--runtime",
+			"bun",
 			"--no-install",
 			"--no-git",
 		]);
@@ -76,23 +76,37 @@ describe("create-crust CLI", () => {
 			version: "0.0.0",
 			type: "module",
 			bin: { "my-cli": "dist/cli" },
+			scripts: {
+				dev: "bun run src/cli.ts",
+				build: "crust build",
+				package: "crust build --package",
+				publish: "crust publish",
+			},
 			dependencies: {
 				"@crustjs/core": `^${corePackage.version}`,
 				"@crustjs/extensions": `^${extensionsPackage.version}`,
 			},
 			devDependencies: {
 				"@crustjs/crust": `^${crustPackage.version}`,
+				"@types/bun": "latest",
 			},
 		});
-		expect(existsSync(join(projectDir, "tsconfig.json"))).toBe(true);
+		expect(pkg.crust).toBeUndefined();
+		const tsconfig = JSON.parse(readFileSync(join(projectDir, "tsconfig.json"), "utf-8"));
+		expect(tsconfig.compilerOptions.lib).toEqual(["ESNext"]);
+		expect(tsconfig.compilerOptions.types).toEqual(["bun"]);
 		const cli = readFileSync(join(projectDir, "src", "cli.ts"), "utf-8");
 		expect(cli).toContain('new Crust("my-cli"');
 		expect(cli).toContain(".execute()");
 		expect(cli).toContain("help()");
 		expect(cli).toContain("version: pkg.version");
 		expect(cli).toContain("version()");
+		expect(cli).toContain('import pkg from "../package.json" with { type: "json" };');
 		expect(readFileSync(join(projectDir, ".gitignore"), "utf-8")).toContain("node_modules");
-		expect(readFileSync(join(projectDir, "README.md"), "utf-8")).toContain("# my-cli");
+		const readme = readFileSync(join(projectDir, "README.md"), "utf-8");
+		expect(readme).toContain("# my-cli");
+		expect(readme).toContain("bun run dev");
+		expect(readme).not.toContain("{{");
 		expect(existsSync(join(projectDir, "node_modules"))).toBe(false);
 		expect(existsSync(join(projectDir, ".git"))).toBe(false);
 	}, 30_000);
@@ -109,7 +123,7 @@ describe("create-crust CLI", () => {
 		const projectDir = join(tempRoot, "my-cli");
 
 		const result = await runCreateCrust(
-			[projectDir, "--distribution", "binary", "--no-install", "--no-git"],
+			[projectDir, "--runtime", "bun", "--no-install", "--no-git"],
 			{ cwd: tempRoot, entrypoint: shim },
 		);
 
@@ -121,36 +135,113 @@ describe("create-crust CLI", () => {
 		expect(pkg.scripts.dev).toBe("bun run src/cli.ts");
 	}, 30_000);
 
-	it("scaffolds the runtime distribution through the real CLI", async () => {
-		const tempRoot = makeTempRoot("create-crust-runtime");
-		const projectDir = join(tempRoot, "runtime-cli");
+	it("scaffolds a Node runtime project through the real CLI", async () => {
+		const tempRoot = makeTempRoot("create-crust-node");
+		const projectDir = join(tempRoot, "node-cli");
 
 		const result = await runCreateCrust([
 			projectDir,
-			"--distribution",
-			"runtime",
+			"--runtime",
+			"node",
 			"--no-install",
 			"--no-git",
 		]);
 
 		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("npm run dev");
 		const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf-8"));
-		expect(pkg.bin).toEqual({ "runtime-cli": "dist/cli.js" });
-		expect(pkg.files).toEqual(["dist"]);
-		expect(pkg.dependencies).toEqual({
-			"@crustjs/core": `^${corePackage.version}`,
-			"@crustjs/extensions": `^${extensionsPackage.version}`,
+		expect(pkg).toMatchObject({
+			crust: { runtime: "node" },
+			files: ["dist"],
+			bin: { "node-cli": "dist/cli.js" },
+			scripts: {
+				dev: "node src/cli.ts",
+				build: "crust build --name cli",
+				prepack: "npm run build",
+				start: "node dist/cli.js",
+				"check:types": "tsc --noEmit",
+			},
+			engines: { node: ">=22.18" },
+			dependencies: {
+				"@crustjs/core": `^${corePackage.version}`,
+				"@crustjs/extensions": `^${extensionsPackage.version}`,
+			},
+			devDependencies: {
+				"@crustjs/crust": `^${crustPackage.version}`,
+				"@types/node": "^22",
+			},
 		});
-		expect(pkg.scripts.build).toBe("bun build src/cli.ts --target bun --outfile dist/cli.js");
+		expect(pkg.scripts.package).toBeUndefined();
+		expect(pkg.scripts.publish).toBeUndefined();
+		const tsconfig = JSON.parse(readFileSync(join(projectDir, "tsconfig.json"), "utf-8"));
+		expect(tsconfig.compilerOptions.lib).toEqual(["ESNext"]);
+		expect(tsconfig.compilerOptions.types).toEqual(["node"]);
+		expect(readFileSync(join(projectDir, "src", "cli.ts"), "utf-8")).toContain(
+			'import pkg from "../package.json" with { type: "json" };',
+		);
+		const readme = readFileSync(join(projectDir, "README.md"), "utf-8");
+		expect(readme).toContain("npm run dev");
+		expect(readme).not.toContain("bun run");
 	}, 30_000);
 
-	it("fails with a clear error for an invalid distribution", async () => {
-		const tempRoot = makeTempRoot("create-crust-invalid-distribution");
-		const projectDir = join(tempRoot, "bad-distribution");
+	it("scaffolds a Deno runtime project through the real CLI", async () => {
+		const tempRoot = makeTempRoot("create-crust-deno");
+		const projectDir = join(tempRoot, "deno-cli");
 
 		const result = await runCreateCrust([
 			projectDir,
-			"--distribution",
+			"--runtime",
+			"deno",
+			"--no-install",
+			"--no-git",
+		]);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("deno task dev");
+		const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf-8"));
+		expect(pkg).toMatchObject({
+			crust: { runtime: "deno" },
+			files: [
+				"dist/cli",
+				"dist/cli.cmd",
+				"dist/*-unknown-linux-*",
+				"dist/*-apple-darwin",
+				"dist/*-pc-windows-*",
+			],
+			bin: { "deno-cli": "dist/cli" },
+			scripts: {
+				dev: "deno run -A src/cli.ts",
+				build: "crust build",
+				start: "./dist/cli",
+				"check:types": "deno check src/cli.ts",
+			},
+			dependencies: {
+				"@crustjs/core": `^${corePackage.version}`,
+				"@crustjs/extensions": `^${extensionsPackage.version}`,
+			},
+			devDependencies: { "@crustjs/crust": `^${crustPackage.version}` },
+		});
+		expect(pkg.scripts.package).toBeUndefined();
+		expect(pkg.scripts.publish).toBeUndefined();
+		expect(pkg.devDependencies.typescript).toBeUndefined();
+		const tsconfig = JSON.parse(readFileSync(join(projectDir, "tsconfig.json"), "utf-8"));
+		expect(tsconfig.compilerOptions.lib).toEqual(["ESNext", "deno.window"]);
+		expect(tsconfig.compilerOptions.types).toEqual([]);
+		expect(readFileSync(join(projectDir, "src", "cli.ts"), "utf-8")).toContain(
+			'import pkg from "../package.json" with { type: "json" };',
+		);
+		const readme = readFileSync(join(projectDir, "README.md"), "utf-8");
+		expect(readme).toContain("deno task dev");
+		expect(readme).not.toContain("bun run");
+	}, 30_000);
+
+	it("fails with a clear error for an invalid runtime", async () => {
+		const tempRoot = makeTempRoot("create-crust-invalid-runtime");
+		const projectDir = join(tempRoot, "bad-runtime");
+
+		const result = await runCreateCrust([
+			projectDir,
+			"--runtime",
 			"invalid",
 			"--no-install",
 			"--no-git",
@@ -158,7 +249,7 @@ describe("create-crust CLI", () => {
 
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain(
-			'Error: Invalid value "invalid" for --distribution. Expected one of: binary, runtime',
+			'Error: Invalid value "invalid" for --runtime. Expected one of: bun, node, deno',
 		);
 		expect(existsSync(projectDir)).toBe(false);
 	}, 30_000);
@@ -171,8 +262,8 @@ describe("create-crust CLI", () => {
 
 		const result = await runCreateCrust([
 			projectDir,
-			"--distribution",
-			"binary",
+			"--runtime",
+			"bun",
 			"--no-install",
 			"--no-git",
 			"--no-overwrite",
@@ -189,7 +280,7 @@ describe("create-crust CLI", () => {
 		writeFileSync(join(tempRoot, "sentinel.txt"), "keep me", "utf-8");
 
 		const result = await runCreateCrust(
-			[".", "--distribution", "binary", "--no-install", "--no-git", "--no-overwrite"],
+			[".", "--runtime", "bun", "--no-install", "--no-git", "--no-overwrite"],
 			{ cwd: tempRoot },
 		);
 
@@ -204,7 +295,7 @@ describe("create-crust CLI", () => {
 		writeFileSync(join(tempRoot, "package.json"), '{"name":"old"}', "utf-8");
 
 		const result = await runCreateCrust(
-			[".", "--distribution", "binary", "--no-install", "--no-git", "--overwrite"],
+			[".", "--runtime", "bun", "--no-install", "--no-git", "--overwrite"],
 			{ cwd: tempRoot },
 		);
 
@@ -218,10 +309,9 @@ describe("create-crust CLI", () => {
 	it("scaffolds into an empty current directory without prompting", async () => {
 		const tempRoot = makeTempRoot("create-crust-dot-empty");
 
-		const result = await runCreateCrust(
-			[".", "--distribution", "binary", "--no-install", "--no-git"],
-			{ cwd: tempRoot },
-		);
+		const result = await runCreateCrust([".", "--runtime", "bun", "--no-install", "--no-git"], {
+			cwd: tempRoot,
+		});
 
 		expect(result.exitCode).toBe(0);
 		expect(result.stderr).not.toContain("Error:");
@@ -242,13 +332,7 @@ describe("create-crust CLI", () => {
 		});
 		expect(gitInit.exitCode).toBe(0);
 
-		const result = await runCreateCrust([
-			projectDir,
-			"--distribution",
-			"binary",
-			"--no-install",
-			"--git",
-		]);
+		const result = await runCreateCrust([projectDir, "--runtime", "bun", "--no-install", "--git"]);
 
 		expect(result.exitCode).toBe(0);
 		expect(existsSync(join(projectDir, "package.json"))).toBe(true);
