@@ -42,23 +42,17 @@ Every generated project includes:
 
 Generated templates can be configured for either standalone binary distribution or Bun runtime package distribution during scaffolding.
 
-For standalone binary projects, the intended workflow is:
+Both modes put the Crust packages your code imports (`@crustjs/core`, `@crustjs/extensions`) in `dependencies` and the build tool (`@crustjs/crust`) in `devDependencies`.
 
-1. `bun run build` — raw binaries (`crust build`)
-2. `bun run package` — npm-ready staged packages in `dist/npm` (`crust build --package`)
-3. `bun run publish` — publish the staged packages (`crust publish`)
+Standalone binary projects ship through three scripts:
 
-The binary templates intentionally keep `build` and `package` as separate scripts because they do different jobs:
+1. `bun run build` — raw binaries in `dist` for local use (`crust build`)
+2. `bun run package` — npm-ready packages in `dist/npm` (`crust build --package`)
+3. `bun run publish` — upload the staged packages (`crust publish`)
 
-- `build` is for raw binary artifacts.
-- `package` is for npm packaging (alias for `crust build --package`).
-- `publish` is for registry upload.
+`crust build --package` generates a fresh `package.json` for each staged package from your project's npm metadata, so the template's `bin`, `files`, and dependency fields only matter for local development. See [Build and distribution](https://crustjs.com/docs/guide/build-and-distribution).
 
-If you need public build-time constants, `crust build` can use Bun's cwd env by default or explicit `--env-file` inputs.
-
-> **Note:** Binary projects use a top-level `bin` entry at `dist/cli` for local development. `crust build --package` generates staged packages in `dist/npm/`, each with its own platform-appropriate `files` and `bin` entries; those staged manifests are used for binary npm distribution. The generated binary template's own `files` list excludes Extension artifact directories; use the staged packages to include them.
-
-Bun runtime projects use `bun build src/cli.ts --target bun --outfile dist/cli.js` and run the result with `bun run dist/cli.js`. This separate workflow does not use `crust build --runtime node`, snapshot preparation, or Extension build hooks.
+Bun runtime projects bundle with `bun build src/cli.ts --target bun --outfile dist/cli.js` and run the result with `bun run dist/cli.js`; this path does not use `crust build`, snapshot preparation, or Extension build hooks.
 
 ## Documentation
 

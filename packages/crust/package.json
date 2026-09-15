@@ -37,12 +37,14 @@
 		"check:types": "tsc --noEmit",
 		"test": "bun test"
 	},
+	"dependencies": {
+		"@crustjs/core": "workspace:^",
+		"@crustjs/extensions": "workspace:^",
+		"@crustjs/style": "workspace:^"
+	},
 	"devDependencies": {
-		"@crustjs/core": "workspace:*",
-		"@crustjs/extensions": "workspace:*",
-		"@crustjs/style": "workspace:*",
-		"@crustjs/testing": "workspace:*",
 		"@crustjs/config": "workspace:*",
+		"@crustjs/testing": "workspace:*",
 		"@crustjs/utils": "workspace:*"
 	},
 	"engines": {
