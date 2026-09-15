@@ -11,6 +11,7 @@
     "progress",
     "prompts",
     "tui",
+    "effect",
     "store",
     "style",
     "testing"

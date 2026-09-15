@@ -126,6 +126,25 @@
         "@crustjs/utils": "workspace:*",
       },
     },
+    "packages/effect": {
+      "name": "@crustjs/effect",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@crustjs/config": "workspace:*",
+        "@crustjs/core": "workspace:*",
+        "@crustjs/testing": "workspace:*",
+        "effect": "4.0.0-rc.115",
+        "tsdown": "catalog:",
+      },
+      "peerDependencies": {
+        "@crustjs/core": "workspace:^",
+        "effect": "^4.0.0-rc.115",
+        "typescript": "^7.0.0",
+      },
+      "optionalPeers": [
+        "typescript",
+      ],
+    },
     "packages/extensions": {
       "name": "@crustjs/extensions",
       "version": "0.2.1",
@@ -418,6 +437,8 @@
     "@crustjs/crust": ["@crustjs/crust@workspace:packages/crust"],
 
     "@crustjs/docs": ["@crustjs/docs@workspace:apps/docs"],
+
+    "@crustjs/effect": ["@crustjs/effect@workspace:packages/effect"],
 
     "@crustjs/extensions": ["@crustjs/extensions@workspace:packages/extensions"],
 
@@ -1142,6 +1163,8 @@
     "diff": ["diff@9.0.0", "", {}, "sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw=="],
 
     "dts-resolver": ["dts-resolver@3.0.0", "", { "peerDependencies": { "oxc-resolver": ">=11.0.0" }, "optionalPeers": ["oxc-resolver"] }, "sha512-1T1f+z+4tl9XD+m+0HBgWoL/nm0bOIffyWaUuUSBlFg/86IWvfx+wjNaO/ybU0AJzG9/Mi5hBUgGV6zCmWEN7Q=="],
+
+    "effect": ["effect@4.0.0-rc.115", "", {}, "sha512-ogYulZ5ffeOzrJqQrG0XOkDO5lKn2s9KNHhoxJy/6wKUkF0i12dlVXWA9TgsgQ+zV/JzizyG0+XMPepZEQX6vw=="],
 
     "electron-to-chromium": ["electron-to-chromium@1.5.302", "", {}, "sha512-sM6HAN2LyK82IyPBpznDRqlTQAtuSaO+ShzFiWTvoMJLHyZ+Y39r8VMfHzwbU8MVBzQ4Wdn85+wlZl2TLGIlwg=="],
 
