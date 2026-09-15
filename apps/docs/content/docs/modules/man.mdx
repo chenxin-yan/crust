@@ -76,7 +76,7 @@ console.log(source.startsWith(".Dd ")); // => true
 
 `renderManPageMdoc()` returns mdoc text without writing a file. It accepts a prepared Command Snapshot, not a live definition.
 
-The renderer lists immediate visible children in the root summary and collects visible subcommand sections under `.Sh COMMANDS`. Sections targeted to `man` are audience-filtered, and same-title sections merge at their first position.
+The renderer lists immediate visible children in the root summary and collects visible subcommand sections under `.Sh COMMANDS`. Sections targeted to `man` are audience-filtered, same-title sections merge at their first position, and section titles are uppercased (`Files` renders as `.Sh FILES`).
 
 ```ts
 new Crust("my-cli", {

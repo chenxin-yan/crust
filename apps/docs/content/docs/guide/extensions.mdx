@@ -98,7 +98,19 @@ Environment:
   Set DEPLOY_TOKEN before running.
 ```
 
+The `sections` callback receives the snapshot as authored, before any Extension's sections are applied, so it sees Extension-contributed commands and flags but not other Extensions' sections. Invalid entries (blank or multi-line title, blank body, empty audience, both `only` and `except`, or a `command` path that is not a canonical command) fail preparation with a `DEFINITION` error.
+
 See the [help Extension](/docs/modules/extensions/help) for rendering and [`ExtensionSectionContribution`](/docs/api/types#extensionsectioncontribution) for targeting and audiences.
+
+## Section consumers
+
+A consumer is any Extension identity that reads sections. `help` renders the current command's sections after Options, `man` collects the whole tree into one page, and `skill` writes them into per-command markdown files. Authors scope a section with `only` or `except`, passing either the Extension value or its id.
+
+<include lang="ts" meta='title="consumer.ts"'>
+  ../../../examples/extensions/consumer.ts
+</include>
+
+`visibleSectionsFor(snapshot, id)` walks listed commands in name order and returns each section-bearing command as `{ path, sections }`, where `path` is `[]` for the root. It skips hidden commands and their subtrees, and applies the audience filter and same-title merge for `id`. Use `sectionsFor(sections, id)` for a single command. Both live in [`@crustjs/core/tooling`](/docs/modules/core#tooling-subpath).
 
 ## Build hooks
 

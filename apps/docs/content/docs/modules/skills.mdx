@@ -39,7 +39,7 @@ Use `writeSkillsFromSnapshot()` when a prepared Command Snapshot is available. O
 
 <include lang="ts">../../../examples/modules/skills.ts#extension</include>
 
-The Extension registers `my-cli skill` and `my-cli skill update`. It also adds an `Agent skills` section to root help and generated man pages.
+The Extension registers `my-cli skill` and `my-cli skill update`. It also contributes an `Agent skills` root section with `except: [skill]`, so it appears in help, man pages, and any other consumer, but not in the skills it generates.
 
 The help section includes this escaped excerpt:
 
@@ -112,7 +112,7 @@ The root exports the option, result, status, source, scope, agent, and packaged-
 
 <include lang="ts">../../../examples/modules/skills.ts#sections</include>
 
-Command metadata sections appear in generated skill documentation. Passing the `skill` factory in `only` limits a section to the skills renderer.
+Command metadata sections render as `## Title` blocks in each command's file under `commands/`. Passing the `skill` factory in `only` limits a section to the skills renderer.
 
 Sections with the same exact title share one heading and join their bodies. See [Command Snapshot sections](/docs/api/crust#snapshot) for shared snapshot behavior.
 
