@@ -3,19 +3,126 @@ import { fileURLToPath } from "node:url";
 
 import ts from "typescript";
 
+import {
+	CompilerError,
+	DiagnosticCodes,
+	diagnosticAtNode,
+	type CompilerDiagnostic,
+} from "./diagnostics.js";
 import type { Expression, FunctionDeclaration, Program, Statement, ValueType } from "./ir.js";
 
-export class TypeScriptCompileError extends Error {
-	public constructor(public readonly diagnostics: readonly ts.Diagnostic[]) {
-		super(
-			ts.formatDiagnosticsWithColorAndContext(diagnostics, {
-				getCanonicalFileName: (fileName) => fileName,
-				getCurrentDirectory: () => process.cwd(),
-				getNewLine: () => "\n",
-			}),
-		);
-		this.name = "TypeScriptCompileError";
+const anyHint =
+	"Rewrite the `any`-typed construct using supported M0 expressions or typed function parameters: string, number, boolean, or string[].";
+const anyCallHint =
+	"Remove the any-producing call and replace it with an expression using a supported concrete type.";
+
+// Codes stay stable in pinned TypeScript releases; rendered messages can vary by locale.
+const implicitAnyDiagnosticCodes = new Set([
+	2602, 2683, 7005, 7006, 7008, 7009, 7010, 7011, 7013, 7014, 7015, 7016, 7017, 7018, 7019, 7020,
+	7022, 7023, 7024, 7026, 7031, 7032, 7033, 7034, 7039, 7052, 7053, 7055, 7057,
+]);
+
+function fromTypeScriptDiagnostic(
+	diagnostic: ts.Diagnostic,
+	fallbackFile: string,
+): CompilerDiagnostic {
+	const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
+	const sourceFile = diagnostic.file;
+	const start = diagnostic.start ?? 0;
+	const location = sourceFile?.getLineAndCharacterOfPosition(start) ?? { line: 0, character: 0 };
+	const implicitAny = implicitAnyDiagnosticCodes.has(diagnostic.code);
+	return {
+		code: implicitAny ? DiagnosticCodes.AnyType : DiagnosticCodes.TypeScriptError,
+		file: sourceFile?.fileName ?? fallbackFile,
+		line: location.line + 1,
+		column: location.character + 1,
+		message: `${message} (TS${diagnostic.code})`,
+		hint: implicitAny ? anyHint : "Fix the TypeScript error before compiling.",
+	};
+}
+
+function findAnyDiagnostics(sourceFile: ts.SourceFile, checker: ts.TypeChecker) {
+	const diagnostics: CompilerDiagnostic[] = [];
+	function visit(node: ts.Node): void {
+		if (node.kind === ts.SyntaxKind.AnyKeyword) {
+			diagnostics.push(
+				diagnosticAtNode(
+					sourceFile,
+					node,
+					DiagnosticCodes.AnyType,
+					"The compiler does not support the `any` type.",
+					anyHint,
+				),
+			);
+		} else if (
+			ts.isCallExpression(node) &&
+			checker.getTypeAtLocation(node) === checker.getAnyType()
+		) {
+			diagnostics.push(
+				diagnosticAtNode(
+					sourceFile,
+					node,
+					DiagnosticCodes.AnyType,
+					"This call returns `any`, which the compiler cannot lower safely.",
+					anyCallHint,
+				),
+			);
+		}
+		ts.forEachChild(node, visit);
 	}
+	visit(sourceFile);
+	return diagnostics;
+}
+
+function rejectTypeSuppressions(sourceFile: ts.SourceFile): void {
+	const text = sourceFile.text;
+	const leadingComments = new Set(ts.getLeadingCommentRanges(text, 0)?.map(({ pos }) => pos));
+	const scanner = ts.createScanner(ts.ScriptTarget.ES2022, false);
+	function visit(node: ts.Node): void {
+		if (ts.isJSDoc(node)) return;
+		if (!ts.isToken(node)) {
+			for (const child of node.getChildren(sourceFile)) visit(child);
+			return;
+		}
+		// Scan only parsed token trivia: a standalone scan mistakes regex/template text for comments.
+		scanner.setText(text, node.pos, node.getStart(sourceFile) - node.pos);
+		for (let kind = scanner.scan(); kind !== ts.SyntaxKind.EndOfFileToken; kind = scanner.scan()) {
+			const comment = scanner.getTokenText();
+			const start = scanner.getTokenStart();
+			// Match TypeScript 5.9's scanner directives and leading single-line pragmas.
+			let directive: string | undefined;
+			let lastLineStart = 0;
+			if (kind === ts.SyntaxKind.SingleLineCommentTrivia) {
+				directive = /^\/\/\/?\s*@(ts-expect-error|ts-ignore)/.exec(comment)?.[1];
+				if (!directive && leadingComments.has(start)) {
+					directive = /^\/\/\/?\s*@(ts-nocheck)(?=\s|:|$)/i.exec(comment)?.[1];
+				}
+			} else if (kind === ts.SyntaxKind.MultiLineCommentTrivia) {
+				lastLineStart =
+					Math.max(
+						...["\n", "\r", "\u2028", "\u2029"].map((lineBreak) => comment.lastIndexOf(lineBreak)),
+					) + 1;
+				directive = /^\s*(?:\/|\*)*\s*@(ts-expect-error|ts-ignore)/.exec(
+					comment.slice(lastLineStart),
+				)?.[1];
+			}
+			if (!directive) continue;
+			const { line, character } = sourceFile.getLineAndCharacterOfPosition(
+				start + comment.indexOf("@", lastLineStart),
+			);
+			throw new CompilerError([
+				{
+					code: DiagnosticCodes.TypeSuppression,
+					file: sourceFile.fileName,
+					line: line + 1,
+					column: character + 1,
+					message: `TypeScript suppression directive @${directive} is unsupported.`,
+					hint: `Remove @${directive} and fix the TypeScript errors it suppresses before compiling.`,
+				},
+			]);
+		}
+	}
+	visit(sourceFile);
 }
 
 export function lower(entryFile: string): Program {
@@ -25,6 +132,7 @@ export function lower(entryFile: string): Program {
 		module: ts.ModuleKind.NodeNext,
 		moduleResolution: ts.ModuleResolutionKind.NodeNext,
 		noEmit: true,
+		noImplicitAny: true,
 		skipLibCheck: true,
 		strict: true,
 		target: ts.ScriptTarget.ES2022,
@@ -33,11 +141,29 @@ export function lower(entryFile: string): Program {
 	// Runtime assets stay beside both src and dist; never discover the caller's host types.
 	const ambientFile = fileURLToPath(new URL("../runtime/m0.d.ts", import.meta.url));
 	const program = ts.createProgram([absoluteEntry, ambientFile], compilerOptions);
-	const diagnostics = ts.getPreEmitDiagnostics(program);
-	if (diagnostics.length > 0) throw new TypeScriptCompileError(diagnostics);
-
 	const sourceFile = program.getSourceFile(absoluteEntry);
-	if (!sourceFile) throw new Error(`TypeScript did not load entry file: ${absoluteEntry}`);
+	if (sourceFile) rejectTypeSuppressions(sourceFile);
+	const typescriptDiagnostics = ts.getPreEmitDiagnostics(program);
+	const diagnostics = typescriptDiagnostics.map((diagnostic) =>
+		fromTypeScriptDiagnostic(diagnostic, absoluteEntry),
+	);
+	if (sourceFile) {
+		diagnostics.push(...findAnyDiagnostics(sourceFile, program.getTypeChecker()));
+	}
+	if (diagnostics.length > 0) throw new CompilerError(diagnostics);
+	if (!sourceFile) {
+		throw new CompilerError([
+			{
+				code: DiagnosticCodes.TypeScriptError,
+				file: absoluteEntry,
+				line: 1,
+				column: 1,
+				message: "TypeScript did not load the entry file.",
+				hint: "Check that the entry path names a readable TypeScript source file.",
+			},
+		]);
+	}
+
 	const checker = program.getTypeChecker();
 	const functions: FunctionDeclaration[] = [];
 	const statements: Statement[] = [];
@@ -396,9 +522,26 @@ function isPropertyCall(node: ts.CallExpression, object: string, property: strin
 	);
 }
 
-function unsupported(node: ts.Node, sourceFile: ts.SourceFile): Error {
-	const { line, character } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
-	return new Error(
-		`Unsupported TypeScript ${ts.SyntaxKind[node.kind]} at ${sourceFile.fileName}:${line + 1}:${character + 1}`,
-	);
+function unsupported(node: ts.Node, sourceFile: ts.SourceFile): CompilerError {
+	const construct = ts.SyntaxKind[node.kind];
+	let message = `Unsupported TypeScript ${construct}.`;
+	let hint = `Rewrite the ${construct} using the supported M0 language surface.`;
+	if (ts.isCallExpression(node)) {
+		const callee = node.expression.getText(sourceFile);
+		message = `Unsupported TypeScript call to ${callee}.`;
+		hint = `Remove the ${callee} call; this operation is not supported in M0.`;
+		if (isPropertyCall(node, "console", "log")) {
+			hint =
+				"Use console.log with at least one supported non-array value and no format placeholders. For arrays, use template string coercion.";
+		} else if (
+			ts.isPropertyAccessExpression(node.expression) &&
+			node.expression.name.text === "slice"
+		) {
+			hint =
+				"Use stringArray.slice(start) with one number argument; string slicing is not supported in M0.";
+		}
+	}
+	return new CompilerError([
+		diagnosticAtNode(sourceFile, node, DiagnosticCodes.UnsupportedConstruct, message, hint),
+	]);
 }
