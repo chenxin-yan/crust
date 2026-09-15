@@ -165,6 +165,33 @@ Variadic `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()
 
 Dynamic Extension commands retain canonical last-write-wins during preparation. Existing static duplicate-context/command/owned-flag checks still protect earlier typed consumers; runtime replacement is not proof that opaque callbacks are compatible.
 
+### Conditional chains
+
+Each call returns a builder whose type records what was added so far. A conditional can produce two different builder types. TypeScript may then fail to infer the inputs of the next variadic call. Crust rejects calls that would silently lose validation or value types:
+
+```ts
+// Compile error: inputs cannot be inferred from this builder union.
+(prod ? c.provide(db()) : c).provide(cache());
+```
+
+Keep the command shape static and put the condition in the Context value:
+
+```ts
+const db = defineContext("db", () => (prod ? connect() : null));
+c.provide(db(), cache()); // db resolves to Connection | null
+```
+
+If the shape genuinely differs, write the full chain in each branch so `.action()` sees the honest union:
+
+```ts
+prod ? c.provide(db(), cache()) : c.provide(cache());
+```
+
+With explicit input type arguments:
+
+- `.provide()`, `.use()`, and `.add()` remain available on a union when validation succeeds.
+- `.flags()`, `.args()`, and `.extend()` still reject unions of distinct builder types.
+
 ## `.args(...defs)`
 
 ```ts
