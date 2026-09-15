@@ -17,6 +17,8 @@ npm install -D @crustjs/testing
 
 `run()` answers whether a Command Action completed, finished early, or failed, and captures its result, error, `stdout`, and `stderr`. Use it for tests and embedding; see the [full `run()` contract](/docs/api/crust#runpath-input-io).
 
+When many tests target one subcommand, bind it once with [`app.at(path)`](/docs/api/crust#atpath) and call `handle.run(input?, io?)` with the same typed input and outcome.
+
 ## Capture terminal behavior
 
 <include lang="ts">../../../examples/guide/testing.ts#capture-execute</include>

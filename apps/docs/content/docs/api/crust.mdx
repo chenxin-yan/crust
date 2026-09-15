@@ -538,6 +538,24 @@ Literal Extension commands and flags participate in typed paths and inputs. Recu
 
 Dynamic collections use `.extend(...extensions)` without a wrapper. Known command/flag collisions remain compile errors; supported dynamic canonical replacements retain last-write-wins at preparation.
 
+## `.at(path)`
+
+```ts
+at(path): CommandHandle<CommandShapeAt<Shape, Path>>
+```
+
+Binds a typed command path into a reusable handle. `handle.run(input?, io?)` accepts exactly what [`run(path, input?, io?)`](#runpath-input-io) accepts after the path, with the same inference, validation, and `RunOutcome`. Use it to let commands call other commands with checked input, to expose a CLI subtree as a typed library function, or to hand a pre-bound invoker to a test helper.
+
+```ts
+const remoteAdd = app.at(["remote", "add"]);
+const outcome = await remoteAdd.run({ args: { name: "origin", url }, flags: { fetch: true } });
+export { remoteAdd };
+```
+
+`at()` validates the path eagerly against the prepared command tree and throws `COMMAND_NOT_FOUND` immediately, with the same `details` as a failed `run()`. Aliases are accepted and `handle.path` keeps the caller's spelling. `at([])` binds the root.
+
+A handle is bound to the builder it was taken from. Because fluent calls return new builders, commands added after `at()` are not visible to an earlier handle; take the handle from the finished application. Handles do not narrow further — call `at()` on the application again for a sibling path.
+
 ## `.execute(options?)`
 
 ```ts
