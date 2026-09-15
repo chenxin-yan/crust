@@ -18,19 +18,10 @@ import { captureExecute } from "@crustjs/testing";
 import { runProcess } from "@crustjs/utils/process";
 
 import { buildCommand } from "../src/commands/build.ts";
-import { BUN_TARGETS, DENO_TARGETS } from "../src/utils/build-helpers.ts";
-import { hostTarget } from "./helpers.ts";
+import { hostDenoTarget, hostTarget } from "./helpers.ts";
 
 function getHostBunTarget() {
 	return hostTarget();
-}
-
-function getHostDenoTarget(): string | null {
-	const target = hostTarget();
-	const alias = target && BUN_TARGETS.info[target].alias;
-	return (
-		DENO_TARGETS.targets.find((candidate) => DENO_TARGETS.info[candidate].alias === alias) ?? null
-	);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -251,10 +242,10 @@ await app.execute();
 	// for monorepo reasons real users never hit. The dist-layer "core runs under
 	// Deno" claim is covered by the CI smoke matrix; a faithful compile-with-deps
 	// test needs a pack+install harness.
-	it.skipIf(Bun.which("deno") === null || getHostDenoTarget() === null)(
+	it.skipIf(Bun.which("deno") === null || hostDenoTarget() === null)(
 		"builds and runs a Deno standalone executable for the host target",
 		async () => {
-			const hostTarget = getHostDenoTarget();
+			const hostTarget = hostDenoTarget();
 			if (!hostTarget) return;
 			process.cwd = () => tmpDir;
 			const outPath = join(tmpDir, "dist", "deno-cli");

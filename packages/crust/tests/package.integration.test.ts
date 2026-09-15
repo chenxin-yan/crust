@@ -16,8 +16,8 @@ import { captureExecute } from "@crustjs/testing";
 import { runProcess } from "@crustjs/utils/process";
 
 import { buildCommand } from "../src/commands/build.ts";
-import { BUN_TARGETS } from "../src/utils/build-helpers.ts";
-import { hostTarget } from "./helpers.ts";
+import { BUN_TARGETS, DENO_TARGETS } from "../src/utils/build-helpers.ts";
+import { hostDenoTarget, hostTarget } from "./helpers.ts";
 
 const tmpDir = mkdtempSync(join(tmpdir(), "crust-package-integration-"));
 const originalCwd = process.cwd;
@@ -153,5 +153,115 @@ describe("crust build --package integration", () => {
 			expect(stderr.trim()).toBe("");
 			expect(stdout.trim()).toBe("hello from packaged test");
 		},
+	);
+
+	it.skipIf(!Bun.which("node"))(
+		"stages a root-only Node package whose bin is the runnable bundle",
+		async () => {
+			mkdirSync(join(tmpDir, "assets"), { recursive: true });
+			writeFileSync(join(tmpDir, "assets", "greeting.txt"), "hi\n");
+			const packageJsonPath = join(tmpDir, "package.json");
+			const original = readFileSync(packageJsonPath, "utf8");
+			writeFileSync(
+				packageJsonPath,
+				JSON.stringify({ ...JSON.parse(original), crust: { include: ["assets"] } }),
+			);
+			try {
+				const { stdout } = await runBuild([
+					"--package",
+					"--runtime",
+					"node",
+					"--stage-dir",
+					".node",
+					"--no-validate",
+				]);
+				expect(stdout).toContain("Runtime: node (from --runtime)");
+			} finally {
+				writeFileSync(packageJsonPath, original);
+			}
+
+			const stageDir = join(tmpDir, ".node");
+			const rootPackageJson = readJson<{
+				bin: Record<string, string>;
+				files: string[];
+				optionalDependencies?: Record<string, string>;
+			}>(join(stageDir, "root", "package.json"));
+			expect(rootPackageJson).toMatchObject({
+				bin: { "test-cli": "bin/test-cli.js" },
+				files: ["bin", "assets"],
+			});
+			expect(rootPackageJson).not.toHaveProperty("optionalDependencies");
+			expect(readJson<object>(join(stageDir, "manifest.json"))).toMatchObject({
+				packages: [],
+				publishOrder: ["root"],
+			});
+			expect(readFileSync(join(stageDir, "root", "assets", "greeting.txt"), "utf8")).toBe("hi\n");
+			expect(existsSync(join(stageDir, "linux-x64"))).toBe(false);
+
+			const bundlePath = join(stageDir, "root", "bin", "test-cli.js");
+			expect(readFileSync(bundlePath, "utf8").startsWith("#!/usr/bin/env node\n")).toBe(true);
+			const { exitCode, stdout } = await runProcess(Bun.which("node")!, [bundlePath], {
+				cwd: tmpDir,
+			});
+			expect(exitCode).toBe(0);
+			expect(stdout.trim()).toBe("hello from packaged test");
+		},
+		30_000,
+	);
+
+	// One host target only: compiling all six Deno targets downloads six runtimes.
+	it.skipIf(Bun.which("deno") === null || hostDenoTarget() === null || !Bun.which("node"))(
+		"stages Deno platform packages and runs them through the Node launcher",
+		async () => {
+			const denoTarget = hostDenoTarget()!;
+			const hostAlias = DENO_TARGETS.info[denoTarget].alias;
+
+			await runBuild([
+				"--package",
+				"--runtime",
+				"deno",
+				"--target",
+				denoTarget,
+				"--stage-dir",
+				".deno",
+				"--no-validate",
+			]);
+
+			const stageDir = join(tmpDir, ".deno");
+			const manifest = readJson<{
+				packages: Array<{ target: string; name: string; bin: string; libc?: string }>;
+				publishOrder: string[];
+			}>(join(stageDir, "manifest.json"));
+			expect(manifest.publishOrder).toEqual([hostAlias, "root"]);
+			expect(manifest.packages).toEqual([
+				expect.objectContaining({
+					target: hostAlias,
+					name: `@scope/test-cli-${hostAlias}`,
+					bin: `bin/test-cli-${denoTarget}${process.platform === "win32" ? ".exe" : ""}`,
+				}),
+			]);
+			if (process.platform === "linux") expect(manifest.packages[0]!.libc).toBe("glibc");
+			expect(
+				readJson<{ optionalDependencies: Record<string, string> }>(
+					join(stageDir, "root", "package.json"),
+				).optionalDependencies,
+			).toEqual({ [`@scope/test-cli-${hostAlias}`]: "0.1.0" });
+
+			// Same installed layout as the Bun launcher test: the platform package under root/node_modules.
+			cpSync(
+				join(stageDir, hostAlias),
+				join(stageDir, "root", "node_modules", "@scope", `test-cli-${hostAlias}`),
+				{ recursive: true },
+			);
+			const { exitCode, stdout, stderr } = await runProcess(
+				Bun.which("node")!,
+				[join(stageDir, "root", "bin", "test-cli.js")],
+				{ cwd: tmpDir },
+			);
+			expect(stderr.trim()).toBe("");
+			expect(exitCode).toBe(0);
+			expect(stdout.trim()).toBe("hello from packaged test");
+		},
+		120_000,
 	);
 });

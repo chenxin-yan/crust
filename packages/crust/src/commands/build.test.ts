@@ -77,13 +77,66 @@ describe("planBuild", () => {
 	afterEach(() => rmSync(join(tmpDir, "package.json"), { force: true }));
 
 	it("defaults to Bun without project configuration", () => {
-		expect(planBuild(baseFlags, tmpDir).runtime).toBe("bun");
+		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
+			runtime: "bun",
+			runtimeSource: "default",
+		});
 	});
 
 	it("reads package.json crust.runtime and lets --runtime override it", () => {
 		writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ crust: { runtime: "deno" } }));
-		expect(planBuild(baseFlags, tmpDir).runtime).toBe("deno");
-		expect(planBuild({ ...baseFlags, runtime: "node" }, tmpDir).runtime).toBe("node");
+		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
+			runtime: "deno",
+			runtimeSource: "from package.json",
+		});
+		expect(planBuild({ ...baseFlags, runtime: "node" }, tmpDir)).toMatchObject({
+			runtime: "node",
+			runtimeSource: "from --runtime",
+		});
+	});
+
+	it("infers the runtime from deno.json or @types/node, never from lockfiles", () => {
+		const nodeTypes = { devDependencies: { "@types/node": "^22" } };
+		writeFileSync(join(tmpDir, "package.json"), JSON.stringify(nodeTypes));
+		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
+			runtime: "node",
+			runtimeSource: "inferred from @types/node",
+		});
+		writeFileSync(
+			join(tmpDir, "package.json"),
+			JSON.stringify({ dependencies: { "@types/node": "^22" } }),
+		);
+		expect(planBuild(baseFlags, tmpDir).runtime).toBe("node");
+		writeFileSync(
+			join(tmpDir, "package.json"),
+			JSON.stringify({ devDependencies: { "@types/node": "^22", "@types/bun": "^1" } }),
+		);
+		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
+			runtime: "bun",
+			runtimeSource: "default",
+		});
+
+		writeFileSync(join(tmpDir, "bun.lock"), "");
+		writeFileSync(join(tmpDir, "deno.jsonc"), "{}");
+		try {
+			// deno.json wins over @types/node; the lockfile is not a signal.
+			writeFileSync(join(tmpDir, "package.json"), JSON.stringify(nodeTypes));
+			expect(planBuild(baseFlags, tmpDir)).toMatchObject({
+				runtime: "deno",
+				runtimeSource: "inferred from deno.jsonc",
+			});
+			// Explicit configuration beats inference.
+			writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ crust: { runtime: "bun" } }));
+			expect(planBuild(baseFlags, tmpDir)).toMatchObject({
+				runtime: "bun",
+				runtimeSource: "from package.json",
+			});
+			rmSync(join(tmpDir, "package.json"));
+			expect(planBuild(baseFlags, tmpDir).runtime).toBe("deno");
+		} finally {
+			rmSync(join(tmpDir, "bun.lock"));
+			rmSync(join(tmpDir, "deno.jsonc"));
+		}
 	});
 
 	it("rejects an invalid configured runtime", () => {
@@ -97,16 +150,6 @@ describe("planBuild", () => {
 	});
 
 	for (const testCase of [
-		{
-			name: "Deno package builds",
-			flags: { runtime: "deno", package: true },
-			error: "--package does not yet support Deno builds",
-		},
-		{
-			name: "Node package builds",
-			flags: { runtime: "node", package: true },
-			error: "--package does not apply to Node builds",
-		},
 		{
 			name: "package builds with outfile",
 			flags: { package: true, outfile: "dist/cli" },
@@ -211,6 +254,42 @@ describe("planBuild", () => {
 			outfilePath: resolve(tmpDir, "out", "my-tool.js"),
 		});
 		expect(plan.warnings).toHaveLength(1);
+	});
+
+	it("plans --package for every runtime", () => {
+		const stageDir = resolve(tmpDir, "dist", "npm");
+		expect(
+			planBuild({ ...baseFlags, package: true, target: ["bun-linux-x64"], name: "tool" }, tmpDir),
+		).toMatchObject({
+			runtime: "bun",
+			mode: "package",
+			name: "tool",
+			targets: ["bun-linux-x64"],
+			stageDir,
+		});
+		expect(planBuild({ ...baseFlags, package: true, runtime: "deno" }, tmpDir)).toMatchObject({
+			runtime: "deno",
+			mode: "package",
+			targets: [...DENO_TARGETS.targets],
+			minify: false,
+			stageDir,
+		});
+		expect(() =>
+			planBuild({ ...baseFlags, package: true, runtime: "deno", target: ["linux-x64"] }, tmpDir),
+		).toThrow('Unknown Deno target "linux-x64"');
+		const nodePlan = planBuild(
+			{ ...baseFlags, package: true, runtime: "node", "bun-plugin": ["./plugin.ts"] },
+			tmpDir,
+		);
+		expect(nodePlan).toMatchObject({
+			runtime: "node",
+			mode: "package",
+			minify: true,
+			bunPlugins: ["./plugin.ts"],
+			stageDir,
+		});
+		expect(nodePlan).not.toHaveProperty("targets");
+		expect(nodePlan).not.toHaveProperty("outfilePath");
 	});
 });
 
@@ -466,11 +545,24 @@ describe("buildCommand error handling", () => {
 			]),
 		).toContain("--target cannot be used with --runtime node");
 		expect(
-			await executeBuildError("node-package", ["--runtime", "node", "--package", "--no-validate"]),
-		).toContain("--package does not apply to Node builds");
+			await executeBuildError("node-package-target", [
+				"--runtime",
+				"node",
+				"--package",
+				"--target",
+				"bun-linux-x64",
+				"--no-validate",
+			]),
+		).toContain("--target cannot be used with --runtime node");
 		expect(
-			await executeBuildError("deno-package", ["--runtime", "deno", "--package", "--no-validate"]),
-		).toContain("Deno per-platform npm staging is reserved for a follow-up");
+			await executeBuildError("deno-package-minify", [
+				"--runtime",
+				"deno",
+				"--package",
+				"--minify",
+				"--no-validate",
+			]),
+		).toContain("--minify is not supported with --runtime deno");
 		expect(
 			await executeBuildError("deno-minify", ["--runtime", "deno", "--minify", "--no-validate"]),
 		).toContain("--minify is not supported with --runtime deno");

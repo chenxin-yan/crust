@@ -21,10 +21,15 @@ function writeStageFixture(tmpDir: string, manifest: DistributionManifest) {
 			{
 				name: manifest.root.name,
 				version: manifest.version,
-				bin: { [manifest.root.bin]: `bin/${manifest.root.bin}` },
-				optionalDependencies: Object.fromEntries(
-					manifest.packages.map((pkg) => [pkg.name, manifest.version]),
-				),
+				bin: { [manifest.root.bin]: `bin/${manifest.root.bin}.js` },
+				// Mirrors distribute.ts: a root-only package has no optionalDependencies field at all.
+				...(manifest.packages.length > 0
+					? {
+							optionalDependencies: Object.fromEntries(
+								manifest.packages.map((pkg) => [pkg.name, manifest.version]),
+							),
+						}
+					: {}),
 			},
 			null,
 			2,
@@ -94,6 +99,69 @@ describe("publish manifest validation", () => {
 		const loaded = readPublishManifest(tmpDir);
 		expect(loaded.publishOrder).toEqual(["linux-x64", "darwin-arm64", "root"]);
 		expect(() => validatePublishManifest(tmpDir, loaded)).not.toThrow();
+	});
+
+	it("validates a root-only Node manifest and publishes just the root", async () => {
+		const nodeDir = join(tmpDir, "node");
+		const nodeManifest: DistributionManifest = {
+			version: "1.2.3",
+			root: { name: "@scope/node-demo", dir: "root", bin: "node-demo" },
+			packages: [],
+			publishOrder: ["root"],
+		};
+		writeStageFixture(nodeDir, nodeManifest);
+		expect(
+			JSON.parse(readFileSync(join(nodeDir, "root", "package.json"), "utf8")),
+		).not.toHaveProperty("optionalDependencies");
+
+		const loaded = readPublishManifest(nodeDir);
+		expect(loaded).toMatchObject({ packages: [], publishOrder: ["root"] });
+		expect(() => validatePublishManifest(nodeDir, loaded)).not.toThrow();
+
+		const published: string[] = [];
+		await publishStagedPackages(
+			loaded,
+			{
+				stageDir: nodeDir,
+				access: "public",
+				spawnPublish: async (dir) => {
+					published.push(dir);
+					return 0;
+				},
+			},
+			io,
+		);
+		expect(published).toEqual([join(nodeDir, "root")]);
+	});
+
+	it("validates a Deno-shaped manifest with glibc Linux and no musl packages", () => {
+		const denoDir = join(tmpDir, "deno");
+		const denoManifest: DistributionManifest = {
+			version: "1.2.3",
+			root: { name: "deno-demo", dir: "root", bin: "deno-demo" },
+			packages: [
+				{
+					target: "linux-x64",
+					name: "deno-demo-linux-x64",
+					dir: "linux-x64",
+					os: "linux",
+					cpu: "x64",
+					libc: "glibc",
+					bin: "bin/deno-demo-x86_64-unknown-linux-gnu",
+				},
+				{
+					target: "windows-x64",
+					name: "deno-demo-windows-x64",
+					dir: "windows-x64",
+					os: "win32",
+					cpu: "x64",
+					bin: "bin/deno-demo-x86_64-pc-windows-msvc.exe",
+				},
+			],
+			publishOrder: ["linux-x64", "windows-x64", "root"],
+		};
+		writeStageFixture(denoDir, denoManifest);
+		expect(() => validatePublishManifest(denoDir, readPublishManifest(denoDir))).not.toThrow();
 	});
 
 	it("rejects malformed publish order", () => {
