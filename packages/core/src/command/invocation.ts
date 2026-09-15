@@ -167,11 +167,8 @@ function resolveArgvInput(root: CommandNode, argv: readonly string[]): ResolvedI
 	return { argv, route, parsed: parseArgs(route.command, route.argv) };
 }
 
-function resolveStructuredInput(
-	root: CommandNode,
-	path: readonly string[],
-	input: RunInputPayload,
-): ResolvedInput {
+/** Resolve a typed path, rejecting any element the router cannot consume as a command. */
+export function resolveTypedPath(root: CommandNode, path: readonly string[]): CommandRoute {
 	const route = resolveCommand(root, [...path]);
 	if (route.argv.length > 0) {
 		// An unconsumed path element would otherwise silently run the nearest resolved ancestor.
@@ -187,6 +184,15 @@ function resolveStructuredInput(
 			parentCommand,
 		});
 	}
+	return route;
+}
+
+function resolveStructuredInput(
+	root: CommandNode,
+	path: readonly string[],
+	input: RunInputPayload,
+): ResolvedInput {
+	const route = resolveTypedPath(root, path);
 	return { argv: path, route, parsed: parseStructured(route.command, input) };
 }
 

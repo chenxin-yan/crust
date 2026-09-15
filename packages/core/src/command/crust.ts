@@ -86,7 +86,12 @@ import {
 	installExtensionContexts,
 	validateCommandSections,
 } from "./extensions-install.ts";
-import { executeInvocation, prepareInvocation, runInvocation } from "./invocation.ts";
+import {
+	executeInvocation,
+	prepareInvocation,
+	resolveTypedPath,
+	runInvocation,
+} from "./invocation.ts";
 import { type CommandAction, type CommandNode, createCommandNode, registerFlag } from "./node.ts";
 import { snapshotCommand } from "./snapshot.ts";
 import type { CommandSnapshot } from "./snapshot.ts";
@@ -281,6 +286,24 @@ export type RunArguments<Shape extends CommandShape> = readonly [
 	...RunInputArguments<Shape>,
 	io?: Partial<InvocationIO>,
 ];
+
+/**
+ * Typed invoker bound to one command in an app, returned by {@link Crust.at}.
+ *
+ * `run` accepts the same structured input and IO as `Crust.run` with the path
+ * already applied, so a handle can be re-exported as a plain typed function.
+ */
+export interface CommandHandle<Shape extends CommandShape> {
+	/** The typed path this handle was created with (`[]` selects the root). */
+	readonly path: readonly string[];
+	run(...args: RunArguments<Shape>): Promise<RunOutcome<Shape["result"]>>;
+	run<const Input>(
+		input: Input,
+		...validation: [Input] extends [CompatibleRunInput<Shape, Input>]
+			? readonly [io?: Partial<InvocationIO>]
+			: readonly [invalidInput: never]
+	): Promise<RunOutcome<Shape["result"]>>;
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Reusable command definitions
@@ -1674,6 +1697,43 @@ export class Crust<
 			io,
 			materializeCommandDefinition,
 		);
+	}
+
+	/**
+	 * Bind a typed command path into a reusable {@link CommandHandle}.
+	 *
+	 * Validates the path eagerly against the prepared command tree, so an
+	 * unknown path throws `COMMAND_NOT_FOUND` here rather than on the first
+	 * `handle.run()`. The handle is bound to this builder's tree; commands added
+	 * afterwards belong to the new builder returned by `.add()`.
+	 *
+	 * @param path - Typed path to the command to bind (`[]` selects the root)
+	 * @throws {CrustError} COMMAND_NOT_FOUND when the path does not name a command
+	 */
+	at<const Path extends CommandPath<Tree>>(
+		this: { readonly _types: { readonly caps: "app" } },
+		path: Path & KnownCommandPath<Path, Tree>,
+	): CommandHandle<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>>;
+
+	at(path: readonly string[]): CommandHandle<CommandShape> {
+		resolveTypedPath(prepareInvocation(this._node, materializeCommandDefinition).rootNode, path);
+		const node = this._node;
+		const boundPath = Object.freeze([...path]);
+		return {
+			path: boundPath,
+			async run(...args: readonly unknown[]): Promise<RunOutcome<unknown>> {
+				// SAFETY: the public overloads constrain structured input to this runtime value union.
+				const structuredInput = (args[0] ?? {}) as RunInputPayload;
+				// SAFETY: the public overloads constrain the second argument to invocation IO.
+				const io = args[1] as Partial<InvocationIO> | undefined;
+				return await runInvocation(
+					node,
+					{ path: boundPath, input: structuredInput },
+					io,
+					materializeCommandDefinition,
+				);
+			},
+		};
 	}
 
 	/**
