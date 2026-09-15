@@ -1,7 +1,7 @@
 import type { StandardSchema } from "@crustjs/utils/schema";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
-import { defineContext } from "../api/context.ts";
+import { type ContextBag, defineContext } from "../api/context.ts";
 import { defineExtension, type Extension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { defineExtensionId } from "../identity.ts";
@@ -83,6 +83,39 @@ function _typecheckChainingFlagsArgsPreservesBothGenerics() {
 			]
 		>
 	>;
+}
+
+// rejects variadic methods on a conditional builder union (TS2349) instead of
+// silently erasing rest-parameter inference
+function _typecheckRejectsVariadicMethodsOnConditionalBuilderUnion(condition: boolean) {
+	const text = defineContext("db", () => "text");
+	const other = defineContext("other", () => 1);
+	const c = new Crust("cli");
+
+	// @ts-expect-error -- union of distinct builders is not callable via .provide()
+	void (condition ? c.provide(text()) : c).provide(text());
+	// @ts-expect-error -- union of distinct builders is not callable via .flags()
+	void (condition ? c.provide(text()) : c).flags({ name: "verbose", type: "boolean" });
+
+	// flags-only unions share Ctx; the phantom parameter must bind to `this` to reject them
+	const flagsUnion = condition ? c.flags({ name: "first", type: "boolean" }) : c;
+	// @ts-expect-error -- union of builders differing only in Flags is not callable via .flags()
+	void flagsUnion.flags({ name: "second", type: "boolean" });
+	// @ts-expect-error -- union of builders differing only in Flags is not callable via .provide()
+	void flagsUnion.provide(other());
+
+	// identical branches collapse and chain normally
+	void (condition ? c.provide(text()) : c.provide(text())).provide(other()).action(({ ctx }) => {
+		type _ctx = Expect<Equal<typeof ctx, ContextBag<{ db: string } & { other: number }>>>;
+	});
+
+	// @ts-expect-error -- unconditional duplicate providers remain rejected (FIX_DUPLICATE_CONTEXT)
+	void c.provide(text()).provide(text());
+
+	// non-variadic methods on a union keep working; ctx is the honest union of both branches
+	void (condition ? c.provide(text()) : c).action(({ ctx }) => {
+		type _ctx = Expect<Equal<typeof ctx, ContextBag<{ db: string }> | ContextBag>>;
+	});
 }
 
 // rejects sibling command spelling collisions at the call site
