@@ -1,0 +1,138 @@
+---
+title: "Effect"
+description: Effect.ts v4 adaptor for Command Actions, Contexts, and Core errors.
+---
+
+`@crustjs/effect` lets you author Command Actions and Contexts as [Effect](https://effect.website) programs. Crust remains the runtime: routing, parsing, rendering, and cleanup are unchanged, and applications that do not use Effect are unaffected.
+
+<Callout type="warn" title="Effect v4 prerelease">
+  The adaptor targets `effect@4.x` prereleases and is published under the `next` dist-tag. Install
+  the exact `effect` version the package was tested against; a second copy of `effect` breaks
+  service identity, so it is a peer dependency.
+</Callout>
+
+## Install
+
+```npm
+npm install @crustjs/effect@next effect@4.0.0-rc.115
+```
+
+`@crustjs/core` and `effect` are required peers. TypeScript is an optional peer.
+
+## Quick example
+
+```ts
+import { Crust } from "@crustjs/core";
+import { effectAction, effectContext } from "@crustjs/effect";
+import { Context, Effect, Layer } from "effect";
+
+class Db extends Context.Service<Db, { readonly query: (sql: string) => string }>()("app/Db") {}
+
+const DbLive = Layer.effect(
+  Db,
+  Effect.acquireRelease(
+    Effect.sync(() => ({ query: (sql) => `rows for ${sql}` })),
+    () => Effect.sync(() => console.log("db closed")),
+  ),
+);
+
+const db = effectContext("db", DbLive);
+
+const app = new Crust("app")
+  .provide(db())
+  .args({ name: "table", type: "string", required: true })
+  .action(
+    effectAction([db], ({ args }) =>
+      Effect.gen(function* () {
+        const database = yield* Db;
+        console.log(database.query(`select * from ${args.table}`));
+      }),
+    ),
+  );
+
+await app.execute();
+```
+
+The Layer is built when the action starts and `db closed` prints after the action finishes, whether it succeeded or failed.
+
+## `effectAction(contexts?, fn)`
+
+```ts
+function effectAction<Input, Out, E>(
+  fn: (input: Input) => Effect.Effect<Out, E>,
+): (input: Input) => Promise<Out>;
+
+function effectAction<Input, Out, E, Factories extends readonly EffectContextFactory[]>(
+  contexts: Factories,
+  fn: (input: Input) => Effect.Effect<Out, E, ServicesOf<Factories>>,
+): (input: Input) => Promise<Out>;
+```
+
+`fn` receives the same input a plain action receives: `args`, `flags`, `ctx`, `rawArgs`, `command`, `rootCommand`, `stdout`, and `stderr`. Inference is unchanged, so `args` and `flags` are typed from the builder.
+
+Each invocation runs the Effect with `Effect.runPromiseExit`. List the [`effectContext`](#effectcontextname-layer) factories the Effect needs; their services are pulled from `ctx` and provided, and the Effect's requirements are checked against them at compile time. A listed Context that is not provided on the command path fails with Core's usual missing-provider error. Plain Contexts stay lazy and reachable as promises on `ctx`:
+
+```ts
+effectAction(({ ctx }) =>
+  Effect.gen(function* () {
+    const config = yield* Effect.promise(() => ctx.config);
+    return config.prefix;
+  }),
+);
+```
+
+On failure the adaptor rethrows the original error, so Core's `execute()` renders it exactly as it would a thrown error. A tagged Crust error rethrows the `CrustError` it wraps; any other failure or defect rethrows as itself. Interruption rethrows an error named `AbortError`, which Core maps to exit code 130 without output.
+
+## `effectContext(name, layer)`
+
+```ts
+function effectContext<Name extends string, ROut, E>(
+  name: Name,
+  layer: Layer.Layer<ROut, E>,
+): EffectContextFactory<Name, ROut>; // ContextFactory<Name, void, Context.Context<ROut>>
+```
+
+Takes one fully composed Layer (no remaining requirements) and returns a Crust Context factory. Attach it with `.provide(db())` and declare it in inert definitions with `.use(db)`.
+
+Setup opens a fresh Effect `Scope`, builds the Layer inside it, and registers a `Scope.close` on the invocation's disposal stack. Resources are acquired when the Context is first pulled and released after post-run hooks in reverse order with every other Context, on success and on failure. Finalizers receive the action's `Exit`, so an `Effect.acquireRelease` release step can commit on success and roll back on failure or interruption. Layers are not shared across Contexts; compose them before passing one Layer.
+
+The Context value is the built `Context.Context<ROut>`. A plain action can read it with `Context.get(await ctx.db, Db)`.
+
+## Tagged errors
+
+```ts
+import { Effect } from "effect";
+import { CrustParseError, tryCrust } from "@crustjs/effect";
+
+const program = tryCrust(() => parseSomething()).pipe(
+  Effect.catchTag("CrustParseError", (error) => Effect.succeed(error.details?.flag)),
+);
+```
+
+One `Data.TaggedError` class exists per Core error code: `CrustDefinitionError`, `CrustValidationError`, `CrustParseError`, and `CrustCommandNotFoundError`. Each carries `message`, `details` (typed by the corresponding Core details type), and `cause` (the original `CrustError`).
+
+- `fromCrustError(error)` wraps a caught `CrustError` in the class for its `code`.
+- `tryCrust(thunk)` lifts a sync or async thunk into an Effect: a thrown `CrustError` fails with its tagged class, an `AbortError` (prompt cancellation) interrupts the fiber, and anything else is a defect.
+- `runEffect(effect)` runs an Effect to a Promise with the same unwrapping `effectAction` uses.
+
+## Exports
+
+```ts
+import {
+  effectAction,
+  effectContext,
+  tryCrust,
+  runEffect,
+  fromCrustError,
+  CrustDefinitionError,
+  CrustValidationError,
+  CrustParseError,
+  CrustCommandNotFoundError,
+} from "@crustjs/effect";
+```
+
+The package also exports the `CrustTaggedError` union and the `EffectContextFactory` and `ServicesOf` types.
+
+## Design
+
+The adaptor is a set of helpers, not an Extension: it registers no flags, commands, or hooks. Embedding a Crust application inside a larger Effect program, sharing Layers between Contexts, and `ManagedRuntime` are out of scope.
