@@ -15,14 +15,16 @@
 		"dev": "bun run src/cli.ts",
 		"build": "crust build",
 		"package": "crust build --package",
-		"publish": "crust publish --stage-dir dist/npm",
+		"publish": "crust publish",
 		"start": "./dist/cli",
 		"check:types": "tsc --noEmit"
 	},
-	"devDependencies": {
+	"dependencies": {
 		"@crustjs/core": "^{{crustCoreVersion}}",
+		"@crustjs/extensions": "^{{crustExtensionsVersion}}"
+	},
+	"devDependencies": {
 		"@crustjs/crust": "^{{crustCliVersion}}",
-		"@crustjs/extensions": "^{{crustExtensionsVersion}}",
 		"@types/bun": "latest",
 		"typescript": "^7.0.2"
 	}
