@@ -19,7 +19,7 @@ npx create-crust@latest my-cli
 cd my-cli
 ```
 
-Pick a package manager once; the tabs remember it across the docs. `create-crust` detects the package manager that launched it and installs dependencies with the same one. The scaffolder creates:
+Pick a package manager once; the tabs remember it across the docs. `create-crust` detects the package manager that launched it and installs dependencies with the same one. It also asks which runtime the project develops and builds for: Bun (the default), Node.js, or Deno; pass `--runtime bun|node|deno` to skip the prompt. The scaffolder creates:
 
 <Files>
   <Folder name="my-cli" defaultOpen>
@@ -37,17 +37,17 @@ Pick a package manager once; the tabs remember it across the docs. `create-crust
 <Step>
 ### Run it
 
-The generated `dev` script is `bun run src/cli.ts`, so [Bun](https://bun.sh) runs the CLI whichever package manager installed it.
+The generated `dev` script runs `src/cli.ts` with the runtime you picked (`bun run`, `node`, or `deno run -A`), whichever package manager installed the dependencies.
 
-```sh
-bun run dev Ada --greet Welcome
+```npm
+npm run dev -- Ada --greet Welcome
 # Welcome, Ada!
 ```
 
 The `help()` extension generates usage from the same definitions:
 
-```sh
-bun run dev --help
+```npm
+npm run dev -- --help
 ```
 
 ```
@@ -75,11 +75,11 @@ Chain `.command()` onto the root:
   ../../examples/quick-start/subcommand.ts
 </include>
 
-```sh
-bun run dev build --minify
+```npm
+npm run dev -- build --minify
 # minify: true
 
-bun run dev Ada
+npm run dev -- Ada
 # Hello, Ada!
 ```
 
@@ -89,12 +89,12 @@ bun run dev Ada
 <Step>
 ### Build it
 
-```sh
-bun run build
-bun run start Ada
+```npm
+npm run build
+npm run start Ada
 ```
 
-Standalone mode compiles a binary to `dist/cli`; runtime mode bundles to `dist/cli.js`. See [Build and distribution](/docs/guide/build-and-distribution) for cross-platform targets and npm packaging.
+Bun and Deno projects compile standalone binaries behind a `dist/cli` resolver; Node projects bundle to `dist/cli.js`. See [Build and distribution](/docs/guide/build-and-distribution) for cross-platform targets and npm packaging.
 
 <Callout type="info">
   Both `create-crust` and `crust` CLI are built with crust. If you would like to see crust in
@@ -115,7 +115,7 @@ npm install @crustjs/core @crustjs/extensions
 npm install -D @crustjs/crust
 ```
 
-`@crustjs/crust` is only needed for `crust build`. Skip it if you bundle with `bun build` or run the source directly. Deno projects install with `deno add npm:`; see [Runtime support](/docs/guide/runtime-support).
+`@crustjs/crust` is only needed for `crust build`. Skip it if you bundle another way or run the source directly. Deno projects install with `deno add npm:`; see [Runtime support](/docs/guide/runtime-support).
 
 </Step>
 <Step>
@@ -133,17 +133,34 @@ npm install -D @crustjs/crust
 }
 ```
 
-`dev` runs the TypeScript source with Bun regardless of which package manager installed the dependencies. `crust build` reads `src/cli.ts` and writes to `dist` by default; pass `--entry` for a different file. `bin` points at the built resolver so `bun link` and npm installs expose the command.
+This is the Bun shape; `dev` runs the TypeScript source with Bun regardless of which package manager installed the dependencies. `crust build` reads `src/cli.ts` and writes to `dist` by default; pass `--entry` for a different file. `bin` points at the built resolver so `npm link` and npm installs expose the command. Node and Deno projects add `"crust": { "runtime": "node" }` or `"deno"` and use their own `dev` and `bin` values; see [Set up `package.json`](/docs/guide/build-and-distribution#set-up-packagejson).
 
 </Step>
 <Step>
 ### Configure `tsconfig.json`
 
-The scaffolder ships this config. Match `types`, `module`, and `moduleResolution` if you merge into an existing one; the rest is strictness.
+The scaffolder ships this config for Bun. Match `types`, `module`, and `moduleResolution` if you merge into an existing one; the rest is strictness. Node projects use `"types": ["node"]`; Deno projects use `"lib": ["ESNext", "deno.window"]` and `"types": []` because `deno check` reads this file and a supplied `lib` replaces Deno's own globals.
 
-<include lang="json" meta='title="tsconfig.json"'>
-  ../../../../packages/create-crust/templates/base/tsconfig.json
-</include>
+```json title="tsconfig.json"
+{
+  "compilerOptions": {
+    "lib": ["ESNext"],
+    "types": ["bun"],
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleDetection": "force",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true
+  },
+  "include": ["src"]
+}
+```
 
 </Step>
 <Step>
@@ -151,8 +168,8 @@ The scaffolder ships this config. Match `types`, `module`, and `moduleResolution
 
 Create `src/cli.ts` with the file from [Add a subcommand](#add-a-subcommand), then:
 
-```sh
-bun run dev --help
+```npm
+npm run dev -- --help
 ```
 
 </Step>

@@ -1,7 +1,7 @@
 import { Crust } from "@crustjs/core";
 import { help, version } from "@crustjs/extensions";
 
-import pkg from "../package.json";
+import pkg from "../package.json" with { type: "json" };
 
 const app = new Crust("{{name}}", { description: "A CLI built with Crust", version: pkg.version })
 	.extend(version(), help())

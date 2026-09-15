@@ -169,61 +169,34 @@ Bun executables built by `crust build` autoload `.env` from the directory they s
 
 ## Set up `package.json`
 
-<Tabs items={["Bun standalone", "Deno standalone", "Node runtime package"]}>
-<Tab value="Bun standalone">
+These are the files `create-crust --runtime bun|node|deno` scaffolds, with `{{name}}` and the version placeholders filled in.
 
-```json title="package.json"
-{
-  "name": "my-cli",
-  "files": ["dist"],
-  "bin": { "my-cli": "dist/cli" },
-  "scripts": {
-    "build": "crust build",
-    "package": "crust build --package",
-    "publish": "crust publish"
-  },
-  "dependencies": { "@crustjs/core": "latest", "@crustjs/extensions": "latest" },
-  "devDependencies": { "@crustjs/crust": "latest" }
-}
-```
+<Tabs items={["Bun", "Node", "Deno"]}>
+<Tab value="Bun">
 
-This is what `create-crust` scaffolds. `build` writes raw binaries for local use, `package` stages the npm packages described above, and `publish` uploads them; the staged root package ignores this file's `bin`, `files`, and dependency fields.
+<include lang="json" meta='title="package.json"'>
+  ../../../../../packages/create-crust/templates/runtime/bun/package.json
+</include>
+
+`build` writes raw binaries for local use, `package` stages the npm packages described above, and `publish` uploads them; the staged root package ignores this file's `bin`, `files`, and dependency fields.
 
 </Tab>
-<Tab value="Deno standalone">
+<Tab value="Node">
 
-```json title="package.json"
-{
-  "name": "my-cli",
-  "crust": { "runtime": "deno" },
-  "files": ["dist"],
-  "bin": { "my-cli": "dist/cli" },
-  "scripts": {
-    "build": "crust build --target x86_64-unknown-linux-gnu --outfile dist/cli"
-  }
-}
-```
+<include lang="json" meta='title="package.json"'>
+  ../../../../../packages/create-crust/templates/runtime/node/package.json
+</include>
 
-Deno must be on `PATH` for the build, but the built executable does not need it.
+`"crust": { "runtime": "node" }` makes plain `crust build` produce the Node bundle, and `prepack` runs it so `npm publish` ships `dist/cli.js`. End users need Node 22.18+ but not Bun. `dev` runs the source with Node's built-in type stripping, so keep to erasable syntax (no enums or parameter properties).
 
 </Tab>
-<Tab value="Node runtime package">
+<Tab value="Deno">
 
-```json title="package.json"
-{
-  "name": "my-cli",
-  "crust": { "runtime": "node" },
-  "type": "module",
-  "files": ["dist"],
-  "bin": { "my-cli": "dist/cli.js" },
-  "scripts": {
-    "build": "crust build --name cli",
-    "prepack": "npm run build"
-  }
-}
-```
+<include lang="json" meta='title="package.json"'>
+  ../../../../../packages/create-crust/templates/runtime/deno/package.json
+</include>
 
-End users need Node but not Bun; publish the ESM bundle from a package with `"type": "module"` or rename it to `.mjs`.
+Plain `crust build` compiles every Deno target plus the `dist/cli` resolver; Deno must be on `PATH` for the build, but the executables do not need it. `--package` is Bun only, so ship the executables yourself. Deno resolves `dependencies` from `node_modules`, so run `deno install` (or any package manager's install) before `deno task dev`.
 
 </Tab>
 </Tabs>

@@ -5,7 +5,7 @@ Official Extensions for the Crust CLI framework
 ## Install
 
 ```sh
-bun add @crustjs/extensions
+npm install @crustjs/extensions
 ```
 
 ## Documentation

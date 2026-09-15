@@ -6,19 +6,18 @@ A CLI built with [Crust](https://crustjs.com).
 
 ```sh
 # Run in dev mode
-bun run dev
+{{run}} dev
 
 # Type-check
-bun run check:types
+{{run}} check:types
 
 # Build distribution output
-bun run build
+{{run}} build
 ```
 
 ## Publishing
 
-- **Standalone binaries**: `bun run package` stages npm packages in `dist/npm/`, then `bun run publish` uploads them in manifest order. The staged packages get their own generated `package.json`; see [Build and distribution](https://crustjs.com/docs/guide/build-and-distribution).
-- **Bun runtime package**: `npm publish` runs `bun run build` via `prepack` and ships `dist/cli.js`, which needs Bun on the user's machine.
+`{{run}} build` writes the distributable output to `dist/`. The remaining `package.json` scripts depend on the runtime you picked when scaffolding; see [Build and distribution](https://crustjs.com/docs/guide/build-and-distribution).
 
 ## Usage
 

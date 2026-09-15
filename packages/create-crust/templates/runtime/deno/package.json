@@ -1,0 +1,32 @@
+{
+	"name": "{{name}}",
+	"version": "0.0.0",
+	"type": "module",
+	"description": "A CLI built with Crust",
+	"crust": {
+		"runtime": "deno"
+	},
+	"files": [
+		"dist/cli",
+		"dist/cli.cmd",
+		"dist/*-unknown-linux-*",
+		"dist/*-apple-darwin",
+		"dist/*-pc-windows-*"
+	],
+	"bin": {
+		"{{name}}": "dist/cli"
+	},
+	"scripts": {
+		"dev": "deno run -A src/cli.ts",
+		"build": "crust build",
+		"start": "./dist/cli",
+		"check:types": "deno check src/cli.ts"
+	},
+	"dependencies": {
+		"@crustjs/core": "^{{crustCoreVersion}}",
+		"@crustjs/extensions": "^{{crustExtensionsVersion}}"
+	},
+	"devDependencies": {
+		"@crustjs/crust": "^{{crustCliVersion}}"
+	}
+}
