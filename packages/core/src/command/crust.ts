@@ -1231,7 +1231,13 @@ export class Crust<
 	 * @param defs - Named flag definitions
 	 * @returns A new `Crust` instance with the given flags
 	 */
-	flags<const Defs extends readonly NamedFlagDef[]>(
+	// `_Union extends this` is a phantom on every variadic public overload. TypeScript
+	// can't infer a rest type parameter when combining signatures across a union of
+	// builders (`cond ? c.provide(x) : c`) and silently falls back to the constraint,
+	// dropping both the duplicate-Context brand and the values' typing. Non-identical
+	// type-parameter lists make TS refuse the combination instead (TS2349). Bound to
+	// `this`, not `Ctx`, so unions that differ only in Flags are caught too.
+	flags<const Defs extends readonly NamedFlagDef[], _Union extends this = this>(
 		...defs: ValidateLocalFlagDefs<Defs, Sp>
 	): AfterFlags<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Defs, Meta, Caps>;
 
@@ -1260,7 +1266,7 @@ export class Crust<
 	 * @param defs - Positional argument definitions, in positional order
 	 * @returns A new `Crust` instance with the combined args
 	 */
-	args<const NewA extends ArgsDef>(
+	args<const NewA extends ArgsDef, _Union extends this = this>(
 		...defs: NewA & AppendArgsChecks<A, NewA>
 	): AfterArgs<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, NewA, Meta, Caps>;
 
@@ -1301,7 +1307,10 @@ export class Crust<
 	 * Declare Contexts this command consumes without supplying their values.
 	 * Factory references are retained while setup stays lazy.
 	 */
-	use<const Fs extends readonly [AnyContextFactory, ...AnyContextFactory[]]>(
+	use<
+		const Fs extends readonly [AnyContextFactory, ...AnyContextFactory[]],
+		_Union extends this = this,
+	>(
 		this: { readonly _types: { readonly caps: "recipe" } },
 		...factories: Fs &
 			DeclaredDependencyValuesBrand<ContextDependencies<Fs>, ProvidersOf<CollisionSp>>
@@ -1327,7 +1336,7 @@ export class Crust<
 	 * Extension commands. Consuming operations throw `DEFINITION` for actual collisions.
 	 *
 	 */
-	provide<const Cs extends readonly AnyContextInstance[]>(
+	provide<const Cs extends readonly AnyContextInstance[], _Union extends this = this>(
 		...instances: KnownContextInstances<Cs> &
 			ProvideChecks<Sp | CollisionSp["pending"], Cs> &
 			ValidateContextNames<Caps extends "recipe" ? ProvidersOf<CollisionSp> : Ctx, Cs> &
@@ -1401,7 +1410,10 @@ export class Crust<
 	 * metadata by TypeScript, not at runtime.
 	 * Recipe builders cannot call this root-only method.
 	 */
-	extend<const Es extends readonly Extension<any, any, any, any, DefinedRootMetaKeys<Meta>>[]>(
+	extend<
+		const Es extends readonly Extension<any, any, any, any, DefinedRootMetaKeys<Meta>>[],
+		_Union extends this = this,
+	>(
 		this: { readonly _types: { readonly caps: "app" } },
 		...extensions: Es & {
 			[I in keyof Es]: (ExtensionCommandDefs<Es[I]> extends ValidateDefinitionFlags<
@@ -1467,7 +1479,10 @@ export class Crust<
 	 * under its own carried name (use `.as(name)` to rename).
 	 *
 	 */
-	add<const Ds extends readonly CommandDefinition<any, any, any, any>[]>(
+	add<
+		const Ds extends readonly CommandDefinition<any, any, any, any>[],
+		_Union extends this = this,
+	>(
 		...definitions: Ds &
 			ValidateCommandDefinitions<Ds, Sibs> &
 			ValidateDeclaredDeps<Ctx, Ds> &
