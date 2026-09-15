@@ -369,3 +369,31 @@ function _typecheckResolvesActionResultsForLiteralPathsPastTheDepthCap() {
 		Equal<CommandShapeAt<Root, readonly [string, ...string[]]>["result"], unknown>
 	>;
 }
+
+// narrows each sibling added by one variadic .add() to its own shape
+function _typecheckNarrowsSiblingsAddedByOneVariadicAddToTheirOwnShapes() {
+	const add = defineCommand("add", (command) =>
+		command
+			.args({ name: "name", type: "string", required: true })
+			.action(({ args }) => ({ name: args.name })),
+	);
+	const list = defineCommand("list", (command) => command.action(() => ["origin"]));
+	const app = new Crust("cli").add(defineCommand("remote", (command) => command.add(add, list)));
+
+	type Shape = (typeof app)["_types"]["shape"];
+	type _addResult = Expect<
+		Equal<CommandShapeAt<Shape, readonly ["remote", "add"]>["result"], { name: string }>
+	>;
+	type _listResult = Expect<
+		Equal<CommandShapeAt<Shape, readonly ["remote", "list"]>["result"], string[]>
+	>;
+	const addInput: RunInput<CommandShapeAt<Shape, readonly ["remote", "add"]>> = {
+		args: { name: "origin" },
+	};
+	const listInput: RunInput<CommandShapeAt<Shape, readonly ["remote", "list"]>> = {
+		// @ts-expect-error -- `list` declares no arguments
+		args: { name: "origin" },
+	};
+	void addInput;
+	void listInput;
+}

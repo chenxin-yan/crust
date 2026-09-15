@@ -510,12 +510,15 @@ type DepsOfBuilder<B> =
 		: {};
 
 // Match only established spellings; open siblings must not replace a known shape.
-type DefinitionShapeForSpelling<D, Spelling extends string> =
-	CommandDefinitionData<D> extends { readonly _shape?: infer Shape extends CommandShape }
+// Distribute over `D`: a variadic `.add(a, b)` passes the definition union, and a
+// non-distributive check would infer the union of every sibling's shape.
+type DefinitionShapeForSpelling<D, Spelling extends string> = D extends unknown
+	? CommandDefinitionData<D> extends { readonly _shape?: infer Shape extends CommandShape }
 		? Spelling extends CommandDefinitionSpellings<D>
 			? Shape
 			: never
-		: never;
+		: never
+	: never;
 
 // Added definitions inherit the parent path's Context-owned flags at runtime
 // (materialization seeds the child with `parent.ownedFlags`), so the typed shape
