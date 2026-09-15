@@ -161,9 +161,31 @@ Repeated aliases within one command remain allowed.
 
 ## Chaining semantics
 
-Variadic `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` accumulate across calls. `.extend()` deduplicates `ExtensionId`s last-registration-wins. TypeScript rejects statically known invalid definitions and collisions; automatic consumption checks cover observable names, spellings, positional layout, Context availability, and destination flag relations. Chaining a variadic method onto a conditional builder union (`(cond ? c.provide(db()) : c).provide(...)`) is a compile error (TS2349) because the union cannot carry the call's inference. Keep the command shape static and make the Context value conditional instead, or write the full chain in each branch so `.action()` sees the honest union.
+Variadic `.flags()`, `.args()`, `.provide()`, `.add()`, and root-only `.extend()` accumulate across calls. `.extend()` deduplicates `ExtensionId`s last-registration-wins. TypeScript rejects statically known invalid definitions and collisions; automatic consumption checks cover observable names, spellings, positional layout, Context availability, and destination flag relations.
 
 Dynamic Extension commands retain canonical last-write-wins during preparation. Existing static duplicate-context/command/owned-flag checks still protect earlier typed consumers; runtime replacement is not proof that opaque callbacks are compatible.
+
+### Conditional chains
+
+Each call returns a builder whose type records what was added so far. A ternary on the builder produces a union of two such types, and TypeScript cannot continue a variadic call from that union — it would silently drop the call's inference. Crust rejects it instead:
+
+```ts
+// Error TS2349: This expression is not callable.
+(prod ? c.provide(db()) : c).provide(cache());
+```
+
+Keep the command shape static and put the condition in the Context value:
+
+```ts
+const db = defineContext("db", () => (prod ? connect() : null));
+c.provide(db(), cache()); // ctx.db: Connection | null
+```
+
+If the shape genuinely differs, write the full chain in each branch so `.action()` sees the honest union:
+
+```ts
+prod ? c.provide(db(), cache()) : c.provide(cache());
+```
 
 ## `.args(...defs)`
 
