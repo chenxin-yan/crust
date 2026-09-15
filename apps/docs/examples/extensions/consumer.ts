@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { Crust, defineCommand, defineExtension, defineExtensionId } from "@crustjs/core";
@@ -12,6 +12,7 @@ export const webDocs = defineExtension(WEB_DOCS, {
       `# ${[snapshot.meta.name, ...path].join(" ")}`,
       ...sections.map((s) => `## ${s.title}\n${s.body}`),
     ]);
+    await mkdir(outDir, { recursive: true });
     await writeFile(join(outDir, "docs.md"), lines.join("\n\n"));
     return ["docs.md"];
   },
