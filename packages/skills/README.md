@@ -5,7 +5,7 @@ Package and install agent skills for AI coding assistants.
 ## Install
 
 ```sh
-bun add @crustjs/skills
+npm install @crustjs/skills
 ```
 
 ## Documentation

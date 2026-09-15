@@ -5,7 +5,7 @@ CLI tooling for the Crust framework
 ## Install
 
 ```sh
-bun add -d @crustjs/crust
+npm install -D @crustjs/crust
 ```
 
 ## Documentation

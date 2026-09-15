@@ -96,8 +96,8 @@ Use `only: [man]` to include a section only in manual pages, or `except: [man]` 
 }
 ```
 
-```sh
-bun run generate:man
+```npm
+npm run generate:man
 man -l man/my-cli.1
 mandoc -T lint -W warning man/my-cli.1
 ```

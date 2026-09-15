@@ -5,7 +5,7 @@ Terminal styling foundation for the Crust CLI framework
 ## Install
 
 ```sh
-bun add @crustjs/style
+npm install @crustjs/style
 ```
 
 ## Documentation

@@ -217,8 +217,8 @@ describe.skipIf(process.env.CREATE_CRUST_SMOKE !== "1")("create-crust smoke test
 			process.execPath,
 			builtCliPath,
 			sampleDir,
-			"--distribution",
-			"binary",
+			"--runtime",
+			"bun",
 			"--no-install",
 			"--no-git",
 		];
