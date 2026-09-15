@@ -85,14 +85,13 @@ function _typecheckChainingFlagsArgsPreservesBothGenerics() {
 	>;
 }
 
-// rejects variadic methods on a conditional builder union (TS2349) instead of
-// silently erasing rest-parameter inference
+// rejects conditional calls that would silently erase rest-parameter inference
 function _typecheckRejectsVariadicMethodsOnConditionalBuilderUnion(condition: boolean) {
 	const text = defineContext("db", () => "text");
 	const other = defineContext("other", () => 1);
 	const c = new Crust("cli");
 
-	// @ts-expect-error -- union of distinct builders is not callable via .provide()
+	// @ts-expect-error -- .provide() rejects failed input inference on a builder union
 	void (condition ? c.provide(text()) : c).provide(text());
 	// @ts-expect-error -- union of distinct builders is not callable via .flags()
 	void (condition ? c.provide(text()) : c).flags({ name: "verbose", type: "boolean" });
@@ -101,8 +100,26 @@ function _typecheckRejectsVariadicMethodsOnConditionalBuilderUnion(condition: bo
 	const flagsUnion = condition ? c.flags({ name: "first", type: "boolean" }) : c;
 	// @ts-expect-error -- union of builders differing only in Flags is not callable via .flags()
 	void flagsUnion.flags({ name: "second", type: "boolean" });
-	// @ts-expect-error -- union of builders differing only in Flags is not callable via .provide()
+	// @ts-expect-error -- union of distinct builders is not callable via .args()
+	void flagsUnion.args({ name: "target", type: "string" });
+	// @ts-expect-error -- .provide() rejects failed inference even when both branches share Ctx
 	void flagsUnion.provide(other());
+
+	const child = defineCommand("child", (command) => command);
+	const treeUnion = condition ? c.add(child) : c;
+	// @ts-expect-error -- .add() rejects failed input inference on a tree-only union
+	void treeUnion.add(child.as("other"));
+
+	const extension = defineExtension(defineExtensionId("conditional"), {});
+	// @ts-expect-error -- app-capability builders still reject union calls via .extend()
+	void flagsUnion.extend(extension);
+
+	defineCommand("conditional", (command) => {
+		const recipeUnion = condition ? command.use(text) : command;
+		// @ts-expect-error -- .use() rejects failed input inference on a recipe union
+		void recipeUnion.use(other);
+		return command;
+	});
 
 	// identical branches collapse and chain normally
 	void (condition ? c.provide(text()) : c.provide(text())).provide(other()).action(({ ctx }) => {
@@ -115,6 +132,41 @@ function _typecheckRejectsVariadicMethodsOnConditionalBuilderUnion(condition: bo
 	// non-variadic methods on a union keep working; ctx is the honest union of both branches
 	void (condition ? c.provide(text()) : c).action(({ ctx }) => {
 		type _ctx = Expect<Equal<typeof ctx, ContextBag<{ db: string }> | ContextBag>>;
+	});
+}
+
+// explicit registration inputs preserve inference without bypassing collision checks
+function _typecheckExplicitInputsOnConditionalBuilderUnion(condition: boolean) {
+	const text = defineContext("db", () => "text");
+	const other = defineContext("other", () => 1);
+	const c = new Crust("cli");
+	const contextUnion = condition ? c.provide(text()) : c;
+
+	// @ts-expect-error -- an explicit input tuple still checks FIX_DUPLICATE_CONTEXT
+	void contextUnion.provide<readonly [ReturnType<typeof text>]>(text());
+	void contextUnion.provide<readonly [ReturnType<typeof other>]>(other()).action(({ ctx }) => {
+		type _ctx = Expect<
+			Equal<
+				typeof ctx,
+				ContextBag<{ db: string } & { other: number }> | ContextBag<{ other: number }>
+			>
+		>;
+	});
+
+	const child = defineCommand("child", (command) => command);
+	const sibling = child.as("other");
+	const treeUnion = condition ? c.add(child) : c;
+	// @ts-expect-error -- an explicit input tuple still checks FIX_COMMAND_COLLISION
+	void treeUnion.add<readonly [typeof child]>(child);
+	const registered = treeUnion.add<readonly [typeof sibling]>(sibling);
+	type _commonPaths = Expect<Equal<keyof (typeof registered)["_types"]["tree"], "other">>;
+
+	defineCommand("explicit", (command) => {
+		const recipeUnion = condition ? command.use(text) : command;
+		return recipeUnion.use<readonly [typeof other]>(other).action(async ({ ctx }) => {
+			const value = await ctx.other;
+			type _value = Expect<Equal<typeof value, number>>;
+		});
 	});
 }
 
