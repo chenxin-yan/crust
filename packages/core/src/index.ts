@@ -42,6 +42,7 @@ export type {
 	CommandConfig,
 	CommandDefinition,
 	CommandDefinitionBuilder,
+	CommandHandle,
 	CommandPath,
 	CommandShape,
 	CommandShapeAt,
