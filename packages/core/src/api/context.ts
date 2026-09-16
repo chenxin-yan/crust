@@ -40,9 +40,18 @@ export function seal<T extends object>(value: T): T & Defining<T> {
 	return Object.freeze(Object.assign(value, { [defining]: value }));
 }
 
+/**
+ * Adapter hook: the Context sources a bag was built from, exposed as a
+ * non-enumerable symbol property. Reading it never starts construction.
+ */
+export const contextSources: unique symbol = Symbol.for("crust.contextSources");
+
 /** Lazy, invocation-scoped Context values. Reading a property starts construction. */
 export type ContextBag<Deps extends ContextMap = {}> = {
 	readonly [K in keyof Deps]: Promise<Deps[K]>;
+} & {
+	// Optional: hand-built bags (tests) omit it; resolver bags always define it.
+	readonly [contextSources]?: readonly (AnyContextFactory | AnyContextInstance)[];
 };
 
 export interface ContextConfig {
@@ -82,6 +91,8 @@ export interface ContextInstance<
 	readonly ownedFlags: FlagsDef;
 	/** @internal — declared direct dependency factories */
 	readonly uses: readonly AnyContextFactory[];
+	/** @internal defining factory, for adapters that identify Contexts by factory */
+	readonly factory: AnyContextFactory;
 	setup(input: ContextSetupInput<OF>): Awaitable<Value>;
 	readonly _ownedFlags?: OF;
 	/** @internal — phantom carrying the transitive dependency closure */
@@ -284,7 +295,7 @@ export function defineContext(
 		instanceUses: readonly AnyContextFactory[],
 		run: AnyContextInstance["setup"],
 	): AnyContextInstance => {
-		const value = { name, ownedFlags, uses: instanceUses, setup: run };
+		const value = { name, ownedFlags, uses: instanceUses, factory: sealed, setup: run };
 		// SAFETY: seal installs the private defining proof before this runtime value is erased.
 		return seal(value) as AnyContextInstance;
 	};
@@ -298,7 +309,8 @@ export function defineContext(
 	factory.of = (value: ContextValue): AnyContextInstance =>
 		instance(Object.freeze([]), () => value);
 	// SAFETY: the mutable factory is fully populated before widening to the runtime registry type.
-	return seal(factory) as AnyContextFactory;
+	const sealed = seal(factory) as AnyContextFactory;
+	return sealed;
 }
 
 export type FactoryValueOf<F extends AnyContextFactory> =
@@ -615,6 +627,7 @@ export function createContextResolver(
 			for (const dependency of source.uses ?? []) add(dependency);
 		};
 		for (const source of sources) add(source);
+		Object.defineProperty(bag, contextSources, { value: Object.freeze([...sources]) });
 		// SAFETY: the loop defines every name reachable from the source dependency closure inferred as Deps.
 		return Object.freeze(bag) as ContextBag<Deps>;
 	};

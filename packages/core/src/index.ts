@@ -9,7 +9,7 @@ export type {
 	ContextSetup,
 	FactoryValueOf,
 } from "./api/context.ts";
-export { defineContext } from "./api/context.ts";
+export { contextSources, defineContext } from "./api/context.ts";
 export type {
 	BuildArtifacts,
 	BuildReport,
