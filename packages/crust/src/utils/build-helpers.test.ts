@@ -10,8 +10,10 @@ import {
 	buildEntrypoint,
 	bunBaselineAlias,
 	bunCompileTarget,
+	CRUST_BUILD_DEFINE,
 	createBunCompileArgs,
 	createBunPluginDriverScript,
+	createNodeBuildArgs,
 	execBuild,
 	execNodeBuild,
 	hostTarget,
@@ -79,6 +81,7 @@ describe("createBunPluginDriverScript", () => {
 				entrypoints: [String.raw`C:\Program Files\my "cli"\src\cli.tsx`],
 				minify: false,
 				env: "PUBLIC_*",
+				define: CRUST_BUILD_DEFINE,
 				target: "bun",
 				compile: { target: "bun-windows-x64", outfile: awkward, autoloadBunfig: false },
 			},
@@ -86,6 +89,7 @@ describe("createBunPluginDriverScript", () => {
 		};
 		const script = createBunPluginDriverScript(options);
 		expect(embeddedOptions(script)).toEqual(options);
+		expect(embeddedOptions(script).build.define).toEqual({ "process.env.CRUST_BUILD": '"1"' });
 		expect(script).toContain('"autoloadBunfig":false');
 		expect(script).toContain("throw: false");
 		expect(script).toContain("must default-export a Bun bundler plugin ({ name, setup })");
@@ -98,6 +102,7 @@ describe("createBunPluginDriverScript", () => {
 				entrypoints: ["/proj/src/cli.ts"],
 				minify: true,
 				env: "PUBLIC_*",
+				define: CRUST_BUILD_DEFINE,
 				target: "node",
 				format: "esm",
 			},
@@ -310,6 +315,8 @@ describe("createBunCompileArgs", () => {
 			"--env-file",
 			"/p/.env",
 			"--env=PUBLIC_*",
+			"--define",
+			'process.env.CRUST_BUILD="1"',
 			"--outfile",
 			"/p/dist/cli",
 			"--minify",
@@ -322,8 +329,31 @@ describe("createBunCompileArgs", () => {
 			"--compile",
 			"--no-compile-autoload-bunfig",
 			"--env=PUBLIC_*",
+			"--define",
+			'process.env.CRUST_BUILD="1"',
 			"--outfile",
 			"/p/dist/cli",
+			"/p/src/cli.ts",
+		]);
+	});
+});
+
+describe("createNodeBuildArgs", () => {
+	it("marks the bundle as crust-built with a string-literal define", () => {
+		expect(createNodeBuildArgs("/p/src/cli.ts", "/p/dist/cli.js", true, ["/p/.env"])).toEqual([
+			"build",
+			"--env-file",
+			"/p/.env",
+			"--env=PUBLIC_*",
+			"--define",
+			'process.env.CRUST_BUILD="1"',
+			"--target",
+			"node",
+			"--format",
+			"esm",
+			"--outfile",
+			"/p/dist/cli.js",
+			"--minify",
 			"/p/src/cli.ts",
 		]);
 	});
@@ -389,8 +419,11 @@ describe("buildEntrypoint", () => {
 		const directory = await mkdtemp(join(tmpdir(), "crust-entry-artifacts-test-"));
 		tempDirs.push(directory);
 		const entry = join(directory, "cli.ts");
-		const source = join(directory, "package", "skills");
+		// Running from source, the skills extension reads the last build's
+		// `.crust/root/skills` under the package root found above the entry.
+		const source = join(directory, ".crust", "root", "skills");
 		const outDir = join(directory, "dist");
+		await Bun.write(join(directory, "package.json"), '{"name":"demo"}');
 		await Bun.write(
 			join(source, "demo", "SKILL.md"),
 			"---\nname: demo\ndescription: Demo workflows\n---\n",
@@ -402,7 +435,7 @@ describe("buildEntrypoint", () => {
 			`import { Crust } from ${JSON.stringify(coreUrl)};\n` +
 				`import { skill } from ${JSON.stringify(skillsUrl)};\n` +
 				`import { man } from ${JSON.stringify(manUrl)};\n` +
-				`await new Crust("demo", { description: "Demo" }).extend(skill({ distDir: ${JSON.stringify(source)} }), man()).execute();\n`,
+				`await new Crust("demo", { description: "Demo" }).extend(skill({}), man()).execute();\n`,
 		);
 
 		// Run the entry subprocess from the fixture project root so advertised

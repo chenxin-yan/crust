@@ -343,10 +343,21 @@ export function resolveBunPluginSource(specifier: string, cwd: string): string {
 		: specifier;
 }
 
+/**
+ * Marks every Bun/Node bundle crust produces so `resolveArtifactDir` (core)
+ * can tell a staged bundle from source at runtime. Not a `PUBLIC_*` variable:
+ * it is internal to crust, never user-set. Deno compile has no define, but
+ * standalone Deno binaries are detected directly.
+ */
+export const CRUST_BUILD_DEFINE = { "process.env.CRUST_BUILD": '"1"' } as const;
+// The value keeps its quotes so bun inlines a string literal, not a number.
+const CRUST_BUILD_DEFINE_ARG = 'process.env.CRUST_BUILD="1"';
+
 type BunPluginDriverBuild = {
 	entrypoints: [string];
 	minify: boolean;
 	env: "PUBLIC_*";
+	define: typeof CRUST_BUILD_DEFINE;
 } & (
 	| { target: "bun"; compile: { target?: string; outfile: string; autoloadBunfig: false } }
 	| { target: "node"; format: "esm" }
@@ -468,6 +479,7 @@ export async function execBuild(
 				entrypoints: [entryPath],
 				minify,
 				env: "PUBLIC_*",
+				define: CRUST_BUILD_DEFINE,
 				target: "bun",
 				compile: {
 					...(compileTarget ? { target: compileTarget } : {}),
@@ -502,6 +514,8 @@ export function createBunCompileArgs(
 		"--no-compile-autoload-bunfig",
 		...toBunEnvFileArgs(envFiles),
 		"--env=PUBLIC_*",
+		"--define",
+		CRUST_BUILD_DEFINE_ARG,
 		"--outfile",
 		outfilePath,
 		...(minify ? ["--minify"] : []),
@@ -510,7 +524,7 @@ export function createBunCompileArgs(
 	];
 }
 
-function createNodeBuildArgs(
+export function createNodeBuildArgs(
 	entryPath: string,
 	outfilePath: string,
 	minify: boolean,
@@ -520,6 +534,8 @@ function createNodeBuildArgs(
 		"build",
 		...toBunEnvFileArgs(envFiles),
 		"--env=PUBLIC_*",
+		"--define",
+		CRUST_BUILD_DEFINE_ARG,
 		"--target",
 		"node",
 		"--format",
@@ -582,7 +598,14 @@ export async function execNodeBuild(
 ): Promise<void> {
 	if (bunPlugins.length > 0) {
 		await runBunPluginDriver(
-			{ entrypoints: [entryPath], minify, env: "PUBLIC_*", target: "node", format: "esm" },
+			{
+				entrypoints: [entryPath],
+				minify,
+				env: "PUBLIC_*",
+				define: CRUST_BUILD_DEFINE,
+				target: "node",
+				format: "esm",
+			},
 			outfilePath,
 			bunPlugins,
 			envFiles,

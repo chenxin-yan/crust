@@ -67,6 +67,8 @@ export type {
 	ValidationErrorDetails,
 } from "./errors.ts";
 export { CrustError } from "./errors.ts";
+// Runtime artifact resolution
+export { resolveArtifactDir } from "@crustjs/utils/artifacts";
 // Core types
 export type {
 	ArgDef,

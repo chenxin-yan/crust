@@ -9,7 +9,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
@@ -32,7 +32,7 @@ async function runBuild(argv: string[]) {
 	process.cwd = () => tmpDir;
 	try {
 		const result = await captureExecute(app, ["build", ...argv]);
-		expect(result.exitCode).toBe(0);
+		expect(result.exitCode, result.stderr).toBe(0);
 		return result;
 	} finally {
 		process.cwd = originalCwd;
@@ -144,11 +144,22 @@ describe("crust build integration", () => {
 				packageJsonPath,
 				JSON.stringify({ ...JSON.parse(original), crust: { include: ["assets"] } }),
 			);
+			// The bundle must locate its include via the build-time marker; the
+			// fixture has no node_modules, so core is imported from its built dist.
+			const entryPath = join(tmpDir, "src", "cli.ts");
+			const originalEntry = readFileSync(entryPath, "utf8");
+			writeFileSync(
+				entryPath,
+				`import { resolveArtifactDir } from ${JSON.stringify(resolve(import.meta.dir, "../../core/dist/index.js"))};\n` +
+					'console.log("hello from packaged test");\n' +
+					'if (process.argv.includes("assets")) console.log(resolveArtifactDir("assets"));\n',
+			);
 			try {
 				const { stdout } = await runBuild(["--runtime", "node", "--no-validate"]);
 				expect(stdout).toContain("Runtime: node (from --runtime)");
 			} finally {
 				writeFileSync(packageJsonPath, original);
+				writeFileSync(entryPath, originalEntry);
 			}
 
 			const rootPackageJson = readJson<{
@@ -169,12 +180,18 @@ describe("crust build integration", () => {
 			expect(existsSync(join(stageDir, "linux-x64"))).toBe(false);
 
 			const bundlePath = join(stageDir, "root", "bin", "test-cli.js");
-			expect(readFileSync(bundlePath, "utf8").startsWith("#!/usr/bin/env node\n")).toBe(true);
-			const { exitCode, stdout } = await runProcess(Bun.which("node")!, [bundlePath], {
+			const bundle = readFileSync(bundlePath, "utf8");
+			expect(bundle.startsWith("#!/usr/bin/env node\n")).toBe(true);
+			// The marker is inlined as a literal, not read from the environment.
+			expect(bundle).not.toContain("process.env.CRUST_BUILD");
+			const { exitCode, stdout } = await runProcess(Bun.which("node")!, [bundlePath, "assets"], {
 				cwd: tmpDir,
 			});
 			expect(exitCode).toBe(0);
-			expect(stdout.trim()).toBe("hello from packaged test");
+			expect(stdout.trim().split("\n")).toEqual([
+				"hello from packaged test",
+				join(stageDir, "root", "assets"),
+			]);
 		},
 		30_000,
 	);

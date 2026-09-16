@@ -14,7 +14,7 @@ export { SkillConflictError, SkillSourceConflictError } from "./errors.ts";
 export { skill } from "./extension.ts";
 export { getSkillStatus, installSkill, uninstallSkill } from "./generate.ts";
 export { isValidSkillName } from "./skill-name.ts";
-export { loadPackagedSkills, resolveSkillSource, SkillSourceUnavailableError } from "./source.ts";
+export { loadPackagedSkills, SkillSourceUnavailableError } from "./source.ts";
 export type { PackagedSkill } from "./source.ts";
 
 export type {

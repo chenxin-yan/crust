@@ -376,6 +376,7 @@ await new Crust("marker-cli").action(() => console.log(JSON.stringify({
   marker: "__MARKER__",
   publicValue: process.env.PUBLIC_MESSAGE,
   secretValue: process.env.SECRET_TOKEN ?? null,
+  crustBuild: process.env.CRUST_BUILD,
 }))).execute();
 `,
 		);
@@ -417,6 +418,8 @@ await new Crust("marker-cli").action(() => console.log(JSON.stringify({
 			marker: "transformed-by-plugin",
 			publicValue: "hello-from-build",
 			secretValue: null,
+			// Inlined by the driver's `define`, not read from the (empty) environment.
+			crustBuild: "1",
 		});
 	}, 30_000);
 
@@ -442,7 +445,10 @@ await new Crust("marker-cli").action(() => console.log(JSON.stringify({
 
 			const run = await runProcess(Bun.which("node")!, [outPath], { env: {} });
 			expect(run.exitCode).toBe(0);
-			expect(JSON.parse(run.stdout.trim()).marker).toBe("transformed-by-plugin");
+			expect(JSON.parse(run.stdout.trim())).toMatchObject({
+				marker: "transformed-by-plugin",
+				crustBuild: "1",
+			});
 		},
 		30_000,
 	);

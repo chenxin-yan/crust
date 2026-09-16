@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 import { existsSync, readdirSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 
-import { Crust } from "@crustjs/core";
+import { Crust, resolveArtifactDir } from "@crustjs/core";
 import { isInGitRepo, runSteps, scaffold } from "@crustjs/create";
 import { spinner } from "@crustjs/progress";
 import { confirm, input, select } from "@crustjs/prompts";
@@ -176,8 +176,8 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 		// Infer package name from directory
 		const name = dirName;
 
-		// Shipped templates belong to this module, not the user's working directory.
-		const templateUrl = (template: string) => new URL(`../templates/${template}`, import.meta.url);
+		// `templates` is a crust.include directory staged next to this bundle.
+		const templatePath = (template: string) => join(resolveArtifactDir("templates"), template);
 		// Scaffolding produces no console output, so it is safe inside a spinner.
 		const context = {
 			name,
@@ -188,19 +188,19 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 			message: "Scaffolding project...",
 			task: async () => {
 				await scaffold({
-					template: templateUrl("base"),
+					template: templatePath("base"),
 					dest: resolvedDir,
 					context,
 					...(overwrite ? { conflict: "overwrite" } : {}),
 				});
 				await scaffold({
-					template: templateUrl("minimal"),
+					template: templatePath("minimal"),
 					dest: resolvedDir,
 					context,
 					conflict: "overwrite",
 				});
 				await scaffold({
-					template: templateUrl(`runtime/${runtime}`),
+					template: templatePath(`runtime/${runtime}`),
 					dest: resolvedDir,
 					context,
 					conflict: "overwrite",

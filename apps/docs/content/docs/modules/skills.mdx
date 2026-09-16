@@ -49,7 +49,7 @@ Agent skills:
     Source: .crust/root/skills/my-cli
 ```
 
-`distDir` is read at runtime, relative to the built entry: `crust build` stages the `skills` artifact beside `bin/` in the root package and beside each platform binary, so `new URL("../skills", import.meta.url)` resolves from `.crust/root/bin/my-cli.js`, and compiled executables fall back to the `skills` directory next to the binary. The build hook writes generated and authored skills to `.crust/artifacts/skills` and reports those files as artifacts owned by `crust:skills`.
+Packaged skills are read at runtime from [`resolveArtifactDir("skills")`](/docs/api/crust#resolveartifactdirname); before the first build, help shows a note asking you to run `crust build` instead of failing. The build hook writes generated and authored skills to `.crust/artifacts/skills` and reports those files as artifacts owned by `crust:skills`.
 
 Generated man pages can embed source paths resolved on the build machine. Run builds from the project root that contains the packaged skills directory to avoid absolute build-machine paths.
 
@@ -128,10 +128,13 @@ Names contain 1 to 64 lowercase letters, digits, and hyphens. They cannot start 
 ## Source helpers and errors
 
 ```ts
-const root = resolveSkillSource(new URL("../skills", import.meta.url));
+import { resolveArtifactDir } from "@crustjs/core";
+import { loadPackagedSkills } from "@crustjs/skills";
+
+const root = resolveArtifactDir("skills");
 const skills = loadPackagedSkills(root);
 ```
 
-`resolveSkillSource()` also checks beside the executable when the configured source is unavailable. `loadPackagedSkills()` validates each `SKILL.md` name and non-empty description, while skipping directories without a `SKILL.md`.
+`loadPackagedSkills()` reads an absolute packaged skills root, validates each `SKILL.md` name and non-empty description, and skips directories without a `SKILL.md`.
 
-`SkillConflictError` covers install conflicts, `SkillSourceConflictError` covers duplicate authored names, and `SkillSourceUnavailableError` covers unresolved packaged sources.
+`SkillConflictError` covers install conflicts, `SkillSourceConflictError` covers duplicate authored names, and `SkillSourceUnavailableError` means the root is missing or empty: the CLI has not been built yet.

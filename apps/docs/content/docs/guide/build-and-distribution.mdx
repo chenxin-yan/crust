@@ -153,7 +153,9 @@ Use `--no-validate` only when preparation cannot run; it skips Extension build h
 }
 ```
 
-`crust.include` lists directories, relative to the project root, that `crust build` copies exactly like Extension artifacts: into `.crust/root/` (added to its `files`) and into each platform package's `bin/`. A Node bundle at `root/bin/my-cli.js` can then read them with `new URL("../templates/", import.meta.url)`, both in place and after install. Entries cannot be inside `.crust`.
+`crust.include` lists directories, relative to the project root, that `crust build` copies exactly like Extension artifacts: into `.crust/root/` (added to its `files`) and into each platform package's `bin/`. Entries cannot be inside `.crust`.
+
+Read Extension artifacts and included directories at runtime with [`resolveArtifactDir(name)`](/docs/api/crust#resolveartifactdirname) from `@crustjs/core`: it returns the staged copy for the running layout (compiled binary, Node bundle, or source after a build), so `resolveArtifactDir("templates")` works in place, after install, and inside a compiled executable.
 
 ## Add Bun bundler plugins
 

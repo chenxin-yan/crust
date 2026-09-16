@@ -6,6 +6,7 @@
 	"license": "MIT",
 	"sideEffects": false,
 	"exports": {
+		"./artifacts": "./src/artifacts.ts",
 		"./error": "./src/error.ts",
 		"./json": "./src/json.ts",
 		"./path": "./src/path.ts",

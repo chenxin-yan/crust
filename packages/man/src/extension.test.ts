@@ -40,7 +40,12 @@ describe("man Extension", () => {
 	it("renders skill sources created by an earlier build hook", async () => {
 		const root = await mkdtemp(join(tmpdir(), "crust-man-extension-"));
 		directories.push(root);
-		const source = join(root, "generated-skills");
+		// The skills extension reads `<package root>/.crust/root/skills`, with the
+		// package root found above process.argv[1].
+		const source = join(root, ".crust", "root", "skills");
+		await writeFile(join(root, "package.json"), '{"name":"demo"}');
+		const originalArgv1 = process.argv[1];
+		process.argv[1] = join(root, "cli.ts");
 		const outDir = join(root, "dist");
 		const snapshotPath = join(root, "snapshot.json");
 		const originalExit = process.exit;
@@ -59,16 +64,14 @@ describe("man Extension", () => {
 				);
 			},
 		});
-		const app = new Crust("demo", { description: "Demo CLI" }).extend(
-			producer,
-			skill({ distDir: source }),
-			man(),
-		);
+		const app = new Crust("demo", { description: "Demo CLI" }).extend(producer, skill({}), man());
 
 		try {
 			await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
 		} finally {
 			process.exit = originalExit;
+			if (originalArgv1 === undefined) process.argv.length = 1;
+			else process.argv[1] = originalArgv1;
 			delete process.env[SNAPSHOT_PATH_ENV];
 			delete process.env[BUILD_OUT_DIR_ENV];
 		}
