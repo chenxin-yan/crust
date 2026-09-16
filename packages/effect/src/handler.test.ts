@@ -125,6 +125,67 @@ describe("handler with layer", () => {
 		expect(Exit.isFailure(interruption) && Cause.hasInterruptsOnly(interruption.cause)).toBe(true);
 	});
 
+	it("closes already-built layers with a failure Exit when a sibling layer fails to build", async () => {
+		const exits: Exit.Exit<unknown, unknown>[] = [];
+		const db = layer(
+			"db",
+			resource([], Db, "db", { query: (sql) => sql }, (exit) => exits.push(exit)),
+		);
+		const broken = new Error("cache is down");
+		const cache = layer("cache", Layer.effect(Cache, Effect.die(broken)));
+		const app = new Crust("cli")
+			.provide(db(), cache())
+			.action(handler(() => Effect.map(Db, () => "unreachable")));
+
+		const outcome = await app.run([]);
+
+		expect(outcome.status === "failed" && outcome.error).toBe(broken);
+		const [exit] = exits as [Exit.Exit<unknown, unknown>];
+		expect(exits).toHaveLength(1);
+		expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toBe(broken);
+	});
+
+	it("closes a layer's own partial acquisitions with the build failure Exit", async () => {
+		const exits: Exit.Exit<unknown, unknown>[] = [];
+		const broken = new Error("second half failed");
+		const partial = Layer.merge(
+			resource([], Db, "db", { query: (sql) => sql }, (exit) => exits.push(exit)),
+			Layer.effect(Cache, Effect.die(broken)),
+		);
+		const both = layer("both", partial);
+		const app = new Crust("cli")
+			.provide(both())
+			.action(handler(() => Effect.map(Db, () => "unreachable")));
+
+		const outcome = await app.run([]);
+
+		expect(outcome.status === "failed" && outcome.error).toBe(broken);
+		const [exit] = exits as [Exit.Exit<unknown, unknown>];
+		expect(exits).toHaveLength(1);
+		expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toBe(broken);
+	});
+
+	it("treats a synchronous throw from the program factory as the program's failure", async () => {
+		const exits: Exit.Exit<unknown, unknown>[] = [];
+		const db = layer(
+			"db",
+			resource([], Db, "db", { query: (sql) => sql }, (exit) => exits.push(exit)),
+		);
+		const boom = new Error("boom before any Effect");
+		const app = new Crust("cli").provide(db()).action(
+			handler((): Effect.Effect<never, never, Db> => {
+				throw boom;
+			}),
+		);
+
+		const outcome = await app.run([]);
+
+		expect(outcome.status === "failed" && outcome.error).toBe(boom);
+		const [exit] = exits as [Exit.Exit<unknown, unknown>];
+		expect(exits).toHaveLength(1);
+		expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toBe(boom);
+	});
+
 	it("produces identical results from the generator and Effect forms", async () => {
 		const db = layer("db", Layer.succeed(Db, { query: (sql) => `rows(${sql})` }));
 		const config = defineContext("config", () => ({ limit: 3 }));

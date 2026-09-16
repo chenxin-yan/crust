@@ -62,12 +62,24 @@ export function handler<Input extends ActionInput, Out>(
 				"factory" in source && layerFactories.has(source.factory),
 		);
 		const bag: Readonly<Record<string, Promise<Context.Context<unknown>>>> = input.ctx;
-		const built = await Promise.all(layers.map(({ name }) => bag[name]!));
-		const returned = fn(input);
-		const program = Effect.isEffect(returned) ? returned : Effect.gen(() => returned);
-		const exit = await Effect.runPromiseExit(
-			Effect.provideContext(program, Context.mergeAll(...built, Context.make(HandlerInput, input))),
-		);
+		const built: Context.Context<unknown>[] = [];
+		// Builds and fn(input) run inside the Effect so a failed sibling build or a
+		// synchronous throw still yields a failure Exit for the layers that did build.
+		const program = Effect.gen(function* () {
+			// allSettled: a failing build must not race a sibling still acquiring.
+			const settled = yield* Effect.promise(() =>
+				Promise.allSettled(layers.map(({ name }) => bag[name]!)),
+			);
+			for (const result of settled) if (result.status === "fulfilled") built.push(result.value);
+			const rejected = settled.find((result) => result.status === "rejected");
+			if (rejected) return yield* tryCrust(() => Promise.reject(rejected.reason));
+			const returned = fn(input);
+			return yield* Effect.provideContext(
+				Effect.isEffect(returned) ? returned : Effect.gen(() => returned),
+				Context.mergeAll(...built, Context.make(HandlerInput, input)),
+			);
+		});
+		const exit = await Effect.runPromiseExit(program);
 		for (const services of built) actionExits.set(services, exit);
 		return unwrapExit(exit);
 	};
