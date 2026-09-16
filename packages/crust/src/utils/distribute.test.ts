@@ -75,6 +75,7 @@ describe("runDistributeBuild", () => {
 			version: "0.1.0",
 			description: "CLI tooling",
 			bin: { "test-cli": "dist/cli" },
+			publishConfig: { access: "public" },
 		};
 		const plan = createPlan(tmpDir, packageJson);
 		const outputs: string[] = [];
@@ -122,9 +123,12 @@ describe("runDistributeBuild", () => {
 
 		// glibc and musl packages share os/cpu; `libc` is what lets npm skip the wrong one.
 		const platformPackage = (dir: string) =>
-			readJson<{ os: string[]; cpu: string[]; libc?: string[] }>(
-				join(plan.stageDir, dir, "package.json"),
-			);
+			readJson<{
+				os: string[];
+				cpu: string[];
+				libc?: string[];
+				publishConfig?: Record<string, string>;
+			}>(join(plan.stageDir, dir, "package.json"));
 		expect(platformPackage("linux-x64")).toMatchObject({
 			os: ["linux"],
 			cpu: ["x64"],
@@ -136,12 +140,16 @@ describe("runDistributeBuild", () => {
 			libc: ["musl"],
 		});
 		expect(platformPackage("windows-arm64")).not.toHaveProperty("libc");
+		// `crust publish` passes no --access; npm reads publishConfig.access from every staged package.
+		expect(platformPackage("linux-x64").publishConfig).toEqual({ access: "public" });
 
 		const rootPackage = readJson<{
 			files: string[];
 			bin: Record<string, string>;
 			optionalDependencies: Record<string, string>;
+			publishConfig?: Record<string, string>;
 		}>(join(plan.stageDir, "root", "package.json"));
+		expect(rootPackage.publishConfig).toEqual({ access: "public" });
 		expect(rootPackage.bin).toEqual({ "test-cli": "bin/test-cli.js" });
 		expect(rootPackage.optionalDependencies).toEqual({
 			"@scope/test-package-cli-linux-x64": "0.1.0",
