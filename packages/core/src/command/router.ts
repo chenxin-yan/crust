@@ -91,8 +91,8 @@ function matchKnownFlagToken(
  * Resolve a command from an argv array by walking the subcommand tree.
  *
  * Subcommand matching happens BEFORE flag parsing, so:
- * `crust build --entry src/cli.ts` first resolves "build" as a subcommand,
- * then passes `["--entry", "src/cli.ts"]` to the build command's parser.
+ * `crust build --target host` first resolves "build" as a subcommand,
+ * then passes `["--target", "host"]` to the build command's parser.
  *
  * Resolution rules:
  * 1. If `argv[0]` matches a subcommand key, recurse into that subcommand

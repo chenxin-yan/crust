@@ -9,11 +9,24 @@
 
 `crust build` now stages publishable npm packages in `.crust/`, replacing that tree on each staged build. Node produces a root-only package with a self-contained `bin/<command>.js` bundle; Bun and Deno produce a root launcher plus platform packages. Deno's Linux targets are glibc-only. The staged CLI runs locally, and `crust publish` publishes the same tree using `.crust/manifest.json`.
 
-Removed `--package`, `--stage-dir` (build and publish), `--outdir`, `--name`, `--resolver`, and the raw `dist/` multi-binary layout with `cli`/`cli.cmd` shell resolvers. Use `crust build` followed by `crust publish`. Package identity comes from `package.json`; the command name comes from its single `bin` entry or the unscoped package name.
+`crust build` keeps four flags: `--target` (repeatable; canonical names or `host` for this machine, deduplicated), `--env-file`, `--validate/--no-validate`, and `--minify/--no-minify`. Removed `--package`, `--stage-dir` (build and publish), `--outdir`, `--name`, `--resolver`, `--outfile`, `--runtime`, `--entry`, `--bun-plugin`, and the raw `dist/` multi-binary layout with `cli`/`cli.cmd` shell resolvers. For a single binary on Bun or Deno, run `crust build --target host` and take `.crust/<platform>/bin/<name>-<target>`; Node accepts no `--target` and always produces `.crust/root/bin/<command>.js`. `.crust/manifest.json` is the index.
 
-Use `--outfile` to bypass package staging and write one binary or Node bundle. Bun/Deno accept one target, defaulting to the host; Node does not accept `--target`. Windows binaries receive an `.exe` suffix when needed.
+Build configuration lives in one `package.json` block; unknown keys under `crust` are an error:
 
-Runtime selection follows `--runtime`, then `package.json`'s `crust.runtime`, then inference: `deno.json`/`deno.jsonc` selects Deno; `@types/node` without `@types/bun` selects Node; otherwise Bun. Builds report the selected runtime and its source. Set `crust.include` to copy asset directories alongside Extension artifacts into the root package and each platform package's `bin/`. Every bundle defines `process.env.CRUST_INTERNAL_BUILD` as `"1"`; the name is reserved and reads of it are replaced at build time.
+```json
+{
+  "crust": {
+    "runtime": "bun",
+    "entry": "src/cli.ts",
+    "bunPlugins": ["@opentui/solid/bun-plugin"],
+    "include": ["templates"]
+  }
+}
+```
+
+Runtime selection follows `crust.runtime`, then inference: `deno.json`/`deno.jsonc` selects Deno; `@types/node` without `@types/bun` selects Node; otherwise Bun. Builds report the selected runtime and its source. `crust.entry` defaults to `src/cli.ts` and must stay inside the project. `crust.bunPlugins` replaces `--bun-plugin` with the same resolution (bare names from `node_modules`, paths from the project root, default export); Deno rejects it. `crust.include` copies asset directories alongside Extension artifacts into the root package and each platform package's `bin/`. Every bundle defines `process.env.CRUST_INTERNAL_BUILD` as `"1"`; the name is reserved and reads of it are replaced at build time.
+
+`crust publish` keeps `--tag`, `--dry-run`, and `--registry`; removed `--access` and `--verify`. Staged metadata is always verified, and npm is run without `--access`, so scoped public packages need `publishConfig.access: "public"` in `package.json` (copied into every staged package). `npm publish` runs inside each `.crust/<package>` directory, so a project-level `.npmrc` is not read; use trusted publishing, `NPM_CONFIG_USERCONFIG`, or `~/.npmrc`.
 
 ### create-crust
 

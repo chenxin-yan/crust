@@ -142,7 +142,10 @@ describe("crust build integration", () => {
 			const original = readFileSync(packageJsonPath, "utf8");
 			writeFileSync(
 				packageJsonPath,
-				JSON.stringify({ ...JSON.parse(original), crust: { include: ["assets"] } }),
+				JSON.stringify({
+					...JSON.parse(original),
+					crust: { runtime: "node", include: ["assets"] },
+				}),
 			);
 			// The bundle must locate its include via the build-time marker; the
 			// fixture has no node_modules, so core is imported from its built dist.
@@ -158,14 +161,8 @@ describe("crust build integration", () => {
 			const envFile = join(tmpDir, ".env.build");
 			writeFileSync(envFile, "PUBLIC_MESSAGE=hello-from-build\nSECRET_MESSAGE=private\n");
 			try {
-				const { stdout } = await runBuild([
-					"--runtime",
-					"node",
-					"--no-validate",
-					"--env-file",
-					envFile,
-				]);
-				expect(stdout).toContain("Runtime: node (from --runtime)");
+				const { stdout } = await runBuild(["--no-validate", "--env-file", envFile]);
+				expect(stdout).toContain("Runtime: node (from package.json)");
 			} finally {
 				writeFileSync(packageJsonPath, original);
 				writeFileSync(entryPath, originalEntry);
@@ -207,8 +204,17 @@ describe("crust build integration", () => {
 		async () => {
 			const denoTarget = hostDenoTarget()!;
 			const hostAlias = DENO_TARGETS.info[denoTarget].alias;
-
-			await runBuild(["--runtime", "deno", "--target", denoTarget, "--no-validate"]);
+			const packageJsonPath = join(tmpDir, "package.json");
+			const original = readFileSync(packageJsonPath, "utf8");
+			writeFileSync(
+				packageJsonPath,
+				JSON.stringify({ ...JSON.parse(original), crust: { runtime: "deno" } }),
+			);
+			try {
+				await runBuild(["--target", "host", "--no-validate"]);
+			} finally {
+				writeFileSync(packageJsonPath, original);
+			}
 
 			expect(
 				readJson<{ publishOrder: string[] }>(join(stageDir, "manifest.json")).publishOrder,

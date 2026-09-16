@@ -12,13 +12,7 @@ try {
 	status =
 		spawnSync(
 			process.execPath,
-			[
-				resolve(packageDir, "..", "crust", "dist", "cli.js"),
-				"build",
-				"--entry",
-				"src/index.ts",
-				...process.argv.slice(2),
-			],
+			[resolve(packageDir, "..", "crust", "dist", "cli.js"), "build", ...process.argv.slice(2)],
 			{ cwd: packageDir, stdio: "inherit" },
 		).status ?? 1;
 } finally {

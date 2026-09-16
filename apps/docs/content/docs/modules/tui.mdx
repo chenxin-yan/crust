@@ -76,11 +76,16 @@ new Crust("app").action(() =>
 
 ## Compiling
 
-```sh
-crust build --entry src/cli.tsx --bun-plugin @opentui/solid/bun-plugin
+```json title="package.json"
+{
+  "crust": {
+    "entry": "src/cli.tsx",
+    "bunPlugins": ["@opentui/solid/bun-plugin"]
+  }
+}
 ```
 
-Solid needs OpenTUI's JSX transform at compile time, so pass `@opentui/solid/bun-plugin` to [`crust build --bun-plugin`](/docs/guide/build-and-distribution#add-bun-bundler-plugins); the `bunfig.toml` preload covers `bun run` and build validation, not compilation. React and core apps compile with a plain `crust build`.
+Solid needs OpenTUI's JSX transform at compile time, so list `@opentui/solid/bun-plugin` in [`crust.bunPlugins`](/docs/guide/build-and-distribution#add-bun-bundler-plugins); the `bunfig.toml` preload covers `bun run` and build validation, not compilation. React and core apps compile with a plain `crust build`.
 
 Cross-compiling needs every platform's native OpenTUI package installed: `bun install --os "*" --cpu "*"`.
 

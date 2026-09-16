@@ -19,11 +19,9 @@ type PublishPackageJson = {
 
 type PublishOptions = {
 	stageDir: string;
-	access: string;
 	tag?: string;
 	registry?: string;
 	dryRun?: boolean;
-	verify?: boolean;
 	spawnPublish?: (dir: string, command: string[], io: InvocationIO) => Promise<number>;
 };
 
@@ -35,7 +33,7 @@ export function readPublishManifest(stageDir: string): DistributionManifest {
 		);
 	}
 
-	// SAFETY: validatePublishManifest checks every manifest field used before publishing unless verification is explicitly disabled.
+	// SAFETY: validatePublishManifest checks every manifest field used before publishing.
 	return JSON.parse(readFileSync(manifestPath, "utf-8")) as DistributionManifest;
 }
 
@@ -141,13 +139,10 @@ export function validatePublishManifest(stageDir: string, manifest: Distribution
 
 // npm, not `bun publish`: only npm supports trusted publishing (OIDC) from CI
 // (oven-sh/bun#15601). Staged package.json files carry no workspace: ranges,
-// so npm can publish the directories directly.
-export function buildPublishCommand(args: {
-	access: string;
-	tag?: string;
-	registry?: string;
-}): string[] {
-	const command = ["npm", "publish", "--access", args.access];
+// so npm can publish the directories directly. No --access: npm reads the
+// staged package's publishConfig.access, copied from the project package.json.
+export function buildPublishCommand(args: { tag?: string; registry?: string }): string[] {
+	const command = ["npm", "publish"];
 
 	if (args.tag) {
 		command.push("--tag", args.tag);
@@ -181,15 +176,9 @@ export async function publishStagedPackages(
 	options: PublishOptions,
 	io: InvocationIO,
 ): Promise<void> {
-	if (options.verify !== false) {
-		validatePublishManifest(options.stageDir, manifest);
-	}
+	validatePublishManifest(options.stageDir, manifest);
 
-	const command = buildPublishCommand({
-		access: options.access,
-		tag: options.tag,
-		registry: options.registry,
-	});
+	const command = buildPublishCommand({ tag: options.tag, registry: options.registry });
 	io.stdout(`${dim("Publish order:")} ${manifest.publishOrder.join(" -> ")}`);
 	for (const relativeDir of manifest.publishOrder) {
 		io.stdout(`  ${cyan("→")} ${relativeDir}: ${dim(command.join(" "))}`);
@@ -227,22 +216,10 @@ export const publishCommand = defineCommand(
 					description: "Override the npm dist-tag passed to npm publish",
 				},
 				{
-					name: "access",
-					type: "string",
-					description: "npm access level passed to npm publish",
-					default: "public",
-				},
-				{
 					name: "dry-run",
 					type: "boolean",
 					description: "Print publish order and commands without publishing",
 					default: false,
-				},
-				{
-					name: "verify",
-					type: "boolean",
-					description: "Verify staged directories and metadata before publishing",
-					default: true,
 				},
 				{
 					name: "registry",
@@ -259,11 +236,9 @@ export const publishCommand = defineCommand(
 					manifest,
 					{
 						stageDir,
-						access: flags.access,
 						tag: flags.tag,
 						registry: flags.registry,
 						dryRun: flags["dry-run"],
-						verify: flags.verify,
 					},
 					{ stdout, stderr },
 				);

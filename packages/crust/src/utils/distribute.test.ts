@@ -31,6 +31,7 @@ function createPlan(
 		validate: false,
 		outDir: join(cwd, ".crust", "artifacts"),
 		userPackageJson: packageJson,
+		include: [],
 		...overrides,
 	};
 }
@@ -404,13 +405,10 @@ describe("runDistributeBuild", () => {
 		mkdirSync(join(tmpDir, "assets"), { recursive: true });
 		writeFileSync(join(tmpDir, "templates", "base", "README.md"), "template\n");
 		writeFileSync(join(tmpDir, "assets", "logo.txt"), "logo\n");
-		const packageJson = {
-			name: "include-cli",
-			version: "0.1.0",
-			crust: { include: ["templates", "./assets"] },
-		};
+		const packageJson = { name: "include-cli", version: "0.1.0" };
+		const include = ["templates", "./assets"];
 
-		const bunPlan = createPlan(tmpDir, packageJson, { validate: true });
+		const bunPlan = createPlan(tmpDir, packageJson, { validate: true, include });
 		await runDistributeBuild(bunPlan, bunDistribution(), io);
 		expect(
 			readJson<{ files: string[] }>(join(bunPlan.stageDir, "root", "package.json")).files,
@@ -423,7 +421,10 @@ describe("runDistributeBuild", () => {
 		).toBe("logo\n");
 
 		// Root-only packages have no platform bin to copy into; the root copy is the only one.
-		const nodePlan = createPlan(tmpDir, packageJson, { stageDir: join(tmpDir, ".node-stage") });
+		const nodePlan = createPlan(tmpDir, packageJson, {
+			stageDir: join(tmpDir, ".node-stage"),
+			include,
+		});
 		await runDistributeBuild(nodePlan, rootOnlyDistribution, io);
 		expect(
 			readJson<{ files: string[] }>(join(nodePlan.stageDir, "root", "package.json")).files,
@@ -449,18 +450,17 @@ describe("runDistributeBuild", () => {
 		symlinkSync(join(tmpDir, "templates", "deep"), join(tmpDir, "hop", "real", "via"), "dir");
 		mkdirSync(join(tmpDir, "hopper"));
 		symlinkSync(join(tmpDir, "hop", "real"), join(tmpDir, "hopper", "link"), "dir");
-		const stage = (include: JsonValue, validate = false, stageDir = join(tmpDir, ".crust")) =>
+		const stage = (include: string[], validate = false, stageDir = join(tmpDir, ".crust")) =>
 			runDistributeBuild(
 				createPlan(
 					tmpDir,
-					{ name: "include-cli", version: "0.1.0", crust: { include } },
-					{ validate, stageDir },
+					{ name: "include-cli", version: "0.1.0" },
+					{ validate, stageDir, include },
 				),
 				bunDistribution(),
 				io,
 			);
 
-		await expect(stage("templates")).rejects.toThrow("crust.include must be an array");
 		await expect(stage(["../outside"])).rejects.toThrow("inside the project root");
 		await expect(stage([join(tmpDir, "src")])).rejects.toThrow("inside the project root");
 		await expect(stage(["."])).rejects.toThrow("inside the project root");

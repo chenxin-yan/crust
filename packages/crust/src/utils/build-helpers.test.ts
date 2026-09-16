@@ -118,7 +118,7 @@ describe("createBunPluginDriverScript", () => {
 	});
 });
 
-describe.skipIf(hostTarget(BUN_TARGETS) === null)("execBuild with --bun-plugin", () => {
+describe.skipIf(hostTarget(BUN_TARGETS) === null)("execBuild with crust.bunPlugins", () => {
 	const tempDirs: string[] = [];
 
 	afterEach(async () => {
@@ -150,7 +150,7 @@ describe.skipIf(hostTarget(BUN_TARGETS) === null)("execBuild with --bun-plugin",
 		).catch((cause: unknown) => cause);
 		expect(error).toBeInstanceOf(Error);
 		expect((error as Error).message).toContain(
-			`--bun-plugin ./missing.ts could not be imported from ${await realpath(directory)}: Cannot find module '${join(await realpath(directory), "missing.ts")}'`,
+			`crust.bunPlugins entry ./missing.ts could not be imported from ${await realpath(directory)}: Cannot find module '${join(await realpath(directory), "missing.ts")}'`,
 		);
 		expect((error as Error).message).not.toContain(".crust-build-");
 		expect(await leftoverDrivers(directory)).toEqual([]);
@@ -188,7 +188,7 @@ describe.skipIf(hostTarget(BUN_TARGETS) === null)("execBuild with --bun-plugin",
 				["./plugin.ts"],
 			),
 		).rejects.toThrow(
-			"--bun-plugin ./plugin.ts must default-export a Bun bundler plugin ({ name, setup }). Wrap a plugin factory in a module that default-exports the created plugin.",
+			"crust.bunPlugins entry ./plugin.ts must default-export a Bun bundler plugin ({ name, setup }). Wrap a plugin factory in a module that default-exports the created plugin.",
 		);
 		expect(await leftoverDrivers(directory)).toEqual([]);
 	});

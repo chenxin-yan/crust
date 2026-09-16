@@ -1,9 +1,10 @@
 import { existsSync, rmSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 
 import { defineCommand, type BuildReport, type InvocationIO } from "@crustjs/core";
-import { cyan, dim, green } from "@crustjs/style";
+import { dim } from "@crustjs/style";
 import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
+import { isWithin } from "@crustjs/utils/path";
 
 import {
 	assertTargetsBuildableWithoutBun,
@@ -16,22 +17,88 @@ import {
 	execBuild,
 	execDenoBuild,
 	execNodeBuild,
-	hostTarget,
+	HOST_TARGET,
 	readUserPackageJson,
 	resolveTargets,
 	buildEntrypoint,
-	type TargetTable,
 } from "../utils/build-helpers.ts";
 import { CRUST_DIR, type Distribution, runDistributeBuild } from "../utils/distribute.ts";
 
-function getConfiguredRuntime(pkg: JsonValue): JsonValue | undefined {
-	if (!isJsonObject(pkg)) return undefined;
-	const crust = pkg.crust;
-	return crust !== undefined && isJsonObject(crust) ? crust.runtime : undefined;
-}
+// ────────────────────────────────────────────────────────────────────────────
+// package.json "crust" configuration
+// ────────────────────────────────────────────────────────────────────────────
+
+const DEFAULT_ENTRY = "src/cli.ts";
+const CRUST_CONFIG_KEYS = ["runtime", "entry", "bunPlugins", "include"] as const;
+
+/** The `crust` block of the user's package.json, shape-validated. */
+export type CrustConfig = {
+	runtime?: BuildRuntime;
+	entry?: string;
+	bunPlugins?: string[];
+	include?: string[];
+};
 
 function isBuildRuntime(value: JsonValue): value is BuildRuntime {
 	return typeof value === "string" && BUILD_RUNTIMES.some((runtime) => runtime === value);
+}
+
+function isString(value: JsonValue): value is string {
+	return typeof value === "string";
+}
+
+function isStringArray(value: JsonValue): value is string[] {
+	return Array.isArray(value) && value.every(isString);
+}
+
+export function readCrustConfig(pkg: JsonValue | undefined): CrustConfig {
+	if (pkg === undefined || !isJsonObject(pkg) || pkg.crust === undefined) return {};
+	const crust = pkg.crust;
+	const allowed = `Allowed keys: ${CRUST_CONFIG_KEYS.join(", ")}`;
+	if (!isJsonObject(crust)) {
+		throw new Error(`package.json crust must be an object. ${allowed}`);
+	}
+	const unknown = Object.keys(crust).find(
+		(key) => !CRUST_CONFIG_KEYS.some((allowedKey) => allowedKey === key),
+	);
+	if (unknown !== undefined) {
+		throw new Error(`Unknown package.json crust key ${JSON.stringify(unknown)}. ${allowed}`);
+	}
+
+	const config: CrustConfig = {};
+	if (crust.runtime !== undefined) {
+		if (!isBuildRuntime(crust.runtime)) {
+			throw new Error(
+				`Invalid package.json crust.runtime ${JSON.stringify(crust.runtime)}. Valid runtimes: ${BUILD_RUNTIMES.join(", ")}`,
+			);
+		}
+		config.runtime = crust.runtime;
+	}
+	if (crust.entry !== undefined) {
+		if (!isString(crust.entry)) {
+			throw new Error(
+				`package.json crust.entry must be a project-relative file path, e.g. ${JSON.stringify(DEFAULT_ENTRY)}.`,
+			);
+		}
+		config.entry = crust.entry;
+	}
+	if (crust.bunPlugins !== undefined) {
+		if (!isStringArray(crust.bunPlugins)) {
+			throw new Error(
+				'package.json crust.bunPlugins must be an array of Bun plugin module specifiers, e.g. ["@opentui/solid/bun-plugin", "./build/plugin.ts"].',
+			);
+		}
+		config.bunPlugins = crust.bunPlugins;
+	}
+	if (crust.include !== undefined) {
+		if (!isStringArray(crust.include)) {
+			throw new Error(
+				'package.json crust.include must be an array of directory names relative to the project root, e.g. ["templates"].',
+			);
+		}
+		config.include = crust.include;
+	}
+	return config;
 }
 
 function hasDependency(pkg: JsonValue, name: string): boolean {
@@ -45,7 +112,6 @@ const DENO_CONFIG_FILES = ["deno.json", "deno.jsonc"] as const;
 
 /** Where the build runtime came from, printed as `Runtime: <runtime> (<source>)`. */
 export type RuntimeSource =
-	| "from --runtime"
 	| "from package.json"
 	| `inferred from ${(typeof DENO_CONFIG_FILES)[number]}`
 	| "inferred from @types/node"
@@ -54,25 +120,17 @@ export type RuntimeSource =
 type ResolvedRuntime = { runtime: BuildRuntime; source: RuntimeSource };
 
 /**
- * `--runtime` > package.json `crust.runtime` > inference > Bun. Inference uses
- * only unambiguous signals: a Deno config file, or `@types/node` without
+ * package.json `crust.runtime` > inference > Bun. Inference uses only
+ * unambiguous signals: a Deno config file, or `@types/node` without
  * `@types/bun`. Lockfiles say which package manager installed dependencies,
  * not which runtime runs the CLI, so they are not consulted.
  */
 export function resolveBuildRuntime(
 	pkg: JsonValue | undefined,
+	config: CrustConfig,
 	cwd: string,
-	override?: BuildRuntime,
 ): ResolvedRuntime {
-	// --runtime is validated by the flag's `choices`; no re-check needed here.
-	if (override !== undefined) return { runtime: override, source: "from --runtime" };
-	const configured = pkg === undefined ? undefined : getConfiguredRuntime(pkg);
-	if (configured !== undefined) {
-		if (isBuildRuntime(configured)) return { runtime: configured, source: "from package.json" };
-		throw new Error(
-			`Invalid package.json crust.runtime ${JSON.stringify(configured)}. Valid runtimes: ${BUILD_RUNTIMES.join(", ")}`,
-		);
-	}
+	if (config.runtime !== undefined) return { runtime: config.runtime, source: "from package.json" };
 	const denoConfig = DENO_CONFIG_FILES.find((file) => existsSync(join(cwd, file)));
 	if (denoConfig) return { runtime: "deno", source: `inferred from ${denoConfig}` };
 	if (pkg !== undefined && hasDependency(pkg, "@types/node") && !hasDependency(pkg, "@types/bun")) {
@@ -124,15 +182,28 @@ export function resolveEnvFilePaths(cwd: string, envFiles: string[] | undefined)
 	});
 }
 
+/** `crust.entry` (default `src/cli.ts`) as an absolute path; must stay inside the project. */
+function resolveEntryPath(cwd: string, entry: string | undefined): string {
+	const configured = entry ?? DEFAULT_ENTRY;
+	const entryPath = resolve(cwd, configured);
+	if (isAbsolute(configured) || entryPath === cwd || !isWithin(cwd, entryPath)) {
+		throw new Error(
+			`package.json crust.entry ${JSON.stringify(configured)} must be a file inside the project root ${cwd}.`,
+		);
+	}
+	if (!existsSync(entryPath)) {
+		throw new Error(
+			`Entry file not found: ${entryPath}\n  Set package.json crust.entry to your CLI entry (default ${DEFAULT_ENTRY}).`,
+		);
+	}
+	return entryPath;
+}
+
 export type BuildFlags = {
-	entry: string;
-	outfile?: string;
 	minify?: boolean;
-	runtime?: BuildRuntime;
 	target?: string[];
 	validate: boolean;
 	"env-file"?: string[];
-	"bun-plugin"?: string[];
 };
 
 type CommonBuildPlan = {
@@ -142,97 +213,50 @@ type CommonBuildPlan = {
 	entryPath: string;
 	envFiles: string[];
 	bunPlugins: string[];
+	include: string[];
 	/** Where Extension build hooks write: `.crust/artifacts`. */
 	outDir: string;
+	stageDir: string;
 	validate: boolean;
 	minify: boolean;
 };
 
-/** Default: the publishable `.crust/` tree (root package + platform packages for Bun/Deno). */
-export type StagedBuildPlan = CommonBuildPlan & { stageDir: string } & (
+/** The publishable `.crust/` tree: root package plus platform packages for Bun/Deno. */
+export type BuildPlan = CommonBuildPlan &
+	(
 		| { runtime: "bun"; targets: BunTarget[] }
 		| { runtime: "deno"; targets: DenoTarget[] }
 		| { runtime: "node" }
 	);
 
-/** `--outfile`: one artifact at an exact path, no staging. */
-export type OutfileBuildPlan = CommonBuildPlan & { outfilePath: string } & (
-		| { runtime: "bun"; target: BunTarget }
-		| { runtime: "deno"; target: DenoTarget }
-		| { runtime: "node" }
-	);
-
-export type BuildPlan = StagedBuildPlan | OutfileBuildPlan;
-
-/** The single `--target`, or the host target when omitted. */
-function resolveOutfileTarget<T extends string>(
-	table: TargetTable<T>,
-	targetFlags: string[] | undefined,
-): T {
-	if (!targetFlags?.length) {
-		const host = hostTarget(table);
-		if (host === null) {
-			throw new Error(
-				`No ${table.runtime} target matches this machine (${process.platform}-${process.arch}).\n  Pass --target <target> with --outfile.`,
-			);
-		}
-		return host;
-	}
-	const targets = resolveTargets(table, targetFlags);
-	if (targets.length > 1) {
-		throw new Error(
-			"--outfile builds exactly one target.\n  Pass a single --target, or omit --target to build for this machine.",
-		);
-	}
-	return targets[0]!;
-}
-
-function withExecutableExtension<T extends string>(
-	table: TargetTable<T>,
-	target: T,
-	outfilePath: string,
-): string {
-	return table.info[target].os === "win32" && !outfilePath.endsWith(".exe")
-		? `${outfilePath}.exe`
-		: outfilePath;
-}
-
 export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 	const userPackageJson = readUserPackageJson(cwd);
-	const { runtime, source: runtimeSource } = resolveBuildRuntime(
-		userPackageJson,
-		cwd,
-		flags.runtime,
-	);
-	const entryPath = resolve(cwd, flags.entry);
+	const config = readCrustConfig(userPackageJson);
+	const { runtime, source: runtimeSource } = resolveBuildRuntime(userPackageJson, config, cwd);
+	const entryPath = resolveEntryPath(cwd, config.entry);
 	const envFiles = resolveEnvFilePaths(cwd, flags["env-file"]);
+	const bunPlugins = config.bunPlugins ?? [];
 
-	if (!existsSync(entryPath)) {
-		throw new Error(
-			`Entry file not found: ${entryPath}\n  Specify a valid entry file with --entry <path>`,
-		);
-	}
 	if (runtime === "node" && flags.target?.length) {
 		throw new Error(
-			"--target cannot be used with --runtime node.\n  Node builds produce one portable JavaScript artifact.",
+			"--target cannot be used with the node runtime.\n  Node builds produce one portable JavaScript artifact.",
 		);
 	}
 	if (runtime === "deno" && flags.minify) {
 		throw new Error(
-			"--minify is not supported with --runtime deno.\n  deno compile has no minification step; drop the flag.",
+			"--minify is not supported with the deno runtime.\n  deno compile has no minification step; drop the flag.",
 		);
 	}
 	if (runtime === "deno" && envFiles.length > 0) {
 		throw new Error(
-			"--env-file is not supported with --runtime deno.\n" +
+			"--env-file is not supported with the deno runtime.\n" +
 				"  deno compile embeds every variable from the file into the binary — secrets included —\n" +
 				"  with no PUBLIC_* filter. Load configuration at runtime instead (e.g. deno run --env-file).",
 		);
 	}
-	const bunPlugins = flags["bun-plugin"] ?? [];
 	if (runtime === "deno" && bunPlugins.length > 0) {
 		throw new Error(
-			"--bun-plugin is not supported with --runtime deno.\n  deno compile has no Bun bundler; drop the flag or build with --runtime bun.",
+			"package.json crust.bunPlugins is not supported with the deno runtime.\n  deno compile has no Bun bundler; remove crust.bunPlugins or set crust.runtime to bun.",
 		);
 	}
 
@@ -244,44 +268,24 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 		entryPath,
 		envFiles,
 		bunPlugins,
+		include: config.include ?? [],
 		outDir: join(stageDir, "artifacts"),
+		stageDir,
 		validate: flags.validate,
 		minify: runtime === "deno" ? false : (flags.minify ?? true),
 	};
 
-	if (flags.outfile !== undefined) {
-		const outfilePath = resolve(cwd, flags.outfile);
-		if (runtime === "node") return { ...common, runtime, outfilePath };
-		if (runtime === "bun") {
-			const target = resolveOutfileTarget(BUN_TARGETS, flags.target);
-			assertTargetsBuildableWithoutBun([target]);
-			return {
-				...common,
-				runtime,
-				target,
-				outfilePath: withExecutableExtension(BUN_TARGETS, target, outfilePath),
-			};
-		}
-		const target = resolveOutfileTarget(DENO_TARGETS, flags.target);
-		return {
-			...common,
-			runtime,
-			target,
-			outfilePath: withExecutableExtension(DENO_TARGETS, target, outfilePath),
-		};
-	}
-
-	if (runtime === "node") return { ...common, runtime, stageDir };
+	if (runtime === "node") return { ...common, runtime };
 	if (runtime === "bun") {
 		const targets = resolveTargets(BUN_TARGETS, flags.target);
 		assertTargetsBuildableWithoutBun(targets);
-		return { ...common, runtime, targets, stageDir };
+		return { ...common, runtime, targets };
 	}
-	return { ...common, runtime, targets: resolveTargets(DENO_TARGETS, flags.target), stageDir };
+	return { ...common, runtime, targets: resolveTargets(DENO_TARGETS, flags.target) };
 }
 
 /** Bun and Deno stage platform packages behind a Node launcher; Node stages a root-only bundle. */
-async function runStagedBuild(plan: StagedBuildPlan, cwd: string, io: InvocationIO): Promise<void> {
+async function runStagedBuild(plan: BuildPlan, cwd: string, io: InvocationIO): Promise<void> {
 	if (plan.runtime === "bun") {
 		const distribution: Distribution<BunTarget> = {
 			table: BUN_TARGETS,
@@ -309,37 +313,6 @@ async function runStagedBuild(plan: StagedBuildPlan, cwd: string, io: Invocation
 	);
 }
 
-async function runOutfileBuild(
-	plan: OutfileBuildPlan,
-	cwd: string,
-	io: InvocationIO,
-): Promise<void> {
-	io.stdout(`Building ${dim(plan.entryPath)} ${cyan("→")} ${dim(plan.outfilePath)}...`);
-	if (plan.runtime === "node") {
-		await execNodeBuild(
-			plan.entryPath,
-			plan.outfilePath,
-			plan.minify,
-			plan.envFiles,
-			cwd,
-			plan.bunPlugins,
-		);
-	} else if (plan.runtime === "bun") {
-		await execBuild(
-			plan.entryPath,
-			plan.outfilePath,
-			plan.minify,
-			plan.target,
-			plan.envFiles,
-			cwd,
-			plan.bunPlugins,
-		);
-	} else {
-		await execDenoBuild(plan.entryPath, plan.outfilePath, plan.target, cwd);
-	}
-	io.stdout(`${green("✓")} Built successfully: ${plan.outfilePath}`);
-}
-
 // ────────────────────────────────────────────────────────────────────────────
 // Build command
 // ────────────────────────────────────────────────────────────────────────────
@@ -349,20 +322,16 @@ async function runOutfileBuild(
  *
  * Stages the publishable npm tree in `.crust/`: a root package whose
  * `bin/<cmd>.js` is a Node launcher (Bun, Deno) or the bundle itself (Node),
- * plus one platform package per target for Bun and Deno. `--outfile` instead
- * writes one binary or bundle to an exact path.
+ * plus one platform package per target for Bun and Deno. The runtime, entry,
+ * Bun plugins, and extra directories come from package.json `crust`.
  *
  * @example
  * ```sh
  * crust build                                  # Stage .crust/ for every target of the runtime
+ * crust build --target host                    # Stage only this machine's target
  * crust build --target bun-linux-x64           # Stage only Linux x64
- * crust build --entry src/main.ts              # Custom entry point
  * crust build --no-minify                      # Disable minification
- * crust build --outfile ./my-cli               # One binary for this machine
- * crust build --outfile ./my-cli --target bun-linux-x64
- * crust build --runtime deno --target aarch64-apple-darwin
- * crust build --runtime node --outfile out/cli.js
- * crust build --bun-plugin @opentui/solid/bun-plugin    # Bundle with a project Bun plugin
+ * crust build --env-file .env.production       # Inline PUBLIC_* constants from a file
  * ```
  */
 export const buildCommand = defineCommand(
@@ -372,40 +341,17 @@ export const buildCommand = defineCommand(
 		command
 			.flags(
 				{
-					name: "entry",
-					type: "string",
-					description: "Entry file path",
-					default: "src/cli.ts",
-					short: "e",
-				},
-				{
-					name: "outfile",
-					type: "string",
-					description:
-						"Write one binary or bundle to this path instead of staging .crust/ (one --target, or this machine's)",
-					short: "o",
-				},
-				{
-					name: "minify",
-					type: "boolean",
-					// No default: deno builds must distinguish an explicit --minify (error)
-					// from the implicit bun/node default (true, applied below).
-					description: "Minify the output (default for bun and node; unsupported for deno)",
-				},
-				{
-					name: "runtime",
-					type: "string",
-					choices: BUILD_RUNTIMES,
-					description:
-						"Build runtime (overrides package.json crust.runtime; otherwise inferred from deno.json or @types/node, defaulting to bun)",
-				},
-				{
 					name: "target",
 					type: "string",
 					multiple: true,
-					description:
-						"Canonical compiler target(s). Omit to stage all Bun/Deno targets, or this machine's target with --outfile.",
+					description: `Canonical compiler target(s), or "${HOST_TARGET}" for this machine; repeatable. Omit to stage all Bun/Deno targets`,
 					short: "t",
+				},
+				{
+					name: "env-file",
+					type: "string",
+					multiple: true,
+					description: "Explicit env file(s) used for build-time constants; repeatable",
 				},
 				{
 					name: "validate",
@@ -415,17 +361,11 @@ export const buildCommand = defineCommand(
 					default: true,
 				},
 				{
-					name: "env-file",
-					type: "string",
-					multiple: true,
-					description: "Explicit env file(s) used for build-time constants; repeatable",
-				},
-				{
-					name: "bun-plugin",
-					type: "string",
-					multiple: true,
-					description:
-						"Bun bundler plugin module(s) to apply (default export); repeatable. Bun and Node builds only",
+					name: "minify",
+					type: "boolean",
+					// No default: deno builds must distinguish an explicit --minify (error)
+					// from the implicit bun/node default (true, applied below).
+					description: "Minify the output (default for bun and node; unsupported for deno)",
 				},
 			)
 			.action(async ({ flags, stdout, stderr }) => {
@@ -434,7 +374,7 @@ export const buildCommand = defineCommand(
 				const plan = planBuild(flags, cwd);
 				stdout(`${dim("Runtime:")} ${plan.runtime} ${dim(`(${plan.runtimeSource})`)}`);
 				// Wipe once, before Extension hooks fill .crust/artifacts; staging only adds to the tree.
-				if (!("outfilePath" in plan)) rmSync(plan.stageDir, { recursive: true, force: true });
+				rmSync(plan.stageDir, { recursive: true, force: true });
 				if (plan.validate) {
 					const { build } = await buildEntrypoint(
 						plan.entryPath,
@@ -445,7 +385,6 @@ export const buildCommand = defineCommand(
 					);
 					printBuildReport(build, stdout);
 				}
-				if ("outfilePath" in plan) await runOutfileBuild(plan, cwd, io);
-				else await runStagedBuild(plan, cwd, io);
+				await runStagedBuild(plan, cwd, io);
 			}),
 );

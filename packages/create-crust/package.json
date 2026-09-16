@@ -29,6 +29,7 @@
 	},
 	"crust": {
 		"runtime": "node",
+		"entry": "src/index.ts",
 		"include": [
 			"templates"
 		]
