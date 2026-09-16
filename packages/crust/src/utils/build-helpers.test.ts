@@ -13,7 +13,6 @@ import {
 	CRUST_BUILD_DEFINE,
 	createBunCompileArgs,
 	createBunPluginDriverScript,
-	createNodeBuildArgs,
 	execBuild,
 	execNodeBuild,
 	hostTarget,
@@ -243,7 +242,6 @@ describe("bunCompileTarget", () => {
 			"bun-darwin-arm64",
 		);
 		expect(bunCompileTarget("bun-linux-x64", fallbackRunner, null)).toBe("bun-linux-x64");
-		expect(bunCompileTarget(undefined, fallbackRunner, "bun-linux-x64")).toBeUndefined();
 	});
 
 	it("passes the canonical target to a real bun", () => {
@@ -326,7 +324,9 @@ describe("createBunCompileArgs", () => {
 			"bun-darwin-arm64",
 			"/p/src/cli.ts",
 		]);
-		expect(createBunCompileArgs("/p/src/cli.ts", "/p/dist/cli", false, undefined, [])).toEqual([
+		expect(
+			createBunCompileArgs("/p/src/cli.ts", "/p/dist/cli", false, "bun-linux-x64", []),
+		).toEqual([
 			"build",
 			"--compile",
 			"--no-compile-autoload-bunfig",
@@ -335,27 +335,8 @@ describe("createBunCompileArgs", () => {
 			'process.env.CRUST_INTERNAL_BUILD="1"',
 			"--outfile",
 			"/p/dist/cli",
-			"/p/src/cli.ts",
-		]);
-	});
-});
-
-describe("createNodeBuildArgs", () => {
-	it("marks the bundle as crust-built with a string-literal define", () => {
-		expect(createNodeBuildArgs("/p/src/cli.ts", "/p/dist/cli.js", true, ["/p/.env"])).toEqual([
-			"build",
-			"--env-file",
-			"/p/.env",
-			"--env=PUBLIC_*",
-			"--define",
-			'process.env.CRUST_INTERNAL_BUILD="1"',
 			"--target",
-			"node",
-			"--format",
-			"esm",
-			"--outfile",
-			"/p/dist/cli.js",
-			"--minify",
+			"bun-linux-x64",
 			"/p/src/cli.ts",
 		]);
 	});

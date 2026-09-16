@@ -33,7 +33,7 @@ crust build --target bun-linux-x64
 | `-o, --outfile`               | string                        | none         | Write one binary or bundle to this path instead of staging `.crust/` (one `--target`, or this machine's)                  |
 | `--minify`, `--no-minify`     | boolean                       | none         | Minify the output (default for bun and node; unsupported for deno)                                                        |
 | `--runtime`                   | string: `bun \| deno \| node` | none         | Build runtime (overrides package.json crust.runtime; otherwise inferred from deno.json or @types/node, defaulting to bun) |
-| `-t, --target`                | string, repeatable            | none         | Canonical compiler target(s). Omit to build all platforms for Bun or Deno.                                                |
+| `-t, --target`                | string, repeatable            | none         | Canonical compiler target(s). Omit to stage all Bun/Deno targets, or this machine's target with `--outfile`.              |
 | `--env-file`                  | string, repeatable            | none         | Explicit env file(s) used for build-time constants; repeatable                                                            |
 | `--bun-plugin`                | string, repeatable            | none         | Bun bundler plugin module(s) to apply (default export); repeatable. Bun and Node builds only                              |
 | `--validate`, `--no-validate` | boolean                       | `true`       | Materialize command definitions before compiling; `--no-validate` also skips Extension build hooks                        |

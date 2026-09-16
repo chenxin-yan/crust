@@ -27,9 +27,9 @@ function createPlan(
 	return {
 		cwd,
 		entryPath: join(cwd, "src", "cli.ts"),
-		stageDir: join(cwd, ".stage"),
+		stageDir: join(cwd, ".crust"),
 		validate: false,
-		outDir: join(cwd, "dist"),
+		outDir: join(cwd, ".crust", "artifacts"),
 		userPackageJson: packageJson,
 		...overrides,
 	};
@@ -339,17 +339,16 @@ describe("runDistributeBuild", () => {
 		);
 	});
 
-	it("stages Extension artifact directories into root and platform packages", async () => {
-		const outDir = join(tmpDir, "dist");
-		mkdirSync(join(outDir, "man"), { recursive: true });
-		mkdirSync(join(outDir, "skills", "x"), { recursive: true });
-		writeFileSync(join(outDir, "man", "x.1"), ".Dd generated\n");
-		writeFileSync(join(outDir, "skills", "x", "SKILL.md"), "skill\n");
+	it("stages Extension artifact directories into root and platform packages without wiping them", async () => {
 		const plan = createPlan(
 			tmpDir,
 			{ name: "artifact-stage-cli", version: "0.1.0", bin: { cli: "dist/cli" } },
-			{ validate: true, outDir },
+			{ validate: true },
 		);
+		mkdirSync(join(plan.outDir, "man"), { recursive: true });
+		mkdirSync(join(plan.outDir, "skills", "x"), { recursive: true });
+		writeFileSync(join(plan.outDir, "man", "x.1"), ".Dd generated\n");
+		writeFileSync(join(plan.outDir, "skills", "x", "SKILL.md"), "skill\n");
 
 		await runDistributeBuild(plan, bunDistribution(), io);
 
@@ -358,22 +357,23 @@ describe("runDistributeBuild", () => {
 		);
 		expect(rootPackage.files).toEqual(["bin", "man", "skills"]);
 		expect(rootPackage.man).toEqual(["./man/x.1"]);
+		expect(readFileSync(join(plan.stageDir, "root", "man", "x.1"), "utf8")).toBe(".Dd generated\n");
 		expect(
 			readFileSync(join(plan.stageDir, "darwin-arm64", "bin", "skills", "x", "SKILL.md"), "utf8"),
 		).toBe("skill\n");
+		expect(readFileSync(join(plan.outDir, "man", "x.1"), "utf8")).toBe(".Dd generated\n");
 	});
 
 	it("copies artifact symlinks as links instead of following them out of the project", async () => {
-		const outDir = join(tmpDir, "dist");
-		mkdirSync(join(outDir, "skills"), { recursive: true });
-		// Artifact trees are not containment-checked, so a link to an external file
-		// must not have its contents copied into the staged packages.
-		symlinkSync(join(tmpDir, "LICENSE"), join(outDir, "skills", "leak"), "file");
 		const plan = createPlan(
 			tmpDir,
 			{ name: "artifact-stage-cli", version: "0.1.0", bin: { cli: "dist/cli" } },
-			{ validate: true, outDir },
+			{ validate: true },
 		);
+		mkdirSync(join(plan.outDir, "skills"), { recursive: true });
+		// Artifact trees are not containment-checked, so a link to an external file
+		// must not have its contents copied into the staged packages.
+		symlinkSync(join(tmpDir, "LICENSE"), join(plan.outDir, "skills", "leak"), "file");
 
 		await runDistributeBuild(plan, bunDistribution(), io);
 
@@ -385,42 +385,20 @@ describe("runDistributeBuild", () => {
 		}
 	});
 
-	it("stages artifacts written inside the stage dir without wiping them", async () => {
-		const packageJson = { name: "artifact-stage-cli", version: "0.1.0" };
-		const stageDir = join(tmpDir, ".stage");
-		const outDir = join(stageDir, "artifacts");
-		mkdirSync(join(outDir, "man"), { recursive: true });
-		writeFileSync(join(outDir, "man", "x.1"), ".Dd generated\n");
-
-		await runDistributeBuild(
-			createPlan(tmpDir, packageJson, { stageDir, validate: true, outDir }),
-			bunDistribution(),
-			io,
-		);
-
-		expect(readFileSync(join(stageDir, "root", "man", "x.1"), "utf8")).toBe(".Dd generated\n");
-		expect(readFileSync(join(outDir, "man", "x.1"), "utf8")).toBe(".Dd generated\n");
-		expect(readJson<{ files: string[] }>(join(stageDir, "root", "package.json")).files).toEqual([
-			"bin",
-			"man",
-		]);
-	});
-
 	it("rejects the reserved bin artifact directory", async () => {
-		const packageJson = { name: "artifact-stage-cli", version: "0.1.0" };
-		const outDir = join(tmpDir, "dist-bin");
-		mkdirSync(join(outDir, "bin"), { recursive: true });
-		await expect(
-			runDistributeBuild(
-				createPlan(tmpDir, packageJson, { validate: true, outDir }),
-				bunDistribution(),
-				io,
-			),
-		).rejects.toThrow('Artifact directory "bin"');
+		const plan = createPlan(
+			tmpDir,
+			{ name: "artifact-stage-cli", version: "0.1.0" },
+			{ validate: true },
+		);
+		mkdirSync(join(plan.outDir, "bin"), { recursive: true });
+		await expect(runDistributeBuild(plan, bunDistribution(), io)).rejects.toThrow(
+			'Artifact directory "bin"',
+		);
 	});
 
 	it("stages crust.include directories beside Extension artifacts", async () => {
-		const outDir = join(tmpDir, "dist");
+		const outDir = join(tmpDir, ".crust", "artifacts");
 		mkdirSync(join(outDir, "skills"), { recursive: true });
 		mkdirSync(join(tmpDir, "templates", "base"), { recursive: true });
 		mkdirSync(join(tmpDir, "assets"), { recursive: true });
@@ -432,7 +410,7 @@ describe("runDistributeBuild", () => {
 			crust: { include: ["templates", "./assets"] },
 		};
 
-		const bunPlan = createPlan(tmpDir, packageJson, { validate: true, outDir });
+		const bunPlan = createPlan(tmpDir, packageJson, { validate: true });
 		await runDistributeBuild(bunPlan, bunDistribution(), io);
 		expect(
 			readJson<{ files: string[] }>(join(bunPlan.stageDir, "root", "package.json")).files,
@@ -455,11 +433,10 @@ describe("runDistributeBuild", () => {
 	});
 
 	it("rejects crust.include entries that escape cwd, are missing, or collide", async () => {
-		const outDir = join(tmpDir, "dist");
-		mkdirSync(join(outDir, "skills"), { recursive: true });
+		mkdirSync(join(tmpDir, ".crust", "artifacts", "skills"), { recursive: true });
 		mkdirSync(join(tmpDir, "skills"), { recursive: true });
 		mkdirSync(join(tmpDir, "bin"), { recursive: true });
-		mkdirSync(join(tmpDir, ".stage", "nested"), { recursive: true });
+		mkdirSync(join(tmpDir, ".crust", "nested"), { recursive: true });
 		mkdirSync(join(tmpDir, "skills", "sub"), { recursive: true });
 		mkdirSync(join(tmpDir, "assets"), { recursive: true });
 		symlinkSync(tmpdir(), join(tmpDir, "escape"), "dir");
@@ -472,12 +449,12 @@ describe("runDistributeBuild", () => {
 		symlinkSync(join(tmpDir, "templates", "deep"), join(tmpDir, "hop", "real", "via"), "dir");
 		mkdirSync(join(tmpDir, "hopper"));
 		symlinkSync(join(tmpDir, "hop", "real"), join(tmpDir, "hopper", "link"), "dir");
-		const stage = (include: JsonValue, validate = false, stageDir = join(tmpDir, ".stage")) =>
+		const stage = (include: JsonValue, validate = false, stageDir = join(tmpDir, ".crust")) =>
 			runDistributeBuild(
 				createPlan(
 					tmpDir,
 					{ name: "include-cli", version: "0.1.0", crust: { include } },
-					{ validate, outDir, stageDir },
+					{ validate, stageDir },
 				),
 				bunDistribution(),
 				io,
@@ -489,7 +466,7 @@ describe("runDistributeBuild", () => {
 		await expect(stage(["."])).rejects.toThrow("inside the project root");
 		await expect(stage(["missing"])).rejects.toThrow("is not a directory");
 		await expect(stage(["src/cli.ts"])).rejects.toThrow("is not a directory");
-		await expect(stage([".stage/nested"])).rejects.toThrow("overlaps the build output directory");
+		await expect(stage([".crust/nested"])).rejects.toThrow("overlaps the build output directory");
 		await expect(stage(["assets"], false, join(tmpDir, "assets", "npm"))).rejects.toThrow(
 			"overlaps the build output directory",
 		);

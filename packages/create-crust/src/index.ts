@@ -8,6 +8,10 @@ import { isInGitRepo, runSteps, scaffold } from "@crustjs/create";
 import { spinner } from "@crustjs/progress";
 import { confirm, input, select } from "@crustjs/prompts";
 
+import corePkg from "../../core/package.json" with { type: "json" };
+import crustPkg from "../../crust/package.json" with { type: "json" };
+import extensionsPkg from "../../extensions/package.json" with { type: "json" };
+
 type Runtime = "bun" | "node" | "deno";
 
 // `tsLib`/`tsTypes` are spliced into tsconfig arrays, so they carry their own JSON quoting.
@@ -19,31 +23,13 @@ const RUNTIME_TEMPLATE_CONTEXT = {
 	deno: { run: "deno task", tsLib: '"ESNext", "deno.window"', tsTypes: "" },
 } satisfies Record<Runtime, { run: string; tsLib: string; tsTypes: string }>;
 
-// `crust build` inlines `process.env.PUBLIC_*` at bundle time; scripts/build.ts
-// sets these from the sibling packages. Only literal property access is inlined.
-function requireBuildVersion(name: string, value: string | undefined): string {
-	if (!value) {
-		throw new Error(
-			`${name} is not set. Build with \`bun run build\` or export it before running src/index.ts.`,
-		);
-	}
-	return value;
-}
-
+// The bundle inlines these JSON imports, so scaffolded package.json files pin
+// the sibling package versions from the build that produced create-crust.
 const CRUST_TEMPLATE_VERSION_CONTEXT = {
-	crustCoreVersion: requireBuildVersion(
-		"PUBLIC_CRUST_CORE_VERSION",
-		process.env.PUBLIC_CRUST_CORE_VERSION,
-	),
-	crustExtensionsVersion: requireBuildVersion(
-		"PUBLIC_CRUST_EXTENSIONS_VERSION",
-		process.env.PUBLIC_CRUST_EXTENSIONS_VERSION,
-	),
-	crustCliVersion: requireBuildVersion(
-		"PUBLIC_CRUST_CLI_VERSION",
-		process.env.PUBLIC_CRUST_CLI_VERSION,
-	),
-} satisfies Record<string, string>;
+	crustCoreVersion: corePkg.version,
+	crustExtensionsVersion: extensionsPkg.version,
+	crustCliVersion: crustPkg.version,
+};
 
 // ────────────────────────────────────────────────────────────────────────────
 // Validation
@@ -192,12 +178,6 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 					dest: resolvedDir,
 					context,
 					...(overwrite ? { conflict: "overwrite" } : {}),
-				});
-				await scaffold({
-					template: templatePath("minimal"),
-					dest: resolvedDir,
-					context,
-					conflict: "overwrite",
 				});
 				await scaffold({
 					template: templatePath(`runtime/${runtime}`),

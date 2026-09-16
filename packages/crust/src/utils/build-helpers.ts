@@ -184,14 +184,6 @@ export function resolveTargets<T extends string>(
 	});
 }
 
-export function binaryFilename<T extends string>(
-	table: TargetTable<T>,
-	baseName: string,
-	target: T,
-): string {
-	return `${baseName}-${target}${table.info[target].os === "win32" ? ".exe" : ""}`;
-}
-
 /** True on musl-based Linux (Alpine, Void, …). Mirrors the check in Bun's own npm installer. */
 export function isMuslHost(): boolean {
 	if (process.platform !== "linux") return false;
@@ -289,11 +281,11 @@ export function bunBaselineAlias(target: BunTarget): string | null {
  * fallback runner would otherwise compile `target` by copying itself.
  */
 export function bunCompileTarget(
-	target: BunTarget | undefined,
+	target: BunTarget,
 	runner: BuildRunner,
 	host = hostTarget(BUN_TARGETS),
-): string | undefined {
-	if (target === undefined || target !== host || runner.env.BUN_BE_BUN !== "1") {
+): string {
+	if (target !== host || runner.env.BUN_BE_BUN !== "1") {
 		return target;
 	}
 	return bunBaselineAlias(target) ?? target;
@@ -359,7 +351,7 @@ type BunPluginDriverBuild = {
 	env: "PUBLIC_*";
 	define: typeof CRUST_BUILD_DEFINE;
 } & (
-	| { target: "bun"; compile: { target?: string; outfile: string; autoloadBunfig: false } }
+	| { target: "bun"; compile: { target: string; outfile: string; autoloadBunfig: false } }
 	| { target: "node"; format: "esm" }
 );
 
@@ -456,7 +448,7 @@ async function runBunPluginDriver(
  * @param entryPath - Absolute path to the entry file
  * @param outfilePath - Absolute path to the output binary
  * @param minify - Whether to enable minification
- * @param target - Optional Bun compile target for cross-compilation
+ * @param target - Bun compile target
  * @param envFiles - Optional env files to load during build
  * @param bunPlugins - Bun bundler plugin specifiers; when present the build
  *   runs through the generated `Bun.build` driver instead of `bun build`
@@ -466,7 +458,7 @@ export async function execBuild(
 	entryPath: string,
 	outfilePath: string,
 	minify: boolean,
-	target: BunTarget | undefined,
+	target: BunTarget,
 	envFiles: readonly string[],
 	cwd: string,
 	bunPlugins: readonly string[] = [],
@@ -482,7 +474,7 @@ export async function execBuild(
 				define: CRUST_BUILD_DEFINE,
 				target: "bun",
 				compile: {
-					...(compileTarget ? { target: compileTarget } : {}),
+					target: compileTarget,
 					outfile: outfilePath,
 					autoloadBunfig: false,
 				},
@@ -502,7 +494,7 @@ export function createBunCompileArgs(
 	entryPath: string,
 	outfilePath: string,
 	minify: boolean,
-	target?: string,
+	target: string,
 	envFiles: readonly string[] = [],
 ): string[] {
 	return [
@@ -519,12 +511,13 @@ export function createBunCompileArgs(
 		"--outfile",
 		outfilePath,
 		...(minify ? ["--minify"] : []),
-		...(target ? ["--target", target] : []),
+		"--target",
+		target,
 		entryPath,
 	];
 }
 
-export function createNodeBuildArgs(
+function createNodeBuildArgs(
 	entryPath: string,
 	outfilePath: string,
 	minify: boolean,

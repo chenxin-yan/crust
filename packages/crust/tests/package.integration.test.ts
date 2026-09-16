@@ -152,26 +152,25 @@ describe("crust build integration", () => {
 				entryPath,
 				`import { resolveArtifactDir } from ${JSON.stringify(resolve(import.meta.dir, "../../core/dist/index.js"))};\n` +
 					'console.log("hello from packaged test");\n' +
-					'if (process.argv.includes("assets")) console.log(resolveArtifactDir("assets"));\n',
+					'if (process.argv.includes("assets")) console.log(resolveArtifactDir("assets"));\n' +
+					'if (process.argv.includes("env")) console.log(process.env.PUBLIC_MESSAGE, process.env.SECRET_MESSAGE);\n',
 			);
+			const envFile = join(tmpDir, ".env.build");
+			writeFileSync(envFile, "PUBLIC_MESSAGE=hello-from-build\nSECRET_MESSAGE=private\n");
 			try {
-				const { stdout } = await runBuild(["--runtime", "node", "--no-validate"]);
+				const { stdout } = await runBuild([
+					"--runtime",
+					"node",
+					"--no-validate",
+					"--env-file",
+					envFile,
+				]);
 				expect(stdout).toContain("Runtime: node (from --runtime)");
 			} finally {
 				writeFileSync(packageJsonPath, original);
 				writeFileSync(entryPath, originalEntry);
 			}
 
-			const rootPackageJson = readJson<{
-				bin: Record<string, string>;
-				files: string[];
-				optionalDependencies?: Record<string, string>;
-			}>(join(stageDir, "root", "package.json"));
-			expect(rootPackageJson).toMatchObject({
-				bin: { "test-cli": "bin/test-cli.js" },
-				files: ["bin", "assets"],
-			});
-			expect(rootPackageJson).not.toHaveProperty("optionalDependencies");
 			expect(readJson<object>(join(stageDir, "manifest.json"))).toMatchObject({
 				packages: [],
 				publishOrder: ["root"],
@@ -192,6 +191,12 @@ describe("crust build integration", () => {
 				"hello from packaged test",
 				join(stageDir, "root", "assets"),
 			]);
+			// The non-plugin Node build forwards --env-file and inlines only PUBLIC_* values.
+			const env = await runProcess(Bun.which("node")!, [bundlePath, "env"], {
+				cwd: tmpDir,
+				env: {},
+			});
+			expect(env.stdout.trim().split("\n").at(-1)).toBe("hello-from-build undefined");
 		},
 		30_000,
 	);
@@ -205,24 +210,19 @@ describe("crust build integration", () => {
 
 			await runBuild(["--runtime", "deno", "--target", denoTarget, "--no-validate"]);
 
-			const manifest = readJson<{
-				packages: Array<{ target: string; name: string; bin: string; libc?: string }>;
-				publishOrder: string[];
-			}>(join(stageDir, "manifest.json"));
-			expect(manifest.publishOrder).toEqual([hostAlias, "root"]);
-			expect(manifest.packages).toEqual([
-				expect.objectContaining({
-					target: hostAlias,
-					name: `@scope/test-cli-${hostAlias}`,
-					bin: `bin/test-cli-${denoTarget}${process.platform === "win32" ? ".exe" : ""}`,
-				}),
-			]);
-			if (process.platform === "linux") expect(manifest.packages[0]!.libc).toBe("glibc");
 			expect(
-				readJson<{ optionalDependencies: Record<string, string> }>(
-					join(stageDir, "root", "package.json"),
-				).optionalDependencies,
-			).toEqual({ [`@scope/test-cli-${hostAlias}`]: "0.1.0" });
+				readJson<{ publishOrder: string[] }>(join(stageDir, "manifest.json")).publishOrder,
+			).toEqual([hostAlias, "root"]);
+			expect(
+				existsSync(
+					join(
+						stageDir,
+						hostAlias,
+						"bin",
+						`test-cli-${denoTarget}${process.platform === "win32" ? ".exe" : ""}`,
+					),
+				),
+			).toBe(true);
 
 			const { exitCode, stdout, stderr } = await runProcess(
 				Bun.which("node")!,

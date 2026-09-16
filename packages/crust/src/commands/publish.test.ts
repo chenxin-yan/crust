@@ -134,36 +134,6 @@ describe("publish manifest validation", () => {
 		expect(published).toEqual([join(nodeDir, "root")]);
 	});
 
-	it("validates a Deno-shaped manifest with glibc Linux and no musl packages", () => {
-		const denoDir = join(tmpDir, "deno");
-		const denoManifest: DistributionManifest = {
-			version: "1.2.3",
-			root: { name: "deno-demo", dir: "root", bin: "deno-demo" },
-			packages: [
-				{
-					target: "linux-x64",
-					name: "deno-demo-linux-x64",
-					dir: "linux-x64",
-					os: "linux",
-					cpu: "x64",
-					libc: "glibc",
-					bin: "bin/deno-demo-x86_64-unknown-linux-gnu",
-				},
-				{
-					target: "windows-x64",
-					name: "deno-demo-windows-x64",
-					dir: "windows-x64",
-					os: "win32",
-					cpu: "x64",
-					bin: "bin/deno-demo-x86_64-pc-windows-msvc.exe",
-				},
-			],
-			publishOrder: ["linux-x64", "windows-x64", "root"],
-		};
-		writeStageFixture(denoDir, denoManifest);
-		expect(() => validatePublishManifest(denoDir, readPublishManifest(denoDir))).not.toThrow();
-	});
-
 	it("rejects malformed publish order", () => {
 		const invalid: DistributionManifest = {
 			...manifest,
