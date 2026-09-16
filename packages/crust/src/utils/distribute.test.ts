@@ -412,6 +412,15 @@ describe("runDistributeBuild", () => {
 		mkdirSync(join(tmpDir, "skills", "sub"), { recursive: true });
 		mkdirSync(join(tmpDir, "assets"), { recursive: true });
 		symlinkSync(tmpdir(), join(tmpDir, "escape"), "dir");
+		// Nested escapes: a symlinked file directly inside the include dir, and one
+		// only reachable through an in-project symlinked directory.
+		mkdirSync(join(tmpDir, "templates", "deep"), { recursive: true });
+		symlinkSync(join(tmpDir, "LICENSE"), join(tmpDir, "templates", "ok.txt"), "file");
+		symlinkSync(tmpdir(), join(tmpDir, "templates", "deep", "leak"), "dir");
+		mkdirSync(join(tmpDir, "hop", "real"), { recursive: true });
+		symlinkSync(join(tmpDir, "templates", "deep"), join(tmpDir, "hop", "real", "via"), "dir");
+		mkdirSync(join(tmpDir, "hopper"));
+		symlinkSync(join(tmpDir, "hop", "real"), join(tmpDir, "hopper", "link"), "dir");
 		const stage = (include: JsonValue, validate = false, stageDir = join(tmpDir, ".stage")) =>
 			runDistributeBuild(
 				createPlan(
@@ -434,6 +443,12 @@ describe("runDistributeBuild", () => {
 			"overlaps --stage-dir",
 		);
 		await expect(stage(["escape"])).rejects.toThrow("resolves outside the project root");
+		await expect(stage(["templates"])).rejects.toThrow(
+			`resolves outside the project root: ${join("templates", "deep", "leak")}`,
+		);
+		await expect(stage(["hopper"])).rejects.toThrow(
+			`resolves outside the project root: ${join("hopper", "link", "via", "leak")}`,
+		);
 		await expect(stage(["bin"])).rejects.toThrow("generated npm bin directory");
 		await expect(stage(["src", "src"])).rejects.toThrow("already staged");
 		await expect(stage(["skills"], true)).rejects.toThrow("Extension artifact directory");

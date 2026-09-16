@@ -89,7 +89,7 @@ With `--package`, Bun and Deno stage a root package with a Node launcher plus on
 | `crust.runtime` | Build runtime when `--runtime` is omitted. Without it, `deno.json`/`deno.jsonc` selects Deno and `@types/node` without `@types/bun` selects Node; otherwise Bun. |
 | `crust.include` | Directories relative to the project root that `--package` copies into the staged root package (listed in `files`) and into each platform package's `bin/`.       |
 
-`crust.include` entries must be existing directories inside the project, cannot be named `bin`, and cannot repeat an Extension artifact directory name. Plain `crust build` ignores them.
+`crust.include` entries must be existing directories inside the project (symlinks are copied dereferenced, so every symlink inside them must also resolve inside the project), cannot be named `bin`, and cannot repeat an Extension artifact directory name. Plain `crust build` ignores them.
 
 ## Extension artifacts
 

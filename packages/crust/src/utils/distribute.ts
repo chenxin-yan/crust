@@ -669,13 +669,10 @@ function collectIncludeDirs(
 				`package.json crust.include entry ${JSON.stringify(entry)} is not a directory: ${dir}`,
 			);
 		}
-		// The lexical check above passes a symlink to anywhere; the staged copy is
-		// dereferenced, so its real location must be inside the project too.
-		if (!isWithin(realpathSync(cwd), realpathSync(dir))) {
-			throw new Error(
-				`package.json crust.include entry ${JSON.stringify(entry)} resolves outside the project root: ${realpathSync(dir)}`,
-			);
-		}
+		// The lexical check above passes a symlink to anywhere, and the staged copy
+		// dereferences every symlink it meets, so the directory and everything
+		// reachable inside it must really live inside the project too.
+		assertResolvesInsideProject(cwd, entry, dir);
 		// Staging wipes stageDir first, and copying a directory into itself fails midway.
 		if (isWithin(stageDir, dir) || isWithin(dir, stageDir)) {
 			throw new Error(
@@ -704,6 +701,28 @@ function collectIncludeDirs(
 		includeDirs.push(posixName);
 	}
 	return includeDirs;
+}
+
+/**
+ * Walks `dir` the way the dereferencing copy will (through symlinked
+ * directories) and rejects any path whose real location leaves the project.
+ */
+function assertResolvesInsideProject(cwd: string, entry: string, dir: string): void {
+	const realCwd = realpathSync(cwd);
+	const seen = new Set<string>();
+	const walk = (path: string): void => {
+		const real = realpathSync(path);
+		if (!isWithin(realCwd, real)) {
+			throw new Error(
+				`package.json crust.include entry ${JSON.stringify(entry)} resolves outside the project root: ${relative(cwd, path)} -> ${real}`,
+			);
+		}
+		// A symlink back to an ancestor would otherwise recurse forever.
+		if (seen.has(real) || !statSync(path).isDirectory()) return;
+		seen.add(real);
+		for (const child of readdirSync(path)) walk(join(path, child));
+	};
+	walk(dir);
 }
 
 type CollectedArtifacts = { names: string[]; manPages: string[] };
