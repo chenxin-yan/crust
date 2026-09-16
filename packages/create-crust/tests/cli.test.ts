@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, delimiter, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import corePackage from "../../core/package.json";
@@ -237,6 +237,32 @@ describe("create-crust CLI", () => {
 		const readme = readFileSync(join(projectDir, "README.md"), "utf-8");
 		expect(readme).toContain("deno task dev");
 		expect(readme).not.toContain("bun run");
+	}, 30_000);
+
+	it("installs a Deno runtime project with deno install", async () => {
+		const tempRoot = makeTempRoot("create-crust-deno-install");
+		const projectDir = join(tempRoot, "deno-cli");
+		// A fake `deno` on PATH records its argv so the test proves the CLI runs
+		// `deno install` instead of the detected npm-style package manager.
+		const binDir = join(tempRoot, "bin");
+		const argvLog = join(tempRoot, "deno-argv.txt");
+		mkdirSync(binDir);
+		if (process.platform === "win32") {
+			writeFileSync(join(binDir, "deno.cmd"), `@echo %*> "${argvLog}"\r\n`);
+		} else {
+			const shim = join(binDir, "deno");
+			writeFileSync(shim, `#!/bin/sh\necho "$@" > "${argvLog}"\n`);
+			chmodSync(shim, 0o755);
+		}
+
+		const result = await runCreateCrust(
+			[projectDir, "--runtime", "deno", "--install", "--no-git"],
+			{ env: { PATH: `${binDir}${delimiter}${process.env.PATH}` } },
+		);
+
+		expect(result.exitCode).toBe(0);
+		expect(readFileSync(argvLog, "utf-8").trim()).toBe("install");
+		expect(existsSync(join(projectDir, "package-lock.json"))).toBe(false);
 	}, 30_000);
 
 	it("fails with a clear error for an invalid runtime", async () => {

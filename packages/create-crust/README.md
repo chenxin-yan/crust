@@ -26,7 +26,7 @@ create-crust [directory] [--runtime bun|node|deno] [--install|--no-install] [--g
 
 - `directory` sets the destination; otherwise the directory prompt defaults to `my-cli`.
 - `--runtime` selects the runtime the project develops and builds for: `bun`, `node`, or `deno`. The default is `bun`.
-- `--install` / `--no-install` installs or skips dependencies. The default is to install.
+- `--install` / `--no-install` installs or skips dependencies. The default is to install. Deno projects install with `deno install`; the other runtimes use the detected package manager.
 - `--git` / `--no-git` initializes or skips a Git repository when the destination is not already inside one. The default is to initialize.
 - When the destination requires an overwrite decision, `--overwrite` overwrites conflicting files without confirmation; `--no-overwrite` aborts without prompting. The default is not to overwrite.
 

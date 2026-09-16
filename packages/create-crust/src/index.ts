@@ -193,7 +193,13 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 		});
 
 		if (installDeps) {
-			await runSteps([{ type: "install" }], resolvedDir);
+			// The generic install step only detects npm-style package managers and falls
+			// back to npm, which a Deno-only machine lacks; Deno installs package.json
+			// dependencies itself.
+			await runSteps(
+				[runtime === "deno" ? { type: "command", cmd: "deno install" } : { type: "install" }],
+				resolvedDir,
+			);
 		}
 
 		if (initGit) {
