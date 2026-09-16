@@ -8,6 +8,7 @@ import { defineExtensionId } from "../identity.ts";
 import {
 	type ContextBag,
 	type ContextSetup,
+	contextSources,
 	createContextResolver,
 	defineContext,
 	FallbackAsyncDisposableStack,
@@ -756,6 +757,28 @@ describe("Context dependency runtime boundaries", () => {
 });
 
 describe("lazy Context bags", () => {
+	it("exposes its sources under the contextSources symbol without pulling anything", async () => {
+		let built = 0;
+		const db = defineContext("db", () => {
+			built += 1;
+			return "db";
+		});
+		const instance = db();
+		await using disposal = new AsyncDisposableStack();
+		const bag = createContextResolver(
+			[instance],
+			{ stdout: () => {}, stderr: () => {} },
+			disposal,
+		).bag<{ db: string }>([instance]);
+
+		expect(instance.factory).toBe(db);
+		expect(bag[contextSources]).toEqual([instance]);
+		expect(Object.isFrozen(bag[contextSources])).toBe(true);
+		expect(Object.keys(bag)).toEqual(["db"]);
+		expect(Object.getOwnPropertyDescriptor(bag, contextSources)?.enumerable).toBe(false);
+		expect(built).toBe(0);
+	});
+
 	it("memoizes a degraded value a setup returned after catching the flag-phase rejection", async () => {
 		const token = defineFlag("token", { type: "string" });
 		const gate = defineContext("gate", { flags: [token] }, () => "real");

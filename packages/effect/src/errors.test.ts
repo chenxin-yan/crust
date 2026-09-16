@@ -10,9 +10,13 @@ import {
 	type CrustTaggedError,
 	CrustValidationError,
 	fromCrustError,
-	runEffect,
 	tryCrust,
+	unwrapExit,
 } from "./errors.ts";
+
+/** Run an Effect and unwrap its Exit the way handler() does. */
+const runAndUnwrap = async <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
+	unwrapExit(await Effect.runPromiseExit(effect));
 
 /** A real Core PARSE failure: an unknown flag passed to `run()`. */
 async function realParseError(): Promise<CrustError<"PARSE">> {
@@ -92,7 +96,7 @@ describe("tagged errors", () => {
 				Effect.fail(tagged).pipe(Effect.catchTag(tag, (e) => Effect.succeed(e))),
 			);
 			expect(caught).toBe(tagged);
-			await expect(runEffect(Effect.fail(tagged))).rejects.toBe(error);
+			await expect(runAndUnwrap(Effect.fail(tagged))).rejects.toBe(error);
 		},
 	);
 
@@ -125,20 +129,20 @@ describe("tagged errors", () => {
 	});
 });
 
-describe("runEffect", () => {
+describe("unwrapExit", () => {
 	it("rethrows the original CrustError behind a tagged failure", async () => {
 		const original = new CrustError("PARSE", "bad");
-		await expect(runEffect(Effect.fail(fromCrustError(original)))).rejects.toBe(original);
+		await expect(runAndUnwrap(Effect.fail(fromCrustError(original)))).rejects.toBe(original);
 	});
 
 	it("rethrows plain failures and defects as themselves", async () => {
 		const failed = new Error("failed");
 		const died = new Error("died");
-		await expect(runEffect(Effect.fail(failed))).rejects.toBe(failed);
-		await expect(runEffect(Effect.die(died))).rejects.toBe(died);
+		await expect(runAndUnwrap(Effect.fail(failed))).rejects.toBe(failed);
+		await expect(runAndUnwrap(Effect.die(died))).rejects.toBe(died);
 	});
 
 	it("rethrows interruption as an AbortError", async () => {
-		await expect(runEffect(Effect.interrupt)).rejects.toMatchObject({ name: "AbortError" });
+		await expect(runAndUnwrap(Effect.interrupt)).rejects.toMatchObject({ name: "AbortError" });
 	});
 });

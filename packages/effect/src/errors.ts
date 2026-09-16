@@ -60,7 +60,7 @@ function isCrustTaggedError(value: unknown): value is CrustTaggedError {
 }
 
 /** Matches Core's cancellation check: prompts reject with a `DOMException` named `AbortError`. */
-export function isAbortError(value: unknown): value is Error {
+function isAbortError(value: unknown): value is Error {
 	return value instanceof Error && value.name === "AbortError";
 }
 
@@ -96,9 +96,4 @@ function unwrapCause(cause: Cause.Cause<unknown>): never {
 export function unwrapExit<A, E>(exit: Exit.Exit<A, E>): A {
 	if (Exit.isSuccess(exit)) return exit.value;
 	return unwrapCause(exit.cause);
-}
-
-/** Run an Effect to a Promise with the same unwrapping as {@link unwrapExit}. */
-export async function runEffect<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
-	return unwrapExit(await Effect.runPromiseExit(effect));
 }
