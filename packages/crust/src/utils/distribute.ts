@@ -481,7 +481,6 @@ function stageDistributionPackages(
 	}
 
 	copyLicense(cwd, [rootDir, ...targets.map((target) => target.packageDir)]);
-	writeDistributionManifest(stageDir, metadata, targets);
 }
 
 export type DistributeBuildPlan = {
@@ -593,6 +592,9 @@ export async function runDistributeBuild<T extends string>(
 		await distribution.execute(plan.entryPath, rootBinPath);
 	}
 
+	// Written last: `crust publish` treats manifest.json as proof of a complete
+	// build, so a failed compile must not leave one behind.
+	writeDistributionManifest(plan.stageDir, metadata, distributionTargets);
 	const manifestPath = join(plan.stageDir, "manifest.json");
 	io.stdout(
 		`\n${green("✓")} Staged ${bold(`${distributionTargets.length + 1}`)} npm package(s) successfully:`,

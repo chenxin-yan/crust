@@ -309,6 +309,25 @@ describe("runDistributeBuild", () => {
 		);
 	});
 
+	it("writes manifest.json only after every target compiles", async () => {
+		const plan = createPlan(tmpDir, { name: "my-cli", version: "0.1.0", bin: { cli: "dist/cli" } });
+		const failSecond = async (entryPath: string, outfilePath: string, target: BunTarget) => {
+			if (target === "bun-linux-x64") throw new Error("compile failed");
+			await fakeExecutor(entryPath, outfilePath);
+		};
+		await expect(
+			runDistributeBuild(
+				plan,
+				bunDistribution(["bun-darwin-arm64", "bun-linux-x64"], failSecond),
+				io,
+			),
+		).rejects.toThrow(/compile failed/);
+		expect(existsSync(join(plan.stageDir, "darwin-arm64", "bin", "my-cli-bun-darwin-arm64"))).toBe(
+			true,
+		);
+		expect(existsSync(join(plan.stageDir, "manifest.json"))).toBe(false);
+	});
+
 	it("rejects multiple bin entries through staged package planning", async () => {
 		const plan = createPlan(tmpDir, {
 			name: "my-cli",
