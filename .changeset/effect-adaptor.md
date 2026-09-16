@@ -1,5 +1,5 @@
 ---
-"@crustjs/effect": minor
+"@crustjs/effect": patch
 ---
 
 Add `@crustjs/effect`, an Effect.ts v4 adaptor for Crust.
