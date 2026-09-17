@@ -13,17 +13,17 @@ let originalBuildOutDir: string | undefined;
 beforeEach(async () => {
 	tmpDir = await mkdtemp(join(tmpdir(), "crust-artifacts-"));
 	originalArgv1 = process.argv[1];
-	originalMarker = process.env.CRUST_BUILD;
+	originalMarker = process.env.CRUST_INTERNAL_BUILD;
 	originalBuildOutDir = process.env[BUILD_OUT_DIR_ENV];
-	delete process.env.CRUST_BUILD;
+	delete process.env.CRUST_INTERNAL_BUILD;
 	delete process.env[BUILD_OUT_DIR_ENV];
 });
 
 afterEach(async () => {
 	if (originalArgv1 === undefined) process.argv.length = 1;
 	else process.argv[1] = originalArgv1;
-	if (originalMarker === undefined) delete process.env.CRUST_BUILD;
-	else process.env.CRUST_BUILD = originalMarker;
+	if (originalMarker === undefined) delete process.env.CRUST_INTERNAL_BUILD;
+	else process.env.CRUST_INTERNAL_BUILD = originalMarker;
 	if (originalBuildOutDir === undefined) delete process.env[BUILD_OUT_DIR_ENV];
 	else process.env[BUILD_OUT_DIR_ENV] = originalBuildOutDir;
 	await rm(tmpDir, { recursive: true, force: true });
@@ -78,7 +78,7 @@ describe("resolveArtifactDir", () => {
 	it("detects a Windows Bun compiled binary even when the crust build marker is set", () => {
 		// Windows standalone Bun mounts the embedded entry at B:/~BUN/, not /$bunfs/.
 		process.argv[1] = join(tmpDir, "elsewhere", "cli.ts");
-		process.env.CRUST_BUILD = "1";
+		process.env.CRUST_INTERNAL_BUILD = "1";
 		const result = withExecPath(join(tmpDir, "bin", "cli.exe"), () =>
 			withBunMain("B:/~BUN/root/cli.exe", () => resolveArtifactDir("skills")),
 		);

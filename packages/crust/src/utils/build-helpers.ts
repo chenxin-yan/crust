@@ -349,9 +349,9 @@ export function resolveBunPluginSource(specifier: string, cwd: string): string {
  * it is internal to crust, never user-set. Deno compile has no define, but
  * standalone Deno binaries are detected directly.
  */
-export const CRUST_BUILD_DEFINE = { "process.env.CRUST_BUILD": '"1"' } as const;
+export const CRUST_BUILD_DEFINE = { "process.env.CRUST_INTERNAL_BUILD": '"1"' } as const;
 // The value keeps its quotes so bun inlines a string literal, not a number.
-const CRUST_BUILD_DEFINE_ARG = 'process.env.CRUST_BUILD="1"';
+const CRUST_BUILD_DEFINE_ARG = 'process.env.CRUST_INTERNAL_BUILD="1"';
 
 type BunPluginDriverBuild = {
 	entrypoints: [string];

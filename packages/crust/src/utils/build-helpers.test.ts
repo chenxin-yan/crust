@@ -89,7 +89,9 @@ describe("createBunPluginDriverScript", () => {
 		};
 		const script = createBunPluginDriverScript(options);
 		expect(embeddedOptions(script)).toEqual(options);
-		expect(embeddedOptions(script).build.define).toEqual({ "process.env.CRUST_BUILD": '"1"' });
+		expect(embeddedOptions(script).build.define).toEqual({
+			"process.env.CRUST_INTERNAL_BUILD": '"1"',
+		});
 		expect(script).toContain('"autoloadBunfig":false');
 		expect(script).toContain("throw: false");
 		expect(script).toContain("must default-export a Bun bundler plugin ({ name, setup })");
@@ -316,7 +318,7 @@ describe("createBunCompileArgs", () => {
 			"/p/.env",
 			"--env=PUBLIC_*",
 			"--define",
-			'process.env.CRUST_BUILD="1"',
+			'process.env.CRUST_INTERNAL_BUILD="1"',
 			"--outfile",
 			"/p/dist/cli",
 			"--minify",
@@ -330,7 +332,7 @@ describe("createBunCompileArgs", () => {
 			"--no-compile-autoload-bunfig",
 			"--env=PUBLIC_*",
 			"--define",
-			'process.env.CRUST_BUILD="1"',
+			'process.env.CRUST_INTERNAL_BUILD="1"',
 			"--outfile",
 			"/p/dist/cli",
 			"/p/src/cli.ts",
@@ -346,7 +348,7 @@ describe("createNodeBuildArgs", () => {
 			"/p/.env",
 			"--env=PUBLIC_*",
 			"--define",
-			'process.env.CRUST_BUILD="1"',
+			'process.env.CRUST_INTERNAL_BUILD="1"',
 			"--target",
 			"node",
 			"--format",

@@ -183,7 +183,7 @@ describe("crust build integration", () => {
 			const bundle = readFileSync(bundlePath, "utf8");
 			expect(bundle.startsWith("#!/usr/bin/env node\n")).toBe(true);
 			// The marker is inlined as a literal, not read from the environment.
-			expect(bundle).not.toContain("process.env.CRUST_BUILD");
+			expect(bundle).not.toContain("process.env.CRUST_INTERNAL_BUILD");
 			const { exitCode, stdout } = await runProcess(Bun.which("node")!, [bundlePath, "assets"], {
 				cwd: tmpDir,
 			});

@@ -60,7 +60,7 @@ export function resolveArtifactDir(name: string): string {
 	// `crust build` defines this literal in every Bun/Node bundle it produces so a
 	// staged bundle can be told apart from source. Kept as a literal property
 	// access so the bundler can replace it.
-	if (process.env.CRUST_BUILD === "1") {
+	if (process.env.CRUST_INTERNAL_BUILD === "1") {
 		// import.meta.url is the bundle itself (everything is inlined) and Node
 		// realpaths it, unlike process.argv[1] through a node_modules/.bin symlink.
 		return resolve(fileURLToPath(import.meta.url), "..", "..", name);

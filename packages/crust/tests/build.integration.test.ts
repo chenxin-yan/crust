@@ -376,7 +376,7 @@ await new Crust("marker-cli").action(() => console.log(JSON.stringify({
   marker: "__MARKER__",
   publicValue: process.env.PUBLIC_MESSAGE,
   secretValue: process.env.SECRET_TOKEN ?? null,
-  crustBuild: process.env.CRUST_BUILD,
+  crustBuild: process.env.CRUST_INTERNAL_BUILD,
 }))).execute();
 `,
 		);

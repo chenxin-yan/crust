@@ -624,4 +624,4 @@ import { readdirSync } from "node:fs";
 const templates = readdirSync(resolveArtifactDir("templates"));
 ```
 
-`crust build` marks the Bun and Node bundles it produces by defining `process.env.CRUST_BUILD` as the literal `"1"`, so `resolveArtifactDir()` can tell a staged bundle from source; standalone Deno binaries are detected directly. `CRUST_BUILD` is reserved: every `process.env.CRUST_BUILD` read in your CLI is replaced at bundle time, regardless of the runtime environment.
+`crust build` marks the Bun and Node bundles it produces by defining `process.env.CRUST_INTERNAL_BUILD` as the literal `"1"`, so `resolveArtifactDir()` can tell a staged bundle from source; standalone Deno binaries are detected directly. `CRUST_INTERNAL_BUILD` is reserved: every `process.env.CRUST_INTERNAL_BUILD` read in your CLI is replaced at bundle time, regardless of the runtime environment.
