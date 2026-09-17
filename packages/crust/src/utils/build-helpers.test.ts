@@ -419,15 +419,8 @@ describe("buildEntrypoint", () => {
 		const directory = await mkdtemp(join(tmpdir(), "crust-entry-artifacts-test-"));
 		tempDirs.push(directory);
 		const entry = join(directory, "cli.ts");
-		// Running from source, the skills extension reads the last build's
-		// `.crust/root/skills` under the package root found above the entry.
-		const source = join(directory, ".crust", "root", "skills");
 		const outDir = join(directory, "dist");
 		await Bun.write(join(directory, "package.json"), '{"name":"demo"}');
-		await Bun.write(
-			join(source, "demo", "SKILL.md"),
-			"---\nname: demo\ndescription: Demo workflows\n---\n",
-		);
 		const skillsUrl = pathToFileURL(resolve(import.meta.dir, "../../../skills/src/index.ts")).href;
 		const manUrl = pathToFileURL(resolve(import.meta.dir, "../../../man/src/index.ts")).href;
 		await writeFile(
@@ -442,11 +435,13 @@ describe("buildEntrypoint", () => {
 		// sources are relative to that project.
 		await buildEntrypoint(entry, outDir, [], io, directory);
 
+		// The man hook runs after the skills hook and reads the skill it just wrote
+		// into the build output, advertised relative to the project root.
 		const manual = await Bun.file(join(outDir, "man", "demo.1")).text();
 		const packagedSkill = await Bun.file(join(outDir, "skills", "demo", "SKILL.md")).text();
-		expect(manual).toContain("Demo workflows");
-		expect(manual).not.toContain(source);
-		expect(packagedSkill).not.toContain(source);
+		expect(manual).toContain(`Source: ${join("dist", "skills", "demo")}`);
+		expect(manual).not.toContain(directory);
+		expect(packagedSkill).not.toContain(directory);
 	});
 
 	it("attributes Extension build failures", async () => {

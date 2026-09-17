@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { BUILD_OUT_DIR_ENV, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
 import { skill } from "@crustjs/skills";
 
@@ -37,12 +37,9 @@ describe("man Extension", () => {
 		expect(output).not.toContain(outDir);
 	});
 
-	it("renders skill sources created by an earlier build hook", async () => {
+	it("renders the skill the skills build hook wrote in the same build", async () => {
 		const root = await mkdtemp(join(tmpdir(), "crust-man-extension-"));
 		directories.push(root);
-		// The skills extension reads `<package root>/.crust/root/skills`, with the
-		// package root found above process.argv[1].
-		const source = join(root, ".crust", "root", "skills");
 		await writeFile(join(root, "package.json"), '{"name":"demo"}');
 		const originalArgv1 = process.argv[1];
 		process.argv[1] = join(root, "cli.ts");
@@ -50,21 +47,13 @@ describe("man Extension", () => {
 		const snapshotPath = join(root, "snapshot.json");
 		const originalExit = process.exit;
 		process.env[SNAPSHOT_PATH_ENV] = snapshotPath;
+		// crust build has wiped .crust by now, so the skills extension must read the
+		// build output directory or the man page reports its own skill as missing.
 		process.env[BUILD_OUT_DIR_ENV] = outDir;
 		process.exit = (code?: number) => {
 			throw new Error(`process.exit(${code ?? "undefined"}) was called during snapshot`);
 		};
-		const producer = defineExtension(defineExtensionId("skill-producer"), {
-			async build() {
-				const directory = join(source, "generated");
-				await mkdir(directory, { recursive: true });
-				await writeFile(
-					join(directory, "SKILL.md"),
-					"---\nname: generated\ndescription: Generated during build\n---\n",
-				);
-			},
-		});
-		const app = new Crust("demo", { description: "Demo CLI" }).extend(producer, skill({}), man());
+		const app = new Crust("demo", { description: "Demo CLI" }).extend(skill({}), man());
 
 		try {
 			await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
@@ -77,8 +66,8 @@ describe("man Extension", () => {
 		}
 
 		const output = await readFile(join(outDir, "man", "demo.1"), "utf8");
-		expect(output).toContain("Generated during build");
-		expect(output).not.toContain("unavailable");
+		expect(output).toContain(`Source: ${join(outDir, "skills", "demo")}`);
+		expect(output).not.toContain("not found");
 	});
 
 	it("honors a configured installed name", async () => {

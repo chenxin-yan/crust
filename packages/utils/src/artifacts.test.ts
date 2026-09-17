@@ -3,17 +3,20 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { resolveArtifactDir } from "./artifacts.ts";
+import { BUILD_OUT_DIR_ENV, resolveArtifactDir } from "./artifacts.ts";
 
 let tmpDir: string;
 let originalArgv1: string | undefined;
 let originalMarker: string | undefined;
+let originalBuildOutDir: string | undefined;
 
 beforeEach(async () => {
 	tmpDir = await mkdtemp(join(tmpdir(), "crust-artifacts-"));
 	originalArgv1 = process.argv[1];
 	originalMarker = process.env.CRUST_BUILD;
+	originalBuildOutDir = process.env[BUILD_OUT_DIR_ENV];
 	delete process.env.CRUST_BUILD;
+	delete process.env[BUILD_OUT_DIR_ENV];
 });
 
 afterEach(async () => {
@@ -21,6 +24,8 @@ afterEach(async () => {
 	else process.argv[1] = originalArgv1;
 	if (originalMarker === undefined) delete process.env.CRUST_BUILD;
 	else process.env.CRUST_BUILD = originalMarker;
+	if (originalBuildOutDir === undefined) delete process.env[BUILD_OUT_DIR_ENV];
+	else process.env[BUILD_OUT_DIR_ENV] = originalBuildOutDir;
 	await rm(tmpDir, { recursive: true, force: true });
 });
 
@@ -93,6 +98,14 @@ describe("resolveArtifactDir", () => {
 		await mkdir(join(tmpDir, "src"));
 		process.argv[1] = join(tmpDir, "src", "cli.ts");
 		expect(resolveArtifactDir("skills")).toBe(join(tmpDir, ".crust", "root", "skills"));
+	});
+
+	it("resolves the build output directory while crust build prepares the snapshot", async () => {
+		// .crust/root is wiped at this point; sections must read what earlier hooks wrote.
+		await writeFile(join(tmpDir, "package.json"), "{}");
+		process.argv[1] = join(tmpDir, "src", "cli.ts");
+		process.env[BUILD_OUT_DIR_ENV] = join(tmpDir, ".crust", "artifacts");
+		expect(resolveArtifactDir("skills")).toBe(join(tmpDir, ".crust", "artifacts", "skills"));
 	});
 
 	it("names the entrypoint when no package root is found from source", async () => {

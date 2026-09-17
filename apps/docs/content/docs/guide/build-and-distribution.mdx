@@ -191,7 +191,7 @@ grep -a -o 'private-value' ./deploy || echo 'private-value: not embedded'
 # private-value: not embedded
 ```
 
-For Bun and Node builds, `--env-file` passes explicit files to the compiler, embeds only `PUBLIC_*` values, and reaches snapshot preparation.
+For Bun and Node builds, `--env-file` passes explicit files to the compiler, embeds only `PUBLIC_*` values, and reaches snapshot preparation. The one other name the bundler rewrites is the reserved [`CRUST_BUILD`](/docs/api/crust#resolveartifactdirname) marker.
 
 <Callout type="warn">
   Embedded `PUBLIC_*` values are visible in the output. Keep secrets in runtime environment

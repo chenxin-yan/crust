@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { dirname, join, posix, win32 } from "node:path";
 
+import { BUILD_OUT_DIR_ENV } from "@crustjs/utils/artifacts";
 import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
 
 import { createContextResolver, DisposalStack } from "../api/context.ts";
@@ -55,7 +56,8 @@ interface PreparedInvocation {
  * without dispatching a Command Action. In-process callers use `Crust.snapshot()`.
  */
 export const SNAPSHOT_PATH_ENV = "CRUST_INTERNAL_SNAPSHOT_PATH";
-export const BUILD_OUT_DIR_ENV = "CRUST_INTERNAL_BUILD_OUT_DIR";
+// Shared with resolveArtifactDir, which resolves against this directory during the run.
+export { BUILD_OUT_DIR_ENV };
 const EXIT_CODE_CANCELLED = 130;
 
 function isAbortError(error: CaughtError): boolean {
