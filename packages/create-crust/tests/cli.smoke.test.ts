@@ -285,9 +285,14 @@ async function smokeRuntime(runtime: Runtime): Promise<void> {
 		);
 	}
 
-	// Mirrors each template's `start` script.
+	// Run the template's own `start` script the way its users do, so the
+	// launcher is exercised under the template's runtime (bun/node/deno) and the
+	// script's `{{name}}` path is verified. `--silent` drops npm's script banner,
+	// which would otherwise satisfy the `name` assertion by itself.
 	const startCommand =
-		runtime === "deno" ? denoArgv(["run", "-A", launcher, "--help"]) : ["node", launcher, "--help"];
+		runtime === "deno"
+			? denoArgv(["task", "start", "--help"])
+			: npmArgv(["run", "--silent", "start", "--", "--help"]);
 	const start = await run(startCommand, sampleDir);
 	assertSuccess("generated project start", startCommand, sampleDir, start);
 	expect(start.stdout).toContain(name);
