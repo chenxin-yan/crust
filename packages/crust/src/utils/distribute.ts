@@ -582,14 +582,21 @@ export async function runDistributeBuild<T extends string>(
 	});
 
 	const rootDir = join(plan.stageDir, "root");
+	// Only crust.include trees are dereferenced: collectIncludeDirs proved every
+	// symlink inside them resolves into the project. Artifact trees are not
+	// validated, so a symlink there is copied as a link rather than followed.
 	const copies = [
 		...(artifactOutDir
-			? artifacts.names.map((name) => ({ name, sourceDir: join(artifactOutDir, name) }))
+			? artifacts.names.map((name) => ({
+					name,
+					sourceDir: join(artifactOutDir, name),
+					dereference: false,
+				}))
 			: []),
-		...includeDirs.map((name) => ({ name, sourceDir: join(plan.cwd, name) })),
+		...includeDirs.map((name) => ({ name, sourceDir: join(plan.cwd, name), dereference: true })),
 	];
-	for (const { name, sourceDir } of copies) {
-		cpSync(sourceDir, join(rootDir, name), { recursive: true, dereference: true });
+	for (const { name, sourceDir, dereference } of copies) {
+		cpSync(sourceDir, join(rootDir, name), { recursive: true, dereference });
 		// Runtime source resolution (e.g. packaged skills) falls back to
 		// dirname(process.execPath), which is a platform package's bin dir — the
 		// root package is unreachable from there, so each platform package ships
@@ -597,7 +604,7 @@ export async function runDistributeBuild<T extends string>(
 		for (const targetPackage of distributionTargets) {
 			cpSync(sourceDir, join(targetPackage.packageDir, "bin", name), {
 				recursive: true,
-				dereference: true,
+				dereference,
 			});
 		}
 	}

@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "bun:test";
 import {
 	existsSync,
+	lstatSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
@@ -342,6 +343,28 @@ describe("runDistributeBuild", () => {
 		expect(
 			readFileSync(join(plan.stageDir, "darwin-arm64", "bin", "skills", "x", "SKILL.md"), "utf8"),
 		).toBe("skill\n");
+	});
+
+	it("copies artifact symlinks as links instead of following them out of the project", async () => {
+		const outDir = join(tmpDir, "dist");
+		mkdirSync(join(outDir, "skills"), { recursive: true });
+		// Artifact trees are not containment-checked, so a link to an external file
+		// must not have its contents copied into the staged packages.
+		symlinkSync(join(tmpDir, "LICENSE"), join(outDir, "skills", "leak"), "file");
+		const plan = createPlan(
+			tmpDir,
+			{ name: "artifact-stage-cli", version: "0.1.0", bin: { cli: "dist/cli" } },
+			{ validate: true, outDir },
+		);
+
+		await runDistributeBuild(plan, bunDistribution(), io);
+
+		for (const staged of [
+			join(plan.stageDir, "root", "skills", "leak"),
+			join(plan.stageDir, "darwin-arm64", "bin", "skills", "leak"),
+		]) {
+			expect(lstatSync(staged).isSymbolicLink()).toBe(true);
+		}
 	});
 
 	it("rejects artifacts inside stage-dir and the reserved bin directory", async () => {
