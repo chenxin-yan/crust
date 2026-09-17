@@ -19,7 +19,7 @@ npx create-crust@latest my-cli
 cd my-cli
 ```
 
-Pick a package manager once; the tabs remember it across the docs. `create-crust` detects the package manager that launched it and installs dependencies with the same one. It also asks which runtime the project develops and builds for: Bun (the default), Node.js, or Deno; pass `--runtime bun|node|deno` to skip the prompt. The scaffolder creates:
+Pick a package manager once; the tabs remember it across the docs. `create-crust` detects the package manager that launched it and installs dependencies with the same one. It also asks which runtime the project develops and builds for: Bun (the default), Node.js, or Deno; pass `--runtime bun|node|deno` to skip the prompt. Deno projects are the exception: they always install with `deno install`, whichever package manager launched the scaffolder. The scaffolder creates:
 
 <Files>
   <Folder name="my-cli" defaultOpen>
