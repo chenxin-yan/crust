@@ -67,13 +67,13 @@ type RootCommandSnapshot<K extends RootMetaKey> = CommandSnapshot & {
 	readonly meta: Readonly<Required<Pick<CommandMeta, K>>>;
 };
 
-/** One file a build hook produces; `path` is POSIX-relative to `outDir`. */
+/** One file a build hook produces; `path` is POSIX-relative to the build output directory. */
 export interface BuildFile {
 	readonly path: string;
 	readonly content: string | Uint8Array;
 }
 
-/** Files returned by a build hook; build tooling writes them under `outDir`. */
+/** Files returned by a build hook; build tooling writes them into the build output directory. */
 export type BuildArtifacts = readonly BuildFile[];
 
 /** Files written for each Extension build hook, in hook execution order. */
@@ -84,18 +84,17 @@ export interface BuildReport {
 	}[];
 }
 
-/** Build-time context passed to an Extension's artifact generator. */
+/**
+ * Build-time context passed to an Extension's artifact generator. It deliberately
+ * carries no output directory: build tooling owns that tree, so every shipped file
+ * is a returned {@link BuildFile} and the {@link BuildReport} is exact.
+ */
 export interface ExtensionBuildContext<MetaKeys extends RootMetaKey = never> {
 	/**
 	 * Frozen snapshot prepared before this hook starts. It does not include this hook's own
 	 * outputs; later-registered hooks receive refreshed snapshots.
 	 */
 	readonly snapshot: RootCommandSnapshot<MetaKeys>;
-	/**
-	 * Resolved absolute output directory where the returned files land. Hooks only
-	 * need it to read earlier hooks' output or to point an external tool at the tree.
-	 */
-	readonly outDir: string;
 }
 
 /**

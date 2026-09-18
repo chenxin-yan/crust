@@ -241,12 +241,11 @@ describe("completion", () => {
 });
 
 describe("completion build hook", () => {
-	const outDir = "/unused/out";
 	const text = (content: string | Uint8Array) => Buffer.from(content).toString();
 
 	it("returns all three shell files under completions/", async () => {
 		const snapshot = await buildCli().snapshot();
-		const artifacts = await completion().build?.({ snapshot, outDir });
+		const artifacts = await completion().build?.({ snapshot });
 
 		expect(artifacts?.map((file) => file.path)).toEqual([
 			"completions/mycli",
@@ -264,7 +263,6 @@ describe("completion build hook", () => {
 		const snapshot = await buildCli().snapshot();
 		const artifacts = await completion({ binName: "my-tool", version: "2.0.0" }).build?.({
 			snapshot,
-			outDir,
 		});
 
 		expect(artifacts?.map((file) => file.path)).toEqual([
@@ -278,14 +276,14 @@ describe("completion build hook", () => {
 
 	it("rejects an unsafe binName", async () => {
 		const snapshot = await buildCli().snapshot();
-		expect(() => completion({ binName: "../pwn" }).build?.({ snapshot, outDir })).toThrow(
+		expect(() => completion({ binName: "../pwn" }).build?.({ snapshot })).toThrow(
 			/invalid binName/,
 		);
 	});
 
 	it("rejects a missing version", async () => {
 		const snapshot = await new Crust("mycli").snapshot();
-		expect(() => completion().build?.({ snapshot, outDir })).toThrow("requires a version");
+		expect(() => completion().build?.({ snapshot })).toThrow("requires a version");
 	});
 
 	it("pure renderers match build and runtime files byte-for-byte", async () => {
@@ -294,7 +292,7 @@ describe("completion build hook", () => {
 			const app = buildCli();
 			const snapshot = await app.snapshot();
 			const options: CompletionRenderOptions = { version: "1.2.3" };
-			const artifacts = await completion(options).build?.({ snapshot, outDir });
+			const artifacts = await completion(options).build?.({ snapshot });
 			await app.execute({ argv: ["completion", "zsh", "--output-dir", tmpDir] });
 
 			for (const [filename, render] of [

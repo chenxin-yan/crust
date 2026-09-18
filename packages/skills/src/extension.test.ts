@@ -137,7 +137,7 @@ describe("skill extension packaged directory", () => {
 		extension: ReturnType<typeof skill>,
 		snapshot: Awaited<ReturnType<Crust["snapshot"]>>,
 	): Promise<Map<string, string>> {
-		const artifacts = await extension.build!({ snapshot, outDir: join(tempRoot, "dist") });
+		const artifacts = await extension.build!({ snapshot });
 		return new Map(artifacts.map((file) => [file.path, Buffer.from(file.content).toString()]));
 	}
 

@@ -2032,10 +2032,11 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		const app = new Crust("build-subprocess")
 			.extend(
 				defineExtension(defineExtensionId("first"), {
-					build: ({ snapshot, outDir: receivedOutDir }) => {
-						expect(Object.isFrozen(snapshot)).toBe(true);
-						expect(snapshot.meta.name).toBe("build-subprocess");
-						expect(receivedOutDir).toBe(outDir);
+					build: (ctx) => {
+						expect(Object.isFrozen(ctx.snapshot)).toBe(true);
+						expect(ctx.snapshot.meta.name).toBe("build-subprocess");
+						// The output directory is owned by core; a hook has no handle to write beside its returned files.
+						expect(Object.keys(ctx)).toEqual(["snapshot"]);
 						calls.push("first");
 						return [
 							{ path: "first\\one.txt", content: "one" },

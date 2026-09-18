@@ -442,7 +442,7 @@ export async function executeInvocation(
 				for (const extension of base.extensions) {
 					if (!extension.build) continue;
 					try {
-						const artifacts = await extension.build({ snapshot, outDir: buildOutDir });
+						const artifacts = await extension.build({ snapshot });
 						// Every path is checked before any file is written, so a rejected hook leaves nothing behind.
 						const files = artifacts.map((file) => {
 							const path = normalizeArtifactPath(file.path);

@@ -4,7 +4,7 @@ import type { CommandSnapshot } from "../command/snapshot.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { CommandSection } from "../types.ts";
 import { defineContext } from "./context.ts";
-import { defineExtension, type Extension } from "./extension.ts";
+import { defineExtension, type Extension, type ExtensionBuildContext } from "./extension.ts";
 
 function _metadataRequirements() {
 	const ID = defineExtensionId("test:metadata");
@@ -227,5 +227,9 @@ function _buildHookReturnsFiles() {
 	defineExtension(ID, {
 		// @ts-expect-error Bare paths carry no content for core to write.
 		build: () => ["man/app.1"],
+	});
+	defineExtension(ID, {
+		// @ts-expect-error The output directory is owned by build tooling; hooks get no handle to side-write into it.
+		build: ({ outDir }: ExtensionBuildContext) => [{ path: "man/app.1", content: outDir }],
 	});
 }

@@ -8,9 +8,9 @@
 
 ### @crustjs/core
 
-**Breaking:** Extension build hooks return their files instead of writing them. `build(ctx)` now returns `BuildArtifacts = readonly BuildFile[]`, where `BuildFile` is `{ path, content }` with `path` relative to `ctx.outDir` and `content` a `string` or `Uint8Array`. Returning `void` is no longer allowed. Core validates every path, rejects a path an earlier hook already produced (compared case-insensitively, naming both Extensions), writes the files under `outDir`, and records exactly the written paths; `BuildReport.extensions[].files` is always `readonly string[]` (the `"unknown"` marker is gone). `ctx.outDir` remains available for hooks that need to read earlier hooks' files or point an external tool at the tree.
+**Breaking:** Extension build hooks return their files instead of writing them. `build(ctx)` now returns `BuildArtifacts = readonly BuildFile[]`, where `BuildFile` is `{ path, content }` with `path` relative to the build output directory and `content` a `string` or `Uint8Array`. Returning `void` is no longer allowed. Core validates every path, rejects a path an earlier hook already produced (compared case-insensitively, naming both Extensions), writes the files into the output directory, and records exactly the written paths; `BuildReport.extensions[].files` is always `readonly string[]` (the `"unknown"` marker is gone). `ExtensionBuildContext` no longer exposes `outDir`: hooks have no handle to write beside their returned files, which is what makes the report exact. A hook that drives an external tool should write to its own temporary directory and read the results back.
 
-Migration: replace `mkdir`/`writeFile` calls in a hook with returned entries.
+Migration: replace `mkdir`/`writeFile` calls in a hook with returned entries, and drop `outDir` from the destructured context.
 
 ```ts
 // before

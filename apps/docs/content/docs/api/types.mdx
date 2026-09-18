@@ -338,13 +338,13 @@ The entry shape inside the collection returned by `ExtensionConfig.sections(snap
   name="ExtensionBuildContext"
 />
 
-The build context contains the frozen root Command Snapshot and the resolved absolute output directory where the returned files are written. Its optional `MetaKeys` type parameter refines required snapshot metadata fields.
+The build context contains the frozen root Command Snapshot. It deliberately carries no output directory: build tooling owns that tree, so a hook's only way to ship a file is to return it, and the [`BuildReport`](#buildreport) lists every shipped file. Its optional `MetaKeys` type parameter refines required snapshot metadata fields.
 
 ### `BuildFile`
 
 <auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="BuildFile" />
 
-One file a build hook produces: a path relative to `outDir` and its `string` or `Uint8Array` content. Build tooling normalizes separators, rejects absolute or escaping paths, and rejects a path an earlier hook already produced, compared case-insensitively so the tree stays valid on case-insensitive filesystems.
+One file a build hook produces: a path relative to the build output directory and its `string` or `Uint8Array` content. Build tooling normalizes separators, rejects absolute or escaping paths, and rejects a path an earlier hook already produced, compared case-insensitively so the tree stays valid on case-insensitive filesystems.
 
 ### `BuildArtifacts`
 
