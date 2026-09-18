@@ -4,7 +4,8 @@ import type { CompletionCommand, CompletionFlag } from "../spec.ts";
 /**
  * Pure-static zsh completion script renderer.
  *
- * Strategy: emit one `_<bin>_<path>` helper per command in the tree.
+ * Strategy: emit one `_<bin>__<path>` helper per command in the tree
+ * (path segments joined by `__`, see {@link helperName}).
  * Helpers for non-leaf commands declare an `_arguments -C` spec with
  * `1: :->cmds` and `*::arg:->args`, then dispatch via `case "$line[1]"`
  * into the child helper — the canonical `->state` routing pattern from
@@ -158,13 +159,27 @@ function renderArgSpecs(node: CompletionCommand): string[] {
 }
 
 /**
+ * Encode one validated command name (`[A-Za-z0-9][A-Za-z0-9._-]*`) as a
+ * helper-name segment. Alphanumerics pass through; `.`, `-` and `_`
+ * become `_<hex>` (`_2e`, `_2d`, `_5f`). The result never contains `__`
+ * and never ends in `_`, so `__` is unambiguous as the path separator in
+ * {@link helperName}: `foo-bar`, `foo_bar` and nested `foo bar` map to
+ * `foo_2dbar`, `foo_5fbar` and `foo__bar`. Mapping every non-alphanumeric
+ * to `_` (as {@link toShellIdent} does) let distinct commands overwrite
+ * one another's helper.
+ */
+function encodeHelperSegment(name: string): string {
+	return name.replace(/[^A-Za-z0-9]/g, (ch) => `_${ch.charCodeAt(0).toString(16)}`);
+}
+
+/**
  * Build the function name for the helper that handles a given command
- * path. The root is `_<ident>`; nested children append `_<segment>` for
- * each step.
+ * path. The root is `_<ident>`; nested children append `__<segment>` for
+ * each step, with segments encoded by {@link encodeHelperSegment}.
  */
 function helperName(rootIdent: string, path: readonly string[]): string {
 	if (path.length === 0) return `_${rootIdent}`;
-	return `_${rootIdent}_${path.map(toShellIdent).join("_")}`;
+	return `_${rootIdent}__${path.map(encodeHelperSegment).join("__")}`;
 }
 
 /**

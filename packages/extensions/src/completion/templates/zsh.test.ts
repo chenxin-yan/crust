@@ -110,6 +110,13 @@ describe("renderZsh", () => {
 		expect(script).toContain("'dep:Deploy'");
 	});
 
+	it("encodes command path segments so distinct paths never share a helper name", () => {
+		const script = renderZsh(fixture, "mycli", "1.0.0");
+		expect(script).toContain("_mycli__deploy() {");
+		expect(script).toContain("_mycli__deploy__prod() {");
+		expect(script).toMatch(/'deploy'\|'dep'\)\n\s+_mycli__deploy\n/);
+	});
+
 	it("derives helper function names from bin name with non-alpha mapped to _", () => {
 		const script = renderZsh(fixture, "my-cli", "1.0.0");
 		// Function is `_my_cli`, but `#compdef` and `compdef` retain the
@@ -204,6 +211,142 @@ echo OK
 		}
 		expect(err).toBe("");
 		expect(out.trim()).toBe("OK");
+	});
+});
+
+/**
+ * INT-03 regression: `foo-bar` and `foo_bar` (and nested `a b` vs flat
+ * `a_b`) are all valid command paths but previously flattened to the same
+ * `_<bin>_foo_bar` helper, so the later definition silently replaced the
+ * earlier one. Helper names must be injective over command paths.
+ */
+const collisionFixture: CompletionCommand = {
+	name: "clash",
+	flags: [],
+	args: [],
+	subCommands: [
+		{
+			name: "foo-bar",
+			flags: [{ name: "first", type: "boolean", takesValue: false, negatable: false }],
+			args: [],
+			subCommands: [],
+		},
+		{
+			name: "foo_bar",
+			flags: [{ name: "second", type: "boolean", takesValue: false, negatable: false }],
+			args: [],
+			subCommands: [],
+		},
+		{
+			name: "foo.bar",
+			flags: [{ name: "third", type: "boolean", takesValue: false, negatable: false }],
+			args: [],
+			subCommands: [],
+		},
+		{
+			name: "a_b",
+			flags: [{ name: "flat", type: "boolean", takesValue: false, negatable: false }],
+			args: [],
+			subCommands: [],
+		},
+		{
+			name: "a",
+			flags: [],
+			args: [],
+			subCommands: [
+				{
+					name: "b",
+					flags: [{ name: "nested", type: "boolean", takesValue: false, negatable: false }],
+					args: [],
+					subCommands: [],
+				},
+			],
+		},
+	],
+};
+
+describe("renderZsh · helper names are injective over command paths", () => {
+	it("emits one distinct helper definition per command", () => {
+		const script = renderZsh(collisionFixture, "clash", "1.0.0");
+		const definitions = [...script.matchAll(/^(_clash\S*)\(\) \{$/gm)].map((m) => m[1]);
+		// Root + 6 commands, no duplicates.
+		expect(definitions).toHaveLength(7);
+		expect(new Set(definitions).size).toBe(7);
+		// Every helper name is a portable identifier.
+		for (const name of definitions) expect(name).toMatch(/^[A-Za-z0-9_]+$/);
+		expect(definitions).toContain("_clash__foo_2dbar");
+		expect(definitions).toContain("_clash__foo_5fbar");
+		expect(definitions).toContain("_clash__foo_2ebar");
+		expect(definitions).toContain("_clash__a_5fb");
+		expect(definitions).toContain("_clash__a__b");
+	});
+});
+
+describeIfZsh("renderZsh · colliding command names dispatch to their own flags", () => {
+	let scriptPath: string;
+	let tmpDir: string;
+
+	beforeAll(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "tp010-zsh-collide-"));
+		scriptPath = join(tmpDir, "_clash");
+		await writeFile(scriptPath, renderZsh(collisionFixture, "clash", "1.0.0"), "utf8");
+	});
+
+	afterAll(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	/**
+	 * Source the script with `compdef`/`_describe` stubbed and `_arguments`
+	 * replaced by a spec printer, then call the helper for `<command>` and
+	 * return the printed specs. No TTY or compsys needed to prove which
+	 * function body the dispatcher reaches.
+	 */
+	async function specsFor(helper: string): Promise<string> {
+		const driver = `
+compdef() { :; }
+_describe() { :; }
+_arguments() { print -rl -- "$@"; }
+source ${shQuoteForZsh(scriptPath)} || exit 1
+${helper}
+`;
+		const proc = Bun.spawn(["zsh", "-c", driver], { stdout: "pipe", stderr: "pipe" });
+		const [out, err] = await Promise.all([
+			new Response(proc.stdout).text(),
+			new Response(proc.stderr).text(),
+		]);
+		const code = await proc.exited;
+		if (code !== 0) throw new Error(`zsh exited ${code}\nstderr:\n${err}\nstdout:\n${out}`);
+		return out;
+	}
+
+	it("parses cleanly under `zsh -n`", async () => {
+		const proc = Bun.spawn(["zsh", "-n", scriptPath], { stdout: "pipe", stderr: "pipe" });
+		const err = await new Response(proc.stderr).text();
+		expect(err).toBe("");
+		expect(await proc.exited).toBe(0);
+	});
+
+	it("foo-bar, foo_bar and foo.bar each keep their own flag specs", async () => {
+		expect(await specsFor("_clash__foo_2dbar")).toBe("--first[]\n");
+		expect(await specsFor("_clash__foo_5fbar")).toBe("--second[]\n");
+		expect(await specsFor("_clash__foo_2ebar")).toBe("--third[]\n");
+	});
+
+	it("flat `a_b` and nested `a b` keep their own flag specs", async () => {
+		expect(await specsFor("_clash__a_5fb")).toBe("--flat[]\n");
+		expect(await specsFor("_clash__a__b")).toBe("--nested[]\n");
+	});
+
+	it("the root dispatcher routes `foo-bar` and `foo_bar` to different helpers", async () => {
+		// The root's `_arguments -C` call is stubbed to set `state`/`line` as
+		// compsys would after routing; leaf `_arguments` calls still print.
+		const routed = async (word: string) =>
+			specsFor(
+				`_arguments() { if [[ $1 == -C ]]; then state=args; line=(${shQuoteForZsh(word)}); else print -rl -- "$@"; fi; }; _clash`,
+			);
+		expect(await routed("foo-bar")).toBe("--first[]\n");
+		expect(await routed("foo_bar")).toBe("--second[]\n");
 	});
 });
 
