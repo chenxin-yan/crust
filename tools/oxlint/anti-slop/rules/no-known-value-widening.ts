@@ -8,6 +8,7 @@ import {
 	type TypeEnvironment,
 	type WideningTarget,
 } from "../shared/dictionary-types.ts";
+import { lexicalTypeParameterNames } from "../shared/lexical-type-parameters.ts";
 import { resolveVariable } from "../shared/scope.ts";
 
 type FunctionExpression = ESTree.ArrowFunctionExpression | ESTree.Function;
@@ -64,13 +65,55 @@ function hasKnownEvidence(
 	return hasKnownEvidence(sourceCode, declarator.init, visitedVariables);
 }
 
+type VisitorKeys = Readonly<Record<string, readonly string[]>>;
+
+/**
+ * Module environment as seen from `node`: enclosing type parameters and block-level type
+ * declarations shadow same-named module aliases, so those names are not resolved through the
+ * module map. Block-level aliases stay unresolved, as before.
+ */
+function environmentAt(
+	node: ESTree.Node,
+	environment: TypeEnvironment,
+	visitorKeys: VisitorKeys,
+): TypeEnvironment {
+	const shadowed = new Set(lexicalTypeParameterNames(node, visitorKeys));
+	for (let current = node.parent; current !== null; current = current.parent) {
+		if (current.type === "Program") break;
+		if (current.type !== "BlockStatement") continue;
+		for (const statement of current.body) {
+			if (
+				statement.type === "TSTypeAliasDeclaration" ||
+				statement.type === "TSInterfaceDeclaration" ||
+				statement.type === "TSEnumDeclaration"
+			) {
+				shadowed.add(statement.id.name);
+			} else if (statement.type === "ClassDeclaration" && statement.id !== null) {
+				shadowed.add(statement.id.name);
+			}
+		}
+	}
+	if (shadowed.size === 0) return environment;
+	const aliases = new Map(environment.aliases);
+	const shadowedBuiltIns = new Set(environment.shadowedBuiltIns);
+	for (const name of shadowed) {
+		aliases.delete(name);
+		shadowedBuiltIns.add(name);
+	}
+	return { aliases, interfaces: environment.interfaces, shadowedBuiltIns };
+}
+
 function annotationTarget(
 	annotation: ESTree.TSTypeAnnotation | null | undefined,
 	environment: TypeEnvironment,
+	visitorKeys: VisitorKeys,
 ): WideningTarget | null {
 	return annotation === null || annotation === undefined
 		? null
-		: classifyWideningTarget(annotation.typeAnnotation, environment);
+		: classifyWideningTarget(
+				annotation.typeAnnotation,
+				environmentAt(annotation, environment, visitorKeys),
+			);
 }
 
 function enclosingFunction(node: ESTree.Node): FunctionExpression | null {
@@ -151,7 +194,16 @@ export const noKnownValueWideningRule = defineRule({
 		};
 
 		const targetFromAnnotation = (annotation: ESTree.TSTypeAnnotation | null | undefined) =>
-			environment === null ? null : annotationTarget(annotation, environment);
+			environment === null
+				? null
+				: annotationTarget(annotation, environment, context.sourceCode.visitorKeys);
+		const targetFromAssertion = (type: ESTree.TSType) =>
+			environment === null
+				? null
+				: classifyWideningTarget(
+						type,
+						environmentAt(type, environment, context.sourceCode.visitorKeys),
+					);
 
 		return {
 			Program(node) {
@@ -211,20 +263,12 @@ export const noKnownValueWideningRule = defineRule({
 				);
 			},
 			TSAsExpression(node) {
-				if (environment === null || hasParentAssertion(node)) return;
-				reportFlow(
-					node.expression,
-					classifyWideningTarget(node.typeAnnotation, environment),
-					"assertion",
-				);
+				if (hasParentAssertion(node)) return;
+				reportFlow(node.expression, targetFromAssertion(node.typeAnnotation), "assertion");
 			},
 			TSTypeAssertion(node) {
-				if (environment === null || hasParentAssertion(node)) return;
-				reportFlow(
-					node.expression,
-					classifyWideningTarget(node.typeAnnotation, environment),
-					"assertion",
-				);
+				if (hasParentAssertion(node)) return;
+				reportFlow(node.expression, targetFromAssertion(node.typeAnnotation), "assertion");
 			},
 		};
 	},
