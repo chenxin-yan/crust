@@ -1,6 +1,7 @@
 import { lstat, mkdir, readlink, rm, stat, symlink, unlink } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
+import { isErrnoException } from "@crustjs/utils/error";
 import { resolveSourceDir } from "@crustjs/utils/source";
 
 import {
@@ -46,7 +47,8 @@ async function pathExists(path: string): Promise<boolean> {
 	try {
 		await stat(path);
 		return true;
-	} catch {
+	} catch (error) {
+		if (!isErrnoException(error) || error.code !== "ENOENT") throw error;
 		return false;
 	}
 }
@@ -68,7 +70,8 @@ async function inspectLink(
 	let entry;
 	try {
 		entry = await lstat(outputDir);
-	} catch {
+	} catch (error) {
+		if (!isErrnoException(error) || error.code !== "ENOENT") throw error;
 		return { status: "absent" };
 	}
 	if (!entry.isSymbolicLink()) return { status: "conflict" };
@@ -162,7 +165,7 @@ export async function uninstallSkill(
 	return { agents: results };
 }
 
-/** Reports the ownership and health of each requested agent-directory entry. */
+/** Reports ownership and health. Only ENOENT is missing; other filesystem errors reject. */
 export async function getSkillStatus(options: SkillStatusOptions): Promise<SkillStatusResult> {
 	const agents = options.agents ?? [...ALL_AGENTS];
 	const scope = resolveEffectiveScope(options.scope ?? "global");
