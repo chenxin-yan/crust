@@ -9,6 +9,8 @@ const app = new Crust("greet")
 		const line = `Hello, ${args.name}!`;
 		stdout(flags.shout ? line.toUpperCase() : line);
 	})
-	.command("wave", (command) => command.action(({ stdout }) => stdout("👋")));
+	.command("wave", (command) =>
+		command.action(({ stdout }) => stdout("👋")),
+	);
 
 await app.execute();

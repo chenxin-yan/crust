@@ -6,6 +6,12 @@
   "ignorePatterns": [".source/", "src/routeTree.gen.ts"],
   "overrides": [
     {
+      "files": ["examples/landing/**"],
+      "options": {
+        "printWidth": 60
+      }
+    },
+    {
       "files": ["**/*.{md,mdx,json,jsonc,yml,yaml}"],
       "options": {
         "useTabs": false,
