@@ -124,10 +124,12 @@ jobs:
           bun test scripts/*.test.ts
           bun x tsc --noEmit -p scripts
 
-      - name: Lint and format check (packages)
+      # Whole-repository commands: scripts, tools, root TS/config, and workflow files are
+      # not workspaces, so path-scoped lint/format would leave them unchecked.
+      - name: Lint and format check (repository)
         run: |
-          bun run lint packages
-          bun run format packages
+          bun run lint
+          bun run format
 
       - name: Run package-manager smoke tests
         run: |
