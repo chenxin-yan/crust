@@ -76,13 +76,17 @@ describe("create-crust CLI", () => {
 			version: "0.0.0",
 			type: "module",
 			bin: { "my-cli": "dist/cli" },
-			devDependencies: {
+			dependencies: {
 				"@crustjs/core": `^${corePackage.version}`,
 				"@crustjs/extensions": `^${extensionsPackage.version}`,
+			},
+			devDependencies: {
 				"@crustjs/crust": `^${crustPackage.version}`,
 			},
 		});
-		expect(pkg.dependencies).toBeUndefined();
+		// toMatchObject is partial: prove the imported packages left devDependencies.
+		expect(pkg.devDependencies["@crustjs/core"]).toBeUndefined();
+		expect(pkg.devDependencies["@crustjs/extensions"]).toBeUndefined();
 		expect(existsSync(join(projectDir, "tsconfig.json"))).toBe(true);
 		const cli = readFileSync(join(projectDir, "src", "cli.ts"), "utf-8");
 		expect(cli).toContain('new Crust("my-cli"');
