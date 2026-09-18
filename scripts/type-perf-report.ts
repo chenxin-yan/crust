@@ -114,7 +114,7 @@ export function formatComparison(base: TypePerfReport, head: TypePerfReport): st
 		// only against head's dist, and head's absolute ratio is still informative.
 		`| 100/10 scaling ratio${ratioWarning} | ${baseRatio === null ? "n/a" : `${baseRatio.toFixed(2)}×`} | ${headRatio === null ? "n/a" : `${headRatio.toFixed(2)}×`} | ${baseRatio !== null && headRatio !== null ? delta(baseRatio, headRatio, 2) : "n/a"} |`,
 		"",
-		"### Editor latency (informational — LSP round-trips on the 50-command fixture, wall time)",
+		"### Editor latency (informational — LSP round-trips on a two-flag probe builder appended to the 50-command fixture, not the generated app; wall time)",
 		"",
 		"| Request | Base | Head |",
 		"|---|---:|---:|",

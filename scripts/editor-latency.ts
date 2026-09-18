@@ -3,11 +3,14 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 /**
- * Editor-latency benchmark: drives the TypeScript native LSP (`tsc --lsp
- * --stdio`) through a scripted editing session against a synthetic consumer
- * fixture, timing the request round-trips an editor user actually feels —
- * completion after `flags.`, hover on a mid-chain builder, and completion
- * right after a keystroke edit.
+ * Editor-latency probe: drives the TypeScript native LSP (`tsc --lsp --stdio`)
+ * through a scripted editing session, timing completion after `flags.`, hover on
+ * a mid-chain builder, and completion right after a keystroke edit.
+ *
+ * Every request targets the small two-flag `editor-probe` builder appended below.
+ * The 50-command consumer fixture only shares the program; nothing here measures
+ * completion or hover on the accumulated application type, so the numbers are a
+ * smoke signal for the probe, not evidence of complex-app editor responsiveness.
  */
 
 export interface EditorLatencyMetrics {
