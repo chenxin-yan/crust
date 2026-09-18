@@ -436,7 +436,9 @@ export async function executeInvocation(
 			const buildOutDir = process.env[BUILD_OUT_DIR_ENV];
 			if (buildOutDir) {
 				const extensions: Array<BuildReport["extensions"][number]> = [];
-				const owners = new Map<string, ExtensionId>();
+				// Keyed case-insensitively: the tree may land on a case-insensitive filesystem
+				// where `Config.json` and `config.json` are one file and the second write wins.
+				const owners = new Map<string, { id: ExtensionId; path: string }>();
 				for (const extension of base.extensions) {
 					if (!extension.build) continue;
 					try {
@@ -444,13 +446,13 @@ export async function executeInvocation(
 						// Every path is checked before any file is written, so a rejected hook leaves nothing behind.
 						const files = artifacts.map((file) => {
 							const path = normalizeArtifactPath(file.path);
-							const owner = owners.get(path);
+							const owner = owners.get(path.toLowerCase());
 							if (owner !== undefined) {
 								throw new Error(
-									`Artifact path "${path}" was already written by Extension "${owner}".`,
+									`Artifact path "${path}" collides with "${owner.path}" written by Extension "${owner.id}".`,
 								);
 							}
-							owners.set(path, extension.id);
+							owners.set(path.toLowerCase(), { id: extension.id, path });
 							return { path, content: file.content };
 						});
 						// ponytail: in-memory files; stream if an extension ever ships large binaries

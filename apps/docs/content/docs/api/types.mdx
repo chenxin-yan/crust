@@ -344,7 +344,7 @@ The build context contains the frozen root Command Snapshot and the resolved abs
 
 <auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="BuildFile" />
 
-One file a build hook produces: a path relative to `outDir` and its `string` or `Uint8Array` content. Build tooling normalizes separators, rejects absolute or escaping paths, and rejects a path an earlier hook already produced.
+One file a build hook produces: a path relative to `outDir` and its `string` or `Uint8Array` content. Build tooling normalizes separators, rejects absolute or escaping paths, and rejects a path an earlier hook already produced, compared case-insensitively so the tree stays valid on case-insensitive filesystems.
 
 ### `BuildArtifacts`
 

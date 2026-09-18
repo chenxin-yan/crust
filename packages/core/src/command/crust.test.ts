@@ -2096,6 +2096,31 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		expect(existsSync(join(outDir, "second"))).toBe(false);
 	});
 
+	it("rejects paths that differ only by case, naming both Extensions and both spellings", async () => {
+		const path = await snapshotPath();
+		const outDir = join(dirname(path), "output");
+		process.env[SNAPSHOT_PATH_ENV] = path;
+		process.env[BUILD_OUT_DIR_ENV] = outDir;
+		const app = new Crust("build-subprocess").extend(
+			defineExtension(defineExtensionId("first"), {
+				build: () => [{ path: "shared/Config.json", content: "first" }],
+			}),
+			defineExtension(defineExtensionId("second"), {
+				build: () => [{ path: "shared/config.json", content: "second" }],
+			}),
+		);
+
+		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
+
+		expect(errorCalls).toHaveLength(1);
+		expect(errorCalls[0]).toStartWith('Extension "second" build failed:');
+		expect(errorCalls[0]).toContain('"shared/config.json"');
+		expect(errorCalls[0]).toContain('"shared/Config.json"');
+		expect(errorCalls[0]).toContain('Extension "first"');
+		// On a case-insensitive filesystem both spellings name this file; the first hook's content survives.
+		expect(await readFile(join(outDir, "shared", "Config.json"), "utf8")).toBe("first");
+	});
+
 	it("runs only the last build hook for a duplicate Extension id", async () => {
 		const path = await snapshotPath();
 		process.env[SNAPSHOT_PATH_ENV] = path;
