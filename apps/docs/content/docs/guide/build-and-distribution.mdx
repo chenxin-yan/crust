@@ -27,8 +27,8 @@ crust build
 
 ```text
 .crust/
-├── manifest.json        # staged packages and publish order
-├── artifacts/           # Extension build hook output
+├── manifest.json        # staged packages, publish order, and per-bin build hook output
+├── artifacts/           # Extension build hook output, written by crust build
 ├── root/                # the npm package users install
 │   └── bin/my-cli.js    # one per bin entry: Node launcher (Bun, Deno) or the bundle itself (Node)
 └── linux-x64/           # one platform package per target (Bun and Deno)
@@ -136,6 +136,26 @@ cat .crust/manifest.json        # every staged directory, its target, and the pu
 
 Every build stages into `.crust/`, so for release assets, containers, or any channel other than npm, build the targets you need and take the files from there: the standalone executable at `.crust/<platform alias>/bin/<command>-<target>` for Bun and Deno (`.exe` on Windows), or the executable JavaScript bundle at `.crust/root/bin/<command>.js` for Node. `.crust/manifest.json` is the index. Staging requires `name` and `version` in `package.json` and replaces `.crust/` on every build, so copy what you need out before building again.
 
+```json title=".crust/manifest.json (excerpt)"
+{
+  "root": { "name": "my-cli", "dir": "root", "bins": ["my-cli"] },
+  "publishOrder": ["linux-x64", "root"],
+  "build": {
+    "my-cli": {
+      "extensions": [
+        {
+          "id": "crust:skills",
+          "files": ["skills/my-cli/SKILL.md", "skills/my-cli/commands/my-cli.md"]
+        },
+        { "id": "crust:man", "files": ["man/my-cli.1"] }
+      ]
+    }
+  }
+}
+```
+
+`build` records, per `bin` entry, every file each Extension build hook produced under `.crust/artifacts/`, in hook order. It is absent when `--no-validate` skipped the hooks.
+
 ## Prepare Extension artifacts
 
 ```sh
@@ -144,9 +164,9 @@ crust build
 #   crust:man  1 file  man/my-cli.1
 ```
 
-Before compilation, the build materializes and validates the command tree of every `bin` entry, checks that its root command is named after the `bin` key, and runs Extension build hooks, which write to `.crust/artifacts/`. The entry module's top-level code runs during this step, but Command Actions and code after `await app.execute()` do not. Each top-level artifact directory is copied into `.crust/root/` (and listed in its `files`) and into every platform package's `bin/`, as described in [Extension artifacts](/docs/modules/crust#extension-artifacts). With several entries, each entry's hooks run in isolation and their output is merged; a path two entries both write fails the build.
+Before compilation, the build materializes and validates the command tree of every `bin` entry, checks that its root command is named after the `bin` key, and runs Extension build hooks. Each hook returns the files it ships; the build validates their paths, writes them to `.crust/artifacts/`, and records them under `build` in `.crust/manifest.json`. The entry module's top-level code runs during this step, but Command Actions and code after `await app.execute()` do not. Each top-level artifact directory is copied into `.crust/root/` (and listed in its `files`) and into every platform package's `bin/`, as described in [Extension artifacts](/docs/modules/crust#extension-artifacts). A path two hooks of one entry both return fails the build naming both Extensions. With several entries, each entry's hooks run in isolation and their output is merged; a path two entries both write fails the build naming both commands.
 
-Use `--no-validate` only when preparation cannot run; it skips the name check and Extension build hooks, so nothing is staged from `.crust/artifacts/`. `bin` itself is still validated: missing entries, duplicate entries, and invalid command names fail before `.crust/` is touched.
+Use `--no-validate` only when preparation cannot run; it skips the name check and Extension build hooks, so nothing is staged from `.crust/artifacts/` and the manifest has no `build` field. `bin` itself is still validated: missing entries, duplicate entries, and invalid command names fail before `.crust/` is touched.
 
 ### Ship extra directories with `crust.include`
 

@@ -1,5 +1,3 @@
-import { join } from "node:path";
-
 import {
 	type ExtensionFactory,
 	type ExtensionId,
@@ -26,22 +24,20 @@ export const man: ExtensionFactory<[options?: ManOptions]> = defineExtension(
 	(options = {}) => {
 		const section = options.section ?? 1;
 		return {
-			async build({ snapshot, outDir }) {
-				const { writeManPage } = await import("./write-man-page.ts");
+			async build({ snapshot }) {
+				const { renderManPageMdoc } = await import("./mdoc.ts");
 				const name = options.name ?? snapshot.meta.name;
-				// The name is a filename segment; separators would make the written
-				// path diverge from the artifact path core reports.
+				// The name is a filename segment; a separator would nest the page where
+				// npm's `man` field and `man -l` would not find it.
 				if (/[\\/]/.test(name)) {
 					throw new Error(`Manual name "${name}" must not contain path separators.`);
 				}
-				const outfile = join("man", `${name}.${section}`);
-				await writeManPage({
-					root: snapshot,
-					name,
-					section,
-					outfile: join(outDir, outfile),
-				});
-				return [outfile];
+				return [
+					{
+						path: `man/${name}.${section}`,
+						content: renderManPageMdoc({ root: snapshot, name, section }),
+					},
+				];
 			},
 		};
 	},

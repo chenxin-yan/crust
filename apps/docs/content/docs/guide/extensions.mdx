@@ -118,13 +118,13 @@ A consumer is any Extension identity that reads sections. `help` renders the cur
   ../../../examples/extensions/build.ts
 </include>
 
-Use a build hook when an Extension must generate files alongside the CLI. It receives the frozen Command Snapshot and absolute output directory, then returns artifact paths relative to that directory.
+Use a build hook when an Extension must generate files alongside the CLI. It receives the frozen Command Snapshot and returns the files to ship, each a path relative to the output directory plus its `string` or `Uint8Array` content. Core validates every path, rejects a path that another file already claims, whether equal (compared case-insensitively, since the tree may land on a case-insensitive filesystem) or nested under it (a file and a directory cannot share a name), writes the files, and records exactly what it wrote; the hook itself touches no disk.
 
 ```text
-Preparing Command Snapshot...
+Preparing Command Snapshot for my-cli...
   acme:manifest  1 file  acme-manifest/manifest.json
 ```
 
-Hooks run in `.extend()` registration order, and section callbacks are re-evaluated after each one, so a later hook's snapshot reflects what earlier hooks wrote: register `skill()` before `man()` for the man page to list packaged skills. During this step [`resolveArtifactDir(name)`](/docs/api/crust#resolveartifactdirname) points at the build output directory rather than `.crust/root/`, which the build has already wiped.
+Hooks run in `.extend()` registration order, and section callbacks are re-evaluated after each hook's files are written, so a later hook's snapshot reflects what earlier hooks produced: register `skill()` before `man()` for the man page to list packaged skills. During this step [`resolveArtifactDir(name)`](/docs/api/crust#resolveartifactdirname) points at the build output directory rather than `.crust/root/`, which the build has already wiped. The context carries no output directory: render into memory, or write to your own temporary directory and read the results back; the output directory is owned by the build tooling, which is what keeps the Build Report exact.
 
-For package staging, give each build hook a unique top-level directory and clean it before writing. See [`ExtensionBuildContext`](/docs/api/types#extensionbuildcontext) and [`BuildArtifacts`](/docs/api/types#buildartifacts) for the contracts.
+For package staging, give each build hook a unique top-level directory. See [`ExtensionBuildContext`](/docs/api/types#extensionbuildcontext), [`BuildFile`](/docs/api/types#buildfile), and [`BuildArtifacts`](/docs/api/types#buildartifacts) for the contracts.

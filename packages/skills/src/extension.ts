@@ -1,6 +1,7 @@
 import { join, relative } from "node:path";
 
 import {
+	type BuildArtifacts,
 	type CommandDefinition,
 	type ExtensionBuildContext,
 	type ExtensionFactory,
@@ -180,20 +181,15 @@ function formatSkillDocumentation(commandName: string, appName: string): string 
 async function buildSkills(
 	options: SkillOptions,
 	context: ExtensionBuildContext,
-): Promise<readonly string[]> {
-	const { writeSkills, writeSkillsFromSnapshot } = await import("./build.ts");
-	const writeOptions = {
-		outDir: join(context.outDir, "skills"),
+): Promise<BuildArtifacts> {
+	const { renderSkills } = await import("./build.ts");
+	const files = await renderSkills(options.generated === false ? undefined : context.snapshot, {
 		version: context.snapshot.meta.version,
 		name: options.name,
 		description: options.description,
 		extras: options.extras,
-	};
-	const files =
-		options.generated === false
-			? await writeSkills(writeOptions)
-			: await writeSkillsFromSnapshot(context.snapshot, writeOptions);
-	return files.map((file) => join("skills", file));
+	});
+	return files.map((file) => ({ path: join(SKILLS_ARTIFACT, file.path), content: file.content }));
 }
 
 // Configurable command names require an open command namespace.

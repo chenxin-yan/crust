@@ -67,26 +67,34 @@ type RootCommandSnapshot<K extends RootMetaKey> = CommandSnapshot & {
 	readonly meta: Readonly<Required<Pick<CommandMeta, K>>>;
 };
 
-/** Artifact paths relative to `outDir`. */
-export type BuildArtifacts = readonly string[];
+/** One file a build hook produces; `path` is POSIX-relative to the build output directory. */
+export interface BuildFile {
+	readonly path: string;
+	readonly content: string | Uint8Array;
+}
 
-/** Artifacts reported by Extension build hooks, in hook execution order. */
+/** Files returned by a build hook; build tooling writes them into the build output directory. */
+export type BuildArtifacts = readonly BuildFile[];
+
+/** Files written for each Extension build hook, in hook execution order. */
 export interface BuildReport {
 	readonly extensions: readonly {
 		readonly id: ExtensionId;
-		readonly files: readonly string[] | "unknown";
+		readonly files: readonly string[];
 	}[];
 }
 
-/** Build-time context passed to an Extension's artifact generator. */
+/**
+ * Build-time context passed to an Extension's artifact generator. It deliberately
+ * carries no output directory: build tooling owns that tree, so every shipped file
+ * is a returned {@link BuildFile} and the {@link BuildReport} is exact.
+ */
 export interface ExtensionBuildContext<MetaKeys extends RootMetaKey = never> {
 	/**
 	 * Frozen snapshot prepared before this hook starts. It does not include this hook's own
 	 * outputs; later-registered hooks receive refreshed snapshots.
 	 */
 	readonly snapshot: RootCommandSnapshot<MetaKeys>;
-	/** Resolved absolute output directory. */
-	readonly outDir: string;
 }
 
 /**
@@ -282,9 +290,7 @@ export interface ExtensionConfig<
 	readonly sections?: (
 		snapshot: RootCommandSnapshot<MetaKeys>,
 	) => readonly ExtensionSectionContribution[];
-	readonly build?: (
-		ctx: ExtensionBuildContext<MetaKeys>,
-	) => BuildArtifacts | void | Promise<BuildArtifacts | void>;
+	readonly build?: (ctx: ExtensionBuildContext<MetaKeys>) => Awaitable<BuildArtifacts>;
 	readonly hooks?: ExtensionHooks<Defs, ContextDependencies<Uses>, MetaKeys>;
 }
 
@@ -337,9 +343,7 @@ export interface Extension<
 	readonly sections?: (
 		snapshot: RootCommandSnapshot<MetaKeys>,
 	) => readonly ExtensionSectionContribution[];
-	readonly build?: (
-		ctx: ExtensionBuildContext<MetaKeys>,
-	) => BuildArtifacts | void | Promise<BuildArtifacts | void>;
+	readonly build?: (ctx: ExtensionBuildContext<MetaKeys>) => Awaitable<BuildArtifacts>;
 	readonly hooks?: ExtensionHooks<any, Deps, MetaKeys>;
 	readonly _deps?: Deps;
 }

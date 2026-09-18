@@ -26,7 +26,7 @@ const app = new Crust("my-cli").extend(man());
 .crust/artifacts/man/my-cli.1
 ```
 
-`man()` registers a build hook that writes `man/<name>.<section>` under the build artifact directory; `crust build` copies it into the staged packages. It reports that relative path as a build artifact owned by `crust:man`.
+`man()` registers a build hook that renders `man/<name>.<section>`; `crust build` writes it under the build artifact directory, copies it into the staged packages, and records that path as a build artifact owned by `crust:man`.
 
 ```text
 .Dd March 1, 2026
@@ -55,7 +55,7 @@ await writeManPage({ root, name: "my-cli", outfile: "man/my-cli.1" });
   name="WriteManPageOptions"
 />
 
-`writeManPage()` renders a Command Snapshot, creates parent directories, and writes the page. `section` defaults to `1`; `date` overrides the `.Dd` value.
+`writeManPage()` renders a Command Snapshot, creates parent directories, and writes the page; the build hook does not use it. `section` defaults to `1`; `date` overrides the `.Dd` value.
 
 Without `date`, rendering uses `SOURCE_DATE_EPOCH` in UTC when set, then the current local date. Generated dates use the English `Month D, YYYY` form expected by mdoc.
 

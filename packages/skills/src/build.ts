@@ -50,17 +50,10 @@ async function writeSkillSource(
 	snapshot: CommandSnapshot | undefined,
 	options: Omit<WriteSkillsOptions, "app">,
 ): Promise<readonly string[]> {
-	if (snapshot === undefined && (options.extras?.length ?? 0) === 0) {
-		throw new Error("Nothing to write: provide an app or at least one extra skill directory.");
-	}
 	const outDir = resolve(options.outDir);
 	if (basename(outDir) !== "skills") {
 		throw new Error(`Skill source outDir "${outDir}" must be named "skills".`);
 	}
-
-	const skills = new Map<string, readonly RenderedFile[]>();
-	const authoredNames = new Set<string>();
-
 	for (const sourceDir of options.extras ?? []) {
 		const resolved = resolveSourceDir(sourceDir);
 		// outDir is replaced wholesale below; an extra nested inside it would be destroyed.
@@ -69,6 +62,42 @@ async function writeSkillSource(
 				`Extra skill directory "${resolved}" is inside outDir "${outDir}", which is replaced on every build. Move authored skills outside the build output.`,
 			);
 		}
+	}
+	const files = await renderSkills(snapshot, options);
+	const cwd = resolve(".");
+	// outDir is replaced wholesale below; refuse targets that would delete the caller's project.
+	if (outDir === dirname(outDir) || isWithin(outDir, cwd)) {
+		throw new Error(
+			`Refusing to replace "${outDir}": outDir must be a dedicated directory, not the filesystem root, the working directory, or an ancestor of it.`,
+		);
+	}
+	// Replacing the tree (rather than writing into it) means a stale symlink at
+	// `skills/<name>` is unlinked, not followed into whatever it points at.
+	await rm(outDir, { recursive: true, force: true });
+	for (const file of files) {
+		const filePath = join(outDir, file.path);
+		await mkdir(dirname(filePath), { recursive: true });
+		await writeFile(filePath, file.content);
+	}
+	return files.map((file) => file.path);
+}
+
+/**
+ * Renders generated and authored skills as `<skill>/<file>` paths relative to a
+ * `skills` directory, without writing them.
+ */
+export async function renderSkills(
+	snapshot: CommandSnapshot | undefined,
+	options: Omit<WriteSkillsOptions, "app" | "outDir">,
+): Promise<readonly RenderedFile[]> {
+	if (snapshot === undefined && (options.extras?.length ?? 0) === 0) {
+		throw new Error("Nothing to write: provide an app or at least one extra skill directory.");
+	}
+
+	const skills = new Map<string, readonly RenderedFile[]>();
+	const authoredNames = new Set<string>();
+
+	for (const sourceDir of options.extras ?? []) {
 		const bundle = await loadBundleFiles(sourceDir);
 		validateSkillName(bundle.frontmatter.name);
 		if (authoredNames.has(bundle.frontmatter.name)) {
@@ -93,19 +122,9 @@ async function writeSkillSource(
 		}
 	}
 
-	const cwd = resolve(".");
-	// outDir is replaced wholesale below; refuse targets that would delete the caller's project.
-	if (outDir === dirname(outDir) || isWithin(outDir, cwd)) {
-		throw new Error(
-			`Refusing to replace "${outDir}": outDir must be a dedicated directory, not the filesystem root, the working directory, or an ancestor of it.`,
-		);
-	}
-	await rm(outDir, { recursive: true, force: true });
-	const written: string[] = [];
-	for (const [name, files] of skills) {
-		written.push(...(await writeFiles(join(outDir, name), files)).map((path) => join(name, path)));
-	}
-	return written;
+	return [...skills].flatMap(([name, files]) =>
+		files.map((file) => ({ path: join(name, file.path), content: file.content })),
+	);
 }
 
 function validateSkillName(name: string): void {
@@ -114,16 +133,4 @@ function validateSkillName(name: string): void {
 			`Invalid skill name "${name}": must be 1–64 lowercase alphanumeric characters and hyphens, no leading/trailing/consecutive hyphens.`,
 		);
 	}
-}
-
-async function writeFiles(
-	baseDir: string,
-	files: readonly RenderedFile[],
-): Promise<readonly string[]> {
-	for (const file of files) {
-		const filePath = join(baseDir, file.path);
-		await mkdir(dirname(filePath), { recursive: true });
-		await writeFile(filePath, file.content);
-	}
-	return files.map((file) => file.path);
 }

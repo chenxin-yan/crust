@@ -146,27 +146,18 @@ function printBuildReport(
 ): void {
 	if (report.extensions.length === 0) return;
 	stdout(`Preparing Command Snapshot for ${command}...`);
+	const fileCount = (files: readonly string[]) =>
+		`${files.length} ${files.length === 1 ? "file" : "files"}`;
 	const idWidth = Math.max(...report.extensions.map(({ id }) => id.length));
-	const countWidth = Math.max(
-		0,
-		...report.extensions.flatMap(({ files }) =>
-			files === "unknown"
-				? []
-				: [`${files.length} ${files.length === 1 ? "file" : "files"}`.length],
-		),
-	);
+	const countWidth = Math.max(...report.extensions.map(({ files }) => fileCount(files).length));
 	for (const { id, files } of report.extensions) {
-		const prefix = `  ${id.padEnd(idWidth)}  `;
-		if (files === "unknown") {
-			stdout(`${prefix}ran (artifacts not reported)`);
-			continue;
-		}
-		const count = `${files.length} ${files.length === 1 ? "file" : "files"}`;
 		const listed = files.slice(0, 3);
 		const paths = [...listed, ...(files.length > 3 ? [`+${files.length - 3} more`] : [])].join(
 			", ",
 		);
-		stdout(`${prefix}${count.padEnd(countWidth)}${paths ? `  ${paths}` : ""}`);
+		stdout(
+			`  ${id.padEnd(idWidth)}  ${fileCount(files).padEnd(countWidth)}${paths ? `  ${paths}` : ""}`,
+		);
 	}
 }
 
@@ -369,7 +360,11 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 }
 
 /** Bun and Deno stage platform packages behind a Node launcher; Node stages a root-only bundle. */
-async function runStagedBuild(plan: BuildPlan, io: InvocationIO): Promise<void> {
+async function runStagedBuild(
+	plan: BuildPlan,
+	io: InvocationIO,
+	build: Record<string, BuildReport> | undefined,
+): Promise<void> {
 	if (plan.runtime === "bun") {
 		const distribution: Distribution<BunTarget> = {
 			table: BUN_TARGETS,
@@ -377,7 +372,7 @@ async function runStagedBuild(plan: BuildPlan, io: InvocationIO): Promise<void> 
 			execute: (entry, outfile, target) =>
 				execBuild(entry, outfile, plan.minify, target, plan.envFiles, plan.cwd, plan.bunPlugins),
 		};
-		return runDistributeBuild(plan, distribution, io);
+		return runDistributeBuild(plan, distribution, io, build);
 	}
 	if (plan.runtime === "deno") {
 		const distribution: Distribution<DenoTarget> = {
@@ -385,7 +380,7 @@ async function runStagedBuild(plan: BuildPlan, io: InvocationIO): Promise<void> 
 			targets: plan.targets,
 			execute: (entry, outfile, target) => execDenoBuild(entry, outfile, target, plan.cwd),
 		};
-		return runDistributeBuild(plan, distribution, io);
+		return runDistributeBuild(plan, distribution, io, build);
 	}
 	return runDistributeBuild(
 		plan,
@@ -394,18 +389,23 @@ async function runStagedBuild(plan: BuildPlan, io: InvocationIO): Promise<void> 
 				execNodeBuild(entry, outfile, plan.minify, plan.envFiles, plan.cwd, plan.bunPlugins),
 		},
 		io,
+		build,
 	);
 }
 
 /**
  * Prepares every entry's Command Snapshot and checks that its root command is
  * named after the bin key, then merges the Extension build hook output into
- * `plan.outDir`. Each entry's hooks run in their own temporary directory so a
- * hook that replaces its output directory (skills) cannot erase another
- * entry's files; the merge fails on any path two entries both write.
+ * `plan.outDir`. Each entry's hooks write into their own temporary directory;
+ * the merge fails on any path two entries both write. Returns each command's
+ * Build Report.
  */
-async function prepareEntries(plan: BuildPlan, io: InvocationIO): Promise<void> {
+async function prepareEntries(
+	plan: BuildPlan,
+	io: InvocationIO,
+): Promise<Record<string, BuildReport>> {
 	const owners = new Map<string, string>();
+	const reports: Record<string, BuildReport> = {};
 	for (const { command, entryPath } of plan.entries) {
 		const entryOutDir = await mkdtemp(join(tmpdir(), "crust-artifacts-"));
 		try {
@@ -424,10 +424,12 @@ async function prepareEntries(plan: BuildPlan, io: InvocationIO): Promise<void> 
 			}
 			printBuildReport(command, build, io.stdout);
 			mergeEntryArtifacts(entryOutDir, plan.outDir, command, owners);
+			reports[command] = build;
 		} finally {
 			rmSync(entryOutDir, { recursive: true, force: true });
 		}
 	}
+	return reports;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -493,9 +495,10 @@ export const buildCommand = defineCommand(
 				const plan = planBuild(flags, cwd);
 				stdout(`${dim("Runtime:")} ${plan.runtime} ${dim(`(${plan.runtimeSource})`)}`);
 				// Wipe once, before Extension hooks fill .crust/artifacts; staging only adds to the tree.
+				// Clean-by-producer would be a set diff against manifest.build if this wipe is ever dropped.
 				rmSync(plan.stageDir, { recursive: true, force: true });
 				// --no-validate skips the snapshots (and so the name check and hooks), not the bin validation above.
-				if (plan.validate) await prepareEntries(plan, io);
-				await runStagedBuild(plan, io);
+				const build = plan.validate ? await prepareEntries(plan, io) : undefined;
+				await runStagedBuild(plan, io, build);
 			}),
 );

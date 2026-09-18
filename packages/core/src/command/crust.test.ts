@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -2032,18 +2032,23 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		const app = new Crust("build-subprocess")
 			.extend(
 				defineExtension(defineExtensionId("first"), {
-					build: ({ snapshot, outDir: receivedOutDir }) => {
-						expect(Object.isFrozen(snapshot)).toBe(true);
-						expect(snapshot.meta.name).toBe("build-subprocess");
-						expect(receivedOutDir).toBe(outDir);
+					build: (ctx) => {
+						expect(Object.isFrozen(ctx.snapshot)).toBe(true);
+						expect(ctx.snapshot.meta.name).toBe("build-subprocess");
+						// The output directory is owned by core; a hook has no handle to write beside its returned files.
+						expect(Object.keys(ctx)).toEqual(["snapshot"]);
 						calls.push("first");
-						return ["first\\one.txt", "nested/../first-two.txt"];
+						return [
+							{ path: "first\\one.txt", content: "one" },
+							{ path: "nested/../first-two.txt", content: new TextEncoder().encode("two") },
+						];
 					},
 				}),
 				defineExtension(defineExtensionId("runtime-only")),
 				defineExtension(defineExtensionId("second"), {
 					build: () => {
 						calls.push("second");
+						return [];
 					},
 				}),
 			)
@@ -2054,12 +2059,119 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
 
 		expect(calls).toEqual(["first", "second"]);
+		// The report lists exactly the written paths; core wrote them, not the hook.
 		expect(JSON.parse(await readFile(join(dirname(path), "build-report.json"), "utf8"))).toEqual({
 			extensions: [
 				{ id: "first", files: ["first/one.txt", "first-two.txt"] },
-				{ id: "second", files: "unknown" },
+				{ id: "second", files: [] },
 			],
 		});
+		expect(await readFile(join(outDir, "first", "one.txt"), "utf8")).toBe("one");
+		expect(await readFile(join(outDir, "first-two.txt"), "utf8")).toBe("two");
+	});
+
+	it("rejects a path two build hooks both return, naming both Extensions, before writing", async () => {
+		const path = await snapshotPath();
+		const outDir = join(dirname(path), "output");
+		process.env[SNAPSHOT_PATH_ENV] = path;
+		process.env[BUILD_OUT_DIR_ENV] = outDir;
+		const app = new Crust("build-subprocess").extend(
+			defineExtension(defineExtensionId("first"), {
+				build: () => [{ path: "shared/config.json", content: "first" }],
+			}),
+			defineExtension(defineExtensionId("second"), {
+				build: () => [
+					{ path: "second/own.txt", content: "own" },
+					{ path: "shared\\config.json", content: "second" },
+				],
+			}),
+		);
+
+		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
+
+		expect(errorCalls).toHaveLength(1);
+		expect(errorCalls[0]).toStartWith('Extension "second" build failed:');
+		expect(errorCalls[0]).toContain('"shared/config.json"');
+		expect(errorCalls[0]).toContain('Extension "first"');
+		expect(await readFile(join(outDir, "shared", "config.json"), "utf8")).toBe("first");
+		expect(existsSync(join(outDir, "second"))).toBe(false);
+	});
+
+	it("rejects paths that differ only by case, naming both Extensions and both spellings", async () => {
+		const path = await snapshotPath();
+		const outDir = join(dirname(path), "output");
+		process.env[SNAPSHOT_PATH_ENV] = path;
+		process.env[BUILD_OUT_DIR_ENV] = outDir;
+		const app = new Crust("build-subprocess").extend(
+			defineExtension(defineExtensionId("first"), {
+				build: () => [{ path: "shared/Config.json", content: "first" }],
+			}),
+			defineExtension(defineExtensionId("second"), {
+				build: () => [{ path: "shared/config.json", content: "second" }],
+			}),
+		);
+
+		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
+
+		expect(errorCalls).toHaveLength(1);
+		expect(errorCalls[0]).toStartWith('Extension "second" build failed:');
+		expect(errorCalls[0]).toContain('"shared/config.json"');
+		expect(errorCalls[0]).toContain('"shared/Config.json"');
+		expect(errorCalls[0]).toContain('Extension "first"');
+		// On a case-insensitive filesystem both spellings name this file; the first hook's content survives.
+		expect(await readFile(join(outDir, "shared", "Config.json"), "utf8")).toBe("first");
+	});
+
+	it("rejects a path nested under a file an earlier hook produced, before writing", async () => {
+		const path = await snapshotPath();
+		const outDir = join(dirname(path), "output");
+		process.env[SNAPSHOT_PATH_ENV] = path;
+		process.env[BUILD_OUT_DIR_ENV] = outDir;
+		const app = new Crust("build-subprocess").extend(
+			defineExtension(defineExtensionId("first"), {
+				build: () => [{ path: "Foo", content: "first" }],
+			}),
+			defineExtension(defineExtensionId("second"), {
+				build: () => [
+					{ path: "second/own.txt", content: "own" },
+					{ path: "foo/bar", content: "second" },
+				],
+			}),
+		);
+
+		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
+
+		expect(errorCalls).toHaveLength(1);
+		expect(errorCalls[0]).toStartWith('Extension "second" build failed:');
+		expect(errorCalls[0]).toContain('"foo/bar"');
+		expect(errorCalls[0]).toContain('"Foo"');
+		expect(errorCalls[0]).toContain('Extension "first"');
+		expect(await readFile(join(outDir, "Foo"), "utf8")).toBe("first");
+		expect(existsSync(join(outDir, "second"))).toBe(false);
+	});
+
+	it("rejects a hook whose own files nest under each other, before writing", async () => {
+		const path = await snapshotPath();
+		const outDir = join(dirname(path), "output");
+		process.env[SNAPSHOT_PATH_ENV] = path;
+		process.env[BUILD_OUT_DIR_ENV] = outDir;
+		const app = new Crust("build-subprocess").extend(
+			defineExtension(defineExtensionId("only"), {
+				build: () => [
+					{ path: "foo/bar", content: "nested" },
+					{ path: "foo", content: "file" },
+				],
+			}),
+		);
+
+		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
+
+		expect(errorCalls).toHaveLength(1);
+		expect(errorCalls[0]).toStartWith('Extension "only" build failed:');
+		expect(errorCalls[0]).toContain('"foo"');
+		expect(errorCalls[0]).toContain('"foo/bar"');
+		expect(errorCalls[0]).toContain('Extension "only"');
+		expect(existsSync(outDir)).toBe(false);
 	});
 
 	it("runs only the last build hook for a duplicate Extension id", async () => {
@@ -2068,8 +2180,18 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		process.env[BUILD_OUT_DIR_ENV] = dirname(path);
 		const calls: string[] = [];
 		const id = defineExtensionId("duplicate-build");
-		const first = defineExtension(id, { build: () => void calls.push("first") });
-		const second = defineExtension(id, { build: () => void calls.push("second") });
+		const first = defineExtension(id, {
+			build: () => {
+				calls.push("first");
+				return [];
+			},
+		});
+		const second = defineExtension(id, {
+			build: () => {
+				calls.push("second");
+				return [];
+			},
+		});
 		const app = new Crust("build-subprocess").extend(first).extend(second);
 
 		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
@@ -2080,7 +2202,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 	it("refreshes sections between build hooks", async () => {
 		const path = await snapshotPath();
 		const outDir = join(dirname(path), "output");
-		const source = join(dirname(path), "generated-source");
+		const marker = join(outDir, "generated-source", "marker.txt");
 		process.env[SNAPSHOT_PATH_ENV] = path;
 		process.env[BUILD_OUT_DIR_ENV] = outDir;
 		const calls: string[] = [];
@@ -2089,26 +2211,26 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 				async build() {
 					expect(existsSync(path)).toBe(false);
 					calls.push("producer");
-					await mkdir(source);
-					await writeFile(join(source, "marker.txt"), "ready");
+					return [{ path: "generated-source/marker.txt", content: "ready" }];
 				},
 			}),
 			defineExtension(defineExtensionId("consumer"), {
+				// Reads the earlier hook's file from disk, like skills reading resolveArtifactDir("skills").
 				sections: () => [
 					{
 						command: [],
 						title: "Generated source",
-						body: existsSync(join(source, "marker.txt"))
-							? readFileSync(join(source, "marker.txt"), "utf8")
-							: "missing",
+						body: existsSync(marker) ? readFileSync(marker, "utf8") : "missing",
 					},
 				],
 				build({ snapshot }) {
 					calls.push("consumer");
+					expect(existsSync(marker)).toBe(true);
 					expect(snapshot.meta.sections).toContainEqual({
 						title: "Generated source",
 						body: "ready",
 					});
+					return [];
 				},
 			}),
 		);
@@ -2134,9 +2256,9 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 						return command;
 					}),
 				],
-				build() {},
+				build: () => [],
 			}),
-			defineExtension(defineExtensionId("second-hook"), { build() {} }),
+			defineExtension(defineExtensionId("second-hook"), { build: () => [] }),
 		);
 
 		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
@@ -2169,14 +2291,18 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		["an empty", () => "", "must name a file"],
 		["an outDir-relative dot", () => "./", "must name a file"],
 		["a collapsed dot", () => "nested/..", "must name a file"],
-	])("rejects %s reported artifact path", async (_label, artifactPath, message) => {
+	])("rejects %s returned artifact path", async (_label, artifactPath, message) => {
 		const path = await snapshotPath();
 		const outDir = join(dirname(path), "output");
 		process.env[SNAPSHOT_PATH_ENV] = path;
 		process.env[BUILD_OUT_DIR_ENV] = outDir;
 		const app = new Crust("build-subprocess").extend(
 			defineExtension(defineExtensionId("unsafe"), {
-				build: () => [artifactPath(outDir)],
+				// A valid sibling first: every path is checked before any file is written.
+				build: () => [
+					{ path: "valid.txt", content: "valid" },
+					{ path: artifactPath(outDir), content: "unsafe" },
+				],
 			}),
 		);
 
@@ -2185,6 +2311,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		expect(errorCalls).toHaveLength(1);
 		expect(errorCalls[0]).toStartWith('Extension "unsafe" build failed:');
 		expect(errorCalls[0]).toContain(message);
+		expect(existsSync(outDir)).toBe(false);
 	});
 });
 

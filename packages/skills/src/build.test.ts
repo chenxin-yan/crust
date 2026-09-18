@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
 
-import { writeSkills } from "./build.ts";
+import { renderSkills, writeSkills } from "./build.ts";
 import { SkillSourceConflictError } from "./errors.ts";
 
 let tempRoot: string;
@@ -156,6 +156,24 @@ describe("writeSkills", () => {
 		expect(await readdir(outDir)).toEqual(["guide"]);
 	});
 
+	it("replaces a symlinked skill directory instead of writing through it", async () => {
+		const authored = await createBundle("demo", "Hand-written demo skill");
+		const outDir = join(tempRoot, "skills");
+		await mkdir(outDir, { recursive: true });
+		await symlink(authored, join(outDir, "demo"));
+
+		await writeSkills({ app: createApp(), outDir, version: "1.0.0" });
+
+		expect(await readFile(join(authored, "SKILL.md"), "utf8")).toContain(
+			"description: Hand-written demo skill",
+		);
+		expect((await readdir(authored)).sort()).toEqual(["SKILL.md", "references"]);
+		expect((await lstat(join(outDir, "demo"))).isSymbolicLink()).toBe(false);
+		expect(await readFile(join(outDir, "demo", "SKILL.md"), "utf8")).toContain(
+			"description: Demo CLI",
+		);
+	});
+
 	it("rejects an extra skill directory nested inside outDir", async () => {
 		const outDir = join(tempRoot, "skills");
 		await mkdir(join(outDir, "nested"), { recursive: true });
@@ -199,5 +217,37 @@ describe("writeSkills", () => {
 		const result = writeSkills({ app: createApp(), outDir, version: "1.0.0", name: "Bad_Name" });
 		await expect(result).rejects.toThrow('Invalid skill name "Bad_Name"');
 		await expect(readdir(outDir)).rejects.toThrow();
+	});
+});
+
+describe("renderSkills", () => {
+	it("returns generated and authored skill files without touching disk", async () => {
+		const bundleDir = await createBundle("deployment-guide", "Deployment guidance");
+		const snapshot = await createApp().snapshot();
+
+		const files = await renderSkills(snapshot, { version: "1.2.3", extras: [bundleDir] });
+
+		expect(files.map((file) => file.path)).toEqual([
+			join("deployment-guide", "SKILL.md"),
+			join("deployment-guide", "references", "guide.md"),
+			join("demo", "SKILL.md"),
+			join("demo", "commands", "demo.md"),
+			join("demo", "commands", "serve.md"),
+		]);
+		expect(files[1]?.content).toEqual(Buffer.from("# Guide\n"));
+		expect(files[2]?.content).toContain("name: demo");
+		expect(await readdir(tempRoot)).toEqual(["deployment-guide"]);
+	});
+
+	it("renders only authored skills without a snapshot", async () => {
+		const bundleDir = await createBundle("guide", "Authored guidance");
+
+		const files = await renderSkills(undefined, { extras: [bundleDir] });
+
+		expect(files.map((file) => file.path)).toEqual([
+			join("guide", "SKILL.md"),
+			join("guide", "references", "guide.md"),
+		]);
+		await expect(renderSkills(undefined, {})).rejects.toThrow("Nothing to write");
 	});
 });

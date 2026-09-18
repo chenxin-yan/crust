@@ -15,9 +15,7 @@ npm install @crustjs/skills
 
 <include lang="ts">../../../examples/modules/skills.ts#write</include>
 
-`writeSkills()` generates one skill from `app` and copies any authored `extras`. It replaces a dedicated output directory named `skills` and returns paths relative to that directory.
-
-Keep authored extras outside that replaced output directory. An authored skill with the generated skill's name replaces the generated skill.
+`writeSkills()` generates one skill from `app` and copies any authored `extras`. It replaces a dedicated output directory named `skills` and returns paths relative to that directory. An authored skill with the generated skill's name replaces the generated skill.
 
 Each skill has its own directory:
 
@@ -49,7 +47,7 @@ Agent skills:
     Source: .crust/root/skills/my-cli
 ```
 
-Packaged skills are read at runtime from [`resolveArtifactDir("skills")`](/docs/api/crust#resolveartifactdirname); before the first build, help shows a note asking you to run `crust build` instead of failing. The build hook writes generated and authored skills to `.crust/artifacts/skills` and reports those files as artifacts owned by `crust:skills`.
+Packaged skills are read at runtime from [`resolveArtifactDir("skills")`](/docs/api/crust#resolveartifactdirname); before the first build, help shows a note asking you to run `crust build` instead of failing. The build hook renders generated and authored skills under `skills/`; `crust build` writes them to `.crust/artifacts/skills` and records those files as artifacts owned by `crust:skills`.
 
 Generated man pages can embed source paths resolved on the build machine. Run builds from the project root that contains the packaged skills directory to avoid absolute build-machine paths.
 

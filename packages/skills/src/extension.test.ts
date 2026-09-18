@@ -4,7 +4,6 @@ import {
 	lstat,
 	mkdir,
 	mkdtemp,
-	readdir,
 	readFile,
 	readlink,
 	rm,
@@ -133,32 +132,36 @@ describe("skill extension packaged directory", () => {
 		expect(output).toContain("Then run `demo agents`");
 	});
 
+	/** Build hook output, keyed by artifact path with text content. */
+	async function buildArtifacts(
+		extension: ReturnType<typeof skill>,
+		snapshot: Awaited<ReturnType<Crust["snapshot"]>>,
+	): Promise<Map<string, string>> {
+		const artifacts = await extension.build!({ snapshot });
+		return new Map(artifacts.map((file) => [file.path, Buffer.from(file.content).toString()]));
+	}
+
 	it("omits the generated skill when generated is false", async () => {
 		const authored = join(tempRoot, "authored", "guide");
 		await mkdir(authored, { recursive: true });
 		await writeFile(join(authored, "SKILL.md"), "---\nname: guide\ndescription: Guide\n---\n");
 		const extension = skill({ generated: false, extras: [authored] });
 		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
-		const outDir = join(tempRoot, "dist");
 
-		const artifacts = await extension.build?.({ snapshot, outDir });
+		const artifacts = await buildArtifacts(extension, snapshot);
 
-		expect(artifacts).toEqual([join("skills", "guide", "SKILL.md")]);
-		expect(await readdir(join(outDir, "skills"))).toEqual(["guide"]);
+		expect([...artifacts.keys()]).toEqual([join("skills", "guide", "SKILL.md")]);
 	});
 
 	it("generates from the snapshot even when a stale packaged directory exists", async () => {
 		await writeSource("demo", "stale");
 		const extension = skill({});
 		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
-		const outDir = join(tempRoot, "dist");
 
-		await extension.build?.({ snapshot, outDir });
+		const artifacts = await buildArtifacts(extension, snapshot);
 
-		expect(await readdir(join(outDir, "skills", "demo"))).not.toContain("content.md");
-		expect(await readFile(join(outDir, "skills", "demo", "SKILL.md"), "utf8")).toContain(
-			"description: Demo",
-		);
+		expect(artifacts.has(join("skills", "demo", "content.md"))).toBe(false);
+		expect(artifacts.get(join("skills", "demo", "SKILL.md"))).toContain("description: Demo");
 	});
 
 	it("generates command and authored skills together when extras are configured", async () => {
@@ -178,28 +181,18 @@ describe("skill extension packaged directory", () => {
 		})
 			.extend(extension)
 			.snapshot();
-		const outDir = join(tempRoot, "dist");
 
-		await withCwd(tempRoot, async () => {
-			await extension.build?.({ snapshot, outDir });
-		});
+		const artifacts = await withCwd(tempRoot, () => buildArtifacts(extension, snapshot));
 
-		expect(await readFile(join(outDir, "skills", "demo", "SKILL.md"), "utf8")).toContain(
-			'version: "9.9.9"',
-		);
-		const rootReference = await readFile(
-			join(outDir, "skills", "demo", "commands", "demo.md"),
-			"utf8",
-		);
+		expect(artifacts.get(join("skills", "demo", "SKILL.md"))).toContain('version: "9.9.9"');
+		const rootReference = artifacts.get(join("skills", "demo", "commands", "demo.md"));
 		expect(rootReference).toContain("# `demo`");
 		expect(rootReference).toContain("## Agent skills\nApplication-authored agent guidance.");
 		// The extension's Agent skills section advertises the packaged directory; it
 		// must not leak build-machine paths into the regenerated command reference.
 		expect(rootReference).not.toContain(tempRoot);
-		expect(await readFile(join(outDir, "skills", "guide", "content.md"), "utf8")).toBe(
-			"authored\n",
-		);
-		await expect(lstat(join(outDir, "skills", "stale"))).rejects.toThrow();
+		expect(artifacts.get(join("skills", "guide", "content.md"))).toBe("authored\n");
+		expect([...artifacts.keys()].some((path) => path.includes("stale"))).toBe(false);
 	});
 
 	it("forwards generated skill overrides to the build", async () => {
@@ -216,12 +209,11 @@ describe("skill extension packaged directory", () => {
 			description: "Generated command reference",
 		});
 		const snapshot = await new Crust("gyst", { description: "Gyst" }).extend(extension).snapshot();
-		const outDir = join(tempRoot, "dist");
 
-		await extension.build?.({ snapshot, outDir });
+		const artifacts = await buildArtifacts(extension, snapshot);
 
-		expect((await readdir(join(outDir, "skills"))).sort()).toEqual(["gyst", "gyst-reference"]);
-		expect(await readFile(join(outDir, "skills", "gyst-reference", "SKILL.md"), "utf8")).toContain(
+		expect(artifacts.has(join("skills", "gyst", "SKILL.md"))).toBe(true);
+		expect(artifacts.get(join("skills", "gyst-reference", "SKILL.md"))).toContain(
 			"description: Generated command reference",
 		);
 	});
@@ -229,24 +221,19 @@ describe("skill extension packaged directory", () => {
 	it("renders from the snapshot without requiring a package version", async () => {
 		const extension = skill({});
 		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
-		const outDir = join(tempRoot, "dist");
 		await writeFile(join(tempRoot, "package.json"), '{"version":"8.8.8"}');
 
-		await withCwd(tempRoot, async () => {
-			await extension.build!({ snapshot, outDir });
-		});
+		const artifacts = await withCwd(tempRoot, () => buildArtifacts(extension, snapshot));
 
-		const generated = await readFile(join(outDir, "skills", "demo", "SKILL.md"), "utf8");
+		const generated = artifacts.get(join("skills", "demo", "SKILL.md"));
 		expect(generated).toContain("name: demo");
 		expect(generated).not.toContain("version:");
 		expect(generated).not.toContain(tempRoot);
 		// The snapshot was prepared while the packaged directory was missing; the
 		// skill must not embed that stale warning in its command reference.
-		const rootReference = await readFile(
-			join(outDir, "skills", "demo", "commands", "demo.md"),
-			"utf8",
+		expect(artifacts.get(join("skills", "demo", "commands", "demo.md"))).not.toContain(
+			"unavailable",
 		);
-		expect(rootReference).not.toContain("unavailable");
 	});
 
 	it.each(["skills", "skill"])("installs every packaged skill via %s", async (command) => {

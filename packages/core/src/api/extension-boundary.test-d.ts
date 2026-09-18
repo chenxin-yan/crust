@@ -23,6 +23,7 @@ function _extensionBoundary(broad: Extension) {
 			build({ snapshot }) {
 				const name: string = snapshot.meta.name;
 				void name;
+				return [];
 			},
 		}),
 		defineExtension(defineExtensionId("second")),

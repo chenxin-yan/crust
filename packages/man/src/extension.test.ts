@@ -1,17 +1,8 @@
-import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { describe, expect, it } from "bun:test";
 
 import { Crust } from "@crustjs/core";
 
 import { man } from "./extension.ts";
-
-const directories: string[] = [];
-
-afterEach(async () => {
-	await Promise.all(directories.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
-});
 
 describe("man Extension", () => {
 	it("exposes the reserved identity on the factory", () => {
@@ -19,40 +10,34 @@ describe("man Extension", () => {
 		expect(man().id).toBe(man.id);
 	});
 
-	it("writes the root manual with a configurable section", async () => {
-		const outDir = await mkdtemp(join(tmpdir(), "crust-man-extension-"));
-		directories.push(outDir);
+	it("returns the root manual with a configurable section", async () => {
 		const extension = man({ section: 5 });
 		const snapshot = await new Crust("demo", { description: "Demo CLI" })
 			.extend(extension)
 			.snapshot();
 
-		const artifacts = await extension.build?.({ snapshot, outDir });
+		const artifacts = await extension.build?.({ snapshot });
 
-		expect(artifacts).toEqual([join("man", "demo.5")]);
-		const output = await readFile(join(outDir, "man", "demo.5"), "utf8");
+		expect(artifacts).toEqual([{ path: "man/demo.5", content: expect.any(String) }]);
+		const output = artifacts?.[0]?.content as string;
 		expect(output).toContain(".Dt DEMO 5");
-		expect(output).not.toContain(outDir);
 	});
 
 	it("honors a configured installed name", async () => {
-		const outDir = await mkdtemp(join(tmpdir(), "crust-man-extension-"));
-		directories.push(outDir);
 		const extension = man({ name: "my-tool" });
 		const snapshot = await new Crust("demo").extend(extension).snapshot();
 
-		await extension.build?.({ snapshot, outDir });
+		const artifacts = await extension.build?.({ snapshot });
 
-		expect(await readFile(join(outDir, "man", "my-tool.1"), "utf8")).toContain(".Nm my-tool");
+		expect(artifacts?.[0]?.path).toBe("man/my-tool.1");
+		expect(artifacts?.[0]?.content).toContain(".Nm my-tool");
 	});
 
 	it("rejects names containing path separators", async () => {
-		const outDir = await mkdtemp(join(tmpdir(), "crust-man-extension-"));
-		directories.push(outDir);
 		const extension = man({ name: "foo\\bar" });
 		const snapshot = await new Crust("demo").extend(extension).snapshot();
 
-		await expect(extension.build?.({ snapshot, outDir })).rejects.toThrow(
+		await expect(extension.build?.({ snapshot })).rejects.toThrow(
 			"must not contain path separators",
 		);
 	});

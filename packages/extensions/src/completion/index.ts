@@ -1,8 +1,9 @@
-import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve as resolvePath } from "node:path";
 
 import {
 	CrustError,
+	type BuildArtifacts,
 	type CommandDefinition,
 	type CommandSnapshot,
 	type ExtensionFactory,
@@ -98,21 +99,16 @@ function prepareRender(root: CommandSnapshot, options: CompletionRenderOptions) 
 	};
 }
 
-async function writeCompletionFiles(
-	dir: string,
+/** Every supported shell's drop-in file, named by its autoload convention. */
+function renderCompletionFiles(
 	root: CommandSnapshot,
 	options: CompletionRenderOptions,
-): Promise<readonly string[]> {
+): BuildArtifacts {
 	const { spec, binName, version } = prepareRender(root, options);
-	await mkdir(dir, { recursive: true });
-	const filenames: string[] = [];
-	for (const shell of SUPPORTED_SHELLS) {
-		const filename = filenameForShell(shell, binName);
-		const script = SHELL_RENDERERS[shell](spec, binName, version);
-		await writeFile(join(dir, filename), script, "utf8");
-		filenames.push(filename);
-	}
-	return filenames;
+	return SUPPORTED_SHELLS.map((shell) => ({
+		path: filenameForShell(shell, binName),
+		content: SHELL_RENDERERS[shell](spec, binName, version),
+	}));
 }
 
 function renderCompletionScript(
@@ -170,10 +166,10 @@ export function renderFishCompletion(
  *   distribution channels — distributors run it once at packaging time
  *   and the resulting files become drop-ins.
  *
- * **Build hook.** `crust build` writes the same three files under
- * `.crust/artifacts/completions/`; staged builds copy it into the root package
- * and each platform package's `bin/`. The binary name defaults to the
- * snapshot's `meta.name`, unless `options.binName` is set.
+ * **Build hook.** Returns the same three files under `completions/`; `crust build`
+ * writes them to `.crust/artifacts/completions/` and copies that directory into
+ * the root package and each platform package's `bin/`. The binary name defaults
+ * to the snapshot's `meta.name`, unless `options.binName` is set.
  */
 // Configurable command names require an open command namespace.
 export const completion: ExtensionFactory<
@@ -216,26 +212,19 @@ export const completion: ExtensionFactory<
 					// the packaging-time use case — distributors generate every
 					// supported file in one invocation regardless of which
 					// shell they nominally requested.
-					await writeCompletionFiles(resolvePath(outputDir), context.rootCommand, options);
+					const dir = resolvePath(outputDir);
+					const files = renderCompletionFiles(context.rootCommand, options);
+					await mkdir(dir, { recursive: true });
+					for (const file of files) await writeFile(join(dir, file.path), file.content);
 				}),
 	);
 
 	return {
 		commands: [completionCommand],
-		build: async ({ snapshot, outDir }) => {
-			const dir = join(outDir, "completions");
-			await mkdir(outDir, { recursive: true });
-			const stagedDir = await mkdtemp(join(outDir, ".completions-"));
-			try {
-				// Keep previous artifacts until validation, rendering, and writes succeed.
-				const filenames = await writeCompletionFiles(stagedDir, snapshot, options);
-				// The hook owns this directory; remove stale scripts after a binary rename.
-				await rm(dir, { recursive: true, force: true });
-				await rename(stagedDir, dir);
-				return filenames.map((filename) => join("completions", filename));
-			} finally {
-				await rm(stagedDir, { recursive: true, force: true });
-			}
-		},
+		build: ({ snapshot }) =>
+			renderCompletionFiles(snapshot, options).map((file) => ({
+				...file,
+				path: `completions/${file.path}`,
+			})),
 	};
 });
