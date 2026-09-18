@@ -312,8 +312,15 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Prom
 			if (renderPending !== null) return;
 			renderPending = setTimeout(() => {
 				renderPending = null;
-				if (!isCleanedUp) {
+				if (isCleanedUp) return;
+				// The keypress handler's try/catch has already returned by the time
+				// this timer fires, so a throwing render must be caught here or it
+				// escapes as an uncaught exception with the prompt still pending.
+				try {
 					renderFrame(render(state, theme));
+				} catch (err) {
+					cleanup();
+					reject(err);
 				}
 			}, 0);
 		}

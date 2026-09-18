@@ -397,6 +397,33 @@ describe("runPrompt", () => {
 		await expect(promise).rejects.toThrow("handler error");
 	});
 
+	it("rejects and cleans up when a deferred render throws", async () => {
+		const config: PromptConfig<number, string> = {
+			render: (state) => {
+				if (state > 0) throw new Error("render error");
+				return "ready";
+			},
+			handleKey: (_key, state) => state + 1,
+			initialState: 0,
+			theme: defaultTheme,
+		};
+
+		const harness = createPromptIO();
+		const promise = runPrompt(config, harness.io);
+		harness.type("a");
+
+		await expect(promise).rejects.toThrow("render error");
+		expect(harness.io.input.isRaw).toBe(false);
+
+		// Stream reservations were released: the same streams can host a new prompt.
+		const reuse = runPrompt(
+			{ ...config, render: () => "again", handleKey: () => submit("done") },
+			harness.io,
+		);
+		harness.type("a");
+		expect(await reuse).toBe("done");
+	});
+
 	it("rejects with an AbortError DOMException on Ctrl+C", async () => {
 		const config: PromptConfig<{ value: string }, string> = {
 			render: (state) => state.value,
