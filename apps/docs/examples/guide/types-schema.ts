@@ -5,8 +5,8 @@ import { z } from "zod";
 const Port = z.coerce.number().int().min(1).max(65535).default(3000);
 
 const serve = new Crust("serve").args({ name: "port", schema: Port }).action(({ args, stdout }) => {
-  const port = args.port; // number
-  stdout(`listening on port ${port}`);
+	const port = args.port; // number
+	stdout(`listening on port ${port}`);
 });
 
 await serve.execute();

@@ -2,10 +2,10 @@ import { progress, spinner, type ProgressSink, withTerminalIO } from "@crustjs/p
 
 //#region spinner
 await spinner({
-  message: "Building",
-  task: async ({ updateMessage }) => {
-    updateMessage("Running checks");
-  },
+	message: "Building",
+	task: async ({ updateMessage }) => {
+		updateMessage("Running checks");
+	},
 });
 //#endregion
 
@@ -21,6 +21,6 @@ bar.stop("success", "Files complete");
 const transcript: string[] = [];
 const sink: ProgressSink = { isTTY: false, write: (text) => transcript.push(text) };
 await withTerminalIO({ output: sink }, () =>
-  spinner({ message: "Deploying", task: async () => {} }),
+	spinner({ message: "Deploying", task: async () => {} }),
 );
 //#endregion

@@ -5,102 +5,102 @@ type HeadMeta = Array<React.JSX.IntrinsicElements["meta"]>;
 type HeadScript = React.JSX.IntrinsicElements["script"];
 
 export const siteConfig = {
-  name: "CrustJS",
-  siteName: "CrustJS CLI Framework",
-  siteUrl: "https://crustjs.com",
-  titleTemplate: (page?: string) =>
-    page ? `${page} | CrustJS CLI Framework` : "CrustJS - TypeScript CLI Framework for Bun",
-  defaultDescription: "A TypeScript-first, Bun-native CLI framework with composable modules.",
-  twitterCard: "summary" as const,
-  githubUrl: "https://github.com/chenxin-yan/crust",
-  npmUrl: "https://www.npmjs.com/org/crustjs",
-  discordUrl: "https://discord.gg/sQF8hdN6Ht",
+	name: "CrustJS",
+	siteName: "CrustJS CLI Framework",
+	siteUrl: "https://crustjs.com",
+	titleTemplate: (page?: string) =>
+		page ? `${page} | CrustJS CLI Framework` : "CrustJS - TypeScript CLI Framework for Bun",
+	defaultDescription: "A TypeScript-first, Bun-native CLI framework with composable modules.",
+	twitterCard: "summary" as const,
+	githubUrl: "https://github.com/chenxin-yan/crust",
+	npmUrl: "https://www.npmjs.com/org/crustjs",
+	discordUrl: "https://discord.gg/sQF8hdN6Ht",
 };
 
 /** Build absolute URL from a path */
 export function absoluteUrl(path: string): string {
-  return new URL(path, siteConfig.siteUrl).href;
+	return new URL(path, siteConfig.siteUrl).href;
 }
 
 /** Generate standard meta tags for a page */
 export function buildPageMeta({
-  title,
-  description,
-  canonical,
-  noindex,
+	title,
+	description,
+	canonical,
+	noindex,
 }: {
-  title?: string;
-  description?: string;
-  canonical?: string;
-  noindex?: boolean;
+	title?: string;
+	description?: string;
+	canonical?: string;
+	noindex?: boolean;
 }) {
-  const resolvedTitle = siteConfig.titleTemplate(title);
-  const resolvedDescription = description ?? siteConfig.defaultDescription;
-  const resolvedCanonical = canonical ? absoluteUrl(canonical) : undefined;
-  const meta: HeadMeta = [
-    { title: resolvedTitle },
-    { name: "description", content: resolvedDescription },
-    // Open Graph
-    { property: "og:type", content: "website" },
-    { property: "og:site_name", content: siteConfig.siteName },
-    { property: "og:title", content: resolvedTitle },
-    { property: "og:description", content: resolvedDescription },
-    // Twitter
-    { name: "twitter:card", content: siteConfig.twitterCard },
-    { name: "twitter:title", content: resolvedTitle },
-    { name: "twitter:description", content: resolvedDescription },
-  ];
+	const resolvedTitle = siteConfig.titleTemplate(title);
+	const resolvedDescription = description ?? siteConfig.defaultDescription;
+	const resolvedCanonical = canonical ? absoluteUrl(canonical) : undefined;
+	const meta: HeadMeta = [
+		{ title: resolvedTitle },
+		{ name: "description", content: resolvedDescription },
+		// Open Graph
+		{ property: "og:type", content: "website" },
+		{ property: "og:site_name", content: siteConfig.siteName },
+		{ property: "og:title", content: resolvedTitle },
+		{ property: "og:description", content: resolvedDescription },
+		// Twitter
+		{ name: "twitter:card", content: siteConfig.twitterCard },
+		{ name: "twitter:title", content: resolvedTitle },
+		{ name: "twitter:description", content: resolvedDescription },
+	];
 
-  if (noindex) {
-    meta.push({ name: "robots", content: "noindex, nofollow" });
-  }
+	if (noindex) {
+		meta.push({ name: "robots", content: "noindex, nofollow" });
+	}
 
-  const links: Array<{ rel: string; href: string }> = [];
-  if (resolvedCanonical) {
-    meta.push({ property: "og:url", content: resolvedCanonical });
-    links.push({ rel: "canonical", href: resolvedCanonical });
-  }
+	const links: Array<{ rel: string; href: string }> = [];
+	if (resolvedCanonical) {
+		meta.push({ property: "og:url", content: resolvedCanonical });
+		links.push({ rel: "canonical", href: resolvedCanonical });
+	}
 
-  return { meta, links };
+	return { meta, links };
 }
 
 /** JSON-LD structured data for the site root */
 export function buildSiteJsonLd(): HeadScript[] {
-  return [
-    {
-      type: "application/ld+json",
-      children: JSON.stringify({
-        "@context": "https://schema.org",
-        "@type": "Organization",
-        name: siteConfig.name,
-        url: siteConfig.siteUrl,
-        logo: absoluteUrl("/favicon-96x96.png"),
-        sameAs: [siteConfig.githubUrl, siteConfig.npmUrl, siteConfig.discordUrl],
-      }),
-    },
-    {
-      type: "application/ld+json",
-      children: JSON.stringify({
-        "@context": "https://schema.org",
-        "@type": "WebSite",
-        name: siteConfig.siteName,
-        url: siteConfig.siteUrl,
-        description: siteConfig.defaultDescription,
-      }),
-    },
-    {
-      type: "application/ld+json",
-      children: JSON.stringify({
-        "@context": "https://schema.org",
-        "@type": "SoftwareSourceCode",
-        name: siteConfig.name,
-        description: siteConfig.defaultDescription,
-        url: siteConfig.siteUrl,
-        codeRepository: siteConfig.githubUrl,
-        programmingLanguage: "TypeScript",
-        runtimePlatform: "Bun",
-        license: "https://opensource.org/licenses/MIT",
-      }),
-    },
-  ];
+	return [
+		{
+			type: "application/ld+json",
+			children: JSON.stringify({
+				"@context": "https://schema.org",
+				"@type": "Organization",
+				name: siteConfig.name,
+				url: siteConfig.siteUrl,
+				logo: absoluteUrl("/favicon-96x96.png"),
+				sameAs: [siteConfig.githubUrl, siteConfig.npmUrl, siteConfig.discordUrl],
+			}),
+		},
+		{
+			type: "application/ld+json",
+			children: JSON.stringify({
+				"@context": "https://schema.org",
+				"@type": "WebSite",
+				name: siteConfig.siteName,
+				url: siteConfig.siteUrl,
+				description: siteConfig.defaultDescription,
+			}),
+		},
+		{
+			type: "application/ld+json",
+			children: JSON.stringify({
+				"@context": "https://schema.org",
+				"@type": "SoftwareSourceCode",
+				name: siteConfig.name,
+				description: siteConfig.defaultDescription,
+				url: siteConfig.siteUrl,
+				codeRepository: siteConfig.githubUrl,
+				programmingLanguage: "TypeScript",
+				runtimePlatform: "Bun",
+				license: "https://opensource.org/licenses/MIT",
+			}),
+		},
+	];
 }

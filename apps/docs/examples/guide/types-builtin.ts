@@ -1,10 +1,10 @@
 import { Crust } from "@crustjs/core";
 
 const wait = new Crust("wait")
-  .flags({ name: "seconds", type: "number", required: true })
-  .action(({ flags, stdout }) => {
-    const seconds = flags.seconds; // number
-    stdout(`waiting ${seconds * 1000}ms`);
-  });
+	.flags({ name: "seconds", type: "number", required: true })
+	.action(({ flags, stdout }) => {
+		const seconds = flags.seconds; // number
+		stdout(`waiting ${seconds * 1000}ms`);
+	});
 
 await wait.execute();

@@ -1,15 +1,15 @@
 import { Crust, defineCommand, defineContext } from "@crustjs/core";
 
 const database = defineContext("database", ({ stdout, defer }) => {
-  stdout("database opened");
-  defer(() => stdout("database closed"));
-  return { query: (sql: string) => `${sql}: ok` };
+	stdout("database opened");
+	defer(() => stdout("database closed"));
+	return { query: (sql: string) => `${sql}: ok` };
 });
 
 const query = defineCommand("query", (command) =>
-  command.use(database).action(async ({ ctx, stdout }) => {
-    stdout((await ctx.database).query("select 1"));
-  }),
+	command.use(database).action(async ({ ctx, stdout }) => {
+		stdout((await ctx.database).query("select 1"));
+	}),
 );
 
 // [!code highlight:2]

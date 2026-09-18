@@ -22,165 +22,165 @@ const PACKAGE_MANAGER_GROUP_ID = "package-manager";
 
 // Must match what remarkNpm expands the Quick Start scaffold fence to; site.test.ts checks it.
 export const SCAFFOLD_COMMANDS = {
-  npm: "npx create-crust@latest my-cli",
-  pnpm: "pnpm dlx create-crust@latest my-cli",
-  yarn: "yarn dlx create-crust@latest my-cli",
-  bun: "bun x create-crust@latest my-cli",
+	npm: "npx create-crust@latest my-cli",
+	pnpm: "pnpm dlx create-crust@latest my-cli",
+	yarn: "yarn dlx create-crust@latest my-cli",
+	bun: "bun x create-crust@latest my-cli",
 };
 
 let highlighterPromise: Promise<Awaited<ReturnType<typeof createHighlighterCore>>> | null = null;
 
 function getHighlighter() {
-  if (!highlighterPromise) {
-    highlighterPromise = createHighlighterCore({
-      themes: [gruvboxLightHard, gruvboxDarkHard],
-      langs: [langTypescript],
-      engine: createJavaScriptRegexEngine(),
-    });
-  }
+	if (!highlighterPromise) {
+		highlighterPromise = createHighlighterCore({
+			themes: [gruvboxLightHard, gruvboxDarkHard],
+			langs: [langTypescript],
+			engine: createJavaScriptRegexEngine(),
+		});
+	}
 
-  return highlighterPromise;
+	return highlighterPromise;
 }
 
 function escapeHtml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+	return value
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;")
+		.replaceAll('"', "&quot;")
+		.replaceAll("'", "&#39;");
 }
 
 function createFallbackHighlightedCode(code: string) {
-  const lines = code
-    .split("\n")
-    .map((line) => `<span class="line">${escapeHtml(line)}</span>`)
-    .join("\n");
+	const lines = code
+		.split("\n")
+		.map((line) => `<span class="line">${escapeHtml(line)}</span>`)
+		.join("\n");
 
-  return `<pre class="shiki" tabindex="0"><code>${lines}</code></pre>`;
+	return `<pre class="shiki" tabindex="0"><code>${lines}</code></pre>`;
 }
 
 const getHighlightedCode = createServerFn({ method: "GET" }).handler(async () => {
-  const highlighter = await getHighlighter();
-  return highlighter.codeToHtml(CODE_EXAMPLE, {
-    lang: "typescript",
-    themes: {
-      light: "gruvbox-light-hard",
-      dark: "gruvbox-dark-hard",
-    },
-    defaultColor: false,
-  });
+	const highlighter = await getHighlighter();
+	return highlighter.codeToHtml(CODE_EXAMPLE, {
+		lang: "typescript",
+		themes: {
+			light: "gruvbox-light-hard",
+			dark: "gruvbox-dark-hard",
+		},
+		defaultColor: false,
+	});
 });
 
 const { meta: homeMeta, links: homeLinks } = buildPageMeta({
-  description: "CrustJS is a TypeScript-first, Bun-native CLI framework with composable modules.",
-  canonical: "/",
+	description: "CrustJS is a TypeScript-first, Bun-native CLI framework with composable modules.",
+	canonical: "/",
 });
 
 export const Route = createFileRoute("/")({
-  component: FurnaceHome,
-  head: () => ({
-    meta: homeMeta,
-    links: homeLinks,
-  }),
-  loader: async () => {
-    // allSettled so a shiki failure doesn't also degrade npm versions (and vice versa)
-    const [codeResult, versionsResult] = await Promise.allSettled([
-      getHighlightedCode(),
-      getNpmVersions(),
-    ]);
+	component: FurnaceHome,
+	head: () => ({
+		meta: homeMeta,
+		links: homeLinks,
+	}),
+	loader: async () => {
+		// allSettled so a shiki failure doesn't also degrade npm versions (and vice versa)
+		const [codeResult, versionsResult] = await Promise.allSettled([
+			getHighlightedCode(),
+			getNpmVersions(),
+		]);
 
-    if (codeResult.status === "rejected") {
-      console.error("[docs] Failed to highlight code example", codeResult.reason);
-    }
-    if (versionsResult.status === "rejected") {
-      console.error("[docs] Failed to load npm versions", versionsResult.reason);
-    }
+		if (codeResult.status === "rejected") {
+			console.error("[docs] Failed to highlight code example", codeResult.reason);
+		}
+		if (versionsResult.status === "rejected") {
+			console.error("[docs] Failed to load npm versions", versionsResult.reason);
+		}
 
-    return {
-      highlightedCode:
-        codeResult.status === "fulfilled" ? codeResult.value : FALLBACK_HIGHLIGHTED_CODE,
-      npmVersions: versionsResult.status === "fulfilled" ? versionsResult.value : {},
-    };
-  },
+		return {
+			highlightedCode:
+				codeResult.status === "fulfilled" ? codeResult.value : FALLBACK_HIGHLIGHTED_CODE,
+			npmVersions: versionsResult.status === "fulfilled" ? versionsResult.value : {},
+		};
+	},
 });
 
 const MODULES: Array<{
-  pkg: string;
-  desc: string;
-  doc?: string;
-  upcoming?: boolean;
+	pkg: string;
+	desc: string;
+	doc?: string;
+	upcoming?: boolean;
 }> = [
-  {
-    pkg: "@crustjs/core",
-    desc: "Commands, Contexts, Extensions, execution",
-    doc: "modules/core",
-  },
-  {
-    pkg: "@crustjs/extensions",
-    desc: "Official Crust Extensions",
-    doc: "modules/extensions",
-  },
-  {
-    pkg: "@crustjs/crust",
-    desc: "CLI build tooling",
-    doc: "modules/crust",
-  },
-  {
-    pkg: "@crustjs/create",
-    desc: "Scaffolding library for create-xx tools",
-    doc: "modules/create",
-  },
-  {
-    pkg: "@crustjs/progress",
-    desc: "Progress indicators",
-    doc: "modules/progress",
-  },
-  {
-    pkg: "@crustjs/tui",
-    desc: "OpenTUI adapter",
-    doc: "modules/tui",
-  },
-  {
-    pkg: "@crustjs/prompts",
-    desc: "Interactive prompts",
-    doc: "modules/prompts",
-  },
-  {
-    pkg: "@crustjs/style",
-    desc: "Terminal styling",
-    doc: "modules/style",
-  },
-  {
-    pkg: "@crustjs/store",
-    desc: "Type-safe config persistence",
-    doc: "modules/store",
-  },
-  {
-    pkg: "@crustjs/skills",
-    desc: "Agent skills generation",
-    doc: "modules/skills",
-  },
-  {
-    pkg: "@crustjs/man",
-    desc: "Generate mdoc(7) manual pages",
-    doc: "modules/man",
-  },
-  {
-    pkg: "@crustjs/testing",
-    desc: "CLI testing helpers",
-    doc: "modules/testing",
-  },
-  {
-    pkg: "@crustjs/render",
-    desc: "Terminal content rendering",
-    upcoming: true,
-  },
-  {
-    pkg: "@crustjs/log",
-    desc: "Structured logging",
-    upcoming: true,
-  },
+	{
+		pkg: "@crustjs/core",
+		desc: "Commands, Contexts, Extensions, execution",
+		doc: "modules/core",
+	},
+	{
+		pkg: "@crustjs/extensions",
+		desc: "Official Crust Extensions",
+		doc: "modules/extensions",
+	},
+	{
+		pkg: "@crustjs/crust",
+		desc: "CLI build tooling",
+		doc: "modules/crust",
+	},
+	{
+		pkg: "@crustjs/create",
+		desc: "Scaffolding library for create-xx tools",
+		doc: "modules/create",
+	},
+	{
+		pkg: "@crustjs/progress",
+		desc: "Progress indicators",
+		doc: "modules/progress",
+	},
+	{
+		pkg: "@crustjs/tui",
+		desc: "OpenTUI adapter",
+		doc: "modules/tui",
+	},
+	{
+		pkg: "@crustjs/prompts",
+		desc: "Interactive prompts",
+		doc: "modules/prompts",
+	},
+	{
+		pkg: "@crustjs/style",
+		desc: "Terminal styling",
+		doc: "modules/style",
+	},
+	{
+		pkg: "@crustjs/store",
+		desc: "Type-safe config persistence",
+		doc: "modules/store",
+	},
+	{
+		pkg: "@crustjs/skills",
+		desc: "Agent skills generation",
+		doc: "modules/skills",
+	},
+	{
+		pkg: "@crustjs/man",
+		desc: "Generate mdoc(7) manual pages",
+		doc: "modules/man",
+	},
+	{
+		pkg: "@crustjs/testing",
+		desc: "CLI testing helpers",
+		doc: "modules/testing",
+	},
+	{
+		pkg: "@crustjs/render",
+		desc: "Terminal content rendering",
+		upcoming: true,
+	},
+	{
+		pkg: "@crustjs/log",
+		desc: "Structured logging",
+		upcoming: true,
+	},
 ];
 
 const PUBLISHED_PACKAGES = MODULES.flatMap((m) => (m.upcoming ? [] : [m.pkg]));
@@ -188,66 +188,66 @@ const PUBLISHED_PACKAGES = MODULES.flatMap((m) => (m.upcoming ? [] : [m.pkg]));
 type ReleaseChannel = "alpha" | "beta";
 
 function getReleaseChannel(version: string): ReleaseChannel | null {
-  const match = version.match(/^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/);
-  if (!match) return null;
+	const match = version.match(/^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/);
+	if (!match) return null;
 
-  const major = Number(match[1]);
-  const minor = Number(match[2]);
+	const major = Number(match[1]);
+	const minor = Number(match[2]);
 
-  if (major === 0 && minor === 0) return "alpha";
-  if (major === 0) return "beta";
+	if (major === 0 && minor === 0) return "alpha";
+	if (major === 0) return "beta";
 
-  return null;
+	return null;
 }
 
 function hasVersion<Value>(value: Value): value is Value & { version: string } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "version" in value &&
-    typeof value.version === "string"
-  );
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		"version" in value &&
+		typeof value.version === "string"
+	);
 }
 
 async function fetchNpmVersion(pkg: string): Promise<string | null> {
-  try {
-    const res = await fetch(`https://registry.npmjs.org/${pkg}/latest`, {
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(3000),
-    });
-    if (!res.ok) return null;
-    const data: unknown = await res.json();
-    return hasVersion(data) ? data.version : null;
-  } catch {
-    return null;
-  }
+	try {
+		const res = await fetch(`https://registry.npmjs.org/${pkg}/latest`, {
+			headers: { Accept: "application/json" },
+			signal: AbortSignal.timeout(3000),
+		});
+		if (!res.ok) return null;
+		const data: unknown = await res.json();
+		return hasVersion(data) ? data.version : null;
+	} catch {
+		return null;
+	}
 }
 
 const getNpmVersions = createServerFn({ method: "GET" }).handler(async () => {
-  const entries = await Promise.all(
-    PUBLISHED_PACKAGES.map(async (pkg) => {
-      const version = await fetchNpmVersion(pkg);
-      return [pkg, version] as const;
-    }),
-  );
-  return Object.fromEntries(entries);
+	const entries = await Promise.all(
+		PUBLISHED_PACKAGES.map(async (pkg) => {
+			const version = await fetchNpmVersion(pkg);
+			return [pkg, version] as const;
+		}),
+	);
+	return Object.fromEntries(entries);
 });
 
 const FALLBACK_HIGHLIGHTED_CODE = createFallbackHighlightedCode(CODE_EXAMPLE);
 
 function FurnaceHome() {
-  const { highlightedCode, npmVersions } = Route.useLoaderData();
-  const [copied, setCopied] = useState<string | null>(null);
+	const { highlightedCode, npmVersions } = Route.useLoaderData();
+	const [copied, setCopied] = useState<string | null>(null);
 
-  const handleCopy = useCallback((command: string) => {
-    void navigator.clipboard.writeText(command);
-    setCopied(command);
-    setTimeout(() => setCopied(null), 2000);
-  }, []);
+	const handleCopy = useCallback((command: string) => {
+		void navigator.clipboard.writeText(command);
+		setCopied(command);
+		setTimeout(() => setCopied(null), 2000);
+	}, []);
 
-  return (
-    <>
-      <style>{`
+	return (
+		<>
+			<style>{`
         /* ── Light mode (warm parchment) ─────────────────────────────── */
         :root {
           --fn-bg: #f5f0eb;
@@ -720,231 +720,231 @@ function FurnaceHome() {
         }
       `}</style>
 
-      <HomeLayout {...baseOptions}>
-        <div className="furnace-home">
-          {/* Hero */}
-          <section className="fn-hero-section">
-            <a
-              href="https://github.com/users/chenxin-yan/projects/10"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="fn-mono fn-dev-badge"
-            >
-              <span className="fn-dev-badge-dot" />
-              <span className="fn-dev-badge-status">Now in Beta</span>
-              <span className="fn-dev-badge-sep" />
-              <span className="fn-dev-badge-cta">
-                See Roadmap
-                <span className="fn-dev-badge-arrow" aria-hidden="true">
-                  →
-                </span>
-              </span>
-            </a>
+			<HomeLayout {...baseOptions}>
+				<div className="furnace-home">
+					{/* Hero */}
+					<section className="fn-hero-section">
+						<a
+							href="https://github.com/users/chenxin-yan/projects/10"
+							target="_blank"
+							rel="noopener noreferrer"
+							className="fn-mono fn-dev-badge"
+						>
+							<span className="fn-dev-badge-dot" />
+							<span className="fn-dev-badge-status">Now in Beta</span>
+							<span className="fn-dev-badge-sep" />
+							<span className="fn-dev-badge-cta">
+								See Roadmap
+								<span className="fn-dev-badge-arrow" aria-hidden="true">
+									→
+								</span>
+							</span>
+						</a>
 
-            <div className="fn-hero-grid">
-              {/* Left — text content */}
-              <div>
-                <h1
-                  className="fn-condensed"
-                  style={{
-                    fontSize: "clamp(42px, 6vw, 80px)",
-                    fontWeight: 800,
-                    lineHeight: 0.95,
-                    margin: 0,
-                    letterSpacing: "-0.01em",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Build CLIs
-                  <br />
-                  <span style={{ color: "var(--fn-molten)", whiteSpace: "nowrap" }}>
-                    with types.
-                  </span>
-                </h1>
+						<div className="fn-hero-grid">
+							{/* Left — text content */}
+							<div>
+								<h1
+									className="fn-condensed"
+									style={{
+										fontSize: "clamp(42px, 6vw, 80px)",
+										fontWeight: 800,
+										lineHeight: 0.95,
+										margin: 0,
+										letterSpacing: "-0.01em",
+										textTransform: "uppercase",
+									}}
+								>
+									Build CLIs
+									<br />
+									<span style={{ color: "var(--fn-molten)", whiteSpace: "nowrap" }}>
+										with types.
+									</span>
+								</h1>
 
-                <p
-                  style={{
-                    fontSize: 16,
-                    lineHeight: 1.7,
-                    color: "var(--fn-dim)",
-                    maxWidth: 420,
-                    marginTop: 20,
-                    fontWeight: 400,
-                  }}
-                >
-                  A TypeScript-first, Bun-native CLI framework with composable modules.
-                </p>
+								<p
+									style={{
+										fontSize: 16,
+										lineHeight: 1.7,
+										color: "var(--fn-dim)",
+										maxWidth: 420,
+										marginTop: 20,
+										fontWeight: 400,
+									}}
+								>
+									A TypeScript-first, Bun-native CLI framework with composable modules.
+								</p>
 
-                {/* Install — pick a package manager, click the command to copy */}
-                <Tabs
-                  className="fn-install"
-                  groupId={PACKAGE_MANAGER_GROUP_ID}
-                  persist
-                  defaultValue="npm"
-                >
-                  <TabsList className="fn-mono fn-install-tabs" aria-label="Package manager">
-                    {Object.keys(SCAFFOLD_COMMANDS).map((manager) => (
-                      <TabsTrigger key={manager} value={manager} className="fn-install-tab">
-                        {manager}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                  {Object.entries(SCAFFOLD_COMMANDS).map(([manager, command]) => (
-                    <TabsContent key={manager} value={manager} className="fn-install-panel">
-                      <button
-                        type="button"
-                        className="fn-mono fn-install-cmd"
-                        onClick={() => handleCopy(command)}
-                      >
-                        <span style={{ color: "var(--fn-molten)" }}>{">"}</span>
-                        <span>{command}</span>
-                        <span
-                          className="fn-mono"
-                          style={{
-                            fontSize: 10,
-                            color: copied === command ? "var(--fn-molten)" : "var(--fn-dim)",
-                            marginLeft: 8,
-                            transition: "color 0.2s",
-                            letterSpacing: 1,
-                          }}
-                        >
-                          {copied === command ? "COPIED!" : "COPY"}
-                        </span>
-                      </button>
-                    </TabsContent>
-                  ))}
-                </Tabs>
+								{/* Install — pick a package manager, click the command to copy */}
+								<Tabs
+									className="fn-install"
+									groupId={PACKAGE_MANAGER_GROUP_ID}
+									persist
+									defaultValue="npm"
+								>
+									<TabsList className="fn-mono fn-install-tabs" aria-label="Package manager">
+										{Object.keys(SCAFFOLD_COMMANDS).map((manager) => (
+											<TabsTrigger key={manager} value={manager} className="fn-install-tab">
+												{manager}
+											</TabsTrigger>
+										))}
+									</TabsList>
+									{Object.entries(SCAFFOLD_COMMANDS).map(([manager, command]) => (
+										<TabsContent key={manager} value={manager} className="fn-install-panel">
+											<button
+												type="button"
+												className="fn-mono fn-install-cmd"
+												onClick={() => handleCopy(command)}
+											>
+												<span style={{ color: "var(--fn-molten)" }}>{">"}</span>
+												<span>{command}</span>
+												<span
+													className="fn-mono"
+													style={{
+														fontSize: 10,
+														color: copied === command ? "var(--fn-molten)" : "var(--fn-dim)",
+														marginLeft: 8,
+														transition: "color 0.2s",
+														letterSpacing: 1,
+													}}
+												>
+													{copied === command ? "COPIED!" : "COPY"}
+												</span>
+											</button>
+										</TabsContent>
+									))}
+								</Tabs>
 
-                <div
-                  style={{
-                    marginTop: 20,
-                    display: "flex",
-                    gap: 8,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <Link to="/docs/$" params={{ _splat: "quick-start" }} className="fn-btn-primary">
-                    Quick Start
-                  </Link>
-                  <a
-                    href="https://discord.gg/sQF8hdN6Ht"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="fn-btn-ghost"
-                  >
-                    Join Discord
-                  </a>
-                </div>
-              </div>
+								<div
+									style={{
+										marginTop: 20,
+										display: "flex",
+										gap: 8,
+										flexWrap: "wrap",
+									}}
+								>
+									<Link to="/docs/$" params={{ _splat: "quick-start" }} className="fn-btn-primary">
+										Quick Start
+									</Link>
+									<a
+										href="https://discord.gg/sQF8hdN6Ht"
+										target="_blank"
+										rel="noopener noreferrer"
+										className="fn-btn-ghost"
+									>
+										Join Discord
+									</a>
+								</div>
+							</div>
 
-              {/* Right — code sample */}
-              <div className="fn-code">
-                <div className="fn-code-header">
-                  <span>src/cli.ts</span>
-                  <span>TypeScript</span>
-                </div>
-                <div
-                  className="fn-code-body fn-shiki-container"
-                  dangerouslySetInnerHTML={{ __html: highlightedCode }}
-                />
-              </div>
-            </div>
-          </section>
+							{/* Right — code sample */}
+							<div className="fn-code">
+								<div className="fn-code-header">
+									<span>src/cli.ts</span>
+									<span>TypeScript</span>
+								</div>
+								<div
+									className="fn-code-body fn-shiki-container"
+									dangerouslySetInnerHTML={{ __html: highlightedCode }}
+								/>
+							</div>
+						</div>
+					</section>
 
-          {/* Modules */}
-          <section className="fn-content-section">
-            <p
-              className="fn-mono"
-              style={{
-                fontSize: 10,
-                letterSpacing: 4,
-                color: "var(--fn-dim)",
-                textTransform: "uppercase",
-                marginBottom: 16,
-              }}
-            >
-              Modules
-            </p>
+					{/* Modules */}
+					<section className="fn-content-section">
+						<p
+							className="fn-mono"
+							style={{
+								fontSize: 10,
+								letterSpacing: 4,
+								color: "var(--fn-dim)",
+								textTransform: "uppercase",
+								marginBottom: 16,
+							}}
+						>
+							Modules
+						</p>
 
-            {MODULES.map((m) => {
-              if (m.upcoming) {
-                return (
-                  <div key={m.pkg} className="fn-module-upcoming">
-                    <div className="fn-module-info">
-                      <code
-                        className="fn-mono"
-                        style={{
-                          fontSize: 14,
-                          color: "var(--fn-dim)",
-                        }}
-                      >
-                        {m.pkg}
-                      </code>
-                      <span style={{ fontSize: 13, color: "var(--fn-dim)" }}>{m.desc}</span>
-                    </div>
-                    <span className="fn-badge-soon">Coming Soon</span>
-                  </div>
-                );
-              }
+						{MODULES.map((m) => {
+							if (m.upcoming) {
+								return (
+									<div key={m.pkg} className="fn-module-upcoming">
+										<div className="fn-module-info">
+											<code
+												className="fn-mono"
+												style={{
+													fontSize: 14,
+													color: "var(--fn-dim)",
+												}}
+											>
+												{m.pkg}
+											</code>
+											<span style={{ fontSize: 13, color: "var(--fn-dim)" }}>{m.desc}</span>
+										</div>
+										<span className="fn-badge-soon">Coming Soon</span>
+									</div>
+								);
+							}
 
-              const version = npmVersions[m.pkg];
-              const channel = version ? getReleaseChannel(version) : null;
+							const version = npmVersions[m.pkg];
+							const channel = version ? getReleaseChannel(version) : null;
 
-              return (
-                <Link key={m.pkg} to="/docs/$" params={{ _splat: m.doc }} className="fn-module-row">
-                  <div className="fn-module-info">
-                    <code
-                      className="fn-mono fn-module-name"
-                      style={{
-                        fontSize: 14,
-                        color: "var(--fn-molten)",
-                        transition: "color 0.2s",
-                      }}
-                    >
-                      {m.pkg}
-                    </code>
-                    {version && <span className="fn-badge-version fn-mono">v{version}</span>}
-                    {channel && (
-                      <span className={`fn-badge-channel fn-badge-channel-${channel} fn-mono`}>
-                        {channel}
-                      </span>
-                    )}
-                    <span style={{ fontSize: 13, color: "var(--fn-dim)" }}>{m.desc}</span>
-                  </div>
-                  <span className="fn-module-arrow">→</span>
-                </Link>
-              );
-            })}
-          </section>
+							return (
+								<Link key={m.pkg} to="/docs/$" params={{ _splat: m.doc }} className="fn-module-row">
+									<div className="fn-module-info">
+										<code
+											className="fn-mono fn-module-name"
+											style={{
+												fontSize: 14,
+												color: "var(--fn-molten)",
+												transition: "color 0.2s",
+											}}
+										>
+											{m.pkg}
+										</code>
+										{version && <span className="fn-badge-version fn-mono">v{version}</span>}
+										{channel && (
+											<span className={`fn-badge-channel fn-badge-channel-${channel} fn-mono`}>
+												{channel}
+											</span>
+										)}
+										<span style={{ fontSize: 13, color: "var(--fn-dim)" }}>{m.desc}</span>
+									</div>
+									<span className="fn-module-arrow">→</span>
+								</Link>
+							);
+						})}
+					</section>
 
-          {/* Footer */}
-          <footer className="fn-footer">
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span className="fn-dot" />
-              <span
-                className="fn-condensed"
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  letterSpacing: 3,
-                  textTransform: "uppercase",
-                }}
-              >
-                Crust
-              </span>
-            </div>
-            <span
-              style={{
-                fontSize: 11,
-                color: "var(--fn-dim)",
-                letterSpacing: 1,
-              }}
-            >
-              MIT
-            </span>
-          </footer>
-        </div>
-      </HomeLayout>
-    </>
-  );
+					{/* Footer */}
+					<footer className="fn-footer">
+						<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+							<span className="fn-dot" />
+							<span
+								className="fn-condensed"
+								style={{
+									fontSize: 12,
+									fontWeight: 700,
+									letterSpacing: 3,
+									textTransform: "uppercase",
+								}}
+							>
+								Crust
+							</span>
+						</div>
+						<span
+							style={{
+								fontSize: 11,
+								color: "var(--fn-dim)",
+								letterSpacing: 1,
+							}}
+						>
+							MIT
+						</span>
+					</footer>
+				</div>
+			</HomeLayout>
+		</>
+	);
 }
