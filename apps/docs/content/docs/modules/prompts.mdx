@@ -66,7 +66,7 @@ import {
 } from "@crustjs/prompts";
 ```
 
-All prompt functions accept `(options, io?)`. Choice functions preserve literal choice value types when their choices are not widened.
+All prompt functions accept `(options, io?)`. Choice functions preserve literal choice value types when their choices are not widened. A plain-string choice is its own value, so `Choice<T>` only accepts plain strings that are themselves a `T`; non-string values such as numbers must use `{ label, value }` objects.
 
 ### `input(options, io?)`
 
@@ -200,7 +200,7 @@ const result = await runPrompt({
 });
 ```
 
-`runPrompt()` owns rendering, input, submission, cancellation, and theme merging. Only one prompt may use a given input or output stream at a time.
+`runPrompt()` owns rendering, input, submission, cancellation, and theme merging. Only one prompt may use a given input or output stream at a time. An error thrown by `render`, `handleKey`, or `renderSubmitted` rejects the returned promise after the terminal and stream reservations are restored.
 
 Use `handleTextEdit()` for shared cursor editing. It returns `null` for keys it does not handle.
 
