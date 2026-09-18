@@ -57,6 +57,8 @@ Own a flag when every command installed with the Extension should accept it. Own
 
 Extension flags are recursive by default. Set `recursive: false` on an inline flag definition when only the root should accept it, and see [`ExtensionFlagDef`](/docs/api/types#extensionflagdef) for the flag contract.
 
+Hooks see pre-validation values, not schema outputs. A false-capable `recursive` value makes even defaulted flags possibly absent on descendants; optional schema `multiple` can produce a scalar or an array. Fixed tuples with one known name per definition retain precise hook types. Dynamic arrays, conditional collections, and uncertain names expose raw flag values that require narrowing: an absent definition leaves its name available to other Extensions.
+
 ## Hooks
 
 <include lang="ts" meta='title="hooks.ts"'>

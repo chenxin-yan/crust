@@ -21,7 +21,12 @@ import type {
 	ProvidedContextSpellings,
 	ValidateLocalFlagDefs,
 } from "../validation/flags.brands.ts";
-import type { Awaitable, MergeProviders } from "../validation/shared.ts";
+import type {
+	Awaitable,
+	HasClosedNames,
+	IsStaticTuple,
+	MergeProviders,
+} from "../validation/shared.ts";
 import {
 	definingOf,
 	seal,
@@ -225,16 +230,19 @@ export type NamedExtensionFlagDef = NamedFlagDef & {
 	readonly recursive?: boolean;
 };
 
+type SchemaToken<F> = F extends { type: "boolean" } ? boolean : string;
+
 type InferPreSchemaExtensionFlag<F extends ExtensionFlagDef> = F extends {
 	schema: unknown;
 }
-	? F extends { multiple: true }
-		? F extends { type: "boolean" }
-			? boolean[] | undefined
-			: string[] | undefined
-		: F extends { type: "boolean" }
-			? boolean | undefined
-			: string | undefined
+	?
+			| (F extends { multiple: true } ? never : SchemaToken<F>)
+			| ("multiple" extends keyof F
+					? true extends F["multiple"]
+						? SchemaToken<F>[]
+						: never
+					: never)
+			| undefined
 	: F extends { required: true }
 		? F extends { default: unknown }
 			? InferFlags<{ value: F }>["value"]
@@ -243,15 +251,18 @@ type InferPreSchemaExtensionFlag<F extends ExtensionFlagDef> = F extends {
 		: InferFlags<{ value: F }>["value"];
 
 type InferExtensionFlag<F> = F extends ExtensionFlagDef
-	? F extends { recursive: false }
-		? InferPreSchemaExtensionFlag<F> | undefined
-		: InferPreSchemaExtensionFlag<F>
+	?
+			| InferPreSchemaExtensionFlag<F>
+			| ("recursive" extends keyof F ? (false extends F["recursive"] ? undefined : never) : never)
 	: never;
 
-/** Infer the syntax-parsed values visible to an Extension's hooks. */
-export type InferExtensionFlags<Defs extends readonly NamedExtensionFlagDef[]> = {
-	[K in keyof NamedFlagsRecord<Defs>]: InferExtensionFlag<NamedFlagsRecord<Defs>[K]>;
-};
+/** Infer pre-validation hook values; uncertain collections claim no typed ownership. */
+export type InferExtensionFlags<Defs extends readonly NamedExtensionFlagDef[]> =
+	IsStaticTuple<Defs> extends true
+		? HasClosedNames<Defs> extends true
+			? { [K in keyof NamedFlagsRecord<Defs>]: InferExtensionFlag<NamedFlagsRecord<Defs>[K]> }
+			: Record<string, ParsedFlagValue>
+		: Record<string, ParsedFlagValue>;
 
 /** A documentation section an Extension contributes to one command path. */
 export type ExtensionSectionContribution = RuntimeCommandSectionInput & {
