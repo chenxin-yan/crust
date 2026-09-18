@@ -54,7 +54,8 @@ it("optional schema multiplicity exposes raw arrays in hooks, not validated outp
 	const schema: StandardSchema<unknown, number> = {
 		"~standard": { version: 1, vendor: "test", validate: () => ({ value: 42 }) },
 	};
-	const toggle: { name: "toggle"; type: "boolean"; schema: typeof schema; multiple?: true } = {
+	type OptionalToggle = { name: "toggle"; type: "boolean"; schema: typeof schema; multiple?: true };
+	const toggle: OptionalToggle = {
 		name: "toggle",
 		type: "boolean",
 		schema,
