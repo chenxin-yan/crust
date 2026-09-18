@@ -5,18 +5,18 @@ import { rewritePath } from "fumadocs-core/negotiation";
 const llmRewriter = rewritePath("/docs{/*path}.mdx", "/llms.mdx/docs{/*path}");
 
 const llmMiddleware = createMiddleware().server(({ next, request }) => {
-  const url = new URL(request.url);
-  const path = llmRewriter.rewrite(url.pathname);
+	const url = new URL(request.url);
+	const path = llmRewriter.rewrite(url.pathname);
 
-  if (path) {
-    throw redirect(new URL(path, url));
-  }
+	if (path) {
+		throw redirect(new URL(path, url));
+	}
 
-  return next();
+	return next();
 });
 
 export const startInstance = createStart(() => {
-  return {
-    requestMiddleware: [llmMiddleware],
-  };
+	return {
+		requestMiddleware: [llmMiddleware],
+	};
 });

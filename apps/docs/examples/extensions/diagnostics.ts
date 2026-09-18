@@ -2,14 +2,14 @@ import { Crust, defineCommand, defineExtension, defineExtensionId } from "@crust
 
 //#region author
 export const preview = defineExtension(defineExtensionId("acme:preview"), {
-  flags: [{ name: "preview", type: "boolean", description: "Show the plan" }],
-  hooks: {
-    preRun(ctx) {
-      if (ctx.flags.preview !== true) return;
-      ctx.stdout("nothing changed");
-      return ctx.finish();
-    },
-  },
+	flags: [{ name: "preview", type: "boolean", description: "Show the plan" }],
+	hooks: {
+		preRun(ctx) {
+			if (ctx.flags.preview !== true) return;
+			ctx.stdout("nothing changed");
+			return ctx.finish();
+		},
+	},
 });
 
 const previewApp = new Crust("deploy").extend(preview).action(() => "deployed");
@@ -19,11 +19,11 @@ console.log(previewOutcome.status, previewOutcome.stdout); // => finished nothin
 
 //#region owned-command
 const doctor = defineCommand("doctor", (command) =>
-  command.action(({ rootCommand, stdout }) => stdout(`checking ${rootCommand.meta.name}`)),
+	command.action(({ rootCommand, stdout }) => stdout(`checking ${rootCommand.meta.name}`)),
 );
 
 export const diagnostics = defineExtension(defineExtensionId("acme:diagnostics"), {
-  commands: [doctor],
+	commands: [doctor],
 });
 
 const diagnosticsApp = new Crust("my-cli").extend(diagnostics);

@@ -14,92 +14,92 @@ import { buildPageMeta } from "@/lib/seo";
 import { source } from "@/lib/source";
 
 export const Route = createFileRoute("/docs/$")({
-  component: Page,
-  loader: async ({ params }) => {
-    const slugs = params._splat?.split("/") ?? [];
-    const data = await serverLoader({ data: slugs });
-    await clientLoader.preload(data.path);
-    return data;
-  },
-  head: ({ loaderData }) => {
-    if (!loaderData) return {};
-    const { meta: pageMeta, links: pageLinks } = buildPageMeta({
-      title: loaderData.meta.title,
-      description: loaderData.meta.description,
-      canonical: loaderData.url,
-    });
-    return {
-      meta: pageMeta,
-      links: pageLinks,
-    };
-  },
+	component: Page,
+	loader: async ({ params }) => {
+		const slugs = params._splat?.split("/") ?? [];
+		const data = await serverLoader({ data: slugs });
+		await clientLoader.preload(data.path);
+		return data;
+	},
+	head: ({ loaderData }) => {
+		if (!loaderData) return {};
+		const { meta: pageMeta, links: pageLinks } = buildPageMeta({
+			title: loaderData.meta.title,
+			description: loaderData.meta.description,
+			canonical: loaderData.url,
+		});
+		return {
+			meta: pageMeta,
+			links: pageLinks,
+		};
+	},
 });
 
 const serverLoader = createServerFn({
-  method: "GET",
+	method: "GET",
 })
-  .validator((slugs: string[]) => slugs)
-  .handler(async ({ data: slugs }) => {
-    const page = source.getPage(slugs);
-    if (!page) throw notFound();
+	.validator((slugs: string[]) => slugs)
+	.handler(async ({ data: slugs }) => {
+		const page = source.getPage(slugs);
+		if (!page) throw notFound();
 
-    return {
-      url: page.url,
-      path: page.path,
-      meta: {
-        title: page.data.title,
-        description: page.data.description,
-      },
-      pageTree: await source.serializePageTree(source.getPageTree()),
-    };
-  });
+		return {
+			url: page.url,
+			path: page.path,
+			meta: {
+				title: page.data.title,
+				description: page.data.description,
+			},
+			pageTree: await source.serializePageTree(source.getPageTree()),
+		};
+	});
 
 const clientLoader = browserCollections.docs.createClientLoader({
-  component(
-    { toc, frontmatter, default: MDX },
-    // you can define props for the component
-    {
-      url,
-      path,
-    }: {
-      url: string;
-      path: string;
-    },
-  ) {
-    return (
-      <DocsPage
-        toc={toc}
-        tableOfContent={{ style: "clerk" }}
-        tableOfContentPopover={{ style: "clerk" }}
-      >
-        <DocsTitle>{frontmatter.title}</DocsTitle>
-        <DocsDescription>{frontmatter.description}</DocsDescription>
-        <div className="flex flex-row gap-2 items-center border-b -mt-4 pb-6">
-          <LLMCopyButton markdownUrl={`${url}.mdx`} />
-          <ViewOptions
-            markdownUrl={`${url}.mdx`}
-            githubUrl={`https://github.com/${gitConfig.user}/${gitConfig.repo}/blob/${gitConfig.branch}/apps/docs/content/docs/${path}`}
-          />
-        </div>
-        <DocsBody>
-          <MDX
-            components={{
-              ...defaultMdxComponents,
-              TypeTable,
-            }}
-          />
-        </DocsBody>
-      </DocsPage>
-    );
-  },
+	component(
+		{ toc, frontmatter, default: MDX },
+		// you can define props for the component
+		{
+			url,
+			path,
+		}: {
+			url: string;
+			path: string;
+		},
+	) {
+		return (
+			<DocsPage
+				toc={toc}
+				tableOfContent={{ style: "clerk" }}
+				tableOfContentPopover={{ style: "clerk" }}
+			>
+				<DocsTitle>{frontmatter.title}</DocsTitle>
+				<DocsDescription>{frontmatter.description}</DocsDescription>
+				<div className="flex flex-row gap-2 items-center border-b -mt-4 pb-6">
+					<LLMCopyButton markdownUrl={`${url}.mdx`} />
+					<ViewOptions
+						markdownUrl={`${url}.mdx`}
+						githubUrl={`https://github.com/${gitConfig.user}/${gitConfig.repo}/blob/${gitConfig.branch}/apps/docs/content/docs/${path}`}
+					/>
+				</div>
+				<DocsBody>
+					<MDX
+						components={{
+							...defaultMdxComponents,
+							TypeTable,
+						}}
+					/>
+				</DocsBody>
+			</DocsPage>
+		);
+	},
 });
 
 function Page() {
-  const data = useFumadocsLoader(Route.useLoaderData());
+	const data = useFumadocsLoader(Route.useLoaderData());
 
-  return (
-    <DocsLayout {...baseOptions} tree={data.pageTree}>
-      <Suspense>{clientLoader.useContent(data.path, data)}</Suspense>
-    </DocsLayout>
-  );
+	return (
+		<DocsLayout {...baseOptions} tree={data.pageTree}>
+			<Suspense>{clientLoader.useContent(data.path, data)}</Suspense>
+		</DocsLayout>
+	);
 }

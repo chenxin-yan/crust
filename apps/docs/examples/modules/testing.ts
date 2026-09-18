@@ -4,12 +4,12 @@ import { captureExecute } from "@crustjs/testing";
 import { runInteractive } from "@crustjs/testing/interactive";
 
 const app = new Crust("my-cli").add(
-  defineCommand("greet", (command) =>
-    command.action(async ({ stdout }) => {
-      const name = await input({ message: "Name?" });
-      stdout(`Hello, ${name}`);
-    }),
-  ),
+	defineCommand("greet", (command) =>
+		command.action(async ({ stdout }) => {
+			const name = await input({ message: "Name?" });
+			stdout(`Hello, ${name}`);
+		}),
+	),
 );
 
 //#region execute
