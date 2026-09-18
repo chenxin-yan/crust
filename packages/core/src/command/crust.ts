@@ -843,7 +843,9 @@ type CollisionSpellings<
 	Pending extends string = never,
 	RecipeDeps extends ContextMap = {},
 	Providers extends Record<string, ContextValue> = {},
+	ActionDeps extends ContextMap = {},
 > = {
+	readonly actionDeps: ActionDeps;
 	readonly pending: Pending;
 	readonly demands: Demands;
 	readonly extension: Extensions;
@@ -853,6 +855,7 @@ type CollisionSpellings<
 };
 
 type AnyCollisionSpellings = {
+	readonly actionDeps?: ContextMap;
 	readonly pending: string;
 	readonly demands: ContextMap;
 	readonly extension: string;
@@ -871,6 +874,13 @@ type ProvidersOf<S extends AnyCollisionSpellings> = S extends {
 	readonly providers: infer Providers extends Record<string, ContextValue>;
 }
 	? Providers
+	: {};
+
+/** Obligations of this node's stored action, never inherited by descendants. */
+type ActionDepsOf<S extends AnyCollisionSpellings> = S extends {
+	readonly actionDeps: infer Deps extends ContextMap;
+}
+	? Deps
 	: {};
 
 type AfterFlags<
@@ -955,7 +965,8 @@ type AfterUse<
 		CollisionSp["demands"],
 		CollisionSp["pending"],
 		MergeContext<RecipeDepsOf<CollisionSp>, ContextDependencies<Fs>>,
-		ProvidersOf<CollisionSp>
+		ProvidersOf<CollisionSp>,
+		ActionDepsOf<CollisionSp>
 	>,
 	Result,
 	Meta,
@@ -990,7 +1001,8 @@ type AfterProvide<
 		CollisionSp["demands"],
 		CollisionSp["pending"],
 		RecipeDepsOf<CollisionSp>,
-		MergeProviders<ProvidersOf<CollisionSp>, ContextsOutput<Cs>>
+		MergeProviders<ProvidersOf<CollisionSp>, ContextsOutput<Cs>>,
+		ActionDepsOf<CollisionSp>
 	>,
 	Result,
 	Meta,
@@ -1010,7 +1022,20 @@ type AfterAction<
 	R,
 	Meta extends RootCommandMeta | undefined,
 	Caps extends "app" | "recipe",
-> = Crust<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Awaited<R>, Meta, string, Caps>;
+> = Crust<
+	Flags,
+	A,
+	Ctx,
+	Sibs,
+	Sp,
+	Tree,
+	CtxFlags,
+	Omit<CollisionSp, "actionDeps"> & { readonly actionDeps: Ctx },
+	Awaited<R>,
+	Meta,
+	string,
+	Caps
+>;
 
 type AfterExtend<
 	Flags extends FlagsDef,
@@ -1039,7 +1064,8 @@ type AfterExtend<
 		CollisionSp["demands"] & ExtensionDemandValues<Es>,
 		CollisionSp["pending"] | DefinitionTreeSpellings<ExtensionCommands<Es>>,
 		RecipeDepsOf<CollisionSp>,
-		MergeProviders<ProvidersOf<CollisionSp>, ExtensionsProvidesOutput<Es>>
+		MergeProviders<ProvidersOf<CollisionSp>, ExtensionsProvidesOutput<Es>>,
+		ActionDepsOf<CollisionSp>
 	>,
 	Result,
 	Meta,
@@ -1074,7 +1100,8 @@ type AfterAdd<
 		CollisionSp["demands"],
 		CollisionSp["pending"],
 		RecipeDepsOf<CollisionSp>,
-		ProvidersOf<CollisionSp>
+		ProvidersOf<CollisionSp>,
+		ActionDepsOf<CollisionSp>
 	>,
 	Result,
 	Meta,
@@ -1158,7 +1185,7 @@ export class Crust<
 	Caps extends "app" | "recipe" = "app",
 > {
 	declare private readonly _contextProof: (
-		state: [Flags, A, Ctx, CtxFlags, CollisionSp["demands"], Caps],
+		state: [Flags, A, Ctx, CtxFlags, CollisionSp["demands"], ActionDepsOf<CollisionSp>, Caps],
 	) => void;
 
 	/** @internal — recipe state, without structural inference through builder methods. */
@@ -1364,7 +1391,7 @@ export class Crust<
 			ValidateContextNames<Caps extends "recipe" ? ProvidersOf<CollisionSp> : Ctx, Cs> &
 			ValidateContextDeps<Ctx, Cs> &
 			DeclaredDependencyValuesBrand<
-				CollisionSp["demands"] & RecipeDepsOf<CollisionSp>,
+				CollisionSp["demands"] & RecipeDepsOf<CollisionSp> & ActionDepsOf<CollisionSp>,
 				ContextsOutput<NoInfer<Cs>>
 			>
 	): AfterProvide<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Cs, Meta, Caps>;
@@ -1400,8 +1427,9 @@ export class Crust<
 	 * The action receives a {@link CrustCommandContext} with `args` typed from
 	 * `.args()` and `flags` typed from the accumulated `Flags`.
 	 *
-	 * Calling `.action()` again replaces the command behavior on the new builder.
-	 * The original builder is not mutated.
+	 * Calling `.action()` again replaces the command behavior and its Context obligations
+	 * on the new builder. Later local providers must satisfy the bound Context value types;
+	 * descendants may shadow independently. The original builder is not mutated.
 	 *
 	 * @param action - The Command Action function
 	 * @returns A new `Crust` instance with the action registered
