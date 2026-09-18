@@ -424,6 +424,55 @@ describe("runPrompt", () => {
 		expect(await reuse).toBe("done");
 	});
 
+	it("ignores an in-flight handler after render failure and stream reuse", async () => {
+		const pending = Promise.withResolvers<ReturnType<typeof submit<string>>>();
+		const entered = Promise.withResolvers<void>();
+		let submitted = false;
+		const harness = createPromptIO();
+		let raw = "";
+		const output = new Writable({
+			write(chunk, _encoding, callback) {
+				raw += chunk.toString();
+				callback();
+			},
+		});
+		const io = { input: harness.io.input, output };
+		const promise = runPrompt<number, string>(
+			{
+				initialState: 0,
+				render: (state) => {
+					if (state > 0) throw new Error("render error");
+					return "old prompt";
+				},
+				handleKey: (_key, state) => {
+					if (state === 0) return 1;
+					entered.resolve();
+					return pending.promise;
+				},
+				renderSubmitted: () => {
+					submitted = true;
+					return "stale submission";
+				},
+			},
+			io,
+		);
+		harness.type("ab");
+		await entered.promise;
+		await expect(promise).rejects.toThrow("render error");
+		const replacement = runPrompt(
+			{ initialState: 0, render: () => "replacement", handleKey: () => submit("done") },
+			io,
+		);
+		const before = raw;
+		pending.resolve(submit("old"));
+		await new Promise((resolve) => setTimeout(resolve, 10));
+		const after = raw;
+		harness.keys("return");
+		expect(await replacement).toBe("done");
+		expect(submitted).toBe(false);
+		expect(after).toBe(before);
+	});
+
 	it("rejects with an AbortError DOMException on Ctrl+C", async () => {
 		const config: PromptConfig<{ value: string }, string> = {
 			render: (state) => state.value,

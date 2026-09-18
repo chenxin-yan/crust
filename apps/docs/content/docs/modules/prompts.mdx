@@ -200,7 +200,7 @@ const result = await runPrompt({
 });
 ```
 
-`runPrompt()` owns rendering, input, submission, cancellation, and theme merging. Only one prompt may use a given input or output stream at a time. An error thrown by `render`, `handleKey`, or `renderSubmitted` rejects the returned promise after the terminal and stream reservations are restored.
+`runPrompt()` owns rendering, input, submission, cancellation, and theme merging. Only one prompt may use a given input or output stream at a time. An error thrown by `render`, `handleKey`, or `renderSubmitted` rejects the returned promise after the terminal and stream reservations are restored. Pending key-handler results are ignored after cleanup, so they cannot write into a replacement prompt.
 
 Use `handleTextEdit()` for shared cursor editing. It returns `null` for keys it does not handle.
 

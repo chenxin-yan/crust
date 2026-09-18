@@ -366,6 +366,8 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Prom
 
 				try {
 					const result = await handleKey(event, state);
+					// A render failure or cancellation may have released these streams while awaiting.
+					if (isCleanedUp) return;
 
 					if (isSubmit(result)) {
 						// Submit must render immediately — cancel any pending render
