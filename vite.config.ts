@@ -21,6 +21,12 @@ export default defineConfig({
 		],
 		overrides: [
 			{
+				files: ["apps/docs/examples/landing/**"],
+				options: {
+					printWidth: 60,
+				},
+			},
+			{
 				files: ["apps/docs/**/*.{md,mdx,json,jsonc,yml,yaml}"],
 				options: {
 					useTabs: false,
