@@ -125,4 +125,6 @@ Preparing Command Snapshot...
   acme:manifest  1 file  acme-manifest/manifest.json
 ```
 
+Hooks run in `.extend()` registration order, and section callbacks are re-evaluated after each one, so a later hook's snapshot reflects what earlier hooks wrote: register `skill()` before `man()` for the man page to list packaged skills. During this step [`resolveArtifactDir(name)`](/docs/api/crust#resolveartifactdirname) points at the build output directory rather than `.crust/root/`, which the build has already wiped.
+
 For package staging, give each build hook a unique top-level directory and clean it before writing. See [`ExtensionBuildContext`](/docs/api/types#extensionbuildcontext) and [`BuildArtifacts`](/docs/api/types#buildartifacts) for the contracts.

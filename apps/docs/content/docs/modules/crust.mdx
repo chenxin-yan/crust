@@ -87,6 +87,6 @@ Publishing reads `.crust/manifest.json` and runs `npm publish` in each staged di
 └── completions/
 ```
 
-Registered Extensions own build artifacts. `man()`, `skill()`, and `completion()` write the directories shown when registered, and `crust build` copies each top-level directory into `.crust/root/` and every platform package's `bin/`.
+Registered Extensions own build artifacts. `man()`, `skill()`, and `completion()` write the directories shown when registered, and `crust build` copies each top-level directory into `.crust/root/` and every platform package's `bin/`. A CLI reads them back with [`resolveArtifactDir(name)`](/docs/api/crust#resolveartifactdirname).
 
 `--no-validate` skips snapshot preparation and all Extension build hooks, so no artifact directories are staged.

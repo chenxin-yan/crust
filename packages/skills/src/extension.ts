@@ -9,6 +9,7 @@ import {
 	defineCommand,
 	defineExtension,
 	defineExtensionId,
+	resolveArtifactDir,
 } from "@crustjs/core";
 import { spinner } from "@crustjs/progress";
 import { confirm, multiselect, select } from "@crustjs/prompts";
@@ -38,6 +39,7 @@ export const SKILLS: ExtensionId = defineExtensionId("crust:skills");
 const DEFAULT_SKILL_COMMAND_NAME = "skill";
 const SKILLS_SECTION_TITLE = "Agent skills";
 const DEFAULT_SKILL_SCOPE = "global";
+const SKILLS_ARTIFACT = "skills";
 
 type SkillIO = Pick<InvocationIO, "stdout" | "stderr">;
 
@@ -116,7 +118,7 @@ async function repairInstalledSkill(
 async function autoRepairSkills(options: SkillOptions, io: SkillIO): Promise<void> {
 	let skills: readonly PackagedSkill[];
 	try {
-		skills = loadPackagedSkills(options.distDir);
+		skills = loadPackagedSkills(resolveArtifactDir(SKILLS_ARTIFACT));
 	} catch (error) {
 		// A missing or invalid packaged asset must not prevent unrelated CLI commands
 		// from running; the explicit skill command surfaces the same failure loudly.
@@ -150,13 +152,9 @@ async function autoRepairSkills(options: SkillOptions, io: SkillIO): Promise<voi
 	}
 }
 
-function formatSkillDocumentation(
-	source: string | URL,
-	commandName: string,
-	appName: string,
-): string {
+function formatSkillDocumentation(commandName: string, appName: string): string {
 	try {
-		return loadPackagedSkills(source)
+		return loadPackagedSkills(resolveArtifactDir(SKILLS_ARTIFACT))
 			.map((packagedSkill) => {
 				// Relativizing across unrelated roots yields ../ chains that still spell
 				// out the absolute path; keep the absolute form when outside the cwd.
@@ -170,7 +168,7 @@ function formatSkillDocumentation(
 		// A missing or invalid packaged asset degrades the advertisement instead of
 		// failing help, matching the auto-update hook's recovery behavior.
 		if (error instanceof SkillSourceUnavailableError) {
-			return `The packaged skills directory is unavailable. Run \`${appName} ${commandName}\` to link packaged skills into an agent directory.`;
+			return `${error.message} Then run \`${appName} ${commandName}\` to link packaged skills into an agent directory.`;
 		}
 		// No warn here: the preRun repair hook already surfaces the underlying
 		// message once per invocation, and the explicit skill command fails loudly.
@@ -214,7 +212,7 @@ export const skill: ExtensionFactory<
 			{
 				command: [],
 				title: SKILLS_SECTION_TITLE,
-				body: formatSkillDocumentation(options.distDir, commandName, snapshot.meta.name),
+				body: formatSkillDocumentation(commandName, snapshot.meta.name),
 				except: [SKILLS],
 			},
 		],
@@ -394,7 +392,9 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 							})
 							.action(async (context) => {
 								const scope = await resolveScope(context.flags.scope, options);
-								for (const packagedSkill of loadPackagedSkills(options.distDir)) {
+								for (const packagedSkill of loadPackagedSkills(
+									resolveArtifactDir(SKILLS_ARTIFACT),
+								)) {
 									await repairInstalledSkill(packagedSkill, scope, context, true);
 								}
 							}),
@@ -405,7 +405,7 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 					const scope = installAll
 						? (context.flags.scope ?? options.defaultScope ?? DEFAULT_SKILL_SCOPE)
 						: await resolveScope(context.flags.scope, options);
-					for (const packagedSkill of loadPackagedSkills(options.distDir)) {
+					for (const packagedSkill of loadPackagedSkills(resolveArtifactDir(SKILLS_ARTIFACT))) {
 						await reconcileSkill({ packagedSkill, scope, installAll, io: context });
 					}
 				}),

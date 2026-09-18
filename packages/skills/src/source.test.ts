@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { loadPackagedSkills, resolveSkillSource, SkillSourceUnavailableError } from "./source.ts";
+import { loadPackagedSkills, SkillSourceUnavailableError } from "./source.ts";
 
 let tempRoot: string;
 
@@ -25,36 +25,23 @@ async function writeSkill(root: string, dirName: string, declaredName = dirName)
 }
 
 describe("packaged skill sources", () => {
-	it("returns a logical path without resolving its symlink", async () => {
+	it("reports a missing root as not built yet, naming the path", () => {
+		const root = join(tempRoot, "missing", "skills");
+		const load = () => loadPackagedSkills(root);
+		expect(load).toThrow(SkillSourceUnavailableError);
+		expect(load).toThrow(`Packaged skills not found at "${root}". Run \`crust build\` first.`);
+	});
+
+	it("keeps the logical root path without resolving its symlink", async () => {
 		const realSource = join(tempRoot, "store", "skills");
 		const logicalSource = join(tempRoot, "node_modules", "pkg", "skills");
-		await mkdir(realSource, { recursive: true });
+		await writeSkill(realSource, "demo");
 		await mkdir(join(tempRoot, "node_modules", "pkg"), { recursive: true });
 		await symlink(realSource, logicalSource);
 
-		expect(resolveSkillSource(logicalSource)).toBe(logicalSource);
-	});
-
-	it("resolves an executable-relative fallback", async () => {
-		const name = `skills-${crypto.randomUUID()}`;
-		const source = join(tempRoot, "bin", name);
-		await mkdir(source, { recursive: true });
-		const descriptor = Object.getOwnPropertyDescriptor(process, "execPath")!;
-		Object.defineProperty(process, "execPath", {
-			...descriptor,
-			value: join(tempRoot, "bin", "cli"),
-		});
-		try {
-			expect(resolveSkillSource(name)).toBe(source);
-		} finally {
-			Object.defineProperty(process, "execPath", descriptor);
-		}
-	});
-
-	it("rejects non-file URLs as a definition error, not an unavailable source", () => {
-		const fn = () => resolveSkillSource(new URL("https://example.com/skills"));
-		expect(fn).toThrow("file: protocol");
-		expect(fn).not.toThrow(SkillSourceUnavailableError);
+		expect(loadPackagedSkills(logicalSource)).toMatchObject([
+			{ sourceDir: join(logicalSource, "demo") },
+		]);
 	});
 
 	it("loads name and description from SKILL.md frontmatter", async () => {
@@ -68,11 +55,11 @@ describe("packaged skill sources", () => {
 	it("rejects empty, invalid, and mismatched skill sources", async () => {
 		const empty = join(tempRoot, "empty");
 		await mkdir(empty);
-		expect(() => loadPackagedSkills(empty)).toThrow("does not contain any skill directories");
+		expect(() => loadPackagedSkills(empty)).toThrow("do not contain any skill directories");
 
 		const invalid = join(tempRoot, "invalid");
 		await mkdir(join(invalid, "demo"), { recursive: true });
-		expect(() => loadPackagedSkills(invalid)).toThrow("does not contain any skill directories");
+		expect(() => loadPackagedSkills(invalid)).toThrow("do not contain any skill directories");
 
 		await writeSkill(invalid, "demo", "other");
 		expect(() => loadPackagedSkills(invalid)).toThrow('declares name "other"');

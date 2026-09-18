@@ -11,6 +11,7 @@ import {
   defineCommand,
   defineContext,
   defineFlag,
+  resolveArtifactDir,
   type CommandConfig,
   type CommandDefinition,
   type CommandDefinitionBuilder,
@@ -599,3 +600,28 @@ It is offered to `onError` hooks and renders nothing when no hook claims it.
   point, and `.execute()` is the terminal entry point. Command definitions are inert and expose
   neither.
 </Callout>
+
+## `resolveArtifactDir(name)`
+
+```ts
+function resolveArtifactDir(name: string): string;
+```
+
+Returns the absolute path of an Extension artifact directory or a [`crust.include`](/docs/guide/build-and-distribution#ship-extra-directories-with-crustinclude) directory shipped with the running CLI. `name` is a top-level directory name (`"skills"`, `"templates"`); anything with a path separator, `.`, `..`, or an empty string throws.
+
+The path is computed from how the CLI is running. Nothing is probed, so a missing directory is reported by the caller, not here.
+
+| Situation                                                   | Result                                                                                                                        |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Compiled executable (`bun build --compile`, `deno compile`) | `<name>` next to the executable: a platform package's `bin/<name>`, or wherever you placed the `--outfile` binary             |
+| Crust-built Node bundle                                     | `<name>` next to the bundle's `bin/` directory: `.crust/root/<name>` in place, `<installed root>/<name>` after install        |
+| Snapshot preparation inside `crust build`                   | `<name>` under the build output directory (`.crust/artifacts/<name>`): what earlier Extension build hooks wrote in this build |
+| Source (`bun run`, `node`, `deno run`)                      | `.crust/root/<name>` under the nearest `package.json` above `process.argv[1]`: the output of the last `crust build`           |
+
+```ts
+import { readdirSync } from "node:fs";
+
+const templates = readdirSync(resolveArtifactDir("templates"));
+```
+
+`crust build` marks the Bun and Node bundles it produces by defining `process.env.CRUST_INTERNAL_BUILD` as the literal `"1"`, so `resolveArtifactDir()` can tell a staged bundle from source; standalone Deno binaries are detected directly. `CRUST_INTERNAL_BUILD` is reserved: every `process.env.CRUST_INTERNAL_BUILD` read in your CLI is replaced at bundle time, regardless of the runtime environment.

@@ -24,16 +24,27 @@ import { skill } from "./extension.ts";
 import { installSkill } from "./generate.ts";
 
 let tempRoot: string;
+let packageRoot: string;
 let originalExitCode: typeof process.exitCode;
+let originalArgv1: string | undefined;
 
 beforeEach(async () => {
 	originalExitCode = process.exitCode;
 	process.exitCode = 0;
 	tempRoot = await mkdtemp(join(tmpdir(), "crust-skill-plugin-"));
+	// Running from source, the extension reads `<package root>/.crust/root/skills`,
+	// where the package root is found by walking up from process.argv[1].
+	packageRoot = join(tempRoot, "package");
+	await mkdir(join(packageRoot, "src"), { recursive: true });
+	await writeFile(join(packageRoot, "package.json"), '{"name":"demo"}');
+	originalArgv1 = process.argv[1];
+	process.argv[1] = join(packageRoot, "src", "cli.ts");
 });
 
 afterEach(async () => {
 	process.exitCode = originalExitCode ?? 0;
+	if (originalArgv1 === undefined) process.argv.length = 1;
+	else process.argv[1] = originalArgv1;
 	await rm(tempRoot, { recursive: true, force: true });
 });
 
@@ -47,8 +58,9 @@ async function withCwd<T>(dir: string, run: () => Promise<T>): Promise<T> {
 	}
 }
 
+/** Writes a skill into the staged skills directory the resolver points at. */
 async function writeSource(name: string, content = name, description = name): Promise<string> {
-	const root = join(tempRoot, "package", "skills");
+	const root = join(packageRoot, ".crust", "root", "skills");
 	const dir = join(root, name);
 	await mkdir(dir, { recursive: true });
 	await writeFile(join(dir, "SKILL.md"), `---\nname: ${name}\ndescription: ${description}\n---\n`);
@@ -56,9 +68,9 @@ async function writeSource(name: string, content = name, description = name): Pr
 	return root;
 }
 
-function createApp(source: string | URL, autoUpdate = true) {
+function createApp(autoUpdate = true) {
 	return new Crust("demo", { description: "Demo" })
-		.extend(skill({ distDir: source, defaultScope: "project", autoUpdate }))
+		.extend(skill({ defaultScope: "project", autoUpdate }))
 		.action(() => {});
 }
 
@@ -69,13 +81,13 @@ function target(name = "demo") {
 describe("skill extension packaged directory", () => {
 	it("exposes the reserved identity on the factory", () => {
 		expect(String(skill.id)).toBe("crust:skills");
-		expect(skill({ distDir: "." }).id).toBe(skill.id);
+		expect(skill({}).id).toBe(skill.id);
 	});
 
 	it("advertises every packaged skill in help with its resolved source path", async () => {
 		const source = await writeSource("demo", "demo", "Run demo workflows");
 		await writeSource("guide", "guide", "Explain deployment choices");
-		const snapshot = await createApp(source).snapshot();
+		const snapshot = await createApp().snapshot();
 
 		const output = renderHelp(snapshot);
 		expect(output).toContain("Agent skills:");
@@ -87,28 +99,25 @@ describe("skill extension packaged directory", () => {
 		);
 	});
 
-	it("keeps help usable when the packaged skills directory cannot be resolved", async () => {
-		const source = join(tempRoot, "missing-skills");
+	it("keeps help usable when the packaged skills directory has not been built", async () => {
 		const app = new Crust("demo", { description: "Demo" })
-			.extend(skill({ distDir: source, command: "agents" }))
+			.extend(skill({ command: "agents" }))
 			.action(() => {});
 		const output = renderHelp(await app.snapshot());
 
 		expect(output).toContain("Agent skills:");
-		expect(output).toContain("The packaged skills directory is unavailable.");
-		expect(output).toContain("Run `demo agents`");
-		expect(output).not.toContain(source);
+		expect(output).toContain(
+			`Packaged skills not found at "${join(packageRoot, ".crust", "root", "skills")}".`,
+		);
+		expect(output).toContain("Run `crust build` first.");
+		expect(output).toContain("Then run `demo agents`");
 	});
 
 	it("omits the generated skill when generated is false", async () => {
 		const authored = join(tempRoot, "authored", "guide");
 		await mkdir(authored, { recursive: true });
 		await writeFile(join(authored, "SKILL.md"), "---\nname: guide\ndescription: Guide\n---\n");
-		const extension = skill({
-			distDir: join(tempRoot, "dist", "skills"),
-			generated: false,
-			extras: [authored],
-		});
+		const extension = skill({ generated: false, extras: [authored] });
 		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
 		const outDir = join(tempRoot, "dist");
 
@@ -119,8 +128,8 @@ describe("skill extension packaged directory", () => {
 	});
 
 	it("generates from the snapshot even when a stale packaged directory exists", async () => {
-		const source = await writeSource("demo", "stale");
-		const extension = skill({ distDir: source });
+		await writeSource("demo", "stale");
+		const extension = skill({});
 		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
 		const outDir = join(tempRoot, "dist");
 
@@ -133,7 +142,7 @@ describe("skill extension packaged directory", () => {
 	});
 
 	it("generates command and authored skills together when extras are configured", async () => {
-		const source = await writeSource("stale", "stale");
+		await writeSource("stale", "stale");
 		const authored = join(tempRoot, "authored", "guide");
 		await mkdir(authored, { recursive: true });
 		await writeFile(
@@ -141,7 +150,7 @@ describe("skill extension packaged directory", () => {
 			"---\nname: guide\ndescription: Deployment guide\n---\n",
 		);
 		await writeFile(join(authored, "content.md"), "authored\n");
-		const extension = skill({ distDir: source, extras: [authored] });
+		const extension = skill({ extras: [authored] });
 		const snapshot = await new Crust("demo", {
 			description: "Demo",
 			version: "9.9.9",
@@ -174,7 +183,7 @@ describe("skill extension packaged directory", () => {
 	});
 
 	it("forwards generated skill overrides to the build", async () => {
-		const source = await writeSource("stale", "stale");
+		await writeSource("stale", "stale");
 		const authored = join(tempRoot, "authored", "gyst");
 		await mkdir(authored, { recursive: true });
 		await writeFile(
@@ -182,7 +191,6 @@ describe("skill extension packaged directory", () => {
 			"---\nname: gyst\ndescription: Authored co-review workflow\n---\n",
 		);
 		const extension = skill({
-			distDir: source,
 			extras: [authored],
 			name: "gyst-reference",
 			description: "Generated command reference",
@@ -199,8 +207,7 @@ describe("skill extension packaged directory", () => {
 	});
 
 	it("renders from the snapshot without requiring a package version", async () => {
-		const source = join(tempRoot, "missing-skills");
-		const extension = skill({ distDir: source });
+		const extension = skill({});
 		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
 		const outDir = join(tempRoot, "dist");
 		await writeFile(join(tempRoot, "package.json"), '{"version":"8.8.8"}');
@@ -223,9 +230,9 @@ describe("skill extension packaged directory", () => {
 	});
 
 	it("installs every packaged skill as a link", async () => {
-		const source = await writeSource("demo");
+		await writeSource("demo");
 		await writeSource("guide");
-		await withCwd(tempRoot, () => createApp(source).execute({ argv: ["skill", "--all"] }));
+		await withCwd(tempRoot, () => createApp().execute({ argv: ["skill", "--all"] }));
 
 		expect((await lstat(target("demo"))).isSymbolicLink()).toBe(true);
 		expect((await lstat(target("guide"))).isSymbolicLink()).toBe(true);
@@ -233,7 +240,7 @@ describe("skill extension packaged directory", () => {
 	});
 
 	it("normalizes home-directory scopes before repair and install grouping", async () => {
-		const source = await writeSource("demo");
+		await writeSource("demo");
 		for (const conflict of [
 			join(tempRoot, ".agents", "skills", "demo"),
 			join(tempRoot, ".trae", "skills", "demo"),
@@ -247,7 +254,8 @@ describe("skill extension packaged directory", () => {
 		await writeFile(traeBin, "#!/bin/sh\nexit 0\n");
 		await chmod(traeBin, 0o755);
 
-		const script = join(tempRoot, "home-scope.ts");
+		// Inside the fake package so the subprocess resolves the same staged skills.
+		const script = join(packageRoot, "home-scope.ts");
 		await writeFile(
 			script,
 			`import { lstat } from "node:fs/promises";
@@ -255,15 +263,14 @@ import { join } from "node:path";
 import { Crust } from ${JSON.stringify(import.meta.resolve("@crustjs/core"))};
 import { skill } from ${JSON.stringify(new URL("./extension.ts", import.meta.url).href)};
 
-const source = ${JSON.stringify(source)};
 const repairErrors: string[] = [];
 await new Crust("demo")
-  .extend(skill({ distDir: source }))
+  .extend(skill({}))
   .action(() => {})
   .execute({ argv: [], io: { stderr: (text) => repairErrors.push(text) } });
 
 await new Crust("demo")
-  .extend(skill({ distDir: source, autoUpdate: false }))
+  .extend(skill({ autoUpdate: false }))
   .action(() => {})
   .execute({
     argv: ["skill", "--all", "--scope", "project"],
@@ -308,11 +315,11 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 	});
 
 	it("does not let --all overwrite an unowned agent directory", async () => {
-		const source = await writeSource("demo");
+		await writeSource("demo");
 		await mkdir(target(), { recursive: true });
 		await writeFile(join(target(), "manual.md"), "keep\n");
 
-		await withCwd(tempRoot, () => createApp(source).execute({ argv: ["skill", "--all"] }));
+		await withCwd(tempRoot, () => createApp().execute({ argv: ["skill", "--all"] }));
 		expect(await readFile(join(target(), "manual.md"), "utf8")).toBe("keep\n");
 	});
 
@@ -325,14 +332,14 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		await mkdir(dirname(installed), { recursive: true });
 		await symlink(stale, installed);
 
-		await withCwd(tempRoot, () => createApp(source).execute({ argv: [] }));
+		await withCwd(tempRoot, () => createApp().execute({ argv: [] }));
 		expect(resolve(dirname(installed), await readlink(installed))).toBe(join(source, "demo"));
 		expect(await readFile(join(installed, "content.md"), "utf8")).toBe("current\n");
 	});
 
 	it("never creates links that were not installed", async () => {
-		const source = await writeSource("demo");
-		await withCwd(tempRoot, () => createApp(source).execute({ argv: [] }));
+		await writeSource("demo");
+		await withCwd(tempRoot, () => createApp().execute({ argv: [] }));
 		await expect(lstat(target())).rejects.toThrow();
 	});
 
@@ -343,24 +350,24 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		await symlink(join(tempRoot, "missing", "skills", "demo"), installed);
 
 		await withCwd(tempRoot, () =>
-			createApp(source).execute({ argv: ["skill", "update", "--scope", "project"] }),
+			createApp().execute({ argv: ["skill", "update", "--scope", "project"] }),
 		);
 		expect(resolve(dirname(installed), await readlink(installed))).toBe(join(source, "demo"));
 	});
 
 	it("skips repair when autoUpdate is false", async () => {
-		const source = await writeSource("demo");
+		await writeSource("demo");
 		const installed = join(tempRoot, ".claude", "skills", "demo");
 		const stale = join(tempRoot, "missing", "skills", "demo");
 		await mkdir(dirname(installed), { recursive: true });
 		await symlink(stale, installed);
 
-		await withCwd(tempRoot, () => createApp(source, false).execute({ argv: [] }));
+		await withCwd(tempRoot, () => createApp(false).execute({ argv: [] }));
 		expect(await readlink(installed)).toBe(stale);
 	});
 
 	it("reports preRun conflicts through injected stderr", async () => {
-		const source = await writeSource("demo");
+		await writeSource("demo");
 		const installed = target();
 		await mkdir(installed, { recursive: true });
 		await writeFile(join(installed, "manual.md"), "keep\n");
@@ -368,7 +375,7 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		const ambientWarnings: unknown[] = [];
 		console.warn = (...args) => ambientWarnings.push(...args);
 		try {
-			const captured = await withCwd(tempRoot, () => captureExecute(createApp(source), []));
+			const captured = await withCwd(tempRoot, () => captureExecute(createApp(), []));
 			expect(captured.exitCode).toBe(0);
 			expect(captured.stderr).toContain("Skill conflict [demo]");
 			expect(ambientWarnings).toEqual([]);
@@ -379,18 +386,17 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 	});
 
 	it("quietly skips preRun repair for an empty packaged source", async () => {
-		const source = join(tempRoot, "package", "skills");
-		await mkdir(source, { recursive: true });
+		await mkdir(join(packageRoot, ".crust", "root", "skills"), { recursive: true });
 
-		const captured = await withCwd(tempRoot, () => captureExecute(createApp(source), []));
+		const captured = await withCwd(tempRoot, () => captureExecute(createApp(), []));
 
 		expect(captured).toEqual({ stdout: "", stderr: "", exitCode: 0 });
 	});
 
 	it("rejects an invalid --scope value during parsing", async () => {
-		const source = await writeSource("demo");
+		await writeSource("demo");
 		const captured = await withCwd(tempRoot, () =>
-			captureExecute(createApp(source), ["skill", "update", "--scope", "bogus"]),
+			captureExecute(createApp(), ["skill", "update", "--scope", "bogus"]),
 		);
 
 		expect(captured.exitCode).toBe(1);
@@ -405,7 +411,7 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 
 		let ran = false;
 		const app = new Crust("demo", { description: "Demo" })
-			.extend(skill({ distDir: source, defaultScope: "project" }))
+			.extend(skill({ defaultScope: "project" }))
 			.action(() => {
 				ran = true;
 			});
@@ -420,19 +426,17 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		const source = await writeSource("demo");
 		await writeFile(join(source, "demo", "SKILL.md"), "---\nname: demo\n---\n");
 
-		const output = renderHelp(await createApp(source).snapshot());
+		const output = renderHelp(await createApp().snapshot());
 		expect(output).toContain("Agent skills:");
 		expect(output).toContain("Packaged skills could not be read.");
-		expect(output).not.toContain("The packaged skills directory is unavailable.");
+		expect(output).not.toContain("Packaged skills not found");
 	});
 
 	it("does not break unrelated commands when the packaged directory is unavailable", async () => {
 		let ran = false;
-		const app = new Crust("demo")
-			.extend(skill({ distDir: join(tempRoot, "missing-skills") }))
-			.action(() => {
-				ran = true;
-			});
+		const app = new Crust("demo").extend(skill({})).action(() => {
+			ran = true;
+		});
 		await app.execute({ argv: [] });
 		expect(ran).toBe(true);
 	});
@@ -452,7 +456,7 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		try {
 			const harness = createPromptIO();
 			const run = withCwd(tempRoot, () =>
-				withPromptIO(harness.io, () => createApp(source).execute({ argv: ["skill"] })),
+				withPromptIO(harness.io, () => createApp().execute({ argv: ["skill"] })),
 			);
 			harness.keys("down", "space", "enter");
 			await run;
@@ -464,7 +468,7 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 	});
 
 	it("overwrites an unowned directory when the conflict confirm is accepted", async () => {
-		const source = await writeSource("demo");
+		await writeSource("demo");
 		await mkdir(target(), { recursive: true });
 		await writeFile(join(target(), "manual.md"), "unowned\n");
 
@@ -475,7 +479,7 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		try {
 			const harness = createPromptIO();
 			const run = withCwd(tempRoot, () =>
-				withPromptIO(harness.io, () => createApp(source).execute({ argv: ["skill"] })),
+				withPromptIO(harness.io, () => createApp().execute({ argv: ["skill"] })),
 			);
 			harness.keys("space", "enter");
 			// The multiselect drains buffered input, so the confirm answer must
@@ -500,9 +504,7 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		// Owned but dangling: reconciliation must repair this after the Universal conflict.
 		await symlink(join(tempRoot, "missing", "skills", "demo"), claude);
 		await mkdir(target(), { recursive: true });
-		const captured = await withCwd(tempRoot, () =>
-			captureExecute(createApp(source), ["skill", "--all"]),
-		);
+		const captured = await withCwd(tempRoot, () => captureExecute(createApp(), ["skill", "--all"]));
 		expect(captured.stderr).toContain("Skipped Universal [demo]");
 		expect(resolve(dirname(claude), await readlink(claude))).toBe(join(source, "demo"));
 	});

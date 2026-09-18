@@ -19,9 +19,9 @@ import { fileURLToPath } from "node:url";
  * @returns The absolute path of the nearest enclosing directory containing
  *   `package.json`, or `null` if the filesystem root is reached first.
  *
- * @internal Used only by {@link resolveSourceDir}.
+ * @internal Shared by {@link resolveSourceDir} and `resolveArtifactDir`.
  */
-function findNearestPackageRoot(startPath: string): string | null {
+export function findNearestPackageRoot(startPath: string): string | null {
 	let current = resolve(startPath);
 
 	if (existsSync(current) && !statSync(current).isDirectory()) {

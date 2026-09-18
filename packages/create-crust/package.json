@@ -38,7 +38,7 @@
 	},
 	"scripts": {
 		"build": "bun scripts/build.ts",
-		"dev": "bun src/index.ts",
+		"dev": "bun run build && bun src/index.ts",
 		"release": "crust publish",
 		"check:types": "tsc --noEmit",
 		"test": "bun test",

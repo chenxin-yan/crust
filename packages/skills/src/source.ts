@@ -1,61 +1,13 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { basename, dirname, isAbsolute, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { type Dirent, existsSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { isErrnoException } from "@crustjs/utils/error";
-import { resolveSourceDir } from "@crustjs/utils/source";
 
 import { probeFrontmatter, requireSkillFrontmatter } from "./bundle.ts";
 
+/** The packaged skills root is missing or holds no skills: the CLI has not been built yet. */
 export class SkillSourceUnavailableError extends Error {
 	override readonly name = "SkillSourceUnavailableError";
-}
-
-function directoryPath(path: string): string | null {
-	try {
-		return statSync(path).isDirectory() ? path : null;
-	} catch {
-		// ENOENT/EACCES: an absent or unreadable candidate is not a source root; the
-		// caller falls through to the next candidate or a clear unavailable error.
-		return null;
-	}
-}
-
-function fallbackName(source: string | URL): string {
-	if (source instanceof URL) return basename(fileURLToPath(source));
-	return isAbsolute(source) ? basename(source) : source;
-}
-
-/**
- * Resolves a logical packaged skill-source root. When the package path is
- * unavailable, falls back to the executable directory: absolute and URL
- * sources by their basename, relative sources by the same relative path.
- */
-export function resolveSkillSource(source: string | URL): string {
-	if (source instanceof URL && source.protocol !== "file:") {
-		// A wrong-protocol URL is a definition error, not a missing asset; validating
-		// before resolution keeps it out of the catch below so it is never classified
-		// as "unavailable" and silently degrades the extension.
-		throw new Error(`Skill source URL must use file: protocol, got "${source.protocol}".`);
-	}
-	let primary: string | undefined;
-	try {
-		primary = resolveSourceDir(source);
-	} catch {
-		// Relative paths may not have a package entrypoint in compiled executables.
-	}
-	if (primary) {
-		const resolved = directoryPath(primary);
-		if (resolved) return resolved;
-	}
-
-	const fallback = join(dirname(process.execPath), fallbackName(source));
-	const resolvedFallback = directoryPath(fallback);
-	if (resolvedFallback) return resolvedFallback;
-
-	throw new SkillSourceUnavailableError(
-		`Could not resolve skill source${primary ? ` at "${primary}"` : ""} or executable-relative fallback "${fallback}".`,
-	);
 }
 
 export interface PackagedSkill {
@@ -81,11 +33,27 @@ export function readSkillFrontmatter(
 	);
 }
 
-/** Reads every self-describing skill directory in a packaged skill source. */
-export function loadPackagedSkills(source: string | URL): readonly PackagedSkill[] {
-	const root = resolveSkillSource(source);
+/**
+ * Reads every self-describing skill directory under `root`, the absolute
+ * packaged skills directory (normally `resolveArtifactDir("skills")`).
+ */
+export function loadPackagedSkills(root: string): readonly PackagedSkill[] {
+	let entries: Dirent[];
+	try {
+		entries = readdirSync(root, { withFileTypes: true });
+	} catch (error) {
+		// ENOENT/ENOTDIR: not built yet; help and auto-repair degrade on this typed
+		// error. Anything else (EACCES) is a real read failure and surfaces as-is.
+		if (!isErrnoException(error) || (error.code !== "ENOENT" && error.code !== "ENOTDIR")) {
+			throw error;
+		}
+		throw new SkillSourceUnavailableError(
+			`Packaged skills not found at "${root}". Run \`crust build\` first.`,
+			{ cause: error },
+		);
+	}
 	const skills: PackagedSkill[] = [];
-	for (const entry of readdirSync(root, { withFileTypes: true })) {
+	for (const entry of entries) {
 		if (!entry.isDirectory()) continue;
 		const sourceDir = join(root, entry.name);
 		// Cruft directories (__MACOSX, editor droppings) must not take down every
@@ -101,7 +69,7 @@ export function loadPackagedSkills(source: string | URL): readonly PackagedSkill
 	}
 	if (skills.length === 0) {
 		throw new SkillSourceUnavailableError(
-			`Skill source "${root}" does not contain any skill directories.`,
+			`Packaged skills at "${root}" do not contain any skill directories. Run \`crust build\` first.`,
 		);
 	}
 	return skills.sort((a, b) => a.name.localeCompare(b.name));

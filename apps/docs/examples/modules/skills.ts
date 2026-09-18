@@ -8,7 +8,7 @@ const deploy = defineCommand("deploy", { description: "Deploy the app" }, (comma
 
 export const app = new Crust("my-cli", { description: "Manage deployments", version: "1.2.3" })
 	.add(deploy)
-	.extend(skill({ distDir: new URL("../skills", import.meta.url) }));
+	.extend(skill({}));
 //#endregion
 
 //#region write
@@ -24,8 +24,12 @@ const writeApp = new WriteCrust("my-cli", {
 			command.action(() => {}),
 		),
 	)
-	.extend(writeSkill({ distDir: new URL("../skills", import.meta.url) }));
-const files = await writeSkills({ app: writeApp, outDir: "dist/skills", version: "1.2.3" });
+	.extend(writeSkill({}));
+const files = await writeSkills({
+	app: writeApp,
+	outDir: ".crust/artifacts/skills",
+	version: "1.2.3",
+});
 console.log(files);
 // ["my-cli/SKILL.md", "my-cli/commands/my-cli.md", "my-cli/commands/deploy.md",
 //  "my-cli/commands/skill.md", "my-cli/commands/skill/update.md"]

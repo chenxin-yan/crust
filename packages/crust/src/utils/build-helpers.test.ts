@@ -10,8 +10,10 @@ import {
 	buildEntrypoint,
 	bunBaselineAlias,
 	bunCompileTarget,
+	CRUST_BUILD_DEFINE,
 	createBunCompileArgs,
 	createBunPluginDriverScript,
+	createNodeBuildArgs,
 	execBuild,
 	execNodeBuild,
 	hostTarget,
@@ -79,6 +81,7 @@ describe("createBunPluginDriverScript", () => {
 				entrypoints: [String.raw`C:\Program Files\my "cli"\src\cli.tsx`],
 				minify: false,
 				env: "PUBLIC_*",
+				define: CRUST_BUILD_DEFINE,
 				target: "bun",
 				compile: { target: "bun-windows-x64", outfile: awkward, autoloadBunfig: false },
 			},
@@ -86,6 +89,9 @@ describe("createBunPluginDriverScript", () => {
 		};
 		const script = createBunPluginDriverScript(options);
 		expect(embeddedOptions(script)).toEqual(options);
+		expect(embeddedOptions(script).build.define).toEqual({
+			"process.env.CRUST_INTERNAL_BUILD": '"1"',
+		});
 		expect(script).toContain('"autoloadBunfig":false');
 		expect(script).toContain("throw: false");
 		expect(script).toContain("must default-export a Bun bundler plugin ({ name, setup })");
@@ -98,6 +104,7 @@ describe("createBunPluginDriverScript", () => {
 				entrypoints: ["/proj/src/cli.ts"],
 				minify: true,
 				env: "PUBLIC_*",
+				define: CRUST_BUILD_DEFINE,
 				target: "node",
 				format: "esm",
 			},
@@ -310,6 +317,8 @@ describe("createBunCompileArgs", () => {
 			"--env-file",
 			"/p/.env",
 			"--env=PUBLIC_*",
+			"--define",
+			'process.env.CRUST_INTERNAL_BUILD="1"',
 			"--outfile",
 			"/p/dist/cli",
 			"--minify",
@@ -322,8 +331,31 @@ describe("createBunCompileArgs", () => {
 			"--compile",
 			"--no-compile-autoload-bunfig",
 			"--env=PUBLIC_*",
+			"--define",
+			'process.env.CRUST_INTERNAL_BUILD="1"',
 			"--outfile",
 			"/p/dist/cli",
+			"/p/src/cli.ts",
+		]);
+	});
+});
+
+describe("createNodeBuildArgs", () => {
+	it("marks the bundle as crust-built with a string-literal define", () => {
+		expect(createNodeBuildArgs("/p/src/cli.ts", "/p/dist/cli.js", true, ["/p/.env"])).toEqual([
+			"build",
+			"--env-file",
+			"/p/.env",
+			"--env=PUBLIC_*",
+			"--define",
+			'process.env.CRUST_INTERNAL_BUILD="1"',
+			"--target",
+			"node",
+			"--format",
+			"esm",
+			"--outfile",
+			"/p/dist/cli.js",
+			"--minify",
 			"/p/src/cli.ts",
 		]);
 	});
@@ -389,12 +421,8 @@ describe("buildEntrypoint", () => {
 		const directory = await mkdtemp(join(tmpdir(), "crust-entry-artifacts-test-"));
 		tempDirs.push(directory);
 		const entry = join(directory, "cli.ts");
-		const source = join(directory, "package", "skills");
 		const outDir = join(directory, "dist");
-		await Bun.write(
-			join(source, "demo", "SKILL.md"),
-			"---\nname: demo\ndescription: Demo workflows\n---\n",
-		);
+		await Bun.write(join(directory, "package.json"), '{"name":"demo"}');
 		const skillsUrl = pathToFileURL(resolve(import.meta.dir, "../../../skills/src/index.ts")).href;
 		const manUrl = pathToFileURL(resolve(import.meta.dir, "../../../man/src/index.ts")).href;
 		await writeFile(
@@ -402,18 +430,20 @@ describe("buildEntrypoint", () => {
 			`import { Crust } from ${JSON.stringify(coreUrl)};\n` +
 				`import { skill } from ${JSON.stringify(skillsUrl)};\n` +
 				`import { man } from ${JSON.stringify(manUrl)};\n` +
-				`await new Crust("demo", { description: "Demo" }).extend(skill({ distDir: ${JSON.stringify(source)} }), man()).execute();\n`,
+				`await new Crust("demo", { description: "Demo" }).extend(skill({}), man()).execute();\n`,
 		);
 
 		// Run the entry subprocess from the fixture project root so advertised
 		// sources are relative to that project.
 		await buildEntrypoint(entry, outDir, [], io, directory);
 
+		// The man hook runs after the skills hook and reads the skill it just wrote
+		// into the build output, advertised relative to the project root.
 		const manual = await Bun.file(join(outDir, "man", "demo.1")).text();
 		const packagedSkill = await Bun.file(join(outDir, "skills", "demo", "SKILL.md")).text();
-		expect(manual).toContain("Demo workflows");
-		expect(manual).not.toContain(source);
-		expect(packagedSkill).not.toContain(source);
+		expect(manual).toContain(`Source: ${join("dist", "skills", "demo")}`);
+		expect(manual).not.toContain(directory);
+		expect(packagedSkill).not.toContain(directory);
 	});
 
 	it("attributes Extension build failures", async () => {
