@@ -7,6 +7,7 @@ on:
       - "packages/config/**"
       - "package.json"
       - "bun.lock"
+      - "tsdown.config.ts"
       - "scripts/type-perf-report.ts"
       - "scripts/editor-latency.ts"
       - ".github/workflows/type-perf.yml"

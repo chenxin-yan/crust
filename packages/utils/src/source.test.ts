@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { resolveSourceDir } from "./source.ts";
@@ -21,16 +21,12 @@ afterEach(async () => {
 });
 
 async function withArgv1<T>(value: string, fn: () => Promise<T>): Promise<T> {
-	const original = process.argv[1];
+	const original = [...process.argv];
 	process.argv[1] = value;
 	try {
 		return await fn();
 	} finally {
-		if (original === undefined) {
-			process.argv.length = 1;
-		} else {
-			process.argv[1] = original;
-		}
+		process.argv.splice(0, process.argv.length, ...original);
 	}
 }
 
@@ -50,7 +46,7 @@ describe("resolveSourceDir", () => {
 		});
 
 		it("normalizes absolute string paths with `.` / `..` segments", () => {
-			const messy = join(tmpDir, ".", "sub", "..");
+			const messy = `${tmpDir}${sep}.${sep}sub${sep}..`;
 			expect(resolveSourceDir(messy)).toBe(tmpDir);
 		});
 
@@ -89,13 +85,13 @@ describe("resolveSourceDir", () => {
 		});
 
 		it("throws a descriptive error when relative input is given but process.argv[1] is unset", () => {
-			const original = process.argv[1];
+			const original = [...process.argv];
 			process.argv.length = 1;
 			try {
 				expect(() => resolveSourceDir("x/y")).toThrow(/process\.argv\[1\] is not set/);
 				expect(() => resolveSourceDir("x/y")).toThrow(/absolute path or a file: URL/);
 			} finally {
-				if (original !== undefined) process.argv[1] = original;
+				process.argv.splice(0, process.argv.length, ...original);
 			}
 		});
 

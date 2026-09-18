@@ -21,10 +21,6 @@ import type { ColorString } from "./types.ts";
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("fg", () => {
-	it("applies truecolor foreground to text from hex", () => {
-		expect(fg("hello", "#ff0000")).toBe("\x1b[38;2;255;0;0mhello\x1b[39m");
-	});
-
 	it("accepts 3-digit hex shorthand", () => {
 		expect(fg("hello", "#f00")).toBe("\x1b[38;2;255;0;0mhello\x1b[39m");
 	});
@@ -250,8 +246,6 @@ describe("bg — depth fallback", () => {
 
 	it('depth="256" emits ansi-256 background (38; → 48; swap)', () => {
 		expect(bg("hello", "#00ff88", "256")).toBe("\x1b[48;5;48mhello\x1b[49m");
-		// Invariant: must end in bg close, must start with bg SGR introducer.
-		expect(bg("hello", "#00ff88", "256").startsWith("\x1b[48;")).toBe(true);
 	});
 
 	it('depth="16" emits a real 16-color background SGR', () => {

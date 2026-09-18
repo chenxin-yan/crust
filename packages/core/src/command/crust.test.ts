@@ -1256,7 +1256,8 @@ describe("Extension onError hooks", () => {
 			},
 		});
 
-		await failing().extend(observer).execute({ argv: [] });
+		expect(await failing().extend(observer).execute({ argv: [] })).toBe(1);
+		expect(preRunContext).toBeDefined();
 		expect(onErrorContext).toBe(preRunContext);
 	});
 
@@ -1925,14 +1926,14 @@ describe("Crust .execute()", () => {
 	});
 
 	it("does not create an ambient terminal scope when execute IO is omitted", async () => {
-		let observed: ReturnType<typeof getAmbientTerminalIO>;
+		const observations: ReturnType<typeof getAmbientTerminalIO>[] = [];
 		const app = new Crust("test").action(() => {
-			observed = getAmbientTerminalIO();
+			observations.push(getAmbientTerminalIO());
 		});
 
-		await app.execute({ argv: [] });
-
-		expect(observed).toBeUndefined();
+		expect(await app.execute({ argv: [] })).toBe(0);
+		expect(observations).toHaveLength(1);
+		expect(observations[0]).toBeUndefined();
 	});
 
 	it("command context contains a serializable snapshot of the resolved command", async () => {

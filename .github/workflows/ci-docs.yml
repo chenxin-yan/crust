@@ -8,6 +8,7 @@ on:
       - "package.json"
       - "bun.lock"
       - "turbo.json"
+      - "tsdown.config.ts"
       - ".oxlintrc.json"
       - ".oxfmtrc.json"
       - ".github/workflows/ci-docs.yml"

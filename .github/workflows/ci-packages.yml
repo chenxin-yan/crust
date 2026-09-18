@@ -11,6 +11,7 @@ on:
       - "package.json"
       - "bun.lock"
       - "turbo.json"
+      - "tsdown.config.ts"
       - ".oxlintrc.json"
       - ".oxfmtrc.json"
       - "tsconfig*.json"
@@ -121,6 +122,7 @@ jobs:
         run: |
           bun turbo run build check:types test --filter='./packages/*' --filter='./tools'
           bun test scripts/*.test.ts
+          bun x tsc --noEmit -p scripts
 
       - name: Lint and format check (packages)
         run: |

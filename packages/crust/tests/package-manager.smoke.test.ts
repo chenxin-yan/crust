@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -78,7 +78,7 @@ afterAll(() => {
 });
 
 describe.skipIf(!packageManager)("package manager smoke", () => {
-	it("installs and runs the staged CLI through node_modules/.bin", async () => {
+	it("installs and runs both the .bin command and root launcher", async () => {
 		if (!hasCommand(packageManager!)) {
 			throw new Error(`${packageManager} is required for this smoke test.`);
 		}
@@ -115,6 +115,15 @@ describe.skipIf(!packageManager)("package manager smoke", () => {
 			),
 		);
 
+		if (packageManager === "pnpm") {
+			// The unpublished platform fixture must resolve as the root's optional
+			// dependency under pnpm's isolated linker, not just as a direct dependency.
+			writeFileSync(
+				join(installDir, "pnpm-workspace.yaml"),
+				`overrides:\n  ${JSON.stringify(platformPackage.name)}: ${JSON.stringify(`file:${platformTarball}`)}\n`,
+			);
+		}
+
 		// Audit/funding lookups hit registry endpoints the smoke test does not need;
 		// when they degrade, npm blocks on them and the test times out.
 		const auditFlags = packageManager === "npm" ? ["--no-audit", "--no-fund"] : [];
@@ -124,9 +133,23 @@ describe.skipIf(!packageManager)("package manager smoke", () => {
 		expect(install.exitCode).toBe(0);
 
 		const binPath = join(installDir, "node_modules", ".bin", "resolver-smoke");
-		chmodSync(binPath, 0o755);
 		const exec = await runProcess(binPath, ["smoke-ok"], { cwd: installDir });
 		expect(exec.exitCode).toBe(0);
-		expect(exec.stdout.trim()).toContain("smoke-ok");
+		expect(exec.stdout.trim()).toBe("smoke-ok");
+
+		// Both direct dependencies advertise the same bin; .bin may select the platform
+		// binary. Also execute the installed root launcher to prove its resolver works.
+		const launcherPath = join(
+			installDir,
+			"node_modules",
+			manifest.root.name,
+			"bin",
+			"resolver-smoke.js",
+		);
+		const launcher = await runProcess("node", [launcherPath, "launcher-ok"], {
+			cwd: installDir,
+		});
+		expect(launcher.exitCode, launcher.stderr).toBe(0);
+		expect(launcher.stdout.trim()).toBe("launcher-ok");
 	}, 30000);
 });

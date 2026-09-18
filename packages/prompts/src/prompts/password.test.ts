@@ -1,8 +1,10 @@
 import { describe, expect, it } from "bun:test";
+import { Writable } from "node:stream";
+import { stripVTControlCharacters } from "node:util";
 
 import { z } from "zod";
 
-import { renderPrompt } from "../testing.ts";
+import { createPromptIO, renderPrompt } from "../testing.ts";
 import { password } from "./password.ts";
 import { nonTTYIO, tick, waitForScreen } from "./test-helpers.ts";
 
@@ -271,52 +273,89 @@ describe("password — schema short-circuit", () => {
 // Secrecy — raw value never appears in rendered output
 // ────────────────────────────────────────────────────────────────────────────
 //
-// The masking comment in the rendering test only said the raw value
-// shouldn't appear; it never asserted that. Tighten across the schema
-// rejection and submission paths so a regression is loud.
+// Inspect every write, not just the final fake screen: a later masked repaint
+// must not hide a transient leak. Validator messages here contain no secret.
 
 describe("password — secrecy", () => {
-	// A unique, unlikely-to-appear-in-prompt-chrome marker so any leak fails
-	// the assertion deterministically.
-	const SECRET = "hunter2-XYZ";
+	// None occurs in prompt chrome, validation messages, or emitted ANSI controls.
+	const SECRET = "qzxvjk";
+
+	function recordedIO() {
+		const harness = createPromptIO();
+		let transcript = "";
+		const output = Object.assign(
+			new Writable({
+				write(chunk, _encoding, callback) {
+					transcript += chunk.toString();
+					harness.io.output.write(chunk);
+					callback();
+				},
+			}),
+			{ columns: 80, isTTY: true },
+		);
+		return {
+			...harness,
+			io: { input: harness.io.input, output },
+			assertSecretAbsent() {
+				for (const char of SECRET) {
+					expect(transcript).not.toContain(char);
+					expect(stripVTControlCharacters(transcript)).not.toContain(char);
+				}
+			},
+		};
+	}
 
 	it("never renders the raw value while typing or after submission", async () => {
-		const prompt = renderPrompt(password, { message: "Password?" });
+		const prompt = recordedIO();
+		const answer = password({ message: "Password?" }, prompt.io);
 
 		await tick();
 		for (const ch of SECRET) {
 			prompt.type(ch);
 			await tick();
+			prompt.assertSecretAbsent();
 		}
 		prompt.keys("return");
-		await prompt.answer;
-
-		expect(prompt.screen()).not.toContain(SECRET);
+		expect(await answer).toBe(SECRET);
+		expect(prompt.screen()).toBe("✓ Password? ****");
+		prompt.assertSecretAbsent();
 	});
 
 	it("never renders the raw value when schema validation rejects", async () => {
-		const prompt = renderPrompt(password<string>, {
-			message: "Password?",
-			schema: z.string().min(12, "too short"),
-		});
+		const prompt = recordedIO();
+		const answer = password(
+			{
+				message: "Password?",
+				schema: z
+					.string()
+					.min(12, "too short")
+					.transform((value) => `parsed:${value}`),
+			},
+			prompt.io,
+		);
 
 		await tick();
-		prompt.type(SECRET);
-		await tick();
+		for (const ch of SECRET) {
+			prompt.type(ch);
+			await tick();
+			prompt.assertSecretAbsent();
+		}
 		prompt.keys("return");
 		// Schema validation is async; a fixed tick races the error render on slow runners.
 		await waitForScreen(prompt, "too short");
 
 		expect(prompt.screen()).toContain("too short");
-		expect(prompt.screen()).not.toContain(SECRET);
+		prompt.assertSecretAbsent();
 
 		// Resolve the prompt cleanly with a long-enough valid value.
 		for (let i = 0; i < SECRET.length; i++) {
 			prompt.keys("backspace");
 		}
-		prompt.type("x".repeat(12));
+		prompt.type(SECRET.repeat(2));
 		prompt.keys("return");
-		await prompt.answer;
+		expect(await answer).toBe(`parsed:${SECRET.repeat(2)}`);
+		expect(prompt.screen()).toBe("✓ Password? ****");
+		prompt.assertSecretAbsent();
 	});
 });
 

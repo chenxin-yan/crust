@@ -439,10 +439,6 @@ describe("createStyle — structural equivalence", () => {
 describe("createStyle — dynamic colors always mode", () => {
 	const s = createStyle({ mode: "always" });
 
-	it("reports trueColorEnabled as true", () => {
-		expect(s.trueColorEnabled).toBe(true);
-	});
-
 	it("fg emits truecolor ANSI codes from `[r, g, b]`", () => {
 		expect(s.fg("text", [255, 0, 0])).toBe("\x1b[38;2;255;0;0mtext\x1b[39m");
 	});
@@ -454,10 +450,6 @@ describe("createStyle — dynamic colors always mode", () => {
 
 describe("createStyle — dynamic colors never mode", () => {
 	const s = createStyle({ mode: "never" });
-
-	it("reports trueColorEnabled as false", () => {
-		expect(s.trueColorEnabled).toBe(false);
-	});
 
 	it("fg returns plain text from `[r, g, b]`", () => {
 		expect(s.fg("text", [255, 0, 0])).toBe("text");

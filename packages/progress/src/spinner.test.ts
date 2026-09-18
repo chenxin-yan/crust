@@ -251,15 +251,18 @@ describe("spinner — sink resolution", () => {
 	it("the ambient sink survives async boundaries", async () => {
 		const { sink, writes } = createFakeSink(false);
 
-		await withProgressSink(sink, () =>
-			spinner({
+		const result = await withProgressSink(sink, async () => {
+			await tick(10);
+			return spinner({
 				message: "Async",
 				task: async () => {
 					await tick(10);
 					return "ok";
 				},
-			}),
-		);
+			});
+		});
+
+		expect(result).toBe("ok");
 
 		expect(writes[0]).toContain("✓ Async\n");
 	});

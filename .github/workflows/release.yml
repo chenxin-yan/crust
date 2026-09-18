@@ -11,6 +11,7 @@ on:
       - "package.json"
       - "bun.lock"
       - "turbo.json"
+      - "tsdown.config.ts"
       - ".github/workflows/ci-packages.yml"
       - ".github/workflows/release.yml"
 

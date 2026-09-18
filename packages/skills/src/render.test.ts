@@ -685,6 +685,12 @@ describe("renderSkill", () => {
 			};
 			const files = renderSkill(manifest, meta);
 			const allPaths = new Set(files.map((f) => f.path));
+			expect([...allPaths].sort()).toEqual([
+				"SKILL.md",
+				"commands/app.md",
+				"commands/build.md",
+				"commands/serve.md",
+			]);
 
 			const skillContent = expectTextContent(findFile(files, "SKILL.md"));
 
@@ -699,6 +705,7 @@ describe("renderSkill", () => {
 				}
 			}
 
+			expect(links.sort()).toEqual(["commands/app.md", "commands/build.md", "commands/serve.md"]);
 			for (const link of links) {
 				expect(allPaths.has(link)).toBe(true);
 			}
@@ -725,11 +732,16 @@ describe("renderSkill", () => {
 				version: "1.0.0",
 			};
 			const files = renderSkill(manifest, meta);
-			const skill = findFile(files, "SKILL.md");
+			const skillContent = expectTextContent(findFile(files, "SKILL.md"));
 			const commandFiles = files.filter((f) => f.path.startsWith("commands/")).map((f) => f.path);
+			expect(commandFiles.sort()).toEqual([
+				"commands/git.md",
+				"commands/remote.md",
+				"commands/remote/add.md",
+			]);
 
 			for (const cmdPath of commandFiles) {
-				expect(skill?.content).toContain(cmdPath);
+				expect(skillContent).toContain(cmdPath);
 			}
 		});
 	});
