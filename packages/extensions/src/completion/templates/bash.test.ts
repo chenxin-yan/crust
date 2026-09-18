@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -19,6 +19,7 @@ async function runBashCompletion(
 	scriptPath: string,
 	fnName: string,
 	words: string[],
+	cwd?: string,
 ): Promise<string[]> {
 	const compWordsLines = words.map((w, i) => `COMP_WORDS[${i}]=${shQuote(w)}`).join("\n");
 	const compCword = words.length - 1;
@@ -35,6 +36,7 @@ for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
 	const proc = Bun.spawn(["bash", "-c", driver], {
 		stdout: "pipe",
 		stderr: "pipe",
+		cwd,
 	});
 	const [out, err] = await Promise.all([
 		new Response(proc.stdout).text(),
@@ -44,9 +46,10 @@ for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
 	if (code !== 0) {
 		throw new Error(`bash exited ${code}\nstderr:\n${err}\nstdout:\n${out}`);
 	}
+	// Candidates are newline-delimited; do not trim — leading/trailing
+	// whitespace in a filename candidate is meaningful.
 	return out
 		.split("\n")
-		.map((l) => l.trim())
 		.filter((l) => l.length > 0)
 		.sort();
 }
@@ -345,7 +348,74 @@ describe("renderBash — url/path/json value-flag handling", () => {
 	it("emits explicit file completion (compgen -f) for path flags", () => {
 		const script = renderBash(valueTypeFixture, "mycli", "1.0.0");
 		expect(script).toContain('"|--out")');
-		expect(script).toContain('compgen -f -- "$cur"');
+		expect(script).toContain('__mycli_file_candidates "" "$cur"');
+		expect(script).toContain('compgen -f -- "$2"');
+	});
+
+	/**
+	 * INT-02 regression: `COMPREPLY=( $(compgen -f …) )` word-split and
+	 * glob-expanded filenames, so `hello world.txt` became two candidates
+	 * and `star*.txt` matched other files. Each filesystem name must survive
+	 * as exactly one candidate in both the separate and `--flag=` forms.
+	 */
+	describe("path candidates preserve whitespace and glob metacharacters", () => {
+		let tmpDir: string;
+		let scriptPath: string;
+		let cwd: string;
+
+		beforeAll(async () => {
+			tmpDir = await mkdtemp(join(tmpdir(), "tp010-bash-spaced-"));
+			scriptPath = join(tmpDir, "mycli-completion.bash");
+			await writeFile(scriptPath, renderBash(valueTypeFixture, "mycli", "1.0.0"), "utf8");
+			cwd = join(tmpDir, "cwd");
+			await mkdir(cwd);
+			for (const name of [
+				"hello world.txt",
+				"star*.txt",
+				"starlight.txt",
+				"$HOME.txt",
+				"back\\slash",
+			]) {
+				await writeFile(join(cwd, name), "", "utf8");
+			}
+		});
+
+		afterAll(async () => {
+			await rm(tmpDir, { recursive: true, force: true });
+		});
+
+		const runCompletion = (words: string[]) => runBashCompletion(scriptPath, "_mycli", words, cwd);
+
+		it("separate form: `mycli --out <TAB>` lists each file once", async () => {
+			const completions = await runCompletion(["mycli", "--out", ""]);
+			expect(completions).toEqual([
+				"$HOME.txt",
+				"back\\slash",
+				"hello world.txt",
+				"star*.txt",
+				"starlight.txt",
+			]);
+		});
+
+		it("separate form with a prefix: `mycli --out hello<TAB>`", async () => {
+			const completions = await runCompletion(["mycli", "--out", "hello"]);
+			expect(completions).toEqual(["hello world.txt"]);
+		});
+
+		it("equals form: `mycli --out=st<TAB>` keeps the literal `*` and the flag prefix", async () => {
+			const completions = await runCompletion(["mycli", "--out=st"]);
+			expect(completions).toEqual(["--out=star*.txt", "--out=starlight.txt"]);
+		});
+
+		it("equals form: `mycli --out=hello<TAB>` yields one prefixed candidate", async () => {
+			const completions = await runCompletion(["mycli", "--out=hello"]);
+			expect(completions).toEqual(["--out=hello world.txt"]);
+		});
+
+		it("no match yields an empty COMPREPLY (falls through to `-o default`)", async () => {
+			const completions = await runCompletion(["mycli", "--out", "zzz"]);
+			expect(completions).toEqual([]);
+		});
 	});
 
 	it("emits compopt +o default suppression for url and json flags", () => {
