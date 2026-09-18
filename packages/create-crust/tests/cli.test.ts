@@ -79,7 +79,7 @@ describe("create-crust CLI", () => {
 			version: "0.0.0",
 			type: "module",
 			crust: { runtime: "bun" },
-			bin: { "my-cli": ".crust/root/bin/my-cli.js" },
+			bin: { "my-cli": "src/cli.ts" },
 			scripts: {
 				dev: "bun run src/cli.ts",
 				build: "crust build",
@@ -104,6 +104,8 @@ describe("create-crust CLI", () => {
 		expect(tsconfig.compilerOptions.lib).toEqual(["ESNext"]);
 		expect(tsconfig.compilerOptions.types).toEqual(["bun"]);
 		const cli = readFileSync(join(projectDir, "src", "cli.ts"), "utf-8");
+		// `bin` points at the source, so the linked command needs the runtime's shebang.
+		expect(cli.startsWith("#!/usr/bin/env bun\n")).toBe(true);
 		expect(cli).toContain('new Crust("my-cli"');
 		expect(cli).toContain(".execute()");
 		expect(cli).toContain("help()");
@@ -164,7 +166,7 @@ describe("create-crust CLI", () => {
 		expect(pkg).toMatchObject({
 			$schema: "./node_modules/@crustjs/crust/schema/package.json",
 			crust: { runtime: "node" },
-			bin: { "node-cli": ".crust/root/bin/node-cli.js" },
+			bin: { "node-cli": "src/cli.ts" },
 			scripts: {
 				dev: "node src/cli.ts",
 				build: "crust build",
@@ -187,6 +189,9 @@ describe("create-crust CLI", () => {
 		const tsconfig = JSON.parse(readFileSync(join(projectDir, "tsconfig.json"), "utf-8"));
 		expect(tsconfig.compilerOptions.lib).toEqual(["ESNext"]);
 		expect(tsconfig.compilerOptions.types).toEqual(["node"]);
+		expect(
+			readFileSync(join(projectDir, "src", "cli.ts"), "utf-8").startsWith("#!/usr/bin/env node\n"),
+		).toBe(true);
 		const readme = readFileSync(join(projectDir, "README.md"), "utf-8");
 		expect(readme).toContain("npm run dev");
 		expect(readme).not.toContain("bun run");
@@ -210,7 +215,7 @@ describe("create-crust CLI", () => {
 		expect(pkg).toMatchObject({
 			$schema: "./node_modules/@crustjs/crust/schema/package.json",
 			crust: { runtime: "deno" },
-			bin: { "deno-cli": ".crust/root/bin/deno-cli.js" },
+			bin: { "deno-cli": "src/cli.ts" },
 			scripts: {
 				dev: "deno run -A src/cli.ts",
 				build: "crust build",
@@ -230,6 +235,11 @@ describe("create-crust CLI", () => {
 		const tsconfig = JSON.parse(readFileSync(join(projectDir, "tsconfig.json"), "utf-8"));
 		expect(tsconfig.compilerOptions.lib).toEqual(["ESNext", "deno.window"]);
 		expect(tsconfig.compilerOptions.types).toEqual([]);
+		expect(
+			readFileSync(join(projectDir, "src", "cli.ts"), "utf-8").startsWith(
+				"#!/usr/bin/env -S deno run -A\n",
+			),
+		).toBe(true);
 		const readme = readFileSync(join(projectDir, "README.md"), "utf-8");
 		expect(readme).toContain("deno task dev");
 		expect(readme).not.toContain("bun run");

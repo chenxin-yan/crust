@@ -31,7 +31,7 @@
 		]
 	},
 	"bin": {
-		"crust": "dist/cli.js"
+		"crust": "src/cli.ts"
 	},
 	"scripts": {
 		"build": "bun run build:cli && bun dist/cli.js build",

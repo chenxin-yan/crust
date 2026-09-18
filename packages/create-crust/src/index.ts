@@ -17,11 +17,18 @@ type Runtime = "bun" | "node" | "deno";
 // `tsLib`/`tsTypes` are spliced into tsconfig arrays, so they carry their own JSON quoting.
 // Deno reads the project tsconfig and a supplied `lib` replaces its default `deno.window`,
 // which would drop `Deno`, `console`, and `process` from `deno check`.
+// `shebang` heads src/cli.ts: package.json `bin` points at the source, so a linked
+// command must start the project's runtime itself.
 const RUNTIME_TEMPLATE_CONTEXT = {
-	bun: { run: "bun run", tsLib: '"ESNext"', tsTypes: '"bun"' },
-	node: { run: "npm run", tsLib: '"ESNext"', tsTypes: '"node"' },
-	deno: { run: "deno task", tsLib: '"ESNext", "deno.window"', tsTypes: "" },
-} satisfies Record<Runtime, { run: string; tsLib: string; tsTypes: string }>;
+	bun: { run: "bun run", shebang: "#!/usr/bin/env bun", tsLib: '"ESNext"', tsTypes: '"bun"' },
+	node: { run: "npm run", shebang: "#!/usr/bin/env node", tsLib: '"ESNext"', tsTypes: '"node"' },
+	deno: {
+		run: "deno task",
+		shebang: "#!/usr/bin/env -S deno run -A",
+		tsLib: '"ESNext", "deno.window"',
+		tsTypes: "",
+	},
+} satisfies Record<Runtime, { run: string; shebang: string; tsLib: string; tsTypes: string }>;
 
 // The bundle inlines these JSON imports, so scaffolded package.json files pin
 // the sibling package versions from the build that produced create-crust.

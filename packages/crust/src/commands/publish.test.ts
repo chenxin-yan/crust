@@ -21,7 +21,9 @@ function writeStageFixture(tmpDir: string, manifest: DistributionManifest) {
 			{
 				name: manifest.root.name,
 				version: manifest.version,
-				bin: { [manifest.root.bin]: `bin/${manifest.root.bin}.js` },
+				bin: Object.fromEntries(
+					manifest.root.bins.map((command) => [command, `bin/${command}.js`]),
+				),
 				// Mirrors distribute.ts: a root-only package has no optionalDependencies field at all.
 				...(manifest.packages.length > 0
 					? {
@@ -44,7 +46,7 @@ function writeStageFixture(tmpDir: string, manifest: DistributionManifest) {
 				{
 					name: pkg.name,
 					version: manifest.version,
-					bin: { [manifest.root.bin]: pkg.bin },
+					bin: pkg.bins,
 					os: [pkg.os],
 					cpu: [pkg.cpu],
 					...(pkg.libc ? { libc: [pkg.libc] } : {}),
@@ -62,7 +64,7 @@ describe("publish manifest validation", () => {
 	const tmpDir = mkdtempSync(join(tmpdir(), "crust-publish-"));
 	const manifest: DistributionManifest = {
 		version: "1.2.3",
-		root: { name: "@scope/demo", dir: "root", bin: "demo" },
+		root: { name: "@scope/demo", dir: "root", bins: ["demo", "demo-admin"] },
 		packages: [
 			{
 				target: "linux-x64",
@@ -71,7 +73,10 @@ describe("publish manifest validation", () => {
 				os: "linux",
 				cpu: "x64",
 				libc: "glibc",
-				bin: "bin/demo-bun-linux-x64",
+				bins: {
+					demo: "bin/demo-bun-linux-x64",
+					"demo-admin": "bin/demo-admin-bun-linux-x64",
+				},
 			},
 			{
 				target: "darwin-arm64",
@@ -79,7 +84,10 @@ describe("publish manifest validation", () => {
 				dir: "darwin-arm64",
 				os: "darwin",
 				cpu: "arm64",
-				bin: "bin/demo-bun-darwin-arm64",
+				bins: {
+					demo: "bin/demo-bun-darwin-arm64",
+					"demo-admin": "bin/demo-admin-bun-darwin-arm64",
+				},
 			},
 		],
 		publishOrder: ["linux-x64", "darwin-arm64", "root"],
@@ -105,7 +113,7 @@ describe("publish manifest validation", () => {
 		const nodeDir = join(tmpDir, "node");
 		const nodeManifest: DistributionManifest = {
 			version: "1.2.3",
-			root: { name: "@scope/node-demo", dir: "root", bin: "node-demo" },
+			root: { name: "@scope/node-demo", dir: "root", bins: ["node-demo"] },
 			packages: [],
 			publishOrder: ["root"],
 		};
@@ -154,6 +162,41 @@ describe("publish manifest validation", () => {
 		const { libc: _dropped, ...withoutLibc } = staged;
 		writeFileSync(stagedPath, JSON.stringify(withoutLibc));
 		expect(() => validatePublishManifest(tmpDir, manifest)).toThrow(/libc metadata/);
+	});
+
+	it("checks every command's bin in the root and each platform package", () => {
+		const rootPath = join(tmpDir, "root", "package.json");
+		const root = JSON.parse(readFileSync(rootPath, "utf8"));
+		writeFileSync(rootPath, JSON.stringify({ ...root, bin: { demo: "bin/demo.js" } }));
+		expect(() => validatePublishManifest(tmpDir, manifest)).toThrow(
+			"Root staged package is missing correct bin metadata for demo-admin.",
+		);
+		writeFileSync(rootPath, JSON.stringify(root));
+
+		const stagedPath = join(tmpDir, "darwin-arm64", "package.json");
+		const staged = JSON.parse(readFileSync(stagedPath, "utf8"));
+		writeFileSync(
+			stagedPath,
+			JSON.stringify({ ...staged, bin: { ...staged.bin, "demo-admin": "bin/demo-admin" } }),
+		);
+		expect(() => validatePublishManifest(tmpDir, manifest)).toThrow(
+			"Staged package darwin-arm64 is missing correct bin metadata for demo-admin.",
+		);
+		writeFileSync(stagedPath, JSON.stringify(staged));
+
+		// A manifest entry that forgot a command, and a manifest without commands.
+		const partial: DistributionManifest = {
+			...manifest,
+			packages: manifest.packages.map((pkg) =>
+				pkg.dir === "linux-x64" ? { ...pkg, bins: { demo: pkg.bins.demo! } } : pkg,
+			),
+		};
+		expect(() => validatePublishManifest(tmpDir, partial)).toThrow(
+			"Staged package linux-x64 is missing correct bin metadata for demo-admin.",
+		);
+		expect(() =>
+			validatePublishManifest(tmpDir, { ...manifest, root: { ...manifest.root, bins: [] } }),
+		).toThrow("root.bins must list at least one command");
 	});
 
 	it("rejects missing staged directories", () => {

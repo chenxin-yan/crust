@@ -1,4 +1,6 @@
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, realpathSync, rmSync, statSync } from "node:fs";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 
 import { defineCommand, type BuildReport, type InvocationIO } from "@crustjs/core";
@@ -23,9 +25,11 @@ import {
 	buildEntrypoint,
 } from "../utils/build-helpers.ts";
 import {
+	type BinEntry,
 	CRUST_DIR,
 	type DistributeBuildPlan,
 	type Distribution,
+	mergeEntryArtifacts,
 	runDistributeBuild,
 } from "../utils/distribute.ts";
 
@@ -33,14 +37,12 @@ import {
 // package.json "crust" configuration
 // ────────────────────────────────────────────────────────────────────────────
 
-export const DEFAULT_ENTRY = "src/cli.ts";
 /** Also mirrored by `schema/package.json`; build.test.ts guards against drift. */
-export const CRUST_CONFIG_KEYS = ["runtime", "entry", "bunPlugins", "include"] as const;
+export const CRUST_CONFIG_KEYS = ["runtime", "bunPlugins", "include"] as const;
 
 /** The `crust` block of the user's package.json, shape-validated. */
 export type CrustConfig = {
 	runtime?: BuildRuntime;
-	entry?: string;
 	bunPlugins?: string[];
 	include?: string[];
 };
@@ -79,14 +81,6 @@ export function readCrustConfig(pkg: JsonValue | undefined): CrustConfig {
 			);
 		}
 		config.runtime = crust.runtime;
-	}
-	if (crust.entry !== undefined) {
-		if (!isString(crust.entry)) {
-			throw new Error(
-				`package.json crust.entry must be a project-relative file path, e.g. ${JSON.stringify(DEFAULT_ENTRY)}.`,
-			);
-		}
-		config.entry = crust.entry;
 	}
 	if (crust.bunPlugins !== undefined) {
 		if (!isStringArray(crust.bunPlugins)) {
@@ -145,9 +139,13 @@ function resolveBuildRuntime(
 	return { runtime: "bun", source: "default" };
 }
 
-function printBuildReport(report: BuildReport, stdout: InvocationIO["stdout"]): void {
+function printBuildReport(
+	command: string,
+	report: BuildReport,
+	stdout: InvocationIO["stdout"],
+): void {
 	if (report.extensions.length === 0) return;
-	stdout("Preparing Command Snapshot...");
+	stdout(`Preparing Command Snapshot for ${command}...`);
 	const idWidth = Math.max(...report.extensions.map(({ id }) => id.length));
 	const countWidth = Math.max(
 		0,
@@ -188,21 +186,109 @@ export function resolveEnvFilePaths(cwd: string, envFiles: string[] | undefined)
 	});
 }
 
-/** `crust.entry` (default `src/cli.ts`) as an absolute path; must stay inside the project. */
-function resolveEntryPath(cwd: string, entry: string | undefined): string {
-	const configured = entry ?? DEFAULT_ENTRY;
-	const entryPath = resolve(cwd, configured);
-	if (isAbsolute(configured) || entryPath === cwd || !isWithin(cwd, entryPath)) {
+// ────────────────────────────────────────────────────────────────────────────
+// package.json "bin": command names and their source entries
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Entry built when package.json has no `bin`. */
+export const DEFAULT_ENTRY = "src/cli.ts";
+
+/**
+ * Command names become `bin/<command>.js`, `<command>-<target>` binary
+ * filenames, and launcher text, so they are restricted to a filename-safe
+ * subset of what npm accepts: no separators, dots-only names, or leading `.`/`-`.
+ */
+const COMMAND_NAME_PATTERN = /^[A-Za-z0-9_~][A-Za-z0-9._~-]*$/;
+
+const BIN_EXAMPLE = `{ "my-cli": ${JSON.stringify(DEFAULT_ENTRY)} }`;
+
+/**
+ * A `bin` value as an absolute path. The path must be relative and lexically
+ * inside the project (a symlink may point elsewhere, as for `crust.include`),
+ * and must name an existing file, not a directory.
+ */
+function resolveEntryPath(cwd: string, command: string, source: string): string {
+	const entryPath = resolve(cwd, source);
+	if (isAbsolute(source) || entryPath === cwd || !isWithin(cwd, entryPath)) {
 		throw new Error(
-			`package.json crust.entry ${JSON.stringify(configured)} must be a file inside the project root ${cwd}.`,
+			`package.json bin ${JSON.stringify(command)} entry ${JSON.stringify(source)} must be a file inside the project root ${cwd}.`,
 		);
 	}
 	if (!existsSync(entryPath)) {
 		throw new Error(
-			`Entry file not found: ${entryPath}\n  Set package.json crust.entry to your CLI entry (default ${DEFAULT_ENTRY}).`,
+			`Entry file not found: ${entryPath}\n  Point package.json bin ${JSON.stringify(command)} at your CLI source entry (default ${DEFAULT_ENTRY}).`,
+		);
+	}
+	if (!statSync(entryPath).isFile()) {
+		throw new Error(
+			`package.json bin ${JSON.stringify(command)} entry ${JSON.stringify(source)} is not a file: ${entryPath}`,
 		);
 	}
 	return entryPath;
+}
+
+/**
+ * package.json `bin` as build entries, in declaration order. Object values are
+ * source files built for the command named by their key; a string `bin` is the
+ * source of a command named after the unscoped package name, and no `bin` builds
+ * `src/cli.ts` under that name.
+ *
+ * Two commands cannot share one entry file: entries are compared by real path,
+ * so `./src/cli.ts`, `src/../src/cli.ts`, and a symlink to `src/cli.ts` all
+ * collide. Command names are compared case-insensitively, because `Tool` and
+ * `tool` would be the same `bin/` file on a case-insensitive filesystem.
+ */
+export function resolveBinEntries(cwd: string, pkg: JsonValue | undefined): BinEntry[] {
+	const packageJson = pkg !== undefined && isJsonObject(pkg) ? pkg : {};
+	const bin = packageJson.bin;
+	let declared: Array<[command: string, source: JsonValue]>;
+	if (bin === undefined || isString(bin)) {
+		const name = packageJson.name;
+		if (name === undefined || !isString(name) || name === "") {
+			throw new Error(
+				`package.json is missing a name field.\n  Without an object bin, the unscoped package name is the command name, e.g. "bin": ${BIN_EXAMPLE}.`,
+			);
+		}
+		declared = [[name.replace(/^@[^/]+\//, ""), bin ?? DEFAULT_ENTRY]];
+	} else if (isJsonObject(bin) && Object.keys(bin).length > 0) {
+		declared = Object.entries(bin);
+	} else {
+		throw new Error(
+			`package.json bin must be a source entry path or a non-empty object mapping command names to source entries, e.g. ${BIN_EXAMPLE}.`,
+		);
+	}
+
+	const commandByLowerName = new Map<string, string>();
+	const commandByRealPath = new Map<string, string>();
+	return declared.map(([command, source]) => {
+		if (!COMMAND_NAME_PATTERN.test(command)) {
+			throw new Error(
+				`package.json bin key ${JSON.stringify(command)} is not a valid command name.\n  Use letters, digits, ".", "_", "~", and "-", not starting with "." or "-".`,
+			);
+		}
+		const sameName = commandByLowerName.get(command.toLowerCase());
+		if (sameName !== undefined) {
+			throw new Error(
+				`package.json bin keys ${JSON.stringify(sameName)} and ${JSON.stringify(command)} differ only by case.\n  Command names become bin/ file names, which collide on case-insensitive filesystems; rename one of them.`,
+			);
+		}
+		commandByLowerName.set(command.toLowerCase(), command);
+		if (!isString(source)) {
+			throw new Error(
+				`package.json bin ${JSON.stringify(command)} must be a project-relative source entry path, e.g. ${JSON.stringify(DEFAULT_ENTRY)}.`,
+			);
+		}
+		const entryPath = resolveEntryPath(cwd, command, source);
+		const realPath = realpathSync(entryPath);
+		const other = commandByRealPath.get(realPath);
+		if (other !== undefined) {
+			throw new Error(
+				`package.json bin ${JSON.stringify(other)} and ${JSON.stringify(command)} both build ${realPath}.\n  Each command needs its own entry file; aliases of one entry are not supported.`,
+			);
+		}
+		commandByRealPath.set(realPath, command);
+		return { command, entryPath };
+	});
 }
 
 export type BuildFlags = {
@@ -231,7 +317,7 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 	const userPackageJson = readUserPackageJson(cwd);
 	const config = readCrustConfig(userPackageJson);
 	const { runtime, source: runtimeSource } = resolveBuildRuntime(userPackageJson, config, cwd);
-	const entryPath = resolveEntryPath(cwd, config.entry);
+	const entries = resolveBinEntries(cwd, userPackageJson);
 	const envFiles = resolveEnvFilePaths(cwd, flags["env-file"]);
 	const bunPlugins = config.bunPlugins ?? [];
 
@@ -263,7 +349,7 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 		cwd,
 		userPackageJson,
 		runtimeSource,
-		entryPath,
+		entries,
 		envFiles,
 		bunPlugins,
 		include: config.include ?? [],
@@ -311,6 +397,39 @@ async function runStagedBuild(plan: BuildPlan, io: InvocationIO): Promise<void> 
 	);
 }
 
+/**
+ * Prepares every entry's Command Snapshot and checks that its root command is
+ * named after the bin key, then merges the Extension build hook output into
+ * `plan.outDir`. Each entry's hooks run in their own temporary directory so a
+ * hook that replaces its output directory (skills) cannot erase another
+ * entry's files; the merge fails on any path two entries both write.
+ */
+async function prepareEntries(plan: BuildPlan, io: InvocationIO): Promise<void> {
+	const owners = new Map<string, string>();
+	for (const { command, entryPath } of plan.entries) {
+		const entryOutDir = await mkdtemp(join(tmpdir(), "crust-artifacts-"));
+		try {
+			const { snapshot, build } = await buildEntrypoint(
+				entryPath,
+				entryOutDir,
+				plan.envFiles,
+				io,
+				plan.cwd,
+			);
+			if (snapshot.meta.name !== command) {
+				throw new Error(
+					`package.json bin ${JSON.stringify(command)} builds ${entryPath}, whose root command is named ${JSON.stringify(snapshot.meta.name)}.\n` +
+						"  The installed command, help, man pages, and skills use the root command name, so new Crust(name) must match the bin key; rename one of them.",
+				);
+			}
+			printBuildReport(command, build, io.stdout);
+			mergeEntryArtifacts(entryOutDir, plan.outDir, command, owners);
+		} finally {
+			rmSync(entryOutDir, { recursive: true, force: true });
+		}
+	}
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Build command
 // ────────────────────────────────────────────────────────────────────────────
@@ -318,10 +437,12 @@ async function runStagedBuild(plan: BuildPlan, io: InvocationIO): Promise<void> 
 /**
  * The `crust build` command.
  *
- * Stages the publishable npm tree in `.crust/`: a root package whose
- * `bin/<cmd>.js` is a Node launcher (Bun, Deno) or the bundle itself (Node),
- * plus one platform package per target for Bun and Deno. The runtime, entry,
- * Bun plugins, and extra directories come from package.json `crust`.
+ * Stages the publishable npm tree in `.crust/`: a root package with one
+ * `bin/<command>.js` per package.json `bin` entry, each a Node launcher (Bun,
+ * Deno) or the bundle itself (Node), plus one platform package per target for
+ * Bun and Deno holding one binary per command. Command names and source
+ * entries come from `bin`; the runtime, Bun plugins, and extra directories
+ * from package.json `crust`.
  *
  * @example
  * ```sh
@@ -373,16 +494,8 @@ export const buildCommand = defineCommand(
 				stdout(`${dim("Runtime:")} ${plan.runtime} ${dim(`(${plan.runtimeSource})`)}`);
 				// Wipe once, before Extension hooks fill .crust/artifacts; staging only adds to the tree.
 				rmSync(plan.stageDir, { recursive: true, force: true });
-				if (plan.validate) {
-					const { build } = await buildEntrypoint(
-						plan.entryPath,
-						plan.outDir,
-						plan.envFiles,
-						io,
-						cwd,
-					);
-					printBuildReport(build, stdout);
-				}
+				// --no-validate skips the snapshots (and so the name check and hooks), not the bin validation above.
+				if (plan.validate) await prepareEntries(plan, io);
 				await runStagedBuild(plan, io);
 			}),
 );

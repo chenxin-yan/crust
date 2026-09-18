@@ -26,15 +26,19 @@ function getHostBunTarget() {
 	return hostTarget();
 }
 
-/** Staged platform binary for a Bun target: `.crust/<alias>/bin/<baseName>-<target>`. */
-function stagedBunBinary(projectDir: string, baseName: string, target: BunTarget): string {
+function readJson<T>(path: string): T {
+	return JSON.parse(readFileSync(path, "utf8")) as T;
+}
+
+/** Staged platform binary for a Bun target: `.crust/<alias>/bin/<command>-<target>`. */
+function stagedBunBinary(projectDir: string, command: string, target: BunTarget): string {
 	const info = BUN_TARGETS.info[target];
 	return join(
 		projectDir,
 		".crust",
 		info.alias,
 		"bin",
-		`${baseName}-${target}${info.os === "win32" ? ".exe" : ""}`,
+		`${command}-${target}${info.os === "win32" ? ".exe" : ""}`,
 	);
 }
 
@@ -142,6 +146,98 @@ console.log("hello from crust build test");
 		},
 	);
 
+	it.skipIf(getHostBunTarget() === null || Bun.which("node") === null)(
+		"builds two bin entries into their own launchers and binaries with merged artifacts",
+		async () => {
+			const host = getHostBunTarget()!;
+			const projectDir = join(tmpDir, "two-entries");
+			mkdirSync(join(projectDir, "src"), { recursive: true });
+			// Names differ from the package name and the source filenames. Each entry's
+			// hook replaces `skills/` the way the skills Extension does; isolation keeps
+			// both, and `man/` pages with distinct names merge.
+			const entry = (name: string) =>
+				`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(corePath)};
+import { rmSync, mkdirSync, writeFileSync } from "node:fs";
+const hook = defineExtension(defineExtensionId("hook"), { build({ outDir }) {
+  rmSync(outDir + "/skills", { recursive: true, force: true });
+  mkdirSync(outDir + "/skills/${name}", { recursive: true });
+  mkdirSync(outDir + "/man", { recursive: true });
+  writeFileSync(outDir + "/skills/${name}/SKILL.md", "${name}");
+  writeFileSync(outDir + "/man/${name}.1", "${name}");
+  return ["skills/${name}/SKILL.md", "man/${name}.1"];
+} });
+await new Crust("${name}").extend(hook).action(({ stdout }) => stdout("running ${name}")).execute();
+`;
+			writeFileSync(join(projectDir, "src", "first.ts"), entry("greet"));
+			writeFileSync(join(projectDir, "src", "second.ts"), entry("admin-tool"));
+			writePackageJson(projectDir, {
+				name: "@scope/suite",
+				version: "0.1.0",
+				bin: { greet: "src/first.ts", "admin-tool": "./src/second.ts" },
+			});
+			process.cwd = () => projectDir;
+
+			const { exitCode, stderr, stdout } = await captureExecute(
+				new Crust("test").add(buildCommand),
+				["build", "--target", "host"],
+			);
+			expect(exitCode, stderr).toBe(0);
+			expect(stdout).toContain("Preparing Command Snapshot for greet...");
+			expect(stdout).toContain("Preparing Command Snapshot for admin-tool...");
+
+			const alias = BUN_TARGETS.info[host].alias;
+			expect(readdirSync(join(projectDir, ".crust", "root", "bin")).sort()).toEqual([
+				"admin-tool.js",
+				"greet.js",
+			]);
+			expect(readdirSync(join(projectDir, ".crust", "artifacts", "skills")).sort()).toEqual([
+				"admin-tool",
+				"greet",
+			]);
+			expect(readdirSync(join(projectDir, ".crust", "artifacts", "man")).sort()).toEqual([
+				"admin-tool.1",
+				"greet.1",
+			]);
+			expect(
+				readJson<{ bin: Record<string, string>; files: string[]; man: string[] }>(
+					join(projectDir, ".crust", "root", "package.json"),
+				),
+			).toMatchObject({
+				bin: { greet: "bin/greet.js", "admin-tool": "bin/admin-tool.js" },
+				files: ["bin", "man", "skills"],
+				man: ["./man/admin-tool.1", "./man/greet.1"],
+			});
+			expect(
+				readJson<{ bin: Record<string, string> }>(join(projectDir, ".crust", alias, "package.json"))
+					.bin,
+			).toEqual({
+				greet: `bin/greet-${host}${host.includes("windows") ? ".exe" : ""}`,
+				"admin-tool": `bin/admin-tool-${host}${host.includes("windows") ? ".exe" : ""}`,
+			});
+			expect(
+				readJson<{ root: { bins: string[] } }>(join(projectDir, ".crust", "manifest.json")).root
+					.bins,
+			).toEqual(["greet", "admin-tool"]);
+
+			for (const command of ["greet", "admin-tool"]) {
+				const binary = await runProcess(stagedBunBinary(projectDir, command, host), [], {
+					cwd: projectDir,
+				});
+				expect(binary.exitCode, binary.stderr).toBe(0);
+				expect(binary.stdout.trim()).toBe(`running ${command}`);
+				const launcher = await runProcess(
+					Bun.which("node")!,
+					[join(projectDir, ".crust", "root", "bin", `${command}.js`)],
+					{ cwd: projectDir },
+				);
+				expect(launcher.exitCode, launcher.stderr).toBe(0);
+				expect(launcher.stdout.trim()).toBe(`running ${command}`);
+				expect(existsSync(join(projectDir, ".crust", alias, "bin", "skills", command))).toBe(true);
+			}
+		},
+		60_000,
+	);
+
 	it.skipIf(getHostBunTarget() === null)(
 		"applies --env-file to validation and embeds PUBLIC_ constants only",
 		async () => {
@@ -169,13 +265,13 @@ await app.execute();
 					"SECRET_TOKEN=super-secret",
 				].join("\n"),
 			);
-			writePackageJson(tmpDir, { ...basePackageJson, crust: { entry: "src/env-cli.ts" } });
+			writePackageJson(tmpDir, { ...basePackageJson, bin: { "env-cli": "src/env-cli.ts" } });
 
 			await new Crust("test").add(buildCommand).execute({
 				argv: ["build", "--target", "host", "--env-file", ".env.build"],
 			});
 
-			const outPath = stagedBunBinary(tmpDir, "test-build-cli", host);
+			const outPath = stagedBunBinary(tmpDir, "env-cli", host);
 			expect(existsSync(outPath)).toBe(true);
 
 			const { exitCode, stdout } = await runProcess(outPath, [], { cwd: tmpDir, env: {} });
@@ -194,7 +290,8 @@ await app.execute();
 			process.cwd = () => tmpDir;
 			writePackageJson(tmpDir, {
 				...basePackageJson,
-				crust: { runtime: "node", entry: "src/node-core-cli.ts" },
+				crust: { runtime: "node" },
+				bin: { "node-core-cli": "src/node-core-cli.ts" },
 			});
 			// Bundle @crustjs/core into the artifact — the portability claim is "a
 			// Crust CLI runs under node", not "a console.log runs under node".
@@ -206,7 +303,7 @@ await app.execute();
 `,
 			);
 			await new Crust("test").add(buildCommand).execute({ argv: ["build", "--no-validate"] });
-			const outPath = join(tmpDir, ".crust", "root", "bin", "test-build-cli.js");
+			const outPath = join(tmpDir, ".crust", "root", "bin", "node-core-cli.js");
 			expect(readFileSync(outPath, "utf8").startsWith("#!/usr/bin/env node\n")).toBe(true);
 			if (process.platform !== "win32") expect(statSync(outPath).mode & 0o111).not.toBe(0);
 
@@ -319,7 +416,8 @@ describe.skipIf(getHostBunTarget() === null)("crust build integration — crust.
 	const packageJson = {
 		name: "marker-cli",
 		version: "0.1.0",
-		crust: { entry: "src/marker-cli.ts", bunPlugins: ["./plugins/marker.ts"] },
+		bin: "src/marker-cli.ts",
+		crust: { bunPlugins: ["./plugins/marker.ts"] },
 	};
 
 	beforeAll(() => {

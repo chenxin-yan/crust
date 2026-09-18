@@ -37,13 +37,17 @@ const FIXTURE_PACKAGE_JSON = {
 	},
 };
 
-/** Stages the fixture with `crust.entry`/`crust.bunPlugins`; returns the host binary path. */
-async function buildFixture(entry: string, bunPlugins: string[]): Promise<string> {
+/** Stages the fixture with `bin: { [command]: entry }` and `crust.bunPlugins`; returns the host binary path. */
+async function buildFixture(command: string, entry: string, bunPlugins: string[]): Promise<string> {
 	const target = hostTarget();
 	if (!target) throw new Error(`Unsupported smoke-test host: ${process.platform}-${process.arch}`);
 	writeFileSync(
 		join(fixtureDir, "package.json"),
-		JSON.stringify({ ...FIXTURE_PACKAGE_JSON, crust: { entry, bunPlugins } }, null, 2),
+		JSON.stringify(
+			{ ...FIXTURE_PACKAGE_JSON, bin: { [command]: entry }, crust: { bunPlugins } },
+			null,
+			2,
+		),
 	);
 	const originalCwd = process.cwd;
 	process.cwd = () => fixtureDir;
@@ -57,7 +61,7 @@ async function buildFixture(entry: string, bunPlugins: string[]): Promise<string
 	} finally {
 		process.cwd = originalCwd;
 	}
-	return join(fixtureDir, ".crust", BUN_TARGETS.info[target].alias, "bin", `tui-smoke-${target}`);
+	return join(fixtureDir, ".crust", BUN_TARGETS.info[target].alias, "bin", `${command}-${target}`);
 }
 
 async function runInTerminal(
@@ -180,7 +184,7 @@ await new Crust("core-smoke")
 	});
 
 	it("compiles a Solid app with crust.bunPlugins @opentui/solid/bun-plugin and runs it reactively", async () => {
-		const outfile = await buildFixture("solid.tsx", ["@opentui/solid/bun-plugin"]);
+		const outfile = await buildFixture("solid-smoke", "solid.tsx", ["@opentui/solid/bun-plugin"]);
 
 		const { exitCode, output } = await runInTerminal(outfile, "SOLID_REACTIVE_OK");
 		expect(output).toContain("SOLID_MOUNTED");
@@ -190,7 +194,7 @@ await new Crust("core-smoke")
 	}, 120_000);
 
 	it("compiles a core app without plugins and runs it reactively", async () => {
-		const outfile = await buildFixture("core.ts", []);
+		const outfile = await buildFixture("core-smoke", "core.ts", []);
 
 		const { exitCode, output } = await runInTerminal(outfile, "CORE_REACTIVE_OK");
 		expect(output).toContain("CORE_REACTIVE_OK");

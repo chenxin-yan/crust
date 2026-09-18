@@ -1,5 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	realpathSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -39,7 +47,8 @@ const localDependencyPackages = [
 		// The 0.2.0 cohort is unpublished until release; link the workspace
 		// package so the scaffolded project's devDependency resolves. Linked
 		// (not packed): the published layout is the staged `.crust/root`, while
-		// the workspace package's bin is the Bun bootstrap dist/cli.js.
+		// the workspace package's bin is its source; the smoke runs the Bun
+		// bootstrap dist/cli.js by path.
 		name: "@crustjs/crust",
 		dir: "crust",
 		requiredBuildOutput: "dist/cli.js",
@@ -183,6 +192,79 @@ function useLocalDependencyPackages(projectDir: string, specs: Record<string, st
 	writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, "\t")}\n`);
 }
 
+/**
+ * Adds a second `bin` entry to a scaffolded project: `src/admin.ts` is the
+ * template entry with its root command renamed to `<name>-admin`, so the
+ * build has two commands with distinct names, entries, and actions.
+ */
+function addSecondEntry(projectDir: string, name: string): string {
+	const command = `${name}-admin`;
+	const cli = readFileSync(join(projectDir, "src", "cli.ts"), "utf8");
+	writeFileSync(
+		join(projectDir, "src", "admin.ts"),
+		cli.replace(`new Crust(${JSON.stringify(name)}`, `new Crust(${JSON.stringify(command)}`),
+	);
+	const packageJsonPath = join(projectDir, "package.json");
+	const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
+	packageJson.bin[command] = "src/admin.ts";
+	writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, "\t")}\n`);
+	return command;
+}
+
+/** A `node_modules/.bin` command the way a shell runs it: the `.cmd` shim through cmd.exe on Windows. */
+function shimArgv(binDir: string, command: string, args: string[]): string[] {
+	return process.platform === "win32"
+		? ["cmd", "/c", join(binDir, `${command}.cmd`), ...args]
+		: [join(binDir, command), ...args];
+}
+
+/**
+ * `npm link`s `packageDir` into a fresh consumer (paths with spaces; npm prefix
+ * and cache inside the smoke root, never the user's global state) and runs each
+ * command's action and help through the shim npm generated. For the project
+ * itself the shim runs the TypeScript source via its shebang; for `.crust/root`
+ * it runs the staged launcher or bundle.
+ */
+async function linkAndRunCommands(
+	label: string,
+	packageDir: string,
+	consumerDir: string,
+	commands: readonly string[],
+): Promise<void> {
+	mkdirSync(consumerDir, { recursive: true });
+	writeFileSync(
+		join(consumerDir, "package.json"),
+		'{ "name": "link-consumer", "private": true }\n',
+	);
+	const npmEnv = {
+		npm_config_prefix: join(consumerDir, "npm prefix"),
+		npm_config_cache: join(consumerDir, "npm cache"),
+	};
+	// --omit=optional: the staged root lists unpublished platform packages.
+	const linkFlags = ["--ignore-scripts", "--offline", "--omit=optional", "--no-audit", "--no-fund"];
+	const registerCommand = npmArgv(["link", ...linkFlags]);
+	const register = await run(registerCommand, packageDir, npmEnv);
+	assertSuccess(`${label} npm link (register)`, registerCommand, packageDir, register);
+	const { name } = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8"));
+	const linkCommand = npmArgv(["link", name, ...linkFlags]);
+	const link = await run(linkCommand, consumerDir, npmEnv);
+	assertSuccess(`${label} npm link ${name}`, linkCommand, consumerDir, link);
+	// The shims below must reach this package (source tree or staged root), not a copy.
+	expect(realpathSync(join(consumerDir, "node_modules", name))).toBe(realpathSync(packageDir));
+
+	const binDir = join(consumerDir, "node_modules", ".bin");
+	for (const command of commands) {
+		const actionCommand = shimArgv(binDir, command, ["Ada"]);
+		const action = await run(actionCommand, consumerDir);
+		assertSuccess(`${label} ${command} action`, actionCommand, consumerDir, action);
+		expect(action.stdout.trim()).toBe("Hello, Ada!");
+		const helpCommand = shimArgv(binDir, command, ["--help"]);
+		const help = await run(helpCommand, consumerDir);
+		assertSuccess(`${label} ${command} --help`, helpCommand, consumerDir, help);
+		expect(help.stdout).toContain(command);
+	}
+}
+
 async function smokeRuntime(runtime: Runtime): Promise<void> {
 	const sampleDir = join(smokeRoot, `smoke-${runtime}`);
 	const scaffoldCommand = [
@@ -205,6 +287,8 @@ async function smokeRuntime(runtime: Runtime): Promise<void> {
 	expect(existsSync(join(sampleDir, "src", "cli.ts"))).toBe(true);
 	expect(existsSync(join(sampleDir, "README.md"))).toBe(true);
 
+	const name = basename(sampleDir);
+	const commands = [name, addSecondEntry(sampleDir, name)];
 	useLocalDependencyPackages(sampleDir, localSpecs);
 	// npm installs every runtime's project, including Deno's. create-crust itself
 	// runs `deno install` for Deno projects, but `deno install` treats the smoke's
@@ -251,17 +335,21 @@ async function smokeRuntime(runtime: Runtime): Promise<void> {
 	const build = await run(buildCommand, sampleDir, buildExtraEnv);
 	assertSuccess("generated project build", buildCommand, sampleDir, build);
 
-	const name = basename(sampleDir);
 	const crustDir = join(sampleDir, ".crust");
-	const launcher = join(crustDir, "root", "bin", `${name}.js`);
-	expect(existsSync(launcher)).toBe(true);
+	for (const command of commands) {
+		expect(existsSync(join(crustDir, "root", "bin", `${command}.js`))).toBe(true);
+	}
 	const manifest = JSON.parse(readFileSync(join(crustDir, "manifest.json"), "utf8"));
+	expect(manifest.root.bins).toEqual(commands);
 	if (runtime !== "node") {
-		// `--target host` stages exactly one platform package.
+		// `--target host` stages exactly one platform package, holding every command's binary.
 		expect(manifest.packages).toHaveLength(1);
-		expect(existsSync(join(crustDir, manifest.packages[0].dir, manifest.packages[0].bin))).toBe(
-			true,
-		);
+		expect(Object.keys(manifest.packages[0].bins)).toEqual(commands);
+		for (const command of commands) {
+			expect(
+				existsSync(join(crustDir, manifest.packages[0].dir, manifest.packages[0].bins[command])),
+			).toBe(true);
+		}
 	}
 
 	// Run the template's own `start` script the way its users do, so the
@@ -275,6 +363,18 @@ async function smokeRuntime(runtime: Runtime): Promise<void> {
 	const start = await run(startCommand, sampleDir);
 	assertSuccess("generated project start", startCommand, sampleDir, start);
 	expect(start.stdout).toContain(name);
+
+	// `bin` points at the source, so linking the project runs src/*.ts through the
+	// runtime shebang (a cmd-shim `.cmd` on Windows); linking `.crust/root` runs
+	// the staged launcher/bundle. Both consumers live under a path with spaces.
+	const linkRoot = join(smokeRoot, "link consumers", runtime);
+	await linkAndRunCommands("source link", sampleDir, join(linkRoot, "source"), commands);
+	await linkAndRunCommands(
+		"staged link",
+		join(crustDir, "root"),
+		join(linkRoot, "staged"),
+		commands,
+	);
 }
 
 function smokeCase(runtime: Runtime): () => Promise<void> {

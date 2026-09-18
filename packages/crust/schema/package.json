@@ -10,7 +10,7 @@
 	],
 	"properties": {
 		"crust": {
-			"description": "Build configuration read by `crust build`. Every key is optional; unknown keys fail the build.",
+			"description": "Build configuration read by `crust build`. Every key is optional; unknown keys fail the build. Command names and their source entries come from the standard `bin` field.",
 			"type": "object",
 			"additionalProperties": false,
 			"properties": {
@@ -22,11 +22,6 @@
 						"deno",
 						"node"
 					]
-				},
-				"entry": {
-					"description": "Entry file, a relative path that stays inside the project root.",
-					"type": "string",
-					"default": "src/cli.ts"
 				},
 				"bunPlugins": {
 					"description": "Bun bundler plugin modules applied to Bun and Node builds, in order: bare names resolve from node_modules, paths from the project root; each must default-export the plugin. Rejected for Deno.",

@@ -8,7 +8,7 @@
 		"runtime": "bun"
 	},
 	"bin": {
-		"{{name}}": ".crust/root/bin/{{name}}.js"
+		"{{name}}": "src/cli.ts"
 	},
 	"scripts": {
 		"dev": "bun run src/cli.ts",

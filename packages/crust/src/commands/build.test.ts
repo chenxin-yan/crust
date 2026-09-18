@@ -1,5 +1,14 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	realpathSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,9 +33,9 @@ import {
 	type BuildFlags,
 	buildCommand,
 	CRUST_CONFIG_KEYS,
-	DEFAULT_ENTRY,
 	planBuild,
 	readCrustConfig,
+	resolveBinEntries,
 	resolveEnvFilePaths,
 } from "./build.ts";
 
@@ -61,8 +70,9 @@ describe("env file helpers", () => {
 describe("planBuild", () => {
 	const tmpDir = mkdtempSync(join(tmpdir(), "crust-build-plan-"));
 	const baseFlags: BuildFlags = { validate: true };
-	const writePackageJson = (pkg: JsonValue) =>
-		writeFileSync(join(tmpDir, "package.json"), JSON.stringify(pkg));
+	// Every plan needs a package name: without an object bin it names the command.
+	const writePackageJson = (pkg: Record<string, JsonValue>) =>
+		writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ name: "plan-cli", ...pkg }));
 
 	beforeAll(() => {
 		rmSync(tmpDir, { recursive: true, force: true });
@@ -72,12 +82,14 @@ describe("planBuild", () => {
 	});
 
 	afterAll(() => rmSync(tmpDir, { recursive: true, force: true }));
+	beforeEach(() => writePackageJson({}));
 	afterEach(() => rmSync(join(tmpDir, "package.json"), { force: true }));
 
-	it("defaults to Bun without project configuration", () => {
+	it("defaults to Bun and src/cli.ts without project configuration", () => {
 		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
 			runtime: "bun",
 			runtimeSource: "default",
+			entries: [{ command: "plan-cli", entryPath: join(tmpDir, "src", "cli.ts") }],
 		});
 	});
 
@@ -91,20 +103,14 @@ describe("planBuild", () => {
 
 	it("infers the runtime from deno.json or @types/node, never from lockfiles", () => {
 		const nodeTypes = { devDependencies: { "@types/node": "^22" } };
-		writeFileSync(join(tmpDir, "package.json"), JSON.stringify(nodeTypes));
+		writePackageJson(nodeTypes);
 		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
 			runtime: "node",
 			runtimeSource: "inferred from @types/node",
 		});
-		writeFileSync(
-			join(tmpDir, "package.json"),
-			JSON.stringify({ dependencies: { "@types/node": "^22" } }),
-		);
+		writePackageJson({ dependencies: { "@types/node": "^22" } });
 		expect(planBuild(baseFlags, tmpDir).runtime).toBe("node");
-		writeFileSync(
-			join(tmpDir, "package.json"),
-			JSON.stringify({ devDependencies: { "@types/node": "^22", "@types/bun": "^1" } }),
-		);
+		writePackageJson({ devDependencies: { "@types/node": "^22", "@types/bun": "^1" } });
 		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
 			runtime: "bun",
 			runtimeSource: "default",
@@ -114,18 +120,18 @@ describe("planBuild", () => {
 		writeFileSync(join(tmpDir, "deno.jsonc"), "{}");
 		try {
 			// deno.json wins over @types/node; the lockfile is not a signal.
-			writeFileSync(join(tmpDir, "package.json"), JSON.stringify(nodeTypes));
+			writePackageJson(nodeTypes);
 			expect(planBuild(baseFlags, tmpDir)).toMatchObject({
 				runtime: "deno",
 				runtimeSource: "inferred from deno.jsonc",
 			});
 			// Explicit configuration beats inference.
-			writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ crust: { runtime: "bun" } }));
+			writePackageJson({ crust: { runtime: "bun" } });
 			expect(planBuild(baseFlags, tmpDir)).toMatchObject({
 				runtime: "bun",
 				runtimeSource: "from package.json",
 			});
-			rmSync(join(tmpDir, "package.json"));
+			writePackageJson({});
 			expect(planBuild(baseFlags, tmpDir).runtime).toBe("deno");
 		} finally {
 			rmSync(join(tmpDir, "bun.lock"));
@@ -138,21 +144,21 @@ describe("planBuild", () => {
 		expect(() => planBuild(baseFlags, tmpDir)).toThrow(/Invalid package.json crust.runtime/);
 	});
 
-	it("reads crust.entry relative to the project and rejects paths outside it", () => {
-		expect(planBuild(baseFlags, tmpDir).entryPath).toBe(join(tmpDir, "src", "cli.ts"));
-		writeFileSync(join(tmpDir, "src", "main.ts"), "export {};\n");
-		writePackageJson({ crust: { entry: "./src/main.ts" } });
-		expect(planBuild(baseFlags, tmpDir).entryPath).toBe(join(tmpDir, "src", "main.ts"));
-		for (const entry of ["../cli.ts", join(tmpDir, "src", "cli.ts"), ".", "src/.."]) {
-			writePackageJson({ crust: { entry } });
-			expect(() => planBuild(baseFlags, tmpDir)).toThrow(
-				`package.json crust.entry ${JSON.stringify(entry)} must be a file inside the project root`,
-			);
-		}
-		writePackageJson({ crust: { entry: "src/missing.ts" } });
-		expect(() => planBuild(baseFlags, tmpDir)).toThrow(
-			`Entry file not found: ${join(tmpDir, "src", "missing.ts")}`,
-		);
+	it("builds every bin entry under its command name, in declaration order", () => {
+		writeFileSync(join(tmpDir, "src", "admin.ts"), "export {};\n");
+		writePackageJson({
+			name: "@scope/tool",
+			bin: { greet: "./src/cli.ts", "admin-tool": "src/admin.ts" },
+		});
+		expect(planBuild(baseFlags, tmpDir).entries).toEqual([
+			{ command: "greet", entryPath: join(tmpDir, "src", "cli.ts") },
+			{ command: "admin-tool", entryPath: join(tmpDir, "src", "admin.ts") },
+		]);
+		// A string bin is the entry of a command named after the unscoped package name.
+		writePackageJson({ name: "@scope/tool", bin: "src/admin.ts" });
+		expect(planBuild(baseFlags, tmpDir).entries).toEqual([
+			{ command: "tool", entryPath: join(tmpDir, "src", "admin.ts") },
+		]);
 	});
 
 	it("uses one parse-error policy for runtime and output-name resolution", () => {
@@ -305,20 +311,132 @@ describe("planBuild", () => {
 	});
 });
 
+describe("resolveBinEntries", () => {
+	const tmpDir = mkdtempSync(join(tmpdir(), "crust-bin-entries-"));
+	const entries = (pkg: JsonValue | undefined) => resolveBinEntries(tmpDir, pkg);
+
+	beforeAll(() => {
+		mkdirSync(join(tmpDir, "src"), { recursive: true });
+		writeFileSync(join(tmpDir, "src", "cli.ts"), "export {};\n");
+		writeFileSync(join(tmpDir, "src", "admin.ts"), "export {};\n");
+	});
+	afterAll(() => rmSync(tmpDir, { recursive: true, force: true }));
+
+	it("requires a package name when bin is absent or a string", () => {
+		const nameless: Array<JsonValue | undefined> = [
+			undefined,
+			{},
+			{ name: "" },
+			{ name: 1 },
+			{ bin: "src/cli.ts" },
+		];
+		for (const pkg of nameless) {
+			expect(() => entries(pkg)).toThrow("package.json is missing a name field");
+		}
+		expect(entries({ name: "@scope/my-cli" })).toEqual([
+			{ command: "my-cli", entryPath: join(tmpDir, "src", "cli.ts") },
+		]);
+	});
+
+	it("rejects malformed bin fields instead of guessing", () => {
+		for (const bin of [{}, [], 1, null, ["src/cli.ts"]]) {
+			expect(() => entries({ name: "x", bin })).toThrow(
+				"package.json bin must be a source entry path or a non-empty object",
+			);
+		}
+		expect(() => entries({ name: "x", bin: { cli: 1 } })).toThrow(
+			'package.json bin "cli" must be a project-relative source entry path',
+		);
+	});
+
+	it("rejects command names that could escape bin/ or break generated launchers", () => {
+		for (const key of [
+			"",
+			".",
+			"..",
+			"-x",
+			".hidden",
+			"a/b",
+			"a\\b",
+			"a b",
+			'a"b',
+			"a$b",
+			"café",
+		]) {
+			expect(() => entries({ name: "x", bin: { [key]: "src/cli.ts" } })).toThrow(
+				`package.json bin key ${JSON.stringify(key)} is not a valid command name`,
+			);
+		}
+		for (const key of ["my-cli", "MyCli2", "a.b_c~d", "1up"]) {
+			expect(entries({ name: "x", bin: { [key]: "src/cli.ts" } })[0]?.command).toBe(key);
+		}
+	});
+
+	it("keeps every entry inside the project and requires it to exist", () => {
+		for (const source of ["../cli.ts", join(tmpDir, "src", "cli.ts"), ".", "src/..", ""]) {
+			expect(() => entries({ name: "x", bin: { cli: source } })).toThrow(
+				`package.json bin "cli" entry ${JSON.stringify(source)} must be a file inside the project root`,
+			);
+		}
+		expect(() => entries({ name: "x", bin: { cli: "src/missing.ts" } })).toThrow(
+			`Entry file not found: ${join(tmpDir, "src", "missing.ts")}\n  Point package.json bin "cli"`,
+		);
+		expect(() => entries({ name: "x", bin: "src/missing.ts" })).toThrow(
+			'Point package.json bin "x" at your CLI source entry',
+		);
+	});
+
+	it("rejects two commands that build the same entry, however it is spelled", () => {
+		const cli = realpathSync(join(tmpDir, "src", "cli.ts"));
+		for (const alias of ["src/cli.ts", "./src/cli.ts", "src/../src/cli.ts", "src//cli.ts"]) {
+			expect(() => entries({ name: "x", bin: { one: "src/cli.ts", two: alias } })).toThrow(
+				`package.json bin "one" and "two" both build ${cli}`,
+			);
+		}
+		// Symlinked spellings collide too, whether the link is the file or a directory above it.
+		symlinkSync(join(tmpDir, "src", "cli.ts"), join(tmpDir, "src", "cli-link.ts"), "file");
+		symlinkSync(join(tmpDir, "src"), join(tmpDir, "source"), "dir");
+		for (const alias of ["src/cli-link.ts", "source/cli.ts"]) {
+			expect(() => entries({ name: "x", bin: { one: "src/cli.ts", two: alias } })).toThrow(
+				`package.json bin "one" and "two" both build ${cli}`,
+			);
+		}
+		// The plan keeps the spelling the user wrote; only the collision check uses the real path.
+		expect(entries({ name: "x", bin: { two: "source/cli.ts" } })).toEqual([
+			{ command: "two", entryPath: join(tmpDir, "source", "cli.ts") },
+		]);
+		expect(entries({ name: "x", bin: { one: "src/cli.ts", two: "src/admin.ts" } })).toHaveLength(2);
+	});
+
+	it("requires each entry to be a file", () => {
+		expect(() => entries({ name: "x", bin: { cli: "src" } })).toThrow(
+			`package.json bin "cli" entry "src" is not a file: ${join(tmpDir, "src")}`,
+		);
+	});
+
+	it("rejects command names that differ only by case", () => {
+		expect(() => entries({ name: "x", bin: { Tool: "src/cli.ts", tool: "src/admin.ts" } })).toThrow(
+			'package.json bin keys "Tool" and "tool" differ only by case.',
+		);
+		expect(() =>
+			entries({ name: "x", bin: { "my-cli": "src/cli.ts", "MY-CLI": "src/admin.ts" } }),
+		).toThrow("differ only by case");
+	});
+});
+
 describe("readCrustConfig", () => {
-	it("accepts the four documented keys and nothing else", () => {
+	it("accepts the three documented keys and nothing else", () => {
 		expect(readCrustConfig(undefined)).toEqual({});
 		expect(readCrustConfig({ name: "x" })).toEqual({});
 		expect(
-			readCrustConfig({
-				crust: { runtime: "node", entry: "src/index.ts", bunPlugins: ["./p.ts"], include: ["t"] },
-			}),
-		).toEqual({ runtime: "node", entry: "src/index.ts", bunPlugins: ["./p.ts"], include: ["t"] });
-		expect(() => readCrustConfig({ crust: { bunPlugin: [] } })).toThrow(
-			'Unknown package.json crust key "bunPlugin". Allowed keys: runtime, entry, bunPlugins, include',
-		);
+			readCrustConfig({ crust: { runtime: "node", bunPlugins: ["./p.ts"], include: ["t"] } }),
+		).toEqual({ runtime: "node", bunPlugins: ["./p.ts"], include: ["t"] });
+		for (const key of ["bunPlugin", "entry"]) {
+			expect(() => readCrustConfig({ crust: { [key]: [] } })).toThrow(
+				`Unknown package.json crust key "${key}". Allowed keys: runtime, bunPlugins, include`,
+			);
+		}
 		expect(() => readCrustConfig({ crust: "bun" })).toThrow("crust must be an object");
-		expect(() => readCrustConfig({ crust: { entry: 1 } })).toThrow("crust.entry must be");
 		expect(() => readCrustConfig({ crust: { bunPlugins: "./p.ts" } })).toThrow(
 			"crust.bunPlugins must be an array",
 		);
@@ -332,7 +450,7 @@ describe("readCrustConfig", () => {
 		expect(crust.additionalProperties).toBe(false);
 		expect(Object.keys(crust.properties)).toEqual([...CRUST_CONFIG_KEYS]);
 		expect(crust.properties.runtime.enum).toEqual([...BUILD_RUNTIMES]);
-		expect(crust.properties.entry.default).toBe(DEFAULT_ENTRY);
+		expect(crust.description).toContain("`bin` field");
 	});
 });
 
@@ -396,13 +514,17 @@ describe("resolveDenoTarget", () => {
 // Error handling tests
 // ────────────────────────────────────────────────────────────────────────────
 
-async function executeBuildError(name: string, crust: JsonValue, argv: string[]): Promise<string> {
+async function executeBuildError(
+	name: string,
+	pkg: Record<string, JsonValue>,
+	argv: string[],
+): Promise<string> {
 	const originalCwd = process.cwd;
 	const tmpDir = mkdtempSync(join(tmpdir(), `crust-${name}-`));
 	rmSync(tmpDir, { recursive: true, force: true });
 	mkdirSync(join(tmpDir, "src"), { recursive: true });
 	writeFileSync(join(tmpDir, "src", "cli.ts"), "console.log('hi');");
-	writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ crust }));
+	writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ name: "error-cli", ...pkg }));
 	process.cwd = () => tmpDir;
 	try {
 		const result = await captureExecute(new Crust("test").add(buildCommand), ["build", ...argv]);
@@ -417,21 +539,24 @@ async function executeBuildError(name: string, crust: JsonValue, argv: string[])
 describe("buildCommand error handling", () => {
 	it("rejects unsupported runtime and flag combinations before compiling", async () => {
 		expect(
-			await executeBuildError("node-target", { runtime: "node" }, [
+			await executeBuildError("node-target", { crust: { runtime: "node" } }, [
 				"--target",
 				"bun-linux-x64",
 				"--no-validate",
 			]),
 		).toContain("--target cannot be used with the node runtime");
 		expect(
-			await executeBuildError("deno-minify", { runtime: "deno" }, ["--minify", "--no-validate"]),
+			await executeBuildError("deno-minify", { crust: { runtime: "deno" } }, [
+				"--minify",
+				"--no-validate",
+			]),
 		).toContain("--minify is not supported with the deno runtime");
 		const envDir = mkdtempSync(join(tmpdir(), "crust-deno-env-file-"));
 		const envFile = join(envDir, ".env");
 		writeFileSync(envFile, "SECRET=x\n");
 		try {
 			expect(
-				await executeBuildError("deno-env-file", { runtime: "deno" }, [
+				await executeBuildError("deno-env-file", { crust: { runtime: "deno" } }, [
 					"--env-file",
 					envFile,
 					"--no-validate",
@@ -443,21 +568,53 @@ describe("buildCommand error handling", () => {
 		expect(
 			await executeBuildError(
 				"deno-bun-plugin",
-				{ runtime: "deno", bunPlugins: ["@opentui/solid/bun-plugin"] },
+				{ crust: { runtime: "deno", bunPlugins: ["@opentui/solid/bun-plugin"] } },
 				["--no-validate"],
 			),
 		).toContain("package.json crust.bunPlugins is not supported with the deno runtime");
-		expect(await executeBuildError("unknown-key", { bunPlugin: [] }, ["--no-validate"])).toContain(
-			'Unknown package.json crust key "bunPlugin". Allowed keys: runtime, entry, bunPlugins, include',
+		expect(
+			await executeBuildError("unknown-key", { crust: { bunPlugin: [] } }, ["--no-validate"]),
+		).toContain(
+			'Unknown package.json crust key "bunPlugin". Allowed keys: runtime, bunPlugins, include',
 		);
 	});
-	it("sets exitCode and logs error when entry file is missing", async () => {
-		expect(
-			await executeBuildError("missing-entry", { entry: "nonexistent.ts" }, [
-				"--target",
-				"bun-linux-x64",
-			]),
-		).toContain("Entry file not found");
+
+	it("rejects bad bin entries before wiping .crust, even with --no-validate", async () => {
+		const tmpDir = mkdtempSync(join(tmpdir(), "crust-bin-guard-"));
+		mkdirSync(join(tmpDir, "src"), { recursive: true });
+		mkdirSync(join(tmpDir, ".crust"), { recursive: true });
+		writeFileSync(join(tmpDir, ".crust", "previous.txt"), "kept\n");
+		writeFileSync(join(tmpDir, "src", "cli.ts"), "export {};\n");
+		const originalCwd = process.cwd;
+		process.cwd = () => tmpDir;
+		try {
+			symlinkSync(join(tmpDir, "src", "cli.ts"), join(tmpDir, "src", "alias.ts"), "file");
+			symlinkSync(join(tmpDir, "src"), join(tmpDir, "source"), "dir");
+			for (const [bin, error] of [
+				[{ one: "src/cli.ts", two: "./src/cli.ts" }, 'bin "one" and "two" both build'],
+				[{ one: "src/cli.ts", two: "src/alias.ts" }, 'bin "one" and "two" both build'],
+				[{ one: "src/cli.ts", two: "source/cli.ts" }, 'bin "one" and "two" both build'],
+				[{ Tool: "src/cli.ts", tool: "src/alias.ts" }, "differ only by case"],
+				[{ cli: "src" }, "is not a file"],
+				[{ "../up": "src/cli.ts" }, "is not a valid command name"],
+				[{ cli: "nonexistent.ts" }, "Entry file not found"],
+				[{}, "non-empty object"],
+			] as const) {
+				writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ name: "guard", bin }));
+				const result = await captureExecute(new Crust("test").add(buildCommand), [
+					"build",
+					"--no-validate",
+					"--target",
+					"bun-linux-x64",
+				]);
+				expect(result.exitCode).toBe(1);
+				expect(result.stderr).toContain(error);
+			}
+			expect(existsSync(join(tmpDir, ".crust", "previous.txt"))).toBe(true);
+		} finally {
+			process.cwd = originalCwd;
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
 	});
 
 	it.skipIf(host === null)(
@@ -476,7 +633,7 @@ describe("buildCommand error handling", () => {
 				`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(corePath)};\n` +
 					`const artifact = defineExtension(defineExtensionId("artifact"), { build: async ({ outDir }) => { await Bun.write(outDir + "/artifact.txt", "built"); return ["artifact.txt", "second.txt", "third.txt", "fourth.txt"]; } });\n` +
 					`const unknown = defineExtension(defineExtensionId("unknown-extension"), { build() {} });\n` +
-					`await new Crust("fixture").extend(artifact, unknown).action(() => {}).execute();\n`,
+					`await new Crust("artifact-cli").extend(artifact, unknown).action(() => {}).execute();\n`,
 			);
 
 			process.cwd = () => tmpDir;
@@ -490,7 +647,7 @@ describe("buildCommand error handling", () => {
 
 				expect(result.exitCode, result.stderr).toBe(0);
 				expect(result.stdout).toContain(
-					"Preparing Command Snapshot...\n" +
+					"Preparing Command Snapshot for artifact-cli...\n" +
 						"  artifact           4 files  artifact.txt, second.txt, third.txt, +1 more\n" +
 						"  unknown-extension  ran (artifacts not reported)",
 				);
@@ -506,4 +663,64 @@ describe("buildCommand error handling", () => {
 		},
 		30_000,
 	);
+
+	describe.skipIf(host === null)("validated multi-entry builds", () => {
+		const tmpDir = mkdtempSync(join(tmpdir(), "crust-multi-entry-"));
+		const originalCwd = process.cwd;
+		/** An entry whose one Extension build hook writes `files` under outDir without reporting them. */
+		const writeEntry = (file: string, name: string, files: Record<string, string>) =>
+			writeFileSync(
+				join(tmpDir, "src", file),
+				`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(corePath)};\n` +
+					`const hook = defineExtension(defineExtensionId("hook"), { build: async ({ outDir }) => { for (const [path, content] of Object.entries(${JSON.stringify(files)})) await Bun.write(outDir + "/" + path, content); } });\n` +
+					`await new Crust(${JSON.stringify(name)}).extend(hook).action(() => {}).execute();\n`,
+			);
+		const build = (argv: string[]) =>
+			captureExecute(new Crust("test").add(buildCommand), ["build", "--target", "host", ...argv]);
+
+		beforeAll(() => {
+			mkdirSync(join(tmpDir, "src"), { recursive: true });
+			writeFileSync(
+				join(tmpDir, "package.json"),
+				JSON.stringify({
+					name: "multi",
+					version: "0.1.0",
+					bin: { greet: "src/greet.ts", admin: "src/admin.ts" },
+				}),
+			);
+			process.cwd = () => tmpDir;
+		});
+		afterAll(() => {
+			process.cwd = originalCwd;
+			rmSync(tmpDir, { recursive: true, force: true });
+		});
+
+		it("fails when a root command is not named after its bin key, unless --no-validate", async () => {
+			writeEntry("greet.ts", "greet", {});
+			writeEntry("admin.ts", "greet", {});
+			const result = await build([]);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain(
+				`package.json bin "admin" builds ${join(tmpDir, "src", "admin.ts")}, whose root command is named "greet".`,
+			);
+			expect(existsSync(join(tmpDir, ".crust", "manifest.json"))).toBe(false);
+
+			// --no-validate skips the snapshots, and with them this check and the hooks.
+			const unchecked = await build(["--no-validate"]);
+			expect(unchecked.exitCode, unchecked.stderr).toBe(0);
+			expect(existsSync(join(tmpDir, ".crust", "manifest.json"))).toBe(true);
+			expect(existsSync(join(tmpDir, ".crust", "artifacts"))).toBe(false);
+		}, 60_000);
+
+		it("rejects colliding hook output across entries even when hooks report no files", async () => {
+			writeEntry("greet.ts", "greet", { "shared/config.json": "{}" });
+			writeEntry("admin.ts", "admin", { "shared/config.json": "{}", "man/admin.1": ".Dd" });
+			const result = await build([]);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain(
+				'Build artifact "shared/config.json" is written by both bin "greet" and "admin".',
+			);
+			expect(existsSync(join(tmpDir, ".crust", "manifest.json"))).toBe(false);
+		}, 60_000);
+	});
 });

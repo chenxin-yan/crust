@@ -50,7 +50,7 @@ beforeAll(() => {
 				name: "@scope/test-cli",
 				version: "0.1.0",
 				bin: {
-					"test-cli": "dist/cli",
+					"test-cli": "src/cli.ts",
 				},
 			},
 			null,
