@@ -1,12 +1,14 @@
 import type { DefiningOf } from "../api/context.ts";
 import type { CommandDefinitionData } from "../command/crust.ts";
 import type {
+	ClosedMembers,
 	CollisionBrand,
 	DefName,
 	HasClosedNames,
 	IsClosedName,
 	IsStaticTuple,
 	IsUnion,
+	DefNameMembers,
 	UnionToIntersection,
 } from "./shared.ts";
 
@@ -21,8 +23,12 @@ export type AliasesOf<C> = C extends { readonly aliases: infer A extends readonl
 		? readonly string[]
 		: readonly [];
 
+// Key/collision evidence: all-or-nothing, so an open member never leaks literal siblings.
 type NarrowAliases<A extends readonly string[]> =
 	IsClosedName<A[number]> extends true ? A[number] : never;
+
+// Spelling grammar: each literal member is independently provable.
+type AliasMembers<A extends readonly string[]> = ClosedMembers<A[number]>;
 
 type AliasShapeError<Name extends string, Alias extends string> = Alias extends ""
 	? `Subcommand "${Name}" has an invalid alias: must be a non-empty string`
@@ -43,7 +49,7 @@ type AliasShapeError<Name extends string, Alias extends string> = Alias extends 
 					: never;
 
 type AliasShapeErrors<Name extends string, C> =
-	NarrowAliases<AliasesOf<C>> extends infer Alias
+	AliasMembers<AliasesOf<C>> extends infer Alias
 		? Alias extends string
 			? AliasShapeError<Name, Alias>
 			: never
@@ -97,15 +103,13 @@ type BlankName<Name extends string> = Name extends `${TrimWhitespace}${infer Tai
 		? true
 		: false;
 
-/** Runtime checks own open names; provably invalid literal members remain errors. */
+/** Runtime checks own open members; every statically known member is validated, even beside an open one. */
 export type CommandNameBrand<Name extends string> =
-	IsClosedName<Name> extends false
-		? {}
-		: true extends BlankName<Name>
-			? EmptyNameError
-			: "__proto__" extends Name
-				? { readonly FIX_RESERVED_NAME: 'Command name "__proto__" is reserved' }
-				: {};
+	true extends BlankName<ClosedMembers<Name>>
+		? EmptyNameError
+		: "__proto__" extends ClosedMembers<Name>
+			? { readonly FIX_RESERVED_NAME: 'Command name "__proto__" is reserved' }
+			: {};
 
 type DefinitionAliases<D> =
 	CommandDefinitionData<D> extends {
@@ -129,14 +133,20 @@ export type CommandDefinitionSpellings<D> = D extends unknown
 
 // Catches `.as()` renames that land on one of the definition's own aliases
 // (config-time AliasShapeError compares aliases against the original name only).
-type SelfAliasBrand<D> = DefName<D> & NarrowAliases<DefinitionAliases<D>> extends infer Dup extends
-	string
-	? [Dup] extends [never]
-		? {}
-		: {
-				readonly FIX_ALIAS_SHAPE: `Command "${Dup}" must not list its own canonical name as an alias`;
-			}
-	: never;
+// Distributes over definition unions so `cond ? x : y` compares each variant's
+// name with its own aliases; the intersection keeps a `{}` variant from
+// absorbing a sibling's error brand.
+type SelfAliasBrand<D> = UnionToIntersection<
+	D extends unknown
+		? DefNameMembers<D> & AliasMembers<DefinitionAliases<D>> extends infer Dup extends string
+			? [Dup] extends [never]
+				? {}
+				: {
+						readonly FIX_ALIAS_SHAPE: `Command "${Dup}" must not list its own canonical name as an alias`;
+					}
+			: never
+		: never
+>;
 
 export type CommandCollisionBrand<
 	Spellings extends string,
@@ -163,7 +173,7 @@ export type ValidateCommandDefinitions<
 		? readonly [
 				Head &
 					CommandCollisionBrand<Spellings, Existing> &
-					CommandNameBrand<DefName<Head>> &
+					CommandNameBrand<DefNameMembers<Head>> &
 					SelfAliasBrand<Head>,
 				...ValidateCommandDefinitions<Tail, Existing | Spellings>,
 			]

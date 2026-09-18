@@ -2,6 +2,7 @@ import type { DefiningOf } from "../api/context.ts";
 import type { CommandDefinitionData } from "../command/crust.ts";
 import type { FlagsDef, NamedFlagDef, NamedFlagsRecord } from "../types.ts";
 import type {
+	ClosedMembers,
 	CollisionBrand,
 	DefName,
 	EmptyLiteralNameBrand,
@@ -9,6 +10,7 @@ import type {
 	IsStaticTuple,
 	IsClosedName,
 	LocalValueBrand,
+	DefNameMembers,
 	UnionToIntersection,
 } from "./shared.ts";
 
@@ -25,25 +27,38 @@ type ExistingFlagCollisionBrand<F, Existing extends string> = CollisionBrand<
 	" collides with an existing flag"
 >;
 
+/**
+ * Every statically known canonical, short, and long-alias member, including literals
+ * beside an open member. Spelling grammar only: collision evidence stays with
+ * {@link ExtractAllAliases}, which must not leak literals out of an open domain.
+ * Each field is filtered on its own so a `string`-typed field cannot absorb a
+ * sibling field's invalid literal before the filter runs.
+ */
+type SpellingMembers<F> =
+	| DefNameMembers<F>
+	| ClosedMembers<F extends { short: infer S extends string } ? S : never>
+	| ClosedMembers<F extends { aliases: infer A extends readonly string[] } ? A[number] : never>;
+
 /** Reject `__proto__`, which mutates the prototype of plain-object flag registries. */
-type ReservedSpellingBrand<F> = "__proto__" extends DefName<F> | ExtractAllAliases<F>
-	? {
-			readonly FIX_RESERVED_SPELLING: 'Flag spelling "__proto__" is reserved';
-		}
-	: {};
+type ReservedSpellingBrand<F> =
+	"__proto__" extends SpellingMembers<F>
+		? {
+				readonly FIX_RESERVED_SPELLING: 'Flag spelling "__proto__" is reserved';
+			}
+		: {};
 
 type EmptySpellingError = {
 	readonly FIX_EMPTY_SPELLING: "Flag names and aliases must be non-empty strings";
 };
 
-/** Reject empty flag names, including empty members of a name union. */
+/** Reject empty flag names, including an empty member of a name union beside an open member. */
 export type EmptyFlagSpellingBrand<Name extends string> = EmptyLiteralNameBrand<
 	Name,
 	EmptySpellingError
 >;
 
 /** Reject empty spellings: their CLI tokens (`--`, `-`) are unparseable, so the flag can never be supplied. */
-type EmptySpellingBrand<F> = "" extends DefName<F> | ExtractAllAliases<F> ? EmptySpellingError : {};
+type EmptySpellingBrand<F> = "" extends SpellingMembers<F> ? EmptySpellingError : {};
 
 type RepeatedAliases<
 	Aliases extends readonly string[],
@@ -316,7 +331,7 @@ type LocalFlagBranchBrand<F> = LocalValueBrand<F> &
 	ShortLengthBrand<F> &
 	ReservedSpellingBrand<F> &
 	EmptySpellingBrand<F> &
-	NoPrefixBrand<DefName<F> | ExtractAllAliases<F>> &
+	NoPrefixBrand<SpellingMembers<F>> &
 	([DefName<F> & ExtractAllAliases<F>] extends [never]
 		? {}
 		: { readonly FIX_ALIAS_COLLISION: "Flag repeats one of its own spellings" });

@@ -109,7 +109,7 @@ const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
 const target = defineArg("target", { type: "string", required: true });
 ```
 
-`defineFlag(name, def)` returns a named flag definition; `defineArg(name, def)` returns a named argument definition. Literal fields retain inference and provably invalid names/defaults/parsers fail typecheck. Broad names and dynamic definitions use the same helpers and are checked automatically at consumption.
+`defineFlag(name, def)` returns a named flag definition; `defineArg(name, def)` returns a named argument definition. Literal fields retain inference and provably invalid names/defaults/parsers fail typecheck; an invalid literal member of a name union is rejected even beside an open template member. Broad names and dynamic definitions use the same helpers and are checked automatically at consumption.
 
 Helpers own readonly structural arrays, without cloning payloads; local proof does not certify another destination. `UnnamedArgDef` is the argument helper input without its name.
 

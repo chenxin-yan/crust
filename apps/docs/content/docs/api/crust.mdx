@@ -105,7 +105,7 @@ const deploy = defineCommand("deploy", { description: "Deploy an application" },
 );
 ```
 
-The recipe executes once for each `.add()`, not when the definition is created, so configuration side effects repeat for every addition. Statically blank names and `__proto__` fail typecheck. Broad string names are supported and checked when consumed, including equality to a carried alias; unresolved generics may require a validated parameter constraint.
+The recipe executes once for each `.add()`, not when the definition is created, so configuration side effects repeat for every addition. Statically blank names and `__proto__` fail typecheck, including a blank or reserved member of a name union even when another member is an open template such as `` `mode-${string}` ``. Broad string names are supported and checked when consumed, including equality to a carried alias; unresolved generics may require a validated parameter constraint.
 
 Materialization verifies that the recipe returns its seeded builder and does not register nested Extensions. Declared Context availability is checked without running setup; factory and callback value contracts remain TypeScript-owned.
 

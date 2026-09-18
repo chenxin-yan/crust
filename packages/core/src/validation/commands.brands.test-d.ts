@@ -90,6 +90,84 @@ type Def<Name extends string, Aliases extends readonly string[] = readonly []> =
 }
 
 {
+	// brands invalid literal members beside an open template member (#357)
+	type Mixed = `mode-${string}`;
+	type Empty = ValidateCommandDefinitions<readonly [Def<"" | Mixed>]>;
+	type Reserved = ValidateCommandDefinitions<readonly [Def<"__proto__" | Mixed>]>;
+	type Valid = ValidateCommandDefinitions<readonly [Def<"fixed" | Mixed>]>;
+	type _empty = Expect<
+		Equal<Empty[0]["FIX_EMPTY_NAME"], "Command name must be a non-empty string">
+	>;
+	type _reserved = Expect<
+		Equal<Reserved[0]["FIX_RESERVED_NAME"], 'Command name "__proto__" is reserved'>
+	>;
+	type _valid = Expect<Equal<Extract<keyof Valid[0], `FIX_${string}`>, never>>;
+	// a definition union: the open variant's `string` must not absorb the literal variant's name
+	type EmptyDefs = ValidateCommandDefinitions<readonly [Def<""> | Def<string>]>;
+	type ReservedDefs = ValidateCommandDefinitions<readonly [Def<"__proto__"> | Def<string>]>;
+	type _emptyDefs = Expect<
+		Equal<EmptyDefs[0]["FIX_EMPTY_NAME"], "Command name must be a non-empty string">
+	>;
+	type _reservedDefs = Expect<
+		Equal<ReservedDefs[0]["FIX_RESERVED_NAME"], 'Command name "__proto__" is reserved'>
+	>;
+
+	type EmptyAlias = ValidateCommandConfig<"issue", { aliases: readonly ["", Mixed] }>;
+	type DashAlias = ValidateCommandConfig<"issue", { aliases: readonly ["-i" | Mixed] }>;
+	type OwnAlias = ValidateCommandConfig<"issue", { aliases: readonly ["issue" | Mixed] }>;
+	type ValidAlias = ValidateCommandConfig<"issue", { aliases: readonly ["i" | Mixed] }>;
+	type _emptyAlias = Expect<
+		Equal<
+			EmptyAlias["FIX_ALIAS_SHAPE"],
+			'Subcommand "issue" has an invalid alias: must be a non-empty string'
+		>
+	>;
+	type _dashAlias = Expect<
+		Equal<
+			DashAlias["FIX_ALIAS_SHAPE"],
+			'Subcommand "issue" alias "-i" must not start with "-" (reserved for flags)'
+		>
+	>;
+	type _ownAlias = Expect<
+		Equal<
+			OwnAlias["FIX_ALIAS_SHAPE"],
+			'Subcommand "issue" alias "issue" must not equal its own canonical name'
+		>
+	>;
+	type _validAlias = Expect<Equal<keyof ValidAlias, never>>;
+	// .as() rename landing on a mixed alias union's literal member
+	type SelfAlias = ValidateCommandDefinitions<
+		readonly [{ name: "i"; _aliases?: readonly ["i" | Mixed] }]
+	>;
+	type _selfAlias = Expect<
+		Equal<
+			SelfAlias[0]["FIX_ALIAS_SHAPE"],
+			'Command "i" must not list its own canonical name as an alias'
+		>
+	>;
+	// variants of a definition union are compared with their own aliases only
+	type CrossAlias = ValidateCommandDefinitions<
+		readonly [Def<"x", readonly ["y"]> | Def<"y", readonly ["x"]>]
+	>;
+	type _crossAlias = Expect<Equal<keyof Omit<CrossAlias[0], "name" | "_aliases">, never>>;
+	// a valid variant does not absorb a self-aliased sibling's brand
+	type OneSelfAliased = ValidateCommandDefinitions<
+		readonly [Def<"x", readonly ["x"]> | Def<"y", readonly ["z"]>]
+	>;
+	type _oneSelfAliased = Expect<
+		Equal<
+			OneSelfAliased[0]["FIX_ALIAS_SHAPE"],
+			'Command "x" must not list its own canonical name as an alias'
+		>
+	>;
+	// open members still keep the attachment namespace open
+	type _spellings = Expect<Equal<CommandDefinitionSpellings<Def<"fixed" | Mixed>>, never>>;
+	type _aliasSpellings = Expect<
+		Equal<CommandDefinitionSpellings<Def<"issue", readonly ["i" | Mixed]>>, "issue">
+	>;
+}
+
+{
 	// brands every statically known invalid alias shape
 	type Empty = ValidateCommandConfig<"issue", { aliases: readonly [""] }>;
 	type Dash = ValidateCommandConfig<"issue", { aliases: readonly ["-i"] }>;
