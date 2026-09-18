@@ -32,7 +32,7 @@ const files = await writeSkills({
 });
 console.log(files);
 // ["my-cli/SKILL.md", "my-cli/commands/my-cli.md", "my-cli/commands/deploy.md",
-//  "my-cli/commands/skill.md", "my-cli/commands/skill/update.md"]
+//  "my-cli/commands/skills.md", "my-cli/commands/skills/update.md"]
 //#endregion
 
 //#region sections

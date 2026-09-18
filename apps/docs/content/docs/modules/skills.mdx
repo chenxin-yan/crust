@@ -39,7 +39,7 @@ Use `writeSkillsFromSnapshot()` when a prepared Command Snapshot is available. O
 
 <include lang="ts">../../../examples/modules/skills.ts#extension</include>
 
-The Extension registers `my-cli skills` and `my-cli skills update`, with `skill` retained as an alias. Setting `command` to a custom name replaces the default command without adding the alias. It also contributes an `Agent skills` root section with `except: [skill]`, so it appears in help, man pages, and any other consumer, but not in the skills it generates.
+The Extension registers `my-cli skills` and `my-cli skills update`, with `skill` retained as an alias. Setting `command` to a custom name replaces the default command without adding the alias. It also contributes an `Agent skills` root section with `except: [skill]` (the Extension factory), so it appears in help, man pages, and any other consumer, but not in the skills it generates.
 
 The help section includes this escaped excerpt:
 
