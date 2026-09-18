@@ -1,35 +1,33 @@
 import { afterAll, beforeEach, describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	lstatSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { JsonValue } from "@crustjs/utils/json";
 
-import type { BunTarget } from "./build-helpers.ts";
-import { runDistributeBuild } from "./distribute.ts";
+import { BUN_TARGETS, type BunTarget, DENO_TARGETS, type DenoTarget } from "./build-helpers.ts";
+import { type DistributeBuildPlan, type Distribution, runDistributeBuild } from "./distribute.ts";
 
 const io = { stdout: () => {}, stderr: () => {} };
 
 function createPlan(
 	cwd: string,
 	packageJson: JsonValue,
-	overrides: Partial<{
-		name: string;
-		targets: BunTarget[];
-		stageDir: string;
-		validate: boolean;
-		outDir: string;
-		bunPlugins: string[];
-	}> = {},
-) {
+	overrides: Partial<DistributeBuildPlan> = {},
+): DistributeBuildPlan {
 	return {
 		cwd,
 		entryPath: join(cwd, "src", "cli.ts"),
-		minify: true,
-		targets: ["bun-darwin-arm64"] satisfies BunTarget[],
 		stageDir: join(cwd, ".stage"),
-		envFiles: [],
-		bunPlugins: [],
 		validate: false,
 		outDir: join(cwd, "dist"),
 		userPackageJson: packageJson,
@@ -37,17 +35,22 @@ function createPlan(
 	};
 }
 
-const fakeExecutor = async (
-	_entryPath: string,
-	outfilePath: string,
-	_minify: boolean,
-	_target: BunTarget,
-	_envFiles: readonly string[],
-	_cwd: string,
-	_bunPlugins: readonly string[],
-) => {
+const fakeExecutor = async (_entryPath: string, outfilePath: string) => {
 	writeFileSync(outfilePath, "fake binary\n");
 };
+
+function bunDistribution(
+	targets: BunTarget[] = ["bun-darwin-arm64"],
+	execute: (
+		entryPath: string,
+		outfilePath: string,
+		target: BunTarget,
+	) => Promise<void> = fakeExecutor,
+): Distribution<BunTarget> {
+	return { table: BUN_TARGETS, targets, execute };
+}
+
+const rootOnlyDistribution: Distribution<never> = { execute: fakeExecutor };
 
 function readJson<T>(path: string): T {
 	return JSON.parse(readFileSync(path, "utf8")) as T;
@@ -72,18 +75,20 @@ describe("runDistributeBuild", () => {
 			description: "CLI tooling",
 			bin: { "test-cli": "dist/cli" },
 		};
-		const plan = createPlan(tmpDir, packageJson, {
-			targets: ["bun-linux-x64", "bun-linux-x64-musl", "bun-windows-arm64"],
-		});
+		const plan = createPlan(tmpDir, packageJson);
 		const outputs: string[] = [];
 
-		await runDistributeBuild(plan, {
+		await runDistributeBuild(
+			plan,
+			bunDistribution(
+				["bun-linux-x64", "bun-linux-x64-musl", "bun-windows-arm64"],
+				async (entryPath: string, outfilePath: string) => {
+					outputs.push(outfilePath);
+					await fakeExecutor(entryPath, outfilePath);
+				},
+			),
 			io,
-			execute: async (...args) => {
-				outputs.push(args[1]);
-				await fakeExecutor(...args);
-			},
-		});
+		);
 
 		const manifest = readJson<{
 			root: { name: string; dir: string; bin: string };
@@ -163,29 +168,126 @@ describe("runDistributeBuild", () => {
 		]);
 	});
 
-	it("passes the Bun bundler plugins to every target build", async () => {
-		const plan = createPlan(
-			tmpDir,
-			{ name: "plugin-cli", version: "0.1.0" },
-			{
-				targets: ["bun-linux-x64", "bun-darwin-arm64"],
-				bunPlugins: ["@opentui/solid/bun-plugin", "./plugins/local.ts"],
-			},
-		);
-		const calls: Array<{ target: BunTarget; bunPlugins: readonly string[] }> = [];
+	it("runs the executor once per target with the canonical target name", async () => {
+		const plan = createPlan(tmpDir, { name: "target-cli", version: "0.1.0" });
+		const calls: BunTarget[] = [];
 
-		await runDistributeBuild(plan, {
+		await runDistributeBuild(
+			plan,
+			bunDistribution(
+				["bun-linux-x64", "bun-darwin-arm64"],
+				async (entryPath, outfilePath, target) => {
+					calls.push(target);
+					await fakeExecutor(entryPath, outfilePath);
+				},
+			),
 			io,
-			execute: async (...args) => {
-				calls.push({ target: args[3], bunPlugins: args[6] });
-				await fakeExecutor(...args);
-			},
-		});
+		);
 
-		expect(calls).toEqual([
-			{ target: "bun-linux-x64", bunPlugins: plan.bunPlugins },
-			{ target: "bun-darwin-arm64", bunPlugins: plan.bunPlugins },
+		expect(calls).toEqual(["bun-linux-x64", "bun-darwin-arm64"]);
+	});
+
+	it("stages Deno platform packages with the same npm names and glibc-only Linux metadata", async () => {
+		const plan = createPlan(tmpDir, { name: "@scope/deno-cli", version: "2.0.0" });
+		const outputs: string[] = [];
+		const targets: DenoTarget[] = ["x86_64-unknown-linux-gnu", "aarch64-pc-windows-msvc"];
+
+		await runDistributeBuild(
+			plan,
+			{
+				table: DENO_TARGETS,
+				targets,
+				execute: async (entryPath: string, outfilePath: string) => {
+					outputs.push(outfilePath);
+					await fakeExecutor(entryPath, outfilePath);
+				},
+			},
+			io,
+		);
+
+		const manifest = readJson<{
+			packages: Array<{ target: string; name: string; bin: string; libc?: string }>;
+			publishOrder: string[];
+		}>(join(plan.stageDir, "manifest.json"));
+		expect(manifest.packages).toEqual([
+			expect.objectContaining({
+				target: "linux-x64",
+				name: "@scope/deno-cli-linux-x64",
+				libc: "glibc",
+				bin: "bin/deno-cli-x86_64-unknown-linux-gnu",
+			}),
+			expect.objectContaining({
+				target: "windows-arm64",
+				name: "@scope/deno-cli-windows-arm64",
+				bin: "bin/deno-cli-aarch64-pc-windows-msvc.exe",
+			}),
 		]);
+		expect(manifest.publishOrder).toEqual(["linux-x64", "windows-arm64", "root"]);
+		expect(
+			readJson<{ libc?: string[] }>(join(plan.stageDir, "linux-x64", "package.json")).libc,
+		).toEqual(["glibc"]);
+		expect(
+			readJson<{ optionalDependencies: Record<string, string> }>(
+				join(plan.stageDir, "root", "package.json"),
+			).optionalDependencies,
+		).toEqual({
+			"@scope/deno-cli-linux-x64": "2.0.0",
+			"@scope/deno-cli-windows-arm64": "2.0.0",
+		});
+		expect(readFileSync(join(plan.stageDir, "root", "bin", "deno-cli.js"), "utf8")).toContain(
+			'"binaryFilename": "deno-cli-x86_64-unknown-linux-gnu"',
+		);
+		expect(outputs).toEqual([
+			join(plan.stageDir, "linux-x64", "bin", "deno-cli-x86_64-unknown-linux-gnu"),
+			join(plan.stageDir, "windows-arm64", "bin", "deno-cli-aarch64-pc-windows-msvc.exe"),
+		]);
+	});
+
+	it("stages a root-only package whose bin is the executor output", async () => {
+		const plan = createPlan(tmpDir, {
+			name: "@scope/node-cli",
+			version: "0.3.0",
+			dependencies: { "@crustjs/core": "^1.0.0" },
+			bin: { "node-cli": "dist/cli.js" },
+		});
+		const outputs: string[] = [];
+
+		await runDistributeBuild(
+			plan,
+			{
+				execute: async (entryPath: string, outfilePath: string) => {
+					outputs.push(outfilePath);
+					await fakeExecutor(entryPath, outfilePath);
+				},
+			},
+			io,
+		);
+
+		const rootBin = join(plan.stageDir, "root", "bin", "node-cli.js");
+		expect(outputs).toEqual([rootBin]);
+		expect(readFileSync(rootBin, "utf8")).toBe("fake binary\n");
+		const rootPackage = readJson<{
+			name: string;
+			files: string[];
+			bin: Record<string, string>;
+			optionalDependencies?: Record<string, string>;
+			dependencies?: Record<string, string>;
+		}>(join(plan.stageDir, "root", "package.json"));
+		expect(rootPackage).toMatchObject({
+			name: "@scope/node-cli",
+			version: "0.3.0",
+			type: "module",
+			files: ["bin"],
+			bin: { "node-cli": "bin/node-cli.js" },
+		});
+		expect(rootPackage).not.toHaveProperty("optionalDependencies");
+		expect(rootPackage).not.toHaveProperty("dependencies");
+		expect(
+			readJson<{ packages: unknown[]; publishOrder: string[] }>(
+				join(plan.stageDir, "manifest.json"),
+			),
+		).toMatchObject({ packages: [], publishOrder: ["root"] });
+		expect(readFileSync(join(plan.stageDir, "root", "LICENSE"), "utf8")).toBe("test license\n");
 	});
 
 	it("uses string bin shorthand and copies common license variants", async () => {
@@ -197,7 +299,7 @@ describe("runDistributeBuild", () => {
 			bin: "dist/cli",
 		});
 
-		await runDistributeBuild(plan, { io, execute: fakeExecutor });
+		await runDistributeBuild(plan, bunDistribution(), io);
 
 		const rootPackage = readJson<{ bin: Record<string, string> }>(
 			join(plan.stageDir, "root", "package.json"),
@@ -214,7 +316,7 @@ describe("runDistributeBuild", () => {
 			version: "0.1.0",
 			bin: { one: "dist/one", two: "dist/two" },
 		});
-		await expect(runDistributeBuild(plan, { io, execute: fakeExecutor })).rejects.toThrow(
+		await expect(runDistributeBuild(plan, bunDistribution(), io)).rejects.toThrow(
 			/exactly one bin entry/,
 		);
 	});
@@ -231,7 +333,7 @@ describe("runDistributeBuild", () => {
 			{ validate: true, outDir },
 		);
 
-		await runDistributeBuild(plan, { io, execute: fakeExecutor });
+		await runDistributeBuild(plan, bunDistribution(), io);
 
 		const rootPackage = readJson<{ files: string[]; man: string[] }>(
 			join(plan.stageDir, "root", "package.json"),
@@ -243,6 +345,28 @@ describe("runDistributeBuild", () => {
 		).toBe("skill\n");
 	});
 
+	it("copies artifact symlinks as links instead of following them out of the project", async () => {
+		const outDir = join(tmpDir, "dist");
+		mkdirSync(join(outDir, "skills"), { recursive: true });
+		// Artifact trees are not containment-checked, so a link to an external file
+		// must not have its contents copied into the staged packages.
+		symlinkSync(join(tmpDir, "LICENSE"), join(outDir, "skills", "leak"), "file");
+		const plan = createPlan(
+			tmpDir,
+			{ name: "artifact-stage-cli", version: "0.1.0", bin: { cli: "dist/cli" } },
+			{ validate: true, outDir },
+		);
+
+		await runDistributeBuild(plan, bunDistribution(), io);
+
+		for (const staged of [
+			join(plan.stageDir, "root", "skills", "leak"),
+			join(plan.stageDir, "darwin-arm64", "bin", "skills", "leak"),
+		]) {
+			expect(lstatSync(staged).isSymbolicLink()).toBe(true);
+		}
+	});
+
 	it("rejects artifacts inside stage-dir and the reserved bin directory", async () => {
 		const packageJson = { name: "artifact-stage-cli", version: "0.1.0" };
 		const stageDir = join(tmpDir, ".stage");
@@ -251,20 +375,106 @@ describe("runDistributeBuild", () => {
 		await expect(
 			runDistributeBuild(
 				createPlan(tmpDir, packageJson, { stageDir, validate: true, outDir: nestedOutDir }),
-				{
-					io,
-					execute: fakeExecutor,
-				},
+				bunDistribution(),
+				io,
 			),
 		).rejects.toThrow("--stage-dir cannot contain the artifact output directory");
 
 		const outDir = join(tmpDir, "dist-bin");
 		mkdirSync(join(outDir, "bin"), { recursive: true });
 		await expect(
-			runDistributeBuild(createPlan(tmpDir, packageJson, { validate: true, outDir }), {
+			runDistributeBuild(
+				createPlan(tmpDir, packageJson, { validate: true, outDir }),
+				bunDistribution(),
 				io,
-				execute: fakeExecutor,
-			}),
+			),
 		).rejects.toThrow('Artifact directory "bin"');
+	});
+
+	it("stages crust.include directories beside Extension artifacts", async () => {
+		const outDir = join(tmpDir, "dist");
+		mkdirSync(join(outDir, "skills"), { recursive: true });
+		mkdirSync(join(tmpDir, "templates", "base"), { recursive: true });
+		mkdirSync(join(tmpDir, "assets"), { recursive: true });
+		writeFileSync(join(tmpDir, "templates", "base", "README.md"), "template\n");
+		writeFileSync(join(tmpDir, "assets", "logo.txt"), "logo\n");
+		const packageJson = {
+			name: "include-cli",
+			version: "0.1.0",
+			crust: { include: ["templates", "./assets"] },
+		};
+
+		const bunPlan = createPlan(tmpDir, packageJson, { validate: true, outDir });
+		await runDistributeBuild(bunPlan, bunDistribution(), io);
+		expect(
+			readJson<{ files: string[] }>(join(bunPlan.stageDir, "root", "package.json")).files,
+		).toEqual(["bin", "skills", "templates", "assets"]);
+		expect(
+			readFileSync(join(bunPlan.stageDir, "root", "templates", "base", "README.md"), "utf8"),
+		).toBe("template\n");
+		expect(
+			readFileSync(join(bunPlan.stageDir, "darwin-arm64", "bin", "assets", "logo.txt"), "utf8"),
+		).toBe("logo\n");
+
+		// Root-only packages have no platform bin to copy into; the root copy is the only one.
+		const nodePlan = createPlan(tmpDir, packageJson, { stageDir: join(tmpDir, ".node-stage") });
+		await runDistributeBuild(nodePlan, rootOnlyDistribution, io);
+		expect(
+			readJson<{ files: string[] }>(join(nodePlan.stageDir, "root", "package.json")).files,
+		).toEqual(["bin", "templates", "assets"]);
+		expect(existsSync(join(nodePlan.stageDir, "root", "assets", "logo.txt"))).toBe(true);
+		expect(existsSync(join(nodePlan.stageDir, "darwin-arm64"))).toBe(false);
+	});
+
+	it("rejects crust.include entries that escape cwd, are missing, or collide", async () => {
+		const outDir = join(tmpDir, "dist");
+		mkdirSync(join(outDir, "skills"), { recursive: true });
+		mkdirSync(join(tmpDir, "skills"), { recursive: true });
+		mkdirSync(join(tmpDir, "bin"), { recursive: true });
+		mkdirSync(join(tmpDir, ".stage", "nested"), { recursive: true });
+		mkdirSync(join(tmpDir, "skills", "sub"), { recursive: true });
+		mkdirSync(join(tmpDir, "assets"), { recursive: true });
+		symlinkSync(tmpdir(), join(tmpDir, "escape"), "dir");
+		// Nested escapes: a symlinked file directly inside the include dir, and one
+		// only reachable through an in-project symlinked directory.
+		mkdirSync(join(tmpDir, "templates", "deep"), { recursive: true });
+		symlinkSync(join(tmpDir, "LICENSE"), join(tmpDir, "templates", "ok.txt"), "file");
+		symlinkSync(tmpdir(), join(tmpDir, "templates", "deep", "leak"), "dir");
+		mkdirSync(join(tmpDir, "hop", "real"), { recursive: true });
+		symlinkSync(join(tmpDir, "templates", "deep"), join(tmpDir, "hop", "real", "via"), "dir");
+		mkdirSync(join(tmpDir, "hopper"));
+		symlinkSync(join(tmpDir, "hop", "real"), join(tmpDir, "hopper", "link"), "dir");
+		const stage = (include: JsonValue, validate = false, stageDir = join(tmpDir, ".stage")) =>
+			runDistributeBuild(
+				createPlan(
+					tmpDir,
+					{ name: "include-cli", version: "0.1.0", crust: { include } },
+					{ validate, outDir, stageDir },
+				),
+				bunDistribution(),
+				io,
+			);
+
+		await expect(stage("templates")).rejects.toThrow("crust.include must be an array");
+		await expect(stage(["../outside"])).rejects.toThrow("inside the project root");
+		await expect(stage([join(tmpDir, "src")])).rejects.toThrow("inside the project root");
+		await expect(stage(["."])).rejects.toThrow("inside the project root");
+		await expect(stage(["missing"])).rejects.toThrow("is not a directory");
+		await expect(stage(["src/cli.ts"])).rejects.toThrow("is not a directory");
+		await expect(stage([".stage/nested"])).rejects.toThrow("overlaps --stage-dir");
+		await expect(stage(["assets"], false, join(tmpDir, "assets", "npm"))).rejects.toThrow(
+			"overlaps --stage-dir",
+		);
+		await expect(stage(["escape"])).rejects.toThrow("resolves outside the project root");
+		await expect(stage(["templates"])).rejects.toThrow(
+			`resolves outside the project root: ${join("templates", "deep", "leak")}`,
+		);
+		await expect(stage(["hopper"])).rejects.toThrow(
+			`resolves outside the project root: ${join("hopper", "link", "via", "leak")}`,
+		);
+		await expect(stage(["bin"])).rejects.toThrow("generated npm bin directory");
+		await expect(stage(["src", "src"])).rejects.toThrow("already staged");
+		await expect(stage(["skills"], true)).rejects.toThrow("Extension artifact directory");
+		await expect(stage(["skills/sub"], true)).rejects.toThrow('overlaps "skills"');
 	});
 });

@@ -4,10 +4,12 @@ import {
 	existsSync,
 	mkdirSync,
 	readdirSync,
+	realpathSync,
 	rmSync,
+	statSync,
 	writeFileSync,
 } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import type { InvocationIO } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
@@ -16,11 +18,9 @@ import { isWithin } from "@crustjs/utils/path";
 
 import {
 	binaryFilename,
-	BUN_TARGETS,
-	type BunTarget,
-	execBuild,
 	resolveBaseName,
 	type TargetInfo,
+	type TargetTable,
 } from "./build-helpers.ts";
 
 const MAX_PACKAGE_NAME_LENGTH = 214;
@@ -40,7 +40,7 @@ const METADATA_KEYS = [
 type NpmOs = TargetInfo["os"];
 type NpmCpu = TargetInfo["cpu"];
 type NpmLibc = NonNullable<TargetInfo["libc"]>;
-type PlatformKey = (typeof BUN_TARGETS.info)[BunTarget]["platformKey"];
+type PlatformKey = TargetInfo["platformKey"];
 type PublishPackageMetadata = {
 	name: string;
 	version: string;
@@ -62,7 +62,8 @@ type PublishPackageMetadata = {
 };
 
 type RootPublishPackageJson = PublishPackageMetadata & {
-	optionalDependencies: Record<string, string>;
+	/** Absent for a root-only package: npm treats `{}` and a missing field alike, but the manifest stays honest. */
+	optionalDependencies?: Record<string, string>;
 	os?: never;
 	cpu?: never;
 	libc?: never;
@@ -92,8 +93,8 @@ type DistributionMetadata = {
 	rootPackageJson: PublishPackageMetadata;
 };
 
-type DistributionTarget = {
-	target: BunTarget;
+type DistributionTarget<T extends string = string> = {
+	target: T;
 	platformKey: PlatformKey;
 	targetAlias: string;
 	packageName: string;
@@ -197,9 +198,13 @@ function buildDistributionRootPackageJson(
 		bin: {
 			[metadata.commandName]: `bin/${metadata.commandName}.js`,
 		},
-		optionalDependencies: Object.fromEntries(
-			targets.map((target) => [target.packageName, metadata.version]),
-		),
+		...(targets.length > 0
+			? {
+					optionalDependencies: Object.fromEntries(
+						targets.map((target) => [target.packageName, metadata.version]),
+					),
+				}
+			: {}),
 		...(manPages.length > 0 ? { man: manPages.map((page) => `./man/${page}`) } : {}),
 	};
 
@@ -277,17 +282,18 @@ function resolveDistributionMetadata(
 	};
 }
 
-function resolveDistributionTarget(
+function resolveDistributionTarget<T extends string>(
+	table: TargetTable<T>,
 	stageDir: string,
 	baseName: string,
 	rootPackageName: string,
-	target: BunTarget,
-): DistributionTarget {
-	const info = BUN_TARGETS.info[target];
+	target: T,
+): DistributionTarget<T> {
+	const info = table.info[target];
 	const packageName = derivePlatformPackageName(rootPackageName, info.alias);
 	validatePackageNameLength(packageName);
 
-	const filename = binaryFilename(BUN_TARGETS, baseName, target);
+	const filename = binaryFilename(table, baseName, target);
 	const packageDir = resolve(stageDir, info.alias);
 
 	return {
@@ -301,7 +307,7 @@ function resolveDistributionTarget(
 		binaryFilename: filename,
 		os: info.os,
 		cpu: info.cpu,
-		...("libc" in info ? { libc: info.libc } : {}),
+		...(info.libc ? { libc: info.libc } : {}),
 	};
 }
 
@@ -491,11 +497,6 @@ function stageDistributionPackages(
 		join(rootDir, "package.json"),
 		buildDistributionRootPackageJson(metadata, targets, options),
 	);
-	writeFileSync(
-		join(rootBinDir, `${metadata.commandName}.js`),
-		generateDistributionJsResolver(metadata.commandName, targets),
-		{ mode: 0o755 },
-	);
 	copyRootReadme(cwd, rootDir);
 
 	for (const target of targets) {
@@ -510,33 +511,37 @@ function stageDistributionPackages(
 	writeDistributionManifest(stageDir, metadata, targets);
 }
 
-type DistributeBuildPlan = {
+export type DistributeBuildPlan = {
 	cwd: string;
 	entryPath: string;
 	name?: string;
-	minify: boolean;
-	targets: BunTarget[];
 	stageDir: string;
-	envFiles: readonly string[];
-	bunPlugins: readonly string[];
 	validate: boolean;
 	outDir: string;
 	userPackageJson: JsonValue | undefined;
 };
 
-type DistributeExecutor = (
-	entryPath: string,
-	outfilePath: string,
-	minify: boolean,
-	target: BunTarget,
-	envFiles: readonly string[],
-	cwd: string,
-	bunPlugins: readonly string[],
-) => Promise<void>;
+/**
+ * How the staged root `bin/<cmd>.js` gets its content. With a target table it
+ * is a generated launcher and `execute` compiles one binary per platform
+ * package; without one the package is root-only and `execute` writes the
+ * self-contained bundle to that path (Node).
+ */
+export type Distribution<T extends string> =
+	| {
+			table: TargetTable<T>;
+			targets: readonly T[];
+			execute: (entryPath: string, outfilePath: string, target: T) => Promise<void>;
+	  }
+	| {
+			table?: undefined;
+			execute: (entryPath: string, outfilePath: string) => Promise<void>;
+	  };
 
-export async function runDistributeBuild(
+export async function runDistributeBuild<T extends string>(
 	plan: DistributeBuildPlan,
-	options: { io: InvocationIO; execute?: DistributeExecutor },
+	distribution: Distribution<T>,
+	io: InvocationIO,
 ): Promise<void> {
 	const metadata = resolveDistributionMetadata(
 		plan.cwd,
@@ -544,60 +549,187 @@ export async function runDistributeBuild(
 		plan.name,
 		plan.userPackageJson,
 	);
-	const distributionTargets = plan.targets.map((target) =>
-		resolveDistributionTarget(plan.stageDir, metadata.baseName, metadata.rootPackageName, target),
-	);
+	const table = distribution.table;
+	const distributionTargets = table
+		? distribution.targets.map((target) =>
+				resolveDistributionTarget(
+					table,
+					plan.stageDir,
+					metadata.baseName,
+					metadata.rootPackageName,
+					target,
+				),
+			)
+		: [];
 
-	options.io.stdout(
-		`Staging ${bold(`${plan.targets.length}`)} distribution target(s) in ${dim(plan.stageDir)}...`,
+	io.stdout(
+		table
+			? `Staging ${bold(`${distributionTargets.length}`)} distribution target(s) in ${dim(plan.stageDir)}...`
+			: `Staging a root-only npm package in ${dim(plan.stageDir)}...`,
 	);
 
 	const artifactOutDir = plan.validate ? plan.outDir : undefined;
 	const artifacts = collectArtifacts(artifactOutDir, plan.stageDir);
+	const includeDirs = collectIncludeDirs(
+		plan.cwd,
+		plan.stageDir,
+		plan.userPackageJson,
+		artifacts.names,
+	);
 	stageDistributionPackages(plan.cwd, plan.stageDir, metadata, distributionTargets, {
-		artifactDirs: artifacts.names,
+		artifactDirs: [...artifacts.names, ...includeDirs],
 		manPages: artifacts.manPages,
 	});
 
-	if (artifactOutDir) {
-		const rootDir = join(plan.stageDir, "root");
-		for (const name of artifacts.names) {
-			const artifactDir = join(artifactOutDir, name);
-			cpSync(artifactDir, join(rootDir, name), { recursive: true });
-			// Runtime source resolution (e.g. packaged skills) falls back to
-			// dirname(process.execPath), which is a platform package's bin dir — the
-			// root package is unreachable from there, so each platform package ships
-			// its own copy of the artifacts.
-			for (const targetPackage of distributionTargets) {
-				cpSync(artifactDir, join(targetPackage.packageDir, "bin", name), { recursive: true });
-			}
+	const rootDir = join(plan.stageDir, "root");
+	// Only crust.include trees are dereferenced: collectIncludeDirs proved every
+	// symlink inside them resolves into the project. Artifact trees are not
+	// validated, so a symlink there is copied as a link rather than followed.
+	const copies = [
+		...(artifactOutDir
+			? artifacts.names.map((name) => ({
+					name,
+					sourceDir: join(artifactOutDir, name),
+					dereference: false,
+				}))
+			: []),
+		...includeDirs.map((name) => ({ name, sourceDir: join(plan.cwd, name), dereference: true })),
+	];
+	for (const { name, sourceDir, dereference } of copies) {
+		cpSync(sourceDir, join(rootDir, name), { recursive: true, dereference });
+		// Runtime source resolution (e.g. packaged skills) falls back to
+		// dirname(process.execPath), which is a platform package's bin dir — the
+		// root package is unreachable from there, so each platform package ships
+		// its own copy of the artifacts.
+		for (const targetPackage of distributionTargets) {
+			cpSync(sourceDir, join(targetPackage.packageDir, "bin", name), {
+				recursive: true,
+				dereference,
+			});
 		}
 	}
 
-	const execute = options.execute ?? execBuild;
-	for (const targetPackage of distributionTargets) {
-		const outfilePath = join(targetPackage.packageDir, targetPackage.binaryRelativePath);
-		options.io.stdout(`  ${cyan("→")} ${bold(targetPackage.targetAlias)}: ${dim(outfilePath)}`);
-		await execute(
-			plan.entryPath,
-			outfilePath,
-			plan.minify,
-			targetPackage.target,
-			plan.envFiles,
-			plan.cwd,
-			plan.bunPlugins,
+	const rootBinPath = join(rootDir, "bin", `${metadata.commandName}.js`);
+	if (table) {
+		writeFileSync(
+			rootBinPath,
+			generateDistributionJsResolver(metadata.commandName, distributionTargets),
+			{ mode: 0o755 },
 		);
+		for (const targetPackage of distributionTargets) {
+			const outfilePath = join(targetPackage.packageDir, targetPackage.binaryRelativePath);
+			io.stdout(`  ${cyan("→")} ${bold(targetPackage.targetAlias)}: ${dim(outfilePath)}`);
+			await distribution.execute(plan.entryPath, outfilePath, targetPackage.target);
+		}
+	} else {
+		io.stdout(`  ${cyan("→")} ${bold("root")}: ${dim(rootBinPath)}`);
+		await distribution.execute(plan.entryPath, rootBinPath);
 	}
 
 	const manifestPath = join(plan.stageDir, "manifest.json");
-	options.io.stdout(
-		`\n${green("✓")} Staged ${bold(`${plan.targets.length + 1}`)} npm package(s) successfully:`,
+	io.stdout(
+		`\n${green("✓")} Staged ${bold(`${distributionTargets.length + 1}`)} npm package(s) successfully:`,
 	);
-	options.io.stdout(`  ${join(plan.stageDir, "root")}`);
+	io.stdout(`  ${rootDir}`);
 	for (const targetPackage of distributionTargets) {
-		options.io.stdout(`  ${targetPackage.packageDir}`);
+		io.stdout(`  ${targetPackage.packageDir}`);
 	}
-	options.io.stdout(`\n${dim("Manifest:")} ${manifestPath}`);
+	io.stdout(`\n${dim("Manifest:")} ${manifestPath}`);
+}
+
+function isStringArray(value: JsonValue): value is readonly string[] {
+	return Array.isArray(value) && value.every((entry): entry is string => typeof entry === "string");
+}
+
+/**
+ * `crust.include` directories from the user's package.json, normalized to
+ * cwd-relative POSIX names. They are staged exactly like Extension artifacts.
+ */
+function collectIncludeDirs(
+	cwd: string,
+	stageDir: string,
+	userPackageJson: JsonValue | undefined,
+	artifactNames: readonly string[],
+): string[] {
+	if (userPackageJson === undefined || !isJsonObject(userPackageJson)) return [];
+	const crust = userPackageJson.crust;
+	if (crust === undefined || !isJsonObject(crust) || crust.include === undefined) return [];
+	const include = crust.include;
+	if (!isStringArray(include)) {
+		throw new Error(
+			'package.json crust.include must be an array of directory names relative to the project root, e.g. ["templates"].',
+		);
+	}
+
+	const names = [...artifactNames];
+	const includeDirs: string[] = [];
+	for (const entry of include) {
+		const dir = resolve(cwd, entry);
+		const name = relative(cwd, dir);
+		if (isAbsolute(entry) || name === "" || !isWithin(cwd, dir)) {
+			throw new Error(
+				`package.json crust.include entry ${JSON.stringify(entry)} must be a directory inside the project root ${cwd}.`,
+			);
+		}
+		if (!existsSync(dir) || !statSync(dir).isDirectory()) {
+			throw new Error(
+				`package.json crust.include entry ${JSON.stringify(entry)} is not a directory: ${dir}`,
+			);
+		}
+		// The lexical check above passes a symlink to anywhere, and the staged copy
+		// dereferences every symlink it meets, so the directory and everything
+		// reachable inside it must really live inside the project too.
+		assertResolvesInsideProject(cwd, entry, dir);
+		// Staging wipes stageDir first, and copying a directory into itself fails midway.
+		if (isWithin(stageDir, dir) || isWithin(dir, stageDir)) {
+			throw new Error(
+				`package.json crust.include entry ${JSON.stringify(entry)} overlaps --stage-dir ${stageDir}, which staging replaces.`,
+			);
+		}
+		if (name.split(sep)[0] === "bin") {
+			throw new Error(
+				`package.json crust.include entry ${JSON.stringify(entry)} conflicts with the generated npm bin directory.\n  Include a directory with a different top-level name.`,
+			);
+		}
+		const posixName = name.replaceAll(sep, "/");
+		// A nested include under an artifact name (or vice versa) would silently merge into it.
+		const overlap = names.find(
+			(staged) =>
+				staged === posixName ||
+				staged.startsWith(`${posixName}/`) ||
+				posixName.startsWith(`${staged}/`),
+		);
+		if (overlap !== undefined) {
+			throw new Error(
+				`package.json crust.include entry ${JSON.stringify(entry)} overlaps "${overlap}", which is already staged (duplicate include or Extension artifact directory).`,
+			);
+		}
+		names.push(posixName);
+		includeDirs.push(posixName);
+	}
+	return includeDirs;
+}
+
+/**
+ * Walks `dir` the way the dereferencing copy will (through symlinked
+ * directories) and rejects any path whose real location leaves the project.
+ */
+function assertResolvesInsideProject(cwd: string, entry: string, dir: string): void {
+	const realCwd = realpathSync(cwd);
+	const seen = new Set<string>();
+	const walk = (path: string): void => {
+		const real = realpathSync(path);
+		if (!isWithin(realCwd, real)) {
+			throw new Error(
+				`package.json crust.include entry ${JSON.stringify(entry)} resolves outside the project root: ${relative(cwd, path)} -> ${real}`,
+			);
+		}
+		// A symlink back to an ancestor would otherwise recurse forever.
+		if (seen.has(real) || !statSync(path).isDirectory()) return;
+		seen.add(real);
+		for (const child of readdirSync(path)) walk(join(path, child));
+	};
+	walk(dir);
 }
 
 type CollectedArtifacts = { names: string[]; manPages: string[] };

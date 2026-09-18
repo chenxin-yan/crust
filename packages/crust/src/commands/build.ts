@@ -1,5 +1,5 @@
 import { existsSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { defineCommand, type BuildReport, type InvocationIO } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
@@ -23,7 +23,7 @@ import {
 	buildEntrypoint,
 	type TargetTable,
 } from "../utils/build-helpers.ts";
-import { runDistributeBuild } from "../utils/distribute.ts";
+import { type Distribution, runDistributeBuild } from "../utils/distribute.ts";
 
 /**
  * Resolve the output file path for a single-target build.
@@ -66,19 +66,51 @@ function isBuildRuntime(value: JsonValue): value is BuildRuntime {
 	return typeof value === "string" && BUILD_RUNTIMES.some((runtime) => runtime === value);
 }
 
-function resolveBuildRuntimeFromPackageJson(
-	pkg: JsonValue | undefined,
-	override?: BuildRuntime,
-): BuildRuntime {
-	// --runtime is validated by the flag's `choices`; no re-check needed here.
-	if (override !== undefined) return override;
-	if (pkg === undefined) return "bun";
-	const configured = getConfiguredRuntime(pkg);
-	if (configured === undefined) return "bun";
-	if (isBuildRuntime(configured)) return configured;
-	throw new Error(
-		`Invalid package.json crust.runtime ${JSON.stringify(configured)}. Valid runtimes: ${BUILD_RUNTIMES.join(", ")}`,
+function hasDependency(pkg: JsonValue, name: string): boolean {
+	if (!isJsonObject(pkg)) return false;
+	return [pkg.dependencies, pkg.devDependencies].some(
+		(deps) => deps !== undefined && isJsonObject(deps) && name in deps,
 	);
+}
+
+const DENO_CONFIG_FILES = ["deno.json", "deno.jsonc"] as const;
+
+/** Where the build runtime came from, printed as `Runtime: <runtime> (<source>)`. */
+export type RuntimeSource =
+	| "from --runtime"
+	| "from package.json"
+	| `inferred from ${(typeof DENO_CONFIG_FILES)[number]}`
+	| "inferred from @types/node"
+	| "default";
+
+type ResolvedRuntime = { runtime: BuildRuntime; source: RuntimeSource };
+
+/**
+ * `--runtime` > package.json `crust.runtime` > inference > Bun. Inference uses
+ * only unambiguous signals: a Deno config file, or `@types/node` without
+ * `@types/bun`. Lockfiles say which package manager installed dependencies,
+ * not which runtime runs the CLI, so they are not consulted.
+ */
+export function resolveBuildRuntime(
+	pkg: JsonValue | undefined,
+	cwd: string,
+	override?: BuildRuntime,
+): ResolvedRuntime {
+	// --runtime is validated by the flag's `choices`; no re-check needed here.
+	if (override !== undefined) return { runtime: override, source: "from --runtime" };
+	const configured = pkg === undefined ? undefined : getConfiguredRuntime(pkg);
+	if (configured !== undefined) {
+		if (isBuildRuntime(configured)) return { runtime: configured, source: "from package.json" };
+		throw new Error(
+			`Invalid package.json crust.runtime ${JSON.stringify(configured)}. Valid runtimes: ${BUILD_RUNTIMES.join(", ")}`,
+		);
+	}
+	const denoConfig = DENO_CONFIG_FILES.find((file) => existsSync(join(cwd, file)));
+	if (denoConfig) return { runtime: "deno", source: `inferred from ${denoConfig}` };
+	if (pkg !== undefined && hasDependency(pkg, "@types/node") && !hasDependency(pkg, "@types/bun")) {
+		return { runtime: "node", source: "inferred from @types/node" };
+	}
+	return { runtime: "bun", source: "default" };
 }
 
 function printBuildReport(report: BuildReport, stdout: InvocationIO["stdout"]): void {
@@ -368,6 +400,7 @@ export type BuildFlags = {
 type CommonBuildPlan = {
 	cwd: string;
 	userPackageJson: JsonValue | undefined;
+	runtimeSource: RuntimeSource;
 	entryPath: string;
 	envFiles: string[];
 	bunPlugins: string[];
@@ -377,15 +410,11 @@ type CommonBuildPlan = {
 	warnings: string[];
 };
 
+type PackagePlan = { mode: "package"; name?: string; stageDir: string };
+
 type BunBuildPlan = CommonBuildPlan &
 	(
-		| {
-				runtime: "bun";
-				mode: "package";
-				name?: string;
-				targets: BunTarget[];
-				stageDir: string;
-		  }
+		| ({ runtime: "bun"; targets: BunTarget[] } & PackagePlan)
 		| {
 				runtime: "bun";
 				mode: "binary";
@@ -394,18 +423,26 @@ type BunBuildPlan = CommonBuildPlan &
 		  }
 	);
 
-type DenoBuildPlan = CommonBuildPlan & {
-	runtime: "deno";
-	mode: "binary";
-	outputs: Array<BinaryOutput<DenoTarget>>;
-	resolver: ResolverPlan;
-};
+type DenoBuildPlan = CommonBuildPlan &
+	(
+		| ({ runtime: "deno"; targets: DenoTarget[] } & PackagePlan)
+		| {
+				runtime: "deno";
+				mode: "binary";
+				outputs: Array<BinaryOutput<DenoTarget>>;
+				resolver: ResolverPlan;
+		  }
+	);
 
-type NodeBuildPlan = CommonBuildPlan & {
-	runtime: "node";
-	mode: "node";
-	outfilePath: string;
-};
+type NodeBuildPlan = CommonBuildPlan &
+	(
+		| ({ runtime: "node" } & PackagePlan)
+		| {
+				runtime: "node";
+				mode: "node";
+				outfilePath: string;
+		  }
+	);
 
 export type BuildPlan = BunBuildPlan | DenoBuildPlan | NodeBuildPlan;
 
@@ -462,23 +499,17 @@ function planBinaryOutputs<T extends string>(options: {
 
 export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 	const userPackageJson = readUserPackageJson(cwd);
-	const runtime = resolveBuildRuntimeFromPackageJson(userPackageJson, flags.runtime);
+	const { runtime, source: runtimeSource } = resolveBuildRuntime(
+		userPackageJson,
+		cwd,
+		flags.runtime,
+	);
 	const entryPath = resolve(cwd, flags.entry);
 	const envFiles = resolveEnvFilePaths(cwd, flags["env-file"]);
 
 	if (!existsSync(entryPath)) {
 		throw new Error(
 			`Entry file not found: ${entryPath}\n  Specify a valid entry file with --entry <path>`,
-		);
-	}
-	if (flags.package && runtime === "deno") {
-		throw new Error(
-			"--package does not yet support Deno builds.\n  Deno per-platform npm staging is reserved for a follow-up; build a specific target without --package for now.",
-		);
-	}
-	if (flags.package && runtime === "node") {
-		throw new Error(
-			"--package does not apply to Node builds.\n  Publish the generated JavaScript artifact as a normal npm package.",
 		);
 	}
 	if (flags.package && flags.outfile) {
@@ -515,6 +546,7 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 	const common = {
 		cwd,
 		userPackageJson,
+		runtimeSource,
 		entryPath,
 		envFiles,
 		bunPlugins,
@@ -529,7 +561,14 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 				: [],
 	};
 
+	const packagePlan = (): PackagePlan => ({
+		mode: "package",
+		...(flags.name === undefined ? {} : { name: flags.name }),
+		stageDir: resolve(cwd, flags["stage-dir"]),
+	});
+
 	if (runtime === "node") {
+		if (flags.package) return { ...common, runtime, ...packagePlan() };
 		return {
 			...common,
 			runtime,
@@ -553,16 +592,7 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 				"--outfile cannot be used when building for multiple targets.\n  Use --name to set the base binary name instead.",
 			);
 		}
-		if (flags.package) {
-			return {
-				...common,
-				runtime,
-				mode: "package",
-				...(flags.name === undefined ? {} : { name: flags.name }),
-				targets,
-				stageDir: resolve(cwd, flags["stage-dir"]),
-			};
-		}
+		if (flags.package) return { ...common, runtime, targets, ...packagePlan() };
 		return {
 			...common,
 			runtime,
@@ -579,11 +609,12 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 	}
 
 	const targets = resolveTargets(DENO_TARGETS, flags.target);
-	if (flags.outfile && targets.length > 1) {
+	if (!flags.package && flags.outfile && targets.length > 1) {
 		throw new Error(
 			"--outfile cannot be used when building for multiple targets.\n  Use --name to set the base binary name instead.",
 		);
 	}
+	if (flags.package) return { ...common, runtime, targets, ...packagePlan() };
 	return {
 		...common,
 		runtime,
@@ -597,6 +628,39 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 			packageJson: userPackageJson,
 		}),
 	};
+}
+
+/** `--package` for every runtime: Bun and Deno stage platform packages, Node a root-only bundle. */
+async function runPackageBuild(
+	plan: BuildPlan & PackagePlan,
+	cwd: string,
+	io: InvocationIO,
+): Promise<void> {
+	if (plan.runtime === "bun") {
+		const distribution: Distribution<BunTarget> = {
+			table: BUN_TARGETS,
+			targets: plan.targets,
+			execute: (entry, outfile, target) =>
+				execBuild(entry, outfile, plan.minify, target, plan.envFiles, cwd, plan.bunPlugins),
+		};
+		return runDistributeBuild(plan, distribution, io);
+	}
+	if (plan.runtime === "deno") {
+		const distribution: Distribution<DenoTarget> = {
+			table: DENO_TARGETS,
+			targets: plan.targets,
+			execute: (entry, outfile, target) => execDenoBuild(entry, outfile, target, cwd),
+		};
+		return runDistributeBuild(plan, distribution, io);
+	}
+	return runDistributeBuild(
+		plan,
+		{
+			execute: (entry, outfile) =>
+				execNodeBuild(entry, outfile, plan.minify, plan.envFiles, cwd, plan.bunPlugins),
+		},
+		io,
+	);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -660,7 +724,8 @@ export const buildCommand = defineCommand(
 					name: "runtime",
 					type: "string",
 					choices: BUILD_RUNTIMES,
-					description: "Build runtime (overrides package.json crust.runtime; defaults to bun)",
+					description:
+						"Build runtime (overrides package.json crust.runtime; otherwise inferred from deno.json or @types/node, defaulting to bun)",
 				},
 				{
 					name: "target",
@@ -706,7 +771,8 @@ export const buildCommand = defineCommand(
 				{
 					name: "package",
 					type: "boolean",
-					description: "Stage per-platform Bun npm packages in dist/npm",
+					description:
+						"Stage npm packages in dist/npm: a root package plus one per platform for Bun and Deno, a root-only bundle package for Node",
 					default: false,
 				},
 				{
@@ -720,6 +786,7 @@ export const buildCommand = defineCommand(
 				const cwd = process.cwd();
 				const io = { stdout, stderr };
 				const plan = planBuild(flags, cwd);
+				stdout(`${dim("Runtime:")} ${plan.runtime} ${dim(`(${plan.runtimeSource})`)}`);
 				for (const warning of plan.warnings) stderr(warning);
 				if (plan.validate) {
 					const { build } = await buildEntrypoint(
@@ -732,8 +799,8 @@ export const buildCommand = defineCommand(
 					printBuildReport(build, stdout);
 				}
 
-				if (plan.runtime === "bun" && plan.mode === "package") {
-					await runDistributeBuild(plan, { io });
+				if (plan.mode === "package") {
+					await runPackageBuild(plan, cwd, io);
 					return;
 				}
 

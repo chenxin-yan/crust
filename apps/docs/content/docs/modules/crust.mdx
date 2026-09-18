@@ -25,21 +25,21 @@ crust build --runtime node --name my-cli
 
 ### `crust build` options
 
-| Option                        | Type                          | Default      | Description                                                                                        |
-| ----------------------------- | ----------------------------- | ------------ | -------------------------------------------------------------------------------------------------- |
-| `-e, --entry`                 | string                        | `src/cli.ts` | Entry file path                                                                                    |
-| `-o, --outfile`               | string                        | none         | Output file path (single-target builds only)                                                       |
-| `-n, --name`                  | string                        | none         | Binary name (defaults to package.json name or entry filename)                                      |
-| `--minify`, `--no-minify`     | boolean                       | none         | Minify the output (default for bun and node; unsupported for deno)                                 |
-| `--runtime`                   | string: `bun \| deno \| node` | none         | Build runtime (overrides package.json crust.runtime; defaults to bun)                              |
-| `-t, --target`                | string, repeatable            | none         | Canonical compiler target(s). Omit to build all platforms for Bun or Deno.                         |
-| `--env-file`                  | string, repeatable            | none         | Explicit env file(s) used for build-time constants; repeatable                                     |
-| `--bun-plugin`                | string, repeatable            | none         | Bun bundler plugin module(s) to apply (default export); repeatable. Bun and Node builds only       |
-| `-d, --outdir`                | string                        | `dist`       | Output directory for build artifacts                                                               |
-| `-r, --resolver`              | string                        | `cli`        | Filename for the resolver script (multi-target builds, no extension)                               |
-| `--validate`, `--no-validate` | boolean                       | `true`       | Materialize command definitions before compiling; `--no-validate` also skips Extension build hooks |
-| `--package`                   | boolean                       | `false`      | Stage per-platform Bun npm packages in dist/npm                                                    |
-| `--stage-dir`                 | string                        | `dist/npm`   | Directory to stage npm packages into when using `--package`                                        |
+| Option                        | Type                          | Default      | Description                                                                                                                |
+| ----------------------------- | ----------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `-e, --entry`                 | string                        | `src/cli.ts` | Entry file path                                                                                                            |
+| `-o, --outfile`               | string                        | none         | Output file path (single-target builds only)                                                                               |
+| `-n, --name`                  | string                        | none         | Binary name (defaults to package.json name or entry filename)                                                              |
+| `--minify`, `--no-minify`     | boolean                       | none         | Minify the output (default for bun and node; unsupported for deno)                                                         |
+| `--runtime`                   | string: `bun \| deno \| node` | none         | Build runtime (overrides package.json crust.runtime; otherwise inferred from deno.json or @types/node, defaulting to bun)  |
+| `-t, --target`                | string, repeatable            | none         | Canonical compiler target(s). Omit to build all platforms for Bun or Deno.                                                 |
+| `--env-file`                  | string, repeatable            | none         | Explicit env file(s) used for build-time constants; repeatable                                                             |
+| `--bun-plugin`                | string, repeatable            | none         | Bun bundler plugin module(s) to apply (default export); repeatable. Bun and Node builds only                               |
+| `-d, --outdir`                | string                        | `dist`       | Output directory for build artifacts                                                                                       |
+| `-r, --resolver`              | string                        | `cli`        | Filename for the resolver script (multi-target builds, no extension)                                                       |
+| `--validate`, `--no-validate` | boolean                       | `true`       | Materialize command definitions before compiling; `--no-validate` also skips Extension build hooks                         |
+| `--package`                   | boolean                       | `false`      | Stage npm packages in dist/npm: a root package plus one per platform for Bun and Deno, a root-only bundle package for Node |
+| `--stage-dir`                 | string                        | `dist/npm`   | Directory to stage npm packages into when using `--package`                                                                |
 
 ### `crust publish` options
 
@@ -70,6 +70,26 @@ crust build --runtime node --outdir out
 ```
 
 Bun and Deno builds produce standalone binaries. Node builds produce one JavaScript bundle; see [Build and distribution](/docs/guide/build-and-distribution) for snapshot preparation and target rules.
+
+With `--package`, Bun and Deno stage a root package with a Node launcher plus one platform package per target, and Node stages a root-only package whose `bin/<command>.js` is the bundle. `crust publish` handles both shapes; see [Stage npm packages](/docs/guide/build-and-distribution#stage-npm-packages).
+
+## `package.json` configuration
+
+```json title="package.json"
+{
+  "crust": {
+    "runtime": "node",
+    "include": ["templates"]
+  }
+}
+```
+
+| Key             | Description                                                                                                                                                      |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `crust.runtime` | Build runtime when `--runtime` is omitted. Without it, `deno.json`/`deno.jsonc` selects Deno and `@types/node` without `@types/bun` selects Node; otherwise Bun. |
+| `crust.include` | Directories relative to the project root that `--package` copies into the staged root package (listed in `files`) and into each platform package's `bin/`.       |
+
+`crust.include` entries must be existing directories inside the project (symlinks are copied dereferenced, so every symlink inside them must also resolve inside the project), cannot be named `bin`, and cannot repeat an Extension artifact directory name. Plain `crust build` ignores them.
 
 ## Extension artifacts
 
