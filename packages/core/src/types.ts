@@ -447,12 +447,14 @@ export type InferArgValue<A extends ArgDef> = A extends {
 								: ResolveBaseType<A>
 							: ResolveBaseType<A> | undefined);
 
+// Accumulate duplicates so long positional actions do not exhaust instantiation depth.
 type DuplicateArgNames<
 	A extends readonly ArgDef[],
 	Seen extends string = never,
+	Duplicates extends string = never,
 > = A extends readonly [infer Head extends ArgDef, ...infer Tail extends readonly ArgDef[]]
-	? (Head["name"] & Seen) | DuplicateArgNames<Tail, Seen | Head["name"]>
-	: never;
+	? DuplicateArgNames<Tail, Seen | Head["name"], Duplicates | (Head["name"] & Seen)>
+	: Duplicates;
 
 type InferDuplicateArgs<A extends readonly ArgDef[]> = A extends readonly [
 	infer Head extends ArgDef,
