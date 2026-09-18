@@ -122,9 +122,24 @@ describe("resolveArtifactDir", () => {
 		expect(resolveArtifactDir("skills")).toBe(join(tmpDir, ".crust", "artifacts", "skills"));
 	});
 
+	it("reports artifact context for missing or broken source entrypoints", async () => {
+		const missing = join(tmpDir, "missing.ts");
+		const broken = join(tmpDir, "broken.ts");
+		await symlink(missing, broken, "file");
+		for (const entrypoint of [missing, broken]) {
+			process.argv[1] = entrypoint;
+			expect(() => resolveArtifactDir("skills")).toThrow(
+				`Could not resolve artifact "skills": could not resolve source entrypoint "${entrypoint}".`,
+			);
+		}
+	});
+
 	it("names the entrypoint when no package root is found from source", async () => {
 		process.argv[1] = join(tmpDir, "cli.ts");
-		expect(() => resolveArtifactDir("skills")).toThrow(join(tmpDir, "cli.ts"));
+		await writeFile(process.argv[1], "");
+		expect(() => resolveArtifactDir("skills")).toThrow(
+			`Could not resolve artifact "skills": no package.json was found above entrypoint "${process.argv[1]}".`,
+		);
 		process.argv.length = 1;
 		expect(() => resolveArtifactDir("skills")).toThrow("process.argv[1] (unset)");
 	});

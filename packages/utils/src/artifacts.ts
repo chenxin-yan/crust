@@ -48,7 +48,7 @@ function isCompiledExecutable(): boolean {
  *   links) — the output of the last `crust build`.
  *
  * @throws {Error} when `name` is not a single path segment, or in source mode
- *   when no `package.json` is found above `process.argv[1]`.
+ *   when the entrypoint cannot be resolved or has no enclosing `package.json`.
  */
 export function resolveArtifactDir(name: string): string {
 	if (name === "" || name === "." || name === ".." || /[\\/]/.test(name)) {
@@ -74,8 +74,19 @@ export function resolveArtifactDir(name: string): string {
 	if (buildOutDir) return join(buildOutDir, name);
 
 	const entrypoint = process.argv[1];
-	// Node keeps a source npm-link's consumer-side .bin path in argv[1].
-	const packageRoot = entrypoint ? findNearestPackageRoot(realpathSync(entrypoint)) : null;
+	let sourceEntrypoint = entrypoint;
+	if (entrypoint) {
+		try {
+			// Node keeps a source npm-link's consumer-side .bin path in argv[1].
+			sourceEntrypoint = realpathSync(entrypoint);
+		} catch (cause) {
+			throw new Error(
+				`Could not resolve artifact "${name}": could not resolve source entrypoint "${entrypoint}".`,
+				{ cause },
+			);
+		}
+	}
+	const packageRoot = sourceEntrypoint ? findNearestPackageRoot(sourceEntrypoint) : null;
 	if (!packageRoot) {
 		throw new Error(
 			`Could not resolve artifact "${name}": no package.json was found above ` +
