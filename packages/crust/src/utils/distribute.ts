@@ -5,15 +5,13 @@ import {
 	lstatSync,
 	mkdirSync,
 	readdirSync,
-	readlinkSync,
 	realpathSync,
 	statSync,
-	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-import type { InvocationIO } from "@crustjs/core";
+import type { BuildReport, InvocationIO } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
 import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
 import { isWithin } from "@crustjs/utils/path";
@@ -128,6 +126,8 @@ export type DistributionManifest = {
 		bins: Record<string, string>;
 	}>;
 	publishOrder: string[];
+	/** Extension build hook output per command; absent when `--no-validate` skipped the hooks. */
+	build?: Record<string, BuildReport>;
 };
 
 function readPackageJson(cwd: string, packageJson: JsonValue | undefined): UserPackageJson {
@@ -411,6 +411,7 @@ function writeDistributionManifest(
 	metadata: DistributionMetadata,
 	commands: readonly string[],
 	targets: readonly DistributionTarget[],
+	build: Record<string, BuildReport> | undefined,
 ): DistributionManifest {
 	const manifest: DistributionManifest = {
 		version: metadata.version,
@@ -429,6 +430,7 @@ function writeDistributionManifest(
 			bins: platformBinMap(commands, target),
 		})),
 		publishOrder: [...targets.map((target) => target.targetAlias), "root"],
+		...(build ? { build } : {}),
 	};
 
 	writeJson(join(stageDir, "manifest.json"), manifest);
@@ -496,10 +498,15 @@ export type Distribution<T extends string> =
 			execute: (entryPath: string, outfilePath: string) => Promise<void>;
 	  };
 
+/**
+ * Stages the npm tree in `plan.stageDir`. `build` is each command's Extension
+ * build hook report, recorded in `manifest.json`; omit it when the hooks did not run.
+ */
 export async function runDistributeBuild<T extends string>(
 	plan: DistributeBuildPlan,
 	distribution: Distribution<T>,
 	io: InvocationIO,
+	build?: Record<string, BuildReport>,
 ): Promise<void> {
 	const metadata = resolveDistributionMetadata(plan.cwd, plan.userPackageJson);
 	const commands = plan.entries.map((entry) => entry.command);
@@ -582,7 +589,7 @@ export async function runDistributeBuild<T extends string>(
 
 	// Written last: `crust publish` treats manifest.json as proof of a complete
 	// build, so a failed compile must not leave one behind.
-	writeDistributionManifest(plan.stageDir, metadata, commands, distributionTargets);
+	writeDistributionManifest(plan.stageDir, metadata, commands, distributionTargets, build);
 	const manifestPath = join(plan.stageDir, "manifest.json");
 	io.stdout(
 		`\n${green("✓")} Staged ${bold(`${distributionTargets.length + 1}`)} npm package(s) successfully:`,
@@ -677,15 +684,10 @@ function assertResolvesInsideProject(cwd: string, entry: string, dir: string): v
 
 /**
  * Copies one entry's Extension build hook output into the shared artifact
- * directory. Directories merge; a file, symlink, or file/directory mismatch at
- * a path another entry already produced is an error, so no entry's hooks can
- * replace another's output. `owners` maps merged POSIX-relative paths to the
- * command that wrote them and is shared across the entries of one build.
- *
- * Symlinks are copied as links, never followed. `entryOutDir` is deleted after
- * the merge, so a link's text must not point back into it: relative targets are
- * kept verbatim, absolute targets inside `entryOutDir` are rebased onto
- * `artifactDir`, and any other target is left exactly as the hook wrote it.
+ * directory. Directories merge; a file or file/directory mismatch at a path
+ * another entry already produced is an error, so no entry's hooks can replace
+ * another's output. `owners` maps merged POSIX-relative paths to the command
+ * that wrote them and is shared across the entries of one build.
  */
 export function mergeEntryArtifacts(
 	entryOutDir: string,
@@ -693,17 +695,6 @@ export function mergeEntryArtifacts(
 	command: string,
 	owners: Map<string, string>,
 ): void {
-	const copyLink = (source: string, destination: string): void => {
-		const target = readlinkSync(source);
-		const rebased =
-			isAbsolute(target) && isWithin(entryOutDir, target)
-				? join(artifactDir, relative(entryOutDir, target))
-				: target;
-		// Windows distinguishes file and directory links; the type comes from what
-		// the hook actually linked to, so a dangling link is created as a file link.
-		const linked = statSync(source, { throwIfNoEntry: false });
-		symlinkSync(rebased, destination, linked?.isDirectory() ? "dir" : "file");
-	};
 	const merge = (relativeDir: string): void => {
 		for (const dirent of readdirSync(join(entryOutDir, relativeDir), { withFileTypes: true })) {
 			const relativePath = relativeDir ? `${relativeDir}/${dirent.name}` : dirent.name;
@@ -715,9 +706,6 @@ export function mergeEntryArtifacts(
 				if (dirent.isDirectory()) {
 					mkdirSync(destination, { recursive: true });
 					merge(relativePath);
-				} else if (dirent.isSymbolicLink()) {
-					mkdirSync(dirname(destination), { recursive: true });
-					copyLink(source, destination);
 				} else {
 					mkdirSync(dirname(destination), { recursive: true });
 					copyFileSync(source, destination);

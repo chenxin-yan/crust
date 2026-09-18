@@ -153,19 +153,13 @@ console.log("hello from crust build test");
 			const projectDir = join(tmpDir, "two-entries");
 			mkdirSync(join(projectDir, "src"), { recursive: true });
 			// Names differ from the package name and the source filenames. Each entry's
-			// hook replaces `skills/` the way the skills Extension does; isolation keeps
-			// both, and `man/` pages with distinct names merge.
+			// `skills/` and `man/` directories merge into the shared artifact tree.
 			const entry = (name: string) =>
 				`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(corePath)};
-import { rmSync, mkdirSync, writeFileSync } from "node:fs";
-const hook = defineExtension(defineExtensionId("hook"), { build({ outDir }) {
-  rmSync(outDir + "/skills", { recursive: true, force: true });
-  mkdirSync(outDir + "/skills/${name}", { recursive: true });
-  mkdirSync(outDir + "/man", { recursive: true });
-  writeFileSync(outDir + "/skills/${name}/SKILL.md", "${name}");
-  writeFileSync(outDir + "/man/${name}.1", "${name}");
-  return ["skills/${name}/SKILL.md", "man/${name}.1"];
-} });
+const hook = defineExtension(defineExtensionId("hook"), { build: () => [
+  { path: "skills/${name}/SKILL.md", content: "${name}" },
+  { path: "man/${name}.1", content: "${name}" },
+] });
 await new Crust("${name}").extend(hook).action(({ stdout }) => stdout("running ${name}")).execute();
 `;
 			writeFileSync(join(projectDir, "src", "first.ts"), entry("greet"));

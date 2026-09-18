@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { Crust } from "@crustjs/core";
+import { Crust, defineExtensionId } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import type { JsonValue } from "@crustjs/utils/json";
 
@@ -29,6 +29,7 @@ import {
 	resolveTargets,
 	type TargetTable,
 } from "../utils/build-helpers.ts";
+import type { DistributionManifest } from "../utils/distribute.ts";
 import {
 	type BuildFlags,
 	buildCommand,
@@ -40,6 +41,10 @@ import {
 } from "./build.ts";
 
 const host = hostTarget(BUN_TARGETS);
+
+function readManifest(path: string): DistributionManifest {
+	return JSON.parse(readFileSync(path, "utf8")) as DistributionManifest;
+}
 
 describe("env file helpers", () => {
 	const tmpDir = mkdtempSync(join(tmpdir(), "crust-env-files-"));
@@ -628,9 +633,9 @@ describe("buildCommand error handling", () => {
 			writeFileSync(
 				join(tmpDir, "src", "cli.ts"),
 				`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(corePath)};\n` +
-					`const artifact = defineExtension(defineExtensionId("artifact"), { build: async ({ outDir }) => { await Bun.write(outDir + "/artifact.txt", "built"); return ["artifact.txt", "second.txt", "third.txt", "fourth.txt"]; } });\n` +
-					`const unknown = defineExtension(defineExtensionId("unknown-extension"), { build() {} });\n` +
-					`await new Crust("artifact-cli").extend(artifact, unknown).action(() => {}).execute();\n`,
+					`const artifact = defineExtension(defineExtensionId("artifact"), { build: () => ["artifact.txt", "second.txt", "third.txt", "fourth.txt"].map((path) => ({ path, content: "built" })) });\n` +
+					`const empty = defineExtension(defineExtensionId("empty-extension"), { build: () => [] });\n` +
+					`await new Crust("artifact-cli").extend(artifact, empty).action(() => {}).execute();\n`,
 			);
 
 			process.cwd = () => tmpDir;
@@ -645,13 +650,25 @@ describe("buildCommand error handling", () => {
 				expect(result.exitCode, result.stderr).toBe(0);
 				expect(result.stdout).toContain(
 					"Preparing Command Snapshot for artifact-cli...\n" +
-						"  artifact           4 files  artifact.txt, second.txt, third.txt, +1 more\n" +
-						"  unknown-extension  ran (artifacts not reported)",
+						"  artifact         4 files  artifact.txt, second.txt, third.txt, +1 more\n" +
+						"  empty-extension  0 files",
 				);
+				expect(result.stdout).not.toContain("not reported");
 				expect(readFileSync(join(tmpDir, ".crust", "artifacts", "artifact.txt"), "utf-8")).toBe(
 					"built",
 				);
-				expect(existsSync(join(tmpDir, ".crust", "manifest.json"))).toBe(true);
+				// The manifest records the same report the summary printed, per bin.
+				expect(readManifest(join(tmpDir, ".crust", "manifest.json")).build).toEqual({
+					"artifact-cli": {
+						extensions: [
+							{
+								id: defineExtensionId("artifact"),
+								files: ["artifact.txt", "second.txt", "third.txt", "fourth.txt"],
+							},
+							{ id: defineExtensionId("empty-extension"), files: [] },
+						],
+					},
+				});
 				expect(existsSync(join(tmpDir, ".crust", BUN_TARGETS.info[host!].alias, "bin"))).toBe(true);
 			} finally {
 				process.cwd = originalCwd;
@@ -664,12 +681,12 @@ describe("buildCommand error handling", () => {
 	describe.skipIf(host === null)("validated multi-entry builds", () => {
 		const tmpDir = mkdtempSync(join(tmpdir(), "crust-multi-entry-"));
 		const originalCwd = process.cwd;
-		/** An entry whose one Extension build hook writes `files` under outDir without reporting them. */
+		/** An entry whose one Extension build hook returns `files`. */
 		const writeEntry = (file: string, name: string, files: Record<string, string>) =>
 			writeFileSync(
 				join(tmpDir, "src", file),
 				`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(corePath)};\n` +
-					`const hook = defineExtension(defineExtensionId("hook"), { build: async ({ outDir }) => { for (const [path, content] of Object.entries(${JSON.stringify(files)})) await Bun.write(outDir + "/" + path, content); } });\n` +
+					`const hook = defineExtension(defineExtensionId("hook"), { build: () => Object.entries(${JSON.stringify(files)}).map(([path, content]) => ({ path, content })) });\n` +
 					`await new Crust(${JSON.stringify(name)}).extend(hook).action(() => {}).execute();\n`,
 			);
 		const build = (argv: string[]) =>
@@ -702,14 +719,30 @@ describe("buildCommand error handling", () => {
 			);
 			expect(existsSync(join(tmpDir, ".crust", "manifest.json"))).toBe(false);
 
-			// --no-validate skips the snapshots, and with them this check and the hooks.
+			// --no-validate skips the snapshots, and with them this check and the hooks;
+			// the manifest then carries no `build` rather than claiming hooks ran.
 			const unchecked = await build(["--no-validate"]);
 			expect(unchecked.exitCode, unchecked.stderr).toBe(0);
-			expect(existsSync(join(tmpDir, ".crust", "manifest.json"))).toBe(true);
+			expect(readManifest(join(tmpDir, ".crust", "manifest.json"))).not.toHaveProperty("build");
 			expect(existsSync(join(tmpDir, ".crust", "artifacts"))).toBe(false);
 		}, 60_000);
 
-		it("rejects colliding hook output across entries even when hooks report no files", async () => {
+		it("records one Build Report per bin in the manifest", async () => {
+			writeEntry("greet.ts", "greet", { "man/greet.1": ".Dd" });
+			writeEntry("admin.ts", "admin", { "man/admin.1": ".Dd", "skills/admin/SKILL.md": "---" });
+			const result = await build([]);
+			expect(result.exitCode, result.stderr).toBe(0);
+			expect(readManifest(join(tmpDir, ".crust", "manifest.json")).build).toEqual({
+				greet: { extensions: [{ id: defineExtensionId("hook"), files: ["man/greet.1"] }] },
+				admin: {
+					extensions: [
+						{ id: defineExtensionId("hook"), files: ["man/admin.1", "skills/admin/SKILL.md"] },
+					],
+				},
+			});
+		}, 60_000);
+
+		it("rejects colliding hook output across entries", async () => {
 			writeEntry("greet.ts", "greet", { "shared/config.json": "{}" });
 			writeEntry("admin.ts", "admin", { "shared/config.json": "{}", "man/admin.1": ".Dd" });
 			const result = await build([]);

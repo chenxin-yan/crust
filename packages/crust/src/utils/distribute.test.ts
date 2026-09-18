@@ -12,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { type BuildReport, defineExtensionId } from "@crustjs/core";
 import type { JsonValue } from "@crustjs/utils/json";
 
 import { BUN_TARGETS, type BunTarget, DENO_TARGETS, type DenoTarget } from "./build-helpers.ts";
@@ -454,6 +455,26 @@ describe("runDistributeBuild", () => {
 		expect(existsSync(join(plan.stageDir, "manifest.json"))).toBe(false);
 	});
 
+	it("records each bin's Build Report in the manifest, and omits the field when hooks did not run", async () => {
+		const plan = createPlan(tmpDir, { name: "my-cli", version: "0.1.0" });
+		const build = {
+			"test-cli": {
+				extensions: [{ id: defineExtensionId("crust:man"), files: ["man/test-cli.1"] }],
+			},
+		} satisfies Record<string, BuildReport>;
+
+		await runDistributeBuild({ ...plan, validate: true }, bunDistribution(), io, build);
+		expect(readJson<DistributionManifest>(join(plan.stageDir, "manifest.json")).build).toEqual(
+			build,
+		);
+
+		// --no-validate: hooks skipped, so the manifest must not claim they ran.
+		await runDistributeBuild(plan, bunDistribution(), io, undefined);
+		expect(readJson<DistributionManifest>(join(plan.stageDir, "manifest.json"))).not.toHaveProperty(
+			"build",
+		);
+	});
+
 	it("stages Extension artifact directories into root and platform packages without wiping them", async () => {
 		const plan = createPlan(
 			tmpDir,
@@ -614,17 +635,14 @@ describe("mergeEntryArtifacts", () => {
 	beforeEach(() => rmSync(tmpDir, { recursive: true, force: true }));
 	afterAll(() => rmSync(tmpDir, { recursive: true, force: true }));
 
-	it("merges distinct paths from every entry and keeps symlinks as links", () => {
+	it("merges distinct paths from every entry", () => {
 		write("greet/man/greet.1", "greet man\n");
 		write("greet/skills/greet/SKILL.md", "greet skill\n");
-		write("greet/loose.txt");
 		write("admin/man/admin.1", "admin man\n");
 		write("admin/skills/admin/SKILL.md", "admin skill\n");
-		symlinkSync(join(tmpDir, "greet", "loose.txt"), join(tmpDir, "admin", "link"), "file");
 		const owners = new Map<string, string>();
 
 		mergeEntryArtifacts(join(tmpDir, "greet"), artifactDir, "greet", owners);
-		// Simulates the skills hook: the second entry's own tree only ever held its own skill.
 		mergeEntryArtifacts(join(tmpDir, "admin"), artifactDir, "admin", owners);
 
 		expect(readFileSync(join(artifactDir, "man", "greet.1"), "utf8")).toBe("greet man\n");
@@ -635,36 +653,8 @@ describe("mergeEntryArtifacts", () => {
 		expect(readFileSync(join(artifactDir, "skills", "admin", "SKILL.md"), "utf8")).toBe(
 			"admin skill\n",
 		);
-		// An external link (outside the entry's own tree) is copied byte for byte.
-		expect(readlinkSync(join(artifactDir, "link"))).toBe(join(tmpDir, "greet", "loose.txt"));
 		expect(owners.get("man")).toBe("greet");
 		expect(owners.get("man/admin.1")).toBe("admin");
-	});
-
-	it("keeps hook symlinks resolvable after the entry's temporary directory is deleted", () => {
-		const entryDir = join(tmpDir, "entry");
-		write("entry/man/alpha.1", "alpha man page\n");
-		write("entry/skills/alpha/SKILL.md", "alpha skill\n");
-		// Relative link text is preserved; an absolute link into the entry tree is
-		// rebased onto the artifact directory; a link elsewhere is left alone.
-		symlinkSync("alpha.1", join(entryDir, "man", "alias.1"), "file");
-		symlinkSync(join(entryDir, "skills", "alpha"), join(entryDir, "skills", "latest"), "dir");
-		symlinkSync(join(tmpDir, "outside.txt"), join(entryDir, "external"), "file");
-		writeFileSync(join(tmpDir, "outside.txt"), "outside\n");
-
-		mergeEntryArtifacts(entryDir, artifactDir, "alpha", new Map());
-		rmSync(entryDir, { recursive: true });
-
-		expect(readlinkSync(join(artifactDir, "man", "alias.1"))).toBe("alpha.1");
-		expect(readFileSync(join(artifactDir, "man", "alias.1"), "utf8")).toBe("alpha man page\n");
-		expect(readlinkSync(join(artifactDir, "skills", "latest"))).toBe(
-			join(artifactDir, "skills", "alpha"),
-		);
-		expect(readFileSync(join(artifactDir, "skills", "latest", "SKILL.md"), "utf8")).toBe(
-			"alpha skill\n",
-		);
-		expect(readlinkSync(join(artifactDir, "external"))).toBe(join(tmpDir, "outside.txt"));
-		expect(readFileSync(join(artifactDir, "external"), "utf8")).toBe("outside\n");
 	});
 
 	it("rejects a file two entries both write, naming both commands", () => {
@@ -680,11 +670,10 @@ describe("mergeEntryArtifacts", () => {
 		expect(readFileSync(join(artifactDir, "man", "greet.1"), "utf8")).toBe("x\n");
 	});
 
-	it("rejects a directory in one entry that is a file or symlink in another", () => {
+	it("rejects a directory in one entry that is a file in another", () => {
 		write("greet/skills/tool");
 		write("admin/skills/tool/SKILL.md");
-		mkdirSync(join(tmpDir, "third", "skills"), { recursive: true });
-		symlinkSync(join(tmpDir, "greet"), join(tmpDir, "third", "skills", "tool"), "dir");
+		write("third/skills/tool");
 		const owners = new Map<string, string>();
 		mergeEntryArtifacts(join(tmpDir, "greet"), artifactDir, "greet", owners);
 

@@ -379,7 +379,7 @@ describe("buildEntrypoint", () => {
 		await writeFile(
 			entry,
 			`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(coreUrl)};\n` +
-				`const artifact = defineExtension(defineExtensionId("artifact"), { build: async ({ outDir }) => { await Bun.write(outDir + "/artifact.txt", "built"); return ["artifact.txt"]; } });\n` +
+				`const artifact = defineExtension(defineExtensionId("artifact"), { build: () => [{ path: "artifact.txt", content: "built" }] });\n` +
 				`const app = new Crust("fixture").extend(artifact).action(() => {});\n` +
 				`await app.execute();\n`,
 		);
