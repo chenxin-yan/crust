@@ -87,7 +87,8 @@ export function handler<Input extends ActionInput, Out>(
 
 /**
  * Pull a plain Crust Context by factory from inside a {@link handler} program.
- * Lazy like `ctx.<name>`; a name absent from the command path fails with
+ * Lazy like `ctx.<name>`; requires the same factory on the command path
+ * (including its `.of()` doubles). Missing or different factories fail with
  * Core's missing-context error as a `CrustDefinitionError`.
  */
 export function service<F extends AnyContextFactory>(
@@ -96,12 +97,15 @@ export function service<F extends AnyContextFactory>(
 	const name = factory.contextName;
 	return Effect.flatMap(HandlerInput, (input) =>
 		tryCrust((): Promise<FactoryValueOf<F>> => {
+			const ctx: ContextBag = input.ctx;
+			const sources = ctx[contextSources] ?? [];
+			const matches = sources.some((source) => "factory" in source && source.factory === factory);
+			// Factory identity justifies returning the factory-typed value; names alone do not.
 			const bag: Readonly<Record<string, Promise<FactoryValueOf<F>>>> = input.ctx;
-			// Names off the command path never reach the bag, so Core's missing-provider error is raised here.
-			if (Object.hasOwn(bag, name)) return bag[name]!;
+			if (matches && Object.hasOwn(bag, name)) return bag[name]!;
 			throw new CrustError(
 				"DEFINITION",
-				`No provider for Context "${name}". Add .provide(${name}(...)) to the app or an ancestor command.`,
+				`No matching provider for Context "${name}". Add .provide(${name}(...)) using the same factory passed to service(), or its .of() double, to the app or an ancestor command.`,
 				{ subject: "context", name, reason: "missing-context" },
 			);
 		}),
