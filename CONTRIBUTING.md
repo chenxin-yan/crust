@@ -67,6 +67,48 @@ node scripts/smoke-runtimes/smoke.mjs
 deno run --allow-env --allow-read --allow-write --allow-run --config scripts/smoke-runtimes/deno.json scripts/smoke-runtimes/smoke.mjs
 ```
 
+The installed-tool E2E smoke runs on Linux with Node, Bun and Git on PATH and
+verified npm **11.19.1**. After a current `bun run build`, run it directly (not
+through cached Turbo tests), provisioning npm outside the workspace:
+
+```sh
+npm_prefix=$(mktemp -d)
+npm install --global --prefix "$npm_prefix" --cache "$npm_prefix/cache" --ignore-scripts --no-audit --no-fund npm@11.19.1
+PATH="$npm_prefix/bin:$PATH" CREATE_CRUST_INSTALLED_SMOKE=1 bun test packages/create-crust/tests/installed-tools.smoke.test.ts
+rm -rf "$npm_prefix"
+```
+
+npm **10.9.8** returns a successful install but deletes the root `crust` shim when
+pruning incompatible optional platform packages that share its bin name. npm
+**11.19.1** is verified with Node **22.23.2**; this does not establish the minimum
+fixed npm version or support for every npm11 release. CI pins that npm version
+only for this new Linux step; existing scaffold/runtime coverage keeps its toolchain.
+
+It packs staged `create-crust` and `crust` root/host-platform artifacts, installs
+with npm outside the workspace, then scaffolds a Bun project and builds it through
+the actual installed command shims. It runs the generated CLI and checks output
+and exit status. Installed-copy-only removal probes verify template and platform
+resolution. Existing source/bootstrap, cross-runtime and PTY tests remain separate.
+
+The suite never rebuilds or modifies repository artifacts: current `.crust` staging
+for both tools and `dist` for core/extensions/style/store are prerequisites. Crust's
+root must retain the full manifest's optional dependencies, including incompatible
+platforms; the test rejects host-only staging, which can mask the npm10 bug. Existing
+build integration tests can replace staging with a host-only build, so rebuild all
+targets before this smoke if needed. Those unpublished libraries and the host optional package are explicitly provisioned via
+local tarballs (the host via npm overrides). Public registry access is still needed
+for the pinned npm toolchain, non-host optional package metadata, and the template's
+TypeScript/Bun typings and transitives; crust's update notifier
+can also contact the registry. Real Bun remains available for compilation. This
+is not offline/hermetic acquisition or published-registry optional-package selection
+coverage, nor coverage of other platforms, installers or no-Bun compilation.
+
+Unique `create-crust-installed-*` fixtures under `RUNNER_TEMP` or the system temp
+directory isolate npm cache/prefix and home state. Success removes them; failure
+prints the retained path (remove it manually after diagnosis). CI uploads only its
+`diagnostics/` command logs and manifests, not the large binaries or npm cache.
+Without `CREATE_CRUST_INSTALLED_SMOKE=1`, the test skips without creating a fixture.
+
 The OpenTUI compile smoke installs pinned packages from npm, so it is opt-in: `CRUST_TUI_SMOKE=1 bun test packages/crust/tests/tui-build.smoke.test.ts` (Linux/macOS).
 
 Before opening a pull request, always run:

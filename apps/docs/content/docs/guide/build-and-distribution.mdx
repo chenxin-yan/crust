@@ -122,6 +122,13 @@ my-cli --help
 
 Users install the root package; for Bun and Deno builds the package manager pulls only the platform package for their machine, and for Node builds the root package is the whole CLI. Yarn 2+ has no global install, so Yarn users run the CLI once with `yarn dlx` or add it to a project and run it with `yarn my-cli`.
 
+<Callout type="warn">
+  npm 10.9.8 can report a successful install but remove the root command shim while skipping
+  incompatible optional platform packages with the same bin name. Use npm 11.19.1, verified on Linux
+  with Node 22.23.2. The minimum fixed npm version has not been established; this does not imply
+  every npm11 release is fixed.
+</Callout>
+
 ### Publishing from CI
 
 `npm publish` runs inside each `.crust/<package>` directory, so a project-level `.npmrc` is not read. Authenticate with [trusted publishing](https://docs.npmjs.com/trusted-publishers), point `NPM_CONFIG_USERCONFIG` at an `.npmrc` you write in the workflow, or use `~/.npmrc`; `--registry` overrides the destination. npm reads `publishConfig.access` from each staged `package.json`, so a scoped public package needs `"publishConfig": { "access": "public" }` in its `package.json`, which `crust build` copies into every staged package.

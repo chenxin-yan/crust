@@ -13,6 +13,7 @@ on:
       - "packages/progress/**"
       - "packages/prompts/**"
       - "packages/style/**"
+      - "packages/store/**"
       - "packages/utils/**"
       - "package.json"
       - "bun.lock"
@@ -87,6 +88,25 @@ jobs:
         run: bun run --cwd packages/create-crust test:smoke
         env:
           CREATE_CRUST_SMOKE: "1"
+
+      - name: Run installed-tool smoke test (Linux/npm)
+        if: matrix.os == 'ubuntu-latest'
+        timeout-minutes: 10
+        # npm 10.9.8 deletes the root bin when pruning incompatible optional platforms.
+        # Keep the verified npm version local to this step; existing smoke keeps Node's npm.
+        run: |
+          npm install --global --prefix "$RUNNER_TEMP/installed-tool-npm" --cache "$RUNNER_TEMP/installed-tool-npm-cache" --ignore-scripts --no-audit --no-fund npm@11.19.1
+          PATH="$RUNNER_TEMP/installed-tool-npm/bin:$PATH" bun test packages/create-crust/tests/installed-tools.smoke.test.ts
+        env:
+          CREATE_CRUST_INSTALLED_SMOKE: "1"
+
+      - name: Upload installed-tool diagnostics on failure
+        if: failure() && matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v7
+        with:
+          name: create-crust-installed-${{ matrix.os }}
+          path: ${{ runner.temp }}/create-crust-installed-*/diagnostics/**
+          if-no-files-found: ignore
 
       - name: Upload smoke workspace on failure
         if: failure()
