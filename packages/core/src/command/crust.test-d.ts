@@ -208,6 +208,13 @@ function _typecheckRejectsInvalidCommandAliasShapesAtDefineCommand() {
 	defineCommand("issue", { aliases: ["issue"] }, (command) => command);
 }
 
+// accepts a definition union whose variants alias each other's canonical name
+function _typecheckAcceptsCrossAliasedDefinitionUnion(condition: boolean) {
+	const x = defineCommand("x", { aliases: ["y"] }, (command) => command);
+	const y = defineCommand("y", { aliases: ["x"] }, (command) => command);
+	void new Crust("app").add(condition ? x : y);
+}
+
 // types pulled capabilities and local values in actions
 function _typecheckTypesPulledCapabilitiesAndLocalValuesInActions() {
 	const verbose = defineFlag("verbose", { type: "boolean" });

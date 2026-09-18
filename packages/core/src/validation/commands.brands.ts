@@ -133,14 +133,20 @@ export type CommandDefinitionSpellings<D> = D extends unknown
 
 // Catches `.as()` renames that land on one of the definition's own aliases
 // (config-time AliasShapeError compares aliases against the original name only).
-type SelfAliasBrand<D> = DefNameMembers<D> &
-	AliasMembers<DefinitionAliases<D>> extends infer Dup extends string
-	? [Dup] extends [never]
-		? {}
-		: {
-				readonly FIX_ALIAS_SHAPE: `Command "${Dup}" must not list its own canonical name as an alias`;
-			}
-	: never;
+// Distributes over definition unions so `cond ? x : y` compares each variant's
+// name with its own aliases; the intersection keeps a `{}` variant from
+// absorbing a sibling's error brand.
+type SelfAliasBrand<D> = UnionToIntersection<
+	D extends unknown
+		? DefNameMembers<D> & AliasMembers<DefinitionAliases<D>> extends infer Dup extends string
+			? [Dup] extends [never]
+				? {}
+				: {
+						readonly FIX_ALIAS_SHAPE: `Command "${Dup}" must not list its own canonical name as an alias`;
+					}
+			: never
+		: never
+>;
 
 export type CommandCollisionBrand<
 	Spellings extends string,

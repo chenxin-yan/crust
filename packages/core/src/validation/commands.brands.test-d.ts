@@ -145,6 +145,21 @@ type Def<Name extends string, Aliases extends readonly string[] = readonly []> =
 			'Command "i" must not list its own canonical name as an alias'
 		>
 	>;
+	// variants of a definition union are compared with their own aliases only
+	type CrossAlias = ValidateCommandDefinitions<
+		readonly [Def<"x", readonly ["y"]> | Def<"y", readonly ["x"]>]
+	>;
+	type _crossAlias = Expect<Equal<keyof Omit<CrossAlias[0], "name" | "_aliases">, never>>;
+	// a valid variant does not absorb a self-aliased sibling's brand
+	type OneSelfAliased = ValidateCommandDefinitions<
+		readonly [Def<"x", readonly ["x"]> | Def<"y", readonly ["z"]>]
+	>;
+	type _oneSelfAliased = Expect<
+		Equal<
+			OneSelfAliased[0]["FIX_ALIAS_SHAPE"],
+			'Command "x" must not list its own canonical name as an alias'
+		>
+	>;
 	// open members still keep the attachment namespace open
 	type _spellings = Expect<Equal<CommandDefinitionSpellings<Def<"fixed" | Mixed>>, never>>;
 	type _aliasSpellings = Expect<
