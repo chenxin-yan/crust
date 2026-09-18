@@ -1,5 +1,13 @@
 import { afterEach, beforeAll, describe, expect, it } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	chmodSync,
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, delimiter, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -124,29 +132,37 @@ describe("create-crust CLI", () => {
 		expect(existsSync(join(projectDir, ".git"))).toBe(false);
 	}, 30_000);
 
-	it("finds its templates when launched through a .bin shim in another package root", async () => {
-		// npx and bun x run the CLI via <cache>/node_modules/.bin/create-crust, so process.argv[1]
-		// walks up to the cache's package.json, not to create-crust's own package root.
-		const tempRoot = makeTempRoot("create-crust-shim");
-		const binDir = join(tempRoot, "node_modules", ".bin");
-		mkdirSync(binDir, { recursive: true });
-		writeFileSync(join(tempRoot, "package.json"), '{"name":"launcher-cache"}', "utf-8");
-		const shim = join(binDir, "create-crust.mjs");
-		writeFileSync(shim, `await import(${JSON.stringify(pathToFileURL(builtCliPath).href)});\n`);
-		const projectDir = join(tempRoot, "my-cli");
+	it.each(["bundle", "source"])(
+		"finds %s templates through a .bin entry in another package root",
+		async (mode) => {
+			// npx and bun x run the CLI via <cache>/node_modules/.bin/create-crust, so process.argv[1]
+			// walks up to the cache's package.json, not to create-crust's own package root.
+			const tempRoot = makeTempRoot("create-crust-shim");
+			const binDir = join(tempRoot, "node_modules", ".bin");
+			mkdirSync(binDir, { recursive: true });
+			writeFileSync(join(tempRoot, "package.json"), '{"name":"launcher-cache"}', "utf-8");
+			const shim = join(binDir, mode === "source" ? "create-crust" : "create-crust.mjs");
+			if (mode === "source") {
+				symlinkSync(join(packageRoot, "src", "index.ts"), shim, "file");
+			} else {
+				writeFileSync(shim, `await import(${JSON.stringify(pathToFileURL(builtCliPath).href)});\n`);
+			}
+			const projectDir = join(tempRoot, "my-cli");
 
-		const result = await runCreateCrust(
-			[projectDir, "--runtime", "bun", "--no-install", "--no-git"],
-			{ cwd: tempRoot, entrypoint: shim },
-		);
+			const result = await runCreateCrust(
+				[projectDir, "--runtime", "bun", "--no-install", "--no-git"],
+				{ cwd: tempRoot, entrypoint: shim },
+			);
 
-		expect(result.stderr).not.toContain("Template directory");
-		expect(result.exitCode).toBe(0);
-		expect(result.stdout).toContain("Created my-cli!");
-		expect(existsSync(join(projectDir, "src", "cli.ts"))).toBe(true);
-		const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf-8"));
-		expect(pkg.scripts.dev).toBe("bun run src/cli.ts");
-	}, 30_000);
+			expect(result.stderr).not.toContain("Template directory");
+			expect(result.exitCode).toBe(0);
+			expect(result.stdout).toContain("Created my-cli!");
+			expect(existsSync(join(projectDir, "src", "cli.ts"))).toBe(true);
+			const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf-8"));
+			expect(pkg.scripts.dev).toBe("bun run src/cli.ts");
+		},
+		30_000,
+	);
 
 	it("scaffolds a Node runtime project through the real CLI", async () => {
 		const tempRoot = makeTempRoot("create-crust-node");
