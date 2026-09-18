@@ -9,7 +9,7 @@ export const webDocs = defineExtension(WEB_DOCS, {
 			`# ${[snapshot.meta.name, ...path].join(" ")}`,
 			...sections.map((s) => `## ${s.title}\n${s.body}`),
 		]);
-		return [{ path: "docs.md", content: lines.join("\n\n") }];
+		return [{ path: "web-docs/docs.md", content: lines.join("\n\n") }];
 	},
 });
 
