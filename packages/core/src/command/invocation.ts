@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, posix, win32 } from "node:path";
 
 import { BUILD_OUT_DIR_ENV } from "@crustjs/utils/artifacts";
@@ -436,14 +436,30 @@ export async function executeInvocation(
 			const buildOutDir = process.env[BUILD_OUT_DIR_ENV];
 			if (buildOutDir) {
 				const extensions: Array<BuildReport["extensions"][number]> = [];
+				const owners = new Map<string, ExtensionId>();
 				for (const extension of base.extensions) {
 					if (!extension.build) continue;
 					try {
 						const artifacts = await extension.build({ snapshot, outDir: buildOutDir });
-						extensions.push({
-							id: extension.id,
-							files: artifacts === undefined ? "unknown" : artifacts.map(normalizeArtifactPath),
+						// Every path is checked before any file is written, so a rejected hook leaves nothing behind.
+						const files = artifacts.map((file) => {
+							const path = normalizeArtifactPath(file.path);
+							const owner = owners.get(path);
+							if (owner !== undefined) {
+								throw new Error(
+									`Artifact path "${path}" was already written by Extension "${owner}".`,
+								);
+							}
+							owners.set(path, extension.id);
+							return { path, content: file.content };
 						});
+						// ponytail: in-memory files; stream if an extension ever ships large binaries
+						for (const file of files) {
+							const target = join(buildOutDir, file.path);
+							await mkdir(dirname(target), { recursive: true });
+							await writeFile(target, file.content);
+						}
+						extensions.push({ id: extension.id, files: files.map((file) => file.path) });
 					} catch (error) {
 						const message = error instanceof Error ? error.message : String(error);
 						throw new Error(`Extension "${extension.id}" build failed: ${message}`, {
@@ -451,7 +467,8 @@ export async function executeInvocation(
 						});
 					}
 					// The hook sees the snapshot from before it starts; re-evaluating sections
-					// afterwards lets later hooks observe its outputs without mutating the frozen tree.
+					// after its files are on disk lets later hooks observe its outputs without
+					// mutating the frozen tree.
 					snapshot = takeSnapshot();
 				}
 				await writeFile(

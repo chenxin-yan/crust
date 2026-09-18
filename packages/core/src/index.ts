@@ -12,6 +12,7 @@ export type {
 export { contextSources, defineContext } from "./api/context.ts";
 export type {
 	BuildArtifacts,
+	BuildFile,
 	BuildReport,
 	Extension,
 	ExtensionFactory,

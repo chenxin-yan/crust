@@ -26,6 +26,7 @@ function _metadataRequirements() {
 		},
 		build({ snapshot }) {
 			const _value: string = snapshot.meta.version;
+			return [];
 		},
 		sections(snapshot) {
 			const _value: string = snapshot.meta.version;
@@ -211,4 +212,20 @@ function _curriedInference() {
 	// @ts-expect-error Old explicit factory type arguments still constrain calls.
 	explicit(123);
 	explicit("value");
+}
+
+function _buildHookReturnsFiles() {
+	const ID = defineExtensionId("test:build");
+	defineExtension(ID, { build: () => [{ path: "man/app.1", content: ".Dd" }] });
+	defineExtension(ID, {
+		build: async () => [{ path: "assets/logo.png", content: new Uint8Array() }],
+	});
+	defineExtension(ID, {
+		// @ts-expect-error Core writes the returned files; a hook cannot write on its own and return nothing.
+		build() {},
+	});
+	defineExtension(ID, {
+		// @ts-expect-error Bare paths carry no content for core to write.
+		build: () => ["man/app.1"],
+	});
 }
