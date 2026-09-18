@@ -319,7 +319,7 @@ The intersection of two Context maps.
 
 `commands` entries are `defineCommand()` definitions contributed at the application root. `sections(snapshot)` returns an array of plain-text sections targeted by canonical command paths relative to that root; contributions append to each target's `meta.sections` in Extension registration order. Renderers filter audiences and merge exact same-title entries while preserving this body order.
 
-`build(ctx)` generates artifacts in Extension registration order when invoked by build tooling and may be async. It may return `BuildArtifacts`; its errors propagate to the caller. See [Extensions](/docs/guide/extensions).
+`build(ctx)` runs in Extension registration order when invoked by build tooling and may be async. It returns `BuildArtifacts`, the files for the tooling to write; its errors propagate to the caller. See [Extensions](/docs/guide/extensions).
 
 ### `ExtensionSectionContribution`
 
@@ -338,7 +338,13 @@ The entry shape inside the collection returned by `ExtensionConfig.sections(snap
   name="ExtensionBuildContext"
 />
 
-The build context contains the frozen root Command Snapshot and the resolved absolute output directory. Its optional `MetaKeys` type parameter refines required snapshot metadata fields.
+The build context contains the frozen root Command Snapshot and the resolved absolute output directory where the returned files are written. Its optional `MetaKeys` type parameter refines required snapshot metadata fields.
+
+### `BuildFile`
+
+<auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="BuildFile" />
+
+One file a build hook produces: a path relative to `outDir` and its `string` or `Uint8Array` content. Build tooling normalizes separators, rejects absolute or escaping paths, and rejects a path an earlier hook already produced.
 
 ### `BuildArtifacts`
 
@@ -347,13 +353,13 @@ The build context contains the frozen root Command Snapshot and the resolved abs
   name="BuildArtifacts"
 />
 
-File paths reported by a build hook, relative to its `outDir`. Build tooling normalizes separators and rejects absolute or escaping paths.
+The files returned by one build hook; an empty array means the hook ships nothing.
 
 ### `BuildReport`
 
 <auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="BuildReport" />
 
-One entry per executed build hook, in execution order. `files` is `"unknown"` when a hook returns nothing; an empty array explicitly reports that the hook wrote no files.
+One entry per executed build hook, in execution order, listing exactly the files build tooling wrote for it. `crust build` records this per `bin` entry under `build` in `.crust/manifest.json`.
 
 ### `Extension`
 

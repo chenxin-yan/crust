@@ -91,7 +91,7 @@ With `--output-dir`, the required `<shell>` still selects a valid invocation, bu
 .crust/artifacts/completions/my-cli.fish
 ```
 
-The build hook writes these files as artifacts owned by `crust:completion`. Set `binName` when the installed binary differs from the root command name.
+The build hook renders these three files; `crust build` writes them and records them as artifacts owned by `crust:completion`. Set `binName` when the installed binary differs from the root command name.
 
 ### Saved files and autoload
 

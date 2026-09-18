@@ -118,13 +118,13 @@ A consumer is any Extension identity that reads sections. `help` renders the cur
   ../../../examples/extensions/build.ts
 </include>
 
-Use a build hook when an Extension must generate files alongside the CLI. It receives the frozen Command Snapshot and absolute output directory, then returns artifact paths relative to that directory.
+Use a build hook when an Extension must generate files alongside the CLI. It receives the frozen Command Snapshot and returns the files to ship, each a path relative to the output directory plus its `string` or `Uint8Array` content. Core validates every path, rejects a path another hook already produced, writes the files, and records exactly what it wrote; the hook itself touches no disk.
 
 ```text
-Preparing Command Snapshot...
+Preparing Command Snapshot for my-cli...
   acme:manifest  1 file  acme-manifest/manifest.json
 ```
 
-Hooks run in `.extend()` registration order, and section callbacks are re-evaluated after each one, so a later hook's snapshot reflects what earlier hooks wrote: register `skill()` before `man()` for the man page to list packaged skills. During this step [`resolveArtifactDir(name)`](/docs/api/crust#resolveartifactdirname) points at the build output directory rather than `.crust/root/`, which the build has already wiped.
+Hooks run in `.extend()` registration order, and section callbacks are re-evaluated after each hook's files are written, so a later hook's snapshot reflects what earlier hooks produced: register `skill()` before `man()` for the man page to list packaged skills. During this step [`resolveArtifactDir(name)`](/docs/api/crust#resolveartifactdirname) points at the build output directory rather than `.crust/root/`, which the build has already wiped; `ctx.outDir` is that directory, useful only to read earlier hooks' files or to point an external tool at the tree.
 
-For package staging, give each build hook a unique top-level directory and clean it before writing. See [`ExtensionBuildContext`](/docs/api/types#extensionbuildcontext) and [`BuildArtifacts`](/docs/api/types#buildartifacts) for the contracts.
+For package staging, give each build hook a unique top-level directory. See [`ExtensionBuildContext`](/docs/api/types#extensionbuildcontext), [`BuildFile`](/docs/api/types#buildfile), and [`BuildArtifacts`](/docs/api/types#buildartifacts) for the contracts.

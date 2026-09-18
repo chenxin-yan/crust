@@ -113,8 +113,8 @@ Every key is optional. Any other key under `crust` is an error that lists the al
 └── completions/
 ```
 
-Registered Extensions own build artifacts. `man()`, `skill()`, and `completion()` write the directories shown when registered, and `crust build` copies each top-level directory into `.crust/root/` and every platform package's `bin/`. A CLI reads them back with [`resolveArtifactDir(name)`](/docs/api/crust#resolveartifactdirname).
+Registered Extensions own build artifacts. `man()`, `skill()`, and `completion()` return the files shown when registered; `crust build` writes them, copies each top-level directory into `.crust/root/` and every platform package's `bin/`, and records every written path per `bin` entry under `build` in `.crust/manifest.json`. A CLI reads the directories back with [`resolveArtifactDir(name)`](/docs/api/crust#resolveartifactdirname).
 
-With several `bin` entries, each entry's hooks run in their own temporary directory and the results are merged into `.crust/artifacts/`. Directories merge, so `man/greet.1` and `man/admin.1` coexist, but a path two entries both write (or a file in one and a directory in another) fails the build naming both commands; a hook that replaces its output directory, like `skill()`, therefore cannot erase another entry's files.
+With several `bin` entries, each entry's hooks run in their own temporary directory and the results are merged into `.crust/artifacts/`. Directories merge, so `man/greet.1` and `man/admin.1` coexist, but a path two entries both write (or a file in one and a directory in another) fails the build naming both commands.
 
-`--no-validate` skips snapshot preparation and all Extension build hooks, so no artifact directories are staged.
+`--no-validate` skips snapshot preparation and all Extension build hooks, so no artifact directories are staged and the manifest has no `build` field.
