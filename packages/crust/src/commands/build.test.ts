@@ -11,7 +11,6 @@ const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 
 import {
 	BUN_TARGETS,
-	binaryFilename,
 	bunBaselineAlias,
 	DENO_TARGETS,
 	hostTarget,
@@ -326,37 +325,6 @@ describe("resolveDenoTarget", () => {
 				`Did you mean "${target}"?`,
 			);
 		}
-	});
-
-	it("uses Deno target names and the Windows executable extension", () => {
-		expect(binaryFilename(DENO_TARGETS, "cli", "x86_64-unknown-linux-gnu")).toBe(
-			"cli-x86_64-unknown-linux-gnu",
-		);
-		expect(binaryFilename(DENO_TARGETS, "cli", "aarch64-pc-windows-msvc")).toBe(
-			"cli-aarch64-pc-windows-msvc.exe",
-		);
-	});
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Unit tests for getBinaryFilename
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("getBinaryFilename", () => {
-	it("returns <name>-<target> for non-Windows targets", () => {
-		expect(binaryFilename(BUN_TARGETS, "my-cli", "bun-linux-x64")).toBe("my-cli-bun-linux-x64");
-		expect(binaryFilename(BUN_TARGETS, "my-cli", "bun-darwin-arm64")).toBe(
-			"my-cli-bun-darwin-arm64",
-		);
-	});
-
-	it("appends .exe for Windows targets", () => {
-		expect(binaryFilename(BUN_TARGETS, "my-cli", "bun-windows-x64")).toBe(
-			"my-cli-bun-windows-x64.exe",
-		);
-		expect(binaryFilename(BUN_TARGETS, "my-cli", "bun-windows-arm64")).toBe(
-			"my-cli-bun-windows-arm64.exe",
-		);
 	});
 });
 

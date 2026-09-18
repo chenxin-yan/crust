@@ -37,8 +37,8 @@ export interface CompletionOptions {
 	/**
 	 * Binary name embedded in generated scripts (the `complete -F` target,
 	 * the `#compdef` line, the `complete -c <bin>` rules).
-	 * Applies to the runtime command and build hook; set it when `crust build --name`
-	 * or the npm bin key installs the CLI under a different name.
+	 * Applies to the runtime command and build hook; set it when the npm bin key
+	 * installs the CLI under a different name.
 	 *
 	 * @default The root command's `meta.name`
 	 */
@@ -171,8 +171,9 @@ export function renderFishCompletion(
  *   and the resulting files become drop-ins.
  *
  * **Build hook.** `crust build` writes the same three files under
- * `<outDir>/completions/`; `--package` stages that directory. The binary name
- * defaults to the snapshot's `meta.name`, unless `options.binName` is set.
+ * `.crust/artifacts/completions/`; staged builds copy it into the root package
+ * and each platform package's `bin/`. The binary name defaults to the
+ * snapshot's `meta.name`, unless `options.binName` is set.
  */
 // Configurable command names require an open command namespace.
 export const completion: ExtensionFactory<

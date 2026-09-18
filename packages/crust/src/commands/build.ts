@@ -403,7 +403,8 @@ export const buildCommand = defineCommand(
 					name: "target",
 					type: "string",
 					multiple: true,
-					description: "Canonical compiler target(s). Omit to build all platforms for Bun or Deno.",
+					description:
+						"Canonical compiler target(s). Omit to stage all Bun/Deno targets, or this machine's target with --outfile.",
 					short: "t",
 				},
 				{

@@ -206,7 +206,7 @@ Bun executables built by `crust build` autoload `.env` from the directory they s
 
 ## Set up `package.json`
 
-These are the files `create-crust --runtime bun|node|deno` scaffolds, with `{{name}}` and the version placeholders filled in. Every runtime shares the same flow: `build` stages `.crust/`, `start` runs `.crust/root/bin/<command>.js`, and `release` publishes with `crust publish`; `bin` points at the staged launcher so `npm link` works. The staged packages ignore this file's `bin`, `files`, and dependency fields.
+These are the files `create-crust --runtime bun|node|deno` scaffolds, with `{{name}}` and the version placeholders filled in. Every runtime shares the same flow: `build` stages `.crust/`, `start` runs `.crust/root/bin/<command>.js`, and `release` publishes with `crust publish`; `bin` points at the staged launcher so `npm link` works. The staged packages regenerate `bin` and `files` and omit dependency fields; an object `bin` supplies the installed command name.
 
 <Tabs items={["Bun", "Node", "Deno"]}>
 <Tab value="Bun">

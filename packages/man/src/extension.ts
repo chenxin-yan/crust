@@ -14,8 +14,8 @@ export interface ManOptions {
 	readonly section?: number;
 	/**
 	 * Installed command name used for the page title and filename. Defaults to
-	 * the application name; set it when `crust build --name` or the npm bin key
-	 * installs the CLI under a different name.
+	 * the application name; set it when the npm bin key installs the CLI under a
+	 * different name.
 	 */
 	readonly name?: string;
 }

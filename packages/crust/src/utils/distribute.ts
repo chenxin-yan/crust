@@ -15,7 +15,7 @@ import { bold, cyan, dim, green } from "@crustjs/style";
 import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
 import { isWithin } from "@crustjs/utils/path";
 
-import { binaryFilename, type TargetInfo, type TargetTable } from "./build-helpers.ts";
+import type { TargetInfo, TargetTable } from "./build-helpers.ts";
 
 /** Project-relative directory that `crust build` owns: wiped per build, read by `crust publish`. */
 export const CRUST_DIR = ".crust";
@@ -81,6 +81,9 @@ type UserPackageJson = Omit<PublishPackageMetadata, "bin"> & {
 	cpu?: [NpmCpu];
 	libc?: [NpmLibc];
 };
+
+/** Top-level directories and `man/` pages staged into the root package's `files`/`man` fields. */
+type StagingOptions = { artifactDirs: readonly string[]; manPages: readonly string[] };
 
 type DistributionMetadata = {
 	commandName: string;
@@ -159,7 +162,7 @@ function inferCommandName(baseName: string, bin: UserPackageJson["bin"]): string
 	const entries = Object.keys(bin);
 	if (entries.length !== 1) {
 		throw new Error(
-			"crust build currently supports exactly one bin entry.\n  Use a single bin command in package.json for split-package publishing.",
+			"crust build currently supports exactly one bin entry.\n  Use a single bin command in package.json for npm staging.",
 		);
 	}
 
@@ -174,10 +177,8 @@ function inferCommandName(baseName: string, bin: UserPackageJson["bin"]): string
 function buildDistributionRootPackageJson(
 	metadata: DistributionMetadata,
 	targets: readonly DistributionTarget[],
-	options?: { artifactDirs?: readonly string[]; manPages?: readonly string[] },
+	{ artifactDirs, manPages }: StagingOptions,
 ): RootPublishPackageJson {
-	const artifactDirs = options?.artifactDirs ?? [];
-	const manPages = options?.manPages ?? [];
 	const rootPackageJson: RootPublishPackageJson = {
 		...metadata.rootPackageJson,
 		name: metadata.rootPackageName,
@@ -280,7 +281,7 @@ function resolveDistributionTarget<T extends string>(
 	const packageName = derivePlatformPackageName(rootPackageName, info.alias);
 	validatePackageNameLength(packageName);
 
-	const filename = binaryFilename(table, baseName, target);
+	const filename = `${baseName}-${target}${info.os === "win32" ? ".exe" : ""}`;
 	const packageDir = resolve(stageDir, info.alias);
 
 	return {
@@ -435,18 +436,13 @@ function writeDistributionManifest(
 		packages: targets.map((target) => ({
 			target: target.targetAlias,
 			name: target.packageName,
-			dir: (relative(stageDir, target.packageDir) || ".").replaceAll("\\", "/"),
+			dir: target.targetAlias,
 			os: target.os,
 			cpu: target.cpu,
 			...(target.libc ? { libc: target.libc } : {}),
 			bin: target.binaryRelativePath.replaceAll("\\", "/"),
 		})),
-		publishOrder: [
-			...targets.map((target) =>
-				(relative(stageDir, target.packageDir) || ".").replaceAll("\\", "/"),
-			),
-			"root",
-		],
+		publishOrder: [...targets.map((target) => target.targetAlias), "root"],
 	};
 
 	writeJson(join(stageDir, "manifest.json"), manifest);
@@ -458,7 +454,7 @@ function stageDistributionPackages(
 	stageDir: string,
 	metadata: DistributionMetadata,
 	targets: readonly DistributionTarget[],
-	options?: { artifactDirs?: readonly string[]; manPages?: readonly string[] },
+	options: StagingOptions,
 ): void {
 	// No wipe here: the build command clears stageDir before Extension hooks fill
 	// stageDir/artifacts, which this function reads.
@@ -708,10 +704,8 @@ function collectArtifacts(artifactOutDir: string | undefined): CollectedArtifact
 		return { names: [], manPages: [] };
 	}
 
-	// ponytail: hooks own and clean unique top-level dirs in artifactOutDir; loose
-	// files are ignored and stale dirs get packaged. Add a manifest when hooks need
-	// file-level outputs, shared dirs, or conflict detection — hooks return declared
-	// paths, core writes one manifest; no filesystem diff-scanning, no legacy+manifest dual mode.
+	// Hooks own unique top-level directories; loose files are ignored. Staged
+	// builds clear previous output before hooks run.
 	const names = readdirSync(artifactOutDir, { withFileTypes: true })
 		.filter((entry) => entry.isDirectory())
 		.map((entry) => entry.name)

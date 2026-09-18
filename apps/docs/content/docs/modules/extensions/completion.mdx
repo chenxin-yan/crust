@@ -86,9 +86,9 @@ With `--output-dir`, the required `<shell>` still selects a valid invocation, bu
 ### Build artifacts
 
 ```text
-<outDir>/completions/my-cli
-<outDir>/completions/_my-cli
-<outDir>/completions/my-cli.fish
+.crust/artifacts/completions/my-cli
+.crust/artifacts/completions/_my-cli
+.crust/artifacts/completions/my-cli.fish
 ```
 
 The build hook writes these files as artifacts owned by `crust:completion`. Set `binName` when the installed binary differs from the root command name.

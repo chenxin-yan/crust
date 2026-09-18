@@ -79,7 +79,8 @@
 		".changeset/",
 		"**/CHANGELOG.md",
 		".pi/",
-		".worktrees/"
+		".worktrees/",
+		"packages/create-crust/templates/base/"
 	],
 	"overrides": [
 		{
