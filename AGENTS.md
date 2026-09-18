@@ -2,7 +2,7 @@
 
 - `bun:test`: `import { describe, expect, it, beforeEach, afterEach } from "bun:test"`
 - Unit tests: co-located (`src/foo.test.ts` beside `src/foo.ts`)
-- Compile-only type tests: co-located `src/foo.test-d.ts`; enforced by `bun run check:types`, not discovered by `bun test`. Must not import `bun:test` or use Bun globals; portable package sources are Bun-free by convention and CI has no grep guard for it (removed in 95084730), so review enforces this.
+- Compile-only type tests: co-located `src/foo.test-d.ts`; enforced by `bun run check:types`, not discovered by `bun test`.
 - Integration/smoke tests: package-local `packages/<pkg>/tests/`
 
 ## Documentation
