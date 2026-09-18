@@ -93,6 +93,23 @@ export function validatePublishManifest(stageDir: string, manifest: Distribution
 		throw new Error("Root staged package is missing a version field.");
 	}
 
+	const commands = manifest.root.bins;
+	if (!Array.isArray(commands) || commands.length === 0) {
+		throw new Error("manifest.json root.bins must list at least one command.");
+	}
+	if (new Set(commands).size !== commands.length) {
+		throw new Error("manifest.json root.bins must contain unique command names.");
+	}
+	for (const command of commands) {
+		if (rootPackageJson.bin?.[command] !== `bin/${command}.js`) {
+			throw new Error(`Root staged package is missing correct bin metadata for ${command}.`);
+		}
+	}
+
+	if (Object.keys(rootPackageJson.bin ?? {}).length !== commands.length) {
+		throw new Error("Root staged package commands do not match manifest.json root.bins.");
+	}
+
 	const optionalDeps = rootPackageJson.optionalDependencies ?? {};
 
 	for (const pkg of manifest.packages) {
@@ -106,8 +123,8 @@ export function validatePublishManifest(stageDir: string, manifest: Distribution
 			throw new Error("All staged package versions must match.");
 		}
 
-		if (!pkg.os || !pkg.cpu || !pkg.bin) {
-			throw new Error(`Manifest entry for ${pkg.dir} is missing os/cpu/bin metadata.`);
+		if (!pkg.os || !pkg.cpu || !pkg.bins) {
+			throw new Error(`Manifest entry for ${pkg.dir} is missing os/cpu/bins metadata.`);
 		}
 
 		if (!Array.isArray(stagedPackageJson.os) || stagedPackageJson.os[0] !== pkg.os) {
@@ -125,8 +142,20 @@ export function validatePublishManifest(stageDir: string, manifest: Distribution
 			throw new Error(`Staged package ${pkg.dir} is missing correct libc metadata.`);
 		}
 
-		if (stagedPackageJson.bin?.[manifest.root.bin] !== pkg.bin) {
-			throw new Error(`Staged package ${pkg.dir} is missing correct bin metadata.`);
+		for (const command of commands) {
+			const binary = pkg.bins[command];
+			if (binary === undefined || stagedPackageJson.bin?.[command] !== binary) {
+				throw new Error(
+					`Staged package ${pkg.dir} is missing correct bin metadata for ${command}.`,
+				);
+			}
+		}
+
+		if (
+			Object.keys(pkg.bins).length !== commands.length ||
+			Object.keys(stagedPackageJson.bin ?? {}).length !== commands.length
+		) {
+			throw new Error(`Staged package ${pkg.dir} commands do not match manifest.json root.bins.`);
 		}
 
 		if (optionalDeps[pkg.name] !== rootPackageJson.version) {

@@ -39,7 +39,7 @@ console.log(args.join(" ") || "resolver-ok");
 				name: "@scope/resolver-smoke",
 				version: "0.0.1",
 				bin: {
-					"resolver-smoke": "dist/cli",
+					"resolver-smoke": "src/cli.ts",
 				},
 			},
 			null,

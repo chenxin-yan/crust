@@ -39,6 +39,7 @@ beforeEach(async () => {
 	await writeFile(join(packageRoot, "package.json"), '{"name":"demo"}');
 	originalArgv1 = process.argv[1];
 	process.argv[1] = join(packageRoot, "src", "cli.ts");
+	await writeFile(process.argv[1], "");
 });
 
 afterEach(async () => {

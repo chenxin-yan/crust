@@ -1,10 +1,10 @@
 import { afterAll, beforeEach, describe, expect, it } from "bun:test";
 import {
 	existsSync,
-	lstatSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
+	readlinkSync,
 	rmSync,
 	symlinkSync,
 	writeFileSync,
@@ -15,7 +15,13 @@ import { join } from "node:path";
 import type { JsonValue } from "@crustjs/utils/json";
 
 import { BUN_TARGETS, type BunTarget, DENO_TARGETS, type DenoTarget } from "./build-helpers.ts";
-import { type DistributeBuildPlan, type Distribution, runDistributeBuild } from "./distribute.ts";
+import {
+	type DistributeBuildPlan,
+	type Distribution,
+	type DistributionManifest,
+	mergeEntryArtifacts,
+	runDistributeBuild,
+} from "./distribute.ts";
 
 const io = { stdout: () => {}, stderr: () => {} };
 
@@ -26,7 +32,7 @@ function createPlan(
 ): DistributeBuildPlan {
 	return {
 		cwd,
-		entryPath: join(cwd, "src", "cli.ts"),
+		entries: [{ command: "test-cli", entryPath: join(cwd, "src", "cli.ts") }],
 		stageDir: join(cwd, ".crust"),
 		validate: false,
 		outDir: join(cwd, ".crust", "artifacts"),
@@ -76,7 +82,7 @@ describe("runDistributeBuild", () => {
 			version: "0.1.0",
 			description: "CLI tooling",
 			crust: { runtime: "bun" },
-			bin: { "test-cli": "dist/cli" },
+			bin: { "test-cli": "src/cli.ts" },
 			publishConfig: { access: "public" },
 		};
 		const plan = createPlan(tmpDir, packageJson);
@@ -94,31 +100,28 @@ describe("runDistributeBuild", () => {
 			io,
 		);
 
-		const manifest = readJson<{
-			root: { name: string; dir: string; bin: string };
-			packages: Array<{ target: string; name: string; bin: string }>;
-			publishOrder: string[];
-		}>(join(plan.stageDir, "manifest.json"));
+		const manifest = readJson<DistributionManifest>(join(plan.stageDir, "manifest.json"));
 		expect(manifest.root).toEqual({
 			name: "@scope/test-package-cli",
 			dir: "root",
-			bin: "test-cli",
+			bins: ["test-cli"],
 		});
+		// Binaries are named after the command, not the package.
 		expect(manifest.packages).toEqual([
 			expect.objectContaining({
 				target: "linux-x64",
 				name: "@scope/test-package-cli-linux-x64",
-				bin: "bin/test-package-cli-bun-linux-x64",
+				bins: { "test-cli": "bin/test-cli-bun-linux-x64" },
 			}),
 			expect.objectContaining({
 				target: "linux-x64-musl",
 				name: "@scope/test-package-cli-linux-x64-musl",
-				bin: "bin/test-package-cli-bun-linux-x64-musl",
+				bins: { "test-cli": "bin/test-cli-bun-linux-x64-musl" },
 			}),
 			expect.objectContaining({
 				target: "windows-arm64",
 				name: "@scope/test-package-cli-windows-arm64",
-				bin: "bin/test-package-cli-bun-windows-arm64.exe",
+				bins: { "test-cli": "bin/test-cli-bun-windows-arm64.exe" },
 			}),
 		]);
 		expect(manifest.publishOrder).toEqual(["linux-x64", "linux-x64-musl", "windows-arm64", "root"]);
@@ -129,12 +132,14 @@ describe("runDistributeBuild", () => {
 				os: string[];
 				cpu: string[];
 				libc?: string[];
+				bin: Record<string, string>;
 				publishConfig?: Record<string, string>;
 			}>(join(plan.stageDir, dir, "package.json"));
 		expect(platformPackage("linux-x64")).toMatchObject({
 			os: ["linux"],
 			cpu: ["x64"],
 			libc: ["glibc"],
+			bin: { "test-cli": "bin/test-cli-bun-linux-x64" },
 		});
 		expect(platformPackage("linux-x64-musl")).toMatchObject({
 			os: ["linux"],
@@ -165,7 +170,9 @@ describe("runDistributeBuild", () => {
 			"@scope/test-package-cli-windows-arm64": "0.1.0",
 		});
 		const resolver = readFileSync(join(plan.stageDir, "root", "bin", "test-cli.js"), "utf8");
+		expect(resolver).toContain('const NAME = "test-cli";');
 		expect(resolver).toContain('"packagePathSegment": "test-package-cli-linux-x64"');
+		expect(resolver).toContain('"binaryFilename": "test-cli-bun-linux-x64"');
 		expect(resolver).toContain("Unsupported platform:");
 		expect(resolver).toContain('"linux-x64-musl": {');
 		expect(resolver).toContain("glibcVersionRuntime");
@@ -177,10 +184,107 @@ describe("runDistributeBuild", () => {
 		expect(resolver).toContain("process.exit(code ?? 0)");
 		expect(readFileSync(join(plan.stageDir, "root", "LICENSE"), "utf8")).toBe("test license\n");
 		expect(outputs).toEqual([
-			join(plan.stageDir, "linux-x64", "bin", "test-package-cli-bun-linux-x64"),
-			join(plan.stageDir, "linux-x64-musl", "bin", "test-package-cli-bun-linux-x64-musl"),
-			join(plan.stageDir, "windows-arm64", "bin", "test-package-cli-bun-windows-arm64.exe"),
+			join(plan.stageDir, "linux-x64", "bin", "test-cli-bun-linux-x64"),
+			join(plan.stageDir, "linux-x64-musl", "bin", "test-cli-bun-linux-x64-musl"),
+			join(plan.stageDir, "windows-arm64", "bin", "test-cli-bun-windows-arm64.exe"),
 		]);
+	});
+
+	it("stages one launcher and one binary per command in every package", async () => {
+		writeFileSync(join(tmpDir, "src", "admin.ts"), "export {};\n");
+		const plan = createPlan(
+			tmpDir,
+			{ name: "@scope/suite", version: "1.0.0" },
+			{
+				entries: [
+					{ command: "greet", entryPath: join(tmpDir, "src", "cli.ts") },
+					{ command: "admin", entryPath: join(tmpDir, "src", "admin.ts") },
+				],
+			},
+		);
+		const calls: Array<[string, string, BunTarget]> = [];
+
+		await runDistributeBuild(
+			plan,
+			bunDistribution(
+				["bun-linux-x64", "bun-windows-x64"],
+				async (entryPath, outfilePath, target) => {
+					calls.push([entryPath, outfilePath, target]);
+					await fakeExecutor(entryPath, outfilePath);
+				},
+			),
+			io,
+		);
+
+		// Each entry compiles from its own source, grouped by target.
+		expect(calls).toEqual([
+			[
+				join(tmpDir, "src", "cli.ts"),
+				join(plan.stageDir, "linux-x64", "bin", "greet-bun-linux-x64"),
+				"bun-linux-x64",
+			],
+			[
+				join(tmpDir, "src", "admin.ts"),
+				join(plan.stageDir, "linux-x64", "bin", "admin-bun-linux-x64"),
+				"bun-linux-x64",
+			],
+			[
+				join(tmpDir, "src", "cli.ts"),
+				join(plan.stageDir, "windows-x64", "bin", "greet-bun-windows-x64.exe"),
+				"bun-windows-x64",
+			],
+			[
+				join(tmpDir, "src", "admin.ts"),
+				join(plan.stageDir, "windows-x64", "bin", "admin-bun-windows-x64.exe"),
+				"bun-windows-x64",
+			],
+		]);
+		expect(
+			readJson<{ bin: Record<string, string>; optionalDependencies: Record<string, string> }>(
+				join(plan.stageDir, "root", "package.json"),
+			),
+		).toMatchObject({
+			bin: { greet: "bin/greet.js", admin: "bin/admin.js" },
+			// One platform package per target, never per command.
+			optionalDependencies: {
+				"@scope/suite-linux-x64": "1.0.0",
+				"@scope/suite-windows-x64": "1.0.0",
+			},
+		});
+		expect(
+			readJson<{ bin: Record<string, string> }>(join(plan.stageDir, "windows-x64", "package.json"))
+				.bin,
+		).toEqual({ greet: "bin/greet-bun-windows-x64.exe", admin: "bin/admin-bun-windows-x64.exe" });
+		expect(readFileSync(join(plan.stageDir, "root", "bin", "admin.js"), "utf8")).toContain(
+			'"binaryFilename": "admin-bun-linux-x64"',
+		);
+		expect(readJson<DistributionManifest>(join(plan.stageDir, "manifest.json"))).toMatchObject({
+			root: { bins: ["greet", "admin"] },
+			packages: [
+				expect.objectContaining({
+					dir: "linux-x64",
+					bins: { greet: "bin/greet-bun-linux-x64", admin: "bin/admin-bun-linux-x64" },
+				}),
+				expect.objectContaining({
+					dir: "windows-x64",
+					bins: { greet: "bin/greet-bun-windows-x64.exe", admin: "bin/admin-bun-windows-x64.exe" },
+				}),
+			],
+		});
+
+		// Root-only packages get one bundle per command.
+		const nodePlan = { ...plan, stageDir: join(tmpDir, ".node-stage") };
+		await runDistributeBuild(nodePlan, rootOnlyDistribution, io);
+		expect(readFileSync(join(nodePlan.stageDir, "root", "bin", "greet.js"), "utf8")).toBe(
+			"fake binary\n",
+		);
+		expect(readFileSync(join(nodePlan.stageDir, "root", "bin", "admin.js"), "utf8")).toBe(
+			"fake binary\n",
+		);
+		expect(readJson<DistributionManifest>(join(nodePlan.stageDir, "manifest.json"))).toMatchObject({
+			root: { bins: ["greet", "admin"] },
+			packages: [],
+		});
 	});
 
 	it("runs the executor once per target with the canonical target name", async () => {
@@ -220,21 +324,18 @@ describe("runDistributeBuild", () => {
 			io,
 		);
 
-		const manifest = readJson<{
-			packages: Array<{ target: string; name: string; bin: string; libc?: string }>;
-			publishOrder: string[];
-		}>(join(plan.stageDir, "manifest.json"));
+		const manifest = readJson<DistributionManifest>(join(plan.stageDir, "manifest.json"));
 		expect(manifest.packages).toEqual([
 			expect.objectContaining({
 				target: "linux-x64",
 				name: "@scope/deno-cli-linux-x64",
 				libc: "glibc",
-				bin: "bin/deno-cli-x86_64-unknown-linux-gnu",
+				bins: { "test-cli": "bin/test-cli-x86_64-unknown-linux-gnu" },
 			}),
 			expect.objectContaining({
 				target: "windows-arm64",
 				name: "@scope/deno-cli-windows-arm64",
-				bin: "bin/deno-cli-aarch64-pc-windows-msvc.exe",
+				bins: { "test-cli": "bin/test-cli-aarch64-pc-windows-msvc.exe" },
 			}),
 		]);
 		expect(manifest.publishOrder).toEqual(["linux-x64", "windows-arm64", "root"]);
@@ -250,18 +351,22 @@ describe("runDistributeBuild", () => {
 			"@scope/deno-cli-windows-arm64": "2.0.0",
 		});
 		expect(outputs).toEqual([
-			join(plan.stageDir, "linux-x64", "bin", "deno-cli-x86_64-unknown-linux-gnu"),
-			join(plan.stageDir, "windows-arm64", "bin", "deno-cli-aarch64-pc-windows-msvc.exe"),
+			join(plan.stageDir, "linux-x64", "bin", "test-cli-x86_64-unknown-linux-gnu"),
+			join(plan.stageDir, "windows-arm64", "bin", "test-cli-aarch64-pc-windows-msvc.exe"),
 		]);
 	});
 
 	it("stages a root-only package whose bin is the executor output", async () => {
-		const plan = createPlan(tmpDir, {
-			name: "@scope/node-cli",
-			version: "0.3.0",
-			dependencies: { "@crustjs/core": "^1.0.0" },
-			bin: { "node-cli": "dist/cli.js" },
-		});
+		const plan = createPlan(
+			tmpDir,
+			{
+				name: "@scope/node-cli",
+				version: "0.3.0",
+				dependencies: { "@crustjs/core": "^1.0.0" },
+				bin: { "node-cli": "src/cli.ts" },
+			},
+			{ entries: [{ command: "node-cli", entryPath: join(tmpDir, "src", "cli.ts") }] },
+		);
 		const outputs: string[] = [];
 
 		await runDistributeBuild(
@@ -302,60 +407,57 @@ describe("runDistributeBuild", () => {
 		expect(readFileSync(join(plan.stageDir, "root", "LICENSE"), "utf8")).toBe("test license\n");
 	});
 
-	it("uses string bin shorthand and copies common license variants", async () => {
+	it("copies common license variants into every package", async () => {
 		rmSync(join(tmpDir, "LICENSE"));
 		writeFileSync(join(tmpDir, "LICENCE.md"), "variant license\n");
-		const plan = createPlan(tmpDir, {
-			name: "@scope/my-cli",
-			version: "0.1.0",
-			bin: "dist/cli",
-		});
+		const plan = createPlan(tmpDir, { name: "@scope/my-cli", version: "0.1.0" });
 
 		await runDistributeBuild(plan, bunDistribution(), io);
 
-		const rootPackage = readJson<{ bin: Record<string, string> }>(
-			join(plan.stageDir, "root", "package.json"),
+		expect(readFileSync(join(plan.stageDir, "root", "LICENCE.md"), "utf8")).toBe(
+			"variant license\n",
 		);
-		expect(rootPackage.bin).toEqual({ "my-cli": "bin/my-cli.js" });
 		expect(readFileSync(join(plan.stageDir, "darwin-arm64", "LICENCE.md"), "utf8")).toBe(
 			"variant license\n",
 		);
 	});
 
-	it("writes manifest.json only after every target compiles", async () => {
-		const plan = createPlan(tmpDir, { name: "my-cli", version: "0.1.0", bin: { cli: "dist/cli" } });
-		const failSecond = async (entryPath: string, outfilePath: string, target: BunTarget) => {
-			if (target === "bun-linux-x64") throw new Error("compile failed");
+	it("writes manifest.json only after every command of every target compiles", async () => {
+		writeFileSync(join(tmpDir, "src", "admin.ts"), "export {};\n");
+		const plan = createPlan(
+			tmpDir,
+			{ name: "my-cli", version: "0.1.0" },
+			{
+				entries: [
+					{ command: "cli", entryPath: join(tmpDir, "src", "cli.ts") },
+					{ command: "admin", entryPath: join(tmpDir, "src", "admin.ts") },
+				],
+			},
+		);
+		const failAdminLinux = async (entryPath: string, outfilePath: string, target: BunTarget) => {
+			if (target === "bun-linux-x64" && entryPath.endsWith("admin.ts")) {
+				throw new Error("compile failed");
+			}
 			await fakeExecutor(entryPath, outfilePath);
 		};
 		await expect(
 			runDistributeBuild(
 				plan,
-				bunDistribution(["bun-darwin-arm64", "bun-linux-x64"], failSecond),
+				bunDistribution(["bun-darwin-arm64", "bun-linux-x64"], failAdminLinux),
 				io,
 			),
 		).rejects.toThrow(/compile failed/);
-		expect(existsSync(join(plan.stageDir, "darwin-arm64", "bin", "my-cli-bun-darwin-arm64"))).toBe(
+		expect(existsSync(join(plan.stageDir, "darwin-arm64", "bin", "admin-bun-darwin-arm64"))).toBe(
 			true,
 		);
+		expect(existsSync(join(plan.stageDir, "linux-x64", "bin", "cli-bun-linux-x64"))).toBe(true);
 		expect(existsSync(join(plan.stageDir, "manifest.json"))).toBe(false);
-	});
-
-	it("rejects multiple bin entries through staged package planning", async () => {
-		const plan = createPlan(tmpDir, {
-			name: "my-cli",
-			version: "0.1.0",
-			bin: { one: "dist/one", two: "dist/two" },
-		});
-		await expect(runDistributeBuild(plan, bunDistribution(), io)).rejects.toThrow(
-			/exactly one bin entry/,
-		);
 	});
 
 	it("stages Extension artifact directories into root and platform packages without wiping them", async () => {
 		const plan = createPlan(
 			tmpDir,
-			{ name: "artifact-stage-cli", version: "0.1.0", bin: { cli: "dist/cli" } },
+			{ name: "artifact-stage-cli", version: "0.1.0" },
 			{ validate: true },
 		);
 		mkdirSync(join(plan.outDir, "man"), { recursive: true });
@@ -380,21 +482,26 @@ describe("runDistributeBuild", () => {
 	it("copies artifact symlinks as links instead of following them out of the project", async () => {
 		const plan = createPlan(
 			tmpDir,
-			{ name: "artifact-stage-cli", version: "0.1.0", bin: { cli: "dist/cli" } },
+			{ name: "artifact-stage-cli", version: "0.1.0" },
 			{ validate: true },
 		);
 		mkdirSync(join(plan.outDir, "skills"), { recursive: true });
 		// Artifact trees are not containment-checked, so a link to an external file
 		// must not have its contents copied into the staged packages.
 		symlinkSync(join(tmpDir, "LICENSE"), join(plan.outDir, "skills", "leak"), "file");
+		// A relative link must stay relative so it still resolves after install,
+		// when .crust/artifacts no longer exists.
+		writeFileSync(join(plan.outDir, "skills", "SKILL.md"), "skill\n");
+		symlinkSync("SKILL.md", join(plan.outDir, "skills", "alias.md"), "file");
 
 		await runDistributeBuild(plan, bunDistribution(), io);
 
-		for (const staged of [
-			join(plan.stageDir, "root", "skills", "leak"),
-			join(plan.stageDir, "darwin-arm64", "bin", "skills", "leak"),
+		for (const skills of [
+			join(plan.stageDir, "root", "skills"),
+			join(plan.stageDir, "darwin-arm64", "bin", "skills"),
 		]) {
-			expect(lstatSync(staged).isSymbolicLink()).toBe(true);
+			expect(readlinkSync(join(skills, "leak"))).toBe(join(tmpDir, "LICENSE"));
+			expect(readlinkSync(join(skills, "alias.md"))).toBe("SKILL.md");
 		}
 	});
 
@@ -493,5 +600,106 @@ describe("runDistributeBuild", () => {
 		await expect(stage(["src", "src"])).rejects.toThrow("already staged");
 		await expect(stage(["skills"], true)).rejects.toThrow("Extension artifact directory");
 		await expect(stage(["skills/sub"], true)).rejects.toThrow('overlaps "skills"');
+	});
+});
+
+describe("mergeEntryArtifacts", () => {
+	const tmpDir = mkdtempSync(join(tmpdir(), "crust-merge-artifacts-"));
+	const artifactDir = join(tmpDir, "artifacts");
+	const write = (path: string, content = "x\n") => {
+		mkdirSync(join(tmpDir, path, ".."), { recursive: true });
+		writeFileSync(join(tmpDir, path), content);
+	};
+
+	beforeEach(() => rmSync(tmpDir, { recursive: true, force: true }));
+	afterAll(() => rmSync(tmpDir, { recursive: true, force: true }));
+
+	it("merges distinct paths from every entry and keeps symlinks as links", () => {
+		write("greet/man/greet.1", "greet man\n");
+		write("greet/skills/greet/SKILL.md", "greet skill\n");
+		write("greet/loose.txt");
+		write("admin/man/admin.1", "admin man\n");
+		write("admin/skills/admin/SKILL.md", "admin skill\n");
+		symlinkSync(join(tmpDir, "greet", "loose.txt"), join(tmpDir, "admin", "link"), "file");
+		const owners = new Map<string, string>();
+
+		mergeEntryArtifacts(join(tmpDir, "greet"), artifactDir, "greet", owners);
+		// Simulates the skills hook: the second entry's own tree only ever held its own skill.
+		mergeEntryArtifacts(join(tmpDir, "admin"), artifactDir, "admin", owners);
+
+		expect(readFileSync(join(artifactDir, "man", "greet.1"), "utf8")).toBe("greet man\n");
+		expect(readFileSync(join(artifactDir, "man", "admin.1"), "utf8")).toBe("admin man\n");
+		expect(readFileSync(join(artifactDir, "skills", "greet", "SKILL.md"), "utf8")).toBe(
+			"greet skill\n",
+		);
+		expect(readFileSync(join(artifactDir, "skills", "admin", "SKILL.md"), "utf8")).toBe(
+			"admin skill\n",
+		);
+		// An external link (outside the entry's own tree) is copied byte for byte.
+		expect(readlinkSync(join(artifactDir, "link"))).toBe(join(tmpDir, "greet", "loose.txt"));
+		expect(owners.get("man")).toBe("greet");
+		expect(owners.get("man/admin.1")).toBe("admin");
+	});
+
+	it("keeps hook symlinks resolvable after the entry's temporary directory is deleted", () => {
+		const entryDir = join(tmpDir, "entry");
+		write("entry/man/alpha.1", "alpha man page\n");
+		write("entry/skills/alpha/SKILL.md", "alpha skill\n");
+		// Relative link text is preserved; an absolute link into the entry tree is
+		// rebased onto the artifact directory; a link elsewhere is left alone.
+		symlinkSync("alpha.1", join(entryDir, "man", "alias.1"), "file");
+		symlinkSync(join(entryDir, "skills", "alpha"), join(entryDir, "skills", "latest"), "dir");
+		symlinkSync(join(tmpDir, "outside.txt"), join(entryDir, "external"), "file");
+		writeFileSync(join(tmpDir, "outside.txt"), "outside\n");
+
+		mergeEntryArtifacts(entryDir, artifactDir, "alpha", new Map());
+		rmSync(entryDir, { recursive: true });
+
+		expect(readlinkSync(join(artifactDir, "man", "alias.1"))).toBe("alpha.1");
+		expect(readFileSync(join(artifactDir, "man", "alias.1"), "utf8")).toBe("alpha man page\n");
+		expect(readlinkSync(join(artifactDir, "skills", "latest"))).toBe(
+			join(artifactDir, "skills", "alpha"),
+		);
+		expect(readFileSync(join(artifactDir, "skills", "latest", "SKILL.md"), "utf8")).toBe(
+			"alpha skill\n",
+		);
+		expect(readlinkSync(join(artifactDir, "external"))).toBe(join(tmpDir, "outside.txt"));
+		expect(readFileSync(join(artifactDir, "external"), "utf8")).toBe("outside\n");
+	});
+
+	it("rejects a file two entries both write, naming both commands", () => {
+		write("greet/completions/_shared");
+		write("greet/man/greet.1");
+		write("admin/man/greet.1", "overwrite attempt\n");
+		const owners = new Map<string, string>();
+		mergeEntryArtifacts(join(tmpDir, "greet"), artifactDir, "greet", owners);
+
+		expect(() => mergeEntryArtifacts(join(tmpDir, "admin"), artifactDir, "admin", owners)).toThrow(
+			'Build artifact "man/greet.1" is written by both bin "greet" and "admin".',
+		);
+		expect(readFileSync(join(artifactDir, "man", "greet.1"), "utf8")).toBe("x\n");
+	});
+
+	it("rejects a directory in one entry that is a file or symlink in another", () => {
+		write("greet/skills/tool");
+		write("admin/skills/tool/SKILL.md");
+		mkdirSync(join(tmpDir, "third", "skills"), { recursive: true });
+		symlinkSync(join(tmpDir, "greet"), join(tmpDir, "third", "skills", "tool"), "dir");
+		const owners = new Map<string, string>();
+		mergeEntryArtifacts(join(tmpDir, "greet"), artifactDir, "greet", owners);
+
+		expect(() => mergeEntryArtifacts(join(tmpDir, "admin"), artifactDir, "admin", owners)).toThrow(
+			'Build artifact "skills/tool" is written by both bin "greet" and "admin".',
+		);
+		rmSync(join(artifactDir, "skills", "tool"));
+		mergeEntryArtifacts(join(tmpDir, "admin"), artifactDir, "admin", owners);
+		expect(() => mergeEntryArtifacts(join(tmpDir, "third"), artifactDir, "third", owners)).toThrow(
+			'Build artifact "skills/tool" is written by both bin "admin" and "third".',
+		);
+	});
+
+	it("tolerates an entry whose hooks wrote nothing", () => {
+		mergeEntryArtifacts(join(tmpDir, "missing"), artifactDir, "greet", new Map());
+		expect(existsSync(artifactDir)).toBe(false);
 	});
 });

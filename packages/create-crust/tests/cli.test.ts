@@ -1,5 +1,13 @@
 import { afterEach, beforeAll, describe, expect, it } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	chmodSync,
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, delimiter, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -79,7 +87,7 @@ describe("create-crust CLI", () => {
 			version: "0.0.0",
 			type: "module",
 			crust: { runtime: "bun" },
-			bin: { "my-cli": ".crust/root/bin/my-cli.js" },
+			bin: { "my-cli": "src/cli.ts" },
 			scripts: {
 				dev: "bun run src/cli.ts",
 				build: "crust build",
@@ -104,6 +112,8 @@ describe("create-crust CLI", () => {
 		expect(tsconfig.compilerOptions.lib).toEqual(["ESNext"]);
 		expect(tsconfig.compilerOptions.types).toEqual(["bun"]);
 		const cli = readFileSync(join(projectDir, "src", "cli.ts"), "utf-8");
+		// `bin` points at the source, so the linked command needs the runtime's shebang.
+		expect(cli.startsWith("#!/usr/bin/env bun\n")).toBe(true);
 		expect(cli).toContain('new Crust("my-cli"');
 		expect(cli).toContain(".execute()");
 		expect(cli).toContain("help()");
@@ -122,29 +132,37 @@ describe("create-crust CLI", () => {
 		expect(existsSync(join(projectDir, ".git"))).toBe(false);
 	}, 30_000);
 
-	it("finds its templates when launched through a .bin shim in another package root", async () => {
-		// npx and bun x run the CLI via <cache>/node_modules/.bin/create-crust, so process.argv[1]
-		// walks up to the cache's package.json, not to create-crust's own package root.
-		const tempRoot = makeTempRoot("create-crust-shim");
-		const binDir = join(tempRoot, "node_modules", ".bin");
-		mkdirSync(binDir, { recursive: true });
-		writeFileSync(join(tempRoot, "package.json"), '{"name":"launcher-cache"}', "utf-8");
-		const shim = join(binDir, "create-crust.mjs");
-		writeFileSync(shim, `await import(${JSON.stringify(pathToFileURL(builtCliPath).href)});\n`);
-		const projectDir = join(tempRoot, "my-cli");
+	it.each(["bundle", "source"])(
+		"finds %s templates through a .bin entry in another package root",
+		async (mode) => {
+			// npx and bun x run the CLI via <cache>/node_modules/.bin/create-crust, so process.argv[1]
+			// walks up to the cache's package.json, not to create-crust's own package root.
+			const tempRoot = makeTempRoot("create-crust-shim");
+			const binDir = join(tempRoot, "node_modules", ".bin");
+			mkdirSync(binDir, { recursive: true });
+			writeFileSync(join(tempRoot, "package.json"), '{"name":"launcher-cache"}', "utf-8");
+			const shim = join(binDir, mode === "source" ? "create-crust" : "create-crust.mjs");
+			if (mode === "source") {
+				symlinkSync(join(packageRoot, "src", "index.ts"), shim, "file");
+			} else {
+				writeFileSync(shim, `await import(${JSON.stringify(pathToFileURL(builtCliPath).href)});\n`);
+			}
+			const projectDir = join(tempRoot, "my-cli");
 
-		const result = await runCreateCrust(
-			[projectDir, "--runtime", "bun", "--no-install", "--no-git"],
-			{ cwd: tempRoot, entrypoint: shim },
-		);
+			const result = await runCreateCrust(
+				[projectDir, "--runtime", "bun", "--no-install", "--no-git"],
+				{ cwd: tempRoot, entrypoint: shim },
+			);
 
-		expect(result.stderr).not.toContain("Template directory");
-		expect(result.exitCode).toBe(0);
-		expect(result.stdout).toContain("Created my-cli!");
-		expect(existsSync(join(projectDir, "src", "cli.ts"))).toBe(true);
-		const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf-8"));
-		expect(pkg.scripts.dev).toBe("bun run src/cli.ts");
-	}, 30_000);
+			expect(result.stderr).not.toContain("Template directory");
+			expect(result.exitCode).toBe(0);
+			expect(result.stdout).toContain("Created my-cli!");
+			expect(existsSync(join(projectDir, "src", "cli.ts"))).toBe(true);
+			const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf-8"));
+			expect(pkg.scripts.dev).toBe("bun run src/cli.ts");
+		},
+		30_000,
+	);
 
 	it("scaffolds a Node runtime project through the real CLI", async () => {
 		const tempRoot = makeTempRoot("create-crust-node");
@@ -164,7 +182,7 @@ describe("create-crust CLI", () => {
 		expect(pkg).toMatchObject({
 			$schema: "./node_modules/@crustjs/crust/schema/package.json",
 			crust: { runtime: "node" },
-			bin: { "node-cli": ".crust/root/bin/node-cli.js" },
+			bin: { "node-cli": "src/cli.ts" },
 			scripts: {
 				dev: "node src/cli.ts",
 				build: "crust build",
@@ -187,6 +205,9 @@ describe("create-crust CLI", () => {
 		const tsconfig = JSON.parse(readFileSync(join(projectDir, "tsconfig.json"), "utf-8"));
 		expect(tsconfig.compilerOptions.lib).toEqual(["ESNext"]);
 		expect(tsconfig.compilerOptions.types).toEqual(["node"]);
+		expect(
+			readFileSync(join(projectDir, "src", "cli.ts"), "utf-8").startsWith("#!/usr/bin/env node\n"),
+		).toBe(true);
 		const readme = readFileSync(join(projectDir, "README.md"), "utf-8");
 		expect(readme).toContain("npm run dev");
 		expect(readme).not.toContain("bun run");
@@ -210,7 +231,7 @@ describe("create-crust CLI", () => {
 		expect(pkg).toMatchObject({
 			$schema: "./node_modules/@crustjs/crust/schema/package.json",
 			crust: { runtime: "deno" },
-			bin: { "deno-cli": ".crust/root/bin/deno-cli.js" },
+			bin: { "deno-cli": "src/cli.ts" },
 			scripts: {
 				dev: "deno run -A src/cli.ts",
 				build: "crust build",
@@ -230,6 +251,11 @@ describe("create-crust CLI", () => {
 		const tsconfig = JSON.parse(readFileSync(join(projectDir, "tsconfig.json"), "utf-8"));
 		expect(tsconfig.compilerOptions.lib).toEqual(["ESNext", "deno.window"]);
 		expect(tsconfig.compilerOptions.types).toEqual([]);
+		expect(
+			readFileSync(join(projectDir, "src", "cli.ts"), "utf-8").startsWith(
+				"#!/usr/bin/env -S deno run -A\n",
+			),
+		).toBe(true);
 		const readme = readFileSync(join(projectDir, "README.md"), "utf-8");
 		expect(readme).toContain("deno task dev");
 		expect(readme).not.toContain("bun run");

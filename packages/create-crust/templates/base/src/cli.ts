@@ -1,3 +1,4 @@
+{{shebang}}
 import { Crust } from "@crustjs/core";
 import { help, version } from "@crustjs/extensions";
 

@@ -29,13 +29,12 @@
 	},
 	"crust": {
 		"runtime": "node",
-		"entry": "src/index.ts",
 		"include": [
 			"templates"
 		]
 	},
 	"bin": {
-		"create-crust": ".crust/root/bin/create-crust.js"
+		"create-crust": "src/index.ts"
 	},
 	"scripts": {
 		"build": "bun scripts/build.ts",

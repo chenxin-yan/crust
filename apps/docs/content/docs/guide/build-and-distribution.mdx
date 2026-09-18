@@ -30,9 +30,9 @@ crust build
 ├── manifest.json        # staged packages and publish order
 ├── artifacts/           # Extension build hook output
 ├── root/                # the npm package users install
-│   └── bin/my-cli.js    # Node launcher (Bun, Deno) or the bundle itself (Node)
+│   └── bin/my-cli.js    # one per bin entry: Node launcher (Bun, Deno) or the bundle itself (Node)
 └── linux-x64/           # one platform package per target (Bun and Deno)
-    └── bin/my-cli-bun-linux-x64   # <package name>-<target>, .exe on Windows
+    └── bin/my-cli-bun-linux-x64   # <command>-<target> per bin entry, .exe on Windows
 ```
 
 Every build prints the runtime it resolved and where it came from, for example `Runtime: node (inferred from @types/node)`. The order is:
@@ -49,7 +49,7 @@ Lockfiles are not a signal, because the package manager that installed your depe
 | Deno    | Same layout as Bun; Linux platform packages are glibc only                                                  | Node               |
 | Node    | Root package only: `bin/<command>.js` is the self-contained bundle, so no launcher and no platform packages | Node               |
 
-The entry file is `src/cli.ts`; set `"crust": { "entry": "src/main.ts" }` in `package.json` for a different file inside the project. The runtime, entry, Bun plugins, and included directories all live in that one [`crust` block](/docs/modules/crust#packagejson-configuration); see the [`crust build` options](/docs/modules/crust#crust-build-options) for the flags.
+The entry file is the value of `bin` in `package.json`: `"bin": { "my-cli": "src/main.ts" }` builds `src/main.ts` as the `my-cli` command, and several keys build several commands (see [Commands and entries](/docs/modules/crust#commands-and-entries-bin)). Without `bin`, the build compiles `src/cli.ts` under the unscoped package name. The runtime, Bun plugins, and included directories live in the [`crust` block](/docs/modules/crust#packagejson-configuration); see the [`crust build` options](/docs/modules/crust#crust-build-options) for the flags.
 
 ### Choose targets
 
@@ -81,7 +81,7 @@ The plain Linux targets link against glibc and do not start on musl-based distri
 
 The staged `package.json` files are generated, not copied: they take `name`, `version`, and npm metadata (`description`, `license`, `author`, `repository`, `keywords`, `engines`, and similar) from your `package.json`, and a Bun or Deno root package lists the platform packages as `optionalDependencies`. Your own `bin`, `files`, `dependencies`, and `devDependencies` are not carried over, because the binaries and the Node bundle already inline them, so keep the usual split in your project: Crust packages your code imports in `dependencies`, `@crustjs/crust` in `devDependencies`. A Node root package therefore has no dependency fields at all.
 
-The command name (`bin/<command>.js`) is the key of your `bin` field when it is an object, which must have exactly one entry; a string `bin` or no `bin` uses the unscoped package name. Platform binaries are always named `<unscoped package name>-<target>`. Platform package names append the platform alias, such as `my-cli-linux-x64` or `@scope/my-cli-linux-x64`, and Linux packages carry an npm `libc` field (`glibc` or `musl`), so package managers download only the platform package that matches the host. The project's `README.md` is copied into the root package and its `LICENSE` into every package.
+Each key of your `bin` field is a command: the root package gets `bin/<command>.js` and every platform package gets `bin/<command>-<target>` (`.exe` on Windows), so two commands mean two launchers and two binaries per platform, all in the same packages. A string `bin` or no `bin` gives one command named after the unscoped package name. Platform package names append the platform alias, such as `my-cli-linux-x64` or `@scope/my-cli-linux-x64`, and Linux packages carry an npm `libc` field (`glibc` or `musl`), so package managers download only the platform package that matches the host. The project's `README.md` is copied into the root package and its `LICENSE` into every package.
 
 ## Run locally
 
@@ -89,7 +89,7 @@ The command name (`bin/<command>.js`) is the key of your `bin` field when it is 
 node .crust/root/bin/my-cli.js --help
 ```
 
-`.crust/root/bin/<command>.js` runs in place: the Bun and Deno launcher finds the platform binary in the sibling `.crust/<platform>/` directory, and the Node bundle needs nothing else. Projects scaffolded by `create-crust` expose this as the `start` script and point `bin` at it, so `npm link` exposes the command too.
+`.crust/root/bin/<command>.js` runs in place: the Bun and Deno launcher finds the platform binary in the sibling `.crust/<platform>/` directory, and the Node bundle needs nothing else. Projects scaffolded by `create-crust` expose this as the `start` script. Your project's `bin` points at the source entry, so `npm link` in the project runs the TypeScript source through the shebang at the top of the entry (`#!/usr/bin/env bun`, `node`, or `-S deno run -A`); run `npm link` inside `.crust/root` to link the built distribution instead.
 
 ## Publish with `crust publish`
 
@@ -134,19 +134,19 @@ ls .crust/linux-x64/bin/        # my-cli-bun-linux-x64
 cat .crust/manifest.json        # every staged directory, its target, and the publish order
 ```
 
-Every build stages into `.crust/`, so for release assets, containers, or any channel other than npm, build the targets you need and take the files from there: the standalone executable at `.crust/<platform alias>/bin/<package name>-<target>` for Bun and Deno (`.exe` on Windows), or the executable JavaScript bundle at `.crust/root/bin/<command>.js` for Node. `.crust/manifest.json` is the index. Staging requires `name` and `version` in `package.json` and replaces `.crust/` on every build, so copy what you need out before building again.
+Every build stages into `.crust/`, so for release assets, containers, or any channel other than npm, build the targets you need and take the files from there: the standalone executable at `.crust/<platform alias>/bin/<command>-<target>` for Bun and Deno (`.exe` on Windows), or the executable JavaScript bundle at `.crust/root/bin/<command>.js` for Node. `.crust/manifest.json` is the index. Staging requires `name` and `version` in `package.json` and replaces `.crust/` on every build, so copy what you need out before building again.
 
 ## Prepare Extension artifacts
 
 ```sh
 crust build
-# Preparing Command Snapshot... (excerpt)
+# Preparing Command Snapshot for my-cli... (excerpt)
 #   crust:man  1 file  man/my-cli.1
 ```
 
-Before compilation, the build materializes and validates the command tree and runs Extension build hooks, which write to `.crust/artifacts/`. The entry module's top-level code runs during this step, but Command Actions and code after `await app.execute()` do not. Each top-level artifact directory is copied into `.crust/root/` (and listed in its `files`) and into every platform package's `bin/`, as described in [Extension artifacts](/docs/modules/crust#extension-artifacts).
+Before compilation, the build materializes and validates the command tree of every `bin` entry, checks that its root command is named after the `bin` key, and runs Extension build hooks, which write to `.crust/artifacts/`. The entry module's top-level code runs during this step, but Command Actions and code after `await app.execute()` do not. Each top-level artifact directory is copied into `.crust/root/` (and listed in its `files`) and into every platform package's `bin/`, as described in [Extension artifacts](/docs/modules/crust#extension-artifacts). With several entries, each entry's hooks run in isolation and their output is merged; a path two entries both write fails the build.
 
-Use `--no-validate` only when preparation cannot run; it skips Extension build hooks, so nothing is staged from `.crust/artifacts/`.
+Use `--no-validate` only when preparation cannot run; it skips the name check and Extension build hooks, so nothing is staged from `.crust/artifacts/`. `bin` itself is still validated: missing entries, duplicate entries, and invalid command names fail before `.crust/` is touched.
 
 ### Ship extra directories with `crust.include`
 
@@ -209,7 +209,7 @@ Bun executables built by `crust build` autoload `.env` from the directory they s
 
 ## Set up `package.json`
 
-These are the files `create-crust --runtime bun|node|deno` scaffolds, with `{{name}}` and the version placeholders filled in. Every runtime shares the same flow: `build` stages `.crust/`, `start` runs `.crust/root/bin/<command>.js`, and `release` publishes with `crust publish`; `bin` points at the staged launcher so `npm link` works. The staged packages regenerate `bin` and `files` and omit dependency fields; an object `bin` supplies the installed command name.
+These are the files `create-crust --runtime bun|node|deno` scaffolds, with `{{name}}` and the version placeholders filled in. Every runtime shares the same flow: `build` stages `.crust/`, `start` runs `.crust/root/bin/<command>.js`, and `release` publishes with `crust publish`. `bin` maps the command name to its source entry, which `crust build` compiles and `npm link` runs directly through the entry's shebang. The staged packages regenerate `bin` and `files` and omit dependency fields.
 
 <Tabs items={["Bun", "Node", "Deno"]}>
 <Tab value="Bun">

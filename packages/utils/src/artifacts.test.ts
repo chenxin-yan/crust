@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -97,7 +97,21 @@ describe("resolveArtifactDir", () => {
 		await writeFile(join(tmpDir, "package.json"), "{}");
 		await mkdir(join(tmpDir, "src"));
 		process.argv[1] = join(tmpDir, "src", "cli.ts");
+		await writeFile(process.argv[1], "");
 		expect(resolveArtifactDir("skills")).toBe(join(tmpDir, ".crust", "root", "skills"));
+	});
+
+	it("resolves source-linked artifacts from the real entrypoint's package, not the consumer", async () => {
+		const source = join(tmpDir, "source");
+		const consumer = join(tmpDir, "consumer");
+		await mkdir(join(source, "src"), { recursive: true });
+		await mkdir(join(consumer, "node_modules", ".bin"), { recursive: true });
+		await writeFile(join(source, "package.json"), "{}");
+		await writeFile(join(consumer, "package.json"), "{}");
+		await writeFile(join(source, "src", "cli.ts"), "");
+		process.argv[1] = join(consumer, "node_modules", ".bin", "cli");
+		await symlink(join(source, "src", "cli.ts"), process.argv[1], "file");
+		expect(resolveArtifactDir("templates")).toBe(join(source, ".crust", "root", "templates"));
 	});
 
 	it("resolves the build output directory while crust build prepares the snapshot", async () => {
@@ -108,9 +122,24 @@ describe("resolveArtifactDir", () => {
 		expect(resolveArtifactDir("skills")).toBe(join(tmpDir, ".crust", "artifacts", "skills"));
 	});
 
+	it("reports artifact context for missing or broken source entrypoints", async () => {
+		const missing = join(tmpDir, "missing.ts");
+		const broken = join(tmpDir, "broken.ts");
+		await symlink(missing, broken, "file");
+		for (const entrypoint of [missing, broken]) {
+			process.argv[1] = entrypoint;
+			expect(() => resolveArtifactDir("skills")).toThrow(
+				`Could not resolve artifact "skills": could not resolve source entrypoint "${entrypoint}".`,
+			);
+		}
+	});
+
 	it("names the entrypoint when no package root is found from source", async () => {
 		process.argv[1] = join(tmpDir, "cli.ts");
-		expect(() => resolveArtifactDir("skills")).toThrow(join(tmpDir, "cli.ts"));
+		await writeFile(process.argv[1], "");
+		expect(() => resolveArtifactDir("skills")).toThrow(
+			`Could not resolve artifact "skills": no package.json was found above entrypoint "${process.argv[1]}".`,
+		);
 		process.argv.length = 1;
 		expect(() => resolveArtifactDir("skills")).toThrow("process.argv[1] (unset)");
 	});

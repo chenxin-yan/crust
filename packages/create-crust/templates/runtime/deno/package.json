@@ -8,7 +8,7 @@
 		"runtime": "deno"
 	},
 	"bin": {
-		"{{name}}": ".crust/root/bin/{{name}}.js"
+		"{{name}}": "src/cli.ts"
 	},
 	"scripts": {
 		"dev": "deno run -A src/cli.ts",

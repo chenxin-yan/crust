@@ -34,7 +34,7 @@ crust build --target bun-linux-x64
 | `--validate`, `--no-validate` | boolean            | `true`  | Materialize command definitions before compiling; `--no-validate` also skips Extension build hooks       |
 | `--minify`, `--no-minify`     | boolean            | none    | Minify the output (default for bun and node; unsupported for deno)                                       |
 
-The runtime, entry file, Bun bundler plugins, and extra directories are not flags; they come from the [`crust` block in `package.json`](#packagejson-configuration).
+None of the command names, entry files, runtime, Bun bundler plugins, or extra directories are flags: they come from [`bin`](#commands-and-entries-bin) and the [`crust` block](#packagejson-configuration) in `package.json`.
 
 ### `crust publish` options
 
@@ -58,25 +58,37 @@ npm reads `publishConfig.access` from each staged `package.json`, which `crust b
 
 `crust build` stages the publishable npm tree in `.crust/` (`manifest.json`, `root/`, one `<platform>/` per target for Bun and Deno, and `artifacts/` from Extension build hooks) and wipes it at the start of every build. See [Build](/docs/guide/build-and-distribution#build) for the tree, the launcher, and naming rules.
 
+## Commands and entries (`bin`)
+
+```json title="package.json"
+{
+  "bin": { "my-cli": "src/cli.ts", "my-cli-admin": "src/admin.ts" }
+}
+```
+
+The standard `bin` field declares what `crust build` builds: each key is an installed command name and each value is the TypeScript source entry compiled for it. Every entry becomes `bin/<command>.js` in the root package and, for Bun and Deno, a `<command>-<target>` binary in every platform package. A string `bin` is the entry of one command named after the unscoped package name, and without `bin` the build compiles `src/cli.ts` under that name.
+
+Entries must be relative paths to existing files inside the project (checked lexically, so a symlink may point elsewhere), and two commands cannot share one entry: entries are compared by real path, so `./src/cli.ts`, `src/../src/cli.ts`, and a symlink to `src/cli.ts` all count as the same file. Command names are limited to letters, digits, `.`, `_`, `~`, and `-`, cannot start with `.` or `-`, and cannot differ only by case (`Tool` and `tool` would be one `bin/` file on a case-insensitive filesystem), because they become file names and launcher text. These checks run before `.crust/` is wiped, with or without `--no-validate`. Because the values are source files, `npm link` runs the source directly: the entry needs the runtime's shebang (`#!/usr/bin/env bun`, `#!/usr/bin/env node`, or `#!/usr/bin/env -S deno run -A`), which `create-crust` templates include; link `.crust/root` instead to exercise the built distribution.
+
+During a validated build each entry's root command must be named after its key (`new Crust("my-cli-admin")` for `"my-cli-admin": "src/admin.ts"`), since help, man pages, completions, and skills all use that name; a mismatch fails the build with both names and the entry path. `--no-validate` skips this check along with the snapshots it needs.
+
 ## `package.json` configuration
 
 ```json title="package.json"
 {
   "crust": {
     "runtime": "bun",
-    "entry": "src/cli.ts",
     "bunPlugins": ["@opentui/solid/bun-plugin", "./build/plugin.ts"],
     "include": ["templates"]
   }
 }
 ```
 
-Every key is optional. Any other key under `crust` is an error that lists the allowed keys, so typos such as `bunPlugin` fail the build instead of being ignored.
+Every key is optional. Any other key under `crust` is an error that lists the allowed keys, so typos such as `bunPlugin` fail the build instead of being ignored. The entry file is not configured here: it is the value of [`bin`](#commands-and-entries-bin).
 
 | Key                | Description                                                                                                                                                                                                                                  |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `crust.runtime`    | `bun`, `deno`, or `node`. Without it, `deno.json`/`deno.jsonc` selects Deno and `@types/node` without `@types/bun` selects Node; otherwise Bun.                                                                                              |
-| `crust.entry`      | Entry file, a relative path that stays inside the project root (checked lexically, so a symlink may point elsewhere). Default `src/cli.ts`.                                                                                                  |
 | `crust.bunPlugins` | [Bun bundler plugin](https://bun.com/docs/bundler/plugins) modules applied to Bun and Node builds, in order. A bare name resolves from `node_modules`, a path from the project root; each must default-export the plugin. Rejected for Deno. |
 | `crust.include`    | Directories relative to the project root that `crust build` copies into `.crust/root/` (listed in `files`) and into each platform package's `bin/`.                                                                                          |
 
@@ -102,5 +114,7 @@ Every key is optional. Any other key under `crust` is an error that lists the al
 ```
 
 Registered Extensions own build artifacts. `man()`, `skill()`, and `completion()` write the directories shown when registered, and `crust build` copies each top-level directory into `.crust/root/` and every platform package's `bin/`. A CLI reads them back with [`resolveArtifactDir(name)`](/docs/api/crust#resolveartifactdirname).
+
+With several `bin` entries, each entry's hooks run in their own temporary directory and the results are merged into `.crust/artifacts/`. Directories merge, so `man/greet.1` and `man/admin.1` coexist, but a path two entries both write (or a file in one and a directory in another) fails the build naming both commands; a hook that replaces its output directory, like `skill()`, therefore cannot erase another entry's files.
 
 `--no-validate` skips snapshot preparation and all Extension build hooks, so no artifact directories are staged.
