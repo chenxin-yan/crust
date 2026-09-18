@@ -35,6 +35,13 @@ function _typecheckAllTypeExportsAreImportableAndResolveCorrectly() {
 	// These assignments are never executed at runtime but ensure the types
 	// compile correctly.
 	const _choice: Choice<string> = "test";
+	// Plain-string choices are only valid when the string is itself a `T`.
+	const _literalChoice: Choice<"dev" | "prod"> = "dev";
+	const _mixedChoices: Choice<string | number>[] = ["80", { label: "HTTPS", value: 443 }];
+	// @ts-expect-error a plain string is not a `number` value
+	const _numberChoice: Choice<number> = "oops";
+	// @ts-expect-error a plain string outside the literal union is not a value
+	const _outsideLiteralChoice: Choice<"dev" | "prod"> = "staging";
 	const _inputOpts: InputOptions = { message: "m" };
 	const _inputOptsNoMsg: InputOptions = {};
 	const _passwordOpts: PasswordOptions = { message: "m" };

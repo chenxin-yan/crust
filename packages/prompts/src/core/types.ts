@@ -62,8 +62,10 @@ export type PartialPromptTheme = Partial<PromptTheme>;
 /**
  * A choice item for select, multiselect, and filter prompts.
  *
- * Accepts either a plain string (where `label === value`) or an object
- * with explicit label, value, and optional hint.
+ * Accepts either a plain string (where `label === value`, so the string
+ * must itself be a `T`) or an object with explicit label, value, and
+ * optional hint. Non-string `T` (e.g. `number`) therefore only admits
+ * object choices; a literal union `T` only admits strings in that union.
  *
  * @example
  * ```ts
@@ -78,7 +80,7 @@ export type PartialPromptTheme = Partial<PromptTheme>;
  * ```
  */
 export type Choice<T> =
-	| string
+	| (T & string)
 	| { readonly label: string; readonly value: T; readonly hint?: string };
 
 /**
