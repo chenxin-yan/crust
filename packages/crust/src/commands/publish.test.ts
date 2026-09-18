@@ -199,6 +199,33 @@ describe("publish manifest validation", () => {
 		).toThrow("root.bins must list at least one command");
 	});
 
+	it("rejects incomplete or repeated root commands before publishing", async () => {
+		const partial = structuredClone(manifest);
+		partial.root.bins = ["demo"];
+		for (const pkg of partial.packages) delete pkg.bins["demo-admin"];
+		const spawnPublish = mock(async () => 0);
+		await expect(
+			publishStagedPackages(partial, { stageDir: tmpDir, spawnPublish }, io),
+		).rejects.toThrow(/command/);
+		expect(spawnPublish).not.toHaveBeenCalled();
+
+		const repeated = structuredClone(manifest);
+		repeated.root.bins.push("demo");
+		expect(() => validatePublishManifest(tmpDir, repeated)).toThrow(/unique/);
+	});
+
+	it("rejects extra commands in either platform bin map", () => {
+		const extra = structuredClone(manifest);
+		extra.packages[0]!.bins.extra = "bin/extra";
+		expect(() => validatePublishManifest(tmpDir, extra)).toThrow(/command/);
+
+		const stagedPath = join(tmpDir, "linux-x64", "package.json");
+		const staged = JSON.parse(readFileSync(stagedPath, "utf8"));
+		staged.bin.extra = "bin/extra";
+		writeFileSync(stagedPath, JSON.stringify(staged));
+		expect(() => validatePublishManifest(tmpDir, manifest)).toThrow(/command/);
+	});
+
 	it("rejects missing staged directories", () => {
 		rmSync(join(tmpDir, "linux-x64"), { recursive: true, force: true });
 		expect(() => validatePublishManifest(tmpDir, manifest)).toThrow(
