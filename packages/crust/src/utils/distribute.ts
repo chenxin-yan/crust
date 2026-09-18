@@ -692,11 +692,12 @@ function assertResolvesInsideProject(cwd: string, entry: string, dir: string): v
 	walk(dir);
 }
 
-export type ArtifactOwner = { command: string; directory: boolean };
+export type ArtifactOwner = { command: string; directory: boolean; path: string };
 
 /**
  * Copies one entry's Extension build hook output into the shared artifact
- * directory. Directories merge; a file or file/directory mismatch at a path
+ * directory. Identically spelled directories merge; case-only directory aliases
+ * and a file or file/directory mismatch at a path
  * another entry already produced is an error, so no entry's hooks can replace
  * another's output. `owners` tracks case-folded POSIX-relative paths across
  * entries, including directories so file/ancestor conflicts are portable.
@@ -721,14 +722,14 @@ export function mergeEntryArtifacts(
 			const owner = owners.get(key);
 			const existing = lstatSync(destination, { throwIfNoEntry: false });
 			if (
-				(owner && !(dirent.isDirectory() && owner.directory)) ||
+				(owner && !(dirent.isDirectory() && owner.directory && owner.path === relativePath)) ||
 				(existing && !(dirent.isDirectory() && existing.isDirectory()))
 			) {
 				throw new Error(
 					`Build artifact "${relativePath}" is written by both bin ${JSON.stringify(owner?.command ?? "an earlier bin")} and ${JSON.stringify(command)}.\n  Extension build hooks of different commands must write distinct paths under ${artifactDir}.`,
 				);
 			}
-			if (!owner) owners.set(key, { command, directory: dirent.isDirectory() });
+			if (!owner) owners.set(key, { command, directory: dirent.isDirectory(), path: relativePath });
 			if (dirent.isDirectory()) {
 				mkdirSync(destination, { recursive: true });
 				merge(relativePath);

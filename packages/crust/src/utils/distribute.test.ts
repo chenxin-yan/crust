@@ -655,8 +655,12 @@ describe("mergeEntryArtifacts", () => {
 		expect(readFileSync(join(artifactDir, "skills", "admin", "SKILL.md"), "utf8")).toBe(
 			"admin skill\n",
 		);
-		expect(owners.get("man")).toEqual({ command: "greet", directory: true });
-		expect(owners.get("man/admin.1")).toEqual({ command: "admin", directory: false });
+		expect(owners.get("man")).toEqual({ command: "greet", directory: true, path: "man" });
+		expect(owners.get("man/admin.1")).toEqual({
+			command: "admin",
+			directory: false,
+			path: "man/admin.1",
+		});
 	});
 
 	it("rejects a file two entries both write, naming both commands", () => {
@@ -745,6 +749,8 @@ describe("mergeEntryArtifacts", () => {
 		["shared/Config", "shared/config/child"],
 		["shared/Config/child", "shared/config"],
 		["Shared/Config.json", "shared/config.json"],
+		["Assets/a", "assets/b"],
+		["shared/Assets/a", "shared/assets/b"],
 	])("rejects portable cross-entry collision %s / %s", (first, second) => {
 		write(`greet/${first}`);
 		write(`admin/${second}`);
@@ -756,8 +762,8 @@ describe("mergeEntryArtifacts", () => {
 		expect(readFileSync(join(artifactDir, first), "utf8")).toBe("x\n");
 	});
 
-	it("preserves bytes in shared directories with different casing", () => {
-		write("greet/Shared/first");
+	it("preserves bytes in identically spelled shared directories", () => {
+		write("greet/shared/first");
 		write("admin/shared/second");
 		const bytes = new Uint8Array([0, 255, 128, 10]);
 		writeFileSync(join(tmpDir, "admin/shared/second"), bytes);

@@ -178,6 +178,21 @@ describe("publish manifest validation", () => {
 		}
 	});
 
+	it.each(["platform", "root"])(
+		"rejects duplicate %s package names before any publisher runs",
+		async (duplicate) => {
+			const invalid = structuredClone(manifest);
+			invalid.packages[1]!.name =
+				duplicate === "root" ? invalid.root.name : invalid.packages[0]!.name;
+			writeStageFixture(tmpDir, invalid);
+			const spawnPublish = mock(async () => 0);
+			await expect(
+				publishStagedPackages(invalid, { stageDir: tmpDir, spawnPublish }, io),
+			).rejects.toThrow(/duplicate package names/);
+			expect(spawnPublish).not.toHaveBeenCalled();
+		},
+	);
+
 	it("rejects external package metadata links before any publisher runs", async () => {
 		const outside = join(tmpDir, "outside.json");
 		const stage = join(tmpDir, "stage");

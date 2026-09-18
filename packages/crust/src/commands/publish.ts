@@ -201,8 +201,13 @@ export function validatePublishManifest(stageDir: string, manifest: PublishManif
 	}
 
 	const optionalDeps = rootPackageJson.optionalDependencies ?? {};
+	const names = new Set([rootPackageJson.name]);
 
 	for (const pkg of manifest.packages) {
+		if (names.has(pkg.name)) {
+			throw new Error(`manifest.json contains duplicate package names: ${pkg.name}`);
+		}
+		names.add(pkg.name);
 		const stagedPackageJson = readStagedPackageJson(stageDir, pkg.dir);
 
 		if (stagedPackageJson.name !== pkg.name) {

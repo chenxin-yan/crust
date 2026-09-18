@@ -1,19 +1,20 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { once } from "node:events";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join, posix, resolve, win32 } from "node:path";
 import { text } from "node:stream/consumers";
 import { pathToFileURL } from "node:url";
 
-import type { BuildReport, InvocationIO } from "@crustjs/core";
+import { type BuildReport, defineExtensionId, type InvocationIO } from "@crustjs/core";
 import { type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
 import { yellow } from "@crustjs/style";
 import { BUILD_OUT_DIR_ENV } from "@crustjs/utils/artifacts";
 import { isErrnoException } from "@crustjs/utils/error";
 import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
+import { isWithin } from "@crustjs/utils/path";
 import { runProcess, which } from "@crustjs/utils/process";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -777,6 +778,27 @@ export async function buildEntrypoint(
 			const build: JsonValue = JSON.parse(serializedBuild);
 			if (!isBuildReport(build)) {
 				throw new Error("Expected extensions with string ids and files arrays.");
+			}
+			for (const extension of build.extensions) {
+				defineExtensionId(extension.id);
+				for (const file of extension.files) {
+					// Reports use Core's normalized POSIX-relative paths, not arbitrary entry side effects.
+					const path = resolve(outDir, file);
+					if (
+						file === "." ||
+						file.includes("\\") ||
+						posix.normalize(file) !== file ||
+						win32.isAbsolute(file) ||
+						/^[A-Za-z]:/.test(file) ||
+						!isWithin(resolve(outDir), path) ||
+						!isWithin(realpathSync(outDir), realpathSync(path)) ||
+						!lstatSync(path).isFile()
+					) {
+						throw new Error(
+							`Reported artifact must be a normalized, contained regular file: ${file}`,
+						);
+					}
+				}
 			}
 			return { snapshot, build };
 		} catch (error) {
