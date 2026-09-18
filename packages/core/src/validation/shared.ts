@@ -29,8 +29,14 @@ export type DefName<T> = T extends { name: infer N extends string }
 		: never
 	: never;
 
-/** The unfiltered canonical `name` of a definition; pair with {@link ClosedMembers} for spelling grammar. */
-export type RawName<T> = T extends { name: infer N extends string } ? N : never;
+/**
+ * Statically known `name` members of a definition (or definition union), for spelling grammar.
+ * Filtered per variant: combining names first would let an open variant's `string` absorb
+ * a literal sibling before {@link ClosedMembers} can see it.
+ */
+export type DefNameMembers<T> = T extends { name: infer N extends string }
+	? ClosedMembers<N>
+	: never;
 
 export type UnionToIntersection<U> = (U extends unknown ? (x: U) => void : never) extends (
 	x: infer I,

@@ -31,6 +31,13 @@ import type { AppendArgsChecks, EmptyArgNameBrand, ValidateVariadicArgs } from "
 		readonly [{ name: "pos" | `p-${string}`; type: "string" }]
 	>;
 	type _mixedValid = Expect<Equal<Extract<keyof MixedValid[0], `FIX_${string}`>, never>>;
+	// a definition union: the open variant's `string` must not absorb the literal variant's ""
+	type MixedDefs = ValidateVariadicArgs<
+		readonly [{ name: ""; type: "string" } | { name: string; type: "number" }]
+	>;
+	type _mixedDefs = Expect<
+		Equal<MixedDefs[0]["FIX_EMPTY_NAME"], "Argument names must be non-empty">
+	>;
 }
 
 {

@@ -10,7 +10,7 @@ import type {
 	IsStaticTuple,
 	IsClosedName,
 	LocalValueBrand,
-	RawName,
+	DefNameMembers,
 	UnionToIntersection,
 } from "./shared.ts";
 
@@ -31,12 +31,13 @@ type ExistingFlagCollisionBrand<F, Existing extends string> = CollisionBrand<
  * Every statically known canonical, short, and long-alias member, including literals
  * beside an open member. Spelling grammar only: collision evidence stays with
  * {@link ExtractAllAliases}, which must not leak literals out of an open domain.
+ * Each field is filtered on its own so a `string`-typed field cannot absorb a
+ * sibling field's invalid literal before the filter runs.
  */
-type SpellingMembers<F> = ClosedMembers<
-	| RawName<F>
-	| (F extends { short: infer S extends string } ? S : never)
-	| (F extends { aliases: infer A extends readonly string[] } ? A[number] : never)
->;
+type SpellingMembers<F> =
+	| DefNameMembers<F>
+	| ClosedMembers<F extends { short: infer S extends string } ? S : never>
+	| ClosedMembers<F extends { aliases: infer A extends readonly string[] } ? A[number] : never>;
 
 /** Reject `__proto__`, which mutates the prototype of plain-object flag registries. */
 type ReservedSpellingBrand<F> =

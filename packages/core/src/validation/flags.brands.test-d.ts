@@ -182,6 +182,24 @@ type _noPrefix = Expect<
 		Equal<Tuple["FIX_EMPTY_SPELLING"], "Flag names and aliases must be non-empty strings">
 	>;
 	type _tupleCollision = Expect<Equal<Extract<keyof Tuple, "FIX_ALIAS_COLLISION">, never>>;
+
+	// a `string`-typed field must not absorb a sibling field's invalid literal
+	type BroadName = LocalFlagBrand<{ name: string; type: "boolean"; aliases: [""] }>;
+	type BroadNameNoPrefix = LocalFlagBrand<{ name: string; type: "boolean"; aliases: ["no-x"] }>;
+	type BroadAliases = LocalFlagBrand<{ name: ""; type: "boolean"; aliases: string[] }>;
+	type BroadShort = LocalFlagBrand<{ name: "__proto__"; type: "boolean"; short: string }>;
+	type _broadName = Expect<
+		Equal<BroadName["FIX_EMPTY_SPELLING"], "Flag names and aliases must be non-empty strings">
+	>;
+	type _broadNameNoPrefix = Expect<
+		Equal<BroadNameNoPrefix["FIX_NO_PREFIX"], "Names must not start with no-">
+	>;
+	type _broadAliases = Expect<
+		Equal<BroadAliases["FIX_EMPTY_SPELLING"], "Flag names and aliases must be non-empty strings">
+	>;
+	type _broadShort = Expect<
+		Equal<BroadShort["FIX_RESERVED_SPELLING"], 'Flag spelling "__proto__" is reserved'>
+	>;
 }
 
 {

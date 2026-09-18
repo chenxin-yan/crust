@@ -102,6 +102,15 @@ type Def<Name extends string, Aliases extends readonly string[] = readonly []> =
 		Equal<Reserved[0]["FIX_RESERVED_NAME"], 'Command name "__proto__" is reserved'>
 	>;
 	type _valid = Expect<Equal<Extract<keyof Valid[0], `FIX_${string}`>, never>>;
+	// a definition union: the open variant's `string` must not absorb the literal variant's name
+	type EmptyDefs = ValidateCommandDefinitions<readonly [Def<""> | Def<string>]>;
+	type ReservedDefs = ValidateCommandDefinitions<readonly [Def<"__proto__"> | Def<string>]>;
+	type _emptyDefs = Expect<
+		Equal<EmptyDefs[0]["FIX_EMPTY_NAME"], "Command name must be a non-empty string">
+	>;
+	type _reservedDefs = Expect<
+		Equal<ReservedDefs[0]["FIX_RESERVED_NAME"], 'Command name "__proto__" is reserved'>
+	>;
 
 	type EmptyAlias = ValidateCommandConfig<"issue", { aliases: readonly ["", Mixed] }>;
 	type DashAlias = ValidateCommandConfig<"issue", { aliases: readonly ["-i" | Mixed] }>;

@@ -5,7 +5,7 @@ import type {
 	EmptyLiteralNameBrand,
 	HasClosedNames,
 	LocalValueBrand,
-	RawName,
+	DefNameMembers,
 } from "./shared.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -28,7 +28,7 @@ type EmptyArgNameError = { readonly FIX_EMPTY_NAME: "Argument names must be non-
 export type EmptyArgNameBrand<Name extends string> = EmptyLiteralNameBrand<Name, EmptyArgNameError>;
 
 // An empty name renders as "<>" in help/snapshot labels and validation messages.
-type EmptyArgDefinitionNameBrand<A> = EmptyArgNameBrand<RawName<A>>;
+type EmptyArgDefinitionNameBrand<A> = EmptyArgNameBrand<DefNameMembers<A>>;
 
 type ArgChecks<A, Existing extends string> = A &
 	DuplicateArgBrand<A, Existing> &

@@ -8,7 +8,7 @@ import type {
 	IsClosedName,
 	IsStaticTuple,
 	IsUnion,
-	RawName,
+	DefNameMembers,
 	UnionToIntersection,
 } from "./shared.ts";
 
@@ -133,7 +133,7 @@ export type CommandDefinitionSpellings<D> = D extends unknown
 
 // Catches `.as()` renames that land on one of the definition's own aliases
 // (config-time AliasShapeError compares aliases against the original name only).
-type SelfAliasBrand<D> = ClosedMembers<RawName<D>> &
+type SelfAliasBrand<D> = DefNameMembers<D> &
 	AliasMembers<DefinitionAliases<D>> extends infer Dup extends string
 	? [Dup] extends [never]
 		? {}
@@ -167,7 +167,7 @@ export type ValidateCommandDefinitions<
 		? readonly [
 				Head &
 					CommandCollisionBrand<Spellings, Existing> &
-					CommandNameBrand<RawName<Head>> &
+					CommandNameBrand<DefNameMembers<Head>> &
 					SelfAliasBrand<Head>,
 				...ValidateCommandDefinitions<Tail, Existing | Spellings>,
 			]
