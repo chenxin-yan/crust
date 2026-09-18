@@ -22,7 +22,12 @@ import {
 	resolveTargets,
 	buildEntrypoint,
 } from "../utils/build-helpers.ts";
-import { CRUST_DIR, type Distribution, runDistributeBuild } from "../utils/distribute.ts";
+import {
+	CRUST_DIR,
+	type DistributeBuildPlan,
+	type Distribution,
+	runDistributeBuild,
+} from "../utils/distribute.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // package.json "crust" configuration
@@ -112,7 +117,7 @@ function hasDependency(pkg: JsonValue, name: string): boolean {
 const DENO_CONFIG_FILES = ["deno.json", "deno.jsonc"] as const;
 
 /** Where the build runtime came from, printed as `Runtime: <runtime> (<source>)`. */
-export type RuntimeSource =
+type RuntimeSource =
 	| "from package.json"
 	| `inferred from ${(typeof DENO_CONFIG_FILES)[number]}`
 	| "inferred from @types/node"
@@ -126,7 +131,7 @@ type ResolvedRuntime = { runtime: BuildRuntime; source: RuntimeSource };
  * `@types/bun`. Lockfiles say which package manager installed dependencies,
  * not which runtime runs the CLI, so they are not consulted.
  */
-export function resolveBuildRuntime(
+function resolveBuildRuntime(
 	pkg: JsonValue | undefined,
 	config: CrustConfig,
 	cwd: string,
@@ -207,18 +212,10 @@ export type BuildFlags = {
 	"env-file"?: string[];
 };
 
-type CommonBuildPlan = {
-	cwd: string;
-	userPackageJson: JsonValue | undefined;
+type CommonBuildPlan = DistributeBuildPlan & {
 	runtimeSource: RuntimeSource;
-	entryPath: string;
 	envFiles: string[];
 	bunPlugins: string[];
-	include: string[];
-	/** Where Extension build hooks write: `.crust/artifacts`. */
-	outDir: string;
-	stageDir: string;
-	validate: boolean;
 	minify: boolean;
 };
 
@@ -286,13 +283,13 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 }
 
 /** Bun and Deno stage platform packages behind a Node launcher; Node stages a root-only bundle. */
-async function runStagedBuild(plan: BuildPlan, cwd: string, io: InvocationIO): Promise<void> {
+async function runStagedBuild(plan: BuildPlan, io: InvocationIO): Promise<void> {
 	if (plan.runtime === "bun") {
 		const distribution: Distribution<BunTarget> = {
 			table: BUN_TARGETS,
 			targets: plan.targets,
 			execute: (entry, outfile, target) =>
-				execBuild(entry, outfile, plan.minify, target, plan.envFiles, cwd, plan.bunPlugins),
+				execBuild(entry, outfile, plan.minify, target, plan.envFiles, plan.cwd, plan.bunPlugins),
 		};
 		return runDistributeBuild(plan, distribution, io);
 	}
@@ -300,7 +297,7 @@ async function runStagedBuild(plan: BuildPlan, cwd: string, io: InvocationIO): P
 		const distribution: Distribution<DenoTarget> = {
 			table: DENO_TARGETS,
 			targets: plan.targets,
-			execute: (entry, outfile, target) => execDenoBuild(entry, outfile, target, cwd),
+			execute: (entry, outfile, target) => execDenoBuild(entry, outfile, target, plan.cwd),
 		};
 		return runDistributeBuild(plan, distribution, io);
 	}
@@ -308,7 +305,7 @@ async function runStagedBuild(plan: BuildPlan, cwd: string, io: InvocationIO): P
 		plan,
 		{
 			execute: (entry, outfile) =>
-				execNodeBuild(entry, outfile, plan.minify, plan.envFiles, cwd, plan.bunPlugins),
+				execNodeBuild(entry, outfile, plan.minify, plan.envFiles, plan.cwd, plan.bunPlugins),
 		},
 		io,
 	);
@@ -386,6 +383,6 @@ export const buildCommand = defineCommand(
 					);
 					printBuildReport(build, stdout);
 				}
-				await runStagedBuild(plan, cwd, io);
+				await runStagedBuild(plan, io);
 			}),
 );

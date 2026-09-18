@@ -362,7 +362,7 @@ export function resolveBunPluginSource(specifier: string, cwd: string): string {
  * it is internal to crust, never user-set. Deno compile has no define, but
  * standalone Deno binaries are detected directly.
  */
-export const CRUST_BUILD_DEFINE = { "process.env.CRUST_INTERNAL_BUILD": '"1"' } as const;
+const CRUST_BUILD_DEFINE = { "process.env.CRUST_INTERNAL_BUILD": '"1"' } as const;
 // The value keeps its quotes so bun inlines a string literal, not a number.
 const CRUST_BUILD_DEFINE_ARG = 'process.env.CRUST_INTERNAL_BUILD="1"';
 
@@ -370,7 +370,6 @@ type BunPluginDriverBuild = {
 	entrypoints: [string];
 	minify: boolean;
 	env: "PUBLIC_*";
-	define: typeof CRUST_BUILD_DEFINE;
 } & (
 	| { target: "bun"; compile: { target: string; outfile: string; autoloadBunfig: false } }
 	| { target: "node"; format: "esm" }
@@ -409,7 +408,7 @@ for (const { specifier, source } of options.plugins) {
 	}
 	plugins.push(plugin);
 }
-const result = await Bun.build({ ...options.build, plugins, throw: false });
+const result = await Bun.build({ ...options.build, define: ${JSON.stringify(CRUST_BUILD_DEFINE)}, plugins, throw: false });
 if (!result.success) {
 	for (const log of result.logs) console.error(log);
 	process.exit(1);
@@ -492,7 +491,6 @@ export async function execBuild(
 				entrypoints: [entryPath],
 				minify,
 				env: "PUBLIC_*",
-				define: CRUST_BUILD_DEFINE,
 				target: "bun",
 				compile: {
 					target: compileTarget,
@@ -534,29 +532,6 @@ export function createBunCompileArgs(
 		...(minify ? ["--minify"] : []),
 		"--target",
 		target,
-		entryPath,
-	];
-}
-
-function createNodeBuildArgs(
-	entryPath: string,
-	outfilePath: string,
-	minify: boolean,
-	envFiles: readonly string[] = [],
-): string[] {
-	return [
-		"build",
-		...toBunEnvFileArgs(envFiles),
-		"--env=PUBLIC_*",
-		"--define",
-		CRUST_BUILD_DEFINE_ARG,
-		"--target",
-		"node",
-		"--format",
-		"esm",
-		"--outfile",
-		outfilePath,
-		...(minify ? ["--minify"] : []),
 		entryPath,
 	];
 }
@@ -616,7 +591,6 @@ export async function execNodeBuild(
 				entrypoints: [entryPath],
 				minify,
 				env: "PUBLIC_*",
-				define: CRUST_BUILD_DEFINE,
 				target: "node",
 				format: "esm",
 			},
@@ -628,7 +602,21 @@ export async function execNodeBuild(
 	} else {
 		await runBuildProcess(
 			resolveBunBuildRunner(),
-			createNodeBuildArgs(entryPath, outfilePath, minify, envFiles),
+			[
+				"build",
+				...toBunEnvFileArgs(envFiles),
+				"--env=PUBLIC_*",
+				"--define",
+				CRUST_BUILD_DEFINE_ARG,
+				"--target",
+				"node",
+				"--format",
+				"esm",
+				"--outfile",
+				outfilePath,
+				...(minify ? ["--minify"] : []),
+				entryPath,
+			],
 			outfilePath,
 			cwd,
 		);

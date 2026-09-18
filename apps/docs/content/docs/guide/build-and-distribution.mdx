@@ -124,7 +124,7 @@ Users install the root package; for Bun and Deno builds the package manager pull
 
 ### Publishing from CI
 
-`npm publish` runs inside each `.crust/<package>` directory, so a project-level `.npmrc` is not read. Authenticate with [trusted publishing](https://docs.npmjs.com/trusted-publishers), point `NPM_CONFIG_USERCONFIG` at an `.npmrc` you write in the workflow, or use `~/.npmrc`; `--registry` overrides the destination. crust passes no `--access`, so a scoped public package needs `"publishConfig": { "access": "public" }` in its `package.json`, which `crust build` copies into every staged package.
+`npm publish` runs inside each `.crust/<package>` directory, so a project-level `.npmrc` is not read. Authenticate with [trusted publishing](https://docs.npmjs.com/trusted-publishers), point `NPM_CONFIG_USERCONFIG` at an `.npmrc` you write in the workflow, or use `~/.npmrc`; `--registry` overrides the destination. npm reads `publishConfig.access` from each staged `package.json`, so a scoped public package needs `"publishConfig": { "access": "public" }` in its `package.json`, which `crust build` copies into every staged package.
 
 ## Custom distribution
 

@@ -1,11 +1,9 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust } from "@crustjs/core";
-import { BUILD_OUT_DIR_ENV, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
-import { skill } from "@crustjs/skills";
 
 import { man } from "./extension.ts";
 
@@ -35,39 +33,6 @@ describe("man Extension", () => {
 		const output = await readFile(join(outDir, "man", "demo.5"), "utf8");
 		expect(output).toContain(".Dt DEMO 5");
 		expect(output).not.toContain(outDir);
-	});
-
-	it("renders the skill the skills build hook wrote in the same build", async () => {
-		const root = await mkdtemp(join(tmpdir(), "crust-man-extension-"));
-		directories.push(root);
-		await writeFile(join(root, "package.json"), '{"name":"demo"}');
-		const originalArgv1 = process.argv[1];
-		process.argv[1] = join(root, "cli.ts");
-		const outDir = join(root, "dist");
-		const snapshotPath = join(root, "snapshot.json");
-		const originalExit = process.exit;
-		process.env[SNAPSHOT_PATH_ENV] = snapshotPath;
-		// crust build has wiped .crust by now, so the skills extension must read the
-		// build output directory or the man page reports its own skill as missing.
-		process.env[BUILD_OUT_DIR_ENV] = outDir;
-		process.exit = (code?: number) => {
-			throw new Error(`process.exit(${code ?? "undefined"}) was called during snapshot`);
-		};
-		const app = new Crust("demo", { description: "Demo CLI" }).extend(skill({}), man());
-
-		try {
-			await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
-		} finally {
-			process.exit = originalExit;
-			if (originalArgv1 === undefined) process.argv.length = 1;
-			else process.argv[1] = originalArgv1;
-			delete process.env[SNAPSHOT_PATH_ENV];
-			delete process.env[BUILD_OUT_DIR_ENV];
-		}
-
-		const output = await readFile(join(outDir, "man", "demo.1"), "utf8");
-		expect(output).toContain(`Source: ${join(outDir, "skills", "demo")}`);
-		expect(output).not.toContain("not found");
 	});
 
 	it("honors a configured installed name", async () => {

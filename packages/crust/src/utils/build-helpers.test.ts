@@ -10,7 +10,6 @@ import {
 	buildEntrypoint,
 	bunBaselineAlias,
 	bunCompileTarget,
-	CRUST_BUILD_DEFINE,
 	createBunCompileArgs,
 	createBunPluginDriverScript,
 	execBuild,
@@ -80,7 +79,6 @@ describe("createBunPluginDriverScript", () => {
 				entrypoints: [String.raw`C:\Program Files\my "cli"\src\cli.tsx`],
 				minify: false,
 				env: "PUBLIC_*",
-				define: CRUST_BUILD_DEFINE,
 				target: "bun",
 				compile: { target: "bun-windows-x64", outfile: awkward, autoloadBunfig: false },
 			},
@@ -88,9 +86,7 @@ describe("createBunPluginDriverScript", () => {
 		};
 		const script = createBunPluginDriverScript(options);
 		expect(embeddedOptions(script)).toEqual(options);
-		expect(embeddedOptions(script).build.define).toEqual({
-			"process.env.CRUST_INTERNAL_BUILD": '"1"',
-		});
+		expect(script).toContain('define: {"process.env.CRUST_INTERNAL_BUILD":"\\"1\\""}');
 		expect(script).toContain('"autoloadBunfig":false');
 		expect(script).toContain("throw: false");
 		expect(script).toContain("must default-export a Bun bundler plugin ({ name, setup })");
@@ -103,7 +99,6 @@ describe("createBunPluginDriverScript", () => {
 				entrypoints: ["/proj/src/cli.ts"],
 				minify: true,
 				env: "PUBLIC_*",
-				define: CRUST_BUILD_DEFINE,
 				target: "node",
 				format: "esm",
 			},

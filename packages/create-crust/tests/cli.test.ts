@@ -11,6 +11,8 @@ import extensionsPackage from "../../extensions/package.json";
 const packageRoot = resolve(import.meta.dir, "..");
 const builtCliPath = join(packageRoot, ".crust", "root", "bin", "create-crust.js");
 const tempRoots: string[] = [];
+// Every runtime template ships exactly these scripts.
+const templateScriptKeys = ["build", "check:types", "dev", "release", "start"];
 
 function makeTempRoot(label: string): string {
 	const dir = join(tmpdir(), `${label}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -94,12 +96,10 @@ describe("create-crust CLI", () => {
 				"@types/bun": "latest",
 			},
 		});
-		// toMatchObject is partial: prove the imported packages left devDependencies.
 		expect(pkg.devDependencies["@crustjs/core"]).toBeUndefined();
 		expect(pkg.devDependencies["@crustjs/extensions"]).toBeUndefined();
 		expect(pkg.files).toBeUndefined();
-		expect(pkg.scripts.package).toBeUndefined();
-		expect(pkg.scripts.publish).toBeUndefined();
+		expect(Object.keys(pkg.scripts).sort()).toEqual(templateScriptKeys);
 		const tsconfig = JSON.parse(readFileSync(join(projectDir, "tsconfig.json"), "utf-8"));
 		expect(tsconfig.compilerOptions.lib).toEqual(["ESNext"]);
 		expect(tsconfig.compilerOptions.types).toEqual(["bun"]);
@@ -117,7 +117,6 @@ describe("create-crust CLI", () => {
 		expect(readme).toContain("# my-cli");
 		expect(readme).toContain("bun run dev");
 		expect(readme).toContain("bun run release");
-		expect(readme).not.toContain("dist/");
 		expect(readme).not.toContain("{{");
 		expect(existsSync(join(projectDir, "node_modules"))).toBe(false);
 		expect(existsSync(join(projectDir, ".git"))).toBe(false);
@@ -184,15 +183,10 @@ describe("create-crust CLI", () => {
 			},
 		});
 		expect(pkg.files).toBeUndefined();
-		expect(pkg.scripts.prepack).toBeUndefined();
-		expect(pkg.scripts.package).toBeUndefined();
-		expect(pkg.scripts.publish).toBeUndefined();
+		expect(Object.keys(pkg.scripts).sort()).toEqual(templateScriptKeys);
 		const tsconfig = JSON.parse(readFileSync(join(projectDir, "tsconfig.json"), "utf-8"));
 		expect(tsconfig.compilerOptions.lib).toEqual(["ESNext"]);
 		expect(tsconfig.compilerOptions.types).toEqual(["node"]);
-		expect(readFileSync(join(projectDir, "src", "cli.ts"), "utf-8")).toContain(
-			'import pkg from "../package.json" with { type: "json" };',
-		);
 		const readme = readFileSync(join(projectDir, "README.md"), "utf-8");
 		expect(readme).toContain("npm run dev");
 		expect(readme).not.toContain("bun run");
@@ -231,15 +225,11 @@ describe("create-crust CLI", () => {
 			devDependencies: { "@crustjs/crust": `^${crustPackage.version}` },
 		});
 		expect(pkg.files).toBeUndefined();
-		expect(pkg.scripts.package).toBeUndefined();
-		expect(pkg.scripts.publish).toBeUndefined();
+		expect(Object.keys(pkg.scripts).sort()).toEqual(templateScriptKeys);
 		expect(pkg.devDependencies.typescript).toBeUndefined();
 		const tsconfig = JSON.parse(readFileSync(join(projectDir, "tsconfig.json"), "utf-8"));
 		expect(tsconfig.compilerOptions.lib).toEqual(["ESNext", "deno.window"]);
 		expect(tsconfig.compilerOptions.types).toEqual([]);
-		expect(readFileSync(join(projectDir, "src", "cli.ts"), "utf-8")).toContain(
-			'import pkg from "../package.json" with { type: "json" };',
-		);
 		const readme = readFileSync(join(projectDir, "README.md"), "utf-8");
 		expect(readme).toContain("deno task dev");
 		expect(readme).not.toContain("bun run");

@@ -139,8 +139,8 @@ export function validatePublishManifest(stageDir: string, manifest: Distribution
 
 // npm, not `bun publish`: only npm supports trusted publishing (OIDC) from CI
 // (oven-sh/bun#15601). Staged package.json files carry no workspace: ranges,
-// so npm can publish the directories directly. No --access: npm reads the
-// staged package's publishConfig.access, copied from the project package.json.
+// so npm can publish the directories directly. npm reads publishConfig.access
+// from each staged package.json, copied from the project package.json.
 export function buildPublishCommand(args: { tag?: string; registry?: string }): string[] {
 	const command = ["npm", "publish"];
 

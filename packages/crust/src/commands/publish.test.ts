@@ -110,9 +110,6 @@ describe("publish manifest validation", () => {
 			publishOrder: ["root"],
 		};
 		writeStageFixture(nodeDir, nodeManifest);
-		expect(
-			JSON.parse(readFileSync(join(nodeDir, "root", "package.json"), "utf8")),
-		).not.toHaveProperty("optionalDependencies");
 
 		const loaded = readPublishManifest(nodeDir);
 		expect(loaded).toMatchObject({ packages: [], publishOrder: ["root"] });

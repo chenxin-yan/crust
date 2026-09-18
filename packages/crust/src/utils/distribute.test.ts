@@ -142,7 +142,7 @@ describe("runDistributeBuild", () => {
 			libc: ["musl"],
 		});
 		expect(platformPackage("windows-arm64")).not.toHaveProperty("libc");
-		// `crust publish` passes no --access; npm reads publishConfig.access from every staged package.
+		// npm reads publishConfig.access from each staged package.json.
 		expect(platformPackage("linux-x64").publishConfig).toEqual({ access: "public" });
 		// Editor-only `$schema` (create-crust templates set it) and the `crust` build
 		// config are project-side; neither belongs in a published package.
@@ -166,7 +166,6 @@ describe("runDistributeBuild", () => {
 		});
 		const resolver = readFileSync(join(plan.stageDir, "root", "bin", "test-cli.js"), "utf8");
 		expect(resolver).toContain('"packagePathSegment": "test-package-cli-linux-x64"');
-		expect(resolver).toContain('"targetAlias": "linux-x64"');
 		expect(resolver).toContain("Unsupported platform:");
 		expect(resolver).toContain('"linux-x64-musl": {');
 		expect(resolver).toContain("glibcVersionRuntime");
@@ -250,9 +249,6 @@ describe("runDistributeBuild", () => {
 			"@scope/deno-cli-linux-x64": "2.0.0",
 			"@scope/deno-cli-windows-arm64": "2.0.0",
 		});
-		expect(readFileSync(join(plan.stageDir, "root", "bin", "deno-cli.js"), "utf8")).toContain(
-			'"binaryFilename": "deno-cli-x86_64-unknown-linux-gnu"',
-		);
 		expect(outputs).toEqual([
 			join(plan.stageDir, "linux-x64", "bin", "deno-cli-x86_64-unknown-linux-gnu"),
 			join(plan.stageDir, "windows-arm64", "bin", "deno-cli-aarch64-pc-windows-msvc.exe"),

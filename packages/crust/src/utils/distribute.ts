@@ -484,6 +484,7 @@ export type DistributeBuildPlan = {
 	entryPath: string;
 	stageDir: string;
 	validate: boolean;
+	/** Where Extension build hooks write: `.crust/artifacts`. */
 	outDir: string;
 	userPackageJson: JsonValue | undefined;
 	/** Validated `crust.include` entries; directories staged like Extension artifacts. */
