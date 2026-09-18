@@ -3,8 +3,6 @@ import type { BaseValueType } from "@crustjs/utils/primitive";
 
 import type { AgentTarget, Scope } from "./agents.ts";
 
-export type { AgentClass, AgentTarget, Scope } from "./agents.ts";
-
 /** Metadata used to render a generated skill. */
 export interface SkillMeta {
 	name: string;

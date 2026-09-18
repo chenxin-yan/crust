@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { defineCommand, Crust } from "./command/crust.ts";
 import { defineExtensionId } from "./identity.ts";
-import { isListed, sectionsFor, visibleSectionsFor } from "./tooling.ts";
+import { isListed, sectionsFor, visibleSectionsFor } from "./sections.ts";
 import type { CommandSection } from "./types.ts";
 
 const universal = { title: "Universal", body: "Everywhere" } as const;

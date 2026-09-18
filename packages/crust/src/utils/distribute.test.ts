@@ -31,6 +31,7 @@ function createPlan(
 		validate: false,
 		outDir: join(cwd, ".crust", "artifacts"),
 		userPackageJson: packageJson,
+		include: [],
 		...overrides,
 	};
 }
@@ -70,10 +71,13 @@ describe("runDistributeBuild", () => {
 
 	it("stages manifests, package metadata, resolver, licenses, and fake binary outputs", async () => {
 		const packageJson = {
+			$schema: "./node_modules/@crustjs/crust/schema/package.json",
 			name: "@scope/test-package-cli",
 			version: "0.1.0",
 			description: "CLI tooling",
+			crust: { runtime: "bun" },
 			bin: { "test-cli": "dist/cli" },
+			publishConfig: { access: "public" },
 		};
 		const plan = createPlan(tmpDir, packageJson);
 		const outputs: string[] = [];
@@ -121,9 +125,12 @@ describe("runDistributeBuild", () => {
 
 		// glibc and musl packages share os/cpu; `libc` is what lets npm skip the wrong one.
 		const platformPackage = (dir: string) =>
-			readJson<{ os: string[]; cpu: string[]; libc?: string[] }>(
-				join(plan.stageDir, dir, "package.json"),
-			);
+			readJson<{
+				os: string[];
+				cpu: string[];
+				libc?: string[];
+				publishConfig?: Record<string, string>;
+			}>(join(plan.stageDir, dir, "package.json"));
 		expect(platformPackage("linux-x64")).toMatchObject({
 			os: ["linux"],
 			cpu: ["x64"],
@@ -135,12 +142,22 @@ describe("runDistributeBuild", () => {
 			libc: ["musl"],
 		});
 		expect(platformPackage("windows-arm64")).not.toHaveProperty("libc");
+		// npm reads publishConfig.access from each staged package.json.
+		expect(platformPackage("linux-x64").publishConfig).toEqual({ access: "public" });
+		// Editor-only `$schema` (create-crust templates set it) and the `crust` build
+		// config are project-side; neither belongs in a published package.
+		expect(platformPackage("linux-x64")).not.toHaveProperty("$schema");
+		expect(platformPackage("linux-x64")).not.toHaveProperty("crust");
 
 		const rootPackage = readJson<{
 			files: string[];
 			bin: Record<string, string>;
 			optionalDependencies: Record<string, string>;
+			publishConfig?: Record<string, string>;
 		}>(join(plan.stageDir, "root", "package.json"));
+		expect(rootPackage.publishConfig).toEqual({ access: "public" });
+		expect(rootPackage).not.toHaveProperty("$schema");
+		expect(rootPackage).not.toHaveProperty("crust");
 		expect(rootPackage.bin).toEqual({ "test-cli": "bin/test-cli.js" });
 		expect(rootPackage.optionalDependencies).toEqual({
 			"@scope/test-package-cli-linux-x64": "0.1.0",
@@ -149,7 +166,6 @@ describe("runDistributeBuild", () => {
 		});
 		const resolver = readFileSync(join(plan.stageDir, "root", "bin", "test-cli.js"), "utf8");
 		expect(resolver).toContain('"packagePathSegment": "test-package-cli-linux-x64"');
-		expect(resolver).toContain('"targetAlias": "linux-x64"');
 		expect(resolver).toContain("Unsupported platform:");
 		expect(resolver).toContain('"linux-x64-musl": {');
 		expect(resolver).toContain("glibcVersionRuntime");
@@ -233,9 +249,6 @@ describe("runDistributeBuild", () => {
 			"@scope/deno-cli-linux-x64": "2.0.0",
 			"@scope/deno-cli-windows-arm64": "2.0.0",
 		});
-		expect(readFileSync(join(plan.stageDir, "root", "bin", "deno-cli.js"), "utf8")).toContain(
-			'"binaryFilename": "deno-cli-x86_64-unknown-linux-gnu"',
-		);
 		expect(outputs).toEqual([
 			join(plan.stageDir, "linux-x64", "bin", "deno-cli-x86_64-unknown-linux-gnu"),
 			join(plan.stageDir, "windows-arm64", "bin", "deno-cli-aarch64-pc-windows-msvc.exe"),
@@ -404,13 +417,10 @@ describe("runDistributeBuild", () => {
 		mkdirSync(join(tmpDir, "assets"), { recursive: true });
 		writeFileSync(join(tmpDir, "templates", "base", "README.md"), "template\n");
 		writeFileSync(join(tmpDir, "assets", "logo.txt"), "logo\n");
-		const packageJson = {
-			name: "include-cli",
-			version: "0.1.0",
-			crust: { include: ["templates", "./assets"] },
-		};
+		const packageJson = { name: "include-cli", version: "0.1.0" };
+		const include = ["templates", "./assets"];
 
-		const bunPlan = createPlan(tmpDir, packageJson, { validate: true });
+		const bunPlan = createPlan(tmpDir, packageJson, { validate: true, include });
 		await runDistributeBuild(bunPlan, bunDistribution(), io);
 		expect(
 			readJson<{ files: string[] }>(join(bunPlan.stageDir, "root", "package.json")).files,
@@ -423,7 +433,10 @@ describe("runDistributeBuild", () => {
 		).toBe("logo\n");
 
 		// Root-only packages have no platform bin to copy into; the root copy is the only one.
-		const nodePlan = createPlan(tmpDir, packageJson, { stageDir: join(tmpDir, ".node-stage") });
+		const nodePlan = createPlan(tmpDir, packageJson, {
+			stageDir: join(tmpDir, ".node-stage"),
+			include,
+		});
 		await runDistributeBuild(nodePlan, rootOnlyDistribution, io);
 		expect(
 			readJson<{ files: string[] }>(join(nodePlan.stageDir, "root", "package.json")).files,
@@ -449,18 +462,17 @@ describe("runDistributeBuild", () => {
 		symlinkSync(join(tmpDir, "templates", "deep"), join(tmpDir, "hop", "real", "via"), "dir");
 		mkdirSync(join(tmpDir, "hopper"));
 		symlinkSync(join(tmpDir, "hop", "real"), join(tmpDir, "hopper", "link"), "dir");
-		const stage = (include: JsonValue, validate = false, stageDir = join(tmpDir, ".crust")) =>
+		const stage = (include: string[], validate = false, stageDir = join(tmpDir, ".crust")) =>
 			runDistributeBuild(
 				createPlan(
 					tmpDir,
-					{ name: "include-cli", version: "0.1.0", crust: { include } },
-					{ validate, stageDir },
+					{ name: "include-cli", version: "0.1.0" },
+					{ validate, stageDir, include },
 				),
 				bunDistribution(),
 				io,
 			);
 
-		await expect(stage("templates")).rejects.toThrow("crust.include must be an array");
 		await expect(stage(["../outside"])).rejects.toThrow("inside the project root");
 		await expect(stage([join(tmpDir, "src")])).rejects.toThrow("inside the project root");
 		await expect(stage(["."])).rejects.toThrow("inside the project root");

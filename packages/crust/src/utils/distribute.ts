@@ -484,8 +484,11 @@ export type DistributeBuildPlan = {
 	entryPath: string;
 	stageDir: string;
 	validate: boolean;
+	/** Where Extension build hooks write: `.crust/artifacts`. */
 	outDir: string;
 	userPackageJson: JsonValue | undefined;
+	/** Validated `crust.include` entries; directories staged like Extension artifacts. */
+	include: readonly string[];
 };
 
 /**
@@ -532,12 +535,7 @@ export async function runDistributeBuild<T extends string>(
 
 	const artifactOutDir = plan.validate ? plan.outDir : undefined;
 	const artifacts = collectArtifacts(artifactOutDir);
-	const includeDirs = collectIncludeDirs(
-		plan.cwd,
-		plan.stageDir,
-		plan.userPackageJson,
-		artifacts.names,
-	);
+	const includeDirs = collectIncludeDirs(plan.cwd, plan.stageDir, plan.include, artifacts.names);
 	stageDistributionPackages(plan.cwd, plan.stageDir, metadata, distributionTargets, {
 		artifactDirs: [...artifacts.names, ...includeDirs],
 		manPages: artifacts.manPages,
@@ -602,30 +600,16 @@ export async function runDistributeBuild<T extends string>(
 	io.stdout(`\n${dim("Manifest:")} ${manifestPath}`);
 }
 
-function isStringArray(value: JsonValue): value is readonly string[] {
-	return Array.isArray(value) && value.every((entry): entry is string => typeof entry === "string");
-}
-
 /**
- * `crust.include` directories from the user's package.json, normalized to
- * cwd-relative POSIX names. They are staged exactly like Extension artifacts.
+ * `crust.include` directories normalized to cwd-relative POSIX names. They are
+ * staged exactly like Extension artifacts.
  */
 function collectIncludeDirs(
 	cwd: string,
 	stageDir: string,
-	userPackageJson: JsonValue | undefined,
+	include: readonly string[],
 	artifactNames: readonly string[],
 ): string[] {
-	if (userPackageJson === undefined || !isJsonObject(userPackageJson)) return [];
-	const crust = userPackageJson.crust;
-	if (crust === undefined || !isJsonObject(crust) || crust.include === undefined) return [];
-	const include = crust.include;
-	if (!isStringArray(include)) {
-		throw new Error(
-			'package.json crust.include must be an array of directory names relative to the project root, e.g. ["templates"].',
-		);
-	}
-
 	const names = [...artifactNames];
 	const includeDirs: string[] = [];
 	for (const entry of include) {

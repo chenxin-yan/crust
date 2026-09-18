@@ -110,9 +110,6 @@ describe("publish manifest validation", () => {
 			publishOrder: ["root"],
 		};
 		writeStageFixture(nodeDir, nodeManifest);
-		expect(
-			JSON.parse(readFileSync(join(nodeDir, "root", "package.json"), "utf8")),
-		).not.toHaveProperty("optionalDependencies");
 
 		const loaded = readPublishManifest(nodeDir);
 		expect(loaded).toMatchObject({ packages: [], publishOrder: ["root"] });
@@ -123,7 +120,6 @@ describe("publish manifest validation", () => {
 			loaded,
 			{
 				stageDir: nodeDir,
-				access: "public",
 				spawnPublish: async (dir) => {
 					published.push(dir);
 					return 0;
@@ -134,13 +130,19 @@ describe("publish manifest validation", () => {
 		expect(published).toEqual([join(nodeDir, "root")]);
 	});
 
-	it("rejects malformed publish order", () => {
+	it("rejects malformed publish order", async () => {
 		const invalid: DistributionManifest = {
 			...manifest,
 			publishOrder: ["root", "linux-x64", "darwin-arm64"],
 		};
 
 		expect(() => validatePublishManifest(tmpDir, invalid)).toThrow(/root package last/);
+		// Validation always runs before any npm publish is spawned.
+		const spawnPublish = mock(async () => 0);
+		await expect(
+			publishStagedPackages(invalid, { stageDir: tmpDir, spawnPublish }, io),
+		).rejects.toThrow(/root package last/);
+		expect(spawnPublish).not.toHaveBeenCalled();
 	});
 
 	it("rejects staged libc metadata that disagrees with the manifest", () => {
@@ -161,20 +163,11 @@ describe("publish manifest validation", () => {
 		);
 	});
 
-	it("publishes with npm so trusted publishing works", () => {
-		expect(buildPublishCommand({ access: "public" })).toEqual([
+	it("publishes with npm so trusted publishing works, leaving access to publishConfig", () => {
+		expect(buildPublishCommand({})).toEqual(["npm", "publish"]);
+		expect(buildPublishCommand({ tag: "next", registry: "https://r.example" })).toEqual([
 			"npm",
 			"publish",
-			"--access",
-			"public",
-		]);
-		expect(
-			buildPublishCommand({ access: "restricted", tag: "next", registry: "https://r.example" }),
-		).toEqual([
-			"npm",
-			"publish",
-			"--access",
-			"restricted",
 			"--tag",
 			"next",
 			"--registry",
@@ -188,7 +181,6 @@ describe("publish manifest validation", () => {
 			manifest,
 			{
 				stageDir: tmpDir,
-				access: "public",
 				dryRun: true,
 				spawnPublish,
 			},
@@ -209,7 +201,6 @@ describe("publish manifest validation", () => {
 			manifest,
 			{
 				stageDir: tmpDir,
-				access: "public",
 				spawnPublish: async (_dir, _command, executorIO) => {
 					executorIO.stdout("registry stdout");
 					executorIO.stderr("registry stderr");
@@ -235,7 +226,6 @@ describe("publish manifest validation", () => {
 				manifest,
 				{
 					stageDir: tmpDir,
-					access: "public",
 					spawnPublish,
 				},
 				io,

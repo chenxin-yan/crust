@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
+import type { AgentTarget } from "./agents.ts";
 import { planReconcile, UNIVERSAL_GROUP, type ReconcileChoice } from "./reconcile.ts";
-import type { AgentTarget, SkillStatusResult } from "./types.ts";
+import type { SkillStatusResult } from "./types.ts";
 
 function statusMap(
 	entries: SkillStatusResult["agents"],

@@ -56,8 +56,6 @@ interface PreparedInvocation {
  * without dispatching a Command Action. In-process callers use `Crust.snapshot()`.
  */
 export const SNAPSHOT_PATH_ENV = "CRUST_INTERNAL_SNAPSHOT_PATH";
-// Shared with resolveArtifactDir, which resolves against this directory during the run.
-export { BUILD_OUT_DIR_ENV };
 const EXIT_CODE_CANCELLED = 130;
 
 function isAbortError(error: CaughtError): boolean {

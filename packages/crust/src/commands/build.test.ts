@@ -6,17 +6,31 @@ import { fileURLToPath } from "node:url";
 
 import { Crust } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
+import type { JsonValue } from "@crustjs/utils/json";
 
 const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 
+import schema from "../../schema/package.json";
 import {
+	BUILD_RUNTIMES,
 	BUN_TARGETS,
 	bunBaselineAlias,
 	DENO_TARGETS,
 	hostTarget,
 	resolveTargets,
+	type TargetTable,
 } from "../utils/build-helpers.ts";
-import { type BuildFlags, buildCommand, planBuild, resolveEnvFilePaths } from "./build.ts";
+import {
+	type BuildFlags,
+	buildCommand,
+	CRUST_CONFIG_KEYS,
+	DEFAULT_ENTRY,
+	planBuild,
+	readCrustConfig,
+	resolveEnvFilePaths,
+} from "./build.ts";
+
+const host = hostTarget(BUN_TARGETS);
 
 describe("env file helpers", () => {
 	const tmpDir = mkdtempSync(join(tmpdir(), "crust-env-files-"));
@@ -46,7 +60,9 @@ describe("env file helpers", () => {
 
 describe("planBuild", () => {
 	const tmpDir = mkdtempSync(join(tmpdir(), "crust-build-plan-"));
-	const baseFlags: BuildFlags = { entry: "src/cli.ts", validate: true };
+	const baseFlags: BuildFlags = { validate: true };
+	const writePackageJson = (pkg: JsonValue) =>
+		writeFileSync(join(tmpDir, "package.json"), JSON.stringify(pkg));
 
 	beforeAll(() => {
 		rmSync(tmpDir, { recursive: true, force: true });
@@ -65,15 +81,11 @@ describe("planBuild", () => {
 		});
 	});
 
-	it("reads package.json crust.runtime and lets --runtime override it", () => {
-		writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ crust: { runtime: "deno" } }));
+	it("reads package.json crust.runtime", () => {
+		writePackageJson({ crust: { runtime: "deno" } });
 		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
 			runtime: "deno",
 			runtimeSource: "from package.json",
-		});
-		expect(planBuild({ ...baseFlags, runtime: "node" }, tmpDir)).toMatchObject({
-			runtime: "node",
-			runtimeSource: "from --runtime",
 		});
 	});
 
@@ -122,8 +134,25 @@ describe("planBuild", () => {
 	});
 
 	it("rejects an invalid configured runtime", () => {
-		writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ crust: { runtime: "python" } }));
+		writePackageJson({ crust: { runtime: "python" } });
 		expect(() => planBuild(baseFlags, tmpDir)).toThrow(/Invalid package.json crust.runtime/);
+	});
+
+	it("reads crust.entry relative to the project and rejects paths outside it", () => {
+		expect(planBuild(baseFlags, tmpDir).entryPath).toBe(join(tmpDir, "src", "cli.ts"));
+		writeFileSync(join(tmpDir, "src", "main.ts"), "export {};\n");
+		writePackageJson({ crust: { entry: "./src/main.ts" } });
+		expect(planBuild(baseFlags, tmpDir).entryPath).toBe(join(tmpDir, "src", "main.ts"));
+		for (const entry of ["../cli.ts", join(tmpDir, "src", "cli.ts"), ".", "src/.."]) {
+			writePackageJson({ crust: { entry } });
+			expect(() => planBuild(baseFlags, tmpDir)).toThrow(
+				`package.json crust.entry ${JSON.stringify(entry)} must be a file inside the project root`,
+			);
+		}
+		writePackageJson({ crust: { entry: "src/missing.ts" } });
+		expect(() => planBuild(baseFlags, tmpDir)).toThrow(
+			`Entry file not found: ${join(tmpDir, "src", "missing.ts")}`,
+		);
 	});
 
 	it("uses one parse-error policy for runtime and output-name resolution", () => {
@@ -131,56 +160,62 @@ describe("planBuild", () => {
 		expect(() => planBuild(baseFlags, tmpDir)).toThrow(`Failed to parse package.json in ${tmpDir}`);
 	});
 
-	for (const testCase of [
+	const rejectedCases: Array<{
+		name: string;
+		crust: JsonValue;
+		flags: Partial<BuildFlags>;
+		error: string;
+	}> = [
 		{
 			name: "Node builds with targets",
-			flags: { runtime: "node", target: ["bun-linux-x64"] },
-			error: "--target cannot be used with --runtime node",
+			crust: { runtime: "node" },
+			flags: { target: ["bun-linux-x64"] },
+			error: "--target cannot be used with the node runtime",
 		},
 		{
 			name: "minified Deno builds",
-			flags: { runtime: "deno", minify: true },
-			error: "--minify is not supported with --runtime deno",
+			crust: { runtime: "deno" },
+			flags: { minify: true },
+			error: "--minify is not supported with the deno runtime",
 		},
 		{
 			name: "Deno builds with env files",
-			flags: { runtime: "deno", "env-file": [".env"] },
-			error: "--env-file is not supported with --runtime deno",
-		},
-		{
-			name: "multi-target builds with outfile",
-			flags: { outfile: "out/cli", target: ["bun-linux-x64", "bun-darwin-arm64"] },
-			error: "--outfile builds exactly one target",
+			crust: { runtime: "deno" },
+			flags: { "env-file": [".env"] },
+			error: "--env-file is not supported with the deno runtime",
 		},
 		{
 			name: "Deno builds with Bun bundler plugins",
-			flags: { runtime: "deno", "bun-plugin": ["@opentui/solid/bun-plugin"] },
-			error: "--bun-plugin is not supported with --runtime deno",
+			crust: { runtime: "deno", bunPlugins: ["@opentui/solid/bun-plugin"] },
+			flags: {},
+			error: "package.json crust.bunPlugins is not supported with the deno runtime",
 		},
-	] as const) {
+	];
+	for (const testCase of rejectedCases) {
 		it(`rejects ${testCase.name}`, () => {
-			expect(() => planBuild({ ...baseFlags, ...testCase.flags } as BuildFlags, tmpDir)).toThrow(
-				testCase.error,
-			);
+			writePackageJson({ crust: testCase.crust });
+			expect(() => planBuild({ ...baseFlags, ...testCase.flags }, tmpDir)).toThrow(testCase.error);
 		});
 	}
 
-	it("keeps --bun-plugin specifiers in order and defaults to none", () => {
+	it("keeps crust.bunPlugins specifiers in order and defaults to none", () => {
 		expect(planBuild(baseFlags, tmpDir).bunPlugins).toEqual([]);
-		expect(
-			planBuild(
-				{ ...baseFlags, "bun-plugin": ["./plugins/second.ts", "@opentui/solid/bun-plugin"] },
-				tmpDir,
-			).bunPlugins,
-		).toEqual(["./plugins/second.ts", "@opentui/solid/bun-plugin"]);
-		expect(
-			planBuild({ ...baseFlags, runtime: "node", "bun-plugin": ["./plugin.ts"] }, tmpDir),
-		).toMatchObject({ runtime: "node", bunPlugins: ["./plugin.ts"] });
+		writePackageJson({
+			crust: { bunPlugins: ["./plugins/second.ts", "@opentui/solid/bun-plugin"] },
+		});
+		expect(planBuild(baseFlags, tmpDir).bunPlugins).toEqual([
+			"./plugins/second.ts",
+			"@opentui/solid/bun-plugin",
+		]);
+		writePackageJson({ crust: { runtime: "node", bunPlugins: ["./plugin.ts"] } });
+		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
+			runtime: "node",
+			bunPlugins: ["./plugin.ts"],
+		});
 	});
 
 	// Only arm64 hosts hit the self-copy refusal; x64 hosts compile their own
 	// target through its -baseline alias, which Bun downloads clean.
-	const host = hostTarget(BUN_TARGETS);
 	const hostHasAlias = host !== null && bunBaselineAlias(host) !== null;
 
 	it.skipIf(host === null || hostHasAlias)(
@@ -212,7 +247,7 @@ describe("planBuild", () => {
 		}
 	});
 
-	it("stages .crust for every runtime by default", () => {
+	it("stages .crust for every runtime", () => {
 		const stageDir = resolve(tmpDir, ".crust");
 		const outDir = resolve(stageDir, "artifacts");
 		expect(planBuild({ ...baseFlags, target: ["bun-linux-x64"] }, tmpDir)).toMatchObject({
@@ -220,69 +255,84 @@ describe("planBuild", () => {
 			targets: ["bun-linux-x64"],
 			stageDir,
 			outDir,
+			include: [],
 		});
-		expect(planBuild({ ...baseFlags, runtime: "deno" }, tmpDir)).toMatchObject({
+		writePackageJson({ crust: { runtime: "deno" } });
+		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
 			runtime: "deno",
 			targets: [...DENO_TARGETS.targets],
 			minify: false,
 			stageDir,
 		});
-		expect(() =>
-			planBuild({ ...baseFlags, runtime: "deno", target: ["linux-x64"] }, tmpDir),
-		).toThrow('Unknown Deno target "linux-x64"');
-		const nodePlan = planBuild(
-			{ ...baseFlags, runtime: "node", "bun-plugin": ["./plugin.ts"] },
-			tmpDir,
+		expect(() => planBuild({ ...baseFlags, target: ["linux-x64"] }, tmpDir)).toThrow(
+			'Unknown Deno target "linux-x64"',
 		);
+		mkdirSync(join(tmpDir, "templates"), { recursive: true });
+		writePackageJson({
+			crust: { runtime: "node", bunPlugins: ["./plugin.ts"], include: ["templates"] },
+		});
+		const nodePlan = planBuild(baseFlags, tmpDir);
 		expect(nodePlan).toMatchObject({
 			runtime: "node",
 			minify: true,
 			bunPlugins: ["./plugin.ts"],
+			include: ["templates"],
 			stageDir,
 		});
 		expect(nodePlan).not.toHaveProperty("targets");
-		expect(nodePlan).not.toHaveProperty("outfilePath");
 	});
 
-	it("plans one exact --outfile artifact without staging", () => {
-		const outDir = resolve(tmpDir, ".crust", "artifacts");
-		const nodePlan = planBuild({ ...baseFlags, runtime: "node", outfile: "out/cli.js" }, tmpDir);
-		expect(nodePlan).toMatchObject({
-			runtime: "node",
-			outfilePath: resolve(tmpDir, "out", "cli.js"),
-			outDir,
-		});
-		expect(nodePlan).not.toHaveProperty("stageDir");
-
-		expect(
-			planBuild({ ...baseFlags, outfile: "out/cli", target: ["bun-windows-x64"] }, tmpDir),
-		).toMatchObject({
+	it.skipIf(host === null)("resolves --target host to this machine's target", () => {
+		expect(planBuild({ ...baseFlags, target: ["host"] }, tmpDir)).toMatchObject({
 			runtime: "bun",
-			target: "bun-windows-x64",
-			outfilePath: resolve(tmpDir, "out", "cli.exe"),
+			targets: [host],
 		});
 		expect(
-			planBuild({ ...baseFlags, outfile: "out/cli.exe", target: ["bun-windows-x64"] }, tmpDir),
-		).toMatchObject({ outfilePath: resolve(tmpDir, "out", "cli.exe") });
-		expect(
-			planBuild(
-				{ ...baseFlags, runtime: "deno", outfile: "out/cli", target: ["aarch64-apple-darwin"] },
-				tmpDir,
-			),
-		).toMatchObject({ runtime: "deno", target: "aarch64-apple-darwin", minify: false });
-	});
-
-	it.skipIf(host === null)("defaults --outfile to the host target", () => {
-		expect(planBuild({ ...baseFlags, outfile: "out/cli" }, tmpDir)).toMatchObject({
-			runtime: "bun",
-			target: host,
-		});
+			planBuild({ ...baseFlags, target: ["host", host!, "bun-linux-x64", "host"] }, tmpDir),
+		).toMatchObject({ targets: host === "bun-linux-x64" ? [host] : [host, "bun-linux-x64"] });
 		const denoHost = hostTarget(DENO_TARGETS);
+		writePackageJson({ crust: { runtime: "deno" } });
 		if (denoHost !== null) {
-			expect(
-				planBuild({ ...baseFlags, runtime: "deno", outfile: "out/cli" }, tmpDir),
-			).toMatchObject({ runtime: "deno", target: denoHost });
+			expect(planBuild({ ...baseFlags, target: ["host"] }, tmpDir)).toMatchObject({
+				runtime: "deno",
+				targets: [denoHost],
+			});
+		} else {
+			expect(() => planBuild({ ...baseFlags, target: ["host"] }, tmpDir)).toThrow(
+				/No Deno target matches this machine \(linux-(x64|arm64)-musl\)/,
+			);
 		}
+	});
+});
+
+describe("readCrustConfig", () => {
+	it("accepts the four documented keys and nothing else", () => {
+		expect(readCrustConfig(undefined)).toEqual({});
+		expect(readCrustConfig({ name: "x" })).toEqual({});
+		expect(
+			readCrustConfig({
+				crust: { runtime: "node", entry: "src/index.ts", bunPlugins: ["./p.ts"], include: ["t"] },
+			}),
+		).toEqual({ runtime: "node", entry: "src/index.ts", bunPlugins: ["./p.ts"], include: ["t"] });
+		expect(() => readCrustConfig({ crust: { bunPlugin: [] } })).toThrow(
+			'Unknown package.json crust key "bunPlugin". Allowed keys: runtime, entry, bunPlugins, include',
+		);
+		expect(() => readCrustConfig({ crust: "bun" })).toThrow("crust must be an object");
+		expect(() => readCrustConfig({ crust: { entry: 1 } })).toThrow("crust.entry must be");
+		expect(() => readCrustConfig({ crust: { bunPlugins: "./p.ts" } })).toThrow(
+			"crust.bunPlugins must be an array",
+		);
+		expect(() => readCrustConfig({ crust: { include: "templates" } })).toThrow(
+			"crust.include must be an array",
+		);
+	});
+
+	it("matches the published JSON schema (schema/package.json)", () => {
+		const crust = schema.properties.crust;
+		expect(crust.additionalProperties).toBe(false);
+		expect(Object.keys(crust.properties)).toEqual([...CRUST_CONFIG_KEYS]);
+		expect(crust.properties.runtime.enum).toEqual([...BUILD_RUNTIMES]);
+		expect(crust.properties.entry.default).toBe(DEFAULT_ENTRY);
 	});
 });
 
@@ -310,6 +360,20 @@ describe("resolveTarget", () => {
 	it("throws on unknown target", () => {
 		expect(() => resolveTargets(BUN_TARGETS, ["linux-arm32"])).toThrow(/Unknown target/);
 	});
+
+	it("dedupes repeated targets in input order", () => {
+		expect(
+			resolveTargets(BUN_TARGETS, ["bun-darwin-arm64", "bun-linux-x64", "bun-darwin-arm64"]),
+		).toEqual(["bun-darwin-arm64", "bun-linux-x64"]);
+	});
+
+	it("rejects host when the table has no target for this machine", () => {
+		// A table with no entries for this platform reproduces the unsupported-host case deterministically.
+		const empty: TargetTable<never> = { runtime: "Bun", targets: [], info: {} };
+		expect(() => resolveTargets(empty, ["host"])).toThrow(
+			/No Bun target matches this machine \(\w+-\w+(-musl)?\)/,
+		);
+	});
 });
 
 describe("resolveDenoTarget", () => {
@@ -332,15 +396,18 @@ describe("resolveDenoTarget", () => {
 // Error handling tests
 // ────────────────────────────────────────────────────────────────────────────
 
-async function executeBuildError(name: string, argv: string[]): Promise<string> {
+async function executeBuildError(name: string, crust: JsonValue, argv: string[]): Promise<string> {
 	const originalCwd = process.cwd;
 	const tmpDir = mkdtempSync(join(tmpdir(), `crust-${name}-`));
 	rmSync(tmpDir, { recursive: true, force: true });
 	mkdirSync(join(tmpDir, "src"), { recursive: true });
 	writeFileSync(join(tmpDir, "src", "cli.ts"), "console.log('hi');");
+	writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ crust }));
 	process.cwd = () => tmpDir;
 	try {
-		return (await captureExecute(new Crust("test").add(buildCommand), ["build", ...argv])).stderr;
+		const result = await captureExecute(new Crust("test").add(buildCommand), ["build", ...argv]);
+		expect(result.exitCode).toBe(1);
+		return result.stderr;
 	} finally {
 		process.cwd = originalCwd;
 		rmSync(tmpDir, { recursive: true, force: true });
@@ -350,120 +417,93 @@ async function executeBuildError(name: string, argv: string[]): Promise<string> 
 describe("buildCommand error handling", () => {
 	it("rejects unsupported runtime and flag combinations before compiling", async () => {
 		expect(
-			await executeBuildError("node-target", [
-				"--runtime",
-				"node",
+			await executeBuildError("node-target", { runtime: "node" }, [
 				"--target",
 				"bun-linux-x64",
 				"--no-validate",
 			]),
-		).toContain("--target cannot be used with --runtime node");
+		).toContain("--target cannot be used with the node runtime");
 		expect(
-			await executeBuildError("deno-minify", ["--runtime", "deno", "--minify", "--no-validate"]),
-		).toContain("--minify is not supported with --runtime deno");
+			await executeBuildError("deno-minify", { runtime: "deno" }, ["--minify", "--no-validate"]),
+		).toContain("--minify is not supported with the deno runtime");
 		const envDir = mkdtempSync(join(tmpdir(), "crust-deno-env-file-"));
 		const envFile = join(envDir, ".env");
 		writeFileSync(envFile, "SECRET=x\n");
 		try {
 			expect(
-				await executeBuildError("deno-env-file", [
-					"--runtime",
-					"deno",
+				await executeBuildError("deno-env-file", { runtime: "deno" }, [
 					"--env-file",
 					envFile,
 					"--no-validate",
 				]),
-			).toContain("--env-file is not supported with --runtime deno");
+			).toContain("--env-file is not supported with the deno runtime");
 		} finally {
 			rmSync(envDir, { recursive: true, force: true });
 		}
 		expect(
-			await executeBuildError("deno-bun-plugin", [
-				"--runtime",
-				"deno",
-				"--bun-plugin",
-				"@opentui/solid/bun-plugin",
-				"--no-validate",
-			]),
-		).toContain("--bun-plugin is not supported with --runtime deno");
+			await executeBuildError(
+				"deno-bun-plugin",
+				{ runtime: "deno", bunPlugins: ["@opentui/solid/bun-plugin"] },
+				["--no-validate"],
+			),
+		).toContain("package.json crust.bunPlugins is not supported with the deno runtime");
+		expect(await executeBuildError("unknown-key", { bunPlugin: [] }, ["--no-validate"])).toContain(
+			'Unknown package.json crust key "bunPlugin". Allowed keys: runtime, entry, bunPlugins, include',
+		);
 	});
 	it("sets exitCode and logs error when entry file is missing", async () => {
-		const originalCwd = process.cwd;
-		const tmpDir = mkdtempSync(join(tmpdir(), "crust-missing-entry-"));
-		mkdirSync(tmpDir, { recursive: true });
-
-		process.cwd = () => tmpDir;
-
-		try {
-			const result = await captureExecute(new Crust("test").add(buildCommand), [
-				"build",
-				"--entry",
-				"nonexistent.ts",
-				"--target",
-				"bun-linux-x64",
-			]);
-
-			expect(result.exitCode).toBe(1);
-			expect(result.stderr).toContain("Entry file not found");
-		} finally {
-			process.cwd = originalCwd;
-			rmSync(tmpDir, { recursive: true, force: true });
-		}
-	});
-
-	it("rejects --outfile with more than one --target", async () => {
 		expect(
-			await executeBuildError("outfile-multi-target", [
-				"--outfile",
-				"./out",
+			await executeBuildError("missing-entry", { entry: "nonexistent.ts" }, [
 				"--target",
 				"bun-linux-x64",
-				"--target",
-				"bun-darwin-arm64",
-				"--no-validate",
 			]),
-		).toContain("--outfile builds exactly one target");
+		).toContain("Entry file not found");
 	});
 
-	it("writes Extension build artifacts to .crust/artifacts for an --outfile build", async () => {
-		const originalCwd = process.cwd;
-		const tmpDir = mkdtempSync(join(tmpdir(), "crust-outfile-artifacts-"));
-		rmSync(tmpDir, { recursive: true, force: true });
-		mkdirSync(join(tmpDir, "src"), { recursive: true });
-		writeFileSync(
-			join(tmpDir, "src", "cli.ts"),
-			`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(corePath)};\n` +
-				`const artifact = defineExtension(defineExtensionId("artifact"), { build: async ({ outDir }) => { await Bun.write(outDir + "/artifact.txt", "built"); return ["artifact.txt", "second.txt", "third.txt", "fourth.txt"]; } });\n` +
-				`const unknown = defineExtension(defineExtensionId("unknown-extension"), { build() {} });\n` +
-				`await new Crust("fixture").extend(artifact, unknown).action(() => {}).execute();\n`,
-		);
-
-		process.cwd = () => tmpDir;
-
-		try {
-			const result = await captureExecute(new Crust("test").add(buildCommand), [
-				"build",
-				"--entry",
-				"src/cli.ts",
-				"--target",
-				"bun-darwin-arm64",
-				"--outfile",
-				"./out/custom/cli",
-			]);
-
-			expect(result.exitCode).toBe(0);
-			expect(result.stdout).toContain(
-				"Preparing Command Snapshot...\n" +
-					"  artifact           4 files  artifact.txt, second.txt, third.txt, +1 more\n" +
-					"  unknown-extension  ran (artifacts not reported)",
-			);
-			expect(readFileSync(join(tmpDir, ".crust", "artifacts", "artifact.txt"), "utf-8")).toBe(
-				"built",
-			);
-			expect(existsSync(join(tmpDir, ".crust", "manifest.json"))).toBe(false);
-		} finally {
-			process.cwd = originalCwd;
+	it.skipIf(host === null)(
+		"writes Extension build artifacts to .crust/artifacts",
+		async () => {
+			const originalCwd = process.cwd;
+			const tmpDir = mkdtempSync(join(tmpdir(), "crust-artifacts-"));
 			rmSync(tmpDir, { recursive: true, force: true });
-		}
-	}, 30_000);
+			mkdirSync(join(tmpDir, "src"), { recursive: true });
+			writeFileSync(
+				join(tmpDir, "package.json"),
+				JSON.stringify({ name: "artifact-cli", version: "0.1.0" }),
+			);
+			writeFileSync(
+				join(tmpDir, "src", "cli.ts"),
+				`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(corePath)};\n` +
+					`const artifact = defineExtension(defineExtensionId("artifact"), { build: async ({ outDir }) => { await Bun.write(outDir + "/artifact.txt", "built"); return ["artifact.txt", "second.txt", "third.txt", "fourth.txt"]; } });\n` +
+					`const unknown = defineExtension(defineExtensionId("unknown-extension"), { build() {} });\n` +
+					`await new Crust("fixture").extend(artifact, unknown).action(() => {}).execute();\n`,
+			);
+
+			process.cwd = () => tmpDir;
+
+			try {
+				const result = await captureExecute(new Crust("test").add(buildCommand), [
+					"build",
+					"--target",
+					"host",
+				]);
+
+				expect(result.exitCode, result.stderr).toBe(0);
+				expect(result.stdout).toContain(
+					"Preparing Command Snapshot...\n" +
+						"  artifact           4 files  artifact.txt, second.txt, third.txt, +1 more\n" +
+						"  unknown-extension  ran (artifacts not reported)",
+				);
+				expect(readFileSync(join(tmpDir, ".crust", "artifacts", "artifact.txt"), "utf-8")).toBe(
+					"built",
+				);
+				expect(existsSync(join(tmpDir, ".crust", "manifest.json"))).toBe(true);
+				expect(existsSync(join(tmpDir, ".crust", BUN_TARGETS.info[host!].alias, "bin"))).toBe(true);
+			} finally {
+				process.cwd = originalCwd;
+				rmSync(tmpDir, { recursive: true, force: true });
+			}
+		},
+		30_000,
+	);
 });

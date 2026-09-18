@@ -35,7 +35,7 @@ Generated projects use the single-file starter (`src/cli.ts`).
 Every generated project includes:
 
 - `src/cli.ts` — entry point with a sample command
-- `package.json` — configured for the selected runtime
+- `package.json` — configured for the selected runtime, with `$schema` pointing at the `crust` block schema shipped by `@crustjs/crust` for editor completion
 - `tsconfig.json` — strict TypeScript config
 - `README.md` — getting started instructions
 - `.gitignore` — sensible defaults for Node/Bun projects

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,12 +9,14 @@ import { captureExecute } from "@crustjs/testing";
 import { runProcess } from "@crustjs/utils/process";
 
 import { buildCommand } from "../src/commands/build.ts";
+import { BUN_TARGETS } from "../src/utils/build-helpers.ts";
 import { hostTarget } from "./helpers.ts";
 
 // Opt-in (CRUST_TUI_SMOKE=1): installs pinned OpenTUI packages from npm into a
 // temp project and drives the compiled binaries in a pseudo-terminal. The Solid
-// build needs `--bun-plugin @opentui/solid/bun-plugin`; core needs no plugin.
-// The project's bunfig preload stays in place during the build and at runtime.
+// build needs `crust.bunPlugins: ["@opentui/solid/bun-plugin"]`; core needs no
+// plugin. The project's bunfig preload stays in place during the build and at
+// runtime.
 const enabled = process.env.CRUST_TUI_SMOKE === "1" && process.platform !== "win32";
 // Allocated in beforeAll so skipped runs leave no crust-tui-smoke-* directory behind.
 let fixtureDir = "";
@@ -23,26 +25,39 @@ const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 const OPENTUI_VERSION = "0.5.11";
 const SOLID_VERSION = "1.9.12";
 
-async function buildFixture(entry: string, outfile: string, extraArgs: string[]): Promise<void> {
+const FIXTURE_PACKAGE_JSON = {
+	name: "tui-smoke",
+	version: "0.1.0",
+	private: true,
+	type: "module",
+	dependencies: {
+		"@opentui/core": OPENTUI_VERSION,
+		"@opentui/solid": OPENTUI_VERSION,
+		"solid-js": SOLID_VERSION,
+	},
+};
+
+/** Stages the fixture with `crust.entry`/`crust.bunPlugins`; returns the host binary path. */
+async function buildFixture(entry: string, bunPlugins: string[]): Promise<string> {
 	const target = hostTarget();
 	if (!target) throw new Error(`Unsupported smoke-test host: ${process.platform}-${process.arch}`);
+	writeFileSync(
+		join(fixtureDir, "package.json"),
+		JSON.stringify({ ...FIXTURE_PACKAGE_JSON, crust: { entry, bunPlugins } }, null, 2),
+	);
 	const originalCwd = process.cwd;
 	process.cwd = () => fixtureDir;
 	try {
 		const result = await captureExecute(new Crust("test").add(buildCommand), [
 			"build",
-			"--entry",
-			entry,
-			"--outfile",
-			outfile,
 			"--target",
-			target,
-			...extraArgs,
+			"host",
 		]);
 		if (result.exitCode !== 0) throw new Error(result.stderr);
 	} finally {
 		process.cwd = originalCwd;
 	}
+	return join(fixtureDir, ".crust", BUN_TARGETS.info[target].alias, "bin", `tui-smoke-${target}`);
 }
 
 async function runInTerminal(
@@ -74,24 +89,7 @@ async function runInTerminal(
 describe.skipIf(!enabled)("crust build OpenTUI smoke (CRUST_TUI_SMOKE=1)", () => {
 	beforeAll(async () => {
 		fixtureDir = mkdtempSync(join(tmpdir(), "crust-tui-smoke-"));
-		mkdirSync(join(fixtureDir, "dist"), { recursive: true });
-		writeFileSync(
-			join(fixtureDir, "package.json"),
-			JSON.stringify(
-				{
-					name: "tui-smoke",
-					private: true,
-					type: "module",
-					dependencies: {
-						"@opentui/core": OPENTUI_VERSION,
-						"@opentui/solid": OPENTUI_VERSION,
-						"solid-js": SOLID_VERSION,
-					},
-				},
-				null,
-				2,
-			),
-		);
+		writeFileSync(join(fixtureDir, "package.json"), JSON.stringify(FIXTURE_PACKAGE_JSON, null, 2));
 		writeFileSync(join(fixtureDir, "bunfig.toml"), 'preload = ["@opentui/solid/preload"]\n');
 		writeFileSync(
 			join(fixtureDir, "tsconfig.json"),
@@ -181,9 +179,8 @@ await new Crust("core-smoke")
 		rmSync(fixtureDir, { recursive: true, force: true });
 	});
 
-	it("compiles a Solid app with --bun-plugin @opentui/solid/bun-plugin and runs it reactively", async () => {
-		const outfile = join(fixtureDir, "dist", "solid");
-		await buildFixture("solid.tsx", outfile, ["--bun-plugin", "@opentui/solid/bun-plugin"]);
+	it("compiles a Solid app with crust.bunPlugins @opentui/solid/bun-plugin and runs it reactively", async () => {
+		const outfile = await buildFixture("solid.tsx", ["@opentui/solid/bun-plugin"]);
 
 		const { exitCode, output } = await runInTerminal(outfile, "SOLID_REACTIVE_OK");
 		expect(output).toContain("SOLID_MOUNTED");
@@ -193,8 +190,7 @@ await new Crust("core-smoke")
 	}, 120_000);
 
 	it("compiles a core app without plugins and runs it reactively", async () => {
-		const outfile = join(fixtureDir, "dist", "core");
-		await buildFixture("core.ts", outfile, []);
+		const outfile = await buildFixture("core.ts", []);
 
 		const { exitCode, output } = await runInTerminal(outfile, "CORE_REACTIVE_OK");
 		expect(output).toContain("CORE_REACTIVE_OK");

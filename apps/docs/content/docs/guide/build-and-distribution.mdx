@@ -37,10 +37,9 @@ crust build
 
 Every build prints the runtime it resolved and where it came from, for example `Runtime: node (inferred from @types/node)`. The order is:
 
-1. `--runtime bun|deno|node`
-2. `"crust": { "runtime": "deno" }` in `package.json`
-3. Inference: a `deno.json` or `deno.jsonc` in the project selects Deno; `@types/node` in `dependencies` or `devDependencies` without `@types/bun` selects Node
-4. Bun
+1. `"crust": { "runtime": "deno" }` in `package.json`
+2. Inference: a `deno.json` or `deno.jsonc` in the project selects Deno; `@types/node` in `dependencies` or `devDependencies` without `@types/bun` selects Node
+3. Bun
 
 Lockfiles are not a signal, because the package manager that installed your dependencies says nothing about the runtime your CLI runs on.
 
@@ -50,7 +49,7 @@ Lockfiles are not a signal, because the package manager that installed your depe
 | Deno    | Same layout as Bun; Linux platform packages are glibc only                                                  | Node               |
 | Node    | Root package only: `bin/<command>.js` is the self-contained bundle, so no launcher and no platform packages | Node               |
 
-Use `--entry` to replace `src/cli.ts`. See all flags in the [`crust build` options](/docs/modules/crust#crust-build-options).
+The entry file is `src/cli.ts`; set `"crust": { "entry": "src/main.ts" }` in `package.json` for a different file inside the project. The runtime, entry, Bun plugins, and included directories all live in that one [`crust` block](/docs/modules/crust#packagejson-configuration); see the [`crust build` options](/docs/modules/crust#crust-build-options) for the flags.
 
 ### Choose targets
 
@@ -58,7 +57,7 @@ Use `--entry` to replace `src/cli.ts`. See all flags in the [`crust build` optio
 crust build --target bun-linux-x64 --target bun-darwin-arm64
 ```
 
-Omitting `--target` builds every supported Bun or Deno target; repeat it for the platforms you ship, or pass just your own machine's target for a fast local build. The launcher only knows the targets that were built, so a release build should include every platform your users run.
+Omitting `--target` builds every supported Bun or Deno target; repeat it for the platforms you ship, or pass `--target host` for a fast local build of just your own machine's target (`host` can be mixed with explicit targets, and duplicates are dropped). The launcher only knows the targets that were built, so a release build should include every platform your users run.
 
 | Bun target                                   | Deno target                                             | Platform alias                       |
 | -------------------------------------------- | ------------------------------------------------------- | ------------------------------------ |
@@ -123,15 +122,19 @@ my-cli --help
 
 Users install the root package; for Bun and Deno builds the package manager pulls only the platform package for their machine, and for Node builds the root package is the whole CLI. Yarn 2+ has no global install, so Yarn users run the CLI once with `yarn dlx` or add it to a project and run it with `yarn my-cli`.
 
+### Publishing from CI
+
+`npm publish` runs inside each `.crust/<package>` directory, so a project-level `.npmrc` is not read. Authenticate with [trusted publishing](https://docs.npmjs.com/trusted-publishers), point `NPM_CONFIG_USERCONFIG` at an `.npmrc` you write in the workflow, or use `~/.npmrc`; `--registry` overrides the destination. npm reads `publishConfig.access` from each staged `package.json`, so a scoped public package needs `"publishConfig": { "access": "public" }` in its `package.json`, which `crust build` copies into every staged package.
+
 ## Custom distribution
 
 ```sh
-crust build --outfile ./my-cli                      # this machine
-crust build --outfile ./my-cli --target bun-linux-x64
-crust build --runtime node --outfile ./my-cli.js
+crust build --target host       # Bun and Deno; Node takes no --target
+ls .crust/linux-x64/bin/        # my-cli-bun-linux-x64
+cat .crust/manifest.json        # every staged directory, its target, and the publish order
 ```
 
-`--outfile` skips staging and writes one file: a standalone executable for Bun and Deno (the single `--target`, or your machine's when omitted; Windows targets get `.exe`), or the executable JavaScript bundle for Node. Use it for release assets, containers, or any channel other than npm; it leaves an existing `.crust/` untouched apart from `artifacts/`, which Extension build hooks still write unless you pass `--no-validate`. For a custom npm layout, read `.crust/manifest.json` instead: it lists every staged directory, its target, and the publish order.
+Every build stages into `.crust/`, so for release assets, containers, or any channel other than npm, build the targets you need and take the files from there: the standalone executable at `.crust/<platform alias>/bin/<package name>-<target>` for Bun and Deno (`.exe` on Windows), or the executable JavaScript bundle at `.crust/root/bin/<command>.js` for Node. `.crust/manifest.json` is the index. Staging requires `name` and `version` in `package.json` and replaces `.crust/` on every build, so copy what you need out before building again.
 
 ## Prepare Extension artifacts
 
@@ -159,13 +162,13 @@ Read Extension artifacts and included directories at runtime with [`resolveArtif
 
 ## Add Bun bundler plugins
 
-```sh
-crust build --bun-plugin ./build/plugin.ts
+```json title="package.json"
+{
+  "crust": { "bunPlugins": ["@opentui/solid/bun-plugin", "./build/plugin.ts"] }
+}
 ```
 
-`--bun-plugin` applies a [Bun bundler plugin](https://bun.com/docs/bundler/plugins) to Bun and Node builds; repeat it for several. The specifier is imported from your project (a bare name resolves from `node_modules`, a path from the project root) and must default-export the plugin. Deno builds reject the flag.
-
-Validation runs the entry under Bun's runtime without bundler plugins, so a plugin that transforms sources at import time needs a matching runtime plugin in `bunfig.toml` `preload`; otherwise pass `--no-validate`.
+See [`crust.bunPlugins`](/docs/modules/crust#packagejson-configuration) for resolution rules. Validation runs the entry under Bun's runtime without bundler plugins, so a plugin that transforms sources at import time needs a matching runtime plugin in `bunfig.toml` `preload`; otherwise pass `--no-validate`.
 
 ## Environment variables
 
@@ -184,10 +187,10 @@ cat > .env.production <<'EOF'
 PUBLIC_API_ORIGIN=https://api.example.com
 API_TOKEN=private-value
 EOF
-crust build --env-file .env.production --outfile ./deploy
-env -u PUBLIC_API_ORIGIN -u API_TOKEN ./deploy origin
+crust build --env-file .env.production --target host
+env -u PUBLIC_API_ORIGIN -u API_TOKEN node .crust/root/bin/my-cli.js origin
 # https://api.example.com
-grep -a -o 'private-value' ./deploy || echo 'private-value: not embedded'
+grep -a -o 'private-value' .crust/*/bin/my-cli-* || echo 'private-value: not embedded'
 # private-value: not embedded
 ```
 

@@ -53,16 +53,6 @@ interface CommandResult {
 	stderr: string;
 }
 
-/** Compile target per host, keyed by the `.crust/<platform>` directory it stages into. */
-const HOST_TARGETS = {
-	"linux-x64": { bun: "bun-linux-x64", deno: "x86_64-unknown-linux-gnu" },
-	"linux-arm64": { bun: "bun-linux-arm64", deno: "aarch64-unknown-linux-gnu" },
-	"darwin-x64": { bun: "bun-darwin-x64", deno: "x86_64-apple-darwin" },
-	"darwin-arm64": { bun: "bun-darwin-arm64", deno: "aarch64-apple-darwin" },
-	"windows-x64": { bun: "bun-windows-x64", deno: "x86_64-pc-windows-msvc" },
-	"windows-arm64": { bun: "bun-windows-arm64", deno: "aarch64-pc-windows-msvc" },
-} satisfies Record<string, { bun: string; deno: string }>;
-
 let localSpecs: Record<string, string> = {};
 // A failed case leaves the workspace behind for the CI failure artifact.
 let keepSmokeRoot = false;
@@ -126,21 +116,11 @@ function assertSuccess(label: string, command: string[], cwd: string, result: Co
 	}
 }
 
-/** Host-only targets avoid cross-compile downloads (flaky on Windows CI for Linux Bun artifacts). */
-function hostTargets() {
-	const os = process.platform === "win32" ? "windows" : process.platform;
-	const platform = `${os}-${process.arch}`;
-	const entry = Object.entries(HOST_TARGETS).find(([key]) => key === platform);
-	if (entry === undefined) {
-		throw new Error(`No crust build host target for ${platform}.`);
-	}
-	return { platform, ...entry[1] };
-}
-
 /** The linked workspace crust is the Bun bootstrap bundle, so run it with Bun. */
-function crustBuildArgv(projectDir: string, target: string | undefined): string[] {
+function crustBuildArgv(projectDir: string, runtime: Runtime): string[] {
 	const crustCli = join(projectDir, "node_modules", "@crustjs", "crust", "dist", "cli.js");
-	return [process.execPath, crustCli, "build", ...(target ? ["--target", target] : [])];
+	// Host-only target avoids cross-compile downloads (flaky on Windows CI for Linux Bun artifacts).
+	return [process.execPath, crustCli, "build", ...(runtime === "node" ? [] : ["--target", "host"])];
 }
 
 async function packLocalDependencyPackages(): Promise<Record<string, string>> {
@@ -249,9 +229,7 @@ async function smokeRuntime(runtime: Runtime): Promise<void> {
 	const checkTypes = await run(checkTypesCommand, sampleDir);
 	assertSuccess("generated project type-check", checkTypesCommand, sampleDir, checkTypes);
 
-	const host = hostTargets();
-	const target = runtime === "node" ? undefined : host[runtime];
-	const buildCommand = crustBuildArgv(sampleDir, target);
+	const buildCommand = crustBuildArgv(sampleDir, runtime);
 
 	// GitHub-hosted Windows: project is often on D: while default TEMP/cache are on C:;
 	// Bun compile can fail extracting toolchains across volumes (oven-sh/bun#28327).
@@ -276,12 +254,13 @@ async function smokeRuntime(runtime: Runtime): Promise<void> {
 	const name = basename(sampleDir);
 	const crustDir = join(sampleDir, ".crust");
 	const launcher = join(crustDir, "root", "bin", `${name}.js`);
-	expect(existsSync(join(crustDir, "manifest.json"))).toBe(true);
 	expect(existsSync(launcher)).toBe(true);
-	if (target !== undefined) {
-		const platformBin = join(crustDir, host.platform, "bin");
-		expect(readdirSync(platformBin)).toContain(
-			`${name}-${target}${process.platform === "win32" ? ".exe" : ""}`,
+	const manifest = JSON.parse(readFileSync(join(crustDir, "manifest.json"), "utf8"));
+	if (runtime !== "node") {
+		// `--target host` stages exactly one platform package.
+		expect(manifest.packages).toHaveLength(1);
+		expect(existsSync(join(crustDir, manifest.packages[0].dir, manifest.packages[0].bin))).toBe(
+			true,
 		);
 	}
 
