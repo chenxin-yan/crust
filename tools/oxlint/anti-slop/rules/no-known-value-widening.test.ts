@@ -32,9 +32,23 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
 		`${prelude} import { Commands } from './types'; const commands: Commands = { start: startCommand };`,
 		"type Payload = unknown; function run() { type Payload = { id: string }; const value: Payload = { id: 'ok' }; return value; }",
 		"type Payload = unknown; function run<Payload>(): Payload { return { id: 'ok' } as Payload; }",
+		"type Payload = unknown; function run<Payload>(): Readonly<Payload> { return { id: 'ok' } as Readonly<Payload>; }",
+		"function run<Record>(): Record { return { id: 'ok' } as Record; }",
 		"type Payload = unknown; function run() { interface Payload { id: string } const value: Payload = { id: 'ok' }; return value; }",
 	],
 	invalid: [
+		{
+			code: "type Payload = unknown; type Result = Payload; function run<Payload>(): Result { return { id: 'ok' }; }",
+			errors: [error],
+		},
+		{
+			code: "type Payload = unknown; type Result = Payload; function run() { type Payload = { id: string }; return { id: 'ok' } as Readonly<Result>; }",
+			errors: [error],
+		},
+		{
+			code: "type Result = Record<string, unknown>; function run<Record>(): Result { return { id: 'ok' }; }",
+			errors: [error],
+		},
 		{ code: "const value: unknown = {};", errors: [error] },
 		{ code: "const value: any = {};", errors: [error] },
 		{ code: "const value = {} as any;", errors: [error] },

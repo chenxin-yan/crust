@@ -68,15 +68,11 @@ function hasKnownEvidence(
 type VisitorKeys = Readonly<Record<string, readonly string[]>>;
 
 /**
- * Module environment as seen from `node`: enclosing type parameters and block-level type
- * declarations shadow same-named module aliases, so those names are not resolved through the
- * module map. Block-level aliases stay unresolved, as before.
+ * Use-site references shadowed by enclosing type parameters or block declarations.
+ * Keep the module environment intact for references inside module alias bodies.
+ * Block-level aliases stay unresolved, as before.
  */
-function environmentAt(
-	node: ESTree.Node,
-	environment: TypeEnvironment,
-	visitorKeys: VisitorKeys,
-): TypeEnvironment {
+function shadowedNamesAt(node: ESTree.Node, visitorKeys: VisitorKeys): ReadonlySet<string> {
 	const shadowed = new Set(lexicalTypeParameterNames(node, visitorKeys));
 	for (let current = node.parent; current !== null; current = current.parent) {
 		if (current.type === "Program") break;
@@ -93,14 +89,7 @@ function environmentAt(
 			}
 		}
 	}
-	if (shadowed.size === 0) return environment;
-	const aliases = new Map(environment.aliases);
-	const shadowedBuiltIns = new Set(environment.shadowedBuiltIns);
-	for (const name of shadowed) {
-		aliases.delete(name);
-		shadowedBuiltIns.add(name);
-	}
-	return { aliases, interfaces: environment.interfaces, shadowedBuiltIns };
+	return shadowed;
 }
 
 function annotationTarget(
@@ -112,7 +101,8 @@ function annotationTarget(
 		? null
 		: classifyWideningTarget(
 				annotation.typeAnnotation,
-				environmentAt(annotation, environment, visitorKeys),
+				environment,
+				shadowedNamesAt(annotation, visitorKeys),
 			);
 }
 
@@ -202,7 +192,8 @@ export const noKnownValueWideningRule = defineRule({
 				? null
 				: classifyWideningTarget(
 						type,
-						environmentAt(type, environment, context.sourceCode.visitorKeys),
+						environment,
+						shadowedNamesAt(type, context.sourceCode.visitorKeys),
 					);
 
 		return {
