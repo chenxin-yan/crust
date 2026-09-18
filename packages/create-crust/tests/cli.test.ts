@@ -309,7 +309,7 @@ describe("create-crust CLI", () => {
 
 	// The basename becomes the package name, bin key, and a quoted TS string, so
 	// positional input must meet the same command-name contract as the prompt.
-	it.each(['bad"name', "bad name", ".hidden-cli", "-leading-dash"])(
+	it.each(['bad"name', "bad name", ".hidden-cli", "-leading-dash", "__proto__"])(
 		"rejects the project directory basename %j before writing anything",
 		async (dirName) => {
 			const tempRoot = makeTempRoot("create-crust-bad-name");
@@ -325,7 +325,7 @@ describe("create-crust CLI", () => {
 
 			expect(result.exitCode).toBe(1);
 			expect(result.stderr).toContain(
-				`Error: Project name ${JSON.stringify(dirName)} is not a valid package or command name.`,
+				`Error: Project name ${JSON.stringify(dirName)} is not safe for the generated project.`,
 			);
 			expect(existsSync(projectDir)).toBe(false);
 		},
@@ -342,7 +342,9 @@ describe("create-crust CLI", () => {
 		});
 
 		expect(result.exitCode).toBe(1);
-		expect(result.stderr).toContain('Error: Project name "has space" is not a valid package');
+		expect(result.stderr).toContain(
+			'Error: Project name "has space" is not safe for the generated project.',
+		);
 		expect(readdirSync(projectDir)).toEqual([]);
 	}, 30_000);
 
