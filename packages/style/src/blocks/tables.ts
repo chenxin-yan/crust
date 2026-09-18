@@ -23,7 +23,7 @@ export interface TableOptions {
 	 * remaining columns default to `"left"`. If omitted, all columns are
 	 * left-aligned.
 	 */
-	align?: ColumnAlignment[];
+	align?: readonly ColumnAlignment[];
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -33,7 +33,10 @@ export interface TableOptions {
 /**
  * Compute the maximum visible width for each column across headers and rows.
  */
-function computeColumnWidths(headers: string[], rows: string[][]): number[] {
+function computeColumnWidths(
+	headers: readonly string[],
+	rows: readonly (readonly string[])[],
+): number[] {
 	const columnCount = headers.length;
 	const widths = Array<number>(columnCount).fill(0);
 
@@ -64,7 +67,11 @@ function alignCell(value: string, width: number, alignment: ColumnAlignment): st
 /**
  * Format a single row of cells into a bordered row string.
  */
-function formatRow(cells: string[], columnWidths: number[], alignments: ColumnAlignment[]): string {
+function formatRow(
+	cells: readonly string[],
+	columnWidths: readonly number[],
+	alignments: readonly ColumnAlignment[],
+): string {
 	const formattedCells = columnWidths.map((width, col) => {
 		const cell = cells[col] ?? "";
 		const alignment = alignments[col] ?? "left";
@@ -77,7 +84,7 @@ function formatRow(cells: string[], columnWidths: number[], alignments: ColumnAl
 /**
  * Generate a separator row using the given character.
  */
-function formatSeparator(columnWidths: number[]): string {
+function formatSeparator(columnWidths: readonly number[]): string {
 	const segments = columnWidths.map((width) => "-".repeat(width + 2));
 	return `|${segments.join("|")}|`;
 }
@@ -94,6 +101,8 @@ function formatSeparator(columnWidths: number[]): string {
  * Column widths are computed from the visible width of all cell content
  * (ANSI escape sequences are excluded from width calculations), so styled
  * cell values align correctly.
+ *
+ * Inputs are only read, so readonly arrays (e.g. `as const` data) are accepted.
  *
  * @param headers - The header row cells.
  * @param rows - The data rows (each row is an array of cell strings).
@@ -115,7 +124,11 @@ function formatSeparator(columnWidths: number[]): string {
  * // "| Bob   | 25  |"
  * ```
  */
-export function table(headers: string[], rows: string[][], options?: TableOptions): string {
+export function table(
+	headers: readonly string[],
+	rows: readonly (readonly string[])[],
+	options?: TableOptions,
+): string {
 	const alignments = options?.align ?? [];
 	const columnWidths = computeColumnWidths(headers, rows);
 
