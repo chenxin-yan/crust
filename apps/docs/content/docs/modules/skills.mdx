@@ -15,7 +15,7 @@ npm install @crustjs/skills
 
 <include lang="ts">../../../examples/modules/skills.ts#write</include>
 
-`writeSkills()` generates one skill from `app` and copies any authored `extras` into an output directory named `skills`, creating it as needed and leaving unrelated files in place. It returns paths relative to that directory. An authored skill with the generated skill's name replaces the generated skill.
+`writeSkills()` generates one skill from `app` and copies any authored `extras`. It replaces a dedicated output directory named `skills` and returns paths relative to that directory. An authored skill with the generated skill's name replaces the generated skill.
 
 Each skill has its own directory:
 

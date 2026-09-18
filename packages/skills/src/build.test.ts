@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -83,8 +83,9 @@ describe("writeSkills", () => {
 		]);
 	});
 
-	it("supports generated skill overrides", async () => {
+	it("supports overrides and replaces stale output", async () => {
 		const outDir = join(tempRoot, "skills");
+		await mkdir(join(outDir, "removed-skill"), { recursive: true });
 
 		await writeSkills({
 			app: createApp(),
@@ -153,6 +154,42 @@ describe("writeSkills", () => {
 		await writeSkills({ outDir, extras: [bundleDir] });
 
 		expect(await readdir(outDir)).toEqual(["guide"]);
+	});
+
+	it("replaces a symlinked skill directory instead of writing through it", async () => {
+		const authored = await createBundle("demo", "Hand-written demo skill");
+		const outDir = join(tempRoot, "skills");
+		await mkdir(outDir, { recursive: true });
+		await symlink(authored, join(outDir, "demo"));
+
+		await writeSkills({ app: createApp(), outDir, version: "1.0.0" });
+
+		expect(await readFile(join(authored, "SKILL.md"), "utf8")).toContain(
+			"description: Hand-written demo skill",
+		);
+		expect((await readdir(authored)).sort()).toEqual(["SKILL.md", "references"]);
+		expect((await lstat(join(outDir, "demo"))).isSymbolicLink()).toBe(false);
+		expect(await readFile(join(outDir, "demo", "SKILL.md"), "utf8")).toContain(
+			"description: Demo CLI",
+		);
+	});
+
+	it("rejects an extra skill directory nested inside outDir", async () => {
+		const outDir = join(tempRoot, "skills");
+		await mkdir(join(outDir, "nested"), { recursive: true });
+		await writeFile(
+			join(outDir, "nested", "SKILL.md"),
+			"---\nname: nested\ndescription: Nested\n---\n",
+		);
+
+		const result = writeSkills({
+			app: createApp(),
+			outDir,
+			version: "1.0.0",
+			extras: [join(outDir, "nested")],
+		});
+		await expect(result).rejects.toThrow("is inside outDir");
+		expect(await readdir(join(outDir, "nested"))).toEqual(["SKILL.md"]);
 	});
 
 	it("requires a generated skill description", async () => {

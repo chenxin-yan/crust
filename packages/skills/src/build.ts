@@ -1,7 +1,9 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 
 import type { CommandSnapshot } from "@crustjs/core";
+import { isWithin } from "@crustjs/utils/path";
+import { resolveSourceDir } from "@crustjs/utils/source";
 
 import { loadBundleFiles, requireSkillFrontmatter } from "./bundle.ts";
 import { SkillSourceConflictError } from "./errors.ts";
@@ -52,7 +54,26 @@ async function writeSkillSource(
 	if (basename(outDir) !== "skills") {
 		throw new Error(`Skill source outDir "${outDir}" must be named "skills".`);
 	}
+	for (const sourceDir of options.extras ?? []) {
+		const resolved = resolveSourceDir(sourceDir);
+		// outDir is replaced wholesale below; an extra nested inside it would be destroyed.
+		if (isWithin(outDir, resolved)) {
+			throw new Error(
+				`Extra skill directory "${resolved}" is inside outDir "${outDir}", which is replaced on every build. Move authored skills outside the build output.`,
+			);
+		}
+	}
 	const files = await renderSkills(snapshot, options);
+	const cwd = resolve(".");
+	// outDir is replaced wholesale below; refuse targets that would delete the caller's project.
+	if (outDir === dirname(outDir) || isWithin(outDir, cwd)) {
+		throw new Error(
+			`Refusing to replace "${outDir}": outDir must be a dedicated directory, not the filesystem root, the working directory, or an ancestor of it.`,
+		);
+	}
+	// Replacing the tree (rather than writing into it) means a stale symlink at
+	// `skills/<name>` is unlinked, not followed into whatever it points at.
+	await rm(outDir, { recursive: true, force: true });
 	for (const file of files) {
 		const filePath = join(outDir, file.path);
 		await mkdir(dirname(filePath), { recursive: true });
