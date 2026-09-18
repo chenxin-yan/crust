@@ -118,7 +118,7 @@ A consumer is any Extension identity that reads sections. `help` renders the cur
   ../../../examples/extensions/build.ts
 </include>
 
-Use a build hook when an Extension must generate files alongside the CLI. It receives the frozen Command Snapshot and returns the files to ship, each a path relative to the output directory plus its `string` or `Uint8Array` content. Core validates every path, rejects a path another hook already produced (compared case-insensitively, since the tree may land on a case-insensitive filesystem), writes the files, and records exactly what it wrote; the hook itself touches no disk.
+Use a build hook when an Extension must generate files alongside the CLI. It receives the frozen Command Snapshot and returns the files to ship, each a path relative to the output directory plus its `string` or `Uint8Array` content. Core validates every path, rejects a path that another file already claims, whether equal (compared case-insensitively, since the tree may land on a case-insensitive filesystem) or nested under it (a file and a directory cannot share a name), writes the files, and records exactly what it wrote; the hook itself touches no disk.
 
 ```text
 Preparing Command Snapshot for my-cli...

@@ -446,13 +446,22 @@ export async function executeInvocation(
 						// Every path is checked before any file is written, so a rejected hook leaves nothing behind.
 						const files = artifacts.map((file) => {
 							const path = normalizeArtifactPath(file.path);
-							const owner = owners.get(path.toLowerCase());
-							if (owner !== undefined) {
-								throw new Error(
-									`Artifact path "${path}" collides with "${owner.path}" written by Extension "${owner.id}".`,
-								);
+							const key = path.toLowerCase();
+							// A file and a directory cannot share a name, so an ancestor or descendant
+							// of an owned path collides just like an equal one.
+							// ponytail: linear scan per file; hooks ship a handful of files each.
+							for (const [ownedKey, owner] of owners) {
+								if (
+									ownedKey === key ||
+									ownedKey.startsWith(`${key}/`) ||
+									key.startsWith(`${ownedKey}/`)
+								) {
+									throw new Error(
+										`Artifact path "${path}" collides with "${owner.path}" produced by Extension "${owner.id}".`,
+									);
+								}
 							}
-							owners.set(path.toLowerCase(), { id: extension.id, path });
+							owners.set(key, { id: extension.id, path });
 							return { path, content: file.content };
 						});
 						// ponytail: in-memory files; stream if an extension ever ships large binaries

@@ -2122,6 +2122,58 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		expect(await readFile(join(outDir, "shared", "Config.json"), "utf8")).toBe("first");
 	});
 
+	it("rejects a path nested under a file an earlier hook produced, before writing", async () => {
+		const path = await snapshotPath();
+		const outDir = join(dirname(path), "output");
+		process.env[SNAPSHOT_PATH_ENV] = path;
+		process.env[BUILD_OUT_DIR_ENV] = outDir;
+		const app = new Crust("build-subprocess").extend(
+			defineExtension(defineExtensionId("first"), {
+				build: () => [{ path: "Foo", content: "first" }],
+			}),
+			defineExtension(defineExtensionId("second"), {
+				build: () => [
+					{ path: "second/own.txt", content: "own" },
+					{ path: "foo/bar", content: "second" },
+				],
+			}),
+		);
+
+		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
+
+		expect(errorCalls).toHaveLength(1);
+		expect(errorCalls[0]).toStartWith('Extension "second" build failed:');
+		expect(errorCalls[0]).toContain('"foo/bar"');
+		expect(errorCalls[0]).toContain('"Foo"');
+		expect(errorCalls[0]).toContain('Extension "first"');
+		expect(await readFile(join(outDir, "Foo"), "utf8")).toBe("first");
+		expect(existsSync(join(outDir, "second"))).toBe(false);
+	});
+
+	it("rejects a hook whose own files nest under each other, before writing", async () => {
+		const path = await snapshotPath();
+		const outDir = join(dirname(path), "output");
+		process.env[SNAPSHOT_PATH_ENV] = path;
+		process.env[BUILD_OUT_DIR_ENV] = outDir;
+		const app = new Crust("build-subprocess").extend(
+			defineExtension(defineExtensionId("only"), {
+				build: () => [
+					{ path: "foo/bar", content: "nested" },
+					{ path: "foo", content: "file" },
+				],
+			}),
+		);
+
+		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
+
+		expect(errorCalls).toHaveLength(1);
+		expect(errorCalls[0]).toStartWith('Extension "only" build failed:');
+		expect(errorCalls[0]).toContain('"foo"');
+		expect(errorCalls[0]).toContain('"foo/bar"');
+		expect(errorCalls[0]).toContain('Extension "only"');
+		expect(existsSync(outDir)).toBe(false);
+	});
+
 	it("runs only the last build hook for a duplicate Extension id", async () => {
 		const path = await snapshotPath();
 		process.env[SNAPSHOT_PATH_ENV] = path;
