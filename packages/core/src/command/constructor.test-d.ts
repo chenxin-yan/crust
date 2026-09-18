@@ -20,6 +20,40 @@ function _commandNames() {
 	defineCommand("-leading", (builder) => builder);
 }
 
+// An open template member does not hide an independently invalid literal member (#357).
+function _mixedOpenNames(
+	empty: "" | `mode-${string}`,
+	reserved: "__proto__" | `mode-${string}`,
+	valid: "fixed" | `mode-${string}`,
+	dashAlias: "-a" | `x-${string}`,
+) {
+	const command = defineCommand("valid", (builder) => builder);
+	// @ts-expect-error -- blank member cannot route
+	new Crust(empty);
+	// @ts-expect-error -- reserved member
+	new Crust(reserved);
+	// @ts-expect-error -- blank member cannot route
+	defineCommand(empty, (builder) => builder);
+	// @ts-expect-error -- reserved member
+	defineCommand(reserved, (builder) => builder);
+	// @ts-expect-error -- blank member cannot route
+	new Crust("root").command(empty, (builder) => builder);
+	// @ts-expect-error -- reserved member
+	new Crust("root").command(reserved, (builder) => builder);
+	// @ts-expect-error -- renaming cannot introduce a blank member
+	command.as(empty);
+	// @ts-expect-error -- renaming cannot introduce a reserved member
+	command.as(reserved);
+	// @ts-expect-error -- empty alias member
+	defineCommand("x", { aliases: ["", valid] }, (builder) => builder);
+	// @ts-expect-error -- leading-dash alias member
+	defineCommand("x", { aliases: [dashAlias] }, (builder) => builder);
+	new Crust(valid);
+	defineCommand(valid, (builder) => builder);
+	defineCommand("x", { aliases: [valid] }, (builder) => builder);
+	command.as(valid);
+}
+
 function _constructorNames(invalidName: "" | "valid") {
 	// @ts-expect-error -- blank literal root names cannot route
 	new Crust("");

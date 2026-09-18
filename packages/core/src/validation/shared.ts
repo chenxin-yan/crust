@@ -29,6 +29,9 @@ export type DefName<T> = T extends { name: infer N extends string }
 		: never
 	: never;
 
+/** The unfiltered canonical `name` of a definition; pair with {@link ClosedMembers} for spelling grammar. */
+export type RawName<T> = T extends { name: infer N extends string } ? N : never;
+
 export type UnionToIntersection<U> = (U extends unknown ? (x: U) => void : never) extends (
 	x: infer I,
 ) => void
@@ -80,9 +83,20 @@ export type CollisionBrand<
 		? {}
 		: { readonly [K in Key]: `${Before}"${S & Existing}"${After}` };
 
-/** Brand a statically known empty literal while allowing widened and generic names. */
+/**
+ * The statically known members of a name union; open members stay runtime-owned.
+ * Only for local spelling grammar: a literal beside an open template is still
+ * independently invalid, but must never become key or collision evidence.
+ */
+export type ClosedMembers<N extends string> = N extends unknown
+	? IsClosedName<N> extends true
+		? N
+		: never
+	: never;
+
+/** Brand a statically known empty literal member while allowing widened and generic names. */
 export type EmptyLiteralNameBrand<Name extends string, Err> =
-	IsClosedName<Name> extends true ? ("" extends Name ? Err : {}) : {};
+	"" extends ClosedMembers<Name> ? Err : {};
 
 /**
  * Brand a definition whose custom parser can return a Promise — parse results

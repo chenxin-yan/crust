@@ -9,6 +9,8 @@ import type {
 	ValidateDefinitionFlags,
 	ValidateExtensionFlags,
 	LocalFlagBrand,
+	LocalFlagNameBrand,
+	ValidateLocalFlagDefs,
 } from "./flags.brands.ts";
 
 {
@@ -136,6 +138,51 @@ type _noPrefix = Expect<
 		"Names must not start with no-"
 	>
 >;
+
+{
+	// brands invalid literal spellings beside an open template member (#357)
+	type Mixed = `y-${string}`;
+	type Reserved = LocalFlagBrand<{ name: "__proto__" | Mixed; type: "boolean" }>;
+	type Empty = LocalFlagBrand<{ name: "" | Mixed; type: "boolean" }>;
+	type NoPrefix = LocalFlagBrand<{ name: "no-x" | Mixed; type: "boolean" }>;
+	type EmptyAlias = LocalFlagBrand<{ name: "x"; type: "boolean"; aliases: ["" | Mixed] }>;
+	type NoPrefixAlias = LocalFlagBrand<{ name: "x"; type: "boolean"; aliases: ["no-x" | Mixed] }>;
+	type ShortNoPrefix = LocalFlagBrand<{ name: "x"; type: "boolean"; short: "n" | Mixed }>;
+	type EmptyShort = LocalFlagBrand<{ name: "x"; type: "boolean"; short: "" | Mixed }>;
+	type Valid = LocalFlagBrand<{ name: "fixed" | Mixed; type: "boolean"; aliases: ["f" | Mixed] }>;
+	type _reserved = Expect<
+		Equal<Reserved["FIX_RESERVED_SPELLING"], 'Flag spelling "__proto__" is reserved'>
+	>;
+	type _empty = Expect<
+		Equal<Empty["FIX_EMPTY_SPELLING"], "Flag names and aliases must be non-empty strings">
+	>;
+	type _noPrefix = Expect<Equal<NoPrefix["FIX_NO_PREFIX"], "Names must not start with no-">>;
+	type _emptyAlias = Expect<
+		Equal<EmptyAlias["FIX_EMPTY_SPELLING"], "Flag names and aliases must be non-empty strings">
+	>;
+	type _noPrefixAlias = Expect<
+		Equal<NoPrefixAlias["FIX_NO_PREFIX"], "Names must not start with no-">
+	>;
+	type _shortNoPrefix = Expect<Equal<Extract<keyof ShortNoPrefix, "FIX_NO_PREFIX">, never>>;
+	type _emptyShort = Expect<
+		Equal<EmptyShort["FIX_EMPTY_SPELLING"], "Flag names and aliases must be non-empty strings">
+	>;
+	type _valid = Expect<Equal<Extract<keyof Valid, `FIX_${string}`>, never>>;
+
+	type DirectReserved = LocalFlagNameBrand<"__proto__" | Mixed>;
+	type DirectValid = LocalFlagNameBrand<"fixed" | Mixed>;
+	type _directReserved = Expect<
+		Equal<DirectReserved["FIX_RESERVED_SPELLING"], 'Flag spelling "__proto__" is reserved'>
+	>;
+	type _directValid = Expect<Equal<keyof DirectValid, never>>;
+
+	// the same brands reach .flags() tuples; open members still opt out of collision evidence
+	type Tuple = ValidateLocalFlagDefs<readonly [{ name: "" | Mixed; type: "boolean" }], "y-a">;
+	type _tuple = Expect<
+		Equal<Tuple["FIX_EMPTY_SPELLING"], "Flag names and aliases must be non-empty strings">
+	>;
+	type _tupleCollision = Expect<Equal<Extract<keyof Tuple, "FIX_ALIAS_COLLISION">, never>>;
+}
 
 {
 	// distributes over a Context union: one flagless member must not erase the others' owned flags

@@ -1,5 +1,5 @@
 import type { Equal, Expect } from "../../tests/helpers.ts";
-import type { AppendArgsChecks, ValidateVariadicArgs } from "./args.brands.ts";
+import type { AppendArgsChecks, EmptyArgNameBrand, ValidateVariadicArgs } from "./args.brands.ts";
 
 // ValidateVariadicArgs type inference
 {
@@ -18,6 +18,19 @@ import type { AppendArgsChecks, ValidateVariadicArgs } from "./args.brands.ts";
 	type _empty = Expect<Equal<Result[0]["FIX_EMPTY_NAME"], "Argument names must be non-empty">>;
 	type Widened = ValidateVariadicArgs<readonly [{ name: string; type: "string" }]>;
 	type _widened = Expect<Equal<Extract<keyof Widened[0], "FIX_EMPTY_NAME">, never>>;
+	// an open template member does not hide an empty literal member (#357)
+	type Mixed = ValidateVariadicArgs<readonly [{ name: "" | `p-${string}`; type: "string" }]>;
+	type _mixed = Expect<Equal<Mixed[0]["FIX_EMPTY_NAME"], "Argument names must be non-empty">>;
+	type _mixedDirect = Expect<
+		Equal<
+			EmptyArgNameBrand<"" | `p-${string}`>["FIX_EMPTY_NAME"],
+			"Argument names must be non-empty"
+		>
+	>;
+	type MixedValid = ValidateVariadicArgs<
+		readonly [{ name: "pos" | `p-${string}`; type: "string" }]
+	>;
+	type _mixedValid = Expect<Equal<Extract<keyof MixedValid[0], `FIX_${string}`>, never>>;
 }
 
 {
