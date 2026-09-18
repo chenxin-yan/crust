@@ -32,7 +32,7 @@ import { detectPackageManager } from "./utils.ts";
  * );
  * ```
  */
-export async function runSteps(steps: PostScaffoldStep[], cwd: string): Promise<void> {
+export async function runSteps(steps: readonly PostScaffoldStep[], cwd: string): Promise<void> {
 	for (const step of steps) {
 		switch (step.type) {
 			case "install":
