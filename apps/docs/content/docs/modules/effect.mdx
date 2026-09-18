@@ -21,39 +21,7 @@ npm install @crustjs/effect@next effect@4.0.0-rc.115
 
 ## Quick example
 
-```ts
-import { Crust, defineContext } from "@crustjs/core";
-import { handler, layer, service } from "@crustjs/effect";
-import { Context, Effect, Layer } from "effect";
-
-class Db extends Context.Service<Db, { readonly query: (sql: string) => Promise<string> }>()(
-  "app/Db",
-) {}
-
-const DbLive = Layer.effect(
-  Db,
-  Effect.acquireRelease(
-    Effect.sync(() => ({ query: async (sql) => `rows for ${sql}` })),
-    () => Effect.sync(() => console.log("db closed")),
-  ),
-);
-
-const db = layer("db", DbLive);
-const config = defineContext("config", () => ({ limit: 10 }));
-
-const app = new Crust("app")
-  .provide(db(), config())
-  .args({ name: "table", type: "string", required: true })
-  .action(
-    handler(function* ({ args }) {
-      const d = yield* Db;
-      const cfg = yield* service(config);
-      return yield* Effect.promise(() => d.query(`select * from ${args.table} limit ${cfg.limit}`));
-    }),
-  );
-
-await app.execute();
-```
+<include lang="ts">../../../examples/modules/effect.ts#quick-example</include>
 
 `DbLive` is built when the action starts; `db closed` prints after the action finishes, whether it succeeded, failed, or was interrupted. `config` is a plain Crust Context and stays lazy.
 
@@ -155,7 +123,7 @@ new Crust("app").action(
 );
 ```
 
-Pulls a plain Crust Context from inside a `handler()` program, typed by the factory's value (`FactoryValueOf<F>`) and failing with `CrustTaggedError`. Like `ctx.<name>`, it is lazy: untouched Contexts never build, and repeated pulls share one build. A factory whose name is not provided on the command path fails with Core's missing-context `CrustError`, surfaced as a `CrustDefinitionError` for `Effect.catchTag`. Presence on the path is not compile-checked.
+Pulls a plain Crust Context from inside a `handler()` program, typed by the factory's value (`FactoryValueOf<F>`) and failing with `CrustTaggedError`. Like `ctx.<name>`, it is lazy: untouched Contexts never build, and repeated pulls share one build. The effective (last same-name) provider must come from the **same factory**, including that factory's `.of(...)` test doubles; a shadowed ancestor does not satisfy this requirement. An absent factory or a different same-name factory (even with a compatible value shape) fails with Core's missing-context `CrustError`, surfaced as a `CrustDefinitionError` for `Effect.catchTag`. Factory identity on the path is checked at runtime, not compile time.
 
 `service()` requires the internal input service that `handler()` provides, so it cannot be run outside a `handler()` program; that service is not exported.
 

@@ -8,6 +8,7 @@ import {
 	type TypeEnvironment,
 	type WideningTarget,
 } from "../shared/dictionary-types.ts";
+import { lexicalTypeParameterNames } from "../shared/lexical-type-parameters.ts";
 import { resolveVariable } from "../shared/scope.ts";
 
 type FunctionExpression = ESTree.ArrowFunctionExpression | ESTree.Function;
@@ -64,13 +65,33 @@ function hasKnownEvidence(
 	return hasKnownEvidence(sourceCode, declarator.init, visitedVariables);
 }
 
-function annotationTarget(
-	annotation: ESTree.TSTypeAnnotation | null | undefined,
-	environment: TypeEnvironment,
-): WideningTarget | null {
-	return annotation === null || annotation === undefined
-		? null
-		: classifyWideningTarget(annotation.typeAnnotation, environment);
+type VisitorKeys = Readonly<Record<string, readonly string[]>>;
+
+/**
+ * Use-site references shadowed by enclosing type parameters or block declarations.
+ * Keep the module environment intact for references inside module alias bodies.
+ * Block- and namespace-local aliases stay unresolved, as before.
+ */
+function shadowedNamesAt(node: ESTree.Node, visitorKeys: VisitorKeys): ReadonlySet<string> {
+	const shadowed = new Set(lexicalTypeParameterNames(node, visitorKeys));
+	for (let current = node.parent; current !== null; current = current.parent) {
+		if (current.type === "Program") break;
+		if (current.type !== "BlockStatement" && current.type !== "TSModuleBlock") continue;
+		for (const statement of current.body) {
+			const declaration =
+				statement.type === "ExportNamedDeclaration" ? statement.declaration : statement;
+			if (
+				declaration?.type === "TSTypeAliasDeclaration" ||
+				declaration?.type === "TSInterfaceDeclaration" ||
+				declaration?.type === "TSEnumDeclaration"
+			) {
+				shadowed.add(declaration.id.name);
+			} else if (declaration?.type === "ClassDeclaration" && declaration.id !== null) {
+				shadowed.add(declaration.id.name);
+			}
+		}
+	}
+	return shadowed;
 }
 
 function enclosingFunction(node: ESTree.Node): FunctionExpression | null {
@@ -150,8 +171,14 @@ export const noKnownValueWideningRule = defineRule({
 			});
 		};
 
-		const targetFromAnnotation = (annotation: ESTree.TSTypeAnnotation | null | undefined) =>
-			environment === null ? null : annotationTarget(annotation, environment);
+		const targetFromType = (type: ESTree.TSType | undefined) =>
+			environment === null || type === undefined
+				? null
+				: classifyWideningTarget(
+						type,
+						environment,
+						shadowedNamesAt(type, context.sourceCode.visitorKeys),
+					);
 
 		return {
 			Program(node) {
@@ -161,7 +188,7 @@ export const noKnownValueWideningRule = defineRule({
 				if (node.init === null || node.id.type !== "Identifier") return;
 				reportFlow(
 					node.init,
-					targetFromAnnotation(node.id.typeAnnotation),
+					targetFromType(node.id.typeAnnotation?.typeAnnotation),
 					`binding \`${node.id.name}\``,
 				);
 			},
@@ -169,7 +196,7 @@ export const noKnownValueWideningRule = defineRule({
 				if (node.value === null) return;
 				reportFlow(
 					node.value,
-					targetFromAnnotation(node.typeAnnotation),
+					targetFromType(node.typeAnnotation?.typeAnnotation),
 					`property \`${sourceKeyName(context.sourceCode, node.key)}\``,
 				);
 			},
@@ -177,7 +204,7 @@ export const noKnownValueWideningRule = defineRule({
 				if (node.value === null) return;
 				reportFlow(
 					node.value,
-					targetFromAnnotation(node.typeAnnotation),
+					targetFromType(node.typeAnnotation?.typeAnnotation),
 					`property \`${sourceKeyName(context.sourceCode, node.key)}\``,
 				);
 			},
@@ -189,7 +216,7 @@ export const noKnownValueWideningRule = defineRule({
 				if (declarator === null || declarator.id.type !== "Identifier") return;
 				reportFlow(
 					node.right,
-					targetFromAnnotation(declarator.id.typeAnnotation),
+					targetFromType(declarator.id.typeAnnotation?.typeAnnotation),
 					`binding \`${declarator.id.name}\``,
 				);
 			},
@@ -198,7 +225,7 @@ export const noKnownValueWideningRule = defineRule({
 				const owner = enclosingFunction(node);
 				reportFlow(
 					node.argument,
-					targetFromAnnotation(owner?.returnType),
+					targetFromType(owner?.returnType?.typeAnnotation),
 					`return value of \`${functionName(context.sourceCode, owner)}\``,
 				);
 			},
@@ -206,25 +233,17 @@ export const noKnownValueWideningRule = defineRule({
 				if (node.body.type === "BlockStatement") return;
 				reportFlow(
 					node.body,
-					targetFromAnnotation(node.returnType),
+					targetFromType(node.returnType?.typeAnnotation),
 					`return value of \`${functionName(context.sourceCode, node)}\``,
 				);
 			},
 			TSAsExpression(node) {
-				if (environment === null || hasParentAssertion(node)) return;
-				reportFlow(
-					node.expression,
-					classifyWideningTarget(node.typeAnnotation, environment),
-					"assertion",
-				);
+				if (hasParentAssertion(node)) return;
+				reportFlow(node.expression, targetFromType(node.typeAnnotation), "assertion");
 			},
 			TSTypeAssertion(node) {
-				if (environment === null || hasParentAssertion(node)) return;
-				reportFlow(
-					node.expression,
-					classifyWideningTarget(node.typeAnnotation, environment),
-					"assertion",
-				);
+				if (hasParentAssertion(node)) return;
+				reportFlow(node.expression, targetFromType(node.typeAnnotation), "assertion");
 			},
 		};
 	},

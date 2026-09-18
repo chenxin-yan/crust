@@ -20,6 +20,8 @@ https://api.example.com/status
 
 `defineContext` returns a factory. `api()` creates an instance and `.provide()` attaches it to the app. In the action, `ctx.api` is the value setup returned; it is always awaited because setup may be asynchronous.
 
+An inline command can shadow an inherited Context with a different value type **before** binding its action. After `.action()`, a local replacement must satisfy the Context value types that action received. Calling `.action()` again replaces the callback and binds the current Context contract. These obligations belong to that command, not its descendants: a child may still shadow independently.
+
 ## Use from a reusable command
 
 <include lang="ts" meta='title="app.ts"'>

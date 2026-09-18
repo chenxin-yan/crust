@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -91,6 +91,7 @@ describe("publish manifest validation", () => {
 			},
 		],
 		publishOrder: ["linux-x64", "darwin-arm64", "root"],
+		build: { demo: { extensions: [] } },
 	};
 
 	beforeEach(() => {
@@ -136,6 +137,139 @@ describe("publish manifest validation", () => {
 			io,
 		);
 		expect(published).toEqual([join(nodeDir, "root")]);
+	});
+
+	it("rejects escaped and aliased directories before any publisher runs", async () => {
+		const outside = join(tmpDir, "outside");
+		const stage = join(tmpDir, "stage");
+		mkdirSync(outside);
+		writeFileSync(join(outside, "sentinel"), "untouched");
+		for (const dir of ["../outside", outside, "escape", "root/../outside-link"]) {
+			writeStageFixture(stage, manifest);
+			symlinkSync(outside, join(stage, "escape"), "dir");
+			symlinkSync(outside, join(stage, "outside-link"), "dir");
+			const invalid = structuredClone(manifest);
+			invalid.root.dir = dir;
+			invalid.publishOrder[2] = dir;
+			writeFileSync(
+				join(outside, "package.json"),
+				readFileSync(join(stage, "root", "package.json")),
+			);
+			const spawnPublish = mock(async () => 0);
+			await expect(
+				publishStagedPackages(invalid, { stageDir: stage, spawnPublish }, io),
+			).rejects.toThrow(/inside|outside/);
+			expect(spawnPublish).not.toHaveBeenCalled();
+			expect(readFileSync(join(outside, "sentinel"), "utf8")).toBe("untouched");
+			rmSync(stage, { recursive: true });
+		}
+		for (const alias of ["./root", "alias"]) {
+			writeStageFixture(stage, manifest);
+			symlinkSync(join(stage, "root"), join(stage, "alias"), "dir");
+			const invalid = structuredClone(manifest);
+			invalid.packages[1]!.dir = alias;
+			invalid.publishOrder[1] = alias;
+			const spawnPublish = mock(async () => 0);
+			await expect(
+				publishStagedPackages(invalid, { stageDir: stage, spawnPublish }, io),
+			).rejects.toThrow(/duplicate staged directories/);
+			expect(spawnPublish).not.toHaveBeenCalled();
+			rmSync(stage, { recursive: true });
+		}
+	});
+
+	it.each(["platform", "root"])(
+		"rejects duplicate %s package names before any publisher runs",
+		async (duplicate) => {
+			const invalid = structuredClone(manifest);
+			invalid.packages[1]!.name =
+				duplicate === "root" ? invalid.root.name : invalid.packages[0]!.name;
+			writeStageFixture(tmpDir, invalid);
+			const spawnPublish = mock(async () => 0);
+			await expect(
+				publishStagedPackages(invalid, { stageDir: tmpDir, spawnPublish }, io),
+			).rejects.toThrow(/duplicate package names/);
+			expect(spawnPublish).not.toHaveBeenCalled();
+		},
+	);
+
+	it("rejects external package metadata links before any publisher runs", async () => {
+		const outside = join(tmpDir, "outside.json");
+		const stage = join(tmpDir, "stage");
+		writeStageFixture(stage, manifest);
+		const rootPath = join(stage, "root/package.json");
+		const sentinel = readFileSync(rootPath, "utf8");
+		writeFileSync(outside, sentinel);
+		rmSync(rootPath);
+		symlinkSync(outside, rootPath, "file");
+		const spawnPublish = mock(async () => 0);
+		await expect(
+			publishStagedPackages(manifest, { stageDir: stage, spawnPublish }, io),
+		).rejects.toThrow(/package.json resolves outside/);
+		expect(spawnPublish).not.toHaveBeenCalled();
+		expect(readFileSync(outside, "utf8")).toBe(sentinel);
+	});
+
+	it("uses canonical package paths beneath an explicitly symlinked stage root", async () => {
+		const linked = join(tmpDir, "linked");
+		symlinkSync(tmpDir, linked, "dir");
+		const published: string[] = [];
+		await publishStagedPackages(
+			manifest,
+			{
+				stageDir: linked,
+				spawnPublish: async (dir) => {
+					published.push(dir);
+					return 0;
+				},
+			},
+			io,
+		);
+		expect(published).toEqual(manifest.publishOrder.map((dir) => join(tmpDir, dir)));
+	});
+
+	it("narrows persisted manifest and package fields before publishing", async () => {
+		const invalidManifests = [
+			null,
+			[],
+			{},
+			{ ...manifest, version: 42 },
+			{ ...manifest, root: { ...manifest.root, name: 42 } },
+			{ ...manifest, root: { ...manifest.root, bins: [42] } },
+			{ ...manifest, packages: [null] },
+			{ ...manifest, publishOrder: "root" },
+			{ ...manifest, packages: [{ ...manifest.packages[0], bins: [] }] },
+		];
+		for (const invalid of invalidManifests) {
+			writeFileSync(join(tmpDir, "manifest.json"), JSON.stringify(invalid));
+			const spawnPublish = mock(async () => 0);
+			await expect(
+				(async () =>
+					publishStagedPackages(
+						readPublishManifest(tmpDir),
+						{ stageDir: tmpDir, spawnPublish },
+						io,
+					))(),
+			).rejects.toThrow(/manifest.json/);
+			expect(spawnPublish).not.toHaveBeenCalled();
+		}
+		const rootPath = join(tmpDir, "root", "package.json");
+		const root = JSON.parse(readFileSync(rootPath, "utf8"));
+		for (const invalid of [
+			null,
+			{ ...root, name: 42 },
+			{ ...root, version: {} },
+			{ ...root, version: " " },
+			{ ...root, bin: [] },
+			{ ...root, optionalDependencies: [] },
+		]) {
+			writeFileSync(rootPath, JSON.stringify(invalid));
+			const spawnPublish = mock(async () => 0);
+			await expect(
+				publishStagedPackages(manifest, { stageDir: tmpDir, spawnPublish }, io),
+			).rejects.toThrow(/package|field/);
+			expect(spawnPublish).not.toHaveBeenCalled();
+		}
 	});
 
 	it("rejects malformed publish order", async () => {

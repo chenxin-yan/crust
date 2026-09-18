@@ -207,7 +207,9 @@ function resolveAliases(
 	for (const token of tokens) {
 		if (token.kind !== "option") continue;
 
-		const canonicalName = aliasToName[token.name] ?? token.name;
+		const canonicalName = Object.hasOwn(aliasToName, token.name)
+			? aliasToName[token.name]!
+			: token.name;
 		// Strict token names come from this command's descriptor, built from its retained spelling map.
 		const def = flagsDef[canonicalName]!;
 		const existing = canonical[canonicalName];
@@ -315,6 +317,13 @@ function resolveArgs<A extends ArgsDef, V>(
 	for (const def of argsDef) {
 		const { name } = def;
 		const label = `<${name}>`;
+		// Positional names include __proto__; always create an own data property.
+		Object.defineProperty(resolved, name, {
+			value: undefined,
+			writable: true,
+			enumerable: true,
+			configurable: true,
+		});
 
 		if (def.variadic) {
 			const remaining = positionals.slice(index);

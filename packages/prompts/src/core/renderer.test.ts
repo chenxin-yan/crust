@@ -397,6 +397,82 @@ describe("runPrompt", () => {
 		await expect(promise).rejects.toThrow("handler error");
 	});
 
+	it("rejects and cleans up when a deferred render throws", async () => {
+		const config: PromptConfig<number, string> = {
+			render: (state) => {
+				if (state > 0) throw new Error("render error");
+				return "ready";
+			},
+			handleKey: (_key, state) => state + 1,
+			initialState: 0,
+			theme: defaultTheme,
+		};
+
+		const harness = createPromptIO();
+		const promise = runPrompt(config, harness.io);
+		harness.type("a");
+
+		await expect(promise).rejects.toThrow("render error");
+		expect(harness.io.input.isRaw).toBe(false);
+
+		// Stream reservations were released: the same streams can host a new prompt.
+		const reuse = runPrompt(
+			{ ...config, render: () => "again", handleKey: () => submit("done") },
+			harness.io,
+		);
+		harness.type("a");
+		expect(await reuse).toBe("done");
+	});
+
+	it("ignores an in-flight handler after render failure and stream reuse", async () => {
+		const pending = Promise.withResolvers<ReturnType<typeof submit<string>>>();
+		const entered = Promise.withResolvers<void>();
+		let submitted = false;
+		const harness = createPromptIO();
+		let raw = "";
+		const output = new Writable({
+			write(chunk, _encoding, callback) {
+				raw += chunk.toString();
+				callback();
+			},
+		});
+		const io = { input: harness.io.input, output };
+		const promise = runPrompt<number, string>(
+			{
+				initialState: 0,
+				render: (state) => {
+					if (state > 0) throw new Error("render error");
+					return "old prompt";
+				},
+				handleKey: (_key, state) => {
+					if (state === 0) return 1;
+					entered.resolve();
+					return pending.promise;
+				},
+				renderSubmitted: () => {
+					submitted = true;
+					return "stale submission";
+				},
+			},
+			io,
+		);
+		harness.type("ab");
+		await entered.promise;
+		await expect(promise).rejects.toThrow("render error");
+		const replacement = runPrompt(
+			{ initialState: 0, render: () => "replacement", handleKey: () => submit("done") },
+			io,
+		);
+		const before = raw;
+		pending.resolve(submit("old"));
+		await new Promise((resolve) => setTimeout(resolve, 10));
+		const after = raw;
+		harness.keys("return");
+		expect(await replacement).toBe("done");
+		expect(submitted).toBe(false);
+		expect(after).toBe(before);
+	});
+
 	it("rejects with an AbortError DOMException on Ctrl+C", async () => {
 		const config: PromptConfig<{ value: string }, string> = {
 			render: (state) => state.value,

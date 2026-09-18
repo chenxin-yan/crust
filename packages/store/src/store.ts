@@ -198,7 +198,12 @@ export function createStore<const F extends FieldsDef>(
 		for (const [key, def] of Object.entries(fields)) {
 			const value = mutableState[key];
 
-			if (value === undefined && def.schema === undefined) continue;
+			if (value === undefined && def.schema === undefined) {
+				if (def.default !== undefined) {
+					issues.push({ message: expectedTypeMessage(def), path: key });
+				}
+				continue;
+			}
 
 			if (value !== undefined && def.schema === undefined && !matchesDeclaredType(def, value)) {
 				issues.push({ message: expectedTypeMessage(def), path: key });
@@ -224,10 +229,10 @@ export function createStore<const F extends FieldsDef>(
 			if (isFieldValueResult(result)) {
 				const transformed = result.value;
 
-				// On read, preserve persisted values verbatim, but allow schemas to
-				// materialize missing values by validating `undefined` (e.g. defaults).
+				// Schemas own their output, including coercion and nested defaults.
+				// Core callback transforms remain mutation-only; reads never persist.
 				if (operation === "read") {
-					if (value === undefined) mutableState[key] = transformed;
+					if (def.schema !== undefined) mutableState[key] = transformed;
 					continue;
 				}
 
@@ -283,15 +288,18 @@ export function createStore<const F extends FieldsDef>(
 		// array holes → null, dropped undefined object properties) is rejected.
 		if (operation !== "read") {
 			for (const [key, value] of Object.entries(mutableState)) {
-				// A dropped undefined key is harmless: the next read reapplies defaults identically.
+				// Required fields were checked above; optional undefined can be omitted.
 				if (value === undefined) continue;
-				if (!isDeepStrictEqual(JSON.parse(JSON.stringify(value)), value)) {
-					issues.push({
-						message:
-							"value does not survive JSON serialization (NaN, Infinity, -0, sparse arrays, or undefined properties)",
-						path: key,
-					});
+				try {
+					if (isDeepStrictEqual(JSON.parse(JSON.stringify(value)), value)) continue;
+				} catch {
+					// Cycles and other serialization failures use the same typed error path.
 				}
+				issues.push({
+					message:
+						"value does not survive JSON serialization (cycles, NaN, Infinity, -0, sparse arrays, or undefined properties)",
+					path: key,
+				});
 			}
 		}
 
@@ -307,10 +315,10 @@ export function createStore<const F extends FieldsDef>(
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
-	// readRaw — Load persisted config and optionally materialize schema defaults
+	// readRaw — Load persisted config and apply core defaults
 	// ──────────────────────────────────────────────────────────────────────
 
-	async function readRaw(materializeSchemaDefaults = false): Promise<StoreDocument> {
+	async function readRaw(): Promise<StoreDocument> {
 		const persisted = await readJson(filePath);
 		const persistedObject =
 			persisted !== undefined && isJsonObject(persisted) ? persisted : undefined;
@@ -321,17 +329,6 @@ export function createStore<const F extends FieldsDef>(
 			});
 		}
 		const merged = applyFieldDefaults(persistedObject, fields, shouldPrune);
-		if (materializeSchemaDefaults) {
-			for (const [key, def] of Object.entries(fields)) {
-				if (merged[key] !== undefined || def.schema === undefined) continue;
-				try {
-					const result = await validators.get(key)?.(undefined);
-					if (result !== undefined && isFieldValueResult(result)) merged[key] = result.value;
-				} catch {
-					// Required schemas are validated after the updater or patch can supply a value.
-				}
-			}
-		}
 		return normalizeStateTypes(merged);
 	}
 
@@ -364,9 +361,8 @@ export function createStore<const F extends FieldsDef>(
 	// ──────────────────────────────────────────────────────────────────────
 
 	async function update(updater: StoreUpdater<Config>): Promise<Config> {
-		const current = await readRaw(true);
-		// SAFETY: readRaw normalizes the current document against the field definitions.
-		const updated = updater(current as Config);
+		const current = await read();
+		const updated = updater(current);
 		// SAFETY: field definitions constrain updater output to JSON-compatible values.
 		const normalized = normalizeStateTypes({ ...updated } as StoreDocument);
 		await runFieldValidators(normalized, "update");
@@ -380,7 +376,7 @@ export function createStore<const F extends FieldsDef>(
 	// ──────────────────────────────────────────────────────────────────────
 
 	async function patch(partial: Partial<Config>): Promise<Config> {
-		const current = await readRaw(true);
+		const current = await readRaw();
 		const normalized = normalizeStateTypes({ ...current, ...partial });
 		await runFieldValidators(normalized, "patch");
 		await writeJson(filePath, normalized, writeOptions);

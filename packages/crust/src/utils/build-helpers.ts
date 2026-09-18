@@ -1,19 +1,20 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { once } from "node:events";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join, posix, resolve, win32 } from "node:path";
 import { text } from "node:stream/consumers";
 import { pathToFileURL } from "node:url";
 
-import type { BuildReport, InvocationIO } from "@crustjs/core";
+import { type BuildReport, defineExtensionId, type InvocationIO } from "@crustjs/core";
 import { type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
 import { yellow } from "@crustjs/style";
 import { BUILD_OUT_DIR_ENV } from "@crustjs/utils/artifacts";
 import { isErrnoException } from "@crustjs/utils/error";
-import type { JsonValue } from "@crustjs/utils/json";
+import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
+import { isWithin } from "@crustjs/utils/path";
 import { runProcess, which } from "@crustjs/utils/process";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -662,6 +663,20 @@ export async function execDenoBuild(
  */
 const SNAPSHOT_TIMEOUT_MS = 30_000;
 
+function isBuildReport(value: JsonValue): value is JsonObject & BuildReport {
+	return (
+		isJsonObject(value) &&
+		Array.isArray(value.extensions) &&
+		value.extensions.every(
+			(extension: JsonValue): extension is JsonObject & BuildReport["extensions"][number] =>
+				isJsonObject(extension) &&
+				typeof extension.id === "string" &&
+				Array.isArray(extension.files) &&
+				extension.files.every((file: JsonValue): file is string => typeof file === "string"),
+		)
+	);
+}
+
 export async function buildEntrypoint(
 	entryPath: string,
 	outDir: string,
@@ -759,11 +774,36 @@ export async function buildEntrypoint(
 			throw error;
 		}
 		try {
-			// SAFETY: the paired core build writer serializes a BuildReport to this private path.
-			return { snapshot, build: JSON.parse(serializedBuild) as BuildReport };
+			// The subprocess uses the application's Core, which may have a different report contract.
+			const build: JsonValue = JSON.parse(serializedBuild);
+			if (!isBuildReport(build)) {
+				throw new Error("Expected extensions with string ids and files arrays.");
+			}
+			for (const extension of build.extensions) {
+				defineExtensionId(extension.id);
+				for (const file of extension.files) {
+					// Reports use Core's normalized POSIX-relative paths, not arbitrary entry side effects.
+					const path = resolve(outDir, file);
+					if (
+						file === "." ||
+						file.includes("\\") ||
+						posix.normalize(file) !== file ||
+						win32.isAbsolute(file) ||
+						/^[A-Za-z]:/.test(file) ||
+						!isWithin(resolve(outDir), path) ||
+						!isWithin(realpathSync(outDir), realpathSync(path)) ||
+						!lstatSync(path).isFile()
+					) {
+						throw new Error(
+							`Reported artifact must be a normalized, contained regular file: ${file}`,
+						);
+					}
+				}
+			}
+			return { snapshot, build };
 		} catch (error) {
 			throw new Error(
-				`Entry produced an invalid Build Report.\n  Ensure ${absoluteEntry} uses a compatible @crustjs/core version.`,
+				`Entry produced an invalid Build Report.\n  Ensure ${absoluteEntry} uses a compatible @crustjs/core version; upgrade Core, @crustjs/crust, and build-hook Extensions together to the pure-return build API.`,
 				{ cause: error },
 			);
 		}

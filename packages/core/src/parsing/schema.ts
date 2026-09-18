@@ -15,8 +15,8 @@ async function runSchema<S extends StandardSchema, Raw>(
 	path: readonly PropertyKey[],
 	issues: ValidationIssue[],
 ): Promise<{ readonly ok: false } | { readonly ok: true; readonly value: InferOutput<S> }> {
-	let result = schema["~standard"].validate(raw);
-	if (result instanceof Promise) result = await result;
+	// Standard Schema validation is async-capable, including promises from other realms.
+	const result = await schema["~standard"].validate(raw);
 
 	if (result.issues) {
 		issues.push(...normalizeStandardIssues(result.issues, path));

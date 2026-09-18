@@ -429,6 +429,7 @@ function resolvesToDictionary(
 export function classifyWideningTarget(
 	type: ESTree.TSType,
 	environment: TypeEnvironment,
+	shadowedNames: ReadonlySet<string> = new Set(),
 ): WideningTarget | null {
 	const unwrapped = unwrapTransparentType(type);
 	if (unwrapped.type === "TSAnyKeyword") return { kind: "any" };
@@ -444,10 +445,12 @@ export function classifyWideningTarget(
 	if (unwrapped.type === "TSMappedType") return { kind: "open dictionary" };
 	if (unwrapped.type !== "TSTypeReference") return null;
 	const name = typeReferenceName(unwrapped);
-	if (name === null) return null;
+	if (name === null || shadowedNames.has(name)) return null;
 	if (TRANSPARENT_WRAPPERS.has(name) && isBuiltIn(name, environment)) {
 		const wrapped = unwrapped.typeArguments?.params[0];
-		return wrapped === undefined ? null : classifyWideningTarget(wrapped, environment);
+		return wrapped === undefined
+			? null
+			: classifyWideningTarget(wrapped, environment, shadowedNames);
 	}
 	if (name === "Record" && isBuiltIn(name, environment)) return { kind: "open dictionary" };
 	const alias = environment.aliases.get(name);

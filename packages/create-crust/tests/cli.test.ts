@@ -3,6 +3,7 @@ import {
 	chmodSync,
 	existsSync,
 	mkdirSync,
+	readdirSync,
 	readFileSync,
 	rmSync,
 	symlinkSync,
@@ -304,6 +305,47 @@ describe("create-crust CLI", () => {
 			'Error: Invalid value "invalid" for --runtime. Expected one of: bun, node, deno',
 		);
 		expect(existsSync(projectDir)).toBe(false);
+	}, 30_000);
+
+	// The basename becomes the package name, bin key, and a quoted TS string, so
+	// positional input must meet the same command-name contract as the prompt.
+	it.each(['bad"name', "bad name", ".hidden-cli", "-leading-dash", "__proto__"])(
+		"rejects the project directory basename %j before writing anything",
+		async (dirName) => {
+			const tempRoot = makeTempRoot("create-crust-bad-name");
+			const projectDir = join(tempRoot, dirName);
+
+			const result = await runCreateCrust([
+				projectDir,
+				"--runtime",
+				"node",
+				"--no-install",
+				"--no-git",
+			]);
+
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain(
+				`Error: Project name ${JSON.stringify(dirName)} is not safe for the generated project.`,
+			);
+			expect(existsSync(projectDir)).toBe(false);
+		},
+		30_000,
+	);
+
+	it("rejects scaffolding into a current directory whose basename is not a valid name", async () => {
+		const tempRoot = makeTempRoot("create-crust-bad-dot");
+		const projectDir = join(tempRoot, "has space");
+		mkdirSync(projectDir);
+
+		const result = await runCreateCrust([".", "--runtime", "bun", "--no-install", "--no-git"], {
+			cwd: projectDir,
+		});
+
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toContain(
+			'Error: Project name "has space" is not safe for the generated project.',
+		);
+		expect(readdirSync(projectDir)).toEqual([]);
 	}, 30_000);
 
 	it("aborts cleanly when the destination exists and --no-overwrite is passed", async () => {

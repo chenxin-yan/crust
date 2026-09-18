@@ -37,7 +37,7 @@ interface FieldDefBase<V> {
 	 *   persistence and is re-validated once to catch read-unstable
 	 *   transforms. Outputs outside the declared type are rejected with
 	 *   `VALIDATION`. On `read`, the transformed value is discarded —
-	 *   reads always return the on-disk value verbatim.
+	 *   core fields return their defaulted, type-coerced input value.
 	 * - Throwing an error — the value is rejected; the error message is
 	 *   captured as a validation issue with the field name as `path`.
 	 *
@@ -314,11 +314,11 @@ export interface CreateStoreOptions<F extends FieldsDef> {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Receives the current config with defaults and core coercion applied,
- * but without full field validation, and returns an updated config.
- * Persisted values may not yet satisfy their declared types or validators.
+ * Receives the validated current config, including defaults, core coercion,
+ * and schema output, and returns an updated config. Invalid current state
+ * rejects before this callback runs; use `write` or `patch` to initialize or repair it.
  *
- * Used by {@link Store.update}, which validates the result before persistence.
+ * Used by {@link Store.update}, which also validates the result before persistence.
  *
  * @example
  * ```ts
@@ -364,7 +364,8 @@ export type StoreUpdater<TConfig> = (current: TConfig) => NoInfer<TConfig>;
  */
 export interface Store<TConfig> {
 	/**
-	 * Reads the persisted config, applying field defaults for missing keys.
+	 * Reads the persisted config, applying field defaults for missing keys and
+	 * returning successful schema output (including transforms) without writing.
 	 *
 	 * Always returns a value — fields with defaults are guaranteed present,
 	 * fields without defaults may be `undefined`.
@@ -393,8 +394,9 @@ export interface Store<TConfig> {
 	write(config: NoInfer<TConfig>): Promise<TConfig>;
 
 	/**
-	 * Reads current config with defaults and core coercion applied, without
-	 * full field validation. Applies the updater, validates the result, and persists.
+	 * Reads and validates current config before calling the updater. Applies
+	 * the updater, validates the result, and persists. Invalid current state
+	 * rejects before the callback runs; use `write` or `patch` to initialize or repair.
 	 *
 	 * The final file replacement is atomic, but the read-modify-write sequence
 	 * is not serialized, even within one process. Await mutations sequentially
@@ -412,9 +414,11 @@ export interface Store<TConfig> {
 	 * Applies a partial update to the current config and persists.
 	 *
 	 * Only the provided keys are updated; everything else is preserved.
-	 * Like {@link Store.update}, the current config has defaults and core coercion
-	 * applied but has not undergone full field validation. The merged result is
-	 * validated before persistence. Await mutations sequentially to avoid lost updates.
+	 * Unlike {@link Store.update}, the current config has core defaults and coercion
+	 * applied but has not undergone full field validation, allowing repairs. The
+	 * merged result is validated before persistence. Explicit `undefined` is rejected
+	 * for defaulted core fields; optional core fields and schema-owned optionality
+	 * remain supported. Await mutations sequentially to avoid lost updates.
 	 *
 	 * @param partial - A partial subset of the config to merge in.
 	 * @returns The persisted config, including schema transformations.

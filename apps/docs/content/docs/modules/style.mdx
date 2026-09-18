@@ -63,7 +63,7 @@ Links emit OSC 8 sequences when capability checks allow them and otherwise retur
 
 <include lang="ts">../../../examples/modules/style.ts#layout</include>
 
-`padStart`, `padEnd`, `center`, and `stringWidth` measure visible terminal columns rather than ANSI bytes. `table()` uses headers for its column count and supports per-column alignment.
+`padStart`, `padEnd`, `center`, and `stringWidth` measure visible terminal columns rather than ANSI bytes. `table()` uses headers for its column count, supports per-column alignment, and accepts readonly (`as const`) headers, rows, and alignments.
 
 ## Reference
 

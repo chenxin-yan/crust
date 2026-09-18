@@ -206,8 +206,8 @@ export function normalizeChoices<T>(choices: readonly Choice<T>[]): NormalizedCh
 	return choices.map((choice) => {
 		// oxlint-disable-next-line anti-slop/no-runtime-typeof -- Choice is an internal discriminated union, not unparsed input.
 		if (typeof choice === "string") {
-			// SAFETY: plain-string Choice values are represented by that same string.
-			return { label: choice, value: choice as T };
+			// A plain-string Choice<T> is `T & string`, so it is its own value.
+			return { label: choice, value: choice };
 		}
 		return choice;
 	});

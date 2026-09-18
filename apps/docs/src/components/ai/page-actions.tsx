@@ -9,6 +9,19 @@ import { cn } from "@/lib/cn";
 
 const cache = new Map<string, string>();
 
+/** Fetch a page's Markdown once; failed responses reject instead of being copied and cached. */
+export async function loadMarkdown(markdownUrl: string): Promise<string> {
+	const cached = cache.get(markdownUrl);
+	if (cached !== undefined) return cached;
+	const response = await fetch(markdownUrl);
+	if (!response.ok) {
+		throw new Error(`Markdown request for ${markdownUrl} failed with status ${response.status}`);
+	}
+	const content = await response.text();
+	cache.set(markdownUrl, content);
+	return content;
+}
+
 export function LLMCopyButton({
 	/**
 	 * A URL to fetch the raw Markdown/MDX content of page
@@ -26,14 +39,7 @@ export function LLMCopyButton({
 
 		try {
 			await navigator.clipboard.write([
-				new ClipboardItem({
-					"text/plain": fetch(markdownUrl).then(async (res) => {
-						const content = await res.text();
-						cache.set(markdownUrl, content);
-
-						return content;
-					}),
-				}),
+				new ClipboardItem({ "text/plain": loadMarkdown(markdownUrl) }),
 			]);
 		} finally {
 			setLoading(false);

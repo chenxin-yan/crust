@@ -235,6 +235,111 @@ describe("scaffold", () => {
 		},
 	);
 
+	// Destination containment: overwrite must never write through a link that
+	// leaves the destination, whether the link is the file itself, an ancestor
+	// directory, or a dangling link whose target would be created outside.
+	describe.skipIf(process.platform === "win32")("destination containment", () => {
+		let outsideDir: string;
+		let sentinel: string;
+
+		beforeEach(() => {
+			outsideDir = join(tempDir, "outside");
+			sentinel = join(outsideDir, "sentinel.txt");
+			mkdirSync(outsideDir, { recursive: true });
+			writeFileSync(sentinel, "original", "utf-8");
+			mkdirSync(destDir, { recursive: true });
+		});
+
+		it("rejects a destination file link that escapes the destination", async () => {
+			createTemplateFile("config.txt", "{{name}}");
+			symlinkSync(sentinel, join(destDir, "config.txt"));
+
+			await expect(
+				scaffold({
+					template: templateDir,
+					dest: destDir,
+					context: { name: "my-app" },
+					conflict: "overwrite",
+				}),
+			).rejects.toThrow(/config\.txt.*outside the destination/);
+			expect(readFileSync(sentinel, "utf-8")).toBe("original");
+		});
+
+		it("rejects a destination ancestor directory link that escapes the destination", async () => {
+			createTemplateFile("src/deep/index.ts", "{{name}}");
+			symlinkSync(outsideDir, join(destDir, "src"));
+
+			await expect(
+				scaffold({
+					template: templateDir,
+					dest: destDir,
+					context: { name: "my-app" },
+					conflict: "overwrite",
+				}),
+			).rejects.toThrow(/src.*outside the destination/);
+			expect(existsSync(join(outsideDir, "deep"))).toBe(false);
+		});
+
+		it("rejects a dangling destination link, which would create its target", async () => {
+			createTemplateFile("notes.txt", "{{name}}");
+			const missingTarget = join(outsideDir, "created-by-write.txt");
+			symlinkSync(missingTarget, join(destDir, "notes.txt"));
+
+			await expect(
+				scaffold({
+					template: templateDir,
+					dest: destDir,
+					context: { name: "my-app" },
+					conflict: "overwrite",
+				}),
+			).rejects.toThrow(/notes\.txt.*outside the destination/);
+			expect(existsSync(missingTarget)).toBe(false);
+		});
+
+		it("does not write earlier template files when a later one escapes", async () => {
+			createTemplateFile("a.txt", "a");
+			createTemplateFile("z.txt", "z");
+			symlinkSync(sentinel, join(destDir, "z.txt"));
+
+			await expect(
+				scaffold({ template: templateDir, dest: destDir, context: {}, conflict: "overwrite" }),
+			).rejects.toThrow("outside the destination");
+			expect(existsSync(join(destDir, "a.txt"))).toBe(false);
+			expect(readFileSync(sentinel, "utf-8")).toBe("original");
+		});
+
+		it("writes through a link that stays inside the destination", async () => {
+			createTemplateFile("alias.txt", "{{name}}");
+			writeFileSync(join(destDir, "real.txt"), "old", "utf-8");
+			symlinkSync(join(destDir, "real.txt"), join(destDir, "alias.txt"));
+
+			const result = await scaffold({
+				template: templateDir,
+				dest: destDir,
+				context: { name: "my-app" },
+				conflict: "overwrite",
+			});
+
+			expect(result.files).toEqual(["alias.txt"]);
+			expect(readOutputFile("real.txt")).toBe("my-app");
+		});
+
+		it("treats an explicitly chosen symlinked root as the destination", async () => {
+			createTemplateFile("src/index.ts", "{{name}}");
+			const linkedRoot = join(tempDir, "linked-root");
+			symlinkSync(destDir, linkedRoot);
+
+			const result = await scaffold({
+				template: templateDir,
+				dest: linkedRoot,
+				context: { name: "my-app" },
+			});
+
+			expect(result.files).toEqual([join("src", "index.ts")]);
+			expect(readOutputFile(join("src", "index.ts"))).toBe("my-app");
+		});
+	});
+
 	it("allows scaffold on an empty existing directory with conflict 'abort'", async () => {
 		// Create an empty destination directory
 		mkdirSync(destDir, { recursive: true });

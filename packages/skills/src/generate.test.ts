@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
+	chmod,
 	lstat,
 	mkdir,
 	mkdtemp,
@@ -153,6 +154,35 @@ describe("symlink-only skill installation", () => {
 		await mkdir(outputDir(), { recursive: true });
 		expect((await status()).agents[0]?.status).toBe("conflict");
 	});
+
+	it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+		"rejects permission failures inspecting entries and targets instead of reporting missing",
+		async () => {
+			const sourceDir = await createSource();
+			const options = {
+				name: "demo",
+				sourceDir,
+				agents: ["claude-code" as const],
+				scope: "project" as const,
+			};
+			await projectInstall(sourceDir);
+			for (const denied of [join(tempRoot, ".claude"), join(tempRoot, "package")]) {
+				await chmod(denied, 0o000);
+				try {
+					await withCwd(tempRoot, async () => {
+						await expect(getSkillStatus(options)).rejects.toMatchObject({ code: "EACCES" });
+						await expect(uninstallSkill(options)).rejects.toMatchObject({ code: "EACCES" });
+					});
+				} finally {
+					await chmod(denied, 0o755);
+				}
+				expect((await lstat(outputDir())).isSymbolicLink()).toBe(true);
+			}
+			await rm(outputDir());
+			const missing = await withCwd(tempRoot, () => uninstallSkill(options));
+			expect(missing.agents[0]?.status).toBe("not-found");
+		},
+	);
 
 	it("unlinks owned healthy and dangling links but skips conflicts", async () => {
 		const sourceDir = await createSource();

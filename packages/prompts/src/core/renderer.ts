@@ -312,8 +312,15 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Prom
 			if (renderPending !== null) return;
 			renderPending = setTimeout(() => {
 				renderPending = null;
-				if (!isCleanedUp) {
+				if (isCleanedUp) return;
+				// The keypress handler's try/catch has already returned by the time
+				// this timer fires, so a throwing render must be caught here or it
+				// escapes as an uncaught exception with the prompt still pending.
+				try {
 					renderFrame(render(state, theme));
+				} catch (err) {
+					cleanup();
+					reject(err);
 				}
 			}, 0);
 		}
@@ -359,6 +366,8 @@ export function runPrompt<S, T>(config: PromptConfig<S, T>, io?: PromptIO): Prom
 
 				try {
 					const result = await handleKey(event, state);
+					// A render failure or cancellation may have released these streams while awaiting.
+					if (isCleanedUp) return;
 
 					if (isSubmit(result)) {
 						// Submit must render immediately — cancel any pending render

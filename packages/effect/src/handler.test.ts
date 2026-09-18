@@ -276,6 +276,92 @@ describe("handler with layer", () => {
 		expect(details).toEqual({ subject: "context", name: "config", reason: "missing-context" });
 	});
 
+	it.each([false, true])(
+		"rejects a different same-name factory without building it (compatible=%s)",
+		async (compatible) => {
+			const expected = defineContext("config", () => ({ port: 80 }));
+			let builds = 0;
+			const actual = defineContext("config", () => {
+				builds++;
+				return compatible ? { port: 80 } : { label: "wrong" };
+			});
+			const app = new Crust("cli")
+				.provide(actual())
+				.action(
+					handler(() =>
+						service(expected).pipe(
+							Effect.catchTag("CrustDefinitionError", (error) => Effect.succeed(error)),
+						),
+					),
+				);
+			const outcome = await app.run([]);
+			expect(outcome.status === "completed" && outcome.result).toBeInstanceOf(CrustDefinitionError);
+			expect(builds).toBe(0);
+		},
+	);
+
+	it("rejects a matching ancestor factory shadowed by a different descendant factory", async () => {
+		const expected = defineContext("config", () => ({ port: 80 }));
+		let builds = 0;
+		const replacement = defineContext("config", () => {
+			builds++;
+			return { label: "replacement" };
+		});
+		const app = new Crust("cli")
+			.provide(expected())
+			.command("child", (child) =>
+				child
+					.provide(replacement())
+					.action(
+						handler(() =>
+							service(expected).pipe(
+								Effect.catchTag("CrustDefinitionError", (error) => Effect.succeed(error)),
+							),
+						),
+					),
+			);
+		const outcome = await app.run(["child"]);
+		expect(outcome.status === "completed" && outcome.result).toBeInstanceOf(CrustDefinitionError);
+		expect(builds).toBe(0);
+
+		const effective = new Crust("cli").provide(expected()).command("child", (child) =>
+			child.provide(replacement()).action(
+				handler(function* () {
+					return (yield* service(replacement)).label;
+				}),
+			),
+		);
+		const resolved = await effective.run(["child"]);
+		expect(resolved.status === "completed" && resolved.result).toBe("replacement");
+		expect(builds).toBe(1);
+	});
+
+	it("accepts descendant same-factory .of shadowing", async () => {
+		const config = defineContext("config", () => ({ port: 80 }));
+		const app = new Crust("cli").provide(config()).command("child", (child) =>
+			child.provide(config.of({ port: 123 })).action(
+				handler(function* () {
+					return (yield* service(config)).port;
+				}),
+			),
+		);
+		const outcome = await app.run(["child"]);
+		expect(outcome.status === "completed" && outcome.result).toBe(123);
+	});
+
+	it("accepts same-factory .of doubles", async () => {
+		const config = defineContext("config", (): { port: number } => {
+			throw new Error("live factory must not run");
+		});
+		const app = new Crust("cli").provide(config.of({ port: 123 })).action(
+			handler(function* () {
+				return (yield* service(config)).port;
+			}),
+		);
+		const outcome = await app.run([]);
+		expect(outcome.status === "completed" && outcome.result).toBe(123);
+	});
+
 	it("lets a plain action read a layer value with Context.get", async () => {
 		const db = layer("db", Layer.succeed(Db, { query: (sql) => `rows(${sql})` }));
 		const app = new Crust("cli").provide(db()).action(async ({ ctx }) => {

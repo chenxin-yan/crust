@@ -333,7 +333,7 @@ Extensions must originate from `defineExtension()`. Core consumes immutable priv
 ```ts
 import { help, version } from "@crustjs/extensions";
 
-const app = new Crust("my-cli", { version: "1.2.3" }).extend(help(), version());
+const app = new Crust("my-cli", { version: "1.2.3" }).extend(version(), help());
 ```
 
 Added definitions become ordinary command nodes before root Extensions prepare the application, so root Extensions apply to them. Extension-contributed definitions are materialized when the application prepares.

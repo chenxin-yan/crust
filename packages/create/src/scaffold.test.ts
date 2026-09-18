@@ -19,6 +19,11 @@ describe("interpolate", () => {
 		expect(interpolate("{{known}} and {{unknown}}", { known: "yes" })).toBe("yes and {{unknown}}");
 	});
 
+	it("leaves placeholders named after inherited Object properties untouched", () => {
+		const content = "{{toString}} {{constructor}} {{__proto__}} {{hasOwnProperty}}";
+		expect(interpolate(content, {})).toBe(content);
+	});
+
 	it("returns original content when there are no placeholders", () => {
 		expect(interpolate("Hello, world!", { name: "unused" })).toBe("Hello, world!");
 	});

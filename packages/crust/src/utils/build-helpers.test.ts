@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { defineExtensionId } from "@crustjs/core";
+
 import {
 	assertTargetsBuildableWithoutBun,
 	BUN_TARGETS,
@@ -379,7 +381,7 @@ describe("buildEntrypoint", () => {
 		await writeFile(
 			entry,
 			`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(coreUrl)};\n` +
-				`const artifact = defineExtension(defineExtensionId("artifact"), { build: () => [{ path: "artifact.txt", content: "built" }] });\n` +
+				`const artifact = defineExtension(defineExtensionId("artifact"), { build: () => [{ path: "artifact.txt", content: "built" }, { path: "assets/bytes.bin", content: new Uint8Array([0, 255, 128, 10]) }] });\n` +
 				`const app = new Crust("fixture").extend(artifact).action(() => {});\n` +
 				`await app.execute();\n`,
 		);
@@ -389,8 +391,11 @@ describe("buildEntrypoint", () => {
 		expect(result.snapshot.meta.name).toBe("fixture");
 		expect(result.build.extensions).toHaveLength(1);
 		expect(String(result.build.extensions[0]?.id)).toBe("artifact");
-		expect(result.build.extensions[0]?.files).toEqual(["artifact.txt"]);
+		expect(result.build.extensions[0]?.files).toEqual(["artifact.txt", "assets/bytes.bin"]);
 		expect(await Bun.file(join(outDir, "artifact.txt")).text()).toBe("built");
+		expect(new Uint8Array(await Bun.file(join(outDir, "assets/bytes.bin")).arrayBuffer())).toEqual(
+			new Uint8Array([0, 255, 128, 10]),
+		);
 	});
 
 	it("builds skill and man artifacts without absolute source paths", async () => {
@@ -461,6 +466,97 @@ describe("buildEntrypoint", () => {
 		await expect(
 			buildEntrypoint(entry, join(directory, "dist"), [], io, directory),
 		).rejects.toThrow("Command Snapshot without a Build Report");
+	});
+
+	it.each([
+		null,
+		{},
+		{ extensions: {} },
+		{ extensions: [null] },
+		{ extensions: [{ id: 42, files: [] }] },
+		{ extensions: [{ id: "legacy", files: "unknown" }] },
+		{ extensions: [{ id: "legacy" }] },
+		{ extensions: [{ id: "bad", files: [42] }] },
+		{ extensions: [{ id: "", files: [] }] },
+		{ extensions: [{ id: " padded ", files: [] }] },
+		{ extensions: [{ id: "missing", files: ["missing.txt"] }] },
+	])("rejects malformed or synthetic legacy reports: %j", async (report) => {
+		const directory = await mkdtemp(join(tmpdir(), "crust-entry-report-test-"));
+		tempDirs.push(directory);
+		const entry = join(directory, "cli.ts");
+		await writeFile(
+			entry,
+			`import { dirname, join } from "node:path";
+			await Bun.write(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!, JSON.stringify({ meta: { name: "fixture" } }));
+			await Bun.write(join(dirname(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!), "build-report.json"), ${JSON.stringify(JSON.stringify(report))});`,
+		);
+		await expect(
+			buildEntrypoint(entry, join(directory, "dist"), [], io, directory),
+		).rejects.toThrow(/invalid Build Report[\s\S]*compatible @crustjs\/core/);
+	});
+
+	it.each([
+		"../outside.txt",
+		"/outside.txt",
+		"C:outside.txt",
+		"assets/../present.txt",
+		"assets\\present.txt",
+		".",
+		"directory",
+		"linked.txt",
+		"linked-dir/outside.txt",
+	])("rejects unsafe or nonregular reported paths: %s", async (file) => {
+		const directory = await mkdtemp(join(tmpdir(), "crust-entry-report-path-test-"));
+		tempDirs.push(directory);
+		const entry = join(directory, "cli.ts");
+		await writeFile(
+			entry,
+			`import { mkdirSync, symlinkSync } from "node:fs";
+			import { dirname, join } from "node:path";
+			const outDir = process.env.CRUST_INTERNAL_BUILD_OUT_DIR!;
+			mkdirSync(join(outDir, "directory"), { recursive: true });
+			await Bun.write(join(outDir, "present.txt"), "present");
+			await Bun.write(join(dirname(outDir), "outside.txt"), "outside");
+			symlinkSync(join(dirname(outDir), "outside.txt"), join(outDir, "linked.txt"), "file");
+			symlinkSync(dirname(outDir), join(outDir, "linked-dir"), "dir");
+			await Bun.write(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!, JSON.stringify({ meta: { name: "fixture" } }));
+			await Bun.write(join(dirname(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!), "build-report.json"), ${JSON.stringify(JSON.stringify({ extensions: [{ id: "fixture", files: [file] }] }))});`,
+		);
+		await expect(
+			buildEntrypoint(entry, join(directory, "dist"), [], io, directory),
+		).rejects.toThrow(/invalid Build Report[\s\S]*compatible @crustjs\/core/);
+	});
+
+	it("keeps reports scoped to hook output rather than all entry side effects", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "crust-entry-side-effect-test-"));
+		tempDirs.push(directory);
+		const entry = join(directory, "cli.ts");
+		const outDir = join(directory, "dist");
+		await writeFile(
+			entry,
+			`import { join } from "node:path";
+			import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(coreUrl)};
+			await Bun.write(join(process.env.CRUST_INTERNAL_BUILD_OUT_DIR!, "extra.txt"), "side effect");
+			await new Crust("fixture").extend(defineExtension(defineExtensionId("fixture"), {
+				build: () => [{ path: "assets/real.txt", content: "hook output" }]
+			})).execute();`,
+		);
+		const result = await buildEntrypoint(entry, outDir, [], io, directory);
+		expect(result.build.extensions[0]?.files).toEqual(["assets/real.txt"]);
+		expect(await Bun.file(join(outDir, "extra.txt")).text()).toBe("side effect");
+	});
+
+	it("preserves an executed hook's empty array report", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "crust-entry-empty-test-"));
+		tempDirs.push(directory);
+		const entry = join(directory, "cli.ts");
+		await writeFile(
+			entry,
+			`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(coreUrl)};
+			await new Crust("fixture").extend(defineExtension(defineExtensionId("empty"), { build: () => [] })).execute();`,
+		);
+		const result = await buildEntrypoint(entry, join(directory, "dist"), [], io, directory);
+		expect(result.build).toEqual({ extensions: [{ id: defineExtensionId("empty"), files: [] }] });
 	});
 
 	it("rethrows the entry's error when the subprocess exits non-zero", async () => {

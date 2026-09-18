@@ -42,14 +42,30 @@ const CRUST_TEMPLATE_VERSION_CONTEXT = {
 // Validation
 // ────────────────────────────────────────────────────────────────────────────
 
-const INVALID_NAME_CHARS = /[<>:"|?*\\]/;
+// The resolved basename is spliced into package.json (`name`, `bin` key, `start`
+// script path) and a quoted TS string, whatever its origin: positional argument,
+// prompt, or the cwd for ".". Use the build bin-key subset, excluding Core's
+// reserved command name. This is interpolation safety, not full npm-name validation.
+const PROJECT_NAME_PATTERN = /^[A-Za-z0-9_~][A-Za-z0-9._~-]*$/;
 function validateProjectName(name: string): void {
-	if (!name) {
-		throw new Error("Project name cannot be empty");
+	if (name === "__proto__" || !PROJECT_NAME_PATTERN.test(name)) {
+		throw new Error(
+			`Project name ${JSON.stringify(name)} is not safe for the generated project.\n  The directory basename becomes the package and command name: use letters, digits, ".", "_", "~", and "-", not starting with "." or "-"; "__proto__" is reserved.`,
+		);
 	}
-	if (INVALID_NAME_CHARS.test(name)) {
-		throw new Error(`Project name contains invalid characters: ${name}`);
+}
+
+// The prompt accepts a directory path, so parent segments only need to be
+// path-safe; the basename must also pass the project-name check.
+const INVALID_PATH_CHARS = /[<>:"|?*\\]/;
+function validateProjectDirectory(path: string): void {
+	if (!path) {
+		throw new Error("Project directory cannot be empty");
 	}
+	if (INVALID_PATH_CHARS.test(path)) {
+		throw new Error(`Project directory contains invalid characters: ${path}`);
+	}
+	validateProjectName(basename(resolve(path)));
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -95,11 +111,12 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 			(await input({
 				message: "Project directory",
 				default: "my-cli",
-				validate: validateProjectName,
+				validate: validateProjectDirectory,
 			}));
 
 		const resolvedDir = resolve(process.cwd(), targetDir);
 		const dirName = basename(resolvedDir);
+		validateProjectName(dirName);
 		const runtimeInitial = flags.runtime;
 
 		// Ask before writing into an existing destination. The cwd (".") always

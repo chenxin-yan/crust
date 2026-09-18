@@ -144,7 +144,8 @@ interface ChoiceCase {
 /**
  * One entry per value-flag that needs explicit value-completion handling.
  *
- * - `kind: "path"`     — emit `compgen -f` candidates for the value token.
+ * - `kind: "path"`     — emit `compgen -f` candidates for the value token
+ *                       via the line-preserving `__<bin>_file_candidates`.
  * - `kind: "suppress"` — disable the `complete -o default` file fallback
  *                       so url/json flags don't get filenames offered.
  */
@@ -400,6 +401,26 @@ export function renderBash(spec: CompletionCommand, binName: string, version: st
 	lines.push("}");
 	lines.push("");
 
+	// Helper: append `compgen -f` matches for `$2` to COMPREPLY, each
+	// prefixed with `$1` (`""` or `"--flag="`). Reads line by line so a
+	// filename containing spaces or glob characters stays one candidate;
+	// `COMPREPLY=( $(compgen -f …) )` word-splits and glob-expands it.
+	// Here-string + `read` (not `mapfile`) keeps Bash 3/macOS working.
+	// `compopt -o filenames` makes readline quote the inserted candidate;
+	// it is absent on Bash 3, where candidates are inserted unquoted.
+	// Filenames containing newlines remain unsupported (compgen output is
+	// newline-delimited).
+	if (valueTypeCases.some((c) => c.kind === "path")) {
+		lines.push(`__${ident}_file_candidates() {`);
+		lines.push("\tlocal f");
+		lines.push("\tcompopt -o filenames 2>/dev/null || :");
+		lines.push("\twhile IFS= read -r f; do");
+		lines.push('\t\tif [[ -n "$f" ]]; then COMPREPLY[${#COMPREPLY[@]}]="$1$f"; fi');
+		lines.push('\tdone <<< "$(compgen -f -- "$2")"');
+		lines.push("}");
+		lines.push("");
+	}
+
 	// Main completion function.
 	lines.push(`${fnName}() {`);
 	lines.push("\tlocal cur prev words cword");
@@ -487,7 +508,7 @@ export function renderBash(spec: CompletionCommand, binName: string, version: st
 		for (const c of valueTypeCases) {
 			lines.push(`\t\t\t"${bashDoubleQuoteInner(c.key)}")`);
 			if (c.kind === "path") {
-				lines.push('\t\t\t\tCOMPREPLY=( $(compgen -P "${_flag}=" -f -- "$_value") )');
+				lines.push(`\t\t\t\t__${ident}_file_candidates "\${_flag}=" "$_value"`);
 			} else {
 				lines.push("\t\t\t\tcompopt +o default 2>/dev/null");
 			}
@@ -522,7 +543,7 @@ export function renderBash(spec: CompletionCommand, binName: string, version: st
 		for (const c of valueTypeCases) {
 			lines.push(`\t\t"${bashDoubleQuoteInner(c.key)}")`);
 			if (c.kind === "path") {
-				lines.push('\t\t\tCOMPREPLY=( $(compgen -f -- "$cur") )');
+				lines.push(`\t\t\t__${ident}_file_candidates "" "$cur"`);
 			} else {
 				lines.push("\t\t\tcompopt +o default 2>/dev/null");
 			}
