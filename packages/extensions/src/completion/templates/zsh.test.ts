@@ -141,12 +141,7 @@ describe("renderZsh", () => {
 	});
 });
 
-/**
- * Behavioural tests: parse the generated script under `zsh -n` (syntax
- * check) at minimum. If a richer behavioural check is feasible (sourcing
- * the script and asking compsys directly), we attempt it; otherwise the
- * syntax check is the gate.
- */
+/** Syntax and registration smoke; candidate generation needs a real completion context. */
 const zshAvailable = await isZshAvailable();
 const describeIfZsh = zshAvailable ? describe : describe.skip;
 
@@ -179,18 +174,16 @@ describeIfZsh("renderZsh · zsh -n syntax check", () => {
 		expect(code).toBe(0);
 	});
 
-	it("sources cleanly under interactive zsh with compsys initialised", async () => {
-		// Drive completion the way zsh does: load compinit, source the
-		// generated function file, then probe the candidate list with
-		// `_main_complete` is impractical without a TTY; the next-best
-		// gate is to confirm the script `source`s without errors when
-		// compinit is active.
+	it("sources and registers completion under noninteractive zsh with compsys initialised", async () => {
 		const driver = `
-emulate -L zsh
-autoload -Uz compinit
-compinit -u -d $TMPDIR/zcompdump 2>/dev/null
+emulate -L zsh || exit 1
+setopt ERR_EXIT || exit 1
+autoload -Uz compinit || exit 1
+compinit -u -d "$TMPDIR/zcompdump" || exit 1
 fpath=(${shQuoteForZsh(tmpDir)} $fpath)
-source ${shQuoteForZsh(scriptPath)}
+source ${shQuoteForZsh(scriptPath)} || exit 1
+(( $+functions[_mycli] )) || exit 1
+[[ $_comps[mycli] == _mycli ]] || exit 1
 echo OK
 `;
 		const proc = Bun.spawn(["zsh", "-c", driver], {
@@ -209,7 +202,8 @@ echo OK
 		if (code !== 0) {
 			throw new Error(`zsh failed: code=${code}\nstdout:\n${out}\nstderr:\n${err}`);
 		}
-		expect(out).toContain("OK");
+		expect(err).toBe("");
+		expect(out.trim()).toBe("OK");
 	});
 });
 

@@ -155,7 +155,8 @@ describe("writeJson", () => {
 	// ACLs, not Unix bits), so these exact-mode assertions do not apply.
 	describe.skipIf(process.platform === "win32")("permission bits", () => {
 		it("should create the file with the requested mode regardless of umask", async () => {
-			const previous = process.umask(0o000);
+			await mkdir(tempDir);
+			const previous = process.umask(0o777);
 			try {
 				await writeJson(filePath, { secret: true }, { fileMode: 0o600 });
 
@@ -169,8 +170,9 @@ describe("writeJson", () => {
 		});
 
 		it("should apply directoryMode when it creates the directory", async () => {
+			await mkdir(tempDir);
 			const nested = join(tempDir, "secret-dir", "config.json");
-			const previous = process.umask(0o000);
+			const previous = process.umask(0o777);
 			try {
 				await writeJson(nested, { data: true }, { directoryMode: 0o700 });
 
@@ -208,8 +210,10 @@ describe("writeJson", () => {
 	});
 
 	it("should throw CrustStoreError IO when directory creation fails", async () => {
-		// Use /dev/null (not a directory) as parent to force mkdir failure
-		const badPath = "/dev/null/impossible/config.json";
+		await mkdir(tempDir);
+		const parentFile = join(tempDir, "not-a-directory");
+		await writeFile(parentFile, "sentinel");
+		const badPath = join(parentFile, "impossible", "config.json");
 
 		try {
 			await writeJson(badPath, { data: true });

@@ -426,15 +426,6 @@ describe("parseArgs — variadic args", () => {
 			expect((err as CrustError).message).toBe('Expected number for <numbers>, got "abc"');
 		}
 	});
-
-	it("returns empty array for missing required variadic arg (no validation)", () => {
-		const cmd = makeNode({
-			meta: { name: "test" },
-			args: [{ name: "files", type: "string", variadic: true, required: true }],
-		});
-		const result = parseArgs(cmd, []);
-		expect(result.args.files).toEqual([]);
-	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────

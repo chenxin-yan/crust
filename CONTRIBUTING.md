@@ -12,7 +12,7 @@ Thanks for contributing to Crust. This repository is a Bun-native, TypeScript-fi
 
 - [Bun](https://bun.sh) `1.4.2`
 - Node.js `^22.18.0 || ^24.11.0 || >=26.0.0` (package builds run tsdown under Node, which enforces this exact range — Node 23.x, 25.x and 24.0–24.10 are rejected)
-- [Deno](https://deno.com) `>=2.8` (only needed to run the cross-runtime smoke suite locally; CI runs it on every PR)
+- [Deno](https://deno.com) `>=2.8` (only needed to run the cross-runtime smoke suite locally; CI runs it for PRs matching the package workflow's path filters)
 - Git
 
 ## Repository Layout
@@ -41,8 +41,25 @@ bun run check:types
 bun run test
 ```
 
+`bun run test` runs package tests and the Node-based Oxlint RuleTester suite in
+`tools`; it does not run scripts or docs tests. Do not substitute bare root
+`bun test`: Oxlint RuleTester requires Node. For those additional checks, run:
+
+```sh
+bun test scripts/*.test.ts
+bun x tsc --noEmit -p scripts
+bun run --cwd apps/docs test
+bun run check:types --filter=./apps/docs
+```
+
+Build changed packages and their dependencies before directly running tests that
+consume `dist` (including declaration-emission and packed-consumer tests). The
+Turbo-backed `bun run test` handles these build prerequisites; an existing `dist`
+file alone does not prove it reflects current source.
+
 The cross-runtime smoke suite (built distributions executed under Bun, Node,
-and Deno) runs in CI on every PR. To run it locally after `bun run build`:
+and Deno) runs for PRs matching the package workflow's path filters. To run it
+locally after `bun run build`:
 
 ```sh
 bun scripts/smoke-runtimes/smoke.mjs
@@ -123,7 +140,11 @@ Add tests for bug fixes and new behavior whenever practical.
 Preferred patterns in this repo:
 
 - colocated unit tests in `packages/*/src/*.test.ts`
+- compile-only contracts in `packages/*/src/*.test-d.ts`, enforced by `check:types`, not `bun test`; keep them free of `bun:test` imports and Bun globals
 - integration and smoke tests in package-local `packages/<pkg>/tests/` directories
+
+Opt-in smoke suites should run directly with their documented environment flag,
+not through a potentially cached Turbo test task that previously skipped them.
 
 When fixing a bug, add a test that fails before the fix and passes after it.
 

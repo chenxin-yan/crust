@@ -6,7 +6,7 @@ describe("createStyle — apply() under NO_COLOR", () => {
 	// NO_COLOR on a TTY: colorsEnabled=false, modifiersEnabled=true.
 	const s = createStyle({
 		mode: "auto",
-		overrides: { isTTY: true, noColor: "1" },
+		overrides: { isTTY: true, noColor: "1", forceColor: undefined },
 	});
 
 	it("preserves modifier steps when colors are disabled", () => {
@@ -32,6 +32,7 @@ function autoStyle(overrides: {
 		overrides: {
 			isTTY: overrides.isTTY ?? true,
 			noColor: undefined,
+			forceColor: undefined,
 			colorTerm: overrides.colorTerm,
 			term: overrides.term,
 		},
@@ -72,8 +73,5 @@ describe("createStyle — fg/bg emit format matching colorDepth", () => {
 		// standard half-channel bucketing (b=0x88=136 rounds to 1).
 		const out = autoStyle({}).bg("text", "#00ff88");
 		expect(out).toBe("\x1b[106mtext\x1b[49m");
-		// Invariant: bg open must always be a background SGR, never a fg one.
-		// oxlint-disable-next-line no-control-regex -- matching ANSI escape sequences
-		expect(/^\x1b\[(?:4[0-7]|10[0-7])m/.test(out)).toBe(true);
 	});
 });

@@ -114,6 +114,7 @@ describe("scaffold", () => {
 	});
 
 	it("does not rename files starting with double underscore", async () => {
+		createTemplateFile("__file.ts", "export const preserved = true;");
 		createTemplateFile("__tests__/foo.test.ts", "test('foo', () => {})");
 		createTemplateFile("__mocks__/bar.ts", "export default {}");
 
@@ -124,6 +125,8 @@ describe("scaffold", () => {
 			context: {},
 		});
 
+		expect(result.files).toContain("__file.ts");
+		expect(readOutputFile("__file.ts")).toBe("export const preserved = true;");
 		expect(result.files).toContain(join("__tests__", "foo.test.ts"));
 		expect(result.files).toContain(join("__mocks__", "bar.ts"));
 		expect(readOutputFile(join("__tests__", "foo.test.ts"))).toBe("test('foo', () => {})");

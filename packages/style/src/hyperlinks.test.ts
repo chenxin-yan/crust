@@ -55,7 +55,7 @@ describe("createStyle().link", () => {
 	it("emits hyperlinks in auto mode even when NO_COLOR is set", () => {
 		const s = createStyle({
 			mode: "auto",
-			overrides: { isTTY: true, noColor: "1" },
+			overrides: { isTTY: true, noColor: "1", forceColor: undefined },
 		});
 		expect(s.link("Crust", "https://crustjs.com")).toBe(
 			"\x1b]8;;https://crustjs.com\x1b\\Crust\x1b]8;;\x1b\\",
@@ -65,7 +65,7 @@ describe("createStyle().link", () => {
 	it("suppresses hyperlinks when auto mode is not a TTY", () => {
 		const s = createStyle({
 			mode: "auto",
-			overrides: { isTTY: false, noColor: undefined },
+			overrides: { isTTY: false, noColor: undefined, forceColor: undefined },
 		});
 		expect(s.link("Crust", "https://crustjs.com")).toBe("Crust");
 	});

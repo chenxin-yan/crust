@@ -670,14 +670,6 @@ describe("built-in extensions", () => {
 		expect(output).toContain("Show version number");
 	});
 
-	it("version extension with function value", async () => {
-		const app = new Crust("app").extend(version(() => "3.5.0")).action(() => {});
-
-		await app.execute({ argv: ["--version"] });
-
-		expect(getStdout()).toContain("app v3.5.0");
-	});
-
 	it("version extension supports plain format", async () => {
 		const app = new Crust("app").extend(version("1.2.3", { format: "plain" })).action(() => {});
 

@@ -53,7 +53,8 @@ describe("detectPackageManager", () => {
 		expect(detectPackageManager(tempDir)).toBe("yarn");
 	});
 
-	it("detects npm from package-lock.json", () => {
+	it("detects npm from package-lock.json ahead of a conflicting user agent", () => {
+		process.env.npm_config_user_agent = "bun/1.0.0";
 		writeFileSync(join(tempDir, "package-lock.json"), "");
 		expect(detectPackageManager(tempDir)).toBe("npm");
 	});
@@ -67,8 +68,10 @@ describe("detectPackageManager", () => {
 	});
 
 	it("prefers pnpm over yarn and npm when bun is absent", () => {
+		process.env.npm_config_user_agent = "bun/1.0.0";
 		writeFileSync(join(tempDir, "pnpm-lock.yaml"), "");
 		writeFileSync(join(tempDir, "yarn.lock"), "");
+		writeFileSync(join(tempDir, "package-lock.json"), "");
 		expect(detectPackageManager(tempDir)).toBe("pnpm");
 	});
 

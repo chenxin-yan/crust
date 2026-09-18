@@ -7,6 +7,7 @@ on:
       - "package.json"
       - "bun.lock"
       - "turbo.json"
+      - "tsdown.config.ts"
       - "scripts/package-size-report.mjs"
       - ".github/workflows/package-size.yml"
 
@@ -69,6 +70,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
           marker='<!-- package-size-report -->'
           {
@@ -77,6 +79,12 @@ jobs:
             echo
             bun scripts/package-size-report.mjs compare "$RUNNER_TEMP/base.json" "$RUNNER_TEMP/head.json"
           } > "$RUNNER_TEMP/comment.md"
+          cat "$RUNNER_TEMP/comment.md" >> "$GITHUB_STEP_SUMMARY"
+          # Fork PRs get a read-only GITHUB_TOKEN; the step summary above is their report.
+          if [ "$HEAD_REPO" != "$REPO" ]; then
+            echo "Fork PR: skipping PR comment (read-only token)."
+            exit 0
+          fi
           comment_id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
             --jq '[.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- package-size-report -->")))][0].id // empty')
           if [ -n "$comment_id" ]; then
