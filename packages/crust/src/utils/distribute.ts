@@ -693,12 +693,6 @@ export function mergeEntryArtifacts(
 	command: string,
 	owners: Map<string, string>,
 ): void {
-	const ownerOf = (path: string): string => {
-		for (let current = path; ; current = current.slice(0, current.lastIndexOf("/"))) {
-			const owner = owners.get(current);
-			if (owner !== undefined || !current.includes("/")) return owner ?? "an earlier bin";
-		}
-	};
 	const copyLink = (source: string, destination: string): void => {
 		const target = readlinkSync(source);
 		const rebased =
@@ -732,7 +726,7 @@ export function mergeEntryArtifacts(
 				merge(relativePath);
 			} else {
 				throw new Error(
-					`Build artifact "${relativePath}" is written by both bin ${JSON.stringify(ownerOf(relativePath))} and ${JSON.stringify(command)}.\n  Extension build hooks of different commands must write distinct paths under ${artifactDir}.`,
+					`Build artifact "${relativePath}" is written by both bin ${JSON.stringify(owners.get(relativePath) ?? "an earlier bin")} and ${JSON.stringify(command)}.\n  Extension build hooks of different commands must write distinct paths under ${artifactDir}.`,
 				);
 			}
 		}

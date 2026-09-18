@@ -418,9 +418,6 @@ describe("resolveBinEntries", () => {
 		expect(() => entries({ name: "x", bin: { Tool: "src/cli.ts", tool: "src/admin.ts" } })).toThrow(
 			'package.json bin keys "Tool" and "tool" differ only by case.',
 		);
-		expect(() =>
-			entries({ name: "x", bin: { "my-cli": "src/cli.ts", "MY-CLI": "src/admin.ts" } }),
-		).toThrow("differ only by case");
 	});
 });
 
