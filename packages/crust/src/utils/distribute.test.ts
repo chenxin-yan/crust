@@ -71,9 +71,11 @@ describe("runDistributeBuild", () => {
 
 	it("stages manifests, package metadata, resolver, licenses, and fake binary outputs", async () => {
 		const packageJson = {
+			$schema: "./node_modules/@crustjs/crust/schema/package.json",
 			name: "@scope/test-package-cli",
 			version: "0.1.0",
 			description: "CLI tooling",
+			crust: { runtime: "bun" },
 			bin: { "test-cli": "dist/cli" },
 			publishConfig: { access: "public" },
 		};
@@ -142,6 +144,10 @@ describe("runDistributeBuild", () => {
 		expect(platformPackage("windows-arm64")).not.toHaveProperty("libc");
 		// `crust publish` passes no --access; npm reads publishConfig.access from every staged package.
 		expect(platformPackage("linux-x64").publishConfig).toEqual({ access: "public" });
+		// Editor-only `$schema` (create-crust templates set it) and the `crust` build
+		// config are project-side; neither belongs in a published package.
+		expect(platformPackage("linux-x64")).not.toHaveProperty("$schema");
+		expect(platformPackage("linux-x64")).not.toHaveProperty("crust");
 
 		const rootPackage = readJson<{
 			files: string[];
@@ -150,6 +156,8 @@ describe("runDistributeBuild", () => {
 			publishConfig?: Record<string, string>;
 		}>(join(plan.stageDir, "root", "package.json"));
 		expect(rootPackage.publishConfig).toEqual({ access: "public" });
+		expect(rootPackage).not.toHaveProperty("$schema");
+		expect(rootPackage).not.toHaveProperty("crust");
 		expect(rootPackage.bin).toEqual({ "test-cli": "bin/test-cli.js" });
 		expect(rootPackage.optionalDependencies).toEqual({
 			"@scope/test-package-cli-linux-x64": "0.1.0",

@@ -28,8 +28,9 @@ import { CRUST_DIR, type Distribution, runDistributeBuild } from "../utils/distr
 // package.json "crust" configuration
 // ────────────────────────────────────────────────────────────────────────────
 
-const DEFAULT_ENTRY = "src/cli.ts";
-const CRUST_CONFIG_KEYS = ["runtime", "entry", "bunPlugins", "include"] as const;
+export const DEFAULT_ENTRY = "src/cli.ts";
+/** Also mirrored by `schema/package.json`; build.test.ts guards against drift. */
+export const CRUST_CONFIG_KEYS = ["runtime", "entry", "bunPlugins", "include"] as const;
 
 /** The `crust` block of the user's package.json, shape-validated. */
 export type CrustConfig = {

@@ -82,6 +82,16 @@ Every key is optional. Any other key under `crust` is an error that lists the al
 
 `crust.include` entries must be existing directories inside the project (symlinks are copied dereferenced, so every symlink inside them must also resolve inside the project), cannot be named `bin`, cannot be inside `.crust`, and cannot repeat an Extension artifact directory name.
 
+### Editor completion
+
+`@crustjs/crust` ships a JSON schema for this block at `node_modules/@crustjs/crust/schema/package.json`. It extends the standard [SchemaStore package.json schema](https://json.schemastore.org/package.json) with the `crust` keys above, so pointing `$schema` at it keeps completion for `name`, `scripts`, and the rest while adding completion and validation for `crust`. `create-crust` templates set it; `crust build` never copies `$schema` into the staged packages.
+
+```json title="package.json"
+{
+  "$schema": "./node_modules/@crustjs/crust/schema/package.json"
+}
+```
+
 ## Extension artifacts
 
 ```text

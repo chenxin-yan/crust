@@ -25,6 +25,11 @@
 	"publishConfig": {
 		"access": "public"
 	},
+	"crust": {
+		"include": [
+			"schema"
+		]
+	},
 	"bin": {
 		"crust": "dist/cli.js"
 	},

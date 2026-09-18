@@ -72,6 +72,7 @@ describe("create-crust CLI", () => {
 		expect(result.stdout).toContain("Created my-cli!");
 		const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf-8"));
 		expect(pkg).toMatchObject({
+			$schema: "./node_modules/@crustjs/crust/schema/package.json",
 			name: "my-cli",
 			version: "0.0.0",
 			type: "module",
@@ -162,6 +163,7 @@ describe("create-crust CLI", () => {
 		expect(result.stdout).toContain("npm run dev");
 		const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf-8"));
 		expect(pkg).toMatchObject({
+			$schema: "./node_modules/@crustjs/crust/schema/package.json",
 			crust: { runtime: "node" },
 			bin: { "node-cli": ".crust/root/bin/node-cli.js" },
 			scripts: {
@@ -212,6 +214,7 @@ describe("create-crust CLI", () => {
 		expect(result.stdout).toContain("deno task dev");
 		const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf-8"));
 		expect(pkg).toMatchObject({
+			$schema: "./node_modules/@crustjs/crust/schema/package.json",
 			crust: { runtime: "deno" },
 			bin: { "deno-cli": ".crust/root/bin/deno-cli.js" },
 			scripts: {

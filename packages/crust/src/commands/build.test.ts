@@ -10,7 +10,9 @@ import type { JsonValue } from "@crustjs/utils/json";
 
 const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 
+import schema from "../../schema/package.json";
 import {
+	BUILD_RUNTIMES,
 	BUN_TARGETS,
 	bunBaselineAlias,
 	DENO_TARGETS,
@@ -21,6 +23,8 @@ import {
 import {
 	type BuildFlags,
 	buildCommand,
+	CRUST_CONFIG_KEYS,
+	DEFAULT_ENTRY,
 	planBuild,
 	readCrustConfig,
 	resolveEnvFilePaths,
@@ -321,6 +325,14 @@ describe("readCrustConfig", () => {
 		expect(() => readCrustConfig({ crust: { include: "templates" } })).toThrow(
 			"crust.include must be an array",
 		);
+	});
+
+	it("matches the published JSON schema (schema/package.json)", () => {
+		const crust = schema.properties.crust;
+		expect(crust.additionalProperties).toBe(false);
+		expect(Object.keys(crust.properties)).toEqual([...CRUST_CONFIG_KEYS]);
+		expect(crust.properties.runtime.enum).toEqual([...BUILD_RUNTIMES]);
+		expect(crust.properties.entry.default).toBe(DEFAULT_ENTRY);
 	});
 });
 

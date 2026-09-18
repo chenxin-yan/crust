@@ -1,0 +1,48 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "package.json with a Crust build configuration",
+	"description": "package.json schema for CLIs built with Crust. Point \"$schema\" at ./node_modules/@crustjs/crust/schema/package.json to get completion for the \"crust\" block alongside the standard package.json fields.",
+	"type": "object",
+	"allOf": [
+		{
+			"$ref": "https://json.schemastore.org/package.json"
+		}
+	],
+	"properties": {
+		"crust": {
+			"description": "Build configuration read by `crust build`. Every key is optional; unknown keys fail the build.",
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"runtime": {
+					"description": "Runtime the CLI is built for. Without it: deno.json/deno.jsonc selects deno; @types/node without @types/bun selects node; otherwise bun.",
+					"type": "string",
+					"enum": [
+						"bun",
+						"deno",
+						"node"
+					]
+				},
+				"entry": {
+					"description": "Entry file, a relative path that stays inside the project root.",
+					"type": "string",
+					"default": "src/cli.ts"
+				},
+				"bunPlugins": {
+					"description": "Bun bundler plugin modules applied to Bun and Node builds, in order: bare names resolve from node_modules, paths from the project root; each must default-export the plugin. Rejected for Deno.",
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"include": {
+					"description": "Directories relative to the project root that `crust build` copies into .crust/root/ and into each platform package's bin/.",
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				}
+			}
+		}
+	}
+}
