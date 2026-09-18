@@ -39,7 +39,7 @@ describe("crust CLI entry point", () => {
 			expect(output).toContain("build");
 			expect(output).toContain("publish");
 			expect(output).toContain("Build your CLI for Bun, Deno, or Node");
-			expect(output).toContain("Publish staged npm packages created by crust build --package");
+			expect(output).toContain("Publish the npm packages staged in .crust/ by crust build");
 		});
 
 		it("should show --help and --version in options", async () => {

@@ -23,10 +23,10 @@ const app = new Crust("my-cli").extend(man());
 ```
 
 ```text
-dist/man/my-cli.1
+.crust/artifacts/man/my-cli.1
 ```
 
-`man()` registers a build hook that writes `man/<name>.<section>` under the build output directory. It reports that relative path as a build artifact owned by `crust:man`.
+`man()` registers a build hook that writes `man/<name>.<section>` under the build artifact directory; `crust build` copies it into the staged packages. It reports that relative path as a build artifact owned by `crust:man`.
 
 ```text
 .Dd March 1, 2026

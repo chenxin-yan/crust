@@ -8,10 +8,6 @@ import { isInGitRepo, runSteps, scaffold } from "@crustjs/create";
 import { spinner } from "@crustjs/progress";
 import { confirm, input, select } from "@crustjs/prompts";
 
-declare const CRUST_CORE_VERSION: string;
-declare const CRUST_CLI_VERSION: string;
-declare const CRUST_EXTENSIONS_VERSION: string;
-
 type Runtime = "bun" | "node" | "deno";
 
 // `tsLib`/`tsTypes` are spliced into tsconfig arrays, so they carry their own JSON quoting.
@@ -23,10 +19,30 @@ const RUNTIME_TEMPLATE_CONTEXT = {
 	deno: { run: "deno task", tsLib: '"ESNext", "deno.window"', tsTypes: "" },
 } satisfies Record<Runtime, { run: string; tsLib: string; tsTypes: string }>;
 
+// `crust build` inlines `process.env.PUBLIC_*` at bundle time; scripts/build.ts
+// sets these from the sibling packages. Only literal property access is inlined.
+function requireBuildVersion(name: string, value: string | undefined): string {
+	if (!value) {
+		throw new Error(
+			`${name} is not set. Build with \`bun run build\` or export it before running src/index.ts.`,
+		);
+	}
+	return value;
+}
+
 const CRUST_TEMPLATE_VERSION_CONTEXT = {
-	crustCoreVersion: CRUST_CORE_VERSION,
-	crustExtensionsVersion: CRUST_EXTENSIONS_VERSION,
-	crustCliVersion: CRUST_CLI_VERSION,
+	crustCoreVersion: requireBuildVersion(
+		"PUBLIC_CRUST_CORE_VERSION",
+		process.env.PUBLIC_CRUST_CORE_VERSION,
+	),
+	crustExtensionsVersion: requireBuildVersion(
+		"PUBLIC_CRUST_EXTENSIONS_VERSION",
+		process.env.PUBLIC_CRUST_EXTENSIONS_VERSION,
+	),
+	crustCliVersion: requireBuildVersion(
+		"PUBLIC_CRUST_CLI_VERSION",
+		process.env.PUBLIC_CRUST_CLI_VERSION,
+	),
 } satisfies Record<string, string>;
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -120,17 +136,17 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 				{
 					label: "Bun (recommended)",
 					value: "bun",
-					hint: "compile with crust build, publish per-platform npm packages",
+					hint: "standalone binaries per platform, published as npm packages",
 				},
 				{
 					label: "Node.js",
 					value: "node",
-					hint: "bundle with crust build, publish one npm package that runs on Node",
+					hint: "one JavaScript bundle, published as a single npm package",
 				},
 				{
 					label: "Deno",
 					value: "deno",
-					hint: "compile with crust build, ship self-contained executables",
+					hint: "standalone binaries per platform, published as npm packages",
 				},
 			],
 			default: "bun",

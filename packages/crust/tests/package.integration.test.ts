@@ -20,6 +20,7 @@ import { BUN_TARGETS, DENO_TARGETS } from "../src/utils/build-helpers.ts";
 import { hostDenoTarget, hostTarget } from "./helpers.ts";
 
 const tmpDir = mkdtempSync(join(tmpdir(), "crust-package-integration-"));
+const stageDir = join(tmpDir, ".crust");
 const originalCwd = process.cwd;
 
 function readJson<T>(path: string): T {
@@ -63,27 +64,17 @@ afterAll(() => {
 	rmSync(tmpDir, { recursive: true, force: true });
 });
 
-describe("crust build --package integration", () => {
-	it("stages root and platform packages with a JS resolver", async () => {
-		await runBuild([
-			"--package",
-			"--target",
-			"bun-linux-x64",
-			"--target",
-			"bun-darwin-arm64",
-			"--stage-dir",
-			".stage",
-			"--no-validate",
-		]);
+describe("crust build integration", () => {
+	it("stages root and platform packages in .crust with a JS launcher", async () => {
+		await runBuild(["--target", "bun-linux-x64", "--target", "bun-darwin-arm64", "--no-validate"]);
 
-		expect(existsSync(join(tmpDir, ".stage", "root", "bin", "test-cli.js"))).toBe(true);
-		expect(existsSync(join(tmpDir, ".stage", "root", "bin", "test-cli"))).toBe(false);
-		expect(existsSync(join(tmpDir, ".stage", "root", "bin", "test-cli.cmd"))).toBe(false);
-		expect(existsSync(join(tmpDir, ".stage", "linux-x64", "bin"))).toBe(true);
-		expect(existsSync(join(tmpDir, ".stage", "darwin-arm64", "bin"))).toBe(true);
+		expect(existsSync(join(stageDir, "root", "bin", "test-cli.js"))).toBe(true);
+		expect(existsSync(join(stageDir, "root", "bin", "test-cli"))).toBe(false);
+		expect(existsSync(join(stageDir, "linux-x64", "bin"))).toBe(true);
+		expect(existsSync(join(stageDir, "darwin-arm64", "bin"))).toBe(true);
 
 		const rootPackageJson = readJson<{ bin: Record<string, string> }>(
-			join(tmpDir, ".stage", "root", "package.json"),
+			join(stageDir, "root", "package.json"),
 		);
 		expect(rootPackageJson.bin["test-cli"]).toBe("bin/test-cli.js");
 
@@ -91,67 +82,54 @@ describe("crust build --package integration", () => {
 			version: string;
 			publishOrder: string[];
 			packages: Array<{ target: string; dir: string }>;
-		}>(join(tmpDir, ".stage", "manifest.json"));
+		}>(join(stageDir, "manifest.json"));
 		expect(manifest.version).toBe("0.1.0");
 		expect(manifest.publishOrder).toEqual(["linux-x64", "darwin-arm64", "root"]);
 		expect(manifest.packages.map((pkg) => pkg.target)).toEqual(["linux-x64", "darwin-arm64"]);
 	}, 15_000);
 
-	it("stages only the selected target directories", async () => {
-		await runBuild([
-			"--package",
-			"--target",
-			"bun-linux-x64",
-			"--stage-dir",
-			".subset",
-			"--no-validate",
-		]);
+	it("wipes .crust and stages only the selected target directories", async () => {
+		writeFileSync(join(stageDir, "stale.txt"), "from a previous build\n");
+		await runBuild(["--target", "bun-linux-x64", "--no-validate"]);
 
-		expect(existsSync(join(tmpDir, ".subset", "root"))).toBe(true);
-		expect(existsSync(join(tmpDir, ".subset", "linux-x64"))).toBe(true);
-		expect(existsSync(join(tmpDir, ".subset", "darwin-arm64"))).toBe(false);
+		expect(existsSync(join(stageDir, "stale.txt"))).toBe(false);
+		expect(existsSync(join(stageDir, "root"))).toBe(true);
+		expect(existsSync(join(stageDir, "linux-x64"))).toBe(true);
+		expect(existsSync(join(stageDir, "darwin-arm64"))).toBe(false);
 	});
 
 	it.skipIf(hostTarget() === null || !Bun.which("node"))(
-		"executes the staged JS resolver through Node on the host platform",
+		"runs the staged launcher in place and from an installed layout",
 		async () => {
 			const hostBunTarget = hostTarget();
 			const nodePath = Bun.which("node");
 			if (!hostBunTarget || !nodePath) return;
 			const hostAlias = BUN_TARGETS.info[hostBunTarget].alias;
 
-			await runBuild([
-				"--package",
-				"--target",
-				hostBunTarget,
-				"--stage-dir",
-				".host",
-				"--no-validate",
-			]);
+			await runBuild(["--target", hostBunTarget, "--no-validate"]);
 
+			const launcherPath = join(stageDir, "root", "bin", "test-cli.js");
+			const inPlace = await runProcess(nodePath, [launcherPath], { cwd: tmpDir });
+			expect(inPlace.stderr.trim()).toBe("");
+			expect(inPlace.exitCode).toBe(0);
+			expect(inPlace.stdout.trim()).toBe("hello from packaged test");
+
+			// Installed layout: the platform package under root/node_modules. Scoped
+			// names split into @scope/name path segments, matching the launcher's
+			// resolve(..., target.packageName, ...).
+			const installedRoot = join(tmpDir, "installed");
+			cpSync(join(stageDir, "root"), installedRoot, { recursive: true });
 			cpSync(
-				join(tmpDir, ".host", hostAlias),
-				join(
-					tmpDir,
-					".host",
-					"root",
-					"node_modules",
-					// Scoped package names split into @scope/name path segments here,
-					// matching resolver candidateTwo's resolve(..., target.packageName, ...).
-					"@scope",
-					`test-cli-${hostAlias}`,
-				),
+				join(stageDir, hostAlias),
+				join(installedRoot, "node_modules", "@scope", `test-cli-${hostAlias}`),
 				{ recursive: true },
 			);
-
-			const resolverPath = join(tmpDir, ".host", "root", "bin", "test-cli.js");
-			const { exitCode, stdout, stderr } = await runProcess(nodePath, [resolverPath], {
+			const installed = await runProcess(nodePath, [join(installedRoot, "bin", "test-cli.js")], {
 				cwd: tmpDir,
 			});
-
-			expect(exitCode).toBe(0);
-			expect(stderr.trim()).toBe("");
-			expect(stdout.trim()).toBe("hello from packaged test");
+			expect(installed.stderr.trim()).toBe("");
+			expect(installed.exitCode).toBe(0);
+			expect(installed.stdout.trim()).toBe("hello from packaged test");
 		},
 	);
 
@@ -167,20 +145,12 @@ describe("crust build --package integration", () => {
 				JSON.stringify({ ...JSON.parse(original), crust: { include: ["assets"] } }),
 			);
 			try {
-				const { stdout } = await runBuild([
-					"--package",
-					"--runtime",
-					"node",
-					"--stage-dir",
-					".node",
-					"--no-validate",
-				]);
+				const { stdout } = await runBuild(["--runtime", "node", "--no-validate"]);
 				expect(stdout).toContain("Runtime: node (from --runtime)");
 			} finally {
 				writeFileSync(packageJsonPath, original);
 			}
 
-			const stageDir = join(tmpDir, ".node");
 			const rootPackageJson = readJson<{
 				bin: Record<string, string>;
 				files: string[];
@@ -216,18 +186,8 @@ describe("crust build --package integration", () => {
 			const denoTarget = hostDenoTarget()!;
 			const hostAlias = DENO_TARGETS.info[denoTarget].alias;
 
-			await runBuild([
-				"--package",
-				"--runtime",
-				"deno",
-				"--target",
-				denoTarget,
-				"--stage-dir",
-				".deno",
-				"--no-validate",
-			]);
+			await runBuild(["--runtime", "deno", "--target", denoTarget, "--no-validate"]);
 
-			const stageDir = join(tmpDir, ".deno");
 			const manifest = readJson<{
 				packages: Array<{ target: string; name: string; bin: string; libc?: string }>;
 				publishOrder: string[];
@@ -247,12 +207,6 @@ describe("crust build --package integration", () => {
 				).optionalDependencies,
 			).toEqual({ [`@scope/test-cli-${hostAlias}`]: "0.1.0" });
 
-			// Same installed layout as the Bun launcher test: the platform package under root/node_modules.
-			cpSync(
-				join(stageDir, hostAlias),
-				join(stageDir, "root", "node_modules", "@scope", `test-cli-${hostAlias}`),
-				{ recursive: true },
-			);
 			const { exitCode, stdout, stderr } = await runProcess(
 				Bun.which("node")!,
 				[join(stageDir, "root", "bin", "test-cli.js")],

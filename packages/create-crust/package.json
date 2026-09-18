@@ -24,24 +24,25 @@
 		"typescript",
 		"crust"
 	],
-	"files": [
-		"dist",
-		"templates"
-	],
 	"publishConfig": {
 		"access": "public"
 	},
+	"crust": {
+		"runtime": "node",
+		"include": [
+			"templates"
+		]
+	},
 	"bin": {
-		"create-crust": "dist/index.js"
+		"create-crust": ".crust/root/bin/create-crust.js"
 	},
 	"scripts": {
-		"build": "tsdown",
-		"dev": "tsdown --watch",
+		"build": "bun scripts/build.ts",
+		"dev": "bun src/index.ts",
+		"release": "crust publish",
 		"check:types": "tsc --noEmit",
 		"test": "bun test",
-		"test:smoke": "bun test tests/cli.smoke.test.ts",
-		"prepack": "cp ../../LICENSE LICENSE",
-		"postpack": "rm -f LICENSE"
+		"test:smoke": "bun test tests/cli.smoke.test.ts"
 	},
 	"dependencies": {
 		"@crustjs/core": "workspace:^",
@@ -51,8 +52,8 @@
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
-		"@crustjs/extensions": "workspace:*",
-		"tsdown": "catalog:"
+		"@crustjs/crust": "workspace:*",
+		"@crustjs/extensions": "workspace:*"
 	},
 	"engines": {
 		"bun": ">=1.4.0",

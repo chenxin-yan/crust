@@ -94,7 +94,7 @@ npm run build
 npm run start Ada
 ```
 
-Bun and Deno projects compile standalone binaries behind a `dist/cli` resolver; Node projects bundle to `dist/cli.js`. See [Build and distribution](/docs/guide/build-and-distribution) for cross-platform targets and npm packaging.
+`crust build` stages the publishable npm package(s) in `.crust/`: Bun and Deno projects get one standalone binary per platform behind a Node launcher at `.crust/root/bin/my-cli.js`; Node projects get one JavaScript bundle at that path. `npm run release` publishes them. See [Build and distribution](/docs/guide/build-and-distribution) for cross-platform targets and the `.crust/` layout.
 
 <Callout type="info">
   Both `create-crust` and `crust` CLI are built with crust. If you would like to see crust in
@@ -124,16 +124,18 @@ npm install -D @crustjs/crust
 ```json title="package.json"
 {
   "type": "module",
-  "bin": { "my-cli": "dist/cli" },
+  "crust": { "runtime": "bun" },
+  "bin": { "my-cli": ".crust/root/bin/my-cli.js" },
   "scripts": {
     "dev": "bun run src/cli.ts",
     "build": "crust build",
-    "start": "./dist/cli"
+    "release": "crust publish",
+    "start": "bun .crust/root/bin/my-cli.js"
   }
 }
 ```
 
-This is the Bun shape; `dev` runs the TypeScript source with Bun regardless of which package manager installed the dependencies. `crust build` reads `src/cli.ts` and writes to `dist` by default; pass `--entry` for a different file. `bin` points at the built resolver so `npm link` and npm installs expose the command. Node and Deno projects add `"crust": { "runtime": "node" }` or `"deno"` and use their own `dev` and `bin` values; see [Set up `package.json`](/docs/guide/build-and-distribution#set-up-packagejson).
+This is the Bun shape; `dev` runs the TypeScript source with Bun regardless of which package manager installed the dependencies. `crust build` reads `src/cli.ts` and stages `.crust/`; pass `--entry` for a different file. `bin` points at the staged launcher so `npm link` exposes the command locally. Node and Deno projects set `"crust": { "runtime": "node" }` or `"deno"` and use their own `dev` and `start` values; see [Set up `package.json`](/docs/guide/build-and-distribution#set-up-packagejson).
 
 </Step>
 <Step>

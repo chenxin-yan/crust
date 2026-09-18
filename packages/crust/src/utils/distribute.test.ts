@@ -149,8 +149,7 @@ describe("runDistributeBuild", () => {
 		});
 		const resolver = readFileSync(join(plan.stageDir, "root", "bin", "test-cli.js"), "utf8");
 		expect(resolver).toContain('"packagePathSegment": "test-package-cli-linux-x64"');
-		expect(resolver).toContain("const candidateOne = resolve(");
-		expect(resolver).toContain("const candidateTwo = resolve(");
+		expect(resolver).toContain('"targetAlias": "linux-x64"');
 		expect(resolver).toContain("Unsupported platform:");
 		expect(resolver).toContain('"linux-x64-musl": {');
 		expect(resolver).toContain("glibcVersionRuntime");
@@ -310,6 +309,25 @@ describe("runDistributeBuild", () => {
 		);
 	});
 
+	it("writes manifest.json only after every target compiles", async () => {
+		const plan = createPlan(tmpDir, { name: "my-cli", version: "0.1.0", bin: { cli: "dist/cli" } });
+		const failSecond = async (entryPath: string, outfilePath: string, target: BunTarget) => {
+			if (target === "bun-linux-x64") throw new Error("compile failed");
+			await fakeExecutor(entryPath, outfilePath);
+		};
+		await expect(
+			runDistributeBuild(
+				plan,
+				bunDistribution(["bun-darwin-arm64", "bun-linux-x64"], failSecond),
+				io,
+			),
+		).rejects.toThrow(/compile failed/);
+		expect(existsSync(join(plan.stageDir, "darwin-arm64", "bin", "my-cli-bun-darwin-arm64"))).toBe(
+			true,
+		);
+		expect(existsSync(join(plan.stageDir, "manifest.json"))).toBe(false);
+	});
+
 	it("rejects multiple bin entries through staged package planning", async () => {
 		const plan = createPlan(tmpDir, {
 			name: "my-cli",
@@ -367,19 +385,29 @@ describe("runDistributeBuild", () => {
 		}
 	});
 
-	it("rejects artifacts inside stage-dir and the reserved bin directory", async () => {
+	it("stages artifacts written inside the stage dir without wiping them", async () => {
 		const packageJson = { name: "artifact-stage-cli", version: "0.1.0" };
 		const stageDir = join(tmpDir, ".stage");
-		const nestedOutDir = join(stageDir, "artifacts");
-		mkdirSync(join(nestedOutDir, "man"), { recursive: true });
-		await expect(
-			runDistributeBuild(
-				createPlan(tmpDir, packageJson, { stageDir, validate: true, outDir: nestedOutDir }),
-				bunDistribution(),
-				io,
-			),
-		).rejects.toThrow("--stage-dir cannot contain the artifact output directory");
+		const outDir = join(stageDir, "artifacts");
+		mkdirSync(join(outDir, "man"), { recursive: true });
+		writeFileSync(join(outDir, "man", "x.1"), ".Dd generated\n");
 
+		await runDistributeBuild(
+			createPlan(tmpDir, packageJson, { stageDir, validate: true, outDir }),
+			bunDistribution(),
+			io,
+		);
+
+		expect(readFileSync(join(stageDir, "root", "man", "x.1"), "utf8")).toBe(".Dd generated\n");
+		expect(readFileSync(join(outDir, "man", "x.1"), "utf8")).toBe(".Dd generated\n");
+		expect(readJson<{ files: string[] }>(join(stageDir, "root", "package.json")).files).toEqual([
+			"bin",
+			"man",
+		]);
+	});
+
+	it("rejects the reserved bin artifact directory", async () => {
+		const packageJson = { name: "artifact-stage-cli", version: "0.1.0" };
 		const outDir = join(tmpDir, "dist-bin");
 		mkdirSync(join(outDir, "bin"), { recursive: true });
 		await expect(
@@ -461,9 +489,9 @@ describe("runDistributeBuild", () => {
 		await expect(stage(["."])).rejects.toThrow("inside the project root");
 		await expect(stage(["missing"])).rejects.toThrow("is not a directory");
 		await expect(stage(["src/cli.ts"])).rejects.toThrow("is not a directory");
-		await expect(stage([".stage/nested"])).rejects.toThrow("overlaps --stage-dir");
+		await expect(stage([".stage/nested"])).rejects.toThrow("overlaps the build output directory");
 		await expect(stage(["assets"], false, join(tmpDir, "assets", "npm"))).rejects.toThrow(
-			"overlaps --stage-dir",
+			"overlaps the build output directory",
 		);
 		await expect(stage(["escape"])).rejects.toThrow("resolves outside the project root");
 		await expect(stage(["templates"])).rejects.toThrow(

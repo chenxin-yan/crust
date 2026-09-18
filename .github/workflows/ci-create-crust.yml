@@ -35,7 +35,9 @@ jobs:
           - macos-latest
           - windows-latest
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    # Three runtime cases run sequentially; each may compile a binary and
+    # `deno compile` downloads a denort runtime on a cold cache.
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -50,6 +52,13 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
+      # The smoke test's Deno case is mandatory when CI is set.
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          # Documented floor (runtime-support.mdx claims Deno 2.8+); smoke the floor, not latest.
+          deno-version: v2.8.x
+
       - name: Install dependencies
         run: bun ci
 
@@ -63,16 +72,14 @@ jobs:
             turbo-create-crust-${{ runner.os }}-
 
       - name: Build create-crust dependency subset
-        run: bun turbo run build --filter=./packages/style --filter=./packages/prompts --filter=./packages/core --filter=./packages/extensions --filter=./packages/config --filter=./packages/man --filter=./packages/create --filter=./packages/create-crust
-
-      - name: Build Crust JavaScript CLI
-        run: bun run --cwd packages/crust build:cli
+        run: bun turbo run build --filter=./packages/style --filter=./packages/prompts --filter=./packages/core --filter=./packages/extensions --filter=./packages/config --filter=./packages/man --filter=./packages/create --filter=./packages/crust --filter=./packages/create-crust
 
       - name: Print tool versions
         run: |
           node --version
           npm --version
           bun --version
+          deno --version
 
       - name: Run create-crust smoke test
         run: bun run --cwd packages/create-crust test:smoke

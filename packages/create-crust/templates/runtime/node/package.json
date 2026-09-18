@@ -6,17 +6,14 @@
 	"crust": {
 		"runtime": "node"
 	},
-	"files": [
-		"dist"
-	],
 	"bin": {
-		"{{name}}": "dist/cli.js"
+		"{{name}}": ".crust/root/bin/{{name}}.js"
 	},
 	"scripts": {
 		"dev": "node src/cli.ts",
-		"build": "crust build --name cli",
-		"prepack": "npm run build",
-		"start": "node dist/cli.js",
+		"build": "crust build",
+		"release": "crust publish",
+		"start": "node .crust/root/bin/{{name}}.js",
 		"check:types": "tsc --noEmit"
 	},
 	"engines": {
