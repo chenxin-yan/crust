@@ -9,11 +9,11 @@ import {
 	defineCommand,
 	defineExtension,
 	defineExtensionId,
-	resolveArtifactDir,
 } from "@crustjs/core";
 import { spinner } from "@crustjs/progress";
 import { confirm, multiselect, select } from "@crustjs/prompts";
 import { bold, dim, yellow } from "@crustjs/style";
+import { resolveArtifactDir } from "@crustjs/utils/artifacts";
 import { isWithin } from "@crustjs/utils/path";
 
 import {
@@ -23,6 +23,7 @@ import {
 	getUniversalAgents,
 	resolveEffectiveScope,
 } from "./agents.ts";
+import type { AgentTarget, Scope } from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";
 import {
 	getSkillStatus,
@@ -32,7 +33,7 @@ import {
 } from "./generate.ts";
 import { planReconcile, UNIVERSAL_GROUP, type ReconcileChoice } from "./reconcile.ts";
 import { SkillSourceUnavailableError, loadPackagedSkills, type PackagedSkill } from "./source.ts";
-import type { AgentTarget, InstallSkillResult, Scope, SkillOptions } from "./types.ts";
+import type { InstallSkillResult, SkillOptions } from "./types.ts";
 
 export const SKILLS: ExtensionId = defineExtensionId("crust:skills");
 

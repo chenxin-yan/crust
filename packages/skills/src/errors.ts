@@ -1,4 +1,4 @@
-import type { AgentTarget } from "./types.ts";
+import type { AgentTarget } from "./agents.ts";
 
 export class SkillSourceConflictError extends Error {
 	override readonly name = "SkillSourceConflictError";

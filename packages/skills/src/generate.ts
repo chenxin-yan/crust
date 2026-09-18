@@ -5,10 +5,12 @@ import { resolveSourceDir } from "@crustjs/utils/source";
 
 import {
 	ALL_AGENTS,
+	type AgentTarget,
 	detectInstalledAgents,
 	getUniversalAgents,
 	resolveAgentPath,
 	resolveEffectiveScope,
+	type Scope,
 } from "./agents.ts";
 import { SkillConflictError } from "./errors.ts";
 import { isOwnedSkillLink, skillLinkTarget } from "./link.ts";
@@ -16,10 +18,8 @@ import { isValidSkillName } from "./skill-name.ts";
 import { readSkillFrontmatter } from "./source.ts";
 import type {
 	AgentResult,
-	AgentTarget,
 	InstallSkillOptions,
 	InstallSkillResult,
-	Scope,
 	SkillStatusOptions,
 	SkillStatusResult,
 	UninstallSkillOptions,

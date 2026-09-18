@@ -9,8 +9,6 @@ import type { NamedColor } from "./namedColorValues.ts";
 import { applyStyle } from "./styleEngine.ts";
 import type { ColorDepth, ColorInput } from "./types.ts";
 
-export type { ColorInput } from "./types.ts";
-
 // ────────────────────────────────────────────────────────────────────────────
 // Constants
 // ────────────────────────────────────────────────────────────────────────────

@@ -1,4 +1,5 @@
-import type { AgentTarget, SkillStatusResult } from "./types.ts";
+import type { AgentTarget } from "./agents.ts";
+import type { SkillStatusResult } from "./types.ts";
 
 export const UNIVERSAL_GROUP = "__universal__";
 

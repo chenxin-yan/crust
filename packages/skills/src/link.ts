@@ -1,6 +1,6 @@
 import { dirname, relative } from "node:path";
 
-import type { Scope } from "./types.ts";
+import type { Scope } from "./agents.ts";
 
 /** Returns whether a symlink target carries Crust's skill ownership signature. */
 export function isOwnedSkillLink(target: string, name: string): boolean {

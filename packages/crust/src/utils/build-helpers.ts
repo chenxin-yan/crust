@@ -9,8 +9,9 @@ import { text } from "node:stream/consumers";
 import { pathToFileURL } from "node:url";
 
 import type { BuildReport, InvocationIO } from "@crustjs/core";
-import { BUILD_OUT_DIR_ENV, type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
+import { type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
 import { yellow } from "@crustjs/style";
+import { BUILD_OUT_DIR_ENV } from "@crustjs/utils/artifacts";
 import { isErrnoException } from "@crustjs/utils/error";
 import type { JsonValue } from "@crustjs/utils/json";
 import { runProcess, which } from "@crustjs/utils/process";

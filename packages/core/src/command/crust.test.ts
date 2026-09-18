@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { BUILD_OUT_DIR_ENV } from "@crustjs/utils/artifacts";
 import { getAmbientTerminalIO } from "@crustjs/utils/terminal";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
@@ -15,7 +16,7 @@ import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { ArgsDef, NamedFlagDef, ParsedFlagValue } from "../types.ts";
 import { type AnyCrust, type CommandDefinitionBuilder, Crust, defineCommand } from "./crust.ts";
-import { BUILD_OUT_DIR_ENV, SNAPSHOT_PATH_ENV } from "./invocation.ts";
+import { SNAPSHOT_PATH_ENV } from "./invocation.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Type-level test utilities

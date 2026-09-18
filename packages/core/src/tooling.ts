@@ -6,7 +6,8 @@
 // render-time helpers plus the lockstep first-party subprocess protocol.
 // ────────────────────────────────────────────────────────────────────────────
 
-export { BUILD_OUT_DIR_ENV, SNAPSHOT_PATH_ENV } from "./command/invocation.ts";
+export { BUILD_OUT_DIR_ENV } from "@crustjs/utils/artifacts";
+export { SNAPSHOT_PATH_ENV } from "./command/invocation.ts";
 export {
 	buildCommandDocumentation,
 	formatDefault,
