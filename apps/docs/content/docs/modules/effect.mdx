@@ -123,7 +123,7 @@ new Crust("app").action(
 );
 ```
 
-Pulls a plain Crust Context from inside a `handler()` program, typed by the factory's value (`FactoryValueOf<F>`) and failing with `CrustTaggedError`. Like `ctx.<name>`, it is lazy: untouched Contexts never build, and repeated pulls share one build. The provided Context must come from the **same factory**, including that factory's `.of(...)` test doubles. An absent factory or a different same-name factory (even with a compatible value shape) fails with Core's missing-context `CrustError`, surfaced as a `CrustDefinitionError` for `Effect.catchTag`. Factory identity on the path is checked at runtime, not compile time.
+Pulls a plain Crust Context from inside a `handler()` program, typed by the factory's value (`FactoryValueOf<F>`) and failing with `CrustTaggedError`. Like `ctx.<name>`, it is lazy: untouched Contexts never build, and repeated pulls share one build. The effective (last same-name) provider must come from the **same factory**, including that factory's `.of(...)` test doubles; a shadowed ancestor does not satisfy this requirement. An absent factory or a different same-name factory (even with a compatible value shape) fails with Core's missing-context `CrustError`, surfaced as a `CrustDefinitionError` for `Effect.catchTag`. Factory identity on the path is checked at runtime, not compile time.
 
 `service()` requires the internal input service that `handler()` provides, so it cannot be run outside a `handler()` program; that service is not exported.
 

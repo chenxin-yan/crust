@@ -87,8 +87,8 @@ export function handler<Input extends ActionInput, Out>(
 
 /**
  * Pull a plain Crust Context by factory from inside a {@link handler} program.
- * Lazy like `ctx.<name>`; requires the same factory on the command path
- * (including its `.of()` doubles). Missing or different factories fail with
+ * Lazy like `ctx.<name>`; requires the effective same-name provider to use
+ * the same factory (including its `.of()` doubles). Missing or different factories fail with
  * Core's missing-context error as a `CrustDefinitionError`.
  */
 export function service<F extends AnyContextFactory>(
@@ -99,10 +99,17 @@ export function service<F extends AnyContextFactory>(
 		tryCrust((): Promise<FactoryValueOf<F>> => {
 			const ctx: ContextBag = input.ctx;
 			const sources = ctx[contextSources] ?? [];
-			const matches = sources.some((source) => "factory" in source && source.factory === factory);
-			// Factory identity justifies returning the factory-typed value; names alone do not.
+			const provider = sources.findLast((source) => "factory" in source && source.name === name);
+			// Core resolves the last same-name provider, not a shadowed ancestor.
 			const bag: Readonly<Record<string, Promise<FactoryValueOf<F>>>> = input.ctx;
-			if (matches && Object.hasOwn(bag, name)) return bag[name]!;
+			if (
+				provider &&
+				"factory" in provider &&
+				provider.factory === factory &&
+				Object.hasOwn(bag, name)
+			) {
+				return bag[name]!;
+			}
 			throw new CrustError(
 				"DEFINITION",
 				`No matching provider for Context "${name}". Add .provide(${name}(...)) using the same factory passed to service(), or its .of() double, to the app or an ancestor command.`,
