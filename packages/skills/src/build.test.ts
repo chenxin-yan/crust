@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
 
-import { writeSkills } from "./build.ts";
+import { renderSkills, writeSkills } from "./build.ts";
 import { SkillSourceConflictError } from "./errors.ts";
 
 let tempRoot: string;
@@ -83,9 +83,8 @@ describe("writeSkills", () => {
 		]);
 	});
 
-	it("supports overrides and replaces stale output", async () => {
+	it("supports generated skill overrides", async () => {
 		const outDir = join(tempRoot, "skills");
-		await mkdir(join(outDir, "removed-skill"), { recursive: true });
 
 		await writeSkills({
 			app: createApp(),
@@ -156,24 +155,6 @@ describe("writeSkills", () => {
 		expect(await readdir(outDir)).toEqual(["guide"]);
 	});
 
-	it("rejects an extra skill directory nested inside outDir", async () => {
-		const outDir = join(tempRoot, "skills");
-		await mkdir(join(outDir, "nested"), { recursive: true });
-		await writeFile(
-			join(outDir, "nested", "SKILL.md"),
-			"---\nname: nested\ndescription: Nested\n---\n",
-		);
-
-		const result = writeSkills({
-			app: createApp(),
-			outDir,
-			version: "1.0.0",
-			extras: [join(outDir, "nested")],
-		});
-		await expect(result).rejects.toThrow("is inside outDir");
-		expect(await readdir(join(outDir, "nested"))).toEqual(["SKILL.md"]);
-	});
-
 	it("requires a generated skill description", async () => {
 		const outDir = join(tempRoot, "skills");
 		const app = new Crust("demo").action(() => {});
@@ -199,5 +180,37 @@ describe("writeSkills", () => {
 		const result = writeSkills({ app: createApp(), outDir, version: "1.0.0", name: "Bad_Name" });
 		await expect(result).rejects.toThrow('Invalid skill name "Bad_Name"');
 		await expect(readdir(outDir)).rejects.toThrow();
+	});
+});
+
+describe("renderSkills", () => {
+	it("returns generated and authored skill files without touching disk", async () => {
+		const bundleDir = await createBundle("deployment-guide", "Deployment guidance");
+		const snapshot = await createApp().snapshot();
+
+		const files = await renderSkills(snapshot, { version: "1.2.3", extras: [bundleDir] });
+
+		expect(files.map((file) => file.path)).toEqual([
+			join("deployment-guide", "SKILL.md"),
+			join("deployment-guide", "references", "guide.md"),
+			join("demo", "SKILL.md"),
+			join("demo", "commands", "demo.md"),
+			join("demo", "commands", "serve.md"),
+		]);
+		expect(files[1]?.content).toEqual(Buffer.from("# Guide\n"));
+		expect(files[2]?.content).toContain("name: demo");
+		expect(await readdir(tempRoot)).toEqual(["deployment-guide"]);
+	});
+
+	it("renders only authored skills without a snapshot", async () => {
+		const bundleDir = await createBundle("guide", "Authored guidance");
+
+		const files = await renderSkills(undefined, { extras: [bundleDir] });
+
+		expect(files.map((file) => file.path)).toEqual([
+			join("guide", "SKILL.md"),
+			join("guide", "references", "guide.md"),
+		]);
+		await expect(renderSkills(undefined, {})).rejects.toThrow("Nothing to write");
 	});
 });

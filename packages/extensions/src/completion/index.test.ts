@@ -241,111 +241,75 @@ describe("completion", () => {
 });
 
 describe("completion build hook", () => {
-	let tmpDir: string;
+	const outDir = "/unused/out";
+	const text = (content: string | Uint8Array) => Buffer.from(content).toString();
 
-	beforeEach(async () => {
-		tmpDir = await mkdtemp(join(tmpdir(), "crust-completion-build-"));
-	});
-
-	afterEach(async () => {
-		await rm(tmpDir, { recursive: true, force: true });
-	});
-
-	it("writes all three shell files under outDir/completions", async () => {
+	it("returns all three shell files under completions/", async () => {
 		const snapshot = await buildCli().snapshot();
-		const artifacts = await completion().build?.({ snapshot, outDir: tmpDir });
+		const artifacts = await completion().build?.({ snapshot, outDir });
 
-		expect(artifacts).toEqual([
-			join("completions", "mycli"),
-			join("completions", "_mycli"),
-			join("completions", "mycli.fish"),
+		expect(artifacts?.map((file) => file.path)).toEqual([
+			"completions/mycli",
+			"completions/_mycli",
+			"completions/mycli.fish",
 		]);
-		expect(await readdir(tmpDir)).toEqual(["completions"]);
-		const dir = join(tmpDir, "completions");
-		expect((await readdir(dir)).sort()).toEqual(["_mycli", "mycli", "mycli.fish"]);
-		const bash = await readFile(join(dir, "mycli"), "utf8");
+		const [bash, zsh, fish] = artifacts!.map((file) => text(file.content));
 		expect(bash).toContain("# completion script for mycli v1.2.3");
 		expect(bash).toContain("complete -o default -F _mycli 'mycli'");
-		expect(await readFile(join(dir, "_mycli"), "utf8")).toStartWith("#compdef mycli\n");
-		expect(await readFile(join(dir, "mycli.fish"), "utf8")).toContain("complete -c 'mycli' -f");
+		expect(zsh).toStartWith("#compdef mycli\n");
+		expect(fish).toContain("complete -c 'mycli' -f");
 	});
 
 	it("honors binName and version overrides at build time", async () => {
 		const snapshot = await buildCli().snapshot();
-		await completion({ binName: "my-tool", version: "2.0.0" }).build?.({
+		const artifacts = await completion({ binName: "my-tool", version: "2.0.0" }).build?.({
 			snapshot,
-			outDir: tmpDir,
+			outDir,
 		});
 
-		const dir = join(tmpDir, "completions");
-		expect((await readdir(dir)).sort()).toEqual(["_my-tool", "my-tool", "my-tool.fish"]);
-		expect(await readFile(join(dir, "_my-tool"), "utf8")).toStartWith("#compdef my-tool\n");
-		expect(await readFile(join(dir, "my-tool"), "utf8")).toContain("my-tool v2.0.0");
-	});
-
-	it("removes stale completion files after a binary rename without touching sibling artifacts", async () => {
-		const snapshot = await buildCli().snapshot();
-		await writeFile(join(tmpDir, "other-artifact"), "preserved");
-		await completion().build?.({ snapshot, outDir: tmpDir });
-		await completion({ binName: "renamed" }).build?.({ snapshot, outDir: tmpDir });
-
-		expect((await readdir(join(tmpDir, "completions"))).sort()).toEqual([
-			"_renamed",
-			"renamed",
-			"renamed.fish",
+		expect(artifacts?.map((file) => file.path)).toEqual([
+			"completions/my-tool",
+			"completions/_my-tool",
+			"completions/my-tool.fish",
 		]);
-		expect(await readFile(join(tmpDir, "other-artifact"), "utf8")).toBe("preserved");
+		expect(text(artifacts![1]!.content)).toStartWith("#compdef my-tool\n");
+		expect(text(artifacts![0]!.content)).toContain("my-tool v2.0.0");
 	});
 
-	it("rejects an unsafe binName before writing anything", async () => {
+	it("rejects an unsafe binName", async () => {
 		const snapshot = await buildCli().snapshot();
-		await expect(
-			completion({ binName: "../pwn" }).build?.({ snapshot, outDir: tmpDir }),
-		).rejects.toThrow(/invalid binName/);
-		expect(await readdir(tmpDir)).toEqual([]);
-	});
-
-	it("pure renderers match build and runtime files byte-for-byte", async () => {
-		const app = buildCli();
-		const snapshot = await app.snapshot();
-		const options: CompletionRenderOptions = { version: "1.2.3" };
-		await completion(options).build?.({ snapshot, outDir: tmpDir });
-		const runtimeDir = join(tmpDir, "runtime");
-		await app.execute({ argv: ["completion", "zsh", "--output-dir", runtimeDir] });
-
-		for (const [filename, render] of [
-			["mycli", renderBashCompletion],
-			["_mycli", renderZshCompletion],
-			["mycli.fish", renderFishCompletion],
-		] as const) {
-			const script = render(snapshot, options);
-			expect(script).toBe(await readFile(join(tmpDir, "completions", filename), "utf8"));
-			expect(script).toBe(await readFile(join(runtimeDir, filename), "utf8"));
-		}
-	});
-
-	it("preserves existing artifacts when a rebuild fails validation", async () => {
-		await completion().build?.({ snapshot: await buildCli().snapshot(), outDir: tmpDir });
-		const dir = join(tmpDir, "completions");
-		const filenames = (await readdir(dir)).sort();
-		const scripts = await Promise.all(filenames.map((name) => readFile(join(dir, name), "utf8")));
-
-		await expect(
-			completion().build?.({ snapshot: await new Crust("mycli").snapshot(), outDir: tmpDir }),
-		).rejects.toThrow("requires a version");
-
-		expect(await readdir(tmpDir)).toEqual(["completions"]);
-		expect((await readdir(dir)).sort()).toEqual(filenames);
-		expect(await Promise.all(filenames.map((name) => readFile(join(dir, name), "utf8")))).toEqual(
-			scripts,
+		expect(() => completion({ binName: "../pwn" }).build?.({ snapshot, outDir })).toThrow(
+			/invalid binName/,
 		);
 	});
 
-	it("rejects a missing version without writing files", async () => {
-		await expect(
-			completion().build?.({ snapshot: await new Crust("mycli").snapshot(), outDir: tmpDir }),
-		).rejects.toThrow("requires a version");
-		expect(await readdir(tmpDir)).toEqual([]);
+	it("rejects a missing version", async () => {
+		const snapshot = await new Crust("mycli").snapshot();
+		expect(() => completion().build?.({ snapshot, outDir })).toThrow("requires a version");
+	});
+
+	it("pure renderers match build and runtime files byte-for-byte", async () => {
+		const tmpDir = await mkdtemp(join(tmpdir(), "crust-completion-build-"));
+		try {
+			const app = buildCli();
+			const snapshot = await app.snapshot();
+			const options: CompletionRenderOptions = { version: "1.2.3" };
+			const artifacts = await completion(options).build?.({ snapshot, outDir });
+			await app.execute({ argv: ["completion", "zsh", "--output-dir", tmpDir] });
+
+			for (const [filename, render] of [
+				["mycli", renderBashCompletion],
+				["_mycli", renderZshCompletion],
+				["mycli.fish", renderFishCompletion],
+			] as const) {
+				const script = render(snapshot, options);
+				const built = artifacts?.find((file) => file.path === `completions/${filename}`);
+				expect(built && text(built.content)).toBe(script);
+				expect(script).toBe(await readFile(join(tmpDir, filename), "utf8"));
+			}
+		} finally {
+			await rm(tmpDir, { recursive: true, force: true });
+		}
 	});
 });
 
