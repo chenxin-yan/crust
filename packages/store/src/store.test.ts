@@ -479,6 +479,51 @@ describe("store.update", () => {
 		).resolves.toEqual({ theme: "dark" });
 	});
 
+	it("resolves schema coercion and nested defaults before the updater", async () => {
+		const filePath = join(tempDir, "config.json");
+		const raw = JSON.stringify({ count: "42", payload: {} });
+		await writeFile(filePath, raw);
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: {
+				count: { schema: z.coerce.number() },
+				payload: { schema: z.object({ name: z.string().default("anonymous") }) },
+			},
+		});
+		const expected = { count: 42, payload: { name: "anonymous" } };
+		expect(await store.read()).toEqual(expected);
+		expect(await readFile(filePath, "utf8")).toBe(raw);
+		const updated = await store.update((current) => {
+			expect(current).toEqual(expected);
+			return current;
+		});
+		expect(updated).toEqual(await store.read());
+	});
+
+	it("never calls an updater with missing required or invalid persisted state", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: { token: { schema: z.string() }, count: { type: "number", default: 0 } },
+		});
+		let calls = 0;
+		const update = () =>
+			store.update((current) => {
+				calls++;
+				return { ...current, token: "repaired", count: 1 };
+			});
+		await expect(update()).rejects.toMatchObject({ code: "VALIDATION" });
+		expect(existsSync(join(tempDir, "config.json"))).toBe(false);
+		const raw = JSON.stringify({ token: "ok", count: "invalid" });
+		await writeFile(join(tempDir, "config.json"), raw);
+		await expect(update()).rejects.toMatchObject({ code: "VALIDATION" });
+		expect(calls).toBe(0);
+		expect(await readFile(join(tempDir, "config.json"), "utf8")).toBe(raw);
+		// Patch can repair state without exposing it as a typed callback input.
+		expect(await store.patch({ count: 1 })).toEqual(await store.read());
+	});
+
 	it("should run field validators on update", async () => {
 		const store = createStore({
 			dirPath: tempDir,
@@ -578,6 +623,42 @@ describe("store.patch", () => {
 		const result = await store.read();
 		expect(result.theme).toBe("dark");
 		expect(result.verbose).toBe(false);
+	});
+
+	it("rejects undefined defaulted core fields but preserves genuinely optional fields", async () => {
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: {
+				enabled: { type: "boolean", default: true },
+				token: { type: "string" },
+				optional: { schema: z.string().optional() },
+			},
+		});
+		await expect(store.patch({ enabled: undefined })).rejects.toMatchObject({
+			code: "VALIDATION",
+			details: { operation: "patch", issues: [{ path: "enabled" }] },
+		});
+		const invalid = Object.assign(
+			{ enabled: true, token: undefined, optional: undefined },
+			{ enabled: undefined },
+		);
+		await expect(store.write(invalid)).rejects.toMatchObject({ code: "VALIDATION" });
+		await expect(store.update(() => invalid)).rejects.toMatchObject({ code: "VALIDATION" });
+		expect(existsSync(join(tempDir, "config.json"))).toBe(false);
+		const patched = await store.patch({ token: undefined, optional: undefined });
+		expect(patched).toEqual(await store.read());
+		expect(patched.enabled).toBe(true);
+		expect(patched.token).toBeUndefined();
+
+		const required = createStore({
+			dirPath: tempDir,
+			name: "required",
+			fields: { token: { schema: z.string() } },
+		});
+		await expect(required.patch({ token: undefined })).rejects.toMatchObject({
+			code: "VALIDATION",
+		});
 	});
 
 	it("should preserve schema defaults when patching another field", async () => {
@@ -892,8 +973,8 @@ describe("field validation", () => {
 //
 // Closes the command/store asymmetry: schema transforms (e.g.
 // `z.string().transform(s => s.trim())`) MUST persist on write/update/
-// patch operations. Reads return on-disk values verbatim (no transform on
-// read). A write-time read-stability guard rejects cross-type transforms
+// patch operations. Reads resolve schema output without writing to disk.
+// A write-time read-stability guard rejects cross-type transforms
 // whose output would fail the schema's own re-validation on the next
 // read.
 
@@ -980,6 +1061,7 @@ describe("schema transform persistence", () => {
 		const persisted = await store.write({ name: "  hi  " });
 
 		expect(persisted).toEqual({ name: "hi" });
+		expect(persisted).toEqual(await store.read());
 		const filePath = join(tempDir, "config.json");
 		const raw = await readFile(filePath, "utf-8");
 		expect(JSON.parse(raw)).toEqual(persisted);
@@ -992,6 +1074,7 @@ describe("schema transform persistence", () => {
 
 		const store = createStore({ dirPath: tempDir, name: "config", fields });
 
+		await store.write({ name: "initial" });
 		const persisted = await store.update(() => ({ name: "  spaced  " }));
 
 		expect(persisted).toEqual({ name: "spaced" });
@@ -1015,10 +1098,8 @@ describe("schema transform persistence", () => {
 		expect(JSON.parse(raw)).toEqual(persisted);
 	});
 
-	// Pin: reads MUST NOT mutate on-disk state, even when the schema would
-	// transform the persisted value. Existing on-disk values survive
-	// untouched until the next write canonicalizes them.
-	it("read does NOT transform — pre-seeded file survives unchanged", async () => {
+	// Schema output is resolved in memory, never written by read().
+	it("read transforms without changing the pre-seeded file", async () => {
 		const filePath = join(tempDir, "config.json");
 		await writeFile(filePath, JSON.stringify({ name: "  hi  " }));
 
@@ -1029,7 +1110,7 @@ describe("schema transform persistence", () => {
 		const store = createStore({ dirPath: tempDir, name: "config", fields });
 
 		const result = await store.read();
-		expect(result.name).toBe("  hi  ");
+		expect(result.name).toBe("hi");
 
 		const rawAfter = await readFile(filePath, "utf-8");
 		expect(JSON.parse(rawAfter)).toEqual({ name: "  hi  " });
@@ -1134,6 +1215,32 @@ describe("JSON serialization stability", () => {
 		expect(existsSync(join(tempDir, "config.json"))).toBe(false);
 	});
 
+	it("normalizes cyclic serialization failures to field-scoped VALIDATION errors", async () => {
+		interface Recursive {
+			self: Recursive;
+		}
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: { payload: { schema: z.custom<Recursive>(() => true).optional() } },
+		});
+		const cyclic: Recursive = JSON.parse("{}");
+		cyclic.self = cyclic;
+		for (const mutate of [
+			() => store.write({ payload: cyclic }),
+			() => store.patch({ payload: cyclic }),
+			() => store.update(() => ({ payload: cyclic })),
+		]) {
+			const result = mutate();
+			await expect(result).rejects.toBeInstanceOf(CrustStoreError);
+			await expect(result).rejects.toMatchObject({
+				code: "VALIDATION",
+				details: { issues: [{ path: "payload" }] },
+			});
+		}
+		expect(existsSync(join(tempDir, "config.json"))).toBe(false);
+	});
+
 	it("rejects sparse arrays whose holes would persist as null", async () => {
 		const store = createStore({
 			dirPath: tempDir,
@@ -1206,6 +1313,20 @@ describe("core validator transform type enforcement", () => {
 			},
 		});
 		expect(existsSync(join(tempDir, "config.json"))).toBe(false);
+	});
+
+	it("keeps core callback transforms mutation-only", async () => {
+		const filePath = join(tempDir, "config.json");
+		await writeFile(filePath, JSON.stringify({ name: "  hi  " }));
+		const store = createStore({
+			dirPath: tempDir,
+			name: "config",
+			fields: { name: { type: "string", validate: (value) => ({ value: value.trim() }) } },
+		});
+		expect(await store.read()).toEqual({ name: "  hi  " });
+		const patched = await store.patch({});
+		expect(patched).toEqual({ name: "hi" });
+		expect(patched).toEqual(await store.read());
 	});
 
 	it("still accepts core transforms within the declared type", async () => {
