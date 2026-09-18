@@ -70,22 +70,24 @@ type VisitorKeys = Readonly<Record<string, readonly string[]>>;
 /**
  * Use-site references shadowed by enclosing type parameters or block declarations.
  * Keep the module environment intact for references inside module alias bodies.
- * Block-level aliases stay unresolved, as before.
+ * Block- and namespace-local aliases stay unresolved, as before.
  */
 function shadowedNamesAt(node: ESTree.Node, visitorKeys: VisitorKeys): ReadonlySet<string> {
 	const shadowed = new Set(lexicalTypeParameterNames(node, visitorKeys));
 	for (let current = node.parent; current !== null; current = current.parent) {
 		if (current.type === "Program") break;
-		if (current.type !== "BlockStatement") continue;
+		if (current.type !== "BlockStatement" && current.type !== "TSModuleBlock") continue;
 		for (const statement of current.body) {
+			const declaration =
+				statement.type === "ExportNamedDeclaration" ? statement.declaration : statement;
 			if (
-				statement.type === "TSTypeAliasDeclaration" ||
-				statement.type === "TSInterfaceDeclaration" ||
-				statement.type === "TSEnumDeclaration"
+				declaration?.type === "TSTypeAliasDeclaration" ||
+				declaration?.type === "TSInterfaceDeclaration" ||
+				declaration?.type === "TSEnumDeclaration"
 			) {
-				shadowed.add(statement.id.name);
-			} else if (statement.type === "ClassDeclaration" && statement.id !== null) {
-				shadowed.add(statement.id.name);
+				shadowed.add(declaration.id.name);
+			} else if (declaration?.type === "ClassDeclaration" && declaration.id !== null) {
+				shadowed.add(declaration.id.name);
 			}
 		}
 	}
