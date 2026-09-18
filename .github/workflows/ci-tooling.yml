@@ -1,0 +1,43 @@
+name: CI Tooling
+
+on:
+  pull_request:
+    paths:
+      - "**"
+      - "!apps/**"
+      - "!packages/**"
+      # Tooling and script tsconfigs extend the shared package configuration.
+      - "packages/config/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  tooling:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun ci
+
+      - name: Lint and format check (tooling and repository files)
+        run: |
+          bun run lint . --ignore-pattern 'packages/**' --ignore-pattern 'apps/**'
+          bun run format . '!packages/**' '!apps/**'
