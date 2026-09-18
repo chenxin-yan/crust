@@ -77,7 +77,10 @@ describe("planBuild", () => {
 	const baseFlags: BuildFlags = { validate: true };
 	// Every plan needs a package name: without an object bin it names the command.
 	const writePackageJson = (pkg: Record<string, JsonValue>) =>
-		writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ name: "plan-cli", ...pkg }));
+		writeFileSync(
+			join(tmpDir, "package.json"),
+			JSON.stringify({ name: "plan-cli", version: "1.0.0", ...pkg }),
+		);
 
 	beforeAll(() => {
 		rmSync(tmpDir, { recursive: true, force: true });
@@ -526,7 +529,10 @@ async function executeBuildError(
 	rmSync(tmpDir, { recursive: true, force: true });
 	mkdirSync(join(tmpDir, "src"), { recursive: true });
 	writeFileSync(join(tmpDir, "src", "cli.ts"), "console.log('hi');");
-	writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ name: "error-cli", ...pkg }));
+	writeFileSync(
+		join(tmpDir, "package.json"),
+		JSON.stringify({ name: "error-cli", version: "1.0.0", ...pkg }),
+	);
 	process.cwd = () => tmpDir;
 	try {
 		const result = await captureExecute(new Crust("test").add(buildCommand), ["build", ...argv]);
@@ -581,6 +587,68 @@ describe("buildCommand error handling", () => {
 		);
 	});
 
+	it("rejects invalid identity before wiping the previous stage, even with --no-validate", async () => {
+		const tmpDir = mkdtempSync(join(tmpdir(), "crust-identity-guard-"));
+		mkdirSync(join(tmpDir, ".crust"));
+		writeFileSync(join(tmpDir, ".crust", "previous.txt"), "kept");
+		writeFileSync(join(tmpDir, "cli.ts"), "export {};");
+		const originalCwd = process.cwd;
+		process.cwd = () => tmpDir;
+		try {
+			for (const identity of [
+				{ name: 42, version: "1" },
+				{ name: "tool", version: {} },
+				{ name: "tool", version: " " },
+				{ name: "", version: "1" },
+			]) {
+				writeFileSync(
+					join(tmpDir, "package.json"),
+					JSON.stringify({ ...identity, bin: { tool: "cli.ts" }, crust: { runtime: "node" } }),
+				);
+				const result = await captureExecute(new Crust("test").add(buildCommand), [
+					"build",
+					"--no-validate",
+				]);
+				expect(result.exitCode).toBe(1);
+				expect(result.stderr).toContain("non-empty string");
+				expect(readFileSync(join(tmpDir, ".crust", "previous.txt"), "utf8")).toBe("kept");
+			}
+		} finally {
+			process.cwd = originalCwd;
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("rejects a synthetic legacy report before producing a completed manifest", async () => {
+		const tmpDir = mkdtempSync(join(tmpdir(), "crust-legacy-report-"));
+		writeFileSync(
+			join(tmpDir, "package.json"),
+			JSON.stringify({
+				name: "legacy",
+				version: "1",
+				bin: { legacy: "cli.ts" },
+				crust: { runtime: "node" },
+			}),
+		);
+		writeFileSync(
+			join(tmpDir, "cli.ts"),
+			`import { dirname, join } from "node:path";
+			await Bun.write(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!, JSON.stringify({ meta: { name: "legacy" } }));
+			await Bun.write(join(dirname(process.env.CRUST_INTERNAL_SNAPSHOT_PATH!), "build-report.json"), JSON.stringify({ extensions: [{ id: "legacy", files: "unknown" }] }));`,
+		);
+		const originalCwd = process.cwd;
+		process.cwd = () => tmpDir;
+		try {
+			const result = await captureExecute(new Crust("test").add(buildCommand), ["build"]);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain("invalid Build Report");
+			expect(existsSync(join(tmpDir, ".crust", "manifest.json"))).toBe(false);
+		} finally {
+			process.cwd = originalCwd;
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+
 	it("rejects bad bin entries before wiping .crust, even with --no-validate", async () => {
 		const tmpDir = mkdtempSync(join(tmpdir(), "crust-bin-guard-"));
 		mkdirSync(join(tmpDir, "src"), { recursive: true });
@@ -602,7 +670,10 @@ describe("buildCommand error handling", () => {
 				[{ cli: "nonexistent.ts" }, "Entry file not found"],
 				[{}, "non-empty object"],
 			] as const) {
-				writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ name: "guard", bin }));
+				writeFileSync(
+					join(tmpDir, "package.json"),
+					JSON.stringify({ name: "guard", version: "1.0.0", bin }),
+				);
 				const result = await captureExecute(new Crust("test").add(buildCommand), [
 					"build",
 					"--no-validate",
@@ -741,6 +812,18 @@ describe("buildCommand error handling", () => {
 				},
 			});
 		}, 60_000);
+
+		it("rejects case-insensitive cross-entry output before completing the manifest", async () => {
+			writeEntry("greet.ts", "greet", { "shared/Config.json": "first" });
+			writeEntry("admin.ts", "admin", { "shared/config.json": "second" });
+			const result = await build([]);
+			expect(result.exitCode).toBe(1);
+			expect(result.stderr).toContain('both bin "greet" and "admin"');
+			expect(readFileSync(join(tmpDir, ".crust/artifacts/shared/Config.json"), "utf8")).toBe(
+				"first",
+			);
+			expect(existsSync(join(tmpDir, ".crust", "manifest.json"))).toBe(false);
+		});
 
 		it("rejects colliding hook output across entries", async () => {
 			writeEntry("greet.ts", "greet", { "shared/config.json": "{}" });

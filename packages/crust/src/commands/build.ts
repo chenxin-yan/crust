@@ -25,11 +25,13 @@ import {
 	buildEntrypoint,
 } from "../utils/build-helpers.ts";
 import {
+	type ArtifactOwner,
 	type BinEntry,
 	CRUST_DIR,
 	type DistributeBuildPlan,
 	type Distribution,
 	mergeEntryArtifacts,
+	validatePackageIdentity,
 	runDistributeBuild,
 } from "../utils/distribute.ts";
 
@@ -309,6 +311,7 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 	const config = readCrustConfig(userPackageJson);
 	const { runtime, source: runtimeSource } = resolveBuildRuntime(userPackageJson, config, cwd);
 	const entries = resolveBinEntries(cwd, userPackageJson);
+	validatePackageIdentity(userPackageJson, "package.json");
 	const envFiles = resolveEnvFilePaths(cwd, flags["env-file"]);
 	const bunPlugins = config.bunPlugins ?? [];
 
@@ -404,7 +407,7 @@ async function prepareEntries(
 	plan: BuildPlan,
 	io: InvocationIO,
 ): Promise<Record<string, BuildReport>> {
-	const owners = new Map<string, string>();
+	const owners = new Map<string, ArtifactOwner>();
 	const reports: Record<string, BuildReport> = {};
 	for (const { command, entryPath } of plan.entries) {
 		const entryOutDir = await mkdtemp(join(tmpdir(), "crust-artifacts-"));

@@ -13,7 +13,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import type { BuildReport, InvocationIO } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
-import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
+import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
 import { isWithin } from "@crustjs/utils/path";
 
 import type { TargetInfo, TargetTable } from "./build-helpers.ts";
@@ -140,8 +140,25 @@ function readPackageJson(cwd: string, packageJson: JsonValue | undefined): UserP
 		throw new Error(`package.json in ${cwd} must contain a JSON object.`);
 	}
 
-	// SAFETY: required identity fields are validated before use; optional npm metadata is copied without interpretation.
-	return packageJson as UserPackageJson;
+	validatePackageIdentity(packageJson, "package.json");
+	// Optional npm metadata is copied without interpretation.
+	return packageJson;
+}
+
+/** Only identity is interpreted here; this is not a complete npm schema validator. */
+export function validatePackageIdentity(
+	value: JsonValue | undefined,
+	source: string,
+): asserts value is JsonObject & { name: string; version: string } {
+	if (value === undefined || !isJsonObject(value)) {
+		throw new Error(`${source} must contain a JSON object.`);
+	}
+	if (typeof value.name !== "string" || value.name.trim() === "") {
+		throw new Error(`${source} name field must be a non-empty string.`);
+	}
+	if (typeof value.version !== "string" || value.version.trim() === "") {
+		throw new Error(`${source} version field must be a non-empty string.`);
+	}
 }
 
 function derivePlatformPackageName(rootPackageName: string, targetAlias: string): string {
@@ -242,13 +259,6 @@ function resolveDistributionMetadata(
 	userPackageJson: JsonValue | undefined,
 ): DistributionMetadata {
 	const pkgJson = readPackageJson(cwd, userPackageJson);
-	if (!pkgJson.name) {
-		throw new Error("package.json is missing a name field.");
-	}
-	if (!pkgJson.version) {
-		throw new Error("package.json is missing a version field.");
-	}
-
 	validatePackageNameLength(pkgJson.name);
 
 	return {
@@ -682,44 +692,60 @@ function assertResolvesInsideProject(cwd: string, entry: string, dir: string): v
 	walk(dir);
 }
 
+export type ArtifactOwner = { command: string; directory: boolean };
+
 /**
  * Copies one entry's Extension build hook output into the shared artifact
  * directory. Directories merge; a file or file/directory mismatch at a path
  * another entry already produced is an error, so no entry's hooks can replace
- * another's output. `owners` maps merged POSIX-relative paths to the command
- * that wrote them and is shared across the entries of one build.
+ * another's output. `owners` tracks case-folded POSIX-relative paths across
+ * entries, including directories so file/ancestor conflicts are portable.
  */
 export function mergeEntryArtifacts(
 	entryOutDir: string,
 	artifactDir: string,
 	command: string,
-	owners: Map<string, string>,
+	owners: Map<string, ArtifactOwner>,
 ): void {
 	const merge = (relativeDir: string): void => {
 		for (const dirent of readdirSync(join(entryOutDir, relativeDir), { withFileTypes: true })) {
 			const relativePath = relativeDir ? `${relativeDir}/${dirent.name}` : dirent.name;
+			if (!dirent.isDirectory() && !dirent.isFile()) {
+				throw new Error(
+					`Build artifact "${relativePath}" from bin ${JSON.stringify(command)} must use regular files and directories, not symlinks or other file types.`,
+				);
+			}
 			const source = join(entryOutDir, relativePath);
 			const destination = join(artifactDir, relativePath);
+			const key = relativePath.toLowerCase();
+			const owner = owners.get(key);
 			const existing = lstatSync(destination, { throwIfNoEntry: false });
-			if (existing === undefined) {
-				owners.set(relativePath, command);
-				if (dirent.isDirectory()) {
-					mkdirSync(destination, { recursive: true });
-					merge(relativePath);
-				} else {
-					mkdirSync(dirname(destination), { recursive: true });
-					copyFileSync(source, destination);
-				}
-			} else if (dirent.isDirectory() && existing.isDirectory()) {
+			if (
+				(owner && !(dirent.isDirectory() && owner.directory)) ||
+				(existing && !(dirent.isDirectory() && existing.isDirectory()))
+			) {
+				throw new Error(
+					`Build artifact "${relativePath}" is written by both bin ${JSON.stringify(owner?.command ?? "an earlier bin")} and ${JSON.stringify(command)}.\n  Extension build hooks of different commands must write distinct paths under ${artifactDir}.`,
+				);
+			}
+			if (!owner) owners.set(key, { command, directory: dirent.isDirectory() });
+			if (dirent.isDirectory()) {
+				mkdirSync(destination, { recursive: true });
 				merge(relativePath);
 			} else {
-				throw new Error(
-					`Build artifact "${relativePath}" is written by both bin ${JSON.stringify(owners.get(relativePath) ?? "an earlier bin")} and ${JSON.stringify(command)}.\n  Extension build hooks of different commands must write distinct paths under ${artifactDir}.`,
-				);
+				mkdirSync(dirname(destination), { recursive: true });
+				copyFileSync(source, destination);
 			}
 		}
 	};
-	if (existsSync(entryOutDir)) merge("");
+	const root = lstatSync(entryOutDir, { throwIfNoEntry: false });
+	if (root === undefined) return;
+	if (!root.isDirectory()) {
+		throw new Error(
+			`Build artifact directory for bin ${JSON.stringify(command)} must be a directory, not a symlink or other file type: ${entryOutDir}`,
+		);
+	}
+	merge("");
 }
 
 type CollectedArtifacts = { names: string[]; manPages: string[] };

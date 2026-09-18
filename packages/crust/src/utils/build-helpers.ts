@@ -13,7 +13,7 @@ import { type CommandSnapshot, SNAPSHOT_PATH_ENV } from "@crustjs/core/tooling";
 import { yellow } from "@crustjs/style";
 import { BUILD_OUT_DIR_ENV } from "@crustjs/utils/artifacts";
 import { isErrnoException } from "@crustjs/utils/error";
-import type { JsonValue } from "@crustjs/utils/json";
+import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
 import { runProcess, which } from "@crustjs/utils/process";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -662,6 +662,20 @@ export async function execDenoBuild(
  */
 const SNAPSHOT_TIMEOUT_MS = 30_000;
 
+function isBuildReport(value: JsonValue): value is JsonObject & BuildReport {
+	return (
+		isJsonObject(value) &&
+		Array.isArray(value.extensions) &&
+		value.extensions.every(
+			(extension: JsonValue): extension is JsonObject & BuildReport["extensions"][number] =>
+				isJsonObject(extension) &&
+				typeof extension.id === "string" &&
+				Array.isArray(extension.files) &&
+				extension.files.every((file: JsonValue): file is string => typeof file === "string"),
+		)
+	);
+}
+
 export async function buildEntrypoint(
 	entryPath: string,
 	outDir: string,
@@ -759,11 +773,15 @@ export async function buildEntrypoint(
 			throw error;
 		}
 		try {
-			// SAFETY: the paired core build writer serializes a BuildReport to this private path.
-			return { snapshot, build: JSON.parse(serializedBuild) as BuildReport };
+			// The subprocess uses the application's Core, which may have a different report contract.
+			const build: JsonValue = JSON.parse(serializedBuild);
+			if (!isBuildReport(build)) {
+				throw new Error("Expected extensions with string ids and files arrays.");
+			}
+			return { snapshot, build };
 		} catch (error) {
 			throw new Error(
-				`Entry produced an invalid Build Report.\n  Ensure ${absoluteEntry} uses a compatible @crustjs/core version.`,
+				`Entry produced an invalid Build Report.\n  Ensure ${absoluteEntry} uses a compatible @crustjs/core version; upgrade Core, @crustjs/crust, and build-hook Extensions together to the pure-return build API.`,
 				{ cause: error },
 			);
 		}

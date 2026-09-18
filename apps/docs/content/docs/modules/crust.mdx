@@ -46,6 +46,8 @@ crust publish --dry-run
 
 Publishing reads `.crust/manifest.json`, verifies the staged directories and metadata, and runs `npm publish` in each staged directory, so `npm` must be on `PATH`. npm is used instead of `bun publish` because it supports [trusted publishing](https://docs.npmjs.com/trusted-publishers) from CI; `bun publish` does not. Without a prior `crust build`, it fails with `Run crust build before crust publish`.
 
+Before any publisher runs (including dry-run validation), manifest fields and staged package identities are checked, and every listed package directory must resolve to a distinct directory inside the canonical staging root. A symlinked staging root is allowed; descendant directory or `package.json` links escaping it are rejected. This preflight is not protection against concurrent filesystem changes.
+
 npm reads `publishConfig.access` from each staged `package.json`, which `crust build` copies from your project. Scoped public packages need `"publishConfig": { "access": "public" }`. See [Publishing from CI](/docs/guide/build-and-distribution#publishing-from-ci) for registry credentials.
 
 | Option       | Type    | Default | Description                                         |
@@ -56,7 +58,7 @@ npm reads `publishConfig.access` from each staged `package.json`, which `crust b
 
 ## Build output
 
-`crust build` stages the publishable npm tree in `.crust/` (`manifest.json`, `root/`, one `<platform>/` per target for Bun and Deno, and `artifacts/` from Extension build hooks) and wipes it at the start of every build. See [Build](/docs/guide/build-and-distribution#build) for the tree, the launcher, and naming rules.
+`crust build` stages the publishable npm tree in `.crust/` (`manifest.json`, `root/`, one `<platform>/` per target for Bun and Deno, and `artifacts/` from Extension build hooks). It checks that `package.json` has non-empty string `name` and `version` fields before wiping the previous stage, even with `--no-validate`. See [Build](/docs/guide/build-and-distribution#build) for the tree, the launcher, and naming rules.
 
 ## Commands and entries (`bin`)
 
@@ -113,8 +115,10 @@ Every key is optional. Any other key under `crust` is an error that lists the al
 └── completions/
 ```
 
-Registered Extensions own build artifacts. `man()`, `skill()`, and `completion()` return the files shown when registered; `crust build` writes them, copies each top-level directory into `.crust/root/` and every platform package's `bin/`, and records every written path per `bin` entry under `build` in `.crust/manifest.json`. A CLI reads the directories back with [`resolveArtifactDir(name)`](/docs/api/crust#resolveartifactdirname).
+Registered Extensions own build artifacts. `man()`, `skill()`, and `completion()` return the files shown when registered; `crust build` writes them, copies each top-level directory into `.crust/root/` and every platform package's `bin/`, and records each hook's returned paths per `bin` entry under `build` in `.crust/manifest.json`. These reports describe hook output, not all packaged files or arbitrary module side effects; entry execution is not sandboxed. Loose top-level artifact files are reported but not copied into packages. A CLI reads the directories back with [`resolveArtifactDir(name)`](/docs/api/crust#resolveartifactdirname).
 
-With several `bin` entries, each entry's hooks run in their own temporary directory and the results are merged into `.crust/artifacts/`. Directories merge, so `man/greet.1` and `man/admin.1` coexist, but a path two entries both write (or a file in one and a directory in another) fails the build naming both commands.
+With several `bin` entries, each entry's hooks run in their own temporary directory and the results are merged into `.crust/artifacts/`. Directories merge, so `man/greet.1` and `man/admin.1` coexist, but a path two entries both write (or a file in one and a directory in another) fails the build naming both commands. These collisions are checked case-insensitively across entries, including file/ancestor conflicts. Unexpected symlinks and nonregular entries are rejected rather than copied.
+
+Upgrade the application's `@crustjs/core`, `@crustjs/crust`, and build-hook Extensions together to the pure-return build API. Malformed or legacy subprocess reports (such as `files: "unknown"`) fail preparation with compatible-Core guidance; there is no writer-hook compatibility shim. An executed hook returning `[]` remains a valid, empty report. Failed preparation produces no completed manifest.
 
 `--no-validate` skips snapshot preparation and all Extension build hooks, so no artifact directories are staged and the manifest has no `build` field.

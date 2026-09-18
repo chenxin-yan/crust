@@ -1,15 +1,75 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { isAbsolute, join, resolve } from "node:path";
 
 import { defineCommand, type InvocationIO } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
+import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
+import { isWithin } from "@crustjs/utils/path";
 import { runProcess, which } from "@crustjs/utils/process";
 
-import { CRUST_DIR, type DistributionManifest } from "../utils/distribute.ts";
+import { CRUST_DIR, validatePackageIdentity } from "../utils/distribute.ts";
+
+/** Only the persisted fields publishing consumes; build reports remain informational. */
+type PublishManifest = {
+	version: string;
+	root: { name: string; dir: string; bins: string[] };
+	packages: Array<{
+		name: string;
+		dir: string;
+		os: string;
+		cpu: string;
+		libc?: string;
+		bins: Record<string, string>;
+	}>;
+	publishOrder: string[];
+};
+
+function isRecord(value: JsonValue | undefined): value is JsonObject {
+	return value !== undefined && isJsonObject(value);
+}
+
+function isNonemptyString(value: JsonValue | undefined): value is string {
+	return typeof value === "string" && value.trim() !== "";
+}
+
+function isStringArray(value: JsonValue | undefined): value is string[] {
+	return Array.isArray(value) && value.every(isNonemptyString);
+}
+
+function isStringRecord(value: JsonValue | undefined): value is Record<string, string> {
+	return isRecord(value) && Object.values(value).every(isNonemptyString);
+}
+
+function assertPublishManifest(value: JsonValue): asserts value is PublishManifest {
+	if (
+		!isRecord(value) ||
+		!isNonemptyString(value.version) ||
+		!isRecord(value.root) ||
+		!isNonemptyString(value.root.name) ||
+		!isNonemptyString(value.root.dir) ||
+		!isStringArray(value.root.bins) ||
+		!isStringArray(value.publishOrder) ||
+		!Array.isArray(value.packages) ||
+		!value.packages.every(
+			(pkg: JsonValue) =>
+				isRecord(pkg) &&
+				isNonemptyString(pkg.name) &&
+				isNonemptyString(pkg.dir) &&
+				isNonemptyString(pkg.os) &&
+				isNonemptyString(pkg.cpu) &&
+				(pkg.libc === undefined || isNonemptyString(pkg.libc)) &&
+				isStringRecord(pkg.bins),
+		)
+	) {
+		throw new Error(
+			"Invalid manifest.json: expected string identity and directory fields, root.bins and publishOrder arrays, and package os/cpu/bins metadata. Run `crust build` again.",
+		);
+	}
+}
 
 type PublishPackageJson = {
-	name?: string;
-	version?: string;
+	name: string;
+	version: string;
 	bin?: Record<string, string>;
 	os?: string[];
 	cpu?: string[];
@@ -25,7 +85,7 @@ type PublishOptions = {
 	spawnPublish?: (dir: string, command: string[], io: InvocationIO) => Promise<number>;
 };
 
-export function readPublishManifest(stageDir: string): DistributionManifest {
+export function readPublishManifest(stageDir: string): PublishManifest {
 	const manifestPath = join(stageDir, "manifest.json");
 	if (!existsSync(manifestPath)) {
 		throw new Error(
@@ -33,8 +93,9 @@ export function readPublishManifest(stageDir: string): DistributionManifest {
 		);
 	}
 
-	// SAFETY: validatePublishManifest checks every manifest field used before publishing.
-	return JSON.parse(readFileSync(manifestPath, "utf-8")) as DistributionManifest;
+	const manifest: JsonValue = JSON.parse(readFileSync(manifestPath, "utf-8"));
+	assertPublishManifest(manifest);
+	return manifest;
 }
 
 function readStagedPackageJson(stageDir: string, dir: string): PublishPackageJson {
@@ -43,8 +104,23 @@ function readStagedPackageJson(stageDir: string, dir: string): PublishPackageJso
 		throw new Error(`Missing staged package.json: ${packageJsonPath}`);
 	}
 
-	// SAFETY: validatePublishManifest checks each optional field before using it as publish metadata.
-	return JSON.parse(readFileSync(packageJsonPath, "utf-8")) as PublishPackageJson;
+	if (!isWithin(stageDir, realpathSync(packageJsonPath))) {
+		throw new Error(
+			`Staged package.json resolves outside the staging directory: ${packageJsonPath}`,
+		);
+	}
+	const value: JsonValue = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
+	validatePackageIdentity(value, packageJsonPath);
+	if (
+		(value.bin !== undefined && !isStringRecord(value.bin)) ||
+		(value.optionalDependencies !== undefined && !isStringRecord(value.optionalDependencies)) ||
+		[value.os, value.cpu, value.libc].some((field) => field !== undefined && !isStringArray(field))
+	) {
+		throw new Error(
+			`Invalid staged package metadata in ${packageJsonPath}: expected string bin/dependency maps and os/cpu/libc arrays.`,
+		);
+	}
+	return value;
 }
 
 function assertUniqueDirs(dirs: string[]): void {
@@ -58,7 +134,10 @@ function assertUniqueDirs(dirs: string[]): void {
 	}
 }
 
-export function validatePublishManifest(stageDir: string, manifest: DistributionManifest): void {
+export function validatePublishManifest(stageDir: string, manifest: PublishManifest): string[] {
+	assertPublishManifest(manifest);
+	// Resolve the explicitly selected root once; descendant links may not escape it.
+	stageDir = realpathSync(stageDir);
 	const listedDirs = manifest.packages.map((pkg) => pkg.dir);
 	assertUniqueDirs([...listedDirs, manifest.root.dir]);
 	assertUniqueDirs(manifest.publishOrder);
@@ -72,29 +151,40 @@ export function validatePublishManifest(stageDir: string, manifest: Distribution
 		throw new Error("manifest.json publishOrder does not match the staged packages.");
 	}
 
+	const canonicalDirs = new Map<string, string>();
 	for (const dir of expectedPublishOrder) {
 		if (!manifest.publishOrder.includes(dir)) {
 			throw new Error(`manifest.json publishOrder is missing ${dir}.`);
 		}
-		if (!existsSync(join(stageDir, dir))) {
-			throw new Error(`Missing staged package directory: ${join(stageDir, dir)}`);
+		const path = resolve(stageDir, dir);
+		if (isAbsolute(dir) || path === stageDir || !isWithin(stageDir, path)) {
+			throw new Error(`Staged package directory must be inside ${stageDir}: ${dir}`);
 		}
-		if (!existsSync(join(stageDir, dir, "package.json"))) {
-			throw new Error(`Missing staged package.json: ${join(stageDir, dir, "package.json")}`);
+		if (!existsSync(path)) {
+			throw new Error(`Missing staged package directory: ${path}`);
 		}
+		const canonical = realpathSync(path);
+		if (canonical === stageDir || !isWithin(stageDir, canonical)) {
+			throw new Error(`Staged package directory resolves outside ${stageDir}: ${dir}`);
+		}
+		if (!statSync(canonical).isDirectory()) {
+			throw new Error(`Staged package path is not a directory: ${dir}`);
+		}
+		canonicalDirs.set(dir, canonical);
 	}
+	assertUniqueDirs([...canonicalDirs.values()]);
 
 	const rootPackageJson = readStagedPackageJson(stageDir, manifest.root.dir);
 	if (rootPackageJson.name !== manifest.root.name) {
 		throw new Error("Root staged package name does not match manifest.json.");
 	}
 
-	if (!rootPackageJson.version) {
-		throw new Error("Root staged package is missing a version field.");
+	if (rootPackageJson.version !== manifest.version) {
+		throw new Error("Root staged package version does not match manifest.json.");
 	}
 
 	const commands = manifest.root.bins;
-	if (!Array.isArray(commands) || commands.length === 0) {
+	if (commands.length === 0) {
 		throw new Error("manifest.json root.bins must list at least one command.");
 	}
 	if (new Set(commands).size !== commands.length) {
@@ -123,15 +213,11 @@ export function validatePublishManifest(stageDir: string, manifest: Distribution
 			throw new Error("All staged package versions must match.");
 		}
 
-		if (!pkg.os || !pkg.cpu || !pkg.bins) {
-			throw new Error(`Manifest entry for ${pkg.dir} is missing os/cpu/bins metadata.`);
-		}
-
-		if (!Array.isArray(stagedPackageJson.os) || stagedPackageJson.os[0] !== pkg.os) {
+		if (stagedPackageJson.os?.[0] !== pkg.os) {
 			throw new Error(`Staged package ${pkg.dir} is missing correct os metadata.`);
 		}
 
-		if (!Array.isArray(stagedPackageJson.cpu) || stagedPackageJson.cpu[0] !== pkg.cpu) {
+		if (stagedPackageJson.cpu?.[0] !== pkg.cpu) {
 			throw new Error(`Staged package ${pkg.dir} is missing correct cpu metadata.`);
 		}
 
@@ -164,6 +250,7 @@ export function validatePublishManifest(stageDir: string, manifest: Distribution
 			);
 		}
 	}
+	return manifest.publishOrder.map((dir) => canonicalDirs.get(dir)!);
 }
 
 // npm, not `bun publish`: only npm supports trusted publishing (OIDC) from CI
@@ -201,11 +288,11 @@ async function defaultSpawnPublish(
 }
 
 export async function publishStagedPackages(
-	manifest: DistributionManifest,
+	manifest: PublishManifest,
 	options: PublishOptions,
 	io: InvocationIO,
 ): Promise<void> {
-	validatePublishManifest(options.stageDir, manifest);
+	const publishDirs = validatePublishManifest(options.stageDir, manifest);
 
 	const command = buildPublishCommand({ tag: options.tag, registry: options.registry });
 	io.stdout(`${dim("Publish order:")} ${manifest.publishOrder.join(" -> ")}`);
@@ -219,8 +306,8 @@ export async function publishStagedPackages(
 
 	const spawnPublish = options.spawnPublish ?? defaultSpawnPublish;
 
-	for (const relativeDir of manifest.publishOrder) {
-		const dir = join(options.stageDir, relativeDir);
+	for (const [index, relativeDir] of manifest.publishOrder.entries()) {
+		const dir = publishDirs[index]!;
 		io.stdout(`\nPublishing ${bold(relativeDir)} from ${dim(dir)}...`);
 		const exitCode = await spawnPublish(dir, command, io);
 		if (exitCode !== 0) {
