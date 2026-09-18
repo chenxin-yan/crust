@@ -7,7 +7,7 @@ Use core `app.run(path, input)` for quiet captured output and typed completed/fi
 ## Install
 
 ```sh
-bun add -d @crustjs/testing
+npm install -D @crustjs/testing
 ```
 
 ## Documentation

@@ -3,6 +3,9 @@
 	"version": "0.0.0",
 	"type": "module",
 	"description": "A CLI built with Crust",
+	"crust": {
+		"runtime": "node"
+	},
 	"files": [
 		"dist"
 	],
@@ -10,11 +13,14 @@
 		"{{name}}": "dist/cli.js"
 	},
 	"scripts": {
-		"dev": "bun run src/cli.ts",
-		"build": "bun build src/cli.ts --target bun --outfile dist/cli.js",
-		"prepack": "bun run build",
-		"start": "bun run dist/cli.js",
+		"dev": "node src/cli.ts",
+		"build": "crust build --name cli",
+		"prepack": "npm run build",
+		"start": "node dist/cli.js",
 		"check:types": "tsc --noEmit"
+	},
+	"engines": {
+		"node": ">=22.18"
 	},
 	"dependencies": {
 		"@crustjs/core": "^{{crustCoreVersion}}",
@@ -22,7 +28,7 @@
 	},
 	"devDependencies": {
 		"@crustjs/crust": "^{{crustCliVersion}}",
-		"@types/bun": "latest",
+		"@types/node": "^22",
 		"typescript": "^7.0.2"
 	}
 }

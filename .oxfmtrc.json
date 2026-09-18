@@ -3,5 +3,12 @@
 	"useTabs": true,
 	"sortImports": true,
 	"sortPackageJson": false,
-	"ignorePatterns": [".changeset/", "**/CHANGELOG.md", ".pi/", "**/tests/fixtures/", ".worktrees/"]
+	"ignorePatterns": [
+		".changeset/",
+		"**/CHANGELOG.md",
+		".pi/",
+		"**/tests/fixtures/",
+		".worktrees/",
+		"packages/create-crust/templates/base/tsconfig.json"
+	]
 }

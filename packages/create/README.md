@@ -5,7 +5,7 @@ Headless scaffolding engine for building create-xxx tools
 ## Install
 
 ```sh
-bun add @crustjs/create
+npm install @crustjs/create
 ```
 
 ## Documentation

@@ -5,7 +5,7 @@ DX-first, typed persistence for CLI apps with config/data/state/cache separation
 ## Install
 
 ```sh
-bun add @crustjs/store
+npm install @crustjs/store
 ```
 
 ## Documentation

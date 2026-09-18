@@ -12,7 +12,16 @@ declare const CRUST_CORE_VERSION: string;
 declare const CRUST_CLI_VERSION: string;
 declare const CRUST_EXTENSIONS_VERSION: string;
 
-type DistributionMode = "binary" | "runtime";
+type Runtime = "bun" | "node" | "deno";
+
+// `tsLib`/`tsTypes` are spliced into tsconfig arrays, so they carry their own JSON quoting.
+// Deno reads the project tsconfig and a supplied `lib` replaces its default `deno.window`,
+// which would drop `Deno`, `console`, and `process` from `deno check`.
+const RUNTIME_TEMPLATE_CONTEXT = {
+	bun: { run: "bun run", tsLib: '"ESNext"', tsTypes: '"bun"' },
+	node: { run: "npm run", tsLib: '"ESNext"', tsTypes: '"node"' },
+	deno: { run: "deno task", tsLib: '"ESNext", "deno.window"', tsTypes: "" },
+} satisfies Record<Runtime, { run: string; tsLib: string; tsTypes: string }>;
 
 const CRUST_TEMPLATE_VERSION_CONTEXT = {
 	crustCoreVersion: CRUST_CORE_VERSION,
@@ -41,10 +50,10 @@ function validateProjectName(name: string): void {
 const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI project" })
 	.flags(
 		{
-			name: "distribution",
+			name: "runtime",
 			type: "string",
-			choices: ["binary", "runtime"],
-			description: 'Distribution mode ("binary" or "runtime")',
+			choices: ["bun", "node", "deno"],
+			description: 'Runtime to develop and build for ("bun", "node", or "deno")',
 		},
 		{
 			name: "install",
@@ -82,7 +91,7 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 
 		const resolvedDir = resolve(process.cwd(), targetDir);
 		const dirName = basename(resolvedDir);
-		const distributionInitial = flags.distribution;
+		const runtimeInitial = flags.runtime;
 
 		// Ask before writing into an existing destination. The cwd (".") always
 		// exists, so it only needs confirmation when non-empty; a named directory
@@ -105,22 +114,27 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 			}
 		}
 
-		const distributionMode = await select<DistributionMode>({
-			message: "Distribution mode",
+		const runtime = await select<Runtime>({
+			message: "Runtime",
 			choices: [
 				{
-					label: "Standalone binaries (recommended)",
-					value: "binary",
-					hint: "compile with crust build, publish self-contained executables",
+					label: "Bun (recommended)",
+					value: "bun",
+					hint: "compile with crust build, publish per-platform npm packages",
 				},
 				{
-					label: "Bun runtime package",
-					value: "runtime",
-					hint: "ship JS build that runs with Bun",
+					label: "Node.js",
+					value: "node",
+					hint: "bundle with crust build, publish one npm package that runs on Node",
+				},
+				{
+					label: "Deno",
+					value: "deno",
+					hint: "compile with crust build, ship self-contained executables",
 				},
 			],
-			default: "binary",
-			...(distributionInitial !== undefined ? { initial: distributionInitial } : {}),
+			default: "bun",
+			...(runtimeInitial !== undefined ? { initial: runtimeInitial } : {}),
 		});
 		const installDeps = await confirm({
 			message: "Install dependencies?",
@@ -149,7 +163,11 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 		// Shipped templates belong to this module, not the user's working directory.
 		const templateUrl = (template: string) => new URL(`../templates/${template}`, import.meta.url);
 		// Scaffolding produces no console output, so it is safe inside a spinner.
-		const context = { name, ...CRUST_TEMPLATE_VERSION_CONTEXT };
+		const context = {
+			name,
+			...RUNTIME_TEMPLATE_CONTEXT[runtime],
+			...CRUST_TEMPLATE_VERSION_CONTEXT,
+		};
 		await spinner({
 			message: "Scaffolding project...",
 			task: async () => {
@@ -166,7 +184,7 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 					conflict: "overwrite",
 				});
 				await scaffold({
-					template: templateUrl(`distribution/${distributionMode}`),
+					template: templateUrl(`runtime/${runtime}`),
 					dest: resolvedDir,
 					context,
 					conflict: "overwrite",
@@ -175,7 +193,13 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 		});
 
 		if (installDeps) {
-			await runSteps([{ type: "install" }], resolvedDir);
+			// The generic install step only detects npm-style package managers and falls
+			// back to npm, which a Deno-only machine lacks; Deno installs package.json
+			// dependencies itself.
+			await runSteps(
+				[runtime === "deno" ? { type: "command", cmd: "deno install" } : { type: "install" }],
+				resolvedDir,
+			);
 		}
 
 		if (initGit) {
@@ -192,8 +216,8 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 			const relativeDir = targetDir.startsWith("/") ? targetDir : `./${targetDir}`;
 			console.log(`  cd ${relativeDir}`);
 		}
-		console.log("  bun run dev");
-		console.log("  bun run build");
+		console.log(`  ${context.run} dev`);
+		console.log(`  ${context.run} build`);
 	});
 
 await app.execute();

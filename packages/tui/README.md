@@ -11,7 +11,7 @@ Use any OpenTUI renderer with `runTui()`:
 ## Install
 
 ```sh
-bun add @crustjs/tui @opentui/core
+npm install @crustjs/tui @opentui/core
 ```
 
 Compile Solid apps with `crust build --bun-plugin @opentui/solid/bun-plugin`; React and core apps need no plugin. See [Compiling](https://crustjs.com/docs/modules/tui#compiling).

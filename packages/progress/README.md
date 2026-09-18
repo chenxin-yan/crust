@@ -7,7 +7,7 @@ Use `withTerminalIO()` to share ambient input/output with `@crustjs/prompts`; `w
 ## Install
 
 ```sh
-bun add @crustjs/progress
+npm install @crustjs/progress
 ```
 
 ## Documentation

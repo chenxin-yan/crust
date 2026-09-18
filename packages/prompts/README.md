@@ -5,7 +5,7 @@ Interactive terminal prompts for the Crust CLI ecosystem.
 ## Install
 
 ```sh
-bun add @crustjs/prompts
+npm install @crustjs/prompts
 ```
 
 ## Documentation

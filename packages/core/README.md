@@ -5,7 +5,7 @@ Core library for the Crust CLI framework.
 ## Install
 
 ```sh
-bun add @crustjs/core
+npm install @crustjs/core
 ```
 
 ## Documentation
