@@ -64,6 +64,8 @@ See [Locating templates](#locating-templates) for how `template` resolves. Resol
 
 The default `conflict: "abort"` throws for a non-empty destination. `"overwrite"` replaces conflicting files and leaves unrelated destination files in place.
 
+Writes stay inside the destination. `dest` itself may be a symlink (its target is the destination), but an existing destination file or ancestor directory that is a symlink resolving outside that directory, or to a missing target, throws before any file is written. Symlinks that stay inside the destination are followed.
+
 ## `runSteps(steps, cwd)`
 
 ```ts

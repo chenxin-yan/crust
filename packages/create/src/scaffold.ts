@@ -4,11 +4,15 @@ import {
 	mkdirSync,
 	readdirSync,
 	readFileSync,
+	realpathSync,
 	statSync,
 	writeFileSync,
 } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { isErrnoException } from "@crustjs/utils/error";
+import { isWithin } from "@crustjs/utils/path";
 
 import type { ScaffoldOptions, ScaffoldResult } from "./types.ts";
 
@@ -31,7 +35,10 @@ import type { ScaffoldOptions, ScaffoldResult } from "./types.ts";
  * ```
  */
 export function interpolate(content: string, context: Record<string, string>): string {
-	return content.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key: string) => context[key] ?? match);
+	return content.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key: string) =>
+		// Own properties only: `{{toString}}` must not read Object.prototype.
+		Object.hasOwn(context, key) ? (context[key] ?? match) : match,
+	);
 }
 
 /**
@@ -72,6 +79,45 @@ function isNonEmptyDir(dirPath: string): boolean {
 	return entries.length > 0;
 }
 
+/**
+ * Reject a destination path whose existing components include a symlink
+ * resolving outside the canonical destination root.
+ *
+ * Walks every component of `relPath` below `realDestDir`, so an ancestor
+ * directory link is caught before `mkdir` would create anything through it,
+ * and a dangling file link is caught before `write` would create its target.
+ * Components that do not exist yet are created fresh by the caller.
+ */
+function assertDestinationContained(realDestDir: string, relPath: string): void {
+	let current = realDestDir;
+	for (const segment of relPath.split(sep)) {
+		current = join(current, segment);
+		let isLink: boolean;
+		try {
+			isLink = lstatSync(current).isSymbolicLink();
+		} catch (error) {
+			if (isErrnoException(error) && error.code === "ENOENT") {
+				return;
+			}
+			throw error;
+		}
+		if (!isLink) {
+			continue;
+		}
+		let target: string | undefined;
+		try {
+			target = realpathSync(current);
+		} catch {
+			// Dangling link: writing through it would create the target wherever it points.
+		}
+		if (target === undefined || !isWithin(realDestDir, target)) {
+			throw new Error(
+				`Destination path "${current}" is a symlink${target === undefined ? " to a missing target" : ` to "${target}"`} outside the destination "${realDestDir}". Remove the link or choose another destination.`,
+			);
+		}
+	}
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Core Scaffold Function
 // ────────────────────────────────────────────────────────────────────────────
@@ -92,6 +138,9 @@ function isNonEmptyDir(dirPath: string): boolean {
  * @returns The list of all written file paths, relative to the destination directory.
  * @throws When the template source cannot be resolved, does not exist, or is not a directory.
  * @throws When `conflict` is `"abort"` and the destination is a non-empty directory.
+ * @throws When an existing destination file or ancestor directory is a symlink that
+ *   resolves outside the destination (or to a missing target), regardless of `conflict`.
+ *   A `dest` that is itself a symlink is followed once: its target is the destination.
  *
  * @example
  * ```ts
@@ -137,14 +186,26 @@ export async function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult
 	const templateFiles = readdirSync(templateDir, { recursive: true, encoding: "utf8" }).filter(
 		(relFromTemplate) => lstatSync(join(templateDir, relFromTemplate)).isFile(),
 	);
+
+	// The chosen root is canonicalized once (an intentionally symlinked `dest` is
+	// followed); everything below it must stay inside that canonical directory.
+	// Check every destination path before the first write so an escaping link
+	// fails the whole scaffold instead of a partially written tree.
+	mkdirSync(destDir, { recursive: true });
+	const realDestDir = realpathSync(destDir);
+	const plannedFiles = templateFiles.map((relFromTemplate) => ({
+		relFromTemplate,
+		destRelPath: renameDotfile(relFromTemplate),
+	}));
+	for (const { destRelPath } of plannedFiles) {
+		assertDestinationContained(realDestDir, destRelPath);
+	}
+
 	const writtenFiles: string[] = [];
 
-	for (const relFromTemplate of templateFiles) {
+	for (const { relFromTemplate, destRelPath } of plannedFiles) {
 		const absolutePath = join(templateDir, relFromTemplate);
-
-		// Apply dotfile renaming convention
-		const destRelPath = renameDotfile(relFromTemplate);
-		const destFilePath = join(destDir, destRelPath);
+		const destFilePath = join(realDestDir, destRelPath);
 
 		// Ensure parent directory exists
 		mkdirSync(dirname(destFilePath), { recursive: true });
