@@ -37,7 +37,7 @@ import type { InstallSkillResult, SkillOptions } from "./types.ts";
 
 export const SKILLS: ExtensionId = defineExtensionId("crust:skills");
 
-const DEFAULT_SKILL_COMMAND_NAME = "skill";
+const DEFAULT_SKILL_COMMAND_NAME = "skills";
 const SKILLS_SECTION_TITLE = "Agent skills";
 const DEFAULT_SKILL_SCOPE = "global";
 const SKILLS_ARTIFACT = "skills";
@@ -366,7 +366,10 @@ async function reconcileSkill(opts: {
 function buildSkillCommand(commandName: string, options: SkillOptions) {
 	return defineCommand(
 		commandName,
-		{ description: "Manage agent skill installations" },
+		{
+			description: "Manage agent skill installations",
+			aliases: commandName === DEFAULT_SKILL_COMMAND_NAME ? ["skill"] : [],
+		},
 		(command) =>
 			command
 				.flags(

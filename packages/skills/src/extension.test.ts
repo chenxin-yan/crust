@@ -85,6 +85,25 @@ describe("skill extension packaged directory", () => {
 		expect(skill({}).id).toBe(skill.id);
 	});
 
+	it("registers skills as the canonical command with skill as an alias", async () => {
+		const snapshot = await createApp().snapshot();
+
+		expect(snapshot.subCommands.skills?.meta.name).toBe("skills");
+		expect(snapshot.subCommands.skills?.meta.aliases).toEqual(["skill"]);
+		expect(snapshot.subCommands.skill).toBeUndefined();
+		expect(renderHelp(snapshot)).toContain("Then run `demo skills`");
+	});
+
+	it.each(["agents", "skill"])(
+		"preserves the custom command name %s without aliases",
+		async (command) => {
+			const snapshot = await new Crust("demo").extend(skill({ command })).snapshot();
+
+			expect(Object.keys(snapshot.subCommands)).toEqual([command]);
+			expect(snapshot.subCommands[command]?.meta.aliases ?? []).toEqual([]);
+		},
+	);
+
 	it("advertises every packaged skill in help with its resolved source path", async () => {
 		const source = await writeSource("demo", "demo", "Run demo workflows");
 		await writeSource("guide", "guide", "Explain deployment choices");
@@ -230,10 +249,10 @@ describe("skill extension packaged directory", () => {
 		expect(rootReference).not.toContain("unavailable");
 	});
 
-	it("installs every packaged skill as a link", async () => {
+	it.each(["skills", "skill"])("installs every packaged skill via %s", async (command) => {
 		await writeSource("demo");
 		await writeSource("guide");
-		await withCwd(tempRoot, () => createApp().execute({ argv: ["skill", "--all"] }));
+		await withCwd(tempRoot, () => createApp().execute({ argv: [command, "--all"] }));
 
 		expect((await lstat(target("demo"))).isSymbolicLink()).toBe(true);
 		expect((await lstat(target("guide"))).isSymbolicLink()).toBe(true);
@@ -344,14 +363,14 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 		await expect(lstat(target())).rejects.toThrow();
 	});
 
-	it("repairs links via the skill update command", async () => {
+	it.each(["skills", "skill"])("repairs links via %s update", async (command) => {
 		const source = await writeSource("demo");
 		const installed = join(tempRoot, ".claude", "skills", "demo");
 		await mkdir(dirname(installed), { recursive: true });
 		await symlink(join(tempRoot, "missing", "skills", "demo"), installed);
 
 		await withCwd(tempRoot, () =>
-			createApp().execute({ argv: ["skill", "update", "--scope", "project"] }),
+			createApp().execute({ argv: [command, "update", "--scope", "project"] }),
 		);
 		expect(resolve(dirname(installed), await readlink(installed))).toBe(join(source, "demo"));
 	});

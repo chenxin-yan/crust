@@ -28,8 +28,8 @@ Each skill has its own directory:
     └── commands/
         ├── my-cli.md
         ├── deploy.md
-        ├── skill.md
-        └── skill/
+        ├── skills.md
+        └── skills/
             └── update.md
 ```
 
@@ -39,7 +39,7 @@ Use `writeSkillsFromSnapshot()` when a prepared Command Snapshot is available. O
 
 <include lang="ts">../../../examples/modules/skills.ts#extension</include>
 
-The Extension registers `my-cli skill` and `my-cli skill update`. It also contributes an `Agent skills` root section with `except: [skill]`, so it appears in help, man pages, and any other consumer, but not in the skills it generates.
+The Extension registers `my-cli skills` and `my-cli skills update`, with `skill` retained as an alias. Setting `command` to a custom name replaces the default command without adding the alias. It also contributes an `Agent skills` root section with `except: [skill]`, so it appears in help, man pages, and any other consumer, but not in the skills it generates.
 
 The help section includes this escaped excerpt:
 
@@ -54,9 +54,9 @@ Packaged skills are read at runtime from [`resolveArtifactDir("skills")`](/docs/
 Generated man pages can embed source paths resolved on the build machine. Run builds from the project root that contains the packaged skills directory to avoid absolute build-machine paths.
 
 ```sh
-my-cli skill
-my-cli skill --all --scope project
-my-cli skill update
+my-cli skills
+my-cli skills --all --scope project
+my-cli skills update
 ```
 
 `--scope` accepts `project` or `global`. With `--all`, scope comes from `--scope`, then `defaultScope`, then `global`; without `--all`, an interactive run prompts when neither setting is supplied.

@@ -162,6 +162,6 @@ export interface SkillOptions {
 	defaultScope?: Scope;
 	/** Repair stale or dangling owned links before commands run. @default true */
 	autoUpdate?: boolean;
-	/** Name of the interactive management command. @default "skill" */
+	/** Name of the interactive management command. The default includes a `skill` alias. @default "skills" */
 	command?: string;
 }
