@@ -94,20 +94,6 @@ function shadowedNamesAt(node: ESTree.Node, visitorKeys: VisitorKeys): ReadonlyS
 	return shadowed;
 }
 
-function annotationTarget(
-	annotation: ESTree.TSTypeAnnotation | null | undefined,
-	environment: TypeEnvironment,
-	visitorKeys: VisitorKeys,
-): WideningTarget | null {
-	return annotation === null || annotation === undefined
-		? null
-		: classifyWideningTarget(
-				annotation.typeAnnotation,
-				environment,
-				shadowedNamesAt(annotation, visitorKeys),
-			);
-}
-
 function enclosingFunction(node: ESTree.Node): FunctionExpression | null {
 	let current: ESTree.Node | null = node.parent;
 	while (current !== null && current.type !== "Program") {
@@ -185,12 +171,8 @@ export const noKnownValueWideningRule = defineRule({
 			});
 		};
 
-		const targetFromAnnotation = (annotation: ESTree.TSTypeAnnotation | null | undefined) =>
-			environment === null
-				? null
-				: annotationTarget(annotation, environment, context.sourceCode.visitorKeys);
-		const targetFromAssertion = (type: ESTree.TSType) =>
-			environment === null
+		const targetFromType = (type: ESTree.TSType | undefined) =>
+			environment === null || type === undefined
 				? null
 				: classifyWideningTarget(
 						type,
@@ -206,7 +188,7 @@ export const noKnownValueWideningRule = defineRule({
 				if (node.init === null || node.id.type !== "Identifier") return;
 				reportFlow(
 					node.init,
-					targetFromAnnotation(node.id.typeAnnotation),
+					targetFromType(node.id.typeAnnotation?.typeAnnotation),
 					`binding \`${node.id.name}\``,
 				);
 			},
@@ -214,7 +196,7 @@ export const noKnownValueWideningRule = defineRule({
 				if (node.value === null) return;
 				reportFlow(
 					node.value,
-					targetFromAnnotation(node.typeAnnotation),
+					targetFromType(node.typeAnnotation?.typeAnnotation),
 					`property \`${sourceKeyName(context.sourceCode, node.key)}\``,
 				);
 			},
@@ -222,7 +204,7 @@ export const noKnownValueWideningRule = defineRule({
 				if (node.value === null) return;
 				reportFlow(
 					node.value,
-					targetFromAnnotation(node.typeAnnotation),
+					targetFromType(node.typeAnnotation?.typeAnnotation),
 					`property \`${sourceKeyName(context.sourceCode, node.key)}\``,
 				);
 			},
@@ -234,7 +216,7 @@ export const noKnownValueWideningRule = defineRule({
 				if (declarator === null || declarator.id.type !== "Identifier") return;
 				reportFlow(
 					node.right,
-					targetFromAnnotation(declarator.id.typeAnnotation),
+					targetFromType(declarator.id.typeAnnotation?.typeAnnotation),
 					`binding \`${declarator.id.name}\``,
 				);
 			},
@@ -243,7 +225,7 @@ export const noKnownValueWideningRule = defineRule({
 				const owner = enclosingFunction(node);
 				reportFlow(
 					node.argument,
-					targetFromAnnotation(owner?.returnType),
+					targetFromType(owner?.returnType?.typeAnnotation),
 					`return value of \`${functionName(context.sourceCode, owner)}\``,
 				);
 			},
@@ -251,17 +233,17 @@ export const noKnownValueWideningRule = defineRule({
 				if (node.body.type === "BlockStatement") return;
 				reportFlow(
 					node.body,
-					targetFromAnnotation(node.returnType),
+					targetFromType(node.returnType?.typeAnnotation),
 					`return value of \`${functionName(context.sourceCode, node)}\``,
 				);
 			},
 			TSAsExpression(node) {
 				if (hasParentAssertion(node)) return;
-				reportFlow(node.expression, targetFromAssertion(node.typeAnnotation), "assertion");
+				reportFlow(node.expression, targetFromType(node.typeAnnotation), "assertion");
 			},
 			TSTypeAssertion(node) {
 				if (hasParentAssertion(node)) return;
-				reportFlow(node.expression, targetFromAssertion(node.typeAnnotation), "assertion");
+				reportFlow(node.expression, targetFromType(node.typeAnnotation), "assertion");
 			},
 		};
 	},
