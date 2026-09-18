@@ -35,7 +35,7 @@ The `man()` build hook returns the rendered page instead of writing it. `writeMa
 
 ### @crustjs/skills
 
-The `skill()` build hook returns rendered skill files instead of writing them. `writeSkills()` and `writeSkillsFromSnapshot()` are unchanged: they still replace the dedicated `skills` output directory. The new `renderSkills()` returns the same files without touching disk.
+The `skill()` build hook returns rendered skill files instead of writing them. `writeSkills()` and `writeSkillsFromSnapshot()` are unchanged: they still replace the dedicated `skills` output directory.
 
 ### @crustjs/extensions
 
