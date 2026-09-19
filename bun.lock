@@ -117,7 +117,7 @@
       "name": "@crustjs/crust",
       "version": "0.3.0",
       "bin": {
-        "crust": "dist/cli.js",
+        "crust": "src/cli.ts",
       },
       "dependencies": {
         "@crustjs/core": "workspace:^",

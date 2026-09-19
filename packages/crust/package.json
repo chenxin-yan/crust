@@ -34,11 +34,10 @@
 		"crust": "src/cli.ts"
 	},
 	"scripts": {
-		"build": "bun run build:cli && bun dist/cli.js build",
-		"build:cli": "bun build src/cli.ts --target=bun --format=esm --outfile=dist/cli.js --minify --packages=external",
-		"release": "bun dist/cli.js publish",
-		"dev": "bun ./src/cli.ts",
-		"start": "./dist/cli.js",
+		"build": "bun src/cli.ts build",
+		"release": "bun src/cli.ts publish",
+		"dev": "bun src/cli.ts",
+		"start": "bun .crust/root/bin/crust.js",
 		"check:types": "tsc --noEmit",
 		"test": "bun test"
 	},

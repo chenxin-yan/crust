@@ -142,7 +142,7 @@ describe.skipIf(!enabled)("installed create-crust and crust (Linux/npm)", () => 
 			if (!host) throw new Error(`Build crust for ${target} before running this test.`);
 			const specs: Record<string, string> = {};
 			const versions: Record<string, string> = {};
-			// Read-only input: pack staged tools, never workspace source manifests or bootstrap dist.
+			// Read-only input: pack staged tools, never workspace source manifests.
 			for (const dir of [
 				join(repoRoot, "packages/create-crust/.crust/root"),
 				join(stage, "root"),

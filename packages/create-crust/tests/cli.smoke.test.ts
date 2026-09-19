@@ -47,12 +47,10 @@ const localDependencyPackages = [
 		// The 0.2.0 cohort is unpublished until release; link the workspace
 		// package so the scaffolded project's devDependency resolves. Linked
 		// (not packed): the published layout is the staged `.crust/root`, while
-		// the workspace package's bin is its source; the smoke runs the Bun
-		// bootstrap dist/cli.js by path.
+		// the workspace package's bin is its source, which the smoke runs with
+		// Bun by path.
 		name: "@crustjs/crust",
 		dir: "crust",
-		requiredBuildOutput: "dist/cli.js",
-		linkDir: true,
 	},
 ] as const;
 
@@ -125,9 +123,9 @@ function assertSuccess(label: string, command: string[], cwd: string, result: Co
 	}
 }
 
-/** The linked workspace crust is the Bun bootstrap bundle, so run it with Bun. */
+/** The linked workspace crust's bin is its Bun source entry, so run it with Bun. */
 function crustBuildArgv(projectDir: string, runtime: Runtime): string[] {
-	const crustCli = join(projectDir, "node_modules", "@crustjs", "crust", "dist", "cli.js");
+	const crustCli = join(projectDir, "node_modules", "@crustjs", "crust", "src", "cli.ts");
 	// Host-only target avoids cross-compile downloads (flaky on Windows CI for Linux Bun artifacts).
 	return [process.execPath, crustCli, "build", ...(runtime === "node" ? [] : ["--target", "host"])];
 }
@@ -138,16 +136,16 @@ async function packLocalDependencyPackages(): Promise<Record<string, string>> {
 
 	for (const pkg of localDependencyPackages) {
 		const packageDir = join(repoRoot, "packages", pkg.dir);
+		if (!("requiredBuildOutput" in pkg)) {
+			specs[pkg.name] = `file:${packageDir.replaceAll("\\", "/")}`;
+			continue;
+		}
+
 		const requiredBuildOutput = join(packageDir, pkg.requiredBuildOutput);
 		if (!existsSync(requiredBuildOutput)) {
 			throw new Error(
 				`Built package output not found at ${requiredBuildOutput}. Run the package build before test:smoke.`,
 			);
-		}
-
-		if ("linkDir" in pkg && pkg.linkDir) {
-			specs[pkg.name] = `file:${packageDir.replaceAll("\\", "/")}`;
-			continue;
 		}
 
 		const before = new Set(readdirSync(localPackageDir));
