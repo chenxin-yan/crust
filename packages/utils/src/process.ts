@@ -116,7 +116,7 @@ export function which(command: string): string | null {
 	// Path-containing inputs would produce garbage when joined onto PATH
 	// entries; resolve them directly instead.
 	const explicit = command.includes(sep) || command.includes("/");
-	// SAFETY: this only describes the optional Bun global; optional access preserves portability.
+	// SAFETY: only describes the optional Bun global; optional access preserves portability.
 	const bun = (
 		globalThis as { Bun?: { which(command: string, options: { PATH: string }): string | null } }
 	).Bun;

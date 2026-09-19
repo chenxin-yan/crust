@@ -1,8 +1,3 @@
-// ────────────────────────────────────────────────────────────────────────────
-// Test-only fixture for stringWidth.test.ts, not part of the build (nothing
-// under `index.ts` imports this file).
-// ────────────────────────────────────────────────────────────────────────────
-
 /**
  * `[label, input, expected]` rows where `expected` is both the JavaScript
  * fallback's width and `Bun.stringWidth(input, { countAnsiEscapeCodes: false })`

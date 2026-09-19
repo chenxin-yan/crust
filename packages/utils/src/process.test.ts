@@ -168,8 +168,6 @@ describe("which", () => {
 			expect(which(probe)).toBe(probe);
 		});
 
-		// Exact strings the native (Bun) and portable lookups must both return;
-		// Bun.which alone gets the empty-entry, unset-PATH and ordering cases wrong.
 		it.skipIf(process.platform === "win32")("selects the same executable as the PATH scan", () => {
 			const executable = (path: string) => {
 				writeFileSync(path, "#!/bin/sh\n");
