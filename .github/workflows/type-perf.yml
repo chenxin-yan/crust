@@ -5,11 +5,11 @@ on:
     paths:
       - "packages/core/**"
       - "packages/config/**"
+      - "packages/utils/**"
       - "package.json"
       - "bun.lock"
       - "tsdown.config.ts"
-      - "scripts/type-perf-report.ts"
-      - "scripts/editor-latency.ts"
+      - "scripts/type-perf-report*"
       - ".github/workflows/type-perf.yml"
 
 concurrency:
@@ -35,7 +35,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
-      - name: Measure head
+      - name: Measure PR merge
         run: |
           bun ci
           cd packages/core && bun run build && cd ../..
@@ -53,7 +53,7 @@ jobs:
           cd base
           bun ci
           cd packages/core && bun run build && cd ../../..
-          # Head's script measures both trees so old base refs need no copy of it.
+          # Use the PR merge's harness and compiler for both declaration sets.
           bun scripts/type-perf-report.ts measure "$RUNNER_TEMP/base.json" base
 
       - name: Comment type performance
@@ -62,11 +62,15 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          MERGE_SHA: ${{ github.sha }}
         run: |
           marker='<!-- type-perf-report -->'
           {
             echo "$marker"
-            echo '## 🧠 Type-check performance'
+            echo '## 🧠 Consumer type performance'
+            echo
+            echo "Base: $BASE_SHA · PR merge: $MERGE_SHA"
             echo
             bun scripts/type-perf-report.ts compare "$RUNNER_TEMP/base.json" "$RUNNER_TEMP/head.json"
           } > "$RUNNER_TEMP/comment.md"

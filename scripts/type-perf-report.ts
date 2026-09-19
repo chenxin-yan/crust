@@ -2,125 +2,45 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
-import { type EditorLatencyMetrics, measureEditorLatency } from "./editor-latency.ts";
+const scalingSizes = [10, 100, 200] as const;
 
-export interface TypePerfMetrics {
+export interface TypePerfReport {
 	typescriptVersion: string;
-	instantiations: number;
-	types: number;
-	checkTimeSeconds: number;
+	instantiations: Record<(typeof scalingSizes)[number], number>;
 }
 
-export const scalingSizes = [10, 50, 100] as const;
-export type ScalingSize = (typeof scalingSizes)[number];
-
-// null scaling entry = the generated fixture failed to compile against this tree's
-// dist (e.g. the PR changed the public API); rendered as "n/a" instead of failing.
-export interface TypePerfReport extends TypePerfMetrics {
-	scaling: Record<ScalingSize, TypePerfMetrics | null>;
-	// null = the LSP session failed (rendered as "n/a").
-	editor: EditorLatencyMetrics | null;
-}
-
-const metricPatterns = {
-	instantiations: /^Instantiations:\s+(\d+)$/m,
-	types: /^Types:\s+(\d+)$/m,
-	checkTimeSeconds: /^Check time:\s+([\d.]+)s$/m,
-} as const;
-
-function parseMetric(output: string, name: keyof typeof metricPatterns): number {
-	const value = output.match(metricPatterns[name])?.[1];
-	if (value === undefined) throw new Error(`Missing ${name} in TypeScript extended diagnostics`);
+export function parseExtendedDiagnostics(output: string): number {
+	const value = output.match(/^Instantiations:\s+(\d+)$/m)?.[1];
+	if (value === undefined)
+		throw new Error("Missing instantiations in TypeScript extended diagnostics");
 	return Number(value);
 }
 
-export function parseExtendedDiagnostics(
-	output: string,
-	typescriptVersion: string,
-): TypePerfMetrics {
-	return {
-		typescriptVersion,
-		instantiations: parseMetric(output, "instantiations"),
-		types: parseMetric(output, "types"),
-		checkTimeSeconds: parseMetric(output, "checkTimeSeconds"),
-	};
-}
-
 const number = new Intl.NumberFormat("en-US");
-const signed = (value: number, digits = 0) =>
-	`${value > 0 ? "+" : value < 0 ? "−" : "±"}${digits === 0 ? number.format(Math.abs(value)) : Math.abs(value).toFixed(digits)}`;
+const signed = (value: number) =>
+	`${value > 0 ? "+" : value < 0 ? "−" : "±"}${number.format(Math.abs(value))}`;
 const percentage = (base: number, head: number) =>
 	base === 0
 		? "n/a"
 		: `${head > base ? "+" : head < base ? "−" : "±"}${Math.abs(((head - base) / base) * 100).toFixed(1)}%`;
-const delta = (base: number, head: number, digits = 0) =>
-	`${signed(head - base, digits)} (${percentage(base, head)})`;
-
-const editorLatencyLabels = [
-	["coldCompletionMs", "Cold first completion"],
-	["completionMs", "Completion (warm, median)"],
-	["hoverMs", "Hover (warm, median)"],
-	["editCompletionMs", "Completion after edit (median)"],
-] as const satisfies ReadonlyArray<readonly [keyof EditorLatencyMetrics, string]>;
-
-function editorLatencyRows(
-	base: EditorLatencyMetrics | null,
-	head: EditorLatencyMetrics | null,
-): string[] {
-	return editorLatencyLabels.map(
-		([key, label]) =>
-			`| ${label} | ${base ? `${base[key].toFixed(1)}ms` : "n/a"} | ${head ? `${head[key].toFixed(1)}ms` : "n/a"} |`,
-	);
-}
 
 export function formatComparison(base: TypePerfReport, head: TypePerfReport): string {
-	const warns = {
-		instantiations: head.instantiations > base.instantiations * 1.1 ? " ⚠️" : "",
-		types: head.types > base.types * 1.1 ? " ⚠️" : "",
-	};
-	const ratio = (report: TypePerfReport) =>
-		report.scaling[10] && report.scaling[100]
-			? report.scaling[100].instantiations / report.scaling[10].instantiations
-			: null;
-	const baseRatio = ratio(base);
-	const headRatio = ratio(head);
-	const ratioWarning =
-		baseRatio !== null && headRatio !== null && headRatio > baseRatio * 1.1 ? " ⚠️" : "";
-	const footer =
-		base.typescriptVersion === head.typescriptVersion
-			? `TypeScript ${head.typescriptVersion} · ⚠️ marks compiler-work increases above 10%.`
-			: `⚠️ TypeScript version differs (base ${base.typescriptVersion} → head ${head.typescriptVersion}) — deltas include compiler changes, not just this PR.`;
+	if (base.typescriptVersion !== head.typescriptVersion) {
+		throw new Error(
+			`TypeScript versions differ: ${base.typescriptVersion} → ${head.typescriptVersion}`,
+		);
+	}
 	return [
-		"| Metric | Base | Head | Δ |",
-		"|---|---:|---:|---:|",
-		`| Instantiations${warns.instantiations} | ${number.format(base.instantiations)} | ${number.format(head.instantiations)} | ${delta(base.instantiations, head.instantiations)} |`,
-		`| Types${warns.types} | ${number.format(base.types)} | ${number.format(head.types)} | ${delta(base.types, head.types)} |`,
-		`| Check time (informational — noisy on shared runners) | ${base.checkTimeSeconds.toFixed(3)}s | ${head.checkTimeSeconds.toFixed(3)}s | ${delta(base.checkTimeSeconds, head.checkTimeSeconds, 3)} |`,
-		"",
-		"### Consumer scaling (synthetic app vs dist)",
-		"",
-		"| Commands | Base instantiations | Head instantiations | Δ |",
+		"| Top-level commands | Base instantiations | PR merge instantiations | Δ |",
 		"|---:|---:|---:|---:|",
 		...scalingSizes.map((size) => {
-			const baseMetrics = base.scaling[size];
-			const headMetrics = head.scaling[size];
-			if (!baseMetrics || !headMetrics) {
-				return `| ${size} | ${baseMetrics ? number.format(baseMetrics.instantiations) : "n/a"} | ${headMetrics ? number.format(headMetrics.instantiations) : "n/a"} | n/a |`;
-			}
-			const warn = headMetrics.instantiations > baseMetrics.instantiations * 1.1 ? " ⚠️" : "";
-			return `| ${size}${warn} | ${number.format(baseMetrics.instantiations)} | ${number.format(headMetrics.instantiations)} | ${delta(baseMetrics.instantiations, headMetrics.instantiations)} |`;
+			const before = base.instantiations[size];
+			const after = head.instantiations[size];
+			const warn = after > before * 1.1 ? " ⚠️" : "";
+			return `| ${size}${warn} | ${number.format(before)} | ${number.format(after)} | ${signed(after - before)} (${percentage(before, after)}) |`;
 		}),
-		// One side can be n/a on its own — an API-breaking PR compiles head's fixture
-		// only against head's dist, and head's absolute ratio is still informative.
-		`| 100/10 scaling ratio${ratioWarning} | ${baseRatio === null ? "n/a" : `${baseRatio.toFixed(2)}×`} | ${headRatio === null ? "n/a" : `${headRatio.toFixed(2)}×`} | ${baseRatio !== null && headRatio !== null ? delta(baseRatio, headRatio, 2) : "n/a"} |`,
 		"",
-		"### Editor latency (informational — LSP round-trips on a two-flag probe builder appended to the 50-command fixture, not the generated app; wall time)",
-		"",
-		"| Request | Base | Head |",
-		"|---|---:|---:|",
-		...editorLatencyRows(base.editor, head.editor),
-		"",
-		footer,
+		`TypeScript ${head.typescriptVersion} · \`--checkers 1\` · ⚠️ marks increases above the repository's advisory 10% threshold.`,
 	].join("\n");
 }
 
@@ -215,6 +135,7 @@ export function generateConsumerFixture(
 					moduleResolution: "bundler",
 					target: "esnext",
 					strict: true,
+					types: [],
 					noEmit: true,
 					skipLibCheck: true,
 				},
@@ -245,49 +166,38 @@ function parseTypePerfReport(content: string): TypePerfReport {
 	return JSON.parse(content) as TypePerfReport;
 }
 
-async function measure(outputPath: string, rootDir = "."): Promise<void> {
+function measure(outputPath: string, rootDir = "."): void {
 	const root = resolve(rootDir);
-	const tsc = join(root, "node_modules/.bin/tsc");
+	// Both trees use the harness's compiler, even when their lockfiles differ.
+	const tsc = resolve(import.meta.dir, "../node_modules/.bin/tsc");
 	const version = run([tsc, "--version"], root).replace(/^Version\s+/, "");
-	const diagnostics = run(
-		[tsc, "--noEmit", "--incremental", "false", "--extendedDiagnostics", "-p", "packages/core"],
-		root,
-	);
-	const metrics = parseExtendedDiagnostics(diagnostics, version);
-	const scaling: TypePerfReport["scaling"] = { 10: null, 50: null, 100: null };
-	let editor: EditorLatencyMetrics | null = null;
+	const instantiations: TypePerfReport["instantiations"] = { 10: 0, 100: 0, 200: 0 };
 	const fixtureRoot = mkdtempSync(join(tmpdir(), "crust-type-perf-"));
 	try {
 		for (const size of scalingSizes) {
 			const fixtureDir = join(fixtureRoot, String(size));
-			try {
-				// Fixture generation failures follow the same n/a policy as compile failures.
-				generateConsumerFixture(fixtureDir, join(root, "packages/core"), size);
-				const fixtureDiagnostics = run(
-					[tsc, "--noEmit", "--incremental", "false", "--extendedDiagnostics", "-p", fixtureDir],
-					root,
-				);
-				scaling[size] = parseExtendedDiagnostics(fixtureDiagnostics, version);
-			} catch (error) {
-				// Fixture compile failure: expected when the PR changed the public API, so
-				// head's generated fixture can't compile against base dist. Report "n/a"
-				// rather than failing a report-only job.
-				console.error(`scaling fixture (size ${size}) failed:\n${error}`);
-			}
-		}
-		try {
-			const editorFixtureDir = join(fixtureRoot, "editor");
-			generateConsumerFixture(editorFixtureDir, join(root, "packages/core"), 50);
-			editor = await measureEditorLatency(editorFixtureDir, tsc);
-		} catch (error) {
-			// Same policy as scaling fixtures: a report-only job never fails on a
-			// fixture/LSP problem, it reports "n/a".
-			console.error(`editor latency measurement failed:\n${error}`);
+			generateConsumerFixture(fixtureDir, join(root, "packages/core"), size);
+			const diagnostics = run(
+				[
+					tsc,
+					"--noEmit",
+					"--incremental",
+					"false",
+					"--checkers",
+					"1",
+					"--extendedDiagnostics",
+					"-p",
+					fixtureDir,
+				],
+				root,
+			);
+			// Failure on either tree invalidates the comparison, including API incompatibility.
+			instantiations[size] = parseExtendedDiagnostics(diagnostics);
 		}
 	} finally {
 		rmSync(fixtureRoot, { recursive: true, force: true });
 	}
-	const report: TypePerfReport = { ...metrics, scaling, editor };
+	const report: TypePerfReport = { typescriptVersion: version, instantiations };
 	mkdirSync(dirname(resolve(outputPath)), { recursive: true });
 	writeFileSync(resolve(outputPath), `${JSON.stringify(report, null, 2)}\n`);
 }
@@ -296,7 +206,7 @@ if (import.meta.main) {
 	const [mode, ...args] = process.argv.slice(2);
 	try {
 		if (mode === "measure" && args[0]) {
-			await measure(args[0], args[1]);
+			measure(args[0], args[1]);
 		} else if (mode === "compare" && args.length === 2) {
 			const reports = args.map((path) => parseTypePerfReport(readFileSync(path, "utf8")));
 			const base = reports[0];
