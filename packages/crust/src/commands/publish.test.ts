@@ -544,15 +544,23 @@ describe("publish manifest validation", () => {
 	});
 
 	it.each([
+		// The scoped key goes through as its own flag: only `--@scope:registry` beats an
+		// `.npmrc` `@scope:registry=`, which is what npm publish's publishConfig overlay does.
 		[
 			"scoped publishConfig",
 			{ "@scope:registry": "https://scoped", registry: "https://pc" },
 			"https://cli",
-			"https://scoped",
+			["--@scope:registry=https://scoped", "--registry", "https://cli"],
 		],
-		["CLI --registry", { registry: "https://pc" }, "https://cli", "https://cli"],
-		["publishConfig.registry", { registry: "https://pc" }, undefined, "https://pc"],
-		["none", { access: "public" }, undefined, undefined],
+		[
+			"scoped publishConfig only",
+			{ "@scope:registry": "https://scoped" },
+			undefined,
+			["--@scope:registry=https://scoped"],
+		],
+		["CLI --registry", { registry: "https://pc" }, "https://cli", ["--registry", "https://cli"]],
+		["publishConfig.registry", { registry: "https://pc" }, undefined, ["--registry", "https://pc"]],
+		["none", { access: "public" }, undefined, []],
 	])(
 		"resolves the lookup registry like npm publish: %s",
 		async (_label, publishConfig, cli, expected) => {
@@ -566,12 +574,25 @@ describe("publish manifest validation", () => {
 			const runNpm = mockNpm();
 			await publishStagedPackages(manifest, { stageDir: tmpDir, runNpm, registry: cli }, io);
 			const [, viewArgs] = runNpm.mock.calls[0]!;
-			expect(viewArgs.slice(4)).toEqual(expected ? ["--registry", expected] : []);
+			expect(viewArgs.slice(4)).toEqual(expected);
 			// npm publish reads publishConfig itself; only the CLI override is forwarded.
 			const [, publishArgs] = runNpm.mock.calls.find(([, args]) => args[0] === "publish")!;
 			expect(publishArgs).toEqual(cli ? ["publish", "--registry", cli] : ["publish"]);
 		},
 	);
+
+	it("wraps a rejected publish in the same recovery summary", async () => {
+		const runNpm = mockNpm({
+			publish: (dir) => {
+				if (dir.endsWith("darwin-arm64")) throw new Error("spawn npm EAGAIN");
+				return ok;
+			},
+		});
+		await expect(publishStagedPackages(manifest, { stageDir: tmpDir, runNpm }, io)).rejects.toThrow(
+			/darwin-arm64.*before npm exited: spawn npm EAGAIN\n.*published: linux-x64\n.*skipped.*\n.*not attempted: root\n.*rerun `crust publish`/,
+		);
+		expect(publishCalls(runNpm)).toEqual([join(tmpDir, "linux-x64"), join(tmpDir, "darwin-arm64")]);
+	});
 
 	it("resumes after a failed run without republishing what already went up", async () => {
 		const failing = mockNpm({

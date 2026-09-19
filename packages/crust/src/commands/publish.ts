@@ -336,22 +336,24 @@ function registryValue(publishConfig: JsonObject | undefined, key: string): stri
 	return isNonemptyString(value) ? value : undefined;
 }
 
-// `npm view` reads only flat CLI/npmrc options, while `npm publish` flattens the
-// package's publishConfig into its options with CLI flags winning
-// (npm/lib/commands/publish.js #getManifest) and npm-registry-fetch's pickRegistry
-// prefers `<@scope>:registry` over `registry`. Mirror that here so the existence
-// check hits the same registry the upload would.
-function resolveViewRegistry(
+// `npm view` reads only flat CLI/npmrc options, while `npm publish` overlays the
+// package's publishConfig onto them, dropping keys also given as CLI flags
+// (npm/lib/commands/publish.js #getManifest); npm-registry-fetch's pickRegistry
+// then prefers `<@scope>:registry` over `registry`. Replay that overlay as CLI
+// flags so the lookup hits the same registry the upload would, including when
+// .npmrc carries its own `<@scope>:registry` that only the scoped flag can beat.
+function viewRegistryArgs(
 	name: string,
 	publishConfig: JsonObject | undefined,
 	cliRegistry: string | undefined,
-): string | undefined {
+): string[] {
+	const args: string[] = [];
 	const scope = name.startsWith("@") ? name.slice(0, name.indexOf("/")) : undefined;
-	return (
-		(scope ? registryValue(publishConfig, `${scope}:registry`) : undefined) ??
-		cliRegistry ??
-		registryValue(publishConfig, "registry")
-	);
+	const scoped = scope ? registryValue(publishConfig, `${scope}:registry`) : undefined;
+	if (scoped) args.push(`--${scope}:registry=${scoped}`);
+	const registry = cliRegistry ?? registryValue(publishConfig, "registry");
+	if (registry) args.push("--registry", registry);
+	return args;
 }
 
 function parseJson(text: string): JsonValue | undefined {
@@ -410,14 +412,13 @@ export async function publishStagedPackages(
 	const skipped: string[] = [];
 	for (const pkg of staged) {
 		const spec = `${pkg.packageJson.name}@${version}`;
-		const registry = resolveViewRegistry(
-			pkg.packageJson.name,
-			pkg.packageJson.publishConfig,
-			options.registry,
-		);
-		const args = ["view", spec, "version", "--json"];
-		if (registry) args.push("--registry", registry);
-		const result = await runNpm(pkg.path, args);
+		const result = await runNpm(pkg.path, [
+			"view",
+			spec,
+			"version",
+			"--json",
+			...viewRegistryArgs(pkg.packageJson.name, pkg.packageJson.publishConfig, options.registry),
+		]);
 		let published: boolean;
 		try {
 			published = isVersionPublished(result, spec, version);
@@ -444,21 +445,33 @@ export async function publishStagedPackages(
 	const published: string[] = [];
 	for (const [index, pkg] of missing.entries()) {
 		io.stdout(`\nPublishing ${bold(pkg.dir)} from ${dim(pkg.path)}...`);
-		const result = await runNpm(pkg.path, command.slice(1), {
-			// npm needs the terminal for interactive browser/OTP authentication; the
-			// version lookup above always collects because its stdout is parsed.
-			stdio: process.stdin.isTTY ? "inherit" : "collect",
-		});
-		printProcessOutput(result, io);
-		if (result.exitCode !== 0) {
+		const failure = (reason: string, cause?: unknown): Error => {
 			const notAttempted = missing.slice(index + 1).map((rest) => rest.dir);
-			throw new Error(
-				`npm publish failed for ${pkg.dir} (${pkg.path}) with exit code ${result.exitCode ?? 1}\n` +
+			return new Error(
+				`npm publish failed for ${pkg.dir} (${pkg.path}) ${reason}\n` +
 					`  published: ${listDirs(published)}\n` +
 					`  skipped (already published): ${listDirs(skipped)}\n` +
 					`  not attempted: ${listDirs(notAttempted)}\n` +
 					"  Fix the cause and rerun `crust publish`; already-published versions are skipped.",
+				{ cause },
 			);
+		};
+		let result: RunProcessResult;
+		try {
+			result = await runNpm(pkg.path, command.slice(1), {
+				// npm needs the terminal for interactive browser/OTP authentication; the
+				// version lookup above always collects because its stdout is parsed.
+				stdio: process.stdin.isTTY ? "inherit" : "collect",
+			});
+		} catch (error) {
+			throw failure(
+				`before npm exited: ${error instanceof Error ? error.message : String(error)}`,
+				error,
+			);
+		}
+		printProcessOutput(result, io);
+		if (result.exitCode !== 0) {
+			throw failure(`with exit code ${result.exitCode ?? 1}`);
 		}
 		published.push(pkg.dir);
 	}

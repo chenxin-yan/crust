@@ -44,7 +44,7 @@ crust publish --dry-run
 #   → linux-x64: npm publish
 ```
 
-Publishing reads `.crust/manifest.json`, verifies the staged directories and metadata, checks each staged `name@version` on the target registry with `npm view`, and runs `npm publish` in each staged directory whose version is missing, so `npm` must be on `PATH`. Versions that already exist are skipped and never re-tagged, which makes a rerun after a failed publish resume; the lookup is not a permission check, and `--dry-run` stays offline. npm is used instead of `bun publish` because it supports [trusted publishing](https://docs.npmjs.com/trusted-publishers) from CI; `bun publish` does not. Without a prior `crust build`, it fails with `Run crust build before crust publish`.
+Publishing reads `.crust/manifest.json`, verifies the staged directories and metadata, checks each staged `name@version` on the target registry with `npm view`, and runs `npm publish` in each staged directory whose version is missing, so `npm` must be on `PATH`. Versions that already exist are skipped and never re-tagged, which makes a rerun after a failed publish resume; the lookup is not a permission check (trusted publishing supplies no read credential), and `--dry-run` stays offline. npm is used instead of `bun publish` because it supports [trusted publishing](https://docs.npmjs.com/trusted-publishers) from CI; `bun publish` does not. Without a prior `crust build`, it fails with `Run crust build before crust publish`.
 
 When stdin is a TTY, npm inherits stdin, stdout, and stderr so its interactive browser/OTP authentication can complete. Non-interactive runs capture and forward npm output after each package finishes.
 
