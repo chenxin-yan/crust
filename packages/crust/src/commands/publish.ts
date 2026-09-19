@@ -285,7 +285,11 @@ async function defaultSpawnPublish(
 	if (!npm) {
 		throw new Error(`${command[0]} was not found on PATH; it is required to publish.`);
 	}
-	const { exitCode, stdout, stderr } = await runProcess(npm, command.slice(1), { cwd: dir });
+	const { exitCode, stdout, stderr } = await runProcess(npm, command.slice(1), {
+		cwd: dir,
+		// npm needs the terminal for interactive browser/OTP authentication.
+		stdio: process.stdin.isTTY ? "inherit" : "collect",
+	});
 	if (stdout) io.stdout(stdout.replace(/\r?\n$/, ""));
 	if (stderr) io.stderr(stderr.replace(/\r?\n$/, ""));
 
