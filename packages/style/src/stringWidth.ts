@@ -1,11 +1,24 @@
-import { stripVTControlCharacters } from "node:util";
-
 const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 const zeroWidth = /[\p{Cc}\p{Cf}\p{Mn}\p{Me}]/u;
 // Wide iff rendered with emoji presentation: default-emoji code points, or
 // any Emoji code point forced emoji by VS16 (covers keycaps like "1\uFE0F\u20E3").
 // Text-presentation pictographs (©, ☺) stay narrow.
 const emoji = /\p{Emoji_Presentation}|\p{Emoji}\uFE0F/u;
+// Escape sequences measure zero columns the way Bun's recognizer treats them,
+// which node:util.stripVTControlCharacters does not: CSI runs through its final
+// byte (colon SGR parameters included) or to the end of the string; OSC runs to
+// BEL/ST, DCS/SOS/PM/APC to ST only, each else to the end of the string; nF and
+// two-byte ESC sequences drop their trailing byte(s). CAN, SUB and C1 ST abort a sequence.
+const ansi = new RegExp(
+	[
+		String.raw`(?:\x1b\[|\x9b)[^\x1b\x18\x1a\x9c\x40-\x7e]*[\x40-\x7e\x18\x1a\x9c]?`,
+		String.raw`(?:\x1b\]|\x9d)[^\x07\x1b\x18\x1a\x9c]*(?:\x07|\x1b\\|[\x18\x1a\x9c])?`,
+		String.raw`(?:\x1b[PX^_]|[\x90\x98\x9e\x9f])[^\x1b\x18\x1a\x9c]*(?:\x1b\\|[\x18\x1a\x9c])?`,
+		String.raw`\x1b[\x20-\x2f][^\x1b]?`,
+		String.raw`\x1b[\x30-\x7e]?`,
+	].join("|"),
+	"g",
+);
 
 function isFullWidth(code: number): boolean {
 	return (
@@ -30,18 +43,38 @@ function isFullWidth(code: number): boolean {
 	);
 }
 
-/** @internal JavaScript fallback for runtimes without a native width implementation. */
+function isZeroWidth(code: number): boolean {
+	return (
+		zeroWidth.test(String.fromCodePoint(code)) ||
+		// Conjoining jamo medials/finals (and fillers) merge into the syllable before them.
+		(code >= 0x1160 && code <= 0x11ff) ||
+		(code >= 0xd7b0 && code <= 0xd7ff)
+	);
+}
+
+/**
+ * @internal JavaScript fallback for runtimes without a native width implementation.
+ * Matches `Bun.stringWidth` for common terminal text (ASCII, ANSI, CJK, emoji,
+ * combining marks); exotic clusters may measure differently.
+ */
 export function stringWidthJs(input: string): number {
 	let width = 0;
-	for (const { segment } of segmenter.segment(stripVTControlCharacters(input))) {
+	for (const { segment } of segmenter.segment(input.replace(ansi, ""))) {
 		if (emoji.test(segment)) {
-			width += 2;
+			// A lone regional indicator (no flag pair) renders in one column.
+			const code = segment.codePointAt(0)!;
+			width += segment.length === 2 && code >= 0x1f1e6 && code <= 0x1f1ff ? 1 : 2;
 			continue;
 		}
-		// Width of the grapheme's base code point only — spacing combining marks
-		// (Mc) and conjoined jamo grouped into the cluster don't add columns.
-		const code = segment.codePointAt(0)!;
-		if (!zeroWidth.test(String.fromCodePoint(code))) width += isFullWidth(code) ? 2 : 1;
+		// Width of the cluster's base: its first code point that is not a control,
+		// format or nonspacing mark, so a prepended mark ("\u0600a") keeps the
+		// base's column while spacing marks (Mc) and conjoined jamo add none.
+		for (const character of segment) {
+			const code = character.codePointAt(0)!;
+			if (isZeroWidth(code)) continue;
+			width += isFullWidth(code) ? 2 : 1;
+			break;
+		}
 	}
 	return width;
 }
