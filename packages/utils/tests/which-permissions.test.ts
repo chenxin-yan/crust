@@ -4,14 +4,25 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const namespace = ["unshare", "--user", "--map-auto", "--map-root-user"];
-// Different-owner fixtures need subordinate UID mappings, not host root privileges.
-const canMapUsers =
+// Starting a namespace alone does not prove its ownership/capability operations are allowed.
+const canSetUpPermissions =
 	process.platform === "linux" &&
 	Bun.which("unshare") !== null &&
 	Bun.which("setpriv") !== null &&
-	Bun.spawnSync([...namespace, "true"], { stdout: "ignore", stderr: "ignore" }).exitCode === 0;
+	Bun.spawnSync(
+		[
+			...namespace,
+			"sh",
+			"-c",
+			`dir=$(mktemp -d) || exit 1
+			trap 'rm -rf "$dir"' EXIT
+			touch "$dir/probe" && chown 1:1 "$dir/probe" &&
+			setpriv --bounding-set=-dac_override,-dac_read_search true`,
+		],
+		{ stdout: "ignore", stderr: "ignore" },
+	).exitCode === 0;
 
-it.skipIf(!canMapUsers)(
+it.skipIf(!canSetUpPermissions)(
 	"resolves PATH using the caller's execute permissions, not the owner's",
 	() => {
 		const root = mkdtempSync(join(tmpdir(), "crust-which-permissions-"));
