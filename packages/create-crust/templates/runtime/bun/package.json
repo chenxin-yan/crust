@@ -2,6 +2,7 @@
 	"$schema": "./node_modules/@crustjs/crust/schema/package.json",
 	"name": "{{name}}",
 	"version": "0.0.0",
+	"private": true,
 	"type": "module",
 	"description": "A CLI built with Crust",
 	"crust": {

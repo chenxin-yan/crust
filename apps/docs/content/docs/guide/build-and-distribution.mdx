@@ -236,7 +236,7 @@ Bun executables built by `crust build` autoload `.env` from the directory they s
 
 ## Set up `package.json`
 
-These are the files `create-crust --runtime bun|node|deno` scaffolds, with `{{name}}` and the version placeholders filled in. Every runtime shares the same flow: `build` stages `.crust/`, `start` runs `.crust/root/bin/<command>.js`, and `release` publishes with `crust publish`. `bin` maps the command name to its source entry, which `crust build` compiles and `npm link` runs directly through the entry's shebang. The staged packages regenerate `bin` and `files` and omit dependency fields.
+These are the files `create-crust --runtime bun|node|deno` scaffolds, with `{{name}}` and the version placeholders filled in. Every runtime shares the same flow: `build` stages `.crust/`, `start` runs `.crust/root/bin/<command>.js`, and `release` publishes with `crust publish`. `bin` maps the command name to its source entry, which `crust build` compiles and `npm link` runs directly through the entry's shebang. The staged packages regenerate `bin` and `files` and omit dependency fields. The project itself is `"private": true`: only the staged packages are published, so a stray `npm publish` in the project directory is refused instead of uploading the source (`private` is not copied into the staged packages, and `npm link` ignores it).
 
 <Tabs items={["Bun", "Node", "Deno"]}>
 <Tab value="Bun">

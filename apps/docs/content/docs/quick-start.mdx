@@ -123,6 +123,7 @@ npm install -D @crustjs/crust
 
 ```json title="package.json"
 {
+  "private": true,
   "type": "module",
   "crust": { "runtime": "bun" },
   "bin": { "my-cli": "src/cli.ts" },
@@ -135,7 +136,7 @@ npm install -D @crustjs/crust
 }
 ```
 
-This is the Bun shape; `dev` runs the TypeScript source with Bun regardless of which package manager installed the dependencies. `bin` names the command and points at its source entry: `crust build` compiles it into `.crust/`, and `npm link` exposes the command locally by running the source, so start `src/cli.ts` with `#!/usr/bin/env bun`. Node and Deno projects set `"crust": { "runtime": "node" }` or `"deno"` and use their own `dev` and `start` values; see [Set up `package.json`](/docs/guide/build-and-distribution#set-up-packagejson).
+This is the Bun shape; `dev` runs the TypeScript source with Bun regardless of which package manager installed the dependencies. `bin` names the command and points at its source entry: `crust build` compiles it into `.crust/`, and `npm link` exposes the command locally by running the source, so start `src/cli.ts` with `#!/usr/bin/env bun`. `private` keeps a stray `npm publish` from uploading the source; `crust publish` ships the staged packages, which are not private. Node and Deno projects set `"crust": { "runtime": "node" }` or `"deno"` and use their own `dev` and `start` values; see [Set up `package.json`](/docs/guide/build-and-distribution#set-up-packagejson).
 
 </Step>
 <Step>

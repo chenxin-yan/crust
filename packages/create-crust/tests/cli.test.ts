@@ -86,6 +86,9 @@ describe("create-crust CLI", () => {
 			$schema: "./node_modules/@crustjs/crust/schema/package.json",
 			name: "my-cli",
 			version: "0.0.0",
+			// The project is the build input, not the npm package: `crust publish`
+			// publishes `.crust/`, so a stray `npm publish` here must be refused.
+			private: true,
 			type: "module",
 			crust: { runtime: "bun" },
 			bin: { "my-cli": "src/cli.ts" },
@@ -182,6 +185,7 @@ describe("create-crust CLI", () => {
 		const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf-8"));
 		expect(pkg).toMatchObject({
 			$schema: "./node_modules/@crustjs/crust/schema/package.json",
+			private: true,
 			crust: { runtime: "node" },
 			bin: { "node-cli": "src/cli.ts" },
 			scripts: {
@@ -231,6 +235,7 @@ describe("create-crust CLI", () => {
 		const pkg = JSON.parse(readFileSync(join(projectDir, "package.json"), "utf-8"));
 		expect(pkg).toMatchObject({
 			$schema: "./node_modules/@crustjs/crust/schema/package.json",
+			private: true,
 			crust: { runtime: "deno" },
 			bin: { "deno-cli": "src/cli.ts" },
 			scripts: {
