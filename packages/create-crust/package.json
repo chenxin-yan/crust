@@ -37,7 +37,7 @@
 		"create-crust": "src/index.ts"
 	},
 	"scripts": {
-		"build": "bun scripts/build.ts",
+		"build": "crust build",
 		"dev": "bun run build && bun src/index.ts",
 		"release": "crust publish",
 		"check:types": "tsc --noEmit",
