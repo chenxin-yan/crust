@@ -5,7 +5,12 @@ import { defineCommand, type InvocationIO } from "@crustjs/core";
 import { bold, cyan, dim, green } from "@crustjs/style";
 import { isJsonObject, type JsonObject, type JsonValue } from "@crustjs/utils/json";
 import { isWithin } from "@crustjs/utils/path";
-import { runProcess, which } from "@crustjs/utils/process";
+import {
+	runProcess,
+	type RunProcessOptions,
+	type RunProcessResult,
+	which,
+} from "@crustjs/utils/process";
 
 import { CRUST_DIR, validatePackageIdentity } from "../utils/distribute.ts";
 
@@ -38,6 +43,18 @@ function isStringArray(value: JsonValue | undefined): value is string[] {
 
 function isStringRecord(value: JsonValue | undefined): value is Record<string, string> {
 	return isRecord(value) && Object.values(value).every(isNonemptyString);
+}
+
+function isRegistryKey(key: string): boolean {
+	return key === "registry" || (key.startsWith("@") && key.endsWith(":registry"));
+}
+
+/** Only registry keys are interpreted; access, provenance, tag, ... pass through to npm. */
+function isPublishConfig(value: JsonValue | undefined): value is JsonObject {
+	return (
+		isRecord(value) &&
+		Object.entries(value).every(([key, entry]) => !isRegistryKey(key) || isNonemptyString(entry))
+	);
 }
 
 function assertPublishManifest(value: JsonValue): asserts value is PublishManifest {
@@ -75,14 +92,29 @@ type PublishPackageJson = {
 	cpu?: string[];
 	libc?: string[];
 	optionalDependencies?: Record<string, string>;
+	publishConfig?: JsonObject;
 };
+
+/** One validated staged package in publish order. */
+type StagedPackage = {
+	dir: string;
+	path: string;
+	packageJson: PublishPackageJson;
+};
+
+type RunNpm = (
+	dir: string,
+	args: string[],
+	options?: Pick<RunProcessOptions, "stdio">,
+) => Promise<RunProcessResult>;
 
 type PublishOptions = {
 	stageDir: string;
 	tag?: string;
 	registry?: string;
 	dryRun?: boolean;
-	spawnPublish?: (dir: string, command: string[], io: InvocationIO) => Promise<number>;
+	/** Runs npm with `args` in `dir`; used for both `npm view` and `npm publish`. */
+	runNpm?: RunNpm;
 };
 
 export function readPublishManifest(stageDir: string): PublishManifest {
@@ -114,10 +146,11 @@ function readStagedPackageJson(stageDir: string, dir: string): PublishPackageJso
 	if (
 		(value.bin !== undefined && !isStringRecord(value.bin)) ||
 		(value.optionalDependencies !== undefined && !isStringRecord(value.optionalDependencies)) ||
+		(value.publishConfig !== undefined && !isPublishConfig(value.publishConfig)) ||
 		[value.os, value.cpu, value.libc].some((field) => field !== undefined && !isStringArray(field))
 	) {
 		throw new Error(
-			`Invalid staged package metadata in ${packageJsonPath}: expected string bin/dependency maps and os/cpu/libc arrays.`,
+			`Invalid staged package metadata in ${packageJsonPath}: expected string bin/dependency maps, os/cpu/libc arrays, and string publishConfig registry values.`,
 		);
 	}
 	return value;
@@ -134,7 +167,10 @@ function assertUniqueDirs(dirs: string[]): void {
 	}
 }
 
-export function validatePublishManifest(stageDir: string, manifest: PublishManifest): string[] {
+export function validatePublishManifest(
+	stageDir: string,
+	manifest: PublishManifest,
+): StagedPackage[] {
 	assertPublishManifest(manifest);
 	// Resolve the explicitly selected root once; descendant links may not escape it.
 	stageDir = realpathSync(stageDir);
@@ -202,6 +238,7 @@ export function validatePublishManifest(stageDir: string, manifest: PublishManif
 
 	const optionalDeps = rootPackageJson.optionalDependencies ?? {};
 	const names = new Set([rootPackageJson.name]);
+	const stagedPackageJsons = new Map([[manifest.root.dir, rootPackageJson]]);
 
 	for (const pkg of manifest.packages) {
 		if (names.has(pkg.name)) {
@@ -209,6 +246,7 @@ export function validatePublishManifest(stageDir: string, manifest: PublishManif
 		}
 		names.add(pkg.name);
 		const stagedPackageJson = readStagedPackageJson(stageDir, pkg.dir);
+		stagedPackageJsons.set(pkg.dir, stagedPackageJson);
 
 		if (stagedPackageJson.name !== pkg.name) {
 			throw new Error(`Staged package name mismatch for ${pkg.dir}.`);
@@ -255,7 +293,11 @@ export function validatePublishManifest(stageDir: string, manifest: PublishManif
 			);
 		}
 	}
-	return manifest.publishOrder.map((dir) => canonicalDirs.get(dir)!);
+	return manifest.publishOrder.map((dir) => ({
+		dir,
+		path: canonicalDirs.get(dir)!,
+		packageJson: stagedPackageJsons.get(dir)!,
+	}));
 }
 
 // npm, not `bun publish`: only npm supports trusted publishing (OIDC) from CI
@@ -276,24 +318,70 @@ export function buildPublishCommand(args: { tag?: string; registry?: string }): 
 	return command;
 }
 
-async function defaultSpawnPublish(
-	dir: string,
-	command: string[],
-	io: InvocationIO,
-): Promise<number> {
-	const npm = which(command[0]!);
+function defaultRunNpm(): RunNpm {
+	const npm = which("npm");
 	if (!npm) {
-		throw new Error(`${command[0]} was not found on PATH; it is required to publish.`);
+		throw new Error("npm was not found on PATH; it is required to publish.");
 	}
-	const { exitCode, stdout, stderr } = await runProcess(npm, command.slice(1), {
-		cwd: dir,
-		// npm needs the terminal for interactive browser/OTP authentication.
-		stdio: process.stdin.isTTY ? "inherit" : "collect",
-	});
+	return (dir, args, options) => runProcess(npm, args, { cwd: dir, ...options });
+}
+
+function printProcessOutput({ stdout, stderr }: RunProcessResult, io: InvocationIO): void {
 	if (stdout) io.stdout(stdout.replace(/\r?\n$/, ""));
 	if (stderr) io.stderr(stderr.replace(/\r?\n$/, ""));
+}
 
-	return exitCode ?? 1;
+function registryValue(publishConfig: JsonObject | undefined, key: string): string | undefined {
+	const value = publishConfig?.[key];
+	return isNonemptyString(value) ? value : undefined;
+}
+
+// `npm view` reads only flat CLI/npmrc options, while `npm publish` flattens the
+// package's publishConfig into its options with CLI flags winning
+// (npm/lib/commands/publish.js #getManifest) and npm-registry-fetch's pickRegistry
+// prefers `<@scope>:registry` over `registry`. Mirror that here so the existence
+// check hits the same registry the upload would.
+function resolveViewRegistry(
+	name: string,
+	publishConfig: JsonObject | undefined,
+	cliRegistry: string | undefined,
+): string | undefined {
+	const scope = name.startsWith("@") ? name.slice(0, name.indexOf("/")) : undefined;
+	return (
+		(scope ? registryValue(publishConfig, `${scope}:registry`) : undefined) ??
+		cliRegistry ??
+		registryValue(publishConfig, "registry")
+	);
+}
+
+function parseJson(text: string): JsonValue | undefined {
+	try {
+		return JSON.parse(text.trim());
+	} catch {
+		return undefined;
+	}
+}
+
+/** Interprets `npm view <name>@<version> version --json`; anything but a clear yes/no aborts. */
+function isVersionPublished(result: RunProcessResult, spec: string, version: string): boolean {
+	const body = parseJson(result.stdout);
+	if (result.exitCode === 0 && body === version) {
+		return true;
+	}
+	const error = isRecord(body) && isRecord(body.error) ? body.error : undefined;
+	if (result.exitCode !== 0 && error?.code === "E404") {
+		return false;
+	}
+	const summary = error
+		? `${String(error.code)}: ${String(error.summary ?? "")}`.trim()
+		: result.stderr.trim() || result.stdout.trim() || "unrecognized npm view output";
+	throw new Error(
+		`Could not check whether ${spec} is already published (npm view exited ${result.exitCode ?? 1}): ${summary}\n  Nothing was published.`,
+	);
+}
+
+function listDirs(dirs: string[]): string {
+	return dirs.length > 0 ? dirs.join(", ") : "none";
 }
 
 export async function publishStagedPackages(
@@ -301,7 +389,7 @@ export async function publishStagedPackages(
 	options: PublishOptions,
 	io: InvocationIO,
 ): Promise<void> {
-	const publishDirs = validatePublishManifest(options.stageDir, manifest);
+	const staged = validatePublishManifest(options.stageDir, manifest);
 
 	const command = buildPublishCommand({ tag: options.tag, registry: options.registry });
 	io.stdout(`${dim("Publish order:")} ${manifest.publishOrder.join(" -> ")}`);
@@ -310,22 +398,73 @@ export async function publishStagedPackages(
 	}
 
 	if (options.dryRun) {
+		io.stdout(dim("Versions already on the registry are detected and skipped at publish time."));
 		return;
 	}
 
-	const spawnPublish = options.spawnPublish ?? defaultSpawnPublish;
+	const runNpm = options.runNpm ?? defaultRunNpm();
+	const version = manifest.version;
 
-	for (const [index, relativeDir] of manifest.publishOrder.entries()) {
-		const dir = publishDirs[index]!;
-		io.stdout(`\nPublishing ${bold(relativeDir)} from ${dim(dir)}...`);
-		const exitCode = await spawnPublish(dir, command, io);
-		if (exitCode !== 0) {
-			throw new Error(`npm publish failed for ${relativeDir} (${dir}) with exit code ${exitCode}`);
+	io.stdout(`\n${dim(`Checking ${version} on the registry:`)}`);
+	const missing: StagedPackage[] = [];
+	const skipped: string[] = [];
+	for (const pkg of staged) {
+		const spec = `${pkg.packageJson.name}@${version}`;
+		const registry = resolveViewRegistry(
+			pkg.packageJson.name,
+			pkg.packageJson.publishConfig,
+			options.registry,
+		);
+		const args = ["view", spec, "version", "--json"];
+		if (registry) args.push("--registry", registry);
+		const result = await runNpm(pkg.path, args);
+		let published: boolean;
+		try {
+			published = isVersionPublished(result, spec, version);
+		} catch (error) {
+			printProcessOutput(result, io);
+			throw error;
+		}
+		if (published) {
+			skipped.push(pkg.dir);
+			io.stdout(`  ${cyan("→")} ${pkg.dir}: ${dim(`skip: ${version} already published`)}`);
+		} else {
+			missing.push(pkg);
+			io.stdout(`  ${cyan("→")} ${pkg.dir}: publish`);
 		}
 	}
 
+	if (missing.length === 0) {
+		io.stdout(
+			`\n${green("✓")} All ${bold(String(staged.length))} staged package(s) are already published as ${version}.`,
+		);
+		return;
+	}
+
+	const published: string[] = [];
+	for (const [index, pkg] of missing.entries()) {
+		io.stdout(`\nPublishing ${bold(pkg.dir)} from ${dim(pkg.path)}...`);
+		const result = await runNpm(pkg.path, command.slice(1), {
+			// npm needs the terminal for interactive browser/OTP authentication; the
+			// version lookup above always collects because its stdout is parsed.
+			stdio: process.stdin.isTTY ? "inherit" : "collect",
+		});
+		printProcessOutput(result, io);
+		if (result.exitCode !== 0) {
+			const notAttempted = missing.slice(index + 1).map((rest) => rest.dir);
+			throw new Error(
+				`npm publish failed for ${pkg.dir} (${pkg.path}) with exit code ${result.exitCode ?? 1}\n` +
+					`  published: ${listDirs(published)}\n` +
+					`  skipped (already published): ${listDirs(skipped)}\n` +
+					`  not attempted: ${listDirs(notAttempted)}\n` +
+					"  Fix the cause and rerun `crust publish`; already-published versions are skipped.",
+			);
+		}
+		published.push(pkg.dir);
+	}
+
 	io.stdout(
-		`\n${green("✓")} Published ${bold(String(manifest.publishOrder.length))} staged package(s).`,
+		`\n${green("✓")} Published ${bold(String(published.length))} staged package(s), skipped ${bold(String(skipped.length))} already published.`,
 	);
 }
 

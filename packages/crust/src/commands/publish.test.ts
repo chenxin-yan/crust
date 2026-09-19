@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import * as processUtils from "@crustjs/utils/process";
+import type { RunProcessResult } from "@crustjs/utils/process";
 
 import {
 	buildPublishCommand,
@@ -14,6 +15,43 @@ import {
 import type { DistributionManifest } from "../utils/distribute.ts";
 
 const io = { stdout: () => {}, stderr: () => {} };
+
+const ok: RunProcessResult = { exitCode: 0, stdout: "", stderr: "" };
+
+/** Real `npm view <spec> version --json` shapes (npm 11): exists => quoted version, exit 0. */
+function viewExists(spec: string): RunProcessResult {
+	return { exitCode: 0, stdout: `"${spec.slice(spec.lastIndexOf("@") + 1)}"\n`, stderr: "" };
+}
+
+function viewError(code: string, spec: string): RunProcessResult {
+	const version = spec.slice(spec.lastIndexOf("@") + 1);
+	const summary =
+		code === "E404" ? `No match found for version ${version}` : `${code} while fetching ${spec}`;
+	return {
+		exitCode: 1,
+		stdout: `{\n  "error": {\n    "code": "${code}",\n    "summary": "${summary}",\n    "detail": "..."\n  }\n}\n`,
+		stderr: `npm error code ${code}`,
+	};
+}
+
+type NpmHandlers = {
+	view?: (spec: string, dir: string, args: string[]) => RunProcessResult;
+	publish?: (dir: string, args: string[]) => RunProcessResult;
+};
+
+/** Default: every version is missing (E404) and every publish succeeds. */
+function mockNpm(handlers: NpmHandlers = {}) {
+	return mock(async (dir: string, args: string[]): Promise<RunProcessResult> => {
+		if (args[0] === "view") {
+			return (handlers.view ?? ((spec) => viewError("E404", spec)))(args[1]!, dir, args);
+		}
+		return (handlers.publish ?? (() => ok))(dir, args);
+	});
+}
+
+function publishCalls(runNpm: ReturnType<typeof mockNpm>): string[] {
+	return runNpm.mock.calls.filter(([, args]) => args[0] === "publish").map(([dir]) => dir);
+}
 
 function writeStageFixture(tmpDir: string, manifest: DistributionManifest) {
 	mkdirSync(join(tmpDir, "root", "bin"), { recursive: true });
@@ -126,19 +164,9 @@ describe("publish manifest validation", () => {
 		expect(loaded).toMatchObject({ packages: [], publishOrder: ["root"] });
 		expect(() => validatePublishManifest(nodeDir, loaded)).not.toThrow();
 
-		const published: string[] = [];
-		await publishStagedPackages(
-			loaded,
-			{
-				stageDir: nodeDir,
-				spawnPublish: async (dir) => {
-					published.push(dir);
-					return 0;
-				},
-			},
-			io,
-		);
-		expect(published).toEqual([join(nodeDir, "root")]);
+		const runNpm = mockNpm();
+		await publishStagedPackages(loaded, { stageDir: nodeDir, runNpm }, io);
+		expect(publishCalls(runNpm)).toEqual([join(nodeDir, "root")]);
 	});
 
 	it("rejects escaped and aliased directories before any publisher runs", async () => {
@@ -157,11 +185,11 @@ describe("publish manifest validation", () => {
 				join(outside, "package.json"),
 				readFileSync(join(stage, "root", "package.json")),
 			);
-			const spawnPublish = mock(async () => 0);
-			await expect(
-				publishStagedPackages(invalid, { stageDir: stage, spawnPublish }, io),
-			).rejects.toThrow(/inside|outside/);
-			expect(spawnPublish).not.toHaveBeenCalled();
+			const runNpm = mockNpm();
+			await expect(publishStagedPackages(invalid, { stageDir: stage, runNpm }, io)).rejects.toThrow(
+				/inside|outside/,
+			);
+			expect(runNpm).not.toHaveBeenCalled();
 			expect(readFileSync(join(outside, "sentinel"), "utf8")).toBe("untouched");
 			rmSync(stage, { recursive: true });
 		}
@@ -171,11 +199,11 @@ describe("publish manifest validation", () => {
 			const invalid = structuredClone(manifest);
 			invalid.packages[1]!.dir = alias;
 			invalid.publishOrder[1] = alias;
-			const spawnPublish = mock(async () => 0);
-			await expect(
-				publishStagedPackages(invalid, { stageDir: stage, spawnPublish }, io),
-			).rejects.toThrow(/duplicate staged directories/);
-			expect(spawnPublish).not.toHaveBeenCalled();
+			const runNpm = mockNpm();
+			await expect(publishStagedPackages(invalid, { stageDir: stage, runNpm }, io)).rejects.toThrow(
+				/duplicate staged directories/,
+			);
+			expect(runNpm).not.toHaveBeenCalled();
 			rmSync(stage, { recursive: true });
 		}
 	});
@@ -187,11 +215,11 @@ describe("publish manifest validation", () => {
 			invalid.packages[1]!.name =
 				duplicate === "root" ? invalid.root.name : invalid.packages[0]!.name;
 			writeStageFixture(tmpDir, invalid);
-			const spawnPublish = mock(async () => 0);
+			const runNpm = mockNpm();
 			await expect(
-				publishStagedPackages(invalid, { stageDir: tmpDir, spawnPublish }, io),
+				publishStagedPackages(invalid, { stageDir: tmpDir, runNpm }, io),
 			).rejects.toThrow(/duplicate package names/);
-			expect(spawnPublish).not.toHaveBeenCalled();
+			expect(runNpm).not.toHaveBeenCalled();
 		},
 	);
 
@@ -204,30 +232,25 @@ describe("publish manifest validation", () => {
 		writeFileSync(outside, sentinel);
 		rmSync(rootPath);
 		symlinkSync(outside, rootPath, "file");
-		const spawnPublish = mock(async () => 0);
-		await expect(
-			publishStagedPackages(manifest, { stageDir: stage, spawnPublish }, io),
-		).rejects.toThrow(/package.json resolves outside/);
-		expect(spawnPublish).not.toHaveBeenCalled();
+		const runNpm = mockNpm();
+		await expect(publishStagedPackages(manifest, { stageDir: stage, runNpm }, io)).rejects.toThrow(
+			/package.json resolves outside/,
+		);
+		expect(runNpm).not.toHaveBeenCalled();
 		expect(readFileSync(outside, "utf8")).toBe(sentinel);
 	});
 
 	it("uses canonical package paths beneath an explicitly symlinked stage root", async () => {
 		const linked = join(tmpDir, "linked");
 		symlinkSync(tmpDir, linked, "dir");
-		const published: string[] = [];
-		await publishStagedPackages(
-			manifest,
-			{
-				stageDir: linked,
-				spawnPublish: async (dir) => {
-					published.push(dir);
-					return 0;
-				},
-			},
-			io,
-		);
-		expect(published).toEqual(manifest.publishOrder.map((dir) => join(tmpDir, dir)));
+		const runNpm = mockNpm();
+		await publishStagedPackages(manifest, { stageDir: linked, runNpm }, io);
+		expect(publishCalls(runNpm)).toEqual(manifest.publishOrder.map((dir) => join(tmpDir, dir)));
+		// The existence check runs in the same canonical directory so .npmrc resolution matches.
+		expect(runNpm.mock.calls[0]).toEqual([
+			join(tmpDir, "linux-x64"),
+			["view", "@scope/demo-linux-x64@1.2.3", "version", "--json"],
+		]);
 	});
 
 	it("narrows persisted manifest and package fields before publishing", async () => {
@@ -244,16 +267,12 @@ describe("publish manifest validation", () => {
 		];
 		for (const invalid of invalidManifests) {
 			writeFileSync(join(tmpDir, "manifest.json"), JSON.stringify(invalid));
-			const spawnPublish = mock(async () => 0);
+			const runNpm = mockNpm();
 			await expect(
 				(async () =>
-					publishStagedPackages(
-						readPublishManifest(tmpDir),
-						{ stageDir: tmpDir, spawnPublish },
-						io,
-					))(),
+					publishStagedPackages(readPublishManifest(tmpDir), { stageDir: tmpDir, runNpm }, io))(),
 			).rejects.toThrow(/manifest.json/);
-			expect(spawnPublish).not.toHaveBeenCalled();
+			expect(runNpm).not.toHaveBeenCalled();
 		}
 		const rootPath = join(tmpDir, "root", "package.json");
 		const root = JSON.parse(readFileSync(rootPath, "utf8"));
@@ -264,13 +283,16 @@ describe("publish manifest validation", () => {
 			{ ...root, version: " " },
 			{ ...root, bin: [] },
 			{ ...root, optionalDependencies: [] },
+			{ ...root, publishConfig: [] },
+			{ ...root, publishConfig: { registry: 42 } },
+			{ ...root, publishConfig: { "@scope:registry": " " } },
 		]) {
 			writeFileSync(rootPath, JSON.stringify(invalid));
-			const spawnPublish = mock(async () => 0);
+			const runNpm = mockNpm();
 			await expect(
-				publishStagedPackages(manifest, { stageDir: tmpDir, spawnPublish }, io),
+				publishStagedPackages(manifest, { stageDir: tmpDir, runNpm }, io),
 			).rejects.toThrow(/package|field/);
-			expect(spawnPublish).not.toHaveBeenCalled();
+			expect(runNpm).not.toHaveBeenCalled();
 		}
 	});
 
@@ -282,11 +304,11 @@ describe("publish manifest validation", () => {
 
 		expect(() => validatePublishManifest(tmpDir, invalid)).toThrow(/root package last/);
 		// Validation always runs before any npm publish is spawned.
-		const spawnPublish = mock(async () => 0);
-		await expect(
-			publishStagedPackages(invalid, { stageDir: tmpDir, spawnPublish }, io),
-		).rejects.toThrow(/root package last/);
-		expect(spawnPublish).not.toHaveBeenCalled();
+		const runNpm = mockNpm();
+		await expect(publishStagedPackages(invalid, { stageDir: tmpDir, runNpm }, io)).rejects.toThrow(
+			/root package last/,
+		);
+		expect(runNpm).not.toHaveBeenCalled();
 	});
 
 	it("rejects staged libc metadata that disagrees with the manifest", () => {
@@ -339,11 +361,11 @@ describe("publish manifest validation", () => {
 		const partial = structuredClone(manifest);
 		partial.root.bins = ["demo"];
 		for (const pkg of partial.packages) delete pkg.bins["demo-admin"];
-		const spawnPublish = mock(async () => 0);
-		await expect(
-			publishStagedPackages(partial, { stageDir: tmpDir, spawnPublish }, io),
-		).rejects.toThrow(/command/);
-		expect(spawnPublish).not.toHaveBeenCalled();
+		const runNpm = mockNpm();
+		await expect(publishStagedPackages(partial, { stageDir: tmpDir, runNpm }, io)).rejects.toThrow(
+			/command/,
+		);
+		expect(runNpm).not.toHaveBeenCalled();
 
 		const repeated = structuredClone(manifest);
 		repeated.root.bins.push("demo");
@@ -381,29 +403,25 @@ describe("publish manifest validation", () => {
 		]);
 	});
 
-	it("supports dry-run without spawning npm publish", async () => {
-		const spawnPublish = mock(async () => 0);
-		await publishStagedPackages(
-			manifest,
-			{
-				stageDir: tmpDir,
-				dryRun: true,
-				spawnPublish,
-			},
-			io,
-		);
-		expect(spawnPublish).not.toHaveBeenCalled();
+	it("supports dry-run without spawning npm at all", async () => {
+		const runNpm = mockNpm();
+		await publishStagedPackages(manifest, { stageDir: tmpDir, dryRun: true, runNpm }, io);
+		expect(runNpm).not.toHaveBeenCalled();
 	});
 
 	it.each([true, false, undefined])("selects npm stdio when stdin.isTTY is %s", async (isTTY) => {
 		const descriptor = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
 		const npm = join(tmpDir, "npm");
 		const which = spyOn(processUtils, "which").mockReturnValue(npm);
-		const runProcess = spyOn(processUtils, "runProcess").mockResolvedValue({
-			exitCode: 0,
-			stdout: isTTY ? "" : "registry stdout\n",
-			stderr: isTTY ? "" : "registry stderr\r\n",
-		});
+		const runProcess = spyOn(processUtils, "runProcess").mockImplementation(async (_npm, args) =>
+			args[0] === "view"
+				? viewError("E404", args[1]!)
+				: {
+						exitCode: 0,
+						stdout: isTTY ? "" : "registry stdout\n",
+						stderr: isTTY ? "" : "registry stderr\r\n",
+					},
+		);
 		const stdout = mock((_text: string) => {});
 		const stderr = mock((_text: string) => {});
 		try {
@@ -413,7 +431,15 @@ describe("publish manifest validation", () => {
 				{ stageDir: tmpDir, tag: "bootstrap" },
 				{ stdout, stderr },
 			);
-			expect(runProcess.mock.calls).toEqual(
+			// The lookup always collects (its stdout is parsed); only publish inherits the TTY.
+			expect(runProcess.mock.calls.filter(([, args]) => args[0] === "view")).toEqual(
+				manifest.publishOrder.map((dir) => [
+					npm,
+					expect.arrayContaining(["view"]),
+					{ cwd: join(tmpDir, dir) },
+				]),
+			);
+			expect(runProcess.mock.calls.filter(([, args]) => args[0] === "publish")).toEqual(
 				manifest.publishOrder.map((dir) => [
 					npm,
 					["publish", "--tag", "bootstrap"],
@@ -447,36 +473,127 @@ describe("publish manifest validation", () => {
 			manifest,
 			{
 				stageDir: tmpDir,
-				spawnPublish: async (_dir, _command, executorIO) => {
-					executorIO.stdout("registry stdout");
-					executorIO.stderr("registry stderr");
-					return 0;
-				},
+				runNpm: mockNpm({
+					publish: () => ({
+						exitCode: 0,
+						stdout: "registry stdout\n",
+						stderr: "registry stderr\n",
+					}),
+				}),
 			},
 			invocationIO,
 		);
 
 		expect(stdout).toContain("registry stdout");
+		// A successful E404 lookup stays quiet; only publish output reaches stderr.
 		expect(stderr).toEqual(["registry stderr", "registry stderr", "registry stderr"]);
 	});
 
 	it("stops on first failed publish", async () => {
-		const calls: string[] = [];
-		const spawnPublish = mock(async (dir: string) => {
-			calls.push(dir);
-			return calls.length === 1 ? 1 : 0;
-		});
+		const runNpm = mockNpm({ publish: () => ({ exitCode: 1, stdout: "", stderr: "" }) });
 
+		await expect(publishStagedPackages(manifest, { stageDir: tmpDir, runNpm }, io)).rejects.toThrow(
+			/linux-x64/,
+		);
+		expect(publishCalls(runNpm)).toHaveLength(1);
+	});
+
+	it("skips versions the registry already has and publishes the rest in order", async () => {
+		const lines: string[] = [];
+		const runNpm = mockNpm({
+			view: (spec) =>
+				spec.startsWith("@scope/demo-linux-x64@") ? viewExists(spec) : viewError("E404", spec),
+		});
+		await publishStagedPackages(
+			manifest,
+			{ stageDir: tmpDir, runNpm },
+			{ stdout: (text) => lines.push(text), stderr: () => {} },
+		);
+		expect(publishCalls(runNpm)).toEqual([join(tmpDir, "darwin-arm64"), join(tmpDir, "root")]);
+		expect(lines.join("\n")).toMatch(/linux-x64: .*skip: 1\.2\.3 already published/);
+		expect(lines.join("\n")).toMatch(
+			/Published .*2.* staged package\(s\), skipped .*1.* already published/,
+		);
+	});
+
+	it("is a no-op when every staged version is already published", async () => {
+		const lines: string[] = [];
+		const runNpm = mockNpm({ view: viewExists });
+		await publishStagedPackages(
+			manifest,
+			{ stageDir: tmpDir, runNpm },
+			{ stdout: (text) => lines.push(text), stderr: () => {} },
+		);
+		expect(publishCalls(runNpm)).toEqual([]);
+		expect(lines.join("\n")).toMatch(
+			/All .*3.* staged package\(s\) are already published as 1\.2\.3/,
+		);
+	});
+
+	it.each([
+		["E401", (spec: string) => viewError("E401", spec)],
+		["FETCH_ERROR", (spec: string) => viewError("FETCH_ERROR", spec)],
+		["garbage", () => ({ exitCode: 1, stdout: "not json\n", stderr: "" })],
+		["empty success", () => ok],
+	])("aborts before any publish when the lookup is inconclusive (%s)", async (label, view) => {
+		const runNpm = mockNpm({ view });
+		await expect(publishStagedPackages(manifest, { stageDir: tmpDir, runNpm }, io)).rejects.toThrow(
+			label.startsWith("E") || label === "FETCH_ERROR" ? new RegExp(label) : /Could not check/,
+		);
+		expect(publishCalls(runNpm)).toEqual([]);
+	});
+
+	it.each([
+		[
+			"scoped publishConfig",
+			{ "@scope:registry": "https://scoped", registry: "https://pc" },
+			"https://cli",
+			"https://scoped",
+		],
+		["CLI --registry", { registry: "https://pc" }, "https://cli", "https://cli"],
+		["publishConfig.registry", { registry: "https://pc" }, undefined, "https://pc"],
+		["none", { access: "public" }, undefined, undefined],
+	])(
+		"resolves the lookup registry like npm publish: %s",
+		async (_label, publishConfig, cli, expected) => {
+			for (const dir of manifest.publishOrder) {
+				const path = join(tmpDir, dir, "package.json");
+				writeFileSync(
+					path,
+					JSON.stringify({ ...JSON.parse(readFileSync(path, "utf8")), publishConfig }),
+				);
+			}
+			const runNpm = mockNpm();
+			await publishStagedPackages(manifest, { stageDir: tmpDir, runNpm, registry: cli }, io);
+			const [, viewArgs] = runNpm.mock.calls[0]!;
+			expect(viewArgs.slice(4)).toEqual(expected ? ["--registry", expected] : []);
+			// npm publish reads publishConfig itself; only the CLI override is forwarded.
+			const [, publishArgs] = runNpm.mock.calls.find(([, args]) => args[0] === "publish")!;
+			expect(publishArgs).toEqual(cli ? ["publish", "--registry", cli] : ["publish"]);
+		},
+	);
+
+	it("resumes after a failed run without republishing what already went up", async () => {
+		const failing = mockNpm({
+			publish: (dir) =>
+				dir.endsWith("darwin-arm64") ? { exitCode: 1, stdout: "", stderr: "" } : ok,
+		});
 		await expect(
-			publishStagedPackages(
-				manifest,
-				{
-					stageDir: tmpDir,
-					spawnPublish,
-				},
-				io,
-			),
-		).rejects.toThrow(/linux-x64/);
-		expect(calls).toHaveLength(1);
+			publishStagedPackages(manifest, { stageDir: tmpDir, runNpm: failing }, io),
+		).rejects.toThrow(
+			/published: linux-x64\n.*skipped \(already published\): none\n.*not attempted: root\n.*rerun `crust publish`/,
+		);
+		expect(publishCalls(failing)).toEqual([
+			join(tmpDir, "linux-x64"),
+			join(tmpDir, "darwin-arm64"),
+		]);
+
+		// Run 2: the registry now has linux-x64.
+		const resumed = mockNpm({
+			view: (spec) =>
+				spec.startsWith("@scope/demo-linux-x64@") ? viewExists(spec) : viewError("E404", spec),
+		});
+		await publishStagedPackages(manifest, { stageDir: tmpDir, runNpm: resumed }, io);
+		expect(publishCalls(resumed)).toEqual([join(tmpDir, "darwin-arm64"), join(tmpDir, "root")]);
 	});
 });
