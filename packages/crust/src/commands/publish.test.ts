@@ -414,7 +414,7 @@ describe("publish manifest validation", () => {
 		const npm = join(tmpDir, "npm");
 		const which = spyOn(processUtils, "which").mockReturnValue(npm);
 		const runProcess = spyOn(processUtils, "runProcess").mockImplementation(async (_npm, args) =>
-			args[0] === "view"
+			args?.[0] === "view"
 				? viewError("E404", args[1]!)
 				: {
 						exitCode: 0,
@@ -432,14 +432,14 @@ describe("publish manifest validation", () => {
 				{ stdout, stderr },
 			);
 			// The lookup always collects (its stdout is parsed); only publish inherits the TTY.
-			expect(runProcess.mock.calls.filter(([, args]) => args[0] === "view")).toEqual(
+			expect(runProcess.mock.calls.filter(([, args]) => args?.[0] === "view")).toEqual(
 				manifest.publishOrder.map((dir) => [
 					npm,
 					expect.arrayContaining(["view"]),
 					{ cwd: join(tmpDir, dir) },
 				]),
 			);
-			expect(runProcess.mock.calls.filter(([, args]) => args[0] === "publish")).toEqual(
+			expect(runProcess.mock.calls.filter(([, args]) => args?.[0] === "publish")).toEqual(
 				manifest.publishOrder.map((dir) => [
 					npm,
 					["publish", "--tag", "bootstrap"],
@@ -535,11 +535,30 @@ describe("publish manifest validation", () => {
 		["FETCH_ERROR", (spec: string) => viewError("FETCH_ERROR", spec)],
 		["garbage", () => ({ exitCode: 1, stdout: "not json\n", stderr: "" })],
 		["empty success", () => ok],
+		[
+			"rejected spawn",
+			() => {
+				throw new Error("spawn npm EAGAIN");
+			},
+		],
 	])("aborts before any publish when the lookup is inconclusive (%s)", async (label, view) => {
 		const runNpm = mockNpm({ view });
 		await expect(publishStagedPackages(manifest, { stageDir: tmpDir, runNpm }, io)).rejects.toThrow(
-			label.startsWith("E") || label === "FETCH_ERROR" ? new RegExp(label) : /Could not check/,
+			label.startsWith("E") || label === "FETCH_ERROR"
+				? new RegExp(label)
+				: /Could not check.*\n.*Nothing was published/,
 		);
+		expect(publishCalls(runNpm)).toEqual([]);
+	});
+
+	it("treats npm's normalized version as published when the staged version has build metadata", async () => {
+		const built = structuredClone(manifest);
+		built.version = "1.2.3+build.7";
+		writeStageFixture(tmpDir, built);
+		// npm strips build metadata on publish, so the registry (and `npm view`) answer `"1.2.3"`.
+		const runNpm = mockNpm({ view: () => viewExists("x@1.2.3") });
+		await publishStagedPackages(built, { stageDir: tmpDir, runNpm }, io);
+		expect(runNpm.mock.calls[0]![1][1]).toBe("@scope/demo-linux-x64@1.2.3+build.7");
 		expect(publishCalls(runNpm)).toEqual([]);
 	});
 
@@ -559,7 +578,14 @@ describe("publish manifest validation", () => {
 			["--@scope:registry=https://scoped"],
 		],
 		["CLI --registry", { registry: "https://pc" }, "https://cli", ["--registry", "https://cli"]],
-		["publishConfig.registry", { registry: "https://pc" }, undefined, ["--registry", "https://pc"]],
+		["publishConfig.registry", { registry: "https://pc" }, undefined, ["--registry=https://pc"]],
+		// pickRegistry falls back to the configured `scope` when the package has none.
+		[
+			"scope fallback",
+			{ scope: "@internal", "@internal:registry": "https://internal" },
+			undefined,
+			["--scope=@internal", "--@internal:registry=https://internal"],
+		],
 		["none", { access: "public" }, undefined, []],
 	])(
 		"resolves the lookup registry like npm publish: %s",

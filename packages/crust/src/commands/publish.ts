@@ -45,8 +45,11 @@ function isStringRecord(value: JsonValue | undefined): value is Record<string, s
 	return isRecord(value) && Object.values(value).every(isNonemptyString);
 }
 
+/** publishConfig keys that decide which registry npm publishes to; see viewRegistryArgs. */
 function isRegistryKey(key: string): boolean {
-	return key === "registry" || (key.startsWith("@") && key.endsWith(":registry"));
+	return (
+		key === "registry" || key === "scope" || (key.startsWith("@") && key.endsWith(":registry"))
+	);
 }
 
 /** Only registry keys are interpreted; access, provenance, tag, ... pass through to npm. */
@@ -331,28 +334,22 @@ function printProcessOutput({ stdout, stderr }: RunProcessResult, io: Invocation
 	if (stderr) io.stderr(stderr.replace(/\r?\n$/, ""));
 }
 
-function registryValue(publishConfig: JsonObject | undefined, key: string): string | undefined {
-	const value = publishConfig?.[key];
-	return isNonemptyString(value) ? value : undefined;
-}
-
-// `npm view` reads only flat CLI/npmrc options, while `npm publish` overlays the
-// package's publishConfig onto them, dropping keys also given as CLI flags
-// (npm/lib/commands/publish.js #getManifest); npm-registry-fetch's pickRegistry
-// then prefers `<@scope>:registry` over `registry`. Replay that overlay as CLI
-// flags so the lookup hits the same registry the upload would, including when
-// .npmrc carries its own `<@scope>:registry` that only the scoped flag can beat.
+// `npm view` reads only flat CLI/npmrc options, while `npm publish` (npm 11)
+// overlays the package's publishConfig onto them, dropping keys also given as
+// CLI flags (npm/lib/commands/publish.js #getManifest); npm-registry-fetch's
+// pickRegistry then picks `<@scope>:registry` for the package scope, else for
+// the configured `scope`, else `registry`. Replay the overlay as CLI flags and
+// let npm apply that precedence itself, so the lookup hits the registry the
+// upload would — including when .npmrc carries its own `<@scope>:registry`,
+// which only a scoped flag can beat.
 function viewRegistryArgs(
-	name: string,
 	publishConfig: JsonObject | undefined,
 	cliRegistry: string | undefined,
 ): string[] {
-	const args: string[] = [];
-	const scope = name.startsWith("@") ? name.slice(0, name.indexOf("/")) : undefined;
-	const scoped = scope ? registryValue(publishConfig, `${scope}:registry`) : undefined;
-	if (scoped) args.push(`--${scope}:registry=${scoped}`);
-	const registry = cliRegistry ?? registryValue(publishConfig, "registry");
-	if (registry) args.push("--registry", registry);
+	const args = Object.entries(publishConfig ?? {}).flatMap(([key, value]) =>
+		isRegistryKey(key) && !(key === "registry" && cliRegistry) ? [`--${key}=${String(value)}`] : [],
+	);
+	if (cliRegistry) args.push("--registry", cliRegistry);
 	return args;
 }
 
@@ -367,7 +364,8 @@ function parseJson(text: string): JsonValue | undefined {
 /** Interprets `npm view <name>@<version> version --json`; anything but a clear yes/no aborts. */
 function isVersionPublished(result: RunProcessResult, spec: string, version: string): boolean {
 	const body = parseJson(result.stdout);
-	if (result.exitCode === 0 && body === version) {
+	// npm publishes `1.2.3+build` as `1.2.3` (libnpmpublish semver.clean) and view reports that.
+	if (result.exitCode === 0 && body === version.replace(/\+.*$/, "")) {
 		return true;
 	}
 	const error = isRecord(body) && isRecord(body.error) ? body.error : undefined;
@@ -412,13 +410,17 @@ export async function publishStagedPackages(
 	const skipped: string[] = [];
 	for (const pkg of staged) {
 		const spec = `${pkg.packageJson.name}@${version}`;
-		const result = await runNpm(pkg.path, [
-			"view",
-			spec,
-			"version",
-			"--json",
-			...viewRegistryArgs(pkg.packageJson.name, pkg.packageJson.publishConfig, options.registry),
-		]);
+		const args = ["view", spec, "version", "--json"];
+		args.push(...viewRegistryArgs(pkg.packageJson.publishConfig, options.registry));
+		let result: RunProcessResult;
+		try {
+			result = await runNpm(pkg.path, args);
+		} catch (error) {
+			throw new Error(
+				`Could not check whether ${spec} is already published (npm view did not run: ${error instanceof Error ? error.message : String(error)})\n  Nothing was published.`,
+				{ cause: error },
+			);
+		}
 		let published: boolean;
 		try {
 			published = isVersionPublished(result, spec, version);
