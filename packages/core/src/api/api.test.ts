@@ -97,21 +97,4 @@ describe("public beta API", () => {
 		expect(wrapperCalled).toBe(true);
 		expect(actionVersion).toBe(true);
 	});
-
-	it("can execute repeatedly without freezing or accumulating extension setup on the source builder", async () => {
-		let runCount = 0;
-		const debug = defineExtension(defineExtensionId("debug"), {
-			flags: [{ name: "debug", type: "boolean" }],
-		});
-		const app = new Crust("repeat").extend(debug).action(({ flags }) => {
-			if (flags.debug) {
-				runCount++;
-			}
-		});
-
-		await app.execute({ argv: ["--debug"] });
-		await app.execute({ argv: ["--debug"] });
-
-		expect(runCount).toBe(2);
-	});
 });

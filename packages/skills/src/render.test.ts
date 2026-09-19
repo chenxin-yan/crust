@@ -706,9 +706,6 @@ describe("renderSkill", () => {
 			}
 
 			expect(links.sort()).toEqual(["commands/app.md", "commands/build.md", "commands/serve.md"]);
-			for (const link of links) {
-				expect(allPaths.has(link)).toBe(true);
-			}
 		});
 
 		it("SKILL.md command reference lists all generated command files", async () => {

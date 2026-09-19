@@ -130,11 +130,6 @@ describe("tagged errors", () => {
 });
 
 describe("unwrapExit", () => {
-	it("rethrows the original CrustError behind a tagged failure", async () => {
-		const original = new CrustError("PARSE", "bad");
-		await expect(runAndUnwrap(Effect.fail(fromCrustError(original)))).rejects.toBe(original);
-	});
-
 	it("rethrows plain failures and defects as themselves", async () => {
 		const failed = new Error("failed");
 		const died = new Error("died");

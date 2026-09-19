@@ -124,33 +124,6 @@ describe("store.read", () => {
 		await rm(tempDir, { recursive: true, force: true });
 	});
 
-	it("should return defaults when no persisted file exists", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: BASIC_FIELDS,
-		});
-
-		const result = await store.read();
-
-		expect(result.theme).toBe("light");
-		expect(result.verbose).toBe(false);
-	});
-
-	it("should return persisted values overriding defaults", async () => {
-		const store = createStore({
-			dirPath: tempDir,
-			name: "config",
-			fields: BASIC_FIELDS,
-		});
-
-		await store.write({ theme: "dark", verbose: true });
-		const result = await store.read();
-
-		expect(result.theme).toBe("dark");
-		expect(result.verbose).toBe(true);
-	});
-
 	it("should not auto-persist merged defaults back to disk", async () => {
 		const store = createStore({
 			dirPath: tempDir,

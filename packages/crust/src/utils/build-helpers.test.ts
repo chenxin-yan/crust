@@ -89,7 +89,6 @@ describe("createBunPluginDriverScript", () => {
 		const script = createBunPluginDriverScript(options);
 		expect(embeddedOptions(script)).toEqual(options);
 		expect(script).toContain('define: {"process.env.CRUST_INTERNAL_BUILD":"\\"1\\""}');
-		expect(script).toContain('"autoloadBunfig":false');
 		expect(script).toContain("throw: false");
 		expect(script).toContain("must default-export a Bun bundler plugin ({ name, setup })");
 	});

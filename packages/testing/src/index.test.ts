@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { stripVTControlCharacters } from "node:util";
 
 import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
 import { spinner } from "@crustjs/progress";
@@ -31,7 +32,7 @@ describe("captureExecute", () => {
 
 		const result = await captureExecute(app, []);
 
-		expect(result.stderr).toContain("✓ Deploying");
+		expect(stripVTControlCharacters(result.stderr)).toContain("✓ Deploying");
 		expect(result.exitCode).toBe(0);
 	});
 

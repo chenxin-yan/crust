@@ -47,6 +47,14 @@ function _optionalParserDefinitions() {
 }
 
 function _localDefinitions(name: string, aliases: string[], choices: string[], value: string) {
+	// @ts-expect-error -- boolean flags cannot have string defaults
+	defineFlag("bad", { type: "boolean", default: "true" });
+	// @ts-expect-error -- every definition must be a FlagDef
+	defineFlag("bad", { type: "not-a-flag" });
+	// @ts-expect-error -- number args cannot have string defaults
+	defineArg("bad", { type: "number", default: "1" });
+	// @ts-expect-error -- every definition must be an ArgDef
+	defineArg("bad", { type: "not-an-arg" });
 	// @ts-expect-error -- helpers own local spelling checks, not just attachments
 	defineFlag("bad", { type: "boolean", short: "xx" });
 	// @ts-expect-error -- scan alias tuples before extracting their union

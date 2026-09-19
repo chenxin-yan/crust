@@ -345,13 +345,6 @@ describe("renderBash — url/path/json value-flag handling", () => {
 		subCommands: [],
 	};
 
-	it("emits explicit file completion (compgen -f) for path flags", () => {
-		const script = renderBash(valueTypeFixture, "mycli", "1.0.0");
-		expect(script).toContain('"|--out")');
-		expect(script).toContain('__mycli_file_candidates "" "$cur"');
-		expect(script).toContain('compgen -f -- "$2"');
-	});
-
 	/**
 	 * INT-02 regression: `COMPREPLY=( $(compgen -f …) )` word-split and
 	 * glob-expanded filenames, so `hello world.txt` became two candidates

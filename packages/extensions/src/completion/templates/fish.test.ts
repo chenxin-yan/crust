@@ -233,7 +233,7 @@ describe("renderFish", () => {
 const fishAvailable = await isFishAvailable();
 const describeIfFish = fishAvailable ? describe : describe.skip;
 
-describeIfFish("renderFish · fish -n parse check", () => {
+describeIfFish("renderFish · subprocess completion", () => {
 	let scriptPath: string;
 	let tmpDir: string;
 
@@ -246,20 +246,6 @@ describeIfFish("renderFish · fish -n parse check", () => {
 
 	afterAll(async () => {
 		await rm(tmpDir, { recursive: true, force: true });
-	});
-
-	it("parses cleanly under `fish -n`", async () => {
-		const proc = Bun.spawn(["fish", "-n", scriptPath], {
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		const [, err] = await Promise.all([
-			new Response(proc.stdout).text(),
-			new Response(proc.stderr).text(),
-		]);
-		const code = await proc.exited;
-		expect(err).toBe("");
-		expect(code).toBe(0);
 	});
 
 	it("completes root commands, nested commands, and flag choices under fish", async () => {

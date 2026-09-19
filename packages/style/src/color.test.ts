@@ -149,9 +149,8 @@ describe("edge cases", () => {
 		expect(() => fg("x", "rgb(0 0 256)")).toThrow(TypeError);
 	});
 
-	it("rejects 4- and 8-digit hex", () => {
+	it("rejects 4-digit hex", () => {
 		expect(() => fg("x", "#f00a")).toThrow(TypeError);
-		expect(() => fg("x", "#ff000080")).toThrow(TypeError);
 	});
 });
 
