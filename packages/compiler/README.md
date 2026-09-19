@@ -8,6 +8,37 @@ Node, Bun, and DOM ambient types are not discovered. `process.exit` requires a
 number argument. Invalid exit calls (including `process.exit()`), `console.error`,
 and `console.warn` are rejected by the checker before lowering (`CRUST1000`).
 
+## M0 boundary
+
+M0 covers literals, arithmetic/string expressions, templates, function declarations and calls, `console.log`, `process.argv`, and `process.exit`. It is not a general TypeScript or Node implementation. Direct array logging is deferred; array-to-string coercion in templates remains supported. Actual TypeScript suppression directives (`@ts-ignore`, `@ts-expect-error`, and `@ts-nocheck`) are rejected before lowering; remove the directive and fix the type error. Merely mentioning directive text in a string is not a suppression.
+
+## Testing
+
+Use the repository Bun version from the root `package.json` `packageManager` field. Compiler-only checks:
+
+```sh
+cd packages/compiler
+bun run build
+bun run check:types
+bun run test
+```
+
+`test` runs Go-free diagnostics and public `compile()` regressions. Test observable behavior through `compile()`, not internal lowering functions, IR snapshots, or emitted Go snapshots.
+
+For native differential tests, install the optional Go toolchain pinned in the root `mise.toml` (`mise install go`) and put it and Node **24** on `PATH`:
+
+```sh
+# From packages/compiler
+bun run test:corpus
+
+# Or from the repository root
+bun turbo run test:corpus --filter=@crustjs/compiler
+```
+
+The corpus task is uncached and separate from framework tests. Missing Go produces an explicit warning and skips native cases; that is not a native parity pass. Compiler CI installs Node 24, reads Bun from `packageManager`, and verifies the exact pinned Go version before running the corpus. Compiler build, types, lint, formatting, and Go-free tests still run in the framework lane.
+
+`process.argv[0]` represents the native executable rather than Node, so executable-path behavior has a dedicated assertion. Number formatting is fuzzed with a deterministic seed; set `CRUST_NUMBER_FUZZ_SEED` to replay another seed.
+
 ## String representation boundary
 
 Missing string-array entries remain JavaScript `undefined`, including through string
@@ -38,8 +69,7 @@ The native runtime does not reproduce Node stacks or machine-specific paths.
 
 Covered exceptions are undefined `.length` (`TypeError`) and invalid numeric
 `process.exit` codes (`RangeError [ERR_OUT_OF_RANGE]`), including the distinction
-between non-integers and integers outside the safe range. Reference validation uses
-Node 26.8.1; changes to Node's diagnostic format must be reviewed explicitly.
+between non-integers and integers outside the safe range. CI uses Node 24; local validation also ran Node 26.8.1; changes to Node's diagnostic format must be reviewed explicitly.
 
 ## Diagnostics
 
