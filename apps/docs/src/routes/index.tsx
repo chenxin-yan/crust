@@ -73,7 +73,8 @@ const getHighlightedCode = createServerFn({ method: "GET" }).handler(async () =>
 });
 
 const { meta: homeMeta, links: homeLinks } = buildPageMeta({
-	description: "CrustJS is a TypeScript-first, Bun-native CLI framework with composable modules.",
+	description:
+		"CrustJS is a TypeScript CLI framework with composable modules for humans and agents.",
 	canonical: "/",
 });
 
@@ -123,7 +124,7 @@ const MODULES: Array<{
 	},
 	{
 		pkg: "@crustjs/crust",
-		desc: "CLI build tooling",
+		desc: "CLI build and distribution tooling",
 		doc: "modules/crust",
 	},
 	{
@@ -142,23 +143,28 @@ const MODULES: Array<{
 		doc: "modules/tui",
 	},
 	{
+		pkg: "@crustjs/effect",
+		desc: "Effect.ts adaptor",
+		doc: "modules/effect",
+	},
+	{
 		pkg: "@crustjs/prompts",
 		desc: "Interactive prompts",
 		doc: "modules/prompts",
 	},
 	{
 		pkg: "@crustjs/style",
-		desc: "Terminal styling",
+		desc: "Terminal styling and layout",
 		doc: "modules/style",
 	},
 	{
 		pkg: "@crustjs/store",
-		desc: "Type-safe config persistence",
+		desc: "Typed config, data, state, and cache persistence",
 		doc: "modules/store",
 	},
 	{
 		pkg: "@crustjs/skills",
-		desc: "Agent skills generation",
+		desc: "Package and install agent skills",
 		doc: "modules/skills",
 	},
 	{
@@ -170,6 +176,11 @@ const MODULES: Array<{
 		pkg: "@crustjs/testing",
 		desc: "CLI testing helpers",
 		doc: "modules/testing",
+	},
+	{
+		pkg: "@crustjs/mcp",
+		desc: "MCP server generation",
+		upcoming: true,
 	},
 	{
 		pkg: "@crustjs/render",
@@ -747,7 +758,7 @@ function FurnaceHome() {
 								<h1
 									className="fn-condensed"
 									style={{
-										fontSize: "clamp(42px, 6vw, 80px)",
+										fontSize: "clamp(42px, 6vw, 76px)",
 										fontWeight: 800,
 										lineHeight: 0.95,
 										margin: 0,
@@ -758,7 +769,7 @@ function FurnaceHome() {
 									Build CLIs
 									<br />
 									<span style={{ color: "var(--fn-molten)", whiteSpace: "nowrap" }}>
-										with types.
+										agents can use.
 									</span>
 								</h1>
 
@@ -767,12 +778,12 @@ function FurnaceHome() {
 										fontSize: 16,
 										lineHeight: 1.7,
 										color: "var(--fn-dim)",
-										maxWidth: 420,
+										maxWidth: 460,
 										marginTop: 20,
 										fontWeight: 400,
 									}}
 								>
-									A TypeScript-first, Bun-native CLI framework with composable modules.
+									A TypeScript CLI framework with composable modules for humans and agents.
 								</p>
 
 								{/* Install — pick a package manager, click the command to copy */}

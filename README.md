@@ -3,7 +3,7 @@
   <br>
   Crust
 </h1>
-<p align="center">A TypeScript-first, Bun-native CLI framework with composable modules.</p>
+<p align="center">A TypeScript CLI framework with composable modules for humans and agents.</p>
 
 <p align="center">
   <a href="https://github.com/chenxin-yan/crust/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/@crustjs/crust" alt="license"></a>
@@ -22,7 +22,7 @@
 
 ## What is Crust?
 
-Crust is a modern CLI framework built specifically for TypeScript and Bun. It provides a modular architecture for building command-line tools with features like command routing, argument parsing, interactive prompts, validation, and persistence—all with first-class TypeScript support.
+Crust is a TypeScript CLI framework for humans and agents. Define a command once with full type inference, and it runs as a CLI, packages as an agent skill, and can be exposed over MCP. Composable modules add prompts, progress, TUI, styling, persistence, man pages, and testing helpers as you need them. It runs on Bun, Node.js, and Deno, and uses Bun's native APIs where they exist.
 
 ## Who uses Crust?
 
@@ -49,6 +49,7 @@ bun run dev
 | [`@crustjs/progress`](https://www.npmjs.com/package/@crustjs/progress)     | Progress indicators for async CLI tasks                                          | [![npm](https://img.shields.io/npm/v/@crustjs/progress)](https://www.npmjs.com/package/@crustjs/progress)     | [![downloads](https://img.shields.io/npm/dm/@crustjs/progress)](https://www.npmjs.com/package/@crustjs/progress)     |
 | [`@crustjs/prompts`](https://www.npmjs.com/package/@crustjs/prompts)       | Interactive terminal prompts                                                     | [![npm](https://img.shields.io/npm/v/@crustjs/prompts)](https://www.npmjs.com/package/@crustjs/prompts)       | [![downloads](https://img.shields.io/npm/dm/@crustjs/prompts)](https://www.npmjs.com/package/@crustjs/prompts)       |
 | [`@crustjs/tui`](https://www.npmjs.com/package/@crustjs/tui)               | Bun-only OpenTUI adapter for Crust commands                                      | [![npm](https://img.shields.io/npm/v/@crustjs/tui)](https://www.npmjs.com/package/@crustjs/tui)               | [![downloads](https://img.shields.io/npm/dm/@crustjs/tui)](https://www.npmjs.com/package/@crustjs/tui)               |
+| [`@crustjs/effect`](https://www.npmjs.com/package/@crustjs/effect)         | Effect.ts v4 adaptor: Effect handlers, Layer Contexts, tagged errors             | [![npm](https://img.shields.io/npm/v/@crustjs/effect)](https://www.npmjs.com/package/@crustjs/effect)         | [![downloads](https://img.shields.io/npm/dm/@crustjs/effect)](https://www.npmjs.com/package/@crustjs/effect)         |
 | [`@crustjs/store`](https://www.npmjs.com/package/@crustjs/store)           | DX-first, typed persistence for CLI apps with config/data/state/cache separation | [![npm](https://img.shields.io/npm/v/@crustjs/store)](https://www.npmjs.com/package/@crustjs/store)           | [![downloads](https://img.shields.io/npm/dm/@crustjs/store)](https://www.npmjs.com/package/@crustjs/store)           |
 | [`@crustjs/skills`](https://www.npmjs.com/package/@crustjs/skills)         | Agent skill generation from Crust command definitions                            | [![npm](https://img.shields.io/npm/v/@crustjs/skills)](https://www.npmjs.com/package/@crustjs/skills)         | [![downloads](https://img.shields.io/npm/dm/@crustjs/skills)](https://www.npmjs.com/package/@crustjs/skills)         |
 | [`@crustjs/create`](https://www.npmjs.com/package/@crustjs/create)         | Headless scaffolding engine for building create-xxx tools                        | [![npm](https://img.shields.io/npm/v/@crustjs/create)](https://www.npmjs.com/package/@crustjs/create)         | [![downloads](https://img.shields.io/npm/dm/@crustjs/create)](https://www.npmjs.com/package/@crustjs/create)         |
