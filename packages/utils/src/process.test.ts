@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join, relative } from "node:path";
 
@@ -166,6 +166,65 @@ describe("which", () => {
 			writeFileSync(probe, "#!/bin/sh\n");
 			chmodSync(probe, 0o755);
 			expect(which(probe)).toBe(probe);
+		});
+
+		// Exact strings the native (Bun) and portable lookups must both return;
+		// Bun.which alone gets the empty-entry, unset-PATH and ordering cases wrong.
+		it.skipIf(process.platform === "win32")("selects the same executable as the PATH scan", () => {
+			const executable = (path: string) => {
+				writeFileSync(path, "#!/bin/sh\n");
+				chmodSync(path, 0o755);
+			};
+			const [a, b] = [join(dir, "a"), join(dir, "b")];
+			mkdirSync(a);
+			mkdirSync(b);
+			executable(join(a, "probe"));
+			executable(join(b, "probe"));
+			executable(join(dir, "probe"));
+			writeFileSync(join(a, "nonexec"), "#!/bin/sh\n");
+			executable(join(b, "nonexec"));
+			mkdirSync(join(a, "dircmd"));
+			executable(join(b, "dircmd"));
+			symlinkSync(join(a, "probe"), join(a, "linkcmd"));
+			symlinkSync(join(a, "missing"), join(a, "dangling"));
+			executable(join(b, "dangling"));
+
+			const originalCwd = process.cwd();
+			process.chdir(dir);
+			try {
+				const cases: [path: string | undefined, command: string, expected: string | null][] = [
+					[`${a}${delimiter}${b}`, "probe", join(a, "probe")],
+					[`${b}${delimiter}${a}`, "probe", join(b, "probe")],
+					[`${a}${delimiter}${b}`, "nonexec", join(b, "nonexec")],
+					[`${a}${delimiter}${b}`, "dircmd", join(b, "dircmd")],
+					[`${a}${delimiter}${b}`, "dangling", join(b, "dangling")],
+					[a, "linkcmd", join(a, "linkcmd")],
+					[a, "missing", null],
+					["a", "probe", join(a, "probe")],
+					["b/../a", "probe", join(a, "probe")],
+					[`${delimiter}${a}`, "probe", join(dir, "probe")],
+					["", "probe", join(dir, "probe")],
+					[delimiter, "probe", join(dir, "probe")],
+					[undefined, "probe", null],
+				];
+				for (const [path, command, expected] of cases) {
+					if (path === undefined) delete process.env.PATH;
+					else process.env.PATH = path;
+					expect(which(command), `PATH=${JSON.stringify(path)} ${command}`).toBe(expected);
+				}
+
+				// A cwd containing the delimiter must not be re-split into `${dir}/x` + `y`.
+				const colonCwd = join(dir, `x${delimiter}y`);
+				mkdirSync(join(dir, "x"));
+				mkdirSync(colonCwd);
+				executable(join(dir, "x", "probe"));
+				executable(join(colonCwd, "probe"));
+				process.chdir(colonCwd);
+				process.env.PATH = "";
+				expect(which("probe")).toBe(join(colonCwd, "probe"));
+			} finally {
+				process.chdir(originalCwd);
+			}
 		});
 	});
 });
