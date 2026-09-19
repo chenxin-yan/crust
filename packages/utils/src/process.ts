@@ -115,25 +115,7 @@ export async function runProcess(
 export function which(command: string): string | null {
 	// Path-containing inputs would produce garbage when joined onto PATH
 	// entries; resolve them directly instead.
-	const explicit = command.includes(sep) || command.includes("/");
-	// SAFETY: only describes the optional Bun global; optional access preserves portability.
-	const bun = (
-		globalThis as { Bun?: { which(command: string, options: { PATH: string }): string | null } }
-	).Bun;
-	// Bun's native lookup halves the cost of a PATH scan, but it reads the
-	// startup PATH and skips empty/relative entries, so pass the live PATH with
-	// every entry resolved first. Windows keeps the PATHEXT scan below.
-	if (bun && !explicit && process.platform !== "win32") {
-		const path = process.env.PATH;
-		if (path === undefined) return null;
-		const directories = path.split(delimiter).map((directory) => resolve(directory));
-		// A resolved entry containing the delimiter (cwd named "a:b") would be
-		// re-split by Bun and could select a different executable; scan instead.
-		if (!directories.some((directory) => directory.includes(delimiter))) {
-			return bun.which(command, { PATH: directories.join(delimiter) });
-		}
-	}
-	if (explicit) {
+	if (command.includes(sep) || command.includes("/")) {
 		try {
 			accessSync(command, constants.X_OK);
 			if (statSync(command).isFile()) return command;
