@@ -318,25 +318,11 @@ function renderArgsTable(args: ManifestArg[]): string[] {
 	for (const arg of args) {
 		const name = arg.variadic ? `${arg.name}...` : arg.name;
 		const required = arg.required ? "Yes" : "No";
-		const desc = escapeTableCell(formatArgDescription(arg));
+		const desc = escapeTableCell(formatFieldDescription(arg));
 		lines.push(`| \`${name}\` | ${arg.type} | ${required} | ${desc} |`);
 	}
 
 	return lines;
-}
-
-/**
- * Formats the description cell for an argument, including default value.
- */
-function formatArgDescription(arg: ManifestArg): string {
-	const parts: string[] = [];
-	if (arg.description) {
-		parts.push(arg.description);
-	}
-	if (arg.default !== undefined) {
-		parts.push(`Default: \`${arg.default}\``);
-	}
-	return parts.join(". ") || "-";
 }
 
 /**
@@ -351,27 +337,23 @@ function renderFlagsTable(flags: ManifestFlag[]): string[] {
 	for (const flag of flags) {
 		const name = flag.spellings.map((spelling) => `\`${spelling}\``).join(", ");
 		const required = flag.required ? "Yes" : "No";
-		const desc = escapeTableCell(formatFlagDescription(flag));
+		const desc = escapeTableCell(formatFieldDescription(flag));
 		lines.push(`| ${name} | ${flag.type} | ${required} | ${desc} |`);
 	}
 
 	return lines;
 }
 
-/**
- * Formats the description cell for a flag, including default value
- * and multiplicity.
- */
-function formatFlagDescription(flag: ManifestFlag): string {
+function formatFieldDescription(field: ManifestArg | ManifestFlag): string {
 	const parts: string[] = [];
-	if (flag.description) {
-		parts.push(flag.description);
+	if (field.description) {
+		parts.push(field.description);
 	}
-	if (flag.multiple) {
+	if ("multiple" in field && field.multiple) {
 		parts.push("Can be specified multiple times");
 	}
-	if (flag.default !== undefined) {
-		parts.push(`Default: \`${flag.default}\``);
+	if (field.default !== undefined) {
+		parts.push(`Default: \`${field.default}\``);
 	}
 	return parts.join(". ") || "-";
 }

@@ -98,27 +98,12 @@ function buildChainableStyleFactory(
 	// chains from unbounded user-provided colors.
 	const cache = new Map<string, ChainableStyleFn>();
 
-	function makeKey(
-		steps: readonly ChainStep[],
-		dynamic: boolean,
-		capabilities?: ResolvedStyleCapabilities,
-	): string {
-		const mode = dynamic
-			? "runtime"
-			: `${capabilities?.modifiersEnabled}|${capabilities?.colorDepth}`;
-		return `${mode}|${steps
-			.map((step) => (step.kind === "named" ? step.name : `~${stepPair(step, "truecolor").open}`))
-			.join("|")}`;
-	}
+	const pairDepth = runtime ? "truecolor" : resolveCapabilities().colorDepth;
 
-	function createChainableStyle(
-		steps: readonly ChainStep[],
-		dynamic = runtime,
-		capabilities?: ResolvedStyleCapabilities,
-	): ChainableStyleFn {
-		const fixedCapabilities = dynamic ? undefined : (capabilities ?? resolveCapabilities());
-		const capabilitiesForCall = dynamic ? resolveCapabilities : () => fixedCapabilities!;
-		const key = makeKey(steps, dynamic, fixedCapabilities);
+	function createChainableStyle(steps: readonly ChainStep[]): ChainableStyleFn {
+		const key = steps
+			.map((step) => (step.kind === "named" ? step.name : `~${stepPair(step, "truecolor").open}`))
+			.join("|");
 		const cached = cache.get(key);
 		if (cached) {
 			return cached;
@@ -136,9 +121,9 @@ function buildChainableStyleFactory(
 					text += first[i] ?? "";
 					if (i < rest.length) text += String(rest[i]);
 				}
-				return applyChain(text, steps, capabilitiesForCall);
+				return applyChain(text, steps, resolveCapabilities);
 			}
-			return applyChain(first, steps, capabilitiesForCall);
+			return applyChain(first, steps, resolveCapabilities);
 		}) as ChainableStyleFn;
 
 		cache.set(key, styleFn);
@@ -149,11 +134,7 @@ function buildChainableStyleFactory(
 				configurable: false,
 				enumerable: true,
 				get() {
-					return createChainableStyle(
-						[...steps, { kind: "named", name }],
-						dynamic,
-						fixedCapabilities,
-					);
+					return createChainableStyle([...steps, { kind: "named", name }]);
 				},
 			});
 		}
@@ -165,7 +146,7 @@ function buildChainableStyleFactory(
 				enumerable: true,
 				value: (input: ColorInput): ChainableStyleFn => {
 					pairAtDepth(input, "truecolor");
-					return createChainableStyle([...steps, { kind, input }], dynamic, fixedCapabilities);
+					return createChainableStyle([...steps, { kind, input }]);
 				},
 				writable: false,
 			});
@@ -178,7 +159,7 @@ function buildChainableStyleFactory(
 		let open = "";
 		let close = "";
 		for (const step of steps) {
-			const pair = stepPair(step, fixedCapabilities?.colorDepth ?? "truecolor");
+			const pair = stepPair(step, pairDepth);
 			open += pair.open;
 			close = pair.close + close;
 		}
@@ -279,7 +260,7 @@ function createStyleInstance(options: StyleOptions | undefined, runtime: boolean
 				const resolved = resolveCapabilities();
 				if (args.length === 1) {
 					pairAtDepth(args[0], "truecolor");
-					return createChainableStyle([{ kind, input: args[0] }], runtime, resolved);
+					return createChainableStyle([{ kind, input: args[0] }]);
 				}
 				return paint(args[0], args[1], resolved.colorDepth);
 			},

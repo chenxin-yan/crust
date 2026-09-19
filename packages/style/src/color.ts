@@ -201,13 +201,8 @@ export function bgPairAtDepth(input: ColorInput, depth: ColorDepth): AnsiPair {
 function paint(kind: "fg" | "bg", text: string, input: ColorInput, depth: ColorDepth): string {
 	// Validate the color before the empty-string short-circuit so bad inputs
 	// fail consistently even when styling is disabled or text is empty.
-	if (depth === "none") {
-		parseRgb(input);
-		return text === "" ? "" : text;
-	}
-	const open = kind === "fg" ? fgOpen(input, depth) : bgOpen(input, depth);
-	if (text === "") return "";
-	return applyStyle(text, { open, close: kind === "fg" ? FG_CLOSE : BG_CLOSE });
+	const pair = colorPair(kind, input, depth);
+	return depth === "none" ? text : applyStyle(text, pair);
 }
 
 /**

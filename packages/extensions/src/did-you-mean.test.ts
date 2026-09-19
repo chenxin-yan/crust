@@ -45,6 +45,17 @@ describe("didYouMean", () => {
 		expect(process.exitCode).toBe(1);
 	});
 
+	it.each(["car", "ca"])("breaks tied scores by canonical name for %s", async (input) => {
+		const app = new Crust("app")
+			.extend(didYouMean())
+			.add(defineCommand("zebra", { aliases: ["cap"] }, (cmd) => cmd.action(() => {})))
+			.add(defineCommand("cat", (cmd) => cmd.action(() => {})));
+
+		await app.execute({ argv: [input] });
+
+		expect(stderrChunks.join("\n")).toContain('Did you mean "cat"?');
+	});
+
 	// ──────────────────────────────────────────────────────────────────────────────
 	// alias-aware suggestions
 	// ──────────────────────────────────────────────────────────────────────────────

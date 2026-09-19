@@ -19,9 +19,17 @@ const fixture: CompletionCommand = {
 			name: "build",
 			description: "Build artifact",
 			flags: [
-				{ name: "release", type: "boolean", takesValue: false, negatable: false },
+				{
+					name: "release",
+					short: "r",
+					aliases: ["optimized"],
+					type: "boolean",
+					takesValue: false,
+					negatable: true,
+				},
 				{
 					name: "target",
+					aliases: ["platform"],
 					type: "string",
 					takesValue: true,
 					negatable: false,
@@ -86,6 +94,9 @@ describe("renderFish", () => {
 		expect(script).toMatch(/-x -l 'target' -a 'browser'/);
 		expect(script).toMatch(/-x -l 'target' -a 'bun'/);
 		expect(script).toMatch(/-x -l 'target' -a 'node'/);
+		expect(script).toMatch(/-x -l 'platform' -a 'browser'/);
+		expect(script).toMatch(/-x -l 'platform' -a 'bun'/);
+		expect(script).toMatch(/-x -l 'platform' -a 'node'/);
 	});
 
 	it("gates prod-level flag rules on the full deploy-to-prod path", () => {
@@ -104,12 +115,20 @@ describe("renderFish", () => {
 
 	it("emits boolean flags without -r/-x", () => {
 		const script = renderFish(fixture, "mycli", "1.0.0");
-		// `--release` is a boolean toggle on `build`. The canonical rule
-		// (matching `-l 'release'` exactly) must not carry -r or -x.
-		const releaseLine = script.split("\n").find((l) => l.includes("-l 'release'"));
-		expect(releaseLine).toBeDefined();
-		expect(releaseLine).not.toMatch(/ -r\b/);
-		expect(releaseLine).not.toMatch(/ -x\b/);
+		const rules = script
+			.split("\n")
+			.filter((line) => /-l '(?:no-)?(?:release|optimized)'/.test(line));
+		expect(rules.map((line) => line.match(/-l '([^']+)'/)?.[1])).toEqual([
+			"release",
+			"optimized",
+			"no-release",
+			"no-optimized",
+		]);
+		for (const [index, line] of rules.entries()) {
+			expect(line).not.toMatch(/ -(?:r|x)\b/);
+			if (index === 0) expect(line).toContain("-s 'r'");
+			else expect(line).not.toContain("-s ");
+		}
 	});
 
 	it("emits short alias on flags via -s", () => {

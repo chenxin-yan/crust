@@ -27,12 +27,10 @@ export function buildPageMeta({
 	title,
 	description,
 	canonical,
-	noindex,
 }: {
 	title?: string;
 	description?: string;
 	canonical?: string;
-	noindex?: boolean;
 }) {
 	const resolvedTitle = siteConfig.titleTemplate(title);
 	const resolvedDescription = description ?? siteConfig.defaultDescription;
@@ -50,10 +48,6 @@ export function buildPageMeta({
 		{ name: "twitter:title", content: resolvedTitle },
 		{ name: "twitter:description", content: resolvedDescription },
 	];
-
-	if (noindex) {
-		meta.push({ name: "robots", content: "noindex, nofollow" });
-	}
 
 	const links: Array<{ rel: string; href: string }> = [];
 	if (resolvedCanonical) {

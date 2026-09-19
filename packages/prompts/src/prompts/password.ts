@@ -71,17 +71,9 @@ function renderPassword(
 	const prefix = theme.prefix(PREFIX_SYMBOL);
 	const msg = theme.message(message ?? "Enter a password");
 
-	let valueLine: string;
-
-	if (state.value === "") {
-		// Show cursor when input is empty
-		valueLine = theme.cursor(CURSOR_CHAR);
-	} else {
-		// Show masked value with cursor
-		const beforeMask = mask.repeat(state.cursorPos);
-		const afterMask = mask.repeat(state.value.length - state.cursorPos);
-		valueLine = `${beforeMask}${theme.cursor(CURSOR_CHAR)}${afterMask}`;
-	}
+	const beforeMask = mask.repeat(state.cursorPos);
+	const afterMask = mask.repeat(state.value.length - state.cursorPos);
+	const valueLine = `${beforeMask}${theme.cursor(CURSOR_CHAR)}${afterMask}`;
 
 	let output = formatPromptLine(prefix, msg, valueLine);
 

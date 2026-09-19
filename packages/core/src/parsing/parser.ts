@@ -47,11 +47,9 @@ type ParseArgsToken = NonNullable<ReturnType<typeof nodeParseArgs>["tokens"]>[nu
 
 /**
  * Build the options config for `util.parseArgs` from the shared spelling table.
- * Also returns a reverse alias→name mapping for resolving parsed results.
  */
 function buildParseArgsOptionDescriptor(spellings: ReadonlyMap<string, FlagSpelling>) {
 	const options: Record<string, ParseArgsOptionDescriptor> = {};
-	const aliasToName: Record<string, string> = {};
 
 	for (const [spelling, entry] of spellings) {
 		const descriptor: ParseArgsOptionDescriptor = {
@@ -65,11 +63,10 @@ function buildParseArgsOptionDescriptor(spellings: ReadonlyMap<string, FlagSpell
 			continue;
 		}
 
-		aliasToName[spelling] = entry.canonicalName;
 		if (entry.kind === "alias") options[spelling] = descriptor;
 	}
 
-	return { options, aliasToName };
+	return options;
 }
 
 /**
@@ -197,21 +194,14 @@ function coerceFlagValue(name: string, def: FlagDef, parsed: ArgvFlagValue) {
  * must be `true`), and `multiple` flags spread across aliases would lose
  * their interleaved argv order.
  */
-function resolveAliases(
-	tokens: ParseArgsToken[],
-	aliasToName: Record<string, string>,
-	flagsDef: FlagsDef,
-) {
+function resolveAliases(tokens: ParseArgsToken[], spellings: ReadonlyMap<string, FlagSpelling>) {
 	const canonical: Record<string, ArgvFlagValue | undefined> = {};
 
 	for (const token of tokens) {
 		if (token.kind !== "option") continue;
 
-		const canonicalName = Object.hasOwn(aliasToName, token.name)
-			? aliasToName[token.name]!
-			: token.name;
 		// Strict token names come from this command's descriptor, built from its retained spelling map.
-		const def = flagsDef[canonicalName]!;
+		const { canonicalName, def } = spellings.get(token.name)!;
 		const existing = canonical[canonicalName];
 		if (def.type === "boolean") {
 			const value = !token.rawName.startsWith("--no-");
@@ -372,7 +362,7 @@ function validateNoNegateUsage(argv: string[], spellings: ReadonlyMap<string, Fl
 
 function tokenizeArgv(command: CommandNode, argv: string[]) {
 	const spellings = command.flagSpellings;
-	const { options: parseOptions, aliasToName } = buildParseArgsOptionDescriptor(spellings);
+	const parseOptions = buildParseArgsOptionDescriptor(spellings);
 
 	validateNoNegateUsage(argv, spellings);
 
@@ -419,7 +409,7 @@ function tokenizeArgv(command: CommandNode, argv: string[]) {
 
 	return {
 		positionals: preSeparatorPositionals,
-		flagValues: resolveAliases(parsed.tokens, aliasToName, command.effectiveFlags),
+		flagValues: resolveAliases(parsed.tokens, spellings),
 		rawArgs,
 	};
 }

@@ -169,12 +169,7 @@ function emitRules(
 	// Flag rules.
 	for (const flag of current.flags) {
 		const desc = flag.description ?? "";
-		const baseRule: RuleParts = {
-			condition,
-			long: flag.name,
-			description: desc,
-		};
-		if (flag.short !== undefined) baseRule.short = flag.short;
+		const spellings = [flag.name, ...(flag.aliases ?? [])];
 
 		// Emit a single value-taking rule for `flag`. Branches:
 		//   - choices                       → one rule per literal candidate
@@ -201,49 +196,27 @@ function emitRules(
 			out.push(renderRule(binName, { ...rule, requireParameter: true }));
 		};
 
-		if (flag.takesValue) {
-			emitValueRule(baseRule);
-		} else {
-			out.push(renderRule(binName, baseRule));
-		}
-
-		// Aliases — emit additional rules with the same condition/desc but
-		// using the alias as the long form.
-		if (flag.aliases !== undefined) {
-			for (const alias of flag.aliases) {
-				const aliasRule: RuleParts = {
-					condition,
-					long: alias,
-					description: desc,
-				};
-				if (flag.takesValue) {
-					emitValueRule(aliasRule);
-				} else {
-					out.push(renderRule(binName, aliasRule));
-				}
+		for (const [index, spelling] of spellings.entries()) {
+			const rule: RuleParts = { condition, long: spelling, description: desc };
+			if (index === 0 && flag.short !== undefined) rule.short = flag.short;
+			if (flag.takesValue) {
+				emitValueRule(rule);
+			} else {
+				out.push(renderRule(binName, rule));
 			}
 		}
 
 		// `--no-<name>` for boolean toggles.
 		if (flag.negatable) {
 			const negDesc = `disable: ${desc}`.trim();
-			out.push(
-				renderRule(binName, {
-					condition,
-					long: `no-${flag.name}`,
-					description: negDesc,
-				}),
-			);
-			if (flag.aliases !== undefined) {
-				for (const alias of flag.aliases) {
-					out.push(
-						renderRule(binName, {
-							condition,
-							long: `no-${alias}`,
-							description: negDesc,
-						}),
-					);
-				}
+			for (const spelling of spellings) {
+				out.push(
+					renderRule(binName, {
+						condition,
+						long: `no-${spelling}`,
+						description: negDesc,
+					}),
+				);
 			}
 		}
 	}
