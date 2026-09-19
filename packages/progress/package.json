@@ -44,7 +44,8 @@
 		"postpack": "rm -f LICENSE"
 	},
 	"dependencies": {
-		"@crustjs/style": "workspace:^"
+		"@crustjs/style": "workspace:^",
+		"@crustjs/utils": "workspace:^"
 	},
 	"peerDependencies": {
 		"typescript": "^7.0.0"
@@ -56,7 +57,6 @@
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
-		"@crustjs/utils": "workspace:*",
 		"tsdown": "catalog:"
 	},
 	"engines": {

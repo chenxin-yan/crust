@@ -68,9 +68,11 @@
     "packages/core": {
       "name": "@crustjs/core",
       "version": "0.3.1",
+      "dependencies": {
+        "@crustjs/utils": "workspace:^",
+      },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
-        "@crustjs/utils": "workspace:*",
         "tsdown": "catalog:",
       },
       "peerDependencies": {
@@ -83,9 +85,11 @@
     "packages/create": {
       "name": "@crustjs/create",
       "version": "0.1.2",
+      "dependencies": {
+        "@crustjs/utils": "workspace:^",
+      },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
-        "@crustjs/utils": "workspace:*",
         "tsdown": "catalog:",
       },
       "peerDependencies": {
@@ -155,11 +159,11 @@
       "dependencies": {
         "@crustjs/store": "workspace:^",
         "@crustjs/style": "workspace:^",
+        "@crustjs/utils": "workspace:^",
       },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "@crustjs/core": "workspace:*",
-        "@crustjs/utils": "workspace:*",
         "tsdown": "catalog:",
       },
       "peerDependencies": {
@@ -193,10 +197,10 @@
       "version": "0.1.1",
       "dependencies": {
         "@crustjs/style": "workspace:^",
+        "@crustjs/utils": "workspace:^",
       },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
-        "@crustjs/utils": "workspace:*",
         "tsdown": "catalog:",
       },
       "peerDependencies": {
@@ -211,10 +215,10 @@
       "version": "0.2.2",
       "dependencies": {
         "@crustjs/style": "workspace:^",
+        "@crustjs/utils": "workspace:^",
       },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
-        "@crustjs/utils": "workspace:*",
         "tsdown": "catalog:",
         "zod": "^4.5.4",
       },
@@ -232,13 +236,13 @@
         "@crustjs/progress": "workspace:^",
         "@crustjs/prompts": "workspace:^",
         "@crustjs/style": "workspace:^",
+        "@crustjs/utils": "workspace:^",
       },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
         "@crustjs/core": "workspace:*",
         "@crustjs/extensions": "workspace:*",
         "@crustjs/testing": "workspace:*",
-        "@crustjs/utils": "workspace:*",
         "tsdown": "catalog:",
       },
       "peerDependencies": {
@@ -252,9 +256,11 @@
     "packages/store": {
       "name": "@crustjs/store",
       "version": "0.4.0",
+      "dependencies": {
+        "@crustjs/utils": "workspace:^",
+      },
       "devDependencies": {
         "@crustjs/config": "workspace:*",
-        "@crustjs/utils": "workspace:*",
         "tsdown": "catalog:",
         "zod": "^4.5.4",
       },
@@ -317,9 +323,10 @@
     },
     "packages/utils": {
       "name": "@crustjs/utils",
-      "version": "0.0.0",
+      "version": "0.0.3",
       "devDependencies": {
         "@crustjs/config": "workspace:*",
+        "tsdown": "catalog:",
       },
     },
     "tools": {

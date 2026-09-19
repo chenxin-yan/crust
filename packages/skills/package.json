@@ -47,14 +47,14 @@
 	"dependencies": {
 		"@crustjs/progress": "workspace:^",
 		"@crustjs/prompts": "workspace:^",
-		"@crustjs/style": "workspace:^"
+		"@crustjs/style": "workspace:^",
+		"@crustjs/utils": "workspace:^"
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
 		"@crustjs/core": "workspace:*",
 		"@crustjs/extensions": "workspace:*",
 		"@crustjs/testing": "workspace:*",
-		"@crustjs/utils": "workspace:*",
 		"tsdown": "catalog:"
 	},
 	"peerDependencies": {

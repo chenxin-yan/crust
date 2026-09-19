@@ -47,12 +47,12 @@
 	},
 	"dependencies": {
 		"@crustjs/store": "workspace:^",
-		"@crustjs/style": "workspace:^"
+		"@crustjs/style": "workspace:^",
+		"@crustjs/utils": "workspace:^"
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
 		"@crustjs/core": "workspace:*",
-		"@crustjs/utils": "workspace:*",
 		"tsdown": "catalog:"
 	},
 	"peerDependencies": {

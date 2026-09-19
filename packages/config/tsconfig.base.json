@@ -14,9 +14,7 @@
 		"verbatimModuleSyntax": true,
 		"noEmit": true,
 		"declaration": true,
-		// tsdown's per-file oxc-transform declaration emit lets deps.onlyImport inline private
-		// @crustjs/utils sources; the tsgo program fallback fails to emit their .d.ts files.
-		// Speed is secondary; this constraint is the reason the flag stays on.
+		// tsdown's per-file oxc declaration emit requires isolatedDeclarations.
 		"isolatedDeclarations": true,
 
 		// Best practices

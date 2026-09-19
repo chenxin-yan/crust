@@ -9,6 +9,7 @@ import { dirname, join, resolve } from "node:path";
 // with `skipLibCheck: false`:
 //   `.`              needs @crustjs/core only (no prompts, no progress)
 //   `./interactive`  needs @crustjs/core + @crustjs/prompts (no progress)
+// plus those peers' own runtime deps (@crustjs/utils, @crustjs/style).
 // Real `bun pm pack` tarballs are extracted into a temp dir outside the
 // workspace so workspace symlinks cannot mask a missing peer.
 // ────────────────────────────────────────────────────────────────────────────
@@ -130,7 +131,7 @@ beforeAll(() => {
 	}
 	workRoot = mkdtempSync(join(tmpdir(), "crust-testing-packed-"));
 	mkdirSync(join(workRoot, "packs"));
-	for (const name of ["core", "style", "prompts", "testing"]) pack(name);
+	for (const name of ["utils", "core", "style", "prompts", "testing"]) pack(name);
 });
 
 afterAll(() => {
@@ -139,13 +140,14 @@ afterAll(() => {
 
 describe("packed @crustjs/testing", () => {
 	it("root entry runs and typechecks with only @crustjs/core installed", () => {
-		const dir = createConsumer("root", ROOT_CONSUMER, ["core", "testing"]);
+		const dir = createConsumer("root", ROOT_CONSUMER, ["utils", "core", "testing"]);
 		expectClean(["bun", "consumer.ts"], dir, "packed-root-ok");
 		expectClean([tscBin, "-p", "."], dir, "");
 	});
 
 	it("interactive entry runs and typechecks with core and prompts but no progress", () => {
 		const dir = createConsumer("interactive", INTERACTIVE_CONSUMER, [
+			"utils",
 			"core",
 			"style",
 			"prompts",

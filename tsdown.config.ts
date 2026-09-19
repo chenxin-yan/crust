@@ -12,9 +12,4 @@ export default defineConfig({
 		profile: "esm-only",
 		level: "error",
 	},
-	deps: {
-		// @crustjs/utils is private/unpublished; it must be inlined, never
-		// imported by dist output (js or d.ts). Allow every other package.
-		onlyImport: [/^(?!@crustjs\/utils$)/],
-	},
 });
