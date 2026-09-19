@@ -801,7 +801,6 @@ export function defineCommand(
 }
 
 function dedupeExtensions(extensions: readonly Extension[]): Extension[] {
-	// ponytail: O(n^2) scan, fine for handfuls of extensions.
 	return extensions.filter((e, i) => extensions.findLastIndex((x) => x.id === e.id) === i);
 }
 

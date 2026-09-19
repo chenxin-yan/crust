@@ -449,7 +449,6 @@ export async function executeInvocation(
 							const key = path.toLowerCase();
 							// A file and a directory cannot share a name, so an ancestor or descendant
 							// of an owned path collides just like an equal one.
-							// ponytail: linear scan per file; hooks ship a handful of files each.
 							for (const [ownedKey, owner] of owners) {
 								if (
 									ownedKey === key ||

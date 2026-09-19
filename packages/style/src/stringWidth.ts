@@ -22,7 +22,8 @@ function isFullWidth(code: number): boolean {
 			(code >= 0xffe0 && code <= 0xffe6) ||
 			// ponytail: coarse block spans (Tangut…Kana Extended, Enclosed Ideographic
 			// Supplement) that treat interior unassigned gaps as wide, like the CJK
-			// ranges above; generate from Unicode EastAsianWidth data if it matters.
+			// ranges above; generate from Unicode EastAsianWidth data if a
+			// width-misalignment report lands on a code point inside these blocks.
 			(code >= 0x16fe0 && code <= 0x1b2fb) ||
 			(code >= 0x1f200 && code <= 0x1f2ff) ||
 			(code >= 0x20000 && code <= 0x3fffd))

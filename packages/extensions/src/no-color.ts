@@ -2,6 +2,7 @@ import {
 	type ExtensionFactory,
 	type ExtensionId,
 	type ExtensionContext,
+	CrustError,
 	defineExtension,
 	defineExtensionId,
 } from "@crustjs/core";
@@ -11,8 +12,10 @@ const NO_COLOR: ExtensionId = defineExtensionId("crust:no-color");
 // Overlapping execute() calls share process.env, so per-run snapshots would
 // capture each other's temporary overrides and restores would race. Instead,
 // the first active run captures the ambient values and the last one out
-// restores them.
+// restores them. Opposing flags cannot coexist in one env, so the direction
+// of the in-flight runs is pinned and an opposing preRun fails fast.
 let activeRuns = 0;
+let activeFlag: boolean | undefined;
 let baseForceColor: string | undefined;
 let baseNoColor: string | undefined;
 const colorRuns = new WeakSet<ExtensionContext>();
@@ -39,10 +42,11 @@ const colorFlags = [
  *   and hyperlinks keep following TTY detection, per
  *   [no-color.org](https://no-color.org/).
  *
- * Previous values are restored after the command finishes. When overlapping
- * programmatic runs in one process use opposite flags, the later run wins
- * mid-flight (the env is process-global); the ambient values are restored
- * once all runs finish.
+ * Previous values are restored after the command finishes. Overlapping
+ * programmatic runs in one process may share a direction (both `--color` or
+ * both `--no-color`); the ambient values are restored once all runs finish.
+ * An overlapping run with the opposing flag throws a `CrustError` in
+ * `preRun`, because the env is process-global and cannot hold both values.
  */
 export const noColor: ExtensionFactory<[], {}, [], typeof colorFlags> = defineExtension(
 	NO_COLOR,
@@ -52,6 +56,15 @@ export const noColor: ExtensionFactory<[], {}, [], typeof colorFlags> = defineEx
 			preRun(context) {
 				const flagValue = context.flags.color;
 				if (flagValue !== true && flagValue !== false) return;
+
+				if (activeRuns > 0 && activeFlag !== flagValue) {
+					throw new CrustError(
+						"DEFINITION",
+						"noColor: cannot start a --color run while a --no-color run is in flight (or vice versa); opposing overlapping runs share process.env",
+						{ subject: "extension", name: NO_COLOR, reason: "opposing-overlap" },
+					);
+				}
+				activeFlag = flagValue;
 
 				if (activeRuns === 0) {
 					baseForceColor = process.env.FORCE_COLOR;
@@ -72,11 +85,8 @@ export const noColor: ExtensionFactory<[], {}, [], typeof colorFlags> = defineEx
 				if (!colorRuns.has(context)) return;
 				colorRuns.delete(context);
 				activeRuns--;
-				// ponytail: opposing overlapping runs share process.env and are last-writer-wins;
-				// ambient env restored once all runs finish. If a consumer needs per-invocation
-				// color correctness, implement fail-fast (reject opposing overlap in preRun) —
-				// do not serialize (nested execute() deadlocks).
 				if (activeRuns === 0) {
+					activeFlag = undefined;
 					if (baseForceColor === undefined) delete process.env.FORCE_COLOR;
 					else process.env.FORCE_COLOR = baseForceColor;
 					if (baseNoColor === undefined) delete process.env.NO_COLOR;
