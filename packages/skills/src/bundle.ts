@@ -231,7 +231,9 @@ export async function loadBundleFiles(sourceDir: string | URL): Promise<LoadedBu
 		})),
 	);
 
-	const skillContent = await readFile(skillMd.absPath, "utf-8");
+	// Decode the bytes already loaded so frontmatter and returned content
+	// describe the same snapshot of SKILL.md.
+	const skillContent = files[collected.indexOf(skillMd)]!.content.toString("utf-8");
 	const frontmatter = requireSkillFrontmatter(
 		probeFrontmatter(skillContent),
 		`Extra skill SKILL.md at "${join(canonicalRoot, SKILL_MD)}"`,
