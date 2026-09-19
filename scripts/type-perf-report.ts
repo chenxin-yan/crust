@@ -31,8 +31,6 @@ export function formatComparison(base: TypePerfReport, head: TypePerfReport): st
 		);
 	}
 	return [
-		"Synthetic consumers of built declarations; counts measure compiler work, not editor latency.",
-		"",
 		"| Top-level commands | Base instantiations | PR merge instantiations | Δ |",
 		"|---:|---:|---:|---:|",
 		...scalingSizes.map((size) => {
