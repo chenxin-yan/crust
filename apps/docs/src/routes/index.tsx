@@ -124,7 +124,7 @@ const MODULES: Array<{
 	},
 	{
 		pkg: "@crustjs/crust",
-		desc: "CLI build tooling",
+		desc: "CLI build and distribution tooling",
 		doc: "modules/crust",
 	},
 	{
@@ -154,17 +154,17 @@ const MODULES: Array<{
 	},
 	{
 		pkg: "@crustjs/style",
-		desc: "Terminal styling",
+		desc: "Terminal styling and layout",
 		doc: "modules/style",
 	},
 	{
 		pkg: "@crustjs/store",
-		desc: "Type-safe config persistence",
+		desc: "Typed config, data, state, and cache persistence",
 		doc: "modules/store",
 	},
 	{
 		pkg: "@crustjs/skills",
-		desc: "Agent skills generation",
+		desc: "Package and install agent skills",
 		doc: "modules/skills",
 	},
 	{
