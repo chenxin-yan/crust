@@ -16,7 +16,7 @@ import {
 } from "../../packages/prompts/dist/index.js";
 import { loadPackagedSkills } from "../../packages/skills/dist/index.js";
 import { createStore } from "../../packages/store/dist/index.js";
-import { createStyle, fg, stringWidth } from "../../packages/style/dist/index.js";
+import { createStyle, fg, padEnd, stringWidth, table } from "../../packages/style/dist/index.js";
 import * as testing from "../../packages/testing/dist/index.js";
 
 const roots = {
@@ -40,6 +40,27 @@ assert(style.red("crust") === "\x1b[31mcrust\x1b[39m", "expected red ANSI output
 assert(stringWidth("abc") === 3, "expected ASCII width 3");
 assert(stringWidth("界") === 2, "expected CJK width 2");
 assert(stringWidth("👋") === 2, "expected emoji width 2");
+// Widths the JavaScript fallback (live on Node/Deno) must measure like Bun:
+// single regional indicator (1), colon-form SGR (1), prepend + base (1), Hangul filler (0).
+assert(stringWidth("\u{1F1E6}") === 1, "expected single regional indicator width 1");
+assert(stringWidth("\x1b[38:2::1:2:3mX\x1b[0m") === 1, "expected colon-form SGR width 1");
+assert(
+	padEnd("\u{1F1E6}|", 4) === "\u{1F1E6}|  ",
+	"expected regional indicator padded to 4 columns",
+);
+assert.equal(
+	table(
+		["cell", "w"],
+		[
+			["\u{1F1E6}", "1"],
+			["\x1b[38:2::1:2:3mX\x1b[0m", "1"],
+			["\u0600a", "1"],
+			["\u1160", "0"],
+		],
+	),
+	"| cell | w |\n|------|---|\n| \u{1F1E6}    | 1 |\n| \x1b[38:2::1:2:3mX\x1b[0m    | 1 |\n| \u0600a    | 1 |\n| \u1160     | 0 |",
+	"expected table padding to follow Bun-equivalent widths",
+);
 // Route through the mode-forced instance: bare `fg` degrades on non-TTY stdout.
 assert(
 	style.fg("#ff0000")("x") === "\x1b[38;2;255;0;0mx\x1b[39m",
