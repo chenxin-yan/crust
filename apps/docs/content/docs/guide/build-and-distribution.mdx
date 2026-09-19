@@ -101,6 +101,8 @@ crust publish
 
 The dry run prints the order and commands without publishing. `crust publish` reads `.crust/manifest.json`, verifies package metadata, publishes platform packages before the root with `npm publish` (a Node manifest publishes just `root`), and stops at the first failure; see its [options](/docs/modules/crust#crust-publish-options). Because npm does the upload, [trusted publishing](https://docs.npmjs.com/trusted-publishers) works from GitHub Actions: give the job `id-token: write` and configure a trusted publisher for the root package and each platform package.
 
+For a local bootstrap publish, run `npm login`, then `crust publish` from a terminal. When stdin is a TTY, npm inherits the terminal so you can complete its browser or one-time-password (2FA) prompts for each package. Without a TTY, output remains captured and forwarded after each publish; use non-interactive credentials or trusted publishing in CI.
+
 ```sh tab="npm" tab-group="package-manager"
 npm install -g my-cli
 my-cli --help

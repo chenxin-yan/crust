@@ -1,7 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import * as processUtils from "@crustjs/utils/process";
 
 import {
 	buildPublishCommand,
@@ -391,6 +393,46 @@ describe("publish manifest validation", () => {
 			io,
 		);
 		expect(spawnPublish).not.toHaveBeenCalled();
+	});
+
+	it.each([true, false, undefined])("selects npm stdio when stdin.isTTY is %s", async (isTTY) => {
+		const descriptor = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
+		const npm = join(tmpDir, "npm");
+		const which = spyOn(processUtils, "which").mockReturnValue(npm);
+		const runProcess = spyOn(processUtils, "runProcess").mockResolvedValue({
+			exitCode: 0,
+			stdout: isTTY ? "" : "registry stdout\n",
+			stderr: isTTY ? "" : "registry stderr\r\n",
+		});
+		const stdout = mock((_text: string) => {});
+		const stderr = mock((_text: string) => {});
+		try {
+			Object.defineProperty(process.stdin, "isTTY", { configurable: true, value: isTTY });
+			await publishStagedPackages(
+				manifest,
+				{ stageDir: tmpDir, tag: "bootstrap" },
+				{ stdout, stderr },
+			);
+			expect(runProcess.mock.calls).toEqual(
+				manifest.publishOrder.map((dir) => [
+					npm,
+					["publish", "--tag", "bootstrap"],
+					{ cwd: join(tmpDir, dir), stdio: isTTY ? "inherit" : "collect" },
+				]),
+			);
+			if (isTTY) {
+				expect(stdout).not.toHaveBeenCalledWith("registry stdout");
+				expect(stderr).not.toHaveBeenCalled();
+			} else {
+				expect(stdout).toHaveBeenCalledWith("registry stdout");
+				expect(stderr.mock.calls).toEqual(manifest.publishOrder.map(() => ["registry stderr"]));
+			}
+		} finally {
+			which.mockRestore();
+			runProcess.mockRestore();
+			if (descriptor) Object.defineProperty(process.stdin, "isTTY", descriptor);
+			else Reflect.deleteProperty(process.stdin, "isTTY");
+		}
 	});
 
 	it("passes invocation IO to the publisher executor", async () => {

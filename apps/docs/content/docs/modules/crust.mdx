@@ -46,6 +46,8 @@ crust publish --dry-run
 
 Publishing reads `.crust/manifest.json`, verifies the staged directories and metadata, and runs `npm publish` in each staged directory, so `npm` must be on `PATH`. npm is used instead of `bun publish` because it supports [trusted publishing](https://docs.npmjs.com/trusted-publishers) from CI; `bun publish` does not. Without a prior `crust build`, it fails with `Run crust build before crust publish`.
 
+When stdin is a TTY, npm inherits stdin, stdout, and stderr so its interactive browser/OTP authentication can complete. Non-interactive runs capture and forward npm output after each package finishes.
+
 Before any publisher runs (including dry-run validation), manifest fields and staged package identities are checked, root and platform package names must be unique, and every listed package directory must resolve to a distinct directory inside the canonical staging root. A symlinked staging root is allowed; descendant directory or `package.json` links escaping it are rejected. This preflight is not protection against concurrent filesystem changes.
 
 npm reads `publishConfig.access` from each staged `package.json`, which `crust build` copies from your project. Scoped public packages need `"publishConfig": { "access": "public" }`. See [Publishing from CI](/docs/guide/build-and-distribution#publishing-from-ci) for registry credentials.
