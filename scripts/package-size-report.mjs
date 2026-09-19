@@ -11,6 +11,8 @@
 // `sizes-published` measures the latest npm-published version of each
 // workspace package (used on changeset release PRs, where the code diff
 // against main is empty and the meaningful base is the last release).
+// Each release is installed separately: latest versions across packages may
+// require incompatible peers and need not form one valid dependency tree.
 // Local runs: rm -rf packages/*/dist first — turbo cache restore doesn't prune
 // stray dist files from other branches, which inflates install sizes.
 import { execFileSync } from "node:child_process";
@@ -92,7 +94,6 @@ async function measure(root) {
 
 async function measurePublished(root) {
 	const out = {};
-	const published = [];
 	for (const [, pkg] of workspacePackages(root)) {
 		let packed;
 		try {
@@ -102,32 +103,26 @@ async function measurePublished(root) {
 			throw error;
 		}
 		out[pkg.name] = { tarball: packed.size, unpacked: packed.unpackedSize };
-		published.push(pkg.name);
-	}
-	if (published.length === 0) return out;
 
-	// Install the published versions in a throwaway project so bundling
-	// resolves real released code and dependency versions, not the workspace.
-	const tmp = mkdtempSync(join(tmpdir(), "pkg-size-published-"));
-	try {
-		writeFileSync(
-			join(tmp, "package.json"),
-			JSON.stringify({
-				name: "published-size-probe",
-				dependencies: Object.fromEntries(published.map((n) => [n, "latest"])),
-			}),
-		);
-		execFileSync("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], {
-			cwd: tmp,
-			stdio: ["ignore", "ignore", "inherit"],
-		});
-		for (const name of published) {
-			const pkgDir = join(tmp, "node_modules", name);
-			const pkg = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf8"));
-			out[name].entries = await bundleEntries(pkgDir, pkg);
+		const tmp = mkdtempSync(join(tmpdir(), "pkg-size-published-"));
+		try {
+			writeFileSync(
+				join(tmp, "package.json"),
+				JSON.stringify({
+					name: "published-size-probe",
+					dependencies: { [pkg.name]: packed.version },
+				}),
+			);
+			execFileSync("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], {
+				cwd: tmp,
+				stdio: ["ignore", "ignore", "inherit"],
+			});
+			const pkgDir = join(tmp, "node_modules", pkg.name);
+			const installed = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf8"));
+			out[pkg.name].entries = await bundleEntries(pkgDir, installed);
+		} finally {
+			rmSync(tmp, { recursive: true, force: true });
 		}
-	} finally {
-		rmSync(tmp, { recursive: true, force: true });
 	}
 	return out;
 }
