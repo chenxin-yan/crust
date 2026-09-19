@@ -91,7 +91,7 @@ and exit status. Installed-copy-only removal probes verify template and platform
 resolution. Existing source/bootstrap, cross-runtime and PTY tests remain separate.
 
 The suite never rebuilds or modifies repository artifacts: current `.crust` staging
-for both tools and `dist` for core/extensions/style/store are prerequisites. Crust's
+for both tools and `dist` for core/extensions/style/store/utils are prerequisites. Crust's
 root must retain the full manifest's optional dependencies, including incompatible
 platforms; the test rejects host-only staging, which can mask the npm10 bug. Existing
 build integration tests can replace staging with a host-only build, so rebuild all

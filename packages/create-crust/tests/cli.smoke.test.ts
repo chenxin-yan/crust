@@ -29,6 +29,12 @@ const denoSkipReason =
 
 const localDependencyPackages = [
 	{
+		// Runtime dependency of core; has no dist/index.js, any subpath output works.
+		name: "@crustjs/utils",
+		dir: "utils",
+		requiredBuildOutput: "dist/terminal.js",
+	},
+	{
 		name: "@crustjs/style",
 		dir: "style",
 		requiredBuildOutput: "dist/index.js",
@@ -302,7 +308,13 @@ async function smokeRuntime(runtime: Runtime): Promise<void> {
 	});
 	assertSuccess("generated project install", installCommand, sampleDir, install);
 	expect(existsSync(join(sampleDir, "node_modules"))).toBe(true);
-	expect(existsSync(join(sampleDir, "node_modules", "@crustjs", "utils"))).toBe(false);
+	// The local utils tarball, not the unrelated registry 0.0.x shape (which has no
+	// dist/ subpath files), must satisfy core's runtime dependency.
+	const installedUtilsDir = join(sampleDir, "node_modules", "@crustjs", "utils");
+	expect(JSON.parse(readFileSync(join(installedUtilsDir, "package.json"), "utf8")).version).toBe(
+		JSON.parse(readFileSync(join(repoRoot, "packages", "utils", "package.json"), "utf8")).version,
+	);
+	expect(existsSync(join(installedUtilsDir, "dist", "terminal.js"))).toBe(true);
 	expect(existsSync(join(sampleDir, "package-lock.json"))).toBe(true);
 
 	// Run the template's own check:types script the way its users do.

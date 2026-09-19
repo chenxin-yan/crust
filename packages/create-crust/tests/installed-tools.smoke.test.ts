@@ -159,9 +159,16 @@ describe.skipIf(!enabled)("installed create-crust and crust (Linux/npm)", () => 
 				specs[pkg.name] = pathToFileURL(join(packs, packed.filename)).href;
 				versions[pkg.name] = pkg.version;
 			}
-			for (const name of ["core", "extensions", "style", "store"]) {
+			// utils has no root entry; any subpath output proves it is built.
+			for (const [name, builtOutput] of [
+				["core", "dist/index.js"],
+				["extensions", "dist/index.js"],
+				["style", "dist/index.js"],
+				["store", "dist/index.js"],
+				["utils", "dist/terminal.js"],
+			] as const) {
 				const dir = join(repoRoot, "packages", name);
-				if (!existsSync(join(dir, "dist/index.js"))) throw new Error(`Build ${name} first.`);
+				if (!existsSync(join(dir, builtOutput))) throw new Error(`Build ${name} first.`);
 				const pkg = readJson(join(dir, "package.json"));
 				// Bun rewrites workspace ranges; disabling lifecycle scripts avoids source-tree writes.
 				const result = await run(
@@ -241,7 +248,7 @@ describe.skipIf(!enabled)("installed create-crust and crust (Linux/npm)", () => 
 			expect(pkg.devDependencies["@crustjs/crust"]).toBe(`^${versions["@crustjs/crust"]}`);
 			for (const name of ["core", "extensions"])
 				pkg.dependencies[`@crustjs/${name}`] = specs[`@crustjs/${name}`];
-			for (const name of ["crust", "style", "store"])
+			for (const name of ["crust", "style", "store", "utils"])
 				pkg.devDependencies[`@crustjs/${name}`] = specs[`@crustjs/${name}`];
 			// Explicit unpublished host provision, not a test of registry optional-dependency selection.
 			// Keep it optional/transitive so a direct platform bin cannot shadow the root shim.
@@ -253,10 +260,10 @@ describe.skipIf(!enabled)("installed create-crust and crust (Linux/npm)", () => 
 				"@crustjs/extensions",
 				"@crustjs/style",
 				"@crustjs/store",
+				"@crustjs/utils",
 				"@crustjs/crust",
 				host.name,
 			]);
-			expect(existsSync(join(project, "node_modules/@crustjs/utils"))).toBe(false);
 			expect(existsSync(join(project, "node_modules/@crustjs/crust/schema/package.json"))).toBe(
 				true,
 			);

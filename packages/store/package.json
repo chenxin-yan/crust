@@ -47,10 +47,12 @@
 		"prepack": "cp ../../LICENSE LICENSE",
 		"postpack": "rm -f LICENSE"
 	},
+	"dependencies": {
+		"@crustjs/utils": "workspace:^"
+	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
 		"zod": "^4.5.4",
-		"@crustjs/utils": "workspace:*",
 		"tsdown": "catalog:"
 	},
 	"peerDependencies": {
