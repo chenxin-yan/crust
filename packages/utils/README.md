@@ -2,6 +2,7 @@
 
 Internal shared utilities for Crust workspace packages.
 
+- `@crustjs/utils/artifacts` — build artifact directory resolution.
 - `@crustjs/utils/error` — Node error type guards.
 - `@crustjs/utils/json` — JSON value types and object guards.
 - `@crustjs/utils/path` — path containment checks.
