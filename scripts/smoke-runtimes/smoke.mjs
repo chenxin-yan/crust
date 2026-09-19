@@ -16,7 +16,7 @@ import {
 } from "../../packages/prompts/dist/index.js";
 import { loadPackagedSkills } from "../../packages/skills/dist/index.js";
 import { createStore } from "../../packages/store/dist/index.js";
-import { createStyle, fg, stringWidth } from "../../packages/style/dist/index.js";
+import { createStyle, fg, padEnd, stringWidth, table } from "../../packages/style/dist/index.js";
 import * as testing from "../../packages/testing/dist/index.js";
 
 const roots = {
@@ -40,6 +40,23 @@ assert(style.red("crust") === "\x1b[31mcrust\x1b[39m", "expected red ANSI output
 assert(stringWidth("abc") === 3, "expected ASCII width 3");
 assert(stringWidth("界") === 2, "expected CJK width 2");
 assert(stringWidth("👋") === 2, "expected emoji width 2");
+// Exercise the built fallback through layout consumers on Node and Deno, not just Bun.
+for (const [input, width] of [
+	["\u{1F1E6}", 1],
+	["\x1b[38:2::1:2:3mX\x1b[0m", 1],
+	["\u0600a", 1],
+	["\u1160", 0],
+	["\u{1f469}\x1b\x18\u200d\u{1f4bb}", 2],
+	["\u{1f469}\x1b\x1a\u200d\u{1f4bb}", 2],
+	["\u{1f469}\x1b\x9c\u200d\u{1f4bb}", 2],
+]) {
+	assert.equal(stringWidth(input), width);
+	assert.equal(padEnd(input, 4), input + " ".repeat(4 - width));
+	assert.equal(
+		table(["Text"], [[input]]),
+		`| Text |\n|------|\n| ${input}${" ".repeat(5 - width)}|`,
+	);
+}
 // Route through the mode-forced instance: bare `fg` degrades on non-TTY stdout.
 assert(
 	style.fg("#ff0000")("x") === "\x1b[38;2;255;0;0mx\x1b[39m",

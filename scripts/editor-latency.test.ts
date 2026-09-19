@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -47,6 +47,60 @@ describe("editor latency helpers", () => {
 			rmSync(fixtureDir, { recursive: true, force: true });
 		}
 	});
+});
+
+describe("LspClient", () => {
+	it("lets the process exit once requests settle, without waiting for their timeouts", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "crust-lsp-client-test-"));
+		try {
+			// Fake stdio LSP server: answer every request id with an empty result.
+			// Payloads are ASCII, so string length equals byte length.
+			const server = join(dir, "server.ts");
+			writeFileSync(
+				server,
+				`const decoder = new TextDecoder();
+				let buffer = "";
+				for await (const chunk of Bun.stdin.stream()) {
+					buffer += decoder.decode(chunk);
+					for (;;) {
+						const headerEnd = buffer.indexOf("\\r\\n\\r\\n");
+						if (headerEnd === -1) break;
+						const length = Number(/Content-Length: (\\d+)/i.exec(buffer.slice(0, headerEnd))[1]);
+						const bodyStart = headerEnd + 4;
+						if (buffer.length < bodyStart + length) break;
+						const message = JSON.parse(buffer.slice(bodyStart, bodyStart + length));
+						buffer = buffer.slice(bodyStart + length);
+						if (message.id === undefined) continue;
+						const body = JSON.stringify({ jsonrpc: "2.0", id: message.id, result: {} });
+						process.stdout.write(\`Content-Length: \${body.length}\\r\\n\\r\\n\${body}\`);
+					}
+				}`,
+			);
+			const driver = join(dir, "driver.ts");
+			writeFileSync(
+				driver,
+				`import { LspClient } from ${JSON.stringify(join(repoRoot, "scripts/editor-latency.ts"))};
+				const client = new LspClient(["bun", ${JSON.stringify(server)}], ${JSON.stringify(dir)});
+				const response = await client.request("initialize", { capabilities: {} }, 600_000);
+				if (!response.result) throw new Error("fake server returned no result");
+				await client.close();`,
+			);
+
+			// A leaked referenced timer would hold the driver until its 600s deadline;
+			// the spawn timeout kills it instead, surfacing a non-zero exit.
+			const proc = Bun.spawn(["bun", driver], {
+				cwd: dir,
+				stdout: "ignore",
+				stderr: "pipe",
+				timeout: 10_000,
+			});
+			const [exitCode, stderr] = await Promise.all([proc.exited, new Response(proc.stderr).text()]);
+			expect(stderr).toBe("");
+			expect(exitCode).toBe(0);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	}, 20_000);
 });
 
 describe("editor latency measurement (LSP integration)", () => {
