@@ -1,5 +1,11 @@
 # @crustjs/create
 
+## 0.1.2
+
+### Patch Changes
+
+- [#396](https://github.com/chenxin-yan/crust/pull/396) [`015bcdb`](https://github.com/chenxin-yan/crust/commit/015bcdb1e9ca9285d3029794c573bb3f3ea3aa73) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Keep scaffold writes inside the destination: an existing destination file or ancestor directory symlink that resolves outside the (canonicalized) destination, or to a missing target, now throws before any file is written, so `conflict: "overwrite"` can no longer modify files elsewhere. `interpolate()` only substitutes own context properties, leaving `{{toString}}`-style placeholders unchanged. `runSteps()` accepts readonly step arrays.
+
 ## 0.1.1
 
 ### Patch Changes

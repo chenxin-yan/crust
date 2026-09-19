@@ -1,5 +1,11 @@
 # @crustjs/store
 
+## 0.4.0
+
+### Minor Changes
+
+- [#396](https://github.com/chenxin-yan/crust/pull/396) [`015bcdb`](https://github.com/chenxin-yan/crust/commit/015bcdb1e9ca9285d3029794c573bb3f3ea3aa73) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Breaking: Return successful schema output on reads without writing, and validate/resolve current state before calling update callbacks. Use write or patch to initialize or repair invalid state. Reject undefined mutations for defaulted core fields while retaining optional fields and schema-owned defaults. Normalize cyclic serialization failures as field-scoped VALIDATION errors.
+
 ## 0.3.1
 
 ### Patch Changes

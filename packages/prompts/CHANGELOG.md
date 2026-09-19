@@ -1,5 +1,17 @@
 # @crustjs/prompts
 
+## 0.2.2
+
+### Patch Changes
+
+- [#396](https://github.com/chenxin-yan/crust/pull/396) [`015bcdb`](https://github.com/chenxin-yan/crust/commit/015bcdb1e9ca9285d3029794c573bb3f3ea3aa73) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Ignore pending key-handler results after prompt cleanup so a failed render cannot leave stale output in a replacement prompt.
+
+- [#396](https://github.com/chenxin-yan/crust/pull/396) [`015bcdb`](https://github.com/chenxin-yan/crust/commit/015bcdb1e9ca9285d3029794c573bb3f3ea3aa73) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Constrain plain-string `Choice<T>` values to `T & string`, so `select<number>`, `filter<number>`, `multiselect<number>` and `multifilter<number>` (and literal-union `T`) reject strings that could not be a `T` value instead of submitting a string where the caller was promised another type. Object choices, literal-tuple narrowing, widened `string[]` choices, and generic wrappers are unchanged. Callers relying on the previously accepted unsound strings must use `{ label, value }` objects or widen `T`.
+  
+  `runPrompt()` now catches errors thrown by a deferred re-render and rejects the prompt promise after restoring raw mode, the cursor, and stream reservations, instead of surfacing an uncaught timer exception with the prompt left pending.
+- Updated dependencies [[`015bcdb`](https://github.com/chenxin-yan/crust/commit/015bcdb1e9ca9285d3029794c573bb3f3ea3aa73)]:
+  - @crustjs/style@0.3.2
+
 ## 0.2.1
 
 ### Patch Changes
