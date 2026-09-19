@@ -29,8 +29,9 @@ diverges deliberately.
   (respecting type-parameter and block-level shadowing), so `type Payload = unknown` widens like
   `unknown` (reuses `createTypeEnvironment`).
 - Helpers split into `shared/{parameters,scope,type-aliases}.ts`; upstream later grew an
-  identical `shared/scope.ts` and a `shared/type-alias-resolution.ts`. Array rules and
-  `no-widen-then-assert` also reuse the shared scope resolver.
+  identical `shared/scope.ts` and a `shared/type-alias-resolution.ts`. Array rules also
+  reuse the shared scope resolver. `no-widen-then-assert` uses `reference.resolved`
+  for expression bindings so type-only declarations do not shadow value references.
 - Formatted with repo `oxfmt` (tabs); linted by the repo config including these rules,
   so upstream's `x as unknown as T` double-casts are rewritten.
 - Tests run under Node's test runner (`bun test` cannot host Oxlint `RuleTester`).

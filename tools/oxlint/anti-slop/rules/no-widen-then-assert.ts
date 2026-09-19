@@ -3,7 +3,6 @@ import type { ESTree, SourceCode, Variable } from "@oxlint/plugins";
 
 import { createTypeEnvironment } from "../shared/dictionary-types.ts";
 import { lexicalTypeParameterNames } from "../shared/lexical-type-parameters.ts";
-import { resolveVariable } from "../shared/scope.ts";
 
 type BroadTypeKind = "top" | "object" | "record";
 
@@ -220,6 +219,22 @@ function functionBoundary(node: ESTree.Node): ESTree.Node | null {
 	return null;
 }
 
+function resolveValueReference(
+	sourceCode: SourceCode,
+	identifier: ESTree.IdentifierReference,
+): Variable | null {
+	// Type-only declarations do not shadow values; name-based scope lookup loses that distinction.
+	for (const scope of sourceCode.scopeManager.scopes) {
+		const reference = scope.references.find(
+			(candidate) =>
+				candidate.identifier.start === identifier.start &&
+				candidate.identifier.end === identifier.end,
+		);
+		if (reference !== undefined) return reference.resolved;
+	}
+	return null;
+}
+
 function variableDeclarator(variable: Variable): ESTree.VariableDeclarator | null {
 	for (const definition of variable.defs) {
 		if (definition.type === "Variable" && definition.node.type === "VariableDeclarator") {
@@ -258,7 +273,7 @@ function knownValueEvidence(
 	}
 
 	if (unwrapped.type !== "Identifier") return null;
-	const variable = resolveVariable(sourceCode, unwrapped);
+	const variable = resolveValueReference(sourceCode, unwrapped);
 	if (variable === null || visitedVariables.has(variable)) return null;
 
 	const annotatedIdentifier = variable.identifiers.find(
@@ -366,7 +381,7 @@ export const noWidenThenAssertRule = defineRule({
 			const expression = assertedExpression(node);
 			if (expression.type !== "Identifier") return;
 
-			const variable = resolveVariable(context.sourceCode, expression);
+			const variable = resolveValueReference(context.sourceCode, expression);
 			if (variable === null) return;
 			const widened = widenedBinding(variable, context.sourceCode);
 			if (
