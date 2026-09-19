@@ -12,8 +12,7 @@ const NO_COLOR: ExtensionId = defineExtensionId("crust:no-color");
 // Overlapping execute() calls share process.env, so per-run snapshots would
 // capture each other's temporary overrides and restores would race. Instead,
 // the first active run captures the ambient values and the last one out
-// restores them. Opposing flags cannot coexist in one env, so the direction
-// of the in-flight runs is pinned and an opposing preRun fails fast.
+// restores them.
 let activeRuns = 0;
 let activeFlag: boolean | undefined;
 let baseForceColor: string | undefined;

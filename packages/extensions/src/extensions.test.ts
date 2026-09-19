@@ -402,10 +402,7 @@ describe("built-in extensions", () => {
 	});
 
 	it("noColor fails fast when an overlapping run uses the opposing flag", async () => {
-		let releaseA: () => void = () => {};
-		const blockA = new Promise<void>((resolve) => {
-			releaseA = resolve;
-		});
+		const { promise: blockA, resolve: releaseA } = Promise.withResolvers<void>();
 		let ranB = false;
 
 		const appA = new Crust("a").extend(noColor()).action(() => blockA);
@@ -438,10 +435,7 @@ describe("built-in extensions", () => {
 	it("noColor allows overlapping same-direction runs and restores env after both", async () => {
 		process.env.NO_COLOR = "1";
 
-		let releaseA: () => void = () => {};
-		const blockA = new Promise<void>((resolve) => {
-			releaseA = resolve;
-		});
+		const { promise: blockA, resolve: releaseA } = Promise.withResolvers<void>();
 		let seenNoColorB: string | undefined = "unset";
 
 		const appA = new Crust("a").extend(noColor()).action(() => blockA);
