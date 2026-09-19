@@ -1,5 +1,12 @@
 # @crustjs/skills
 
+## 0.3.1
+
+### Patch Changes
+
+- Updated dependencies [[`4350974`](https://github.com/chenxin-yan/crust/commit/4350974af6b81ce9f0db1e3951cdf8b7b0b43b3d)]:
+  - @crustjs/style@0.3.3
+
 ## 0.3.0
 
 ### Minor Changes
