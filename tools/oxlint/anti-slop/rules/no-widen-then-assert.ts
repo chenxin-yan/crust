@@ -1,5 +1,5 @@
 import { defineRule } from "@oxlint/plugins";
-import type { ESTree, Variable } from "@oxlint/plugins";
+import type { ESTree, SourceCode, Variable } from "@oxlint/plugins";
 
 import { createTypeEnvironment } from "../shared/dictionary-types.ts";
 import { lexicalTypeParameterNames } from "../shared/lexical-type-parameters.ts";
@@ -219,16 +219,12 @@ function functionBoundary(node: ESTree.Node): ESTree.Node | null {
 	return null;
 }
 
-function resolvedVariableForIdentifier(
-	scopes: readonly {
-		readonly references: readonly {
-			readonly identifier: ESTree.Node;
-			readonly resolved: Variable | null;
-		}[];
-	}[],
+function resolveValueReference(
+	sourceCode: SourceCode,
 	identifier: ESTree.IdentifierReference,
 ): Variable | null {
-	for (const scope of scopes) {
+	// Type-only declarations do not shadow values; name-based scope lookup loses that distinction.
+	for (const scope of sourceCode.scopeManager.scopes) {
 		const reference = scope.references.find(
 			(candidate) =>
 				candidate.identifier.start === identifier.start &&
@@ -250,7 +246,7 @@ function variableDeclarator(variable: Variable): ESTree.VariableDeclarator | nul
 
 function knownValueEvidence(
 	expression: ESTree.Expression,
-	scopes: Parameters<typeof resolvedVariableForIdentifier>[0],
+	sourceCode: SourceCode,
 	boundary: ESTree.Node | null,
 	visitedVariables: ReadonlySet<Variable>,
 ): KnownValueEvidence | null {
@@ -277,7 +273,7 @@ function knownValueEvidence(
 	}
 
 	if (unwrapped.type !== "Identifier") return null;
-	const variable = resolvedVariableForIdentifier(scopes, unwrapped);
+	const variable = resolveValueReference(sourceCode, unwrapped);
 	if (variable === null || visitedVariables.has(variable)) return null;
 
 	const annotatedIdentifier = variable.identifiers.find(
@@ -305,7 +301,7 @@ function knownValueEvidence(
 
 	return knownValueEvidence(
 		declarator.init,
-		scopes,
+		sourceCode,
 		boundary,
 		new Set([...visitedVariables, variable]),
 	);
@@ -313,7 +309,7 @@ function knownValueEvidence(
 
 function widenedBinding(
 	variable: Variable,
-	scopes: Parameters<typeof resolvedVariableForIdentifier>[0],
+	sourceCode: SourceCode,
 ): {
 	readonly broadKind: BroadTypeKind;
 	readonly evidence: KnownValueEvidence;
@@ -345,7 +341,12 @@ function widenedBinding(
 		initializerAssertion !== null && initializerBroadKind !== null
 			? assertedExpression(initializerAssertion)
 			: declarator.init;
-	const evidence = knownValueEvidence(originalExpression, scopes, boundary, new Set([variable]));
+	const evidence = knownValueEvidence(
+		originalExpression,
+		sourceCode,
+		boundary,
+		new Set([variable]),
+	);
 	return evidence === null ? null : { broadKind, evidence, declaredAt: declarator.end, boundary };
 }
 
@@ -376,15 +377,13 @@ export const noWidenThenAssertRule = defineRule({
 		},
 	},
 	createOnce(context) {
-		let scopes: Parameters<typeof resolvedVariableForIdentifier>[0] = [];
-
 		const checkAssertion = (node: ESTree.TSAsExpression | ESTree.TSTypeAssertion) => {
 			const expression = assertedExpression(node);
 			if (expression.type !== "Identifier") return;
 
-			const variable = resolvedVariableForIdentifier(scopes, expression);
+			const variable = resolveValueReference(context.sourceCode, expression);
 			if (variable === null) return;
-			const widened = widenedBinding(variable, scopes);
+			const widened = widenedBinding(variable, context.sourceCode);
 			if (
 				widened === null ||
 				node.start <= widened.declaredAt ||
@@ -408,7 +407,6 @@ export const noWidenThenAssertRule = defineRule({
 
 		return {
 			Program(node) {
-				scopes = context.sourceCode.scopeManager.scopes;
 				const environment = createTypeEnvironment(node);
 				shadowedBuiltIns = environment.shadowedBuiltIns;
 				typeAliases = environment.aliases;

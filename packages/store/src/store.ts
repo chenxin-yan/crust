@@ -7,7 +7,7 @@ import { isJsonObject, type JsonValue } from "@crustjs/utils/json";
 import { coerceBooleanString, tryCoerceNumber } from "@crustjs/utils/primitive";
 import { normalizeStandardIssues, type StandardSchema } from "@crustjs/utils/schema";
 
-import { CrustStoreError } from "./errors.ts";
+import { CrustStoreError, type ValidationErrorDetails } from "./errors.ts";
 import { applyFieldDefaults } from "./merge.ts";
 import { resolveStorePath } from "./path.ts";
 import { deleteJson, readJson, type WriteJsonOptions, writeJson } from "./persistence.ts";
@@ -191,7 +191,7 @@ export function createStore<const F extends FieldsDef>(
 
 	async function runFieldValidators(
 		mutableState: StoreDocument,
-		operation: "read" | "write" | "update" | "patch",
+		operation: ValidationErrorDetails["operation"],
 	): Promise<void> {
 		const issues: StoreValidatorIssue[] = [];
 
@@ -343,17 +343,24 @@ export function createStore<const F extends FieldsDef>(
 		return document as Config;
 	}
 
+	async function persist(
+		document: StoreDocument,
+		operation: Exclude<ValidationErrorDetails["operation"], "read">,
+	): Promise<Config> {
+		const normalized = normalizeStateTypes(document);
+		await runFieldValidators(normalized, operation);
+		await writeJson(filePath, normalized, writeOptions);
+		// SAFETY: the normalized document was validated against every field definition.
+		return normalized as Config;
+	}
+
 	// ──────────────────────────────────────────────────────────────────────
 	// write — Validate then atomically persist full config
 	// ──────────────────────────────────────────────────────────────────────
 
 	async function write(config: Config): Promise<Config> {
 		// SAFETY: field definitions constrain config values and schema outputs to JSON-compatible values.
-		const normalized = normalizeStateTypes({ ...config } as StoreDocument);
-		await runFieldValidators(normalized, "write");
-		await writeJson(filePath, normalized, writeOptions);
-		// SAFETY: the normalized document was validated against every field definition.
-		return normalized as Config;
+		return persist({ ...config } as StoreDocument, "write");
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
@@ -364,11 +371,7 @@ export function createStore<const F extends FieldsDef>(
 		const current = await read();
 		const updated = updater(current);
 		// SAFETY: field definitions constrain updater output to JSON-compatible values.
-		const normalized = normalizeStateTypes({ ...updated } as StoreDocument);
-		await runFieldValidators(normalized, "update");
-		await writeJson(filePath, normalized, writeOptions);
-		// SAFETY: the normalized document was validated against every field definition.
-		return normalized as Config;
+		return persist({ ...updated } as StoreDocument, "update");
 	}
 
 	// ──────────────────────────────────────────────────────────────────────
@@ -377,11 +380,7 @@ export function createStore<const F extends FieldsDef>(
 
 	async function patch(partial: Partial<Config>): Promise<Config> {
 		const current = await readRaw();
-		const normalized = normalizeStateTypes({ ...current, ...partial });
-		await runFieldValidators(normalized, "patch");
-		await writeJson(filePath, normalized, writeOptions);
-		// SAFETY: the merged document was normalized and validated against every field definition.
-		return normalized as Config;
+		return persist({ ...current, ...partial }, "patch");
 	}
 
 	// ──────────────────────────────────────────────────────────────────────

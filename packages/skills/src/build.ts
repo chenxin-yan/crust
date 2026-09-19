@@ -95,15 +95,13 @@ export async function renderSkills(
 	}
 
 	const skills = new Map<string, readonly RenderedFile[]>();
-	const authoredNames = new Set<string>();
 
 	for (const sourceDir of options.extras ?? []) {
 		const bundle = await loadBundleFiles(sourceDir);
 		validateSkillName(bundle.frontmatter.name);
-		if (authoredNames.has(bundle.frontmatter.name)) {
+		if (skills.has(bundle.frontmatter.name)) {
 			throw new SkillSourceConflictError(bundle.frontmatter.name);
 		}
-		authoredNames.add(bundle.frontmatter.name);
 		skills.set(bundle.frontmatter.name, bundle.files);
 	}
 
@@ -115,7 +113,7 @@ export async function renderSkills(
 		};
 		// An authored skill may intentionally replace the same-named generated command skill;
 		// a replaced skill is neither validated nor rendered.
-		if (!authoredNames.has(generatedMeta.name)) {
+		if (!skills.has(generatedMeta.name)) {
 			validateSkillName(generatedMeta.name);
 			requireSkillFrontmatter(generatedMeta, `Skill "${generatedMeta.name}"`);
 			skills.set(generatedMeta.name, renderSkill(buildManifest(snapshot), generatedMeta));

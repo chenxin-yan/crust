@@ -49,7 +49,7 @@ function normalizeArg(arg: DocumentationArg): ManifestArg {
 		variadic: arg.variadic,
 	};
 	if (arg.description !== undefined) result.description = arg.description;
-	if (arg.default !== undefined) result.default = serializeDefault(arg.default);
+	if (arg.default !== undefined) result.default = formatDefault(arg.default);
 	return result;
 }
 function normalizeFlag(flag: DocumentationFlag): ManifestFlag {
@@ -61,14 +61,9 @@ function normalizeFlag(flag: DocumentationFlag): ManifestFlag {
 		multiple: flag.multiple,
 	};
 	if (flag.description !== undefined) result.description = flag.description;
-	if (flag.default !== undefined) result.default = serializeDefault(flag.default);
+	if (flag.default !== undefined) result.default = formatDefault(flag.default);
 	return result;
 }
 function manifestType(type: string | undefined): BaseValueType {
 	return type === "number" || type === "boolean" ? type : "string";
-}
-type DocumentationDefault = DocumentationArg["default"];
-
-function serializeDefault(value: DocumentationDefault): string {
-	return formatDefault(value);
 }

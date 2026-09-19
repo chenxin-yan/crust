@@ -50,7 +50,7 @@ function levenshtein(a: string, b: string): number {
 }
 
 /**
- * Find canonical-name suggestions for `input` by matching against every
+ * Find the best canonical-name suggestion for `input` by matching against every
  * sibling's canonical name **and** any aliases declared on each sibling.
  *
  * Matched aliases are mapped back to their canonical, so suggestions only
@@ -70,38 +70,31 @@ function levenshtein(a: string, b: string): number {
  * shortcut is intentionally omitted: with aliases in the candidate set,
  * any 1–2 char alias would falsely match every typo as distance 0.
  */
-function findSuggestions(
+function findSuggestion(
 	input: string,
 	subCommands: Readonly<Record<string, CommandSnapshot>>,
-): string[] {
-	const best = new Map<string, number>();
-
-	const score = (text: string): number | null => {
-		if (text.startsWith(input)) return 0;
-		const d = levenshtein(input, text);
-		return d <= 3 ? d : null;
-	};
-
-	const record = (canonical: string, distance: number) => {
-		const prev = best.get(canonical);
-		if (prev === undefined || distance < prev) best.set(canonical, distance);
-	};
+): string | undefined {
+	let bestName: string | undefined;
+	let bestDistance = Infinity;
 
 	for (const [name, node] of Object.entries(subCommands)) {
 		if (!isListed(node)) continue;
-		const d = score(name);
-		if (d !== null) record(name, d);
-		for (const alias of node.meta.aliases ?? []) {
-			const da = score(alias);
-			if (da !== null) record(name, da);
+		let distance = Infinity;
+		for (const spelling of [name, ...(node.meta.aliases ?? [])]) {
+			distance = Math.min(distance, spelling.startsWith(input) ? 0 : levenshtein(input, spelling));
+		}
+		if (
+			distance <= 3 &&
+			(bestName === undefined ||
+				distance < bestDistance ||
+				(distance === bestDistance && name.localeCompare(bestName) < 0))
+		) {
+			bestName = name;
+			bestDistance = distance;
 		}
 	}
 
-	return [...best.entries()]
-		.sort(([aName, aDist], [bName, bDist]) =>
-			aDist !== bDist ? aDist - bDist : aName.localeCompare(bName),
-		)
-		.map(([name]) => name);
+	return bestName;
 }
 
 export const didYouMean: ExtensionFactory<[options?: DidYouMeanOptions]> = defineExtension(
@@ -115,11 +108,11 @@ export const didYouMean: ExtensionFactory<[options?: DidYouMeanOptions]> = defin
 					if (!(error instanceof CrustError) || !error.is("COMMAND_NOT_FOUND")) return;
 
 					const details = error.details;
-					const suggestions = findSuggestions(details.input, details.parentCommand.subCommands);
+					const suggestion = findSuggestion(details.input, details.parentCommand.subCommands);
 
 					let message = `Unknown command "${details.input}".`;
-					if (suggestions.length > 0) {
-						message += ` Did you mean "${suggestions[0]}"?`;
+					if (suggestion !== undefined) {
+						message += ` Did you mean "${suggestion}"?`;
 					}
 
 					if (mode === "help") {
