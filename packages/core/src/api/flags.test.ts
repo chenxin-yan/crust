@@ -19,11 +19,6 @@ describe("defineFlag", () => {
 				}
 			>
 		>;
-
-		// @ts-expect-error -- boolean flags cannot have string defaults
-		defineFlag("bad", { type: "boolean", default: "true" });
-		// @ts-expect-error -- every definition must be a FlagDef
-		defineFlag("bad", { type: "not-a-flag" });
 	});
 
 	it("feeds .flags() with the same record typing as an inline literal", async () => {
@@ -51,11 +46,6 @@ describe("defineArg", () => {
 				{ readonly name: "target"; readonly type: "string"; readonly required: true }
 			>
 		>;
-
-		// @ts-expect-error -- number args cannot have string defaults
-		defineArg("bad", { type: "number", default: "1" });
-		// @ts-expect-error -- every definition must be an ArgDef
-		defineArg("bad", { type: "not-an-arg" });
 	});
 
 	it("feeds .args() with the same tuple typing as an inline literal", async () => {

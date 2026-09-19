@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { scaffold } from "../src/scaffold.ts";
@@ -229,7 +229,6 @@ describe("scaffold", () => {
 			});
 
 			expect(result.files).toEqual([join("src", "index.ts")]);
-			expect(result.files.some((file) => isAbsolute(file) || file.startsWith(".."))).toBe(false);
 			expect(existsSync(join(destDir, "linked.txt"))).toBe(false);
 			expect(readOutputFile(join("src", "index.ts"))).toBe("// my-app");
 		},

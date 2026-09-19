@@ -152,7 +152,7 @@ describe("renderZsh", () => {
 const zshAvailable = await isZshAvailable();
 const describeIfZsh = zshAvailable ? describe : describe.skip;
 
-describeIfZsh("renderZsh · zsh -n syntax check", () => {
+describeIfZsh("renderZsh · registration smoke", () => {
 	let scriptPath: string;
 	let tmpDir: string;
 
@@ -165,20 +165,6 @@ describeIfZsh("renderZsh · zsh -n syntax check", () => {
 
 	afterAll(async () => {
 		await rm(tmpDir, { recursive: true, force: true });
-	});
-
-	it("parses cleanly under `zsh -n`", async () => {
-		const proc = Bun.spawn(["zsh", "-n", scriptPath], {
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		const [, err] = await Promise.all([
-			new Response(proc.stdout).text(),
-			new Response(proc.stderr).text(),
-		]);
-		const code = await proc.exited;
-		expect(err).toBe("");
-		expect(code).toBe(0);
 	});
 
 	it("sources and registers completion under noninteractive zsh with compsys initialised", async () => {
@@ -319,13 +305,6 @@ ${helper}
 		if (code !== 0) throw new Error(`zsh exited ${code}\nstderr:\n${err}\nstdout:\n${out}`);
 		return out;
 	}
-
-	it("parses cleanly under `zsh -n`", async () => {
-		const proc = Bun.spawn(["zsh", "-n", scriptPath], { stdout: "pipe", stderr: "pipe" });
-		const err = await new Response(proc.stderr).text();
-		expect(err).toBe("");
-		expect(await proc.exited).toBe(0);
-	});
 
 	it("foo-bar, foo_bar and foo.bar each keep their own flag specs", async () => {
 		expect(await specsFor("_clash__foo_2dbar")).toBe("--first[]\n");

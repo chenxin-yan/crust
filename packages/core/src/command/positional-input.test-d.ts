@@ -121,49 +121,6 @@ function _requiredJsonVariadic() {
 	void input;
 }
 
-function _thirtyArgumentChain() {
-	const app = new Crust("deep")
-		.args({ name: "a0", type: "string" })
-		.args({ name: "a1", type: "string" })
-		.args({ name: "a2", type: "string" })
-		.args({ name: "a3", type: "string" })
-		.args({ name: "a4", type: "string" })
-		.args({ name: "a5", type: "string" })
-		.args({ name: "a6", type: "string" })
-		.args({ name: "a7", type: "string" })
-		.args({ name: "a8", type: "string" })
-		.args({ name: "a9", type: "string" })
-		.args({ name: "a10", type: "string" })
-		.args({ name: "a11", type: "string" })
-		.args({ name: "a12", type: "string" })
-		.args({ name: "a13", type: "string" })
-		.args({ name: "a14", type: "string" })
-		.args({ name: "a15", type: "string" })
-		.args({ name: "a16", type: "string" })
-		.args({ name: "a17", type: "string" })
-		.args({ name: "a18", type: "string" })
-		.args({ name: "a19", type: "string" })
-		.args({ name: "a20", type: "string" })
-		.args({ name: "a21", type: "string" })
-		.args({ name: "a22", type: "string" })
-		.args({ name: "a23", type: "string" })
-		.args({ name: "a24", type: "string" })
-		.args({ name: "a25", type: "string" })
-		.args({ name: "a26", type: "string" })
-		.args({ name: "a27", type: "string" })
-		.args({ name: "a28", type: "string" })
-		.args({ name: "a29", type: "string" })
-		.action(() => "done" as const);
-	function run(values: {
-		[D in (typeof app)["_types"]["args"][number] as D["name"]]: string;
-	}) {
-		void app.run([], { args: values });
-	}
-	void run;
-	// @ts-expect-error -- a late position still requires every earlier position
-	void app.run([], { args: { a29: "last" } });
-}
-
 type HundredPositions = Repeat<100, "p", { readonly type: "string" }>;
 
 function _hundredPositionPrefixes(

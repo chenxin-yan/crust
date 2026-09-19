@@ -1,8 +1,13 @@
-import { describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
+import { setEnv, snapshotEnv } from "../../style/src/testEnv.ts";
 import { progress as createProgressBar } from "./progress.ts";
 import { withProgressSink } from "./spinner.ts";
 import { createFakeSink } from "./test-helpers.ts";
+
+const restoreEnv = snapshotEnv("FORCE_COLOR");
+beforeAll(() => setEnv("FORCE_COLOR", "0"));
+afterAll(restoreEnv);
 
 describe("progress — determinate", () => {
 	it("renders current/total alongside the message", () => {

@@ -89,6 +89,7 @@ describe("crust build integration", () => {
 	}, 15_000);
 
 	it("wipes .crust and stages only the selected target directories", async () => {
+		mkdirSync(join(stageDir, "darwin-arm64"), { recursive: true });
 		writeFileSync(join(stageDir, "stale.txt"), "from a previous build\n");
 		await runBuild(["--target", "bun-linux-x64", "--no-validate"]);
 
