@@ -364,8 +364,13 @@ function parseJson(text: string): JsonValue | undefined {
 /** Interprets `npm view <name>@<version> version --json`; anything but a clear yes/no aborts. */
 function isVersionPublished(result: RunProcessResult, spec: string, version: string): boolean {
 	const body = parseJson(result.stdout);
-	// npm publishes `1.2.3+build` as `1.2.3` (libnpmpublish semver.clean) and view reports that.
-	if (result.exitCode === 0 && body === version.replace(/\+.*$/, "")) {
+	// npm publishes ` v1.2.3+build` as `1.2.3` (libnpmpublish semver.clean: trim, drop a
+	// leading `v`/`=`, drop build metadata) and view reports that normalized version.
+	const published = version
+		.trim()
+		.replace(/^[=v]+/, "")
+		.replace(/\+.*$/, "");
+	if (result.exitCode === 0 && body === published) {
 		return true;
 	}
 	const error = isRecord(body) && isRecord(body.error) ? body.error : undefined;

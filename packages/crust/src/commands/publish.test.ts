@@ -553,12 +553,12 @@ describe("publish manifest validation", () => {
 
 	it("treats npm's normalized version as published when the staged version has build metadata", async () => {
 		const built = structuredClone(manifest);
-		built.version = "1.2.3+build.7";
+		built.version = "v1.2.3+build.7";
 		writeStageFixture(tmpDir, built);
 		// npm strips build metadata on publish, so the registry (and `npm view`) answer `"1.2.3"`.
 		const runNpm = mockNpm({ view: () => viewExists("x@1.2.3") });
 		await publishStagedPackages(built, { stageDir: tmpDir, runNpm }, io);
-		expect(runNpm.mock.calls[0]![1][1]).toBe("@scope/demo-linux-x64@1.2.3+build.7");
+		expect(runNpm.mock.calls[0]![1][1]).toBe("@scope/demo-linux-x64@v1.2.3+build.7");
 		expect(publishCalls(runNpm)).toEqual([]);
 	});
 
