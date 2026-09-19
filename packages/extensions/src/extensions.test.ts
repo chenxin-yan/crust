@@ -401,32 +401,59 @@ describe("built-in extensions", () => {
 		expect(process.env.NO_COLOR).toBe("1");
 	});
 
-	it("noColor restores ambient env after overlapping runs with opposite flags", async () => {
-		const ambientForceColor = process.env.FORCE_COLOR;
-		const ambientNoColor = process.env.NO_COLOR;
-		delete process.env.FORCE_COLOR;
-		delete process.env.NO_COLOR;
-
-		let releaseA: () => void = () => {};
-		const blockA = new Promise<void>((resolve) => {
-			releaseA = resolve;
-		});
+	it("noColor fails fast when an overlapping run uses the opposing flag", async () => {
+		const { promise: blockA, resolve: releaseA } = Promise.withResolvers<void>();
+		let ranB = false;
 
 		const appA = new Crust("a").extend(noColor()).action(() => blockA);
-		const appB = new Crust("b").extend(noColor()).action(() => {});
+		const appB = new Crust("b").extend(noColor()).action(() => {
+			ranB = true;
+		});
 
-		// A (--color) starts and stays pending; B (--no-color) starts and
-		// finishes while A is mid-run, then A completes.
+		// A (--color) starts and stays pending; B (--no-color) must be rejected
+		// in preRun rather than flipping the shared env under A.
 		const runA = appA.execute({ argv: ["--color"] });
-		await appB.execute({ argv: ["--no-color"] });
-		releaseA();
-		await runA;
+		const exitB = await appB.execute({ argv: ["--no-color"] });
 
+		expect(exitB).toBe(1);
+		expect(ranB).toBe(false);
+		expect(getStderr()).toContain("cannot start a --color run while a --no-color run is in flight");
+		expect(process.env.FORCE_COLOR).toBe("3");
+		expect(process.env.NO_COLOR).toBeUndefined();
+
+		releaseA();
+		expect(await runA).toBe(0);
 		expect(process.env.FORCE_COLOR).toBeUndefined();
 		expect(process.env.NO_COLOR).toBeUndefined();
 
-		if (ambientForceColor !== undefined) process.env.FORCE_COLOR = ambientForceColor;
-		if (ambientNoColor !== undefined) process.env.NO_COLOR = ambientNoColor;
+		// The rejected run must not have pinned the direction: the opposite
+		// flag works again once the in-flight run has finished.
+		expect(await appB.execute({ argv: ["--no-color"] })).toBe(0);
+		expect(ranB).toBe(true);
+	});
+
+	it("noColor allows overlapping same-direction runs and restores env after both", async () => {
+		process.env.NO_COLOR = "1";
+
+		const { promise: blockA, resolve: releaseA } = Promise.withResolvers<void>();
+		let seenNoColorB: string | undefined = "unset";
+
+		const appA = new Crust("a").extend(noColor()).action(() => blockA);
+		const appB = new Crust("b").extend(noColor()).action(() => {
+			seenNoColorB = process.env.NO_COLOR;
+		});
+
+		const runA = appA.execute({ argv: ["--color"] });
+		expect(await appB.execute({ argv: ["--color"] })).toBe(0);
+		expect(seenNoColorB).toBeUndefined();
+		// A is still in flight, so the override must survive B finishing.
+		expect(process.env.FORCE_COLOR).toBe("3");
+		expect(process.env.NO_COLOR).toBeUndefined();
+
+		releaseA();
+		expect(await runA).toBe(0);
+		expect(process.env.FORCE_COLOR).toBeUndefined();
+		expect(process.env.NO_COLOR).toBe("1");
 	});
 
 	it("noColor respects NO_COLOR without explicit --color flag", async () => {

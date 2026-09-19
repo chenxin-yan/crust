@@ -190,7 +190,6 @@ export function installExtensionContexts(
 	// promises flag definition order, so pruning in place (instead of
 	// regrouping locals before Extensions) keeps both observable orders.
 	const cloned = cloneCommandNode(node);
-	// ponytail: O(n²) includes over an already-deduped list, fine for handfuls of extensions.
 	const kept = new Set(
 		extensions.flatMap((e) =>
 			!reRegisteredIds.has(e.id) && node.extensions.includes(e) ? [e.id] : [],

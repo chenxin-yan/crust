@@ -94,8 +94,9 @@ function buildChainableStyleFactory(
 	resolveCapabilities: () => ResolvedStyleCapabilities,
 	runtime: boolean,
 ) {
-	// ponytail: unbounded for CLI lifetimes; add eviction if long-running processes build
-	// chains from unbounded user-provided colors.
+	// Bounded so long-running TUI processes styling unbounded user colors cannot
+	// grow the cache forever. Map insertion order gives FIFO eviction for free;
+	// evicted chains rebuild lazily and already-held references keep working.
 	const cache = new Map<string, ChainableStyleFn>();
 
 	const pairDepth = runtime ? "truecolor" : resolveCapabilities().colorDepth;
@@ -126,6 +127,7 @@ function buildChainableStyleFactory(
 			return applyChain(first, steps, resolveCapabilities);
 		}) as ChainableStyleFn;
 
+		if (cache.size >= 1024) cache.delete(cache.keys().next().value!);
 		cache.set(key, styleFn);
 
 		// Registered chain methods (bold, red, bgYellow, ...)
