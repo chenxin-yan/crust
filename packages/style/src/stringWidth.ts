@@ -58,6 +58,8 @@ function isZeroWidth(code: number): boolean {
  * combining marks); exotic clusters may measure differently.
  */
 export function stringWidthJs(input: string): number {
+	// Printable ASCII has one column per code unit; controls/ANSI still use the fallback.
+	if (!/[^\x20-\x7e]/.test(input)) return input.length;
 	let width = 0;
 	for (const { segment } of segmenter.segment(input.replace(ansi, ""))) {
 		if (emoji.test(segment)) {
