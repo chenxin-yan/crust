@@ -10,9 +10,9 @@ import {
 	type TypePerfReport,
 } from "./type-perf-report.ts";
 
-const report = (small: number, large: number): TypePerfReport => ({
+const report = (small: number, large: number, stress: number): TypePerfReport => ({
 	typescriptVersion: "7.0.2",
-	instantiations: { 10: small, 100: large },
+	instantiations: { 10: small, 100: large, 200: stress },
 });
 
 const repoRoot = resolve(import.meta.dir, "..");
@@ -36,7 +36,7 @@ describe("type performance report", () => {
 		expect(generateConsumerSource(10).match(/const command\d+ = defineCommand/g)).toHaveLength(10);
 	});
 
-	it("measures both consumer sizes using the harness compiler, not the target tree's compiler", () => {
+	it("measures all consumer sizes using the harness compiler, not the target tree's compiler", () => {
 		const root = mkdtempSync(join(tmpdir(), "crust-type-perf-test-"));
 		try {
 			mkdirSync(join(root, "packages"));
@@ -47,14 +47,15 @@ describe("type performance report", () => {
 			expect(result.stdout.toString() + result.stderr.toString()).toBe("");
 			expect(result.exitCode).toBe(0);
 			const measured = JSON.parse(readFileSync(output, "utf8"));
-			expect(Object.keys(measured.instantiations)).toEqual(["10", "100"]);
+			expect(Object.keys(measured.instantiations)).toEqual(["10", "100", "200"]);
 			expect(measured.instantiations[10]).toBeGreaterThan(0);
 			expect(measured.instantiations[100]).toBeGreaterThan(measured.instantiations[10]);
+			expect(measured.instantiations[200]).toBeGreaterThan(measured.instantiations[100]);
 			expect(measured.typescriptVersion).toBeTruthy();
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 		}
-	});
+	}, 30_000);
 
 	it("fails measurement when a consumer cannot compile instead of publishing missing data", () => {
 		const root = mkdtempSync(join(tmpdir(), "crust-type-perf-failure-"));
@@ -78,9 +79,13 @@ describe("type performance report", () => {
 	});
 
 	it("reports only per-fixture deltas and flags increases strictly above 10%", () => {
-		const output = formatComparison(report(10_000, 50_000), report(11_000, 60_000));
+		const output = formatComparison(
+			report(10_000, 50_000, 100_000),
+			report(11_000, 60_000, 120_000),
+		);
 		expect(output).toContain("| 10 | 10,000 | 11,000 | +1,000 (+10.0%) |");
 		expect(output).toContain("| 100 ⚠️ | 50,000 | 60,000 | +10,000 (+20.0%) |");
+		expect(output).toContain("| 200 ⚠️ | 100,000 | 120,000 | +20,000 (+20.0%) |");
 		expect(output).toContain("PR merge");
 		expect(output).toContain("TypeScript 7.0.2");
 		expect(output).not.toContain("Check time");
@@ -89,22 +94,26 @@ describe("type performance report", () => {
 	});
 
 	it("does not flag improved workloads when their ratio increases", () => {
-		const output = formatComparison(report(20_000, 100_000), report(10_000, 80_000));
+		const output = formatComparison(
+			report(20_000, 100_000, 200_000),
+			report(10_000, 80_000, 180_000),
+		);
 		expect(output).toContain("| 10 | 20,000 | 10,000 | −10,000 (−50.0%) |");
 		expect(output).toContain("| 100 | 100,000 | 80,000 | −20,000 (−20.0%) |");
+		expect(output).toContain("| 200 | 200,000 | 180,000 | −20,000 (−10.0%) |");
 		expect(output).not.toContain("| 100/10");
 	});
 
 	it("handles a zero baseline without an infinite percentage", () => {
-		expect(formatComparison(report(0, 50_000), report(100, 50_000))).toContain(
+		expect(formatComparison(report(0, 50_000, 100_000), report(100, 50_000, 100_000))).toContain(
 			"| 10 ⚠️ | 0 | 100 | +100 (n/a) |",
 		);
 	});
 
 	it("rejects comparisons made with different compiler versions", () => {
-		const head = report(10_000, 50_000);
+		const head = report(10_000, 50_000, 100_000);
 		head.typescriptVersion = "7.1.0";
-		expect(() => formatComparison(report(10_000, 50_000), head)).toThrow(
+		expect(() => formatComparison(report(10_000, 50_000, 100_000), head)).toThrow(
 			"TypeScript versions differ",
 		);
 	});

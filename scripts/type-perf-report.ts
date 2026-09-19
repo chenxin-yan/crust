@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
-const scalingSizes = [10, 100] as const;
+const scalingSizes = [10, 100, 200] as const;
 
 export interface TypePerfReport {
 	typescriptVersion: string;
@@ -171,7 +171,7 @@ function measure(outputPath: string, rootDir = "."): void {
 	// Both trees use the harness's compiler, even when their lockfiles differ.
 	const tsc = resolve(import.meta.dir, "../node_modules/.bin/tsc");
 	const version = run([tsc, "--version"], root).replace(/^Version\s+/, "");
-	const instantiations: TypePerfReport["instantiations"] = { 10: 0, 100: 0 };
+	const instantiations: TypePerfReport["instantiations"] = { 10: 0, 100: 0, 200: 0 };
 	const fixtureRoot = mkdtempSync(join(tmpdir(), "crust-type-perf-"));
 	try {
 		for (const size of scalingSizes) {
