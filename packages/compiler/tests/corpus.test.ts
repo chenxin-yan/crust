@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
-import { compile, TypeScriptCompileError } from "../src/index.js";
+import { compile, CompilerError, DiagnosticCodes } from "../src/index.js";
 
 const goPath = Bun.which("go");
 const nodePath = Bun.which("node");
@@ -117,7 +117,7 @@ describe("compiler differential corpus", () => {
 		const workspace = await mkdtemp(join(tmpdir(), "crust-array-log-"));
 		try {
 			await expect(compile(fixture, { outputPath: join(workspace, "binary") })).rejects.toThrow(
-				"Unsupported TypeScript CallExpression",
+				"Unsupported TypeScript call to console.log",
 			);
 		} finally {
 			await rm(workspace, { recursive: true, force: true });
@@ -136,7 +136,7 @@ describe("compiler differential corpus", () => {
 		try {
 			await writeFile(fixture, source);
 			await expect(compile(fixture, { outputPath: join(workspace, "binary") })).rejects.toThrow(
-				"Unsupported TypeScript CallExpression",
+				"Unsupported TypeScript call to console.log",
 			);
 		} finally {
 			await rm(workspace, { recursive: true, force: true });
@@ -217,7 +217,11 @@ describe("compiler differential corpus", () => {
 		const fixture = join(workspace, "fixture.ts");
 		try {
 			await writeFile(fixture, 'process.exit("2");');
-			await expect(compile(fixture)).rejects.toBeInstanceOf(TypeScriptCompileError);
+			const compilation = compile(fixture);
+			await expect(compilation).rejects.toBeInstanceOf(CompilerError);
+			await expect(compilation).rejects.toMatchObject({
+				diagnostics: [expect.objectContaining({ code: DiagnosticCodes.TypeScriptError })],
+			});
 			for (const source of [
 				'console.log("abc".slice(1));',
 				'console.log("abc"[0]);',
