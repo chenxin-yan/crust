@@ -1,5 +1,13 @@
 # @crustjs/plugins
 
+## 0.3.1
+
+### Patch Changes
+
+- [#400](https://github.com/chenxin-yan/crust/pull/400) [`d5937f8`](https://github.com/chenxin-yan/crust/commit/d5937f843240e0244a542e5c294bcfc4f16574ff) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `noColor`: overlapping programmatic runs with opposing `--color`/`--no-color` flags now fail fast in `preRun` instead of last-writer-wins on `process.env`.
+- Updated dependencies [[`4350974`](https://github.com/chenxin-yan/crust/commit/4350974af6b81ce9f0db1e3951cdf8b7b0b43b3d)]:
+  - @crustjs/style@0.3.3
+
 ## 0.3.0
 
 ### Minor Changes

@@ -1,5 +1,13 @@
 # create-crust
 
+## 0.3.1
+
+### Patch Changes
+
+- [#403](https://github.com/chenxin-yan/crust/pull/403) [`41c69b6`](https://github.com/chenxin-yan/crust/commit/41c69b64866e52bdb4fed0797146fd1c7accb01b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Scaffolded projects are `"private": true`. The project is the build input, not the npm package: `crust publish` ships the staged `.crust/` packages (which are not private), so a stray `npm publish` in the project directory is now refused instead of uploading the source. `npm link` is unaffected.
+- Updated dependencies []:
+  - @crustjs/core@0.3.1
+
 ## 0.3.0
 
 ### Minor Changes
