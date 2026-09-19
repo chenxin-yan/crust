@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
+import { widthCorpus } from "./stringWidth.corpus.ts";
 import { stringWidth, stringWidthJs } from "./stringWidth.ts";
+
+const hasBunNative = globalThis.Bun?.stringWidth !== undefined;
 
 describe("stringWidth", () => {
 	it("measures ANSI, combining marks, CJK, and emoji", () => {
@@ -25,21 +28,31 @@ describe("stringWidth", () => {
 		expect(stringWidthJs("\u00b1")).toBe(1); // ± plus-minus sign
 	});
 
-	it("keeps the JavaScript fallback aligned with Bun", () => {
-		for (const value of [
-			"",
-			"plain ASCII",
-			"你好",
-			"🙂",
-			"👨‍👩‍👧‍👦",
-			"☺️",
-			"1\uFE0F\u20E3",
-			"e\u0301",
-			"\u1112\u1161\u11AB",
-			"\u001b[31mred\u001b[0m",
-		]) {
-			const nativeWidth = Bun.stringWidth(value, { countAnsiEscapeCodes: false });
-			expect(stringWidthJs(value)).toBe(nativeWidth);
+	it("only shortcuts printable ASCII", () => {
+		const printable = Array.from({ length: 95 }, (_, i) => String.fromCharCode(i + 32)).join("");
+		expect(stringWidthJs(printable)).toBe(95);
+		for (const [input, width] of [
+			["", 0],
+			["abc\n", 3],
+			["abc\r\n", 3],
+			["abc\x7f", 3],
+			["abc\x1b[31m", 3],
+			["abc你好", 7],
+			["abce\u0301", 4],
+		] as const) {
+			expect(stringWidthJs(input)).toBe(width);
+		}
+	});
+
+	it("matches the corpus in the fallback, the public API and Bun native", () => {
+		for (const [label, input, expected] of widthCorpus) {
+			if (hasBunNative) {
+				expect(Bun.stringWidth(input, { countAnsiEscapeCodes: false }), `native: ${label}`).toBe(
+					expected,
+				);
+			}
+			expect(stringWidthJs(input), label).toBe(expected);
+			expect(stringWidth(input), label).toBe(expected);
 		}
 	});
 });
