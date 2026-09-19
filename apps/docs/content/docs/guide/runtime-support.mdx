@@ -3,7 +3,7 @@ title: Runtime support
 description: Run Crust applications with Bun, Node.js, or Deno.
 ---
 
-Crust application code is the same on Bun, Node.js, and Deno, so pick a runtime based on how you ship and operate the CLI.
+Crust application code is the same on Bun, Node.js, and Deno, so pick a runtime based on how you ship and operate the CLI. Bun is the first-class target: `create-crust` and `crust build` default to it, and where Bun exposes a native primitive Crust uses it. [`@crustjs/style`](/docs/modules/style) measures text with `Bun.stringWidth` when the Bun global is present and falls back to a JavaScript implementation on Node.js and Deno, so padding, tables, and prompt rendering are fastest on Bun.
 
 ## Supported runtimes
 
