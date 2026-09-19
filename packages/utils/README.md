@@ -11,4 +11,4 @@ Internal shared utilities for Crust workspace packages.
 - `@crustjs/utils/schema` — Standard Schema types and issue normalization.
 - `@crustjs/utils/terminal` — cross-package ambient terminal IO.
 
-`@crustjs/utils` is a published internal support package, not a supported public API. Consumer packages declare it as a runtime dependency so an install shares one copy. Multiple installed copies remain possible, so `terminal.ts` still shares its state through a `Symbol.for` process-global slot; `scripts/smoke-runtimes/smoke.mjs` covers that cross-copy behavior.
+`@crustjs/utils` is a published internal support package, not a supported public API. Consumer packages declare it as a runtime dependency so an install shares one copy. Multiple installed copies remain possible, so `terminal.ts` still shares its state through a `Symbol.for` process-global slot; `packages/utils/src/terminal.test.ts` covers that cross-copy sharing, and `scripts/smoke-runtimes/smoke.mjs` covers the cross-package integration on Bun, Node, and Deno.

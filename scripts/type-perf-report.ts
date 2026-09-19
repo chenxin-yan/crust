@@ -116,15 +116,18 @@ export function generateConsumerSource(size: number): string {
 	return lines.join("\n");
 }
 
-export function generateConsumerFixture(
-	outputDir: string,
-	corePackageDir: string,
-	size: number,
-): void {
+export function generateConsumerFixture(outputDir: string, rootDir: string, size: number): void {
 	const fixtureDir = resolve(outputDir);
-	const packageDir = resolve(corePackageDir);
+	const root = resolve(rootDir);
 	mkdirSync(join(fixtureDir, "node_modules/@crustjs"), { recursive: true });
-	symlinkSync(packageDir, join(fixtureDir, "node_modules/@crustjs/core"), "dir");
+	// core's declarations import @crustjs/utils/*; without it they degrade to `any`.
+	for (const name of ["core", "utils"]) {
+		symlinkSync(
+			join(root, "packages", name),
+			join(fixtureDir, `node_modules/@crustjs/${name}`),
+			"dir",
+		);
+	}
 	writeFileSync(join(fixtureDir, "consumer.ts"), generateConsumerSource(size));
 	writeFileSync(
 		join(fixtureDir, "tsconfig.json"),
@@ -176,7 +179,7 @@ function measure(outputPath: string, rootDir = "."): void {
 	try {
 		for (const size of scalingSizes) {
 			const fixtureDir = join(fixtureRoot, String(size));
-			generateConsumerFixture(fixtureDir, join(root, "packages/core"), size);
+			generateConsumerFixture(fixtureDir, root, size);
 			const diagnostics = run(
 				[
 					tsc,

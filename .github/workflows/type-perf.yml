@@ -38,7 +38,8 @@ jobs:
       - name: Measure PR merge
         run: |
           bun ci
-          cd packages/core && bun run build && cd ../..
+          # Turbo builds core's runtime dependency @crustjs/utils first (^build).
+          bun run build:pkgs --filter=@crustjs/core
           bun scripts/type-perf-report.ts measure "$RUNNER_TEMP/head.json"
 
       - name: Checkout base
@@ -52,7 +53,8 @@ jobs:
         run: |
           cd base
           bun ci
-          cd packages/core && bun run build && cd ../../..
+          bun run build:pkgs --filter=@crustjs/core
+          cd ..
           # Use the PR merge's harness and compiler for both declaration sets.
           bun scripts/type-perf-report.ts measure "$RUNNER_TEMP/base.json" base
 
