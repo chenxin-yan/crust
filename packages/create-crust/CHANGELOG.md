@@ -1,5 +1,15 @@
 # create-crust
 
+## 0.3.2
+
+### Patch Changes
+
+- Updated dependencies [[`2cbdc21`](https://github.com/chenxin-yan/crust/commit/2cbdc2122f7bffbad42b79185bf0e4d8d97021a7)]:
+  - @crustjs/core@0.3.2
+  - @crustjs/create@0.1.3
+  - @crustjs/progress@0.1.2
+  - @crustjs/prompts@0.2.3
+
 ## 0.3.1
 
 ### Patch Changes

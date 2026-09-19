@@ -1,5 +1,16 @@
 # @crustjs/crust
 
+## 0.3.2
+
+### Patch Changes
+
+- [#410](https://github.com/chenxin-yan/crust/pull/410) [`941b457`](https://github.com/chenxin-yan/crust/commit/941b4575d648a654bec89c698fab80841366348f) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `crust publish` now checks each staged `name@version` on the target registry with `npm view` before uploading and skips versions that already exist, so rerunning after a partial failure resumes instead of failing on the packages that already went up. The lookup replays the staged `publishConfig` registry settings to `npm view` so it targets the registry `npm publish` would (npm 10.6+ precedence); any answer other than "exists" or E404 aborts before anything is uploaded. `--dry-run` stays offline.
+
+- [#408](https://github.com/chenxin-yan/crust/pull/408) [`10cfb50`](https://github.com/chenxin-yan/crust/commit/10cfb507699e5b1df346200f7815e8d9aa4b3ad3) Thanks [@pullfrog](https://github.com/apps/pullfrog)! - Allow npm browser and OTP authentication during interactive crust publish runs by inheriting terminal stdio.
+- Updated dependencies [[`2cbdc21`](https://github.com/chenxin-yan/crust/commit/2cbdc2122f7bffbad42b79185bf0e4d8d97021a7)]:
+  - @crustjs/core@0.3.2
+  - @crustjs/extensions@0.3.2
+
 ## 0.3.1
 
 ### Patch Changes
