@@ -142,7 +142,7 @@ function hasNumericId(message: LspMessage): message is LspMessage & { id: number
 }
 
 /** Minimal JSON-RPC/LSP client over stdio with Content-Length framing. */
-class LspClient {
+export class LspClient {
 	private readonly proc: ReturnType<typeof Bun.spawn>;
 	private readonly pending = new Map<number, (message: LspMessage) => void>();
 	private nextId = 1;
@@ -211,14 +211,26 @@ class LspClient {
 
 	async request<Params>(method: string, params: Params, timeoutMs = 30_000): Promise<LspMessage> {
 		const id = this.nextId++;
+		// The timer is referenced: clear it on every settlement so a finished
+		// session does not keep the process alive until the deadline.
+		let timer: ReturnType<typeof setTimeout> | undefined;
 		const response = new Promise<LspMessage>((resolvePromise, reject) => {
-			this.pending.set(id, resolvePromise);
-			setTimeout(() => {
+			timer = setTimeout(() => {
 				if (this.pending.delete(id))
 					reject(new Error(`LSP ${method} timed out after ${timeoutMs}ms`));
 			}, timeoutMs);
+			this.pending.set(id, (message) => {
+				clearTimeout(timer);
+				resolvePromise(message);
+			});
 		});
-		await this.send({ jsonrpc: "2.0", id, method, params });
+		try {
+			await this.send({ jsonrpc: "2.0", id, method, params });
+		} catch (error) {
+			clearTimeout(timer);
+			this.pending.delete(id);
+			throw error;
+		}
 		return response;
 	}
 
