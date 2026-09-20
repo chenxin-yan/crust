@@ -69,8 +69,8 @@ function packageDirs(root) {
 	return out;
 }
 
-// Publishable workspace packages: [pkgDir, parsed package.json] pairs.
-const workspacePackages = (root) => packageDirs(root).filter(([, pkg]) => !pkg.private && !pkg.bin);
+// Publishable subset of packageDirs() pairs.
+const publishable = (packages) => packages.filter(([, pkg]) => !pkg.private && !pkg.bin);
 
 async function gzippedBundle(entrypoint, external, define, label) {
 	const result = await Bun.build({
@@ -128,24 +128,6 @@ async function bundleConsumers(consumerRoot, pkg) {
 	return consumers;
 }
 
-// Run fn with a consumer root for a workspace tree: node_modules symlinks to
-// that tree's package dirs. Bun resolves through the symlink, so transitive
-// workspace deps resolve from each package's own node_modules, exactly as
-// bundleEntries does. The root is removed afterwards, even if populating it fails.
-async function withWorkspaceConsumerRoot(packages, fn) {
-	const tmp = mkdtempSync(join(tmpdir(), "pkg-size-consumer-"));
-	try {
-		for (const [pkgDir, pkg] of packages) {
-			const link = join(tmp, "node_modules", pkg.name);
-			mkdirSync(dirname(link), { recursive: true });
-			symlinkSync(resolve(pkgDir), link);
-		}
-		return await fn(tmp);
-	} finally {
-		rmSync(tmp, { recursive: true, force: true });
-	}
-}
-
 // Runtime footprint: unpacked bytes of pkg plus its production `dependencies`
 // graph. Keyed by resolved directory, not name: a published install can hold a
 // nested and a hoisted copy of one package, and both are installed bytes. Peer
@@ -190,8 +172,17 @@ async function measure(root) {
 		if (!packed.has(dir)) packed.set(dir, npmPack([], dir)[0]);
 		return packed.get(dir);
 	};
-	await withWorkspaceConsumerRoot(all, async (consumerRoot) => {
-		for (const [pkgDir, pkg] of workspacePackages(root)) {
+	// Consumer root: node_modules symlinks to this tree's package dirs. Bun
+	// resolves through the symlink, so transitive workspace deps come from each
+	// package's own node_modules, exactly as bundleEntries does.
+	const consumerRoot = mkdtempSync(join(tmpdir(), "pkg-size-consumer-"));
+	try {
+		for (const [pkgDir, pkg] of all) {
+			const link = join(consumerRoot, "node_modules", pkg.name);
+			mkdirSync(dirname(link), { recursive: true });
+			symlinkSync(resolve(pkgDir), link);
+		}
+		for (const [pkgDir, pkg] of publishable(all)) {
 			const own = packOnce(pkgDir);
 			out[pkg.name] = {
 				entries: await bundleEntries(pkgDir, pkg),
@@ -206,7 +197,9 @@ async function measure(root) {
 				),
 			};
 		}
-	});
+	} finally {
+		rmSync(consumerRoot, { recursive: true, force: true });
+	}
 	return out;
 }
 
@@ -221,7 +214,7 @@ function resolveInstalled(name, fromDir, root) {
 
 async function measurePublished(root) {
 	const out = {};
-	for (const [, pkg] of workspacePackages(root)) {
+	for (const [, pkg] of publishable(packageDirs(root))) {
 		let packed;
 		try {
 			[packed] = npmPack([`${pkg.name}@latest`], root);

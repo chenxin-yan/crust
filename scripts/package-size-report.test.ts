@@ -152,14 +152,15 @@ describe("sizes", () => {
 		writeFakeCore(fixtureRoot, 1);
 		writeFakeCore(otherRoot, 2000);
 
-		const small = runJson(["sizes", fixtureRoot])["@crustjs/core"].consumers;
+		const sizes = runJson(["sizes", fixtureRoot]);
+		const small = sizes["@crustjs/core"].consumers;
 		const large = runJson(["sizes", otherRoot])["@crustjs/core"].consumers;
 		expect(Object.keys(small).sort()).toEqual(["cli", "error-only", "tooling-docs"]);
 		for (const fixture of ["error-only", "tooling-docs"]) {
 			expect(small[fixture]).toBeGreaterThan(0);
 			expect(large[fixture]).toBeGreaterThan(small[fixture] + 1000);
 		}
-		expect(runJson(["sizes", fixtureRoot])["@fixture/package"].consumers).toEqual({});
+		expect(sizes["@fixture/package"].consumers).toEqual({});
 	});
 });
 
