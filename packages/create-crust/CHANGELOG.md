@@ -1,5 +1,12 @@
 # create-crust
 
+## 0.3.3
+
+### Patch Changes
+
+- Updated dependencies [[`63ef15c`](https://github.com/chenxin-yan/crust/commit/63ef15c2a009c87cc568d1eab2d1011332417057)]:
+  - @crustjs/core@0.3.3
+
 ## 0.3.2
 
 ### Patch Changes

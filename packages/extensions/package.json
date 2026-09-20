@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/extensions",
-	"version": "0.3.2",
+	"version": "0.3.3",
 	"description": "Official Extensions for the Crust CLI framework",
 	"type": "module",
 	"sideEffects": false,
