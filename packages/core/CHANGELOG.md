@@ -1,5 +1,11 @@
 # @crustjs/core
 
+## 0.3.3
+
+### Patch Changes
+
+- [#413](https://github.com/chenxin-yan/crust/pull/413) [`63ef15c`](https://github.com/chenxin-yan/crust/commit/63ef15c2a009c87cc568d1eab2d1011332417057) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Finished Bun and Node CLI bundles (built by `crust build`) no longer include the `CRUST_INTERNAL_SNAPSHOT_PATH` snapshot/build-hook protocol: the bundle is smaller and dispatches normally even when that variable is set. Source entries run by `crust build` and Deno binaries are unchanged.
+
 ## 0.3.2
 
 ### Patch Changes
