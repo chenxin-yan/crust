@@ -9,6 +9,7 @@ on:
       - "turbo.json"
       - "tsdown.config.ts"
       - "scripts/package-size-report.mjs"
+      - "scripts/package-size-fixtures/**"
       - ".github/workflows/package-size.yml"
 
 concurrency:
