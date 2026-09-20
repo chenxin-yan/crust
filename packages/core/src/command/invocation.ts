@@ -54,6 +54,9 @@ interface PreparedInvocation {
  * validates its documentation sections, optionally runs Extension build hooks when the
  * build output directory is set, writes its final JSON snapshot and Build Report, and exits
  * without dispatching a Command Action. In-process callers use `Crust.snapshot()`.
+ *
+ * Only source entries run by `crust build` honor it: finished Bun/Node bundles carry
+ * `process.env.CRUST_INTERNAL_BUILD === "1"` as a literal and compile the protocol out.
  */
 export const SNAPSHOT_PATH_ENV = "CRUST_INTERNAL_SNAPSHOT_PATH";
 const EXIT_CODE_CANCELLED = 130;
@@ -423,7 +426,10 @@ export async function executeInvocation(
 ): Promise<number> {
 	const argv = options?.argv ?? process.argv.slice(2);
 	const io: InvocationIO = { ...DEFAULT_IO, ...options?.io };
-	const snapshotPath = process.env[SNAPSHOT_PATH_ENV];
+	// Literal property access, no destructuring: `crust build` defines the marker
+	// as `"1"`, so bundlers fold this to `undefined` and drop the snapshot branch.
+	const snapshotPath =
+		process.env.CRUST_INTERNAL_BUILD === "1" ? undefined : process.env[SNAPSHOT_PATH_ENV];
 
 	if (snapshotPath) {
 		try {
