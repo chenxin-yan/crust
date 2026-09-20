@@ -10,7 +10,9 @@ const installArgs = join(testRoot, "install-args.json");
 const reportScript = join(import.meta.dir, "package-size-report.mjs");
 
 // Fake npm: `pack` reports the optional `x-unpacked` field of the cwd package
-// (2 when absent) so tests can assert dependency accounting.
+// (2 when absent) so tests can assert dependency accounting. `install` lays
+// out the manifests in FAKE_NPM_TREE (relative path -> manifest) when set, so
+// a test can shape a nested/hoisted node_modules tree.
 const fakeNpm = `#!/usr/bin/env bun
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -36,9 +38,13 @@ if (args[0] === "pack") {
 		console.error("Expected the version measured by npm pack");
 		process.exit(1);
 	}
-	const packageDir = join(process.cwd(), "node_modules", name);
-	mkdirSync(packageDir, { recursive: true });
-	writeFileSync(join(packageDir, "package.json"), JSON.stringify({ name, version, exports: {} }));
+	const tree = process.env.FAKE_NPM_TREE
+		? JSON.parse(process.env.FAKE_NPM_TREE)
+		: { [join("node_modules", name, "package.json")]: { name, version, exports: {} } };
+	for (const [path, manifest] of Object.entries(tree)) {
+		mkdirSync(join(process.cwd(), path, ".."), { recursive: true });
+		writeFileSync(join(process.cwd(), path), JSON.stringify(manifest));
+	}
 }
 `;
 
@@ -91,7 +97,7 @@ beforeEach(() => {
 
 afterAll(() => rmSync(testRoot, { recursive: true, force: true }));
 
-function run(cmd: string[], errorCode?: string) {
+function run(cmd: string[], errorCode?: string, tree?: Record<string, Manifest>) {
 	return Bun.spawnSync({
 		cmd: [process.execPath, reportScript, ...cmd],
 		env: {
@@ -99,6 +105,7 @@ function run(cmd: string[], errorCode?: string) {
 			PATH: `${fakeBin}:${process.env.PATH}`,
 			NPM_ARGS_FILE: installArgs,
 			...(errorCode ? { FAKE_NPM_ERROR: errorCode } : {}),
+			...(tree ? { FAKE_NPM_TREE: JSON.stringify(tree) } : {}),
 		},
 		stdout: "pipe",
 		stderr: "pipe",
@@ -176,6 +183,29 @@ describe("sizes-published", () => {
 	it("disables lifecycle scripts when installing published packages", () => {
 		expect(run(["sizes-published", fixtureRoot]).exitCode).toBe(0);
 		expect(JSON.parse(readFileSync(installArgs, "utf8"))).toContain("--ignore-scripts");
+	});
+
+	it("counts a nested and a hoisted copy of one dependency as separate installed bytes", () => {
+		const manifest = (name: string, unpacked: number, dependencies?: Record<string, string>) => ({
+			name,
+			exports: {},
+			"x-unpacked": unpacked,
+			...(dependencies ? { dependencies } : {}),
+		});
+		// package -> b, d@1 (hoisted); b -> d@2 (nested under b). All four are installed.
+		const result = run(["sizes-published", fixtureRoot], undefined, {
+			"node_modules/@fixture/package/package.json": manifest("@fixture/package", 100, {
+				"@fixture/b": "^1.0.0",
+				"@fixture/d": "^1.0.0",
+			}),
+			"node_modules/@fixture/b/package.json": manifest("@fixture/b", 10, {
+				"@fixture/d": "^2.0.0",
+			}),
+			"node_modules/@fixture/b/node_modules/@fixture/d/package.json": manifest("@fixture/d", 2),
+			"node_modules/@fixture/d/package.json": manifest("@fixture/d", 1),
+		});
+		expect(result.stderr.toString()).toBe("");
+		expect(JSON.parse(result.stdout.toString())["@fixture/package"].footprint).toBe(113);
 	});
 });
 

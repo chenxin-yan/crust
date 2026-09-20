@@ -1,5 +1,5 @@
-import { beforeAll, describe, expect, it } from "bun:test";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -39,6 +39,8 @@ beforeAll(() => {
 	writeFileSync(join(fixtureDir, "entry.ts"), ENTRY_SOURCE);
 });
 
+afterAll(() => rmSync(fixtureDir, { recursive: true, force: true }));
+
 async function bundle(name: string, define?: Record<string, string>): Promise<string> {
 	const result = await Bun.build({
 		entrypoints: [join(fixtureDir, "entry.ts")],
@@ -53,7 +55,7 @@ async function bundle(name: string, define?: Record<string, string>): Promise<st
 }
 
 async function runWithSnapshotEnv(bundlePath: string, snapshotPath: string) {
-	const proc = Bun.spawn(["bun", bundlePath], {
+	const proc = Bun.spawn([process.execPath, bundlePath], {
 		env: { ...process.env, CRUST_INTERNAL_SNAPSHOT_PATH: snapshotPath },
 		stdout: "pipe",
 		stderr: "pipe",

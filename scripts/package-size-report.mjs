@@ -5,7 +5,7 @@
 //     the same way against the measured tree — the cost of typical usage.
 //   - install: tarball and unpacked size from `npm pack --dry-run`, plus the
 //     runtime footprint: unpacked bytes of the package and its production
-//     `dependencies` graph (each package once; peers excluded).
+//     `dependencies` graph (each installed copy once; peers excluded).
 // CLI packages (with a bin field) are excluded since their size is install
 // cost, not runtime code shipped to consumers.
 // Usage:
@@ -128,28 +128,35 @@ async function bundleConsumers(consumerRoot, pkg) {
 	return consumers;
 }
 
-// Consumer root for a workspace tree: node_modules symlinks to that tree's
-// package dirs. Bun resolves through the symlink, so transitive workspace
-// deps resolve from each package's own node_modules, exactly as bundleEntries does.
-function workspaceConsumerRoot(packages) {
+// Run fn with a consumer root for a workspace tree: node_modules symlinks to
+// that tree's package dirs. Bun resolves through the symlink, so transitive
+// workspace deps resolve from each package's own node_modules, exactly as
+// bundleEntries does. The root is removed afterwards, even if populating it fails.
+async function withWorkspaceConsumerRoot(packages, fn) {
 	const tmp = mkdtempSync(join(tmpdir(), "pkg-size-consumer-"));
-	for (const [pkgDir, pkg] of packages) {
-		const link = join(tmp, "node_modules", pkg.name);
-		mkdirSync(dirname(link), { recursive: true });
-		symlinkSync(resolve(pkgDir), link);
+	try {
+		for (const [pkgDir, pkg] of packages) {
+			const link = join(tmp, "node_modules", pkg.name);
+			mkdirSync(dirname(link), { recursive: true });
+			symlinkSync(resolve(pkgDir), link);
+		}
+		return await fn(tmp);
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
 	}
-	return tmp;
 }
 
 // Runtime footprint: unpacked bytes of pkg plus its production `dependencies`
-// graph, each package counted once. Peer and optional peer dependencies are
-// excluded (consumers provide them). resolveDep(name, fromDir) returns the
-// dependency's package dir or undefined; unpackedOf(dir) its unpacked bytes.
+// graph. Keyed by resolved directory, not name: a published install can hold a
+// nested and a hoisted copy of one package, and both are installed bytes. Peer
+// and optional peer dependencies are excluded (consumers provide them).
+// resolveDep(name, fromDir) returns the dependency's package dir or undefined;
+// unpackedOf(dir) its unpacked bytes.
 function footprint(pkgDir, pkg, resolveDep, unpackedOf) {
-	const seen = new Map();
+	const seen = new Set();
 	const visit = (dir, manifest) => {
-		if (seen.has(manifest.name)) return;
-		seen.set(manifest.name, dir);
+		if (seen.has(dir)) return;
+		seen.add(dir);
 		for (const name of Object.keys(manifest.dependencies ?? {})) {
 			const depDir = resolveDep(name, dir);
 			if (depDir) visit(depDir, readPackage(depDir));
@@ -157,7 +164,7 @@ function footprint(pkgDir, pkg, resolveDep, unpackedOf) {
 	};
 	visit(pkgDir, pkg);
 	let total = 0;
-	for (const dir of seen.values()) total += unpackedOf(dir);
+	for (const dir of seen) total += unpackedOf(dir);
 	return total;
 }
 
@@ -183,10 +190,8 @@ async function measure(root) {
 		if (!packed.has(dir)) packed.set(dir, npmPack([], dir)[0]);
 		return packed.get(dir);
 	};
-	const publishable = workspacePackages(root);
-	const consumerRoot = workspaceConsumerRoot(all);
-	try {
-		for (const [pkgDir, pkg] of publishable) {
+	await withWorkspaceConsumerRoot(all, async (consumerRoot) => {
+		for (const [pkgDir, pkg] of workspacePackages(root)) {
 			const own = packOnce(pkgDir);
 			out[pkg.name] = {
 				entries: await bundleEntries(pkgDir, pkg),
@@ -201,9 +206,7 @@ async function measure(root) {
 				),
 			};
 		}
-	} finally {
-		rmSync(consumerRoot, { recursive: true, force: true });
-	}
+	});
 	return out;
 }
 
@@ -302,7 +305,7 @@ if (mode === "sizes") {
 		"### Install size (`npm pack`)",
 		"",
 		"Runtime footprint = unpacked bytes of the package plus its production `dependencies` graph, " +
-			"each package counted once. Peer and optional peer dependencies (e.g. `typescript`) are excluded. " +
+			"each installed copy counted once. Peer and optional peer dependencies (e.g. `typescript`) are excluded. " +
 			"These are npm unpacked bytes, not exact disk usage.",
 		"",
 		"| Package | Tarball | Unpacked | Δ unpacked | Runtime footprint | Δ footprint |",
