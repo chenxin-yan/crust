@@ -55,6 +55,20 @@ export function applyExtensionFlags(root: CommandNode, extension: Extension): vo
 	}
 }
 
+/** Copy the flag registry so `registerFlag` on the copy leaves `node` untouched. */
+export function cloneFlagRegistry(
+	node: CommandNode,
+): Pick<CommandNode, "localFlags" | "ownedFlags" | "effectiveFlags" | "flagSpellings"> {
+	return {
+		localFlags: { ...node.localFlags },
+		ownedFlags: { ...node.ownedFlags },
+		effectiveFlags: { ...node.effectiveFlags },
+		// Entries are immutable and already point at the effective definition
+		// (see FlagSpelling), so only the Map container needs its own copy.
+		flagSpellings: new Map(node.flagSpellings),
+	};
+}
+
 /** Deep-clone a command subtree without mutating the builder graph. */
 export function cloneCommandNode(node: CommandNode): CommandNode {
 	const subCommands: Record<string, CommandNode> = {};
@@ -68,12 +82,7 @@ export function cloneCommandNode(node: CommandNode): CommandNode {
 		// Section objects/arrays are never mutated in place (prepare replaces
 		// them wholesale), so sharing them here is safe.
 		meta: { ...node.meta },
-		localFlags: { ...node.localFlags },
-		ownedFlags: { ...node.ownedFlags },
-		effectiveFlags: { ...node.effectiveFlags },
-		// FlagSpelling entries are immutable and already reference the shared
-		// effective definition, so only the Map container needs decoupling.
-		flagSpellings: new Map(node.flagSpellings),
+		...cloneFlagRegistry(node),
 		args: [...node.args],
 		subCommands,
 		contexts: node.contexts.map((context) => ({ ...context })),

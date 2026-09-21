@@ -16,6 +16,7 @@ import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { ArgsDef, NamedFlagDef, ParsedFlagValue } from "../types.ts";
 import { type AnyCrust, type CommandDefinitionBuilder, Crust, defineCommand } from "./crust.ts";
+import { cloneCommandNode } from "./extensions-install.ts";
 import { SNAPSHOT_PATH_ENV } from "./invocation.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -109,12 +110,87 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 		expect(await app.snapshot()).toEqual(before);
 	});
 
-	it("shares immutable descendants across fluent clones", () => {
-		const app = new Crust("test").add(defineCommand("sub", (command) => command));
+	it("shares unchanged containers across fluent clones", () => {
+		const app = new Crust("test")
+			.flags({ name: "verbose", type: "boolean" })
+			.add(defineCommand("sub", (command) => command));
 		const derived = app.action(() => {});
 
-		expect(derived._node.subCommands).not.toBe(app._node.subCommands);
-		expect(derived._node.subCommands.sub).toBe(app._node.subCommands.sub);
+		expect(derived._node).not.toBe(app._node);
+		expect(derived._node.subCommands).toBe(app._node.subCommands);
+		expect(derived._node.args).toBe(app._node.args);
+		expect(derived._node.effectiveFlags).toBe(app._node.effectiveFlags);
+		expect(derived._node.flagSpellings).toBe(app._node.flagSpellings);
+	});
+
+	it("copies exactly the containers a builder method changes", () => {
+		const auth = defineContext(
+			"auth",
+			{ flags: [{ name: "api-key", type: "string" }] },
+			() => ({}),
+		)();
+		const db = defineContext("db", () => "db");
+		const base = new Crust("test")
+			.flags({ name: "verbose", type: "boolean", short: "v" })
+			.add(defineCommand("existing", (command) => command));
+		const baseNode = cloneCommandNode(base._node);
+
+		const withFlags = base.flags({ name: "quiet", type: "boolean" });
+		expect(withFlags._node.localFlags).not.toBe(base._node.localFlags);
+		expect(withFlags._node.effectiveFlags).not.toBe(base._node.effectiveFlags);
+		expect(withFlags._node.flagSpellings).not.toBe(base._node.flagSpellings);
+		expect(Object.keys(withFlags._node.effectiveFlags)).toEqual(["verbose", "quiet"]);
+
+		const withArgs = base.args({ name: "file", type: "string" });
+		expect(withArgs._node.args).not.toBe(base._node.args);
+		expect(withArgs._node.args.map(({ name }) => name)).toEqual(["file"]);
+
+		const withContext = base.provide(auth);
+		expect(withContext._node.contexts).not.toBe(base._node.contexts);
+		expect(withContext._node.ownedFlags).not.toBe(base._node.ownedFlags);
+		expect(withContext._node.effectiveFlags).not.toBe(base._node.effectiveFlags);
+		expect(withContext._node.flagSpellings).not.toBe(base._node.flagSpellings);
+		expect(Object.keys(withContext._node.effectiveFlags)).toEqual(["verbose", "api-key"]);
+
+		const withChild = base.add(defineCommand("added", (command) => command));
+		expect(withChild._node.subCommands).not.toBe(base._node.subCommands);
+		expect(Object.keys(withChild._node.subCommands)).toEqual(["existing", "added"]);
+
+		const withAction = base.action(() => {});
+		expect(withAction._node.run).toBeDefined();
+
+		const withExtension = base.extend(
+			defineExtension(defineExtensionId("ext"), { provides: [db()] }),
+		);
+		for (const key of [
+			"localFlags",
+			"ownedFlags",
+			"effectiveFlags",
+			"flagSpellings",
+			"args",
+			"subCommands",
+			"contexts",
+			"extensions",
+		] as const) {
+			expect(withExtension._node[key]).not.toBe(base._node[key]);
+		}
+		expect(withExtension._node.subCommands.existing).not.toBe(base._node.subCommands.existing);
+		expect(withExtension._node.contexts.map(({ instance }) => instance.name)).toEqual(["db"]);
+
+		let demandsChecked = false;
+		new Crust("test").provide(db()).add(
+			defineCommand("child", (command) => {
+				const withDemand = command.use(db);
+				expect(withDemand._node.demands).not.toBe(command._node.demands);
+				expect(command._node.demands).toEqual([]);
+				expect(withDemand._node.demands).toEqual([db]);
+				demandsChecked = true;
+				return withDemand;
+			}),
+		);
+		expect(demandsChecked).toBe(true);
+
+		expect(base._node).toEqual(baseNode);
 	});
 
 	it("shares flag spelling entries across fluent clones while keeping the tables independent", async () => {
