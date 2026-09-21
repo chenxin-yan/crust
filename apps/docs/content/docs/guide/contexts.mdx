@@ -62,6 +62,8 @@ When setup acquires several resources, call `defer` right after each acquire. Th
 
 Read every Context a cleanup callback needs during setup. Once cleanup starts, `ctx` still resolves Contexts that were built during the invocation, but pulling one that was never built rejects with a `DEFINITION` error (`context-during-disposal`) instead of opening a resource nothing will close. A dependency read from a cleanup callback is live only if you registered that `defer` after awaiting it; otherwise it is torn down first.
 
+A Context value belongs to the invocation. Crust disposes a returned disposable itself, so do not `await using` it or close it in the action as well, and do not let it escape through a return value, stored result, or shared variable that is read after the invocation ends: it is already disposed by then. Only automatic registration of returned values is deduplicated, by object identity within one invocation; a setup that returns a disposable and also `defer`s its close runs both. Pick one mechanism per resource.
+
 ## Flags owned by a Context
 
 <include lang="ts" meta='title="app.ts"'>
@@ -97,5 +99,7 @@ List the factories a Context needs in `uses` and read them from `ctx` in setup, 
 </include>
 
 `database.of(value)` builds an instance that returns `value` without running setup, so neither `database opened` nor the deferred `database closed` runs. It keeps the Context's name and value type, which is why `query` is unchanged. See [Testing](/docs/guide/testing) for `run()`.
+
+Ownership still transfers: if `value` implements `[Symbol.dispose]` or `[Symbol.asyncDispose]`, every invocation that pulls the Context disposes it like a returned value; Crust leaves an unpulled value untouched. For a double that survives repeated `run()` calls, pass a fake without a disposer, or keep the real factory so setup builds a fresh resource per invocation.
 
 For the full contracts, see [Context types](/docs/api/types#context-types) and [`.use()`](/docs/api/crust#usefactories).
