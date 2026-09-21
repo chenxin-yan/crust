@@ -212,13 +212,13 @@ describe("completion · --output-dir traversal", () => {
 
 	let stdoutBuf: Buffer[];
 	let originalWrite: typeof process.stdout.write;
-	let originalError: typeof console.error;
+	let originalStderrWrite: typeof process.stderr.write;
 	let originalExitCode: typeof process.exitCode;
 
 	beforeEach(() => {
 		stdoutBuf = [];
 		originalWrite = process.stdout.write.bind(process.stdout);
-		originalError = console.error;
+		originalStderrWrite = process.stderr.write;
 		originalExitCode = process.exitCode;
 		process.stdout.write = (chunk: StdoutChunk) => {
 			if (isStringChunk(chunk)) {
@@ -228,12 +228,12 @@ describe("completion · --output-dir traversal", () => {
 			}
 			return true;
 		};
-		console.error = () => {};
+		process.stderr.write = () => true;
 	});
 
 	afterEach(() => {
 		process.stdout.write = originalWrite;
-		console.error = originalError;
+		process.stderr.write = originalStderrWrite;
 		process.exitCode = originalExitCode;
 	});
 
@@ -243,15 +243,16 @@ describe("completion · --output-dir traversal", () => {
 		// rather than rethrowing, so we observe both side-effects to
 		// confirm the error fired before any file could be written.
 		const stderrChunks: string[] = [];
-		const origError = console.error;
-		console.error = (...args: unknown[]) => {
-			stderrChunks.push(args.map((a) => String(a)).join(" "));
+		const origWrite = process.stderr.write;
+		process.stderr.write = (chunk: string | Uint8Array) => {
+			stderrChunks.push(String(chunk));
+			return true;
 		};
 		try {
 			const cli = new Crust("real").extend(completion({ binName: "../pwn" })).action(() => {});
 			await cli.execute({ argv: ["completion", "bash"] });
 		} finally {
-			console.error = origError;
+			process.stderr.write = origWrite;
 		}
 		expect(stderrChunks.join("\n")).toMatch(/invalid binName/);
 		expect(process.exitCode).toBe(1);
