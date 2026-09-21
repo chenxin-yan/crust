@@ -47,13 +47,16 @@ function writeLine(stream: NodeJS.WriteStream, text: string): void {
 	const absorb = () => {
 		if (stream.listenerCount("error") === 0) stream.once("error", ignoreStreamError);
 	};
-	absorb();
 	try {
+		absorb();
 		stream.write(`${text}\n`, (error) => {
 			if (error) absorb();
 		});
 	} catch {
 		// Synchronous write failure on an already-destroyed stream.
+	} finally {
+		// Async failures install their own one-shot listener in the write callback.
+		stream.removeListener("error", ignoreStreamError);
 	}
 }
 
