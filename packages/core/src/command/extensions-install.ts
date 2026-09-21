@@ -71,12 +71,9 @@ export function cloneCommandNode(node: CommandNode): CommandNode {
 		localFlags: { ...node.localFlags },
 		ownedFlags: { ...node.ownedFlags },
 		effectiveFlags: { ...node.effectiveFlags },
-		flagSpellings: new Map(
-			[...node.flagSpellings].map(([spelling, entry]) => [
-				spelling,
-				{ ...entry, def: node.effectiveFlags[entry.canonicalName]! },
-			]),
-		),
+		// FlagSpelling entries are immutable and already reference the shared
+		// effective definition, so only the Map container needs decoupling.
+		flagSpellings: new Map(node.flagSpellings),
 		args: [...node.args],
 		subCommands,
 		contexts: node.contexts.map((context) => ({ ...context })),

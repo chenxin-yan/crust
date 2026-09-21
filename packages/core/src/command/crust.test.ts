@@ -116,6 +116,43 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 		expect(derived._node.subCommands).not.toBe(app._node.subCommands);
 		expect(derived._node.subCommands.sub).toBe(app._node.subCommands.sub);
 	});
+
+	it("shares flag spelling entries across fluent clones while keeping the tables independent", async () => {
+		const seen: Record<string, boolean | undefined>[] = [];
+		const base = new Crust("test")
+			.flags({ name: "verbose", type: "boolean", short: "v", aliases: ["loud"] })
+			.action(({ flags }) => {
+				seen.push({ verbose: flags.verbose });
+			});
+		const derived = base
+			.flags({ name: "quiet", type: "boolean", short: "q", aliases: ["hush"] })
+			.action(({ flags }) => {
+				seen.push({ verbose: flags.verbose, quiet: flags.quiet });
+			});
+
+		expect(derived._node.flagSpellings).not.toBe(base._node.flagSpellings);
+		for (const spelling of ["verbose", "v", "loud"]) {
+			const entry = base._node.flagSpellings.get(spelling);
+			expect(entry?.def).toBe(base._node.effectiveFlags.verbose);
+			expect(derived._node.flagSpellings.get(spelling)).toBe(entry);
+		}
+		for (const spelling of ["quiet", "q", "hush"]) {
+			expect(derived._node.flagSpellings.get(spelling)?.def).toBe(
+				derived._node.effectiveFlags.quiet,
+			);
+			expect(base._node.flagSpellings.has(spelling)).toBe(false);
+		}
+		expect(base._node.effectiveFlags.quiet).toBeUndefined();
+
+		await base.execute({ argv: ["--loud"] });
+		await derived.execute({ argv: ["-q", "--no-loud"] });
+		await derived.execute({ argv: ["--hush", "-v"] });
+		expect(seen).toEqual([
+			{ verbose: true },
+			{ verbose: false, quiet: true },
+			{ verbose: true, quiet: true },
+		]);
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────
