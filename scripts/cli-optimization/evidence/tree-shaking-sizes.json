@@ -1,0 +1,844 @@
+[
+	{
+		"fixture": "F1",
+		"variant": "control",
+		"id": "F1-control",
+		"bytes": 34166,
+		"gzip": 11731,
+		"sha256": "6fbd7e07d0e8cf32781da7aa074fe6e043e07c1d8e254ff4c45fbaf282351996",
+		"imports": [
+			{
+				"kind": "import-statement",
+				"path": "node:url"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:fs/promises"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:async_hooks"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:stream"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util/types"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:os"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			}
+		],
+		"builtins": [
+			"node:async_hooks",
+			"node:fs/promises",
+			"node:os",
+			"node:path",
+			"node:stream",
+			"node:url",
+			"node:util",
+			"node:util/types"
+		],
+		"markers": {
+			"context-defer-after-setup": true,
+			"flags-before-validation": true,
+			"invalid-section-path": true
+		}
+	},
+	{
+		"fixture": "F1",
+		"variant": "A",
+		"id": "F1-A",
+		"bytes": 28887,
+		"gzip": 10050,
+		"sha256": "166c3b536ac4c34554662558e33d97381815c44269fb4682b69cc4e15e918538",
+		"imports": [
+			{
+				"kind": "import-statement",
+				"path": "node:url"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:fs/promises"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:async_hooks"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:stream"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util/types"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:os"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			}
+		],
+		"builtins": [
+			"node:async_hooks",
+			"node:fs/promises",
+			"node:os",
+			"node:path",
+			"node:stream",
+			"node:url",
+			"node:util",
+			"node:util/types"
+		],
+		"markers": {
+			"context-defer-after-setup": false,
+			"flags-before-validation": false,
+			"invalid-section-path": false
+		}
+	},
+	{
+		"fixture": "F1",
+		"variant": "B1",
+		"id": "F1-B1",
+		"bytes": 34462,
+		"gzip": 11842,
+		"sha256": "03b768f289b721139b50784ce8cb0d79518e10fd3072b0049e542cd00e2a4630",
+		"imports": [
+			{
+				"kind": "import-statement",
+				"path": "node:os"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util/types"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:url"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:fs/promises"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:async_hooks"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:stream"
+			}
+		],
+		"builtins": [
+			"node:async_hooks",
+			"node:fs/promises",
+			"node:os",
+			"node:path",
+			"node:stream",
+			"node:url",
+			"node:util",
+			"node:util/types"
+		],
+		"markers": {
+			"context-defer-after-setup": true,
+			"flags-before-validation": true,
+			"invalid-section-path": true
+		}
+	},
+	{
+		"fixture": "F1",
+		"variant": "B2",
+		"id": "F1-B2",
+		"bytes": 34450,
+		"gzip": 11847,
+		"sha256": "7c77cbd918f74482f4b43ed33291ed6b234a98191d458b7614bc46b05c576ccf",
+		"imports": [
+			{
+				"kind": "import-statement",
+				"path": "node:async_hooks"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:stream"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:url"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util/types"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:module"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "dynamic-import",
+				"path": "node:fs/promises"
+			}
+		],
+		"builtins": [
+			"node:async_hooks",
+			"node:fs/promises",
+			"node:module",
+			"node:os",
+			"node:path",
+			"node:stream",
+			"node:url",
+			"node:util",
+			"node:util/types"
+		],
+		"markers": {
+			"context-defer-after-setup": true,
+			"flags-before-validation": true,
+			"invalid-section-path": true
+		}
+	},
+	{
+		"fixture": "F1",
+		"variant": "B",
+		"id": "F1-B",
+		"bytes": 34665,
+		"gzip": 11920,
+		"sha256": "a3d213ed7e0d262d036b177b2e20c6e58fe33e2db9fc2bfcf223f25582ea90bf",
+		"imports": [
+			{
+				"kind": "import-statement",
+				"path": "node:module"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util/types"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:async_hooks"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:stream"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:url"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "dynamic-import",
+				"path": "node:fs/promises"
+			}
+		],
+		"builtins": [
+			"node:async_hooks",
+			"node:fs/promises",
+			"node:module",
+			"node:os",
+			"node:path",
+			"node:stream",
+			"node:url",
+			"node:util",
+			"node:util/types"
+		],
+		"markers": {
+			"context-defer-after-setup": true,
+			"flags-before-validation": true,
+			"invalid-section-path": true
+		}
+	},
+	{
+		"fixture": "F1",
+		"variant": "AB",
+		"id": "F1-AB",
+		"bytes": 29382,
+		"gzip": 10256,
+		"sha256": "6148d01ac03ef28b682078e0b875cc946b1274fec29650c6dd225abe52bdaf60",
+		"imports": [
+			{
+				"kind": "import-statement",
+				"path": "node:module"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util/types"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:async_hooks"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:stream"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:url"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "dynamic-import",
+				"path": "node:fs/promises"
+			}
+		],
+		"builtins": [
+			"node:async_hooks",
+			"node:fs/promises",
+			"node:module",
+			"node:os",
+			"node:path",
+			"node:stream",
+			"node:url",
+			"node:util",
+			"node:util/types"
+		],
+		"markers": {
+			"context-defer-after-setup": false,
+			"flags-before-validation": false,
+			"invalid-section-path": false
+		}
+	},
+	{
+		"fixture": "F1",
+		"variant": "control-defined",
+		"id": "F1-control-defined",
+		"bytes": 32563,
+		"gzip": 11080,
+		"sha256": "6db324b933c8ba4bd1ce5b27ddf4faa6927c42b3d1a12ecdc7924fc864f3c137",
+		"imports": [
+			{
+				"kind": "import-statement",
+				"path": "node:url"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:async_hooks"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:stream"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util/types"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:os"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			}
+		],
+		"builtins": [
+			"node:async_hooks",
+			"node:os",
+			"node:path",
+			"node:stream",
+			"node:url",
+			"node:util",
+			"node:util/types"
+		],
+		"markers": {
+			"context-defer-after-setup": true,
+			"flags-before-validation": true,
+			"invalid-section-path": true
+		}
+	},
+	{
+		"fixture": "F2",
+		"variant": "control",
+		"id": "F2-control",
+		"bytes": 35768,
+		"gzip": 12263,
+		"sha256": "fa8d252221e23ba8b8b4023c76979c8d3475fda31596fa3497d122f4111f4d9c",
+		"imports": [
+			{
+				"kind": "import-statement",
+				"path": "node:url"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:fs/promises"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:async_hooks"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:stream"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util/types"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:os"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			}
+		],
+		"builtins": [
+			"node:async_hooks",
+			"node:fs/promises",
+			"node:os",
+			"node:path",
+			"node:stream",
+			"node:url",
+			"node:util",
+			"node:util/types"
+		],
+		"markers": {
+			"context-defer-after-setup": true,
+			"flags-before-validation": true,
+			"invalid-section-path": true
+		}
+	},
+	{
+		"fixture": "F2",
+		"variant": "A",
+		"id": "F2-A",
+		"bytes": 36529,
+		"gzip": 12541,
+		"sha256": "19e6a47aa229c6c57e79e9a50113e93f1d629fe6809f73d0db93a224abfccf85",
+		"imports": [
+			{
+				"kind": "import-statement",
+				"path": "node:url"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:fs/promises"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:async_hooks"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:stream"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util/types"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:os"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			}
+		],
+		"builtins": [
+			"node:async_hooks",
+			"node:fs/promises",
+			"node:os",
+			"node:path",
+			"node:stream",
+			"node:url",
+			"node:util",
+			"node:util/types"
+		],
+		"markers": {
+			"context-defer-after-setup": true,
+			"flags-before-validation": true,
+			"invalid-section-path": true
+		}
+	},
+	{
+		"fixture": "F2",
+		"variant": "B1",
+		"id": "F2-B1",
+		"bytes": 36062,
+		"gzip": 12388,
+		"sha256": "8e56ceadd62931e714e6dffa88d3732142dabb547b143c34a7a95979a80a4004",
+		"imports": [
+			{
+				"kind": "import-statement",
+				"path": "node:os"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util/types"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:url"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:fs/promises"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:async_hooks"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:stream"
+			}
+		],
+		"builtins": [
+			"node:async_hooks",
+			"node:fs/promises",
+			"node:os",
+			"node:path",
+			"node:stream",
+			"node:url",
+			"node:util",
+			"node:util/types"
+		],
+		"markers": {
+			"context-defer-after-setup": true,
+			"flags-before-validation": true,
+			"invalid-section-path": true
+		}
+	},
+	{
+		"fixture": "F2",
+		"variant": "B2",
+		"id": "F2-B2",
+		"bytes": 36052,
+		"gzip": 12392,
+		"sha256": "76dc210c0b825518a96052c88b0bd5e015888dc423aec6801cdc9ef4eef7f448",
+		"imports": [
+			{
+				"kind": "import-statement",
+				"path": "node:async_hooks"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:stream"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:url"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util/types"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:module"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "dynamic-import",
+				"path": "node:fs/promises"
+			}
+		],
+		"builtins": [
+			"node:async_hooks",
+			"node:fs/promises",
+			"node:module",
+			"node:os",
+			"node:path",
+			"node:stream",
+			"node:url",
+			"node:util",
+			"node:util/types"
+		],
+		"markers": {
+			"context-defer-after-setup": true,
+			"flags-before-validation": true,
+			"invalid-section-path": true
+		}
+	},
+	{
+		"fixture": "F2",
+		"variant": "B",
+		"id": "F2-B",
+		"bytes": 36265,
+		"gzip": 12466,
+		"sha256": "81aa70bb5c37a1299f7acbbe29c031a8b1edb0d770496ec455674df61bb15c2f",
+		"imports": [
+			{
+				"kind": "import-statement",
+				"path": "node:module"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util/types"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:async_hooks"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:stream"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:url"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "dynamic-import",
+				"path": "node:fs/promises"
+			}
+		],
+		"builtins": [
+			"node:async_hooks",
+			"node:fs/promises",
+			"node:module",
+			"node:os",
+			"node:path",
+			"node:stream",
+			"node:url",
+			"node:util",
+			"node:util/types"
+		],
+		"markers": {
+			"context-defer-after-setup": true,
+			"flags-before-validation": true,
+			"invalid-section-path": true
+		}
+	},
+	{
+		"fixture": "F2",
+		"variant": "AB",
+		"id": "F2-AB",
+		"bytes": 37034,
+		"gzip": 12730,
+		"sha256": "c94999d3187a039c9dd07bf6ec22f45a662e3ddc17e893cadeff32582ff74d2b",
+		"imports": [
+			{
+				"kind": "import-statement",
+				"path": "node:module"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:util/types"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:async_hooks"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:stream"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:url"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "import-statement",
+				"path": "node:path"
+			},
+			{
+				"kind": "dynamic-import",
+				"path": "node:fs/promises"
+			}
+		],
+		"builtins": [
+			"node:async_hooks",
+			"node:fs/promises",
+			"node:module",
+			"node:os",
+			"node:path",
+			"node:stream",
+			"node:url",
+			"node:util",
+			"node:util/types"
+		],
+		"markers": {
+			"context-defer-after-setup": true,
+			"flags-before-validation": true,
+			"invalid-section-path": true
+		}
+	}
+]

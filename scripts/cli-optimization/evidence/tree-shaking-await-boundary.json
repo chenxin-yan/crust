@@ -1,0 +1,134 @@
+[
+	{
+		"variant": "control",
+		"runtime": "bun",
+		"outcome": {
+			"status": "completed",
+			"result": "before:input",
+			"stdout": "",
+			"stderr": ""
+		},
+		"events": ["sections:before", "parse:before", "pre:before", "caller"]
+	},
+	{
+		"variant": "control",
+		"runtime": "node",
+		"outcome": {
+			"status": "completed",
+			"result": "before:input",
+			"stdout": "",
+			"stderr": ""
+		},
+		"events": ["sections:before", "parse:before", "pre:before", "caller"]
+	},
+	{
+		"variant": "A",
+		"runtime": "bun",
+		"outcome": {
+			"status": "completed",
+			"result": "before:input",
+			"stdout": "",
+			"stderr": ""
+		},
+		"events": ["sections:before", "parse:before", "pre:before", "caller"]
+	},
+	{
+		"variant": "A",
+		"runtime": "node",
+		"outcome": {
+			"status": "completed",
+			"result": "before:input",
+			"stdout": "",
+			"stderr": ""
+		},
+		"events": ["sections:before", "parse:before", "pre:before", "caller"]
+	},
+	{
+		"variant": "B1",
+		"runtime": "bun",
+		"outcome": {
+			"status": "completed",
+			"result": "after:input",
+			"stdout": "",
+			"stderr": ""
+		},
+		"events": ["sections:before", "caller", "parse:after", "pre:after"]
+	},
+	{
+		"variant": "B1",
+		"runtime": "node",
+		"outcome": {
+			"status": "completed",
+			"result": "after:input",
+			"stdout": "",
+			"stderr": ""
+		},
+		"events": ["sections:before", "caller", "parse:after", "pre:after"]
+	},
+	{
+		"variant": "B2",
+		"runtime": "bun",
+		"outcome": {
+			"status": "completed",
+			"result": "after:input",
+			"stdout": "",
+			"stderr": ""
+		},
+		"events": ["caller", "sections:after", "parse:after", "pre:after"]
+	},
+	{
+		"variant": "B2",
+		"runtime": "node",
+		"outcome": {
+			"status": "completed",
+			"result": "after:input",
+			"stdout": "",
+			"stderr": ""
+		},
+		"events": ["caller", "sections:after", "parse:after", "pre:after"]
+	},
+	{
+		"variant": "B",
+		"runtime": "bun",
+		"outcome": {
+			"status": "completed",
+			"result": "after:input",
+			"stdout": "",
+			"stderr": ""
+		},
+		"events": ["caller", "sections:after", "parse:after", "pre:after"]
+	},
+	{
+		"variant": "B",
+		"runtime": "node",
+		"outcome": {
+			"status": "completed",
+			"result": "after:input",
+			"stdout": "",
+			"stderr": ""
+		},
+		"events": ["caller", "sections:after", "parse:after", "pre:after"]
+	},
+	{
+		"variant": "AB",
+		"runtime": "bun",
+		"outcome": {
+			"status": "completed",
+			"result": "after:input",
+			"stdout": "",
+			"stderr": ""
+		},
+		"events": ["caller", "sections:after", "parse:after", "pre:after"]
+	},
+	{
+		"variant": "AB",
+		"runtime": "node",
+		"outcome": {
+			"status": "completed",
+			"result": "after:input",
+			"stdout": "",
+			"stderr": ""
+		},
+		"events": ["caller", "sections:after", "parse:after", "pre:after"]
+	}
+]
