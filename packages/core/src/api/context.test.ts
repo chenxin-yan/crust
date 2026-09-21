@@ -1651,6 +1651,27 @@ describe("Context setup defer()", () => {
 		expect(log).toEqual([]);
 	});
 
+	it("disposes a disposable .of() value on every invocation that pulls it", async () => {
+		let disposals = 0;
+		const res = defineContext("res", () => ({
+			[Symbol.dispose]() {
+				disposals++;
+			},
+		}));
+		const provided = res.of({ [Symbol.dispose]: () => disposals++ });
+		const unpulled = new Crust("cli").provide(provided).action(async () => {});
+		const pulled = new Crust("cli").provide(provided).action(async ({ ctx }) => {
+			await ctx.res;
+		});
+
+		await unwrap(unpulled.run([]));
+		expect(disposals).toBe(0);
+		await unwrap(pulled.run([]));
+		expect(disposals).toBe(1);
+		await unwrap(pulled.run([]));
+		expect(disposals).toBe(2);
+	});
+
 	it("tears down in registration order when each setup acquires then defers", async () => {
 		const log: string[] = [];
 		const base = defineContext("base", ({ defer }) => {

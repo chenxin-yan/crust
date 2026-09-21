@@ -263,7 +263,7 @@ interface ContextFactory<Name extends string, Options, Value, OF, Deps> {
 
 `defineContext(name, setup)` and `defineContext(name, config, setup)` always return a factory. Invoke it even when `Options` is `void`. `contextName` is the bag property name.
 
-`.of(value)` creates a precomputed instance with no dependencies while retaining owned flags.
+`.of(value)` creates a precomputed instance with no dependencies while retaining owned flags. The invocation still owns `value`: when it implements `Symbol.dispose` or `Symbol.asyncDispose`, every invocation that pulls the Context disposes it; an unpulled value is left untouched (see [Contexts](/docs/guide/contexts#replace-a-context-in-tests)).
 
 ### `ContextConfig`, `ContextSetup`, and `ContextBag`
 
