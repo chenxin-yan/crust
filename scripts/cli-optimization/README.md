@@ -2,7 +2,7 @@
 
 Investigation at `b79c147ad81549d5cf8755993bf707b539fda996`, 2026-09-20. Four parallel source audits were followed by isolated serial experiments and an independent reviewer, then a strengthened test, a longer-warmup follow-up and a build-configuration experiment.
 
-**Status:** backlog items 1–4 are implemented as the stacked PRs #415 → #416 → #417 → #418. The [frozen baseline](../cli-comparison/results/full.md) is retained, but the stack-tip raw samples and report are not committed. The combined before/after comparison is deferred until those artifacts are available; no stack-wide performance improvement or competitor-control bound is established here. Items 5+ remain open.
+**Status:** backlog items 1–4 are the stacked PRs #415 → #416 → #417 → #418; item 5 (root-snapshot subtree walk, variant A of the lever-1 experiment) is #421 on top. Measured on the 5-PR tip with the same harness ([after-stack5.md](../cli-comparison/results/after-stack5.md) vs [full.md](../cli-comparison/results/full.md); 4-PR tip in [after-stack.md](../cli-comparison/results/after-stack.md)): Crust fresh-schema warm invocation 58.36 → 45.99 µs on Bun (−21%) and 65.56 → 50.07 µs on Node (−24%); startup and bundle size within noise; competitor controls drifted +1–9% slower in that session, so the Crust delta is not session drift. The cached-at-prepare (B) and lazy-snapshot (C) variants were measured and parked behind a contract decision; see the #421 discussion. Items 6+ remain open.
 
 ## Recommendation
 
