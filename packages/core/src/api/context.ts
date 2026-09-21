@@ -374,6 +374,7 @@ export class FallbackAsyncDisposableStack implements DisposalScope, AsyncDisposa
 	}
 
 	async [Symbol.asyncDispose](): Promise<void> {
+		if (this.#disposed) return;
 		this.#disposed = true;
 		const errors: unknown[] = [];
 		for (let index = this.#entries.length - 1; index >= 0; index--) {
@@ -457,6 +458,9 @@ export function createContextResolver(
 	const entries = new Map<string, Entry>();
 	const registered = new WeakSet<object>();
 	let validatedFlags: ValidatedFlags | undefined;
+	// Construction closes when settle() finds no in-flight setup; existing entries
+	// stay readable until the disposal marker below flips `disposed`.
+	let constructing = true;
 	let disposed = false;
 	// Registered first so it runs last (LIFO): the flag flips only after every
 	// Context value has been disposed. onError hooks receiving the same frozen
@@ -533,6 +537,15 @@ export function createContextResolver(
 					"DEFINITION",
 					`No provider for Context "${name}". Add .provide(${name}(...)) to the app or an ancestor command.${originSuffix}`,
 					{ subject: "context", name, reason: "missing-context" },
+				),
+			);
+		}
+		if (!constructing && !entries.has(name)) {
+			return handledRejection(
+				new CrustError(
+					"DEFINITION",
+					`Context "${name}" cannot be constructed during invocation cleanup${originSuffix}. Read it while setting up the Context whose cleanup needs it.`,
+					{ subject: "context", name, reason: "context-during-disposal" },
 				),
 			);
 		}
@@ -645,10 +658,16 @@ export function createContextResolver(
 		// Structured teardown: a rejected sibling pull must not abandon an in-flight
 		// setup past disposal — a late value would register on a disposed stack and
 		// leak. A running setup can start new pulls, so loop until quiescent.
+		// This is the drain boundary (single call site: dispatch()'s finally). The
+		// close is synchronous with the quiescent check so no fire-and-forget pull
+		// can start a setup between it and the disposal scope exit.
 		async settle(): Promise<void> {
 			for (;;) {
 				const pending = [...entries.values()].filter((entry) => !entry.settled);
-				if (pending.length === 0) return;
+				if (pending.length === 0) {
+					constructing = false;
+					return;
+				}
 				await Promise.allSettled(pending.map((entry) => entry.promise));
 			}
 		},
