@@ -26,11 +26,8 @@ export interface InvocationOptions extends Partial<InvocationIO> {
  * - `"exit"` (default): install no handler — the runtime's default signal
  *   handling terminates the process immediately.
  * - `"abort"`: the first `SIGINT` aborts the invocation's `ctx.signal` with an
- *   `AbortError` so pending work can stop and Contexts are still released. Core
- *   keeps listening until the invocation settles (so one-shot handlers that
- *   re-raise when no listener remains, like the `@crustjs/progress` spinner,
- *   defer to it); a second `SIGINT` steps aside and terminates unless another
- *   listener owns the signal.
+ *   `AbortError`; Core keeps listening until the invocation settles, and a
+ *   second `SIGINT` terminates unless another listener owns the signal.
  */
 export type SigintPolicy = "exit" | "abort";
 

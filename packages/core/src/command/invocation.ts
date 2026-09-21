@@ -536,11 +536,7 @@ export async function executeInvocation(
 			return 1;
 		}
 
-		// The first Ctrl-C aborts `ctx.signal`. The listener stays registered until
-		// the invocation settles so one-shot handlers that re-raise SIGINT when no
-		// listener remains (e.g. the `@crustjs/progress` spinner) see a host and
-		// leave termination to us. A second Ctrl-C steps aside and re-raises, so
-		// the runtime's default handling terminates unless another listener owns it.
+		// Persistent, not `once`: spinner-style one-shot listeners re-raise SIGINT only when nobody listens.
 		const onSigint = (): void => {
 			if (!controller.signal.aborted) {
 				controller.abort(new DOMException("Interrupted by SIGINT.", "AbortError"));

@@ -62,15 +62,15 @@ export function handler<Input extends ActionInput, Out>(
 				"factory" in source && layerFactories.has(source.factory),
 		);
 		const bag: Readonly<Record<string, Promise<Context.Context<unknown>>>> = input.ctx;
-		const built: Context.Context<unknown>[] = [];
+		const builds = layers.map(({ name }) => bag[name]!);
 		// Builds and fn(input) run inside the Effect so a failed sibling build or a
 		// synchronous throw still yields a failure Exit for the layers that did build.
 		const program = Effect.gen(function* () {
 			// allSettled: a failing build must not race a sibling still acquiring.
-			const settled = yield* Effect.promise(() =>
-				Promise.allSettled(layers.map(({ name }) => bag[name]!)),
+			const settled = yield* Effect.promise(() => Promise.allSettled(builds));
+			const built = settled.flatMap((result) =>
+				result.status === "fulfilled" ? [result.value] : [],
 			);
-			for (const result of settled) if (result.status === "fulfilled") built.push(result.value);
 			const rejected = settled.find((result) => result.status === "rejected");
 			if (rejected) return yield* tryCrust(() => Promise.reject(rejected.reason));
 			const returned = fn(input);
@@ -80,12 +80,8 @@ export function handler<Input extends ActionInput, Out>(
 			);
 		});
 		const exit = await Effect.runPromiseExit(program, { signal: input.signal });
-		// Interruption during acquisition skips the fiber's `built` bookkeeping while
-		// the builds themselves keep running (Core settles them before disposal).
-		// Re-pull the cached builds so every acquired Layer sees this Exit, not the
-		// success default.
-		const settled = await Promise.allSettled(layers.map(({ name }) => bag[name]!));
-		for (const result of settled) {
+		// Set Exits after the run: an interrupted fiber never reaches `built`, but the builds still finish.
+		for (const result of await Promise.allSettled(builds)) {
 			if (result.status === "fulfilled") actionExits.set(result.value, exit);
 		}
 		return unwrapExit(exit);

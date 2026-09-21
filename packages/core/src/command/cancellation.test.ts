@@ -90,20 +90,16 @@ describe("invocation cancellation signal", () => {
 		expect(stderr).toEqual(["Error: deadline exceeded"]);
 	});
 
-	it("execute() installs no SIGINT listener by default", async () => {
+	it('only execute({ sigint: "abort" }) listens for SIGINT; the first one becomes an AbortError on ctx.signal and Core keeps listening until the invocation settles', async () => {
 		const before = process.listenerCount("SIGINT");
-		let during = -1;
+		let withoutPolicy = -1;
 		await new Crust("cli")
 			.action(() => {
-				during = process.listenerCount("SIGINT");
+				withoutPolicy = process.listenerCount("SIGINT");
 			})
 			.execute({ argv: [], io: quiet });
+		expect(withoutPolicy).toBe(before);
 
-		expect(during).toBe(before);
-	});
-
-	it('execute({ sigint: "abort" }) turns the first SIGINT into an AbortError on ctx.signal and keeps listening until the invocation settles', async () => {
-		const before = process.listenerCount("SIGINT");
 		const { ready, action } = awaitingSignal();
 		let reason: unknown;
 		const cleanedUp = Promise.withResolvers<void>();
