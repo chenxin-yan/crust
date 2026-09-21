@@ -126,7 +126,7 @@ export interface CrustCommandContext<
 	rawArgs: string[];
 	/**
 	 * Aborted when the caller cancels the invocation (`execute({ signal })`,
-	 * `run(path, input, { signal })`, or `SIGINT` under `execute({ sigint: "abort" })`);
+	 * `run(path, input, { signal })`, or the first `SIGINT` under `execute()`);
 	 * see `ExecuteOptions.signal` for how the abort reason maps to the exit code.
 	 */
 	signal: AbortSignal;
@@ -1796,8 +1796,7 @@ export class Crust<
 	 *
 	 * @param options - Optional overrides: custom `argv` and captured `io` for
 	 *                   in-process testing of exit codes and rendered failures,
-	 *                   a caller `signal`, and the `sigint` policy that decides
-	 *                   whether Ctrl-C aborts `ctx.signal` or exits the process
+	 *                   and a caller `signal` that cancels the invocation
 	 * @returns The terminal exit code (`0`, `1`, or `130` for cancellation)
 	 */
 	execute(

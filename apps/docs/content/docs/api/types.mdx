@@ -228,11 +228,11 @@ The same injectable callbacks are passed to the Command Action and every Context
 
 The optional last argument of [`run(path, input?, options?)`](/docs/api/crust#runpath-input-options) and `handle.run(input?, options?)`: live output sinks plus a caller-owned `signal` that aborts the invocation's `ctx.signal`.
 
-### `ExecuteOptions` and `SigintPolicy`
+### `ExecuteOptions`
 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="ExecuteOptions" />
 
-The optional argument of [`execute(options?)`](/docs/api/crust#executeoptions). `sigint` is a `SigintPolicy`: `"exit"` (default) leaves Ctrl-C to the runtime, `"abort"` turns the first Ctrl-C into an `AbortError` on `ctx.signal` and lets a second one terminate the process.
+The optional argument of [`execute(options?)`](/docs/api/crust#executeoptions). During `execute()`, the first Ctrl-C aborts `ctx.signal` with an `AbortError`; a second terminates the process unless another listener owns the signal.
 
 ## Command Action context
 

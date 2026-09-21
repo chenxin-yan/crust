@@ -545,7 +545,7 @@ export async function executeInvocation(
 			process.removeListener("SIGINT", onSigint);
 			if (process.listenerCount("SIGINT") === 0) process.kill(process.pid, "SIGINT");
 		};
-		if (options?.sigint === "abort") process.on("SIGINT", onSigint);
+		process.on("SIGINT", onSigint);
 
 		let extensionContext: ExtensionContext | undefined;
 		let renderedInDispatch = false;

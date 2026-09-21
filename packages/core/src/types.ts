@@ -21,17 +21,10 @@ export interface InvocationOptions extends Partial<InvocationIO> {
 }
 
 /**
- * How `execute()` treats `SIGINT` (Ctrl-C) while an invocation runs.
- *
- * - `"exit"` (default): install no handler — the runtime's default signal
- *   handling terminates the process immediately.
- * - `"abort"`: the first `SIGINT` aborts the invocation's `ctx.signal` with an
- *   `AbortError`; Core keeps listening until the invocation settles, and a
- *   second `SIGINT` terminates unless another listener owns the signal.
+ * Caller options for the terminal `execute()` boundary. While an invocation
+ * runs, the first `SIGINT` (Ctrl-C) aborts its `ctx.signal` with an `AbortError`
+ * and a second `SIGINT` terminates unless another listener owns the signal.
  */
-export type SigintPolicy = "exit" | "abort";
-
-/** Caller options for the terminal `execute()` boundary. */
 export interface ExecuteOptions {
 	/** Arguments to parse; defaults to `process.argv.slice(2)`. */
 	argv?: string[];
@@ -43,8 +36,6 @@ export interface ExecuteOptions {
 	 * `130`; any other reason is rendered as a failure and exits `1`.
 	 */
 	signal?: AbortSignal;
-	/** `SIGINT` handling for this invocation; defaults to `"exit"`. */
-	sigint?: SigintPolicy;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

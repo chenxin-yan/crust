@@ -68,7 +68,7 @@ $ echo $?
 
 Ctrl+C in a prompt prints no error and exits with status 130. To cancel from your own code, throw `new DOMException("Cancelled", "AbortError")`. Put file writes and other side effects after prompts so cancellation leaves nothing to undo.
 
-Outside prompts, Ctrl+C terminates the process immediately by default. When an action has work in flight that should stop cleanly (an HTTP request, a child process, a long loop), run the app with `execute({ sigint: "abort" })` and pass `ctx.signal` to that work: the first Ctrl+C aborts the signal with an `AbortError`, the action fails with it, cleanup runs, and the exit status is 130. A second Ctrl+C exits at once. See [`execute()`](/docs/api/crust#executeoptions).
+During `execute()`, the first Ctrl+C aborts `ctx.signal` with an `AbortError`. Pass `ctx.signal` to work that should stop cleanly (an HTTP request, a child process, a long loop): when that work fails with the abort reason, cleanup runs and the exit status is 130. Work that ignores the signal keeps running. A second Ctrl+C terminates the process unless another listener owns the signal. See [`execute()`](/docs/api/crust#executeoptions).
 
 ## Customize the message
 

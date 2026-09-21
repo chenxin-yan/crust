@@ -90,16 +90,8 @@ describe("invocation cancellation signal", () => {
 		expect(stderr).toEqual(["Error: deadline exceeded"]);
 	});
 
-	it('only execute({ sigint: "abort" }) listens for SIGINT; the first one becomes an AbortError on ctx.signal and Core keeps listening until the invocation settles', async () => {
+	it("execute() turns the first SIGINT into an AbortError on ctx.signal and keeps listening until the invocation settles", async () => {
 		const before = process.listenerCount("SIGINT");
-		let withoutPolicy = -1;
-		await new Crust("cli")
-			.action(() => {
-				withoutPolicy = process.listenerCount("SIGINT");
-			})
-			.execute({ argv: [], io: quiet });
-		expect(withoutPolicy).toBe(before);
-
 		const { ready, action } = awaitingSignal();
 		let reason: unknown;
 		const cleanedUp = Promise.withResolvers<void>();
@@ -114,7 +106,7 @@ describe("invocation cancellation signal", () => {
 				listenersDuringCleanup = process.listenerCount("SIGINT");
 			}
 		});
-		const exitCode = app.execute({ argv: [], io: quiet, sigint: "abort" });
+		const exitCode = app.execute({ argv: [], io: quiet });
 
 		await ready;
 		expect(process.listenerCount("SIGINT")).toBe(before + 1);
@@ -142,7 +134,7 @@ describe("invocation cancellation signal", () => {
 				await released.promise;
 			}
 		});
-		const exitCode = app.execute({ argv: [], io: quiet, sigint: "abort" });
+		const exitCode = app.execute({ argv: [], io: quiet });
 		try {
 			await ready;
 			const core = process.listeners("SIGINT").at(-1)!;
