@@ -1,5 +1,11 @@
 # @crustjs/effect
 
+## 0.1.1
+
+### Patch Changes
+
+- [#424](https://github.com/chenxin-yan/crust/pull/424) [`52e0938`](https://github.com/chenxin-yan/crust/commit/52e0938ceee270340c366afb59f756d455d1623a) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `handler()` and `layer()` run the Effect program and Layer builds with the invocation's `ctx.signal`. Caller cancellation or Ctrl-C during `execute()` interrupts the fibers, including interruptible Layer acquisition, and hands Layer finalizers the interruption Exit. Signal interruption becomes an `AbortError` and exits 130 even when the caller supplies a custom abort reason. Cleanup runs without the aborted signal so finalizers can finish.
+
 ## 0.1.0
 
 ### Minor Changes
