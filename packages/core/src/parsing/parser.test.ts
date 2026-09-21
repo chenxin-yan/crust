@@ -167,6 +167,40 @@ describe("parseArgs — aliases", () => {
 		const result2 = parseArgs(cmd, ["--out", "./build"]);
 		expect(result2.flags.output).toBe("./build");
 	});
+
+	it("registers util.parseArgs options only for canonical and alias spellings", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: {
+				verbose: { type: "boolean", short: "v" },
+				output: { type: "string", aliases: ["out"] },
+				port: { type: "number", short: "p", aliases: ["P", "listen"] },
+				tag: { type: "string", multiple: true, short: "t", aliases: ["label"] },
+				color: { type: "boolean", aliases: ["colour"] },
+				strict: { type: "boolean", noNegate: true, short: "s" },
+			},
+		});
+
+		// util.parseArgs accepts `--<key>` for every registered option key, so a short
+		// spelling must be reachable only through its canonical descriptor's `short`.
+		expect(() => parseArgs(cmd, ["--v"])).toThrow('Unknown flag "--v"');
+		expect(() => parseArgs(cmd, ["--s"])).toThrow('Unknown flag "--s"');
+		expect(parseArgs(cmd, ["--P", "1"]).flags.port).toBe(1);
+
+		expect(
+			parseArgs(cmd, ["-vs", "-p8080", "-t", "a", "--label=b", "--no-colour"]).flags,
+		).toMatchObject({
+			verbose: true,
+			strict: true,
+			port: 8080,
+			tag: ["a", "b"],
+			color: false,
+		});
+		expect(parseArgs(cmd, ["-P", "9090", "--listen=7070", "--out", "x"]).flags).toMatchObject({
+			port: 7070,
+			output: "x",
+		});
+	});
 });
 
 // ────────────────────────────────────────────────────────────────────────────

@@ -52,18 +52,16 @@ function buildParseArgsOptionDescriptor(spellings: ReadonlyMap<string, FlagSpell
 	const options: Record<string, ParseArgsOptionDescriptor> = {};
 
 	for (const [spelling, entry] of spellings) {
+		// The canonical descriptor already carries `short`; a short entry has no descriptor of its own.
+		if (entry.kind === "short") continue;
+
 		const descriptor: ParseArgsOptionDescriptor = {
 			type: entry.def.type === "boolean" ? "boolean" : "string",
 		};
 		if (entry.def.multiple) descriptor.multiple = true;
 
-		if (entry.kind === "canonical") {
-			if (entry.def.short) descriptor.short = entry.def.short;
-			options[spelling] = descriptor;
-			continue;
-		}
-
-		if (entry.kind === "alias") options[spelling] = descriptor;
+		if (entry.kind === "canonical" && entry.def.short) descriptor.short = entry.def.short;
+		options[spelling] = descriptor;
 	}
 
 	return options;
