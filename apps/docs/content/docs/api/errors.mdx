@@ -135,6 +135,10 @@ if (outcome.status === "failed") {
 
 Any `Error` whose `name` is `"AbortError"` is cancellation. `run()` returns cancellation in a `failed` outcome unless disposal changes the escaping failure. `execute()` sets and returns exit code `130`; after successful preparation it offers the error to `onError` hooks, and Core renders nothing when no hook claims it.
 
-Cancellation can also start outside the action. Every invocation carries `ctx.signal`, an `AbortSignal` shared by Extension hooks and the Command Action (Context setups do not receive it). It aborts when the caller aborts `execute({ signal })` or `run(path, input, { signal })`, or on the first Ctrl-C during `execute()`. Work that honors the signal (`fetch`, `signal.throwIfAborted()`, an Effect program under `@crustjs/effect`) then fails with the abort reason, and the rule above classifies it: Core's Ctrl-C abort and a bare `controller.abort()` carry an `AbortError` and take the 130 path; a caller's custom reason or a `TimeoutError` renders and exits 1. `postRun` hooks and Context disposal still run either way.
+Cancellation can also start outside the action. Every invocation carries `ctx.signal`, an `AbortSignal` shared by Context setups, Extension hooks, and the Command Action. It aborts when the caller aborts `execute({ signal })` or `run(path, input, { signal })`, or on the first Ctrl-C during `execute()`.
+
+When work throws the signal's reason (for example, `signal.throwIfAborted()`), Core classifies that escaping error: Ctrl-C and a bare `controller.abort()` supply an `AbortError` (silent exit 130); a caller's custom `Error` or `TimeoutError` renders and exits 1. By contrast, signal cancellation in `@crustjs/effect` interrupts the handler and Layer-build fibers. The adapter converts interruption into an `AbortError`, taking the silent exit-130 path regardless of the caller's reason.
+
+Cancellation is cooperative. Once the work settles, `postRun` hooks and Context disposal still run; work that ignores the signal can delay cleanup.
 
 `toJSON()` returns `code`, `message`, and `details`. It omits `cause`.

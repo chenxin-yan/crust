@@ -56,6 +56,8 @@ database closed
 
 Setup runs the first time a command reads `ctx.database`, so `ping` never opens it. Each invocation gets its own value. `defer(cleanup)` registers cleanup for that value; Crust runs it after the action and `postRun` hooks, including when the action throws. Callbacks may be async and run in reverse registration order. Calling `defer` after setup has settled throws a `DEFINITION` error.
 
+Setup receives the invocation's `signal: AbortSignal`, shared with actions and Extension hooks. Pass it to cancellable initialization, such as `fetch(url, { signal })`. Caller cancellation or the first Ctrl-C during `execute()` aborts it. Crust waits for setup to settle before disposal, so work that ignores the signal can delay shutdown. Do not reuse the aborted signal for cleanup work that must finish.
+
 When setup acquires several resources, call `defer` right after each acquire. Then a later failure in the same setup still releases what was already opened. Returned values that implement `[Symbol.dispose]` or `[Symbol.asyncDispose]` are still disposed automatically, before that setup's deferred callbacks.
 
 ## Flags owned by a Context

@@ -32,8 +32,9 @@ export interface ExecuteOptions {
 	io?: Partial<InvocationIO>;
 	/**
 	 * Caller-owned cancellation; aborting it aborts the invocation's `ctx.signal`
-	 * with the same reason. An `AbortError` reason (the default for `abort()`) exits
-	 * `130`; any other reason is rendered as a failure and exits `1`.
+	 * with the same reason. If work throws that reason, an `AbortError` exits `130`
+	 * and other errors exit `1`. Effect signal interruption instead becomes an
+	 * `AbortError`, regardless of the caller's reason.
 	 */
 	signal?: AbortSignal;
 }

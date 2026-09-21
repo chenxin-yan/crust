@@ -423,71 +423,76 @@ describe("handler under execute()", () => {
 		expect(captured.stderr).toBe("");
 	});
 
-	it("interrupts the program when the invocation signal aborts and hands finalizers the interruption", async () => {
-		const exits: Exit.Exit<unknown, unknown>[] = [];
-		const db = layer(
-			"db",
-			resource([], Db, "db", { query: (sql) => sql }, (exit) => exits.push(exit)),
-		);
-		const controller = new AbortController();
-		const app = new Crust("cli")
-			.provide(db())
-			.action(handler(() => Effect.flatMap(Db, () => Effect.never)));
-		const stderr: string[] = [];
-		// Direct execute() (captureExecute has no signal option) sets process.exitCode; restore it.
-		const previousExitCode = process.exitCode;
-		try {
-			const exitCode = app.execute({
-				argv: [],
-				io: { stdout() {}, stderr: (text) => stderr.push(text) },
-				signal: controller.signal,
-			});
+	it.each([new DOMException("Caller cancelled.", "AbortError"), new Error("deadline exceeded")])(
+		"interrupts the program and finalizers regardless of the caller's abort reason: %s",
+		async (reason) => {
+			const exits: Exit.Exit<unknown, unknown>[] = [];
+			const db = layer(
+				"db",
+				resource([], Db, "db", { query: (sql) => sql }, (exit) => exits.push(exit)),
+			);
+			const controller = new AbortController();
+			const started = Promise.withResolvers<void>();
+			const app = new Crust("cli").provide(db()).action(
+				handler(function* () {
+					yield* Db;
+					started.resolve();
+					return yield* Effect.never;
+				}),
+			);
+			const stderr: string[] = [];
+			// Direct execute() (captureExecute has no signal option) sets process.exitCode; restore it.
+			const previousExitCode = process.exitCode;
+			try {
+				const exitCode = app.execute({
+					argv: [],
+					io: { stdout() {}, stderr: (text) => stderr.push(text) },
+					signal: controller.signal,
+				});
 
-			await new Promise((resolve) => setTimeout(resolve, 10));
+				await started.promise;
+				controller.abort(reason);
+
+				expect(await exitCode).toBe(130);
+			} finally {
+				process.exitCode = previousExitCode;
+			}
+			expect(stderr).toEqual([]);
+			expect(exits).toHaveLength(1);
+			expect(Exit.isFailure(exits[0]!) && Cause.hasInterruptsOnly(exits[0].cause)).toBe(true);
+		},
+	);
+
+	it.each(["separate", "composed"])(
+		"interrupts acquisition and releases acquired resources in %s Layers",
+		async (arrangement) => {
+			const exits: Exit.Exit<unknown, unknown>[] = [];
+			const db = resource([], Db, "db", { query: (sql) => sql }, (exit) => exits.push(exit));
+			const acquiring = Promise.withResolvers<void>();
+			const cache = Layer.effect(
+				Cache,
+				Effect.gen(function* () {
+					acquiring.resolve();
+					return yield* Effect.never;
+				}),
+			);
+			const providers =
+				arrangement === "composed"
+					? [layer("both", Layer.merge(db, cache))()]
+					: [layer("db", db)(), layer("cache", cache)()];
+			const controller = new AbortController();
+			const outcome = new Crust("cli")
+				.provide(...providers)
+				.action(handler(() => Effect.succeed("unreachable")))
+				.run([], {}, { signal: controller.signal });
+
+			await acquiring.promise;
 			controller.abort(new DOMException("Caller cancelled.", "AbortError"));
 
-			expect(await exitCode).toBe(130);
-		} finally {
-			process.exitCode = previousExitCode;
-		}
-		expect(stderr).toEqual([]);
-		expect(exits).toHaveLength(1);
-		expect(Exit.isFailure(exits[0]!) && Cause.hasInterruptsOnly(exits[0].cause)).toBe(true);
-	});
-
-	it("hands already-acquired layers the interruption when cancellation lands during a sibling's acquisition", async () => {
-		const exits: Exit.Exit<unknown, unknown>[] = [];
-		const db = layer(
-			"db",
-			resource([], Db, "db", { query: (sql) => sql }, (exit) => exits.push(exit)),
-		);
-		const gate = Promise.withResolvers<void>();
-		const acquiring = Promise.withResolvers<void>();
-		const cache = layer(
-			"cache",
-			Layer.effect(
-				Cache,
-				Effect.promise(async () => {
-					acquiring.resolve();
-					await gate.promise;
-					return { get: (key: string) => key };
-				}),
-			),
-		);
-		const controller = new AbortController();
-		const outcome = new Crust("cli")
-			.provide(db())
-			.provide(cache())
-			.action(handler(() => Effect.succeed("unreachable")))
-			.run([], {}, { signal: controller.signal });
-
-		await acquiring.promise;
-		controller.abort(new DOMException("Caller cancelled.", "AbortError"));
-		gate.resolve();
-
-		const result = await outcome;
-		expect(result.status === "failed" && (result.error as Error).name).toBe("AbortError");
-		expect(exits).toHaveLength(1);
-		expect(Exit.isFailure(exits[0]!) && Cause.hasInterruptsOnly(exits[0].cause)).toBe(true);
-	});
+			const result = await outcome;
+			expect(result.status === "failed" && (result.error as Error).name).toBe("AbortError");
+			expect(exits).toHaveLength(1);
+			expect(Exit.isFailure(exits[0]!) && Cause.hasInterruptsOnly(exits[0].cause)).toBe(true);
+		},
+	);
 });

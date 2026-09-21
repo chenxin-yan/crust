@@ -47,7 +47,7 @@ Crust is the outer runtime. Each `handler()` invocation opens one Effect run, pr
 | `Die` (defect)                   | Rethrown as-is; rendered like a plain thrown error (exit 1)                          |
 | Interruption                     | An `AbortError` is rethrown; Core exits 130 with no output, like prompt cancellation |
 
-The program runs with the invocation's `ctx.signal`: when the caller aborts it (`execute({ signal })`, `run(path, input, { signal })`, or Ctrl-C during `execute()`), the fiber is interrupted, Layer finalizers receive the interruption Exit, and the interruption row above applies.
+Both the program and Layer builds run with the invocation's `ctx.signal`: caller cancellation or Ctrl-C during `execute()` interrupts their fibers, including interruptible resource acquisition. Layer finalizers receive the interruption Exit. The adapter converts signal interruption into an `AbortError` regardless of the caller's abort reason, so the interruption row above applies even for a custom `Error` or `TimeoutError`. Cleanup runs without the aborted signal; uninterruptible acquisition still has to settle before cleanup can finish.
 
 ## `layer(name, layer)`
 

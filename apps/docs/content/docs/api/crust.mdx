@@ -368,9 +368,9 @@ const app = new Crust("greet")
 
 The context contains typed `args`, typed effective `flags`, the lazy typed `ctx` bag, `rawArgs` after `--`, the invocation's cancellation `signal`, the resolved `command` and application `rootCommand` snapshots, and injectable `stdout(text)` and `stderr(text)` callbacks from `InvocationIO`. `CrustCommandContext` extends `InvocationIO`; Context setups receive those same callbacks for the invocation.
 
-`signal` is an `AbortSignal` that aborts when the caller cancels the invocation: `execute({ signal })`, `run(path, input, { signal })`, or Ctrl-C during `execute()`. Pass it to `fetch`, timers, or child processes and let `signal.throwIfAborted()` end the action. It never aborts on its own, and Context setups do not receive it.
+`signal` is an `AbortSignal` that aborts when the caller cancels the invocation: `execute({ signal })`, `run(path, input, { signal })`, or Ctrl-C during `execute()`. Pass it to `fetch`, timers, or child processes and let `signal.throwIfAborted()` end the action. The same signal is available to Context setups for cancellable initialization.
 
-The abort reason decides the exit path. Core's own abort (Ctrl-C) uses an `AbortError`, and so does a caller's `controller.abort()` with no argument, so both exit 130 silently. A caller signal keeps its own reason: `abort(new Error("cancelled"))` or an `AbortSignal.timeout()` `TimeoutError` is rendered like any thrown error and exits 1. Supply an `AbortError` reason when the abort should read as user cancellation.
+When work throws the signal's reason (for example, `signal.throwIfAborted()`), that error decides the exit path. Core's Ctrl-C abort and a bare `controller.abort()` supply an `AbortError` (silent exit 130); a custom `Error` or `TimeoutError` renders and exits 1. Effect signal interruption instead becomes an `AbortError` regardless of the caller's reason; see [error handling](/docs/api/errors).
 
 ## `.add(...definitions)`
 
@@ -531,7 +531,7 @@ Memory is proportional to emitted output.
 
 Optional `options.stdout`/`options.stderr` sinks receive writes live, once each, after capture. Omitted channels stay quiet. A sink throw becomes an invocation failure, retaining the write that triggered it.
 
-Optional `options.signal` cancels the invocation: aborting it aborts the `ctx.signal` seen by Extension hooks and the action, with the caller's reason. Work that honors the signal ends with that reason, which `run()` returns as a `failed` outcome like any other escaping error. `run()` never installs a `SIGINT` handler.
+Optional `options.signal` cancels the invocation: aborting it aborts the `ctx.signal` shared by Context setups, Extension hooks, and the action, with the caller's reason. If work throws that reason, `run()` returns it as a `failed` outcome like any other escaping error. Effect signal interruption instead throws an `AbortError`. `run()` never installs a `SIGINT` handler.
 
 No callbacks or actions are rerun for capture.
 

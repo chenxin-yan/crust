@@ -225,7 +225,7 @@ async function dispatch(
 	// DisposalStack (not the bare global): Node 22 has no AsyncDisposableStack.
 	await using disposal = new DisposalStack();
 	const contexts = resolvedNode.contexts.map(({ instance }) => instance);
-	const resolver = createContextResolver(contexts, io, disposal);
+	const resolver = createContextResolver(contexts, io, disposal, signal);
 
 	const rootSnapshot = snapshotCommand(rootNode);
 	// The root projection already contains the resolved subtree; walk to it along

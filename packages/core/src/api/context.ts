@@ -73,6 +73,7 @@ type ValidateContextConfig<R extends ContextConfig> = {
 };
 
 interface ContextSetupInput<OF extends FlagsDef = FlagsDef> extends InvocationIO {
+	readonly signal: AbortSignal;
 	readonly flags: InferFlags<OF>;
 	readonly ctx: ContextBag<ContextMap>;
 	readonly defer: (cleanup: () => void | PromiseLike<void>) => void;
@@ -111,6 +112,8 @@ export interface ContextSetup<
 	Deps extends ContextMap = {},
 > extends InvocationIO {
 	readonly options: Options;
+	/** The invocation's cancellation signal; pass it to cancellable setup work. */
+	readonly signal: AbortSignal;
 	readonly flags: InferFlags<OF>;
 	readonly ctx: ContextBag<Deps>;
 	/**
@@ -439,6 +442,7 @@ export function createContextResolver(
 	contexts: readonly AnyContextInstance[],
 	io: InvocationIO,
 	disposal: DisposalScope,
+	signal: AbortSignal,
 ): ContextResolver {
 	interface Entry {
 		readonly name: string;
@@ -567,6 +571,7 @@ export function createContextResolver(
 						// Spread first: injected io is only typed as stdout/stderr, but runtime
 						// extras must not shadow the lifecycle fields below.
 						...io,
+						signal,
 						flags: ownedFlags,
 						ctx: makeBag(context.uses, current),
 						defer(cleanup) {

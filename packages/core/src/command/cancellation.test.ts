@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { describe, expect, it, beforeEach, afterEach } from "bun:test";
 
-import { Crust, defineExtension, defineExtensionId } from "../index.ts";
+import { Crust, defineContext, defineExtension, defineExtensionId } from "../index.ts";
 
 const quiet = { stdout() {}, stderr() {} };
 
@@ -53,6 +53,28 @@ describe("invocation cancellation signal", () => {
 		const failed = await outcome;
 		expect(failed.status === "failed" && (failed.error as Error).name).toBe("AbortError");
 		expect(process.exitCode).toBe(0);
+	});
+
+	it("run() cancels Context setup and waits for its registered cleanup", async () => {
+		const { ready, action: waitForSignal } = awaitingSignal();
+		const controller = new AbortController();
+		let cleanedUp = false;
+		const resource = defineContext("resource", async ({ signal, defer }) => {
+			defer(async () => {
+				await Promise.resolve();
+				cleanedUp = true;
+			});
+			return waitForSignal({ signal });
+		});
+		const outcome = new Crust("cli")
+			.provide(resource())
+			.action(({ ctx }) => ctx.resource)
+			.run([], {}, { signal: controller.signal });
+
+		await ready;
+		controller.abort();
+		expect(await outcome).toMatchObject({ status: "failed", error: controller.signal.reason });
+		expect(cleanedUp).toBe(true);
 	});
 
 	it("execute({ signal }) cancels silently with exit code 130", async () => {
@@ -150,8 +172,15 @@ describe("invocation cancellation signal", () => {
 		}
 	});
 
-	it("shares one signal between Extension hooks and the action, including the onError fallback context", async () => {
+	it("shares one signal between Context setups, Extension hooks and the action, including the onError fallback context", async () => {
 		const seen: AbortSignal[] = [];
+		const dependency = defineContext("dependency", ({ signal }) => {
+			seen.push(signal);
+		});
+		const resource = defineContext("resource", { uses: [dependency] }, async ({ ctx, signal }) => {
+			seen.push(signal);
+			await ctx.dependency;
+		});
 		const probe = defineExtension(defineExtensionId("probe"), {
 			hooks: {
 				preRun(ctx) {
@@ -163,13 +192,17 @@ describe("invocation cancellation signal", () => {
 				},
 			},
 		});
-		const app = new Crust("cli").extend(probe).action(({ signal }) => {
-			seen.push(signal);
-		});
+		const app = new Crust("cli")
+			.extend(probe)
+			.provide(dependency(), resource())
+			.action(async ({ ctx, signal }) => {
+				seen.push(signal);
+				await ctx.resource;
+			});
 
 		await app.execute({ argv: [], io: quiet });
-		expect(seen).toHaveLength(2);
-		expect(seen[0]).toBe(seen[1]);
+		expect(seen).toHaveLength(4);
+		for (const signal of seen) expect(signal).toBe(seen[0]!);
 
 		seen.length = 0;
 		await app.execute({ argv: ["--bogus"], io: quiet });
