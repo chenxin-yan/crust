@@ -10,7 +10,7 @@
 		"allowImportingTsExtensions": true,
 		"esModuleInterop": true,
 		"skipLibCheck": true,
-		"types": ["bun", "node"]
+		"types": ["bun"]
 	},
 	"include": ["*.ts", "adapters/*.ts", "probes/*.ts"],
 	"exclude": ["node_modules", ".generated", "results"]
