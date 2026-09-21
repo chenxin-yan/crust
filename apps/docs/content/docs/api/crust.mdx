@@ -609,7 +609,7 @@ Both `.execute()` and `.run()` follow the same sequence. Steps 4 through 10 are 
 
 A failure in steps 4 through 8 still runs steps 9 and 10. See [propagation boundaries](/docs/api/errors#propagation-boundaries) for what each phase's failure becomes.
 
-`execute()` resolves to the terminal exit code: `0` on success, `1` on failure, or `130` for cancellation. It still renders a failure once through Extension `onError` hooks ending in Core's renderer and sets `process.exitCode` on failure. Any `Error` whose `name` is `"AbortError"`, including a `DOMException`, is cancellation.
+`execute()` resolves to the terminal exit code: `0` on success, `1` on failure, or `130` for cancellation. It still renders a failure once through Extension `onError` hooks ending in Core's renderer and sets `process.exitCode` on failure. When cleanup also fails after that failure was rendered, Core writes the cleanup failure to `stderr` as `Cleanup failed: …` without calling `onError` again, and the exit code is `1` even for a cancelled action. Any `Error` whose `name` is `"AbortError"`, including a `DOMException`, is cancellation.
 
 It is offered to `onError` hooks and renders nothing when no hook claims it.
 
