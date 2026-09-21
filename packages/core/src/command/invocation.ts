@@ -129,9 +129,13 @@ function applySectionsAndFreeze(
 	rootNode: CommandNode,
 	extensions: readonly Extension[],
 ): CommandNode {
-	const authoredSnapshot = snapshotCommand(rootNode);
-	for (const extension of extensions) {
-		applyExtensionSections(rootNode, extension, authoredSnapshot);
+	// The authored snapshot exists only to feed section callbacks; projecting the
+	// whole tree when nothing consumes it is wasted work on every fresh preparation.
+	if (extensions.some((extension) => extension.sections !== undefined)) {
+		const authoredSnapshot = snapshotCommand(rootNode);
+		for (const extension of extensions) {
+			applyExtensionSections(rootNode, extension, authoredSnapshot);
+		}
 	}
 	freezeTree(rootNode);
 	return rootNode;

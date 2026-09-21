@@ -6,8 +6,9 @@ import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
 import { defineExtensionId } from "../identity.ts";
 import { Crust, defineCommand } from "./crust.ts";
+import { prepareInvocation } from "./invocation.ts";
 import { createCommandNode, registerFlag } from "./node.ts";
-import { snapshotCommand } from "./snapshot.ts";
+import { snapshotCommand, type CommandSnapshot } from "./snapshot.ts";
 
 function buildTree() {
 	const root = createCommandNode("cli");
@@ -166,6 +167,50 @@ describe("command metadata sections", () => {
 		expect(Object.isFrozen(snapshot.meta.sections)).toBe(true);
 		expect(Object.isFrozen(snapshot.meta.sections?.[0])).toBe(true);
 		expect(() => structuredClone(snapshot)).not.toThrow();
+	});
+
+	it("freezes callback-free trees and shares one pre-contribution snapshot across callbacks", async () => {
+		const authored = [{ title: "Root guide", body: "Root body" }];
+		const seen: CommandSnapshot[] = [];
+		const contribute = (name: string) =>
+			defineExtension(defineExtensionId(name), {
+				sections(snapshot) {
+					seen.push(snapshot);
+					return [{ command: [], title: name, body: `${name} body` }];
+				},
+			});
+		const plain = new Crust("cli", { sections: authored })
+			.extend(
+				defineExtension(defineExtensionId("silent"), {
+					flags: [{ name: "extra", type: "boolean" }],
+				}),
+			)
+			.add(defineCommand("build", (command) => command.action(() => {})));
+		const contributed = plain.extend(contribute("first")).extend(contribute("second"));
+
+		// No callback: the prepared tree is still frozen and the snapshot is purely authored.
+		const prepared = prepareInvocation(plain._node, () => {
+			throw new Error("no Extension commands to materialize");
+		}).rootNode;
+		expect(Object.isFrozen(prepared)).toBe(true);
+		expect(Object.isFrozen(prepared.meta.sections)).toBe(true);
+		expect(Object.isFrozen(prepared.subCommands.build)).toBe(true);
+		const plainSnapshot = await plain.snapshot();
+		expect(plainSnapshot.meta.sections).toEqual(authored);
+		expect(plainSnapshot.flags.extra?.type).toBe("boolean");
+
+		// Callbacks: each one receives the same pre-contribution snapshot; derived builders stay isolated.
+		const contributedSnapshot = await contributed.snapshot();
+		expect(seen).toHaveLength(2);
+		expect(seen[1]).toBe(seen[0]);
+		expect(seen[0]?.meta.sections).toEqual(authored);
+		expect(seen[0]?.flags.extra?.type).toBe("boolean");
+		expect(contributedSnapshot.meta.sections).toEqual([
+			...authored,
+			{ title: "first", body: "first body" },
+			{ title: "second", body: "second body" },
+		]);
+		expect((await plain.snapshot()).meta.sections).toEqual(authored);
 	});
 
 	it("normalizes object and mixed section consumers for authored and contributed sections", async () => {
