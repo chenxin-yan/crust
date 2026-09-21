@@ -1,5 +1,12 @@
 # create-crust
 
+## 0.3.4
+
+### Patch Changes
+
+- Updated dependencies [[`26baf42`](https://github.com/chenxin-yan/crust/commit/26baf426534a2df0493a3be29c34f1574810fea1), [`9d19b33`](https://github.com/chenxin-yan/crust/commit/9d19b33a077247f47689b64e1babe1527638b9ed), [`52e0938`](https://github.com/chenxin-yan/crust/commit/52e0938ceee270340c366afb59f756d455d1623a), [`5183e78`](https://github.com/chenxin-yan/crust/commit/5183e78b60f263b4da820d3214863ef715d3dca4), [`2835c5b`](https://github.com/chenxin-yan/crust/commit/2835c5b1d2df03585c58c579d50e0ef6298138a0), [`cac21ad`](https://github.com/chenxin-yan/crust/commit/cac21ad6c9a57423aabf048cd3bf25223d52a1ae), [`b02c2af`](https://github.com/chenxin-yan/crust/commit/b02c2af97addd3e7064dff2155d6bf3b2a27c6cd), [`05603c9`](https://github.com/chenxin-yan/crust/commit/05603c9049edc0f0c7f74e6e22b8a69ecfe02dd6)]:
+  - @crustjs/core@0.3.4
+
 ## 0.3.3
 
 ### Patch Changes
