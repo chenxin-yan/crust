@@ -273,9 +273,7 @@ describe("updateNotifier post-run hook", () => {
 	const originalNpmExecpath = process.env.npm_execpath;
 	const originalXdgStateHome = process.env.XDG_STATE_HOME;
 	let originalStderrWrite: typeof process.stderr.write;
-	let originalConsoleError: typeof console.error;
 	let originalExitCode: typeof process.exitCode;
-	let processStderrChunks: string[];
 	let stderrChunks: string[];
 	let cachedState: UpdateNotifierState | undefined;
 	let tempDirs: string[];
@@ -295,16 +293,11 @@ describe("updateNotifier post-run hook", () => {
 		process.env.XDG_STATE_HOME = stateHome;
 
 		stderrChunks = [];
-		processStderrChunks = [];
 		originalStderrWrite = process.stderr.write;
-		originalConsoleError = console.error;
 		originalExitCode = process.exitCode;
 		process.stderr.write = (chunk: string | Uint8Array) => {
-			processStderrChunks.push(String(chunk));
+			stderrChunks.push(String(chunk));
 			return true;
-		};
-		console.error = (...args: unknown[]) => {
-			stderrChunks.push(args.map(String).join(" "));
 		};
 	});
 
@@ -316,7 +309,6 @@ describe("updateNotifier post-run hook", () => {
 	afterEach(async () => {
 		globalThis.fetch = originalFetch;
 		process.stderr.write = originalStderrWrite;
-		console.error = originalConsoleError;
 		restoreEnv("npm_config_user_agent", originalUserAgent);
 		restoreEnv("npm_execpath", originalNpmExecpath);
 		restoreEnv("XDG_STATE_HOME", originalXdgStateHome);
@@ -1202,7 +1194,7 @@ describe("updateNotifier post-run hook", () => {
 
 			expect(stderr.join("\n")).toContain("Update available");
 			expect(stderr.join("\n")).toContain("5.0.0");
-			expect(processStderrChunks.join("")).toBe("");
+			expect(getOutput()).toBe("");
 		});
 	});
 });

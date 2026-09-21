@@ -6,27 +6,31 @@ import { didYouMean } from "./did-you-mean.ts";
 
 let stderrChunks: string[];
 let stdoutChunks: string[];
-let originalError: typeof console.error;
-let originalLog: typeof console.log;
+let originalStderrWrite: typeof process.stderr.write;
+let originalStdoutWrite: typeof process.stdout.write;
 let originalExitCode: typeof process.exitCode;
+
+/** Default IO writes one `text\n` per call; capture each as a line. */
+function captureLines(lines: string[]): typeof process.stdout.write {
+	return (chunk: string | Uint8Array) => {
+		lines.push(String(chunk).replace(/\n$/, ""));
+		return true;
+	};
+}
 
 beforeEach(() => {
 	stderrChunks = [];
 	stdoutChunks = [];
-	originalError = console.error;
-	originalLog = console.log;
+	originalStderrWrite = process.stderr.write;
+	originalStdoutWrite = process.stdout.write;
 	originalExitCode = process.exitCode;
-	console.error = (...args: unknown[]) => {
-		stderrChunks.push(args.map((a) => String(a)).join(" "));
-	};
-	console.log = (...args: unknown[]) => {
-		stdoutChunks.push(args.map((a) => String(a)).join(" "));
-	};
+	process.stderr.write = captureLines(stderrChunks);
+	process.stdout.write = captureLines(stdoutChunks);
 });
 
 afterEach(() => {
-	console.error = originalError;
-	console.log = originalLog;
+	process.stderr.write = originalStderrWrite;
+	process.stdout.write = originalStdoutWrite;
 	process.exitCode = originalExitCode ?? 0;
 });
 

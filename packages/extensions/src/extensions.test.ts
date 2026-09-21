@@ -19,9 +19,17 @@ import { version } from "./version.ts";
 
 let stdoutChunks: string[];
 let stderrChunks: string[];
-let originalLog: typeof console.log;
-let originalError: typeof console.error;
+let originalStdoutWrite: typeof process.stdout.write;
+let originalStderrWrite: typeof process.stderr.write;
 let originalExitCode: typeof process.exitCode;
+
+/** Default IO writes one `text\n` per call; capture each as a line. */
+function captureLines(lines: () => string[]): typeof process.stdout.write {
+	return (chunk: string | Uint8Array) => {
+		lines().push(String(chunk).replace(/\n$/, ""));
+		return true;
+	};
+}
 
 beforeEach(() => {
 	// Ambient NO_COLOR/FORCE_COLOR (e.g. CI runners) must not leak into the
@@ -30,16 +38,12 @@ beforeEach(() => {
 	delete process.env.FORCE_COLOR;
 	stdoutChunks = [];
 	stderrChunks = [];
-	originalLog = console.log;
-	originalError = console.error;
+	originalStdoutWrite = process.stdout.write;
+	originalStderrWrite = process.stderr.write;
 	originalExitCode = process.exitCode;
 
-	console.log = (...args: unknown[]) => {
-		stdoutChunks.push(args.map((arg) => String(arg)).join(" "));
-	};
-	console.error = (...args: unknown[]) => {
-		stderrChunks.push(args.map((arg) => String(arg)).join(" "));
-	};
+	process.stdout.write = captureLines(() => stdoutChunks);
+	process.stderr.write = captureLines(() => stderrChunks);
 });
 
 const originalForceColor = process.env.FORCE_COLOR;
@@ -55,8 +59,8 @@ function restoreEnv(name: string, value: string | undefined) {
 }
 
 afterEach(() => {
-	console.log = originalLog;
-	console.error = originalError;
+	process.stdout.write = originalStdoutWrite;
+	process.stderr.write = originalStderrWrite;
 	process.exitCode = originalExitCode ?? 0;
 	restoreEnv("FORCE_COLOR", originalForceColor);
 	restoreEnv("NO_COLOR", originalNoColor);

@@ -14,11 +14,9 @@ import {
 } from "../index.ts";
 
 let stdoutBuf: Buffer[];
-let processStdoutBuf: Buffer[];
 let stderrChunks: string[];
 let originalWrite: typeof process.stdout.write;
-let originalLog: typeof console.log;
-let originalError: typeof console.error;
+let originalStderrWrite: typeof process.stderr.write;
 let originalExitCode: typeof process.exitCode;
 
 type StdoutChunk = Parameters<typeof process.stdout.write>[0];
@@ -29,42 +27,33 @@ function isStringChunk(chunk: StdoutChunk): chunk is string {
 
 beforeEach(() => {
 	stdoutBuf = [];
-	processStdoutBuf = [];
 	stderrChunks = [];
-	originalWrite = process.stdout.write.bind(process.stdout);
-	originalLog = console.log;
-	originalError = console.error;
+	originalWrite = process.stdout.write;
+	originalStderrWrite = process.stderr.write;
 	originalExitCode = process.exitCode;
 
 	process.stdout.write = (chunk: StdoutChunk) => {
 		if (isStringChunk(chunk)) {
-			processStdoutBuf.push(Buffer.from(chunk, "utf8"));
+			stdoutBuf.push(Buffer.from(chunk, "utf8"));
 		} else if (chunk instanceof Uint8Array) {
-			processStdoutBuf.push(Buffer.from(chunk));
+			stdoutBuf.push(Buffer.from(chunk));
 		}
 		return true;
 	};
-	console.log = (...args: unknown[]) => {
-		stdoutBuf.push(Buffer.from(`${args.map(String).join(" ")}\n`, "utf8"));
-	};
-	console.error = (...args: unknown[]) => {
-		stderrChunks.push(args.map((a) => String(a)).join(" "));
+	process.stderr.write = (chunk: StdoutChunk) => {
+		stderrChunks.push(String(chunk).replace(/\n$/, ""));
+		return true;
 	};
 });
 
 afterEach(() => {
 	process.stdout.write = originalWrite;
-	console.log = originalLog;
-	console.error = originalError;
+	process.stderr.write = originalStderrWrite;
 	process.exitCode = originalExitCode ?? 0;
 });
 
 function getStdout(): string {
 	return Buffer.concat(stdoutBuf).toString("utf8");
-}
-
-function getProcessStdout(): string {
-	return Buffer.concat(processStdoutBuf).toString("utf8");
 }
 
 function buildCli() {
@@ -141,7 +130,7 @@ describe("completion", () => {
 		});
 
 		expect(output.join("\n")).toStartWith("# completion script for mycli v1.2.3");
-		expect(getProcessStdout()).toBe("");
+		expect(getStdout()).toBe("");
 	});
 
 	it("`mycli completion zsh` prints a zsh script with #compdef header", async () => {

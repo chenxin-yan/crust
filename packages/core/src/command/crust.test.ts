@@ -37,8 +37,13 @@ function isString<T>(value: T): value is T & string {
 	return typeof value === "string";
 }
 
-function stringifyConsoleArg<T>(value: T): string {
-	return isString(value) ? value : String(value);
+/** Default IO writes one `text\n` per call; capture each as a line, like the old console stubs. */
+function captureLines(lines: () => string[]): typeof process.stdout.write {
+	return (chunk: string | Uint8Array) => {
+		const text = isString(chunk) ? chunk : Buffer.from(chunk).toString("utf8");
+		lines().push(text.replace(/\n$/, ""));
+		return true;
+	};
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -1268,25 +1273,20 @@ describe("Extension named hooks", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("Extension onError hooks", () => {
-	let originalLog: typeof console.log;
-	let originalError: typeof console.error;
+	let originalStderrWrite: typeof process.stderr.write;
 	let originalExitCode: number | string | null | undefined;
 	let stderrChunks: string[];
 
 	beforeEach(() => {
-		originalLog = console.log;
-		originalError = console.error;
+		originalStderrWrite = process.stderr.write;
 		originalExitCode = process.exitCode;
 		stderrChunks = [];
-		console.error = (...args: unknown[]) => {
-			stderrChunks.push(args.map(String).join(" "));
-		};
+		process.stderr.write = captureLines(() => stderrChunks);
 		process.exitCode = 0;
 	});
 
 	afterEach(() => {
-		console.log = originalLog;
-		console.error = originalError;
+		process.stderr.write = originalStderrWrite;
 		process.exitCode = originalExitCode ?? 0;
 	});
 
@@ -1538,38 +1538,28 @@ describe("Crust .run()", () => {
 });
 
 describe("Crust .execute()", () => {
-	// Save/restore console and process.exitCode around each test
-	let originalLog: typeof console.log;
-	let originalError: typeof console.error;
-	let originalWarn: typeof console.warn;
+	// Save/restore the process streams and process.exitCode around each test
+	let originalStdoutWrite: typeof process.stdout.write;
+	let originalStderrWrite: typeof process.stderr.write;
 	let originalExitCode: number | string | null | undefined;
 	let stdoutChunks: string[];
 	let stderrChunks: string[];
 
 	beforeEach(() => {
-		originalLog = console.log;
-		originalError = console.error;
-		originalWarn = console.warn;
+		originalStdoutWrite = process.stdout.write;
+		originalStderrWrite = process.stderr.write;
 		originalExitCode = process.exitCode;
 		stdoutChunks = [];
 		stderrChunks = [];
-		console.log = (...args: unknown[]) => {
-			stdoutChunks.push(args.map(stringifyConsoleArg).join(" "));
-		};
-		console.error = (...args: unknown[]) => {
-			stderrChunks.push(args.map(stringifyConsoleArg).join(" "));
-		};
-		console.warn = (...args: unknown[]) => {
-			stderrChunks.push(args.map(stringifyConsoleArg).join(" "));
-		};
+		process.stdout.write = captureLines(() => stdoutChunks);
+		process.stderr.write = captureLines(() => stderrChunks);
 		// Reset exitCode — setting to 0 then deleting clears the value
 		process.exitCode = 0;
 	});
 
 	afterEach(() => {
-		console.log = originalLog;
-		console.error = originalError;
-		console.warn = originalWarn;
+		process.stdout.write = originalStdoutWrite;
+		process.stderr.write = originalStderrWrite;
 		// Restore original exit code (0 acts as "no error")
 		process.exitCode = originalExitCode ?? 0;
 	});

@@ -12,12 +12,13 @@ import {
 
 describe("captured run outcomes", () => {
 	it("captures quietly, preserving callback payloads and result", async () => {
-		const log = console.log;
-		const error = console.error;
+		const stdoutWrite = process.stdout.write;
+		const stderrWrite = process.stderr.write;
 		let liveWrites = 0;
-		console.log = console.error = () => {
+		process.stdout.write = process.stderr.write = (() => {
 			liveWrites++;
-		};
+			return true;
+		}) as typeof process.stdout.write;
 		try {
 			const result = await new Crust("app")
 				.action(({ stdout, stderr }) => {
@@ -35,8 +36,8 @@ describe("captured run outcomes", () => {
 			});
 			expect(liveWrites).toBe(0);
 		} finally {
-			console.log = log;
-			console.error = error;
+			process.stdout.write = stdoutWrite;
+			process.stderr.write = stderrWrite;
 		}
 	});
 	it.each([undefined, null, 0, "failure", { identity: true }])(

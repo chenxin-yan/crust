@@ -35,10 +35,15 @@ import type { CommandNode } from "./node.ts";
 import { resolveCommand, type CommandRoute } from "./router.ts";
 import { snapshotCommand } from "./snapshot.ts";
 
-/** Terminal defaults: line-oriented writes to the process streams. */
+/**
+ * Terminal defaults: line-oriented writes to the process streams. Stream writes rather
+ * than `console.log`: once anything materializes `process.stdout` (a platform layer, a
+ * color library probing `isTTY`), Bun's native console writer silently drops output past
+ * the 64 KiB pipe buffer at exit (oven-sh/bun#36419); the stream writer flushes it.
+ */
 const DEFAULT_IO: InvocationIO = {
-	stdout: (text) => console.log(text),
-	stderr: (text) => console.error(text),
+	stdout: (text) => void process.stdout.write(`${text}\n`),
+	stderr: (text) => void process.stderr.write(`${text}\n`),
 };
 
 /** One cloned, extension-applied, frozen command tree. */
