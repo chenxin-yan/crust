@@ -2,7 +2,7 @@
 
 Investigation at `b79c147ad81549d5cf8755993bf707b539fda996`, 2026-09-20. Four parallel source audits were followed by isolated serial experiments and an independent reviewer, then a strengthened test, a longer-warmup follow-up and a build-configuration experiment.
 
-**Status:** backlog items 1–4 are implemented as the stacked PRs #415 → #416 → #417 → #418. Measured on the stack tip with the same harness ([after-stack.md](../cli-comparison/results/after-stack.md) vs [full.md](../cli-comparison/results/full.md)): Crust fresh-schema warm invocation 58.36 → 46.52 µs on Bun (−20%) and 65.56 → 59.22 µs on Node (−10%); startup and bundle size within noise; competitor controls moved ≤1.6%. Items 5+ remain open.
+**Status:** backlog items 1–4 are implemented as the stacked PRs #415 → #416 → #417 → #418. The [frozen baseline](../cli-comparison/results/full.md) is retained, but the stack-tip raw samples and report are not committed. The combined before/after comparison is deferred until those artifacts are available; no stack-wide performance improvement or competitor-control bound is established here. Items 5+ remain open.
 
 ## Recommendation
 

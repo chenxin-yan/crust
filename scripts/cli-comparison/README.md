@@ -6,14 +6,22 @@ Read the [measured comparison](./results/full.md) and [raw samples](./results/fu
 
 ## Reproduce
 
-Prerequisites: this checkout at `b79c147ad81549d5cf8755993bf707b539fda996`, repository build dependencies already installed, Bun **1.4.2**, Node **v26.8.2**, npm, and network access for the first benchmark dependency installation.
+Prerequisites: this PR's checkout (which contains the harness), Bun **1.4.2**, Node **v26.8.2**, npm, and network access for dependency installation. The frozen baseline is `b79c147ad81549d5cf8755993bf707b539fda996`, which predates the harness; build it in a separate worktree rather than checking this harness out at that revision.
 
-From the repository root:
+From the repository root, install the harness tooling and create an installed baseline worktree:
+
+```sh
+bun ci
+git worktree add --detach ../crust-cli-baseline b79c147ad81549d5cf8755993bf707b539fda996
+bun install --frozen-lockfile --cwd ../crust-cli-baseline
+```
+
+Then, still starting from the repository root, run the harness against that baseline:
 
 ```sh
 cd scripts/cli-comparison
 npm ci --ignore-scripts --no-audit --no-fund
-bun run prepare:local
+CRUST_ROOT="$(realpath ../../../crust-cli-baseline)" bun run prepare:local
 bun run check
 bun test contract.test.ts
 bun run build
@@ -32,7 +40,17 @@ bun report.ts results/full.json > results/full.md
 
 The full run has 15 warm measurement batches (3 fresh workers × 5 batches, each after 3 warmup batches; 300 calls/batch) and 30 startup samples per runtime/library plus an empty-process baseline (2 untimed startup rounds). Expect roughly a few minutes on a development machine. Smoke uses 2 × 10 warm calls, 1 warmup batch, and 3 startup samples; **smoke numbers are not performance evidence**. Measurements are serial; a lock rejects a second measurement runner. Individual children have timeouts (30 seconds, or 120 seconds for a warm worker) and bounded loops. A crashed runner can leave `.generated/measurement.lock`; remove it only after confirming no measurement is active.
 
-To measure another commit of local Crust, run `CRUST_ROOT=<checkout> EXPECTED_REVISION=<sha> bun run prepare:local` (`CRUST_ROOT` defaults to this repository), then `bun measure.ts --out <name>` writes `results/<name>.json` instead of `full.json`. `BUN_BIN` and `NODE_BIN` can select executable paths. Build/prepare still require the Bun used to launch them; the measurement gate checks the recorded bundler version. Node uses its native TypeScript stripping for harness/source conformance, not a third-party TS loader. Measurements execute **bundled JavaScript**, never compare source TS against a bundle.
+To measure the current checkout instead of the frozen baseline, run the following from `scripts/cli-comparison` after installing repository and benchmark dependencies:
+
+```sh
+EXPECTED_REVISION="$(git rev-parse HEAD)" bun run prepare:local
+bun run check && bun test contract.test.ts
+bun run build && bun run verify
+bun measure.ts --out current
+bun report.ts results/current.json > results/current.md
+```
+
+To measure another commit in a separate checkout, use `CRUST_ROOT=<absolute-checkout-path> EXPECTED_REVISION=<full-sha> bun run prepare:local` instead. `CRUST_ROOT` defaults to this repository. Always rebuild and verify after preparation; `--out <name>` retains the frozen `full.json` rather than overwriting it. `BUN_BIN` and `NODE_BIN` can select executable paths. Build/prepare still require the Bun used to launch them; the measurement gate checks the recorded bundler version. Node uses its native TypeScript stripping for harness/source conformance, not a third-party TS loader. Measurements execute **bundled JavaScript**, never compare source TS against a bundle.
 
 Generated `.generated/` and smoke results are ignored; `results/full.json` and `results/full.md` are retained as the reproducible measurement snapshot. The benchmark-local `package-lock.json` locks all installed transitive dependencies. Never run `bun install` in this nested workspace: use the explicit npm command above. After `npm ci`, rerun `prepare:local` to recreate local package links.
 
@@ -85,6 +103,8 @@ These limitations apply to **this pinned fixture/API**, not blanket incompatibil
 | Full oclif            | 5.0.0 surveyed; not installed | Official bundling limitation/discovery and package metadata requirements conflict with this single-file scope. No parser-only replacement or claims of slow/unsupported parsing.                                                              |
 
 ## Checks and known limits
+
+The standalone Oxlint config inherits the repository rules but excludes only dependencies and generated artifacts; the root lint pass still excludes this independently installed benchmark.
 
 `bun run check` is strict TypeScript consumer checking plus the repository's Oxlint/Oxfmt gates (not a competing local formatter). The shared parser-result validation boundary explicitly justifies raw `unknown`/`typeof` checks; adapter consumer types remain checked. External types are pinned for yargs/minimist/yargs-parser; `skipLibCheck` skips dependency declaration internals, **not adapter consumer checking**. `bun test contract.test.ts` checks shared domain and summary math. `bun verify.ts --source-only` is useful while editing adapters. The early conformance runs genuinely failed for CAC's initial array-typing mistake, then native zero loss, and cmd-ts/yargs-parser silent default cases; retained probes and tests guard against hiding those differences.
 
