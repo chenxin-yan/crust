@@ -14,6 +14,35 @@ export interface InvocationIO {
 	stderr: (text: string) => void;
 }
 
+/** Caller options for one programmatic `run()` invocation: IO callbacks plus cancellation. */
+export interface InvocationOptions extends Partial<InvocationIO> {
+	/** Aborting it aborts the invocation's `ctx.signal`. */
+	signal?: AbortSignal;
+}
+
+/**
+ * How `execute()` treats `SIGINT` (Ctrl-C) while an invocation runs.
+ *
+ * - `"exit"` (default): install no handler — the runtime's default signal
+ *   handling terminates the process immediately.
+ * - `"abort"`: the first `SIGINT` aborts the invocation's `ctx.signal` with an
+ *   `AbortError` so pending work can stop and Contexts are still released; a
+ *   second `SIGINT` falls through to the default termination.
+ */
+export type SigintPolicy = "exit" | "abort";
+
+/** Caller options for the terminal `execute()` boundary. */
+export interface ExecuteOptions {
+	/** Arguments to parse; defaults to `process.argv.slice(2)`. */
+	argv?: string[];
+	/** Captured `stdout(text)` / `stderr(text)` callbacks (e.g. in-process tests). */
+	io?: Partial<InvocationIO>;
+	/** Caller-owned cancellation; aborting it aborts the invocation's `ctx.signal`. */
+	signal?: AbortSignal;
+	/** `SIGINT` handling for this invocation; defaults to `"exit"`. */
+	sigint?: SigintPolicy;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Primitive type vocabulary
 // ────────────────────────────────────────────────────────────────────────────

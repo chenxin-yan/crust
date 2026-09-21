@@ -422,4 +422,30 @@ describe("handler under execute()", () => {
 		expect(captured.exitCode).toBe(130);
 		expect(captured.stderr).toBe("");
 	});
+
+	it("interrupts the program when the invocation signal aborts and hands finalizers the interruption", async () => {
+		const exits: Exit.Exit<unknown, unknown>[] = [];
+		const db = layer(
+			"db",
+			resource([], Db, "db", { query: (sql) => sql }, (exit) => exits.push(exit)),
+		);
+		const controller = new AbortController();
+		const app = new Crust("cli")
+			.provide(db())
+			.action(handler(() => Effect.flatMap(Db, () => Effect.never)));
+		const stderr: string[] = [];
+		const exitCode = app.execute({
+			argv: [],
+			io: { stdout() {}, stderr: (text) => stderr.push(text) },
+			signal: controller.signal,
+		});
+
+		await new Promise((resolve) => setTimeout(resolve, 10));
+		controller.abort(new DOMException("Caller cancelled.", "AbortError"));
+
+		expect(await exitCode).toBe(130);
+		expect(stderr).toEqual([]);
+		expect(exits).toHaveLength(1);
+		expect(Exit.isFailure(exits[0]!) && Cause.hasInterruptsOnly(exits[0].cause)).toBe(true);
+	});
 });

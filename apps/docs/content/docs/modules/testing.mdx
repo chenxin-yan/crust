@@ -23,7 +23,7 @@ interface ExecutableApp {
 
 `captureExecute()` accepts this structural contract. `runInteractive()` (from `@crustjs/testing/interactive`) accepts a Crust application and infers its command path and input.
 
-An inert definition must be added to an application before the typed helpers can address it. Core's typed invocation rules are documented under [`run()` path and input](/docs/api/crust#runpath-input-io).
+An inert definition must be added to an application before the typed helpers can address it. Core's typed invocation rules are documented under [`run()` path and input](/docs/api/crust#runpath-input-options).
 
 ## `app.run(path, input?)`
 
@@ -33,7 +33,7 @@ if (outcome.status === "failed") throw outcome.error;
 expect(outcome.stdout).toContain("Built");
 ```
 
-Use `run()` to capture stdout, stderr, and the Command Action outcome without terminal parsing. See the [core `run()` reference](/docs/api/crust#runpath-input-io) for result branches and capture boundaries.
+Use `run()` to capture stdout, stderr, and the Command Action outcome without terminal parsing. See the [core `run()` reference](/docs/api/crust#runpath-input-options) for result branches and capture boundaries.
 
 ## `captureExecute(app, argv)`
 

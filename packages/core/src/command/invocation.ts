@@ -22,7 +22,7 @@ import {
 } from "../parsing/parser.ts";
 import { applySchemas } from "../parsing/schema.ts";
 import { isListed } from "../sections.ts";
-import type { InvocationIO, ParseResult } from "../types.ts";
+import type { ExecuteOptions, InvocationIO, InvocationOptions, ParseResult } from "../types.ts";
 import type { CrustCommandContext, RunOutcome } from "./crust.ts";
 import {
 	applyExtensionCommands,
@@ -208,6 +208,7 @@ async function dispatch(
 	input: InvocationInput,
 	prepared: PreparedInvocation,
 	io: InvocationIO,
+	signal: AbortSignal,
 	onExtensionContext?: (context: ExtensionContext) => void,
 	onFailure?: (error: CaughtError, context: ExtensionContext) => Promise<ExtensionId | undefined>,
 ): Promise<{ status: "completed"; result: unknown } | { status: "finished"; by: ExtensionId }> {
@@ -242,6 +243,7 @@ async function dispatch(
 		args: parsed.args,
 		flags: parsed.flags,
 		rawArgs: parsed.rawArgs,
+		signal,
 		ctx: resolver.bag(extensions.flatMap((extension) => extension.uses ?? [])),
 		finish: finishInvocation,
 		stdout: io.stdout,
@@ -263,6 +265,7 @@ async function dispatch(
 			flags: validated.flags,
 			ctx: resolver.bag(contexts),
 			rawArgs: parsed.rawArgs,
+			signal,
 			command: extensionContext.command,
 			rootCommand: rootSnapshot,
 			stdout: io.stdout,
@@ -325,6 +328,7 @@ async function renderFailure(
 	argv: readonly string[],
 	prepared: PreparedInvocation,
 	io: InvocationIO,
+	signal: AbortSignal,
 	extensionContext: ExtensionContext | undefined,
 	silentDefault = false,
 ): Promise<ExtensionId | undefined> {
@@ -371,6 +375,7 @@ async function renderFailure(
 			args: Object.freeze({}),
 			flags: Object.freeze({}),
 			rawArgs: [],
+			signal,
 			finish: finishInvocation,
 			stdout: io.stdout,
 			stderr: io.stderr,
@@ -398,14 +403,14 @@ function hasInjectedIO(io: Partial<InvocationIO> | undefined): boolean {
 export async function runInvocation(
 	node: CommandNode,
 	input: InvocationInput,
-	io: Partial<InvocationIO> | undefined,
+	options: InvocationOptions | undefined,
 	materializeCommandDefinition: MaterializeCommandDefinition,
 ): Promise<RunOutcome<unknown>> {
 	const stdout: string[] = [];
 	const stderr: string[] = [];
 	try {
 		// Keep the same per-invocation callback snapshot semantics as execute.
-		const sinks = { ...io };
+		const { signal = new AbortController().signal, ...sinks } = options ?? {};
 		const resolvedIO: InvocationIO = {
 			stdout(text) {
 				stdout.push(text);
@@ -418,7 +423,7 @@ export async function runInvocation(
 		};
 		const outcome = await withAmbientTerminalIO(resolvedIO, async () => {
 			const prepared = prepareInvocation(node, materializeCommandDefinition);
-			return await dispatch(input, prepared, resolvedIO);
+			return await dispatch(input, prepared, resolvedIO, signal);
 		});
 		return { ...outcome, stdout: stdout.join("\n"), stderr: stderr.join("\n") };
 	} catch (error) {
@@ -429,16 +434,16 @@ export async function runInvocation(
 /** Terminal CLI boundary: render failures and set the process exit status. */
 export async function executeInvocation(
 	node: CommandNode,
-	options:
-		| {
-				argv?: string[];
-				io?: Partial<InvocationIO>;
-		  }
-		| undefined,
+	options: ExecuteOptions | undefined,
 	materializeCommandDefinition: MaterializeCommandDefinition,
 ): Promise<number> {
 	const argv = options?.argv ?? process.argv.slice(2);
 	const io: InvocationIO = { ...DEFAULT_IO, ...options?.io };
+	// One controller per invocation so SIGINT and a caller signal share `ctx.signal`.
+	const controller = new AbortController();
+	const signal = options?.signal
+		? AbortSignal.any([options.signal, controller.signal])
+		: controller.signal;
 	// Literal property access, no destructuring: `crust build` defines the marker
 	// as `"1"`, so bundlers fold this to `undefined` and drop the snapshot branch.
 	const snapshotPath =
@@ -531,6 +536,13 @@ export async function executeInvocation(
 			return 1;
 		}
 
+		// `once`: the first Ctrl-C aborts `ctx.signal`; with the listener gone, a
+		// second Ctrl-C reaches the runtime's default handling and terminates.
+		const onSigint = (): void => {
+			controller.abort(new DOMException("Interrupted by SIGINT.", "AbortError"));
+		};
+		if (options?.sigint === "abort") process.once("SIGINT", onSigint);
+
 		let extensionContext: ExtensionContext | undefined;
 		let renderedInDispatch = false;
 		try {
@@ -538,6 +550,7 @@ export async function executeInvocation(
 				{ argv },
 				prepared,
 				io,
+				signal,
 				(context) => {
 					extensionContext = context;
 				},
@@ -545,7 +558,7 @@ export async function executeInvocation(
 					renderedInDispatch = true;
 					const cancelled = isAbortError(error);
 					process.exitCode = cancelled ? EXIT_CODE_CANCELLED : 1;
-					return renderFailure(error, argv, prepared, io, context, cancelled);
+					return renderFailure(error, argv, prepared, io, signal, context, cancelled);
 				},
 			);
 		} catch (error) {
@@ -553,7 +566,7 @@ export async function executeInvocation(
 				// Cancellation keeps its dedicated exit code while allowing Extension
 				// onError hooks to render a message. Core's default stays silent.
 				if (!renderedInDispatch) {
-					await renderFailure(error, argv, prepared, io, extensionContext, true);
+					await renderFailure(error, argv, prepared, io, signal, extensionContext, true);
 				}
 				process.exitCode = EXIT_CODE_CANCELLED;
 				return EXIT_CODE_CANCELLED;
@@ -561,8 +574,12 @@ export async function executeInvocation(
 			// Core always preserves a nonzero failure outcome, regardless of
 			// what Extension onError hooks do.
 			process.exitCode = 1;
-			if (!renderedInDispatch) await renderFailure(error, argv, prepared, io, extensionContext);
+			if (!renderedInDispatch) {
+				await renderFailure(error, argv, prepared, io, signal, extensionContext);
+			}
 			return 1;
+		} finally {
+			process.removeListener("SIGINT", onSigint);
 		}
 		return 0;
 	};

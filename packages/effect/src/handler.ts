@@ -40,7 +40,7 @@ export type ServicesOf<Input> = Input extends { readonly ctx: infer Bag }
  * command path is built up front and its services provided; `ctx` inference
  * is unchanged. A failure rethrows the original error so `execute()` renders
  * it unchanged, and interruption rethrows an `AbortError` so cancellation
- * exits with 130.
+ * exits with 130. Aborting the invocation's `ctx.signal` interrupts the fiber.
  */
 export function handler<Input extends ActionInput, Out, E>(
 	fn: (input: Input) => Effect.Effect<Out, E, ServicesOf<Input> | HandlerInput>,
@@ -79,7 +79,7 @@ export function handler<Input extends ActionInput, Out>(
 				Context.mergeAll(...built, Context.make(HandlerInput, input)),
 			);
 		});
-		const exit = await Effect.runPromiseExit(program);
+		const exit = await Effect.runPromiseExit(program, { signal: input.signal });
 		for (const services of built) actionExits.set(services, exit);
 		return unwrapExit(exit);
 	};

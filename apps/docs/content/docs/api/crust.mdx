@@ -361,12 +361,14 @@ The action runs after routing, parsing, `preRun` hooks, and validation; Contexts
 ```ts
 const app = new Crust("greet")
   .args({ name: "name", type: "string", required: true })
-  .action(({ args, flags, ctx, rawArgs, command, rootCommand, stdout, stderr }) => {
+  .action(({ args, flags, ctx, rawArgs, signal, command, rootCommand, stdout, stderr }) => {
     stdout(`Hello, ${args.name}!`);
   });
 ```
 
-The context contains typed `args`, typed effective `flags`, the lazy typed `ctx` bag, `rawArgs` after `--`, the resolved `command` and application `rootCommand` snapshots, and injectable `stdout(text)` and `stderr(text)` callbacks from `InvocationIO`. `CrustCommandContext` extends `InvocationIO`; Context setups receive those same callbacks for the invocation.
+The context contains typed `args`, typed effective `flags`, the lazy typed `ctx` bag, `rawArgs` after `--`, the invocation's cancellation `signal`, the resolved `command` and application `rootCommand` snapshots, and injectable `stdout(text)` and `stderr(text)` callbacks from `InvocationIO`. `CrustCommandContext` extends `InvocationIO`; Context setups receive those same callbacks for the invocation.
+
+`signal` is an `AbortSignal` that aborts when the caller cancels the invocation: `execute({ signal })`, `run(path, input, { signal })`, or Ctrl-C under `execute({ sigint: "abort" })`. Its reason is an `AbortError`, so pass it to `fetch`, timers, or child processes and let `signal.throwIfAborted()` end the action with exit code 130. It never aborts on its own.
 
 ## `.add(...definitions)`
 
@@ -404,7 +406,7 @@ Pending Extension commands retain last-write-wins at preparation.
 
 A definition can add other definitions. Context providers are inherited on the materialized command path; a nested definition accesses one by declaring its factory with `.use()` and awaiting the corresponding `ctx` property.
 
-The typed [`run()`](#runpath-input-io) shape of an added definition merges the Context-owned flags already provided on the parent path, matching the runtime parser: descendants accept inherited Context-owned flags, while parent-local flags stay excluded.
+The typed [`run()`](#runpath-input-options) shape of an added definition merges the Context-owned flags already provided on the parent path, matching the runtime parser: descendants accept inherited Context-owned flags, while parent-local flags stay excluded.
 
 <Callout type="info">
   A later `.provide()` does not backfill an already-added definition. Extension `provides` reach
@@ -462,10 +464,10 @@ During artifact builds, section callbacks are re-evaluated after each build hook
 
 The `CommandSnapshot` type is exported from `@crustjs/core` and re-exported from the `@crustjs/core/tooling` subpath; see the [core module reference](/docs/modules/core).
 
-## `.run(path, input?, io?)`
+## `.run(path, input?, options?)`
 
 ```ts
-run(path, input?, io?): Promise<RunOutcome<R>>
+run(path, input?, options?: InvocationOptions): Promise<RunOutcome<R>>
 ```
 
 This sketch is simplified; the [first `.run()` overload](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts#L1644) starts the complete declaration.
@@ -525,7 +527,9 @@ Captured callback payloads are joined with `"\n"`, without a synthetic trailing 
 
 Memory is proportional to emitted output.
 
-Optional `io.stdout`/`io.stderr` sinks receive writes live, once each, after capture. Omitted channels stay quiet. A sink throw becomes an invocation failure, retaining the write that triggered it.
+Optional `options.stdout`/`options.stderr` sinks receive writes live, once each, after capture. Omitted channels stay quiet. A sink throw becomes an invocation failure, retaining the write that triggered it.
+
+Optional `options.signal` cancels the invocation: aborting it aborts the `ctx.signal` seen by hooks, Contexts, and the action. Work that honors the signal ends with the abort reason, which `run()` returns as a `failed` outcome like any other escaping error. `run()` never installs a `SIGINT` handler.
 
 No callbacks or actions are rerun for capture.
 
@@ -545,7 +549,7 @@ Dynamic collections use `.extend(...extensions)` without a wrapper. Known comman
 at(path): CommandHandle<CommandShapeAt<Shape, Path>>
 ```
 
-Binds a typed command path into a reusable handle. `handle.run(input?, io?)` accepts exactly what [`run(path, input?, io?)`](#runpath-input-io) accepts after the path, with the same inference, validation, and `RunOutcome`. Use it to let commands call other commands with checked input, to expose a CLI subtree as a typed library function, or to hand a pre-bound invoker to a test helper.
+Binds a typed command path into a reusable handle. `handle.run(input?, options?)` accepts exactly what [`run(path, input?, options?)`](#runpath-input-options) accepts after the path, with the same inference, validation, and `RunOutcome`. Use it to let commands call other commands with checked input, to expose a CLI subtree as a typed library function, or to hand a pre-bound invoker to a test helper.
 
 ```ts
 const remoteAdd = app.at(["remote", "add"]);
@@ -563,6 +567,8 @@ A handle is bound to the builder it was taken from. Because fluent calls return 
 execute(options?: {
   argv?: string[];
   io?: Partial<InvocationIO>;
+  signal?: AbortSignal;
+  sigint?: "exit" | "abort";
 }): Promise<number>
 ```
 
@@ -572,6 +578,17 @@ Runs the terminal boundary. By default it parses `process.argv.slice(2)`; `optio
 
 ```ts
 await app.execute();
+```
+
+`options.signal` lets the caller cancel the invocation; aborting it aborts `ctx.signal`. `options.sigint` decides what Ctrl-C does while the invocation runs. The default `"exit"` installs no handler, so the runtime terminates the process immediately. `"abort"` installs a one-shot `SIGINT` listener for the duration of the invocation: the first Ctrl-C aborts `ctx.signal` with an `AbortError` so pending work can stop, `postRun` hooks run, and Contexts are released; a second Ctrl-C reaches the runtime's default handling. The listener is removed when the invocation settles.
+
+```ts
+const app = new Crust("sync").action(async ({ signal }) => {
+  const response = await fetch("https://example.com/export", { signal });
+  // …
+});
+
+await app.execute({ sigint: "abort" }); // Ctrl-C → exit 130, nothing rendered
 ```
 
 ### Invocation order
@@ -596,9 +613,9 @@ A failure in steps 4 through 8 still runs steps 9 and 10. See [propagation bound
 It is offered to `onError` hooks and renders nothing when no hook claims it.
 
 <Callout type="warn">
-  `.action(action)` defines behavior. `.run(path, input, io)` is the programmatic invocation entry
-  point, and `.execute()` is the terminal entry point. Command definitions are inert and expose
-  neither.
+  `.action(action)` defines behavior. `.run(path, input, options)` is the programmatic invocation
+  entry point, and `.execute()` is the terminal entry point. Command definitions are inert and
+  expose neither.
 </Callout>
 
 ## `resolveArtifactDir(name)`

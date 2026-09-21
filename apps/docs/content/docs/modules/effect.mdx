@@ -47,6 +47,8 @@ Crust is the outer runtime. Each `handler()` invocation opens one Effect run, pr
 | `Die` (defect)                   | Rethrown as-is; rendered like a plain thrown error (exit 1)                          |
 | Interruption                     | An `AbortError` is rethrown; Core exits 130 with no output, like prompt cancellation |
 
+The program runs with the invocation's `ctx.signal`: when the caller aborts it (`execute({ signal })`, `run(path, input, { signal })`, or Ctrl-C under `execute({ sigint: "abort" })`), the fiber is interrupted, Layer finalizers receive the interruption Exit, and the interruption row above applies.
+
 ## `layer(name, layer)`
 
 ```ts
@@ -86,7 +88,7 @@ base.action(
 base.action(handler(({ args }) => Effect.map(Db, (d) => d.query(`select * from ${args.table}`))));
 ```
 
-`fn` receives the same input a plain action receives: `args`, `flags`, `ctx`, `rawArgs`, `command`, `rootCommand`, `stdout`, and `stderr`. Inference is unchanged. Both forms produce identical results, and the adapted action resolves with the program's success value.
+`fn` receives the same input a plain action receives: `args`, `flags`, `ctx`, `rawArgs`, `signal`, `command`, `rootCommand`, `stdout`, and `stderr`. Inference is unchanged. Both forms produce identical results, and the adapted action resolves with the program's success value.
 
 The program's requirements are checked against `ServicesOf<Input>`: the union of services provided by the `layer()` Contexts in `ctx`. A program requiring a service with no `layer()` on the command path is a compile error. A plain `defineContext` that happens to return a `Context.Context` does not count, and neither does a `layer()` whose name is not a string literal. `handler()` also provides one internal service carrying the action input; `service()` requires it, so `service()` only runs inside a `handler()` program.
 

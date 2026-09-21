@@ -167,9 +167,9 @@ Object-valued JSON defaults, including objects inside arrays, remain shared refe
 
 [Exact declarations](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts).
 
-Types inferred from the application definition that back [`run(path, input?, io?)`](/docs/api/crust#runpath-input-io) and the [`@crustjs/testing`](/docs/modules/testing) helpers. `CommandTree` is the compile-time tree accumulated by `.add()`; `CommandPath` enumerates every valid path through it (including the root path `[]`); `CommandShapeAt` resolves the `CommandShape` a path selects; and `RunInput` is the structured `args`/`flags`/`raw` input for that shape, built from the pre-parse `InputArgs` and `InputFlags` value types. When calling `run()`, inputs declared with `type: "json"` accept JSON primitives, structurally JSON-compatible object types (including named interfaces), and mutable or readonly arrays/tuples (`RunInput` itself and the testing helpers constrain leaves to `JsonValue`); variadic JSON arguments and multiple JSON flags use a mutable array whose items are JSON values.
+Types inferred from the application definition that back [`run(path, input?, options?)`](/docs/api/crust#runpath-input-options) and the [`@crustjs/testing`](/docs/modules/testing) helpers. `CommandTree` is the compile-time tree accumulated by `.add()`; `CommandPath` enumerates every valid path through it (including the root path `[]`); `CommandShapeAt` resolves the `CommandShape` a path selects; and `RunInput` is the structured `args`/`flags`/`raw` input for that shape, built from the pre-parse `InputArgs` and `InputFlags` value types. When calling `run()`, inputs declared with `type: "json"` accept JSON primitives, structurally JSON-compatible object types (including named interfaces), and mutable or readonly arrays/tuples (`RunInput` itself and the testing helpers constrain leaves to `JsonValue`); variadic JSON arguments and multiple JSON flags use a mutable array whose items are JSON values.
 
-Inputs declared with `type: "url"` accept `URL`; `Date`, `bigint`, functions, and other non-JSON values are excluded from JSON inputs. `RunInputArguments` and `RunArguments` are the tuple types that make `input` optional when the selected command requires nothing; `RunOutcome` is the status-discriminated value `run()` resolves to. `CommandHandle<Shape>` is the path-bound invoker returned by [`at(path)`](/docs/api/crust#atpath): a readonly `path` plus `run(input?, io?)` typed from `Shape`. `AnyCrust` accepts any fully-built application.
+Inputs declared with `type: "url"` accept `URL`; `Date`, `bigint`, functions, and other non-JSON values are excluded from JSON inputs. `RunInputArguments` and `RunArguments` are the tuple types that make `input` optional when the selected command requires nothing; `RunOutcome` is the status-discriminated value `run()` resolves to. `CommandHandle<Shape>` is the path-bound invoker returned by [`at(path)`](/docs/api/crust#atpath): a readonly `path` plus `run(input?, options?)` typed from `Shape`. `AnyCrust` accepts any fully-built application.
 
 ```ts
 import type { CommandPath, CommandShapeAt, RunInput } from "@crustjs/core";
@@ -181,7 +181,7 @@ type GreetInput = RunInput<CommandShapeAt<(typeof app)["_types"]["shape"], reado
 
 `InputArgs` requires a supplied prefix: defaults do not fill gaps, and required trailing arguments require preceding positions. Known choices, required fields, and paths remain strict. Conditional definitions retain conservative obligations; fully erased/open shapes accept broad structured input while preserving independently known facts.
 
-See [`run()` input](/docs/api/crust#runpath-input-io).
+See [`run()` input](/docs/api/crust#runpath-input-options).
 
 `Crust` defaults its argument state to `[]`. Prefer inferred authoring builders.
 
@@ -202,7 +202,7 @@ type RunOutcome<Result> = {
 );
 ```
 
-Core `run()` is quiet, captures output, and returns invocation failures instead of rejecting them. Narrow `status` before reading the branch-specific field. See [capture semantics](/docs/api/crust#runpath-input-io) for live sinks, output boundaries, and memory cost.
+Core `run()` is quiet, captures output, and returns invocation failures instead of rejecting them. Narrow `status` before reading the branch-specific field. See [capture semantics](/docs/api/crust#runpath-input-options) for live sinks, output boundaries, and memory cost.
 
 This differs from the internal hook-facing `InvocationOutcome`, which does not carry captured output or action results.
 
@@ -221,6 +221,18 @@ Most application authors consume the inferred Action context rather than naming 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="InvocationIO" />
 
 The same injectable callbacks are passed to the Command Action and every Context setup constructed for that invocation.
+
+### `InvocationOptions`
+
+<auto-type-table path="../../../../../packages/core/src/types.ts" name="InvocationOptions" />
+
+The optional last argument of [`run(path, input?, options?)`](/docs/api/crust#runpath-input-options) and `handle.run(input?, options?)`: live output sinks plus a caller-owned `signal` that aborts the invocation's `ctx.signal`.
+
+### `ExecuteOptions` and `SigintPolicy`
+
+<auto-type-table path="../../../../../packages/core/src/types.ts" name="ExecuteOptions" />
+
+The optional argument of [`execute(options?)`](/docs/api/crust#executeoptions). `sigint` is a `SigintPolicy`: `"exit"` (default) leaves Ctrl-C to the runtime, `"abort"` turns the first Ctrl-C into an `AbortError` on `ctx.signal` and lets a second one terminate the process.
 
 ## Command Action context
 
