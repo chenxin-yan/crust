@@ -5,7 +5,7 @@
 	"scripts": {
 		"prepare:local": "bun prepare.ts",
 		"test": "bun test contract.test.ts",
-		"check": "tsc --noEmit && ../../node_modules/.bin/oxlint --config .oxlintrc.json . && ../../node_modules/.bin/oxfmt --check .",
+		"check": "tsc --noEmit && ../../node_modules/.bin/oxlint --config oxlint.config.json . && ../../node_modules/.bin/oxfmt --check .",
 		"build": "bun build.ts",
 		"verify": "bun verify.ts",
 		"smoke": "bun measure.ts --quick",

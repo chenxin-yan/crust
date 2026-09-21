@@ -104,6 +104,8 @@ These limitations apply to **this pinned fixture/API**, not blanket incompatibil
 
 ## Checks and known limits
 
+The standalone lint configuration is named `oxlint.config.json` and loaded explicitly by `bun run check`. Using `.oxlintrc.json` would make root Oxlint discover it and override the benchmark exclusion, requiring benchmark dependencies during repository CI.
+
 The standalone Oxlint config inherits the repository rules but excludes only dependencies and generated artifacts; the root lint pass still excludes this independently installed benchmark.
 
 `bun run check` is strict TypeScript consumer checking plus the repository's Oxlint/Oxfmt gates (not a competing local formatter). The shared parser-result validation boundary explicitly justifies raw `unknown`/`typeof` checks; adapter consumer types remain checked. External types are pinned for yargs/minimist/yargs-parser; `skipLibCheck` skips dependency declaration internals, **not adapter consumer checking**. `bun test contract.test.ts` checks shared domain and summary math. `bun verify.ts --source-only` is useful while editing adapters. The early conformance runs genuinely failed for CAC's initial array-typing mistake, then native zero loss, and cmd-ts/yargs-parser silent default cases; retained probes and tests guard against hiding those differences.
