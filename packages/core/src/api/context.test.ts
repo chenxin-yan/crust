@@ -1153,6 +1153,7 @@ describe("Context disposal", () => {
 				[late(), slow(), fresh()],
 				{ stdout: () => {}, stderr: () => {} },
 				disposal,
+				new AbortController().signal,
 			);
 			const bag = resolver.bag<{ slow: unknown; late: unknown; fresh: string }>([slow, fresh]);
 			const pulled = bag.slow;
