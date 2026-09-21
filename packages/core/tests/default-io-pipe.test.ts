@@ -1,6 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { describe, expect, it } from "bun:test";
 import { join, resolve } from "node:path";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -38,19 +36,9 @@ const EARLY_CLOSE_SOURCE = `${importCore("dist/index.js")}await new Crust("pipe-
 	.execute({ argv: [] });
 `;
 
-let fixtureDir: string;
-
-beforeAll(() => {
-	fixtureDir = mkdtempSync(join(tmpdir(), "crust-default-io-"));
-	writeFileSync(join(fixtureDir, "large.ts"), LARGE_SOURCE);
-	writeFileSync(join(fixtureDir, "early-close.mjs"), EARLY_CLOSE_SOURCE);
-});
-
-afterAll(() => rmSync(fixtureDir, { recursive: true, force: true }));
-
 /** Closes the parent's end of `closed` after its first chunk, drains the other stream. */
 async function runWithEarlyClose(runtime: string, closed: "stdout" | "stderr") {
-	const proc = Bun.spawn([runtime, join(fixtureDir, "early-close.mjs")], {
+	const proc = Bun.spawn([runtime, "--input-type=module", "--eval", EARLY_CLOSE_SOURCE], {
 		stdout: "pipe",
 		stderr: "pipe",
 	});
@@ -65,7 +53,7 @@ const runtimes = [process.execPath, ...(Bun.which("node") ? ["node"] : [])];
 
 describe("default IO", () => {
 	it("delivers output larger than the pipe buffer to a piped parent", async () => {
-		const proc = Bun.spawn([process.execPath, join(fixtureDir, "large.ts")], {
+		const proc = Bun.spawn([process.execPath, "--input-type=module", "--eval", LARGE_SOURCE], {
 			stdout: "pipe",
 			stderr: "pipe",
 		});
