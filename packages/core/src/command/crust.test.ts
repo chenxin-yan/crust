@@ -18,6 +18,7 @@ import type { ArgsDef, NamedFlagDef, ParsedFlagValue } from "../types.ts";
 import { type AnyCrust, type CommandDefinitionBuilder, Crust, defineCommand } from "./crust.ts";
 import { cloneCommandNode } from "./extensions-install.ts";
 import { SNAPSHOT_PATH_ENV } from "./invocation.ts";
+import type { CommandSnapshot } from "./snapshot.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Type-level test utilities
@@ -2481,6 +2482,46 @@ describe("Crust .add() aliases", () => {
 		await unwrap(app.run(["issues"]));
 		expect(calls).toBe(1);
 		expect((await app.snapshot()).subCommands.issue?.meta.aliases).toEqual(["issues", "i"]);
+	});
+
+	it("resolves ctx.command to the canonical subtree object inside ctx.rootCommand", async () => {
+		const seen: Array<{ command: CommandSnapshot; rootCommand: CommandSnapshot }> = [];
+		const probe = defineExtension(defineExtensionId("probe"), {
+			hooks: {
+				preRun: ({ command, rootCommand }) => {
+					seen.push({ command, rootCommand });
+				},
+			},
+		});
+		const app = new Crust("cli")
+			.extend(probe)
+			.add(
+				defineCommand("issue", { aliases: ["i"] }, (issue) =>
+					issue.add(
+						defineCommand("list", { aliases: ["ls"] }, (list) =>
+							list.action(({ command, rootCommand }) => {
+								seen.push({ command, rootCommand });
+							}),
+						),
+					),
+				),
+			)
+			.action(({ command, rootCommand }) => {
+				seen.push({ command, rootCommand });
+			});
+
+		await unwrap(app.run(["i", "ls"]));
+		const [hook, action] = seen;
+		expect(hook?.command).toBe(action?.command);
+		expect(hook?.rootCommand).toBe(action?.rootCommand);
+		expect(hook?.command).toBe(hook?.rootCommand.subCommands.issue?.subCommands.list);
+		expect(hook?.rootCommand.subCommands.i).toBeUndefined();
+		expect(hook?.command?.meta.name).toBe("list");
+
+		seen.length = 0;
+		await unwrap(app.run([]));
+		expect(seen).toHaveLength(2);
+		for (const { command, rootCommand } of seen) expect(command).toBe(rootCommand);
 	});
 });
 

@@ -227,10 +227,17 @@ async function dispatch(
 	const resolver = createContextResolver(contexts, io, disposal);
 
 	const rootSnapshot = snapshotCommand(rootNode);
+	// The root projection already contains the resolved subtree; walk to it along
+	// the canonical route instead of projecting the same nodes a second time.
+	let commandSnapshot = rootSnapshot;
+	for (const name of route.commandPath.slice(1)) {
+		// SAFETY: the router only records canonical names of children it descended into.
+		commandSnapshot = commandSnapshot.subCommands[name]!;
+	}
 	const extensionContext: ExtensionContext = Object.freeze({
 		argv: [...argv],
 		rootCommand: rootSnapshot,
-		command: resolvedNode === rootNode ? rootSnapshot : snapshotCommand(resolvedNode),
+		command: commandSnapshot,
 		commandPath: Object.freeze([...route.commandPath]),
 		args: parsed.args,
 		flags: parsed.flags,
@@ -353,12 +360,13 @@ async function renderFailure(
 				property === "then" || isSymbol(property) ? undefined : unavailable(property),
 		},
 	);
-	const context =
-		extensionContext ??
-		Object.freeze({
+	let context = extensionContext;
+	if (!context) {
+		const rootSnapshot = snapshotCommand(prepared.rootNode);
+		context = Object.freeze({
 			argv: [...argv],
-			rootCommand: snapshotCommand(prepared.rootNode),
-			command: snapshotCommand(prepared.rootNode),
+			rootCommand: rootSnapshot,
+			command: rootSnapshot,
 			commandPath: Object.freeze([prepared.rootNode.meta.name]),
 			args: Object.freeze({}),
 			flags: Object.freeze({}),
@@ -368,6 +376,7 @@ async function renderFailure(
 			stderr: io.stderr,
 			ctx: unavailableContext,
 		} satisfies ExtensionContext);
+	}
 
 	try {
 		for (const extension of prepared.extensions) {
