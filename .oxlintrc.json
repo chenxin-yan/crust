@@ -80,7 +80,8 @@
 		"**/CHANGELOG.md",
 		".pi/",
 		".worktrees/",
-		"packages/create-crust/templates/base/"
+		"packages/create-crust/templates/base/",
+		"scripts/cli-comparison/"
 	],
 	"overrides": [
 		{

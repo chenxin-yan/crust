@@ -1,0 +1,4556 @@
+{
+	"metadata": {
+		"at": "2026-09-20T22:55:06.059Z",
+		"quick": false,
+		"sourceHash": "509045d7aee9d6515a2fd54c28f99cbb1dc9969cd5783394bf3ce13a08bd419c",
+		"settings": {
+			"warmRounds": 3,
+			"warmups": 3,
+			"batches": 5,
+			"callsPerBatch": 300,
+			"startupWarmups": 2,
+			"startupSamples": 30
+		},
+		"orderSeed": 20260920,
+		"workload": {
+			"name": "all flags",
+			"argv": [
+				"deploy",
+				"api",
+				"--region",
+				"eu-west-1",
+				"--replicas",
+				"3",
+				"--force",
+				"--tag",
+				"blue",
+				"--tag",
+				"canary"
+			],
+			"expected": {
+				"command": "deploy",
+				"target": "api",
+				"region": "eu-west-1",
+				"replicas": 3,
+				"force": true,
+				"tag": ["blue", "canary"]
+			}
+		},
+		"dependencyLock": {
+			"name": "crust-cli-comparison",
+			"lockfileVersion": 3,
+			"requires": true,
+			"packages": {
+				"": {
+					"name": "crust-cli-comparison",
+					"dependencies": {
+						"@stricli/core": "1.3.0",
+						"arg": "5.0.2",
+						"argparse": "3.0.2",
+						"cac": "7.0.0",
+						"citty": "0.2.2",
+						"cleye": "2.7.0",
+						"clipanion": "3.2.1",
+						"cmd-ts": "0.15.0",
+						"commander": "15.0.0",
+						"gunshi": "0.37.3",
+						"minimist": "1.2.8",
+						"mri": "1.2.0",
+						"sade": "1.8.1",
+						"yargs": "18.1.0",
+						"yargs-parser": "22.0.0"
+					},
+					"devDependencies": {
+						"@types/bun": "1.4.2",
+						"@types/minimist": "1.2.5",
+						"@types/node": "26.6.2",
+						"@types/yargs": "17.0.35",
+						"@types/yargs-parser": "21.0.3",
+						"typescript": "7.0.2"
+					}
+				},
+				"node_modules/@stricli/core": {
+					"version": "1.3.0",
+					"resolved": "https://registry.npmjs.org/@stricli/core/-/core-1.3.0.tgz",
+					"integrity": "sha512-LnBe2HntygaLDU5trtjiC3J4C/YkmIZuM0XB52IF4qaLqJH09kgD1fnZiS2gaYUnt0nAN2a+1b4PSOBcfPrN4Q==",
+					"license": "Apache-2.0"
+				},
+				"node_modules/@types/bun": {
+					"version": "1.4.2",
+					"resolved": "https://registry.npmjs.org/@types/bun/-/bun-1.4.2.tgz",
+					"integrity": "sha512-GimotNn7+ZV0uVArItBbriZsR1oNf0+WTzPkdcFrzShI7k2norL0uzEaJT8T33dWr7O/c9ZDuAFQrctKCi72oQ==",
+					"dev": true,
+					"license": "MIT",
+					"dependencies": {
+						"bun-types": "1.4.2"
+					}
+				},
+				"node_modules/@types/minimist": {
+					"version": "1.2.5",
+					"resolved": "https://registry.npmjs.org/@types/minimist/-/minimist-1.2.5.tgz",
+					"integrity": "sha512-hov8bUuiLiyFPGyFPE1lwWhmzYbirOXQNNo40+y3zow8aFVTeyn3VWL0VFFfdNddA8S4Vf0Tc062rzyNr7Paag==",
+					"dev": true,
+					"license": "MIT"
+				},
+				"node_modules/@types/node": {
+					"version": "26.6.2",
+					"resolved": "https://registry.npmjs.org/@types/node/-/node-26.6.2.tgz",
+					"integrity": "sha512-X1P21scMv4zGKLYqjdGjaKa7COa0RKVYYZZN/NfvLQ1JegxFhdhpZG/Lyn8AXx6CDUavKAd11v6BvfpkDByK8g==",
+					"dev": true,
+					"license": "MIT",
+					"dependencies": {
+						"undici-types": "~8.9.0"
+					}
+				},
+				"node_modules/@types/yargs": {
+					"version": "17.0.35",
+					"resolved": "https://registry.npmjs.org/@types/yargs/-/yargs-17.0.35.tgz",
+					"integrity": "sha512-qUHkeCyQFxMXg79wQfTtfndEC+N9ZZg76HJftDJp+qH2tV7Gj4OJi7l+PiWwJ+pWtW8GwSmqsDj/oymhrTWXjg==",
+					"dev": true,
+					"license": "MIT",
+					"dependencies": {
+						"@types/yargs-parser": "*"
+					}
+				},
+				"node_modules/@types/yargs-parser": {
+					"version": "21.0.3",
+					"resolved": "https://registry.npmjs.org/@types/yargs-parser/-/yargs-parser-21.0.3.tgz",
+					"integrity": "sha512-I4q9QU9MQv4oEOz4tAHJtNz1cwuLxn2F3xcc2iV5WdqLPpUnj30aUuxt1mAxYTG+oe8CZMV/+6rU4S4gRDzqtQ==",
+					"dev": true,
+					"license": "MIT"
+				},
+				"node_modules/@typescript/typescript-aix-ppc64": {
+					"version": "7.0.2",
+					"resolved": "https://registry.npmjs.org/@typescript/typescript-aix-ppc64/-/typescript-aix-ppc64-7.0.2.tgz",
+					"integrity": "sha512-MTKKkWB7p/0E9xi1d1tHtZ5PiLkGEMIq88pK2CubZjOsLtYTLqhgIgi6zepFa+9GHZ6h05NMCkQxGKiPXMxXtQ==",
+					"cpu": ["ppc64"],
+					"dev": true,
+					"license": "Apache-2.0",
+					"optional": true,
+					"os": ["aix"],
+					"engines": {
+						"node": ">=16.20.0"
+					}
+				},
+				"node_modules/@typescript/typescript-darwin-arm64": {
+					"version": "7.0.2",
+					"resolved": "https://registry.npmjs.org/@typescript/typescript-darwin-arm64/-/typescript-darwin-arm64-7.0.2.tgz",
+					"integrity": "sha512-gowzar9MwS/aRWp6f3a4KUqzRjAZjOsmGNCM6LcTgXum+dBfgsBVMN+AgvOCCbguXyick6LJhpBszxMebJ8syA==",
+					"cpu": ["arm64"],
+					"dev": true,
+					"license": "Apache-2.0",
+					"optional": true,
+					"os": ["darwin"],
+					"engines": {
+						"node": ">=16.20.0"
+					}
+				},
+				"node_modules/@typescript/typescript-darwin-x64": {
+					"version": "7.0.2",
+					"resolved": "https://registry.npmjs.org/@typescript/typescript-darwin-x64/-/typescript-darwin-x64-7.0.2.tgz",
+					"integrity": "sha512-SZ9xZInqApNlNGc9s0W1VSsktYSOe9cFqNOIqmN1Gs8SmkjKZYFt017G4VwPxASInODuAdbTW7sXiFUf893RgA==",
+					"cpu": ["x64"],
+					"dev": true,
+					"license": "Apache-2.0",
+					"optional": true,
+					"os": ["darwin"],
+					"engines": {
+						"node": ">=16.20.0"
+					}
+				},
+				"node_modules/@typescript/typescript-freebsd-arm64": {
+					"version": "7.0.2",
+					"resolved": "https://registry.npmjs.org/@typescript/typescript-freebsd-arm64/-/typescript-freebsd-arm64-7.0.2.tgz",
+					"integrity": "sha512-W5NH4y/J0plIIS5b2xvTEkU7JFxyqdMAOgf+Ilhl0vHQXKO5dZoxd+C/jEtq56c4F3wk71RB4BMRQ2XdI+bwYQ==",
+					"cpu": ["arm64"],
+					"dev": true,
+					"license": "Apache-2.0",
+					"optional": true,
+					"os": ["freebsd"],
+					"engines": {
+						"node": ">=16.20.0"
+					}
+				},
+				"node_modules/@typescript/typescript-freebsd-x64": {
+					"version": "7.0.2",
+					"resolved": "https://registry.npmjs.org/@typescript/typescript-freebsd-x64/-/typescript-freebsd-x64-7.0.2.tgz",
+					"integrity": "sha512-UMGDx5sTpzNw3WiPebH7l90IWfJggEd+egHt/q6p7/Cm3zqoV7VxkGXt+3DxPIw8CcmvAB0j3sVVfbhX+M4Tpw==",
+					"cpu": ["x64"],
+					"dev": true,
+					"license": "Apache-2.0",
+					"optional": true,
+					"os": ["freebsd"],
+					"engines": {
+						"node": ">=16.20.0"
+					}
+				},
+				"node_modules/@typescript/typescript-linux-arm": {
+					"version": "7.0.2",
+					"resolved": "https://registry.npmjs.org/@typescript/typescript-linux-arm/-/typescript-linux-arm-7.0.2.tgz",
+					"integrity": "sha512-gffT3xPz9sR7j/YJExkyPntrI0P2EP9XbOyWzth2/Gs0RstK+90RBcO0ncXoXy/beYll1SXw846Nf2zdnEz0QQ==",
+					"cpu": ["arm"],
+					"dev": true,
+					"license": "Apache-2.0",
+					"optional": true,
+					"os": ["linux"],
+					"engines": {
+						"node": ">=16.20.0"
+					}
+				},
+				"node_modules/@typescript/typescript-linux-arm64": {
+					"version": "7.0.2",
+					"resolved": "https://registry.npmjs.org/@typescript/typescript-linux-arm64/-/typescript-linux-arm64-7.0.2.tgz",
+					"integrity": "sha512-Qh4eU4/y3yDjnfjjyPYihMj5/ODIlmt+Bzu17OI+fiSRDW57QmU5SiN63exPRNJPKUzcc1INa1NXdrJ+MqHjUQ==",
+					"cpu": ["arm64"],
+					"dev": true,
+					"license": "Apache-2.0",
+					"optional": true,
+					"os": ["linux"],
+					"engines": {
+						"node": ">=16.20.0"
+					}
+				},
+				"node_modules/@typescript/typescript-linux-loong64": {
+					"version": "7.0.2",
+					"resolved": "https://registry.npmjs.org/@typescript/typescript-linux-loong64/-/typescript-linux-loong64-7.0.2.tgz",
+					"integrity": "sha512-uEHck9i8hoAzXPiYRib1O7miOnz23SxIeVl6F4LXox+qov1K35jHcEW6VHKvZI+pyvl7fZEP4MCU5LYvIq1GuQ==",
+					"cpu": ["loong64"],
+					"dev": true,
+					"license": "Apache-2.0",
+					"optional": true,
+					"os": ["linux"],
+					"engines": {
+						"node": ">=16.20.0"
+					}
+				},
+				"node_modules/@typescript/typescript-linux-mips64el": {
+					"version": "7.0.2",
+					"resolved": "https://registry.npmjs.org/@typescript/typescript-linux-mips64el/-/typescript-linux-mips64el-7.0.2.tgz",
+					"integrity": "sha512-R4KvAMnE43W5Qeqb0Ly56O3mWMWIAgsMyz36DCaycd5nbg/9kzm0liw3JocfRqyJY0KPmzFjbswozXyW0DnIYA==",
+					"cpu": ["mips64el"],
+					"dev": true,
+					"license": "Apache-2.0",
+					"optional": true,
+					"os": ["linux"],
+					"engines": {
+						"node": ">=16.20.0"
+					}
+				},
+				"node_modules/@typescript/typescript-linux-ppc64": {
+					"version": "7.0.2",
+					"resolved": "https://registry.npmjs.org/@typescript/typescript-linux-ppc64/-/typescript-linux-ppc64-7.0.2.tgz",
+					"integrity": "sha512-DORx5b3sd/4S7eayxm4FQv+A7CrkUIGRaHiwI8oiHTAI1fAPWhF4J0vAlkC8biAlHSVVwxMQ3tjZ2/DVbnQiiA==",
+					"cpu": ["ppc64"],
+					"dev": true,
+					"license": "Apache-2.0",
+					"optional": true,
+					"os": ["linux"],
+					"engines": {
+						"node": ">=16.20.0"
+					}
+				},
+				"node_modules/@typescript/typescript-linux-riscv64": {
+					"version": "7.0.2",
+					"resolved": "https://registry.npmjs.org/@typescript/typescript-linux-riscv64/-/typescript-linux-riscv64-7.0.2.tgz",
+					"integrity": "sha512-wf0jqEDOjrPRnKwYRyyJDRo11KMbvMFrU+q4zqKyChODBzvlkbhNQfKvLxQCcwTpdDaXSHZTVuh0JoCrKCUMHQ==",
+					"cpu": ["riscv64"],
+					"dev": true,
+					"license": "Apache-2.0",
+					"optional": true,
+					"os": ["linux"],
+					"engines": {
+						"node": ">=16.20.0"
+					}
+				},
+				"node_modules/@typescript/typescript-linux-s390x": {
+					"version": "7.0.2",
+					"resolved": "https://registry.npmjs.org/@typescript/typescript-linux-s390x/-/typescript-linux-s390x-7.0.2.tgz",
+					"integrity": "sha512-IkwJc3L7yhytWd/ewjyxNDfOmswCm9GWMJT/ue/dU4aZNbwZeYAetq42VyLmsmSjvoX7z74X6ZaYCtzAr0EuGw==",
+					"cpu": ["s390x"],
+					"dev": true,
+					"license": "Apache-2.0",
+					"optional": true,
+					"os": ["linux"],
+					"engines": {
+						"node": ">=16.20.0"
+					}
+				},
+				"node_modules/@typescript/typescript-linux-x64": {
+					"version": "7.0.2",
+					"resolved": "https://registry.npmjs.org/@typescript/typescript-linux-x64/-/typescript-linux-x64-7.0.2.tgz",
+					"integrity": "sha512-EYdf2cNg7rgCWJnxCdJ+F3V39O8ihb37eHAu1LK8oAFizgTQbPOK7zHHXbPt8rX24COqODXeI3sIf0fCXG7H/A==",
+					"cpu": ["x64"],
+					"dev": true,
+					"license": "Apache-2.0",
+					"optional": true,
+					"os": ["linux"],
+					"engines": {
+						"node": ">=16.20.0"
+					}
+				},
+				"node_modules/@typescript/typescript-netbsd-arm64": {
+					"version": "7.0.2",
+					"resolved": "https://registry.npmjs.org/@typescript/typescript-netbsd-arm64/-/typescript-netbsd-arm64-7.0.2.tgz",
+					"integrity": "sha512-+polYF4MF04aPpO5FTkHran9yUQDSXqy5GiSDKpsll5jy3l3+g9QLhpf39T+ePtefhXLOGrLl0QIjkQP6VnelA==",
+					"cpu": ["arm64"],
+					"dev": true,
+					"license": "Apache-2.0",
+					"optional": true,
+					"os": ["netbsd"],
+					"engines": {
+						"node": ">=16.20.0"
+					}
+				},
+				"node_modules/@typescript/typescript-netbsd-x64": {
+					"version": "7.0.2",
+					"resolved": "https://registry.npmjs.org/@typescript/typescript-netbsd-x64/-/typescript-netbsd-x64-7.0.2.tgz",
+					"integrity": "sha512-8YIT0EHM/3dq10ZOVF/A7pc/YSMtbcecct4rWtexrnSCHOPcpC2KTLXfTCR6vDpnSiY12heNb1GiN/wu+T/FyA==",
+					"cpu": ["x64"],
+					"dev": true,
+					"license": "Apache-2.0",
+					"optional": true,
+					"os": ["netbsd"],
+					"engines": {
+						"node": ">=16.20.0"
+					}
+				},
+				"node_modules/@typescript/typescript-openbsd-arm64": {
+					"version": "7.0.2",
+					"resolved": "https://registry.npmjs.org/@typescript/typescript-openbsd-arm64/-/typescript-openbsd-arm64-7.0.2.tgz",
+					"integrity": "sha512-APT8+ClYnuYm1u9+kgGXoMj2VzWzcymwh2gNSQVySHfkRDGOTVkoWLjCmOQSaO+PoqQ57B0flRp9SA+7GnnkzQ==",
+					"cpu": ["arm64"],
+					"dev": true,
+					"license": "Apache-2.0",
+					"optional": true,
+					"os": ["openbsd"],
+					"engines": {
+						"node": ">=16.20.0"
+					}
+				},
+				"node_modules/@typescript/typescript-openbsd-x64": {
+					"version": "7.0.2",
+					"resolved": "https://registry.npmjs.org/@typescript/typescript-openbsd-x64/-/typescript-openbsd-x64-7.0.2.tgz",
+					"integrity": "sha512-yX7s+Q0Dln0Dt9tEzZsAjXXR/+ytBM7AlglaqyeMPxQszJ1JhlJdZ6jLA+IzldHtflX81em7lDao1xXu+aRRkg==",
+					"cpu": ["x64"],
+					"dev": true,
+					"license": "Apache-2.0",
+					"optional": true,
+					"os": ["openbsd"],
+					"engines": {
+						"node": ">=16.20.0"
+					}
+				},
+				"node_modules/@typescript/typescript-sunos-x64": {
+					"version": "7.0.2",
+					"resolved": "https://registry.npmjs.org/@typescript/typescript-sunos-x64/-/typescript-sunos-x64-7.0.2.tgz",
+					"integrity": "sha512-dLJDGaLZ1D4HPQn62u1n8mBDkJREwMsAkCdkwd4Ieqw+x3TUyTsqY0YiBCtE6H6OzzgGk3iuZ3vFWRS+E8/d1g==",
+					"cpu": ["x64"],
+					"dev": true,
+					"license": "Apache-2.0",
+					"optional": true,
+					"os": ["sunos"],
+					"engines": {
+						"node": ">=16.20.0"
+					}
+				},
+				"node_modules/@typescript/typescript-win32-arm64": {
+					"version": "7.0.2",
+					"resolved": "https://registry.npmjs.org/@typescript/typescript-win32-arm64/-/typescript-win32-arm64-7.0.2.tgz",
+					"integrity": "sha512-Gyl1Vy6OsWesLzmq+EP0Fb7b4Nid5232AvcA2SFcdYreldpNtYFFofPjnt62y9hQy7VTaZp65ICJjuAQRaVcIQ==",
+					"cpu": ["arm64"],
+					"dev": true,
+					"license": "Apache-2.0",
+					"optional": true,
+					"os": ["win32"],
+					"engines": {
+						"node": ">=16.20.0"
+					}
+				},
+				"node_modules/@typescript/typescript-win32-x64": {
+					"version": "7.0.2",
+					"resolved": "https://registry.npmjs.org/@typescript/typescript-win32-x64/-/typescript-win32-x64-7.0.2.tgz",
+					"integrity": "sha512-0BQ3HkAHHlKLSp1qRvf3SUhGpGsDuhB/jgFw75guyqbxJqEaS0Cw/VFO8i2nHglJUzQCRtMMR/IBAKE3ETMC4g==",
+					"cpu": ["x64"],
+					"dev": true,
+					"license": "Apache-2.0",
+					"optional": true,
+					"os": ["win32"],
+					"engines": {
+						"node": ">=16.20.0"
+					}
+				},
+				"node_modules/ansi-regex": {
+					"version": "6.3.0",
+					"resolved": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.3.0.tgz",
+					"integrity": "sha512-WpDfL7NO6j7tH88IDBNVdUJxDh9nmCteAVW9dsep846XdwF4naCBK+/tGLX3KJgcpgMRXCFlTM2hKGoK9FsdrQ==",
+					"license": "MIT",
+					"engines": {
+						"node": ">=12"
+					},
+					"funding": {
+						"url": "https://github.com/chalk/ansi-regex?sponsor=1"
+					}
+				},
+				"node_modules/ansi-styles": {
+					"version": "6.2.3",
+					"resolved": "https://registry.npmjs.org/ansi-styles/-/ansi-styles-6.2.3.tgz",
+					"integrity": "sha512-4Dj6M28JB+oAH8kFkTLUo+a2jwOFkuqb3yucU0CANcRRUbxS0cP0nZYCGjcc3BNXwRIsUVmDGgzawme7zvJHvg==",
+					"license": "MIT",
+					"engines": {
+						"node": ">=12"
+					},
+					"funding": {
+						"url": "https://github.com/chalk/ansi-styles?sponsor=1"
+					}
+				},
+				"node_modules/ansis": {
+					"version": "4.2.0",
+					"resolved": "https://registry.npmjs.org/ansis/-/ansis-4.2.0.tgz",
+					"integrity": "sha512-HqZ5rWlFjGiV0tDm3UxxgNRqsOTniqoKZu0pIAfh7TZQMGuZK+hH0drySty0si0QXj1ieop4+SkSfPZBPPkHig==",
+					"license": "ISC",
+					"engines": {
+						"node": ">=14"
+					}
+				},
+				"node_modules/arg": {
+					"version": "5.0.2",
+					"resolved": "https://registry.npmjs.org/arg/-/arg-5.0.2.tgz",
+					"integrity": "sha512-PYjyFOLKQ9y57JvQ6QLo8dAgNqswh8M1RMJYdQduT6xbWSgK36P/Z/v+p888pM69jMMfS8Xd8F6I1kQ/I9HUGg==",
+					"license": "MIT"
+				},
+				"node_modules/argparse": {
+					"version": "3.0.2",
+					"resolved": "https://registry.npmjs.org/argparse/-/argparse-3.0.2.tgz",
+					"integrity": "sha512-mFdDM6WqWKraGLsVb+C9CahPnzTXOefAOLq3jYcca2YZ8bEWpr++Tzj+zSaKW9+X9L5uSxcm1AZ3Y6aZJ09OhQ==",
+					"funding": [
+						{
+							"type": "github",
+							"url": "https://github.com/sponsors/puzrin"
+						},
+						{
+							"type": "github",
+							"url": "https://github.com/sponsors/nodeca"
+						}
+					],
+					"license": "PSF-2.0"
+				},
+				"node_modules/bun-types": {
+					"version": "1.4.2",
+					"resolved": "https://registry.npmjs.org/bun-types/-/bun-types-1.4.2.tgz",
+					"integrity": "sha512-bxV1FgK7yBIzjRe5zBozIM4Bem11ZJcCXSrjWRG3YWLt8yFDePu4cLjpebO8OvPeIE9trbyPF4fuj3Cia4Fj3w==",
+					"dev": true,
+					"license": "MIT",
+					"dependencies": {
+						"@types/node": "*"
+					}
+				},
+				"node_modules/cac": {
+					"version": "7.0.0",
+					"resolved": "https://registry.npmjs.org/cac/-/cac-7.0.0.tgz",
+					"integrity": "sha512-tixWYgm5ZoOD+3g6UTea91eow5z6AAHaho3g0V9CNSNb45gM8SmflpAc+GRd1InC4AqN/07Unrgp56Y94N9hJQ==",
+					"license": "MIT",
+					"engines": {
+						"node": ">=20.19.0"
+					}
+				},
+				"node_modules/chalk": {
+					"version": "5.6.2",
+					"resolved": "https://registry.npmjs.org/chalk/-/chalk-5.6.2.tgz",
+					"integrity": "sha512-7NzBL0rN6fMUW+f7A6Io4h40qQlG+xGmtMxfbnH/K7TAtt8JQWVQK+6g0UXKMeVJoyV5EkkNsErQ8pVD3bLHbA==",
+					"license": "MIT",
+					"engines": {
+						"node": "^12.17.0 || ^14.13 || >=16.0.0"
+					},
+					"funding": {
+						"url": "https://github.com/chalk/chalk?sponsor=1"
+					}
+				},
+				"node_modules/citty": {
+					"version": "0.2.2",
+					"resolved": "https://registry.npmjs.org/citty/-/citty-0.2.2.tgz",
+					"integrity": "sha512-+6vJA3L98yv+IdfKGZHBNiGW5KHn22e/JwID0Strsz8h4S/csAu/OuICwxrg44k5MRiZHWIo8XXuJgQTriRP4w==",
+					"license": "MIT"
+				},
+				"node_modules/cleye": {
+					"version": "2.7.0",
+					"resolved": "https://registry.npmjs.org/cleye/-/cleye-2.7.0.tgz",
+					"integrity": "sha512-vSxO418kPRu+oNh6dit+ZMUQf0fQYifZs/2cP85RQqbMtnlJ0tshkxyiMZlKOhMntct4hgi1GC1DXUS5T/zoxA==",
+					"license": "MIT",
+					"dependencies": {
+						"ansis": "4.2.0",
+						"terminal-columns": "^2.0.0",
+						"type-flag": "^4.5.2"
+					},
+					"funding": {
+						"url": "https://github.com/privatenumber/cleye?sponsor=1"
+					}
+				},
+				"node_modules/clipanion": {
+					"version": "3.2.1",
+					"resolved": "https://registry.npmjs.org/clipanion/-/clipanion-3.2.1.tgz",
+					"integrity": "sha512-dYFdjLb7y1ajfxQopN05mylEpK9ZX0sO1/RfMXdfmwjlIsPkbh4p7A682x++zFPLDCo1x3p82dtljHf5cW2LKA==",
+					"license": "MIT",
+					"workspaces": ["website"],
+					"dependencies": {
+						"typanion": "^3.8.0"
+					},
+					"peerDependencies": {
+						"typanion": "*"
+					}
+				},
+				"node_modules/cliui": {
+					"version": "9.0.1",
+					"resolved": "https://registry.npmjs.org/cliui/-/cliui-9.0.1.tgz",
+					"integrity": "sha512-k7ndgKhwoQveBL+/1tqGJYNz097I7WOvwbmmU2AR5+magtbjPWQTS1C5vzGkBC8Ym8UWRzfKUzUUqFLypY4Q+w==",
+					"license": "ISC",
+					"dependencies": {
+						"string-width": "^7.2.0",
+						"strip-ansi": "^7.1.0",
+						"wrap-ansi": "^9.0.0"
+					},
+					"engines": {
+						"node": ">=20"
+					}
+				},
+				"node_modules/cliui/node_modules/string-width": {
+					"version": "7.2.0",
+					"resolved": "https://registry.npmjs.org/string-width/-/string-width-7.2.0.tgz",
+					"integrity": "sha512-tsaTIkKW9b4N+AEj+SVA+WhJzV7/zMhcSu78mLKWSk7cXMOSHsBKFWUs0fWwq8QyK3MgJBQRX6Gbi4kYbdvGkQ==",
+					"license": "MIT",
+					"dependencies": {
+						"emoji-regex": "^10.3.0",
+						"get-east-asian-width": "^1.0.0",
+						"strip-ansi": "^7.1.0"
+					},
+					"engines": {
+						"node": ">=18"
+					},
+					"funding": {
+						"url": "https://github.com/sponsors/sindresorhus"
+					}
+				},
+				"node_modules/cmd-ts": {
+					"version": "0.15.0",
+					"resolved": "https://registry.npmjs.org/cmd-ts/-/cmd-ts-0.15.0.tgz",
+					"integrity": "sha512-ASyAx+P6DNzNEZ6OYmvjjaLAQeI3L+4lm5rX2Jg8tondXdj06o9JTxi9mfC92KoVbrVFKhZ+j2TfBF8fcura6g==",
+					"license": "MIT",
+					"dependencies": {
+						"chalk": "^5.4.1",
+						"debug": "^4.4.1",
+						"didyoumean": "^1.2.2",
+						"strip-ansi": "^7.1.0"
+					}
+				},
+				"node_modules/commander": {
+					"version": "15.0.0",
+					"resolved": "https://registry.npmjs.org/commander/-/commander-15.0.0.tgz",
+					"integrity": "sha512-z67u4ZhzCL/Tydu1lJARtEZYWbWaN7oYLHbsuzocr6y4N6WZAagG3RQ4FW61V1/0+jImpj293XfrcYnd1qxtPg==",
+					"license": "MIT",
+					"engines": {
+						"node": ">=22.12.0"
+					}
+				},
+				"node_modules/debug": {
+					"version": "4.4.3",
+					"resolved": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+					"integrity": "sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==",
+					"license": "MIT",
+					"dependencies": {
+						"ms": "^2.1.3"
+					},
+					"engines": {
+						"node": ">=6.0"
+					},
+					"peerDependenciesMeta": {
+						"supports-color": {
+							"optional": true
+						}
+					}
+				},
+				"node_modules/didyoumean": {
+					"version": "1.2.2",
+					"resolved": "https://registry.npmjs.org/didyoumean/-/didyoumean-1.2.2.tgz",
+					"integrity": "sha512-gxtyfqMg7GKyhQmb056K7M3xszy/myH8w+B4RT+QXBQsvAOdc3XymqDDPHx1BgPgsdAA5SIifona89YtRATDzw==",
+					"license": "Apache-2.0"
+				},
+				"node_modules/emoji-regex": {
+					"version": "10.6.0",
+					"resolved": "https://registry.npmjs.org/emoji-regex/-/emoji-regex-10.6.0.tgz",
+					"integrity": "sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A==",
+					"license": "MIT"
+				},
+				"node_modules/escalade": {
+					"version": "3.2.0",
+					"resolved": "https://registry.npmjs.org/escalade/-/escalade-3.2.0.tgz",
+					"integrity": "sha512-WUj2qlxaQtO4g6Pq5c29GTcWGDyd8itL8zTlipgECz3JesAiiOKotd8JU6otB3PACgG6xkJUyVhboMS+bje/jA==",
+					"license": "MIT",
+					"engines": {
+						"node": ">=6"
+					}
+				},
+				"node_modules/get-caller-file": {
+					"version": "2.0.5",
+					"resolved": "https://registry.npmjs.org/get-caller-file/-/get-caller-file-2.0.5.tgz",
+					"integrity": "sha512-DyFP3BM/3YHTQOCUL/w0OZHR0lpKeGrxotcHWcqNEdnltqFwXVfhEBQ94eIo34AfQpo0rGki4cyIiftY06h2Fg==",
+					"license": "ISC",
+					"engines": {
+						"node": "6.* || 8.* || >= 10.*"
+					}
+				},
+				"node_modules/get-east-asian-width": {
+					"version": "1.7.0",
+					"resolved": "https://registry.npmjs.org/get-east-asian-width/-/get-east-asian-width-1.7.0.tgz",
+					"integrity": "sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==",
+					"license": "MIT",
+					"engines": {
+						"node": ">=18"
+					},
+					"funding": {
+						"url": "https://github.com/sponsors/sindresorhus"
+					}
+				},
+				"node_modules/gunshi": {
+					"version": "0.37.3",
+					"resolved": "https://registry.npmjs.org/gunshi/-/gunshi-0.37.3.tgz",
+					"integrity": "sha512-uwm23bguqDcleEetknuQnF5okLcgmQPM3iv4aWVHTPDbiSs9shh02F079NCY0mWkrIRjHqNhgmzW6k0FCXhy1g==",
+					"license": "MIT",
+					"engines": {
+						"node": ">= 22"
+					},
+					"funding": {
+						"url": "https://github.com/sponsors/kazupon"
+					}
+				},
+				"node_modules/minimist": {
+					"version": "1.2.8",
+					"resolved": "https://registry.npmjs.org/minimist/-/minimist-1.2.8.tgz",
+					"integrity": "sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA==",
+					"license": "MIT",
+					"funding": {
+						"url": "https://github.com/sponsors/ljharb"
+					}
+				},
+				"node_modules/mri": {
+					"version": "1.2.0",
+					"resolved": "https://registry.npmjs.org/mri/-/mri-1.2.0.tgz",
+					"integrity": "sha512-tzzskb3bG8LvYGFF/mDTpq3jpI6Q9wc3LEmBaghu+DdCssd1FakN7Bc0hVNmEyGq1bq3RgfkCb3cmQLpNPOroA==",
+					"license": "MIT",
+					"engines": {
+						"node": ">=4"
+					}
+				},
+				"node_modules/ms": {
+					"version": "2.1.3",
+					"resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+					"integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==",
+					"license": "MIT"
+				},
+				"node_modules/sade": {
+					"version": "1.8.1",
+					"resolved": "https://registry.npmjs.org/sade/-/sade-1.8.1.tgz",
+					"integrity": "sha512-xal3CZX1Xlo/k4ApwCFrHVACi9fBqJ7V+mwhBsuf/1IOKbBy098Fex+Wa/5QMubw09pSZ/u8EY8PWgevJsXp1A==",
+					"license": "MIT",
+					"dependencies": {
+						"mri": "^1.1.0"
+					},
+					"engines": {
+						"node": ">=6"
+					}
+				},
+				"node_modules/string-width": {
+					"version": "8.2.2",
+					"resolved": "https://registry.npmjs.org/string-width/-/string-width-8.2.2.tgz",
+					"integrity": "sha512-GaPUh5gfdrYzqeVNZvUfT23vYYxXzKYidUcnMtJg/3rxRV63EFZy3k6xfKlmfeJD0176lnUV/Usr3XcwSvFzpg==",
+					"license": "MIT",
+					"dependencies": {
+						"get-east-asian-width": "^1.5.0",
+						"strip-ansi": "^7.1.2"
+					},
+					"engines": {
+						"node": ">=20"
+					},
+					"funding": {
+						"url": "https://github.com/sponsors/sindresorhus"
+					}
+				},
+				"node_modules/strip-ansi": {
+					"version": "7.2.0",
+					"resolved": "https://registry.npmjs.org/strip-ansi/-/strip-ansi-7.2.0.tgz",
+					"integrity": "sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w==",
+					"license": "MIT",
+					"dependencies": {
+						"ansi-regex": "^6.2.2"
+					},
+					"engines": {
+						"node": ">=12"
+					},
+					"funding": {
+						"url": "https://github.com/chalk/strip-ansi?sponsor=1"
+					}
+				},
+				"node_modules/terminal-columns": {
+					"version": "2.0.0",
+					"resolved": "https://registry.npmjs.org/terminal-columns/-/terminal-columns-2.0.0.tgz",
+					"integrity": "sha512-6IByuUjyNZJXUtwDNm+OIe62zgwwaRbH+WMNTcx05O2G5V9WhvluAAHJY8OvUdwmzMPpqAD/7EUpGdI6ae1aiQ==",
+					"license": "MIT",
+					"funding": {
+						"url": "https://github.com/privatenumber/terminal-columns?sponsor=1"
+					}
+				},
+				"node_modules/typanion": {
+					"version": "3.14.0",
+					"resolved": "https://registry.npmjs.org/typanion/-/typanion-3.14.0.tgz",
+					"integrity": "sha512-ZW/lVMRabETuYCd9O9ZvMhAh8GslSqaUjxmK/JLPCh6l73CvLBiuXswj/+7LdnWOgYsQ130FqLzFz5aGT4I3Ug==",
+					"license": "MIT",
+					"workspaces": ["website"]
+				},
+				"node_modules/type-flag": {
+					"version": "4.5.2",
+					"resolved": "https://registry.npmjs.org/type-flag/-/type-flag-4.5.2.tgz",
+					"integrity": "sha512-v8O8xoLq3W6eKKYZvlyvk8LI46ryYkfnKrjGVdJzO+1LsxUu1ztvVAKFzQpphKQgS0ucinnbAiEGUbvibQmt/A==",
+					"license": "MIT",
+					"funding": {
+						"url": "https://github.com/privatenumber/type-flag?sponsor=1"
+					}
+				},
+				"node_modules/typescript": {
+					"version": "7.0.2",
+					"resolved": "https://registry.npmjs.org/typescript/-/typescript-7.0.2.tgz",
+					"integrity": "sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA==",
+					"dev": true,
+					"license": "Apache-2.0",
+					"bin": {
+						"tsc": "bin/tsc"
+					},
+					"engines": {
+						"node": ">=16.20.0"
+					},
+					"optionalDependencies": {
+						"@typescript/typescript-aix-ppc64": "7.0.2",
+						"@typescript/typescript-darwin-arm64": "7.0.2",
+						"@typescript/typescript-darwin-x64": "7.0.2",
+						"@typescript/typescript-freebsd-arm64": "7.0.2",
+						"@typescript/typescript-freebsd-x64": "7.0.2",
+						"@typescript/typescript-linux-arm": "7.0.2",
+						"@typescript/typescript-linux-arm64": "7.0.2",
+						"@typescript/typescript-linux-loong64": "7.0.2",
+						"@typescript/typescript-linux-mips64el": "7.0.2",
+						"@typescript/typescript-linux-ppc64": "7.0.2",
+						"@typescript/typescript-linux-riscv64": "7.0.2",
+						"@typescript/typescript-linux-s390x": "7.0.2",
+						"@typescript/typescript-linux-x64": "7.0.2",
+						"@typescript/typescript-netbsd-arm64": "7.0.2",
+						"@typescript/typescript-netbsd-x64": "7.0.2",
+						"@typescript/typescript-openbsd-arm64": "7.0.2",
+						"@typescript/typescript-openbsd-x64": "7.0.2",
+						"@typescript/typescript-sunos-x64": "7.0.2",
+						"@typescript/typescript-win32-arm64": "7.0.2",
+						"@typescript/typescript-win32-x64": "7.0.2"
+					}
+				},
+				"node_modules/undici-types": {
+					"version": "8.9.0",
+					"resolved": "https://registry.npmjs.org/undici-types/-/undici-types-8.9.0.tgz",
+					"integrity": "sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg==",
+					"dev": true,
+					"license": "MIT"
+				},
+				"node_modules/wrap-ansi": {
+					"version": "9.0.2",
+					"resolved": "https://registry.npmjs.org/wrap-ansi/-/wrap-ansi-9.0.2.tgz",
+					"integrity": "sha512-42AtmgqjV+X1VpdOfyTGOYRi0/zsoLqtXQckTmqTeybT+BDIbM/Guxo7x3pE2vtpr1ok6xRqM9OpBe+Jyoqyww==",
+					"license": "MIT",
+					"dependencies": {
+						"ansi-styles": "^6.2.1",
+						"string-width": "^7.0.0",
+						"strip-ansi": "^7.1.0"
+					},
+					"engines": {
+						"node": ">=18"
+					},
+					"funding": {
+						"url": "https://github.com/chalk/wrap-ansi?sponsor=1"
+					}
+				},
+				"node_modules/wrap-ansi/node_modules/string-width": {
+					"version": "7.2.0",
+					"resolved": "https://registry.npmjs.org/string-width/-/string-width-7.2.0.tgz",
+					"integrity": "sha512-tsaTIkKW9b4N+AEj+SVA+WhJzV7/zMhcSu78mLKWSk7cXMOSHsBKFWUs0fWwq8QyK3MgJBQRX6Gbi4kYbdvGkQ==",
+					"license": "MIT",
+					"dependencies": {
+						"emoji-regex": "^10.3.0",
+						"get-east-asian-width": "^1.0.0",
+						"strip-ansi": "^7.1.0"
+					},
+					"engines": {
+						"node": ">=18"
+					},
+					"funding": {
+						"url": "https://github.com/sponsors/sindresorhus"
+					}
+				},
+				"node_modules/y18n": {
+					"version": "5.0.8",
+					"resolved": "https://registry.npmjs.org/y18n/-/y18n-5.0.8.tgz",
+					"integrity": "sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA==",
+					"license": "ISC",
+					"engines": {
+						"node": ">=10"
+					}
+				},
+				"node_modules/yargs": {
+					"version": "18.1.0",
+					"resolved": "https://registry.npmjs.org/yargs/-/yargs-18.1.0.tgz",
+					"integrity": "sha512-2rAgRKu54VsHkqI0/tYkmluGXHD4KW7yZoycuqDQ15QOTnc2VVfy0nN/1eMhnQLO00A+dwtK20xuCnc1YGeUyg==",
+					"license": "MIT",
+					"dependencies": {
+						"cliui": "^9.0.1",
+						"escalade": "^3.1.1",
+						"get-caller-file": "^2.0.5",
+						"string-width": "^8.2.1",
+						"y18n": "^5.0.5",
+						"yargs-parser": "^22.0.0"
+					},
+					"engines": {
+						"node": "^20.19.0 || ^22.12.0 || >=23"
+					}
+				},
+				"node_modules/yargs-parser": {
+					"version": "22.0.0",
+					"resolved": "https://registry.npmjs.org/yargs-parser/-/yargs-parser-22.0.0.tgz",
+					"integrity": "sha512-rwu/ClNdSMpkSrUb+d6BRsSkLUq1fmfsY6TOpYzTwvwkg1/NRG85KBy3kq++A8LKQwX6lsu+aWad+2khvuXrqw==",
+					"license": "ISC",
+					"engines": {
+						"node": "^20.19.0 || ^22.12.0 || >=23"
+					}
+				}
+			}
+		},
+		"runtimeVersions": {
+			"bun": "1.4.2",
+			"node": "v26.8.2"
+		},
+		"runtimeExecutables": {
+			"bun": "bun",
+			"node": "node"
+		},
+		"parentRuntime": {
+			"node": "26.3.0",
+			"bun": "1.4.2",
+			"boringssl": "41bf9b59c2ebf277a7aa427e1ecad5cc80dd4d4f",
+			"openssl": "1.1.0",
+			"llhttp": "9.3.0",
+			"libarchive": "ded82291ab41d5e355831b96b0e1ff49e24d8939",
+			"mimalloc": "6a64e1ba7f5b2130d4efccb67ec87fd0003f0f6a",
+			"picohttpparser": "066d2b1e9ab820703db0837a7255d92d30f0c9f5",
+			"uwebsockets": "744846f844374847c902b5e7fd59b4342a51ef99",
+			"webkit": "2e2aa2290fac856d6f451ceacb58f7f5b44dd057",
+			"zig": "04e7f6ac1e009525bc00934f20199c68f04e0a24",
+			"zlib": "12731092979c6d07f42da27da673a9f6c7b13586",
+			"tinycc": "05f0fafaa3be31e31d7b4b5c17dc60f62c991171",
+			"lolhtml": "725ce499aa9b71e38b7a2d0a9fbb6d7294a4079e",
+			"ares": "c7a3138dcfe3bb0eaaf10c0c24c36dc66dc790ab",
+			"libdeflate": "c8c56a20f8f621e6a966b716b31f1dedab6a41e3",
+			"usockets": "744846f844374847c902b5e7fd59b4342a51ef99",
+			"lshpack": "8905c024b6d052f083a3d11d0a169b3c2735c8a1",
+			"zstd": "f8745da6ff1ad1e7bab384bd1f9d742439278e99",
+			"v8": "14.6.202.34-node.20",
+			"uv": "1.48.0",
+			"napi": "10",
+			"icu": "78.3",
+			"unicode": "17.0",
+			"sqlite": "3.53.2",
+			"modules": "147"
+		},
+		"os": {
+			"platform": "linux",
+			"release": "6.18.36",
+			"arch": "x64"
+		},
+		"cpu": [
+			{
+				"times": {
+					"user": 116103130,
+					"nice": 5106120,
+					"sys": 38608390,
+					"idle": 6884980260,
+					"irq": 14217360
+				},
+				"model": "AMD Ryzen 7 6800H with Radeon Graphics",
+				"speed": 2706
+			},
+			{
+				"times": {
+					"user": 31006910,
+					"nice": 2143320,
+					"sys": 8853970,
+					"idle": 7055828710,
+					"irq": 2896590
+				},
+				"model": "AMD Ryzen 7 6800H with Radeon Graphics",
+				"speed": 1095
+			},
+			{
+				"times": {
+					"user": 98214690,
+					"nice": 3364750,
+					"sys": 35656000,
+					"idle": 6930059630,
+					"irq": 14108090
+				},
+				"model": "AMD Ryzen 7 6800H with Radeon Graphics",
+				"speed": 1962
+			},
+			{
+				"times": {
+					"user": 24921920,
+					"nice": 1536240,
+					"sys": 7101290,
+					"idle": 7073237680,
+					"irq": 2364420
+				},
+				"model": "AMD Ryzen 7 6800H with Radeon Graphics",
+				"speed": 1095
+			},
+			{
+				"times": {
+					"user": 67090440,
+					"nice": 2452970,
+					"sys": 28760020,
+					"idle": 6983471380,
+					"irq": 10842260
+				},
+				"model": "AMD Ryzen 7 6800H with Radeon Graphics",
+				"speed": 3333
+			},
+			{
+				"times": {
+					"user": 23129030,
+					"nice": 1433210,
+					"sys": 6982110,
+					"idle": 7076581210,
+					"irq": 2051000
+				},
+				"model": "AMD Ryzen 7 6800H with Radeon Graphics",
+				"speed": 1095
+			},
+			{
+				"times": {
+					"user": 390170070,
+					"nice": 85716770,
+					"sys": 98848360,
+					"idle": 6422137420,
+					"irq": 25175240
+				},
+				"model": "AMD Ryzen 7 6800H with Radeon Graphics",
+				"speed": 1982
+			},
+			{
+				"times": {
+					"user": 83353770,
+					"nice": 19662940,
+					"sys": 22548150,
+					"idle": 6965774820,
+					"irq": 6371100
+				},
+				"model": "AMD Ryzen 7 6800H with Radeon Graphics",
+				"speed": 1095
+			},
+			{
+				"times": {
+					"user": 72755590,
+					"nice": 2066900,
+					"sys": 29078970,
+					"idle": 6978021200,
+					"irq": 11292350
+				},
+				"model": "AMD Ryzen 7 6800H with Radeon Graphics",
+				"speed": 1983
+			},
+			{
+				"times": {
+					"user": 21560780,
+					"nice": 1339710,
+					"sys": 6699640,
+					"idle": 7079179750,
+					"irq": 1900510
+				},
+				"model": "AMD Ryzen 7 6800H with Radeon Graphics",
+				"speed": 1095
+			},
+			{
+				"times": {
+					"user": 333835690,
+					"nice": 57961630,
+					"sys": 84443770,
+					"idle": 6530906000,
+					"irq": 22774830
+				},
+				"model": "AMD Ryzen 7 6800H with Radeon Graphics",
+				"speed": 2232
+			},
+			{
+				"times": {
+					"user": 100133100,
+					"nice": 18820580,
+					"sys": 25583550,
+					"idle": 6931128690,
+					"irq": 11149080
+				},
+				"model": "AMD Ryzen 7 6800H with Radeon Graphics",
+				"speed": 2233
+			},
+			{
+				"times": {
+					"user": 60350600,
+					"nice": 1789010,
+					"sys": 27005180,
+					"idle": 6999953460,
+					"irq": 9481700
+				},
+				"model": "AMD Ryzen 7 6800H with Radeon Graphics",
+				"speed": 2232
+			},
+			{
+				"times": {
+					"user": 20590520,
+					"nice": 1279290,
+					"sys": 6397520,
+					"idle": 7081260670,
+					"irq": 1691270
+				},
+				"model": "AMD Ryzen 7 6800H with Radeon Graphics",
+				"speed": 2229
+			},
+			{
+				"times": {
+					"user": 88455100,
+					"nice": 3496710,
+					"sys": 33137980,
+					"idle": 6949858370,
+					"irq": 12020710
+				},
+				"model": "AMD Ryzen 7 6800H with Radeon Graphics",
+				"speed": 4466
+			},
+			{
+				"times": {
+					"user": 27316010,
+					"nice": 1699360,
+					"sys": 8087470,
+					"idle": 7069496910,
+					"irq": 2478270
+				},
+				"model": "AMD Ryzen 7 6800H with Radeon Graphics",
+				"speed": 1095
+			}
+		],
+		"memory": {
+			"total": 29155876864,
+			"free": 25016668160
+		},
+		"gitRevision": "b79c147ad81549d5cf8755993bf707b539fda996",
+		"gitStatus": "?? ../../compiler-architecture.html\n?? ../../compiler-input-design.md\n?? ../../gt-prs-explained.html\n?? ./\n",
+		"environment": {
+			"NO_COLOR": "1",
+			"FORCE_COLOR": "0",
+			"TERM": "dumb",
+			"CI": "1",
+			"CRUST_variables": "removed",
+			"NODE_OPTIONS": null,
+			"BUN_OPTIONS": null
+		},
+		"bundler": {
+			"name": "Bun.build",
+			"version": "1.4.2",
+			"target": "node",
+			"format": "esm",
+			"minify": true,
+			"splitting": false,
+			"sourcemap": "none",
+			"packages": "bundle",
+			"defines": {},
+			"gzipLevel": 9
+		},
+		"lifecycle": "fresh schema + parse + route + application validation + dispatch + normalized result per invocation; imports excluded from warm",
+		"warmOverhead": "same argv copy, await, JSON.stringify and equality check inside every timed iteration; no stdout inside timer",
+		"startupScope": "OS-cache-warm fresh process lifetime including runtime/import/schema/invoke/JSON stdout/exit; parent spawn overhead included; NOT filesystem cold start"
+	},
+	"build": {
+		"fingerprint": "509045d7aee9d6515a2fd54c28f99cbb1dc9969cd5783394bf3ce13a08bd419c",
+		"bun": "1.4.2",
+		"local": {
+			"revision": "b79c147ad81549d5cf8755993bf707b539fda996",
+			"artifacts": {
+				"utils/dist/artifacts.d.ts": "c779fe8b0d8c2657aa7a345659a018f327378a43f9eeb056214318b59a5c74f3",
+				"utils/dist/path.js": "4959d551df6e24a1e6320d64d9c81b8402595719f693c60599895523645155a5",
+				"utils/dist/primitive.js": "b9e81896cb9a7b68490b2c5443886f947b863d9fdceb33a44ec30ee3ca42348d",
+				"utils/dist/schema.js": "5a2fe8daffc7d5eef78a79dd586f45cbf381697c57021e5d57f315639bbd2fdf",
+				"utils/dist/primitive.d.ts": "60dbfea2544d1ef1920eca5c36a897f3bcfae7f4812110ac811634f8c97e57ee",
+				"utils/dist/process.d.ts": "62556df839905c0406a6fd9aa84f44d56d1e14f7181f81f1c17ce07e38dd394b",
+				"utils/dist/json.d.ts": "47cf30de4c07e8e774a7b27fc0f85664ec61a9d3e74779d0fd78086d045de39e",
+				"utils/dist/source.js": "114565146d9ac45665fcc3bc3cff9ef0cf05dc0034ec172c6417fa7487e9f3d2",
+				"utils/dist/error.d.ts": "dbb2f9c5feedd6d89dba6cbcd60cf7db84033df18dd1e5ffc0ad25ccb2075f23",
+				"utils/dist/path.d.ts": "cae2f370b30e6abcdc7e3e603323b77a3e17d5f1cde1e6b17a8b109c3224f157",
+				"utils/dist/source.d.ts": "8c6826d2bda844cdf104d296263ffa237cad8c87b8d8db7961221e657bc5d79a",
+				"utils/dist/artifacts.js": "1f959e53cd39f71a02cbd4ab3f0307926683c6adbcbf7c5d7c40e29305b80d2a",
+				"utils/dist/terminal.d.ts": "73c45673700952092cd11a00bab3cafc09dd9f39ec5ee3bd93bc367f6d65fd2c",
+				"utils/dist/process.js": "36069634951bd866c57a22f14a3462756429c6967788af8c1193c277a71243cc",
+				"utils/dist/json.js": "7ad0a8511122f1cfe5759a72081e517da8bf3f418b18727c167d17d4adabd888",
+				"utils/dist/terminal.js": "ed93dbccbc0d4e00ec986849170b6ecd2222031adcada2e152c609eb72fa96b2",
+				"utils/dist/error.js": "47e77427191ec59523b3ca54fbb9da533043f3447dd5e4fc9cc8deb8807fce2b",
+				"utils/dist/schema.d.ts": "f7cfb99c704c51c85db5da04a47f02b8f9080ae8381f758e87d58af115668b78",
+				"core/dist/context-Cud9frNp.d.ts": "050679a73532190259b98df5622754bf6ea649134f622fe5c62df827d8d46704",
+				"core/dist/index.d.ts": "1bbe13448abac1d88da01b06e6bcb2d1609b883789ef7439a4403fe2cc434ac7",
+				"core/dist/index.js": "c49ceb710319dfd0ea066e0ab663b6abfe782182672b1880a3f8ee644f469dcb",
+				"core/dist/tooling.d.ts": "5115e0403aa3393502eaf4b961e527ea9d8bafd94d83534667b75acebf3e5fbd",
+				"core/dist/tooling.js": "61e7df12dbfed2c5c43ee1dcee6934cc51a790e6f3b38576d84a0c25e18d2b17",
+				"core/dist/invocation-CDq_hxre.js": "53e4441dbe814c2563557ca340f5ac65c96fde19270768e7c995ed171c81e4a5"
+			},
+			"rootLockSha256": "e675acf92c4f1c4cd02a84b4f3a458db66f5fb182aa7d4392df5017e69034987",
+			"tsdown": "0.23.0",
+			"bun": "1.4.2",
+			"builtAt": "2026-09-20T22:49:46.523Z",
+			"command": "bun run build (utils then core; dist cleared first)"
+		},
+		"versions": {
+			"@stricli/core": "1.3.0",
+			"arg": "5.0.2",
+			"argparse": "3.0.2",
+			"cac": "7.0.0",
+			"citty": "0.2.2",
+			"cleye": "2.7.0",
+			"clipanion": "3.2.1",
+			"cmd-ts": "0.15.0",
+			"commander": "15.0.0",
+			"gunshi": "0.37.3",
+			"minimist": "1.2.8",
+			"mri": "1.2.0",
+			"sade": "1.8.1",
+			"yargs": "18.1.0",
+			"yargs-parser": "22.0.0",
+			"@types/bun": "1.4.2",
+			"@types/minimist": "1.2.5",
+			"@types/node": "26.6.2",
+			"@types/yargs": "17.0.35",
+			"@types/yargs-parser": "21.0.3",
+			"typescript": "7.0.2",
+			"@crustjs/core": "0.3.3",
+			"@crustjs/utils": "0.1.0"
+		},
+		"rows": [
+			{
+				"id": "crust",
+				"target": "node",
+				"file": ".generated/bundles/node/crust.mjs",
+				"bytes": 34243,
+				"gzipBytes": 11735,
+				"sha256": "df3ccef7cd95944be1033b5e9e3ba7847d8a755b5bfc0a6d6ab7e5b99944ebf2",
+				"external": [
+					"node:url",
+					"node:path",
+					"node:fs/promises",
+					"node:util",
+					"node:util/types",
+					"node:os",
+					"node:fs",
+					"node:async_hooks",
+					"node:stream"
+				]
+			},
+			{
+				"id": "commander",
+				"target": "node",
+				"file": ".generated/bundles/node/commander.mjs",
+				"bytes": 41301,
+				"gzipBytes": 11689,
+				"sha256": "dcaef46de174e2e67e9b7dd511c033a6459591f56614a377d738dfeff8790aeb",
+				"external": [
+					"node:url",
+					"node:path",
+					"node:events",
+					"node:child_process",
+					"node:fs",
+					"node:process",
+					"node:util"
+				]
+			},
+			{
+				"id": "yargs",
+				"target": "node",
+				"file": ".generated/bundles/node/yargs.mjs",
+				"bytes": 115588,
+				"gzipBytes": 34909,
+				"sha256": "5042c4f80f0febbc856bac968ccb9917d64fd0f0cf580c8a94a770a3ef3b59ae",
+				"external": [
+					"node:url",
+					"node:path",
+					"assert",
+					"util",
+					"url",
+					"path",
+					"node:module",
+					"node:fs",
+					"fs"
+				]
+			},
+			{
+				"id": "clipanion",
+				"target": "node",
+				"file": ".generated/bundles/node/clipanion.mjs",
+				"bytes": 58238,
+				"gzipBytes": 17361,
+				"sha256": "9db1d7002ecb618de059f6531745a170900cb7704e5bd648018410460ace6d1a",
+				"external": ["node:url", "node:path", "tty", "async_hooks"]
+			},
+			{
+				"id": "cleye",
+				"target": "node",
+				"file": ".generated/bundles/node/cleye.mjs",
+				"bytes": 47312,
+				"gzipBytes": 16735,
+				"sha256": "7ce6c552cb0da3ac7c721886377e02a9f833d1c839108ed17b70b35a7794d252",
+				"external": ["node:url", "node:path"]
+			},
+			{
+				"id": "argparse",
+				"target": "node",
+				"file": ".generated/bundles/node/argparse.mjs",
+				"bytes": 54446,
+				"gzipBytes": 16615,
+				"sha256": "3d48a2d06cb1299db8abf42bf426f9375d4c0bf920228a13697db4969330b133",
+				"external": ["node:url", "node:path", "assert", "util", "fs", "path"]
+			},
+			{
+				"id": "stricli",
+				"target": "node",
+				"file": ".generated/bundles/node/stricli.mjs",
+				"bytes": 35030,
+				"gzipBytes": 11140,
+				"sha256": "f615c8898c834f7acbfb017283165d4772365f1d063f70c661a12521252acd0c",
+				"external": ["node:url", "node:path"]
+			},
+			{
+				"id": "arg",
+				"target": "node",
+				"file": ".generated/bundles/node/arg.mjs",
+				"bytes": 4335,
+				"gzipBytes": 2065,
+				"sha256": "2de7dd8a157f8bc3f60ed37571d24d510f13975c8b31bd14b06ba637dbc1feea",
+				"external": ["node:url", "node:path"]
+			},
+			{
+				"id": "minimist",
+				"target": "node",
+				"file": ".generated/bundles/node/minimist.mjs",
+				"bytes": 5558,
+				"gzipBytes": 2300,
+				"sha256": "3e1d85e478bf209ea8fbef637bae5fadf4e0f2d21db1532e36bc606532f20120",
+				"external": ["node:url", "node:path"]
+			},
+			{
+				"id": "mri",
+				"target": "node",
+				"file": ".generated/bundles/node/mri.mjs",
+				"bytes": 3890,
+				"gzipBytes": 1751,
+				"sha256": "e931e297f9760d55cab8b2d0d219b3e07a73401c440977c48260705f6efbee22",
+				"external": ["node:url", "node:path"]
+			},
+			{
+				"id": "yargs-parser",
+				"target": "node",
+				"file": ".generated/bundles/node/yargs-parser.mjs",
+				"bytes": 17484,
+				"gzipBytes": 6035,
+				"sha256": "1dd03a1343e89d4f7e9764b4d499e0074108e1d7991da1a5e134267eb7cb5242",
+				"external": ["node:url", "node:path", "util", "path", "fs", "node:module"]
+			},
+			{
+				"id": "parse-args",
+				"target": "node",
+				"file": ".generated/bundles/node/parse-args.mjs",
+				"bytes": 1578,
+				"gzipBytes": 707,
+				"sha256": "152418964a09358c1b4752ddfd40c85d604834eaae4edb9609f1ef8dd67860c2",
+				"external": ["node:url", "node:path", "node:util"]
+			}
+		]
+	},
+	"verification": {
+		"fingerprint": "509045d7aee9d6515a2fd54c28f99cbb1dc9969cd5783394bf3ce13a08bd419c",
+		"buildHash": "f9098314df86d1a84f11e52f1902a2cb0528a9d473a3a0a0d902ff7dd6ee5009",
+		"runtimeVersions": {
+			"bun": "1.4.2",
+			"node": "v26.8.2"
+		},
+		"at": "2026-09-20T22:54:12.991Z",
+		"records": [
+			{
+				"label": "crust/source/bun",
+				"validInvocations": 36,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "commander/source/bun",
+				"validInvocations": 36,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "yargs/source/bun",
+				"validInvocations": 36,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "clipanion/source/bun",
+				"validInvocations": 36,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "cleye/source/bun",
+				"validInvocations": 36,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "argparse/source/bun",
+				"validInvocations": 36,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "stricli/source/bun",
+				"validInvocations": 36,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "arg/source/bun",
+				"validInvocations": 36,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "minimist/source/bun",
+				"validInvocations": 36,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "mri/source/bun",
+				"validInvocations": 36,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "yargs-parser/source/bun",
+				"validInvocations": 36,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "parse-args/source/bun",
+				"validInvocations": 36,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"runtime": "bun",
+				"probes": "cac/citty/sade/gunshi/cmd-ts limitations reproduced"
+			},
+			{
+				"label": "crust/source/node",
+				"validInvocations": 36,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "commander/source/node",
+				"validInvocations": 36,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "yargs/source/node",
+				"validInvocations": 36,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "clipanion/source/node",
+				"validInvocations": 36,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "cleye/source/node",
+				"validInvocations": 36,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "argparse/source/node",
+				"validInvocations": 36,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "stricli/source/node",
+				"validInvocations": 36,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "arg/source/node",
+				"validInvocations": 36,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "minimist/source/node",
+				"validInvocations": 36,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "mri/source/node",
+				"validInvocations": 36,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "yargs-parser/source/node",
+				"validInvocations": 36,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "parse-args/source/node",
+				"validInvocations": 36,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"runtime": "node",
+				"probes": "cac/citty/sade/gunshi/cmd-ts limitations reproduced"
+			},
+			{
+				"label": "crust/node-bundle/bun",
+				"validInvocations": 45,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "crust/node-bundle/node",
+				"validInvocations": 45,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "commander/node-bundle/bun",
+				"validInvocations": 45,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "commander/node-bundle/node",
+				"validInvocations": 45,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "yargs/node-bundle/bun",
+				"validInvocations": 45,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "yargs/node-bundle/node",
+				"validInvocations": 45,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "clipanion/node-bundle/bun",
+				"validInvocations": 45,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "clipanion/node-bundle/node",
+				"validInvocations": 45,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "cleye/node-bundle/bun",
+				"validInvocations": 45,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "cleye/node-bundle/node",
+				"validInvocations": 45,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "argparse/node-bundle/bun",
+				"validInvocations": 45,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "argparse/node-bundle/node",
+				"validInvocations": 45,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "stricli/node-bundle/bun",
+				"validInvocations": 45,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "stricli/node-bundle/node",
+				"validInvocations": 45,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "arg/node-bundle/bun",
+				"validInvocations": 45,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "arg/node-bundle/node",
+				"validInvocations": 45,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "minimist/node-bundle/bun",
+				"validInvocations": 45,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "minimist/node-bundle/node",
+				"validInvocations": 45,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "mri/node-bundle/bun",
+				"validInvocations": 45,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "mri/node-bundle/node",
+				"validInvocations": 45,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "yargs-parser/node-bundle/bun",
+				"validInvocations": 45,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "yargs-parser/node-bundle/node",
+				"validInvocations": 45,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "parse-args/node-bundle/bun",
+				"validInvocations": 45,
+				"invalidProcesses": 20,
+				"status": "passed"
+			},
+			{
+				"label": "parse-args/node-bundle/node",
+				"validInvocations": 45,
+				"invalidProcesses": 20,
+				"status": "passed"
+			}
+		],
+		"exclusions": [
+			{
+				"id": "cmd-ts",
+				"version": "0.15.0",
+				"reason": "Declarative option defaults/optional types treat explicit empty or missing option values as absent. Cannot meet this fixture's rejection contract without extra token inspection; not a claim about every public composition."
+			},
+			{
+				"id": "gunshi",
+				"version": "0.37.3",
+				"reason": "Normal entry reserves -v globally; config -v invokes version. Public addGlobalOption refuses replacement. No substitution with gunshi/bone or patch; probe retained."
+			},
+			{
+				"id": "cac",
+				"version": "7.0.0",
+				"reason": "Numeric-looking strings lose leading zeros before public array transforms. Cannot preserve --region 001 / --tag 002 under this text contract; native probe retained."
+			},
+			{
+				"id": "citty",
+				"version": "0.2.2",
+				"reason": "Repeated tags are overwritten; strict unknown-option rejection unavailable in this fixture. Reproducible source probe, not blanket runtime incompatibility."
+			},
+			{
+				"id": "sade",
+				"version": "1.8.1",
+				"reason": "Reserved -v version switch conflicts with config -v value in this chosen contract. Other aliases could work; no monkey patches."
+			},
+			{
+				"id": "oclif",
+				"version": "5.0.0 (surveyed, not installed)",
+				"reason": "Full framework requires discovery/package assets; official single-file bundling unsupported. Not substituted with parser-only API; no speed claim."
+			}
+		],
+		"failures": []
+	},
+	"libraries": [
+		{
+			"id": "crust",
+			"package": "@crustjs/core",
+			"kind": "framework (local)",
+			"async": true
+		},
+		{
+			"id": "commander",
+			"package": "commander",
+			"kind": "framework",
+			"async": false
+		},
+		{
+			"id": "yargs",
+			"package": "yargs",
+			"kind": "framework",
+			"async": false
+		},
+		{
+			"id": "clipanion",
+			"package": "clipanion",
+			"kind": "framework",
+			"async": true
+		},
+		{
+			"id": "cleye",
+			"package": "cleye",
+			"kind": "framework",
+			"async": true
+		},
+		{
+			"id": "argparse",
+			"package": "argparse",
+			"kind": "command parser",
+			"async": false
+		},
+		{
+			"id": "stricli",
+			"package": "@stricli/core",
+			"kind": "framework",
+			"async": true
+		},
+		{
+			"id": "arg",
+			"package": "arg",
+			"kind": "parser + routing glue",
+			"async": false
+		},
+		{
+			"id": "minimist",
+			"package": "minimist",
+			"kind": "parser + routing glue",
+			"async": false
+		},
+		{
+			"id": "mri",
+			"package": "mri",
+			"kind": "parser + routing glue",
+			"async": false
+		},
+		{
+			"id": "yargs-parser",
+			"package": "yargs-parser",
+			"kind": "parser + routing glue",
+			"async": false
+		},
+		{
+			"id": "parse-args",
+			"package": "node:util",
+			"kind": "runtime builtin + routing glue",
+			"async": false
+		}
+	],
+	"exclusions": [
+		{
+			"id": "cmd-ts",
+			"version": "0.15.0",
+			"reason": "Declarative option defaults/optional types treat explicit empty or missing option values as absent. Cannot meet this fixture's rejection contract without extra token inspection; not a claim about every public composition."
+		},
+		{
+			"id": "gunshi",
+			"version": "0.37.3",
+			"reason": "Normal entry reserves -v globally; config -v invokes version. Public addGlobalOption refuses replacement. No substitution with gunshi/bone or patch; probe retained."
+		},
+		{
+			"id": "cac",
+			"version": "7.0.0",
+			"reason": "Numeric-looking strings lose leading zeros before public array transforms. Cannot preserve --region 001 / --tag 002 under this text contract; native probe retained."
+		},
+		{
+			"id": "citty",
+			"version": "0.2.2",
+			"reason": "Repeated tags are overwritten; strict unknown-option rejection unavailable in this fixture. Reproducible source probe, not blanket runtime incompatibility."
+		},
+		{
+			"id": "sade",
+			"version": "1.8.1",
+			"reason": "Reserved -v version switch conflicts with config -v value in this chosen contract. Other aliases could work; no monkey patches."
+		},
+		{
+			"id": "oclif",
+			"version": "5.0.0 (surveyed, not installed)",
+			"reason": "Full framework requires discovery/package assets; official single-file bundling unsupported. Not substituted with parser-only API; no speed claim."
+		}
+	],
+	"orders": [
+		{
+			"phase": "warm",
+			"runtime": "bun",
+			"round": 0,
+			"ids": [
+				"mri",
+				"argparse",
+				"stricli",
+				"yargs-parser",
+				"minimist",
+				"commander",
+				"parse-args",
+				"arg",
+				"yargs",
+				"clipanion",
+				"crust",
+				"cleye"
+			]
+		},
+		{
+			"phase": "warm",
+			"runtime": "bun",
+			"round": 1,
+			"ids": [
+				"yargs-parser",
+				"mri",
+				"argparse",
+				"arg",
+				"minimist",
+				"stricli",
+				"clipanion",
+				"parse-args",
+				"yargs",
+				"crust",
+				"commander",
+				"cleye"
+			]
+		},
+		{
+			"phase": "warm",
+			"runtime": "bun",
+			"round": 2,
+			"ids": [
+				"yargs-parser",
+				"parse-args",
+				"minimist",
+				"argparse",
+				"stricli",
+				"crust",
+				"mri",
+				"commander",
+				"clipanion",
+				"arg",
+				"yargs",
+				"cleye"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": -2,
+			"ids": [
+				"yargs",
+				"empty-process",
+				"argparse",
+				"stricli",
+				"cleye",
+				"arg",
+				"commander",
+				"parse-args",
+				"mri",
+				"clipanion",
+				"crust",
+				"minimist",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": -1,
+			"ids": [
+				"yargs",
+				"argparse",
+				"empty-process",
+				"stricli",
+				"arg",
+				"parse-args",
+				"cleye",
+				"commander",
+				"crust",
+				"clipanion",
+				"minimist",
+				"mri",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 0,
+			"ids": [
+				"minimist",
+				"argparse",
+				"mri",
+				"commander",
+				"parse-args",
+				"yargs",
+				"crust",
+				"arg",
+				"stricli",
+				"clipanion",
+				"cleye",
+				"empty-process",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 1,
+			"ids": [
+				"mri",
+				"crust",
+				"stricli",
+				"arg",
+				"empty-process",
+				"yargs",
+				"minimist",
+				"argparse",
+				"clipanion",
+				"cleye",
+				"commander",
+				"parse-args",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 2,
+			"ids": [
+				"empty-process",
+				"arg",
+				"argparse",
+				"yargs",
+				"mri",
+				"commander",
+				"stricli",
+				"clipanion",
+				"parse-args",
+				"cleye",
+				"minimist",
+				"crust",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 3,
+			"ids": [
+				"crust",
+				"mri",
+				"clipanion",
+				"minimist",
+				"empty-process",
+				"arg",
+				"yargs",
+				"parse-args",
+				"stricli",
+				"cleye",
+				"argparse",
+				"commander",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 4,
+			"ids": [
+				"empty-process",
+				"minimist",
+				"stricli",
+				"yargs",
+				"cleye",
+				"crust",
+				"mri",
+				"arg",
+				"parse-args",
+				"argparse",
+				"commander",
+				"clipanion",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 5,
+			"ids": [
+				"arg",
+				"stricli",
+				"parse-args",
+				"clipanion",
+				"yargs",
+				"minimist",
+				"commander",
+				"empty-process",
+				"crust",
+				"argparse",
+				"mri",
+				"cleye",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 6,
+			"ids": [
+				"yargs",
+				"commander",
+				"crust",
+				"arg",
+				"minimist",
+				"empty-process",
+				"cleye",
+				"clipanion",
+				"mri",
+				"stricli",
+				"parse-args",
+				"argparse",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 7,
+			"ids": [
+				"commander",
+				"mri",
+				"cleye",
+				"minimist",
+				"empty-process",
+				"argparse",
+				"arg",
+				"crust",
+				"clipanion",
+				"parse-args",
+				"yargs",
+				"stricli",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 8,
+			"ids": [
+				"yargs",
+				"commander",
+				"minimist",
+				"parse-args",
+				"argparse",
+				"cleye",
+				"clipanion",
+				"empty-process",
+				"crust",
+				"stricli",
+				"mri",
+				"arg",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 9,
+			"ids": [
+				"crust",
+				"argparse",
+				"commander",
+				"clipanion",
+				"yargs",
+				"mri",
+				"parse-args",
+				"cleye",
+				"empty-process",
+				"arg",
+				"stricli",
+				"minimist",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 10,
+			"ids": [
+				"commander",
+				"stricli",
+				"argparse",
+				"crust",
+				"cleye",
+				"minimist",
+				"parse-args",
+				"yargs",
+				"empty-process",
+				"arg",
+				"clipanion",
+				"mri",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 11,
+			"ids": [
+				"cleye",
+				"stricli",
+				"commander",
+				"mri",
+				"yargs",
+				"clipanion",
+				"argparse",
+				"minimist",
+				"crust",
+				"arg",
+				"parse-args",
+				"empty-process",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 12,
+			"ids": [
+				"clipanion",
+				"empty-process",
+				"argparse",
+				"crust",
+				"cleye",
+				"yargs",
+				"commander",
+				"mri",
+				"stricli",
+				"minimist",
+				"arg",
+				"parse-args",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 13,
+			"ids": [
+				"stricli",
+				"mri",
+				"commander",
+				"parse-args",
+				"argparse",
+				"yargs",
+				"arg",
+				"cleye",
+				"empty-process",
+				"minimist",
+				"clipanion",
+				"crust",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 14,
+			"ids": [
+				"clipanion",
+				"stricli",
+				"arg",
+				"argparse",
+				"cleye",
+				"parse-args",
+				"minimist",
+				"yargs",
+				"empty-process",
+				"mri",
+				"crust",
+				"commander",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 15,
+			"ids": [
+				"cleye",
+				"minimist",
+				"empty-process",
+				"argparse",
+				"yargs",
+				"commander",
+				"parse-args",
+				"crust",
+				"stricli",
+				"mri",
+				"arg",
+				"clipanion",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 16,
+			"ids": [
+				"minimist",
+				"empty-process",
+				"yargs",
+				"commander",
+				"argparse",
+				"crust",
+				"arg",
+				"stricli",
+				"clipanion",
+				"mri",
+				"parse-args",
+				"cleye",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 17,
+			"ids": [
+				"clipanion",
+				"arg",
+				"parse-args",
+				"commander",
+				"stricli",
+				"minimist",
+				"yargs",
+				"cleye",
+				"mri",
+				"empty-process",
+				"crust",
+				"argparse",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 18,
+			"ids": [
+				"cleye",
+				"clipanion",
+				"commander",
+				"arg",
+				"mri",
+				"empty-process",
+				"argparse",
+				"yargs",
+				"parse-args",
+				"crust",
+				"minimist",
+				"stricli",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 19,
+			"ids": [
+				"minimist",
+				"stricli",
+				"parse-args",
+				"empty-process",
+				"yargs",
+				"argparse",
+				"commander",
+				"mri",
+				"clipanion",
+				"crust",
+				"cleye",
+				"arg",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 20,
+			"ids": [
+				"clipanion",
+				"argparse",
+				"mri",
+				"yargs",
+				"parse-args",
+				"arg",
+				"cleye",
+				"stricli",
+				"crust",
+				"empty-process",
+				"commander",
+				"minimist",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 21,
+			"ids": [
+				"clipanion",
+				"parse-args",
+				"empty-process",
+				"argparse",
+				"yargs",
+				"arg",
+				"crust",
+				"cleye",
+				"stricli",
+				"commander",
+				"minimist",
+				"mri",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 22,
+			"ids": [
+				"cleye",
+				"parse-args",
+				"commander",
+				"arg",
+				"crust",
+				"stricli",
+				"minimist",
+				"mri",
+				"clipanion",
+				"yargs",
+				"argparse",
+				"empty-process",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 23,
+			"ids": [
+				"empty-process",
+				"arg",
+				"cleye",
+				"argparse",
+				"mri",
+				"clipanion",
+				"stricli",
+				"minimist",
+				"crust",
+				"yargs",
+				"commander",
+				"parse-args",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 24,
+			"ids": [
+				"cleye",
+				"argparse",
+				"commander",
+				"clipanion",
+				"parse-args",
+				"arg",
+				"empty-process",
+				"minimist",
+				"stricli",
+				"yargs",
+				"mri",
+				"crust",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 25,
+			"ids": [
+				"crust",
+				"parse-args",
+				"arg",
+				"minimist",
+				"stricli",
+				"yargs",
+				"empty-process",
+				"cleye",
+				"mri",
+				"clipanion",
+				"argparse",
+				"commander",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 26,
+			"ids": [
+				"argparse",
+				"arg",
+				"cleye",
+				"mri",
+				"minimist",
+				"stricli",
+				"commander",
+				"empty-process",
+				"crust",
+				"parse-args",
+				"yargs",
+				"clipanion",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 27,
+			"ids": [
+				"mri",
+				"argparse",
+				"minimist",
+				"arg",
+				"yargs",
+				"commander",
+				"parse-args",
+				"crust",
+				"stricli",
+				"clipanion",
+				"empty-process",
+				"cleye",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 28,
+			"ids": [
+				"yargs",
+				"commander",
+				"minimist",
+				"mri",
+				"parse-args",
+				"arg",
+				"crust",
+				"empty-process",
+				"clipanion",
+				"cleye",
+				"stricli",
+				"argparse",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "bun",
+			"round": 29,
+			"ids": [
+				"yargs",
+				"arg",
+				"commander",
+				"argparse",
+				"parse-args",
+				"minimist",
+				"empty-process",
+				"mri",
+				"crust",
+				"cleye",
+				"clipanion",
+				"stricli",
+				"yargs-parser"
+			]
+		},
+		{
+			"phase": "warm",
+			"runtime": "node",
+			"round": 0,
+			"ids": [
+				"yargs",
+				"arg",
+				"stricli",
+				"commander",
+				"yargs-parser",
+				"parse-args",
+				"argparse",
+				"minimist",
+				"mri",
+				"cleye",
+				"crust",
+				"clipanion"
+			]
+		},
+		{
+			"phase": "warm",
+			"runtime": "node",
+			"round": 1,
+			"ids": [
+				"crust",
+				"yargs",
+				"arg",
+				"stricli",
+				"minimist",
+				"argparse",
+				"parse-args",
+				"mri",
+				"cleye",
+				"yargs-parser",
+				"commander",
+				"clipanion"
+			]
+		},
+		{
+			"phase": "warm",
+			"runtime": "node",
+			"round": 2,
+			"ids": [
+				"argparse",
+				"crust",
+				"parse-args",
+				"commander",
+				"mri",
+				"stricli",
+				"yargs-parser",
+				"arg",
+				"cleye",
+				"minimist",
+				"yargs",
+				"clipanion"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": -2,
+			"ids": [
+				"argparse",
+				"parse-args",
+				"yargs",
+				"clipanion",
+				"stricli",
+				"yargs-parser",
+				"arg",
+				"mri",
+				"crust",
+				"cleye",
+				"commander",
+				"empty-process",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": -1,
+			"ids": [
+				"cleye",
+				"commander",
+				"parse-args",
+				"clipanion",
+				"arg",
+				"empty-process",
+				"crust",
+				"yargs",
+				"stricli",
+				"argparse",
+				"mri",
+				"yargs-parser",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 0,
+			"ids": [
+				"cleye",
+				"commander",
+				"yargs",
+				"stricli",
+				"mri",
+				"crust",
+				"empty-process",
+				"arg",
+				"clipanion",
+				"yargs-parser",
+				"argparse",
+				"parse-args",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 1,
+			"ids": [
+				"commander",
+				"cleye",
+				"clipanion",
+				"empty-process",
+				"yargs-parser",
+				"arg",
+				"stricli",
+				"mri",
+				"parse-args",
+				"argparse",
+				"yargs",
+				"crust",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 2,
+			"ids": [
+				"arg",
+				"empty-process",
+				"parse-args",
+				"cleye",
+				"crust",
+				"argparse",
+				"yargs",
+				"clipanion",
+				"yargs-parser",
+				"stricli",
+				"mri",
+				"commander",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 3,
+			"ids": [
+				"mri",
+				"arg",
+				"empty-process",
+				"crust",
+				"parse-args",
+				"cleye",
+				"argparse",
+				"commander",
+				"clipanion",
+				"yargs-parser",
+				"stricli",
+				"yargs",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 4,
+			"ids": [
+				"yargs-parser",
+				"parse-args",
+				"mri",
+				"argparse",
+				"empty-process",
+				"cleye",
+				"commander",
+				"arg",
+				"crust",
+				"stricli",
+				"yargs",
+				"clipanion",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 5,
+			"ids": [
+				"commander",
+				"empty-process",
+				"mri",
+				"crust",
+				"yargs",
+				"clipanion",
+				"parse-args",
+				"argparse",
+				"stricli",
+				"arg",
+				"yargs-parser",
+				"cleye",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 6,
+			"ids": [
+				"cleye",
+				"yargs",
+				"parse-args",
+				"commander",
+				"yargs-parser",
+				"mri",
+				"crust",
+				"empty-process",
+				"clipanion",
+				"arg",
+				"stricli",
+				"argparse",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 7,
+			"ids": [
+				"parse-args",
+				"mri",
+				"cleye",
+				"arg",
+				"argparse",
+				"yargs",
+				"yargs-parser",
+				"commander",
+				"crust",
+				"empty-process",
+				"clipanion",
+				"stricli",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 8,
+			"ids": [
+				"argparse",
+				"cleye",
+				"clipanion",
+				"commander",
+				"crust",
+				"yargs",
+				"mri",
+				"parse-args",
+				"stricli",
+				"empty-process",
+				"yargs-parser",
+				"arg",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 9,
+			"ids": [
+				"crust",
+				"mri",
+				"cleye",
+				"yargs-parser",
+				"stricli",
+				"commander",
+				"yargs",
+				"argparse",
+				"clipanion",
+				"parse-args",
+				"arg",
+				"empty-process",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 10,
+			"ids": [
+				"stricli",
+				"arg",
+				"cleye",
+				"yargs",
+				"empty-process",
+				"commander",
+				"argparse",
+				"parse-args",
+				"crust",
+				"mri",
+				"clipanion",
+				"yargs-parser",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 11,
+			"ids": [
+				"empty-process",
+				"argparse",
+				"cleye",
+				"yargs",
+				"clipanion",
+				"yargs-parser",
+				"arg",
+				"commander",
+				"stricli",
+				"mri",
+				"crust",
+				"parse-args",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 12,
+			"ids": [
+				"empty-process",
+				"commander",
+				"stricli",
+				"yargs",
+				"argparse",
+				"parse-args",
+				"cleye",
+				"yargs-parser",
+				"clipanion",
+				"mri",
+				"arg",
+				"crust",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 13,
+			"ids": [
+				"stricli",
+				"yargs-parser",
+				"parse-args",
+				"yargs",
+				"clipanion",
+				"arg",
+				"empty-process",
+				"argparse",
+				"mri",
+				"crust",
+				"cleye",
+				"commander",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 14,
+			"ids": [
+				"yargs-parser",
+				"parse-args",
+				"cleye",
+				"empty-process",
+				"mri",
+				"argparse",
+				"arg",
+				"clipanion",
+				"stricli",
+				"crust",
+				"commander",
+				"yargs",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 15,
+			"ids": [
+				"crust",
+				"yargs",
+				"arg",
+				"argparse",
+				"yargs-parser",
+				"cleye",
+				"stricli",
+				"mri",
+				"parse-args",
+				"commander",
+				"empty-process",
+				"clipanion",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 16,
+			"ids": [
+				"stricli",
+				"mri",
+				"yargs-parser",
+				"clipanion",
+				"empty-process",
+				"parse-args",
+				"yargs",
+				"arg",
+				"crust",
+				"commander",
+				"argparse",
+				"cleye",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 17,
+			"ids": [
+				"yargs",
+				"crust",
+				"mri",
+				"cleye",
+				"empty-process",
+				"clipanion",
+				"arg",
+				"parse-args",
+				"stricli",
+				"yargs-parser",
+				"commander",
+				"argparse",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 18,
+			"ids": [
+				"cleye",
+				"parse-args",
+				"yargs-parser",
+				"argparse",
+				"crust",
+				"arg",
+				"commander",
+				"empty-process",
+				"clipanion",
+				"yargs",
+				"mri",
+				"stricli",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 19,
+			"ids": [
+				"stricli",
+				"yargs-parser",
+				"parse-args",
+				"empty-process",
+				"clipanion",
+				"mri",
+				"cleye",
+				"commander",
+				"crust",
+				"yargs",
+				"argparse",
+				"arg",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 20,
+			"ids": [
+				"commander",
+				"clipanion",
+				"argparse",
+				"cleye",
+				"parse-args",
+				"mri",
+				"crust",
+				"arg",
+				"stricli",
+				"yargs-parser",
+				"yargs",
+				"empty-process",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 21,
+			"ids": [
+				"arg",
+				"yargs",
+				"cleye",
+				"crust",
+				"stricli",
+				"commander",
+				"empty-process",
+				"argparse",
+				"parse-args",
+				"clipanion",
+				"mri",
+				"yargs-parser",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 22,
+			"ids": [
+				"arg",
+				"cleye",
+				"yargs",
+				"empty-process",
+				"argparse",
+				"commander",
+				"yargs-parser",
+				"mri",
+				"crust",
+				"clipanion",
+				"stricli",
+				"parse-args",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 23,
+			"ids": [
+				"mri",
+				"empty-process",
+				"argparse",
+				"arg",
+				"clipanion",
+				"parse-args",
+				"yargs-parser",
+				"commander",
+				"stricli",
+				"cleye",
+				"yargs",
+				"crust",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 24,
+			"ids": [
+				"yargs",
+				"stricli",
+				"empty-process",
+				"mri",
+				"parse-args",
+				"crust",
+				"argparse",
+				"arg",
+				"clipanion",
+				"cleye",
+				"yargs-parser",
+				"commander",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 25,
+			"ids": [
+				"parse-args",
+				"mri",
+				"empty-process",
+				"yargs-parser",
+				"clipanion",
+				"arg",
+				"commander",
+				"argparse",
+				"crust",
+				"cleye",
+				"stricli",
+				"yargs",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 26,
+			"ids": [
+				"yargs",
+				"crust",
+				"arg",
+				"empty-process",
+				"commander",
+				"mri",
+				"cleye",
+				"yargs-parser",
+				"stricli",
+				"argparse",
+				"parse-args",
+				"clipanion",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 27,
+			"ids": [
+				"arg",
+				"stricli",
+				"mri",
+				"yargs",
+				"empty-process",
+				"parse-args",
+				"crust",
+				"commander",
+				"clipanion",
+				"argparse",
+				"yargs-parser",
+				"cleye",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 28,
+			"ids": [
+				"empty-process",
+				"stricli",
+				"mri",
+				"yargs",
+				"commander",
+				"cleye",
+				"clipanion",
+				"yargs-parser",
+				"crust",
+				"parse-args",
+				"arg",
+				"argparse",
+				"minimist"
+			]
+		},
+		{
+			"phase": "startup",
+			"runtime": "node",
+			"round": 29,
+			"ids": [
+				"commander",
+				"crust",
+				"yargs-parser",
+				"yargs",
+				"arg",
+				"clipanion",
+				"empty-process",
+				"argparse",
+				"mri",
+				"parse-args",
+				"cleye",
+				"stricli",
+				"minimist"
+			]
+		}
+	],
+	"warm": [
+		{
+			"runtime": "bun",
+			"id": "mri",
+			"round": 0,
+			"samplesNs": [
+				3910.3499999999985, 4051.5166666666682, 3855.9466666666667, 3847.8300000000054,
+				3448.8066666666723
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "argparse",
+			"round": 0,
+			"samplesNs": [
+				121694.09000000003, 126638.93333333333, 121143.71000000005, 127187.97666666679,
+				115901.9699999999
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "stricli",
+			"round": 0,
+			"samplesNs": [
+				147751.10333333336, 149889.13000000006, 145164.89999999994, 141016.20000000007,
+				133617.60333333336
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "yargs-parser",
+			"round": 0,
+			"samplesNs": [
+				15572.566666666673, 15129.693333333355, 18193.10333333334, 15088.116666666663, 18098.19
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "minimist",
+			"round": 0,
+			"samplesNs": [
+				8721.673333333334, 5680.169999999999, 4616.9200000000055, 4016.583333333336,
+				5133.236666666671
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "commander",
+			"round": 0,
+			"samplesNs": [
+				13504.076666666668, 13861.18666666666, 14860.78333333334, 14900.090000000006,
+				14982.68333333333
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "parse-args",
+			"round": 0,
+			"samplesNs": [
+				3175.690000000001, 2905.7433333333374, 2674.973333333336, 3003.1966666666676,
+				3006.7366666666653
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "arg",
+			"round": 0,
+			"samplesNs": [
+				2870.376666666665, 2936.8699999999967, 2895.4933333333347, 2889.0466666666666,
+				1876.4599999999969
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "yargs",
+			"round": 0,
+			"samplesNs": [
+				726139.1033333336, 725758.2466666668, 706369.1433333331, 704105.8166666669,
+				731943.6433333332
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "clipanion",
+			"round": 0,
+			"samplesNs": [
+				58758.936666666705, 66108.1733333333, 69767.50999999998, 61399.176666666615,
+				60170.843333333345
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "crust",
+			"round": 0,
+			"samplesNs": [
+				61143.956666666665, 56557.459999999985, 61702.91999999999, 54559.66999999996,
+				54147.089999999975
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "cleye",
+			"round": 0,
+			"samplesNs": [
+				7849.3200000000015, 8754.303333333317, 6636.550000000009, 6457.176666666674,
+				7388.013333333324
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "yargs-parser",
+			"round": 1,
+			"samplesNs": [
+				14814.22666666667, 14936.626666666654, 18006.950000000023, 14901.22666666667,
+				15302.020000000002
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "mri",
+			"round": 1,
+			"samplesNs": [
+				4016.586666666662, 4017.620000000003, 3894.786666666666, 3856.3800000000015,
+				3753.3166666666652
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "argparse",
+			"round": 1,
+			"samplesNs": [
+				126225.45000000003, 126776.89666666662, 119487.30666666657, 122784.28999999998,
+				114434.88666666667
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "arg",
+			"round": 1,
+			"samplesNs": [
+				2983.4233333333354, 2893.4200000000014, 2908.7833333333356, 2984.393333333332,
+				1697.8866666666668
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "minimist",
+			"round": 1,
+			"samplesNs": [
+				8869.686666666663, 5546.049999999998, 4660.839999999997, 3976.1399999999962,
+				5213.823333333339
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "stricli",
+			"round": 1,
+			"samplesNs": [
+				145630.42000000004, 145935.4966666667, 144496.03333333338, 138031.50666666662,
+				130872.52999999996
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "clipanion",
+			"round": 1,
+			"samplesNs": [
+				57540.09000000001, 64779.050000000025, 72978.09999999999, 60751.24666666672,
+				56443.643333333384
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "parse-args",
+			"round": 1,
+			"samplesNs": [
+				2724.4999999999977, 2612.0200000000023, 2612.523333333332, 2641.7433333333365,
+				2640.006666666667
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "yargs",
+			"round": 1,
+			"samplesNs": [
+				735628.6299999999, 718923.2833333336, 706599.8799999997, 699055.5400000002,
+				731451.1433333337
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "crust",
+			"round": 1,
+			"samplesNs": [
+				60820.24333333332, 56223.760000000024, 68109.73666666663, 58389.29999999995,
+				55157.17000000004
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "commander",
+			"round": 1,
+			"samplesNs": [
+				13098.673333333343, 15263.780000000012, 14715.273333333344, 14812.923333333336,
+				14966.816666666673
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "cleye",
+			"round": 1,
+			"samplesNs": [
+				7790.506666666665, 9324.949999999983, 6838.303333333352, 6554.663333333342,
+				7558.666666666648
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "yargs-parser",
+			"round": 2,
+			"samplesNs": [
+				15309.266666666657, 15122.879999999981, 18049.83333333335, 15306.996666666682,
+				15919.389999999987
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "parse-args",
+			"round": 2,
+			"samplesNs": [
+				5337.32333333333, 3125.5266666666694, 2575.719999999997, 2600.599999999999,
+				2645.316666666666
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "minimist",
+			"round": 2,
+			"samplesNs": [
+				8613.166666666664, 5650.2466666666605, 4524.346666666664, 3881.226666666665,
+				5318.553333333327
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "argparse",
+			"round": 2,
+			"samplesNs": [
+				120216.05333333326, 122032.83, 119482.16333333336, 119628.83999999992, 120080.59333333335
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "stricli",
+			"round": 2,
+			"samplesNs": [
+				147812.82333333336, 146800.40333333344, 145781.50333333344, 140203.5566666668,
+				131719.43666666682
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "crust",
+			"round": 2,
+			"samplesNs": [
+				61486.37333333331, 57268.34333333333, 66222.9233333333, 58362.15, 56289.216666666754
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "mri",
+			"round": 2,
+			"samplesNs": [
+				4043.1, 4014.6800000000007, 4064.373333333335, 3952.5633333333294, 3651.8899999999967
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "commander",
+			"round": 2,
+			"samplesNs": [
+				12836.843333333334, 15859.709999999985, 14977.673333333334, 15497.756666666666,
+				15973.626666666667
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "clipanion",
+			"round": 2,
+			"samplesNs": [
+				66732.52, 68815.30666666673, 71157.54999999997, 65529.80666666666, 58136.886666666695
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "arg",
+			"round": 2,
+			"samplesNs": [
+				3176.1233333333353, 3010.043333333332, 2878.3933333333366, 2046.2133333333318,
+				1725.7733333333351
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "yargs",
+			"round": 2,
+			"samplesNs": [
+				721195.7933333335, 712223.6466666664, 687959.8299999998, 700955.4766666663,
+				730552.9733333334
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "cleye",
+			"round": 2,
+			"samplesNs": [
+				7807.940000000001, 9938.479999999998, 6819.333333333332, 6471.640000000012,
+				7318.9800000000105
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "yargs",
+			"round": 0,
+			"samplesNs": [
+				1365734.1399999997, 1423078.2233333336, 1359352.7399999993, 1378527.939999999,
+				1291941.093333333
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "arg",
+			"round": 0,
+			"samplesNs": [
+				2255.676666666678, 2043.8433333333232, 2731.5133333333347, 2541.520000000001,
+				2367.3900000000003
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "stricli",
+			"round": 0,
+			"samplesNs": [
+				277299.82333333336, 272346.86333333346, 276412.37333333323, 308056.823333333,
+				264351.7999999999
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "commander",
+			"round": 0,
+			"samplesNs": [
+				14818.870000000003, 15369.483333333324, 14808.51666666671, 14589.536666666685,
+				14374.993333333348
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "yargs-parser",
+			"round": 0,
+			"samplesNs": [
+				43238.99999999999, 43793.71999999999, 43560.27999999999, 43726.22666666671,
+				42628.043333333306
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "parse-args",
+			"round": 0,
+			"samplesNs": [
+				6480.923333333331, 6274.43333333332, 7053.3766666666515, 6254.1600000000135,
+				6140.110000000002
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "argparse",
+			"round": 0,
+			"samplesNs": [
+				342021.9999999998, 335697.13999999996, 336131.6633333335, 358815.28, 325858.0133333332
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "minimist",
+			"round": 0,
+			"samplesNs": [
+				6668.646666666689, 7556.933333333357, 7042.153333333327, 6911.2733333333645,
+				6878.746666666681
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "mri",
+			"round": 0,
+			"samplesNs": [
+				3415.243333333322, 3414.976666666642, 3571.1066666666607, 3382.8833333333346,
+				3417.6466666666743
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "cleye",
+			"round": 0,
+			"samplesNs": [
+				14110.559999999972, 14761.49666666667, 14030.009999999984, 15211.383333333355,
+				14003.223333333352
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "crust",
+			"round": 0,
+			"samplesNs": [
+				65556.72666666661, 92417.83333333331, 63835.65999999992, 61684.9533333334, 64183.88666666668
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "clipanion",
+			"round": 0,
+			"samplesNs": [
+				91826.71333333332, 91529.04666666672, 94932.97000000003, 115289.14333333338,
+				85708.87666666672
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "crust",
+			"round": 1,
+			"samplesNs": [
+				66655.54333333328, 88760.06333333332, 63919.65666666664, 63959.69666666663,
+				68724.49999999996
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "yargs",
+			"round": 1,
+			"samplesNs": [
+				1331096.5166666664, 1349669.2733333332, 1298989.930000001, 1313560.5933333333,
+				1383943.9399999992
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "arg",
+			"round": 1,
+			"samplesNs": [
+				2288.673333333312, 2370.7633333333433, 2013.4199999999682, 2864.9333333333498,
+				2448.44333333333
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "stricli",
+			"round": 1,
+			"samplesNs": [
+				269674.7966666667, 268876.3499999999, 270498.6599999999, 305833.7700000001,
+				268246.8233333331
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "minimist",
+			"round": 1,
+			"samplesNs": [
+				6687.083333333324, 7529.546666666676, 6789.776666666635, 6801.563333333339,
+				6912.0066666666935
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "argparse",
+			"round": 1,
+			"samplesNs": [337365.67, 334219.4366666666, 337773.1766666667, 376892.63333333354, 313018.16]
+		},
+		{
+			"runtime": "node",
+			"id": "parse-args",
+			"round": 1,
+			"samplesNs": [
+				6131.493333333348, 6162.453333333341, 6970.053333333321, 6195.016666666646,
+				6186.233333333319
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "mri",
+			"round": 1,
+			"samplesNs": [
+				3509.290000000007, 3450.910000000012, 3824.7866666666637, 3494.830000000017,
+				6930.843333333314
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "cleye",
+			"round": 1,
+			"samplesNs": [
+				14400.276666666703, 14581.320000000016, 14314.816666666655, 15336.250000000005,
+				14113.66666666666
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "yargs-parser",
+			"round": 1,
+			"samplesNs": [
+				43418.47333333334, 43981.243333333325, 43938.0966666666, 44246.3433333333,
+				43371.453333333346
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "commander",
+			"round": 1,
+			"samplesNs": [
+				14845.75666666667, 15483.763333333323, 14868.566666666678, 14481.66333333333,
+				14109.42666666666
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "clipanion",
+			"round": 1,
+			"samplesNs": [
+				99543.58000000003, 97163.60333333332, 95697.68666666675, 113300.54, 86460.70333333341
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "argparse",
+			"round": 2,
+			"samplesNs": [
+				331938.67666666675, 336009.8000000001, 327257.2666666667, 362359.56999999983,
+				327910.3033333331
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "crust",
+			"round": 2,
+			"samplesNs": [
+				66392.14333333333, 89965.68333333329, 71652.62000000004, 61044.4666666667, 65100.29333333326
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "parse-args",
+			"round": 2,
+			"samplesNs": [
+				6387.213333333316, 7001.81333333333, 8998.329999999964, 6004.053333333369, 6031.103333333334
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "commander",
+			"round": 2,
+			"samplesNs": [
+				14636.390000000007, 15607.30000000002, 15214.086666666683, 14472.54666666666,
+				13943.276666666643
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "mri",
+			"round": 2,
+			"samplesNs": [
+				3476.226666666662, 3431.3733333333357, 3921.803333333334, 3461.9333333333675,
+				3498.733333333348
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "stricli",
+			"round": 2,
+			"samplesNs": [
+				272314.93666666665, 273149.01666666666, 268704.08666666684, 300274.2600000003,
+				264365.0599999997
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "yargs-parser",
+			"round": 2,
+			"samplesNs": [
+				43030.97333333336, 43337.25333333334, 43321.62333333334, 43540.34000000003,
+				42636.16000000004
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "arg",
+			"round": 2,
+			"samplesNs": [
+				2300.3633333333323, 2040.2366666666674, 2209.290000000029, 2702.290000000005,
+				2433.2800000000057
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "cleye",
+			"round": 2,
+			"samplesNs": [
+				14574.47666666667, 14562.516666666692, 14472.946666666692, 15559.073333333326,
+				13946.883333333346
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "minimist",
+			"round": 2,
+			"samplesNs": [
+				6673.723333333328, 7788.803333333333, 6922.56333333333, 6690.990000000028, 6857.406666666653
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "yargs",
+			"round": 2,
+			"samplesNs": [
+				1310815.8200000003, 1393298.0800000003, 1310500.72, 1309568.79, 1360631.4599999995
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "clipanion",
+			"round": 2,
+			"samplesNs": [
+				90410.42666666661, 93612.87000000005, 89832.9666666666, 115405.66333333326,
+				85004.67666666661
+			]
+		}
+	],
+	"startup": [
+		{
+			"runtime": "bun",
+			"id": "crust",
+			"samplesMs": [
+				18.003242999999202, 17.198074999998425, 18.720201999998608, 18.2552510000005,
+				19.095825000000332, 17.853778999999122, 19.36063699999977, 17.289780000000974,
+				18.70670699999937, 19.35675900000024, 17.708473999999114, 17.790890000000218,
+				17.970780999999988, 17.650703999999678, 17.578817999999956, 18.7374149999996,
+				18.961510000001, 18.114674000000377, 18.883230999999796, 19.36146800000097,
+				18.57651000000078, 18.78309099999933, 18.004736000000776, 18.810193000001163,
+				19.02994000000035, 19.312094999999317, 19.9801120000011, 18.305876999998873,
+				17.540834999999788, 19.200854000000618
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "commander",
+			"samplesMs": [
+				15.5196219999998, 15.792309999998906, 15.992489000000205, 15.200377000001026,
+				14.780770999999731, 14.211782000000312, 14.155235000000175, 13.914068000000043,
+				16.477629999999408, 15.328750000000582, 14.661936000000424, 13.360486999999921,
+				13.570245000000796, 14.344974999999977, 16.909467999999833, 13.852621, 15.37489800000003,
+				14.055376000000251, 14.247750000000451, 13.443174999998519, 14.687234000000899,
+				15.768313999999009, 14.896511000000828, 16.188491000000795, 13.962509999999384,
+				15.946611999999732, 13.818406000000323, 16.662249999999403, 16.521402000000307,
+				16.447792000000845
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "yargs",
+			"samplesMs": [
+				34.43074700000034, 34.62318199999936, 35.32196699999986, 32.359528999999384,
+				34.11670199999935, 34.21973699999944, 34.43957399999999, 34.337790999999925,
+				35.85078000000067, 33.64067900000009, 33.67639700000109, 34.61904399999912,
+				33.83571800000027, 35.66004799999973, 35.491658999999345, 34.467625999999655,
+				33.772398999999496, 34.624173999998675, 33.260849000000235, 33.73457700000108,
+				36.390542999999525, 34.41190099999949, 33.404891000000134, 35.51029400000152,
+				33.80625200000031, 35.081600999999864, 32.386640999999145, 33.85585600000013,
+				34.08581199999935, 35.30592699999943
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "clipanion",
+			"samplesMs": [
+				19.984599999999773, 20.22284199999922, 21.340571999999156, 20.040194999999585, 19.845867,
+				20.50709199999983, 19.27597699999933, 20.988022999999885, 20.371634999999515,
+				19.24655100000018, 20.059612999999445, 21.082612999998673, 19.538974999999482,
+				19.898646999999983, 20.612160000000586, 19.870264000001043, 20.23027700000057,
+				20.037781000000905, 19.222254000000248, 20.196892999998454, 19.946709000001647,
+				19.30661500000133, 20.231398000001718, 20.53575600000113, 19.46906200000012,
+				20.70075799999904, 21.14865699999973, 19.10316899999998, 20.253569999998945,
+				20.512822000000597
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "cleye",
+			"samplesMs": [
+				21.217468000000736, 17.959921000001486, 18.61025399999926, 19.637211999999636,
+				18.645590999998603, 18.33426099999997, 18.390266000000338, 20.533391000000847,
+				17.527210000000196, 18.33795800000007, 18.665688999999475, 19.421252000000095,
+				19.164896000000226, 18.525081999998292, 19.234887999999046, 18.03968200000054,
+				19.030760999999984, 17.70629899999949, 18.612918999999238, 18.997197999999116,
+				17.80994600000122, 19.073292000000947, 18.206066999999166, 20.470712000000276,
+				18.424371000000974, 19.31564200000139, 18.302590000001146, 19.10684500000025,
+				19.42152199999873, 18.437535999999454
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "argparse",
+			"samplesMs": [
+				21.81488200000058, 23.76401799999985, 21.46974599999885, 22.4196179999999,
+				21.317869000000428, 21.624299999999494, 20.0095280000005, 21.701936999999816,
+				22.06649799999832, 20.91639700000087, 23.42401299999983, 20.387313999999606,
+				22.37646599999971, 20.966522000000623, 22.20343800000046, 21.290947999999844,
+				21.083715000000666, 22.10658400000102, 20.331147999999303, 22.13428699999895,
+				20.9664619999985, 20.760691999999835, 21.235752999999022, 21.59479300000021,
+				22.28572399999939, 20.27918899999895, 22.185503999999128, 22.65816099999938,
+				22.229557999999088, 21.58575699999892
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "stricli",
+			"samplesMs": [
+				17.948790000000372, 17.676472999999532, 18.929478999998537, 18.564417000001413,
+				17.10684299999957, 17.13806199999999, 18.811665999999605, 18.076591999999437,
+				18.00548600000002, 17.390190000000075, 18.200838000000658, 17.613593999998557,
+				20.157858999999007, 18.359497999999803, 18.153267000001506, 17.80253100000118,
+				18.355580999999802, 17.86576199999945, 17.188136999999188, 17.9088040000006,
+				18.34933899999851, 18.553014999999505, 17.158862000000227, 18.995043999999325,
+				17.98440699999992, 17.644963000000644, 17.195911999999225, 17.030407000000196,
+				19.45079700000133, 17.7284209999998
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "arg",
+			"samplesMs": [
+				7.559266000000207, 6.735382999999274, 7.344076999999743, 7.159879000000728,
+				7.599883000000773, 6.796298999999635, 6.877652999999555, 6.974546999999802,
+				6.9589169999999285, 6.873825999999099, 8.487085000000661, 6.808441999999559,
+				7.033418000000893, 6.914543000000776, 7.080878999999186, 6.010840000000826,
+				7.392509000001155, 7.632415000000037, 7.485907000000225, 7.458715000000666,
+				7.466290000000299, 7.544557999999597, 8.116613000000143, 6.98315299999922,
+				6.102403000000777, 7.457032000000254, 6.3997569999992265, 6.434933999998975,
+				7.337475000000268, 8.058933000000252
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "minimist",
+			"samplesMs": [
+				7.577349999999569, 7.777879999999641, 8.214417999999569, 6.804204000000027,
+				7.152304000001095, 7.196097000000009, 7.5654279999998835, 6.946083000000726,
+				7.4607190000006085, 7.708989999999176, 7.459356000001208, 7.3228780000008555,
+				7.909119000001738, 7.224591000000146, 7.86221999999907, 6.9469349999999395,
+				7.097720000001573, 8.043464000000313, 7.9123449999988225, 7.494002999999793,
+				7.4210539999985485, 7.146372999999585, 8.391754999998739, 7.655507999999827,
+				7.196036999999706, 8.456899000000703, 7.704560999998648, 7.600595000001704,
+				7.076830999998492, 6.932918000000427
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "mri",
+			"samplesMs": [
+				7.595495000001392, 7.270797999999559, 7.4621509999997215, 7.7339369999990595,
+				7.1165060000002995, 8.206583000001046, 9.616276999999172, 8.633092000000033,
+				6.430876000000353, 7.36296399999992, 6.755191000000195, 6.716387999998915,
+				8.196052999999665, 7.92705400000159, 7.487428999998883, 6.908811999999671,
+				7.227036000000226, 7.273744999998598, 7.1405620000005, 7.8513699999984965,
+				6.974475999999413, 7.698589999999967, 7.538566999999603, 6.876811999998608,
+				6.99365299999954, 6.92161600000145, 6.924031999998988, 7.699972999998863,
+				7.9692529999992985, 7.273054000001139
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "yargs-parser",
+			"samplesMs": [
+				13.721412999999302, 13.981685999999172, 13.516703999999663, 13.632153000000471,
+				13.685524000000441, 11.284951000001456, 12.630363000000216, 13.50394999999844,
+				13.68441200000052, 13.929678000000422, 12.57787400000052, 13.49902099999963,
+				11.026040999999168, 13.425011000001177, 13.208159000001615, 12.591209000000163,
+				14.167809000000489, 13.943382999999812, 13.622263999999632, 13.788649000000078,
+				13.326554000001124, 12.016499000001204, 14.224908000000141, 11.755103000001327,
+				14.531439000000319, 11.783366999999998, 13.978118999999424, 13.857250000000931,
+				14.449092000000746, 12.811295999999857
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "parse-args",
+			"samplesMs": [
+				8.523704999999609, 8.660734999999477, 8.556155999998737, 8.550866999999926,
+				7.850367999999435, 8.769180999999662, 7.9964749999999185, 8.823354000000108,
+				10.710221999999703, 8.375293999999485, 8.925757999999405, 8.061868999999206,
+				7.604240999999092, 9.111159000000043, 8.562840000000506, 8.021271999999954,
+				8.227813999999853, 8.562840000000506, 8.302025000000867, 8.754462999999305,
+				7.939436999999089, 8.273841000000175, 9.356633999999758, 8.419216000000233,
+				8.509116999999605, 9.73615400000017, 8.308006000001114, 9.252838000000338,
+				8.301453000000038, 9.165392000000793
+			]
+		},
+		{
+			"runtime": "bun",
+			"id": "empty-process",
+			"samplesMs": [
+				4.753505000000587, 4.516696000000593, 4.437175000000934, 4.983451000000059,
+				4.670106999999916, 3.8697990000000573, 4.612186999998812, 4.180126999999629,
+				5.16031600000133, 4.277932999999393, 4.559176000000662, 4.200104999999894,
+				4.120484999999462, 5.000152999999045, 4.051312999999936, 4.143658000000869,
+				3.435966000000917, 4.431595000000016, 3.9536580000003596, 4.188342999999804,
+				4.209453999999823, 4.2528349999993225, 4.869324999999662, 5.332753999999113,
+				4.651692000001276, 3.8541090000016993, 4.511434999998528, 4.406407000000399,
+				4.5327459999989514, 5.03537900000083
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "crust",
+			"samplesMs": [
+				44.87930200000119, 45.21384699999908, 42.42139099999622, 43.56322600000567,
+				45.90234200000123, 41.14621199999965, 46.5272380000024, 42.27619599999889,
+				42.96192600000359, 41.445951000001514, 42.17990300000383, 40.29102000000421,
+				46.847475000002305, 46.61031499999808, 41.297379000003275, 41.59578500000498,
+				41.13878800000384, 36.95820000000094, 43.075019999996584, 43.43846000000485,
+				44.557622000000265, 43.04236900000251, 43.452847000000475, 42.665774000000965,
+				40.934391000002506, 41.0674330000038, 47.449516000000585, 42.464742999996815,
+				40.360852999998315, 41.257683999996516
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "commander",
+			"samplesMs": [
+				48.119377000002714, 40.30066899999656, 42.57158499999787, 45.43710999999894,
+				46.758927000002586, 44.40090500000224, 45.78562100000272, 43.66941699999734,
+				45.07697699999699, 44.48736800000188, 43.3070299999963, 41.391216999996686,
+				43.99598700000206, 44.18467499999679, 41.99927000000025, 41.332877000000735,
+				40.54294800000207, 41.79540399999678, 44.643825999999535, 44.77850100000069,
+				42.71542799999588, 41.96929399999499, 41.58339100000012, 44.17054800000187,
+				45.54859099999885, 43.603573000000324, 40.547616999996535, 44.37316199999623,
+				45.896982000005664, 43.51249999999709
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "yargs",
+			"samplesMs": [
+				80.9493780000048, 76.63892300000589, 81.8787799999991, 75.57033699999738, 81.10012400000414,
+				77.98314199999731, 75.62179399999877, 79.9410760000028, 79.93044500000542,
+				81.50859800000035, 80.98556700000336, 79.36701700000413, 76.60802500000136,
+				79.15198899999814, 79.66157500000554, 83.10800200000085, 78.72822599999927,
+				75.84772299999895, 80.11619799999607, 76.08377000000473, 78.0714300000036, 81.0325559999983,
+				75.73764400000073, 83.56061000000045, 75.65522799999599, 77.84637300000031,
+				80.34768700000132, 80.68845300000248, 78.51498100000026, 79.54533500000252
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "clipanion",
+			"samplesMs": [
+				45.61665999999968, 44.555027000002156, 47.59773700000369, 45.73804100000416,
+				45.70567000000301, 47.392288000002736, 43.87647999999899, 44.89347899999848,
+				43.32682800000475, 46.86414700000023, 46.04385100000218, 42.50641199999518,
+				47.051660999997694, 43.83277700000326, 46.096921999996994, 43.92619500000001,
+				45.335666999999376, 45.27747700000327, 44.192168999994465, 44.097438999997394,
+				43.190608999997494, 44.4741439999998, 45.88029999999708, 44.7850929999986,
+				44.85157900000195, 43.59540800000104, 46.497581000003265, 45.52391500000522,
+				44.60987100000057, 44.83256400000391
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "cleye",
+			"samplesMs": [
+				44.21811799999705, 43.29331500000262, 43.97585899999831, 49.18169199999829,
+				46.8568030000024, 44.208801000000676, 46.364738999996916, 45.618333000005805,
+				45.72567700000218, 45.178280000000086, 44.58479300000181, 46.23918099999719,
+				44.01680599999963, 44.30460199999652, 44.34923700000218, 48.11653200000001,
+				46.13185800000065, 43.507580000004964, 45.36670699999377, 43.06036299999687,
+				45.35770000000048, 46.85183299999335, 42.13525799999479, 44.89400000000023,
+				46.551612999995996, 44.68541399999958, 42.74641700000211, 45.21479900000122,
+				46.37665200000629, 43.661041999999725
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "argparse",
+			"samplesMs": [
+				42.59603200000129, 45.57288700000208, 44.59154600000329, 40.806939000001876,
+				42.048783999998705, 42.70769399999699, 38.516555999995035, 41.67583599999489,
+				45.44653799999651, 43.7622429999974, 47.30298899999616, 43.640854000004765,
+				42.776623999998264, 44.150118999998085, 43.35781699999643, 46.454579999997804,
+				46.963896000001114, 42.227962999997544, 45.458850999995775, 44.832493000001705,
+				41.15365600000223, 42.53645900000265, 47.35721200000262, 45.54848100000527,
+				49.21081600000616, 44.641341000002285, 43.75731399999495, 43.97117900000012,
+				41.31865000000107, 44.7072960000005
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "stricli",
+			"samplesMs": [
+				42.62298299999384, 41.98625499999616, 43.26705499999662, 43.01913400000194,
+				34.30679099999543, 38.558844999999565, 39.030519999992975, 40.317440999999235,
+				44.49690700000065, 36.49493100000109, 40.08203399999911, 40.219334000001254,
+				43.439972000000125, 36.75726900000154, 38.49761900000158, 40.88688099999854,
+				40.99825199999759, 39.08901099999639, 43.15944000000309, 37.236878000003344,
+				40.685599000004004, 42.74836099999811, 40.02486599999975, 36.40833799999382,
+				42.78622199999518, 37.293376000001444, 37.70501599999989, 39.17996299999504,
+				40.52935199999774, 38.18882300000405
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "arg",
+			"samplesMs": [
+				30.28801999999996, 32.61392100000376, 32.70956300000398, 31.462909000001673,
+				31.47400000000198, 31.073279999996885, 32.48675999999978, 32.51076599999942,
+				32.189776999999594, 30.89386899999954, 33.83319299999857, 34.156267000005755,
+				33.80082299999776, 30.497086000003037, 31.53337200000533, 32.428789999998116,
+				32.756642000000284, 30.21285699999862, 30.620039999994333, 31.82681799999409,
+				31.183439000000362, 32.6368650000004, 31.516369000004488, 31.13942500000121,
+				31.343190999999933, 32.67674999999872, 32.58752100000129, 32.604913999995915,
+				32.44602200000372, 30.3338769999973
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "minimist",
+			"samplesMs": [
+				33.48452199999883, 32.00566799999797, 33.16676000000007, 32.561250999999174,
+				32.20528600000398, 31.162928999998257, 33.19180700000288, 31.533912999999302,
+				33.68210700000054, 33.42261499999586, 29.96577900000557, 34.05948300000455,
+				32.83279599999514, 31.831877999997232, 32.13103499999852, 31.797252999997,
+				32.16498999999749, 31.38016200000129, 31.286613999996916, 31.31806399999914,
+				32.09167100000195, 36.129829000004975, 33.57746799999586, 31.414836999996623,
+				31.56208599999809, 31.455173000002105, 32.128741000000446, 34.55963099999644,
+				32.646623000000545, 30.953181000004406
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "mri",
+			"samplesMs": [
+				30.646749999999884, 31.44484399999783, 32.756171000000904, 31.415869000004022,
+				32.776740000001155, 37.78093000000081, 31.6654320000016, 31.43048600000475,
+				31.014007000005222, 30.50693599999795, 30.521653999996488, 32.16846600000281,
+				32.08680199999799, 32.40104799999972, 30.149578000004112, 32.27805499999522,
+				31.51179100000445, 30.059416999996756, 32.140433000000485, 32.21360200000345,
+				31.080843999996432, 31.598675999994157, 30.493640000000596, 29.634811000003538,
+				32.412538999997196, 31.7707819999996, 32.556822999998985, 36.687447000003885,
+				31.469559999997728, 34.37037199999759
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "yargs-parser",
+			"samplesMs": [
+				38.79115599999932, 34.4118610000005, 36.00812800000131, 36.59579300000041,
+				36.17107699999906, 34.72294099999999, 34.69713200000115, 36.053254000005836,
+				34.00884699999733, 35.618820000003325, 36.39553299999534, 35.01561600000423,
+				37.898423000006005, 37.34440299999551, 36.40180400000099, 39.10518199999933,
+				34.798603999995976, 37.86005000000296, 34.01785400000517, 33.66670800000429,
+				37.23649799999839, 38.37744200000452, 39.25257099999726, 36.58868899999652,
+				35.869213999998465, 36.07031600000482, 36.43499700000393, 34.4581079999989,
+				38.65333400000236, 37.83188700000028
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "parse-args",
+			"samplesMs": [
+				30.62762500000099, 32.29063799999858, 31.17263799999637, 32.021787999998196,
+				35.518660000001546, 31.885889999997744, 34.034756000000925, 33.513106999998854,
+				31.594879000003857, 33.18722799999523, 36.98623300000327, 34.745905000003404,
+				31.063781999997445, 31.93710799999826, 31.581213000004936, 32.38115000000107,
+				31.724044000002323, 33.20875900000101, 33.51236500000232, 31.45562400000199,
+				30.463071999998647, 33.179353999999876, 32.37353599999915, 32.615184000002046,
+				31.308014000002004, 31.293727000003855, 37.091904000000795, 31.870151000002807,
+				32.42308999999659, 32.66483799999696
+			]
+		},
+		{
+			"runtime": "node",
+			"id": "empty-process",
+			"samplesMs": [
+				29.439972000000125, 27.551189999998314, 31.89117100000294, 29.110185999998066,
+				25.45421300000453, 29.16029200000048, 28.988216000005195, 26.433970999998564,
+				26.477272999996785, 27.62698300000193, 28.746867000001657, 27.515793000005942,
+				29.699523999996018, 28.014338000000862, 29.077844999999797, 31.372926999996707,
+				27.69317900000169, 27.603769000001193, 28.71240200000466, 26.959507999999914,
+				28.173259999995935, 28.406301000002713, 33.32354699999996, 28.085642999998527,
+				27.263874999996915, 26.767442999997, 28.047801000000618, 28.96826699999656,
+				26.308993999999075, 26.81014399999549
+			]
+		}
+	],
+	"summary": [
+		{
+			"runtime": "bun",
+			"id": "crust",
+			"warmNs": {
+				"median": 58362.15,
+				"p05": 54435.895999999964,
+				"p95": 66788.96733333329,
+				"min": 54147.089999999975,
+				"max": 68109.73666666663
+			},
+			"startupMs": {
+				"median": 18.641608500000075,
+				"p05": 17.40275475000044,
+				"p95": 19.36109405000043,
+				"min": 17.198074999998425,
+				"max": 19.9801120000011
+			}
+		},
+		{
+			"runtime": "bun",
+			"id": "commander",
+			"warmNs": {
+				"median": 14900.090000000006,
+				"p05": 13020.12433333334,
+				"p95": 15893.88499999999,
+				"min": 12836.843333333334,
+				"max": 15973.626666666667
+			},
+			"startupMs": {
+				"median": 14.83864100000028,
+				"p05": 13.500356499999544,
+				"p95": 16.59886839999981,
+				"min": 13.360486999999921,
+				"max": 16.909467999999833
+			}
+		},
+		{
+			"runtime": "bun",
+			"id": "yargs",
+			"warmNs": {
+				"median": 718923.2833333336,
+				"p05": 695726.827,
+				"p95": 733049.1393333332,
+				"min": 687959.8299999998,
+				"max": 735628.6299999999
+			},
+			"startupMs": {
+				"median": 34.37484599999971,
+				"p05": 32.78003459999964,
+				"p95": 35.76495060000025,
+				"min": 32.359528999999384,
+				"max": 36.390542999999525
+			}
+		},
+		{
+			"runtime": "bun",
+			"id": "clipanion",
+			"warmNs": {
+				"median": 64779.050000000025,
+				"p05": 57211.156000000025,
+				"p95": 71703.71499999998,
+				"min": 56443.643333333384,
+				"max": 72978.09999999999
+			},
+			"startupMs": {
+				"median": 20.12825299999895,
+				"p05": 19.233187650000218,
+				"p95": 21.118937199999255,
+				"min": 19.10316899999998,
+				"max": 21.340571999999156
+			}
+		},
+		{
+			"runtime": "bun",
+			"id": "cleye",
+			"warmNs": {
+				"median": 7388.013333333324,
+				"p05": 6467.30100000001,
+				"p95": 9509.008999999987,
+				"min": 6457.176666666674,
+				"max": 9938.479999999998
+			},
+			"startupMs": {
+				"median": 18.62925499999892,
+				"p05": 17.752940150000267,
+				"p95": 20.50518545000059,
+				"min": 17.527210000000196,
+				"max": 21.217468000000736
+			}
+		},
+		{
+			"runtime": "bun",
+			"id": "argparse",
+			"warmNs": {
+				"median": 121143.71000000005,
+				"p05": 115461.84499999993,
+				"p95": 126900.22066666668,
+				"min": 114434.88666666667,
+				"max": 127187.97666666679
+			},
+			"startupMs": {
+				"median": 21.60954649999985,
+				"p05": 20.30257054999911,
+				"p95": 23.079379599999626,
+				"min": 20.0095280000005,
+				"max": 23.76401799999985
+			}
+		},
+		{
+			"runtime": "bun",
+			"id": "stricli",
+			"warmNs": {
+				"median": 145164.89999999994,
+				"p05": 131465.36466666675,
+				"p95": 148435.71533333338,
+				"min": 130872.52999999996,
+				"max": 149889.13000000006
+			},
+			"startupMs": {
+				"median": 17.966598500000146,
+				"p05": 17.12089154999976,
+				"p95": 19.245708150000425,
+				"min": 17.030407000000196,
+				"max": 20.157858999999007
+			}
+		},
+		{
+			"runtime": "bun",
+			"id": "arg",
+			"warmNs": {
+				"median": 2893.4200000000014,
+				"p05": 1717.4073333333347,
+				"p95": 3059.867333333333,
+				"min": 1697.8866666666668,
+				"max": 3176.1233333333353
+			},
+			"startupMs": {
+				"median": 7.120378999999957,
+				"p05": 6.236212300000079,
+				"p95": 8.090657000000192,
+				"min": 6.010840000000826,
+				"max": 8.487085000000661
+			}
+		},
+		{
+			"runtime": "bun",
+			"id": "minimist",
+			"warmNs": {
+				"median": 5213.823333333339,
+				"p05": 3947.665999999997,
+				"p95": 8766.077333333333,
+				"min": 3881.226666666665,
+				"max": 8869.686666666663
+			},
+			"startupMs": {
+				"median": 7.477361000000201,
+				"p05": 6.938842250000562,
+				"p95": 8.311953349999111,
+				"min": 6.804204000000027,
+				"max": 8.456899000000703
+			}
+		},
+		{
+			"runtime": "bun",
+			"id": "mri",
+			"warmNs": {
+				"median": 3910.3499999999985,
+				"p05": 3590.9649999999992,
+				"p95": 4055.373666666668,
+				"min": 3448.8066666666723,
+				"max": 4064.373333333335
+			},
+			"startupMs": {
+				"median": 7.318354499999259,
+				"p05": 6.733849349999491,
+				"p95": 8.441162950000487,
+				"min": 6.430876000000353,
+				"max": 9.616276999999172
+			}
+		},
+		{
+			"runtime": "bun",
+			"id": "yargs-parser",
+			"warmNs": {
+				"median": 15306.996666666682,
+				"p05": 14875.126666666669,
+				"p95": 18126.664,
+				"min": 14814.22666666667,
+				"max": 18193.10333333334
+			},
+			"startupMs": {
+				"median": 13.569483999999647,
+				"p05": 11.496519400001398,
+				"p95": 14.348209200000474,
+				"min": 11.026040999999168,
+				"max": 14.531439000000319
+			}
+		},
+		{
+			"runtime": "bun",
+			"id": "parse-args",
+			"warmNs": {
+				"median": 2674.973333333336,
+				"p05": 2593.1359999999986,
+				"p95": 3824.1799999999976,
+				"min": 2575.719999999997,
+				"max": 5337.32333333333
+			},
+			"startupMs": {
+				"median": 8.537285999999767,
+				"p05": 7.890449049999279,
+				"p95": 9.565369999999984,
+				"min": 7.604240999999092,
+				"max": 10.710221999999703
+			}
+		},
+		{
+			"runtime": "node",
+			"id": "crust",
+			"warmNs": {
+				"median": 65556.72666666661,
+				"p05": 61492.80733333339,
+				"p95": 90701.3283333333,
+				"min": 61044.4666666667,
+				"max": 92417.83333333331
+			},
+			"startupMs": {
+				"median": 42.56525849999889,
+				"p05": 40.32244485000156,
+				"p95": 46.7407530000004,
+				"min": 36.95820000000094,
+				"max": 47.449516000000585
+			}
+		},
+		{
+			"runtime": "node",
+			"id": "commander",
+			"warmNs": {
+				"median": 14808.51666666671,
+				"p05": 14059.581666666656,
+				"p95": 15520.824333333332,
+				"min": 13943.276666666643,
+				"max": 15607.30000000002
+			},
+			"startupMs": {
+				"median": 43.8327019999997,
+				"p05": 40.54504904999958,
+				"p95": 46.37105175000397,
+				"min": 40.30066899999656,
+				"max": 48.119377000002714
+			}
+		},
+		{
+			"runtime": "node",
+			"id": "yargs",
+			"warmNs": {
+				"median": 1349669.2733333332,
+				"p05": 1296875.2790000008,
+				"p95": 1402232.1230000004,
+				"min": 1291941.093333333,
+				"max": 1423078.2233333336
+			},
+			"startupMs": {
+				"median": 79.45617600000332,
+				"p05": 75.63683929999752,
+				"p95": 82.55485210000006,
+				"min": 75.57033699999738,
+				"max": 83.56061000000045
+			}
+		},
+		{
+			"runtime": "node",
+			"id": "clipanion",
+			"warmNs": {
+				"median": 93612.87000000005,
+				"p05": 85497.61666666668,
+				"p95": 115324.09933333335,
+				"min": 85004.67666666661,
+				"max": 115405.66333333326
+			},
+			"startupMs": {
+				"median": 44.87252900000021,
+				"p05": 43.25190755000076,
+				"p95": 47.23900585000047,
+				"min": 42.50641199999518,
+				"max": 47.59773700000369
+			}
+		},
+		{
+			"runtime": "node",
+			"id": "cleye",
+			"warmNs": {
+				"median": 14472.946666666692,
+				"p05": 13986.32133333335,
+				"p95": 15403.097000000002,
+				"min": 13946.883333333346,
+				"max": 15559.073333333326
+			},
+			"startupMs": {
+				"median": 45.03614000000016,
+				"p05": 42.887692699999754,
+				"p95": 47.54965395000108,
+				"min": 42.13525799999479,
+				"max": 49.18169199999829
+			}
+		},
+		{
+			"runtime": "node",
+			"id": "argparse",
+			"warmNs": {
+				"median": 336009.8000000001,
+				"p05": 322006.05733333324,
+				"p95": 366719.48899999994,
+				"min": 313018.16,
+				"max": 376892.63333333354
+			},
+			"startupMs": {
+				"median": 43.86671099999876,
+				"p05": 40.962961650002036,
+				"p95": 47.33281164999971,
+				"min": 38.516555999995035,
+				"max": 49.21081600000616
+			}
+		},
+		{
+			"runtime": "node",
+			"id": "stricli",
+			"warmNs": {
+				"median": 272314.93666666665,
+				"p05": 264361.08199999976,
+				"p95": 306500.6859999999,
+				"min": 264351.7999999999,
+				"max": 308056.823333333
+			},
+			"startupMs": {
+				"median": 40.15068400000018,
+				"p05": 36.44730484999709,
+				"p95": 43.36215934999855,
+				"min": 34.30679099999543,
+				"max": 44.49690700000065
+			}
+		},
+		{
+			"runtime": "node",
+			"id": "arg",
+			"warmNs": {
+				"median": 2367.3900000000003,
+				"p05": 2032.1916666666577,
+				"p95": 2771.539333333339,
+				"min": 2013.4199999999682,
+				"max": 2864.9333333333498
+			},
+			"startupMs": {
+				"median": 32.00829749999684,
+				"p05": 30.308655649998762,
+				"p95": 33.81862649999821,
+				"min": 30.21285699999862,
+				"max": 34.156267000005755
+			}
+		},
+		{
+			"runtime": "node",
+			"id": "minimist",
+			"warmNs": {
+				"median": 6878.746666666681,
+				"p05": 6672.200333333336,
+				"p95": 7626.4943333333495,
+				"min": 6668.646666666689,
+				"max": 7788.803333333333
+			},
+			"startupMs": {
+				"median": 32.12988799999948,
+				"p05": 31.04756760000164,
+				"p95": 34.33456440000009,
+				"min": 29.96577900000557,
+				"max": 36.129829000004975
+			}
+		},
+		{
+			"runtime": "node",
+			"id": "mri",
+			"warmNs": {
+				"median": 3476.226666666662,
+				"p05": 3405.34866666665,
+				"p95": 4824.515333333325,
+				"min": 3382.8833333333346,
+				"max": 6930.843333333314
+			},
+			"startupMs": {
+				"median": 31.63205399999788,
+				"p05": 30.099989450000066,
+				"p95": 35.64476325000104,
+				"min": 29.634811000003538,
+				"max": 37.78093000000081
+			}
+		},
+		{
+			"runtime": "node",
+			"id": "yargs-parser",
+			"warmNs": {
+				"median": 43418.47333333334,
+				"p05": 42633.72500000002,
+				"p95": 44060.773333333316,
+				"min": 42628.043333333306,
+				"max": 44246.3433333333
+			},
+			"startupMs": {
+				"median": 36.2833049999972,
+				"p05": 34.01290015000086,
+				"p95": 38.96387029999932,
+				"min": 33.66670800000429,
+				"max": 39.25257099999726
+			}
+		},
+		{
+			"runtime": "node",
+			"id": "parse-args",
+			"warmNs": {
+				"median": 6254.1600000000135,
+				"p05": 6022.988333333345,
+				"p95": 7636.862666666643,
+				"min": 6004.053333333369,
+				"max": 8998.329999999964
+			},
+			"startupMs": {
+				"median": 32.332086999998864,
+				"p05": 30.823895649999393,
+				"p95": 36.32582515000249,
+				"min": 30.463071999998647,
+				"max": 37.091904000000795
+			}
+		}
+	]
+}

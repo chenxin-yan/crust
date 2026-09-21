@@ -1,0 +1,16 @@
+--- a/packages/core/src/command/extensions-install.ts
++++ b/packages/core/src/command/extensions-install.ts
+@@ -71,12 +71,7 @@
+ 		localFlags: { ...node.localFlags },
+ 		ownedFlags: { ...node.ownedFlags },
+ 		effectiveFlags: { ...node.effectiveFlags },
+-		flagSpellings: new Map(
+-			[...node.flagSpellings].map(([spelling, entry]) => [
+-				spelling,
+-				{ ...entry, def: node.effectiveFlags[entry.canonicalName]! },
+-			]),
+-		),
++		flagSpellings: new Map(node.flagSpellings),
+ 		args: [...node.args],
+ 		subCommands,
+ 		contexts: node.contexts.map((context) => ({ ...context })),

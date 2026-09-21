@@ -4,5 +4,7 @@
 		"declaration": false,
 		"isolatedDeclarations": false
 	},
-	"include": ["."]
+	"include": ["."],
+	// Standalone benchmark project with its own deps and `bun run check`.
+	"exclude": ["cli-comparison"]
 }

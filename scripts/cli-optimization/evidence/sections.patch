@@ -1,0 +1,17 @@
+--- a/packages/core/src/command/invocation.ts
++++ b/packages/core/src/command/invocation.ts
+@@ -129,9 +129,11 @@
+ 	rootNode: CommandNode,
+ 	extensions: readonly Extension[],
+ ): CommandNode {
+-	const authoredSnapshot = snapshotCommand(rootNode);
+-	for (const extension of extensions) {
+-		applyExtensionSections(rootNode, extension, authoredSnapshot);
++	if (extensions.some((extension) => extension.sections !== undefined)) {
++		const authoredSnapshot = snapshotCommand(rootNode);
++		for (const extension of extensions) {
++			applyExtensionSections(rootNode, extension, authoredSnapshot);
++		}
+ 	}
+ 	freezeTree(rootNode);
+ 	return rootNode;

@@ -1,0 +1,14 @@
+--- a/packages/core/src/parsing/schema.ts
++++ b/packages/core/src/parsing/schema.ts
+@@ -40,6 +40,11 @@
+ 	node: CommandNode & { args: A; effectiveFlags: F },
+ 	parsed: ParseResult<A, F>,
+ ): Promise<ValidatedInput<A, F>> {
++	if (!node.args.some((def) => def.schema !== undefined) &&
++		!Object.values(node.effectiveFlags).some((def) => def.schema !== undefined)) {
++		return { args: Object.fromEntries(Object.entries(parsed.args)),
++			flags: Object.fromEntries(Object.entries(parsed.flags)) } as ValidatedInput<A, F>;
++	}
+ 	const issues: ValidationIssue[] = [];
+ 	const args = new Map<string, unknown>(Object.entries(parsed.args));
+ 	const flags = new Map<string, unknown>(Object.entries(parsed.flags));
