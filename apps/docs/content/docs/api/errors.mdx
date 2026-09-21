@@ -121,6 +121,8 @@ Pulling a flag-owning Context before validation reports `flags-before-validation
 
 Extension `onError` hooks handle presentation only and cannot change a failed invocation into success. After preparation, `execute()` calls them in registration order until a hook returns a truthy value; otherwise Core renders the error to `stderr`. Core's renderer writes one `Error: message` line per underlying failure: a `SuppressedError` chain or `AggregateError` lists its members instead of its own message.
 
+Diagnostic traversal is cycle-safe and visits at most 256 values, including containers and unreadable members. If more remain, it ends with `[additional failures omitted]` under the same label instead of silently hiding the truncation.
+
 When disposal fails after an action or `preRun` failure was already rendered, `execute()` writes the disposal side of the escaping `SuppressedError` as `Cleanup failed: message` lines. `onError` hooks are not called again for it, and a hook that claimed the earlier failure does not suppress it.
 
 Routing and parse failures receive a fallback hook context with empty `args` and `flags` and unavailable Contexts. For failures raised during dispatch, `onError` runs before `postRun` while Contexts are live. For `postRun` or disposal failures, it runs after cleanup, so Context pulls reject with `context-after-disposal`.

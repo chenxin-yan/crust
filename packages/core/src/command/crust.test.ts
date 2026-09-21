@@ -2167,26 +2167,29 @@ describe("Crust .execute()", () => {
 			expect(stderrChunks).toEqual(["Cleanup failed: db close failed"]);
 		});
 
-		it("lists every cleanup failure after a successful action instead of a blank message", async () => {
-			const resource = defineContext("resource", ({ defer }) => {
-				defer(() => {
-					throw new Error("close one");
+		it.each([false, true])(
+			"lists all ten cleanup failures with action failure: %p",
+			async (actionFails) => {
+				const resource = defineContext("resource", ({ defer }) => {
+					for (let index = 0; index < 10; index++) {
+						defer(() => {
+							throw new Error(`close ${index}`);
+						});
+					}
+					return {};
 				});
-				defer(() => {
-					throw new Error("close two");
+				const app = new Crust("cli").provide(resource()).action(async ({ ctx }) => {
+					await ctx.resource;
+					if (actionFails) throw new Error("action failed");
 				});
-				return {};
-			});
-			const app = new Crust("cli").provide(resource()).action(async ({ ctx }) => {
-				await ctx.resource;
-			});
 
-			expect(await app.execute({ argv: [] })).toBe(1);
-			expect(stderrChunks.join("\n").split("\n").toSorted()).toEqual([
-				"Error: close one",
-				"Error: close two",
-			]);
-		});
+				expect(await app.execute({ argv: [] })).toBe(1);
+				const label = actionFails ? "Cleanup failed" : "Error";
+				const expected = Array.from({ length: 10 }, (_, index) => `${label}: close ${index}`);
+				if (actionFails) expected.push("Error: action failed");
+				expect(stderrChunks.join("\n").split("\n").toSorted()).toEqual(expected.toSorted());
+			},
+		);
 
 		it("renders each member of an AggregateError preparation failure", async () => {
 			const app = new Crust("cli").extend(
@@ -2296,6 +2299,37 @@ describe("Crust .execute()", () => {
 				"Error: [unreadable failure]\nError: [unreadable failure]\nError: visible",
 			]);
 		});
+
+		it.each(["deep", "wide", "unreadable"])(
+			"marks truncated diagnostics for a %s failure graph",
+			async (shape) => {
+				let failure = new AggregateError([]);
+				if (shape === "deep") {
+					for (let index = 0; index < 1_000; index++) {
+						failure = new AggregateError([failure]);
+					}
+				} else {
+					failure.errors.length = 1_000_000;
+					if (shape === "unreadable") {
+						for (let index = 0; index < 256; index++) {
+							Object.defineProperty(failure.errors, index, {
+								get() {
+									throw new Error("index getter");
+								},
+							});
+						}
+					}
+				}
+				const app = new Crust("cli").action(() => {
+					throw failure;
+				});
+
+				expect(await app.execute({ argv: [] })).toBe(1);
+				const lines = stderrChunks.join("\n").split("\n");
+				expect(lines.at(-1)).toBe("Error: [additional failures omitted]");
+				expect(lines).toHaveLength(shape === "deep" ? 1 : 256);
+			},
+		);
 
 		it("never renders a bare label for an empty AggregateError", async () => {
 			const app = new Crust("cli").action(() => {

@@ -123,10 +123,20 @@ function describeFailure(error: CaughtError, label = "Error"): string {
 	const messages: string[] = [];
 	// Arbitrary thrown values: every read below may hit a throwing getter or Proxy
 	// trap, and members may reference their container, so each node is visited
-	// inside its own try with an identity guard and a depth cap. Each member is
-	// read in its own try too, so one unreadable member does not hide its siblings.
+	// inside its own try with an identity guard. A shared node budget bounds both
+	// depth and width without cutting off ordinary linear disposal chains. Reads
+	// count too, so unreadable members cannot bypass the budget.
 	const seen = new Set<object>();
-	const visitMember = (read: () => CaughtError, depth: number): void => {
+	let remaining = 256;
+	let truncated = false;
+	const visitMember = (read: () => CaughtError): void => {
+		if (truncated) return;
+		if (remaining === 0) {
+			truncated = true;
+			messages.push("[additional failures omitted]");
+			return;
+		}
+		remaining--;
 		let member: CaughtError;
 		try {
 			member = read();
@@ -134,40 +144,38 @@ function describeFailure(error: CaughtError, label = "Error"): string {
 			messages.push("[unreadable failure]");
 			return;
 		}
-		visit(member, depth);
+		visit(member);
 	};
-	const visit = (value: CaughtError, depth: number): void => {
+	const visit = (value: CaughtError): void => {
 		try {
 			if (isObjectLike(value)) {
 				if (seen.has(value)) return;
 				seen.add(value);
 			}
 			const before = messages.length;
-			if (depth < 8) {
-				if (isSuppressedError(value)) {
-					visitMember(() => value.error, depth + 1);
-					visitMember(() => value.suppressed, depth + 1);
-					if (messages.length > before) return;
-				} else {
-					// SAFETY: structural probe of an arbitrary thrown value; reads are protected by this try block.
-					const members = (value as Partial<{ errors: unknown }> | null)?.errors;
-					if (Array.isArray(members)) {
-						for (let index = 0; index < members.length; index++) {
-							visitMember(() => members[index], depth + 1);
-						}
-						if (messages.length > before) return;
+			if (isSuppressedError(value)) {
+				visitMember(() => value.error);
+				visitMember(() => value.suppressed);
+				if (messages.length > before) return;
+			} else {
+				// SAFETY: structural probe of an arbitrary thrown value; reads are protected by this try block.
+				const members = (value as Partial<{ errors: unknown }> | null)?.errors;
+				if (Array.isArray(members)) {
+					for (let index = 0; index < members.length; index++) {
+						visitMember(() => members[index]);
+						if (truncated) break;
 					}
+					if (messages.length > before) return;
 				}
 			}
-			// Blank messages (a container past the depth cap) fall back to the
-			// error's own string form (its name) rather than an empty line. Coerce
-			// here, inside the try: a message object's toString may throw too.
+			// Empty containers fall back to their own string form rather than an
+			// empty line. Coerce inside the try: a message object's toString may throw.
 			messages.push(String((value instanceof Error && value.message) || value));
 		} catch {
 			messages.push("[unreadable failure]");
 		}
 	};
-	visit(error, 0);
+	visitMember(() => error);
 	return messages.map((message) => `${label}: ${message}`).join("\n");
 }
 
