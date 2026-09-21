@@ -2304,6 +2304,7 @@ describe("Crust .execute()", () => {
 			"marks truncated diagnostics for a %s failure graph",
 			async (shape) => {
 				let failure = new AggregateError([]);
+				let memberReads = 0;
 				if (shape === "deep") {
 					for (let index = 0; index < 1_000; index++) {
 						failure = new AggregateError([failure]);
@@ -2319,6 +2320,13 @@ describe("Crust .execute()", () => {
 							});
 						}
 					}
+					// Count member reads: the renderer must stop touching the array once its budget is spent.
+					failure.errors = new Proxy(failure.errors, {
+						get(target, key) {
+							if (key !== "length") memberReads++;
+							return target[key as keyof typeof target];
+						},
+					});
 				}
 				const app = new Crust("cli").action(() => {
 					throw failure;
@@ -2328,6 +2336,8 @@ describe("Crust .execute()", () => {
 				const lines = stderrChunks.join("\n").split("\n");
 				expect(lines.at(-1)).toBe("Error: [additional failures omitted]");
 				expect(lines).toHaveLength(shape === "deep" ? 1 : 256);
+				// 256-value budget: the root AggregateError counts, leaving 255 member reads.
+				expect(memberReads).toBe(shape === "deep" ? 0 : 255);
 			},
 		);
 
@@ -2338,6 +2348,17 @@ describe("Crust .execute()", () => {
 
 			expect(await app.execute({ argv: [] })).toBe(1);
 			expect(stderrChunks).toEqual(["Error: nothing inside"]);
+		});
+
+		it("renders an ordinary error's own message even when it carries an errors array", async () => {
+			const app = new Crust("cli").action(() => {
+				throw Object.assign(new Error("validation failed"), {
+					errors: [new Error("incidental member")],
+				});
+			});
+
+			expect(await app.execute({ argv: [] })).toBe(1);
+			expect(stderrChunks).toEqual(["Error: validation failed"]);
 		});
 	});
 });

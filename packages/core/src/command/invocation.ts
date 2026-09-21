@@ -157,9 +157,11 @@ function describeFailure(error: CaughtError, label = "Error"): string {
 				visitMember(() => value.error);
 				visitMember(() => value.suppressed);
 				if (messages.length > before) return;
-			} else {
-				// SAFETY: structural probe of an arbitrary thrown value; reads are protected by this try block.
-				const members = (value as Partial<{ errors: unknown }> | null)?.errors;
+			} else if (value instanceof AggregateError) {
+				// Only a genuine AggregateError expands: an ordinary error that happens to
+				// carry an `errors` array keeps its own message. The property is writable,
+				// so a hostile value may have replaced the array.
+				const members: unknown = value.errors;
 				if (Array.isArray(members)) {
 					for (let index = 0; index < members.length; index++) {
 						visitMember(() => members[index]);
