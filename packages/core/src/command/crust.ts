@@ -83,6 +83,7 @@ import type {
 } from "../validation/shared.ts";
 import {
 	cloneCommandNode,
+	cloneFlagRegistry,
 	installExtensionContexts,
 	validateCommandSections,
 } from "./extensions-install.ts";
@@ -1258,13 +1259,11 @@ export class Crust<
 	_clone<Out = this>(nodeOverrides: Partial<CommandNode>): Out {
 		// SAFETY: the clone uses the same prototype and receives every instance field below.
 		const cloned = Object.create(Object.getPrototypeOf(this)) as this;
-		const newNode: CommandNode = {
-			...cloneCommandNode({ ...this._node, subCommands: {} }),
-			// Descendants are immutable builder values; sharing them avoids recursive clones.
-			subCommands: { ...this._node.subCommands },
-			...nodeOverrides,
-		};
-		cloned._node = newNode;
+		// A builder node is never mutated once its creating method returns, so the
+		// containers a method leaves unchanged are shared, not copied. A method that
+		// mutates the clone afterwards (registerFlag) must override those containers
+		// with fresh copies here so failures stay private to the clone.
+		cloned._node = { ...this._node, ...nodeOverrides };
 		cloned._ancestorOwnedFlags = this._ancestorOwnedFlags;
 		/* oxlint-disable anti-slop/no-chained-type-assertions -- one runtime builder shape is re-parameterized after each matching mutation. */
 		// SAFETY: every caller pairs this generic transition with the matching runtime node mutation.
@@ -1297,7 +1296,7 @@ export class Crust<
 	): AfterFlags<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Defs, Meta, Caps> {
 		const cloned = this._clone<
 			AfterFlags<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Defs, Meta, Caps>
-		>({});
+		>(cloneFlagRegistry(this._node));
 		for (const def of defs) {
 			const { name, ...rest } = def;
 			// SAFETY: removing name from a NamedFlagDef leaves its discriminated FlagDef.
@@ -1409,7 +1408,10 @@ export class Crust<
 		// differ deliberately — they are application-wide and walk the whole tree.
 		const cloned = this._clone<
 			AfterProvide<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Cs, Meta, Caps>
-		>({ contexts: [...this._node.contexts, ...instances.map((instance) => ({ instance }))] });
+		>({
+			...cloneFlagRegistry(this._node),
+			contexts: [...this._node.contexts, ...instances.map((instance) => ({ instance }))],
+		});
 		for (const instance of instances) {
 			for (const [name, definition] of Object.entries(instance.ownedFlags)) {
 				registerFlag(cloned._node, name, definition, "owned");
