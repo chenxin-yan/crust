@@ -1676,12 +1676,13 @@ describe("Crust .execute()", () => {
 	});
 
 	it("treats prompt cancellation as a silent user abort", async () => {
-		const app = new Crust("test").action(() => {
+		const resource = defineContext("resource", () => ({ [Symbol.dispose]() {} }));
+		const app = new Crust("test").provide(resource()).action(async ({ ctx }) => {
+			await ctx.resource;
 			throw new DOMException("Prompt was cancelled.", "AbortError");
 		});
 
-		await app.execute({ argv: [] });
-
+		expect(await app.execute({ argv: [] })).toBe(130);
 		expect(process.exitCode).toBe(130);
 		expect(stderrChunks).toEqual([]);
 	});
@@ -2060,6 +2061,305 @@ describe("Crust .execute()", () => {
 		expect(Object.keys(snapshot.flags)).toContain("verbose");
 		// Serializable across boundaries — no functions anywhere in the snapshot
 		expect(() => structuredClone(snapshot)).not.toThrow();
+	});
+
+	describe("cleanup failure diagnostics", () => {
+		const failingDisposer = (message: string) =>
+			defineContext("resource", () => ({
+				[Symbol.dispose]() {
+					throw new Error(message);
+				},
+			}));
+		const recordingOnError = (seen: unknown[], claim = false) =>
+			defineExtension(defineExtensionId("errors"), {
+				hooks: {
+					onError(error, ctx) {
+						seen.push(error);
+						if (claim) ctx.stderr(`pretty: ${String(error)}`);
+						return claim;
+					},
+				},
+			});
+
+		it("renders the cleanup failure after the rendered action failure without re-running onError", async () => {
+			const seen: unknown[] = [];
+			const actionError = new Error("action failed");
+			const cleanupError = new Error("db close failed");
+			const resource = defineContext("resource", () => ({
+				[Symbol.dispose]() {
+					throw cleanupError;
+				},
+			}));
+			const app = new Crust("cli")
+				.provide(resource())
+				.extend(recordingOnError(seen))
+				.action(async ({ ctx }) => {
+					await ctx.resource;
+					throw actionError;
+				});
+
+			expect(await app.execute({ argv: [] })).toBe(1);
+			expect(process.exitCode).toBe(1);
+			expect(seen).toEqual([actionError]);
+			expect(stderrChunks).toEqual(["Error: action failed", "Cleanup failed: db close failed"]);
+
+			const outcome = await app.run([]);
+			expect(outcome.status).toBe("failed");
+			if (outcome.status !== "failed") return;
+			const escaping = outcome.error as { name: string; error: unknown; suppressed: unknown };
+			expect(escaping.name).toBe("SuppressedError");
+			expect(escaping.suppressed).toBe(actionError);
+			expect(escaping.error).toBe(cleanupError);
+		});
+
+		it("renders the cleanup failure even when an onError hook claims the action failure", async () => {
+			const seen: unknown[] = [];
+			const app = new Crust("cli")
+				.provide(failingDisposer("db close failed")())
+				.extend(recordingOnError(seen, true))
+				.action(async ({ ctx }) => {
+					await ctx.resource;
+					throw new Error("action failed");
+				});
+
+			expect(await app.execute({ argv: [] })).toBe(1);
+			expect(seen).toHaveLength(1);
+			expect(stderrChunks).toEqual([
+				"pretty: Error: action failed",
+				"Cleanup failed: db close failed",
+			]);
+		});
+
+		it.each(["x", Number.NaN])(
+			"associates the cleanup failure with a primitive action failure: %p",
+			async (actionError) => {
+				const seen: unknown[] = [];
+				const app = new Crust("cli")
+					.provide(failingDisposer("db close failed")())
+					.extend(recordingOnError(seen))
+					.action(async ({ ctx }) => {
+						await ctx.resource;
+						throw actionError;
+					});
+
+				expect(await app.execute({ argv: [] })).toBe(1);
+				expect(seen).toEqual([actionError]);
+				expect(stderrChunks).toEqual([
+					`Error: ${String(actionError)}`,
+					"Cleanup failed: db close failed",
+				]);
+			},
+		);
+
+		it("exits 1 and renders only the cleanup failure when cancellation cleanup fails", async () => {
+			const seen: unknown[] = [];
+			const app = new Crust("cli")
+				.provide(failingDisposer("db close failed")())
+				.extend(recordingOnError(seen))
+				.action(async ({ ctx }) => {
+					await ctx.resource;
+					throw new DOMException("Prompt was cancelled.", "AbortError");
+				});
+
+			expect(await app.execute({ argv: [] })).toBe(1);
+			expect(process.exitCode).toBe(1);
+			expect(seen).toHaveLength(1);
+			expect(stderrChunks).toEqual(["Cleanup failed: db close failed"]);
+		});
+
+		it.each([false, true])(
+			"lists all ten cleanup failures with action failure: %p",
+			async (actionFails) => {
+				const resource = defineContext("resource", ({ defer }) => {
+					for (let index = 0; index < 10; index++) {
+						defer(() => {
+							throw new Error(`close ${index}`);
+						});
+					}
+					return {};
+				});
+				const app = new Crust("cli").provide(resource()).action(async ({ ctx }) => {
+					await ctx.resource;
+					if (actionFails) throw new Error("action failed");
+				});
+
+				expect(await app.execute({ argv: [] })).toBe(1);
+				const label = actionFails ? "Cleanup failed" : "Error";
+				const expected = Array.from({ length: 10 }, (_, index) => `${label}: close ${index}`);
+				if (actionFails) expected.push("Error: action failed");
+				expect(stderrChunks.join("\n").split("\n").toSorted()).toEqual(expected.toSorted());
+			},
+		);
+
+		it("renders each member of an AggregateError preparation failure", async () => {
+			const app = new Crust("cli").extend(
+				defineExtension(defineExtensionId("prepare"), {
+					sections() {
+						throw new AggregateError(
+							[new Error("first section"), new Error("second section")],
+							"Disposal failed",
+						);
+					},
+				}),
+			);
+
+			expect(await app.execute({ argv: [] })).toBe(1);
+			expect(stderrChunks).toEqual(["Error: first section\nError: second section"]);
+		});
+
+		it("flattens a structural SuppressedError without native support", async () => {
+			// Node 22 bundles synthesize this plain-Error shape; no instanceof is possible.
+			const structural = Object.assign(new Error("An error was suppressed during disposal"), {
+				name: "SuppressedError",
+				error: new Error("close failed"),
+				suppressed: "action failed",
+			});
+			const app = new Crust("cli").action(() => {
+				throw structural;
+			});
+
+			expect(await app.execute({ argv: [] })).toBe(1);
+			expect(stderrChunks).toEqual(["Error: close failed\nError: action failed"]);
+		});
+
+		it("terminates on a self-referential SuppressedError with throwing getters", async () => {
+			const hostile = Object.assign(new Error("hostile"), { name: "SuppressedError" });
+			Object.defineProperty(hostile, "error", { value: hostile });
+			Object.defineProperty(hostile, "suppressed", {
+				get() {
+					throw new Error("getter");
+				},
+			});
+			const app = new Crust("cli").action(() => {
+				throw hostile;
+			});
+
+			expect(await app.execute({ argv: [] })).toBe(1);
+			expect(stderrChunks).toHaveLength(1);
+			expect(stderrChunks[0]).toMatch(/^Error: \S/);
+		});
+
+		it("does not report cleanup failure for a self-suppressed action error", async () => {
+			const error = Object.assign(new Error("container"), {
+				name: "SuppressedError",
+				error: new Error("body"),
+			});
+			Object.defineProperty(error, "suppressed", { value: error });
+			const app = new Crust("cli").action(() => {
+				throw error;
+			});
+
+			expect(await app.execute({ argv: [] })).toBe(1);
+			expect(stderrChunks).toEqual(["Error: body"]);
+		});
+
+		it("returns 1 when a member's message cannot be coerced to a string", async () => {
+			const member = new Error("member");
+			Object.defineProperty(member, "message", {
+				value: {
+					toString() {
+						throw new Error("coercion");
+					},
+				},
+			});
+			const app = new Crust("cli").extend(
+				defineExtension(defineExtensionId("prepare"), {
+					sections() {
+						throw new AggregateError([member], "aggregate");
+					},
+				}),
+			);
+
+			expect(await app.execute({ argv: [] })).toBe(1);
+			expect(stderrChunks).toEqual(["Error: [unreadable failure]"]);
+		});
+
+		it("still renders readable siblings of an unreadable member", async () => {
+			const aggregate = new AggregateError([new Error("hidden"), new Error("visible")]);
+			Object.defineProperty(aggregate.errors, "0", {
+				get() {
+					throw new Error("index getter");
+				},
+			});
+			const suppressed = Object.assign(new Error(""), {
+				name: "SuppressedError",
+				suppressed: aggregate,
+			});
+			Object.defineProperty(suppressed, "error", {
+				get() {
+					throw new Error("error getter");
+				},
+			});
+			const app = new Crust("cli").action(() => {
+				throw suppressed;
+			});
+
+			expect(await app.execute({ argv: [] })).toBe(1);
+			expect(stderrChunks).toEqual([
+				"Error: [unreadable failure]\nError: [unreadable failure]\nError: visible",
+			]);
+		});
+
+		it.each(["deep", "wide", "unreadable"])(
+			"marks truncated diagnostics for a %s failure graph",
+			async (shape) => {
+				let failure = new AggregateError([]);
+				let memberReads = 0;
+				if (shape === "deep") {
+					for (let index = 0; index < 1_000; index++) {
+						failure = new AggregateError([failure]);
+					}
+				} else {
+					failure.errors.length = 1_000_000;
+					if (shape === "unreadable") {
+						for (let index = 0; index < 256; index++) {
+							Object.defineProperty(failure.errors, index, {
+								get() {
+									throw new Error("index getter");
+								},
+							});
+						}
+					}
+					// Count member reads: the renderer must stop touching the array once its budget is spent.
+					failure.errors = new Proxy(failure.errors, {
+						get(target, key) {
+							if (key !== "length") memberReads++;
+							return target[key as keyof typeof target];
+						},
+					});
+				}
+				const app = new Crust("cli").action(() => {
+					throw failure;
+				});
+
+				expect(await app.execute({ argv: [] })).toBe(1);
+				const lines = stderrChunks.join("\n").split("\n");
+				expect(lines.at(-1)).toBe("Error: [additional failures omitted]");
+				expect(lines).toHaveLength(shape === "deep" ? 1 : 256);
+				// 256-value budget: the root AggregateError counts, leaving 255 member reads.
+				expect(memberReads).toBe(shape === "deep" ? 0 : 255);
+			},
+		);
+
+		it("never renders a bare label for an empty AggregateError", async () => {
+			const app = new Crust("cli").action(() => {
+				throw new AggregateError([], "nothing inside");
+			});
+
+			expect(await app.execute({ argv: [] })).toBe(1);
+			expect(stderrChunks).toEqual(["Error: nothing inside"]);
+		});
+
+		it("renders an ordinary error's own message even when it carries an errors array", async () => {
+			const app = new Crust("cli").action(() => {
+				throw Object.assign(new Error("validation failed"), {
+					errors: [new Error("incidental member")],
+				});
+			});
+
+			expect(await app.execute({ argv: [] })).toBe(1);
+			expect(stderrChunks).toEqual(["Error: validation failed"]);
+		});
 	});
 });
 

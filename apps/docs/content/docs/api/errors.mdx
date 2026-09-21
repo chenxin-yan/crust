@@ -119,7 +119,11 @@ Pulling a flag-owning Context before validation reports `flags-before-validation
 
 `.execute()` sets `process.exitCode = 1`, renders a failure once, and returns `1`. Non-cancellation preparation failures render directly because no successfully applied Extension hook chain is available.
 
-Extension `onError` hooks handle presentation only and cannot change a failed invocation into success. After preparation, `execute()` calls them in registration order until a hook returns a truthy value; otherwise Core renders the error to `stderr`.
+Extension `onError` hooks handle presentation only and cannot change a failed invocation into success. After preparation, `execute()` calls them in registration order until a hook returns a truthy value; otherwise Core renders the error to `stderr`. Core's renderer writes one `Error: message` line per underlying failure: a `SuppressedError` chain or a genuine `AggregateError` lists its members instead of its own message; an ordinary error that happens to carry an `errors` property renders its own message.
+
+Diagnostic traversal is cycle-safe and visits at most 256 values, including containers and unreadable members. If more remain, it ends with `[additional failures omitted]` under the same label instead of silently hiding the truncation.
+
+When disposal fails after an action or `preRun` failure was already rendered, `execute()` writes the disposal side of the escaping `SuppressedError` as `Cleanup failed: message` lines. `onError` hooks are not called again for it, and a hook that claimed the earlier failure does not suppress it.
 
 Routing and parse failures receive a fallback hook context with empty `args` and `flags` and unavailable Contexts. For failures raised during dispatch, `onError` runs before `postRun` while Contexts are live. For `postRun` or disposal failures, it runs after cleanup, so Context pulls reject with `context-after-disposal`.
 
@@ -133,7 +137,7 @@ if (outcome.status === "failed") {
 }
 ```
 
-Any `Error` whose `name` is `"AbortError"` is cancellation. `run()` returns cancellation in a `failed` outcome unless disposal changes the escaping failure. `execute()` sets and returns exit code `130`; after successful preparation it offers the error to `onError` hooks, and Core renders nothing when no hook claims it.
+Any `Error` whose `name` is `"AbortError"` is cancellation. `run()` returns cancellation in a `failed` outcome unless disposal changes the escaping failure. `execute()` sets and returns exit code `130`; after successful preparation it offers the error to `onError` hooks, and Core renders nothing when no hook claims it. If disposal then fails, the escaping error is a `SuppressedError`, not cancellation, and `execute()` sets and returns `1`; when the cancellation was already offered to `onError` during dispatch, Core renders only the `Cleanup failed:` lines.
 
 Cancellation can also start outside the action. Every invocation carries `ctx.signal`, an `AbortSignal` shared by Context setups, Extension hooks, and the Command Action. It aborts when the caller aborts `execute({ signal })` or `run(path, input, { signal })`, or on the first Ctrl-C during `execute()`.
 

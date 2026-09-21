@@ -96,6 +96,91 @@ function isAbortError(error: CaughtError): boolean {
 	return error.name === "AbortError";
 }
 
+/**
+ * Structural: Node 22 bundles down-level `await using` to a plain `Error`
+ * carrying `error`/`suppressed`, so `instanceof SuppressedError` cannot be used.
+ */
+function isSuppressedError(error: CaughtError): error is { error: unknown; suppressed: unknown } {
+	return (
+		isObjectLike(error) &&
+		"error" in error &&
+		"suppressed" in error &&
+		// SAFETY: structural probe of an arbitrary thrown value; callers guard the getter with try.
+		(error as { name?: unknown }).name === "SuppressedError"
+	);
+}
+
+function isObjectLike(value: CaughtError): value is object {
+	return typeof value === "object" && value !== null;
+}
+
+/**
+ * One `label: message` line per underlying failure. `SuppressedError` chains and
+ * `AggregateError`s contribute their members, not their own boilerplate message,
+ * so a disposal failure never renders as a bare `Error: `.
+ */
+function describeFailure(error: CaughtError, label = "Error"): string {
+	const messages: string[] = [];
+	// Arbitrary thrown values: every read below may hit a throwing getter or Proxy
+	// trap, and members may reference their container, so each node is visited
+	// inside its own try with an identity guard. A shared node budget bounds both
+	// depth and width without cutting off ordinary linear disposal chains. Reads
+	// count too, so unreadable members cannot bypass the budget.
+	const seen = new Set<object>();
+	let remaining = 256;
+	let truncated = false;
+	const visitMember = (read: () => CaughtError): void => {
+		if (truncated) return;
+		if (remaining === 0) {
+			truncated = true;
+			messages.push("[additional failures omitted]");
+			return;
+		}
+		remaining--;
+		let member: CaughtError;
+		try {
+			member = read();
+		} catch {
+			messages.push("[unreadable failure]");
+			return;
+		}
+		visit(member);
+	};
+	const visit = (value: CaughtError): void => {
+		try {
+			if (isObjectLike(value)) {
+				if (seen.has(value)) return;
+				seen.add(value);
+			}
+			const before = messages.length;
+			if (isSuppressedError(value)) {
+				visitMember(() => value.error);
+				visitMember(() => value.suppressed);
+				if (messages.length > before) return;
+			} else if (value instanceof AggregateError) {
+				// Only a genuine AggregateError expands: an ordinary error that happens to
+				// carry an `errors` array keeps its own message. The property is writable,
+				// so a hostile value may have replaced the array.
+				const members: unknown = value.errors;
+				if (Array.isArray(members)) {
+					for (let index = 0; index < members.length; index++) {
+						visitMember(() => members[index]);
+						if (truncated) break;
+					}
+					if (messages.length > before) return;
+				}
+			}
+			// Empty containers fall back to their own string form rather than an
+			// empty line. Coerce inside the try: a message object's toString may throw.
+			messages.push(String((value instanceof Error && value.message) || value));
+		} catch {
+			messages.push("[unreadable failure]");
+		}
+	};
+	visitMember(() => error);
+	return messages.map((message) => `${label}: ${message}`).join("\n");
+}
+
 function freezeTree(node: CommandNode): void {
 	Object.freeze(node);
 	Object.freeze(node.localFlags);
@@ -366,8 +451,7 @@ async function renderFailure(
 		// Cancellation (AbortError) has no default rendering — a user abort
 		// is not an error to report unless an onError hook claims it.
 		if (silentDefault) return;
-		const message = error instanceof Error ? error.message : String(error);
-		io.stderr(`Error: ${message}`);
+		io.stderr(describeFailure(error));
 	};
 
 	// Reuse the dispatch context so per-invocation identity (e.g. WeakMap keys
@@ -560,8 +644,7 @@ export async function executeInvocation(
 				process.exitCode = EXIT_CODE_CANCELLED;
 				return EXIT_CODE_CANCELLED;
 			}
-			const message = error instanceof Error ? error.message : String(error);
-			io.stderr(`Error: ${message}`);
+			io.stderr(describeFailure(error));
 			process.exitCode = 1;
 			return 1;
 		}
@@ -579,6 +662,7 @@ export async function executeInvocation(
 
 		let extensionContext: ExtensionContext | undefined;
 		let renderedInDispatch = false;
+		let renderedError: CaughtError;
 		try {
 			await dispatch(
 				{ argv },
@@ -590,12 +674,31 @@ export async function executeInvocation(
 				},
 				async (error, context) => {
 					renderedInDispatch = true;
+					renderedError = error;
 					const cancelled = isAbortError(error);
 					process.exitCode = cancelled ? EXIT_CODE_CANCELLED : 1;
 					return renderFailure(error, argv, prepared, io, signal, context, cancelled);
 				},
 			);
 		} catch (error) {
+			// Disposal wraps the failure rendered above as `suppressed` (Object.is: the
+			// body may have thrown NaN or any primitive). Render only the cleanup side;
+			// onError hooks already ran and never saw it. A SuppressedError is never an
+			// AbortError, so cancellation with failed cleanup keeps exit code 1 below.
+			let cleanupFailure: { error: unknown } | undefined;
+			try {
+				if (
+					renderedInDispatch &&
+					!Object.is(error, renderedError) &&
+					isSuppressedError(error) &&
+					Object.is(error.suppressed, renderedError)
+				) {
+					cleanupFailure = { error: error.error };
+				}
+			} catch {
+				// A throwing getter on an arbitrary thrown value must not replace the failure.
+			}
+			if (cleanupFailure) io.stderr(describeFailure(cleanupFailure.error, "Cleanup failed"));
 			if (isAbortError(error)) {
 				// Cancellation keeps its dedicated exit code while allowing Extension
 				// onError hooks to render a message. Core's default stays silent.

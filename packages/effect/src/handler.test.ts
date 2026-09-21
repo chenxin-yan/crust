@@ -408,6 +408,30 @@ describe("handler under execute()", () => {
 		expect(actual).toEqual(expected);
 	});
 
+	it("renders a failing layer release after the program failure", async () => {
+		const db = layer(
+			"db",
+			Layer.effect(
+				Db,
+				Effect.acquireRelease(Effect.succeed({ query: () => "row" }), () =>
+					Effect.sync(() => {
+						throw new Error("db release failed");
+					}),
+				),
+			),
+		);
+		const app = new Crust("cli")
+			.provide(db())
+			.action(handler(() => Effect.fail(new Error("boom"))));
+
+		const captured = await captureExecute(app, []);
+
+		expect(captured.exitCode).toBe(1);
+		expect(captured.stderr).toContain("Error: boom");
+		expect(captured.stderr).toContain("Cleanup failed: ");
+		expect(captured.stderr).toContain("db release failed");
+	});
+
 	it("exits 130 silently when the Effect is interrupted", async () => {
 		const app = new Crust("cli").action(
 			handler(() =>
