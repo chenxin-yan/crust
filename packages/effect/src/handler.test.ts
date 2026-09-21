@@ -434,16 +434,22 @@ describe("handler under execute()", () => {
 			.provide(db())
 			.action(handler(() => Effect.flatMap(Db, () => Effect.never)));
 		const stderr: string[] = [];
-		const exitCode = app.execute({
-			argv: [],
-			io: { stdout() {}, stderr: (text) => stderr.push(text) },
-			signal: controller.signal,
-		});
+		// Direct execute() (captureExecute has no signal option) sets process.exitCode; restore it.
+		const previousExitCode = process.exitCode;
+		try {
+			const exitCode = app.execute({
+				argv: [],
+				io: { stdout() {}, stderr: (text) => stderr.push(text) },
+				signal: controller.signal,
+			});
 
-		await new Promise((resolve) => setTimeout(resolve, 10));
-		controller.abort(new DOMException("Caller cancelled.", "AbortError"));
+			await new Promise((resolve) => setTimeout(resolve, 10));
+			controller.abort(new DOMException("Caller cancelled.", "AbortError"));
 
-		expect(await exitCode).toBe(130);
+			expect(await exitCode).toBe(130);
+		} finally {
+			process.exitCode = previousExitCode;
+		}
 		expect(stderr).toEqual([]);
 		expect(exits).toHaveLength(1);
 		expect(Exit.isFailure(exits[0]!) && Cause.hasInterruptsOnly(exits[0].cause)).toBe(true);
