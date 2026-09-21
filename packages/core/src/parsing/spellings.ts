@@ -36,11 +36,17 @@ export function flagSpellings(name: string, def: FlagDef): string[] {
 	return [name, ...(def.short === undefined ? [] : [def.short]), ...(def.aliases ?? [])];
 }
 
+/**
+ * One spelling of an effective flag. Entries are immutable and `def` is the
+ * same object as `node.effectiveFlags[canonicalName]`, so node clones may
+ * share entries and only copy the Map container. Writers (`registerFlag`)
+ * always create fresh entries; never mutate one in place.
+ */
 export interface FlagSpelling {
-	canonicalName: string;
-	def: FlagDef;
-	kind: "canonical" | "short" | "alias";
-	negatable: boolean;
+	readonly canonicalName: string;
+	readonly def: FlagDef;
+	readonly kind: "canonical" | "short" | "alias";
+	readonly negatable: boolean;
 }
 
 /** Whether a flag accepts generated `--no-` spellings. */
