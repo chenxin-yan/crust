@@ -60,6 +60,8 @@ Setup receives the invocation's `signal: AbortSignal`, shared with actions and E
 
 When setup acquires several resources, call `defer` right after each acquire. Then a later failure in the same setup still releases what was already opened. Returned values that implement `[Symbol.dispose]` or `[Symbol.asyncDispose]` are still disposed automatically, before that setup's deferred callbacks.
 
+Read every Context a cleanup callback needs during setup. Once cleanup starts, `ctx` still resolves Contexts that were built during the invocation, but pulling one that was never built rejects with a `DEFINITION` error (`context-during-disposal`) instead of opening a resource nothing will close. A dependency read from a cleanup callback is live only if you registered that `defer` after awaiting it; otherwise it is torn down first.
+
 ## Flags owned by a Context
 
 <include lang="ts" meta='title="app.ts"'>

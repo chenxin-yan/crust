@@ -1121,6 +1121,161 @@ describe("Context disposal", () => {
 		expect(events).toEqual(["use", "dispose"]);
 	});
 
+	it("settle() drains dependencies started while it waits, then closes construction", async () => {
+		const log: string[] = [];
+		let freshSetups = 0;
+		const gate = Promise.withResolvers<void>();
+		const lateGate = Promise.withResolvers<void>();
+		const late = defineContext("late", async ({ defer }) => {
+			await lateGate.promise;
+			defer(() => {
+				log.push("defer:late");
+			});
+			return {
+				[Symbol.asyncDispose]: async () => {
+					log.push("dispose:late");
+				},
+			};
+		});
+		const slow = defineContext("slow", { uses: [late] }, async ({ ctx }) => {
+			await gate.promise;
+			return await ctx.late;
+		});
+		const fresh = defineContext("fresh", () => {
+			freshSetups++;
+			return "fresh";
+		});
+		const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+		{
+			await using disposal = new AsyncDisposableStack();
+			const resolver = createContextResolver(
+				[late(), slow(), fresh()],
+				{ stdout: () => {}, stderr: () => {} },
+				disposal,
+				new AbortController().signal,
+			);
+			const bag = resolver.bag<{ slow: unknown; late: unknown; fresh: string }>([slow, fresh]);
+			const pulled = bag.slow;
+			let settled = false;
+			const draining = resolver.settle().then(() => {
+				settled = true;
+			});
+
+			// `late` is pulled only after settle() started waiting on `slow`.
+			gate.resolve();
+			await flush();
+			expect(settled).toBe(false);
+			lateGate.resolve();
+			await draining;
+			expect(await pulled).toBe(await bag.late);
+
+			await expect(bag.fresh).rejects.toMatchObject({
+				code: "DEFINITION",
+				details: { subject: "context", name: "fresh", reason: "context-during-disposal" },
+			});
+			expect(freshSetups).toBe(0);
+		}
+		expect(log).toEqual(["dispose:late", "defer:late"]);
+	});
+
+	it("rejects a cleanup callback that pulls a never-constructed Context", async () => {
+		let created = 0;
+		let closed = 0;
+		const log: string[] = [];
+		const dependent = defineContext("dependent", () => {
+			created++;
+			return {
+				[Symbol.dispose]() {
+					closed++;
+				},
+			};
+		});
+		const owner = defineContext("owner", { uses: [dependent] }, ({ ctx, defer }) => {
+			defer(async () => {
+				await ctx.dependent;
+			});
+			return "owner";
+		});
+		const sibling = disposableContext("sibling", log);
+		const app = new Crust("cli")
+			.provide(dependent(), owner(), sibling())
+			.action(async ({ ctx }) => {
+				await ctx.sibling;
+				await ctx.owner;
+			});
+
+		await expect(app.run([])).resolves.toMatchObject({
+			status: "failed",
+			error: {
+				code: "DEFINITION",
+				details: { subject: "context", name: "dependent", reason: "context-during-disposal" },
+			},
+		});
+		expect(created).toBe(0);
+		expect(closed).toBe(0);
+		expect(log).toEqual(["dispose:sibling"]);
+	});
+
+	it("lets a cleanup callback read an already-constructed dependency before it is disposed", async () => {
+		const log: string[] = [];
+		const dep = disposableContext("dep", log);
+		const owner = defineContext("owner", { uses: [dep] }, async ({ ctx, defer }) => {
+			await ctx.dep;
+			defer(async () => {
+				log.push(`read:${(await ctx.dep).name}`);
+			});
+			return "owner";
+		});
+		await unwrap(
+			new Crust("cli")
+				.provide(dep(), owner())
+				.action(async ({ ctx }) => {
+					await ctx.owner;
+				})
+				.run([]),
+		);
+		expect(log).toEqual(["read:dep", "dispose:dep"]);
+	});
+
+	it("never leaks a Context pulled by a fire-and-forget chain left behind by postRun", async () => {
+		let created = 0;
+		let closed = 0;
+		let rejection: CaughtError;
+		const first = defineContext("first", () => "first");
+		const second = defineContext("second", () => {
+			created++;
+			return {
+				[Symbol.dispose]() {
+					closed++;
+				},
+			};
+		});
+		const observer = defineExtension(defineExtensionId("observer"), {
+			uses: [first, second],
+			hooks: {
+				postRun(ctx) {
+					void ctx.ctx.first
+						.then(() => ctx.ctx.second)
+						.catch((error: CaughtError) => {
+							rejection = error;
+						});
+				},
+			},
+		});
+		const app = new Crust("cli")
+			.provide(first(), second())
+			.extend(observer)
+			.action(() => {});
+
+		await unwrap(app.run([]));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		if (rejection !== undefined) {
+			expect(rejection).toMatchObject({ details: { reason: "context-during-disposal" } });
+		}
+		expect(created).toBe(closed);
+	});
+
 	it("disposes a value once when an alias setup returns it", async () => {
 		let disposals = 0;
 		const db = defineContext("db", () => ({
@@ -1639,6 +1794,17 @@ describe("FallbackAsyncDisposableStack", () => {
 		await disposal[Symbol.asyncDispose]();
 		expect(() => disposal.defer(() => {})).toThrow(ReferenceError);
 		expect(() => disposal.use({ [Symbol.dispose]() {} })).toThrow(ReferenceError);
+	});
+
+	it("runs callbacks once when disposed twice like the native stack", async () => {
+		let calls = 0;
+		const disposal = new FallbackAsyncDisposableStack();
+		disposal.defer(() => {
+			calls++;
+		});
+		await disposal[Symbol.asyncDispose]();
+		await disposal[Symbol.asyncDispose]();
+		expect(calls).toBe(1);
 	});
 
 	it("rejects a non-callable defer at registration like the native stack", () => {

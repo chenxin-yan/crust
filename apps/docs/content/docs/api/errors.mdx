@@ -115,7 +115,7 @@ Context setup and Command Action failures are not wrapped in `CrustError`.
 
 Pulling an unprovided Context produces a `DEFINITION` `CrustError` with `details.reason === "missing-context"`. Its message names the Context, identifies the requesting setup when applicable, and recommends `.provide()`. A dynamic pull cycle reports `context-cycle`.
 
-Pulling a flag-owning Context before validation reports `flags-before-validation`, and pulling after disposal reports `context-after-disposal`.
+Pulling a flag-owning Context before validation reports `flags-before-validation`. Once cleanup has begun, pulling a Context that was never built during the invocation reports `context-during-disposal` while already-built values still resolve; pulling after disposal reports `context-after-disposal`.
 
 `.execute()` sets `process.exitCode = 1`, renders a failure once, and returns `1`. Non-cancellation preparation failures render directly because no successfully applied Extension hook chain is available.
 
