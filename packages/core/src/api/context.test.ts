@@ -30,6 +30,7 @@ describe("defineContext()", () => {
 		await expect(
 			Promise.resolve(
 				instance.setup({
+					signal: new AbortController().signal,
 					flags: {},
 					ctx: {},
 					defer: () => {},
@@ -49,6 +50,7 @@ describe("defineContext()", () => {
 		await expect(
 			Promise.resolve(
 				instance.setup({
+					signal: new AbortController().signal,
 					flags: {},
 					ctx: {},
 					defer: () => {},
@@ -716,6 +718,7 @@ describe("Context dependency runtime boundaries", () => {
 				[gate()],
 				{ stdout: () => {}, stderr: () => {} },
 				disposal,
+				new AbortController().signal,
 			);
 			const bag = resolver.bag<{ gate: string }>([gate]);
 			// Spread invokes every getter without awaiting; before flag validation the
@@ -738,6 +741,7 @@ describe("Context dependency runtime boundaries", () => {
 			[],
 			{ stdout: () => {}, stderr: () => {} },
 			missingDisposal,
+			new AbortController().signal,
 		).bag<{ service: string }>([service]);
 		await expect(missing.service).rejects.toMatchObject({ details: { reason: "missing-context" } });
 
@@ -748,6 +752,7 @@ describe("Context dependency runtime boundaries", () => {
 				[service()],
 				{ stdout: () => {}, stderr: () => {} },
 				disposal,
+				new AbortController().signal,
 			).bag<{ service: string }>([service]);
 		}
 		await expect(disposed.service).rejects.toMatchObject({
@@ -769,6 +774,7 @@ describe("lazy Context bags", () => {
 			[instance],
 			{ stdout: () => {}, stderr: () => {} },
 			disposal,
+			new AbortController().signal,
 		).bag<{ db: string }>([instance]);
 
 		expect(instance.factory).toBe(db);

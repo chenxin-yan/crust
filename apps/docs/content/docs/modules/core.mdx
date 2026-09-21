@@ -61,9 +61,11 @@ import type {
   ArgDef,
   CommandSnapshot,
   CrustCommandContext,
+  ExecuteOptions,
   Extension,
   FlagDef,
   InvocationIO,
+  InvocationOptions,
 } from "@crustjs/core";
 ```
 
@@ -80,6 +82,7 @@ The root barrel exports the command, Context, Extension, input, snapshot, and er
 | `DefineExtensionWith` / `RootMetaKey`                      | [`RootMetaKey` and `DefineExtensionWith`](/docs/api/types#rootmetakey-and-defineextensionwith)  |
 | `MergeFlags`                                               | [`MergeFlags`](/docs/api/types#mergeflags)                                                      |
 | `MergeContext`                                             | [`MergeContext`](/docs/api/types#mergecontext)                                                  |
+| `InvocationOptions` / `ExecuteOptions`                     | [Invocation I/O](/docs/api/types#invocation-io)                                                 |
 
 The [root barrel](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/index.ts) is the full supported export list.
 
@@ -90,7 +93,7 @@ const outcome = await app.run(["wave"]);
 if (outcome.status === "completed") console.log(outcome.stdout); // => o/
 ```
 
-`run()` returns a captured outcome after cleanup. See [`run()` input and I/O](/docs/api/crust#runpath-input-io) for typed paths, structured input, validation, output capture, and failure behavior.
+`run()` returns a captured outcome after cleanup. See [`run()` input and I/O](/docs/api/crust#runpath-input-options) for typed paths, structured input, validation, output capture, and failure behavior.
 
 ## Tooling subpath
 

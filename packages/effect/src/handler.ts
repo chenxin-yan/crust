@@ -40,7 +40,7 @@ export type ServicesOf<Input> = Input extends { readonly ctx: infer Bag }
  * command path is built up front and its services provided; `ctx` inference
  * is unchanged. A failure rethrows the original error so `execute()` renders
  * it unchanged, and interruption rethrows an `AbortError` so cancellation
- * exits with 130.
+ * exits with 130. Aborting the invocation's `ctx.signal` interrupts the fiber.
  */
 export function handler<Input extends ActionInput, Out, E>(
 	fn: (input: Input) => Effect.Effect<Out, E, ServicesOf<Input> | HandlerInput>,
@@ -62,15 +62,15 @@ export function handler<Input extends ActionInput, Out>(
 				"factory" in source && layerFactories.has(source.factory),
 		);
 		const bag: Readonly<Record<string, Promise<Context.Context<unknown>>>> = input.ctx;
-		const built: Context.Context<unknown>[] = [];
+		const builds = layers.map(({ name }) => bag[name]!);
 		// Builds and fn(input) run inside the Effect so a failed sibling build or a
 		// synchronous throw still yields a failure Exit for the layers that did build.
 		const program = Effect.gen(function* () {
 			// allSettled: a failing build must not race a sibling still acquiring.
-			const settled = yield* Effect.promise(() =>
-				Promise.allSettled(layers.map(({ name }) => bag[name]!)),
+			const settled = yield* Effect.promise(() => Promise.allSettled(builds));
+			const built = settled.flatMap((result) =>
+				result.status === "fulfilled" ? [result.value] : [],
 			);
-			for (const result of settled) if (result.status === "fulfilled") built.push(result.value);
 			const rejected = settled.find((result) => result.status === "rejected");
 			if (rejected) return yield* tryCrust(() => Promise.reject(rejected.reason));
 			const returned = fn(input);
@@ -79,8 +79,11 @@ export function handler<Input extends ActionInput, Out>(
 				Context.mergeAll(...built, Context.make(HandlerInput, input)),
 			);
 		});
-		const exit = await Effect.runPromiseExit(program);
-		for (const services of built) actionExits.set(services, exit);
+		const exit = await Effect.runPromiseExit(program, { signal: input.signal });
+		// Set Exits after the run: an interrupted fiber never reaches `built`, but the builds still finish.
+		for (const result of await Promise.allSettled(builds)) {
+			if (result.status === "fulfilled") actionExits.set(result.value, exit);
+		}
 		return unwrapExit(exit);
 	};
 }

@@ -169,6 +169,12 @@ export interface ExtensionContext<
 	 * @example `["--dry-run"]`
 	 */
 	readonly rawArgs: readonly string[];
+	/**
+	 * Aborted when the caller cancels the invocation (`execute({ signal })`,
+	 * `run(path, input, { signal })`, or the first `SIGINT` under `execute()`);
+	 * see `ExecuteOptions.signal` for how the abort reason maps to the exit code.
+	 */
+	readonly signal: AbortSignal;
 	/** Declared Contexts, constructed lazily on first property access. */
 	readonly ctx: ContextBag<Deps>;
 	/**

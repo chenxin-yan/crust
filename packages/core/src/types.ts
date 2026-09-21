@@ -14,6 +14,31 @@ export interface InvocationIO {
 	stderr: (text: string) => void;
 }
 
+/** Caller options for one programmatic `run()` invocation: IO callbacks plus cancellation. */
+export interface InvocationOptions extends Partial<InvocationIO> {
+	/** Aborting it aborts the invocation's `ctx.signal` with the same reason. */
+	signal?: AbortSignal;
+}
+
+/**
+ * Caller options for the terminal `execute()` boundary. While an invocation
+ * runs, the first `SIGINT` (Ctrl-C) aborts its `ctx.signal` with an `AbortError`
+ * and a second `SIGINT` terminates unless another listener owns the signal.
+ */
+export interface ExecuteOptions {
+	/** Arguments to parse; defaults to `process.argv.slice(2)`. */
+	argv?: string[];
+	/** Captured `stdout(text)` / `stderr(text)` callbacks (e.g. in-process tests). */
+	io?: Partial<InvocationIO>;
+	/**
+	 * Caller-owned cancellation; aborting it aborts the invocation's `ctx.signal`
+	 * with the same reason. If work throws that reason, an `AbortError` exits `130`
+	 * and other errors exit `1`. Effect signal interruption instead becomes an
+	 * `AbortError`, regardless of the caller's reason.
+	 */
+	signal?: AbortSignal;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Primitive type vocabulary
 // ────────────────────────────────────────────────────────────────────────────

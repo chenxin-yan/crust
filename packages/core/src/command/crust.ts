@@ -31,7 +31,9 @@ import type {
 	InferFlags,
 	InputArgs,
 	InputFlags,
+	ExecuteOptions,
 	InvocationIO,
+	InvocationOptions,
 	MergeFlags,
 	NamedFlagDef,
 } from "../types.ts";
@@ -122,6 +124,12 @@ export interface CrustCommandContext<
 	ctx: ContextBag<Ctx>;
 	/** Raw arguments that appeared after the `--` separator */
 	rawArgs: string[];
+	/**
+	 * Aborted when the caller cancels the invocation (`execute({ signal })`,
+	 * `run(path, input, { signal })`, or the first `SIGINT` under `execute()`);
+	 * see `ExecuteOptions.signal` for how the abort reason maps to the exit code.
+	 */
+	signal: AbortSignal;
 	/** Readonly, serializable snapshot of the resolved command */
 	command: CommandSnapshot;
 	/** Readonly snapshot of the application root, including Extension contributions */
@@ -285,14 +293,14 @@ export type RunInputArguments<Shape extends CommandShape> =
 
 export type RunArguments<Shape extends CommandShape> = readonly [
 	...RunInputArguments<Shape>,
-	io?: Partial<InvocationIO>,
+	options?: InvocationOptions,
 ];
 
 /**
  * Typed invoker bound to one command in an app, returned by {@link Crust.at}.
  *
- * `run` accepts the same structured input and IO as `Crust.run` with the path
- * already applied, so a handle can be re-exported as a plain typed function.
+ * `run` accepts the same structured input and options as `Crust.run` with the
+ * path already applied, so a handle can be re-exported as a plain typed function.
  */
 export interface CommandHandle<Shape extends CommandShape> {
 	/** The typed path this handle was created with (`[]` selects the root). */
@@ -301,7 +309,7 @@ export interface CommandHandle<Shape extends CommandShape> {
 	run<const Input>(
 		input: Input,
 		...validation: [Input] extends [CompatibleRunInput<Shape, Input>]
-			? readonly [io?: Partial<InvocationIO>]
+			? readonly [options?: InvocationOptions]
 			: readonly [invalidInput: never]
 	): Promise<RunOutcome<Shape["result"]>>;
 }
@@ -1701,8 +1709,9 @@ export class Crust<
 	 *
 	 * @param path - Typed path to the command to invoke (`[]` selects the root)
 	 * @param input - Structured argument, flag, and raw values
-	 * @param io - Optional `stdout(text)` / `stderr(text)` callbacks, also
-	 *             exposed to Command Actions and Extensions
+	 * @param options - Optional `stdout(text)` / `stderr(text)` callbacks (also
+	 *                  exposed to Command Actions and Extensions) and an
+	 *                  `AbortSignal` that cancels the invocation
 	 */
 	async run<const Path extends CommandPath<Tree>>(
 		this: { readonly _types: { readonly caps: "app" } },
@@ -1722,19 +1731,19 @@ export class Crust<
 				Input
 			>,
 		]
-			? readonly [io?: Partial<InvocationIO>]
+			? readonly [options?: InvocationOptions]
 			: readonly [invalidInput: never]
 	): Promise<RunOutcome<CommandShapeAt<CommandShape<A, Flags, Tree, Result>, Path>["result"]>>;
 	async run(path: readonly string[], ...args: readonly unknown[]): Promise<RunOutcome<unknown>> {
 		// SAFETY: the public overloads constrain structured input to this runtime value union.
 		const structuredInput = (args[0] ?? {}) as RunInputPayload;
-		// SAFETY: the public overloads constrain the second argument to invocation IO.
-		const io = args[1] as Partial<InvocationIO> | undefined;
+		// SAFETY: the public overloads constrain the second argument to invocation options.
+		const options = args[1] as InvocationOptions | undefined;
 		// Programmatic calls capture failures and never change process status.
 		return await runInvocation(
 			this._node,
 			{ path, input: structuredInput },
-			io,
+			options,
 			materializeCommandDefinition,
 		);
 	}
@@ -1764,12 +1773,12 @@ export class Crust<
 			async run(...args: readonly unknown[]): Promise<RunOutcome<unknown>> {
 				// SAFETY: the public overloads constrain structured input to this runtime value union.
 				const structuredInput = (args[0] ?? {}) as RunInputPayload;
-				// SAFETY: the public overloads constrain the second argument to invocation IO.
-				const io = args[1] as Partial<InvocationIO> | undefined;
+				// SAFETY: the public overloads constrain the second argument to invocation options.
+				const options = args[1] as InvocationOptions | undefined;
 				return await runInvocation(
 					node,
 					{ path: boundPath, input: structuredInput },
-					io,
+					options,
 					materializeCommandDefinition,
 				);
 			},
@@ -1785,17 +1794,17 @@ export class Crust<
 	 * Core's default renderer), sets `process.exitCode` (`1`, or
 	 * `130` for an `AbortError` cancellation), and resolves to the exit code.
 	 *
-	 * @param options - Optional overrides (e.g. custom `argv` and captured
-	 *                   `io` for in-process testing of exit codes and
-	 *                   rendered failures)
+	 * @param options - Optional overrides: custom `argv` and captured `io` for
+	 *                   in-process testing of exit codes and rendered failures,
+	 *                   and a caller `signal` that cancels the invocation
 	 * @returns The terminal exit code (`0`, `1`, or `130` for cancellation)
 	 */
 	execute(
 		this: { readonly _types: { readonly caps: "app" } },
-		options?: { argv?: string[]; io?: Partial<InvocationIO> },
+		options?: ExecuteOptions,
 	): Promise<number>;
 
-	async execute(options?: { argv?: string[]; io?: Partial<InvocationIO> }): Promise<number> {
+	async execute(options?: ExecuteOptions): Promise<number> {
 		// Terminal calls render failures and set process exit status instead of throwing.
 		return await executeInvocation(this._node, options, materializeCommandDefinition);
 	}

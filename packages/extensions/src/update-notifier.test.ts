@@ -397,6 +397,7 @@ describe("updateNotifier post-run hook", () => {
 			args: {},
 			flags: {},
 			rawArgs: [] as readonly string[],
+			signal: new AbortController().signal,
 			ctx: {},
 			finish: () => undefined as never,
 			stdout: () => {},
