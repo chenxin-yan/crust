@@ -35,15 +35,37 @@ import type { CommandNode } from "./node.ts";
 import { resolveCommand, type CommandRoute } from "./router.ts";
 import { snapshotCommand } from "./snapshot.ts";
 
+const ignoreStreamError = () => {};
+
 /**
- * Terminal defaults: line-oriented writes to the process streams. Stream writes rather
- * than `console.log`: once anything materializes `process.stdout` (a platform layer, a
- * color library probing `isTTY`), Bun's native console writer silently drops output past
- * the 64 KiB pipe buffer at exit (oven-sh/bun#36419); the stream writer flushes it.
+ * Line-oriented write to a process stream, with `console.log`'s error tolerance: a
+ * downstream that closed early (`cli | head`) surfaces as EPIPE, synchronously or as a
+ * later `error` event, and must not crash the CLI. Mirrors Node's Console
+ * (`ignoreErrors: true`): a noop listener absorbs the event when nobody else listens.
+ */
+function writeLine(stream: NodeJS.WriteStream, text: string): void {
+	const absorb = () => {
+		if (stream.listenerCount("error") === 0) stream.once("error", ignoreStreamError);
+	};
+	absorb();
+	try {
+		stream.write(`${text}\n`, (error) => {
+			if (error) absorb();
+		});
+	} catch {
+		// Synchronous write failure on an already-destroyed stream.
+	}
+}
+
+/**
+ * Terminal defaults: stream writes rather than `console.log`. Once anything materializes
+ * `process.stdout` (a platform layer, a color library probing `isTTY`), Bun's native
+ * console writer silently drops output past the 64 KiB pipe buffer at exit
+ * (oven-sh/bun#36419); the stream writer flushes it.
  */
 const DEFAULT_IO: InvocationIO = {
-	stdout: (text) => void process.stdout.write(`${text}\n`),
-	stderr: (text) => void process.stderr.write(`${text}\n`),
+	stdout: (text) => writeLine(process.stdout, text),
+	stderr: (text) => writeLine(process.stderr, text),
 };
 
 /** One cloned, extension-applied, frozen command tree. */
