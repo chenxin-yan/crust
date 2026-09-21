@@ -368,7 +368,9 @@ const app = new Crust("greet")
 
 The context contains typed `args`, typed effective `flags`, the lazy typed `ctx` bag, `rawArgs` after `--`, the invocation's cancellation `signal`, the resolved `command` and application `rootCommand` snapshots, and injectable `stdout(text)` and `stderr(text)` callbacks from `InvocationIO`. `CrustCommandContext` extends `InvocationIO`; Context setups receive those same callbacks for the invocation.
 
-`signal` is an `AbortSignal` that aborts when the caller cancels the invocation: `execute({ signal })`, `run(path, input, { signal })`, or Ctrl-C under `execute({ sigint: "abort" })`. Its reason is an `AbortError`, so pass it to `fetch`, timers, or child processes and let `signal.throwIfAborted()` end the action with exit code 130. It never aborts on its own.
+`signal` is an `AbortSignal` that aborts when the caller cancels the invocation: `execute({ signal })`, `run(path, input, { signal })`, or Ctrl-C under `execute({ sigint: "abort" })`. Pass it to `fetch`, timers, or child processes and let `signal.throwIfAborted()` end the action. It never aborts on its own, and Context setups do not receive it.
+
+The abort reason decides the exit path. Core's own abort (Ctrl-C) uses an `AbortError`, and so does a caller's `controller.abort()` with no argument, so both exit 130 silently. A caller signal keeps its own reason: `abort(new Error("cancelled"))` or an `AbortSignal.timeout()` `TimeoutError` is rendered like any thrown error and exits 1. Supply an `AbortError` reason when the abort should read as user cancellation.
 
 ## `.add(...definitions)`
 
@@ -529,7 +531,7 @@ Memory is proportional to emitted output.
 
 Optional `options.stdout`/`options.stderr` sinks receive writes live, once each, after capture. Omitted channels stay quiet. A sink throw becomes an invocation failure, retaining the write that triggered it.
 
-Optional `options.signal` cancels the invocation: aborting it aborts the `ctx.signal` seen by hooks, Contexts, and the action. Work that honors the signal ends with the abort reason, which `run()` returns as a `failed` outcome like any other escaping error. `run()` never installs a `SIGINT` handler.
+Optional `options.signal` cancels the invocation: aborting it aborts the `ctx.signal` seen by Extension hooks and the action, with the caller's reason. Work that honors the signal ends with that reason, which `run()` returns as a `failed` outcome like any other escaping error. `run()` never installs a `SIGINT` handler.
 
 No callbacks or actions are rerun for capture.
 
@@ -580,7 +582,7 @@ Runs the terminal boundary. By default it parses `process.argv.slice(2)`; `optio
 await app.execute();
 ```
 
-`options.signal` lets the caller cancel the invocation; aborting it aborts `ctx.signal`. `options.sigint` decides what Ctrl-C does while the invocation runs. The default `"exit"` installs no handler, so the runtime terminates the process immediately. `"abort"` installs a one-shot `SIGINT` listener for the duration of the invocation: the first Ctrl-C aborts `ctx.signal` with an `AbortError` so pending work can stop, `postRun` hooks run, and Contexts are released; a second Ctrl-C reaches the runtime's default handling. The listener is removed when the invocation settles.
+`options.signal` lets the caller cancel the invocation; aborting it aborts `ctx.signal`. `options.sigint` decides what Ctrl-C does while the invocation runs. The default `"exit"` installs no handler, so the runtime terminates the process immediately. `"abort"` installs a `SIGINT` listener for the duration of the invocation: the first Ctrl-C aborts `ctx.signal` with an `AbortError` so pending work can stop, `postRun` hooks run, and Contexts are released. The listener stays registered until the invocation settles, so one-shot handlers that re-raise `SIGINT` when no listener remains (the default `@crustjs/progress` spinner, for example) see Core and leave termination to it; a second Ctrl-C removes Core's listener and reaches the runtime's default handling unless another listener still owns the signal.
 
 ```ts
 const app = new Crust("sync").action(async ({ signal }) => {

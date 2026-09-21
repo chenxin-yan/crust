@@ -127,7 +127,9 @@ export interface CrustCommandContext<
 	/**
 	 * Aborted when the caller cancels the invocation (`execute({ signal })`,
 	 * `run(path, input, { signal })`, or `SIGINT` under `execute({ sigint: "abort" })`).
-	 * Its reason is an `AbortError`, so `signal.throwIfAborted()` exits with `130`.
+	 * Core aborts it with an `AbortError` (Ctrl-C); a caller's own abort reason is
+	 * preserved, so `signal.throwIfAborted()` exits `130` only when that reason is an
+	 * `AbortError` (the default for `abort()`) and renders any other reason as a failure.
 	 */
 	signal: AbortSignal;
 	/** Readonly, serializable snapshot of the resolved command */

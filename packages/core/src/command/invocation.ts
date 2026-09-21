@@ -536,12 +536,20 @@ export async function executeInvocation(
 			return 1;
 		}
 
-		// `once`: the first Ctrl-C aborts `ctx.signal`; with the listener gone, a
-		// second Ctrl-C reaches the runtime's default handling and terminates.
+		// The first Ctrl-C aborts `ctx.signal`. The listener stays registered until
+		// the invocation settles so one-shot handlers that re-raise SIGINT when no
+		// listener remains (e.g. the `@crustjs/progress` spinner) see a host and
+		// leave termination to us. A second Ctrl-C steps aside and re-raises, so
+		// the runtime's default handling terminates unless another listener owns it.
 		const onSigint = (): void => {
-			controller.abort(new DOMException("Interrupted by SIGINT.", "AbortError"));
+			if (!controller.signal.aborted) {
+				controller.abort(new DOMException("Interrupted by SIGINT.", "AbortError"));
+				return;
+			}
+			process.removeListener("SIGINT", onSigint);
+			if (process.listenerCount("SIGINT") === 0) process.kill(process.pid, "SIGINT");
 		};
-		if (options?.sigint === "abort") process.once("SIGINT", onSigint);
+		if (options?.sigint === "abort") process.on("SIGINT", onSigint);
 
 		let extensionContext: ExtensionContext | undefined;
 		let renderedInDispatch = false;

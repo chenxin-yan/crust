@@ -80,7 +80,14 @@ export function handler<Input extends ActionInput, Out>(
 			);
 		});
 		const exit = await Effect.runPromiseExit(program, { signal: input.signal });
-		for (const services of built) actionExits.set(services, exit);
+		// Interruption during acquisition skips the fiber's `built` bookkeeping while
+		// the builds themselves keep running (Core settles them before disposal).
+		// Re-pull the cached builds so every acquired Layer sees this Exit, not the
+		// success default.
+		const settled = await Promise.allSettled(layers.map(({ name }) => bag[name]!));
+		for (const result of settled) {
+			if (result.status === "fulfilled") actionExits.set(result.value, exit);
+		}
 		return unwrapExit(exit);
 	};
 }

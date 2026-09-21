@@ -16,7 +16,7 @@ export interface InvocationIO {
 
 /** Caller options for one programmatic `run()` invocation: IO callbacks plus cancellation. */
 export interface InvocationOptions extends Partial<InvocationIO> {
-	/** Aborting it aborts the invocation's `ctx.signal`. */
+	/** Aborting it aborts the invocation's `ctx.signal` with the same reason. */
 	signal?: AbortSignal;
 }
 
@@ -26,8 +26,11 @@ export interface InvocationOptions extends Partial<InvocationIO> {
  * - `"exit"` (default): install no handler — the runtime's default signal
  *   handling terminates the process immediately.
  * - `"abort"`: the first `SIGINT` aborts the invocation's `ctx.signal` with an
- *   `AbortError` so pending work can stop and Contexts are still released; a
- *   second `SIGINT` falls through to the default termination.
+ *   `AbortError` so pending work can stop and Contexts are still released. Core
+ *   keeps listening until the invocation settles (so one-shot handlers that
+ *   re-raise when no listener remains, like the `@crustjs/progress` spinner,
+ *   defer to it); a second `SIGINT` steps aside and terminates unless another
+ *   listener owns the signal.
  */
 export type SigintPolicy = "exit" | "abort";
 
@@ -37,7 +40,11 @@ export interface ExecuteOptions {
 	argv?: string[];
 	/** Captured `stdout(text)` / `stderr(text)` callbacks (e.g. in-process tests). */
 	io?: Partial<InvocationIO>;
-	/** Caller-owned cancellation; aborting it aborts the invocation's `ctx.signal`. */
+	/**
+	 * Caller-owned cancellation; aborting it aborts the invocation's `ctx.signal`
+	 * with the same reason. An `AbortError` reason (the default for `abort()`) exits
+	 * `130`; any other reason is rendered as a failure and exits `1`.
+	 */
 	signal?: AbortSignal;
 	/** `SIGINT` handling for this invocation; defaults to `"exit"`. */
 	sigint?: SigintPolicy;

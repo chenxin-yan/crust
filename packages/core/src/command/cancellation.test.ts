@@ -73,6 +73,23 @@ describe("invocation cancellation signal", () => {
 		expect(stderr).toEqual([]);
 	});
 
+	it("keeps a caller's non-AbortError reason and renders it as an ordinary failure", async () => {
+		const { ready, action } = awaitingSignal();
+		const controller = new AbortController();
+		const stderr: string[] = [];
+		const exitCode = new Crust("cli").action(action).execute({
+			argv: [],
+			io: { stdout() {}, stderr: (text) => stderr.push(text) },
+			signal: controller.signal,
+		});
+
+		await ready;
+		controller.abort(new Error("deadline exceeded"));
+
+		expect(await exitCode).toBe(1);
+		expect(stderr).toEqual(["Error: deadline exceeded"]);
+	});
+
 	it("execute() installs no SIGINT listener by default", async () => {
 		const before = process.listenerCount("SIGINT");
 		let during = -1;
@@ -85,15 +102,20 @@ describe("invocation cancellation signal", () => {
 		expect(during).toBe(before);
 	});
 
-	it('execute({ sigint: "abort" }) turns the first SIGINT into an AbortError on ctx.signal, then releases the listener', async () => {
+	it('execute({ sigint: "abort" }) turns the first SIGINT into an AbortError on ctx.signal and keeps listening until the invocation settles', async () => {
 		const before = process.listenerCount("SIGINT");
 		const { ready, action } = awaitingSignal();
 		let reason: unknown;
+		const cleanedUp = Promise.withResolvers<void>();
+		let listenersDuringCleanup = -1;
 		const app = new Crust("cli").action(async (ctx) => {
 			try {
 				await action(ctx);
 			} finally {
 				reason = ctx.signal.reason;
+				await cleanedUp.promise;
+				// A one-shot handler that re-raises when nobody listens (progress spinner) must still see Core here.
+				listenersDuringCleanup = process.listenerCount("SIGINT");
 			}
 		});
 		const exitCode = app.execute({ argv: [], io: quiet, sigint: "abort" });
@@ -102,10 +124,42 @@ describe("invocation cancellation signal", () => {
 		expect(process.listenerCount("SIGINT")).toBe(before + 1);
 		// Invoke Core's listener directly: emitting a real SIGINT would reach the test runner.
 		process.listeners("SIGINT").at(-1)!("SIGINT");
+		cleanedUp.resolve();
 
 		expect(await exitCode).toBe(130);
 		expect((reason as Error).name).toBe("AbortError");
+		expect(listenersDuringCleanup).toBe(before + 1);
 		expect(process.listenerCount("SIGINT")).toBe(before);
+	});
+
+	it("a second SIGINT removes Core's listener and leaves termination to any remaining listener", async () => {
+		// Guard listener: without it Core would re-raise SIGINT into the test runner.
+		const guard = () => {};
+		process.on("SIGINT", guard);
+		const before = process.listenerCount("SIGINT");
+		const { ready, action } = awaitingSignal();
+		const released = Promise.withResolvers<void>();
+		const app = new Crust("cli").action(async (ctx) => {
+			try {
+				await action(ctx);
+			} finally {
+				await released.promise;
+			}
+		});
+		const exitCode = app.execute({ argv: [], io: quiet, sigint: "abort" });
+		try {
+			await ready;
+			const core = process.listeners("SIGINT").at(-1)!;
+			core("SIGINT");
+			expect(process.listenerCount("SIGINT")).toBe(before + 1);
+			core("SIGINT");
+			expect(process.listenerCount("SIGINT")).toBe(before);
+			expect(process.listeners("SIGINT")).toContain(guard);
+			released.resolve();
+			expect(await exitCode).toBe(130);
+		} finally {
+			process.removeListener("SIGINT", guard);
+		}
 	});
 
 	it("shares one signal between Extension hooks and the action, including the onError fallback context", async () => {

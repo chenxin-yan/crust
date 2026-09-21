@@ -454,4 +454,40 @@ describe("handler under execute()", () => {
 		expect(exits).toHaveLength(1);
 		expect(Exit.isFailure(exits[0]!) && Cause.hasInterruptsOnly(exits[0].cause)).toBe(true);
 	});
+
+	it("hands already-acquired layers the interruption when cancellation lands during a sibling's acquisition", async () => {
+		const exits: Exit.Exit<unknown, unknown>[] = [];
+		const db = layer(
+			"db",
+			resource([], Db, "db", { query: (sql) => sql }, (exit) => exits.push(exit)),
+		);
+		const gate = Promise.withResolvers<void>();
+		const acquiring = Promise.withResolvers<void>();
+		const cache = layer(
+			"cache",
+			Layer.effect(
+				Cache,
+				Effect.promise(async () => {
+					acquiring.resolve();
+					await gate.promise;
+					return { get: (key: string) => key };
+				}),
+			),
+		);
+		const controller = new AbortController();
+		const outcome = new Crust("cli")
+			.provide(db())
+			.provide(cache())
+			.action(handler(() => Effect.succeed("unreachable")))
+			.run([], {}, { signal: controller.signal });
+
+		await acquiring.promise;
+		controller.abort(new DOMException("Caller cancelled.", "AbortError"));
+		gate.resolve();
+
+		const result = await outcome;
+		expect(result.status === "failed" && (result.error as Error).name).toBe("AbortError");
+		expect(exits).toHaveLength(1);
+		expect(Exit.isFailure(exits[0]!) && Cause.hasInterruptsOnly(exits[0].cause)).toBe(true);
+	});
 });
