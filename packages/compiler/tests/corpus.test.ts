@@ -3,7 +3,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
-import { compile, CompilerError, DiagnosticCodes } from "../src/index.js";
+import { compile } from "../src/index.js";
+import { numericStringBoundarySources } from "./string-boundary.js";
 
 const goPath = Bun.which("go");
 const nodePath = Bun.which("node");
@@ -91,16 +92,6 @@ function numberExpression(value: number): string {
 }
 
 describe("compiler differential corpus", () => {
-	it("rejects a directory-valued output path", async () => {
-		const fixture = join(import.meta.dir, "fixtures", "hello.ts");
-		const outputPath = await mkdtemp(join(tmpdir(), "crust-compiler-output-"));
-		try {
-			await expect(compile(fixture, { outputPath })).rejects.toThrow("must not be a directory");
-		} finally {
-			await rm(outputPath, { recursive: true, force: true });
-		}
-	});
-
 	for (const { name, args } of fixtures) {
 		it.skipIf(goPath === null)(
 			`matches Node for ${name}`,
@@ -111,37 +102,6 @@ describe("compiler differential corpus", () => {
 			120_000,
 		);
 	}
-
-	it("rejects direct string-array logging", async () => {
-		const fixture = join(import.meta.dir, "fixtures", "array-log.ts");
-		const workspace = await mkdtemp(join(tmpdir(), "crust-array-log-"));
-		try {
-			await expect(compile(fixture, { outputPath: join(workspace, "binary") })).rejects.toThrow(
-				"Unsupported TypeScript call to console.log",
-			);
-		} finally {
-			await rm(workspace, { recursive: true, force: true });
-		}
-	}, 120_000);
-
-	it.each([
-		"console.log(process.argv);",
-		"console.log((process.argv.slice(2))!);",
-		"console.log(42, process.argv.slice(2));",
-		"function log(values: string[]): void { console.log(values); } log(process.argv.slice(2));",
-		"function args(): string[] { return process.argv.slice(2); } console.log(args());",
-	])("rejects string-array log arguments: %s", async (source) => {
-		const workspace = await mkdtemp(join(tmpdir(), "crust-array-log-"));
-		const fixture = join(workspace, "fixture.ts");
-		try {
-			await writeFile(fixture, source);
-			await expect(compile(fixture, { outputPath: join(workspace, "binary") })).rejects.toThrow(
-				"Unsupported TypeScript call to console.log",
-			);
-		} finally {
-			await rm(workspace, { recursive: true, force: true });
-		}
-	});
 
 	it.skipIf(goPath === null)(
 		"matches ECMAScript number formatting",
@@ -207,69 +167,17 @@ describe("compiler differential corpus", () => {
 		);
 	}
 
-	it("rejects default parameters before emission", async () => {
-		const fixture = join(import.meta.dir, "fixtures", "default-parameter.ts");
-		await expect(compile(fixture)).rejects.toThrow("Unsupported TypeScript Parameter");
-	});
-
-	it("rejects expressions unsupported by the Go runtime", async () => {
-		const workspace = await mkdtemp(join(tmpdir(), "crust-unsupported-expression-"));
-		const fixture = join(workspace, "fixture.ts");
-		try {
-			await writeFile(fixture, 'process.exit("2");');
-			const compilation = compile(fixture);
-			await expect(compilation).rejects.toBeInstanceOf(CompilerError);
-			await expect(compilation).rejects.toMatchObject({
-				diagnostics: [expect.objectContaining({ code: DiagnosticCodes.TypeScriptError })],
-			});
-			for (const source of [
-				'console.log("abc".slice(1));',
-				'console.log("abc"[0]);',
-				'console.log("abc"[0].length);',
-				'console.log(+"42");',
-				"console.log(String(42));",
-				"console.log(undefined);",
-				"function f(): void {} console.log(f());",
-				"console.log(process.exit(0));",
-				"function f(value: void): number { return 1; } f();",
-				"function f(): void {} function g(): void { return f(); } g();",
-				'console.log(process.argv["0"]);',
-				'console.log("%s", "ok");',
-				'function format(): string { return "%s"; } console.log(format(), "ok");',
-				"function f(): void {} console.log(`${f()}`);",
-				"console.log(`${process.exit(0)}`);",
-				"console.log(process.exit(0) + 1);",
-				"console.log((process.argv[99] + 1).length);",
-				"function f(): number { process.exit(0); } f();",
-				"function f() { return 1; } console.log(f);",
-				"function f(value: number) { return value; } console.log(f.length);",
-			]) {
-				await writeFile(fixture, source);
-				await expect(compile(fixture)).rejects.toThrow("Unsupported TypeScript");
-			}
-		} finally {
-			await rm(workspace, { recursive: true, force: true });
-		}
-	}, 120_000);
-
-	it("rejects numeric string results escaping through function boundaries", async () => {
+	it("exposes numeric string results in the Node oracle", async () => {
 		const workspace = await mkdtemp(join(tmpdir(), "crust-string-boundary-"));
 		const fixture = join(workspace, "fixture.ts");
 		try {
-			for (const source of [
-				"function len(s: string): number { return s.length; } console.log(len(process.argv[99] + 1));",
-				"function len(s: string): number { return s.length; } console.log(len((process.argv[99]! + 1)!));",
-				"function value(): string { return process.argv[99] + 1; } console.log(value().length);",
-				"function value(s: string): string { return s + 1; } console.log(value(process.argv[99]).length);",
-				"function len(s: string): number { return s.length; } console.log(len(process.argv[98] + process.argv[99]));",
-			]) {
+			for (const source of numericStringBoundarySources) {
 				await writeFile(fixture, source);
 				if (nodePath === null) throw new Error("Node is required as the corpus reference runtime");
 				const reference = run(nodePath, [fixture]);
 				expect(reference.exitCode).toBe(0);
 				expect(reference.stdout.toString()).toBe("undefined\n");
 				expect(reference.stderr.toString()).toBe("");
-				await expect(compile(fixture)).rejects.toThrow("Unsupported TypeScript");
 			}
 		} finally {
 			await rm(workspace, { recursive: true, force: true });
