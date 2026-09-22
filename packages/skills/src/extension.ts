@@ -1,4 +1,4 @@
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 
 import {
 	type BuildArtifacts,
@@ -32,9 +32,14 @@ import {
 	installSkill,
 	uninstallSkill,
 } from "./generate.ts";
-import { planReconcile, UNIVERSAL_GROUP, type ReconcileChoice } from "./reconcile.ts";
+import {
+	installedAgents,
+	planReconcile,
+	UNIVERSAL_GROUP,
+	type ReconcileChoice,
+} from "./reconcile.ts";
 import { SkillSourceUnavailableError, loadPackagedSkills, type PackagedSkill } from "./source.ts";
-import type { InstallSkillResult, SkillOptions } from "./types.ts";
+import type { InstallSkillResult, SkillOptions, SkillStatusResult } from "./types.ts";
 
 export const SKILLS: ExtensionId = defineExtensionId("crust:skills");
 
@@ -223,44 +228,95 @@ export const skill: ExtensionFactory<
 	};
 });
 
-async function reconcileSkill(opts: {
-	packagedSkill: PackagedSkill;
+type SkillStatusEntry = SkillStatusResult["agents"][number];
+type SkillStatusMap = ReadonlyMap<AgentTarget, SkillStatusEntry>;
+
+async function loadStatuses(scope: Scope): Promise<Map<PackagedSkill, SkillStatusMap>> {
+	const statuses = new Map<PackagedSkill, SkillStatusMap>();
+	for (const packagedSkill of loadPackagedSkills(resolveArtifactDir(SKILLS_ARTIFACT))) {
+		const status = await getSkillStatus({
+			name: packagedSkill.name,
+			sourceDir: packagedSkill.sourceDir,
+			scope,
+		});
+		statuses.set(packagedSkill, new Map(status.agents.map((entry) => [entry.agent, entry])));
+	}
+	return statuses;
+}
+
+async function selectSkills(
+	message: string,
+	skills: readonly PackagedSkill[],
+	defaults?: readonly PackagedSkill[],
+): Promise<PackagedSkill[]> {
+	const names = await multiselect({
+		message,
+		choices: skills.map((packagedSkill) => ({
+			label: packagedSkill.name,
+			value: packagedSkill.name,
+			hint: packagedSkill.description,
+		})),
+		default: defaults?.map((packagedSkill) => packagedSkill.name),
+		required: false,
+	});
+	return skills.filter((packagedSkill) => names.includes(packagedSkill.name));
+}
+
+function reportAgentDirs(
+	io: SkillIO,
+	entries: readonly { agent: AgentTarget; outputDir: string }[],
+): void {
+	// Agents sharing one directory (e.g. Universal + Antigravity) report as one line.
+	for (const [outputDir, group] of Map.groupBy(entries, (entry) => entry.outputDir)) {
+		const labels = formatAgentLabels(group.map((entry) => entry.agent));
+		io.stdout(dim(`  ${labels.join(", ")} → ${outputDir}`));
+	}
+}
+
+async function installSkills(opts: {
 	scope: Scope;
 	installAll: boolean;
 	io: SkillIO;
 }): Promise<void> {
-	const { packagedSkill, scope, installAll, io } = opts;
-	const effectiveScope = resolveEffectiveScope(scope);
+	const { installAll, io } = opts;
+	const effectiveScope = resolveEffectiveScope(opts.scope);
+	const statuses = await loadStatuses(effectiveScope);
+	let skills = [...statuses.keys()];
+	if (skills.length === 0) return;
+	if (!installAll && skills.length > 1) {
+		const installedSkills = skills.filter(
+			(packagedSkill) => installedAgents(statuses.get(packagedSkill)!).length > 0,
+		);
+		skills = await selectSkills(
+			"Select skills to install",
+			skills,
+			installedSkills.length > 0 ? installedSkills : skills,
+		);
+		if (skills.length === 0) {
+			io.stdout(dim("No skills selected."));
+			return;
+		}
+	}
+
 	const detected = new Set(await detectInstalledAgents());
 	const universal = getUniversalAgents();
-	const status = await getSkillStatus({
-		name: packagedSkill.name,
-		sourceDir: packagedSkill.sourceDir,
-		scope: effectiveScope,
-	});
-	const statusMap = new Map(status.agents.map((entry) => [entry.agent, entry]));
 	const installed = new Set(
-		status.agents
-			.filter((entry) => entry.status === "linked" || entry.status === "dangling")
-			.map((entry) => entry.agent),
+		skills.flatMap((packagedSkill) => installedAgents(statuses.get(packagedSkill)!)),
 	);
 	const additional = getAdditionalAgents().filter(
 		(agent) => detected.has(agent) || installed.has(agent),
 	);
+	// Every skill links into the same per-agent skills root; hint the shared root.
+	const rootHint = (agent: AgentTarget) => {
+		const outputDir = statuses.get(skills[0]!)?.get(agent)?.outputDir;
+		return outputDir ? dirname(outputDir) : "path unavailable";
+	};
 	const choices: Array<ReconcileChoice & { hint: string }> = [];
 	if (universal.length > 0) {
-		choices.push({
-			label: "Universal",
-			value: UNIVERSAL_GROUP,
-			hint: statusMap.get(universal[0]!)?.outputDir ?? "path unavailable",
-		});
+		choices.push({ label: "Universal", value: UNIVERSAL_GROUP, hint: rootHint(universal[0]!) });
 	}
 	for (const agent of additional) {
-		choices.push({
-			label: AGENT_LABELS[agent],
-			value: agent,
-			hint: statusMap.get(agent)?.outputDir ?? "path unavailable",
-		});
+		choices.push({ label: AGENT_LABELS[agent], value: agent, hint: rootHint(agent) });
 	}
 
 	let selected: AgentTarget[];
@@ -273,7 +329,7 @@ async function reconcileSkill(opts: {
 			defaults.unshift(UNIVERSAL_GROUP);
 		}
 		const values = await multiselect({
-			message: `Select agents to install "${packagedSkill.name}" for`,
+			message: "Select agents to install for",
 			choices,
 			default: defaults,
 			required: false,
@@ -282,6 +338,31 @@ async function reconcileSkill(opts: {
 		if (values.includes(UNIVERSAL_GROUP)) selected.push(...universal);
 	}
 
+	for (const packagedSkill of skills) {
+		await applyReconcile({
+			packagedSkill,
+			statusMap: statuses.get(packagedSkill)!,
+			choices,
+			selected,
+			universal,
+			scope: effectiveScope,
+			installAll,
+			io,
+		});
+	}
+}
+
+async function applyReconcile(opts: {
+	packagedSkill: PackagedSkill;
+	statusMap: SkillStatusMap;
+	choices: readonly ReconcileChoice[];
+	selected: readonly AgentTarget[];
+	universal: readonly AgentTarget[];
+	scope: Scope;
+	installAll: boolean;
+	io: SkillIO;
+}): Promise<void> {
+	const { packagedSkill, statusMap, choices, selected, universal, scope, installAll, io } = opts;
 	const { toInstall, toUninstall, sharedDirWarnings } = planReconcile({
 		statusMap,
 		choices,
@@ -297,14 +378,14 @@ async function reconcileSkill(opts: {
 	}
 
 	if (toInstall.length > 0) {
-		const groups = groupAgentsByOutputDir(toInstall, effectiveScope, packagedSkill.name);
-		const installedAgents: InstallSkillResult["agents"] = [];
+		const groups = groupAgentsByOutputDir(toInstall, scope, packagedSkill.name);
+		const linked: InstallSkillResult["agents"] = [];
 		for (const agents of groups.values()) {
 			const runInstall = (force?: boolean) =>
 				installSkill({
 					sourceDir: packagedSkill.sourceDir,
 					agents,
-					scope: effectiveScope,
+					scope,
 					force,
 				});
 			try {
@@ -312,7 +393,7 @@ async function reconcileSkill(opts: {
 					message: `Installing skill [${packagedSkill.name}]...`,
 					task: () => runInstall(),
 				});
-				installedAgents.push(...result.agents);
+				linked.push(...result.agents);
 			} catch (error) {
 				if (!(error instanceof SkillConflictError)) throw error;
 				const label = formatAgentLabels(agents).join(", ");
@@ -330,16 +411,12 @@ async function reconcileSkill(opts: {
 					continue;
 				}
 				const result = await runInstall(true);
-				installedAgents.push(...result.agents);
+				linked.push(...result.agents);
 			}
 		}
-		if (installedAgents.length > 0) {
+		if (linked.length > 0) {
 			io.stdout(`\n${bold(`Installed "${packagedSkill.name}"`)}`);
-			for (const line of new Map(
-				installedAgents.map((entry) => [formatAgentLabels([entry.agent])[0]!, entry.outputDir]),
-			)) {
-				io.stdout(dim(`  ${line[0]} → ${line[1]}`));
-			}
+			reportAgentDirs(io, linked);
 		}
 	}
 
@@ -350,7 +427,7 @@ async function reconcileSkill(opts: {
 				uninstallSkill({
 					name: packagedSkill.name,
 					agents: toUninstall,
-					scope: effectiveScope,
+					scope,
 				}),
 		});
 	}
@@ -359,7 +436,69 @@ async function reconcileSkill(opts: {
 	}
 }
 
+async function uninstallSkills(opts: {
+	scope: Scope;
+	removeAll: boolean;
+	io: SkillIO;
+}): Promise<void> {
+	const { removeAll, io } = opts;
+	const effectiveScope = resolveEffectiveScope(opts.scope);
+	const statuses = await loadStatuses(effectiveScope);
+	const installedSkills = [...statuses].flatMap(([packagedSkill, statusMap]) =>
+		installedAgents(statusMap).length > 0 ? [packagedSkill] : [],
+	);
+	if (installedSkills.length === 0) {
+		io.stdout(dim(`No installed skills (${effectiveScope}).`));
+		return;
+	}
+	// No default: a preselected list would let a non-TTY run (which answers with
+	// the default) remove every skill without --all.
+	const skills = removeAll
+		? installedSkills
+		: await selectSkills("Select skills to uninstall", installedSkills);
+	if (skills.length === 0) {
+		io.stdout(dim("No skills selected."));
+		return;
+	}
+	for (const packagedSkill of skills) {
+		const result = await spinner({
+			message: `Removing skill [${packagedSkill.name}]...`,
+			task: () => uninstallSkill({ name: packagedSkill.name, scope: effectiveScope }),
+		});
+		const removed = result.agents.filter((entry) => entry.status === "removed");
+		if (removed.length === 0) continue;
+		io.stdout(`\n${bold(`Removed "${packagedSkill.name}"`)}`);
+		reportAgentDirs(io, removed);
+	}
+}
+
+const SCOPE_FLAG = {
+	name: "scope",
+	type: "string",
+	choices: ["project", "global"],
+	description: "Skill scope (project or global)",
+} as const;
+
+const INSTALL_FLAGS = [
+	SCOPE_FLAG,
+	{
+		name: "all",
+		type: "boolean",
+		description:
+			"Install for every detected agent and every agent already holding a packaged skill, non-interactively",
+	},
+] as const;
+
+type SkillActionContext = SkillIO & { flags: { scope?: Scope; all?: boolean } };
+
 function buildSkillCommand(commandName: string, options: SkillOptions) {
+	const install = async (context: SkillActionContext) => {
+		const installAll = context.flags.all === true;
+		const scope = installAll
+			? (context.flags.scope ?? options.defaultScope ?? DEFAULT_SKILL_SCOPE)
+			: await resolveScope(context.flags.scope, options);
+		await installSkills({ scope, installAll, io: context });
+	};
 	return defineCommand(
 		commandName,
 		{
@@ -368,46 +507,41 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 		},
 		(command) =>
 			command
-				.flags(
-					{
-						name: "scope",
-						type: "string",
-						choices: ["project", "global"],
-						description: "Install scope (project or global)",
-					},
-					{
-						name: "all",
-						type: "boolean",
-						description: "Install for all detected agents non-interactively",
-					},
+				.flags(...INSTALL_FLAGS)
+				.add(
+					defineCommand(
+						"install",
+						{ description: "Link packaged skills into agent directories" },
+						(sub) => sub.flags(...INSTALL_FLAGS).action(install),
+					),
 				)
 				.add(
-					defineCommand("update", { description: "Repair installed skill links" }, (update) =>
-						update
-							.flags({
-								name: "scope",
-								type: "string",
-								choices: ["project", "global"],
-								description: "Update scope (project or global)",
+					defineCommand("uninstall", { description: "Remove installed skill links" }, (sub) =>
+						sub
+							.flags(SCOPE_FLAG, {
+								name: "all",
+								type: "boolean",
+								description: "Uninstall every installed skill non-interactively",
 							})
 							.action(async (context) => {
-								const scope = await resolveScope(context.flags.scope, options);
-								for (const packagedSkill of loadPackagedSkills(
-									resolveArtifactDir(SKILLS_ARTIFACT),
-								)) {
-									await repairInstalledSkill(packagedSkill, scope, context, true);
-								}
+								const removeAll = context.flags.all === true;
+								const scope = removeAll
+									? (context.flags.scope ?? options.defaultScope ?? DEFAULT_SKILL_SCOPE)
+									: await resolveScope(context.flags.scope, options);
+								await uninstallSkills({ scope, removeAll, io: context });
 							}),
 					),
 				)
-				.action(async (context) => {
-					const installAll = context.flags.all === true;
-					const scope = installAll
-						? (context.flags.scope ?? options.defaultScope ?? DEFAULT_SKILL_SCOPE)
-						: await resolveScope(context.flags.scope, options);
-					for (const packagedSkill of loadPackagedSkills(resolveArtifactDir(SKILLS_ARTIFACT))) {
-						await reconcileSkill({ packagedSkill, scope, installAll, io: context });
-					}
-				}),
+				.add(
+					defineCommand("repair", { description: "Repair installed skill links" }, (sub) =>
+						sub.flags(SCOPE_FLAG).action(async (context) => {
+							const scope = await resolveScope(context.flags.scope, options);
+							for (const packagedSkill of loadPackagedSkills(resolveArtifactDir(SKILLS_ARTIFACT))) {
+								await repairInstalledSkill(packagedSkill, scope, context, true);
+							}
+						}),
+					),
+				)
+				.action(install),
 	);
 }

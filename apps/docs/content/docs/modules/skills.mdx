@@ -28,7 +28,9 @@ Each skill has its own directory:
         ├── deploy.md
         ├── skills.md
         └── skills/
-            └── update.md
+            ├── install.md
+            ├── repair.md
+            └── uninstall.md
 ```
 
 Use `writeSkillsFromSnapshot()` when a prepared Command Snapshot is available. Omit `app` only when at least one authored extra is provided.
@@ -37,7 +39,7 @@ Use `writeSkillsFromSnapshot()` when a prepared Command Snapshot is available. O
 
 <include lang="ts">../../../examples/modules/skills.ts#extension</include>
 
-The Extension registers `my-cli skills` and `my-cli skills update`, with `skill` retained as an alias. Setting `command` to a custom name replaces the default command without adding the alias. It also contributes an `Agent skills` root section with `except: [skill]` (the Extension factory), so it appears in help, man pages, and any other consumer, but not in the skills it generates.
+The Extension registers `my-cli skills` (alias `skill`), which runs `install`, plus the `install`, `uninstall`, and `repair` subcommands. Setting `command` to a custom name replaces the default command without adding the alias. It also contributes an `Agent skills` root section with `except: [skill]` (the Extension factory), so it appears in help, man pages, and any other consumer, but not in the skills it generates.
 
 The help section includes this escaped excerpt:
 
@@ -53,13 +55,16 @@ Generated man pages can embed source paths resolved on the build machine. Run bu
 
 ```sh
 my-cli skills
-my-cli skills --all --scope project
-my-cli skills update
+my-cli skills install --all --scope project
+my-cli skills uninstall
+my-cli skills repair
 ```
 
-`--scope` accepts `project` or `global`. With `--all`, scope comes from `--scope`, then `defaultScope`, then `global`; without `--all`, an interactive run prompts when neither setting is supplied.
+`--scope` accepts `project` or `global`. With `--all`, scope comes from `--scope`, then `defaultScope`, then `global`; without `--all`, an interactive run prompts when neither setting is supplied. `install --all` links every packaged skill for the Universal group, every agent detected on `PATH`, and every agent that already holds one of the packaged skills.
 
-In that prompt, deselecting an agent with an installed link removes its link. It does not merely skip a new installation.
+An interactive install asks once which packaged skills to install (only when more than one is packaged; unselected skills are left untouched), then once which agents to install every selected skill for, with an overwrite confirmation for each unowned directory. Deselecting an agent with an installed link removes that link for the selected skills. It does not merely skip a new installation.
+
+`skills uninstall` lists the packaged skills currently linked at the chosen scope, with nothing preselected, and removes the selected ones from every agent directory; `--all` removes them without prompting and is the only non-interactive form. `skills repair` relinks stale or dangling links without prompting for agents.
 
 <auto-type-table path="../../../../../packages/skills/src/types.ts" name="SkillOptions" />
 

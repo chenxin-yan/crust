@@ -5,6 +5,15 @@ export const UNIVERSAL_GROUP = "__universal__";
 
 type SkillStatusEntry = SkillStatusResult["agents"][number];
 
+/** @internal Agents whose link exists (healthy or dangling) for one skill. */
+export function installedAgents(
+	statusMap: ReadonlyMap<AgentTarget, SkillStatusEntry>,
+): AgentTarget[] {
+	return [...statusMap.values()].flatMap((entry) =>
+		entry.status === "linked" || entry.status === "dangling" ? [entry.agent] : [],
+	);
+}
+
 export interface ReconcileChoice {
 	readonly label: string;
 	readonly value: AgentTarget | typeof UNIVERSAL_GROUP;
@@ -29,9 +38,7 @@ export function planReconcile(options: {
 	readonly universal: readonly AgentTarget[];
 }): ReconcilePlan {
 	const { statusMap, choices, selected, universal } = options;
-	const installed = [...statusMap.values()].flatMap((entry) =>
-		entry.status === "linked" || entry.status === "dangling" ? [entry.agent] : [],
-	);
+	const installed = installedAgents(statusMap);
 	const toInstall = selected.filter((agent) => statusMap.get(agent)?.status !== "linked");
 	const keptDirs = new Set(selected.map((agent) => statusMap.get(agent)?.outputDir));
 	const toUninstall = installed.filter(
