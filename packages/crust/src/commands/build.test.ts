@@ -472,9 +472,11 @@ describe("readCrustConfig", () => {
 				`Unknown package.json crust key "${key}". Allowed keys: runtime, targets, bunPlugins, include`,
 			);
 		}
-		expect(() => readCrustConfig({ crust: { targets: "bun-linux-x64" } })).toThrow(
-			"crust.targets must be an array",
-		);
+		for (const targets of ["bun-linux-x64", []]) {
+			expect(() => readCrustConfig({ crust: { targets } })).toThrow(
+				"crust.targets must be a non-empty array",
+			);
+		}
 		expect(() => readCrustConfig({ crust: "bun" })).toThrow("crust must be an object");
 		expect(() => readCrustConfig({ crust: { bunPlugins: "./p.ts" } })).toThrow(
 			"crust.bunPlugins must be an array",

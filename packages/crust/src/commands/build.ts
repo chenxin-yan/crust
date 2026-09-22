@@ -86,9 +86,10 @@ export function readCrustConfig(pkg: JsonValue | undefined): CrustConfig {
 		config.runtime = crust.runtime;
 	}
 	if (crust.targets !== undefined) {
-		if (!isStringArray(crust.targets)) {
+		// An empty list would mean "every target" downstream, the opposite of what it says.
+		if (!isStringArray(crust.targets) || crust.targets.length === 0) {
 			throw new Error(
-				'package.json crust.targets must be an array of canonical compiler targets, e.g. ["bun-linux-x64", "bun-darwin-arm64"].',
+				'package.json crust.targets must be a non-empty array of canonical compiler targets, e.g. ["bun-linux-x64", "bun-darwin-arm64"].',
 			);
 		}
 		config.targets = crust.targets;

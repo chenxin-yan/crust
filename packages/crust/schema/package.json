@@ -26,6 +26,7 @@
 				"targets": {
 					"description": "Canonical compiler targets `crust build` stages when no --target flag is passed, or `host` for the building machine; without it every Bun or Deno target is staged. Rejected for Node.",
 					"type": "array",
+					"minItems": 1,
 					"items": {
 						"type": "string"
 					}
