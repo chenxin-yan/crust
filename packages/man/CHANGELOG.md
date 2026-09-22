@@ -1,5 +1,9 @@
 # @crustjs/man
 
+## 0.3.5
+
+No changes in this release.
+
 ## 0.3.4
 
 No changes in this release.

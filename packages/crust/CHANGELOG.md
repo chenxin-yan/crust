@@ -1,5 +1,14 @@
 # @crustjs/crust
 
+## 0.3.5
+
+### Patch Changes
+
+- [#429](https://github.com/chenxin-yan/crust/pull/429) [`6e96295`](https://github.com/chenxin-yan/crust/commit/6e962954fbb349667c15c5232143a4fc93be696b) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `crust build` reads a default target list from `crust.targets` in `package.json`, so a CLI that ships a fixed subset of platforms (for example glibc-only Linux because a native dependency has no musl build) runs a bare `crust build` instead of repeating `--target` flags. Accepts the same values as `--target`, which still overrides it per run; rejected for the Node runtime.
+- Updated dependencies []:
+  - @crustjs/core@0.3.5
+  - @crustjs/extensions@0.3.5
+
 ## 0.3.4
 
 ### Patch Changes
