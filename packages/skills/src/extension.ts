@@ -252,7 +252,7 @@ async function loadStatuses(scope: Scope): Promise<Map<PackagedSkill, SkillStatu
 async function selectSkills(
 	message: string,
 	skills: readonly PackagedSkill[],
-	defaults: readonly PackagedSkill[],
+	defaults?: readonly PackagedSkill[],
 ): Promise<PackagedSkill[]> {
 	const names = await multiselect({
 		message,
@@ -261,7 +261,7 @@ async function selectSkills(
 			value: packagedSkill.name,
 			hint: packagedSkill.description,
 		})),
-		default: defaults.map((packagedSkill) => packagedSkill.name),
+		default: defaults?.map((packagedSkill) => packagedSkill.name),
 		required: false,
 	});
 	return skills.filter((packagedSkill) => names.includes(packagedSkill.name));
@@ -459,9 +459,15 @@ async function uninstallSkills(opts: {
 		io.stdout(dim(`No installed skills (${effectiveScope}).`));
 		return;
 	}
+	// No default: a preselected list would let a non-TTY run (which answers with
+	// the default) remove every skill without --all.
 	const skills = removeAll
 		? installedSkills
-		: await selectSkills("Select skills to uninstall", installedSkills, installedSkills);
+		: await selectSkills("Select skills to uninstall", installedSkills);
+	if (skills.length === 0) {
+		io.stdout(dim("No skills selected."));
+		return;
+	}
 	for (const packagedSkill of skills) {
 		const result = await spinner({
 			message: `Removing skill [${packagedSkill.name}]...`,
@@ -486,7 +492,8 @@ const INSTALL_FLAGS = [
 	{
 		name: "all",
 		type: "boolean",
-		description: "Install for all detected agents non-interactively",
+		description:
+			"Install for every detected agent and every agent already holding a packaged skill, non-interactively",
 	},
 ] as const;
 

@@ -330,8 +330,8 @@ describe("skill extension packaged directory", () => {
 			withPromptIO(harness.io, () => captureExecute(createApp(), ["skill", "uninstall"])),
 		);
 		await waitForPrompt(harness, "Select skills to uninstall");
-		// Both installed skills start selected; drop "guide" so only "demo" is removed.
-		harness.keys("down", "space", "enter");
+		// Nothing is preselected; pick "demo" (first choice) so only it is removed.
+		harness.keys("space", "enter");
 		const captured = await run;
 
 		expect(captured.stdout).toContain('Removed "demo"');
