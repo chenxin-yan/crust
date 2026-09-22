@@ -26,14 +26,49 @@ Crust is a TypeScript CLI framework for humans and agents. Define a command once
 
 ## Who uses Crust?
 
-- [Nia CLI](https://github.com/nozomio-labs/nia-cli) by [Nozomio Labs](https://www.trynia.ai/)
+- [gyst](https://github.com/chenxin-yan/gyst)
+- [Nia](https://github.com/nozomio-labs/nia-cli) by [Nozomio Labs](https://www.trynia.ai/)
 
 ## Getting Started
 
+### Bun
+
 ```sh
-bun create crust my-cli
+bun create crust@latest my-cli
 cd my-cli
 bun run dev
+```
+
+### npm
+
+```sh
+npm create crust@latest my-cli
+cd my-cli
+npm run dev
+```
+
+### pnpm
+
+```sh
+pnpm create crust@latest my-cli
+cd my-cli
+pnpm run dev
+```
+
+### Yarn (2+)
+
+```sh
+yarn dlx create-crust@latest my-cli
+cd my-cli
+yarn run dev
+```
+
+### Deno
+
+```sh
+deno run -A npm:create-crust@latest my-cli --runtime deno
+cd my-cli
+deno task dev
 ```
 
 ## Packages
