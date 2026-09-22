@@ -214,7 +214,21 @@ Create one with:
 bun run changeset
 ```
 
-Use the smallest accurate bump. Do not manually edit package versions or changelog files unless the release workflow specifically requires it.
+Use the smallest accurate bump. Describe the user-facing change and any migration steps in the changeset summary. Do not manually edit package versions or changelog files unless the release workflow specifically requires it.
+
+### Pull Request Feedback
+
+[Changeset Status](.github/workflows/changeset-status.yml) updates a comment on contributor PRs, including PRs from forks, showing whether changesets are present and which packages would be released. Automated `changeset-release/` PRs are excluded because they consume changesets.
+
+A missing changeset is a reminder, not a CI failure, following [Changesets' recommendation](https://changesets.dev/guide/automating#non-blocking). For the no-release changes listed above, no changeset (including an empty one) is required. Reviewers still need to check that user-facing changes have appropriate changesets; the comment does not establish that every affected package has the correct bump.
+
+The workflow uses `pull_request_target` with separate read-only status and comment-writing jobs. Do not add dependency installation, builds, tests, or execution of PR-controlled code to it.
+
+### Release Automation
+
+After changes merge to `main`, the [release workflow](.github/workflows/release.yml) runs package CI and uses the split Changesets actions to either update the version PR or publish unreleased package versions. Review the generated versions and changelogs before merging the version PR. Publishing uses npm trusted publishing (OIDC), not an npm token.
+
+Maintainers must keep **Settings → Actions → General → Allow GitHub Actions to create and approve pull requests** enabled and configure an npm trusted publisher for every published package, as described in the release workflow. PRs created with the default `GITHUB_TOKEN` do not automatically trigger PR workflows; the release workflow runs its own package CI and release size report.
 
 ## Pull Requests
 
