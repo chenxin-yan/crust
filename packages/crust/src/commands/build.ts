@@ -368,7 +368,6 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 	};
 
 	if (runtime === "node") return { ...common, runtime };
-	// --target flags override the package.json default; neither means every target.
 	const targetInputs = flags.target?.length ? flags.target : config.targets;
 	if (runtime === "bun") {
 		const targets = resolveTargets(BUN_TARGETS, targetInputs);
