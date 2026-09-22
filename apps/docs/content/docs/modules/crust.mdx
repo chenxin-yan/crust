@@ -27,14 +27,14 @@ crust build --target bun-linux-x64
 
 ### `crust build` options
 
-| Option                        | Type               | Default | Description                                                                                              |
-| ----------------------------- | ------------------ | ------- | -------------------------------------------------------------------------------------------------------- |
-| `-t, --target`                | string, repeatable | none    | Canonical compiler target(s), or `host` for this machine; repeatable. Omit to stage all Bun/Deno targets |
-| `--env-file`                  | string, repeatable | none    | Explicit env file(s) used for build-time constants; repeatable                                           |
-| `--validate`, `--no-validate` | boolean            | `true`  | Materialize command definitions before compiling; `--no-validate` also skips Extension build hooks       |
-| `--minify`, `--no-minify`     | boolean            | none    | Minify the output (default for bun and node; unsupported for deno)                                       |
+| Option                        | Type               | Default | Description                                                                                                                   |
+| ----------------------------- | ------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `-t, --target`                | string, repeatable | none    | Canonical compiler target(s), or `host` for this machine; repeatable. Omit to stage `crust.targets`, or every Bun/Deno target |
+| `--env-file`                  | string, repeatable | none    | Explicit env file(s) used for build-time constants; repeatable                                                                |
+| `--validate`, `--no-validate` | boolean            | `true`  | Materialize command definitions before compiling; `--no-validate` also skips Extension build hooks                            |
+| `--minify`, `--no-minify`     | boolean            | none    | Minify the output (default for bun and node; unsupported for deno)                                                            |
 
-None of the command names, entry files, runtime, Bun bundler plugins, or extra directories are flags: they come from [`bin`](#commands-and-entries-bin) and the [`crust` block](#packagejson-configuration) in `package.json`.
+None of the command names, entry files, runtime, default targets, Bun bundler plugins, or extra directories are flags: they come from [`bin`](#commands-and-entries-bin) and the [`crust` block](#packagejson-configuration) in `package.json`.
 
 ### `crust publish` options
 
@@ -82,6 +82,7 @@ During a validated build each entry's root command must be named after its key (
 {
   "crust": {
     "runtime": "bun",
+    "targets": ["bun-linux-x64", "bun-linux-arm64", "bun-darwin-arm64"],
     "bunPlugins": ["@opentui/solid/bun-plugin", "./build/plugin.ts"],
     "include": ["templates"]
   }
@@ -93,6 +94,7 @@ Every key is optional. Any other key under `crust` is an error that lists the al
 | Key                | Description                                                                                                                                                                                                                                  |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `crust.runtime`    | `bun`, `deno`, or `node`. Without it, `deno.json`/`deno.jsonc` selects Deno and `@types/node` without `@types/bun` selects Node; otherwise Bun.                                                                                              |
+| `crust.targets`    | Canonical compiler targets staged when `crust build` runs without `--target`, `host` included; the flag overrides it per run. Without it every Bun or Deno target is staged. Rejected for Node.                                              |
 | `crust.bunPlugins` | [Bun bundler plugin](https://bun.com/docs/bundler/plugins) modules applied to Bun and Node builds, in order. A bare name resolves from `node_modules`, a path from the project root; each must default-export the plugin. Rejected for Deno. |
 | `crust.include`    | Directories relative to the project root that `crust build` copies into `.crust/root/` (listed in `files`) and into each platform package's `bin/`.                                                                                          |
 

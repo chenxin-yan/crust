@@ -101,6 +101,25 @@ describe("planBuild", () => {
 		});
 	});
 
+	it("stages package.json crust.targets unless --target is passed", () => {
+		writePackageJson({ crust: { targets: ["bun-linux-x64", "bun-darwin-arm64"] } });
+		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
+			runtime: "bun",
+			targets: ["bun-linux-x64", "bun-darwin-arm64"],
+		});
+		expect(planBuild({ ...baseFlags, target: ["bun-linux-arm64"] }, tmpDir)).toMatchObject({
+			targets: ["bun-linux-arm64"],
+		});
+		writePackageJson({ crust: { targets: ["linux-x64"] } });
+		expect(() => planBuild(baseFlags, tmpDir)).toThrow(
+			'Unknown target "linux-x64". Targets must use canonical Bun names. Did you mean "bun-linux-x64"?',
+		);
+		writePackageJson({ crust: { runtime: "node", targets: ["bun-linux-x64"] } });
+		expect(() => planBuild(baseFlags, tmpDir)).toThrow(
+			"package.json crust.targets is not supported with the node runtime",
+		);
+	});
+
 	it("reads package.json crust.runtime", () => {
 		writePackageJson({ crust: { runtime: "deno" } });
 		expect(planBuild(baseFlags, tmpDir)).toMatchObject({
@@ -430,15 +449,32 @@ describe("resolveBinEntries", () => {
 });
 
 describe("readCrustConfig", () => {
-	it("accepts the three documented keys and nothing else", () => {
+	it("accepts the four documented keys and nothing else", () => {
 		expect(readCrustConfig(undefined)).toEqual({});
 		expect(readCrustConfig({ name: "x" })).toEqual({});
 		expect(
-			readCrustConfig({ crust: { runtime: "node", bunPlugins: ["./p.ts"], include: ["t"] } }),
-		).toEqual({ runtime: "node", bunPlugins: ["./p.ts"], include: ["t"] });
-		for (const key of ["bunPlugin", "entry"]) {
+			readCrustConfig({
+				crust: {
+					runtime: "node",
+					targets: ["bun-linux-x64"],
+					bunPlugins: ["./p.ts"],
+					include: ["t"],
+				},
+			}),
+		).toEqual({
+			runtime: "node",
+			targets: ["bun-linux-x64"],
+			bunPlugins: ["./p.ts"],
+			include: ["t"],
+		});
+		for (const key of ["bunPlugin", "entry", "target"]) {
 			expect(() => readCrustConfig({ crust: { [key]: [] } })).toThrow(
-				`Unknown package.json crust key "${key}". Allowed keys: runtime, bunPlugins, include`,
+				`Unknown package.json crust key "${key}". Allowed keys: runtime, targets, bunPlugins, include`,
+			);
+		}
+		for (const targets of ["bun-linux-x64", []]) {
+			expect(() => readCrustConfig({ crust: { targets } })).toThrow(
+				"crust.targets must be a non-empty array",
 			);
 		}
 		expect(() => readCrustConfig({ crust: "bun" })).toThrow("crust must be an object");
@@ -583,7 +619,7 @@ describe("buildCommand error handling", () => {
 		expect(
 			await executeBuildError("unknown-key", { crust: { bunPlugin: [] } }, ["--no-validate"]),
 		).toContain(
-			'Unknown package.json crust key "bunPlugin". Allowed keys: runtime, bunPlugins, include',
+			'Unknown package.json crust key "bunPlugin". Allowed keys: runtime, targets, bunPlugins, include',
 		);
 	});
 

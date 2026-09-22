@@ -57,7 +57,7 @@ The entry file is the value of `bin` in `package.json`: `"bin": { "my-cli": "src
 crust build --target bun-linux-x64 --target bun-darwin-arm64
 ```
 
-Omitting `--target` builds every supported Bun or Deno target; repeat it for the platforms you ship, or pass `--target host` for a fast local build of just your own machine's target (`host` can be mixed with explicit targets, and duplicates are dropped). The launcher only knows the targets that were built, so a release build should include every platform your users run.
+Omitting `--target` builds every supported Bun or Deno target; repeat it for the platforms you ship, or pass `--target host` for a fast local build of just your own machine's target (`host` can be mixed with explicit targets, and duplicates are dropped). A CLI that always ships the same subset records it once as [`crust.targets`](/docs/modules/crust#packagejson-configuration) in `package.json`, so a bare `crust build` stages exactly those and `--target` still overrides per run. The launcher only knows the targets that were built, so a release build should include every platform your users run.
 
 | Bun target                                   | Deno target                                             | Platform alias                       |
 | -------------------------------------------- | ------------------------------------------------------- | ------------------------------------ |

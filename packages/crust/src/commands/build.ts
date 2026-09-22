@@ -40,11 +40,12 @@ import {
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Also mirrored by `schema/package.json`; build.test.ts guards against drift. */
-export const CRUST_CONFIG_KEYS = ["runtime", "bunPlugins", "include"] as const;
+export const CRUST_CONFIG_KEYS = ["runtime", "targets", "bunPlugins", "include"] as const;
 
 /** The `crust` block of the user's package.json, shape-validated. */
 export type CrustConfig = {
 	runtime?: BuildRuntime;
+	targets?: string[];
 	bunPlugins?: string[];
 	include?: string[];
 };
@@ -83,6 +84,15 @@ export function readCrustConfig(pkg: JsonValue | undefined): CrustConfig {
 			);
 		}
 		config.runtime = crust.runtime;
+	}
+	if (crust.targets !== undefined) {
+		// An empty list would mean "every target" downstream, the opposite of what it says.
+		if (!isStringArray(crust.targets) || crust.targets.length === 0) {
+			throw new Error(
+				'package.json crust.targets must be a non-empty array of canonical compiler targets, e.g. ["bun-linux-x64", "bun-darwin-arm64"].',
+			);
+		}
+		config.targets = crust.targets;
 	}
 	if (crust.bunPlugins !== undefined) {
 		if (!isStringArray(crust.bunPlugins)) {
@@ -320,6 +330,11 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 			"--target cannot be used with the node runtime.\n  Node builds produce one portable JavaScript artifact.",
 		);
 	}
+	if (runtime === "node" && config.targets !== undefined) {
+		throw new Error(
+			"package.json crust.targets is not supported with the node runtime.\n  Node builds produce one portable JavaScript artifact; remove crust.targets or set crust.runtime to bun or deno.",
+		);
+	}
 	if (runtime === "deno" && flags.minify) {
 		throw new Error(
 			"--minify is not supported with the deno runtime.\n  deno compile has no minification step; drop the flag.",
@@ -354,12 +369,13 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 	};
 
 	if (runtime === "node") return { ...common, runtime };
+	const targetInputs = flags.target?.length ? flags.target : config.targets;
 	if (runtime === "bun") {
-		const targets = resolveTargets(BUN_TARGETS, flags.target);
+		const targets = resolveTargets(BUN_TARGETS, targetInputs);
 		assertTargetsBuildableWithoutBun(targets);
 		return { ...common, runtime, targets };
 	}
-	return { ...common, runtime, targets: resolveTargets(DENO_TARGETS, flags.target) };
+	return { ...common, runtime, targets: resolveTargets(DENO_TARGETS, targetInputs) };
 }
 
 /** Bun and Deno stage platform packages behind a Node launcher; Node stages a root-only bundle. */
@@ -468,7 +484,7 @@ export const buildCommand = defineCommand(
 					name: "target",
 					type: "string",
 					multiple: true,
-					description: `Canonical compiler target(s), or "${HOST_TARGET}" for this machine; repeatable. Omit to stage all Bun/Deno targets`,
+					description: `Canonical compiler target(s), or "${HOST_TARGET}" for this machine; repeatable. Omit to stage package.json crust.targets, or every Bun/Deno target`,
 					short: "t",
 				},
 				{
