@@ -39,7 +39,7 @@ Use `writeSkillsFromSnapshot()` when a prepared Command Snapshot is available. O
 
 <include lang="ts">../../../examples/modules/skills.ts#extension</include>
 
-The Extension registers `my-cli skills` with `install`, `uninstall`, and `repair` subcommands, with `skill` retained as an alias. The root command runs `install`. Setting `command` to a custom name replaces the default command without adding the alias. It also contributes an `Agent skills` root section with `except: [skill]` (the Extension factory), so it appears in help, man pages, and any other consumer, but not in the skills it generates.
+The Extension registers `my-cli skills` (alias `skill`), which runs `install`, plus the `install`, `uninstall`, and `repair` subcommands. Setting `command` to a custom name replaces the default command without adding the alias. It also contributes an `Agent skills` root section with `except: [skill]` (the Extension factory), so it appears in help, man pages, and any other consumer, but not in the skills it generates.
 
 The help section includes this escaped excerpt:
 
@@ -62,7 +62,7 @@ my-cli skills repair
 
 `--scope` accepts `project` or `global`. With `--all`, scope comes from `--scope`, then `defaultScope`, then `global`; without `--all`, an interactive run prompts when neither setting is supplied. `install --all` links every packaged skill for the Universal group, every agent detected on `PATH`, and every agent that already holds one of the packaged skills.
 
-An interactive install asks once which packaged skills to install (only when more than one is packaged; unselected skills are left untouched), then once which agents to install every selected skill for, plus a scope prompt when neither `--scope` nor `defaultScope` is set and an overwrite confirmation for each unowned directory. Deselecting an agent with an installed link removes that link for the selected skills. It does not merely skip a new installation.
+An interactive install asks once which packaged skills to install (only when more than one is packaged; unselected skills are left untouched), then once which agents to install every selected skill for, with an overwrite confirmation for each unowned directory. Deselecting an agent with an installed link removes that link for the selected skills. It does not merely skip a new installation.
 
 `skills uninstall` lists the packaged skills currently linked at the chosen scope, with nothing preselected, and removes the selected ones from every agent directory; `--all` removes them without prompting and is the only non-interactive form. `skills repair` relinks stale or dangling links without prompting for agents.
 

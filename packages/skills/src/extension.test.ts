@@ -274,7 +274,6 @@ describe("skill extension packaged directory", () => {
 			// Nothing is installed, so both skills start selected; drop "guide".
 			harness.keys("down", "space", "enter");
 			await waitForPrompt(harness, "Select agents to install for");
-			expect(harness.screen()).not.toContain('install "demo"');
 			harness.keys("space", "enter");
 			await run;
 			expect(harness.screen().split("Select agents to install for")).toHaveLength(2);

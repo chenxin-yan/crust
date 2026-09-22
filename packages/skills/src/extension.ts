@@ -32,7 +32,12 @@ import {
 	installSkill,
 	uninstallSkill,
 } from "./generate.ts";
-import { planReconcile, UNIVERSAL_GROUP, type ReconcileChoice } from "./reconcile.ts";
+import {
+	installedAgents,
+	planReconcile,
+	UNIVERSAL_GROUP,
+	type ReconcileChoice,
+} from "./reconcile.ts";
 import { SkillSourceUnavailableError, loadPackagedSkills, type PackagedSkill } from "./source.ts";
 import type { InstallSkillResult, SkillOptions, SkillStatusResult } from "./types.ts";
 
@@ -226,25 +231,15 @@ export const skill: ExtensionFactory<
 type SkillStatusEntry = SkillStatusResult["agents"][number];
 type SkillStatusMap = ReadonlyMap<AgentTarget, SkillStatusEntry>;
 
-async function loadStatusMap(packagedSkill: PackagedSkill, scope: Scope): Promise<SkillStatusMap> {
-	const status = await getSkillStatus({
-		name: packagedSkill.name,
-		sourceDir: packagedSkill.sourceDir,
-		scope,
-	});
-	return new Map(status.agents.map((entry) => [entry.agent, entry]));
-}
-
-function installedAgents(statusMap: SkillStatusMap): AgentTarget[] {
-	return [...statusMap.values()].flatMap((entry) =>
-		entry.status === "linked" || entry.status === "dangling" ? [entry.agent] : [],
-	);
-}
-
 async function loadStatuses(scope: Scope): Promise<Map<PackagedSkill, SkillStatusMap>> {
 	const statuses = new Map<PackagedSkill, SkillStatusMap>();
 	for (const packagedSkill of loadPackagedSkills(resolveArtifactDir(SKILLS_ARTIFACT))) {
-		statuses.set(packagedSkill, await loadStatusMap(packagedSkill, scope));
+		const status = await getSkillStatus({
+			name: packagedSkill.name,
+			sourceDir: packagedSkill.sourceDir,
+			scope,
+		});
+		statuses.set(packagedSkill, new Map(status.agents.map((entry) => [entry.agent, entry])));
 	}
 	return statuses;
 }
@@ -272,12 +267,9 @@ function reportAgentDirs(
 	entries: readonly { agent: AgentTarget; outputDir: string }[],
 ): void {
 	// Agents sharing one directory (e.g. Universal + Antigravity) report as one line.
-	const byDir = new Map<string, AgentTarget[]>();
-	for (const entry of entries) {
-		byDir.set(entry.outputDir, [...(byDir.get(entry.outputDir) ?? []), entry.agent]);
-	}
-	for (const [outputDir, agents] of byDir) {
-		io.stdout(dim(`  ${formatAgentLabels(agents).join(", ")} → ${outputDir}`));
+	for (const [outputDir, group] of Map.groupBy(entries, (entry) => entry.outputDir)) {
+		const labels = formatAgentLabels(group.map((entry) => entry.agent));
+		io.stdout(dim(`  ${labels.join(", ")} → ${outputDir}`));
 	}
 }
 
