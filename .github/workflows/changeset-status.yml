@@ -1,0 +1,44 @@
+name: Changeset Status
+
+on:
+  pull_request_target:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-status:
+    # Release PRs consume changesets rather than adding them.
+    if: ${{ !startsWith(github.head_ref, 'changeset-release/') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      comment-body: ${{ steps.pr-status.outputs.comment-body }}
+    steps:
+      # pull_request_target must not execute PR code. Keep the default base
+      # checkout; the status action reads the PR in a temporary worktree.
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Generate Changesets status
+        id: pr-status
+        uses: changesets/action/pr-status@v2
+
+  pr-comment:
+    needs: pr-status
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Update Changesets comment
+        uses: changesets/action/pr-comment@v2
+        with:
+          body: ${{ needs.pr-status.outputs.comment-body }}
