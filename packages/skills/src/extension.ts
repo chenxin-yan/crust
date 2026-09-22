@@ -271,10 +271,13 @@ function reportAgentDirs(
 	io: SkillIO,
 	entries: readonly { agent: AgentTarget; outputDir: string }[],
 ): void {
-	for (const [label, outputDir] of new Map(
-		entries.map((entry) => [formatAgentLabels([entry.agent])[0]!, entry.outputDir]),
-	)) {
-		io.stdout(dim(`  ${label} → ${outputDir}`));
+	// Agents sharing one directory (e.g. Universal + Antigravity) report as one line.
+	const byDir = new Map<string, AgentTarget[]>();
+	for (const entry of entries) {
+		byDir.set(entry.outputDir, [...(byDir.get(entry.outputDir) ?? []), entry.agent]);
+	}
+	for (const [outputDir, agents] of byDir) {
+		io.stdout(dim(`  ${formatAgentLabels(agents).join(", ")} → ${outputDir}`));
 	}
 }
 

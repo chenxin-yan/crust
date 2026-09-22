@@ -286,6 +286,40 @@ describe("skill extension packaged directory", () => {
 		await expect(lstat(target("guide"))).rejects.toThrow();
 	});
 
+	it("installs a newly selected skill without touching an installed, unselected one", async () => {
+		const source = await writeSource("demo");
+		await writeSource("guide");
+		await withCwd(tempRoot, () =>
+			installSkill({ sourceDir: join(source, "guide"), agents: ["amp"], scope: "project" }),
+		);
+
+		// Empty PATH keeps agent detection deterministic: Universal is the only agent choice.
+		const path = process.env.PATH;
+		process.env.PATH = "";
+		try {
+			const harness = createPromptIO();
+			const run = withCwd(tempRoot, () =>
+				withPromptIO(harness.io, () => createApp().execute({ argv: ["skill"] })),
+			);
+			await waitForPrompt(harness, "Select skills to install");
+			// Only the installed "guide" starts selected; swap it for "demo".
+			harness.keys("space", "down", "space", "enter");
+			await waitForPrompt(harness, "Select agents to install for");
+			harness.keys("space", "enter");
+			await run;
+			expect(harness.screen().split("Select agents to install for")).toHaveLength(2);
+		} finally {
+			process.env.PATH = path;
+		}
+
+		expect(resolve(dirname(target("demo")), await readlink(target("demo")))).toBe(
+			join(source, "demo"),
+		);
+		expect(resolve(dirname(target("guide")), await readlink(target("guide")))).toBe(
+			join(source, "guide"),
+		);
+	});
+
 	it("uninstalls selected skills and leaves the rest linked", async () => {
 		const source = await writeSource("demo");
 		await writeSource("guide");
@@ -301,7 +335,12 @@ describe("skill extension packaged directory", () => {
 		const captured = await run;
 
 		expect(captured.stdout).toContain('Removed "demo"');
-		expect(captured.stdout).toContain(`Universal → ${target("demo")}`);
+		// Antigravity shares `.agents/skills` with Universal at project scope; one line per directory.
+		expect(captured.stdout).toContain(`Universal, Antigravity → ${target("demo")}`);
+		const reportedDirs = captured.stdout
+			.split("\n")
+			.flatMap((line) => (line.includes(" → ") ? [line.split(" → ")[1]] : []));
+		expect(new Set(reportedDirs).size).toBe(reportedDirs.length);
 		await expect(lstat(target("demo"))).rejects.toThrow();
 		expect(resolve(dirname(target("guide")), await readlink(target("guide")))).toBe(
 			join(source, "guide"),

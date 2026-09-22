@@ -62,7 +62,7 @@ my-cli skills repair
 
 `--scope` accepts `project` or `global`. With `--all`, scope comes from `--scope`, then `defaultScope`, then `global`; without `--all`, an interactive run prompts when neither setting is supplied.
 
-An interactive install prompts at most twice: once for which packaged skills to install (skipped when only one is packaged; unselected skills are left untouched), then once for which agents to install every selected skill for. Deselecting an agent with an installed link removes that link for the selected skills. It does not merely skip a new installation.
+An interactive install asks once which packaged skills to install (only when more than one is packaged; unselected skills are left untouched), then once which agents to install every selected skill for, plus a scope prompt when neither `--scope` nor `defaultScope` is set and an overwrite confirmation for each unowned directory. Deselecting an agent with an installed link removes that link for the selected skills. It does not merely skip a new installation.
 
 `skills uninstall` lists the packaged skills currently linked at the chosen scope and removes the selected ones from every agent directory; `--all` removes them without prompting. `skills repair` relinks stale or dangling links without prompting for agents.
 
