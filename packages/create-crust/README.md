@@ -26,11 +26,11 @@ create-crust [directory] [--runtime bun|node|deno] [--install|--no-install] [--g
 
 - `directory` sets the destination; otherwise the directory prompt defaults to `my-cli`. Its basename (the current directory's for `.`) becomes the package and command name, so it must use only letters, digits, `.`, `_`, `~`, and `-`, not starting with `.` or `-`; anything else is rejected before any file is written.
 - `--runtime` selects the runtime the project develops and builds for: `bun`, `node`, or `deno`. The default is `bun`.
-- `--install` / `--no-install` installs or skips dependencies. The default is to install. Deno projects install with `deno install`; the other runtimes use the detected package manager.
+- `--install` / `--no-install` installs or skips dependencies. The default is to install. Deno projects install with `deno install`; the other runtimes use the detected package manager. If installation is skipped, the next steps include the install command.
 - `--git` / `--no-git` initializes or skips a Git repository when the destination is not already inside one. The default is to initialize.
 - When the destination requires an overwrite decision, `--overwrite` overwrites conflicting files without confirmation; `--no-overwrite` aborts without prompting. The default is not to overwrite.
 
-Generated projects use the single-file starter (`src/cli.ts`).
+Generated projects use the single-file starter (`src/cli.ts`). The generated README and next steps use the detected package manager for script commands (`bun run`, `npm run`, `pnpm run`, or `yarn run`), independently of the selected runtime. Detection checks the destination's lockfiles first, then the invoking package manager's user-agent, and defaults to npm. Deno projects always use `deno task`.
 
 Every generated project includes:
 

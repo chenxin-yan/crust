@@ -4,6 +4,12 @@ A CLI built with [Crust](https://crustjs.com).
 
 ## Development
 
+Install dependencies if you skipped installation or just cloned the project:
+
+```sh
+{{install}}
+```
+
 ```sh
 # Run in dev mode
 {{run}} dev
