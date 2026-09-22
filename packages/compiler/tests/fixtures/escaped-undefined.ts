@@ -3,7 +3,7 @@ function length(value: string): number {
 }
 
 function missing() {
-	return process.argv[99]!;
+	return process.argv[99];
 }
 
 console.log(length(missing()));
