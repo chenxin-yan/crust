@@ -23,6 +23,13 @@
 						"node"
 					]
 				},
+				"targets": {
+					"description": "Canonical compiler targets `crust build` stages when no --target flag is passed, or `host` for the building machine; without it every Bun or Deno target is staged. Rejected for Node.",
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
 				"bunPlugins": {
 					"description": "Bun bundler plugin modules applied to Bun and Node builds, in order: bare names resolve from node_modules, paths from the project root; each must default-export the plugin. Rejected for Deno.",
 					"type": "array",
