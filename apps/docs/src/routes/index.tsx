@@ -197,21 +197,6 @@ const MODULES: Array<{
 
 const PUBLISHED_PACKAGES = MODULES.flatMap((m) => (m.upcoming ? [] : [m.pkg]));
 
-type ReleaseChannel = "alpha" | "beta";
-
-function getReleaseChannel(version: string): ReleaseChannel | null {
-	const match = version.match(/^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/);
-	if (!match) return null;
-
-	const major = Number(match[1]);
-	const minor = Number(match[2]);
-
-	if (major === 0 && minor === 0) return "alpha";
-	if (major === 0) return "beta";
-
-	return null;
-}
-
 function hasVersion<Value>(value: Value): value is Value & { version: string } {
 	return (
 		typeof value === "object" &&
@@ -332,7 +317,7 @@ function FurnaceHome() {
           z-index: 0;
         }
 
-        /* Dev badge — roadmap link */
+        /* Roadmap link */
         .fn-dev-badge {
           display: inline-flex;
           align-items: center;
@@ -349,29 +334,6 @@ function FurnaceHome() {
         }
         .fn-dev-badge:hover {
           border-color: var(--fn-molten);
-        }
-        .fn-dev-badge-dot {
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-          background: var(--fn-molten);
-          box-shadow: 0 0 8px rgba(255, 106, 16, 0.5);
-          flex-shrink: 0;
-          animation: fn-pulse 2.5s ease-in-out infinite;
-        }
-        @keyframes fn-pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.4; }
-        }
-        .fn-dev-badge-status {
-          color: var(--fn-primary);
-          letter-spacing: 1px;
-        }
-        .fn-dev-badge-sep {
-          width: 1px;
-          height: 12px;
-          background: var(--fn-border);
-          flex-shrink: 0;
         }
         .fn-dev-badge-cta {
           color: var(--fn-dim);
@@ -641,25 +603,6 @@ function FurnaceHome() {
           letter-spacing: 0.5px;
         }
 
-        /* Release channel badge */
-        .fn-badge-channel {
-          font-size: 10px;
-          padding: 1px 8px;
-          white-space: nowrap;
-          opacity: 0.8;
-          letter-spacing: 0.5px;
-          text-transform: uppercase;
-          border: 1px solid;
-        }
-        .fn-badge-channel-alpha {
-          color: var(--fn-hot);
-          border-color: var(--fn-hot);
-        }
-        .fn-badge-channel-beta {
-          color: var(--fn-cool);
-          border-color: var(--fn-cool);
-        }
-
         /* Coming soon badge */
         .fn-badge-soon {
           font-family: 'Saira Condensed', sans-serif;
@@ -753,9 +696,6 @@ function FurnaceHome() {
 							rel="noopener noreferrer"
 							className="fn-mono fn-dev-badge"
 						>
-							<span className="fn-dev-badge-dot" />
-							<span className="fn-dev-badge-status">Now in Beta</span>
-							<span className="fn-dev-badge-sep" />
 							<span className="fn-dev-badge-cta">
 								See Roadmap
 								<span className="fn-dev-badge-arrow" aria-hidden="true">
@@ -903,7 +843,6 @@ function FurnaceHome() {
 							}
 
 							const version = npmVersions[m.pkg];
-							const channel = version ? getReleaseChannel(version) : null;
 
 							return (
 								<Link key={m.pkg} to="/docs/$" params={{ _splat: m.doc }} className="fn-module-row">
@@ -919,11 +858,6 @@ function FurnaceHome() {
 											{m.pkg}
 										</code>
 										{version && <span className="fn-badge-version fn-mono">v{version}</span>}
-										{channel && (
-											<span className={`fn-badge-channel fn-badge-channel-${channel} fn-mono`}>
-												{channel}
-											</span>
-										)}
 										<span style={{ fontSize: 13, color: "var(--fn-dim)" }}>{m.desc}</span>
 									</div>
 									<span className="fn-module-arrow">→</span>
