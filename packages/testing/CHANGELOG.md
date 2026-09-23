@@ -1,5 +1,12 @@
 # @crustjs/testing
 
+## 0.1.3
+
+### Patch Changes
+
+- Updated dependencies [[`0e1799b`](https://github.com/chenxin-yan/crust/commit/0e1799bb99cfcc73fa24bf288068600fc01dc7bb), [`0e1799b`](https://github.com/chenxin-yan/crust/commit/0e1799bb99cfcc73fa24bf288068600fc01dc7bb)]:
+  - @crustjs/core@0.4.0
+
 ## 0.1.2
 
 ### Patch Changes
