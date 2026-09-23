@@ -5,9 +5,10 @@ import { transformerTwoslash } from "fumadocs-twoslash";
 import { createFileSystemTypesCache } from "fumadocs-twoslash/cache-fs";
 import { createGenerator, remarkAutoTypeTable } from "fumadocs-typescript";
 
-// typescript@7.0.2's sync API throws `RangeError: Offset is outside the bounds of the DataView` when
-// asked for hover info on Crust builder methods (their inferred types are very large). Skip those
-// identifiers until the upstream fix lands; values keep their hovers.
+// TODO(upstream): typescript@7.0.2's sync API throws `RangeError: Offset is outside the bounds of
+// the DataView` (dist/api/node/node.js) when asked for hover info on Crust builder methods, whose
+// inferred types are very large. Skip those identifiers until that is fixed; values keep their
+// hovers. vite/landing-twoslash.ts carries the mirror-image allowlist.
 const BUILDER_METHODS = new Set([
 	"args",
 	"flags",

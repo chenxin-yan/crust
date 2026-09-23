@@ -1,6 +1,6 @@
 // Provided by vite/landing-twoslash.ts.
 declare module "virtual:landing-twoslash" {
-	/** Twoslash-annotated Shiki hast per showcase snippet key. */
-	const hast: Partial<Record<string, import("hast").Root>>;
+	/** Shiki hast per landing snippet key, Twoslash-annotated for TypeScript snippets. */
+	const hast: Record<import("./components/landing/snippets").SnippetKey, import("hast").Root>;
 	export default hast;
 }

@@ -1,5 +1,5 @@
 import { globSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 import { remarkNpm } from "fumadocs-core/mdx-plugins";
@@ -19,14 +19,14 @@ vi.mock("fumadocs-mdx:collections/server", () => ({
 	},
 }));
 
-// Server functions run locally; Vite's native `?raw` transform supplies the example text.
-// oxlint-disable-next-line anti-slop/no-module-mocking -- Test mode has no Start server transport; execute the real handlers locally.
+// Server functions run locally without a Start server transport.
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Execute the real handlers locally in test mode.
 vi.mock("@tanstack/react-start", () => ({
 	createServerFn: () => ({ handler: <T>(fn: T) => fn }),
 }));
 
 const { Route: sitemap } = await import("../src/routes/sitemap[.]xml");
-const { Route: landing, SCAFFOLD_COMMANDS } = await import("../src/routes/index");
+const { SCAFFOLD_COMMANDS } = await import("../src/routes/index");
 const { source } = await import("../src/lib/source");
 const { absoluteUrl } = await import("../src/lib/seo");
 
@@ -45,27 +45,15 @@ it("sitemap lists each Fumadocs page once, including the docs index", async () =
 	expect(new Set(locations).size).toBe(locations.length);
 });
 
-it("landing highlights the checked greeting example", async () => {
-	// The loader ignores router context; only the external registry boundary is stubbed.
-	const load = landing.options.loader as () => Promise<typeof landing.types.loaderData>;
-	const fetchSpy = vi
-		.spyOn(globalThis, "fetch")
-		.mockResolvedValue(new Response(null, { status: 503 }));
-	let data: typeof landing.types.loaderData;
-	try {
-		data = await load();
-	} finally {
-		fetchSpy.mockRestore();
+it("every landing snippet the page renders exists on disk", async () => {
+	// vite/landing-twoslash.ts reads these at build time; a typo would only surface as a build failure.
+	const { SNIPPET_SOURCES } = await import("../src/components/landing/snippets");
+	const { FEATURES } = await import("../src/components/landing/content");
+	for (const feature of FEATURES) expect(SNIPPET_SOURCES).toHaveProperty(feature.code);
+	for (const { file } of Object.values(SNIPPET_SOURCES)) {
+		expect((await stat(new URL(`../${file}`, import.meta.url))).isFile()).toBe(true);
 	}
-	expect(data.highlightedCode).toContain("--shiki-light");
-	// The raw text inside `<code>`, with Shiki's token markup removed.
-	const code = (/<code[^>]*>([\s\S]*)<\/code>/.exec(data.highlightedCode)?.[1] ?? "").replace(
-		/<[^>]*>/g,
-		"",
-	);
-	const example = await readFile(new URL("../examples/landing/greet.ts", import.meta.url), "utf8");
-	expect(code).toBe(example.trimEnd());
-}, 10000);
+});
 
 it("landing scaffold tabs match the Quick Start `npm` fence and share its group", async () => {
 	const quickStart = await readFile(

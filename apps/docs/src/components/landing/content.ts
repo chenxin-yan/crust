@@ -1,36 +1,4 @@
-// oxlint-disable-next-line import/default -- see above
-import appSource from "../../../examples/landing/app.ts?raw";
-// oxlint-disable-next-line import/default -- see above
-import contextsSource from "../../../examples/landing/contexts.ts?raw";
-// oxlint-disable-next-line import/default -- see above
-import extensionSource from "../../../examples/landing/extension.ts?raw";
-// oxlint-disable-next-line import/default -- Vite's ?raw loader exports the file text; the TypeScript source needs no default export.
-import inputsSource from "../../../examples/landing/inputs.ts?raw";
-// oxlint-disable-next-line import/default -- see above
-import schemaSource from "../../../examples/landing/schema.ts?raw";
-// oxlint-disable-next-line import/default -- see above
-import testingSource from "../../../examples/landing/testing.ts?raw";
-
-/** Raw source per snippet key; shown as-is when the generated Twoslash hast lacks a key. */
-export const SNIPPETS = {
-	app: appSource.trimEnd(),
-	typed: inputsSource.trimEnd(),
-	schema: schemaSource.trimEnd(),
-	contexts: contextsSource.trimEnd(),
-	extension: extensionSource.trimEnd(),
-	testing: testingSource.trimEnd(),
-	// The create-crust template's package.json, cropped to what `crust build` reads.
-	build: `{
-  "name": "my-cli",
-  "version": "1.2.3",
-  "bin": { "my-cli": "src/cli.ts" },
-  "scripts": {
-    "build": "crust build",
-    "release": "crust publish"
-  }
-}`,
-} satisfies Record<string, string>;
-export type SnippetKey = keyof typeof SNIPPETS;
+import type { SnippetKey } from "./snippets";
 
 /**
  * One terminal line. `run` is a prompt that runs a file with the selected runtime,

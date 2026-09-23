@@ -1,6 +1,7 @@
-// Virtual module `virtual:landing-twoslash`: Twoslash-annotated Shiki hast for the landing showcase
-// snippets, computed when Vite loads it (dev, build, prerender) and re-computed when a snippet changes.
-// Runs in Vite's Node process; typescript@7's sync API cannot run under Bun or in the worker runtime.
+// Virtual module `virtual:landing-twoslash`: Shiki hast for the landing snippets (see
+// src/components/landing/snippets.ts), Twoslash-annotated, computed when Vite loads the module
+// (dev, build, prerender) and re-computed when a snippet changes. Runs in Vite's Node process;
+// typescript@7's sync API cannot run under Bun or in the worker runtime.
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -10,26 +11,21 @@ import { createFileSystemTypesCache } from "fumadocs-twoslash/cache-fs";
 import type { Root } from "hast";
 import { createHighlighterCore } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
+import langJson from "shiki/langs/json.mjs";
 import langTypescript from "shiki/langs/typescript.mjs";
 import gruvboxDarkHard from "shiki/themes/gruvbox-dark-hard.mjs";
 import gruvboxLightHard from "shiki/themes/gruvbox-light-hard.mjs";
 import type { Plugin } from "vite";
 
+import { SNIPPET_SOURCES, type SnippetKey } from "../src/components/landing/snippets";
+
 const MODULE_ID = "virtual:landing-twoslash";
 const RESOLVED_ID = `\0${MODULE_ID}`;
 
-/** Snippet key (as used by the showcase's `SNIPPETS`) → source file, relative to apps/docs. */
-const SOURCES = {
-	app: "examples/landing/app.ts",
-	typed: "examples/landing/inputs.ts",
-	schema: "examples/landing/schema.ts",
-	contexts: "examples/landing/contexts.ts",
-	testing: "examples/landing/testing.ts",
-	extension: "examples/landing/extension.ts",
-} satisfies Record<string, string>;
-
-// Only values whose inferred type tells the story get a hover; builder methods are excluded
-// because hovering them crashes typescript@7.0.2's sync API (RangeError in dist/api/node/node.js).
+// TODO: typescript@7.0.2's sync API throws `RangeError: Offset is outside the bounds of
+// the DataView` (dist/api/node/node.js) when asked for hover info on Crust builder methods, whose
+// inferred types are very large. Until that is fixed, only the values whose types tell the story get
+// a hover — which also keeps the payload small. source.config.ts carries the mirror-image denylist.
 const HOVER = new Set([
 	"port",
 	"Port",
@@ -53,7 +49,7 @@ export function landingTwoslash(): Plugin {
 	const root = process.cwd();
 	const highlighter = createHighlighterCore({
 		themes: [gruvboxLightHard, gruvboxDarkHard],
-		langs: [langTypescript],
+		langs: [langTypescript, langJson],
 		engine: createJavaScriptRegexEngine(),
 	});
 	const twoslash = transformerTwoslash({
@@ -71,15 +67,17 @@ export function landingTwoslash(): Plugin {
 		async load(id) {
 			if (id !== RESOLVED_ID) return;
 			const shiki = await highlighter;
-			const out: Record<string, Root> = {};
-			for (const [key, file] of Object.entries(SOURCES)) {
+			const out: Partial<Record<SnippetKey, Root>> = {};
+			for (const [key, { file, lang }] of Object.entries(SNIPPET_SOURCES)) {
 				const path = join(root, file);
 				this.addWatchFile(path); // editing a snippet invalidates this module
-				out[key] = shiki.codeToHast((await readFile(path, "utf8")).trimEnd(), {
-					lang: "typescript",
+				// SAFETY: `Object.entries` widens the key to string; SNIPPET_SOURCES has only SnippetKey keys.
+				out[key as SnippetKey] = shiki.codeToHast((await readFile(path, "utf8")).trimEnd(), {
+					lang,
 					themes: { light: "gruvbox-light-hard", dark: "gruvbox-dark-hard" },
 					defaultColor: false,
-					// `// [!code highlight:N]` marker lines are removed and the next N lines get `.highlighted`.
+					// `// [!code highlight:N]` marker lines are removed and the next N lines get `.highlighted`;
+					// Twoslash only runs on TypeScript.
 					transformers: [transformerNotationHighlight(), twoslash],
 				});
 			}

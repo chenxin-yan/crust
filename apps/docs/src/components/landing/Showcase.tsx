@@ -1,18 +1,11 @@
-import { Popup, PopupContent, PopupTrigger } from "fumadocs-twoslash/ui";
-import type { Root } from "hast";
-import { toJsxRuntime } from "hast-util-to-jsx-runtime";
 import { type JSX, useEffect, useRef, useState } from "react";
-import { Fragment, jsx, jsxs } from "react/jsx-runtime";
-// Twoslash-annotated Shiki hast per snippet key, computed by vite/landing-twoslash.ts.
 import HIGHLIGHTED from "virtual:landing-twoslash";
 
-import { FEATURES, type Line, type Runtime, RUNTIMES, SNIPPETS } from "./content";
+import { Code } from "./Code";
+import { FEATURES, type Line, type Runtime, RUNTIMES } from "./content";
 
 // oxlint-disable-next-line import/no-unassigned-import -- Vite bundles the stylesheet as a side effect of the import; there is nothing to assign.
 import "./showcase.css";
-
-// Twoslash emits <Popup>/<PopupContent>/<PopupTrigger> elements; map them to the real components.
-const POPUP_COMPONENTS = { Popup, PopupContent, PopupTrigger };
 
 const LAST = FEATURES.length - 1;
 const pad = (index: number): string => String(index + 1).padStart(2, "0");
@@ -35,25 +28,6 @@ function Lines({ lines, runtime }: { lines: readonly Line[]; runtime: Runtime })
 			})}
 		</pre>
 	);
-}
-
-function PlainCode({ code }: { code: string }) {
-	return (
-		<pre className="shiki">
-			<code>
-				{code.split("\n").map((line, index) => (
-					<span key={index} className="line">
-						{line}
-					</span>
-				))}
-			</code>
-		</pre>
-	);
-}
-
-/** Twoslash popups are elements in the hast; map them to components while rendering. */
-function Code({ code }: { code: Root }) {
-	return <>{toJsxRuntime(code, { Fragment, jsx, jsxs, components: POPUP_COMPONENTS })}</>;
 }
 
 export default function Showcase(): JSX.Element {
@@ -127,7 +101,6 @@ export default function Showcase(): JSX.Element {
 
 			<ol className="fn-showcase-column">
 				{FEATURES.map((item, index) => {
-					const code = HIGHLIGHTED[item.code];
 					return (
 						<li
 							key={item.key}
@@ -146,11 +119,7 @@ export default function Showcase(): JSX.Element {
 										<span>{item.lang}</span>
 									</div>
 									<div className="fn-showcase-body fn-showcase-shiki">
-										{code === undefined ? (
-											<PlainCode code={SNIPPETS[item.code]} />
-										) : (
-											<Code code={code} />
-										)}
+										<Code code={HIGHLIGHTED[item.code]} />
 									</div>
 								</div>
 								<div className="fn-showcase-output">

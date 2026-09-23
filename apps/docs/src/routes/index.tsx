@@ -3,20 +3,12 @@ import { createServerFn } from "@tanstack/react-start";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "fumadocs-ui/components/ui/tabs";
 import { HomeLayout } from "fumadocs-ui/layouts/home";
 import { useCallback, useState } from "react";
-import { createHighlighterCore } from "shiki/core";
-import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
-import langTypescript from "shiki/langs/typescript.mjs";
-import gruvboxDarkHard from "shiki/themes/gruvbox-dark-hard.mjs";
-import gruvboxLightHard from "shiki/themes/gruvbox-light-hard.mjs";
+import HIGHLIGHTED from "virtual:landing-twoslash";
 
+import { Code } from "@/components/landing/Code";
 import Showcase from "@/components/landing/Showcase";
 import { baseOptions, roadmapUrl } from "@/lib/layout.shared";
 import { buildPageMeta } from "@/lib/seo";
-
-// oxlint-disable-next-line import/default -- Vite's ?raw loader exports the file text; the TypeScript source needs no default export.
-import codeExampleSource from "../../examples/landing/greet.ts?raw";
-
-const CODE_EXAMPLE = codeExampleSource.trimEnd();
 
 // Docs `npm` fences share this group id (source.config.ts), so one selection follows the reader everywhere.
 const PACKAGE_MANAGER_GROUP_ID = "package-manager";
@@ -28,50 +20,6 @@ export const SCAFFOLD_COMMANDS = {
 	yarn: "yarn dlx create-crust@latest my-cli",
 	bun: "bun x create-crust@latest my-cli",
 };
-
-let highlighterPromise: Promise<Awaited<ReturnType<typeof createHighlighterCore>>> | null = null;
-
-function getHighlighter() {
-	if (!highlighterPromise) {
-		highlighterPromise = createHighlighterCore({
-			themes: [gruvboxLightHard, gruvboxDarkHard],
-			langs: [langTypescript],
-			engine: createJavaScriptRegexEngine(),
-		});
-	}
-
-	return highlighterPromise;
-}
-
-function escapeHtml(value: string) {
-	return value
-		.replaceAll("&", "&amp;")
-		.replaceAll("<", "&lt;")
-		.replaceAll(">", "&gt;")
-		.replaceAll('"', "&quot;")
-		.replaceAll("'", "&#39;");
-}
-
-function createFallbackHighlightedCode(code: string) {
-	const lines = code
-		.split("\n")
-		.map((line) => `<span class="line">${escapeHtml(line)}</span>`)
-		.join("\n");
-
-	return `<pre class="shiki" tabindex="0"><code>${lines}</code></pre>`;
-}
-
-const getHighlightedCode = createServerFn({ method: "GET" }).handler(async () => {
-	const highlighter = await getHighlighter();
-	return highlighter.codeToHtml(CODE_EXAMPLE, {
-		lang: "typescript",
-		themes: {
-			light: "gruvbox-light-hard",
-			dark: "gruvbox-dark-hard",
-		},
-		defaultColor: false,
-	});
-});
 
 const { meta: homeMeta, links: homeLinks } = buildPageMeta({
 	description:
@@ -86,24 +34,12 @@ export const Route = createFileRoute("/")({
 		links: homeLinks,
 	}),
 	loader: async () => {
-		// allSettled so a shiki failure doesn't also degrade npm versions (and vice versa)
-		const [codeResult, versionsResult] = await Promise.allSettled([
-			getHighlightedCode(),
-			getNpmVersions(),
-		]);
-
-		if (codeResult.status === "rejected") {
-			console.error("[docs] Failed to highlight code example", codeResult.reason);
+		try {
+			return { npmVersions: await getNpmVersions() };
+		} catch (error) {
+			console.error("[docs] Failed to load npm versions", error);
+			return { npmVersions: {} };
 		}
-		if (versionsResult.status === "rejected") {
-			console.error("[docs] Failed to load npm versions", versionsResult.reason);
-		}
-
-		return {
-			highlightedCode:
-				codeResult.status === "fulfilled" ? codeResult.value : FALLBACK_HIGHLIGHTED_CODE,
-			npmVersions: versionsResult.status === "fulfilled" ? versionsResult.value : {},
-		};
 	},
 });
 
@@ -230,10 +166,8 @@ const getNpmVersions = createServerFn({ method: "GET" }).handler(async () => {
 	return Object.fromEntries(entries);
 });
 
-const FALLBACK_HIGHLIGHTED_CODE = createFallbackHighlightedCode(CODE_EXAMPLE);
-
 function FurnaceHome() {
-	const { highlightedCode, npmVersions } = Route.useLoaderData();
+	const { npmVersions } = Route.useLoaderData();
 	const coreVersion = npmVersions["@crustjs/core"];
 	const [copied, setCopied] = useState<string | null>(null);
 
@@ -824,10 +758,9 @@ function FurnaceHome() {
 									<span>src/cli.ts</span>
 									<span>TypeScript</span>
 								</div>
-								<div
-									className="fn-code-body fn-shiki-container"
-									dangerouslySetInnerHTML={{ __html: highlightedCode }}
-								/>
+								<div className="fn-code-body fn-shiki-container">
+									<Code code={HIGHLIGHTED.greet} />
+								</div>
 							</div>
 						</div>
 					</section>

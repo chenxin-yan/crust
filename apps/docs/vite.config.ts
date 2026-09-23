@@ -18,9 +18,11 @@ export default defineConfig(({ mode }) => ({
 	environments: {
 		ssr: {
 			optimizeDeps: {
-				// The Cloudflare plugin crawls SSR deps from the worker entry, so modules first imported by
-				// lazily loaded routes (MDX components, Twoslash popups) are only found on first render. That
-				// mid-session re-optimization loads a second React copy ("Invalid hook call" / null `use`).
+				// TODO: the Cloudflare Vite plugin crawls SSR deps from the worker entry, so modules
+				// first imported by lazily loaded routes (MDX components, Twoslash popups) are only found on
+				// first render, and that mid-session re-optimization loads a second React copy ("Invalid hook
+				// call" / null `use`). Listing them here leaves nothing to discover; drop once dev-time SSR
+				// re-optimization stops duplicating React.
 				include: [
 					"fumadocs-ui/components/callout",
 					"fumadocs-ui/components/card",
