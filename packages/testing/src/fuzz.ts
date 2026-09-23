@@ -344,12 +344,12 @@ export async function checkRoundTripCase(
  * `variadic`, `multiple`, negation), then binds each case twice through
  * `bindInput()` from `@crustjs/core/tooling` — parse, validation, and Standard Schemas only.
  * Command Actions, Extension hooks, and Contexts never run. Definition materialization,
- * `parse` functions, and schemas do run; the last two receive the same raw token value on
- * both paths (a string, a boolean for boolean-token flags, an array for repeated definitions,
- * or `undefined` when omitted) and may reject it, which counts as `rejected` only for
- * commands that declare them. Argv binds against an empty environment, so `env` flags fall
- * back to `default` like structured input; a flag's `delimiter` is never generated inside a
- * value.
+ * `parse` functions, and schemas do run. Custom `parse` callbacks receive individual strings,
+ * one call per supplied occurrence. Schemas receive the whole parsed value (a string,
+ * boolean, repeated-value array, or `undefined` when omitted). Matching `CrustError` codes
+ * on both paths count as `rejected` only for commands that declare these validators.
+ * Argv binds against an empty environment, so `env` flags fall back to `default` like
+ * structured input; a flag's `delimiter` is never generated inside a value.
  *
  * Throws with the seed, case number, and both outcomes on the first divergence, and when no
  * case was accepted (the property then has no evidence).
