@@ -14,6 +14,23 @@ export default defineConfig(({ mode }) => ({
 	resolve: {
 		tsconfigPaths: true,
 	},
+	environments: {
+		ssr: {
+			optimizeDeps: {
+				// The Cloudflare plugin crawls SSR deps from the worker entry, so modules first imported by
+				// lazily loaded routes (MDX components, Twoslash popups) are only found on first render. That
+				// mid-session re-optimization loads a second React copy ("Invalid hook call" / null `use`).
+				include: [
+					"fumadocs-ui/components/callout",
+					"fumadocs-ui/components/card",
+					"fumadocs-ui/components/files",
+					"fumadocs-ui/components/steps",
+					"fumadocs-ui/components/tabs",
+					"fumadocs-twoslash/ui",
+				],
+			},
+		},
+	},
 	// `vp test` (mode "test") imports site modules directly; the MDX, Cloudflare
 	// and TanStack Start plugins serve only dev and build.
 	plugins:
