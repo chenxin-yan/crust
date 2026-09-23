@@ -229,13 +229,9 @@ function buildDistributionRootPackageJson(
 				}
 			: {}),
 		...(manPages.length > 0 ? { man: manPages.map((page) => `./man/${page}`) } : {}),
-		...(metadata.exports !== undefined ? { exports: metadata.exports } : {}),
-		...(metadata.peerDependencies !== undefined
-			? { peerDependencies: metadata.peerDependencies }
-			: {}),
-		...(metadata.peerDependenciesMeta !== undefined
-			? { peerDependenciesMeta: metadata.peerDependenciesMeta }
-			: {}),
+		exports: metadata.exports,
+		peerDependencies: metadata.peerDependencies,
+		peerDependenciesMeta: metadata.peerDependenciesMeta,
 	};
 
 	return rootPackageJson;
