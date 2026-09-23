@@ -676,7 +676,8 @@ function FurnaceHome() {
         /* Hero layout */
         .fn-hero-grid {
           display: grid;
-          grid-template-columns: 1fr 1fr;
+          /* The code panel gets the larger share: its 59-column line needs ~440px at 12px Fira Code. */
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr);
           gap: 48px;
           align-items: stretch;
         }

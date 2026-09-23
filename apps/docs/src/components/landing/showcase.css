@@ -23,7 +23,6 @@
 .fn-showcase-head {
 	position: sticky;
 	top: calc(56px + 40vh - 60px); /* fumadocs header + roughly eye level */
-	margin-top: 120px; /* on first view the label sits at the first panel's middle, not its top edge */
 	padding-left: 16px;
 }
 .fn-showcase-title {
@@ -100,8 +99,8 @@
 /* Panel: the hero's code panel with the terminal beside it, sized to its content. */
 .fn-showcase-panel {
 	display: grid;
-	/* Fira Code is 0.615em per column. 830px panel → 468 | 360: the 62-col import needs 420px + 36px
-	   gutter and padding; the terminal fits 49 columns, so only the schema error line wraps. */
+	/* Fira Code is 0.615em per column. 830px panel → 468 | 360: the widest snippet line (58 cols) needs
+	   ~400px + 36px gutter and padding; the terminal fits 49 columns, so only the schema error line wraps. */
 	grid-template-columns: 1.3fr 1fr;
 	background: var(--fn-surface);
 	border: 1px solid var(--fn-border);
@@ -212,12 +211,20 @@
 .fn-showcase-shiki .shiki code .line {
 	display: block;
 }
-/* `// [!code highlight]` lines: where to look first. Overrides fumadocs-ui's global .highlighted. */
+/* `// [!code highlight]` lines are where to look first: molten bar and tint, the rest of the snippet
+   steps back. Overrides fumadocs-ui's global .highlighted. */
+.fn-showcase-shiki .shiki code:has(.highlighted) .line:not(.highlighted) {
+	opacity: 0.6;
+	transition: opacity 0.3s ease;
+}
+.fn-showcase-shiki .shiki code:has(.highlighted):hover .line {
+	opacity: 1; /* hovering the code brings the whole snippet back */
+}
 .fn-showcase-shiki .shiki code .line.highlighted {
 	margin-right: -8px; /* run the tint to the pane edge */
 	padding-right: 8px;
-	background-color: color-mix(in srgb, var(--fn-molten) 9%, transparent);
-	box-shadow: inset 2px 0 0 var(--fn-molten);
+	background-color: color-mix(in srgb, var(--fn-molten) 16%, transparent);
+	box-shadow: inset 3px 0 0 var(--fn-molten);
 }
 .fn-showcase-shiki .shiki code .line.highlighted::after {
 	content: none;

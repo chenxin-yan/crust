@@ -135,16 +135,11 @@ export const FEATURES: readonly Feature[] = [
 	{
 		key: "testing",
 		tab: "Testing",
-		title: "Test in-process, prompts included",
+		title: "Test in-process, assert on the result",
 		code: "testing",
 		file: "cli.test.ts",
 		lang: "TypeScript",
-		output: [
-			run("cli.test.ts"),
-			out("1"),
-			out('Error: Unknown command "unknown".'),
-			out("✓ Name? Ada"),
-		],
+		output: [run("cli.test.ts"), out("1"), out('Error: Unknown command "unknown".')],
 	},
 	{
 		key: "build",
