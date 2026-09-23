@@ -69,7 +69,7 @@ const flags = {
 } satisfies FlagsDef;
 ```
 
-`env` names an environment variable that terminal parsing consults when the flag has no argv occurrence: argv wins over `env`, and `env` wins over `default`. The value enters the same conversion path as an argv token (`type`, `choices`, `parse`, or the schema) and satisfies `required`; help and man pages show `[env: NAME]` but never the value. `delimiter` is available only with `multiple: true` (a type error otherwise, and a `DEFINITION` error for dynamic definitions); it splits each argv and environment value into occurrences and drops empty segments. Structured [`run()`](/docs/api/crust#runpath-input-options) input reads neither.
+`env` names an environment variable that terminal parsing consults when the flag has no argv occurrence: argv wins over `env`, and `env` wins over `default`. The value enters the same conversion path as an argv token (`type`, `choices`, `parse`, or the schema) and satisfies `required`; help and man pages show `[env: NAME]` but never the value. `delimiter` is available only with `multiple: true` (a type error otherwise, and a `DEFINITION` error for dynamic definitions); it splits each string argv and environment value into occurrences and drops empty segments. Boolean argv switches already supply booleans and are not split; their environment text is. Structured [`run()`](/docs/api/crust#runpath-input-options) input reads neither.
 
 ```ts
 const flags = {

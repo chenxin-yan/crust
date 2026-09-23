@@ -1462,6 +1462,26 @@ describe("parseArgs \u2014 delimiter", () => {
 		expect(parseArgs(cmd, [], { APP_TAGS: "," }).flags.tags).toEqual(["x"]);
 	});
 
+	it("splits boolean env text while keeping boolean argv switches and structured values intact", () => {
+		const command = makeNode({
+			meta: "test",
+			flags: { enabled: { type: "boolean", multiple: true, env: "APP_ENABLED", delimiter: "," } },
+		});
+		expect(parseArgs(command, [], { APP_ENABLED: "true,,false,1" }).flags.enabled).toEqual([
+			true,
+			false,
+			true,
+		]);
+		expect(
+			parseArgs(command, ["--enabled", "--no-enabled"], { APP_ENABLED: "false" }).flags.enabled,
+		).toEqual([true, false]);
+		expect(() => parseArgs(command, ["--enabled=true,false"], {})).toThrow(CrustError);
+		expect(parseStructured(command, { flags: { enabled: [false, true] } }).flags.enabled).toEqual([
+			false,
+			true,
+		]);
+	});
+
 	it("does not split without a delimiter", () => {
 		const plain = makeNode({
 			meta: "test",

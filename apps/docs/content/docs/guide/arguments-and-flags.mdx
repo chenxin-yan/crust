@@ -182,7 +182,7 @@ publishing to jsr tags=undefined
 
 The environment value enters the parser exactly like `--flag=<value>`, so `type` conversion, `choices`, `parse`, and schemas apply unchanged. Boolean flags accept `true` or `1` as true; any other value is false, and a `noNegate` flag rejects a false value the way it rejects `--no-<name>`.
 
-A repeated flag reads one occurrence from its variable unless you set `delimiter`, which splits both argv and environment values into occurrences and drops empty segments. There is no default delimiter, so values containing commas stay intact unless you opt in:
+A repeated flag reads one occurrence from its variable unless you set `delimiter`, which splits string argv and environment values into occurrences and drops empty segments. Boolean argv switches remain `--flag` / `--no-flag` (not `--flag=true,false`); for repeated booleans, the delimiter only splits environment text such as `true,false`. There is no default delimiter, so values containing commas stay intact unless you opt in:
 
 ```sh
 $ PUBLISH_TOKEN=example PUBLISH_TAGS=latest,,beta publish

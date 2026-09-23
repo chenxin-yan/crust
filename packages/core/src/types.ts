@@ -292,8 +292,9 @@ interface RepeatableOccurrenceFields {
 	/** Collect repeated values into an array */
 	multiple: true;
 	/**
-	 * Split each argv or `env` value on this string into separate occurrences
+	 * Split each string argv or `env` value into separate occurrences
 	 * (`--tags a,b` with `","` is two occurrences). Empty segments are dropped.
+	 * Boolean argv switches stay booleans; only their env text is split.
 	 * Opt-in with no default; structured `run()` arrays are never split.
 	 */
 	delimiter?: string;
