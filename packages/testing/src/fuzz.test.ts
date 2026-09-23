@@ -302,7 +302,7 @@ describe("fuzzRoundTrip", () => {
 	it("binds env-backed flags to their default on both paths regardless of the process environment", async () => {
 		expect(process.env.HOME).toBeDefined();
 		const app = new Crust("cli")
-			.flags({ name: "home", type: "string", env: "HOME", default: "fallback" })
+			.flags({ name: "home", type: "string", env: { name: "HOME" }, default: "fallback" })
 			.action(() => {});
 		expect(await fuzzRoundTrip(app, [], { runs: 20, env: {} })).toMatchObject({ accepted: 20 });
 	});
@@ -310,7 +310,13 @@ describe("fuzzRoundTrip", () => {
 	it("never generates a flag's delimiter inside a value", async () => {
 		const app = new Crust("cli")
 			.flags(
-				{ name: "tag", type: "string", multiple: true, delimiter: "," },
+				{
+					name: "tag",
+					type: "string",
+					multiple: true,
+					delimiter: ",",
+					env: { name: "TAGS", delimiter: " " },
+				},
 				{ name: "eq", type: "string", multiple: true, delimiter: "=" },
 				{ name: "payload", type: "json", multiple: true, delimiter: "," },
 			)

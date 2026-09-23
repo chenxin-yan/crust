@@ -158,7 +158,7 @@ describe("bindInput \u2014 environment", () => {
 		expect(process.env.HOME).toBeDefined();
 		const seen: string[] = [];
 		const app = new Crust("cli")
-			.flags({ name: "home", type: "string", env: "HOME", default: "fallback" })
+			.flags({ name: "home", type: "string", env: { name: "HOME" }, default: "fallback" })
 			.action(({ flags }) => {
 				seen.push(flags.home);
 			});
