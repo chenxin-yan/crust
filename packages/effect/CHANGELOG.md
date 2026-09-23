@@ -1,5 +1,11 @@
 # @crustjs/effect
 
+## 0.1.3
+
+### Patch Changes
+
+- [#445](https://github.com/chenxin-yan/crust/pull/445) [`2482d70`](https://github.com/chenxin-yan/crust/commit/2482d70fb50981bafad1283992fbf1fc16953312) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Publish @crustjs/effect under the default latest npm dist-tag instead of next, and update installation instructions.
+
 ## 0.1.2
 
 ### Patch Changes
