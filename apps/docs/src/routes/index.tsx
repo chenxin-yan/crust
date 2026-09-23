@@ -400,6 +400,14 @@ function FurnaceHome() {
         .fn-mono {
           font-family: 'Fira Code', monospace;
         }
+        /* Section eyebrow, shared with the showcase */
+        .fn-eyebrow {
+          margin: 0 0 16px;
+          font: 10px/1 'Fira Code', monospace;
+          letter-spacing: 4px;
+          text-transform: uppercase;
+          color: var(--fn-dim);
+        }
 
         /* Install command — package manager tabs, click the command to copy */
         .fn-install {
@@ -869,18 +877,7 @@ function FurnaceHome() {
 
 					{/* Modules */}
 					<section className="fn-content-section">
-						<p
-							className="fn-mono"
-							style={{
-								fontSize: 10,
-								letterSpacing: 4,
-								color: "var(--fn-dim)",
-								textTransform: "uppercase",
-								marginBottom: 16,
-							}}
-						>
-							Modules
-						</p>
+						<p className="fn-eyebrow">Modules</p>
 
 						{MODULES.map((m) => {
 							if (m.upcoming) {

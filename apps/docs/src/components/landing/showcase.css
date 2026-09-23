@@ -3,15 +3,17 @@
 	position: relative;
 	z-index: 2;
 	display: grid;
-	/* The panel keeps its 916px; the label takes what is left, never less than 200px. */
-	grid-template-columns: minmax(200px, 1fr) minmax(0, 916px);
-	gap: 32px;
+	grid-template-columns: 180px 1fr;
+	gap: 24px;
 	align-items: start;
-	max-width: 1280px; /* wider than the hero so the label has room beside a side-by-side panel */
+	max-width: 1100px; /* same container as the hero and Modules */
 	margin: 0 auto;
-	padding: 0 40px 96px; /* in scale with the hero above and the modules below */
+	padding: 0 40px 96px;
 	color: var(--fn-primary);
 	font-family: "Saira", sans-serif;
+}
+.fn-showcase-eyebrow {
+	grid-column: 1 / -1;
 }
 .fn-showcase > * {
 	min-width: 0; /* long lines scroll inside a pane instead of widening its column */
@@ -21,7 +23,7 @@
 .fn-showcase-head {
 	position: sticky;
 	top: calc(56px + 40vh - 60px); /* fumadocs header + roughly eye level */
-	padding-left: 20px;
+	padding-left: 16px;
 }
 .fn-showcase-title {
 	animation: fn-showcase-in 0.3s ease;
@@ -40,15 +42,14 @@
 .fn-showcase-name {
 	margin: 0;
 	font:
-		600 44px/0.95 "Saira Condensed",
+		600 36px/0.95 "Saira Condensed",
 		sans-serif;
 	letter-spacing: 0.5px;
 	text-transform: uppercase;
 }
 .fn-showcase-claim {
-	max-width: 22em;
 	margin: 14px 0 0;
-	font-size: 15px;
+	font-size: 14px;
 	line-height: 1.45;
 	color: var(--fn-dim);
 }
@@ -98,8 +99,9 @@
 /* Panel: the hero's code panel with the terminal beside it, sized to its content. */
 .fn-showcase-panel {
 	display: grid;
-	/* 916px panel → 500 | 416: the 62-column snippet fits the code pane, the longest `$ deno run -A …` line fits the terminal. */
-	grid-template-columns: 1.2fr 1fr;
+	/* 816px panel at 11px mono → 460 | 355: the 62-column snippet fits the code pane and the default
+	   `$ bun run …` lines fit the terminal; only the longest `$ deno run -A …` line wraps. */
+	grid-template-columns: 1.3fr 1fr;
 	background: var(--fn-surface);
 	border: 1px solid var(--fn-border);
 }
@@ -147,9 +149,9 @@
 }
 
 .fn-showcase-body {
-	padding: 12px 16px;
+	padding: 12px;
 	font:
-		12px/1.65 "Fira Code",
+		11px/1.65 "Fira Code",
 		monospace;
 	overflow-x: auto;
 }
@@ -192,7 +194,7 @@
 	overflow: visible;
 	tab-size: 2;
 	font-family: "Fira Code", monospace;
-	font-size: 12px;
+	font-size: 11px;
 	line-height: 1.65;
 }
 .fn-showcase-shiki .shiki code {
@@ -210,10 +212,10 @@
 	display: inline-block;
 	width: 26px;
 	text-align: right;
-	margin-right: 10px;
+	margin-right: 8px;
 	color: var(--fn-dim);
 	opacity: 0.5;
-	font-size: 11px;
+	font-size: 10px;
 	user-select: none;
 }
 .fn-showcase-shiki .shiki,

@@ -111,7 +111,11 @@ export default function Showcase(): JSX.Element {
 	const feature = FEATURES[active];
 
 	return (
-		<section ref={section} className="fn-showcase" aria-label="Playground">
+		<section ref={section} className="fn-showcase" aria-labelledby="fn-showcase-eyebrow">
+			{/* `.fn-eyebrow` is the landing page's section label, shared with Modules. */}
+			<p id="fn-showcase-eyebrow" className="fn-eyebrow fn-showcase-eyebrow">
+				Features
+			</p>
 			{/* Pinned aside: the label column stays at eye level while the panels pass. */}
 			<aside className="fn-showcase-head">
 				<div ref={rule} className="fn-showcase-rule" aria-hidden="true" />
