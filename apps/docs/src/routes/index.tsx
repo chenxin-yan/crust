@@ -10,7 +10,7 @@ import gruvboxDarkHard from "shiki/themes/gruvbox-dark-hard.mjs";
 import gruvboxLightHard from "shiki/themes/gruvbox-light-hard.mjs";
 
 import Showcase from "@/components/landing/Showcase";
-import { baseOptions } from "@/lib/layout.shared";
+import { baseOptions, gitConfig } from "@/lib/layout.shared";
 import { buildPageMeta } from "@/lib/seo";
 
 // oxlint-disable-next-line import/default -- Vite's ?raw loader exports the file text; the TypeScript source needs no default export.
@@ -234,6 +234,7 @@ const FALLBACK_HIGHLIGHTED_CODE = createFallbackHighlightedCode(CODE_EXAMPLE);
 
 function FurnaceHome() {
 	const { highlightedCode, npmVersions } = Route.useLoaderData();
+	const coreVersion = npmVersions["@crustjs/core"];
 	const [copied, setCopied] = useState<string | null>(null);
 
 	const handleCopy = useCallback((command: string) => {
@@ -317,7 +318,7 @@ function FurnaceHome() {
           z-index: 0;
         }
 
-        /* Roadmap link */
+        /* Version badge — links to GitHub Releases */
         .fn-dev-badge {
           display: inline-flex;
           align-items: center;
@@ -334,6 +335,16 @@ function FurnaceHome() {
         }
         .fn-dev-badge:hover {
           border-color: var(--fn-molten);
+        }
+        .fn-dev-badge-status {
+          color: var(--fn-primary);
+          letter-spacing: 1px;
+        }
+        .fn-dev-badge-sep {
+          width: 1px;
+          height: 12px;
+          background: var(--fn-border);
+          flex-shrink: 0;
         }
         .fn-dev-badge-cta {
           color: var(--fn-dim);
@@ -691,13 +702,20 @@ function FurnaceHome() {
 					{/* Hero */}
 					<section className="fn-hero-section">
 						<a
-							href="https://github.com/users/chenxin-yan/projects/10"
+							href={`https://github.com/${gitConfig.user}/${gitConfig.repo}/releases`}
 							target="_blank"
 							rel="noopener noreferrer"
 							className="fn-mono fn-dev-badge"
 						>
+							{/* The same npm lookup the module list uses; omitted when the registry was unreachable. */}
+							{coreVersion && (
+								<>
+									<span className="fn-dev-badge-status">@crustjs/core v{coreVersion}</span>
+									<span className="fn-dev-badge-sep" />
+								</>
+							)}
 							<span className="fn-dev-badge-cta">
-								See Roadmap
+								Release notes
 								<span className="fn-dev-badge-arrow" aria-hidden="true">
 									→
 								</span>
