@@ -120,6 +120,17 @@ function _envAndDelimiter(schema: StandardSchema) {
 	new Crust("cli").flags({ name: "tag", type: "string", delimiter: "," });
 }
 
+function _ownedEnvBinding() {
+	const env = { name: "APP_TAGS", delimiter: "," };
+	const flag = defineFlag("tags", { type: "string", multiple: true, env });
+	// @ts-expect-error -- owned environment names are frozen even for predeclared bindings
+	flag.env.name = "OTHER";
+	// @ts-expect-error -- owned environment delimiters are frozen too
+	flag.env.delimiter = ":";
+	env.name = "OTHER";
+	env.delimiter = ":";
+}
+
 function _attachments(flags: NamedFlagDef[], args: ArgsDef, aliases: string[], cond: boolean) {
 	new Crust("cli").flags(...flags);
 	new Crust("cli").flags(cond ? { name: "a", type: "boolean" } : { name: "b", type: "boolean" });
