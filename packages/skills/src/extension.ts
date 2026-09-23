@@ -32,12 +32,7 @@ import {
 	installSkill,
 	uninstallSkill,
 } from "./generate.ts";
-import {
-	installedAgents,
-	planReconcile,
-	UNIVERSAL_GROUP,
-	type ReconcileChoice,
-} from "./reconcile.ts";
+import { installedAgents, UNIVERSAL_GROUP, type ReconcileChoice } from "./reconcile.ts";
 import { SkillSourceUnavailableError, loadPackagedSkills, type PackagedSkill } from "./source.ts";
 import type { InstallSkillResult, SkillOptions, SkillStatusResult } from "./types.ts";
 
@@ -339,12 +334,10 @@ async function installSkills(opts: {
 	}
 
 	for (const packagedSkill of skills) {
-		await applyReconcile({
+		await installSelectedAgents({
 			packagedSkill,
 			statusMap: statuses.get(packagedSkill)!,
-			choices,
 			selected,
-			universal,
 			scope: effectiveScope,
 			installAll,
 			io,
@@ -352,87 +345,61 @@ async function installSkills(opts: {
 	}
 }
 
-async function applyReconcile(opts: {
+/** Additive only: links or repairs selected agents; unselected links are left untouched. */
+async function installSelectedAgents(opts: {
 	packagedSkill: PackagedSkill;
 	statusMap: SkillStatusMap;
-	choices: readonly ReconcileChoice[];
 	selected: readonly AgentTarget[];
-	universal: readonly AgentTarget[];
 	scope: Scope;
 	installAll: boolean;
 	io: SkillIO;
 }): Promise<void> {
-	const { packagedSkill, statusMap, choices, selected, universal, scope, installAll, io } = opts;
-	const { toInstall, toUninstall, sharedDirWarnings } = planReconcile({
-		statusMap,
-		choices,
-		selected,
-		universal,
-	});
-	for (const warning of sharedDirWarnings) {
-		io.stderr(
-			yellow(
-				`${warning.label} [${packagedSkill.name}]: "${warning.outputDir}" is shared with a selected agent, so the skill stays available to it.`,
-			),
-		);
-	}
-
-	if (toInstall.length > 0) {
-		const groups = groupAgentsByOutputDir(toInstall, scope, packagedSkill.name);
-		const linked: InstallSkillResult["agents"] = [];
-		for (const agents of groups.values()) {
-			const runInstall = (force?: boolean) =>
-				installSkill({
-					sourceDir: packagedSkill.sourceDir,
-					agents,
-					scope,
-					force,
-				});
-			try {
-				const result = await spinner({
-					message: `Installing skill [${packagedSkill.name}]...`,
-					task: () => runInstall(),
-				});
-				linked.push(...result.agents);
-			} catch (error) {
-				if (!(error instanceof SkillConflictError)) throw error;
-				const label = formatAgentLabels(agents).join(", ");
-				const skipped = `Skipped ${label} [${packagedSkill.name}]: directory is not owned by this skill.`;
-				if (installAll) {
-					io.stderr(yellow(skipped));
-					continue;
-				}
-				const overwrite = await confirm({
-					message: `"${error.details.outputDir}" is not owned by "${packagedSkill.name}". Overwrite?`,
-					default: false,
-				});
-				if (!overwrite) {
-					io.stdout(dim(skipped));
-					continue;
-				}
-				const result = await runInstall(true);
-				linked.push(...result.agents);
-			}
-		}
-		if (linked.length > 0) {
-			io.stdout(`\n${bold(`Installed "${packagedSkill.name}"`)}`);
-			reportAgentDirs(io, linked);
-		}
-	}
-
-	if (toUninstall.length > 0) {
-		await spinner({
-			message: `Removing skill [${packagedSkill.name}]...`,
-			task: () =>
-				uninstallSkill({
-					name: packagedSkill.name,
-					agents: toUninstall,
-					scope,
-				}),
-		});
-	}
-	if (toInstall.length === 0 && toUninstall.length === 0) {
+	const { packagedSkill, statusMap, selected, scope, installAll, io } = opts;
+	const toInstall = selected.filter((agent) => statusMap.get(agent)?.status !== "linked");
+	if (toInstall.length === 0) {
 		io.stdout(dim(`No changes [${packagedSkill.name}].`));
+		return;
+	}
+
+	const groups = groupAgentsByOutputDir(toInstall, scope, packagedSkill.name);
+	const linked: InstallSkillResult["agents"] = [];
+	for (const agents of groups.values()) {
+		const runInstall = (force?: boolean) =>
+			installSkill({
+				sourceDir: packagedSkill.sourceDir,
+				agents,
+				scope,
+				force,
+			});
+		try {
+			const result = await spinner({
+				message: `Installing skill [${packagedSkill.name}]...`,
+				task: () => runInstall(),
+			});
+			linked.push(...result.agents);
+		} catch (error) {
+			if (!(error instanceof SkillConflictError)) throw error;
+			const label = formatAgentLabels(agents).join(", ");
+			const skipped = `Skipped ${label} [${packagedSkill.name}]: directory is not owned by this skill.`;
+			if (installAll) {
+				io.stderr(yellow(skipped));
+				continue;
+			}
+			const overwrite = await confirm({
+				message: `"${error.details.outputDir}" is not owned by "${packagedSkill.name}". Overwrite?`,
+				default: false,
+			});
+			if (!overwrite) {
+				io.stdout(dim(skipped));
+				continue;
+			}
+			const result = await runInstall(true);
+			linked.push(...result.agents);
+		}
+	}
+	if (linked.length > 0) {
+		io.stdout(`\n${bold(`Installed "${packagedSkill.name}"`)}`);
+		reportAgentDirs(io, linked);
 	}
 }
 
@@ -502,7 +469,7 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 	return defineCommand(
 		commandName,
 		{
-			description: "Manage agent skill installations",
+			description: "Manage agent skill installations (shorthand for `install`)",
 			aliases: commandName === DEFAULT_SKILL_COMMAND_NAME ? ["skill"] : [],
 		},
 		(command) =>
@@ -511,7 +478,10 @@ function buildSkillCommand(commandName: string, options: SkillOptions) {
 				.add(
 					defineCommand(
 						"install",
-						{ description: "Link packaged skills into agent directories" },
+						{
+							description:
+								"Link packaged skills into agent directories; never removes existing links",
+						},
 						(sub) => sub.flags(...INSTALL_FLAGS).action(install),
 					),
 				)

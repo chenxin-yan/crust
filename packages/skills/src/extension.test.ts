@@ -319,6 +319,41 @@ describe("skill extension packaged directory", () => {
 		);
 	});
 
+	it.each(["skills install", "skills"])(
+		"%s installs newly selected agents without removing a deselected agent's link",
+		async (command) => {
+			const source = await writeSource("demo");
+			const augmentTarget = join(tempRoot, ".augment", "skills", "demo");
+			await withCwd(tempRoot, () =>
+				installSkill({ sourceDir: join(source, "demo"), agents: ["augment"], scope: "project" }),
+			);
+
+			// Empty PATH keeps agent detection deterministic: Universal plus the
+			// already-installed Augment are the only agent choices.
+			const path = process.env.PATH;
+			process.env.PATH = "";
+			try {
+				const harness = createPromptIO();
+				const run = withCwd(tempRoot, () =>
+					withPromptIO(harness.io, () => createApp().execute({ argv: command.split(" ") })),
+				);
+				await waitForPrompt(harness, "Select agents to install for");
+				// Only the installed Augment starts selected; swap it for Universal.
+				harness.keys("space", "down", "space", "enter");
+				await run;
+			} finally {
+				process.env.PATH = path;
+			}
+
+			expect(resolve(dirname(target("demo")), await readlink(target("demo")))).toBe(
+				join(source, "demo"),
+			);
+			expect(resolve(dirname(augmentTarget), await readlink(augmentTarget))).toBe(
+				join(source, "demo"),
+			);
+		},
+	);
+
 	it("uninstalls selected skills and leaves the rest linked", async () => {
 		const source = await writeSource("demo");
 		await writeSource("guide");
