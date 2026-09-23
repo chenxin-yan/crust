@@ -39,7 +39,7 @@ Use `writeSkillsFromSnapshot()` when a prepared Command Snapshot is available. O
 
 <include lang="ts">../../../examples/modules/skills.ts#extension</include>
 
-The Extension registers `my-cli skills` (alias `skill`), which runs `install`, plus the `install`, `uninstall`, and `repair` subcommands. Setting `command` to a custom name replaces the default command without adding the alias. It also contributes an `Agent skills` root section with `except: [skill]` (the Extension factory), so it appears in help, man pages, and any other consumer, but not in the skills it generates.
+The Extension registers `my-cli skills` (alias `skill`) with the `install`, `uninstall`, and `repair` subcommands. `skills install` is the canonical install command; bare `my-cli skills` is shorthand for it and shares the same handler and flags. Setting `command` to a custom name replaces the default command without adding the alias. It also contributes an `Agent skills` root section with `except: [skill]` (the Extension factory), so it appears in help, man pages, and any other consumer, but not in the skills it generates.
 
 The help section includes this escaped excerpt:
 
@@ -54,15 +54,16 @@ Packaged skills are read at runtime from [`resolveArtifactDir("skills")`](/docs/
 Generated man pages can embed source paths resolved on the build machine. Run builds from the project root that contains the packaged skills directory to avoid absolute build-machine paths.
 
 ```sh
-my-cli skills
+my-cli skills install
 my-cli skills install --all --scope project
+my-cli skills            # shorthand for `skills install`
 my-cli skills uninstall
 my-cli skills repair
 ```
 
 `--scope` accepts `project` or `global`. With `--all`, scope comes from `--scope`, then `defaultScope`, then `global`; without `--all`, an interactive run prompts when neither setting is supplied. `install --all` links every packaged skill for the Universal group, every agent detected on `PATH`, and every agent that already holds one of the packaged skills.
 
-An interactive install asks once which packaged skills to install (only when more than one is packaged; unselected skills are left untouched), then once which agents to install every selected skill for, with an overwrite confirmation for each unowned directory. Deselecting an agent with an installed link removes that link for the selected skills. It does not merely skip a new installation.
+Install is additive only: it links or repairs the selected skills for the selected agents and never removes links. An interactive install asks once which packaged skills to install (only when more than one is packaged), then once which agents to install every selected skill for, with an overwrite confirmation for each unowned directory. Unselected skills and agents are left untouched, even when they already hold an installed link; removal happens only through `skills uninstall`.
 
 `skills uninstall` lists the packaged skills currently linked at the chosen scope, with nothing preselected, and removes the selected ones from every agent directory; `--all` removes them without prompting and is the only non-interactive form. `skills repair` relinks stale or dangling links without prompting for agents.
 

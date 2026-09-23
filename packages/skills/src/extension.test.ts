@@ -19,6 +19,7 @@ import { withPromptIO } from "@crustjs/prompts";
 import { createPromptIO } from "@crustjs/prompts/testing";
 import { captureExecute } from "@crustjs/testing";
 
+import { withCwd } from "../tests/fixtures.ts";
 import { skill } from "./extension.ts";
 import { installSkill } from "./generate.ts";
 
@@ -47,16 +48,6 @@ afterEach(async () => {
 	else process.argv[1] = originalArgv1;
 	await rm(tempRoot, { recursive: true, force: true });
 });
-
-async function withCwd<T>(dir: string, run: () => Promise<T>): Promise<T> {
-	const cwd = process.cwd;
-	process.cwd = () => dir;
-	try {
-		return await run();
-	} finally {
-		process.cwd = cwd;
-	}
-}
 
 /** Writes a skill into the staged skills directory the resolver points at. */
 async function writeSource(name: string, content = name, description = name): Promise<string> {
@@ -318,6 +309,41 @@ describe("skill extension packaged directory", () => {
 			join(source, "guide"),
 		);
 	});
+
+	it.each(["skills install", "skills"])(
+		"%s installs newly selected agents without removing a deselected agent's link",
+		async (command) => {
+			const source = await writeSource("demo");
+			const augmentTarget = join(tempRoot, ".augment", "skills", "demo");
+			await withCwd(tempRoot, () =>
+				installSkill({ sourceDir: join(source, "demo"), agents: ["augment"], scope: "project" }),
+			);
+
+			// Empty PATH keeps agent detection deterministic: Universal plus the
+			// already-installed Augment are the only agent choices.
+			const path = process.env.PATH;
+			process.env.PATH = "";
+			try {
+				const harness = createPromptIO();
+				const run = withCwd(tempRoot, () =>
+					withPromptIO(harness.io, () => createApp().execute({ argv: command.split(" ") })),
+				);
+				await waitForPrompt(harness, "Select agents to install for");
+				// Only the installed Augment starts selected; swap it for Universal.
+				harness.keys("space", "down", "space", "enter");
+				await run;
+			} finally {
+				process.env.PATH = path;
+			}
+
+			expect(resolve(dirname(target("demo")), await readlink(target("demo")))).toBe(
+				join(source, "demo"),
+			);
+			expect(resolve(dirname(augmentTarget), await readlink(augmentTarget))).toBe(
+				join(source, "demo"),
+			);
+		},
+	);
 
 	it("uninstalls selected skills and leaves the rest linked", async () => {
 		const source = await writeSource("demo");

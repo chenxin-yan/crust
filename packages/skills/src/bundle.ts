@@ -134,13 +134,10 @@ async function collectBundleEntries(
 	visitedDirs: Set<string>,
 ): Promise<CollectedFile[]> {
 	// readdir order is filesystem-dependent; sort so reported artifact paths are stable across hosts.
-	const entries = (await readdir(dir, { withFileTypes: true })).sort((a, b) =>
-		a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
-	);
+	const entries = (await readdir(dir)).sort();
 	const collected: CollectedFile[] = [];
 
-	for (const entry of entries) {
-		const name = entry.name;
+	for (const name of entries) {
 		const absPath = join(dir, name);
 		const relPath = relPrefix === "" ? name : `${relPrefix}/${name}`;
 

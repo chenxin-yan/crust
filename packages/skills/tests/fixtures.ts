@@ -8,6 +8,18 @@ import type {
 } from "@crustjs/core";
 import { Crust, defineCommand } from "@crustjs/core";
 
+export async function withCwd<T>(dir: string, run: () => Promise<T>): Promise<T> {
+	// Preserve the original method for restoration; it is never called unbound.
+	// oxlint-disable-next-line typescript/unbound-method
+	const cwd = process.cwd;
+	process.cwd = () => dir;
+	try {
+		return await run();
+	} finally {
+		process.cwd = cwd;
+	}
+}
+
 export interface CommandFixture {
 	meta: {
 		name: string;

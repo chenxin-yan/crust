@@ -13,6 +13,7 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
+import { withCwd } from "../tests/fixtures.ts";
 import { SkillConflictError } from "./errors.ts";
 import { getSkillStatus, installSkill, uninstallSkill } from "./generate.ts";
 
@@ -25,16 +26,6 @@ beforeEach(async () => {
 afterEach(async () => {
 	await rm(tempRoot, { recursive: true, force: true });
 });
-
-async function withCwd<T>(dir: string, run: () => Promise<T>): Promise<T> {
-	const cwd = process.cwd;
-	process.cwd = () => dir;
-	try {
-		return await run();
-	} finally {
-		process.cwd = cwd;
-	}
-}
 
 async function createSource(name = "demo"): Promise<string> {
 	const sourceDir = join(tempRoot, "package", "skills", name);
