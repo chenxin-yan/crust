@@ -476,7 +476,7 @@ function FurnaceHome() {
           flex-shrink: 0;
         }
         .fn-code-body {
-          padding: 3px 3px 3px 0;
+          padding: 12px 16px 12px 0;
           font-family: 'Fira Code', monospace;
           font-size: 12px;
           line-height: 1.65;
@@ -494,6 +494,7 @@ function FurnaceHome() {
           margin: 0;
           padding: 0;
           width: 100%;
+          tab-size: 2;
           font-family: 'Fira Code', monospace;
           font-size: 12px;
           line-height: 1.65;
