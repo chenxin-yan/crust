@@ -3,7 +3,17 @@ title: "Crust"
 description: Build and distribute Crust applications for Bun, Deno, and Node.
 ---
 
-`@crustjs/crust` provides the `crust` CLI. `crust build` writes the publishable npm packages for your CLI to `.crust/`, and `crust publish` uploads them.
+`@crustjs/crust` provides the `crust` CLI. `crust build` writes the publishable npm packages for your CLI to `.crust/`, and `crust publish` uploads them. The same build is available to scripts as [`build()`](#programmatic-api):
+
+```ts
+import {
+  build,
+  type BuildArtifact,
+  type BuildOptions,
+  type BuildReport,
+  type BuildResult,
+} from "@crustjs/crust";
+```
 
 ## Install
 
@@ -11,7 +21,7 @@ description: Build and distribute Crust applications for Bun, Deno, and Node.
 npm install -D @crustjs/crust
 ```
 
-The npm package is itself built with `crust build`, so its `bin` is a Node launcher that runs a platform-specific standalone executable with Bun embedded. Node is required to start it; a separate Bun installation is not. Without `bun` on `PATH`, arm64 hosts cannot build their own target (Bun would copy the running `crust` executable onto itself); the error names the other targets, or install Bun.
+The npm package is itself built with `crust build`, so its `bin` is a Node launcher that runs a platform-specific standalone executable with Bun embedded. Node is required to start it; a separate Bun installation is not. Without `bun` on `PATH`, arm64 hosts cannot build their own target (Bun would copy the running `crust` executable onto itself); the error names the other targets, or install Bun. The package root exports the [`build()`](#programmatic-api) library, a bundled JavaScript module whose declarations import `BuildReport` from `@crustjs/core`, declared as a peer dependency so the type stays the same one your Extensions see; because it is not a Bun executable, it needs `bun` on `PATH` unless the script itself runs under `bun`.
 
 ## Commands
 
@@ -57,6 +67,35 @@ npm reads `publishConfig.access` from each staged `package.json`, which `crust b
 | `--tag`      | string  | none    | Override the npm dist-tag passed to npm publish     |
 | `--dry-run`  | boolean | `false` | Print publish order and commands without publishing |
 | `--registry` | string  | none    | Override the registry passed to npm publish         |
+
+## Programmatic API
+
+```ts
+function build(options?: BuildOptions): Promise<BuildResult>;
+
+type BuildOptions = {
+  cwd?: string; // project root; default process.cwd()
+  targets?: readonly string[]; // canonical targets or "host"; overrides crust.targets; rejected for node
+  envFiles?: readonly string[]; // resolved against cwd; rejected for deno
+  minify?: boolean; // default true for bun and node; explicit true rejected for deno
+  validate?: boolean; // default true; false skips snapshots and Extension build hooks
+  onLog?: (line: string, stream: "stdout" | "stderr") => void; // silent when omitted
+};
+
+type BuildResult = {
+  stageDir: string; // <cwd>/.crust
+  artifacts: BuildArtifact[];
+  reports?: Record<string, BuildReport>; // per bin command; absent when validate is false
+};
+
+type BuildArtifact =
+  | { kind: "package-json"; path: string; target?: string } // root, then one per platform package
+  | { kind: "launcher"; path: string; command: string } // root/bin/<command>.js for Bun and Deno
+  | { kind: "executable"; path: string; command: string; target: string } // <platform>/bin/<command>-<target>
+  | { kind: "bundle"; path: string; command: string }; // root/bin/<command>.js for Node
+```
+
+`build()` is the `crust build` pipeline behind the command: it reads `bin` and the `crust` block from `cwd`, validates them and the options with the same errors the command prints, wipes `.crust/`, prepares each entry's Command Snapshot and Extension build hooks unless `validate` is `false`, then compiles and stages every package and writes `manifest.json` last. It throws on failure and prints nothing; pass `onLog` to receive the command's progress lines with the stream they would go to. `target` in artifacts is the canonical compiler target (`bun-linux-x64`), and `BuildReport` is `@crustjs/core`'s type, re-exported. Overlapping calls for the same real project directory in one process reject before staging; different projects can build concurrently. Serialize builds across separate processes yourself, and consume staged artifacts before rebuilding that project. See [Programmatic builds](/docs/guide/build-and-distribution#programmatic-builds) for a release-script example.
 
 ## Build output
 

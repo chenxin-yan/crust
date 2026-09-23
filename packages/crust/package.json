@@ -25,16 +25,23 @@
 	"publishConfig": {
 		"access": "public"
 	},
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
 	"crust": {
 		"include": [
-			"schema"
+			"schema",
+			"dist"
 		]
 	},
 	"bin": {
 		"crust": "src/cli.ts"
 	},
 	"scripts": {
-		"build": "bun src/cli.ts build",
+		"build": "tsdown && bun src/cli.ts build",
 		"release": "bun src/cli.ts publish",
 		"dev": "bun src/cli.ts",
 		"start": "bun .crust/root/bin/crust.js",
@@ -46,10 +53,16 @@
 		"@crustjs/extensions": "workspace:^",
 		"@crustjs/style": "workspace:^"
 	},
+	"peerDependencies": {
+		"@crustjs/core": "^0.3.5"
+	},
 	"devDependencies": {
+		"@arethetypeswrong/core": "^0.18.5",
 		"@crustjs/config": "workspace:*",
 		"@crustjs/testing": "workspace:*",
-		"@crustjs/utils": "workspace:*"
+		"@crustjs/utils": "workspace:*",
+		"publint": "^0.3.24",
+		"tsdown": "catalog:"
 	},
 	"engines": {
 		"bun": ">=1.4.0"

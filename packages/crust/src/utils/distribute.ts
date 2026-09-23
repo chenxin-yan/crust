@@ -62,6 +62,11 @@ type PublishPackageMetadata = {
 type RootPublishPackageJson = PublishPackageMetadata & {
 	/** Absent for a root-only package: npm treats `{}` and a missing field alike, but the manifest stays honest. */
 	optionalDependencies?: Record<string, string>;
+	/** The user's `exports`, carried only when present and every target is staged; see `validateStagedExports`. */
+	exports?: JsonValue;
+	/** The user's peer contract for what `exports` references (types, re-exports); see `validatePeerDependencies`. */
+	peerDependencies?: Record<string, string>;
+	peerDependenciesMeta?: JsonObject;
 	os?: never;
 	cpu?: never;
 	libc?: never;
@@ -75,8 +80,12 @@ type PlatformPublishPackageJson = PublishPackageMetadata & {
 	optionalDependencies?: never;
 };
 
-type UserPackageJson = Omit<PublishPackageMetadata, "bin"> & {
+type UserPackageJson = Omit<PublishPackageMetadata, "bin" | "type"> & {
+	type?: "module" | "commonjs";
 	bin?: JsonValue;
+	exports?: JsonValue;
+	peerDependencies?: JsonValue;
+	peerDependenciesMeta?: JsonValue;
 	optionalDependencies?: Record<string, string>;
 	os?: [NpmOs];
 	cpu?: [NpmCpu];
@@ -89,7 +98,15 @@ type StagingOptions = { artifactDirs: readonly string[]; manPages: readonly stri
 type DistributionMetadata = {
 	rootPackageName: string;
 	version: string;
+	/** Metadata shared by the root and every platform package. */
 	rootPackageJson: PublishPackageMetadata;
+	/** The source scope for included library files; generated CLI files always use ESM. */
+	sourceType: UserPackageJson["type"];
+	/** The user's `exports`, root package only; validated against the staged tree. */
+	exports?: JsonValue;
+	/** The user's `peerDependencies`/`peerDependenciesMeta`, root package only; publishable ranges. */
+	peerDependencies?: Record<string, string>;
+	peerDependenciesMeta?: JsonObject;
 };
 
 type DistributionTarget<T extends string = string> = {
@@ -161,6 +178,10 @@ export function validatePackageIdentity(
 	}
 }
 
+function isString(value: JsonValue): value is string {
+	return typeof value === "string";
+}
+
 function derivePlatformPackageName(rootPackageName: string, targetAlias: string): string {
 	const [scope, name] = rootPackageName.startsWith("@")
 		? rootPackageName.split("/")
@@ -208,9 +229,146 @@ function buildDistributionRootPackageJson(
 				}
 			: {}),
 		...(manPages.length > 0 ? { man: manPages.map((page) => `./man/${page}`) } : {}),
+		exports: metadata.exports,
+		peerDependencies: metadata.peerDependencies,
+		peerDependenciesMeta: metadata.peerDependenciesMeta,
 	};
 
 	return rootPackageJson;
+}
+
+/**
+ * Node rejects export targets whose segments are `.`, `..`, `node_modules`, or
+ * empty (`ERR_INVALID_PACKAGE_TARGET`), also percent-encoded, even when the path
+ * normalizes to a staged file, so filesystem checks alone would pass a target
+ * consumers cannot import.
+ */
+function hasNodeInvalidSegment(target: string): boolean {
+	return target
+		.slice("./".length)
+		.split(/[\\/]/)
+		.some((segment) => {
+			let decoded = segment;
+			try {
+				decoded = decodeURIComponent(segment);
+			} catch {
+				// Malformed escapes are compared as written.
+			}
+			return /^(\.\.?|node_modules|)$/i.test(decoded);
+		});
+}
+
+/**
+ * Checks a package.json `exports` map against the staged root package: every
+ * target must be a `./`-relative path to a file that staging copied there (a
+ * `crust.include` directory or Extension artifact), so the published root
+ * package resolves exactly what the project's own `exports` promises. `null`
+ * targets (blocked subpaths) and nested condition objects are allowed;
+ * fallback arrays and `*` patterns are rejected rather than half-checked.
+ */
+function validateStagedExports(
+	exports: JsonValue,
+	rootDir: string,
+	sourceType: UserPackageJson["type"],
+): void {
+	const fail = (detail: string): never => {
+		throw new Error(
+			`package.json exports ${detail}\n  crust build stages only bin/, Extension artifacts, and crust.include directories into the root package; point exports at a crust.include directory or remove the field.`,
+		);
+	};
+	const checkTarget = (target: JsonValue, at: string): void => {
+		if (target === null) return;
+		if (isString(target)) {
+			const staged = resolve(rootDir, target);
+			if (!target.startsWith("./") || !isWithin(rootDir, staged)) {
+				fail(
+					`target ${JSON.stringify(target)} (${at}) must be a ./-relative path inside the package.`,
+				);
+			}
+			if (target.includes("*")) {
+				fail(
+					`target ${JSON.stringify(target)} (${at}) uses a pattern, which crust build does not support.`,
+				);
+			}
+			if (hasNodeInvalidSegment(target)) {
+				fail(
+					`target ${JSON.stringify(target)} (${at}) contains a path segment Node rejects (".", "..", "node_modules", or empty).`,
+				);
+			}
+			if (!existsSync(staged) || !statSync(staged).isFile()) {
+				fail(`target ${JSON.stringify(target)} (${at}) is not a staged file: ${staged}`);
+			}
+			if (sourceType !== "module" && (target.endsWith(".js") || target.endsWith(".d.ts"))) {
+				// Copied nested package scopes survive staging; the generated root scope does not.
+				let scope = dirname(staged);
+				while (scope !== rootDir && !existsSync(join(scope, "package.json"))) {
+					scope = dirname(scope);
+				}
+				if (scope === rootDir) {
+					fail(
+						`target ${JSON.stringify(target)} (${at}) would change module format under the staged root's type: "module". Use .cjs/.d.cts for CommonJS, or include a nested package.json declaring the library's type.`,
+					);
+				}
+			}
+			return;
+		}
+		if (!isJsonObject(target)) {
+			fail(`${at} must be a path, null, or a conditions object, not ${JSON.stringify(target)}.`);
+		}
+		for (const [condition, value] of Object.entries(target)) {
+			if (condition.startsWith(".")) {
+				fail(`${at} mixes subpath ${JSON.stringify(condition)} into a conditions object.`);
+			}
+			checkTarget(value, `${at} -> ${condition}`);
+		}
+	};
+
+	if (isJsonObject(exports) && Object.keys(exports).some((key) => key.startsWith("."))) {
+		for (const [subpath, target] of Object.entries(exports)) {
+			if (!subpath.startsWith(".")) {
+				fail(`mixes condition ${JSON.stringify(subpath)} with subpath keys.`);
+			}
+			checkTarget(target, subpath);
+		}
+		return;
+	}
+	checkTarget(exports, '"."');
+}
+
+/**
+ * Carries `peerDependencies` (and `peerDependenciesMeta`) into the root package
+ * so a library `exports` entry can declare what its published types import.
+ * Ranges must be publishable as written: the staged manifests go to npm
+ * directly, so `workspace:` and `catalog:` ranges would leak into the registry.
+ */
+function validatePeerDependencies(
+	peerDependencies: JsonValue,
+	peerDependenciesMeta: JsonValue | undefined,
+): Pick<DistributionMetadata, "peerDependencies" | "peerDependenciesMeta"> {
+	if (!isJsonObject(peerDependencies)) {
+		throw new Error("package.json peerDependencies must be an object of package names to ranges.");
+	}
+	const ranges: Record<string, string> = {};
+	for (const [name, range] of Object.entries(peerDependencies)) {
+		if (!isString(range) || /^(workspace|catalog):/.test(range)) {
+			throw new Error(
+				`package.json peerDependencies[${JSON.stringify(name)}] must be a publishable range, not ${JSON.stringify(range)}.\n  crust build publishes the staged root package as written; workspace: and catalog: ranges are never rewritten.`,
+			);
+		}
+		ranges[name] = range;
+	}
+	if (peerDependenciesMeta === undefined) return { peerDependencies: ranges };
+	if (!isJsonObject(peerDependenciesMeta)) {
+		throw new Error("package.json peerDependenciesMeta must be an object keyed by peer name.");
+	}
+	for (const name of Object.keys(peerDependenciesMeta)) {
+		if (!Object.hasOwn(ranges, name)) {
+			throw new Error(
+				`package.json peerDependenciesMeta[${JSON.stringify(name)}] has no matching peerDependencies entry.`,
+			);
+		}
+	}
+	return { peerDependencies: ranges, peerDependenciesMeta };
 }
 
 function buildDistributionPlatformPackageJson(
@@ -265,6 +423,11 @@ function resolveDistributionMetadata(
 		rootPackageName: pkgJson.name,
 		version: pkgJson.version,
 		rootPackageJson: pickRootMetadata(pkgJson),
+		sourceType: pkgJson.type,
+		...(pkgJson.exports !== undefined ? { exports: pkgJson.exports } : {}),
+		...(pkgJson.peerDependencies !== undefined
+			? validatePeerDependencies(pkgJson.peerDependencies, pkgJson.peerDependenciesMeta)
+			: {}),
 	};
 }
 
@@ -509,15 +672,28 @@ export type Distribution<T extends string> =
 	  };
 
 /**
+ * One file `crust build` generated or compiled into the staged tree. `target`
+ * is the canonical compiler target of a platform package (`bun-linux-x64`),
+ * absent for the root package. Extension build hook output is reported by
+ * command in the `BuildReport`s instead, not repeated here.
+ */
+export type BuildArtifact =
+	| { kind: "package-json"; path: string; target?: string }
+	| { kind: "launcher"; path: string; command: string }
+	| { kind: "executable"; path: string; command: string; target: string }
+	| { kind: "bundle"; path: string; command: string };
+
+/**
  * Stages the npm tree in `plan.stageDir`. `build` is each command's Extension
  * build hook report, recorded in `manifest.json`; omit it when the hooks did not run.
+ * Returns every generated package.json, launcher, and compiled command in staging order.
  */
 export async function runDistributeBuild<T extends string>(
 	plan: DistributeBuildPlan,
 	distribution: Distribution<T>,
 	io: InvocationIO,
 	build?: Record<string, BuildReport>,
-): Promise<void> {
+): Promise<BuildArtifact[]> {
 	const metadata = resolveDistributionMetadata(plan.cwd, plan.userPackageJson);
 	const commands = plan.entries.map((entry) => entry.command);
 	const table = distribution.table;
@@ -542,6 +718,14 @@ export async function runDistributeBuild<T extends string>(
 	});
 
 	const rootDir = join(plan.stageDir, "root");
+	const produced: BuildArtifact[] = [
+		{ kind: "package-json", path: join(rootDir, "package.json") },
+		...distributionTargets.map((targetPackage): BuildArtifact => ({
+			kind: "package-json",
+			path: join(targetPackage.packageDir, "package.json"),
+			target: targetPackage.target,
+		})),
+	];
 	// Only crust.include trees are dereferenced: collectIncludeDirs proved every
 	// symlink inside them resolves into the project. Artifact trees are not
 	// validated, so a symlink there is copied as a link rather than followed, with
@@ -568,15 +752,20 @@ export async function runDistributeBuild<T extends string>(
 			cpSync(sourceDir, join(targetPackage.packageDir, "bin", name), options);
 		}
 	}
+	// After the copies so targets can be checked against the staged files, before
+	// compiling so a bad exports map fails without paying for the binaries.
+	if (metadata.exports !== undefined) {
+		validateStagedExports(metadata.exports, rootDir, metadata.sourceType);
+	}
 
 	const rootBinDir = join(rootDir, "bin");
 	if (table) {
 		for (const { command } of plan.entries) {
-			writeFileSync(
-				join(rootBinDir, `${command}.js`),
-				generateDistributionJsResolver(command, distributionTargets),
-				{ mode: 0o755 },
-			);
+			const launcherPath = join(rootBinDir, `${command}.js`);
+			writeFileSync(launcherPath, generateDistributionJsResolver(command, distributionTargets), {
+				mode: 0o755,
+			});
+			produced.push({ kind: "launcher", path: launcherPath, command });
 		}
 		for (const targetPackage of distributionTargets) {
 			for (const { command, entryPath } of plan.entries) {
@@ -587,6 +776,12 @@ export async function runDistributeBuild<T extends string>(
 				);
 				io.stdout(`  ${cyan("→")} ${bold(targetPackage.targetAlias)}: ${dim(outfilePath)}`);
 				await distribution.execute(entryPath, outfilePath, targetPackage.target);
+				produced.push({
+					kind: "executable",
+					path: outfilePath,
+					command,
+					target: targetPackage.target,
+				});
 			}
 		}
 	} else {
@@ -594,6 +789,7 @@ export async function runDistributeBuild<T extends string>(
 			const rootBinPath = join(rootBinDir, `${command}.js`);
 			io.stdout(`  ${cyan("→")} ${bold("root")}: ${dim(rootBinPath)}`);
 			await distribution.execute(entryPath, rootBinPath);
+			produced.push({ kind: "bundle", path: rootBinPath, command });
 		}
 	}
 
@@ -609,6 +805,7 @@ export async function runDistributeBuild<T extends string>(
 		io.stdout(`  ${targetPackage.packageDir}`);
 	}
 	io.stdout(`\n${dim("Manifest:")} ${manifestPath}`);
+	return produced;
 }
 
 /**

@@ -79,7 +79,13 @@ The plain Linux targets link against glibc and do not start on musl-based distri
 
 ### Staged `package.json` files
 
-The staged `package.json` files are generated, not copied: they take `name`, `version`, and npm metadata (`description`, `license`, `author`, `repository`, `keywords`, `engines`, and similar) from your `package.json`, and a Bun or Deno root package lists the platform packages as `optionalDependencies`. Your own `bin`, `files`, `dependencies`, and `devDependencies` are not carried over, because the binaries and the Node bundle already inline them, so keep the usual split in your project: Crust packages your code imports in `dependencies`, `@crustjs/crust` in `devDependencies`. A Node root package therefore has no dependency fields at all.
+The staged `package.json` files are generated, not copied: they take `name`, `version`, and npm metadata (`description`, `license`, `author`, `repository`, `keywords`, `engines`, and similar) from your `package.json`, and a Bun or Deno root package lists the platform packages as `optionalDependencies`. Your own `bin`, `files`, `dependencies`, and `devDependencies` are not carried over, because the binaries and the Node bundle already inline them, so keep the usual split in your project: Crust packages your code imports in `dependencies`, `@crustjs/crust` in `devDependencies`. A Node root package has no generated platform `optionalDependencies`; explicitly declared peers are preserved as described below.
+
+`exports` is carried as written, into the root package only, so a CLI package can also expose a library entry (this is how `@crustjs/crust` ships [`build()`](#programmatic-builds)). Every target must be a `./` path to a file the build staged into the root package, that is, inside a [`crust.include`](#ship-extra-directories-with-crustinclude) directory or an Extension artifact directory; `null` targets and nested condition objects are fine, while `*` patterns, fallback arrays, paths Node rejects (`.`, `..`, `node_modules`, or empty segments), and paths to source files that stay behind fail the build with the offending target.
+
+The staged root always uses `"type": "module"` for its generated CLI files. If your source root has `"type": "commonjs"` or omits `type`, exported `.js` and `.d.ts` files must sit under an included nested `package.json` declaring the library's type, such as `dist/package.json` with `{"type":"commonjs"}`; otherwise the build rejects them rather than changing their module format. Alternatively, use explicit `.cjs`/`.d.cts` extensions for CommonJS or `.mjs`/`.d.mts` for ESM. Included library files are copied, not transformed; keep their internal imports compatible with the staged package scopes too.
+
+`peerDependencies` and `peerDependenciesMeta` travel with it, root package only, so a library entry can declare the packages its published declarations import; ranges must be publishable as written (`workspace:`, `catalog:`, and named `catalog:<name>` ranges fail the build, since staged manifests are published without rewriting). No other dependency field is carried. Projects without these fields are staged exactly as before.
 
 Each key of your `bin` field is a command: the root package gets `bin/<command>.js` and every platform package gets `bin/<command>-<target>` (`.exe` on Windows), so two commands mean two launchers and two binaries per platform, all in the same packages. A string `bin` or no `bin` gives one command named after the unscoped package name. Platform package names append the platform alias, such as `my-cli-linux-x64` or `@scope/my-cli-linux-x64`, and Linux packages carry an npm `libc` field (`glibc` or `musl`), so package managers download only the platform package that matches the host. The project's `README.md` is copied into the root package and its `LICENSE` into every package.
 
@@ -164,6 +170,36 @@ Every build stages into `.crust/`, so for release assets, containers, or any cha
 ```
 
 `build` records, per `bin` entry, every file each Extension build hook produced under `.crust/artifacts/`, in hook order. It is absent when `--no-validate` skipped the hooks.
+
+## Programmatic builds
+
+```ts title="scripts/release.ts"
+import { build } from "@crustjs/crust";
+
+const result = await build({
+  cwd: process.cwd(), // default; package.json bin and crust are read from here
+  targets: ["bun-linux-x64", "bun-darwin-arm64"], // overrides crust.targets; omit for config, then every target
+  envFiles: [".env.production"],
+  onLog: (line) => console.log(line), // silent without it
+});
+
+console.log(result.stageDir); // <cwd>/.crust
+for (const artifact of result.artifacts) {
+  if (artifact.kind === "executable") {
+    console.log(`${artifact.command} for ${artifact.target}: ${artifact.path}`);
+  }
+}
+for (const [command, report] of Object.entries(result.reports ?? {})) {
+  console.log(
+    command,
+    report.extensions.map((extension) => extension.id),
+  );
+}
+```
+
+`crust build` is a thin wrapper over `build()` from `@crustjs/crust`, so release scripts, CI matrices, and custom publish flows can run the same pipeline and get the result back instead of parsing output. The options mirror the flags (`targets` for `--target`, `envFiles` for `--env-file`, `minify`, `validate`) with the same defaults and the same errors, and `cwd` names the project whose `package.json` is read. The function throws on any failure, exactly where the command would exit 1, and is silent unless `onLog` is passed; the callback receives every line the command prints and, as a second argument, whether it was bound for `stdout` or `stderr` (snapshot warnings).
+
+The result lists what staging generated: `stageDir`, `artifacts` (one record per generated `package.json`, Node launcher, compiled executable per command and target, or Node bundle, each with its absolute `path`), and `reports`, the same per-command Extension build hook output that `manifest.json` records under `build`. Extension artifact files are not repeated in `artifacts`; `reports` is their source of truth, with paths relative to `.crust/artifacts/`. Compilation and Command Snapshots run in `bun` subprocesses just as they do for the command, so a script can run under Node as long as `bun` is on `PATH`; run it with `bun` to need nothing else. See the [`build()` reference](/docs/modules/crust#programmatic-api) for the option and result types.
 
 ## Prepare Extension artifacts
 

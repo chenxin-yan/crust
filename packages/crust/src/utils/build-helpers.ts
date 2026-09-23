@@ -176,7 +176,7 @@ export const HOST_TARGET = "host";
  */
 export function resolveTargets<T extends string>(
 	table: TargetTable<T>,
-	targetFlags: string[] | undefined,
+	targetFlags: readonly string[] | undefined,
 ): T[] {
 	if (!targetFlags?.length) return [...table.targets];
 
@@ -259,15 +259,24 @@ export type BuildRunner = {
  * Bun runtime bugs on some host/target combinations.
  *
  * Fall back to the current executable with `BUN_BE_BUN=1` so packaged Crust
- * binaries still work in environments without a separate Bun install.
+ * binaries still work in environments without a separate Bun install. Only a
+ * Bun process can stand in for bun: the library `build()` may run under Node,
+ * where the fallback would spawn node with Bun flags, so that case is an error.
  */
-export function resolveBunBuildRunner(): BuildRunner {
+export function resolveBunBuildRunner(
+	runningUnderBun: boolean = process.versions.bun !== undefined,
+): BuildRunner {
 	const bunPath = which("bun");
 	if (bunPath) {
 		return {
 			command: bunPath,
 			env: { ...process.env },
 		};
+	}
+	if (!runningUnderBun) {
+		throw new Error(
+			"bun was not found on PATH.\n  crust build compiles with the Bun bundler and prepares Command Snapshots with bun; install Bun (https://bun.sh) or run the build under bun.",
+		);
 	}
 
 	return {
@@ -657,9 +666,9 @@ export async function execDenoBuild(
  * to a temporary file. `.execute()` validates and writes the command graph and
  * adjacent Build Report, then exits before any following entrypoint code can run.
  *
- * Uses `process.execPath` (the current binary) with `BUN_BE_BUN=1` so
- * compiled standalone executables can run arbitrary `.ts` files without a
- * separate `bun` install on PATH.
+ * Runs with the same bun as compilation (`resolveBunBuildRunner`): bun on
+ * PATH, or a compiled standalone crust executable as `BUN_BE_BUN=1`, so
+ * arbitrary `.ts` entries run without a separate `bun` install.
  */
 const SNAPSHOT_TIMEOUT_MS = 30_000;
 
@@ -690,13 +699,13 @@ export async function buildEntrypoint(
 	const buildReportPath = join(snapshotDir, "build-report.json");
 
 	try {
+		const runner = resolveBunBuildRunner();
 		const spawnedAt = Date.now();
-		const proc = spawn(process.execPath, [...toBunEnvFileArgs(envFiles), absoluteEntry], {
+		const proc = spawn(runner.command, [...toBunEnvFileArgs(envFiles), absoluteEntry], {
 			env: {
-				...process.env,
+				...runner.env,
 				[SNAPSHOT_PATH_ENV]: snapshotPath,
 				[BUILD_OUT_DIR_ENV]: resolve(outDir),
-				BUN_BE_BUN: "1",
 			},
 			cwd,
 			stdio: ["ignore", "ignore", "pipe"],

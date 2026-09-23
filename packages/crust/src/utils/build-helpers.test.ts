@@ -42,6 +42,13 @@ describe("resolveBunBuildRunner", () => {
 		expect(fallback.command).toBe(process.execPath);
 		expect(fallback.env.BUN_BE_BUN).toBe("1");
 	});
+
+	it("refuses to stand in for bun from a non-Bun process such as Node running the library", async () => {
+		expect(resolveBunBuildRunner(false).command).toBe(Bun.which("bun")!);
+		await expect(withoutBunOnPath(() => resolveBunBuildRunner(false))).rejects.toThrow(
+			"bun was not found on PATH",
+		);
+	});
 });
 
 describe("resolveBunPluginSource", () => {
