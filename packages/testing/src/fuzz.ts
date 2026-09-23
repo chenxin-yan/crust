@@ -166,16 +166,10 @@ function generateArgs(random: Random, defs: readonly ArgSnapshot[]) {
 	// An empty choice domain can only be omitted, along with all following positionals.
 	const supplied = lastRequired + 1 + int(random, available - lastRequired);
 	for (const def of defs.slice(0, supplied)) {
-		if (def.variadic) {
-			const count = (mustSupply(def) ? 1 : 0) + int(random, 3);
-			const items = Array.from({ length: count }, () => scalar(random, def, true));
-			args[def.name] = items.map((item) => item.value);
-			tokens.push(...items.map((item) => item.token));
-		} else {
-			const item = scalar(random, def, true);
-			args[def.name] = item.value;
-			tokens.push(item.token);
-		}
+		const count = def.variadic ? (mustSupply(def) ? 1 : 0) + int(random, 3) : 1;
+		const items = Array.from({ length: count }, () => scalar(random, def, true));
+		args[def.name] = def.variadic ? items.map((item) => item.value) : items[0]!.value;
+		tokens.push(...items.map((item) => item.token));
 	}
 	return { args, tokens };
 }
@@ -215,17 +209,11 @@ function generateFlags(random: Random, defs: Readonly<Record<string, FlagSnapsho
 			continue;
 		}
 		if (!mustSupply(def) && random() < 0.5) continue;
-		if (def.multiple) {
-			// Zero occurrences is an empty array on the structured side and nothing on argv.
-			const count = (mustSupply(def) ? 1 : 0) + int(random, 3);
-			const items = Array.from({ length: count }, () => encode(name, def));
-			flags[name] = items.map((item) => item.value);
-			tokens.push(...items.map((item) => item.token));
-		} else {
-			const item = encode(name, def);
-			flags[name] = item.value;
-			tokens.push(item.token);
-		}
+		// Zero occurrences is an empty array on the structured side and nothing on argv.
+		const count = def.multiple ? (mustSupply(def) ? 1 : 0) + int(random, 3) : 1;
+		const items = Array.from({ length: count }, () => encode(name, def));
+		flags[name] = def.multiple ? items.map((item) => item.value) : items[0]!.value;
+		tokens.push(...items.map((item) => item.token));
 	}
 	return { flags, tokens };
 }
