@@ -3,6 +3,7 @@
 @import "tailwindcss";
 @import "fumadocs-ui/css/neutral.css";
 @import "fumadocs-ui/css/preset.css";
+@import "fumadocs-twoslash/twoslash.css";
 
 /* ────────────────────────────────────────────────────────────────────────────
    Furnace Theme — Warm industrial aesthetic for Crust CLI docs

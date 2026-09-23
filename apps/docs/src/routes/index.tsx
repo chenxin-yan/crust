@@ -9,6 +9,7 @@ import langTypescript from "shiki/langs/typescript.mjs";
 import gruvboxDarkHard from "shiki/themes/gruvbox-dark-hard.mjs";
 import gruvboxLightHard from "shiki/themes/gruvbox-light-hard.mjs";
 
+import Showcase from "@/components/landing/Showcase";
 import { baseOptions } from "@/lib/layout.shared";
 import { buildPageMeta } from "@/lib/seo";
 
@@ -862,6 +863,9 @@ function FurnaceHome() {
 							</div>
 						</div>
 					</section>
+
+					{/* Showcase: eight features, real code and real output, driven by scroll */}
+					<Showcase />
 
 					{/* Modules */}
 					<section className="fn-content-section">

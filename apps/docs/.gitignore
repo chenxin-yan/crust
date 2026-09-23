@@ -21,3 +21,6 @@ node_modules
 
 # Generated files
 content/roadmap/issues.generated.json
+
+# Twoslash hast for the landing showcase; `bun run twoslash:landing` (turbo runs it before build/check:types/dev)
+src/generated/
