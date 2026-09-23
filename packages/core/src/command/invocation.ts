@@ -318,6 +318,71 @@ function resolveStructuredInput(
 	return { argv: path, route, parsed: parseStructured(route.command, input) };
 }
 
+/** Parse-only result of {@link bindInvocation}: what a Command Action would receive, without running it. */
+export interface BoundInput {
+	/** Canonical command path, root name first. */
+	readonly commandPath: readonly string[];
+	// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Standard Schema outputs erase value types at this runtime-erased tooling boundary.
+	readonly args: Readonly<Record<string, unknown>>;
+	// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- Standard Schema outputs erase value types at this runtime-erased tooling boundary.
+	readonly flags: Readonly<Record<string, unknown>>;
+	readonly rawArgs: readonly string[];
+}
+
+/** Args and flags of one command whose binding runs author callbacks. */
+export interface CustomBindings {
+	/** Positional argument names declared with `parse` or a Standard Schema. */
+	readonly args: readonly string[];
+	/** Canonical flag names declared with `parse` or a Standard Schema. */
+	readonly flags: readonly string[];
+}
+
+/**
+ * Resolve, parse, validate, and apply Standard Schemas for one invocation without dispatching it.
+ *
+ * Materializes definitions and Extension contributions exactly like `snapshot()`, then runs
+ * the production parser, `validateParsed`, and `applySchemas`. Author `parse` functions and
+ * schemas run as validators. Never creates Contexts, runs Extension hooks or the Command
+ * Action, writes to `stdout`/`stderr`, or touches process exit state.
+ */
+export async function bindInvocation(
+	node: CommandNode,
+	input: InvocationInput,
+	materializeCommandDefinition: MaterializeCommandDefinition,
+): Promise<BoundInput> {
+	const { rootNode } = prepareInvocation(node, materializeCommandDefinition);
+	const { route, parsed } =
+		"argv" in input
+			? resolveArgvInput(rootNode, input.argv)
+			: resolveStructuredInput(rootNode, input.path, input.input);
+	validateParsed(route.command, parsed);
+	const validated = await applySchemas(route.command, parsed);
+	return {
+		commandPath: route.commandPath,
+		args: validated.args,
+		flags: validated.flags,
+		rawArgs: parsed.rawArgs,
+	};
+}
+
+/** Name the definitions at a typed path whose binding runs `parse` or a Standard Schema. */
+export function customBindingsAt(
+	node: CommandNode,
+	path: readonly string[],
+	materializeCommandDefinition: MaterializeCommandDefinition,
+): CustomBindings {
+	const { rootNode } = prepareInvocation(node, materializeCommandDefinition);
+	const { command } = resolveTypedPath(rootNode, path);
+	const isCustom = (def: { parse?: unknown; schema?: unknown }) =>
+		def.parse !== undefined || def.schema !== undefined;
+	return {
+		args: command.args.flatMap((def) => (isCustom(def) ? [def.name] : [])),
+		flags: Object.entries(command.effectiveFlags).flatMap(([name, def]) =>
+			isCustom(def) ? [name] : [],
+		),
+	};
+}
+
 /** Resolve, parse, and run one invocation without rendering failures. */
 async function dispatch(
 	input: InvocationInput,

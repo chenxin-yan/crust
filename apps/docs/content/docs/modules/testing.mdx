@@ -3,7 +3,7 @@ title: Testing
 description: Test Crust applications with captured output and fake interactive terminals.
 ---
 
-`@crustjs/testing` adds helpers for raw `execute()` capture and fake interactive terminals. Use core `run()` for ordinary typed action tests.
+`@crustjs/testing` adds helpers for raw `execute()` capture, property-based input round-trips, and fake interactive terminals. Use core `run()` for ordinary typed action tests.
 
 ## Install
 
@@ -21,7 +21,7 @@ interface ExecutableApp {
 }
 ```
 
-`captureExecute()` accepts this structural contract. `runInteractive()` (from `@crustjs/testing/interactive`) accepts a Crust application and infers its command path and input.
+`captureExecute()` accepts this structural contract. `fuzzRoundTrip()` and `runInteractive()` (from `@crustjs/testing/interactive`) accept a Crust application and infer its command paths.
 
 An inert definition must be added to an application before the typed helpers can address it. Core's typed invocation rules are documented under [`run()` path and input](/docs/api/crust#runpath-input-options).
 
@@ -42,6 +42,22 @@ Use `run()` to capture stdout, stderr, and the Command Action outcome without te
 `captureExecute()` drives raw argv through `execute()` in-process and returns `stdout`, `stderr`, and `exitCode`. It restores the previous process exit state after capture. Use it for parser errors, rendered failures, and Extension `onError` output.
 
 <auto-type-table path="../../../../../packages/testing/src/index.ts" name="CapturedExecute" />
+
+## `fuzzRoundTrip(app, path, options?)`
+
+<include lang="ts">../../../examples/modules/testing.ts#fuzz</include>
+
+`fuzzRoundTrip()` generates structured `run()` inputs for the command at `path` from its Command Snapshot, encodes each as canonical argv (`--name=value`, `--flag`/`--no-flag`, one token per occurrence, `--` before `raw`), and binds both through [`bindInput()`](/docs/modules/core#tooling-subpath) from `@crustjs/core/tooling`. Bound `commandPath`, `args`, `flags`, and `rawArgs` must be deeply equal (`URL`s compare by `href`). Generators honor `type`, `choices`, `required`, `default`, `variadic`, `multiple`, and `noNegate`; values argv cannot express (dash-led positionals, a first positional spelled like a subcommand or alias) are never generated.
+
+What runs: definition materialization (as for `app.snapshot()`), the production parser and validation, and any `parse` function or Standard Schema on the command's definitions. What never runs: Command Actions, Extension `preRun`/`postRun`/`onError` hooks, Contexts, output sinks, and process exit handling.
+
+Snapshots omit `parse` functions and schemas, so generators supply raw strings to those definitions and the callbacks receive the same string on both paths. When both paths reject such a value with the same `CrustError` code, the case counts as `rejected`; a rejection on only one path, differing codes, or any rejection for a command without `parse`/schema definitions fails. A run with zero `accepted` cases also fails because it proved nothing. The helper does not fuzz argv syntax (short bundles, aliases, `--no-` spellings): it checks binding equivalence, not the parser's spelling table.
+
+The `seed` option wins, then `CRUST_FUZZ_SEED`, then a fixed default; pass `env` to read the variable from somewhere other than `process.env`. A failure message contains the seed, the case number, the structured input, the argv, and both outcomes.
+
+<auto-type-table path="../../../../../packages/testing/src/fuzz.ts" name="FuzzRoundTripOptions" />
+
+<auto-type-table path="../../../../../packages/testing/src/fuzz.ts" name="FuzzRoundTripReport" />
 
 ## `runInteractive(app, path, input?)`
 

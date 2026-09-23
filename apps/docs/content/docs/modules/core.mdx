@@ -106,13 +106,29 @@ const documentation = buildCommandDocumentation(snapshot);
 const visible = visibleSectionsFor(snapshot, defineExtensionId("acme:web-docs"));
 ```
 
-| Export                                                                             | Role                                                               |
-| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `BUILD_OUT_DIR_ENV` / `SNAPSHOT_PATH_ENV`                                          | Environment variable names for the first-party subprocess protocol |
-| `buildCommandDocumentation()`                                                      | Builds a renderer-ready documentation tree from a Command Snapshot |
-| `formatDefault()` / `formatDescription()`                                          | Formats input defaults and descriptions                            |
-| `isListed()` / `sectionsFor()` / `visibleSectionsFor()`                            | Filters commands and sections for an Extension identity            |
-| `CommandDocumentation` / `DocumentationArg` / `DocumentationFlag` / `UsageSegment` | Documentation model types                                          |
-| `CommandSnapshot`                                                                  | Command Snapshot type used by tooling consumers                    |
+| Export                                                                             | Role                                                                                            |
+| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `BUILD_OUT_DIR_ENV` / `SNAPSHOT_PATH_ENV`                                          | Environment variable names for the first-party subprocess protocol                              |
+| `bindInput()` / `customBindings()`                                                 | Parse-only binding of argv or structured input; names definitions with `parse`/schema callbacks |
+| `buildCommandDocumentation()`                                                      | Builds a renderer-ready documentation tree from a Command Snapshot                              |
+| `formatDefault()` / `formatDescription()`                                          | Formats input defaults and descriptions                                                         |
+| `isListed()` / `sectionsFor()` / `visibleSectionsFor()`                            | Filters commands and sections for an Extension identity                                         |
+| `CommandDocumentation` / `DocumentationArg` / `DocumentationFlag` / `UsageSegment` | Documentation model types                                                                       |
+| `CommandSnapshot`                                                                  | Command Snapshot type used by tooling consumers                                                 |
+| `BindInput` / `BoundInput` / `CustomBindings`                                      | Input and result types of the parse-only binding helpers                                        |
+
+```ts
+import { bindInput, customBindings } from "@crustjs/core/tooling";
+
+const bound = await bindInput(app, { argv: ["remote-add", "origin", "--tag=one"] });
+const same = await bindInput(app, {
+  path: ["remote-add"],
+  input: { args: { name: "origin" }, flags: { tag: ["one"] } },
+});
+// bound.commandPath, bound.args, bound.flags, bound.rawArgs equal `same`
+customBindings(app, ["remote-add"]); // { args: [], flags: [] } — no `parse`/schema definitions
+```
+
+`bindInput()` resolves the command, runs the production parser, required-value validation, and Standard Schemas, and returns what the Command Action would receive without running it: no Contexts, Extension hooks, output, or exit handling. Definition materialization (as for `app.snapshot()`), `parse` functions, and schemas do run. Failures throw the same `CrustError`s that `run()` reports as a failed outcome. `customBindings()` names the definitions at a path that carry `parse` or a schema, which Command Snapshots omit; [`fuzzRoundTrip()`](/docs/modules/testing#fuzzroundtripapp-path-options) uses both.
 
 `@crustjs/core/tooling` contains build-time helpers for Command Snapshots, documentation trees, [section filtering](/docs/guide/extensions#section-consumers), formatting, and the first-party subprocess protocol. Application authoring and invocation APIs stay at the package root. The subprocess protocol applies to source entries run by `crust build`; finished Bun and Node bundles compile it out through the [`CRUST_INTERNAL_BUILD`](/docs/api/crust#resolveartifactdirname) marker, and Deno binaries are unchanged.
