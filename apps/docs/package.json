@@ -34,6 +34,7 @@
     "@crustjs/effect": "workspace:*",
     "@crustjs/extensions": "workspace:*",
     "@crustjs/man": "workspace:*",
+    "@crustjs/mcp": "workspace:*",
     "@crustjs/progress": "workspace:*",
     "@crustjs/prompts": "workspace:*",
     "@crustjs/skills": "workspace:*",

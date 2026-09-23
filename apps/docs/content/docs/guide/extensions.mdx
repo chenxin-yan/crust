@@ -53,7 +53,7 @@ Use `defineExtension(id, factory)` instead when callers need to configure it. Se
   ../../../examples/extensions/diagnostics.ts#owned-command
 </include>
 
-Own a flag when every command installed with the Extension should accept it. Own a definition when installing the Extension should also add a top-level command; these commands are available in typed `run()` paths.
+Own a flag when every command installed with the Extension should accept it. Own a definition when installing the Extension should also add a top-level command; these commands are available in typed `run()` paths. [`@crustjs/mcp`](/docs/modules/mcp) is built this way: `mcpExtension()` owns the `mcp` command that serves the application's commands as MCP tools.
 
 Extension flags are recursive by default. Set `recursive: false` on an inline flag definition when only the root should accept it, and see [`ExtensionFlagDef`](/docs/api/types#extensionflagdef) for the flag contract.
 

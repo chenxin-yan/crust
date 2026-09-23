@@ -1,0 +1,296 @@
+import { afterEach, describe, expect, it } from "bun:test";
+
+import {
+	type AnyCrust,
+	Crust,
+	CrustError,
+	defineCommand,
+	defineExtension,
+	defineExtensionId,
+	type RunOutcome,
+} from "@crustjs/core";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+
+import { createMcpServer, DEFAULT_SERVER_VERSION, toolResultFromOutcome } from "./server.ts";
+
+const cleanups: (() => Promise<void>)[] = [];
+afterEach(async () => {
+	for (const cleanup of cleanups.splice(0)) await cleanup();
+});
+
+async function connect(app: AnyCrust, exclude?: readonly (readonly string[])[]) {
+	const server = await createMcpServer(app, exclude ? { exclude } : {});
+	const client = new Client({ name: "test-client", version: "0.0.0" });
+	const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+	await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+	cleanups.push(async () => {
+		await client.close();
+		await server.close();
+	});
+	return client;
+}
+
+const finisher = defineExtension(defineExtensionId("test:finisher"), {
+	flags: [{ name: "bail", type: "boolean" }],
+	hooks: {
+		preRun(ctx) {
+			if (ctx.flags.bail === true) {
+				ctx.stdout("bailed");
+				return ctx.finish();
+			}
+		},
+	},
+});
+
+const contributed = defineExtension(defineExtensionId("test:contrib"), {
+	commands: [
+		defineCommand("extra", { description: "From an Extension" }, (c) =>
+			c.action(() => ({ from: "extension" })),
+		),
+	],
+});
+
+const fixture = new Crust("fixture", { description: "Fixture", version: "1.2.3" })
+	.add(
+		defineCommand("echo", { description: "Echo input" }, (c) =>
+			c
+				.args({ name: "word", type: "string", required: true })
+				.flags(
+					{ name: "times", type: "number", default: 1 },
+					{ name: "origin", type: "url" },
+					{ name: "tag", type: "string", multiple: true },
+				)
+				.action(({ args, flags, rawArgs }) => ({
+					word: args.word.repeat(flags.times),
+					origin: flags.origin?.href,
+					tags: flags.tag,
+					rawArgs,
+				})),
+		),
+	)
+	.add(
+		defineCommand("print", (c) =>
+			c.action(({ stdout, stderr }) => {
+				stdout("plain output");
+				stderr("noise");
+			}),
+		),
+	)
+	.add(defineCommand("date", (c) => c.action(() => new Date(0))))
+	.add(defineCommand("scalar", (c) => c.action(() => 42)))
+	.add(
+		defineCommand("fail", (c) =>
+			c.flags({ name: "plain", type: "boolean" }).action(({ flags }) => {
+				if (flags.plain) throw new Error("boom");
+				throw new CrustError("VALIDATION", "custom failure");
+			}),
+		),
+	)
+	.add(
+		defineCommand("slow", (c) =>
+			c.args({ name: "id", type: "string", required: true }).action(async ({ args, stdout }) => {
+				stdout(`start ${args.id}`);
+				await new Promise((resolve) => setTimeout(resolve, args.id === "a" ? 30 : 1));
+				stdout(`end ${args.id}`);
+				return { id: args.id };
+			}),
+		),
+	)
+	.add(defineCommand("secret", { hidden: true }, (c) => c.action(() => "hidden")))
+	.extend(finisher)
+	.extend(contributed);
+
+describe("createMcpServer", () => {
+	it("advertises the root identity and the filtered tool manifest", async () => {
+		const client = await connect(fixture, [["date"]]);
+		expect(client.getServerVersion()).toMatchObject({ name: "fixture", version: "1.2.3" });
+		const { tools } = await client.listTools();
+		expect(tools.map((tool) => tool.name)).toEqual([
+			"echo",
+			"print",
+			"scalar",
+			"fail",
+			"slow",
+			"extra",
+		]);
+		expect(tools[0]).toMatchObject({
+			description: "Echo input",
+			inputSchema: {
+				type: "object",
+				required: ["word"],
+				properties: { origin: { type: "string", format: "uri" } },
+			},
+		});
+	});
+
+	it("falls back to a default version", async () => {
+		const client = await connect(new Crust("bare").action(() => "ok"));
+		expect(client.getServerVersion()).toMatchObject({
+			name: "bare",
+			version: DEFAULT_SERVER_VERSION,
+		});
+	});
+
+	it("runs typed input, converting url fields and passing raw through", async () => {
+		const client = await connect(fixture);
+		const result = await client.callTool({
+			name: "echo",
+			arguments: {
+				word: "ab",
+				times: 2,
+				origin: "https://example.com/x",
+				tag: ["one", "two"],
+				raw: ["--dry-run"],
+			},
+		});
+		const expected = {
+			word: "abab",
+			origin: "https://example.com/x",
+			tags: ["one", "two"],
+			rawArgs: ["--dry-run"],
+		};
+		expect(result.isError).toBeUndefined();
+		expect(result.structuredContent).toEqual(expected);
+		expect(result.content).toEqual([{ type: "text", text: JSON.stringify(expected, null, 2) }]);
+	});
+
+	it("reaches Extension-contributed commands", async () => {
+		const client = await connect(fixture);
+		const result = await client.callTool({ name: "extra" });
+		expect(result.structuredContent).toEqual({ from: "extension" });
+	});
+
+	it("wraps JSON scalars and returns captured stdout for non-JSON results", async () => {
+		const client = await connect(fixture);
+		const scalar = await client.callTool({ name: "scalar" });
+		expect(scalar.structuredContent).toEqual({ result: 42 });
+		expect(scalar.content).toEqual([{ type: "text", text: "42" }]);
+
+		const printed = await client.callTool({ name: "print" });
+		expect(printed.structuredContent).toBeUndefined();
+		expect(printed.content).toEqual([{ type: "text", text: "plain output" }]);
+
+		const date = await client.callTool({ name: "date" });
+		expect(date.structuredContent).toBeUndefined();
+		expect(date.content).toEqual([{ type: "text", text: "" }]);
+	});
+
+	it("reports Crust validation, thrown errors, and input shaping as tool errors", async () => {
+		const client = await connect(fixture);
+		const missing = await client.callTool({ name: "echo", arguments: {} });
+		expect(missing).toMatchObject({
+			isError: true,
+			content: [{ type: "text", text: 'VALIDATION: Missing required argument "<word>"' }],
+		});
+		const wrongType = await client.callTool({ name: "echo", arguments: { word: 1 } });
+		expect(wrongType).toMatchObject({
+			isError: true,
+			content: [{ type: "text", text: "PARSE: Expected string for <word>" }],
+		});
+		const crust = await client.callTool({ name: "fail" });
+		expect(crust).toMatchObject({
+			isError: true,
+			content: [{ type: "text", text: "VALIDATION: custom failure" }],
+		});
+		const plain = await client.callTool({ name: "fail", arguments: { plain: true } });
+		expect(plain).toMatchObject({
+			isError: true,
+			content: [{ type: "text", text: "Error: boom" }],
+		});
+		const badUrl = await client.callTool({
+			name: "echo",
+			arguments: { word: "x", origin: "not a url" },
+		});
+		expect(badUrl.isError).toBe(true);
+		expect(badUrl.content).toEqual([{ type: "text", text: expect.stringMatching(/^TypeError: /) }]);
+		const badRaw = await client.callTool({ name: "echo", arguments: { word: "x", raw: "nope" } });
+		expect(badRaw).toMatchObject({
+			isError: true,
+			content: [{ type: "text", text: 'PARSE: Expected an array of strings for "raw"' }],
+		});
+	});
+
+	it("returns captured stdout when an Extension finishes the invocation", async () => {
+		const client = await connect(fixture);
+		const result = await client.callTool({ name: "print", arguments: { bail: true } });
+		expect(result.content).toEqual([{ type: "text", text: "bailed" }]);
+	});
+
+	it("rejects unknown and hidden tools at the protocol level", async () => {
+		const client = await connect(fixture);
+		await expect(client.callTool({ name: "secret" })).rejects.toThrow("Tool secret not found");
+	});
+
+	it("keeps concurrent calls isolated and off process stdout", async () => {
+		const client = await connect(fixture);
+		const stdoutWrite = process.stdout.write;
+		let liveWrites = 0;
+		process.stdout.write = () => {
+			liveWrites++;
+			return true;
+		};
+		try {
+			const [a, b] = await Promise.all([
+				client.callTool({ name: "slow", arguments: { id: "a" } }),
+				client.callTool({ name: "slow", arguments: { id: "b" } }),
+			]);
+			expect(a.structuredContent).toEqual({ id: "a" });
+			expect(b.structuredContent).toEqual({ id: "b" });
+		} finally {
+			process.stdout.write = stdoutWrite;
+		}
+		expect(liveWrites).toBe(0);
+	});
+});
+
+interface Cyclic {
+	self?: Cyclic;
+}
+
+describe("toolResultFromOutcome", () => {
+	type CompletedResult = Extract<RunOutcome<unknown>, { status: "completed" }>["result"];
+	const completed = (result: CompletedResult) => ({
+		status: "completed" as const,
+		result,
+		stdout: "out",
+		stderr: "",
+	});
+
+	it.each([
+		["null", null, { result: null }],
+		["array", [1, "two"], { result: [1, "two"] }],
+		["string", "hi", { result: "hi" }],
+		["false", false, { result: false }],
+		["object", { a: { b: [1] } }, { a: { b: [1] } }],
+	])("structures faithful JSON: %s", (_label, result, structured) => {
+		expect(toolResultFromOutcome(completed(result))).toEqual({
+			content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+			structuredContent: structured,
+		});
+	});
+
+	it.each([
+		["undefined", undefined],
+		["BigInt", 1n],
+		["NaN", Number.NaN],
+		["function", () => {}],
+		["Date", new Date(0)],
+		["Map", new Map()],
+		["URL", new URL("https://example.com")],
+		["object holding undefined", { a: undefined }],
+		["object with symbol key", { [Symbol("s")]: 1 }],
+		[
+			"cycle",
+			(() => {
+				const self: Cyclic = {};
+				self.self = self;
+				return self;
+			})(),
+		],
+	])("falls back to stdout for lossy values: %s", (_label, result) => {
+		expect(toolResultFromOutcome(completed(result))).toEqual({
+			content: [{ type: "text", text: "out" }],
+		});
+	});
+});
