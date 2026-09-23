@@ -483,6 +483,9 @@ async function prepareEntries(
 // Build command
 // ────────────────────────────────────────────────────────────────────────────
 
+// ponytail: process-local guard; callers must serialize builders in separate processes.
+const activeBuilds = new Set<string>();
+
 /**
  * Stages the publishable npm tree in `<cwd>/.crust`: a root package with one
  * `bin/<command>.js` per package.json `bin` entry, each a Node launcher (Bun,
@@ -495,24 +498,31 @@ async function prepareEntries(
  *
  * Throws on any failure. Planning failures (bad options or package.json) leave
  * the previous `.crust/` stage untouched; failures after planning leave a
- * wiped stage without a completion `manifest.json`.
+ * wiped stage without a completion `manifest.json`. Overlapping calls for the
+ * same real project directory in this process are rejected before staging.
  */
 export async function build(options: BuildOptions = {}): Promise<BuildResult> {
 	const cwd = resolve(options.cwd ?? process.cwd());
-	const onLog = options.onLog ?? (() => {});
-	const io: InvocationIO = {
-		stdout: (line) => onLog(line, "stdout"),
-		stderr: (line) => onLog(line, "stderr"),
-	};
-	const plan = planBuild(options, cwd);
-	io.stdout(`${dim("Runtime:")} ${plan.runtime} ${dim(`(${plan.runtimeSource})`)}`);
-	// Wipe once, before Extension hooks fill .crust/artifacts; staging only adds to the tree.
-	// Clean-by-producer would be a set diff against manifest.build if this wipe is ever dropped.
-	rmSync(plan.stageDir, { recursive: true, force: true });
-	// validate: false skips the snapshots (and so the name check and hooks), not the bin validation above.
-	const reports = plan.validate ? await prepareEntries(plan, io) : undefined;
-	const artifacts = await runStagedBuild(plan, io, reports);
-	return { stageDir: plan.stageDir, artifacts, ...(reports ? { reports } : {}) };
+	const project = realpathSync(cwd);
+	if (activeBuilds.has(project)) throw new Error(`crust build is already building ${project}`);
+	activeBuilds.add(project);
+	try {
+		const onLog = options.onLog ?? (() => {});
+		const io: InvocationIO = {
+			stdout: (line) => onLog(line, "stdout"),
+			stderr: (line) => onLog(line, "stderr"),
+		};
+		const plan = planBuild(options, cwd);
+		io.stdout(`${dim("Runtime:")} ${plan.runtime} ${dim(`(${plan.runtimeSource})`)}`);
+		// Wipe once, before Extension hooks fill .crust/artifacts; staging only adds to the tree.
+		rmSync(plan.stageDir, { recursive: true, force: true });
+		// validate: false skips the snapshots (and so the name check and hooks), not the bin validation above.
+		const reports = plan.validate ? await prepareEntries(plan, io) : undefined;
+		const artifacts = await runStagedBuild(plan, io, reports);
+		return { stageDir: plan.stageDir, artifacts, ...(reports ? { reports } : {}) };
+	} finally {
+		activeBuilds.delete(project);
+	}
 }
 
 /**

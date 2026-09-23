@@ -644,6 +644,33 @@ describe("build", () => {
 		60_000,
 	);
 
+	it("rejects overlapping builds of one project and releases the guard after success or failure", async () => {
+		writeProject({ name: "node-cli", crust: { runtime: "node" } }, 'console.log("hi");\n');
+		const alias = join(tmpDir, "alias");
+		symlinkSync(tmpDir, alias, "junction");
+		const results = await Promise.allSettled([
+			build({ cwd: tmpDir, validate: false }),
+			build({ cwd: alias, validate: false }),
+		]);
+		expect(results[0]?.status).toBe("fulfilled");
+		expect(results[1]).toMatchObject({
+			status: "rejected",
+			reason: expect.objectContaining({ message: expect.stringContaining("already building") }),
+		});
+		await expect(
+			build({
+				cwd: tmpDir,
+				onLog: () => {
+					throw new Error("log failure");
+				},
+			}),
+		).rejects.toThrow("log failure");
+		await expect(build({ cwd: tmpDir, validate: false })).resolves.toHaveProperty(
+			"stageDir",
+			stageDir,
+		);
+	}, 30_000);
+
 	it("stages a node bundle without reports when validate is false and rejects bad options", async () => {
 		writeProject({ name: "node-cli", crust: { runtime: "node" } }, 'console.log("hi");\n');
 		mkdirSync(stageDir);
