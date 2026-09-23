@@ -76,6 +76,14 @@ describe("stdio serving through execute()", () => {
 		await roundTrip(launch);
 	});
 
+	it("source mode: preserves a required Node preload when restarting from config", async () => {
+		const entry = new URL("./fixtures/preloaded-cli.ts", import.meta.url).pathname;
+		const preload = "data:text/javascript,process.env.CRUST_MCP_PRELOADED='1'";
+		const { launch } = await configOf("node", ["--import", preload, entry]);
+		expect(launch.args).toEqual(["--import", preload, entry, "mcp"]);
+		await roundTrip(launch);
+	});
+
 	it("exits cleanly when the client hangs up", async () => {
 		const child = Bun.spawn([compiled, "mcp"], { stdin: "pipe", stdout: "pipe", stderr: "pipe" });
 		child.stdin.end();

@@ -25,9 +25,11 @@ export interface McpExtensionOptions extends McpToolsOptions {
 	 * The return annotation keeps TypeScript from seeing a self-referential initializer.
 	 */
 	readonly app: () => AnyCrust;
+	/** Explicit client launch, including `mcp`; use for Deno source entries or custom runtime setup. */
+	readonly launch?: McpLaunch;
 }
 
-/** How an MCP client starts this CLI: the executable plus the arguments before `mcp`. */
+/** How an MCP client starts this CLI: the executable plus all arguments, including `mcp`. */
 export interface McpLaunch {
 	readonly command: string;
 	readonly args: readonly string[];
@@ -36,16 +38,17 @@ export interface McpLaunch {
 /**
  * Compiled executables (`bun build --compile`, `deno compile`) are their own
  * launcher; source files and Node bundles relaunch through the runtime running
- * them, with the entry path as the first argument.
+ * them, with runtime options before the entry path.
  */
 export function resolveLaunch(
 	execPath: string,
 	entry: string | undefined,
 	compiled: boolean,
+	execArgv: readonly string[] = [],
 ): McpLaunch {
 	return compiled || entry === undefined
 		? { command: execPath, args: [MCP_COMMAND_NAME] }
-		: { command: execPath, args: [entry, MCP_COMMAND_NAME] };
+		: { command: execPath, args: [...execArgv, entry, MCP_COMMAND_NAME] };
 }
 
 type StandaloneGlobals = {
@@ -66,7 +69,7 @@ function isCompiledExecutable(entry: string | undefined): boolean {
 /** Launch identity of the current process. */
 export function currentLaunch(): McpLaunch {
 	const entry = process.argv[1];
-	return resolveLaunch(process.execPath, entry, isCompiledExecutable(entry));
+	return resolveLaunch(process.execPath, entry, isCompiledExecutable(entry), process.execArgv);
 }
 
 /**
@@ -148,7 +151,7 @@ export const mcpExtension: ExtensionFactory<
 									})
 									.action((context) => {
 										const name = context.rootCommand.meta.name;
-										const launch = currentLaunch();
+										const launch = options.launch ?? currentLaunch();
 										const client = context.flags.client;
 										context.stdout(renderClientConfig(client, name, launch));
 										if (client === "claude") {

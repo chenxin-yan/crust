@@ -156,7 +156,7 @@ export async function createMcpServer(
 	server.setRequestHandler(ListToolsRequestSchema, () => ({
 		tools: tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
 	}));
-	server.setRequestHandler(CallToolRequestSchema, async (request) => {
+	server.setRequestHandler(CallToolRequestSchema, async (request, { signal }) => {
 		const tool = byName.get(request.params.name);
 		if (!tool) {
 			throw new McpError(ErrorCode.InvalidParams, `Tool ${request.params.name} not found`);
@@ -169,7 +169,7 @@ export async function createMcpServer(
 			return toolResultFromOutcome({ status: "failed", error, stdout: "", stderr: "" });
 		}
 		// SAFETY: `path` comes from this app's own snapshot and run() validates `input`; AnyCrust erases the typed link.
-		return toolResultFromOutcome(await app.run(tool.path as never, input as never));
+		return toolResultFromOutcome(await app.run(tool.path as never, input as never, { signal }));
 	});
 	return server;
 }

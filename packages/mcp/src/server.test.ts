@@ -218,6 +218,56 @@ describe("createMcpServer", () => {
 		expect(result.content).toEqual([{ type: "text", text: "bailed" }]);
 	});
 
+	it("forwards cancellation per invocation and closes active Contexts on disconnect", async () => {
+		const calls = Array.from({ length: 2 }, () => ({
+			started: Promise.withResolvers<AbortSignal>(),
+			disposed: Promise.withResolvers<void>(),
+		}));
+		const session = defineContext(
+			"session",
+			{ flags: [{ name: "id", type: "number", required: true }] },
+			({ flags, defer }) => {
+				const call = calls[flags.id]!;
+				defer(() => call.disposed.resolve());
+				return call;
+			},
+		);
+		const app = new Crust("cancellation").add(
+			defineCommand("wait", (c) =>
+				c.provide(session()).action(async ({ ctx, signal }) => {
+					const call = await ctx.session;
+					await new Promise<void>((resolve) => {
+						signal.addEventListener("abort", () => resolve(), { once: true });
+						call.started.resolve(signal);
+					});
+					signal.throwIfAborted();
+				}),
+			),
+		);
+		const client = await connect(app);
+		const controller = new AbortController();
+		const first = Promise.allSettled([
+			client.callTool({ name: "wait", arguments: { id: 0 } }, undefined, {
+				signal: controller.signal,
+			}),
+		]);
+		const second = Promise.allSettled([client.callTool({ name: "wait", arguments: { id: 1 } })]);
+		const [firstSignal, secondSignal] = await Promise.all(
+			calls.map((call) => call.started.promise),
+		);
+		controller.abort(new Error("cancelled by test"));
+		expect(await first).toMatchObject([
+			{ status: "rejected", reason: { message: expect.stringContaining("cancelled by test") } },
+		]);
+		expect(firstSignal!.aborted).toBe(true);
+		expect(secondSignal!.aborted).toBe(false);
+		await calls[0]!.disposed.promise;
+		await client.close();
+		expect(await second).toMatchObject([{ status: "rejected", reason: expect.any(Error) }]);
+		expect(secondSignal!.aborted).toBe(true);
+		await calls[1]!.disposed.promise;
+	});
+
 	it("captures Context setup and disposal output per call under concurrency", async () => {
 		const session = defineContext(
 			"session",

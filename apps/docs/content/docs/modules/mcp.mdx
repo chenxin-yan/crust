@@ -28,7 +28,9 @@ The package has a peer dependency on `@crustjs/core` and depends on `@modelconte
 
 ### Client configuration
 
-`mcp config` resolves the launch identity from the running process: a compiled executable (`bun build --compile`, `deno compile`) is its own `command` with `args: ["mcp"]`; a source entry or Node bundle relaunches through `process.execPath` with the entry path first. Claude Code, Claude Desktop, and Cursor read `mcpServers`; VS Code's `.vscode/mcp.json` reads `servers`.
+`mcp config` resolves the launch identity from the running process: a compiled executable (`bun build --compile`, `deno compile`) is its own `command` with `args: ["mcp"]`; a Node/Bun source entry or Node bundle relaunches through `process.execPath` with `process.execArgv` (including preloads/loaders) before the entry path. Claude Code, Claude Desktop, and Cursor read `mcpServers`; VS Code's `.vscode/mcp.json` reads `servers`.
+
+Set `launch: { command, args }` in the Extension options to override the generated launch; `args` must include `mcp`. Deno source entries need this override with `run` and the required permission/configuration flags, since Deno does not expose them through `process.execArgv`. Use it also to remove development-only runtime flags such as inspectors or watch mode. Automatic detection does not preserve the working directory or environment options such as `NODE_OPTIONS`; use absolute paths and configure the client's environment separately when needed.
 
 ```json
 {
@@ -81,7 +83,7 @@ Unknown tool names are protocol errors (`InvalidParams`), which is also how hidd
 
 <include lang="ts">../../../examples/modules/mcp.ts#headless</include>
 
-`createMcpServer(app, options?)` prepares the snapshot, builds the manifest, and returns the SDK's low-level `Server` (the class that accepts JSON Schema tools) with `tools/list` and `tools/call` handlers installed. The server is named after the root command and uses its `version`, or `0.0.0` when none is declared. Each call runs `app.run(path, input)` with its own captured output, so concurrent calls never share state. `serveStdio(server)` connects the SDK stdio transport and resolves when the client disconnects.
+`createMcpServer(app, options?)` prepares the snapshot, builds the manifest, and returns the SDK's low-level `Server` (the class that accepts JSON Schema tools) with `tools/list` and `tools/call` handlers installed. The server is named after the root command and uses its `version`, or `0.0.0` when none is declared. Each call runs `app.run(path, input, { signal })` with its own captured output and the SDK request's cancellation signal, so concurrent calls never share state. Client cancellation aborts only that invocation; disconnecting aborts all active requests. Actions must cooperate with the signal to stop work and allow Context disposal. `serveStdio(server)` connects the SDK stdio transport and resolves when the client disconnects.
 
 Over stdio, the transport owns the process's stdout for protocol frames. Only output written through the invocation's `stdout`/`stderr` (Command Actions, Extension hooks, Context setup and disposal) is captured per call; direct `console.log` or `process.stdout.write` calls are not intercepted and will corrupt the protocol stream. Keep such writes out of code that runs under `mcp`, or send them to stderr.
 

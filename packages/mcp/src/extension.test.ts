@@ -38,7 +38,11 @@ describe("mcpExtension", () => {
 		const claude = await capture(["mcp", "config"]);
 		expect(claude.exitCode).toBe(0);
 		expect(claude.stdout).toEqual([
-			renderClientConfig("claude", "demo", resolveLaunch(process.execPath, process.argv[1], false)),
+			renderClientConfig(
+				"claude",
+				"demo",
+				resolveLaunch(process.execPath, process.argv[1], false, process.execArgv),
+			),
 		]);
 		expect(claude.stderr).toEqual([expect.stringMatching(/^Or run: claude mcp add demo -- /)]);
 
@@ -50,6 +54,26 @@ describe("mcpExtension", () => {
 	it("accepts a self-referential app callback without core changes", () => {
 		const self: AnyCrust = app;
 		expect(self).toBe(app);
+	});
+
+	it("uses an explicit launch for both client JSON and the Claude command", async () => {
+		const launch = {
+			command: "/usr/bin/deno",
+			args: ["run", "--allow-env=APP_MODE", "/proj/cli.ts", "mcp"],
+		};
+		const custom = new Crust("custom").extend(
+			mcpExtension({ app: (): AnyCrust => custom, launch }),
+		);
+		const stdout: string[] = [];
+		const stderr: string[] = [];
+		expect(
+			await custom.execute({
+				argv: ["mcp", "config"],
+				io: { stdout: (text) => stdout.push(text), stderr: (text) => stderr.push(text) },
+			}),
+		).toBe(0);
+		expect(stdout).toEqual([renderClientConfig("claude", "custom", launch)]);
+		expect(stderr).toEqual([`Or run: ${renderClaudeAddCommand("custom", launch)}`]);
 	});
 });
 
@@ -65,6 +89,18 @@ describe("resolveLaunch", () => {
 		});
 		expect(resolveLaunch("/opt/demo/demo", undefined, false)).toEqual({
 			command: "/opt/demo/demo",
+			args: ["mcp"],
+		});
+	});
+
+	it("preserves runtime options only for source entries", () => {
+		const execArgv = ["--import", "/proj/required preload.mjs"];
+		expect(resolveLaunch("/usr/bin/node", "/proj/cli.ts", false, execArgv)).toEqual({
+			command: "/usr/bin/node",
+			args: [...execArgv, "/proj/cli.ts", "mcp"],
+		});
+		expect(resolveLaunch("/opt/demo", "/$bunfs/root/demo", true, execArgv)).toEqual({
+			command: "/opt/demo",
 			args: ["mcp"],
 		});
 	});
