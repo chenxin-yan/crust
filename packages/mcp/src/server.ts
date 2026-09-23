@@ -77,12 +77,20 @@ function failureText({ error }: FailedOutcome): string {
 export function toolResultFromOutcome(outcome: RunOutcome<unknown>): CallToolResult {
 	switch (outcome.status) {
 		case "completed": {
-			const { result } = outcome;
-			if (!isJsonValue(result)) return text(outcome.stdout);
-			return {
-				content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-				structuredContent: isJsonObject(result) ? result : { result },
-			};
+			try {
+				if (isJsonValue(outcome.result)) {
+					const json = JSON.stringify(outcome.result, null, 2);
+					// Detach action objects so the transport cannot invoke their getters again.
+					const result: JsonValue = JSON.parse(json);
+					return {
+						content: [{ type: "text", text: json }],
+						structuredContent: isJsonObject(result) ? result : { result },
+					};
+				}
+			} catch {
+				// Inspection and serialization can both invoke user getters; preserve the stdout fallback.
+			}
+			return text(outcome.stdout);
 		}
 		case "finished":
 			return text(outcome.stdout);

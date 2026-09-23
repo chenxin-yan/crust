@@ -95,6 +95,36 @@ describe("toolsFromSnapshot", () => {
 		expect(tool?.argNames).toEqual(["target", "level", "files"]);
 	});
 
+	it("omits unserializable defaults and detaches serializable defaults for discovery", async () => {
+		const cycle = { self: {} };
+		cycle.self = cycle;
+		const throwing = {
+			get value() {
+				throw new Error("default getter");
+			},
+		};
+		const ordinary = { value: 1 };
+		const app = new Crust("cli")
+			.flags(
+				{ name: "cycle", type: "json", default: cycle },
+				{ name: "bigint", type: "json", default: 1n, required: true },
+				{ name: "throwing", type: "json", default: throwing },
+				{ name: "ordinary", type: "json", default: ordinary },
+				{ name: "url", type: "url", default: new URL("https://example.com/") },
+			)
+			.action(noop);
+		const tools = toolsFromSnapshot(await app.snapshot());
+		const properties = tools[0]!.inputSchema.properties;
+		for (const name of ["cycle", "bigint", "throwing"]) {
+			expect(properties[name]).not.toHaveProperty("default");
+		}
+		expect(tools[0]!.inputSchema.required).toBeUndefined();
+		expect(properties.ordinary?.default).toEqual(ordinary);
+		expect(properties.ordinary?.default).not.toBe(ordinary);
+		expect(properties.url?.default).toBe("https://example.com/");
+		expect(() => JSON.stringify(tools)).not.toThrow();
+	});
+
 	it("maps schema and custom-parse definitions by token type; only declared required is required", async () => {
 		const app = new Crust("cli").add(
 			defineCommand("check", (c) =>

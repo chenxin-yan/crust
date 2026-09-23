@@ -381,6 +381,39 @@ describe("toolResultFromOutcome", () => {
 		stderr: "",
 	});
 
+	it.each([1, 2])(
+		"falls back when result inspection or serialization throws on read %s",
+		(failureAt) => {
+			let reads = 0;
+			const result = {
+				get value() {
+					if (++reads === failureAt) throw new Error("result getter");
+					return 1;
+				},
+			};
+			expect(toolResultFromOutcome(completed(result))).toEqual({
+				content: [{ type: "text", text: "out" }],
+			});
+		},
+	);
+
+	it("detaches structured results so transport serialization never rereads action getters", () => {
+		let reads = 0;
+		const result = {
+			get value() {
+				if (++reads > 2) throw new Error("result read again by transport");
+				return reads;
+			},
+		};
+		const response = toolResultFromOutcome(completed(result));
+		expect(response.structuredContent).toEqual({ value: 2 });
+		expect(response.content).toEqual([
+			{ type: "text", text: JSON.stringify({ value: 2 }, null, 2) },
+		]);
+		expect(() => JSON.stringify(response)).not.toThrow();
+		expect(reads).toBe(2);
+	});
+
 	const shared = { value: 1 };
 	it.each([
 		["null", null, { result: null }],

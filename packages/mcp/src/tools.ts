@@ -70,10 +70,18 @@ function valueSchema(
 function propertySchema(def: ArgSnapshot | FlagSnapshot, list: boolean): McpPropertySchema {
 	const value = valueSchema(def.type, def.choices);
 	const schema: McpPropertySchema = list ? { type: "array", items: value } : value;
+	let defaultValue: unknown;
+	if (def.default !== undefined) {
+		try {
+			defaultValue = JSON.parse(JSON.stringify(def.default));
+		} catch {
+			// Advisory metadata must not break discovery; run() still owns the actual default.
+		}
+	}
 	return {
 		...schema,
 		...(def.description === undefined ? {} : { description: def.description }),
-		...(def.default === undefined ? {} : { default: def.default }),
+		...(defaultValue === undefined ? {} : { default: defaultValue }),
 	};
 }
 
