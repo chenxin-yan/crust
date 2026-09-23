@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 
-import { Crust, defineCommand } from "@crustjs/core";
+import { Crust } from "@crustjs/core";
 import { input } from "@crustjs/prompts";
-import { captureExecute, fuzzRoundTrip } from "@crustjs/testing";
+import { captureExecute } from "@crustjs/testing";
 import { runInteractive } from "@crustjs/testing/interactive";
 
 //#region run
@@ -27,23 +27,6 @@ test("captures terminal errors", async () => {
 	expect(result.stdout).toBe("");
 	expect(result.stderr).toContain("Unknown flag");
 	expect(result.exitCode).toBe(1);
-});
-//#endregion
-
-//#region fuzz
-const git = new Crust("git").add(
-	defineCommand("remote-add", (command) =>
-		command
-			.args({ name: "name", type: "string", required: true })
-			.flags({ name: "tag", type: "string", multiple: true }, { name: "config", type: "json" })
-			.action(() => {}),
-	),
-);
-
-test("structured input and argv bind identically", async () => {
-	const report = await fuzzRoundTrip(git, ["remote-add"], { runs: 200 });
-
-	expect(report.accepted).toBe(200);
 });
 //#endregion
 

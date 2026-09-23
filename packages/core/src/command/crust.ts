@@ -90,14 +90,10 @@ import {
 	validateCommandSections,
 } from "./extensions-install.ts";
 import {
-	bindInvocation,
-	customBindingsAt,
 	executeInvocation,
 	prepareInvocation,
 	resolveTypedPath,
 	runInvocation,
-	type BoundInput,
-	type CustomBindings,
 } from "./invocation.ts";
 import { type CommandAction, type CommandNode, createCommandNode, registerFlag } from "./node.ts";
 import { snapshotCommand } from "./snapshot.ts";
@@ -1812,40 +1808,4 @@ export class Crust<
 		// Terminal calls render failures and set process exit status instead of throwing.
 		return await executeInvocation(this._node, options, materializeCommandDefinition);
 	}
-}
-
-/** Input accepted by {@link bindInput}: terminal argv, or a typed path with structured values. */
-export type BindInput =
-	| { readonly argv: readonly string[] }
-	| { readonly path: readonly string[]; readonly input: RunInput<CommandShape> };
-
-/** Applications hide their command node behind {@link AnyCrust}; tooling reads it here. */
-function nodeOf(app: AnyCrust): CommandNode {
-	if (!(app instanceof Crust)) {
-		throw new TypeError("Expected a Crust application from this copy of @crustjs/core.");
-	}
-	return app._node;
-}
-
-/**
- * Parse-only tooling boundary: resolve, parse, validate, and apply Standard Schemas for one
- * invocation without dispatching it.
- *
- * Materializes definitions and Extension contributions exactly like {@link Crust.snapshot},
- * then runs the production parser; author `parse` functions and schemas run as validators.
- * Never creates Contexts, runs Extension hooks or the Command Action, writes output, or
- * touches process exit state. Parse and validation failures throw the same `CrustError`s
- * that `run()` reports as a failed outcome. Argv binds against an empty environment: a flag
- * with `env` falls back to its `default` here even when the variable is set for the process.
- */
-export async function bindInput(app: AnyCrust, input: BindInput): Promise<BoundInput> {
-	return await bindInvocation(nodeOf(app), input, materializeCommandDefinition);
-}
-
-/**
- * Name the args and flags at a typed path whose binding runs author callbacks (`parse` or a
- * Standard Schema). Command Snapshots omit those callbacks, so generators cannot infer them.
- */
-export function customBindings(app: AnyCrust, path: readonly string[]): CustomBindings {
-	return customBindingsAt(nodeOf(app), path, materializeCommandDefinition);
 }

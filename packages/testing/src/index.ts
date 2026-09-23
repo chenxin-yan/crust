@@ -1,8 +1,5 @@
 import type { InvocationIO } from "@crustjs/core";
 
-export { fuzzRoundTrip } from "./fuzz.ts";
-export type { FuzzRoundTripOptions, FuzzRoundTripReport } from "./fuzz.ts";
-
 /** Structural io shape accepted by {@link captureExecute}. */
 export type CaptureIO = Partial<InvocationIO>;
 
