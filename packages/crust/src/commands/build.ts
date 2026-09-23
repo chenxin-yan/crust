@@ -27,6 +27,7 @@ import {
 import {
 	type ArtifactOwner,
 	type BinEntry,
+	type BuildArtifact,
 	CRUST_DIR,
 	type DistributeBuildPlan,
 	type Distribution,
@@ -173,7 +174,10 @@ function printBuildReport(
 	}
 }
 
-export function resolveEnvFilePaths(cwd: string, envFiles: string[] | undefined): string[] {
+export function resolveEnvFilePaths(
+	cwd: string,
+	envFiles: readonly string[] | undefined,
+): string[] {
 	if (!envFiles || envFiles.length === 0) {
 		return [];
 	}
@@ -294,11 +298,35 @@ export function resolveBinEntries(cwd: string, pkg: JsonValue | undefined): BinE
 	});
 }
 
-export type BuildFlags = {
+/** Options of the programmatic {@link build}; `crust build` maps its flags onto them. */
+export type BuildOptions = {
+	/** Project root whose package.json `bin` and `crust` are read. Default: `process.cwd()`. */
+	cwd?: string;
+	/**
+	 * Canonical compiler targets, or `"host"` for this machine. Overrides
+	 * package.json `crust.targets`; omit both to stage every Bun/Deno target.
+	 * Rejected for the node runtime.
+	 */
+	targets?: readonly string[];
+	/** Env files inlining `PUBLIC_*` build-time constants, resolved against `cwd`. Rejected for deno. */
+	envFiles?: readonly string[];
+	/** Minify the output. Default: true for bun and node; an explicit `true` is rejected for deno. */
 	minify?: boolean;
-	target?: string[];
-	validate: boolean;
-	"env-file"?: string[];
+	/** Materialize Command Snapshots and run Extension build hooks before compiling. Default: true. */
+	validate?: boolean;
+	/** Receives each progress line `crust build` would print; silent when omitted. Warnings arrive as `"stderr"`. */
+	onLog?: (line: string, stream: "stdout" | "stderr") => void;
+};
+
+type PlanOptions = Omit<BuildOptions, "cwd" | "onLog">;
+
+/** What {@link build} staged in `stageDir` (`<cwd>/.crust`). */
+export type BuildResult = {
+	stageDir: string;
+	/** Generated package.json files, launchers, and compiled commands; see {@link BuildArtifact}. */
+	artifacts: BuildArtifact[];
+	/** Extension build hook output per command; absent when `validate` was false. */
+	reports?: Record<string, BuildReport>;
 };
 
 type CommonBuildPlan = DistributeBuildPlan & {
@@ -316,16 +344,16 @@ export type BuildPlan = CommonBuildPlan &
 		| { runtime: "node" }
 	);
 
-export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
+export function planBuild(options: PlanOptions, cwd: string): BuildPlan {
 	const userPackageJson = readUserPackageJson(cwd);
 	const config = readCrustConfig(userPackageJson);
 	const { runtime, source: runtimeSource } = resolveBuildRuntime(userPackageJson, config, cwd);
 	const entries = resolveBinEntries(cwd, userPackageJson);
 	validatePackageIdentity(userPackageJson, "package.json");
-	const envFiles = resolveEnvFilePaths(cwd, flags["env-file"]);
+	const envFiles = resolveEnvFilePaths(cwd, options.envFiles);
 	const bunPlugins = config.bunPlugins ?? [];
 
-	if (runtime === "node" && flags.target?.length) {
+	if (runtime === "node" && options.targets?.length) {
 		throw new Error(
 			"--target cannot be used with the node runtime.\n  Node builds produce one portable JavaScript artifact.",
 		);
@@ -335,7 +363,7 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 			"package.json crust.targets is not supported with the node runtime.\n  Node builds produce one portable JavaScript artifact; remove crust.targets or set crust.runtime to bun or deno.",
 		);
 	}
-	if (runtime === "deno" && flags.minify) {
+	if (runtime === "deno" && options.minify) {
 		throw new Error(
 			"--minify is not supported with the deno runtime.\n  deno compile has no minification step; drop the flag.",
 		);
@@ -364,12 +392,12 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 		include: config.include ?? [],
 		outDir: join(stageDir, "artifacts"),
 		stageDir,
-		validate: flags.validate,
-		minify: runtime === "deno" ? false : (flags.minify ?? true),
+		validate: options.validate ?? true,
+		minify: runtime === "deno" ? false : (options.minify ?? true),
 	};
 
 	if (runtime === "node") return { ...common, runtime };
-	const targetInputs = flags.target?.length ? flags.target : config.targets;
+	const targetInputs = options.targets?.length ? options.targets : config.targets;
 	if (runtime === "bun") {
 		const targets = resolveTargets(BUN_TARGETS, targetInputs);
 		assertTargetsBuildableWithoutBun(targets);
@@ -382,8 +410,8 @@ export function planBuild(flags: BuildFlags, cwd: string): BuildPlan {
 async function runStagedBuild(
 	plan: BuildPlan,
 	io: InvocationIO,
-	build: Record<string, BuildReport> | undefined,
-): Promise<void> {
+	reports: Record<string, BuildReport> | undefined,
+): Promise<BuildArtifact[]> {
 	if (plan.runtime === "bun") {
 		const distribution: Distribution<BunTarget> = {
 			table: BUN_TARGETS,
@@ -391,7 +419,7 @@ async function runStagedBuild(
 			execute: (entry, outfile, target) =>
 				execBuild(entry, outfile, plan.minify, target, plan.envFiles, plan.cwd, plan.bunPlugins),
 		};
-		return runDistributeBuild(plan, distribution, io, build);
+		return runDistributeBuild(plan, distribution, io, reports);
 	}
 	if (plan.runtime === "deno") {
 		const distribution: Distribution<DenoTarget> = {
@@ -399,7 +427,7 @@ async function runStagedBuild(
 			targets: plan.targets,
 			execute: (entry, outfile, target) => execDenoBuild(entry, outfile, target, plan.cwd),
 		};
-		return runDistributeBuild(plan, distribution, io, build);
+		return runDistributeBuild(plan, distribution, io, reports);
 	}
 	return runDistributeBuild(
 		plan,
@@ -408,7 +436,7 @@ async function runStagedBuild(
 				execNodeBuild(entry, outfile, plan.minify, plan.envFiles, plan.cwd, plan.bunPlugins),
 		},
 		io,
-		build,
+		reports,
 	);
 }
 
@@ -428,7 +456,7 @@ async function prepareEntries(
 	for (const { command, entryPath } of plan.entries) {
 		const entryOutDir = await mkdtemp(join(tmpdir(), "crust-artifacts-"));
 		try {
-			const { snapshot, build } = await buildEntrypoint(
+			const { snapshot, build: report } = await buildEntrypoint(
 				entryPath,
 				entryOutDir,
 				plan.envFiles,
@@ -441,9 +469,9 @@ async function prepareEntries(
 						"  The installed command, help, man pages, and skills use the root command name, so new Crust(name) must match the bin key; rename one of them.",
 				);
 			}
-			printBuildReport(command, build, io.stdout);
+			printBuildReport(command, report, io.stdout);
 			mergeEntryArtifacts(entryOutDir, plan.outDir, command, owners);
-			reports[command] = build;
+			reports[command] = report;
 		} finally {
 			rmSync(entryOutDir, { recursive: true, force: true });
 		}
@@ -456,14 +484,38 @@ async function prepareEntries(
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * The `crust build` command.
- *
- * Stages the publishable npm tree in `.crust/`: a root package with one
+ * Stages the publishable npm tree in `<cwd>/.crust`: a root package with one
  * `bin/<command>.js` per package.json `bin` entry, each a Node launcher (Bun,
  * Deno) or the bundle itself (Node), plus one platform package per target for
  * Bun and Deno holding one binary per command. Command names and source
  * entries come from `bin`; the runtime, Bun plugins, and extra directories
- * from package.json `crust`.
+ * from package.json `crust`. Compilation and Command Snapshots run in bun
+ * subprocesses (bun on PATH, or the running Bun executable), so this works
+ * under Node as well when Bun is installed.
+ *
+ * Throws on any failure, after which `.crust/` holds no `manifest.json`.
+ */
+export async function build(options: BuildOptions = {}): Promise<BuildResult> {
+	const cwd = resolve(options.cwd ?? process.cwd());
+	const onLog = options.onLog ?? (() => {});
+	const io: InvocationIO = {
+		stdout: (line) => onLog(line, "stdout"),
+		stderr: (line) => onLog(line, "stderr"),
+	};
+	const plan = planBuild(options, cwd);
+	io.stdout(`${dim("Runtime:")} ${plan.runtime} ${dim(`(${plan.runtimeSource})`)}`);
+	// Wipe once, before Extension hooks fill .crust/artifacts; staging only adds to the tree.
+	// Clean-by-producer would be a set diff against manifest.build if this wipe is ever dropped.
+	rmSync(plan.stageDir, { recursive: true, force: true });
+	// validate: false skips the snapshots (and so the name check and hooks), not the bin validation above.
+	const reports = plan.validate ? await prepareEntries(plan, io) : undefined;
+	const artifacts = await runStagedBuild(plan, io, reports);
+	return { stageDir: plan.stageDir, artifacts, ...(reports ? { reports } : {}) };
+}
+
+/**
+ * The `crust build` command: {@link build} with its flags mapped onto
+ * {@link BuildOptions}, printing progress as it goes.
  *
  * @example
  * ```sh
@@ -509,15 +561,13 @@ export const buildCommand = defineCommand(
 				},
 			)
 			.action(async ({ flags, stdout, stderr }) => {
-				const cwd = process.cwd();
-				const io = { stdout, stderr };
-				const plan = planBuild(flags, cwd);
-				stdout(`${dim("Runtime:")} ${plan.runtime} ${dim(`(${plan.runtimeSource})`)}`);
-				// Wipe once, before Extension hooks fill .crust/artifacts; staging only adds to the tree.
-				// Clean-by-producer would be a set diff against manifest.build if this wipe is ever dropped.
-				rmSync(plan.stageDir, { recursive: true, force: true });
-				// --no-validate skips the snapshots (and so the name check and hooks), not the bin validation above.
-				const build = plan.validate ? await prepareEntries(plan, io) : undefined;
-				await runStagedBuild(plan, io, build);
+				await build({
+					cwd: process.cwd(),
+					targets: flags.target,
+					envFiles: flags["env-file"],
+					minify: flags.minify,
+					validate: flags.validate,
+					onLog: (line, stream) => (stream === "stderr" ? stderr : stdout)(line),
+				});
 			}),
 );

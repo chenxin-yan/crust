@@ -129,9 +129,12 @@
         "@crustjs/style": "workspace:^",
       },
       "devDependencies": {
+        "@arethetypeswrong/core": "^0.18.5",
         "@crustjs/config": "workspace:*",
         "@crustjs/testing": "workspace:*",
         "@crustjs/utils": "workspace:*",
+        "publint": "^0.3.24",
+        "tsdown": "catalog:",
       },
     },
     "packages/effect": {

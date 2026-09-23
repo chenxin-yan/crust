@@ -62,6 +62,8 @@ type PublishPackageMetadata = {
 type RootPublishPackageJson = PublishPackageMetadata & {
 	/** Absent for a root-only package: npm treats `{}` and a missing field alike, but the manifest stays honest. */
 	optionalDependencies?: Record<string, string>;
+	/** The user's `exports`, carried only when present and every target is staged; see `validateStagedExports`. */
+	exports?: JsonValue;
 	os?: never;
 	cpu?: never;
 	libc?: never;
@@ -77,6 +79,7 @@ type PlatformPublishPackageJson = PublishPackageMetadata & {
 
 type UserPackageJson = Omit<PublishPackageMetadata, "bin"> & {
 	bin?: JsonValue;
+	exports?: JsonValue;
 	optionalDependencies?: Record<string, string>;
 	os?: [NpmOs];
 	cpu?: [NpmCpu];
@@ -89,7 +92,10 @@ type StagingOptions = { artifactDirs: readonly string[]; manPages: readonly stri
 type DistributionMetadata = {
 	rootPackageName: string;
 	version: string;
+	/** Metadata shared by the root and every platform package. */
 	rootPackageJson: PublishPackageMetadata;
+	/** The user's `exports`, root package only; validated against the staged tree. */
+	exports?: JsonValue;
 };
 
 type DistributionTarget<T extends string = string> = {
@@ -161,6 +167,10 @@ export function validatePackageIdentity(
 	}
 }
 
+function isString(value: JsonValue): value is string {
+	return typeof value === "string";
+}
+
 function derivePlatformPackageName(rootPackageName: string, targetAlias: string): string {
 	const [scope, name] = rootPackageName.startsWith("@")
 		? rootPackageName.split("/")
@@ -208,9 +218,66 @@ function buildDistributionRootPackageJson(
 				}
 			: {}),
 		...(manPages.length > 0 ? { man: manPages.map((page) => `./man/${page}`) } : {}),
+		...(metadata.exports !== undefined ? { exports: metadata.exports } : {}),
 	};
 
 	return rootPackageJson;
+}
+
+/**
+ * Checks a package.json `exports` map against the staged root package: every
+ * target must be a `./`-relative path to a file that staging copied there (a
+ * `crust.include` directory or Extension artifact), so the published root
+ * package resolves exactly what the project's own `exports` promises. `null`
+ * targets (blocked subpaths) and nested condition objects are allowed;
+ * fallback arrays and `*` patterns are rejected rather than half-checked.
+ */
+function validateStagedExports(exports: JsonValue, rootDir: string): void {
+	const fail = (detail: string): never => {
+		throw new Error(
+			`package.json exports ${detail}\n  crust build stages only bin/, Extension artifacts, and crust.include directories into the root package; point exports at a crust.include directory or remove the field.`,
+		);
+	};
+	const checkTarget = (target: JsonValue, at: string): void => {
+		if (target === null) return;
+		if (isString(target)) {
+			const staged = resolve(rootDir, target);
+			if (!target.startsWith("./") || !isWithin(rootDir, staged)) {
+				fail(
+					`target ${JSON.stringify(target)} (${at}) must be a ./-relative path inside the package.`,
+				);
+			}
+			if (target.includes("*")) {
+				fail(
+					`target ${JSON.stringify(target)} (${at}) uses a pattern, which crust build does not support.`,
+				);
+			}
+			if (!existsSync(staged) || !statSync(staged).isFile()) {
+				fail(`target ${JSON.stringify(target)} (${at}) is not a staged file: ${staged}`);
+			}
+			return;
+		}
+		if (!isJsonObject(target)) {
+			fail(`${at} must be a path, null, or a conditions object, not ${JSON.stringify(target)}.`);
+		}
+		for (const [condition, value] of Object.entries(target)) {
+			if (condition.startsWith(".")) {
+				fail(`${at} mixes subpath ${JSON.stringify(condition)} into a conditions object.`);
+			}
+			checkTarget(value, `${at} -> ${condition}`);
+		}
+	};
+
+	if (isJsonObject(exports) && Object.keys(exports).some((key) => key.startsWith("."))) {
+		for (const [subpath, target] of Object.entries(exports)) {
+			if (!subpath.startsWith(".")) {
+				fail(`mixes condition ${JSON.stringify(subpath)} with subpath keys.`);
+			}
+			checkTarget(target, subpath);
+		}
+		return;
+	}
+	checkTarget(exports, '"."');
 }
 
 function buildDistributionPlatformPackageJson(
@@ -265,6 +332,7 @@ function resolveDistributionMetadata(
 		rootPackageName: pkgJson.name,
 		version: pkgJson.version,
 		rootPackageJson: pickRootMetadata(pkgJson),
+		...(pkgJson.exports !== undefined ? { exports: pkgJson.exports } : {}),
 	};
 }
 
@@ -509,15 +577,28 @@ export type Distribution<T extends string> =
 	  };
 
 /**
+ * One file `crust build` generated or compiled into the staged tree. `target`
+ * is the canonical compiler target of a platform package (`bun-linux-x64`),
+ * absent for the root package. Extension build hook output is reported by
+ * command in the `BuildReport`s instead, not repeated here.
+ */
+export type BuildArtifact =
+	| { kind: "package-json"; path: string; target?: string }
+	| { kind: "launcher"; path: string; command: string }
+	| { kind: "executable"; path: string; command: string; target: string }
+	| { kind: "bundle"; path: string; command: string };
+
+/**
  * Stages the npm tree in `plan.stageDir`. `build` is each command's Extension
  * build hook report, recorded in `manifest.json`; omit it when the hooks did not run.
+ * Returns every generated package.json, launcher, and compiled command in staging order.
  */
 export async function runDistributeBuild<T extends string>(
 	plan: DistributeBuildPlan,
 	distribution: Distribution<T>,
 	io: InvocationIO,
 	build?: Record<string, BuildReport>,
-): Promise<void> {
+): Promise<BuildArtifact[]> {
 	const metadata = resolveDistributionMetadata(plan.cwd, plan.userPackageJson);
 	const commands = plan.entries.map((entry) => entry.command);
 	const table = distribution.table;
@@ -542,6 +623,14 @@ export async function runDistributeBuild<T extends string>(
 	});
 
 	const rootDir = join(plan.stageDir, "root");
+	const produced: BuildArtifact[] = [
+		{ kind: "package-json", path: join(rootDir, "package.json") },
+		...distributionTargets.map((targetPackage): BuildArtifact => ({
+			kind: "package-json",
+			path: join(targetPackage.packageDir, "package.json"),
+			target: targetPackage.target,
+		})),
+	];
 	// Only crust.include trees are dereferenced: collectIncludeDirs proved every
 	// symlink inside them resolves into the project. Artifact trees are not
 	// validated, so a symlink there is copied as a link rather than followed, with
@@ -568,15 +657,18 @@ export async function runDistributeBuild<T extends string>(
 			cpSync(sourceDir, join(targetPackage.packageDir, "bin", name), options);
 		}
 	}
+	// After the copies so targets can be checked against the staged files, before
+	// compiling so a bad exports map fails without paying for the binaries.
+	if (metadata.exports !== undefined) validateStagedExports(metadata.exports, rootDir);
 
 	const rootBinDir = join(rootDir, "bin");
 	if (table) {
 		for (const { command } of plan.entries) {
-			writeFileSync(
-				join(rootBinDir, `${command}.js`),
-				generateDistributionJsResolver(command, distributionTargets),
-				{ mode: 0o755 },
-			);
+			const launcherPath = join(rootBinDir, `${command}.js`);
+			writeFileSync(launcherPath, generateDistributionJsResolver(command, distributionTargets), {
+				mode: 0o755,
+			});
+			produced.push({ kind: "launcher", path: launcherPath, command });
 		}
 		for (const targetPackage of distributionTargets) {
 			for (const { command, entryPath } of plan.entries) {
@@ -587,6 +679,12 @@ export async function runDistributeBuild<T extends string>(
 				);
 				io.stdout(`  ${cyan("→")} ${bold(targetPackage.targetAlias)}: ${dim(outfilePath)}`);
 				await distribution.execute(entryPath, outfilePath, targetPackage.target);
+				produced.push({
+					kind: "executable",
+					path: outfilePath,
+					command,
+					target: targetPackage.target,
+				});
 			}
 		}
 	} else {
@@ -594,6 +692,7 @@ export async function runDistributeBuild<T extends string>(
 			const rootBinPath = join(rootBinDir, `${command}.js`);
 			io.stdout(`  ${cyan("→")} ${bold("root")}: ${dim(rootBinPath)}`);
 			await distribution.execute(entryPath, rootBinPath);
+			produced.push({ kind: "bundle", path: rootBinPath, command });
 		}
 	}
 
@@ -609,6 +708,7 @@ export async function runDistributeBuild<T extends string>(
 		io.stdout(`  ${targetPackage.packageDir}`);
 	}
 	io.stdout(`\n${dim("Manifest:")} ${manifestPath}`);
+	return produced;
 }
 
 /**

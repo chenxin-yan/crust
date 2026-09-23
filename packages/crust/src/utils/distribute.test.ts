@@ -624,6 +624,138 @@ describe("runDistributeBuild", () => {
 		await expect(stage(["skills"], true)).rejects.toThrow("Extension artifact directory");
 		await expect(stage(["skills/sub"], true)).rejects.toThrow('overlaps "skills"');
 	});
+
+	it("returns the generated package.json files, launchers, and compiled commands in staging order", async () => {
+		const plan = createPlan(
+			tmpDir,
+			{ name: "@scope/cli", version: "0.1.0" },
+			{
+				entries: [
+					{ command: "one", entryPath: join(tmpDir, "src", "cli.ts") },
+					{ command: "two", entryPath: join(tmpDir, "src", "cli.ts") },
+				],
+			},
+		);
+		const root = join(plan.stageDir, "root");
+		const linux = join(plan.stageDir, "linux-x64");
+		const artifacts = await runDistributeBuild(
+			plan,
+			bunDistribution(["bun-linux-x64", "bun-windows-x64"]),
+			io,
+		);
+		expect(artifacts).toEqual([
+			{ kind: "package-json", path: join(root, "package.json") },
+			{ kind: "package-json", path: join(linux, "package.json"), target: "bun-linux-x64" },
+			{
+				kind: "package-json",
+				path: join(plan.stageDir, "windows-x64", "package.json"),
+				target: "bun-windows-x64",
+			},
+			{ kind: "launcher", path: join(root, "bin", "one.js"), command: "one" },
+			{ kind: "launcher", path: join(root, "bin", "two.js"), command: "two" },
+			{
+				kind: "executable",
+				path: join(linux, "bin", "one-bun-linux-x64"),
+				command: "one",
+				target: "bun-linux-x64",
+			},
+			{
+				kind: "executable",
+				path: join(linux, "bin", "two-bun-linux-x64"),
+				command: "two",
+				target: "bun-linux-x64",
+			},
+			{
+				kind: "executable",
+				path: join(plan.stageDir, "windows-x64", "bin", "one-bun-windows-x64.exe"),
+				command: "one",
+				target: "bun-windows-x64",
+			},
+			{
+				kind: "executable",
+				path: join(plan.stageDir, "windows-x64", "bin", "two-bun-windows-x64.exe"),
+				command: "two",
+				target: "bun-windows-x64",
+			},
+		]);
+		for (const { path } of artifacts) expect(existsSync(path), path).toBe(true);
+
+		const nodePlan = createPlan(
+			tmpDir,
+			{ name: "cli", version: "0.1.0" },
+			{ stageDir: join(tmpDir, ".node-stage") },
+		);
+		expect(await runDistributeBuild(nodePlan, rootOnlyDistribution, io)).toEqual([
+			{ kind: "package-json", path: join(nodePlan.stageDir, "root", "package.json") },
+			{
+				kind: "bundle",
+				path: join(nodePlan.stageDir, "root", "bin", "test-cli.js"),
+				command: "test-cli",
+			},
+		]);
+	});
+
+	it("carries package.json exports into the root package only when every target is staged", async () => {
+		mkdirSync(join(tmpDir, "dist"), { recursive: true });
+		writeFileSync(join(tmpDir, "dist", "index.js"), "export const build = 1;\n");
+		writeFileSync(join(tmpDir, "dist", "index.d.ts"), "export declare const build: number;\n");
+		const stageDir = join(tmpDir, ".crust");
+		const stage = (exports: JsonValue | undefined, include = ["dist"]) => {
+			// The build command wipes the stage before each build; do the same so no earlier copy lingers.
+			rmSync(stageDir, { recursive: true, force: true });
+			return runDistributeBuild(
+				createPlan(
+					tmpDir,
+					{ name: "lib-cli", version: "0.1.0", ...(exports === undefined ? {} : { exports }) },
+					{ include },
+				),
+				bunDistribution(),
+				io,
+			);
+		};
+		const rootPackage = () =>
+			readJson<Record<string, JsonValue>>(join(stageDir, "root", "package.json"));
+		const platformPackage = () =>
+			readJson<Record<string, JsonValue>>(join(stageDir, "darwin-arm64", "package.json"));
+
+		// Without exports the staged manifests are exactly what they were before.
+		await stage(undefined);
+		expect(rootPackage()).not.toHaveProperty("exports");
+
+		const exports = {
+			".": { types: "./dist/index.d.ts", import: "./dist/index.js" },
+			"./package.json": "./package.json",
+			"./internal": null,
+		};
+		await stage(exports);
+		expect(rootPackage().exports).toEqual(exports);
+		expect(platformPackage()).not.toHaveProperty("exports");
+		await stage({ node: { import: "./dist/index.js" }, default: "./dist/index.js" });
+		expect(rootPackage().exports).toEqual({
+			node: { import: "./dist/index.js" },
+			default: "./dist/index.js",
+		});
+
+		// Targets must be staged files: not source that stays behind, not patterns, not escapes.
+		await expect(stage({ ".": "./src/index.ts" })).rejects.toThrow(
+			`exports target "./src/index.ts" (.) is not a staged file: ${join(stageDir, "root", "src", "index.ts")}`,
+		);
+		await expect(stage({ ".": "./dist/index.js" }, [])).rejects.toThrow("is not a staged file");
+		await expect(stage({ ".": "./dist" })).rejects.toThrow("is not a staged file");
+		await expect(stage({ "./*": "./dist/*.js" })).rejects.toThrow("uses a pattern");
+		await expect(stage({ ".": "dist/index.js" })).rejects.toThrow("./-relative path");
+		await expect(stage({ ".": "./../LICENSE" })).rejects.toThrow("./-relative path");
+		await expect(stage({ ".": ["./dist/index.js"] })).rejects.toThrow(
+			"must be a path, null, or a conditions object",
+		);
+		await expect(stage({ ".": "./dist/index.js", import: "./dist/index.js" })).rejects.toThrow(
+			'mixes condition "import" with subpath keys',
+		);
+		await expect(stage({ ".": { "./nested": "./dist/index.js" } })).rejects.toThrow(
+			'mixes subpath "./nested" into a conditions object',
+		);
+		expect(existsSync(join(stageDir, "manifest.json"))).toBe(false);
+	});
 });
 
 describe("mergeEntryArtifacts", () => {

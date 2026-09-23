@@ -31,7 +31,8 @@ import {
 } from "../utils/build-helpers.ts";
 import type { DistributionManifest } from "../utils/distribute.ts";
 import {
-	type BuildFlags,
+	build,
+	type BuildOptions,
 	buildCommand,
 	CRUST_CONFIG_KEYS,
 	planBuild,
@@ -74,7 +75,7 @@ describe("env file helpers", () => {
 
 describe("planBuild", () => {
 	const tmpDir = mkdtempSync(join(tmpdir(), "crust-build-plan-"));
-	const baseFlags: BuildFlags = { validate: true };
+	const baseFlags: BuildOptions = {};
 	// Every plan needs a package name: without an object bin it names the command.
 	const writePackageJson = (pkg: Record<string, JsonValue>) =>
 		writeFileSync(
@@ -107,7 +108,7 @@ describe("planBuild", () => {
 			runtime: "bun",
 			targets: ["bun-linux-x64", "bun-darwin-arm64"],
 		});
-		expect(planBuild({ ...baseFlags, target: ["bun-linux-arm64"] }, tmpDir)).toMatchObject({
+		expect(planBuild({ ...baseFlags, targets: ["bun-linux-arm64"] }, tmpDir)).toMatchObject({
 			targets: ["bun-linux-arm64"],
 		});
 		writePackageJson({ crust: { targets: ["linux-x64"] } });
@@ -196,13 +197,13 @@ describe("planBuild", () => {
 	const rejectedCases: Array<{
 		name: string;
 		crust: JsonValue;
-		flags: Partial<BuildFlags>;
+		flags: Partial<BuildOptions>;
 		error: string;
 	}> = [
 		{
 			name: "Node builds with targets",
 			crust: { runtime: "node" },
-			flags: { target: ["bun-linux-x64"] },
+			flags: { targets: ["bun-linux-x64"] },
 			error: "--target cannot be used with the node runtime",
 		},
 		{
@@ -214,7 +215,7 @@ describe("planBuild", () => {
 		{
 			name: "Deno builds with env files",
 			crust: { runtime: "deno" },
-			flags: { "env-file": [".env"] },
+			flags: { envFiles: [".env"] },
 			error: "--env-file is not supported with the deno runtime",
 		},
 		{
@@ -260,7 +261,7 @@ describe("planBuild", () => {
 				expect(() => planBuild(baseFlags, tmpDir)).toThrow(
 					`Cannot build ${host} without a separate bun executable on PATH`,
 				);
-				expect(planBuild({ ...baseFlags, target: ["bun-linux-x64"] }, tmpDir).runtime).toBe("bun");
+				expect(planBuild({ ...baseFlags, targets: ["bun-linux-x64"] }, tmpDir).runtime).toBe("bun");
 			} finally {
 				process.env.PATH = path;
 			}
@@ -283,7 +284,7 @@ describe("planBuild", () => {
 	it("stages .crust for every runtime", () => {
 		const stageDir = resolve(tmpDir, ".crust");
 		const outDir = resolve(stageDir, "artifacts");
-		expect(planBuild({ ...baseFlags, target: ["bun-linux-x64"] }, tmpDir)).toMatchObject({
+		expect(planBuild({ ...baseFlags, targets: ["bun-linux-x64"] }, tmpDir)).toMatchObject({
 			runtime: "bun",
 			targets: ["bun-linux-x64"],
 			stageDir,
@@ -297,7 +298,7 @@ describe("planBuild", () => {
 			minify: false,
 			stageDir,
 		});
-		expect(() => planBuild({ ...baseFlags, target: ["linux-x64"] }, tmpDir)).toThrow(
+		expect(() => planBuild({ ...baseFlags, targets: ["linux-x64"] }, tmpDir)).toThrow(
 			'Unknown Deno target "linux-x64"',
 		);
 		mkdirSync(join(tmpDir, "templates"), { recursive: true });
@@ -316,22 +317,22 @@ describe("planBuild", () => {
 	});
 
 	it.skipIf(host === null)("resolves --target host to this machine's target", () => {
-		expect(planBuild({ ...baseFlags, target: ["host"] }, tmpDir)).toMatchObject({
+		expect(planBuild({ ...baseFlags, targets: ["host"] }, tmpDir)).toMatchObject({
 			runtime: "bun",
 			targets: [host],
 		});
 		expect(
-			planBuild({ ...baseFlags, target: ["host", host!, "bun-linux-x64", "host"] }, tmpDir),
+			planBuild({ ...baseFlags, targets: ["host", host!, "bun-linux-x64", "host"] }, tmpDir),
 		).toMatchObject({ targets: host === "bun-linux-x64" ? [host] : [host, "bun-linux-x64"] });
 		const denoHost = hostTarget(DENO_TARGETS);
 		writePackageJson({ crust: { runtime: "deno" } });
 		if (denoHost !== null) {
-			expect(planBuild({ ...baseFlags, target: ["host"] }, tmpDir)).toMatchObject({
+			expect(planBuild({ ...baseFlags, targets: ["host"] }, tmpDir)).toMatchObject({
 				runtime: "deno",
 				targets: [denoHost],
 			});
 		} else {
-			expect(() => planBuild({ ...baseFlags, target: ["host"] }, tmpDir)).toThrow(
+			expect(() => planBuild({ ...baseFlags, targets: ["host"] }, tmpDir)).toThrow(
 				/No Deno target matches this machine \(linux-(x64|arm64)-musl\)/,
 			);
 		}
@@ -579,6 +580,103 @@ async function executeBuildError(
 		rmSync(tmpDir, { recursive: true, force: true });
 	}
 }
+
+describe("build", () => {
+	const tmpDir = mkdtempSync(join(tmpdir(), "crust-build-api-"));
+	const stageDir = join(tmpDir, ".crust");
+	const writeProject = (pkg: Record<string, JsonValue>, entry: string) => {
+		rmSync(tmpDir, { recursive: true, force: true });
+		mkdirSync(join(tmpDir, "src"), { recursive: true });
+		writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ version: "0.1.0", ...pkg }));
+		writeFileSync(join(tmpDir, "src", "cli.ts"), entry);
+	};
+
+	afterAll(() => rmSync(tmpDir, { recursive: true, force: true }));
+
+	it.skipIf(host === null)(
+		"returns the staged artifacts and Build Reports of a validated build, logging only through onLog",
+		async () => {
+			writeProject(
+				{ name: "api-cli" },
+				`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(corePath)};\n` +
+					`const hook = defineExtension(defineExtensionId("hook"), { build: () => [{ path: "man/api-cli.1", content: ".Dd" }] });\n` +
+					`await new Crust("api-cli").extend(hook).action(() => {}).execute();\n`,
+			);
+			const logged: Array<[string, string]> = [];
+			const result = await build({
+				cwd: tmpDir,
+				targets: ["host"],
+				onLog: (line, stream) => logged.push([line, stream]),
+			});
+
+			const alias = BUN_TARGETS.info[host!].alias;
+			const root = join(stageDir, "root");
+			expect(result.stageDir).toBe(stageDir);
+			expect(result.artifacts).toEqual([
+				{ kind: "package-json", path: join(root, "package.json") },
+				{ kind: "package-json", path: join(stageDir, alias, "package.json"), target: host! },
+				{ kind: "launcher", path: join(root, "bin", "api-cli.js"), command: "api-cli" },
+				{
+					kind: "executable",
+					path: join(
+						stageDir,
+						alias,
+						"bin",
+						`api-cli-${host}${host!.includes("windows") ? ".exe" : ""}`,
+					),
+					command: "api-cli",
+					target: host!,
+				},
+			]);
+			for (const { path } of result.artifacts) expect(existsSync(path), path).toBe(true);
+			expect(result.reports).toEqual({
+				"api-cli": { extensions: [{ id: defineExtensionId("hook"), files: ["man/api-cli.1"] }] },
+			});
+			expect(readManifest(join(stageDir, "manifest.json")).build).toEqual(result.reports);
+			expect(existsSync(join(root, "man", "api-cli.1"))).toBe(true);
+			// Every CLI progress line arrives through the callback, on the stream the CLI would use.
+			expect(logged.map(([line]) => line).join("\n")).toContain(
+				"Preparing Command Snapshot for api-cli...\n  hook  1 file  man/api-cli.1",
+			);
+			expect(logged.map(([line]) => line).join("\n")).toContain("Staged");
+			expect(logged.every(([, stream]) => stream === "stdout")).toBe(true);
+		},
+		60_000,
+	);
+
+	it("stages a node bundle without reports when validate is false and rejects bad options", async () => {
+		writeProject({ name: "node-cli", crust: { runtime: "node" } }, 'console.log("hi");\n');
+		mkdirSync(stageDir);
+		writeFileSync(join(stageDir, "stale.txt"), "from a previous build\n");
+
+		const result = await build({ cwd: tmpDir, validate: false });
+		const bundlePath = join(stageDir, "root", "bin", "node-cli.js");
+		expect(result).toEqual({
+			stageDir,
+			artifacts: [
+				{ kind: "package-json", path: join(stageDir, "root", "package.json") },
+				{ kind: "bundle", path: bundlePath, command: "node-cli" },
+			],
+		});
+		expect(readFileSync(bundlePath, "utf8")).toStartWith("#!/usr/bin/env node\n");
+		expect(existsSync(join(stageDir, "stale.txt"))).toBe(false);
+		expect(readManifest(join(stageDir, "manifest.json"))).not.toHaveProperty("build");
+
+		// Option validation fails before the stage is wiped, with the CLI's messages.
+		writeFileSync(join(stageDir, "kept.txt"), "kept\n");
+		await expect(
+			build({ cwd: tmpDir, targets: ["bun-linux-x64"], validate: false }),
+		).rejects.toThrow("--target cannot be used with the node runtime");
+		await expect(
+			build({ cwd: tmpDir, envFiles: [".env.missing"], validate: false }),
+		).rejects.toThrow("Env file not found");
+		expect(existsSync(join(stageDir, "kept.txt"))).toBe(true);
+		writeProject({ name: "bun-cli" }, 'console.log("hi");\n');
+		await expect(build({ cwd: tmpDir, targets: ["linux-x64"], validate: false })).rejects.toThrow(
+			'Unknown target "linux-x64". Targets must use canonical Bun names. Did you mean "bun-linux-x64"?',
+		);
+	}, 30_000);
+});
 
 describe("buildCommand error handling", () => {
 	it("rejects unsupported runtime and flag combinations before compiling", async () => {
