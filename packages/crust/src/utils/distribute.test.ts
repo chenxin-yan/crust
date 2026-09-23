@@ -706,7 +706,12 @@ describe("runDistributeBuild", () => {
 			return runDistributeBuild(
 				createPlan(
 					tmpDir,
-					{ name: "lib-cli", version: "0.1.0", ...(exports === undefined ? {} : { exports }) },
+					{
+						name: "lib-cli",
+						version: "0.1.0",
+						type: "module",
+						...(exports === undefined ? {} : { exports }),
+					},
 					{ include },
 				),
 				bunDistribution(),
@@ -794,10 +799,13 @@ describe("runDistributeBuild", () => {
 		await stage({ peerDependencies: { "@crustjs/core": "^0.3.5" } });
 		expect(rootPackage()).not.toHaveProperty("peerDependenciesMeta");
 
-		// Staged manifests publish as written, so workspace ranges must not leak.
-		await expect(stage({ peerDependencies: { "@crustjs/core": "workspace:^" } })).rejects.toThrow(
-			'peerDependencies["@crustjs/core"] must be a publishable range, not "workspace:^"',
-		);
+		// Staged manifests publish as written, so workspace and catalog ranges must not leak.
+		for (const range of ["workspace:^", "catalog:", "catalog:peers"]) {
+			await expect(stage({ peerDependencies: { "@crustjs/core": range } })).rejects.toThrow(
+				`peerDependencies["@crustjs/core"] must be a publishable range, not ${JSON.stringify(range)}`,
+			);
+			expect(existsSync(join(stageDir, "manifest.json"))).toBe(false);
+		}
 		await expect(stage({ peerDependencies: ["@crustjs/core"] })).rejects.toThrow(
 			"peerDependencies must be an object",
 		);

@@ -80,7 +80,8 @@ type PlatformPublishPackageJson = PublishPackageMetadata & {
 	optionalDependencies?: never;
 };
 
-type UserPackageJson = Omit<PublishPackageMetadata, "bin"> & {
+type UserPackageJson = Omit<PublishPackageMetadata, "bin" | "type"> & {
+	type?: "module" | "commonjs";
 	bin?: JsonValue;
 	exports?: JsonValue;
 	peerDependencies?: JsonValue;
@@ -99,6 +100,8 @@ type DistributionMetadata = {
 	version: string;
 	/** Metadata shared by the root and every platform package. */
 	rootPackageJson: PublishPackageMetadata;
+	/** The source scope for included library files; generated CLI files always use ESM. */
+	sourceType: UserPackageJson["type"];
 	/** The user's `exports`, root package only; validated against the staged tree. */
 	exports?: JsonValue;
 	/** The user's `peerDependencies`/`peerDependenciesMeta`, root package only; publishable ranges. */
@@ -267,7 +270,11 @@ function hasNodeInvalidSegment(target: string): boolean {
  * targets (blocked subpaths) and nested condition objects are allowed;
  * fallback arrays and `*` patterns are rejected rather than half-checked.
  */
-function validateStagedExports(exports: JsonValue, rootDir: string): void {
+function validateStagedExports(
+	exports: JsonValue,
+	rootDir: string,
+	sourceType: UserPackageJson["type"],
+): void {
 	const fail = (detail: string): never => {
 		throw new Error(
 			`package.json exports ${detail}\n  crust build stages only bin/, Extension artifacts, and crust.include directories into the root package; point exports at a crust.include directory or remove the field.`,
@@ -294,6 +301,18 @@ function validateStagedExports(exports: JsonValue, rootDir: string): void {
 			}
 			if (!existsSync(staged) || !statSync(staged).isFile()) {
 				fail(`target ${JSON.stringify(target)} (${at}) is not a staged file: ${staged}`);
+			}
+			if (sourceType !== "module" && (target.endsWith(".js") || target.endsWith(".d.ts"))) {
+				// Copied nested package scopes survive staging; the generated root scope does not.
+				let scope = dirname(staged);
+				while (scope !== rootDir && !existsSync(join(scope, "package.json"))) {
+					scope = dirname(scope);
+				}
+				if (scope === rootDir) {
+					fail(
+						`target ${JSON.stringify(target)} (${at}) would change module format under the staged root's type: "module". Use .cjs/.d.cts for CommonJS, or include a nested package.json declaring the library's type.`,
+					);
+				}
 			}
 			return;
 		}
@@ -324,7 +343,7 @@ function validateStagedExports(exports: JsonValue, rootDir: string): void {
  * Carries `peerDependencies` (and `peerDependenciesMeta`) into the root package
  * so a library `exports` entry can declare what its published types import.
  * Ranges must be publishable as written: the staged manifests go to npm
- * directly, so a `workspace:` range would leak into the registry.
+ * directly, so `workspace:` and `catalog:` ranges would leak into the registry.
  */
 function validatePeerDependencies(
 	peerDependencies: JsonValue,
@@ -335,9 +354,9 @@ function validatePeerDependencies(
 	}
 	const ranges: Record<string, string> = {};
 	for (const [name, range] of Object.entries(peerDependencies)) {
-		if (!isString(range) || range.startsWith("workspace:")) {
+		if (!isString(range) || /^(workspace|catalog):/.test(range)) {
 			throw new Error(
-				`package.json peerDependencies[${JSON.stringify(name)}] must be a publishable range, not ${JSON.stringify(range)}.\n  crust build publishes the staged root package as written; workspace: ranges are never rewritten.`,
+				`package.json peerDependencies[${JSON.stringify(name)}] must be a publishable range, not ${JSON.stringify(range)}.\n  crust build publishes the staged root package as written; workspace: and catalog: ranges are never rewritten.`,
 			);
 		}
 		ranges[name] = range;
@@ -408,6 +427,7 @@ function resolveDistributionMetadata(
 		rootPackageName: pkgJson.name,
 		version: pkgJson.version,
 		rootPackageJson: pickRootMetadata(pkgJson),
+		sourceType: pkgJson.type,
 		...(pkgJson.exports !== undefined ? { exports: pkgJson.exports } : {}),
 		...(pkgJson.peerDependencies !== undefined
 			? validatePeerDependencies(pkgJson.peerDependencies, pkgJson.peerDependenciesMeta)
@@ -738,7 +758,9 @@ export async function runDistributeBuild<T extends string>(
 	}
 	// After the copies so targets can be checked against the staged files, before
 	// compiling so a bad exports map fails without paying for the binaries.
-	if (metadata.exports !== undefined) validateStagedExports(metadata.exports, rootDir);
+	if (metadata.exports !== undefined) {
+		validateStagedExports(metadata.exports, rootDir, metadata.sourceType);
+	}
 
 	const rootBinDir = join(rootDir, "bin");
 	if (table) {

@@ -101,6 +101,80 @@ beforeAll(async () => {
 
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
+describe("carried CommonJS exports", () => {
+	it.each(["commonjs", undefined])(
+		"rejects an unscoped .js export with source type %s",
+		async (type) => {
+			const project = join(root, `commonjs-${type ?? "omitted"}`);
+			mkdirSync(join(project, "dist", "nested"), { recursive: true });
+			mkdirSync(join(project, "src"));
+			writeFileSync(join(project, "src", "cli.ts"), 'console.log("cli works");\n');
+			writeFileSync(
+				join(project, "dist", "nested", "index.js"),
+				"module.exports = { value: 1 };\n",
+			);
+			const pkg = {
+				name: "commonjs-cli",
+				version: "0.1.0",
+				type,
+				bin: { "commonjs-cli": "src/cli.ts" },
+				crust: { runtime: "node", include: ["dist"] },
+				exports: "./dist/nested/index.js",
+			};
+			writeFileSync(join(project, "package.json"), JSON.stringify(pkg));
+			const consume = 'import lib from "commonjs-cli"; console.log(lib.value);';
+			const before = await runProcess(nodePath!, ["--input-type=module", "-e", consume], {
+				cwd: project,
+			});
+			expect(before.exitCode, before.stderr).toBe(0);
+			expect(before.stdout.trim()).toBe("1");
+
+			await expect(build({ cwd: project, validate: false })).rejects.toThrow(
+				"would change module format",
+			);
+			expect(existsSync(join(project, ".crust", "manifest.json"))).toBe(false);
+			writeFileSync(
+				join(project, "dist", "index.d.ts"),
+				"declare const value: 1; export = value;\n",
+			);
+			writeFileSync(
+				join(project, "package.json"),
+				JSON.stringify({ ...pkg, exports: { types: "./dist/index.d.ts", default: pkg.exports } }),
+			);
+			await expect(build({ cwd: project, validate: false })).rejects.toThrow(
+				'target "./dist/index.d.ts"',
+			);
+
+			// An included package scope preserves CommonJS without changing the ESM CLI scope.
+			writeFileSync(join(project, "dist", "package.json"), JSON.stringify({ type: "commonjs" }));
+			await build({ cwd: project, validate: false });
+			const staged = join(project, ".crust", "root");
+			const after = await runProcess(nodePath!, ["--input-type=module", "-e", consume], {
+				cwd: staged,
+			});
+			expect(after.exitCode, after.stderr).toBe(0);
+			expect(after.stdout).toBe(before.stdout);
+			const cli = await runProcess(nodePath!, ["bin/commonjs-cli.js"], { cwd: staged });
+			expect(cli.exitCode, cli.stderr).toBe(0);
+			expect(cli.stdout.trim()).toBe("cli works");
+
+			// An explicit extension is the alternative when there is no nested package scope.
+			rmSync(join(project, "dist", "package.json"));
+			writeFileSync(join(project, "dist", "index.cjs"), "module.exports = { value: 1 };\n");
+			writeFileSync(
+				join(project, "package.json"),
+				JSON.stringify({ ...pkg, exports: "./dist/index.cjs" }),
+			);
+			await build({ cwd: project, validate: false });
+			const explicit = await runProcess(nodePath!, ["--input-type=module", "-e", consume], {
+				cwd: staged,
+			});
+			expect(explicit.exitCode, explicit.stderr).toBe(0);
+			expect(explicit.stdout).toBe(before.stdout);
+		},
+	);
+});
+
 describe("published @crustjs/crust library", () => {
 	it("stages the library entry and carries its exports into the root package", () => {
 		const staged = readJson<{ exports: unknown; files: string[]; peerDependencies: unknown }>(
