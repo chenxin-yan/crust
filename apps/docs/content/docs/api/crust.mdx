@@ -498,7 +498,7 @@ Conditional choices, primitive kinds, and occurrence layouts remain conservative
 
 A known literal contract accepts valid literals, choice unions, and honestly narrowed strings, not broad strings, wrong primitives, missing required inputs, invalid paths, or fresh-object typo keys. Standard TypeScript structural assignability allows predeclared objects to carry extra keys. Core rejects supplied unknown argument or flag keys before action.
 
-Structured input is a programmatic call: `run()` never reads `process.env`, so a flag's `env` fallback does not apply, and a `delimiter` never splits the supplied occurrence arrays. Only [`.execute()`](#executeoptions) argv parsing consults the environment.
+Structured input is a programmatic call: `run()` never reads `process.env`, so a flag's `env: { name, delimiter? }` fallback does not apply, and neither delimiter splits the supplied occurrence arrays. Only [`.execute()`](#executeoptions) argv parsing consults the environment.
 
 Keys with `undefined` values are treated as omitted. Assertions do not validate input. A genuinely dynamic `AnyCrust` view supports broad paths and structured input with `RunOutcome<unknown>`; it is a completed-app view, not authoring authority or an escape hatch for static callers.
 

@@ -73,15 +73,45 @@ function _localDefinitions(name: string, aliases: string[], choices: string[], v
 	defineArg(name, { type: "string", choices, default: value });
 }
 
-// `env` is accepted on every flag variant; `delimiter` only with `multiple: true`
+// Environment bindings work on every variant; either delimiter requires `multiple: true`.
 function _envAndDelimiter(schema: StandardSchema) {
-	defineFlag("token", { type: "string", env: "APP_TOKEN", required: true });
-	defineFlag("port", { type: "number", env: "APP_PORT", default: 3000 });
-	defineFlag("color", { type: "boolean", env: "APP_COLOR", noNegate: true });
-	defineFlag("port", { type: "string", schema, env: "APP_PORT" });
-	defineFlag("tags", { type: "string", multiple: true, env: "APP_TAGS", delimiter: "," });
+	defineFlag("token", { type: "string", env: { name: "APP_TOKEN" }, required: true });
+	defineFlag("port", { type: "number", env: { name: "APP_PORT" }, default: 3000 });
+	defineFlag("color", { type: "boolean", env: { name: "APP_COLOR" }, noNegate: true });
+	defineFlag("port", { type: "string", schema, env: { name: "APP_PORT" } });
+	defineFlag("tags", {
+		type: "string",
+		multiple: true,
+		env: { name: "APP_TAGS", delimiter: ":" },
+		delimiter: ",",
+	});
 	defineFlag("ports", { type: "number", multiple: true, delimiter: ":" });
-	defineFlag("tags", { type: "string", schema, multiple: true, delimiter: "," });
+	defineFlag("tags", {
+		type: "string",
+		schema,
+		multiple: true,
+		env: { name: "APP_TAGS", delimiter: "," },
+	});
+	defineFlag("enabled", {
+		type: "boolean",
+		schema,
+		multiple: true,
+		env: { name: "APP_ENABLED", delimiter: "," },
+	});
+	// @ts-expect-error -- an environment binding requires an explicit name
+	defineFlag("token", { type: "string", env: "APP_TOKEN" });
+	// @ts-expect-error -- the environment delimiter also requires multiple: true
+	defineFlag("tag", { type: "string", env: { name: "APP_TAGS", delimiter: "," } });
+	// @ts-expect-error -- schema-backed flags use the same occurrence restriction
+	defineFlag("tag", { type: "string", schema, env: { name: "APP_TAGS", delimiter: "," } });
+	// @ts-expect-error -- bindings require a name
+	defineFlag("tag", { type: "string", multiple: true, env: { delimiter: "," } });
+	// @ts-expect-error -- the restriction also applies at attachment
+	new Crust("cli").flags({
+		name: "tag",
+		type: "string",
+		env: { name: "APP_TAGS", delimiter: "," },
+	});
 	// @ts-expect-error -- delimiter requires multiple: true
 	defineFlag("tag", { type: "string", delimiter: "," });
 	// @ts-expect-error -- delimiter requires multiple: true on schema-backed flags too

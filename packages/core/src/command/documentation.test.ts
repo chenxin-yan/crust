@@ -37,19 +37,25 @@ describe("formatDescription", () => {
 });
 
 describe("buildCommandDocumentation", () => {
-	it("projects env and delimiter names onto flags", async () => {
+	it("projects env bindings and argv delimiters onto flags", async () => {
 		const model = await docs(
 			new Crust("app")
 				.flags(
-					{ name: "token", type: "string", env: "APP_TOKEN" },
-					{ name: "tags", type: "string", multiple: true, env: "APP_TAGS", delimiter: "," },
+					{ name: "token", type: "string", env: { name: "APP_TOKEN" } },
+					{
+						name: "tags",
+						type: "string",
+						multiple: true,
+						env: { name: "APP_TAGS", delimiter: ":" },
+						delimiter: ",",
+					},
 					{ name: "plain", type: "boolean" },
 				)
 				.action(() => {}),
 		);
 		expect(model.flags.map(({ name, env, delimiter }) => ({ name, env, delimiter }))).toEqual([
-			{ name: "token", env: "APP_TOKEN", delimiter: undefined },
-			{ name: "tags", env: "APP_TAGS", delimiter: "," },
+			{ name: "token", env: { name: "APP_TOKEN" }, delimiter: undefined },
+			{ name: "tags", env: { name: "APP_TAGS", delimiter: ":" }, delimiter: "," },
 			{ name: "plain", env: undefined, delimiter: undefined },
 		]);
 	});

@@ -105,9 +105,9 @@ export interface DocumentationFlag {
 	readonly choices?: readonly string[];
 	/** Default value used when the flag is omitted, e.g. `false`. */
 	readonly default?: unknown;
-	/** Environment variable name consulted when the flag is absent from argv; never its value. */
-	readonly env?: string;
-	/** Delimiter that splits argv/env values of a repeatable flag into occurrences. */
+	/** Declared environment binding; never contains the variable's value. */
+	readonly env?: FlagSnapshot["env"];
+	/** Delimiter that splits string argv values of a repeatable flag into occurrences. */
 	readonly delimiter?: string;
 }
 

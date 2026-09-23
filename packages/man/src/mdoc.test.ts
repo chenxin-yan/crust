@@ -319,7 +319,7 @@ describe("renderManPageMdoc", () => {
 
 	it("renders the flag `env` variable name after the description, never its value", async () => {
 		const app = new Crust("demo", { description: "Demo." })
-			.flags({ name: "token", type: "string", env: "HOME", description: "API token" })
+			.flags({ name: "token", type: "string", env: { name: "HOME" }, description: "API token" })
 			.action(() => {});
 
 		const root = await app.snapshot();

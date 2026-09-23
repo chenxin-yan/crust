@@ -129,7 +129,7 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 				flag.default,
 				flag.choices,
 				undefined,
-				flag.env,
+				flag.env?.name,
 			);
 			if (body) lines.push(body.split("\n").map(escapeMdocBodyLine).join("\n"));
 		}

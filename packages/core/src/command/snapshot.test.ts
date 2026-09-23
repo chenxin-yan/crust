@@ -102,24 +102,28 @@ describe("snapshotCommand", () => {
 		expect(() => structuredClone(snapshot)).not.toThrow();
 	});
 
-	it("carries env and delimiter names but never the environment value", () => {
+	it("owns frozen env bindings and independent delimiters without exposing environment values", () => {
 		const root = createCommandNode("cli");
-		registerFlag(root, "token", { type: "string", env: "HOME", required: true }, "local");
-		registerFlag(
-			root,
-			"tags",
-			{ type: "string", multiple: true, env: "CLI_TAGS", delimiter: "," },
-			"local",
-		);
+		registerFlag(root, "token", { type: "string", env: { name: "HOME" }, required: true }, "local");
+		const env = { name: "CLI_TAGS", delimiter: ":" };
+		Object.defineProperty(env, "name", { enumerable: false });
+		registerFlag(root, "tags", { type: "string", multiple: true, env, delimiter: "," }, "local");
+		env.name = "CHANGED";
+		env.delimiter = ";";
 		const snapshot = snapshotCommand(root);
 
 		expect(snapshot.flags.token).toEqual({
 			type: "string",
 			required: true,
 			negatable: false,
-			env: "HOME",
+			env: { name: "HOME" },
 		});
-		expect(snapshot.flags.tags).toMatchObject({ env: "CLI_TAGS", delimiter: "," });
+		expect(snapshot.flags.tags).toMatchObject({
+			env: { name: "CLI_TAGS", delimiter: ":" },
+			delimiter: ",",
+		});
+		expect(Object.isFrozen(snapshot.flags.tags?.env)).toBe(true);
+		expect(Object.isFrozen(root.effectiveFlags.tags?.env)).toBe(true);
 		// HOME is set in every test environment; the snapshot must not leak it.
 		expect(process.env.HOME).toBeTruthy();
 		expect(JSON.stringify(snapshot)).not.toContain(JSON.stringify(process.env.HOME));

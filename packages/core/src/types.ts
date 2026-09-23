@@ -267,20 +267,22 @@ interface FlagDefBase {
 	aliases?: readonly string[];
 	/** When `true`, the parser throws if the flag is not provided */
 	required?: true;
-	/**
-	 * Environment variable consulted by terminal parsing when the flag has no
-	 * argv occurrence: argv > `env` > `default`. The value enters the same
-	 * coercion, `choices`, `parse`, and schema path as an argv token, and it
-	 * satisfies `required`. Structured `run()` input never reads the environment.
-	 * Help and man pages show only the variable name.
-	 */
-	env?: string;
 	/** Not supported with core value options — see {@link SchemaStringFlagDef} */
 	schema?: never;
 }
 
+/** Environment fallback for terminal parsing; structured `run()` never reads it. */
+interface FlagEnvBinding {
+	/** Variable consulted only when argv omits the flag; help shows its name, never its value. */
+	name: string;
+	/** Split environment text into occurrences; independent of the argv delimiter, repeatable flags only. */
+	delimiter?: string;
+}
+
 /** Occurrence fields of a single-value flag — `multiple` and `delimiter` must be omitted. */
 interface SingleOccurrenceFields {
+	/** Environment fallback; argv wins over env, which wins over the default. */
+	env?: FlagEnvBinding & { delimiter?: never };
 	/** Must be omitted for single-value flags — set to `true` for multi-value */
 	multiple?: never;
 	/** Only repeatable flags split values — see {@link RepeatableOccurrenceFields} */
@@ -289,12 +291,14 @@ interface SingleOccurrenceFields {
 
 /** Occurrence fields of a repeatable flag — `multiple` is required as `true`. */
 interface RepeatableOccurrenceFields {
+	/** Environment fallback; text is one occurrence unless `env.delimiter` is set. */
+	env?: FlagEnvBinding;
 	/** Collect repeated values into an array */
 	multiple: true;
 	/**
-	 * Split each string argv or `env` value into separate occurrences
+	 * Split each string argv value into separate occurrences
 	 * (`--tags a,b` with `","` is two occurrences). Empty segments are dropped.
-	 * Boolean argv switches stay booleans; only their env text is split.
+	 * Boolean argv switches stay booleans. Environment text uses `env.delimiter`.
 	 * Opt-in with no default; structured `run()` arrays are never split.
 	 */
 	delimiter?: string;

@@ -891,7 +891,7 @@ describe("built-in extensions", () => {
 			.flags({
 				name: "token",
 				type: "string",
-				env: "HOME",
+				env: { name: "HOME" },
 				default: "anon",
 				description: "API token",
 			})

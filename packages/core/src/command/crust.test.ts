@@ -2868,9 +2868,22 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 		}
 	});
 
-	it("rejects empty env names and delimiters without multiple from dynamic defs", () => {
+	it("rejects invalid env bindings and delimiters from dynamic defs", () => {
 		const cases: [Record<string, ParsedFlagValue>, string][] = [
-			[{ name: "token", type: "string", env: "" }, "empty-env"],
+			[{ name: "token", type: "string", env: "TOKEN" }, "invalid-env"],
+			[{ name: "token", type: "string", env: null }, "invalid-env"],
+			[{ name: "token", type: "string", env: {} }, "invalid-env"],
+			[{ name: "token", type: "string", env: { name: 1 } }, "invalid-env"],
+			[{ name: "token", type: "string", env: { name: "TOKEN", delimiter: 1 } }, "invalid-env"],
+			[{ name: "token", type: "string", env: { name: "" } }, "empty-env"],
+			[
+				{ name: "tags", type: "string", env: { name: "TAGS", delimiter: "," } },
+				"delimiter-without-multiple",
+			],
+			[
+				{ name: "tags", type: "string", multiple: true, env: { name: "TAGS", delimiter: "" } },
+				"empty-delimiter",
+			],
 			[{ name: "tags", type: "string", delimiter: "," }, "delimiter-without-multiple"],
 			[{ name: "tags", type: "string", multiple: true, delimiter: "" }, "empty-delimiter"],
 		];
@@ -2886,7 +2899,13 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 		expect(() =>
 			new Crust("cli").flags(
 				...asDynamic([
-					{ name: "tags", type: "string", multiple: true, env: "TAGS", delimiter: "," },
+					{
+						name: "tags",
+						type: "string",
+						multiple: true,
+						env: { name: "TAGS", delimiter: ":" },
+						delimiter: ",",
+					},
 				]),
 			),
 		).not.toThrow();

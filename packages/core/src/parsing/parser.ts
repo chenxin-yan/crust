@@ -234,14 +234,17 @@ function splitOccurrences(values: readonly string[], delimiter: string | undefin
  * a `noNegate` flag rejects a false value like it rejects `--no-<name>`.
  */
 function envFlagValue(name: string, def: FlagDef, raw: string): ArgvFlagValue | undefined {
-	const occurrences = def.multiple ? splitOccurrences([raw], def.delimiter) : [raw];
+	const occurrences = def.multiple ? splitOccurrences([raw], def.env?.delimiter) : [raw];
 	if (def.multiple && occurrences.length === 0) return undefined;
 	if (def.type !== "boolean") {
 		return { kind: "string", value: def.multiple ? occurrences : raw };
 	}
 	const values = occurrences.map(coerceBooleanString);
 	if ("noNegate" in def && def.noNegate && values.includes(false)) {
-		throw new CrustError("PARSE", `Flag "--${name}" does not support negation (from ${def.env})`);
+		throw new CrustError(
+			"PARSE",
+			`Flag "--${name}" does not support negation (from ${def.env?.name})`,
+		);
 	}
 	// SAFETY: a single-value flag has exactly the one raw occurrence.
 	return { kind: "boolean", value: def.multiple ? values : values[0]! };
@@ -281,8 +284,8 @@ function applyEnvAndDelimiter(
 			}
 			continue;
 		}
-		if (def.env === undefined || !Object.hasOwn(env, def.env)) continue;
-		const raw = env[def.env];
+		if (def.env === undefined || !Object.hasOwn(env, def.env.name)) continue;
+		const raw = env[def.env.name];
 		if (raw !== undefined) values[name] = envFlagValue(name, def, raw);
 	}
 	return values;

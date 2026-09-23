@@ -69,12 +69,17 @@ const flags = {
 } satisfies FlagsDef;
 ```
 
-`env` names an environment variable that terminal parsing consults when the flag has no argv occurrence: argv wins over `env`, and `env` wins over `default`. The value enters the same conversion path as an argv token (`type`, `choices`, `parse`, or the schema) and satisfies `required`; help and man pages show `[env: NAME]` but never the value. `delimiter` is available only with `multiple: true` (a type error otherwise, and a `DEFINITION` error for dynamic definitions); it splits each string argv and environment value into occurrences and drops empty segments. Boolean argv switches already supply booleans and are not split; their environment text is. Structured [`run()`](/docs/api/crust#runpath-input-options) input reads neither.
+`env: { name, delimiter? }` declares an environment fallback that terminal parsing consults when the flag has no argv occurrence: argv wins over env, and env wins over `default`. After optional splitting, the value enters the same conversion path as an argv token (`type`, `choices`, `parse`, or the schema) and satisfies `required`; help and man pages show `[env: NAME]` but never the value. Flag-level `delimiter` splits string argv occurrences; `env.delimiter` independently splits environment text. Both require `multiple: true` (a type error otherwise, and a `DEFINITION` error for dynamic definitions), use nonempty literal separators, and drop empty segments. Neither delimiter is inherited by the other source. Boolean argv switches already supply booleans and are not split; use `env.delimiter` to split repeated boolean environment text. Environment names must be nonempty, and a bare string `env` is not accepted. Structured [`run()`](/docs/api/crust#runpath-input-options) input consults neither setting.
 
 ```ts
 const flags = {
-  token: { type: "string", env: "MYAPP_TOKEN", required: true },
-  tags: { type: "string", multiple: true, env: "MYAPP_TAGS", delimiter: "," },
+  token: { type: "string", env: { name: "MYAPP_TOKEN" }, required: true },
+  tags: {
+    type: "string",
+    multiple: true,
+    delimiter: ",",
+    env: { name: "MYAPP_TAGS", delimiter: ":" },
+  },
 } satisfies FlagsDef;
 ```
 
@@ -168,7 +173,7 @@ Command Snapshots are readonly, serializable descriptions. They omit Command Act
 
 <auto-type-table path="../../../../../packages/core/src/command/snapshot.ts" name="FlagSnapshot" />
 
-Snapshots omit schemas and parse functions. Every flag snapshot includes `negatable`, derived from the parser's spelling policy. `URL` defaults become strings, and array defaults are recursively copied and frozen. `env` and `delimiter` are the declared names only; a snapshot never contains an environment value.
+Snapshots omit schemas and parse functions. Every flag snapshot includes `negatable`, derived from the parser's spelling policy. `URL` defaults become strings, and array defaults are recursively copied and frozen. `env` is a copied, frozen binding containing only the declared variable `name` and optional environment `delimiter`; the flag's own `delimiter` describes argv splitting. A snapshot never contains an environment value.
 
 Object-valued JSON defaults, including objects inside arrays, remain shared references; treat them as immutable.
 
