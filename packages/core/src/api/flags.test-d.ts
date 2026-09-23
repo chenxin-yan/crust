@@ -1,4 +1,6 @@
 /* oxlint-disable anti-slop/no-unknown-returns, anti-slop/no-known-value-widening -- compile-only probes deliberately expose unproven parser contracts. */
+import type { StandardSchema } from "@crustjs/utils/schema";
+
 import { Crust, defineCommand } from "../command/crust.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { ArgsDef, FlagsDef, NamedFlagDef } from "../types.ts";
@@ -69,6 +71,64 @@ function _localDefinitions(name: string, aliases: string[], choices: string[], v
 	// @ts-expect-error -- literal membership is owned by the helper
 	defineArg("mode", { type: "string", choices: ["a"], default: "b" });
 	defineArg(name, { type: "string", choices, default: value });
+}
+
+// Environment bindings work on every variant; either delimiter requires `multiple: true`.
+function _envAndDelimiter(schema: StandardSchema) {
+	defineFlag("token", { type: "string", env: { name: "APP_TOKEN" }, required: true });
+	defineFlag("port", { type: "number", env: { name: "APP_PORT" }, default: 3000 });
+	defineFlag("color", { type: "boolean", env: { name: "APP_COLOR" }, noNegate: true });
+	defineFlag("port", { type: "string", schema, env: { name: "APP_PORT" } });
+	defineFlag("tags", {
+		type: "string",
+		multiple: true,
+		env: { name: "APP_TAGS", delimiter: ":" },
+		delimiter: ",",
+	});
+	defineFlag("ports", { type: "number", multiple: true, delimiter: ":" });
+	defineFlag("tags", {
+		type: "string",
+		schema,
+		multiple: true,
+		env: { name: "APP_TAGS", delimiter: "," },
+	});
+	defineFlag("enabled", {
+		type: "boolean",
+		schema,
+		multiple: true,
+		env: { name: "APP_ENABLED", delimiter: "," },
+	});
+	// @ts-expect-error -- an environment binding requires an explicit name
+	defineFlag("token", { type: "string", env: "APP_TOKEN" });
+	// @ts-expect-error -- the environment delimiter also requires multiple: true
+	defineFlag("tag", { type: "string", env: { name: "APP_TAGS", delimiter: "," } });
+	// @ts-expect-error -- schema-backed flags use the same occurrence restriction
+	defineFlag("tag", { type: "string", schema, env: { name: "APP_TAGS", delimiter: "," } });
+	// @ts-expect-error -- bindings require a name
+	defineFlag("tag", { type: "string", multiple: true, env: { delimiter: "," } });
+	// @ts-expect-error -- the restriction also applies at attachment
+	new Crust("cli").flags({
+		name: "tag",
+		type: "string",
+		env: { name: "APP_TAGS", delimiter: "," },
+	});
+	// @ts-expect-error -- delimiter requires multiple: true
+	defineFlag("tag", { type: "string", delimiter: "," });
+	// @ts-expect-error -- delimiter requires multiple: true on schema-backed flags too
+	defineFlag("tag", { type: "string", schema, delimiter: "," });
+	// @ts-expect-error -- delimiter requires multiple: true
+	new Crust("cli").flags({ name: "tag", type: "string", delimiter: "," });
+}
+
+function _ownedEnvBinding() {
+	const env = { name: "APP_TAGS", delimiter: "," };
+	const flag = defineFlag("tags", { type: "string", multiple: true, env });
+	// @ts-expect-error -- owned environment names are frozen even for predeclared bindings
+	flag.env.name = "OTHER";
+	// @ts-expect-error -- owned environment delimiters are frozen too
+	flag.env.delimiter = ":";
+	env.name = "OTHER";
+	env.delimiter = ":";
 }
 
 function _attachments(flags: NamedFlagDef[], args: ArgsDef, aliases: string[], cond: boolean) {

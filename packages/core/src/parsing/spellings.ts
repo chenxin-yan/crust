@@ -93,10 +93,26 @@ export function ownDefinition<const D extends ArgDef | FlagDef>(def: D): D {
 		...def,
 		...("aliases" in def && def.aliases ? { aliases: Object.freeze([...def.aliases]) } : {}),
 		...(def.choices ? { choices: Object.freeze([...def.choices]) } : {}),
+		...("env" in def && def.env
+			? { env: Object.freeze({ name: def.env.name, delimiter: def.env.delimiter }) }
+			: {}),
 		...("multiple" in def && def.multiple && Array.isArray(def.default)
 			? { default: Object.freeze([...def.default]) }
 			: {}),
 	});
+}
+
+function isEnvBinding(value: unknown): value is NonNullable<FlagDef["env"]> {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		!Array.isArray(value) &&
+		"name" in value &&
+		typeof value.name === "string" &&
+		(!("delimiter" in value) ||
+			value.delimiter === undefined ||
+			typeof value.delimiter === "string")
+	);
 }
 
 export function normalizeFlag<const D extends FlagDef>(name: string, def: D): D {
@@ -113,6 +129,44 @@ export function normalizeFlag<const D extends FlagDef>(name: string, def: D): D 
 	}
 	if (def.short !== undefined && def.short.length !== 1) {
 		throw new CrustError("DEFINITION", "Short flags must be one character");
+	}
+	if (def.env !== undefined && !isEnvBinding(def.env)) {
+		throw new CrustError(
+			"DEFINITION",
+			`Flag "${name}" env must be an object with a string name and optional string delimiter`,
+			{
+				subject: "flag",
+				name,
+				reason: "invalid-env",
+			},
+		);
+	}
+	if (def.env?.name === "") {
+		throw new CrustError("DEFINITION", `Flag "${name}" env variable name must be non-empty`, {
+			subject: "flag",
+			name,
+			reason: "empty-env",
+		});
+	}
+	for (const [field, delimiter] of [
+		["delimiter", def.delimiter],
+		["env.delimiter", def.env?.delimiter],
+	] as const) {
+		if (delimiter === undefined) continue;
+		if (!def.multiple) {
+			throw new CrustError("DEFINITION", `Flag "${name}" ${field} requires multiple: true`, {
+				subject: "flag",
+				name,
+				reason: "delimiter-without-multiple",
+			});
+		}
+		if (delimiter === "") {
+			throw new CrustError("DEFINITION", `Flag "${name}" ${field} must be non-empty`, {
+				subject: "flag",
+				name,
+				reason: "empty-delimiter",
+			});
+		}
 	}
 	return ownDefinition(def);
 }

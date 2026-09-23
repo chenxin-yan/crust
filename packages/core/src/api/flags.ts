@@ -14,6 +14,7 @@ type Frozen<T> = {
 	readonly [K in keyof T]: K extends
 		| "aliases"
 		| "choices"
+		| "env"
 		| (T extends { multiple: true } ? "default" : never)
 		? Readonly<T[K]>
 		: T[K];
@@ -22,7 +23,7 @@ type Frozen<T> = {
 // Preserve conditional fields before mapping the normalized readonly definition.
 type Named<N extends string, D> = D extends unknown ? Frozen<{ name: N } & D> : never;
 
-/** Define and own one flag locally; attachment checks destination collisions. */
+/** Define and own one flag locally, including its readonly env binding; attachment checks destination collisions. */
 export function defineFlag<const N extends string, const D extends FlagDef>(
 	name: N & LocalFlagNameBrand<N>,
 	def: D & LocalFlagBrand<{ name: N } & D>,

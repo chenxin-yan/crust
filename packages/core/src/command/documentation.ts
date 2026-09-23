@@ -13,14 +13,19 @@ export function formatDefault(value: DeclaredDefault): string {
 	return JSON.stringify(value) ?? String(value);
 }
 
-/** Format a definition's description and optional default/choice annotations. */
+/**
+ * Format a definition's description and optional env/default/choice annotations.
+ * `env` is the variable *name* only; renderers never see its value.
+ */
 export function formatDescription(
 	description: string | undefined,
 	defaultValue: DeclaredDefault,
 	choices: readonly string[] | undefined,
 	formatAnnotation: (annotation: string) => string = (annotation) => annotation,
+	env?: string,
 ): string {
 	const parts = description ? [description] : [];
+	if (env !== undefined) parts.push(formatAnnotation(`[env: ${env}]`));
 	if (defaultValue !== undefined) {
 		parts.push(formatAnnotation(`[default: ${formatDefault(defaultValue)}]`));
 	}
@@ -100,6 +105,10 @@ export interface DocumentationFlag {
 	readonly choices?: readonly string[];
 	/** Default value used when the flag is omitted, e.g. `false`. */
 	readonly default?: unknown;
+	/** Declared environment binding; never contains the variable's value. */
+	readonly env?: FlagSnapshot["env"];
+	/** Delimiter that splits string argv values of a repeatable flag into occurrences. */
+	readonly delimiter?: string;
 }
 
 /**
@@ -172,6 +181,8 @@ function documentationFlags(flags: CommandSnapshot["flags"]): readonly Documenta
 			multiple: def.multiple === true,
 			choices: def.choices,
 			default: def.default,
+			env: def.env,
+			delimiter: def.delimiter,
 		});
 	});
 }

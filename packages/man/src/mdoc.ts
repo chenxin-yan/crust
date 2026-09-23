@@ -124,7 +124,13 @@ export function renderManPageMdoc(options: RenderManPageMdocOptions): string {
 		);
 		for (const flag of [...model.flags].sort((a, b) => a.name.localeCompare(b.name))) {
 			lines.push(`.It ${flagMacros(flag)}`);
-			const body = formatDescription(flag.description, flag.default, flag.choices);
+			const body = formatDescription(
+				flag.description,
+				flag.default,
+				flag.choices,
+				undefined,
+				flag.env?.name,
+			);
 			if (body) lines.push(body.split("\n").map(escapeMdocBodyLine).join("\n"));
 		}
 		lines.push(".El");

@@ -22,9 +22,44 @@ describe("formatDescription", () => {
 			'Output <[default: "json"]>',
 		);
 	});
+
+	it("renders the env variable name directly after the description", () => {
+		expect(formatDescription("Token", undefined, undefined, undefined, "APP_TOKEN")).toBe(
+			"Token [env: APP_TOKEN]",
+		);
+		expect(formatDescription("Mode", "dev", ["dev", "prod"], (t) => `<${t}>`, "APP_MODE")).toBe(
+			'Mode <[env: APP_MODE]> <[default: "dev"]> <[choices: dev, prod]>',
+		);
+		expect(formatDescription(undefined, undefined, undefined, undefined, "APP_TOKEN")).toBe(
+			"[env: APP_TOKEN]",
+		);
+	});
 });
 
 describe("buildCommandDocumentation", () => {
+	it("projects env bindings and argv delimiters onto flags", async () => {
+		const model = await docs(
+			new Crust("app")
+				.flags(
+					{ name: "token", type: "string", env: { name: "APP_TOKEN" } },
+					{
+						name: "tags",
+						type: "string",
+						multiple: true,
+						env: { name: "APP_TAGS", delimiter: ":" },
+						delimiter: ",",
+					},
+					{ name: "plain", type: "boolean" },
+				)
+				.action(() => {}),
+		);
+		expect(model.flags.map(({ name, env, delimiter }) => ({ name, env, delimiter }))).toEqual([
+			{ name: "token", env: { name: "APP_TOKEN" }, delimiter: undefined },
+			{ name: "tags", env: { name: "APP_TAGS", delimiter: ":" }, delimiter: "," },
+			{ name: "plain", env: undefined, delimiter: undefined },
+		]);
+	});
+
 	it("builds usage and arg tokens", async () => {
 		const model = await docs(
 			new Crust("app")

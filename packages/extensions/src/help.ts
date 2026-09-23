@@ -45,7 +45,7 @@ function formatFlagsSection(flags: readonly DocumentationFlag[]): string[] {
 	for (const flag of flags) {
 		const rendered = `${padEnd(cyan(flag.spellings.join(", ")), FLAG_COLUMN_WIDTH, " ")} `;
 		lines.push(
-			`  ${rendered}${formatDescription(flag.description, flag.default, flag.choices, dim)}`.trimEnd(),
+			`  ${rendered}${formatDescription(flag.description, flag.default, flag.choices, dim, flag.env?.name)}`.trimEnd(),
 		);
 	}
 	return lines;

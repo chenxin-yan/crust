@@ -317,6 +317,20 @@ describe("renderManPageMdoc", () => {
 		expect(mdoc).toContain("Build target [choices: browser, bun, node]");
 	});
 
+	it("renders the flag `env` variable name after the description, never its value", async () => {
+		const app = new Crust("demo", { description: "Demo." })
+			.flags({ name: "token", type: "string", env: { name: "HOME" }, description: "API token" })
+			.action(() => {});
+
+		const root = await app.snapshot();
+		const mdoc = renderManPageMdoc({ root, name: "demo", section: 1 });
+
+		expect(mdoc).toContain("API token [env: HOME]");
+		// HOME is set in every test environment; the page must show the name only.
+		expect(process.env.HOME).toBeTruthy();
+		expect(mdoc).not.toContain(process.env.HOME as string);
+	});
+
 	it("renders positional-arg `choices` in the ARGUMENTS section", async () => {
 		const app = new Crust("demo", { description: "Demo." })
 			.args({

@@ -271,19 +271,46 @@ interface FlagDefBase {
 	schema?: never;
 }
 
+/** Environment fallback for terminal parsing; structured `run()` never reads it. */
+interface FlagEnvBinding {
+	/** Variable consulted only when argv omits the flag; help shows its name, never its value. */
+	name: string;
+	/** Split environment text into occurrences; independent of the argv delimiter, repeatable flags only. */
+	delimiter?: string;
+}
+
+/** Occurrence fields of a single-value flag — `multiple` and `delimiter` must be omitted. */
+interface SingleOccurrenceFields {
+	/** Environment fallback; argv wins over env, which wins over the default. */
+	env?: FlagEnvBinding & { delimiter?: never };
+	/** Must be omitted for single-value flags — set to `true` for multi-value */
+	multiple?: never;
+	/** Only repeatable flags split values — see {@link RepeatableOccurrenceFields} */
+	delimiter?: never;
+}
+
+/** Occurrence fields of a repeatable flag — `multiple` is required as `true`. */
+interface RepeatableOccurrenceFields {
+	/** Environment fallback; text is one occurrence unless `env.delimiter` is set. */
+	env?: FlagEnvBinding;
+	/** Collect repeated values into an array */
+	multiple: true;
+	/**
+	 * Split each string argv value into separate occurrences
+	 * (`--tags a,b` with `","` is two occurrences). Empty segments are dropped.
+	 * Boolean argv switches stay booleans. Environment text uses `env.delimiter`.
+	 * Opt-in with no default; structured `run()` arrays are never split.
+	 */
+	delimiter?: string;
+}
+
 // ── Core-value flags ─────────────────────────────────────────────────────
 
 /** Base for single-value flags — `multiple` must be omitted */
-interface SingleFlagBase extends FlagDefBase {
-	/** Must be omitted for single-value flags — set to `true` for multi-value */
-	multiple?: never;
-}
+interface SingleFlagBase extends FlagDefBase, SingleOccurrenceFields {}
 
 /** Base for multi-value flags — `multiple` is required as `true` */
-interface MultiFlagBase extends FlagDefBase {
-	/** Collect repeated values into an array */
-	multiple: true;
-}
+interface MultiFlagBase extends FlagDefBase, RepeatableOccurrenceFields {}
 
 type StringFlagFields<Default, ParseOutput> = {
 	/** Default string value, or string array for a multi-value flag. */
@@ -348,24 +375,20 @@ interface SchemaFlagBase extends Omit<FlagDefBase, "schema" | "required"> {
  * `string[] | undefined` with `multiple: true`) and exclusively owns coercion,
  * defaults, requiredness, and validation. `type` declares token consumption only.
  */
-interface SchemaStringFlagDef extends SchemaFlagBase {
+type SchemaStringFlagDef = SchemaFlagBase & {
 	type: "string";
-	/** When `true`, the schema receives `string[]` when present, or `undefined` when omitted. */
-	multiple?: true;
 	noNegate?: never;
-}
+} & (SingleOccurrenceFields | RepeatableOccurrenceFields);
 
 /**
  * A schema-backed toggle flag (no value token). The schema receives the raw
  * `boolean | undefined` (or `boolean[] | undefined` with `multiple: true`).
  */
-interface SchemaBooleanFlagDef extends SchemaFlagBase {
+type SchemaBooleanFlagDef = SchemaFlagBase & {
 	type: "boolean";
-	/** When `true`, the schema receives `boolean[]` when present, or `undefined` when omitted. */
-	multiple?: true;
 	/** When `true`, reject `--no-{name}` (and negated aliases) at parse time and hide the generated help label */
 	noNegate?: true;
-}
+} & (SingleOccurrenceFields | RepeatableOccurrenceFields);
 
 /**
  * Defines a single named flag for a CLI command.

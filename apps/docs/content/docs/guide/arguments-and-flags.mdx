@@ -165,6 +165,36 @@ $ echo $?
 1
 ```
 
+### Environment variables
+
+<include lang="ts" meta='title="src/publish.ts"'>
+  ../../../examples/guide/flags-env.ts
+</include>
+
+Set `env: { name: "VARIABLE" }` to read a flag from that environment variable when it is absent from argv. Precedence is argv, then env, then `default`; an environment value also satisfies `required`. Environment bindings are declarations: variables are read during terminal invocation, not when defining the flag.
+
+```sh
+$ PUBLISH_TOKEN=example publish
+publishing to npm tags=undefined
+$ PUBLISH_TOKEN=example PUBLISH_REGISTRY=github publish --registry jsr
+publishing to jsr tags=undefined
+```
+
+After its own optional splitting, the environment value enters the same conversion and validation path as argv, so `type` conversion, `choices`, `parse`, and schemas apply unchanged. Boolean flags accept `true` or `1` as true; any other value is false, and a `noNegate` flag rejects a false value the way it rejects `--no-<name>`.
+
+The two delimiters are independent: flag-level `delimiter` splits string argv occurrences, while `env.delimiter` splits environment text. Both require `multiple: true`, use nonempty literal separators, and drop empty segments. Neither inherits the other's setting; without `env.delimiter`, the entire environment value is one occurrence. Boolean argv switches remain `--flag` / `--no-flag` (not `--flag=true,false`); repeated booleans can use `env: { name: "FEATURES", delimiter: "," }` for environment text such as `true,false`.
+
+The example above uses commas on argv and colons in `PUBLISH_TAGS`:
+
+```sh
+$ PUBLISH_TOKEN=example PUBLISH_TAGS=latest::beta publish
+publishing to npm tags=latest,beta
+$ PUBLISH_TOKEN=example publish --tag latest,beta --tag next
+publishing to npm tags=latest,beta,next
+```
+
+An explicit argv occurrence always wins over the environment, even when it splits to zero occurrences. Invalid argv values fail rather than trying env; invalid environment values fail rather than trying the default. Zero occurrences after splitting follow the existing default/required or schema rules. Help and man pages list the variable as `[env: PUBLISH_TOKEN]` and never print its value. Programmatic [`run()`](/docs/api/crust#runpath-input-options) binds structured input directly: it does not read the environment and never splits arrays. Positional arguments have no `env`; use a flag.
+
 ### Values that start with `-`
 
 For a value-taking flag, attach a dash-leading value with `=` so it is not mistaken for another flag:
