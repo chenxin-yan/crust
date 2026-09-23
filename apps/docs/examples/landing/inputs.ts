@@ -1,15 +1,11 @@
 import { Crust } from "@crustjs/core";
 
 const convert = new Crust("convert")
-	// A missing input fails before the action runs
+	// [!code highlight:2]
 	.args({ name: "input", type: "string", required: true })
-	.flags({
-		name: "format",
-		type: "string",
-		default: "html",
-	})
+	.flags({ name: "to", type: "string", default: "html" })
 	.action(({ args, flags, stdout }) => {
-		stdout(`Converting ${args.input} as ${flags.format}`);
+		stdout(`Converting ${args.input} as ${flags.to}`);
 	});
 
 await convert.execute();

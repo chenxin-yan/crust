@@ -1,26 +1,23 @@
 import { Crust, defineContext } from "@crustjs/core";
 
-const database = defineContext(
-	"database",
-	({ stdout, defer }) => {
-		stdout("database opened");
-		// Runs after the action, even when it throws
-		defer(() => stdout("database closed"));
-		return { query: (sql: string) => `${sql}: ok` };
-	},
-);
+const db = defineContext("db", ({ stdout, defer }) => {
+	stdout("db opened");
+	// [!code highlight]
+	defer(() => stdout("db closed"));
+	return { query: (sql: string) => `${sql}: ok` };
+});
 
 const work = new Crust("work")
-	// Opened on first read, once per invocation
-	.provide(database())
+	// [!code highlight]
+	.provide(db())
 	.command("query", (command) =>
 		command.action(async ({ ctx, stdout }) => {
-			stdout((await ctx.database).query("select 1"));
+			stdout((await ctx.db).query("select 1"));
 		}),
 	)
 	.command("fail", (command) =>
 		command.action(async ({ ctx }) => {
-			await ctx.database;
+			await ctx.db;
 			throw new Error("query failed");
 		}),
 	);

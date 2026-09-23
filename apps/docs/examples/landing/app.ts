@@ -12,6 +12,7 @@ const app = new Crust("my-cli", {
 	description: "Manage deployments",
 	version: "1.2.3",
 })
+	// [!code highlight:2]
 	.extend(help()) // --help for humans
 	.extend(skill({})) // SKILL.md for agents
 	.add(deploy);

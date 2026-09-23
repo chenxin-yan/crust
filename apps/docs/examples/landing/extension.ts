@@ -6,9 +6,10 @@ import {
 
 const id = defineExtensionId("acme:preview");
 const preview = defineExtension(id, {
+	// [!code highlight]
 	flags: [{ name: "preview", type: "boolean" }],
 	hooks: {
-		// Runs before the action; finish() skips it
+		// [!code highlight]
 		preRun(ctx) {
 			if (ctx.flags.preview !== true) return;
 			ctx.stdout("nothing changed");
@@ -18,6 +19,7 @@ const preview = defineExtension(id, {
 });
 
 const deploy = new Crust("deploy")
+	// [!code highlight]
 	.extend(preview)
 	.action(({ stdout }) => stdout("deployed"));
 

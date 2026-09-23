@@ -5,6 +5,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { transformerNotationHighlight } from "@shikijs/transformers";
 import { transformerTwoslash } from "fumadocs-twoslash";
 import type { Root } from "hast";
 import { createHighlighterCore } from "shiki/core";
@@ -30,9 +31,9 @@ const HOVER = new Set([
 	"port",
 	"Port",
 	"input",
-	"format",
+	"to",
 	"ctx",
-	"database",
+	"db",
 	"captured",
 	"exitCode",
 	"stderr",
@@ -59,6 +60,8 @@ for (const [key, file] of Object.entries(SOURCES)) {
 		themes: { light: "gruvbox-light-hard", dark: "gruvbox-dark-hard" },
 		defaultColor: false,
 		transformers: [
+			// `// [!code highlight:N]` marker lines are removed and the next N lines get `.highlighted`.
+			transformerNotationHighlight(),
 			transformerTwoslash({
 				explicitTrigger: false,
 				twoslashOptions: { cwd: docsRoot, shouldGetHoverInfo: (id) => HOVER.has(id) },

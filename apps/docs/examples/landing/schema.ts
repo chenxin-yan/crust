@@ -1,15 +1,14 @@
 import { Crust } from "@crustjs/core";
 import { z } from "zod";
 
-// Any Standard Schema library works
+// [!code highlight]
 const Port = z.coerce.number().max(65535).default(3000);
 
 const serve = new Crust("serve")
-	// The schema owns parsing, defaults, and validation
+	// [!code highlight]
 	.args({ name: "port", schema: Port })
 	.action(({ args, stdout }) => {
-		const port = args.port;
-		stdout(`listening on port ${port}`);
+		stdout(`listening on port ${args.port}`);
 	});
 
 await serve.execute();

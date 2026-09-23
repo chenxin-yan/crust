@@ -3,21 +3,18 @@ import { input } from "@crustjs/prompts";
 import { captureExecute } from "@crustjs/testing";
 import { runInteractive } from "@crustjs/testing/interactive";
 
-const app = new Crust("my-cli").command(
-	"greet",
-	(command) =>
-		command.action(async ({ stdout }) => {
-			const name = await input({ message: "Name?" });
-			stdout(`Hello, ${name}`);
-		}),
+const app = new Crust("cli").command("greet", (command) =>
+	command.action(async ({ stdout }) => {
+		stdout(`Hello, ${await input({ message: "Name?" })}`);
+	}),
 );
 
-// Runs argv in-process and captures the result
+// [!code highlight]
 const captured = await captureExecute(app, ["unknown"]);
 console.log(captured.exitCode);
 console.log(captured.stderr);
 
-// Drives prompts on a fake terminal
+// [!code highlight]
 const run = runInteractive(app, ["greet"]);
 await run.waitFor(/Name/);
 run.type("Ada");

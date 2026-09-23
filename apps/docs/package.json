@@ -46,6 +46,7 @@
     "@crustjs/style": "workspace:*",
     "@crustjs/testing": "workspace:*",
     "@crustjs/tui": "workspace:*",
+    "@shikijs/transformers": "4.4.3",
     "@tailwindcss/vite": "^4.3.3",
     "@types/mdx": "^2.0.14",
     "@types/node": "^24.13.3",

@@ -485,11 +485,12 @@ function FurnaceHome() {
           flex-shrink: 0;
         }
         .fn-code-body {
-          padding: 12px 16px 12px 0;
+          padding: 12px 10px 12px 0; /* Fira Code is 0.615em/col: the 59-col line needs 436px of the 484px pane */
           font-family: 'Fira Code', monospace;
           font-size: 12px;
           line-height: 1.65;
           overflow-x: auto;
+          scrollbar-width: none;
           overflow-y: hidden;
           flex: 1;
           display: flex;
@@ -523,7 +524,7 @@ function FurnaceHome() {
           display: inline-block;
           width: 20px;
           text-align: right;
-          margin-right: 12px;
+          margin-right: 8px;
           color: var(--fn-dim);
           opacity: 0.5;
           font-size: 11px;

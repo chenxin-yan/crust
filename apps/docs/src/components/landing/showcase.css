@@ -3,12 +3,12 @@
 	position: relative;
 	z-index: 2;
 	display: grid;
-	grid-template-columns: 180px 1fr;
-	gap: 24px;
+	grid-template-columns: 170px 1fr;
+	gap: 20px;
 	align-items: start;
 	max-width: 1100px; /* same container as the hero and Modules */
 	margin: 0 auto;
-	padding: 0 40px 96px;
+	padding: 16px 40px 96px; /* with the hero's 80px this matches the 96px before Modules */
 	color: var(--fn-primary);
 	font-family: "Saira", sans-serif;
 }
@@ -23,6 +23,7 @@
 .fn-showcase-head {
 	position: sticky;
 	top: calc(56px + 40vh - 60px); /* fumadocs header + roughly eye level */
+	margin-top: 120px; /* on first view the label sits at the first panel's middle, not its top edge */
 	padding-left: 16px;
 }
 .fn-showcase-title {
@@ -99,8 +100,8 @@
 /* Panel: the hero's code panel with the terminal beside it, sized to its content. */
 .fn-showcase-panel {
 	display: grid;
-	/* 816px panel at 11px mono → 460 | 355: the 62-column snippet fits the code pane and the default
-	   `$ bun run …` lines fit the terminal; only the longest `$ deno run -A …` line wraps. */
+	/* Fira Code is 0.615em per column. 830px panel → 468 | 360: the 62-col import needs 420px + 36px
+	   gutter and padding; the terminal fits 49 columns, so only the schema error line wraps. */
 	grid-template-columns: 1.3fr 1fr;
 	background: var(--fn-surface);
 	border: 1px solid var(--fn-border);
@@ -154,9 +155,14 @@
 		11px/1.65 "Fira Code",
 		monospace;
 	overflow-x: auto;
+	scrollbar-width: none; /* lines are sized to fit; if a viewport still clips one, scroll without chrome */
+}
+.fn-showcase-body::-webkit-scrollbar {
+	display: none;
 }
 .fn-showcase-shiki {
 	padding-left: 0; /* line numbers provide the gutter, as in the hero */
+	padding-right: 8px;
 }
 
 .fn-showcase-lines {
@@ -206,13 +212,27 @@
 .fn-showcase-shiki .shiki code .line {
 	display: block;
 }
+/* `// [!code highlight]` lines: where to look first. Overrides fumadocs-ui's global .highlighted. */
+.fn-showcase-shiki .shiki code .line.highlighted {
+	margin-right: -8px; /* run the tint to the pane edge */
+	padding-right: 8px;
+	background-color: color-mix(in srgb, var(--fn-molten) 9%, transparent);
+	box-shadow: inset 2px 0 0 var(--fn-molten);
+}
+.fn-showcase-shiki .shiki code .line.highlighted::after {
+	content: none;
+}
+.fn-showcase-shiki .shiki code .line.highlighted::before {
+	opacity: 1;
+	color: var(--fn-molten);
+}
 .fn-showcase-shiki .shiki code .line::before {
 	counter-increment: line;
 	content: counter(line);
 	display: inline-block;
-	width: 26px;
+	width: 22px;
 	text-align: right;
-	margin-right: 8px;
+	margin-right: 6px;
 	color: var(--fn-dim);
 	opacity: 0.5;
 	font-size: 10px;
@@ -237,7 +257,7 @@
 	.fn-showcase-head {
 		top: 56px;
 		z-index: 3;
-		margin-bottom: 24px;
+		margin: 0 0 24px;
 		padding: 16px 0 12px;
 		background: var(--fn-bg);
 		border-bottom: 1px solid var(--fn-border);
