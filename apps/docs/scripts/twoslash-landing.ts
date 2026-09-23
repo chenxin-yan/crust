@@ -1,5 +1,6 @@
-// Precomputes Twoslash-annotated Shiki hast for the landing playground snippets.
-// Runs under Node: typescript@7's sync API needs Node's child_process internals.
+// Precomputes Twoslash-annotated Shiki hast for the landing showcase snippets.
+// Runs under Node (≥22.18, which strips types natively): typescript@7's sync API needs Node's
+// child_process internals, so Bun cannot run it.
 //   bun run twoslash:landing
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";

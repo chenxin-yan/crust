@@ -8,7 +8,7 @@
     "build": "vp build",
     "preview": "vp preview",
     "check:types": "fumadocs-mdx && tsc --noEmit",
-    "twoslash:landing": "node --experimental-strip-types scripts/twoslash-landing.ts",
+    "twoslash:landing": "node scripts/twoslash-landing.ts",
     "test": "vp test",
     "postinstall": "fumadocs-mdx",
     "deploy": "pnpm run build && wrangler deploy",

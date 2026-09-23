@@ -36,7 +36,7 @@ jobs:
         with:
           install_args: bun node pnpm
 
-      # The landing Twoslash generator runs under Node (typescript@7's sync API needs it)
+      # The landing Twoslash generator runs under Node (typescript@7's sync API needs it; ≥22.18 strips types natively)
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
