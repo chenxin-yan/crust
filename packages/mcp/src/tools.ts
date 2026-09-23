@@ -84,11 +84,13 @@ function formatPath(path: readonly string[]): string {
 type ToolInput = Pick<McpTool, "inputSchema" | "urlFields" | "argNames">;
 
 function toolInput(command: CommandSnapshot, path: readonly string[]): ToolInput {
-	const properties: Record<string, McpPropertySchema> = {};
+	// Null prototype: core allows definitions named `constructor` or `__proto__`,
+	// which `in` and plain assignment would confuse with Object.prototype.
+	const properties: Record<string, McpPropertySchema> = Object.create(null);
 	const required: string[] = [];
 	const urlFields: string[] = [];
 	const claim = (name: string, def: ArgSnapshot | FlagSnapshot, list: boolean) => {
-		if (name in properties || name === RAW_PROPERTY) {
+		if (Object.hasOwn(properties, name) || name === RAW_PROPERTY) {
 			throw new Error(
 				`Command "${formatPath(path)}" declares "${name}" more than once across args, flags, and "${RAW_PROPERTY}"; MCP tool input is one flat object`,
 			);

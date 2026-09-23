@@ -5,6 +5,7 @@ import {
 	Crust,
 	CrustError,
 	defineCommand,
+	defineContext,
 	defineExtension,
 	defineExtensionId,
 	type RunOutcome,
@@ -217,6 +218,79 @@ describe("createMcpServer", () => {
 		expect(result.content).toEqual([{ type: "text", text: "bailed" }]);
 	});
 
+	it("captures Context setup and disposal output per call under concurrency", async () => {
+		const session = defineContext(
+			"session",
+			{ flags: [{ name: "id", type: "string", required: true }] },
+			async ({ flags, stdout, defer }) => {
+				stdout(`open ${flags.id}`);
+				await new Promise((resolve) => setTimeout(resolve, flags.id === "a" ? 20 : 1));
+				defer(() => stdout(`close ${flags.id}`));
+				return { id: flags.id };
+			},
+		);
+		const app = new Crust("ctx").add(
+			defineCommand("session", (c) =>
+				c.provide(session()).action(async ({ ctx, stdout }) => {
+					const { id } = await ctx.session;
+					stdout(`work ${id}`);
+				}),
+			),
+		);
+		const client = await connect(app);
+		const stdoutWrite = process.stdout.write;
+		let liveWrites = 0;
+		process.stdout.write = () => {
+			liveWrites++;
+			return true;
+		};
+		try {
+			const [a, b] = await Promise.all([
+				client.callTool({ name: "session", arguments: { id: "a" } }),
+				client.callTool({ name: "session", arguments: { id: "b" } }),
+			]);
+			expect(a.content).toEqual([{ type: "text", text: "open a\nwork a\nclose a" }]);
+			expect(b.content).toEqual([{ type: "text", text: "open b\nwork b\nclose b" }]);
+		} finally {
+			process.stdout.write = stdoutWrite;
+		}
+		expect(liveWrites).toBe(0);
+	});
+
+	it("binds prototype-named args and flags as own properties", async () => {
+		// `__proto__` itself never crosses the SDK: its request parsing drops the key
+		// before the handler runs. The manifest side is covered in tools.test.ts.
+		const app = new Crust("proto").add(
+			defineCommand("probe", (c) =>
+				c
+					.args({ name: "hasOwnProperty", type: "string", required: true })
+					.flags({ name: "constructor", type: "string" }, { name: "toString", type: "number" })
+					.action(({ args, flags }) => ({
+						own: args.hasOwnProperty,
+						constructor: flags.constructor ?? null,
+						toString: flags.toString ?? null,
+					})),
+			),
+		);
+		const client = await connect(app);
+		const { tools } = await client.listTools();
+		expect(Object.keys(tools[0]!.inputSchema.properties!)).toEqual([
+			"hasOwnProperty",
+			"constructor",
+			"toString",
+			"raw",
+		]);
+		expect(tools[0]!.inputSchema.required).toEqual(["hasOwnProperty"]);
+		const result = await client.callTool({
+			name: "probe",
+			arguments: { hasOwnProperty: "p", constructor: "c", toString: 7 },
+		});
+		expect(result.structuredContent).toEqual({ own: "p", constructor: "c", toString: 7 });
+		// Omitting them must not read Object.prototype as supplied values.
+		const omitted = await client.callTool({ name: "probe", arguments: { hasOwnProperty: "p" } });
+		expect(omitted.structuredContent).toEqual({ own: "p", constructor: null, toString: null });
+	});
+
 	it("rejects unknown and hidden tools at the protocol level", async () => {
 		const client = await connect(fixture);
 		await expect(client.callTool({ name: "secret" })).rejects.toThrow("Tool secret not found");
@@ -257,12 +331,16 @@ describe("toolResultFromOutcome", () => {
 		stderr: "",
 	});
 
+	const shared = { value: 1 };
 	it.each([
 		["null", null, { result: null }],
 		["array", [1, "two"], { result: [1, "two"] }],
 		["string", "hi", { result: "hi" }],
 		["false", false, { result: false }],
 		["object", { a: { b: [1] } }, { a: { b: [1] } }],
+		// One object referenced twice is not a cycle.
+		["shared reference", { first: shared, second: shared }, { first: shared, second: shared }],
+		["shared reference in arrays", [shared, [shared]], { result: [shared, [shared]] }],
 	])("structures faithful JSON: %s", (_label, result, structured) => {
 		expect(toolResultFromOutcome(completed(result))).toEqual({
 			content: [{ type: "text", text: JSON.stringify(result, null, 2) }],

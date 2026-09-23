@@ -65,7 +65,7 @@ Each tool's `inputSchema` is one flat object built from the snapshot:
 | Standard Schema flag / custom `parse`           | indistinguishable from a core definition in the snapshot; the declared token type (`string`, or `boolean` for a boolean-token flag) is emitted and the pipeline validates and transforms |
 | every tool                                      | `raw: { type: "array", items: { type: "string" } }`, delivered to the action as `rawArgs`                                                                                                |
 
-The snapshot carries no schema, `parse`, or schema-owned requiredness, so those definitions are advertised as optional values of their token type and validated when the command runs; `run()` accepts exactly those token values. An arg and a flag with the same name, or a definition named `raw`, cannot share the flat object and are rejected.
+The snapshot carries no schema or `parse` function, so those definitions are advertised by their token type and validated when the command runs; `run()` accepts exactly those token values. Requiredness owned by a Standard Schema is invisible to the snapshot, so schema-backed definitions are advertised as optional; a custom `parse` definition's `required` is declared on the definition and is kept. An arg and a flag with the same name, or a definition named `raw`, cannot share the flat object and are rejected. Definitions may use any name core accepts, including `constructor` or `__proto__`; the manifest and the reconstructed `run()` input treat them as ordinary own properties (whether a given MCP client transports a `__proto__` key is up to the client).
 
 ## Results
 
@@ -82,6 +82,8 @@ Unknown tool names are protocol errors (`InvalidParams`), which is also how hidd
 <include lang="ts">../../../examples/modules/mcp.ts#headless</include>
 
 `createMcpServer(app, options?)` prepares the snapshot, builds the manifest, and returns the SDK's low-level `Server` (the class that accepts JSON Schema tools) with `tools/list` and `tools/call` handlers installed. The server is named after the root command and uses its `version`, or `0.0.0` when none is declared. Each call runs `app.run(path, input)` with its own captured output, so concurrent calls never share state. `serveStdio(server)` connects the SDK stdio transport and resolves when the client disconnects.
+
+Over stdio, the transport owns the process's stdout for protocol frames. Only output written through the invocation's `stdout`/`stderr` (Command Actions, Extension hooks, Context setup and disposal) is captured per call; direct `console.log` or `process.stdout.write` calls are not intercepted and will corrupt the protocol stream. Keep such writes out of code that runs under `mcp`, or send them to stderr.
 
 <auto-type-table path="../../../../../packages/mcp/src/tools.ts" name="McpToolsOptions" />
 

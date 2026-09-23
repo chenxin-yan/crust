@@ -1,6 +1,7 @@
 import {
 	type AnyCrust,
 	type CommandDefinition,
+	type CommandShape,
 	defineCommand,
 	defineExtension,
 	defineExtensionId,
@@ -92,17 +93,39 @@ export function renderClaudeAddCommand(name: string, launch: McpLaunch): string 
 		.join(" ");
 }
 
+const CLIENT_FLAG_DESCRIPTION = "Client whose configuration format to print";
+
+/** Flags of `mcp config`. */
+export type McpConfigFlags = {
+	readonly client: {
+		readonly type: "string";
+		readonly choices: typeof MCP_CLIENTS;
+		readonly default: "claude";
+		readonly description: typeof CLIENT_FLAG_DESCRIPTION;
+	};
+};
+
+/**
+ * The contributed `mcp` command, spelled out because the exported factory needs
+ * a declared type: a closed name keeps the host's command tree precise after
+ * `.extend()`, unlike an open `CommandDefinition[]` contribution.
+ */
+export type McpCommandDefinition = CommandDefinition<
+	typeof MCP_COMMAND_NAME,
+	readonly [],
+	CommandShape<[], {}, { config: CommandShape<[], McpConfigFlags, {}, void, {}> }, void, {}>
+>;
+
 /**
  * Adds `mcp`, which serves the application's commands as MCP tools over stdio,
  * and `mcp config`, which prints a client configuration snippet.
  */
-// Contributed commands are typed as an open namespace so the factory's declared type stays short.
 export const mcpExtension: ExtensionFactory<
 	[options: McpExtensionOptions],
 	{},
 	[],
 	[],
-	readonly CommandDefinition<any, any, any, any>[]
+	readonly [McpCommandDefinition]
 > = defineExtension(MCP, (options) => ({
 	commands: [
 		defineCommand(
@@ -121,7 +144,7 @@ export const mcpExtension: ExtensionFactory<
 										type: "string",
 										choices: MCP_CLIENTS,
 										default: "claude",
-										description: "Client whose configuration format to print",
+										description: CLIENT_FLAG_DESCRIPTION,
 									})
 									.action((context) => {
 										const name = context.rootCommand.meta.name;

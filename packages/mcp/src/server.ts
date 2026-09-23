@@ -26,18 +26,23 @@ interface JsonObject {
  * True when `JSON.stringify` round-trips the value without loss: finite numbers,
  * strings, booleans, `null`, arrays of such, and plain objects with only string
  * keys. `undefined`, functions, symbols, BigInt, `NaN`, class instances (`Date`,
- * `Map`, `URL`, …), symbol keys, and cycles are not.
+ * `Map`, `URL`, …), symbol keys, and cycles are not. `ancestors` holds the
+ * active path only, so one object referenced twice is not mistaken for a cycle.
  */
-function isJsonValue(value: unknown, seen = new Set<object>()): value is JsonValue {
+function isJsonValue(value: unknown, ancestors = new Set<object>()): value is JsonValue {
 	if (value === null || typeof value === "string" || typeof value === "boolean") return true;
 	if (typeof value === "number") return Number.isFinite(value);
-	if (typeof value !== "object" || seen.has(value)) return false;
-	seen.add(value);
-	if (Array.isArray(value)) return value.every((item) => isJsonValue(item, seen));
-	const proto = Object.getPrototypeOf(value);
-	if (proto !== Object.prototype && proto !== null) return false;
-	if (Object.getOwnPropertySymbols(value).length > 0) return false;
-	return Object.values(value).every((item) => isJsonValue(item, seen));
+	if (typeof value !== "object" || ancestors.has(value)) return false;
+	if (!Array.isArray(value)) {
+		const proto = Object.getPrototypeOf(value);
+		if (proto !== Object.prototype && proto !== null) return false;
+		if (Object.getOwnPropertySymbols(value).length > 0) return false;
+	}
+	ancestors.add(value);
+	const items = Array.isArray(value) ? value : Object.values(value);
+	const faithful = items.every((item) => isJsonValue(item, ancestors));
+	ancestors.delete(value);
+	return faithful;
 }
 
 function isJsonObject(value: JsonValue): value is JsonObject {
@@ -99,8 +104,9 @@ type ToolArguments = NonNullable<CallToolRequestParams["arguments"]>;
 
 /** Split the flat tool arguments back into `run()` input; `url` fields become `URL`s. */
 function parseToolArguments(tool: McpTool, values: ToolArguments): RunInputPayload {
-	const args: Record<string, RunValue> = {};
-	const flags: Record<string, RunValue> = {};
+	// Null prototypes so a `__proto__` definition binds as an own property.
+	const args: Record<string, RunValue> = Object.create(null);
+	const flags: Record<string, RunValue> = Object.create(null);
 	const toUrl = (value: JsonValue) => (isString(value) ? new URL(value) : value);
 	let raw: readonly string[] | undefined;
 	for (const [name, given] of Object.entries(values)) {

@@ -27,7 +27,9 @@ await serveStdio(server);
 //#region manifest
 import { toolsFromSnapshot } from "@crustjs/mcp";
 
-const tools = toolsFromSnapshot(await app.snapshot());
+// Exclusions are per manifest or server, not part of the snapshot: without this
+// option `wipe` would be listed too.
+const tools = toolsFromSnapshot(await app.snapshot(), { exclude: [["wipe"]] });
 console.log(tools.map((tool) => tool.name)); // => ["deploy"]
 console.log(tools[0]?.inputSchema);
 // => {

@@ -95,7 +95,7 @@ describe("toolsFromSnapshot", () => {
 		expect(tool?.argNames).toEqual(["target", "level", "files"]);
 	});
 
-	it("maps schema and custom-parse definitions by token type, never as required", async () => {
+	it("maps schema and custom-parse definitions by token type; only declared required is required", async () => {
 		const app = new Crust("cli").add(
 			defineCommand("check", (c) =>
 				c
@@ -104,6 +104,7 @@ describe("toolsFromSnapshot", () => {
 						{ name: "mode", type: "string", schema: passthrough },
 						{ name: "on", type: "boolean", schema: passthrough },
 						{ name: "port", type: "string", parse: Number },
+						{ name: "level", type: "string", parse: Number, required: true },
 					)
 					.action(noop),
 			),
@@ -114,8 +115,31 @@ describe("toolsFromSnapshot", () => {
 			mode: { type: "string" },
 			on: { type: "boolean" },
 			port: { type: "string" },
+			level: { type: "string" },
 		});
-		expect(tool?.inputSchema.required).toBeUndefined();
+		// Schema-owned requiredness is invisible; a custom parser's `required` is declared and kept.
+		expect(tool?.inputSchema.required).toEqual(["level"]);
+	});
+
+	it("accepts prototype-named definitions as own properties", async () => {
+		const app = new Crust("cli").add(
+			defineCommand("probe", (c) =>
+				c
+					.args({ name: "__proto__", type: "string" })
+					.flags(
+						{ name: "constructor", type: "string" },
+						{ name: "hasOwnProperty", type: "boolean" },
+					)
+					.action(noop),
+			),
+		);
+		const [tool] = toolsFromSnapshot(await app.snapshot());
+		const properties = tool!.inputSchema.properties;
+		expect(Object.hasOwn(properties, "__proto__")).toBe(true);
+		expect(Object.getPrototypeOf(properties)).toBeNull();
+		expect(properties["constructor"]).toEqual({ type: "string" });
+		expect(properties["hasOwnProperty"]).toEqual({ type: "boolean" });
+		expect(tool!.argNames).toEqual(["__proto__"]);
 	});
 
 	it("includes Extension-contributed commands", async () => {
