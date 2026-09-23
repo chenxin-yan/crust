@@ -1,5 +1,11 @@
 # @crustjs/skills
 
+## 0.4.1
+
+### Patch Changes
+
+- [#443](https://github.com/chenxin-yan/crust/pull/443) [`f7a6a45`](https://github.com/chenxin-yan/crust/commit/f7a6a454f4dceb4ccdc4fe7cb32664e1294f1c89) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - `skills install` (and its bare `skills` shorthand) is now additive only: it links or repairs the selected skills for the selected agents and never removes existing links. Deselecting an agent or skill during an interactive install leaves its installed link untouched; removal happens exclusively through `skills uninstall`.
+
 ## 0.4.0
 
 ### Patch Changes
