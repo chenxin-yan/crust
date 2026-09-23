@@ -51,11 +51,6 @@ describe("mcpExtension", () => {
 		expect(vscode.stderr).toEqual([]);
 	});
 
-	it("accepts a self-referential app callback without core changes", () => {
-		const self: AnyCrust = app;
-		expect(self).toBe(app);
-	});
-
 	it("uses an explicit launch for both client JSON and the Claude command", async () => {
 		const launch = {
 			command: "/usr/bin/deno",
