@@ -1273,6 +1273,27 @@ describe("parseArgs \u2014 env fallback", () => {
 		expect(parseArgs(cmd, [], { APP_TOKEN: undefined }).flags.token).toBeUndefined();
 	});
 
+	it("reads only own properties of argv values and the environment", () => {
+		for (const name of ["constructor", "toString", "hasOwnProperty"]) {
+			const cmd = makeNode({
+				meta: "test",
+				flags: {
+					[name]: { type: "string", env: "APP_VALUE", default: "fallback" },
+					tags: { type: "string", multiple: true, env: name, delimiter: "," },
+				},
+			});
+			// An omitted prototype-named flag falls back to env, then default.
+			expect(parseArgs(cmd, [], { APP_VALUE: "env-value" }).flags[name]).toBe("env-value");
+			expect(parseArgs(cmd, [], {}).flags[name]).toBe("fallback");
+			expect(parseArgs(cmd, [`--${name}`, "argv"], { APP_VALUE: "env-value" }).flags[name]).toBe(
+				"argv",
+			);
+			// A prototype-named variable absent from the environment is absent.
+			expect(parseArgs(cmd, [], {}).flags.tags).toBeUndefined();
+			expect(parseArgs(cmd, [], { [name]: "a,b" }).flags.tags).toEqual(["a", "b"]);
+		}
+	});
+
 	it("satisfies a required flag from env", () => {
 		const cmd = makeNode({
 			meta: "test",

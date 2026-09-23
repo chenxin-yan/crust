@@ -263,7 +263,9 @@ function applyEnvAndDelimiter(
 ) {
 	const values: Record<string, ArgvFlagValue | undefined> = {};
 	for (const [name, def] of Object.entries(flagsDef)) {
-		const argvValue = argvValues[name];
+		// hasOwn on both records: a flag or variable named `constructor` must not
+		// read Object.prototype as a supplied value.
+		const argvValue = Object.hasOwn(argvValues, name) ? argvValues[name] : undefined;
 		if (argvValue !== undefined) {
 			if (
 				def.delimiter !== undefined &&
@@ -279,7 +281,7 @@ function applyEnvAndDelimiter(
 			}
 			continue;
 		}
-		if (def.env === undefined) continue;
+		if (def.env === undefined || !Object.hasOwn(env, def.env)) continue;
 		const raw = env[def.env];
 		if (raw !== undefined) values[name] = envFlagValue(name, def, raw);
 	}
