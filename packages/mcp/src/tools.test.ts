@@ -95,12 +95,26 @@ describe("toolsFromSnapshot", () => {
 		expect(tool?.argNames).toEqual(["target", "level", "files"]);
 	});
 
-	it("treats schema-backed args as optional strings", async () => {
+	it("maps schema and custom-parse definitions by token type, never as required", async () => {
 		const app = new Crust("cli").add(
-			defineCommand("check", (c) => c.args({ name: "id", schema: passthrough }).action(noop)),
+			defineCommand("check", (c) =>
+				c
+					.args({ name: "id", schema: passthrough })
+					.flags(
+						{ name: "mode", type: "string", schema: passthrough },
+						{ name: "on", type: "boolean", schema: passthrough },
+						{ name: "port", type: "string", parse: Number },
+					)
+					.action(noop),
+			),
 		);
 		const [tool] = toolsFromSnapshot(await app.snapshot());
-		expect(tool?.inputSchema.properties.id).toEqual({ type: "string" });
+		expect(tool?.inputSchema.properties).toMatchObject({
+			id: { type: "string" },
+			mode: { type: "string" },
+			on: { type: "boolean" },
+			port: { type: "string" },
+		});
 		expect(tool?.inputSchema.required).toBeUndefined();
 	});
 

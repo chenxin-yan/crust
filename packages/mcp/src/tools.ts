@@ -60,7 +60,8 @@ function valueSchema(
 			return { type: "boolean" };
 		case "string":
 		case "path":
-		// Schema-backed args carry no type; the schema receives the raw string.
+		// Only schema-backed args omit `type`; schema flags and custom `parse` are
+		// indistinguishable from core definitions and map by their token type.
 		case undefined:
 			return { type: "string" };
 	}

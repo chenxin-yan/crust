@@ -52,19 +52,20 @@ The tool name is the canonical command path joined with `_` (`deploy api` become
 
 Each tool's `inputSchema` is one flat object built from the snapshot:
 
-| Definition                        | Schema                                                                         |
-| --------------------------------- | ------------------------------------------------------------------------------ |
-| `type: "string"` / `"path"`       | `{ type: "string" }`                                                           |
-| `type: "number"` / `"boolean"`    | `{ type: "number" }` / `{ type: "boolean" }`                                   |
-| `type: "url"`                     | `{ type: "string", format: "uri" }`; the string becomes a `URL` before `run()` |
-| `type: "json"`                    | `{}` (any JSON)                                                                |
-| `choices`                         | `{ type: "string", enum }`                                                     |
-| `variadic` / `multiple`           | `{ type: "array", items }`                                                     |
-| `required` without `default`      | listed in `required`                                                           |
-| custom `parse` or Standard Schema | `{ type: "string" }`; the pipeline validates                                   |
-| passthrough                       | `raw: { type: "array", items: { type: "string" } }`, delivered as `rawArgs`    |
+| Definition                                      | Schema                                                                                                                                                                                   |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type: "string"` / `"path"`                     | `{ type: "string" }`                                                                                                                                                                     |
+| `type: "number"` / `"boolean"`                  | `{ type: "number" }` / `{ type: "boolean" }`                                                                                                                                             |
+| `type: "url"`                                   | `{ type: "string", format: "uri" }`; the string becomes a `URL` before `run()`                                                                                                           |
+| `type: "json"`                                  | `{}` (any JSON)                                                                                                                                                                          |
+| `choices`                                       | `{ type: "string", enum }`                                                                                                                                                               |
+| `variadic` / `multiple`                         | `{ type: "array", items }`                                                                                                                                                               |
+| `required` without `default`                    | listed in `required`                                                                                                                                                                     |
+| Standard Schema arg (no `type` in the snapshot) | `{ type: "string" }`; the schema receives the string                                                                                                                                     |
+| Standard Schema flag / custom `parse`           | indistinguishable from a core definition in the snapshot; the declared token type (`string`, or `boolean` for a boolean-token flag) is emitted and the pipeline validates and transforms |
+| every tool                                      | `raw: { type: "array", items: { type: "string" } }`, delivered to the action as `rawArgs`                                                                                                |
 
-Schema-backed definitions carry no requiredness in the snapshot, so they are advertised as optional strings and validated when the command runs. An arg and a flag with the same name, or a definition named `raw`, cannot share the flat object and are rejected.
+The snapshot carries no schema, `parse`, or schema-owned requiredness, so those definitions are advertised as optional values of their token type and validated when the command runs; `run()` accepts exactly those token values. An arg and a flag with the same name, or a definition named `raw`, cannot share the flat object and are rejected.
 
 ## Results
 
