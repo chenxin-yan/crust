@@ -33,14 +33,7 @@ export function groupAgentsByOutputDir(
 	scope: Scope,
 	name: string,
 ): Map<string, AgentTarget[]> {
-	const groups = new Map<string, AgentTarget[]>();
-	for (const agent of agents) {
-		const outputDir = resolveAgentPath(agent, scope, name);
-		const existing = groups.get(outputDir);
-		if (existing) existing.push(agent);
-		else groups.set(outputDir, [agent]);
-	}
-	return groups;
+	return Map.groupBy(agents, (agent) => resolveAgentPath(agent, scope, name));
 }
 
 async function pathExists(path: string): Promise<boolean> {

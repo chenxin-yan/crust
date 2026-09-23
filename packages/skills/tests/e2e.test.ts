@@ -8,22 +8,13 @@ import { Crust, defineCommand } from "@crustjs/core";
 import { writeSkills } from "../src/build.ts";
 import { installSkill } from "../src/generate.ts";
 import { loadPackagedSkills } from "../src/source.ts";
+import { withCwd } from "./fixtures.ts";
 
 let tempRoot: string | undefined;
 
 afterEach(async () => {
 	if (tempRoot) await rm(tempRoot, { recursive: true, force: true });
 });
-
-async function withCwd<T>(dir: string, run: () => Promise<T>): Promise<T> {
-	const cwd = process.cwd;
-	process.cwd = () => dir;
-	try {
-		return await run();
-	} finally {
-		process.cwd = cwd;
-	}
-}
 
 describe("package-as-source pipeline", () => {
 	it("builds once and links directly to the packaged source", async () => {

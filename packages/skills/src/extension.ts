@@ -32,7 +32,6 @@ import {
 	installSkill,
 	uninstallSkill,
 } from "./generate.ts";
-import { installedAgents, UNIVERSAL_GROUP, type ReconcileChoice } from "./reconcile.ts";
 import { SkillSourceUnavailableError, loadPackagedSkills, type PackagedSkill } from "./source.ts";
 import type { InstallSkillResult, SkillOptions, SkillStatusResult } from "./types.ts";
 
@@ -42,6 +41,7 @@ const DEFAULT_SKILL_COMMAND_NAME = "skills";
 const SKILLS_SECTION_TITLE = "Agent skills";
 const DEFAULT_SKILL_SCOPE = "global";
 const SKILLS_ARTIFACT = "skills";
+const UNIVERSAL_GROUP = "__universal__";
 
 type SkillIO = Pick<InvocationIO, "stdout" | "stderr">;
 
@@ -226,6 +226,12 @@ export const skill: ExtensionFactory<
 type SkillStatusEntry = SkillStatusResult["agents"][number];
 type SkillStatusMap = ReadonlyMap<AgentTarget, SkillStatusEntry>;
 
+function installedAgents(statusMap: SkillStatusMap): AgentTarget[] {
+	return [...statusMap.values()].flatMap((entry) =>
+		entry.status === "linked" || entry.status === "dangling" ? [entry.agent] : [],
+	);
+}
+
 async function loadStatuses(scope: Scope): Promise<Map<PackagedSkill, SkillStatusMap>> {
 	const statuses = new Map<PackagedSkill, SkillStatusMap>();
 	for (const packagedSkill of loadPackagedSkills(resolveArtifactDir(SKILLS_ARTIFACT))) {
@@ -306,7 +312,11 @@ async function installSkills(opts: {
 		const outputDir = statuses.get(skills[0]!)?.get(agent)?.outputDir;
 		return outputDir ? dirname(outputDir) : "path unavailable";
 	};
-	const choices: Array<ReconcileChoice & { hint: string }> = [];
+	const choices: Array<{
+		label: string;
+		value: AgentTarget | typeof UNIVERSAL_GROUP;
+		hint: string;
+	}> = [];
 	if (universal.length > 0) {
 		choices.push({ label: "Universal", value: UNIVERSAL_GROUP, hint: rootHint(universal[0]!) });
 	}

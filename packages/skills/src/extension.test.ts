@@ -19,6 +19,7 @@ import { withPromptIO } from "@crustjs/prompts";
 import { createPromptIO } from "@crustjs/prompts/testing";
 import { captureExecute } from "@crustjs/testing";
 
+import { withCwd } from "../tests/fixtures.ts";
 import { skill } from "./extension.ts";
 import { installSkill } from "./generate.ts";
 
@@ -47,16 +48,6 @@ afterEach(async () => {
 	else process.argv[1] = originalArgv1;
 	await rm(tempRoot, { recursive: true, force: true });
 });
-
-async function withCwd<T>(dir: string, run: () => Promise<T>): Promise<T> {
-	const cwd = process.cwd;
-	process.cwd = () => dir;
-	try {
-		return await run();
-	} finally {
-		process.cwd = cwd;
-	}
-}
 
 /** Writes a skill into the staged skills directory the resolver points at. */
 async function writeSource(name: string, content = name, description = name): Promise<string> {
