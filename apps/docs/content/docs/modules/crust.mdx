@@ -21,7 +21,7 @@ import {
 npm install -D @crustjs/crust
 ```
 
-The npm package is itself built with `crust build`, so its `bin` is a Node launcher that runs a platform-specific standalone executable with Bun embedded. Node is required to start it; a separate Bun installation is not. Without `bun` on `PATH`, arm64 hosts cannot build their own target (Bun would copy the running `crust` executable onto itself); the error names the other targets, or install Bun. The package root exports the [`build()`](#programmatic-api) library, a bundled JavaScript module with its declarations that needs no other Crust package installed; because it is not a Bun executable, it needs `bun` on `PATH` unless the script itself runs under `bun`.
+The npm package is itself built with `crust build`, so its `bin` is a Node launcher that runs a platform-specific standalone executable with Bun embedded. Node is required to start it; a separate Bun installation is not. Without `bun` on `PATH`, arm64 hosts cannot build their own target (Bun would copy the running `crust` executable onto itself); the error names the other targets, or install Bun. The package root exports the [`build()`](#programmatic-api) library, a bundled JavaScript module whose declarations import `BuildReport` from `@crustjs/core`, declared as a peer dependency so the type stays the same one your Extensions see; because it is not a Bun executable, it needs `bun` on `PATH` unless the script itself runs under `bun`.
 
 ## Commands
 

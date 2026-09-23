@@ -493,7 +493,9 @@ async function prepareEntries(
  * subprocesses (bun on PATH, or the running Bun executable), so this works
  * under Node as well when Bun is installed.
  *
- * Throws on any failure, after which `.crust/` holds no `manifest.json`.
+ * Throws on any failure. Planning failures (bad options or package.json) leave
+ * the previous `.crust/` stage untouched; failures after planning leave a
+ * wiped stage without a completion `manifest.json`.
  */
 export async function build(options: BuildOptions = {}): Promise<BuildResult> {
 	const cwd = resolve(options.cwd ?? process.cwd());

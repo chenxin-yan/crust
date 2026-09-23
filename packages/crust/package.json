@@ -53,6 +53,9 @@
 		"@crustjs/extensions": "workspace:^",
 		"@crustjs/style": "workspace:^"
 	},
+	"peerDependencies": {
+		"@crustjs/core": "^0.3.5"
+	},
 	"devDependencies": {
 		"@arethetypeswrong/core": "^0.18.5",
 		"@crustjs/config": "workspace:*",

@@ -745,6 +745,16 @@ describe("runDistributeBuild", () => {
 		await expect(stage({ "./*": "./dist/*.js" })).rejects.toThrow("uses a pattern");
 		await expect(stage({ ".": "dist/index.js" })).rejects.toThrow("./-relative path");
 		await expect(stage({ ".": "./../LICENSE" })).rejects.toThrow("./-relative path");
+		// Node rejects these targets (ERR_INVALID_PACKAGE_TARGET) even though they resolve to staged files.
+		for (const target of [
+			"./dist/../dist/index.js",
+			"./dist/./index.js",
+			"./dist//index.js",
+			"./dist/%2E%2E/dist/index.js",
+			"./node_modules/dist/index.js",
+		]) {
+			await expect(stage({ ".": target })).rejects.toThrow("path segment Node rejects");
+		}
 		await expect(stage({ ".": ["./dist/index.js"] })).rejects.toThrow(
 			"must be a path, null, or a conditions object",
 		);
@@ -755,6 +765,51 @@ describe("runDistributeBuild", () => {
 			'mixes subpath "./nested" into a conditions object',
 		);
 		expect(existsSync(join(stageDir, "manifest.json"))).toBe(false);
+	});
+
+	it("carries publishable peerDependencies into the root package only", async () => {
+		const stageDir = join(tmpDir, ".crust");
+		const stage = (fields: Record<string, JsonValue>) => {
+			rmSync(stageDir, { recursive: true, force: true });
+			return runDistributeBuild(
+				createPlan(tmpDir, { name: "lib-cli", version: "0.1.0", ...fields }, {}),
+				bunDistribution(),
+				io,
+			);
+		};
+		const rootPackage = () =>
+			readJson<Record<string, JsonValue>>(join(stageDir, "root", "package.json"));
+		const platformPackage = () =>
+			readJson<Record<string, JsonValue>>(join(stageDir, "darwin-arm64", "package.json"));
+
+		await stage({
+			peerDependencies: { "@crustjs/core": "^0.3.5" },
+			peerDependenciesMeta: { "@crustjs/core": { optional: true } },
+		});
+		expect(rootPackage().peerDependencies).toEqual({ "@crustjs/core": "^0.3.5" });
+		expect(rootPackage().peerDependenciesMeta).toEqual({ "@crustjs/core": { optional: true } });
+		expect(platformPackage()).not.toHaveProperty("peerDependencies");
+		expect(platformPackage()).not.toHaveProperty("peerDependenciesMeta");
+
+		await stage({ peerDependencies: { "@crustjs/core": "^0.3.5" } });
+		expect(rootPackage()).not.toHaveProperty("peerDependenciesMeta");
+
+		// Staged manifests publish as written, so workspace ranges must not leak.
+		await expect(stage({ peerDependencies: { "@crustjs/core": "workspace:^" } })).rejects.toThrow(
+			'peerDependencies["@crustjs/core"] must be a publishable range, not "workspace:^"',
+		);
+		await expect(stage({ peerDependencies: ["@crustjs/core"] })).rejects.toThrow(
+			"peerDependencies must be an object",
+		);
+		await expect(stage({ peerDependencies: { "@crustjs/core": 1 } })).rejects.toThrow(
+			"must be a publishable range",
+		);
+		await expect(
+			stage({ peerDependencies: { a: "^1" }, peerDependenciesMeta: { b: { optional: true } } }),
+		).rejects.toThrow('peerDependenciesMeta["b"] has no matching peerDependencies entry');
+		await expect(
+			stage({ peerDependencies: { a: "^1" }, peerDependenciesMeta: "optional" }),
+		).rejects.toThrow("peerDependenciesMeta must be an object");
 	});
 });
 

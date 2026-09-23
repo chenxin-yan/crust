@@ -8,12 +8,16 @@ import base from "../../tsdown.config.ts";
 export default defineConfig({
 	...base,
 	entry: ["src/index.ts"],
-	// The published root package has no dependencies (the binaries inline
-	// theirs), so the library bundles the workspace packages it uses — code and
-	// the declarations its public types reference (BuildReport from core).
+	// The published root package has no runtime dependencies (the binaries
+	// inline theirs), so the library bundles the workspace packages' code.
+	// Declarations stay external: bundling core's `unique symbol` brands would
+	// mint a second `ExtensionId`, making the re-exported `BuildReport`
+	// incompatible with `@crustjs/core`'s. package.json declares core as the
+	// peer that resolves those types.
 	deps: {
 		alwaysBundle: [/^@crustjs\//],
-		dts: { alwaysBundle: [/^@crustjs\//] },
+		// An empty list, not omitted: tsdown falls back to the JS list otherwise.
+		dts: { alwaysBundle: [] },
 	},
 	// This package.json is never published as-is; tests/library.integration.test.ts
 	// runs publint and attw against the staged root package instead.

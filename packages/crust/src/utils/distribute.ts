@@ -64,6 +64,9 @@ type RootPublishPackageJson = PublishPackageMetadata & {
 	optionalDependencies?: Record<string, string>;
 	/** The user's `exports`, carried only when present and every target is staged; see `validateStagedExports`. */
 	exports?: JsonValue;
+	/** The user's peer contract for what `exports` references (types, re-exports); see `validatePeerDependencies`. */
+	peerDependencies?: Record<string, string>;
+	peerDependenciesMeta?: JsonObject;
 	os?: never;
 	cpu?: never;
 	libc?: never;
@@ -80,6 +83,8 @@ type PlatformPublishPackageJson = PublishPackageMetadata & {
 type UserPackageJson = Omit<PublishPackageMetadata, "bin"> & {
 	bin?: JsonValue;
 	exports?: JsonValue;
+	peerDependencies?: JsonValue;
+	peerDependenciesMeta?: JsonValue;
 	optionalDependencies?: Record<string, string>;
 	os?: [NpmOs];
 	cpu?: [NpmCpu];
@@ -96,6 +101,9 @@ type DistributionMetadata = {
 	rootPackageJson: PublishPackageMetadata;
 	/** The user's `exports`, root package only; validated against the staged tree. */
 	exports?: JsonValue;
+	/** The user's `peerDependencies`/`peerDependenciesMeta`, root package only; publishable ranges. */
+	peerDependencies?: Record<string, string>;
+	peerDependenciesMeta?: JsonObject;
 };
 
 type DistributionTarget<T extends string = string> = {
@@ -219,9 +227,36 @@ function buildDistributionRootPackageJson(
 			: {}),
 		...(manPages.length > 0 ? { man: manPages.map((page) => `./man/${page}`) } : {}),
 		...(metadata.exports !== undefined ? { exports: metadata.exports } : {}),
+		...(metadata.peerDependencies !== undefined
+			? { peerDependencies: metadata.peerDependencies }
+			: {}),
+		...(metadata.peerDependenciesMeta !== undefined
+			? { peerDependenciesMeta: metadata.peerDependenciesMeta }
+			: {}),
 	};
 
 	return rootPackageJson;
+}
+
+/**
+ * Node rejects export targets whose segments are `.`, `..`, `node_modules`, or
+ * empty (`ERR_INVALID_PACKAGE_TARGET`), also percent-encoded, even when the path
+ * normalizes to a staged file, so filesystem checks alone would pass a target
+ * consumers cannot import.
+ */
+function hasNodeInvalidSegment(target: string): boolean {
+	return target
+		.slice("./".length)
+		.split(/[\\/]/)
+		.some((segment) => {
+			let decoded = segment;
+			try {
+				decoded = decodeURIComponent(segment);
+			} catch {
+				// Malformed escapes are compared as written.
+			}
+			return /^(\.\.?|node_modules|)$/i.test(decoded);
+		});
 }
 
 /**
@@ -252,6 +287,11 @@ function validateStagedExports(exports: JsonValue, rootDir: string): void {
 					`target ${JSON.stringify(target)} (${at}) uses a pattern, which crust build does not support.`,
 				);
 			}
+			if (hasNodeInvalidSegment(target)) {
+				fail(
+					`target ${JSON.stringify(target)} (${at}) contains a path segment Node rejects (".", "..", "node_modules", or empty).`,
+				);
+			}
 			if (!existsSync(staged) || !statSync(staged).isFile()) {
 				fail(`target ${JSON.stringify(target)} (${at}) is not a staged file: ${staged}`);
 			}
@@ -278,6 +318,42 @@ function validateStagedExports(exports: JsonValue, rootDir: string): void {
 		return;
 	}
 	checkTarget(exports, '"."');
+}
+
+/**
+ * Carries `peerDependencies` (and `peerDependenciesMeta`) into the root package
+ * so a library `exports` entry can declare what its published types import.
+ * Ranges must be publishable as written: the staged manifests go to npm
+ * directly, so a `workspace:` range would leak into the registry.
+ */
+function validatePeerDependencies(
+	peerDependencies: JsonValue,
+	peerDependenciesMeta: JsonValue | undefined,
+): Pick<DistributionMetadata, "peerDependencies" | "peerDependenciesMeta"> {
+	if (!isJsonObject(peerDependencies)) {
+		throw new Error("package.json peerDependencies must be an object of package names to ranges.");
+	}
+	const ranges: Record<string, string> = {};
+	for (const [name, range] of Object.entries(peerDependencies)) {
+		if (!isString(range) || range.startsWith("workspace:")) {
+			throw new Error(
+				`package.json peerDependencies[${JSON.stringify(name)}] must be a publishable range, not ${JSON.stringify(range)}.\n  crust build publishes the staged root package as written; workspace: ranges are never rewritten.`,
+			);
+		}
+		ranges[name] = range;
+	}
+	if (peerDependenciesMeta === undefined) return { peerDependencies: ranges };
+	if (!isJsonObject(peerDependenciesMeta)) {
+		throw new Error("package.json peerDependenciesMeta must be an object keyed by peer name.");
+	}
+	for (const name of Object.keys(peerDependenciesMeta)) {
+		if (!Object.hasOwn(ranges, name)) {
+			throw new Error(
+				`package.json peerDependenciesMeta[${JSON.stringify(name)}] has no matching peerDependencies entry.`,
+			);
+		}
+	}
+	return { peerDependencies: ranges, peerDependenciesMeta };
 }
 
 function buildDistributionPlatformPackageJson(
@@ -333,6 +409,9 @@ function resolveDistributionMetadata(
 		version: pkgJson.version,
 		rootPackageJson: pickRootMetadata(pkgJson),
 		...(pkgJson.exports !== undefined ? { exports: pkgJson.exports } : {}),
+		...(pkgJson.peerDependencies !== undefined
+			? validatePeerDependencies(pkgJson.peerDependencies, pkgJson.peerDependenciesMeta)
+			: {}),
 	};
 }
 

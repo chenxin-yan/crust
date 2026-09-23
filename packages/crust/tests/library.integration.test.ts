@@ -8,6 +8,7 @@ import {
 	readdirSync,
 	readFileSync,
 	rmSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -36,6 +37,7 @@ import { hostTarget } from "./helpers.ts";
 const packageDir = resolve(import.meta.dir, "..");
 const repoRoot = resolve(packageDir, "..", "..");
 const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
+const coreDir = resolve(repoRoot, "packages", "core");
 const host = hostTarget();
 const nodePath = Bun.which("node");
 
@@ -76,6 +78,7 @@ beforeAll(async () => {
 			bin: { crust: "src/cli.ts" },
 			crust: { runtime: "node", include: ["dist"] },
 			exports: crustPackage.exports,
+			peerDependencies: crustPackage.peerDependencies,
 		}),
 	);
 	cpSync(distDir, join(libraryProject, "dist"), { recursive: true });
@@ -88,16 +91,23 @@ beforeAll(async () => {
 	const tgz = readdirSync(root).find((name) => name.endsWith(".tgz"));
 	if (!tgz) throw new Error(`bun pm pack wrote no tarball to ${root}`);
 	tarball = new Uint8Array(readFileSync(join(root, tgz)));
+
+	// A packaged consumer: the staged root beside the core peer it declares.
+	mkdirSync(join(consumer, "node_modules", "@crustjs"), { recursive: true });
+	cpSync(stagedRoot, join(consumer, "node_modules", "@crustjs", "crust"), { recursive: true });
+	symlinkSync(coreDir, join(consumer, "node_modules", "@crustjs", "core"), "dir");
+	writeFileSync(join(consumer, "package.json"), JSON.stringify({ type: "module" }));
 }, 60_000);
 
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 describe("published @crustjs/crust library", () => {
 	it("stages the library entry and carries its exports into the root package", () => {
-		const staged = readJson<{ exports: unknown; files: string[] }>(
+		const staged = readJson<{ exports: unknown; files: string[]; peerDependencies: unknown }>(
 			join(stagedRoot, "package.json"),
 		);
 		expect(staged.exports).toEqual(crustPackage.exports);
+		expect(staged.peerDependencies).toEqual(crustPackage.peerDependencies);
 		expect(staged.files).toEqual(["bin", "dist"]);
 		for (const file of ["index.js", "index.d.ts"]) {
 			expect(readFileSync(join(stagedRoot, "dist", file), "utf8")).toBe(
@@ -105,6 +115,41 @@ describe("published @crustjs/crust library", () => {
 			);
 		}
 	});
+
+	it("keeps BuildReport's core identity: types import @crustjs/core instead of inlining its brands", async () => {
+		const dts = readFileSync(join(stagedRoot, "dist", "index.d.ts"), "utf8");
+		expect(dts).toMatch(/from "@crustjs\/core"/);
+		expect(dts).not.toContain("unique symbol");
+
+		writeFileSync(
+			join(consumer, "reports.ts"),
+			`import type { BuildReport as CoreReport } from "@crustjs/core";
+import type { BuildReport as CrustReport, BuildResult } from "@crustjs/crust";
+
+declare const fromCore: CoreReport;
+declare const fromCrust: CrustReport;
+declare const result: BuildResult;
+export const coreAcceptsCrust: CoreReport = fromCrust;
+export const crustAcceptsCore: CrustReport = fromCore;
+export const coreAcceptsResult: CoreReport | undefined = result.reports?.["cli"];
+`,
+		);
+		const tsc = await runProcess(
+			join(repoRoot, "node_modules", ".bin", "tsc"),
+			[
+				"--noEmit",
+				"--strict",
+				"--module",
+				"nodenext",
+				"--moduleResolution",
+				"nodenext",
+				"--skipLibCheck",
+				"reports.ts",
+			],
+			{ cwd: consumer },
+		);
+		expect(tsc.exitCode, tsc.stdout + tsc.stderr).toBe(0);
+	}, 60_000);
 
 	it("passes publint", async () => {
 		// The tarball is the virtual file system; its root is the package directory.
@@ -142,9 +187,6 @@ describe("published @crustjs/crust library", () => {
 				`await new Crust("installed-app").extend(hook).action(({ stdout }) => stdout("hello from installed-app")).execute();\n`,
 		);
 
-		const installed = join(consumer, "node_modules", "@crustjs", "crust");
-		cpSync(stagedRoot, installed, { recursive: true });
-		writeFileSync(join(consumer, "package.json"), JSON.stringify({ type: "module" }));
 		writeFileSync(
 			join(consumer, "release.mjs"),
 			`import { writeFileSync } from "node:fs";
