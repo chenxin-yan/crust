@@ -6,6 +6,7 @@ import mdx from "fumadocs-mdx/vite";
 import { defineConfig, lazyPlugins } from "vite-plus";
 
 import { toolingTasks, upstreamBuild } from "../../vite.shared.ts";
+import { landingTwoslash } from "./vite/landing-twoslash.ts";
 
 export default defineConfig(({ mode }) => ({
 	server: {
@@ -38,6 +39,7 @@ export default defineConfig(({ mode }) => ({
 			? []
 			: lazyPlugins(async () => [
 					mdx(await import("./source.config.ts")),
+					landingTwoslash(),
 					tailwindcss(),
 					cloudflare({ viteEnvironment: { name: "ssr" } }),
 					tanstackStart({

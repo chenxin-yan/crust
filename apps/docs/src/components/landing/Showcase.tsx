@@ -3,18 +3,13 @@ import type { Root } from "hast";
 import { toJsxRuntime } from "hast-util-to-jsx-runtime";
 import { type JSX, useEffect, useRef, useState } from "react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
-
-// Twoslash-annotated Shiki hast per snippet key, written by scripts/twoslash-landing.ts.
-// Turbo runs that task before build, check:types and dev; on its own: `bun run twoslash:landing`.
-import landingTwoslash from "@/generated/landing-twoslash.json";
+// Twoslash-annotated Shiki hast per snippet key, computed by vite/landing-twoslash.ts.
+import HIGHLIGHTED from "virtual:landing-twoslash";
 
 import { FEATURES, type Line, type Runtime, RUNTIMES, SNIPPETS } from "./content";
 
 // oxlint-disable-next-line import/no-unassigned-import -- Vite bundles the stylesheet as a side effect of the import; there is nothing to assign.
 import "./showcase.css";
-
-// SAFETY: the JSON is Shiki `codeToHast` output written by scripts/twoslash-landing.ts.
-const HIGHLIGHTED = landingTwoslash as Partial<Record<string, Root>>;
 
 // Twoslash emits <Popup>/<PopupContent>/<PopupTrigger> elements; map them to the real components.
 const POPUP_COMPONENTS = { Popup, PopupContent, PopupTrigger };
