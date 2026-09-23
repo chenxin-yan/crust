@@ -1,0 +1,67 @@
+{
+	"name": "@crustjs/mcp",
+	"version": "0.0.1",
+	"description": "Expose a Crust CLI as MCP tools over stdio",
+	"type": "module",
+	"sideEffects": false,
+	"license": "MIT",
+	"author": "chenxin-yan",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/chenxin-yan/crust.git",
+		"directory": "packages/mcp"
+	},
+	"homepage": "https://crustjs.com",
+	"bugs": {
+		"url": "https://github.com/chenxin-yan/crust/issues"
+	},
+	"keywords": [
+		"cli",
+		"crust",
+		"mcp",
+		"model-context-protocol",
+		"bun"
+	],
+	"files": [
+		"dist"
+	],
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"dev": "tsdown --watch",
+		"check:types": "tsc --noEmit",
+		"test": "bun test",
+		"prepack": "cp ../../LICENSE LICENSE",
+		"postpack": "rm -f LICENSE"
+	},
+	"dependencies": {
+		"@modelcontextprotocol/sdk": "^1.30.0"
+	},
+	"devDependencies": {
+		"@crustjs/config": "workspace:*",
+		"@crustjs/core": "workspace:*",
+		"tsdown": "catalog:"
+	},
+	"peerDependencies": {
+		"@crustjs/core": "workspace:^",
+		"typescript": "^7.0.0"
+	},
+	"peerDependenciesMeta": {
+		"typescript": {
+			"optional": true
+		}
+	},
+	"engines": {
+		"bun": ">=1.4.0",
+		"node": ">=22",
+		"deno": ">=2.8"
+	}
+}

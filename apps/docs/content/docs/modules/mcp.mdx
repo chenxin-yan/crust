@@ -1,0 +1,100 @@
+---
+title: "MCP"
+description: Serve a Crust CLI as Model Context Protocol tools over stdio.
+---
+
+`@crustjs/mcp` turns the Command Snapshot into an MCP tool manifest and routes every tool call through typed `app.run()`. No per-command glue: the same definitions that drive parsing, help, and completion drive the JSON Schema each tool advertises.
+
+## Install
+
+```npm
+npm install @crustjs/mcp
+```
+
+The package has a peer dependency on `@crustjs/core` and depends on `@modelcontextprotocol/sdk`. Only the stdio transport is supported.
+
+## `mcpExtension(options)`
+
+<include lang="ts">../../../examples/modules/mcp.ts#extension</include>
+
+`mcpExtension()` owns two commands:
+
+- `<cli> mcp` serves the application over stdio until the client disconnects. Stdout carries protocol frames, so the Command Action writes nothing else to it; command output is captured per call instead.
+- `<cli> mcp config [--client claude|cursor|vscode]` prints the client configuration snippet on stdout, and for Claude also prints a `claude mcp add` one-liner on stderr.
+
+`app` is a callback rather than the application itself because the Extension is installed while the application is still being assembled. The callback runs when `mcp` runs, so returning the variable being assigned is fine, but the arrow needs an explicit `(): AnyCrust =>` return annotation: without it, TypeScript reports the variable as referenced in its own initializer. The `mcpExtension.id` static exposes the Extension identity.
+
+<auto-type-table path="../../../../../packages/mcp/src/extension.ts" name="McpExtensionOptions" />
+
+### Client configuration
+
+`mcp config` resolves the launch identity from the running process: a compiled executable (`bun build --compile`, `deno compile`) is its own `command` with `args: ["mcp"]`; a Node/Bun source entry or Node bundle relaunches through `process.execPath` with `process.execArgv` (including preloads/loaders) before the entry path. Claude Code, Claude Desktop, and Cursor read `mcpServers`; VS Code's `.vscode/mcp.json` reads `servers`.
+
+Set `launch: { command, args }` in the Extension options to override the generated launch; `args` must include `mcp`. Deno source entries need this override with `run` and the required permission/configuration flags, since Deno does not expose them through `process.execArgv`. Use it also to remove development-only runtime flags such as inspectors or watch mode. Automatic detection does not preserve the working directory or environment options such as `NODE_OPTIONS`; use absolute paths and configure the client's environment separately when needed.
+
+```json
+{
+  "mcpServers": {
+    "my-cli": { "type": "stdio", "command": "/usr/local/bin/my-cli", "args": ["mcp"] }
+  }
+}
+```
+
+```text
+Or run: claude mcp add my-cli -- /usr/local/bin/my-cli mcp
+```
+
+Nothing is written into client configuration files; paste the snippet or run the one-liner.
+
+## Tools
+
+A command becomes a tool when it is visible (not `hidden`, nor under a hidden command), has a Command Action, is not the `mcp` command, and is not under an `exclude` path. The root is a tool only when it has an action.
+
+The tool name is the canonical command path joined with `_` (`deploy api` becomes `deploy_api`); the root uses its own name, and aliases never become tools. That join is not injective, so `toolsFromSnapshot` throws when two commands map to one name (`a_b` and `a b`, or the root and a subcommand named after it), naming both paths. It also throws when a name falls outside the MCP tool-name rule (1–128 characters of `A-Z a-z 0-9 _ - .`).
+
+Each tool's `inputSchema` is one flat object built from the snapshot:
+
+| Definition                                      | Schema                                                                                                                                                                                   |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type: "string"` / `"path"`                     | `{ type: "string" }`                                                                                                                                                                     |
+| `type: "number"` / `"boolean"`                  | `{ type: "number" }` / `{ type: "boolean" }`                                                                                                                                             |
+| `type: "url"`                                   | `{ type: "string", format: "uri" }`; the string becomes a `URL` before `run()`                                                                                                           |
+| `type: "json"`                                  | `{}` (any JSON)                                                                                                                                                                          |
+| `choices`                                       | `{ type: "string", enum }`                                                                                                                                                               |
+| `variadic` / `multiple`                         | `{ type: "array", items }`                                                                                                                                                               |
+| `required` without `default`                    | listed in `required`                                                                                                                                                                     |
+| Standard Schema arg (no `type` in the snapshot) | `{ type: "string" }`; the schema receives the string                                                                                                                                     |
+| Standard Schema flag / custom `parse`           | indistinguishable from a core definition in the snapshot; the declared token type (`string`, or `boolean` for a boolean-token flag) is emitted and the pipeline validates and transforms |
+| every tool                                      | `raw: { type: "array", items: { type: "string" } }`, delivered to the action as `rawArgs`                                                                                                |
+
+The snapshot carries no schema or `parse` function, so those definitions are advertised by their token type and validated when the command runs; `run()` accepts exactly those token values. Requiredness owned by a Standard Schema is invisible to the snapshot, so schema-backed definitions are advertised as optional; a custom `parse` definition's `required` is declared on the definition and is kept. An arg and a flag with the same name, or a definition named `raw`, cannot share the flat object and are rejected. Definitions may use any name core accepts, including `constructor` or `__proto__`; the manifest and the reconstructed `run()` input treat them as ordinary own properties (whether a given MCP client transports a `__proto__` key is up to the client).
+
+Default values are advertised as detached JSON snapshots. Defaults that cannot be serialized (such as cycles, `BigInt`, or throwing getters) are omitted from the manifest; this does not change the default used by `run()` or make the input required.
+
+## Results
+
+The outcome of `app.run()` decides the tool result:
+
+- A `completed` result that survives `JSON.stringify` losslessly (finite numbers, strings, booleans, `null`, arrays, and plain objects of those) is returned as `structuredContent` plus a text block holding the same JSON. Plain objects are structured as themselves; other JSON values are wrapped as `{ "result": value }` because `structuredContent` must be an object.
+- Any other `completed` result (`undefined`, `Date`, `Map`, class instances, `BigInt`, `NaN`, cycles, objects holding `undefined`) and every `finished` outcome return the captured stdout as text. Exceptions during result inspection or serialization also fall back to stdout. Structured content is detached from the action's object so transport serialization cannot invoke its getters again.
+- A `failed` outcome sets `isError` with `<code>: <message>` for a `CrustError`, `<name>: <message>` for other errors.
+
+Unknown tool names are protocol errors (`InvalidParams`), which is also how hidden and excluded commands present.
+
+## Headless primitives
+
+<include lang="ts">../../../examples/modules/mcp.ts#headless</include>
+
+`createMcpServer(app, options?)` prepares the snapshot, builds the manifest, and returns the SDK's low-level `Server` (the class that accepts JSON Schema tools) with `tools/list` and `tools/call` handlers installed. The server is named after the root command and uses its `version`, or `0.0.0` when none is declared. Each call runs `app.run(path, input, { signal })` with its own captured output and the SDK request's cancellation signal, so concurrent calls never share state. Client cancellation aborts only that invocation; disconnecting aborts all active requests. Actions must cooperate with the signal to stop work and allow Context disposal. `serveStdio(server)` connects the SDK stdio transport and resolves when the client disconnects.
+
+Over stdio, the transport owns the process's stdout for protocol frames. Only output written through the invocation's `stdout`/`stderr` (Command Actions, Extension hooks, Context setup and disposal) is captured per call; direct `console.log` or `process.stdout.write` calls are not intercepted and will corrupt the protocol stream. Keep such writes out of code that runs under `mcp`, or send them to stderr.
+
+<auto-type-table path="../../../../../packages/mcp/src/tools.ts" name="McpToolsOptions" />
+
+## `toolsFromSnapshot(snapshot, options?)`
+
+<include lang="ts">../../../examples/modules/mcp.ts#manifest</include>
+
+The pure manifest, for tests or tooling that ships tool definitions without a server. Pass `await app.snapshot()` so Extension-contributed commands are included. Each entry carries the tool `name`, `description`, `inputSchema`, and the canonical `path` for `app.run()`.
+
+<auto-type-table path="../../../../../packages/mcp/src/tools.ts" name="McpTool" />
