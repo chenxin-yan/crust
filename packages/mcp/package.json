@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/mcp",
-	"version": "0.0.1",
+	"version": "0.1.0",
 	"description": "Expose a Crust CLI as MCP tools over stdio",
 	"type": "module",
 	"sideEffects": false,

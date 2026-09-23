@@ -1,5 +1,20 @@
 # @crustjs/crust
 
+## 0.4.0
+
+### Minor Changes
+
+- [#437](https://github.com/chenxin-yan/crust/pull/437) [`41cab19`](https://github.com/chenxin-yan/crust/commit/41cab19f22e2a9b6d7315a2079334ec840352dc1) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Add the programmatic `build()` API: `import { build } from "@crustjs/crust"` runs the `crust build` pipeline (same options as the flags: `cwd`, `targets`, `envFiles`, `minify`, `validate`, plus `onLog`) and returns the staged `stageDir`, generated `artifacts`, and per-command Extension `reports`. It is silent unless `onLog` is given and throws on failure; `crust build` is now a thin wrapper over it. The published package ships the library as a bundled `dist/` with declarations, and `crust build` now carries a project's `exports`, `peerDependencies`, and `peerDependenciesMeta` fields into the staged root package (`exports` targets validated against the staged files and Node's target rules, peer ranges must be publishable as written; projects without these fields are unchanged). `@crustjs/crust` declares `@crustjs/core` as a peer dependency so the re-exported `BuildReport` is core's own type. The Command Snapshot subprocess uses `bun` from `PATH` like compilation does, so `build()` also works under Node when Bun is installed.
+  
+  Carried CommonJS `.js`/`.d.ts` exports require an included nested package scope, or explicit `.cjs`/`.d.cts` extensions, to avoid changing their module format under the generated ESM root. Unresolved `workspace:` and `catalog:` peer ranges are rejected because staged manifests are published without rewriting.
+
+### Patch Changes
+
+- [#437](https://github.com/chenxin-yan/crust/pull/437) [`41cab19`](https://github.com/chenxin-yan/crust/commit/41cab19f22e2a9b6d7315a2079334ec840352dc1) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Reject overlapping programmatic builds of the same project before they can overwrite each other's staged files.
+- Updated dependencies [[`0e1799b`](https://github.com/chenxin-yan/crust/commit/0e1799bb99cfcc73fa24bf288068600fc01dc7bb), [`0e1799b`](https://github.com/chenxin-yan/crust/commit/0e1799bb99cfcc73fa24bf288068600fc01dc7bb)]:
+  - @crustjs/core@0.4.0
+  - @crustjs/extensions@0.4.0
+
 ## 0.3.6
 
 ### Patch Changes

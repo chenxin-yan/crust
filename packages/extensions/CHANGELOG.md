@@ -1,5 +1,16 @@
 # @crustjs/plugins
 
+## 0.4.0
+
+### Minor Changes
+
+- [#438](https://github.com/chenxin-yan/crust/pull/438) [`0e1799b`](https://github.com/chenxin-yan/crust/commit/0e1799bb99cfcc73fa24bf288068600fc01dc7bb) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Add `env: { name, delimiter? }` and `delimiter` to `FlagDef`. A flag with `env` reads the named environment variable when absent from argv (argv > env > `default`); the value goes through the same coercion, `choices`, `parse`, and schema path as an argv token and satisfies `required`. Flag-level `delimiter` splits string argv occurrences; `env.delimiter` independently splits environment text. Both require repeatable flags and drop empty segments, with no implicit separator inheritance. `FlagSnapshot`/`DocumentationFlag` carry the immutable environment binding and argv delimiter; help and generated man pages render `[env: NAME]` after the description and never the value. `formatDescription` accepts an optional trailing `env` argument. Structured `run()` input does not read the environment and is never split.
+
+### Patch Changes
+
+- Updated dependencies [[`0e1799b`](https://github.com/chenxin-yan/crust/commit/0e1799bb99cfcc73fa24bf288068600fc01dc7bb), [`0e1799b`](https://github.com/chenxin-yan/crust/commit/0e1799bb99cfcc73fa24bf288068600fc01dc7bb)]:
+  - @crustjs/core@0.4.0
+
 ## 0.3.6
 
 No changes in this release.
