@@ -77,7 +77,7 @@ function int(random: Random, max: number): number {
 }
 
 function pick<T>(random: Random, pool: readonly T[]): T {
-	// SAFETY: every pool below is a non-empty literal array.
+	// SAFETY: pools are non-empty literals or choices checked by the argument/flag generators.
 	return pool[int(random, pool.length)]!;
 }
 
@@ -156,7 +156,15 @@ function generateArgs(random: Random, defs: readonly ArgSnapshot[]) {
 	const tokens: string[] = [];
 	// Structured input rejects positional gaps, so supply a prefix that covers every required arg.
 	const lastRequired = defs.findLastIndex(mustSupply);
-	const supplied = lastRequired + 1 + int(random, defs.length - lastRequired);
+	const empty = defs.find((def) => def.choices?.length === 0);
+	const available = empty ? defs.indexOf(empty) : defs.length;
+	if (empty && lastRequired >= available) {
+		throw new Error(
+			`fuzzRoundTrip: cannot generate required positional prefix: "${empty.name}" has empty choices`,
+		);
+	}
+	// An empty choice domain can only be omitted, along with all following positionals.
+	const supplied = lastRequired + 1 + int(random, available - lastRequired);
 	for (const def of defs.slice(0, supplied)) {
 		if (def.variadic) {
 			const count = (mustSupply(def) ? 1 : 0) + int(random, 3);
@@ -198,6 +206,14 @@ function generateFlags(random: Random, defs: Readonly<Record<string, FlagSnapsho
 		);
 	};
 	for (const [name, def] of Object.entries(defs)) {
+		if (def.choices?.length === 0) {
+			if (mustSupply(def)) {
+				throw new Error(
+					`fuzzRoundTrip: cannot generate required flag "--${name}": choices is empty`,
+				);
+			}
+			continue;
+		}
 		if (!mustSupply(def) && random() < 0.5) continue;
 		if (def.multiple) {
 			// Zero occurrences is an empty array on the structured side and nothing on argv.

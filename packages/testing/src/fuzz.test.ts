@@ -157,6 +157,98 @@ describe("fuzzRoundTrip", () => {
 		expect(new Set(modes)).toEqual(new Set(["safe", "fast"]));
 	});
 
+	it.each([false, true])("omits flags with empty choices (multiple: %s)", async (multiple) => {
+		const app = new Crust("cli")
+			.flags({ name: "mode", type: "string", choices: [], ...(multiple ? { multiple: true } : {}) })
+			.action(() => {});
+		expect(await fuzzRoundTrip(app, [], { seed: 1, runs: 10 })).toEqual({
+			seed: 1,
+			runs: 10,
+			accepted: 10,
+			rejected: 0,
+		});
+	});
+
+	it.each([false, true])(
+		"omits positionals with empty choices (variadic: %s)",
+		async (variadic) => {
+			const app = new Crust("cli")
+				.args({
+					name: "mode",
+					type: "string",
+					choices: [],
+					...(variadic ? { variadic: true } : {}),
+				})
+				.action(() => {});
+			expect(await fuzzRoundTrip(app, [], { seed: 1, runs: 10 })).toEqual({
+				seed: 1,
+				runs: 10,
+				accepted: 10,
+				rejected: 0,
+			});
+		},
+	);
+
+	it("stops the supplied positional prefix at an empty choice domain", async () => {
+		const supplied: string[] = [];
+		const app = new Crust("cli")
+			.args(
+				{
+					name: "first",
+					type: "string",
+					required: true,
+					parse: (raw) => (supplied.push(raw), raw),
+				},
+				{ name: "mode", type: "string", choices: [] },
+				{
+					name: "last",
+					type: "string",
+					parse: () => {
+						throw new Error("positional gap");
+					},
+				},
+			)
+			.action(() => {});
+		expect(await fuzzRoundTrip(app, [], { seed: 1, runs: 10 })).toMatchObject({ accepted: 10 });
+		expect(supplied).toHaveLength(20);
+	});
+
+	it.each([false, true])(
+		"reports required flags with empty choices (multiple: %s)",
+		async (multiple) => {
+			const app = new Crust("cli")
+				.flags({
+					name: "mode",
+					type: "string",
+					choices: [],
+					required: true,
+					...(multiple ? { multiple: true } : {}),
+				})
+				.action(() => {});
+			await expect(fuzzRoundTrip(app, [], { seed: 1, runs: 10 })).rejects.toThrow(
+				'fuzzRoundTrip: cannot generate required flag "--mode": choices is empty',
+			);
+		},
+	);
+
+	it.each([false, true])(
+		"reports required positionals with empty choices (variadic: %s)",
+		async (variadic) => {
+			const app = new Crust("cli")
+				.args({
+					name: "mode",
+					type: "string",
+					choices: [],
+					required: true,
+					...(variadic ? { variadic: true } : {}),
+				})
+				.action(() => {});
+			await expect(fuzzRoundTrip(app, [], { seed: 1, runs: 10 })).rejects.toThrow(
+				'fuzzRoundTrip: cannot generate required positional prefix: "mode" has empty choices',
+			);
+		},
+	);
+
 	it("never places a subcommand name or alias as the first positional", async () => {
 		const firsts: string[] = [];
 		const app = new Crust("cli")
