@@ -38,6 +38,9 @@ type ArgvFlagValue =
 	| { readonly kind: "boolean"; value: boolean | boolean[] }
 	| { readonly kind: "string"; value: string | string[] };
 
+/** Environment variables consulted by `FlagDef.env`; `process.env` on the terminal path. */
+export type FlagEnvironment = Readonly<Record<string, string | undefined>>;
+
 /** Element type of `parseArgs(...).tokens` — not exported by `@types/node`. */
 type ParseArgsToken = NonNullable<ReturnType<typeof nodeParseArgs>["tokens"]>[number];
 
@@ -216,6 +219,71 @@ function resolveAliases(tokens: ParseArgsToken[], spellings: ReadonlyMap<string,
 	}
 
 	return canonical;
+}
+
+/** Split repeatable occurrences on the declared delimiter, dropping empty segments. */
+function splitOccurrences(values: readonly string[], delimiter: string | undefined): string[] {
+	if (delimiter === undefined) return [...values];
+	return values.flatMap((value) => value.split(delimiter)).filter((value) => value !== "");
+}
+
+/**
+ * Convert an environment value into the shape argv tokens produce, so the
+ * shared coercion path (`choices`, `parse`, type conversion, schemas) runs
+ * identically. Booleans use the positional spelling rule (`true`/`1`);
+ * a `noNegate` flag rejects a false value like it rejects `--no-<name>`.
+ */
+function envFlagValue(name: string, def: FlagDef, raw: string): ArgvFlagValue | undefined {
+	const occurrences = def.multiple ? splitOccurrences([raw], def.delimiter) : [raw];
+	if (def.multiple && occurrences.length === 0) return undefined;
+	if (def.type !== "boolean") {
+		return { kind: "string", value: def.multiple ? occurrences : raw };
+	}
+	const values = occurrences.map(coerceBooleanString);
+	if ("noNegate" in def && def.noNegate && values.includes(false)) {
+		throw new CrustError("PARSE", `Flag "--${name}" does not support negation (from ${def.env})`);
+	}
+	// SAFETY: a single-value flag has exactly the one raw occurrence.
+	return { kind: "boolean", value: def.multiple ? values : values[0]! };
+}
+
+/**
+ * Select each flag's source: argv > `env` > `default`.
+ *
+ * Source selection looks at explicit argv presence *before* delimiter
+ * splitting, so `--tags ""` stays an argv value (zero occurrences, then
+ * default/required rules) instead of letting a stale environment variable
+ * override an explicit request. Environment lookup is argv-only; structured
+ * `run()` input never reaches this function.
+ */
+function applyEnvAndDelimiter(
+	flagsDef: FlagsDef,
+	argvValues: Readonly<Record<string, ArgvFlagValue | undefined>>,
+	env: FlagEnvironment,
+) {
+	const values: Record<string, ArgvFlagValue | undefined> = {};
+	for (const [name, def] of Object.entries(flagsDef)) {
+		const argvValue = argvValues[name];
+		if (argvValue !== undefined) {
+			if (
+				def.delimiter !== undefined &&
+				argvValue.kind === "string" &&
+				Array.isArray(argvValue.value)
+			) {
+				const occurrences = splitOccurrences(argvValue.value, def.delimiter);
+				// Zero occurrences after splitting follow the omission rules (default, required).
+				values[name] =
+					occurrences.length === 0 ? undefined : { kind: "string", value: occurrences };
+			} else {
+				values[name] = argvValue;
+			}
+			continue;
+		}
+		if (def.env === undefined) continue;
+		const raw = env[def.env];
+		if (raw !== undefined) values[name] = envFlagValue(name, def, raw);
+	}
+	return values;
 }
 
 /**
@@ -501,18 +569,20 @@ function bind<A extends ArgsDef, F extends FlagsDef, V, W>(
  *
  * @param command - The command whose arg/flag definitions drive the parsing
  * @param argv - The argv array to parse (typically `process.argv.slice(2)`)
+ * @param env - Environment consulted for `FlagDef.env` fallbacks; pass `{}` to parse without one
  * @returns Parsed args, flags, excessArgs (positionals before `--` not consumed by a declared argument), and rawArgs (everything after `--`)
  * @throws {CrustError} On unknown flags or type coercion failure
  */
 export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
 	command: CommandNode & { args: A; effectiveFlags: F },
 	argv: string[],
+	env: FlagEnvironment = process.env,
 ): ParseResult<A, F> {
 	const { positionals, flagValues, rawArgs } = tokenizeArgv(command, argv);
 	const { args, flags, consumed } = bind(
 		command,
 		positionals,
-		flagValues,
+		applyEnvAndDelimiter(command.effectiveFlags, flagValues, env),
 		coerceArgToken,
 		coerceFlagValue,
 	);

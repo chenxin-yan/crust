@@ -1,4 +1,6 @@
 /* oxlint-disable anti-slop/no-unknown-returns, anti-slop/no-known-value-widening -- compile-only probes deliberately expose unproven parser contracts. */
+import type { StandardSchema } from "@crustjs/utils/schema";
+
 import { Crust, defineCommand } from "../command/crust.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { ArgsDef, FlagsDef, NamedFlagDef } from "../types.ts";
@@ -69,6 +71,23 @@ function _localDefinitions(name: string, aliases: string[], choices: string[], v
 	// @ts-expect-error -- literal membership is owned by the helper
 	defineArg("mode", { type: "string", choices: ["a"], default: "b" });
 	defineArg(name, { type: "string", choices, default: value });
+}
+
+// `env` is accepted on every flag variant; `delimiter` only with `multiple: true`
+function _envAndDelimiter(schema: StandardSchema) {
+	defineFlag("token", { type: "string", env: "APP_TOKEN", required: true });
+	defineFlag("port", { type: "number", env: "APP_PORT", default: 3000 });
+	defineFlag("color", { type: "boolean", env: "APP_COLOR", noNegate: true });
+	defineFlag("port", { type: "string", schema, env: "APP_PORT" });
+	defineFlag("tags", { type: "string", multiple: true, env: "APP_TAGS", delimiter: "," });
+	defineFlag("ports", { type: "number", multiple: true, delimiter: ":" });
+	defineFlag("tags", { type: "string", schema, multiple: true, delimiter: "," });
+	// @ts-expect-error -- delimiter requires multiple: true
+	defineFlag("tag", { type: "string", delimiter: "," });
+	// @ts-expect-error -- delimiter requires multiple: true on schema-backed flags too
+	defineFlag("tag", { type: "string", schema, delimiter: "," });
+	// @ts-expect-error -- delimiter requires multiple: true
+	new Crust("cli").flags({ name: "tag", type: "string", delimiter: "," });
 }
 
 function _attachments(flags: NamedFlagDef[], args: ArgsDef, aliases: string[], cond: boolean) {

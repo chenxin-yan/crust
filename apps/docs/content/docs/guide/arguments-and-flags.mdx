@@ -165,6 +165,34 @@ $ echo $?
 1
 ```
 
+### Environment variables
+
+<include lang="ts" meta='title="src/publish.ts"'>
+  ../../../examples/guide/flags-env.ts
+</include>
+
+Set `env` to read a flag from an environment variable when it is absent from argv. Precedence is argv, then `env`, then `default`; an environment value also satisfies `required`:
+
+```sh
+$ PUBLISH_TOKEN=example publish
+publishing to npm tags=undefined
+$ PUBLISH_TOKEN=example PUBLISH_REGISTRY=github publish --registry jsr
+publishing to jsr tags=undefined
+```
+
+The environment value enters the parser exactly like `--flag=<value>`, so `type` conversion, `choices`, `parse`, and schemas apply unchanged. Boolean flags accept `true` or `1` as true; any other value is false, and a `noNegate` flag rejects a false value the way it rejects `--no-<name>`.
+
+A repeated flag reads one occurrence from its variable unless you set `delimiter`, which splits both argv and environment values into occurrences and drops empty segments. There is no default delimiter, so values containing commas stay intact unless you opt in:
+
+```sh
+$ PUBLISH_TOKEN=example PUBLISH_TAGS=latest,,beta publish
+publishing to npm tags=latest,beta
+$ PUBLISH_TOKEN=example publish --tag latest,beta --tag next
+publishing to npm tags=latest,beta,next
+```
+
+An explicit argv occurrence always wins over the environment, even when it splits to zero occurrences. Help and man pages list the variable as `[env: PUBLISH_TOKEN]` and never print its value. Programmatic [`run()`](/docs/api/crust#runpath-input-options) binds structured input directly: it does not read the environment and never splits arrays. Positional arguments have no `env`; use a flag.
+
 ### Values that start with `-`
 
 For a value-taking flag, attach a dash-leading value with `=` so it is not mistaken for another flag:

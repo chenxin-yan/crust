@@ -71,6 +71,10 @@ export interface FlagSnapshot {
 	readonly choices?: readonly string[];
 	/** Declared default value; `URL` defaults are serialized to their `href` string. */
 	readonly default?: unknown;
+	/** Environment variable name consulted when the flag is absent from argv; never its value. */
+	readonly env?: string;
+	/** Delimiter that splits argv/env values of a repeatable flag into occurrences. */
+	readonly delimiter?: string;
 }
 
 /**
@@ -159,6 +163,8 @@ function snapshotFlag(def: FlagDef): FlagSnapshot {
 		noNegate: "noNegate" in def ? def.noNegate : undefined,
 		choices: def.choices ? Object.freeze([...def.choices]) : undefined,
 		default: serializableDefault(def.default),
+		env: def.env,
+		delimiter: def.delimiter,
 	});
 }
 

@@ -886,6 +886,24 @@ describe("built-in extensions", () => {
 		expect(plain).toContain("[choices: dev, staging, prod]");
 	});
 
+	it("renderHelp surfaces the `env` variable name after the description, never its value", async () => {
+		const command = new Crust("app")
+			.flags({
+				name: "token",
+				type: "string",
+				env: "HOME",
+				default: "anon",
+				description: "API token",
+			})
+			.action(() => {});
+		const plain = stripAnsi(renderHelp(await command.snapshot()));
+		const tokenLine = plain.split("\n").find((l) => l.includes("--token"));
+		expect(tokenLine).toContain('API token [env: HOME] [default: "anon"]');
+		// HOME is set in every test environment; help must show the name only.
+		expect(process.env.HOME).toBeTruthy();
+		expect(plain).not.toContain(process.env.HOME as string);
+	});
+
 	it("renderHelp composes `[default: ...]` and `[choices: ...]` when both are present", async () => {
 		const command = new Crust("app")
 			.flags({

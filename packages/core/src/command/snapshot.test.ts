@@ -102,6 +102,29 @@ describe("snapshotCommand", () => {
 		expect(() => structuredClone(snapshot)).not.toThrow();
 	});
 
+	it("carries env and delimiter names but never the environment value", () => {
+		const root = createCommandNode("cli");
+		registerFlag(root, "token", { type: "string", env: "HOME", required: true }, "local");
+		registerFlag(
+			root,
+			"tags",
+			{ type: "string", multiple: true, env: "CLI_TAGS", delimiter: "," },
+			"local",
+		);
+		const snapshot = snapshotCommand(root);
+
+		expect(snapshot.flags.token).toEqual({
+			type: "string",
+			required: true,
+			negatable: false,
+			env: "HOME",
+		});
+		expect(snapshot.flags.tags).toMatchObject({ env: "CLI_TAGS", delimiter: "," });
+		// HOME is set in every test environment; the snapshot must not leak it.
+		expect(process.env.HOME).toBeTruthy();
+		expect(JSON.stringify(snapshot)).not.toContain(JSON.stringify(process.env.HOME));
+	});
+
 	it("is deeply frozen", () => {
 		const snapshot = snapshotCommand(buildTree());
 

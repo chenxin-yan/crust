@@ -1251,6 +1251,206 @@ describe("parseArgs \u2014 default coercion symmetry", () => {
 	});
 });
 
+// ────────────────────────────────────────────────────────────────────────────
+// Environment fallback (`env`) and occurrence splitting (`delimiter`)
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("parseArgs \u2014 env fallback", () => {
+	it("prefers argv, then env, then default", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: { registry: { type: "string", env: "APP_REGISTRY", default: "npm" } },
+		});
+		const env = { APP_REGISTRY: "github" };
+		expect(parseArgs(cmd, ["--registry", "jsr"], env).flags.registry).toBe("jsr");
+		expect(parseArgs(cmd, [], env).flags.registry).toBe("github");
+		expect(parseArgs(cmd, [], {}).flags.registry).toBe("npm");
+	});
+
+	it("leaves an optional flag undefined when neither argv nor env supplies it", () => {
+		const cmd = makeNode({ meta: "test", flags: { token: { type: "string", env: "APP_TOKEN" } } });
+		expect(parseArgs(cmd, [], { OTHER: "x" }).flags.token).toBeUndefined();
+		expect(parseArgs(cmd, [], { APP_TOKEN: undefined }).flags.token).toBeUndefined();
+	});
+
+	it("satisfies a required flag from env", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: { token: { type: "string", env: "APP_TOKEN", required: true } },
+		});
+		const parsed = parseArgs(cmd, [], { APP_TOKEN: "secret" });
+		expect(parsed.flags.token).toBe("secret");
+		expect(() => validateParsed(cmd, parsed)).not.toThrow();
+		expect(() => validateParsed(cmd, parseArgs(cmd, [], {}))).toThrow(
+			'Missing required flag "--token"',
+		);
+	});
+
+	it("runs env values through the same coercion, choices, and parse path as argv", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: {
+				port: { type: "number", env: "APP_PORT" },
+				mode: { type: "string", env: "APP_MODE", choices: ["dev", "prod"] },
+				level: { type: "string", env: "APP_LEVEL", parse: (raw) => raw.toUpperCase() },
+				home: { type: "url", env: "APP_HOME" },
+			},
+		});
+		const parsed = parseArgs(cmd, [], {
+			APP_PORT: "8080",
+			APP_MODE: "prod",
+			APP_LEVEL: "info",
+			APP_HOME: "https://example.com",
+		});
+		expect(parsed.flags.port).toBe(8080);
+		expect(parsed.flags.mode).toBe("prod");
+		expect(parsed.flags.level).toBe("INFO");
+		expect(parsed.flags.home).toEqual(new URL("https://example.com"));
+
+		expect(() => parseArgs(cmd, [], { APP_PORT: "nope" })).toThrow(
+			'Expected number for --port, got "nope"',
+		);
+		expect(() => parseArgs(cmd, [], { APP_MODE: "test" })).toThrow(
+			'Invalid value "test" for --mode. Expected one of: dev, prod',
+		);
+	});
+
+	it("passes env values to schema-backed flags as the raw token shape", () => {
+		const schema = {
+			"~standard": {
+				version: 1 as const,
+				vendor: "test",
+				validate: (value: unknown) => ({ value }),
+			},
+		};
+		const cmd = makeNode({
+			meta: "test",
+			flags: {
+				port: { type: "string", schema, env: "APP_PORT" },
+				tags: { type: "string", schema, env: "APP_TAGS", multiple: true, delimiter: "," },
+			},
+		});
+		const parsed = parseArgs(cmd, [], { APP_PORT: "8080", APP_TAGS: "a,b" });
+		expect(parsed.flags.port).toBe("8080");
+		expect(parsed.flags.tags).toEqual(["a", "b"]);
+	});
+
+	it("coerces boolean env values with the positional boolean spellings", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: { color: { type: "boolean", env: "APP_COLOR", default: true } },
+		});
+		// Same rule as boolean positionals: only "true" and "1" are truthy; anything
+		// else (including "yes") is false. Not an enum validation.
+		for (const [raw, expected] of [
+			["true", true],
+			["1", true],
+			["false", false],
+			["0", false],
+			["", false],
+			["yes", false],
+		] as const) {
+			expect(parseArgs(cmd, [], { APP_COLOR: raw }).flags.color).toBe(expected);
+		}
+		expect(parseArgs(cmd, ["--no-color"], { APP_COLOR: "true" }).flags.color).toBe(false);
+		expect(parseArgs(cmd, ["--color"], { APP_COLOR: "false" }).flags.color).toBe(true);
+	});
+
+	it("rejects a false env value for a noNegate boolean", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: { color: { type: "boolean", env: "APP_COLOR", noNegate: true } },
+		});
+		expect(parseArgs(cmd, [], { APP_COLOR: "1" }).flags.color).toBe(true);
+		expect(() => parseArgs(cmd, [], { APP_COLOR: "0" })).toThrow(
+			'Flag "--color" does not support negation',
+		);
+	});
+
+	it("treats an explicit argv occurrence through an alias or negation as argv presence", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: {
+				output: { type: "string", short: "o", aliases: ["out"], env: "APP_OUTPUT" },
+				loud: { type: "boolean", aliases: ["noisy"], env: "APP_LOUD" },
+			},
+		});
+		const env = { APP_OUTPUT: "from-env", APP_LOUD: "true" };
+		expect(parseArgs(cmd, ["-o", "short"], env).flags.output).toBe("short");
+		expect(parseArgs(cmd, ["--out", "alias"], env).flags.output).toBe("alias");
+		expect(parseArgs(cmd, ["--output", ""], env).flags.output).toBe("");
+		expect(parseArgs(cmd, ["--no-noisy"], env).flags.loud).toBe(false);
+	});
+
+	it("does not read env for structured input", () => {
+		const cmd = makeNode({
+			meta: "test",
+			flags: {
+				token: { type: "string", env: "PATH" },
+				tags: { type: "string", multiple: true, env: "HOME", delimiter: "," },
+			},
+		});
+		// PATH/HOME are set in every test environment; structured binding ignores them.
+		expect(parseStructured(cmd, {}).flags.token).toBeUndefined();
+		expect(parseStructured(cmd, {}).flags.tags).toBeUndefined();
+		expect(parseStructured(cmd, { flags: { tags: ["a,b", "c"] } }).flags.tags).toEqual([
+			"a,b",
+			"c",
+		]);
+	});
+
+	it("reads process.env by default on the argv path", () => {
+		const cmd = makeNode({ meta: "test", flags: { home: { type: "string", env: "HOME" } } });
+		expect(parseArgs(cmd, [])).toEqual(parseArgs(cmd, [], process.env));
+		expect(parseArgs(cmd, []).flags.home).toBe(process.env.HOME);
+		expect(parseArgs(cmd, [], {}).flags.home).toBeUndefined();
+	});
+});
+
+describe("parseArgs \u2014 delimiter", () => {
+	const cmd = makeNode({
+		meta: "test",
+		flags: {
+			tags: { type: "string", multiple: true, env: "APP_TAGS", delimiter: ",", default: ["x"] },
+			ports: { type: "number", multiple: true, env: "APP_PORTS", delimiter: ":" },
+		},
+	});
+
+	it("splits argv occurrences in order and drops empty segments", () => {
+		expect(parseArgs(cmd, ["--tags", "a,b", "--tags", ",c,,"], {}).flags.tags).toEqual([
+			"a",
+			"b",
+			"c",
+		]);
+		expect(parseArgs(cmd, ["--ports", "80:443"], {}).flags.ports).toEqual([80, 443]);
+	});
+
+	it("splits env values and coerces every occurrence", () => {
+		const parsed = parseArgs(cmd, [], { APP_TAGS: "a,,b", APP_PORTS: "80:443" });
+		expect(parsed.flags.tags).toEqual(["a", "b"]);
+		expect(parsed.flags.ports).toEqual([80, 443]);
+		expect(() => parseArgs(cmd, [], { APP_PORTS: "80:nope" })).toThrow(
+			'Expected number for --ports, got "nope"',
+		);
+	});
+
+	it("keeps an explicit all-empty argv value as argv, never falling through to env", () => {
+		// Zero occurrences after splitting then follow the existing empty-array rule (default).
+		expect(parseArgs(cmd, ["--tags", ","], { APP_TAGS: "stale" }).flags.tags).toEqual(["x"]);
+		expect(parseArgs(cmd, ["--ports", ":"], { APP_PORTS: "80" }).flags.ports).toBeUndefined();
+		expect(parseArgs(cmd, [], { APP_TAGS: "," }).flags.tags).toEqual(["x"]);
+	});
+
+	it("does not split without a delimiter", () => {
+		const plain = makeNode({
+			meta: "test",
+			flags: { tags: { type: "string", multiple: true, env: "APP_TAGS" } },
+		});
+		expect(parseArgs(plain, ["--tags", "a,b"], {}).flags.tags).toEqual(["a,b"]);
+		expect(parseArgs(plain, [], { APP_TAGS: "a,b" }).flags.tags).toEqual(["a,b"]);
+	});
+});
+
 describe("parseStructured", () => {
 	it("treats inherited prototype names as omitted while accepting own values", () => {
 		for (const name of ["constructor", "toString"]) {

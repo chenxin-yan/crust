@@ -114,6 +114,29 @@ export function normalizeFlag<const D extends FlagDef>(name: string, def: D): D 
 	if (def.short !== undefined && def.short.length !== 1) {
 		throw new CrustError("DEFINITION", "Short flags must be one character");
 	}
+	if (def.env === "") {
+		throw new CrustError("DEFINITION", `Flag "${name}" env variable name must be non-empty`, {
+			subject: "flag",
+			name,
+			reason: "empty-env",
+		});
+	}
+	if (def.delimiter !== undefined) {
+		if (!def.multiple) {
+			throw new CrustError("DEFINITION", `Flag "${name}" delimiter requires multiple: true`, {
+				subject: "flag",
+				name,
+				reason: "delimiter-without-multiple",
+			});
+		}
+		if (def.delimiter === "") {
+			throw new CrustError("DEFINITION", `Flag "${name}" delimiter must be non-empty`, {
+				subject: "flag",
+				name,
+				reason: "empty-delimiter",
+			});
+		}
+	}
 	return ownDefinition(def);
 }
 

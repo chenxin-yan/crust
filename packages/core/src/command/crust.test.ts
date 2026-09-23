@@ -2868,6 +2868,30 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 		}
 	});
 
+	it("rejects empty env names and delimiters without multiple from dynamic defs", () => {
+		const cases: [Record<string, ParsedFlagValue>, string][] = [
+			[{ name: "token", type: "string", env: "" }, "empty-env"],
+			[{ name: "tags", type: "string", delimiter: "," }, "delimiter-without-multiple"],
+			[{ name: "tags", type: "string", multiple: true, delimiter: "" }, "empty-delimiter"],
+		];
+		for (const [def, reason] of cases) {
+			const defs = asDynamic([def]);
+			expect(() => new Crust("cli").flags(...defs)).toThrow(
+				expect.objectContaining({
+					code: "DEFINITION",
+					details: { subject: "flag", name: def.name, reason },
+				}),
+			);
+		}
+		expect(() =>
+			new Crust("cli").flags(
+				...asDynamic([
+					{ name: "tags", type: "string", multiple: true, env: "TAGS", delimiter: "," },
+				]),
+			),
+		).not.toThrow();
+	});
+
 	it("rejects __proto__ flags at defineContext/defineExtension time", () => {
 		expect(() =>
 			defineContext(
