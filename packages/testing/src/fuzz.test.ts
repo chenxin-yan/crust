@@ -177,6 +177,55 @@ describe("fuzzRoundTrip", () => {
 		expect(firsts).not.toContain("main");
 	});
 
+	it("binds prototype-named positionals, aliases, and flags as own properties", async () => {
+		const app = new Crust("cli").add(
+			defineCommand("serve", { aliases: ["constructor"] }, (command) =>
+				command
+					.args({ name: "__proto__", type: "string", required: true })
+					.flags({ name: "hasOwnProperty", type: "number" })
+					.action(() => {}),
+			),
+		);
+		expect(await fuzzRoundTrip(app, ["serve"], { runs: 25, env: {} })).toMatchObject({
+			accepted: 25,
+		});
+		expect(await fuzzRoundTrip(app, ["constructor"], { runs: 25, env: {} })).toMatchObject({
+			accepted: 25,
+		});
+	});
+
+	it("compares cyclic Standard Schema output without overflowing", async () => {
+		interface Node {
+			self?: Node;
+		}
+		const cyclic = schema<string | undefined, Node>(() => {
+			const node: Node = {};
+			node.self = node;
+			return { value: node };
+		});
+		const app = new Crust("cli").args({ name: "graph", schema: cyclic }).action(() => {});
+		expect(await fuzzRoundTrip(app, [], { runs: 10, env: {} })).toMatchObject({ accepted: 10 });
+	});
+
+	it("binds env-backed flags to their default on both paths regardless of the process environment", async () => {
+		expect(process.env.HOME).toBeDefined();
+		const app = new Crust("cli")
+			.flags({ name: "home", type: "string", env: "HOME", default: "fallback" })
+			.action(() => {});
+		expect(await fuzzRoundTrip(app, [], { runs: 20, env: {} })).toMatchObject({ accepted: 20 });
+	});
+
+	it("never generates a flag's delimiter inside a value", async () => {
+		const app = new Crust("cli")
+			.flags(
+				{ name: "tag", type: "string", multiple: true, delimiter: "," },
+				{ name: "eq", type: "string", multiple: true, delimiter: "=" },
+				{ name: "payload", type: "json", multiple: true, delimiter: "," },
+			)
+			.action(() => {});
+		expect(await fuzzRoundTrip(app, [], { runs: 100, env: {} })).toMatchObject({ accepted: 100 });
+	});
+
 	it("rejects an unknown path with COMMAND_NOT_FOUND before generating anything", async () => {
 		const app = new Crust("cli").action(() => {});
 		// @ts-expect-error -- deliberately exercise an unknown command path.
@@ -275,6 +324,33 @@ describe("checkRoundTripCase", () => {
 				app,
 				[],
 				{ input: { flags: { tag: ["a", "b"] } }, argv: ["--tag=b", "--tag=a"] },
+				false,
+				"pinned",
+			),
+		).rejects.toThrow("structured and argv binding diverged");
+	});
+
+	it("detects a delimiter splitting an argv value that structured input keeps whole", async () => {
+		const delimited = new Crust("cli")
+			.flags({ name: "tag", type: "string", multiple: true, delimiter: "," })
+			.action(() => {});
+		await expect(
+			checkRoundTripCase(
+				delimited,
+				[],
+				{ input: { flags: { tag: ["a,b"] } }, argv: ["--tag=a,b"] },
+				false,
+				"pinned",
+			),
+		).rejects.toThrow(
+			/binding diverged[\s\S]*structured: [\s\S]*tag: \[ 'a,b' \][\s\S]*argv path: [\s\S]*tag: \[ 'a', 'b' \]/,
+		);
+		// An empty segment is dropped on argv but kept as a structured value.
+		await expect(
+			checkRoundTripCase(
+				delimited,
+				[],
+				{ input: { flags: { tag: [""] } }, argv: ["--tag="] },
 				false,
 				"pinned",
 			),

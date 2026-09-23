@@ -1835,7 +1835,8 @@ function nodeOf(app: AnyCrust): CommandNode {
  * then runs the production parser; author `parse` functions and schemas run as validators.
  * Never creates Contexts, runs Extension hooks or the Command Action, writes output, or
  * touches process exit state. Parse and validation failures throw the same `CrustError`s
- * that `run()` reports as a failed outcome.
+ * that `run()` reports as a failed outcome. Argv binds against an empty environment: a flag
+ * with `env` falls back to its `default` here even when the variable is set for the process.
  */
 export async function bindInput(app: AnyCrust, input: BindInput): Promise<BoundInput> {
 	return await bindInvocation(nodeOf(app), input, materializeCommandDefinition);

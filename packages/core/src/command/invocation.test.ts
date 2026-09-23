@@ -152,6 +152,27 @@ describe("bindInput", () => {
 	});
 });
 
+describe("bindInput \u2014 environment", () => {
+	it("binds argv against an empty environment while execute() reads process.env", async () => {
+		// HOME is set in every environment this suite runs in; the flag must still fall back.
+		expect(process.env.HOME).toBeDefined();
+		const seen: string[] = [];
+		const app = new Crust("cli")
+			.flags({ name: "home", type: "string", env: "HOME", default: "fallback" })
+			.action(({ flags }) => {
+				seen.push(flags.home);
+			});
+
+		expect((await bindInput(app, { argv: [] })).flags).toEqual({ home: "fallback" });
+		expect((await bindInput(app, { path: [], input: {} })).flags).toEqual({ home: "fallback" });
+		expect((await bindInput(app, { argv: ["--home=x"] })).flags).toEqual({ home: "x" });
+		expect(seen).toEqual([]);
+
+		expect(await app.execute({ argv: [] })).toBe(0);
+		expect(seen).toEqual([process.env.HOME!]);
+	});
+});
+
 describe("customBindings", () => {
 	it("names parse- and schema-backed definitions at a typed path", () => {
 		const app = new Crust("cli").flags({ name: "plain", type: "string" }).add(

@@ -150,7 +150,9 @@ function mustSupply(def: ArgSnapshot | FlagSnapshot): boolean {
 }
 
 function generateArgs(random: Random, defs: readonly ArgSnapshot[]) {
-	const args: Record<string, StructuredValue> = {};
+	// Null prototype: core accepts a positional named `__proto__`, which plain
+	// assignment would turn into a prototype swap instead of an own property.
+	const args: Record<string, StructuredValue> = Object.create(null);
 	const tokens: string[] = [];
 	// Structured input rejects positional gaps, so supply a prefix that covers every required arg.
 	const lastRequired = defs.findLastIndex(mustSupply);
@@ -171,7 +173,7 @@ function generateArgs(random: Random, defs: readonly ArgSnapshot[]) {
 }
 
 function generateFlags(random: Random, defs: Readonly<Record<string, FlagSnapshot>>) {
-	const flags: Record<string, StructuredValue> = {};
+	const flags: Record<string, StructuredValue> = Object.create(null);
 	const tokens: string[] = [];
 	const encode = (name: string, def: FlagSnapshot): Encoded => {
 		if (def.type === "boolean") {
@@ -179,8 +181,21 @@ function generateFlags(random: Random, defs: Readonly<Record<string, FlagSnapsho
 			const value = def.negatable ? random() < 0.5 : true;
 			return { value, token: value ? `--${name}` : `--no-${name}` };
 		}
-		const item = scalar(random, def, false);
-		return { value: item.value, token: `--${name}=${item.token}` };
+		// A `delimiter` splits argv occurrences and drops empty segments, but never touches
+		// structured values, so a token containing it (or an empty token) is not equivalent.
+		for (let draw = 0; draw < MAX_ENCODE_ATTEMPTS; draw++) {
+			const item = scalar(random, def, false);
+			if (
+				def.delimiter !== undefined &&
+				(item.token === "" || item.token.includes(def.delimiter))
+			) {
+				continue;
+			}
+			return { value: item.value, token: `--${name}=${item.token}` };
+		}
+		throw new Error(
+			`fuzzRoundTrip: could not draw a value for "--${name}" without its delimiter ${inspect(def.delimiter)} after ${MAX_ENCODE_ATTEMPTS} attempts`,
+		);
 	};
 	for (const [name, def] of Object.entries(defs)) {
 		if (!mustSupply(def) && random() < 0.5) continue;
@@ -234,34 +249,16 @@ function generateCase(
 function commandAt(root: CommandSnapshot, path: readonly string[]): CommandSnapshot {
 	let command = root;
 	for (const name of path) {
-		const child =
-			command.subCommands[name] ??
-			Object.values(command.subCommands).find((candidate) =>
-				candidate.meta.aliases?.includes(name),
-			);
+		// hasOwn like the router: an alias named `constructor` must not resolve to Object.
+		const child = Object.hasOwn(command.subCommands, name)
+			? command.subCommands[name]
+			: Object.values(command.subCommands).find((candidate) =>
+					candidate.meta.aliases?.includes(name),
+				);
 		if (!child) throw new Error(`fuzzRoundTrip: snapshot has no command "${name}"`);
 		command = child;
 	}
 	return command;
-}
-
-/** A bound arg or flag value: a core coercion output or whatever a Standard Schema returned. */
-type BoundValue = BoundInput["args"][string];
-
-function isPlainRecord(value: BoundValue): value is Record<string, BoundValue> {
-	return (
-		value !== null && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype
-	);
-}
-
-/** `URL` has no enumerable state, so deep equality must compare its `href`. */
-function comparable(value: BoundValue): BoundValue {
-	if (value instanceof URL) return value.href;
-	if (Array.isArray(value)) return value.map(comparable);
-	if (isPlainRecord(value)) {
-		return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, comparable(item)]));
-	}
-	return value;
 }
 
 type Attempt =
@@ -324,7 +321,8 @@ export async function checkRoundTripCase(
 	};
 
 	if (fromStructured.ok && fromArgv.ok) {
-		if (!isDeepStrictEqual(comparable(fromStructured.bound), comparable(fromArgv.bound))) {
+		// Native deep equality compares URLs by value and tolerates cyclic schema output.
+		if (!isDeepStrictEqual(fromStructured.bound, fromArgv.bound)) {
 			return fail("structured and argv binding diverged");
 		}
 		return "accepted";
@@ -346,8 +344,12 @@ export async function checkRoundTripCase(
  * `variadic`, `multiple`, negation), then binds each case twice through
  * `bindInput()` from `@crustjs/core/tooling` — parse, validation, and Standard Schemas only.
  * Command Actions, Extension hooks, and Contexts never run. Definition materialization,
- * `parse` functions, and schemas do run; the last two receive identical raw strings on both
- * paths and may reject them, which counts as `rejected` only for commands that declare them.
+ * `parse` functions, and schemas do run; the last two receive the same raw token value on
+ * both paths (a string, a boolean for boolean-token flags, an array for repeated definitions,
+ * or `undefined` when omitted) and may reject it, which counts as `rejected` only for
+ * commands that declare them. Argv binds against an empty environment, so `env` flags fall
+ * back to `default` like structured input; a flag's `delimiter` is never generated inside a
+ * value.
  *
  * Throws with the seed, case number, and both outcomes on the first divergence, and when no
  * case was accepted (the property then has no evidence).

@@ -15,6 +15,7 @@ import {
 import { CrustError, type CaughtError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
 import {
+	type FlagEnvironment,
 	parseArgs,
 	parseStructured,
 	validateParsed,
@@ -284,9 +285,13 @@ interface ResolvedInput {
 	parsed: ParseResult;
 }
 
-function resolveArgvInput(root: CommandNode, argv: readonly string[]): ResolvedInput {
+function resolveArgvInput(
+	root: CommandNode,
+	argv: readonly string[],
+	env: FlagEnvironment = process.env,
+): ResolvedInput {
 	const route = resolveCommand(root, [...argv]);
-	return { argv, route, parsed: parseArgs(route.command, route.argv) };
+	return { argv, route, parsed: parseArgs(route.command, route.argv, env) };
 }
 
 /** Resolve a typed path, rejecting any element the router cannot consume as a command. */
@@ -343,7 +348,9 @@ export interface CustomBindings {
  * Materializes definitions and Extension contributions exactly like `snapshot()`, then runs
  * the production parser, `validateParsed`, and `applySchemas`. Author `parse` functions and
  * schemas run as validators. Never creates Contexts, runs Extension hooks or the Command
- * Action, writes to `stdout`/`stderr`, or touches process exit state.
+ * Action, writes to `stdout`/`stderr`, or touches process exit state. The argv path binds
+ * with an empty environment, so flags declaring `env` fall back to `default` exactly as the
+ * structured path does; `dispatch()` alone reads `process.env`.
  */
 export async function bindInvocation(
 	node: CommandNode,
@@ -353,7 +360,7 @@ export async function bindInvocation(
 	const { rootNode } = prepareInvocation(node, materializeCommandDefinition);
 	const { route, parsed } =
 		"argv" in input
-			? resolveArgvInput(rootNode, input.argv)
+			? resolveArgvInput(rootNode, input.argv, {})
 			: resolveStructuredInput(rootNode, input.path, input.input);
 	validateParsed(route.command, parsed);
 	const validated = await applySchemas(route.command, parsed);
