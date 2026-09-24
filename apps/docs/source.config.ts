@@ -1,14 +1,9 @@
 import { defineConfig, defineDocs } from "fumadocs-mdx/config";
 import lastModified from "fumadocs-mdx/plugins/last-modified";
-import {
-	createFileSystemGeneratorCache,
-	createGenerator,
-	remarkAutoTypeTable,
-} from "fumadocs-typescript";
+import { createGenerator, remarkAutoTypeTable } from "fumadocs-typescript";
 
 const typeScriptGenerator = createGenerator({
 	tsconfigPath: "tsconfig.json",
-	cache: createFileSystemGeneratorCache("node_modules/.cache/fumadocs-typescript"),
 });
 
 export const docs = defineDocs({

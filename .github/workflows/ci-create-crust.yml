@@ -16,6 +16,7 @@ on:
       - "packages/store/**"
       - "packages/utils/**"
       - "package.json"
+      - "mise.toml"
       - "bun.lock"
       - "turbo.json"
       - "tsdown.config.ts"
@@ -47,20 +48,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Node
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-
-      # The smoke test's Deno case is mandatory when CI is set.
-      - name: Setup Deno
-        uses: denoland/setup-deno@v2
-        with:
-          # Documented floor (runtime-support.mdx claims Deno 2.8+); smoke the floor, not latest.
-          deno-version: v2.8.x
+      - name: Setup runtimes
+        uses: jdx/mise-action@v4
 
       - name: Install dependencies
         run: bun ci
@@ -84,8 +73,9 @@ jobs:
           bun --version
           deno --version
 
+      # Keep compatibility runtimes separate from the shared build toolchain.
       - name: Run create-crust smoke test
-        run: bun run --cwd packages/create-crust test:smoke
+        run: mise exec node@22.23.2 deno@2.8.0 -- bun run --cwd packages/create-crust test:smoke
         env:
           CREATE_CRUST_SMOKE: "1"
 

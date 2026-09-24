@@ -14,10 +14,11 @@
 		"check": "turbo run build --filter='./packages/*' && turbo run //#lint //#format",
 		"check:fix": "turbo run build --filter='./packages/*' && oxlint --fix && oxfmt",
 		"check:types": "turbo run check:types",
-		"test": "turbo run test --filter='./packages/*' --filter='./tools'",
+		"test": "turbo run test --filter='./packages/*' --filter='./tools' --filter='./scripts'",
 		"changeset": "changeset",
-		"packages:version": "changeset version && bun install",
-		"packages:publish": "bun ./scripts/publish-packages.mjs"
+		"packages:version": "changeset version && bun install --lockfile-only --ignore-scripts",
+		"packages:pack": "bun ./scripts/publish-packages.mjs --pack-dir",
+		"packages:publish": "bun ./scripts/publish-packages.mjs --publish-dir"
 	},
 	"devDependencies": {
 		"@arethetypeswrong/core": "^0.18.5",
@@ -39,6 +40,7 @@
 	"workspaces": [
 		"apps/*",
 		"packages/*",
+		"scripts",
 		"tools"
 	],
 	"overrides": {

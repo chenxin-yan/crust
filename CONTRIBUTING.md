@@ -4,11 +4,17 @@ Check existing [issues](https://github.com/chenxin-yan/crust/issues) and pull re
 
 ## Setup
 
-Install [Bun](https://bun.sh) (the version in [`package.json`](package.json)'s `packageManager` field) and Node.js (recommended: Node 24, version 24.11.0 or later in that line).
-
-From your cloned repository:
+Install [mise](https://mise.jdx.dev/getting-started.html), then from your cloned repository:
 
 ```sh
+mise trust
+mise install
+```
+
+Activate mise in your shell, or prefix the commands below with `mise exec --`.
+
+```
+
 bun install
 ```
 
@@ -16,24 +22,25 @@ bun install
 
 - `packages/` — published packages
 - `apps/docs/` — documentation site
+- `scripts/` — private workspace for repository automation and its tests
+- `tools/` — private workspace for lint tooling
 
 Run these commands from the repository root:
 
 ```sh
 bun run build         # Build all packages and the docs site
 bun run check         # Build packages, lint, and check formatting
-bun run check:types   # Type-check workspaces
-bun run test          # Build and test packages and tooling
+bun run check:types   # Type-check workspaces, scripts, and build configuration
+bun run test          # Build and test packages, tooling, and scripts
 bun run dev:docs      # Start the docs site
 ```
 
 Use `bun run test`, not bare root `bun test`: the tooling tests require Node.
 
-Root tests exclude scripts and docs. When changing those areas, run the relevant checks:
+Run the scripts workspace checks with their build dependencies through Turbo. Docs tests remain separate:
 
 ```sh
-bun test scripts/*.test.ts
-bun x tsc --noEmit -p scripts
+bun turbo run check:types test --filter=./scripts
 bun run --cwd apps/docs test
 ```
 

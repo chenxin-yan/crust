@@ -5,8 +5,10 @@ import { join } from "node:path";
 
 import { Crust } from "../../packages/core/dist/index.js";
 import { isInGitRepo } from "../../packages/create/dist/index.js";
+import { handler } from "../../packages/effect/dist/index.js";
 import { help } from "../../packages/extensions/dist/index.js";
 import * as man from "../../packages/man/dist/index.js";
+import { createMcpServer } from "../../packages/mcp/dist/index.js";
 import * as progress from "../../packages/progress/dist/index.js";
 import {
 	assertTTY,
@@ -22,8 +24,10 @@ import * as testing from "../../packages/testing/dist/index.js";
 const roots = {
 	core: Crust,
 	create: isInGitRepo,
+	effect: handler,
 	extensions: help,
 	man: man.man,
+	mcp: createMcpServer,
 	progress: progress.progress,
 	prompts: createPrompts,
 	skills: loadPackagedSkills,

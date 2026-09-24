@@ -4,5 +4,5 @@
 		"declaration": false,
 		"isolatedDeclarations": false
 	},
-	"include": ["."]
+	"include": [".", "../tsdown.config.ts", "../packages/*/tsdown.config.ts"]
 }

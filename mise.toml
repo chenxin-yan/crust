@@ -1,2 +1,6 @@
 [settings]
 idiomatic_version_file_enable_tools = ["bun"]
+
+[tools]
+node = "24.21.0"
+deno = "2.9.6"
