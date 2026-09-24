@@ -1,0 +1,503 @@
+<!doctype html>
+<!-- regen: can you use to html skill to show me and explain how expose a programtic build api works with current design? -->
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Crust · A programmatic build API</title>
+		<script src="https://cdn.tailwindcss.com"></script>
+		<style>
+			:root {
+				color-scheme: light dark;
+			}
+			body {
+				margin: 0;
+			}
+			main {
+				min-width: 0;
+			}
+			p,
+			li {
+				text-wrap: pretty;
+			}
+			pre {
+				max-width: 100%;
+				overflow-x: auto;
+			}
+			a {
+				text-underline-offset: 3px;
+			}
+			a:focus-visible,
+			summary:focus-visible {
+				outline: 3px solid #0284c7;
+				outline-offset: 4px;
+			}
+			.source-list {
+				overflow-wrap: anywhere;
+			}
+			.mermaid svg {
+				display: block;
+				margin: auto;
+				min-width: 560px;
+			}
+			@media (prefers-color-scheme: dark) {
+				.mermaid .node rect {
+					fill: #1e293b !important;
+					stroke: #64748b !important;
+				}
+				.mermaid .nodeLabel {
+					color: #e2e8f0 !important;
+				}
+				.mermaid .flowchart-link {
+					stroke: #94a3b8 !important;
+				}
+				.mermaid marker path {
+					fill: #94a3b8 !important;
+					stroke: #94a3b8 !important;
+				}
+			}
+			:target {
+				outline: 2px solid #0284c7;
+				outline-offset: 6px;
+				border-radius: 0.5rem;
+			}
+			@media print {
+				details > :not(summary) {
+					display: revert !important;
+				}
+			}
+		</style>
+		<script type="module">
+			import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+			mermaid.initialize({
+				startOnLoad: true,
+				theme: "base",
+				themeVariables: {
+					primaryColor: "#f1f5f9",
+					primaryTextColor: "#334155",
+					primaryBorderColor: "#94a3b8",
+					lineColor: "#64748b",
+					fontFamily: "ui-sans-serif, system-ui, sans-serif",
+				},
+			});
+		</script>
+		<link
+			rel="stylesheet"
+			href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github.min.css"
+			media="(prefers-color-scheme: light)"
+		/>
+		<link
+			rel="stylesheet"
+			href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github-dark.min.css"
+			media="(prefers-color-scheme: dark)"
+		/>
+		<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/highlight.min.js"></script>
+		<script>
+			addEventListener("DOMContentLoaded", () => hljs.highlightAll());
+		</script>
+	</head>
+	<body
+		class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 antialiased font-[ui-sans-serif,system-ui,sans-serif]"
+	>
+		<main class="mx-auto max-w-5xl px-5 sm:px-8 py-10 sm:py-16 space-y-10">
+			<header class="border-b border-slate-200 dark:border-slate-800 pb-8">
+				<p class="text-sm text-slate-500 dark:text-slate-400">
+					Design explainer · 23 September 2026
+				</p>
+				<h1 class="mt-3 text-4xl sm:text-6xl font-bold tracking-tight leading-tight max-w-3xl">
+					One build pipeline.<br />Two ways to call it.
+				</h1>
+				<p class="mt-5 text-lg text-slate-600 dark:text-slate-300 max-w-2xl">
+					Expose a normal async function beneath the CLI—not a second build system, and not a
+					wrapper that parses terminal output.
+				</p>
+				<div class="mt-5 flex flex-wrap gap-2 text-xs">
+					<span class="rounded-full bg-slate-200 dark:bg-slate-800 px-3 py-1"
+						>Main inspected: 21654596</span
+					>
+					<span
+						class="rounded-full bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-100 px-3 py-1"
+						>Compiler stack: 340fc4e4</span
+					>
+					<span
+						class="rounded-full bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-100 px-3 py-1"
+						>Public build API: proposed</span
+					>
+				</div>
+			</header>
+
+			<section aria-labelledby="two-apis">
+				<h2 id="two-apis" class="text-2xl font-semibold tracking-tight mb-4">
+					First, separate compile from build
+				</h2>
+				<div class="grid gap-5 md:grid-cols-2">
+					<div
+						class="min-w-0 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5"
+					>
+						<p class="text-sm font-medium text-sky-700 dark:text-sky-300">
+							Exists on the private compiler PR stack
+						</p>
+						<h3 class="text-xl font-semibold mt-2">A source file → a binary</h3>
+						<pre
+							class="mt-4 rounded-md text-sm"
+						><code class="language-typescript">import { compile } from "@crustjs/compiler";
+
+const binary = await compile("hello.ts", {
+  outputPath: "./out/hello",
+});</code></pre>
+						<ul class="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300 list-disc pl-5">
+							<li>
+								<code>hello.ts</code> can contain <code>console.log("hello")</code>; this is not yet
+								arbitrary Crust source.
+							</li>
+							<li>
+								TypeScript checker → typed IR → Go → <code>go build</code>. Returns an absolute
+								path.
+							</li>
+							<li>
+								No npm staging, hooks, target option or hybrid option. Not on main or published for
+								installation.
+							</li>
+						</ul>
+					</div>
+					<div
+						class="min-w-0 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5"
+					>
+						<p class="text-sm font-medium text-amber-700 dark:text-amber-300">
+							Suggested public surface · does not exist yet
+						</p>
+						<h3 class="text-xl font-semibold mt-2">A CLI project → a staged package</h3>
+						<pre
+							class="mt-4 rounded-md text-sm"
+						><code class="language-typescript">// Proposed import and result shape.
+import { build } from "@crustjs/crust/build";
+
+const result = await build({
+  cwd: "/projects/my-cli",
+});
+console.log(result.stageDir);</code></pre>
+						<ul class="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300 list-disc pl-5">
+							<li>
+								Reads the same <code>package.json</code> entries/config as <code>crust build</code>;
+								keeps validation/hooks on.
+							</li>
+							<li>
+								Returns the completed <code>.crust/</code> stage location; rejects on failure.
+								Publishing stays separate.
+							</li>
+							<li>
+								Can be exposed for current Bun/Deno/Node outputs before the Go compiler is ready for
+								Crust.
+							</li>
+						</ul>
+					</div>
+				</div>
+			</section>
+
+			<section aria-labelledby="shared-flow">
+				<h2 id="shared-flow" class="text-2xl font-semibold tracking-tight">
+					Extract orchestration, keep the existing work
+				</h2>
+				<p class="mt-2 mb-4 text-slate-600 dark:text-slate-300 max-w-2xl">
+					Today the command action owns this sequence; the proposal moves it into one importable
+					function that both callers await.
+				</p>
+				<figure
+					class="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 overflow-x-auto"
+				>
+					<pre class="mermaid">
+flowchart TD
+  CLI["crust build&lt;br/&gt;parse flags + render errors"] --> API["build(options)&lt;br/&gt;proposed shared function"]
+  SCRIPT["Your build.ts / CI script&lt;br/&gt;pass options + catch errors"] --> API
+  API --> PLAN["planBuild&lt;br/&gt;resolve entries, runtime, targets"]
+  PLAN --> PREP["Clear .crust, prepareEntries&lt;br/&gt;validate snapshots + run hooks"]
+  PREP --> DIST["runStagedBuild → runDistributeBuild&lt;br/&gt;stage packages/assets; execute backend"]
+  DIST --> DONE["Write manifest last&lt;br/&gt;resolve with stageDir"]
+      </pre>
+					<figcaption class="mt-3 text-sm text-slate-500 dark:text-slate-400">
+						The new wrapper is proposed; the named helpers already exist on main. Diagrams scroll
+						horizontally on small screens.
+					</figcaption>
+				</figure>
+				<div class="mt-5 overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+					<table class="w-full text-sm text-left">
+						<caption class="sr-only">
+							Responsibility boundaries for a shared build API
+						</caption>
+						<thead class="bg-slate-100 dark:bg-slate-900">
+							<tr>
+								<th scope="col" class="px-4 py-3">Layer</th>
+								<th scope="col" class="px-4 py-3">Owns</th>
+								<th scope="col" class="px-4 py-3">Does not own</th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-slate-200 dark:divide-slate-800">
+							<tr>
+								<th scope="row" class="px-4 py-3 font-medium">CLI adapter</th>
+								<td class="px-4 py-3">Flags, progress display, process exit</td>
+								<td class="px-4 py-3">A duplicate build pipeline</td>
+							</tr>
+							<tr>
+								<th scope="row" class="px-4 py-3 font-medium">Build function</th>
+								<td class="px-4 py-3">Config, hooks, output ownership, staging, errors</td>
+								<td class="px-4 py-3">Argument parsing or npm publishing</td>
+							</tr>
+							<tr>
+								<th scope="row" class="px-4 py-3 font-medium">Backend</th>
+								<td class="px-4 py-3">Produce the requested artifact at the assigned path</td>
+								<td class="px-4 py-3">Crust command registration or release policy</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+			</section>
+
+			<section aria-labelledby="hybrid">
+				<h2 id="hybrid" class="text-2xl font-semibold tracking-tight">
+					Hybrid changes the backend, not the caller
+				</h2>
+				<p class="mt-2 text-slate-600 dark:text-slate-300 max-w-2xl">
+					The agreed post-M0 direction fits beneath this API—but graph ownership, the JS engine and
+					its embedding still need implementation.
+				</p>
+				<figure
+					class="mt-4 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 overflow-x-auto"
+				>
+					<pre class="mermaid">
+flowchart TD
+  GRAPH["Original source graph&lt;br/&gt;explicit module ownership"] --> NATIVE["Native-assigned modules&lt;br/&gt;TS checker → typed IR → Go"]
+  GRAPH --> JS["JS-assigned modules&lt;br/&gt;bundle interpreted payload"]
+  NATIVE --> LINK["Build executable + required assets&lt;br/&gt;embed chosen engine + explicit bridge"]
+  JS --> LINK
+  LINK --> ART["Stager receives the artifact&lt;br/&gt;profile declares runtime requirements"]
+      </pre>
+					<figcaption class="mt-3 text-sm text-slate-500 dark:text-slate-400">
+						Future build-time flow, not implemented code; a single dependency-free file is not
+						guaranteed.
+					</figcaption>
+				</figure>
+				<ul class="mt-5 list-disc pl-5 space-y-3 text-sm text-slate-600 dark:text-slate-300">
+					<li>
+						<strong class="text-slate-900 dark:text-slate-100">Explicit selection.</strong> An
+						unsupported native module fails compilation; it never silently moves to the interpreter.
+						No <code>hybrid</code> or <code>go</code> runtime value is accepted by today's build
+						config.
+					</li>
+					<li>
+						<strong class="text-slate-900 dark:text-slate-100">A narrow runtime bridge.</strong> Go
+						calls selected JS operations through declared, validated data/result interfaces—not
+						arbitrary shared objects or closures. Errors, async completion, cancellation and cleanup
+						need a defined contract.
+					</li>
+					<li>
+						<strong class="text-slate-900 dark:text-slate-100"
+							>Reuse the existing execution callback.</strong
+						>
+						<code>Distribution.execute(entry, outfile, target)</code> is already the
+						binary-producing integration point; target metadata, engine assets and launcher/runtime
+						assumptions still need adaptation.
+					</li>
+				</ul>
+				<aside
+					class="mt-5 rounded-lg border-l-4 p-4 bg-amber-50 border-amber-400 text-amber-950 dark:bg-amber-950/40 dark:border-amber-500 dark:text-amber-100"
+				>
+					<p class="font-semibold">Build host ≠ output runtime</p>
+					<p class="mt-1 text-sm">
+						A Bun-hosted API can produce a Go executable, but QuickJS cannot run
+						<code>Bun.build</code>, and a Go-based Crust cannot turn itself into Bun with
+						<code>BUN_BE_BUN=1</code>.
+					</p>
+				</aside>
+			</section>
+
+			<details
+				id="implementation"
+				class="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"
+			>
+				<summary class="cursor-pointer select-none p-5 text-lg font-semibold">
+					What exposing it actually requires
+				</summary>
+				<div class="px-5 pb-5 space-y-5 text-sm">
+					<ol class="list-decimal pl-5 space-y-4">
+						<li>
+							<strong>Move the action's orchestration into a library module.</strong> Keep
+							<code>planBuild</code>, snapshot preparation and distribution implementation behind
+							<code>build()</code>. Let the CLI translate flags into options. Do not import
+							<code>src/cli.ts</code>: it calls <code>await crustApp.execute()</code> at module
+							load.
+						</li>
+						<li>
+							<strong>Keep one source of configuration truth.</strong> Resolve
+							<code>cwd</code> explicitly, without <code>process.chdir()</code>. Keep
+							<code>package.json</code> as the source for <code>bin</code>, runtime, plugins and
+							included directories; map deliberate API overrides into the existing planner. Omitted
+							targets currently mean every configured/supported Bun or Deno target—not only the
+							host. Node outputs have no target option.
+						</li>
+						<li>
+							<strong>Define a small library contract.</strong> Initially return
+							<code>{ stageDir }</code> only after successful manifest creation. Accept output
+							callbacks using the existing <code>InvocationIO</code> shape; reject with errors
+							rather than exiting the caller. Do not advertise cancellation until it reaches
+							snapshots, tool subprocesses and cleanup.
+						</li>
+						<li>
+							<strong>Ship the import, not just a source export.</strong> The proposed
+							<code>@crustjs/crust/build</code> subpath needs a built JS module, declarations and an
+							export map in the actual published tree. Today's package is CLI-oriented; staging
+							explicitly lists <code>bin</code> plus artifact/include directories. Retain library
+							files and resolve their dependencies in that staged package; a repository-only import
+							test is insufficient.
+						</li>
+						<li>
+							<strong>Prove parity before adding another backend.</strong> Reuse current build
+							tests, then compare CLI and API staging for the same disposable project. Test
+							installed-package imports, hook errors, artifact collisions and failed compilation
+							with no success manifest. Add Go/hybrid integration only after its own capability
+							gates pass.
+						</li>
+					</ol>
+					<aside
+						class="rounded-lg border-l-4 p-4 bg-rose-50 border-rose-400 text-rose-950 dark:bg-rose-950/40 dark:text-rose-100"
+					>
+						<p class="font-semibold">Keep the current sharp edges visible</p>
+						<ul class="mt-2 list-disc pl-5 space-y-2">
+							<li>
+								<code>.crust/</code> is deleted before hooks run: no atomic rollback and no
+								concurrent builds sharing that directory.
+							</li>
+							<li>
+								Snapshot preparation executes project code and hooks in a subprocess. It is not a
+								sandbox; <code>validate: false</code> also skips hooks.
+							</li>
+							<li>
+								Snapshot execution currently uses <code>process.execPath</code> with Bun
+								conventions. Start by documenting a Bun build host; Node-hosted or native-hosted API
+								support needs explicit runner work.
+							</li>
+						</ul>
+					</aside>
+				</div>
+			</details>
+
+			<details
+				id="evidence"
+				class="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"
+			>
+				<summary class="cursor-pointer select-none p-5 text-lg font-semibold">
+					Current behavior, evidence and limits
+				</summary>
+				<div class="px-5 pb-5 space-y-5 text-sm">
+					<div class="grid gap-5 md:grid-cols-2">
+						<div>
+							<h3 class="font-semibold">What the compiler API does today</h3>
+							<ul class="mt-2 list-disc pl-5 space-y-2">
+								<li>
+									<code>CompileOptions</code> has only <code>outputPath</code>. No engine, target,
+									watch, cache, cancellation or hybrid fields.
+								</li>
+								<li>
+									With an explicit path it removes its temporary Go workspace and retains the
+									binary; otherwise the caller owns the returned binary's temporary directory.
+								</li>
+								<li>
+									Source failures reject with <code>CompilerError.diagnostics</code>; Go/tool
+									failures also reject, but are not source diagnostics.
+								</li>
+								<li>
+									The build needs Go on PATH and the compiler's adjacent runtime assets. The
+									compiler does not depend on Crust packages.
+								</li>
+							</ul>
+						</div>
+						<div>
+							<h3 class="font-semibold">What Crust build does today</h3>
+							<ul class="mt-2 list-disc pl-5 space-y-2">
+								<li>
+									Bun and Deno produce platform binaries behind a Node launcher. Node produces a
+									root-only JS bundle; Bun still performs that bundling.
+								</li>
+								<li>
+									Snapshots validate commands and collect Extension build output. They are not typed
+									IR and cannot replace original TS as native compiler input.
+								</li>
+								<li>
+									The completion manifest is written last; <code>crust publish</code> consumes
+									staged packages separately.
+								</li>
+								<li>
+									The compiler stack cannot yet compile the real Crust CLI. Exposing a library
+									function alone does not change this.
+								</li>
+							</ul>
+						</div>
+					</div>
+					<h3 class="font-semibold">Pinned source map</h3>
+					<ul class="source-list list-disc pl-5 space-y-2 text-sky-700 dark:text-sky-300">
+						<li>
+							<a
+								class="underline"
+								href="https://github.com/chenxin-yan/crust/blob/21654596bf3c5636c6ca3133ea83c5944b596695/packages/crust/src/commands/build.ts"
+								>Main · planner, preparation and command-owned orchestration</a
+							>
+						</li>
+						<li>
+							<a
+								class="underline"
+								href="https://github.com/chenxin-yan/crust/blob/21654596bf3c5636c6ca3133ea83c5944b596695/packages/crust/src/utils/build-helpers.ts"
+								>Main · Bun/Deno/Node backends and snapshot runner</a
+							>
+						</li>
+						<li>
+							<a
+								class="underline"
+								href="https://github.com/chenxin-yan/crust/blob/21654596bf3c5636c6ca3133ea83c5944b596695/packages/crust/src/utils/distribute.ts"
+								>Main · Distribution.execute, packaging and manifest-last behavior</a
+							>
+						</li>
+						<li>
+							<a
+								class="underline"
+								href="https://github.com/chenxin-yan/crust/blob/21654596bf3c5636c6ca3133ea83c5944b596695/packages/crust/package.json"
+								>Main · CLI package metadata; no public build subpath</a
+							>
+						</li>
+						<li>
+							<a
+								class="underline"
+								href="https://github.com/chenxin-yan/crust/blob/21654596bf3c5636c6ca3133ea83c5944b596695/packages/crust/src/cli.ts"
+								>Main · importing the CLI executes it</a
+							>
+						</li>
+						<li>
+							<a
+								class="underline"
+								href="https://github.com/chenxin-yan/crust/blob/340fc4e4fbf5735cfb4be3e8d7bf9737a2f63aef/packages/compiler/src/index.ts"
+								>Compiler stack · actual compile() implementation</a
+							>
+						</li>
+						<li>
+							<a
+								class="underline"
+								href="https://github.com/chenxin-yan/crust/blob/340fc4e4fbf5735cfb4be3e8d7bf9737a2f63aef/packages/compiler/package.json"
+								>Compiler stack · private package, exports and exact TypeScript dependency</a
+							>
+						</li>
+						<li>
+							<a class="underline" href="https://github.com/chenxin-yan/crust/issues/294"
+								>Issue #294 · agreed post-M0 hybrid direction</a
+							>
+						</li>
+					</ul>
+					<p class="text-slate-500 dark:text-slate-400">
+						Read-only source investigation plus this explainer; no API implementation, project
+						builds or compiler regression tests were run. HTML/source links and example syntax were
+						checked; both diagrams rendered in Chromium at desktop/mobile sizes with no page-level
+						overflow. The proposed import/result are illustrative, not a supported contract.
+						Tailwind, diagrams and syntax highlighting load from CDNs.
+					</p>
+				</div>
+			</details>
+		</main>
+	</body>
+</html>
