@@ -355,6 +355,13 @@
         "tsdown": "catalog:",
       },
     },
+    "scripts": {
+      "name": "crust-scripts",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@crustjs/core": "workspace:*",
+      },
+    },
     "tools": {
       "name": "oxlint-plugin-anti-slop",
       "version": "0.0.0",
@@ -1208,6 +1215,8 @@
     "create-crust": ["create-crust@workspace:packages/create-crust"],
 
     "cross-spawn": ["cross-spawn@7.0.6", "", { "dependencies": { "path-key": "^3.1.0", "shebang-command": "^2.0.0", "which": "^2.0.1" } }, "sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA=="],
+
+    "crust-scripts": ["crust-scripts@workspace:scripts"],
 
     "csstype": ["csstype@3.2.3", "", {}, "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ=="],
 

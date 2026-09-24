@@ -1,11 +1,15 @@
 {
 	"$schema": "https://turborepo.dev/schema.json",
 	"ui": "tui",
-	"globalDependencies": ["mise.toml", "packages/config/tsconfig.base.json"],
+	"globalDependencies": [
+		"mise.toml",
+		"packages/config/tsconfig.base.json",
+		"tsdown.config.ts",
+		"packages/*/tsdown.config.ts"
+	],
 	"tasks": {
 		"build": {
 			"dependsOn": ["^build"],
-			"inputs": ["$TURBO_DEFAULT$", "../../tsdown.config.ts"],
 			"env": ["CI"],
 			"outputs": ["dist/**", ".crust/**"]
 		},
