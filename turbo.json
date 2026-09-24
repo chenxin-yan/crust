@@ -5,7 +5,6 @@
 	"tasks": {
 		"build": {
 			"dependsOn": ["^build"],
-			// shared tsdown config lives at the repo root, outside package inputs
 			"inputs": ["$TURBO_DEFAULT$", "../../tsdown.config.ts"],
 			"env": ["CI"],
 			"outputs": ["dist/**", ".crust/**"]
