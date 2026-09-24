@@ -9,6 +9,7 @@ on:
       - "scripts/**"
       - "tools/**"
       - "package.json"
+      - "mise.toml"
       - "bun.lock"
       - "turbo.json"
       - "tsdown.config.ts"
@@ -25,41 +26,29 @@ jobs:
   runtime-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    concurrency:
+      group: runtime-smoke-${{ matrix.runtime }}-${{ github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     strategy:
       matrix:
         include:
           - runtime: node
-            smoke: node scripts/smoke-runtimes/smoke.mjs
+            smoke: mise exec node@22.0.0 -- node scripts/smoke-runtimes/smoke.mjs
           - runtime: deno
-            smoke: deno run --allow-env --allow-read --allow-write --allow-run --config scripts/smoke-runtimes/deno.json scripts/smoke-runtimes/smoke.mjs
+            smoke: mise exec deno@2.8.0 -- deno run --allow-env --allow-read --allow-write --allow-run --config scripts/smoke-runtimes/deno.json scripts/smoke-runtimes/smoke.mjs
           - runtime: bun
-            smoke: bun scripts/smoke-runtimes/smoke.mjs
+            smoke: mise exec bun@1.4.0 -- bun scripts/smoke-runtimes/smoke.mjs
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - name: Setup Node
-        if: matrix.runtime == 'node'
-        uses: actions/setup-node@v7
+      # Build on the shared toolchain, then test the exact consumer runtime floor.
+      - name: Setup runtimes
+        uses: jdx/mise-action@v4
         with:
-          # Documented floor (runtimes.mdx claims Node 22+); smoke the floor, not latest.
-          node-version: 22
-
-      - name: Setup Deno
-        if: matrix.runtime == 'deno'
-        uses: denoland/setup-deno@v2
-        with:
-          # Documented floor (runtimes.mdx claims Deno 2.8+); smoke the floor, not latest.
-          deno-version: v2.8.x
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          # When Bun is the runtime under test, smoke the documented floor
-          # (runtimes.mdx / engines claim Bun 1.4+), not latest.
-          bun-version: ${{ matrix.runtime == 'bun' && '1.4.0' || 'latest' }}
+          install_args: bun node
 
       - name: Install dependencies
         run: bun ci
@@ -91,21 +80,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-
-      # Installed so Deno-gated integration tests run instead of skipping.
-      - name: Setup Deno
-        uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
-
-      # tsdown's bin runs under Node (engines ^22.18.0 || ^24.11.0 || >=26.0.0); don't rely
-      # on the runner image's preinstalled Node.
-      - name: Setup Node
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
+      # Deno is installed so integration tests run instead of skipping.
+      - name: Setup runtimes
+        uses: jdx/mise-action@v4
 
       - name: Install dependencies
         run: bun ci
@@ -120,9 +97,8 @@ jobs:
 
       - name: Build, type check, and test
         run: |
-          bun turbo run build check:types test --filter='./packages/*' --filter='./tools'
-          bun test scripts/*.test.ts
-          bun x tsc --noEmit -p scripts
+          bun run check:types
+          bun run test
 
       - name: Lint and format check (packages)
         run: |

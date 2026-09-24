@@ -1,12 +1,14 @@
 {
 	"$schema": "https://turborepo.dev/schema.json",
 	"ui": "tui",
+	"globalDependencies": ["mise.toml", "packages/config/tsconfig.base.json"],
 	"tasks": {
 		"build": {
 			"dependsOn": ["^build"],
 			// shared tsdown config lives at the repo root, outside package inputs
 			"inputs": ["$TURBO_DEFAULT$", "../../tsdown.config.ts"],
-			"outputs": ["dist/**", "!.dist/cache/**", ".crust/**"]
+			"env": ["CI"],
+			"outputs": ["dist/**", ".crust/**"]
 		},
 		"//#lint": {},
 		"//#format": {},

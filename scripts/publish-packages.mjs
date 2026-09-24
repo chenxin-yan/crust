@@ -1,234 +1,235 @@
 #!/usr/bin/env bun
 
-import { access, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { glob, lstat, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 const ROOT_DIR = resolve(import.meta.dir, "..");
-const PACKAGES_DIR = join(ROOT_DIR, "packages");
-const DEFAULT_REGISTRY = "https://registry.npmjs.org";
-
-const byCodepoint = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
-
-function normalizeRegistry(registry) {
-	return registry.replace(/\/+$/, "");
-}
-
-function getRegistryUrl() {
-	return normalizeRegistry(
-		process.env.npm_config_registry ?? process.env.NPM_CONFIG_REGISTRY ?? DEFAULT_REGISTRY,
-	);
-}
+const REGISTRY = "https://registry.npmjs.org";
 
 async function readJson(path) {
 	return JSON.parse(await readFile(path, "utf8"));
 }
 
 async function loadWorkspacePackages() {
-	const entries = await readdir(PACKAGES_DIR, { withFileTypes: true });
+	const { workspaces } = await readJson(join(ROOT_DIR, "package.json"));
 	const packages = [];
-
-	for (const entry of entries) {
-		if (!entry.isDirectory()) {
-			continue;
+	for await (const file of glob(
+		workspaces.map((pattern) => `${pattern}/package.json`),
+		{ cwd: ROOT_DIR },
+	)) {
+		const packageJson = await readJson(join(ROOT_DIR, file));
+		if (!packageJson.private) {
+			packages.push({ ...packageJson, dir: join(ROOT_DIR, dirname(file)) });
 		}
-
-		const relativeDir = `packages/${entry.name}`;
-		const dir = join(ROOT_DIR, relativeDir);
-		const packageJsonPath = join(dir, "package.json");
-		if (
-			!(await access(packageJsonPath).then(
-				() => true,
-				() => false,
-			))
-		) {
-			continue;
-		}
-
-		const packageJson = await readJson(packageJsonPath);
-		if (packageJson.private) {
-			continue;
-		}
-
-		packages.push({
-			name: packageJson.name,
-			version: packageJson.version,
-			dir,
-			relativeDir,
-			// Packages that publish more than themselves (crust's per-platform
-			// binaries) own their publish via a `release` script. Not `publish`:
-			// that is an npm lifecycle hook `bun publish` would re-run.
-			hasReleaseScript: Boolean(packageJson.scripts?.release),
-			dependencies: packageJson.dependencies ?? {},
-			optionalDependencies: packageJson.optionalDependencies ?? {},
-			peerDependencies: packageJson.peerDependencies ?? {},
-		});
 	}
-
-	return packages.sort((a, b) => a.relativeDir.localeCompare(b.relativeDir));
-}
-
-function getInternalDependencyNames(pkg, workspaceNames) {
-	const allDeps = {
-		...pkg.dependencies,
-		...pkg.optionalDependencies,
-		...pkg.peerDependencies,
-	};
-
-	return new Set(Object.keys(allDeps).filter((dependency) => workspaceNames.has(dependency)));
+	return packages;
 }
 
 function sortPackagesForPublish(packages) {
-	const workspaceNames = new Set(packages.map((pkg) => pkg.name));
 	const dependents = new Map();
 	const indegree = new Map();
-
 	for (const pkg of packages) {
 		dependents.set(pkg.name, new Set());
 		indegree.set(pkg.name, 0);
 	}
-
 	for (const pkg of packages) {
-		for (const dependency of getInternalDependencyNames(pkg, workspaceNames)) {
-			dependents.get(dependency).add(pkg.name);
-			indegree.set(pkg.name, indegree.get(pkg.name) + 1);
-		}
-	}
-
-	const queue = packages
-		.filter((pkg) => indegree.get(pkg.name) === 0)
-		.map((pkg) => pkg.name)
-		.sort(byCodepoint);
-	const orderedNames = [];
-
-	while (queue.length > 0) {
-		const current = queue.shift();
-		orderedNames.push(current);
-
-		// Explicit codepoint comparator keeps publish order deterministic across locales
-		for (const dependent of [...dependents.get(current)].sort(byCodepoint)) {
-			indegree.set(dependent, indegree.get(dependent) - 1);
-			if (indegree.get(dependent) === 0) {
-				queue.push(dependent);
-				queue.sort(byCodepoint);
+		const dependencies = {
+			...pkg.dependencies,
+			...pkg.optionalDependencies,
+			...pkg.peerDependencies,
+		};
+		for (const dependency of Object.keys(dependencies)) {
+			if (indegree.has(dependency)) {
+				dependents.get(dependency).add(pkg.name);
+				indegree.set(pkg.name, indegree.get(pkg.name) + 1);
 			}
 		}
 	}
-
+	const queue = packages
+		.filter((pkg) => indegree.get(pkg.name) === 0)
+		.map((pkg) => pkg.name)
+		.sort();
+	const orderedNames = [];
+	while (queue.length > 0) {
+		const current = queue.shift();
+		orderedNames.push(current);
+		for (const dependent of dependents.get(current)) {
+			indegree.set(dependent, indegree.get(dependent) - 1);
+			if (indegree.get(dependent) === 0) {
+				queue.push(dependent);
+				queue.sort();
+			}
+		}
+	}
 	if (orderedNames.length !== packages.length) {
-		const unresolved = packages
-			.filter((pkg) => !orderedNames.includes(pkg.name))
-			.map((pkg) => pkg.name);
 		throw new Error(
-			`Unable to determine publish order due to a dependency cycle: ${unresolved.join(", ")}`,
+			"Unable to determine publish order due to a dependency cycle or duplicate package name.",
 		);
 	}
-
 	const packagesByName = new Map(packages.map((pkg) => [pkg.name, pkg]));
 	return orderedNames.map((name) => packagesByName.get(name));
 }
 
-async function fetchPackageMetadata(pkgName, registryUrl) {
-	const response = await fetch(`${registryUrl}/${encodeURIComponent(pkgName)}`, {
-		headers: {
-			accept: "application/vnd.npm.install-v1+json, application/json",
-		},
-	});
-
-	if (response.status === 404) {
-		return null;
+async function runCommand(args, cwd = ROOT_DIR, allowFailure = false) {
+	const proc = Bun.spawn(args, { cwd, stdout: "pipe", stderr: "pipe" });
+	const [exitCode, stdout, stderr] = await Promise.all([
+		proc.exited,
+		new Response(proc.stdout).text(),
+		new Response(proc.stderr).text(),
+	]);
+	if (exitCode !== 0 && !allowFailure) {
+		throw new Error(`${args.join(" ")} failed (${exitCode}): ${stderr || stdout}`);
 	}
+	return { exitCode, stdout, stderr };
+}
 
-	if (!response.ok) {
+async function packPackages(directory) {
+	await mkdir(directory, { recursive: true });
+	if ((await readdir(directory)).length > 0) {
+		throw new Error(`Pack directory must be empty: ${directory}`);
+	}
+	// Only the unprivileged pack job loads workspace code and runs lifecycle hooks.
+	const { readPublishManifest, validatePublishManifest } =
+		await import("../packages/crust/src/commands/publish.ts");
+	const inventory = [];
+	for (const pkg of sortPackagesForPublish(await loadWorkspacePackages())) {
+		let entries = [{ path: pkg.dir, packageJson: pkg }];
+		if (pkg.scripts?.release) {
+			const stageDir = join(pkg.dir, ".crust");
+			const manifest = readPublishManifest(stageDir);
+			if (manifest.root.name !== pkg.name || manifest.version !== pkg.version) {
+				throw new Error(
+					`Staged identity does not match ${pkg.name}@${pkg.version}; rebuild before packing.`,
+				);
+			}
+			entries = validatePublishManifest(stageDir, manifest);
+		}
+		for (const entry of entries) {
+			const { name, version } = entry.packageJson;
+			const file = `${inventory.length}.tgz`;
+			console.log(`Packing ${name}@${version}`);
+			// Bun rewrites workspace/catalog ranges; prepack hooks include LICENSE files.
+			await runCommand(
+				[process.execPath, "pm", "pack", "--quiet", "--filename", join(directory, file)],
+				entry.path,
+			);
+			inventory.push({ name, version, file });
+		}
+	}
+	if (inventory.length === 0) throw new Error("No public packages found.");
+	// An incomplete pack must never leave an uploadable inventory.
+	await writeFile(join(directory, "packages.json"), `${JSON.stringify(inventory, null, 2)}\n`);
+}
+
+/* oxlint-disable anti-slop/no-runtime-typeof -- Validate artifact JSON at the upload boundary; JavaScript has no TS type predicate. */
+function isPackageEntry(pkg) {
+	return (
+		pkg !== null &&
+		typeof pkg === "object" &&
+		typeof pkg.name === "string" &&
+		/^(?:@[a-z0-9._-]+\/)?[a-z0-9][a-z0-9._-]*$/.test(pkg.name) &&
+		typeof pkg.version === "string" &&
+		/^\d+\.\d+\.\d+$/.test(pkg.version) &&
+		typeof pkg.file === "string" &&
+		/^\d+\.tgz$/.test(pkg.file)
+	);
+}
+/* oxlint-enable anti-slop/no-runtime-typeof */
+
+async function readInventory(directory) {
+	const packages = await readJson(join(directory, "packages.json"));
+	if (!Array.isArray(packages) || packages.length === 0 || !packages.every(isPackageEntry)) {
 		throw new Error(
-			`Failed to query ${pkgName} from ${registryUrl}: ${response.status} ${response.statusText}`,
+			"Invalid release inventory: expected named stable versions and local tarball filenames.",
 		);
 	}
-
-	return response.json();
-}
-
-async function findPackagesToPublish(packages, registryUrl) {
-	const metadataByName = new Map(
-		await Promise.all(
-			packages.map(async (pkg) => [pkg.name, await fetchPackageMetadata(pkg.name, registryUrl)]),
-		),
-	);
-
-	return packages.filter((pkg) => {
-		const metadata = metadataByName.get(pkg.name);
-		return !metadata?.versions?.[pkg.version];
-	});
-}
-
-async function runCommand(args, cwd) {
-	const proc = Bun.spawn(args, {
-		cwd,
-		stdout: "inherit",
-		stderr: "inherit",
-	});
-
-	const exitCode = await proc.exited;
-	if (exitCode !== 0) {
-		throw new Error(`${args.join(" ")} failed in ${cwd} with exit code ${exitCode}`);
+	if (
+		new Set(packages.map((pkg) => pkg.name)).size !== packages.length ||
+		new Set(packages.map((pkg) => pkg.file)).size !== packages.length
+	) {
+		throw new Error("Duplicate package or tarball in release inventory.");
 	}
-}
-
-// Pack with Bun so workspace:/catalog: ranges resolve, then upload with npm,
-// which supports trusted publishing (OIDC); `bun publish` does not
-// (oven-sh/bun#15601).
-async function packAndPublish(pkg) {
-	const tmp = await mkdtemp(join(tmpdir(), "crust-publish-"));
-	const tarball = join(tmp, "package.tgz");
-	try {
-		await runCommand([process.execPath, "pm", "pack", "--quiet", "--filename", tarball], pkg.dir);
-		await runCommand(["npm", "publish", tarball, "--access", "public"], pkg.dir);
-	} finally {
-		await rm(tmp, { recursive: true, force: true });
-	}
-}
-
-async function main() {
-	const {
-		values: { "dry-run": dryRun },
-	} = parseArgs({
-		args: process.argv.slice(2),
-		options: { "dry-run": { type: "boolean", default: false } },
-	});
-	const registryUrl = getRegistryUrl();
-	const packages = sortPackagesForPublish(await loadWorkspacePackages());
-	const packagesToPublish = await findPackagesToPublish(packages, registryUrl);
-
-	console.log(`Registry: ${registryUrl}`);
-	console.log(`Publish order: ${packages.map((pkg) => `${pkg.name}@${pkg.version}`).join(" -> ")}`);
-
-	if (packagesToPublish.length === 0) {
-		console.log("No unpublished package versions found.");
-	} else {
-		console.log("Packages to publish:");
-		for (const pkg of packagesToPublish) {
-			console.log(`- ${pkg.name}@${pkg.version} (${pkg.relativeDir})`);
+	for (const pkg of packages) {
+		// Basename-only paths plus lstat reject traversal, directories and symlinks.
+		if (!(await lstat(join(directory, pkg.file))).isFile()) {
+			throw new Error(`Release artifact must be a regular file: ${pkg.file}`);
 		}
 	}
+	return packages;
+}
 
+function registryArgs(name) {
+	// Repository releases target public npm, regardless of ambient npmrc settings.
+	// Both commands get the same explicit scope/registry overrides.
+	return [
+		`--registry=${REGISTRY}`,
+		"--scope=",
+		...(name.startsWith("@") ? [`--${name.split("/")[0]}:registry=${REGISTRY}`] : []),
+	];
+}
+
+async function publishPackages(directory, dryRun) {
+	const packages = await readInventory(directory);
+	const missing = [];
+	for (const pkg of packages) {
+		const spec = `${pkg.name}@${pkg.version}`;
+		const result = await runCommand(
+			["npm", "view", spec, "version", "--json", ...registryArgs(pkg.name)],
+			ROOT_DIR,
+			true,
+		);
+		let body;
+		try {
+			body = JSON.parse(result.stdout);
+		} catch {
+			throw new Error(`Inconclusive npm lookup for ${spec}: ${result.stderr || result.stdout}`);
+		}
+		if (result.exitCode === 0 && body === pkg.version) {
+			console.log(`Already published: ${spec}`);
+		} else if (result.exitCode !== 0 && body?.error?.code === "E404") {
+			missing.push(pkg);
+		} else {
+			throw new Error(`Could not check ${spec}: ${result.stderr || result.stdout}`);
+		}
+	}
 	if (dryRun) {
-		console.log("Dry run enabled; skipping publish and tag creation.");
+		console.log(`Dry run: ${missing.length} package versions would be published.`);
 		return;
 	}
-
-	for (const pkg of packagesToPublish) {
-		console.log(`\nPublishing ${pkg.name}@${pkg.version} from ${pkg.relativeDir}`);
-		if (pkg.hasReleaseScript) {
-			await runCommand([process.execPath, "run", "release"], pkg.dir);
-		} else {
-			await packAndPublish(pkg);
-		}
+	for (const pkg of missing) {
+		console.log(`Publishing ${pkg.name}@${pkg.version}`);
+		await runCommand([
+			"npm",
+			"publish",
+			join(directory, pkg.file),
+			"--ignore-scripts",
+			"--access",
+			"public",
+			...registryArgs(pkg.name),
+		]);
 	}
-
-	// Tag the whole cohort, not just this run's publishes: after a partial
-	// failure, a retry must still tag packages that the failed run published.
-	await runCommand([process.execPath, "x", "changeset", "git-tag"], ROOT_DIR);
+	console.log(
+		`Published ${missing.length} package versions. Cohort is ready for Changesets tagging.`,
+	);
 }
 
-await main();
+const { values } = parseArgs({
+	args: process.argv.slice(2),
+	options: {
+		"pack-dir": { type: "string" },
+		"publish-dir": { type: "string" },
+		"dry-run": { type: "boolean", default: false },
+	},
+});
+if (
+	Boolean(values["pack-dir"]) === Boolean(values["publish-dir"]) ||
+	(values["pack-dir"] && values["dry-run"])
+) {
+	throw new Error("Choose --pack-dir <empty directory> or --publish-dir <directory> [--dry-run].");
+}
+if (values["pack-dir"]) {
+	await packPackages(resolve(values["pack-dir"]));
+} else {
+	await publishPackages(resolve(values["publish-dir"]), values["dry-run"]);
+}

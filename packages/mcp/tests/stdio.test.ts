@@ -86,7 +86,7 @@ describe("stdio serving through execute()", () => {
 
 	it("exits cleanly when the client hangs up", async () => {
 		const child = Bun.spawn([compiled, "mcp"], { stdin: "pipe", stdout: "pipe", stderr: "pipe" });
-		child.stdin.end();
+		await child.stdin.end();
 		expect(await child.exited).toBe(0);
 		expect(await new Response(child.stdout).text()).toBe("");
 	});

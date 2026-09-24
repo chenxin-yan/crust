@@ -5,6 +5,8 @@ on:
     paths:
       - "apps/docs/**"
       - "packages/**"
+      - "tools/**"
+      - "mise.toml"
       - "package.json"
       - "bun.lock"
       - "turbo.json"
@@ -30,8 +32,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup runtimes
+        uses: jdx/mise-action@v4
+        with:
+          install_args: bun node
 
       - name: Install dependencies
         run: bun ci
@@ -45,7 +49,7 @@ jobs:
             turbo-docs-${{ runner.os }}-
 
       - name: Type check (docs)
-        run: bun run check:types --filter=./apps/docs
+        run: bun turbo run check:types --filter=./apps/docs
 
       - name: Lint and format check (docs)
         run: |

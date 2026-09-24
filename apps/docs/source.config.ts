@@ -1,14 +1,10 @@
 import { defineConfig, defineDocs } from "fumadocs-mdx/config";
 import lastModified from "fumadocs-mdx/plugins/last-modified";
-import {
-	createFileSystemGeneratorCache,
-	createGenerator,
-	remarkAutoTypeTable,
-} from "fumadocs-typescript";
+import { createGenerator, remarkAutoTypeTable } from "fumadocs-typescript";
 
+// The optional disk cache does not invalidate when imported types change.
 const typeScriptGenerator = createGenerator({
 	tsconfigPath: "tsconfig.json",
-	cache: createFileSystemGeneratorCache("node_modules/.cache/fumadocs-typescript"),
 });
 
 export const docs = defineDocs({

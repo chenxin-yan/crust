@@ -45,12 +45,15 @@ diverges deliberately.
   documented API.
 - `no-conditional-empty-object-spread`: `...(cond ? { k } : {})` is the accepted idiom here.
 - `no-reflect-apply` / `no-reflect-get`: covered by `eslint/no-restricted-properties`.
-- `effect/*`: no Effect dependency.
+- `effect/*`: not reviewed for the Effect 4 APIs used by `@crustjs/effect`; adopting
+  them requires checking compatibility and useful enforcement first.
 
 ## Updating
 
 ```bash
-git clone https://github.com/dmmulroy/anti-slop .agent-sources/anti-slop   # git-excluded
+# Keep the upstream checkout out of this repository's tracked files.
+printf '\n/.agent-sources/\n' >> .git/info/exclude
+git clone https://github.com/dmmulroy/anti-slop .agent-sources/anti-slop
 git -C .agent-sources/anti-slop diff c44ef22..HEAD -- src/
 ```
 

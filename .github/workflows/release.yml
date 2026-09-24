@@ -9,6 +9,7 @@ on:
       - "packages/**"
       - "scripts/**"
       - "package.json"
+      - "mise.toml"
       - "bun.lock"
       - "turbo.json"
       - "tsdown.config.ts"
@@ -43,11 +44,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup runtimes
+        uses: jdx/mise-action@v4
+        with:
+          install_args: bun node
 
       - name: Install dependencies
-        run: bun ci
+        run: bun ci --ignore-scripts
 
       - name: Select Changesets mode
         id: select-mode
@@ -69,11 +72,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup runtimes
+        uses: jdx/mise-action@v4
+        with:
+          install_args: bun node
+          cache: false
 
       - name: Install dependencies
-        run: bun ci
+        run: bun ci --ignore-scripts
 
       - name: Version packages and update release PR
         id: version
@@ -83,57 +89,108 @@ jobs:
           commit-message: "chore: version packages"
           script: bun run packages:version
 
-  publish:
+  pack:
     if: needs.select-mode.outputs.mode == 'publish'
     needs: select-mode
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: write # git tags + GitHub releases
-      id-token: write # npm trusted publishing (OIDC)
+      contents: read
     outputs:
-      published: ${{ steps.publish.outputs.published }}
+      artifact-id: ${{ steps.tarballs.outputs.artifact-id }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          # `changeset git-tag` needs existing tags to skip already-tagged versions.
-          fetch-depth: 0
           persist-credentials: false
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-
-      # Node for tsdown's bin (engines ^22.18.0 || ^24.11.0 || >=26.0.0) and npm
-      # >= 11.5.1 for publishing. Auth is npm trusted publishing only: no token,
-      # no .npmrc. Every published package (including the @crustjs/crust-<platform>
-      # packages) needs a trusted publisher on npmjs.com for this repo and
-      # workflow file; a brand-new package must be published once by hand first.
-      - name: Setup Node
-        uses: actions/setup-node@v7
+      - name: Setup runtimes
+        uses: jdx/mise-action@v4
         with:
-          node-version: 24
-          package-manager-cache: false
+          install_args: bun node
+          cache: false
 
       - name: Install dependencies
         run: bun ci
 
-      - name: Cache Turbo
-        uses: actions/cache@v6
-        with:
-          path: .turbo
-          key: turbo-release-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            turbo-release-${{ runner.os }}-
+      # Build and lifecycle hooks run without publishing credentials or restored caches.
+      - name: Build and pack packages
+        run: |
+          bun run build:pkgs --force
+          bun run packages:pack "$RUNNER_TEMP/release-pack"
 
-      - name: Build packages
-        run: bun run build:pkgs
+      - name: Upload release tarballs
+        id: tarballs
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-pack-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-pack
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  publish:
+    needs: pack
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # No dependency installation, builds, or lifecycle hooks in this job.
+      # npm >=11.5.1 uses OIDC; every root/platform package needs its own trusted
+      # publisher for release.yml and a one-time initial publication on npmjs.com.
+      - name: Setup runtimes
+        uses: jdx/mise-action@v4
+        with:
+          install_args: bun node
+          cache: false
+
+      - name: Download release tarballs
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.pack.outputs.artifact-id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/release-pack
 
       - name: Publish packages
-        id: publish
+        run: bun run packages:publish "$RUNNER_TEMP/release-pack"
+
+  finalize:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      published: ${{ steps.tags.outputs.published }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup runtimes
+        uses: jdx/mise-action@v4
+        with:
+          install_args: bun node
+          cache: false
+
+      - name: Install Changesets without lifecycle hooks
+        run: bun ci --ignore-scripts
+
+      # Tag the full cohort even when a retry found every version already uploaded.
+      - name: Create tags and GitHub releases
+        id: tags
         uses: changesets/action/publish@v2
         with:
-          script: bun run packages:publish
+          script: bun run changeset git-tag
 
   release-pr-size:
     needs: version
@@ -153,14 +210,10 @@ jobs:
           ref: changeset-release/main
           persist-credentials: false
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-
-      # tsdown's bin runs under Node (engines ^22.18.0 || ^24.11.0 || >=26.0.0)
-      - name: Setup Node
-        uses: actions/setup-node@v7
+      - name: Setup runtimes
+        uses: jdx/mise-action@v4
         with:
-          node-version: 24
+          install_args: bun node
 
       - name: Cache Turbo
         uses: actions/cache@v6
@@ -201,8 +254,8 @@ jobs:
           fi
 
   deploy-docs:
-    needs: publish
-    if: needs.publish.outputs.published == 'true'
+    needs: finalize
+    if: needs.finalize.outputs.published == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -213,14 +266,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-
-      # tsdown's bin runs under Node (engines ^22.18.0 || ^24.11.0 || >=26.0.0)
-      - name: Setup Node
-        uses: actions/setup-node@v7
+      - name: Setup runtimes
+        uses: jdx/mise-action@v4
         with:
-          node-version: 24
+          install_args: bun node
 
       - name: Install dependencies
         run: bun ci

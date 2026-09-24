@@ -4,11 +4,17 @@ Check existing [issues](https://github.com/chenxin-yan/crust/issues) and pull re
 
 ## Setup
 
-Install [Bun](https://bun.sh) (the version in [`package.json`](package.json)'s `packageManager` field) and Node.js (recommended: Node 24, version 24.11.0 or later in that line).
-
-From your cloned repository:
+Install [mise](https://mise.jdx.dev/getting-started.html), then from your cloned repository:
 
 ```sh
+mise trust
+mise install
+```
+
+Activate mise in your shell, or prefix the commands below with `mise exec --`.
+
+```
+
 bun install
 ```
 
@@ -22,18 +28,18 @@ Run these commands from the repository root:
 ```sh
 bun run build         # Build all packages and the docs site
 bun run check         # Build packages, lint, and check formatting
-bun run check:types   # Type-check workspaces
-bun run test          # Build and test packages and tooling
+bun run check:types   # Type-check workspaces, scripts, and build configuration
+bun run test          # Build and test packages, tooling, and scripts
 bun run dev:docs      # Start the docs site
 ```
 
 Use `bun run test`, not bare root `bun test`: the tooling tests require Node.
 
-Root tests exclude scripts and docs. When changing those areas, run the relevant checks:
+Scripts checks can also run independently. Docs tests remain separate:
 
 ```sh
 bun test scripts/*.test.ts
-bun x tsc --noEmit -p scripts
+bunx tsc --noEmit -p scripts
 bun run --cwd apps/docs test
 ```
 
@@ -60,6 +66,50 @@ bun run changeset
 Choose the smallest accurate version bump and describe the user-facing change, including migration steps if needed. Do not edit package versions or changelogs manually.
 
 Docs, tests, internal refactors, and maintenance without user-facing impact do not need a changeset.
+
+### Release automation
+
+The release workflow versions packages with Changesets and refreshes `bun.lock`
+without installing dependencies or running lifecycle hooks. Publishing has three
+separate jobs:
+
+1. Build without restored caches, then pack workspace and generated platform
+   packages. Bun packing resolves workspace/catalog ranges and runs the LICENSE
+   hooks. Generated packages are validated and packed before their root package.
+2. Download those tarballs and upload missing versions with npm trusted publishing.
+   This is the only OIDC-enabled job; it installs no project dependencies and runs
+   no build, pack, or lifecycle hooks.
+3. After every upload succeeds, Changesets tags the entire cohort and creates
+   GitHub releases. This job has no npm publishing permission.
+
+The small repository publisher is deliberately for stable, public npm releases.
+It explicitly targets npmjs.com for both lookups and uploads, ignoring ambient
+registry overrides. Other registries and prerelease release policies are not
+handled by this repository workflow. The public `crust publish` command remains
+separate.
+
+Bun packing plus npm uploading remains necessary until upstream supports the
+required combination: [Bun OIDC](https://github.com/oven-sh/bun/issues/15601) and
+[Changesets workspace packing with Bun](https://github.com/changesets/changesets/issues/1468).
+Generated binary packages also require the staged manifest, not just workspace
+discovery. Do not replace this with bare `changeset publish` or rename the package
+`release` scripts to npm's recursive `publish` lifecycle hook.
+
+To inspect release artifacts without publishing (use a new empty directory):
+
+```sh
+bun run build:pkgs
+bun run packages:pack /tmp/crust-release-pack
+bun run packages:publish /tmp/crust-release-pack --dry-run
+```
+
+The dry run queries npm but uploads nothing. After a partial upload failure,
+rerun the failed jobs to reuse the same run's tarballs (retained for seven days).
+Existing versions are skipped; finalization still runs when no uploads remain.
+Each root and platform package needs its own npm trusted-publisher configuration
+for `release.yml`; first publication and registry permissions require a maintainer.
+If tags were pushed but GitHub release creation failed, inspect/reconcile the
+missing GitHub releases manually: `changeset git-tag` skips existing tags.
 
 ## Reporting Issues
 
