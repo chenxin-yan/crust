@@ -37,13 +37,13 @@ $ bun run src/cli.ts wave
 
 ## Capabilities
 
-- **Commands and input parsing.** Nested [commands](/docs/guide/commands), [arguments and flags](/docs/guide/arguments-and-flags) with aliases, defaults, choices, [Standard Schema validation](/docs/guide/values-and-validation#schema-backed-definitions), and inferred types.
-- **[Extensions](/docs/guide/extensions).** Shared flags, commands, lifecycle hooks, and build hooks, plus [official extensions](/docs/modules/extensions) for help, version, typo suggestions, and update notices.
-- **[Dependency injection](/docs/guide/contexts).** Typed Contexts with lazy initialization and automatic cleanup.
-- **Generated from your definitions.** [Shell completion](/docs/modules/extensions/completion) for Bash, Zsh, and Fish, [manual pages](/docs/modules/man), and [agent skills](/docs/modules/skills).
-- **Terminal UI.** [Styling](/docs/modules/style), [interactive prompts](/docs/modules/prompts), and [progress indicators](/docs/modules/progress). Progress supports non-interactive output; prompts can use explicit defaults, except for passwords, or reject when interaction is required. Build [full-screen apps](/docs/modules/tui) through OpenTUI (Bun only).
-- **[Testing helpers](/docs/guide/testing).** Capture output and exit codes, or drive interactive commands with simulated input.
-- **[Build and distribution](/docs/guide/build-and-distribution).** Standalone Bun or Deno executables, or a Node.js bundle.
+- **Typed commands.** Define nested [commands](/docs/guide/commands), [arguments and flags](/docs/guide/arguments-and-flags) with inferred types and [schema validation](/docs/guide/values-and-validation#schema-backed-definitions).
+- **[Extensions](/docs/guide/extensions).** Add help, version information, [completion](/docs/modules/extensions/completion), and shared behavior.
+- **[Shared resources](/docs/guide/contexts).** Provide typed dependencies with lazy initialization and automatic cleanup.
+- **Generated documentation.** Turn command definitions into [manual pages](/docs/modules/man) and [agent skills](/docs/modules/skills).
+- **Terminal UI.** Add [styling](/docs/modules/style), [prompts](/docs/modules/prompts), [progress indicators](/docs/modules/progress), and [full-screen apps](/docs/modules/tui) (Bun only).
+- **[Testing](/docs/guide/testing).** Capture output and exit codes, or simulate interactive input.
+- **[Distribution](/docs/guide/build-and-distribution).** Build standalone Bun or Deno executables, or a Node.js bundle.
 
 ## Next steps
 
