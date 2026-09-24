@@ -1,3 +1,4 @@
+import { transformerMetaHighlight } from "@shikijs/transformers";
 import { rehypeCodeDefaultOptions } from "fumadocs-core/mdx-plugins";
 import { defineConfig, defineDocs } from "fumadocs-mdx/config";
 import lastModified from "fumadocs-mdx/plugins/last-modified";
@@ -32,7 +33,11 @@ export default defineConfig({
 			},
 			// Twoslash popups cannot lazy-load grammars, so every fence grammar used in content/ is preloaded (`text` is built in).
 			langs: ["ts", "tsx", "sh", "json"],
-			transformers: [...(rehypeCodeDefaultOptions.transformers ?? []), ...twoslashHovers()],
+			transformers: [
+				...(rehypeCodeDefaultOptions.transformers ?? []),
+				transformerMetaHighlight(),
+				...twoslashHovers(),
+			],
 		},
 	},
 });

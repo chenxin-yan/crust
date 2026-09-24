@@ -9,15 +9,16 @@ it("docs and landing hovers explain selected values without builder or boilerpla
 		[
 			"--input-type=module",
 			"-e",
-			`
+			String.raw`
 		import assert from "node:assert/strict";
-		import { readFileSync } from "node:fs";
+		import { readFileSync, readdirSync } from "node:fs";
+		import { resolve } from "node:path";
 		import { createHighlighter } from "shiki";
 		import config from "./source.config.ts";
 		import { twoslashHovers } from "./twoslash.ts";
 
 		const options = config.mdxOptions.rehypeCodeOptions;
-		const highlighter = await createHighlighter({ themes: ["gruvbox-light-hard"], langs: ["ts"] });
+		const highlighter = await createHighlighter({ themes: ["gruvbox-light-hard"], langs: ["ts", "json"] });
 		let nodes;
 		const tree = highlighter.codeToHast(readFileSync("examples/landing/greet.ts", "utf8"), {
 			lang: "ts", theme: "gruvbox-light-hard", meta: { __raw: "twoslash" },
@@ -57,6 +58,37 @@ it("docs and landing hovers explain selected values without builder or boilerpla
 					},
 				}],
 			});
+		}
+		const visibleText = node => node.type === "text" ? node.value : (node.children ?? []).map(visibleText).join("");
+		for (const page of readdirSync("content/docs/guide").filter(file => file.endsWith(".mdx"))) {
+			const guide = readFileSync("content/docs/guide/" + page, "utf8");
+			const includes = [...guide.matchAll(/<include lang="(ts|json)"(?: meta=(['"])(.*?)\2)?>\s*([^<]+)<\/include>/g)];
+			assert.equal(includes.length, (guide.match(/<include lang="(?:ts|json)"/g) ?? []).length, page);
+			for (const [, lang, , meta = "", specifier] of includes) {
+				const [file, region] = specifier.trim().split("#");
+				let source = readFileSync(resolve("content/docs/guide", file), "utf8");
+				if (region) {
+					source = source.split("//#region " + region + "\n")[1]?.split("//#endregion")[0];
+					assert.ok(source, specifier);
+				}
+				let queries = [];
+				const hast = highlighter.codeToHast(source, {
+					lang, theme: "gruvbox-light-hard", meta: { __raw: meta },
+					transformers: [...options.transformers, {
+						name: "capture-guide-types",
+						preprocess() { queries = this.meta.twoslash?.nodes ?? []; },
+					}],
+				});
+				const selected = [...source.matchAll(/\/\/\s*\^\?/g)].length;
+				assert.equal(queries.length, selected, specifier);
+				if (meta.includes("twoslash")) assert.ok(selected > 0, specifier);
+				assert.ok(queries.every(node => node.type === "hover" && !node.text.includes(": any")), specifier);
+				const html = JSON.stringify(hast);
+				assert.ok(html.includes("highlighted"), specifier);
+				const text = visibleText(hast);
+				assert.ok(!text.includes("^?") && !text.includes("[!code"), specifier);
+				if (selected) assert.ok(html.includes("PopupTrigger"), specifier);
+			}
 		}
 		highlighter.dispose();
 	`,

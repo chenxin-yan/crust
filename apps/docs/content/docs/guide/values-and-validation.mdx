@@ -37,7 +37,7 @@ With a built-in type, Crust also handles presence: `required` rejects a missing 
 
 ## Custom parsing
 
-<include lang="ts" meta='title="deploy.ts"'>
+<include lang="ts" meta='title="deploy.ts" twoslash'>
   ../../../examples/guide/types-parse.ts
 </include>
 
@@ -52,7 +52,7 @@ deploying to the default region
 
 ## Schema-backed definitions
 
-<include lang="ts" meta='title="serve.ts"'>
+<include lang="ts" meta='title="serve.ts" twoslash'>
   ../../../examples/guide/types-schema.ts#schema
 </include>
 
@@ -81,7 +81,7 @@ A schema definition cannot also set `parse`, `choices`, `default`, or `required`
 | Allowed values | `choices: ["a", "b"]`    | `z.enum(["a", "b"])`              |
 | Range or shape | `parse` plus a throw     | `.int().min(1).max(65535)`        |
 
-Presence follows the same rule. An omitted input reaches the schema as `undefined`: `.default(3000)` substitutes the default, `.optional()` lets `undefined` through as `number | undefined`, and a schema without either rejects the omission.
+For the scalar port argument above, omission passes `undefined` to the schema. `.default(3000)` substitutes the default; replacing it with `.optional()` preserves `undefined` and infers `number | undefined`. Without either, this number schema rejects omission. Other schemas may handle `undefined` differently; an omitted variadic argument receives `[]`.
 
 ### What the schema receives
 

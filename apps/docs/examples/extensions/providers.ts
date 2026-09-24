@@ -2,14 +2,15 @@ import { Crust, defineContext, defineExtension, defineExtensionId } from "@crust
 
 const logger = defineContext("logger", ({ stdout }) => ({ info: stdout }));
 
-export const logging = defineExtension(defineExtensionId("acme:logging")).provide(logger());
-
-export const audit = defineExtension(defineExtensionId("acme:audit"))
-	.use(logger)
-	.postRun(async ({ ctx }, outcome) => (await ctx.logger).info(`audit: ${outcome.status}`));
-
-const app = new Crust("my-cli").extend(logging, audit).action(async ({ ctx }) => {
-	(await ctx.logger).info("ready");
+export const logging = defineExtension(defineExtensionId("acme:logging"), {
+	// [!code highlight]
+	provides: [logger()],
 });
 
-console.log((await app.run([])).stdout); // => "ready\naudit: completed"
+const app = new Crust("my-cli").extend(logging).action(async ({ ctx }) => {
+	// [!code highlight]
+	(await ctx.logger).info("ready");
+	//         ^?
+});
+
+console.log((await app.run([])).stdout); // => "ready"

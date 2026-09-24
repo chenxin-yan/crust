@@ -69,7 +69,7 @@ Hooks see pre-validation values, not schema outputs. A false-capable `recursive`
 
 ## Hooks
 
-<include lang="ts" meta='title="hooks.ts"'>
+<include lang="ts" meta='title="hooks.ts" twoslash'>
   ../../../examples/extensions/hooks.ts
 </include>
 
@@ -79,7 +79,7 @@ The Command Action is skipped when `preRun` returns `ctx.finish()`, but `postRun
 
 ## Dependency injection
 
-<include lang="ts" meta='title="providers.ts"'>
+<include lang="ts" meta='title="providers.ts" twoslash'>
   ../../../examples/extensions/providers.ts
 </include>
 
@@ -87,7 +87,7 @@ Use `.provide()` when installing the Extension should also install a Context acr
 
 ## Required root metadata
 
-<include lang="ts" meta='title="metadata.ts"'>
+<include lang="ts" meta='title="metadata.ts" twoslash'>
   ../../../examples/extensions/metadata.ts
 </include>
 
@@ -116,7 +116,7 @@ See the [help Extension](/docs/modules/extensions/help) for rendering and [`Exte
 
 A consumer is any Extension identity that reads sections. `help` renders the current command's sections after Options, `man` collects the whole tree into one page, and `skill` writes them into per-command markdown files. Authors scope a section with `only` or `except`, passing either the Extension value or its id.
 
-<include lang="ts" meta='title="consumer.ts"'>
+<include lang="ts" meta='title="consumer.ts" twoslash'>
   ../../../examples/extensions/consumer.ts
 </include>
 

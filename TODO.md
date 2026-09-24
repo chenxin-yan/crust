@@ -6,9 +6,9 @@ Branch `update-docs`, PR #389. Reviewing each surface from scratch, top to botto
 - [x] Package READMEs (`packages/*/README.md`, 15)
 - [x] Landing page (`apps/docs/src/routes/index.tsx`)
 - [x] Overview (`apps/docs/content/docs/index.mdx`)
-- [ ] Quick start (`apps/docs/content/docs/quick-start.mdx`)
+- [x] Quick start (`apps/docs/content/docs/quick-start.mdx`)
 - [ ] Guides (`apps/docs/content/docs/guide/`)
-  - [ ] index
+  - [x] index
   - [ ] commands
   - [ ] arguments-and-flags
   - [ ] values-and-validation

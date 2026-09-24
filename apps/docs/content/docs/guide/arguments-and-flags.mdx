@@ -5,7 +5,9 @@ description: Choose and define typed positional and named command inputs.
 
 Use a positional argument for the thing a command acts on, and a flag for how it should act.
 
-<include lang="ts">../../../examples/guide/inputs.ts</include>
+<include lang="ts" meta="twoslash">
+  ../../../examples/guide/inputs.ts
+</include>
 
 ```sh
 $ convert report.md --format markdown
@@ -64,7 +66,7 @@ Tokens after `--` bypass argument and flag parsing and reach the Command Action 
 
 Use boolean flags for switches and value-taking flags for named settings.
 
-<include lang="ts" meta='title="src/cli.ts"'>
+<include lang="ts" meta='title="src/cli.ts" twoslash'>
   ../../../examples/guide/flags.ts
 </include>
 
@@ -86,7 +88,7 @@ Error: Expected number for --port, got "nope"
 
 ### Required and defaulted values
 
-<include lang="ts" meta='title="src/publish.ts"'>
+<include lang="ts" meta='title="src/publish.ts" twoslash'>
   ../../../examples/guide/flags-required.ts
 </include>
 
@@ -134,7 +136,7 @@ See the [`.flags()` contract](/docs/api/crust#flagsdefs) for all accepted spelli
 
 ### Repeated values
 
-<include lang="ts" meta='title="src/serve-values.ts"'>
+<include lang="ts" meta='title="src/serve-values.ts" twoslash'>
   ../../../examples/guide/flags-values.ts
 </include>
 

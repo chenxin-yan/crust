@@ -9,6 +9,7 @@ const status = new Crust("status")
 	.provide(api()) // [!code highlight]
 	.action(async ({ ctx, stdout }) => {
 		const client = await ctx.api; // [!code highlight]
+		//    ^?
 		stdout(client.get("/status"));
 	});
 

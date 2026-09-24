@@ -12,19 +12,23 @@ const app = new Crust("app").action(({ stdout }) => {
 });
 
 test("returns output and the action result", async () => {
+	// [!code highlight]
 	const outcome = await app.run([]);
 
 	expect(outcome.stdout).toBe("first\nsecond");
 	expect(outcome.status).toBe("completed");
+	// [!code highlight]
 	if (outcome.status === "completed") expect(outcome.result).toBe(3);
 });
 //#endregion
 
 //#region capture-execute
 test("captures terminal errors", async () => {
+	// [!code highlight]
 	const result = await captureExecute(app, ["--unknown"]);
 
 	expect(result.stdout).toBe("");
+	// [!code highlight:2]
 	expect(result.stderr).toContain("Unknown flag");
 	expect(result.exitCode).toBe(1);
 });
@@ -37,6 +41,7 @@ const greeting = new Crust("greet").action(async ({ stderr }) => {
 });
 
 test("drives a prompt", async () => {
+	// [!code highlight:5]
 	const run = runInteractive(greeting, []);
 	await run.waitFor(/Name\?/);
 	run.type("Ada");

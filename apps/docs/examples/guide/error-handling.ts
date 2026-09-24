@@ -17,6 +17,7 @@ export const declared = new Crust("greet")
 	.flags({
 		name: "name",
 		type: "string",
+		// [!code highlight:2]
 		required: true,
 		choices: ["Ada", "Grace"],
 	})
@@ -25,6 +26,7 @@ export const declared = new Crust("greet")
 
 //#region cleanup
 const database = defineContext("database", () => ({
+	// [!code highlight:2]
 	[Symbol.dispose]() {
 		console.error("Closed database");
 	},
@@ -33,6 +35,7 @@ function deployRelease() {
 	throw new Error("Deployment service is unavailable. Try again later.");
 }
 export const deploy = new Crust("deploy").provide(database()).action(async ({ ctx }) => {
+	// [!code highlight:2]
 	await ctx.database;
 	deployRelease();
 });
@@ -40,6 +43,7 @@ export const deploy = new Crust("deploy").provide(database()).action(async ({ ct
 
 //#region cancellation
 async function createProject() {
+	// [!code highlight]
 	const name = await input({ message: "Project name?" });
 	await mkdir(name);
 	await writeFile(`${name}/package.json`, "{}");
@@ -51,14 +55,18 @@ const prompted = new Crust("scaffold").action(createProject);
 //#region custom-message
 class ConfigError extends Error {}
 
-const configErrors = defineExtension(defineExtensionId("config-errors")).onError(
-	(error, { stderr }) => {
-		if (!(error instanceof ConfigError)) return;
-		stderr(`Error: ${error.message}`);
-		stderr("Hint: Run init to create the config file.");
-		return true;
+const configErrors = defineExtension(defineExtensionId("config-errors"), {
+	hooks: {
+		onError(error, { stderr }) {
+			// [!code highlight]
+			if (!(error instanceof ConfigError)) return;
+			stderr(`Error: ${error.message}`);
+			stderr("Hint: Run init to create the config file.");
+			// [!code highlight]
+			return true;
+		},
 	},
-);
+});
 
 const configured = new Crust("app").extend(configErrors).action(() => {
 	throw new ConfigError("Config file not found.");
@@ -69,11 +77,13 @@ const cancelled = new Crust("app").action(() => {
 	throw new DOMException("Cancelled", "AbortError");
 });
 //#region tests
+// [!code highlight:2]
 const outcome = await deploy.run([]);
 if (outcome.status === "failed" && outcome.error instanceof Error) {
 	console.log(outcome.error.message); // Deployment service is unavailable. Try again later.
 }
 
+// [!code highlight]
 const terminal = await captureExecute(declared, []);
 console.log(terminal.stderr); // Error: Missing required flag "--name"
 console.log(terminal.exitCode); // 1
