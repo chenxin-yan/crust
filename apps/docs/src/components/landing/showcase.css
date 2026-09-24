@@ -8,7 +8,7 @@
 	align-items: start;
 	max-width: 1100px; /* same container as the hero and Modules */
 	margin: 0 auto;
-	padding: 16px 40px 96px; /* with the hero's 80px this matches the 96px before Modules */
+	padding: 16px 40px 96px; /* the hero's 48px bottom plus 16px keeps the index close to the fold */
 	color: var(--fn-primary);
 	font-family: "Saira", sans-serif;
 }
@@ -51,6 +51,7 @@
 	margin: 14px 0 0;
 	font-size: 14px;
 	line-height: 1.45;
+	text-wrap: pretty; /* no single-word last lines */
 	color: var(--fn-dim);
 }
 @keyframes fn-showcase-in {
@@ -89,8 +90,9 @@
 	opacity: 0.45;
 	transition: opacity 0.4s ease;
 }
+/* A short gap keeps the next, dimmed panel peeking above the fold so the page never looks finished. */
 .fn-showcase-slot + .fn-showcase-slot {
-	margin-top: 24vh;
+	margin-top: 48px;
 }
 .fn-showcase-slot[data-active] {
 	opacity: 1;
@@ -295,7 +297,7 @@
 		display: none;
 	}
 	.fn-showcase-slot + .fn-showcase-slot {
-		margin-top: 16vh;
+		margin-top: 32px;
 	}
 	.fn-showcase-panel {
 		grid-template-columns: 1fr;

@@ -83,7 +83,7 @@ export default function Showcase(): JSX.Element {
 		<section ref={section} className="fn-showcase" aria-labelledby="fn-showcase-eyebrow">
 			{/* `.fn-eyebrow` is the landing page's section label, shared with Modules. */}
 			<p id="fn-showcase-eyebrow" className="fn-eyebrow fn-showcase-eyebrow">
-				Features
+				See Crust in action
 			</p>
 			{/* Pinned aside: the label column stays at eye level while the panels pass. */}
 			<aside className="fn-showcase-head">

@@ -572,7 +572,7 @@ function FurnaceHome() {
 
         /* Hero section */
         .fn-hero-section {
-          padding: 80px 40px 80px;
+          padding: 80px 40px 48px;
           max-width: 1100px;
           margin: 0 auto;
           position: relative;
