@@ -9,6 +9,7 @@ const serve = new Crust("serve")
 	.args({ name: "port", schema: Port })
 	.action(({ args, stdout }) => {
 		stdout(`listening on port ${args.port}`);
+		//                               ^?
 	});
 
 await serve.execute();

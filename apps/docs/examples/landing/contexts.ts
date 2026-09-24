@@ -13,6 +13,7 @@ const work = new Crust("work")
 	.command("query", (command) =>
 		command.action(async ({ ctx, stdout }) => {
 			stdout((await ctx.db).query("select 1"));
+			//                ^?
 		}),
 	)
 	.command("fail", (command) =>

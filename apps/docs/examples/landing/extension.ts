@@ -12,6 +12,7 @@ const preview = defineExtension(id, {
 		// [!code highlight]
 		preRun(ctx) {
 			if (ctx.flags.preview !== true) return;
+			//            ^?
 			ctx.stdout("nothing changed");
 			return ctx.finish();
 		},

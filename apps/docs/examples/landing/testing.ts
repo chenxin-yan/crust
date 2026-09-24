@@ -8,4 +8,6 @@ const app = new Crust("cli").command("greet", (command) =>
 // [!code highlight]
 const captured = await captureExecute(app, ["unknown"]);
 console.log(captured.exitCode);
+//                   ^?
 console.log(captured.stderr);
+//                   ^?

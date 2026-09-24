@@ -6,8 +6,6 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { transformerNotationHighlight } from "@shikijs/transformers";
-import { transformerTwoslash } from "fumadocs-twoslash";
-import { createFileSystemTypesCache } from "fumadocs-twoslash/cache-fs";
 import type { Root } from "hast";
 import { createHighlighterCore } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
@@ -18,32 +16,10 @@ import gruvboxLightHard from "shiki/themes/gruvbox-light-hard.mjs";
 import type { Plugin } from "vite";
 
 import { SNIPPET_SOURCES, type SnippetKey } from "../src/components/landing/snippets";
+import { twoslashHovers } from "../twoslash.ts";
 
 const MODULE_ID = "virtual:landing-twoslash";
 const RESOLVED_ID = `\0${MODULE_ID}`;
-
-// TODO: typescript@7.0.2's sync API throws `RangeError: Offset is outside the bounds of
-// the DataView` (dist/api/node/node.js) when asked for hover info on Crust builder methods, whose
-// inferred types are very large. Until that is fixed, only the values whose types tell the story get
-// a hover — which also keeps the payload small. source.config.ts carries the mirror-image denylist.
-const HOVER = new Set([
-	"port",
-	"Port",
-	"input",
-	"to",
-	"ctx",
-	"db",
-	"captured",
-	"exitCode",
-	"stderr",
-	"preview",
-	"deploy",
-	"query",
-	"sql",
-	"line",
-	"name",
-	"run",
-]);
 
 export function landingTwoslash(): Plugin {
 	const root = process.cwd();
@@ -52,12 +28,7 @@ export function landingTwoslash(): Plugin {
 		langs: [langTypescript, langJson],
 		engine: createJavaScriptRegexEngine(),
 	});
-	const twoslash = transformerTwoslash({
-		explicitTrigger: false,
-		twoslashOptions: { cwd: root, shouldGetHoverInfo: (id) => HOVER.has(id) },
-		// Same cache the docs pages use; keyed by snippet content, so unchanged snippets skip TypeScript.
-		typesCache: createFileSystemTypesCache({ dir: "node_modules/.cache/twoslash" }),
-	});
+	const twoslash = twoslashHovers(false);
 
 	return {
 		name: "landing-twoslash",
@@ -78,7 +49,7 @@ export function landingTwoslash(): Plugin {
 					defaultColor: false,
 					// `// [!code highlight:N]` marker lines are removed and the next N lines get `.highlighted`;
 					// Twoslash only runs on TypeScript.
-					transformers: [transformerNotationHighlight(), twoslash],
+					transformers: [transformerNotationHighlight(), ...twoslash],
 				});
 			}
 			return `export default ${JSON.stringify(out)};`;

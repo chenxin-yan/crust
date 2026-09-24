@@ -6,6 +6,8 @@ const convert = new Crust("convert")
 	.flags({ name: "to", type: "string", default: "html" })
 	.action(({ args, flags, stdout }) => {
 		stdout(`Converting ${args.input} as ${flags.to}`);
+		//                        ^?
+		//                                          ^?
 	});
 
 await convert.execute();
