@@ -8,7 +8,6 @@ export const logging = defineExtension(defineExtensionId("acme:logging"), {
 });
 
 const app = new Crust("my-cli").extend(logging).action(async ({ ctx }) => {
-	// [!code highlight]
 	(await ctx.logger).info("ready");
 	//         ^?
 });

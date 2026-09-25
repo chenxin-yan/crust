@@ -18,7 +18,9 @@ The Command Action receives both values under the names in their definitions.
 
 ## Arguments
 
-<include lang="ts">../../../examples/guide/arguments.ts#defaults</include>
+<include lang="ts" meta="twoslash">
+  ../../../examples/guide/arguments-defaults.ts
+</include>
 
 ```sh
 $ convert report.md
@@ -31,7 +33,9 @@ Positional values fill definitions in order. Set `required: true` when omission 
 
 ### Variadic arguments
 
-<include lang="ts">../../../examples/guide/arguments.ts#variadic</include>
+<include lang="ts" meta="twoslash">
+  ../../../examples/guide/arguments-variadic.ts
+</include>
 
 ```sh
 $ copy dist a.ts b.ts
@@ -42,18 +46,20 @@ Use a final variadic argument when the command accepts any number of values in t
 
 ### Choices
 
-<include lang="ts">../../../examples/guide/arguments.ts#choices</include>
+<include lang="ts" meta="twoslash">
+  ../../../examples/guide/arguments-choices.ts
+</include>
 
 ```sh
 $ run deno
 Error: Invalid value "deno" for <runtime>. Expected one of: bun, node
 ```
 
-Use `choices` when the accepted strings are known in advance. The Command Action gets their string union, and an invalid value fails before the action runs.
+Use `choices` when the accepted strings are known in advance. The Command Action gets their string union, plus `undefined` here because the argument is neither required nor defaulted, and an invalid value fails before the action runs.
 
 ### Pass through raw tokens
 
-<include lang="ts">../../../examples/guide/arguments.ts#raw</include>
+<include lang="ts">../../../examples/guide/arguments-raw.ts</include>
 
 ```sh
 $ wrap -- --watch src

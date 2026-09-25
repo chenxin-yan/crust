@@ -216,7 +216,7 @@
 /* `// [!code highlight]` lines are where to look first: molten bar and tint, the rest of the snippet
    steps back. Overrides fumadocs-ui's global .highlighted. */
 .fn-showcase-shiki .shiki code:has(.highlighted) .line:not(.highlighted) {
-	opacity: 0.6;
+	opacity: 0.8; /* the bar and tint lead; inactive panels already dim to 0.45 */
 	transition: opacity 0.3s ease;
 }
 .fn-showcase-shiki .shiki code:has(.highlighted):hover .line {

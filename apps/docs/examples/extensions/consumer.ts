@@ -7,7 +7,8 @@ export const webDocs = defineExtension(WEB_DOCS, {
 	build({ snapshot }) {
 		// [!code highlight]
 		const lines = visibleSectionsFor(snapshot, WEB_DOCS).flatMap(({ path, sections }) => [
-			//   ^?
+			//                                                             ^?
+			//                                                                   ^?
 			`# ${[snapshot.meta.name, ...path].join(" ")}`,
 			...sections.map((s) => `## ${s.title}\n${s.body}`),
 		]);

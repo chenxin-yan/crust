@@ -13,9 +13,11 @@ npm install -D @crustjs/testing
 
 ## Inspect values and errors
 
-<include lang="ts">../../../examples/guide/testing.ts#run</include>
+<include lang="ts" meta="twoslash">
+  ../../../examples/guide/testing.ts#run
+</include>
 
-`run()` answers whether a Command Action completed, finished early, or failed, and captures its result, error, `stdout`, and `stderr`. Use it for tests and embedding; see the [full `run()` contract](/docs/api/crust#runpath-input-options).
+`run()` answers whether a Command Action completed, finished early, or failed, and captures its result, error, `stdout`, and `stderr`. Its `RunOutcome` type is a union on `status`: narrow to `"completed"` before reading the typed `result`. Use it for tests and embedding; see the [full `run()` contract](/docs/api/crust#runpath-input-options).
 
 When many tests target one subcommand, bind it once with [`app.at(path)`](/docs/api/crust#atpath) and call `handle.run(input?, options?)` with the same typed input and outcome.
 

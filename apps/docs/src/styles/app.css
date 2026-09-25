@@ -78,6 +78,16 @@ code.shiki {
 	font-family: "Fira Code", monospace;
 }
 
+/* Type hovers: fumadocs-twoslash shows the dotted cue only while the block is hovered and unsets the
+   trigger button's focus ring; keep a faint cue visible and restore keyboard focus. */
+.twoslash .twoslash-hover {
+	border-color: color-mix(in srgb, currentColor 40%, transparent);
+}
+.twoslash .twoslash-hover:focus-visible {
+	outline: 1px solid var(--color-fd-primary);
+	outline-offset: 2px;
+}
+
 /* Code block container styling */
 pre:has(> code.shiki) {
 	border: 1px solid var(--color-fd-border);

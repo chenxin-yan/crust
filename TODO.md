@@ -9,8 +9,8 @@ Branch `update-docs`, PR #389. Reviewing each surface from scratch, top to botto
 - [x] Quick start (`apps/docs/content/docs/quick-start.mdx`)
 - [ ] Guides (`apps/docs/content/docs/guide/`)
   - [x] index
-  - [ ] commands
-  - [ ] arguments-and-flags
+  - [x] commands
+  - [x] arguments-and-flags
   - [ ] values-and-validation
   - [ ] contexts
   - [ ] extensions

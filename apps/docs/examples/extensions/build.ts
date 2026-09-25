@@ -1,7 +1,6 @@
 import { Crust, type BuildArtifacts, defineExtension, defineExtensionId } from "@crustjs/core";
 
 export const manifest = defineExtension(defineExtensionId("acme:manifest"), {
-	// [!code highlight]
 	build({ snapshot }) {
 		return [
 			// [!code highlight]

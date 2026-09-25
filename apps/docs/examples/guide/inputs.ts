@@ -1,7 +1,6 @@
 import { Crust } from "@crustjs/core";
 
 const app = new Crust("convert")
-	// [!code highlight:2]
 	.args({ name: "input", type: "string", required: true })
 	.flags({ name: "format", type: "string", default: "html" })
 	.action(({ args, flags, stdout }) => {

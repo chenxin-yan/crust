@@ -1,6 +1,5 @@
 import { Crust, defineContext } from "@crustjs/core";
 
-// [!code highlight:3]
 const api = defineContext("api", () => ({
 	get: (path: string) => `https://api.example.com${path}`,
 }));

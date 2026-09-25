@@ -9,7 +9,6 @@ const preview = defineExtension(id, {
 	// [!code highlight]
 	flags: [{ name: "preview", type: "boolean" }],
 	hooks: {
-		// [!code highlight]
 		preRun(ctx) {
 			if (ctx.flags.preview !== true) return;
 			//            ^?

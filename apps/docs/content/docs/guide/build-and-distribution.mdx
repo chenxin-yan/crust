@@ -153,7 +153,7 @@ cat .crust/manifest.json        # every staged directory, its target, and the pu
 
 Every build stages into `.crust/`, so for release assets, containers, or any channel other than npm, build the targets you need and take the files from there: the standalone executable at `.crust/<platform alias>/bin/<command>-<target>` for Bun and Deno (`.exe` on Windows), or the executable JavaScript bundle at `.crust/root/bin/<command>.js` for Node. `.crust/manifest.json` is the index. Staging requires `name` and `version` in `package.json` and replaces `.crust/` on every build, so copy what you need out before building again.
 
-```json title=".crust/manifest.json (excerpt)" {5-14}
+```json title=".crust/manifest.json (excerpt)" {4}
 {
   "root": { "name": "my-cli", "dir": "root", "bins": ["my-cli"] },
   "publishOrder": ["linux-x64", "root"],
@@ -217,7 +217,7 @@ Use `--no-validate` only when preparation cannot run; it skips the name check an
 
 ### Ship extra directories with `crust.include`
 
-```json title="package.json" {2}
+```json title="package.json"
 {
   "crust": { "include": ["templates"] }
 }
@@ -229,7 +229,7 @@ Read Extension artifacts and included directories at runtime with [`resolveArtif
 
 ## Add Bun bundler plugins
 
-```json title="package.json" {2}
+```json title="package.json"
 {
   "crust": { "bunPlugins": ["@opentui/solid/bun-plugin", "./build/plugin.ts"] }
 }
@@ -239,15 +239,13 @@ See [`crust.bunPlugins`](/docs/modules/crust#packagejson-configuration) for reso
 
 ## Environment variables
 
-<include lang="ts" meta="twoslash">
-  ../../../examples/guide/build.ts#runtime-secret
-</include>
+<include lang="ts">../../../examples/guide/build.ts#runtime-secret</include>
 
 Read secrets and deployment configuration from the runtime environment; Crust adds no abstraction, and [Bun environment variables](https://bun.sh/docs/runtime/environment-variables) covers Bun's `.env` loading and precedence.
 
 ### Build-time constants
 
-<include lang="ts" meta='title="src/cli.ts" twoslash'>
+<include lang="ts" meta='title="src/cli.ts"'>
   ../../../examples/guide/build.ts
 </include>
 
@@ -283,7 +281,7 @@ These are the files `create-crust --runtime bun|node|deno` scaffolds, with `{{na
 <Tabs items={["Bun", "Node", "Deno"]}>
 <Tab value="Bun">
 
-<include lang="json" meta='title="package.json" {8-9,11-19}'>
+<include lang="json" meta='title="package.json" {8-9,15}'>
   ../../../../../packages/create-crust/templates/runtime/bun/package.json
 </include>
 
@@ -292,7 +290,7 @@ These are the files `create-crust --runtime bun|node|deno` scaffolds, with `{{na
 </Tab>
 <Tab value="Node">
 
-<include lang="json" meta='title="package.json" {8-9,11-19}'>
+<include lang="json" meta='title="package.json" {8-9,15}'>
   ../../../../../packages/create-crust/templates/runtime/node/package.json
 </include>
 
@@ -301,7 +299,7 @@ These are the files `create-crust --runtime bun|node|deno` scaffolds, with `{{na
 </Tab>
 <Tab value="Deno">
 
-<include lang="json" meta='title="package.json" {8-9,11-19}'>
+<include lang="json" meta='title="package.json" {8-9,15}'>
   ../../../../../packages/create-crust/templates/runtime/deno/package.json
 </include>
 

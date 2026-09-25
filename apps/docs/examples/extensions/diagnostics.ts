@@ -6,9 +6,9 @@ export const preview = defineExtension(defineExtensionId("acme:preview"), {
 	flags: [{ name: "preview", type: "boolean", description: "Show the plan" }],
 	hooks: {
 		preRun(ctx) {
-			// [!code highlight:3]
 			if (ctx.flags.preview !== true) return;
 			ctx.stdout("nothing changed");
+			// [!code highlight]
 			return ctx.finish();
 		},
 	},

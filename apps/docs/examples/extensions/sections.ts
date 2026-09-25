@@ -4,7 +4,7 @@ import { help } from "@crustjs/extensions";
 export const guidance = defineExtension(defineExtensionId("acme:guidance"), {
 	sections: () => [
 		{
-			// [!code highlight:3]
+			// [!code highlight]
 			command: [],
 			title: "Environment",
 			body: "Set DEPLOY_TOKEN before running.",

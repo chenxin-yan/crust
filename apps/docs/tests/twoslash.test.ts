@@ -13,83 +13,102 @@ it("docs and landing hovers explain selected values without builder or boilerpla
 		import assert from "node:assert/strict";
 		import { readFileSync, readdirSync } from "node:fs";
 		import { resolve } from "node:path";
+		import { transformerNotationHighlight } from "@shikijs/transformers";
+		import { remarkInclude } from "fumadocs-mdx/config";
 		import { createHighlighter } from "shiki";
 		import config from "./source.config.ts";
+		import { SNIPPET_SOURCES } from "./src/components/landing/snippets.ts";
 		import { twoslashHovers } from "./twoslash.ts";
 
-		const options = config.mdxOptions.rehypeCodeOptions;
-		const highlighter = await createHighlighter({ themes: ["gruvbox-light-hard"], langs: ["ts", "json"] });
-		let nodes;
-		const tree = highlighter.codeToHast(readFileSync("examples/landing/greet.ts", "utf8"), {
-			lang: "ts", theme: "gruvbox-light-hard", meta: { __raw: "twoslash" },
-			transformers: [...options.transformers, {
-				name: "capture-types",
-				preprocess() { nodes = this.meta.twoslash.nodes; },
-			}],
-		});
-		assert.deepEqual(nodes.map(node => node.target), ["args", "flags", "name", "shout"]);
-		assert.ok(nodes.every(node => node.type === "hover"));
-		assert.match(nodes[0].text, /name: string/);
-		assert.match(nodes[1].text, /shout: boolean/);
-		assert.match(nodes[2].text, /string/);
-		assert.match(nodes[3].text, /boolean/);
-		const rendered = JSON.stringify(tree);
-		assert.ok(rendered.includes("PopupTrigger"));
-		assert.ok(!rendered.includes("twoslash-query-line"));
-		assert.ok(!rendered.includes("^?"));
+		// Exact hover types a reader should learn, keyed by snippet then hovered token. Not every
+		// selection is listed; count parity below keeps the rest honest.
+		const EXPECTED_HOVERS = {
+			"examples/landing/greet.ts": { args: "args: Simplify<{ name: string; }>", flags: "flags: { help: boolean | undefined; shout: boolean | undefined; }" },
+			"examples/landing/inputs.ts": { to: "to: string" },
+			"../../../examples/guide/arguments-defaults.ts": { format: "const format: string", label: "const label: string | undefined" },
+			"../../../examples/guide/arguments-variadic.ts": { files: "const files: string[]" },
+			"../../../examples/guide/arguments-choices.ts": { runtime: 'const runtime: "bun" | "node" | undefined' },
+			"../../../examples/guide/flags-values.ts": { flags: 'flags: { runtime: "bun" | "node"; tag: string | undefined; target: string[] | undefined; }' },
+			"../../../examples/guide/testing.ts#run": { outcome: "const outcome: RunOutcome<number>", result: "result: number" },
+			"../../../examples/guide/contexts-uses.ts": { config: "config: Promise<{ region: string; }>" },
+			"../../../examples/extensions/consumer.ts": { sections: "sections: readonly CommandSection[]" },
+		};
 
-		const landing = twoslashHovers(false);
-		for (const [file, targets] of [
-			["landing/greet", ["args", "flags", "name", "shout"]],
-			["landing/inputs", ["input", "to"]],
-			["landing/schema", ["port"]],
-			["landing/contexts", ["db"]],
-			["landing/extension", ["preview"]],
-			["landing/testing", ["exitCode", "stderr"]],
-			["landing/app", []],
-			["guide/types-builtin", ["flags", "seconds"]],
-		]) {
-			highlighter.codeToHast(readFileSync("examples/" + file + ".ts", "utf8"), {
-				lang: "ts", theme: "gruvbox-light-hard",
-				transformers: [...landing, {
-					name: "check-selections",
-					preprocess() {
-						assert.deepEqual(this.meta.twoslash.nodes.map(node => node.target), targets, file);
-					},
-				}],
-			});
+		const options = config.mdxOptions.rehypeCodeOptions;
+		const highlighter = await createHighlighter({ themes: ["gruvbox-light-hard", "gruvbox-dark-hard"], langs: ["ts", "json"] });
+		const children = node => node.children ?? [];
+		const walk = node => [node, ...children(node).flatMap(walk)];
+		const textOf = node => node.type === "text" ? node.value : children(node).map(textOf).join("");
+		// What the reader sees in the code block: popup bodies render elsewhere.
+		const codeText = node => node.type === "text" ? node.value : node.tagName === "PopupContent" ? "" : children(node).map(codeText).join("");
+		const authoredHighlights = (source, meta) =>
+			[...source.matchAll(/\[!code highlight(?::(\d+))?\]/g)].reduce((sum, [, lines = "1"]) => sum + Number(lines), 0) +
+			[...(meta.match(/\{([\d,-]+)\}/)?.[1].split(",") ?? [])].reduce((sum, range) => {
+				const [start, end = start] = range.split("-").map(Number);
+				return sum + end - start + 1;
+			}, 0);
+
+		function checkRendered(key, source, meta, hast) {
+			const nodes = walk(hast);
+			const highlighted = nodes.filter(node => /\bline\b/.test(node.properties?.class ?? "") && /\bhighlighted\b/.test(node.properties.class));
+			assert.equal(highlighted.length, authoredHighlights(source, meta), key + ": highlighted lines");
+			const text = codeText(hast);
+			for (const marker of ["^?", "[!code", "---cut---", "// @types"]) assert.ok(!text.includes(marker), key + ": visible " + marker);
+			assert.ok(!nodes.some(node => /twoslash-query-line|twoslash-popup-container/.test(node.properties?.class ?? "")), key + ": inline type panel");
+			const popups = nodes.filter(node => node.tagName === "Popup").map(popup => ({
+				target: textOf(popup.children.find(child => child.tagName === "PopupTrigger")),
+				// The first PopupContent child is the type; JSDoc prose follows it.
+				type: textOf(popup.children.find(child => child.tagName === "PopupContent").children[0]).replace(/\s+/g, " "),
+			}));
+			// One popup per authored ^? selection: no automatic builder hovers, no dropped "any" hovers.
+			assert.equal(popups.length, [...source.matchAll(/\/\/\s*\^\?/g)].length, key + ": " + JSON.stringify(popups));
+			// app.css styles the hover cue under .twoslash.
+			if (popups.length) assert.ok(nodes.some(node => node.tagName === "pre" && /\btwoslash\b/.test(node.properties.class)), key + ": no .twoslash block");
+			for (const popup of popups) assert.ok(!/\bany\b/.test(popup.type), key + ": " + popup.type);
+			for (const [target, type] of Object.entries(EXPECTED_HOVERS[key] ?? {})) {
+				const popup = popups.find(popup => popup.target === target);
+				assert.ok(popup, key + ": no hover on " + target);
+				assert.equal(popup.type, type, key + ": " + target);
+			}
+			return popups.length;
 		}
-		const visibleText = node => node.type === "text" ? node.value : (node.children ?? []).map(visibleText).join("");
+
+		// Landing: the same transformers and trimming as vite/landing-twoslash.ts.
+		const landing = [transformerNotationHighlight(), ...twoslashHovers(false)];
+		for (const { file, lang } of Object.values(SNIPPET_SOURCES)) {
+			const source = readFileSync(file, "utf8").trimEnd();
+			const hast = highlighter.codeToHast(source, {
+				lang, themes: { light: "gruvbox-light-hard", dark: "gruvbox-dark-hard" }, defaultColor: false, transformers: landing,
+			});
+			checkRendered(file, source, "", hast);
+		}
+
+		// Guide: expand each <include> with Fumadocs' own remark-include, so regions and dedent match the page.
+		const checked = new Set();
+		let plain = 0;
+		let annotated = 0;
 		for (const page of readdirSync("content/docs/guide").filter(file => file.endsWith(".mdx"))) {
 			const guide = readFileSync("content/docs/guide/" + page, "utf8");
-			const includes = [...guide.matchAll(/<include lang="(ts|json)"(?: meta=(['"])(.*?)\2)?>\s*([^<]+)<\/include>/g)];
-			assert.equal(includes.length, (guide.match(/<include lang="(?:ts|json)"/g) ?? []).length, page);
+			const includes = [...guide.matchAll(/<include lang="(ts|json)"(?: meta=(['"])(.*?)\2)?>\s*([^<]+?)\s*<\/include>/g)];
+			assert.equal(includes.length, (guide.match(/<include\b/g) ?? []).length, page);
 			for (const [, lang, , meta = "", specifier] of includes) {
-				const [file, region] = specifier.trim().split("#");
-				let source = readFileSync(resolve("content/docs/guide", file), "utf8");
-				if (region) {
-					source = source.split("//#region " + region + "\n")[1]?.split("//#endregion")[0];
-					assert.ok(source, specifier);
-				}
-				let queries = [];
-				const hast = highlighter.codeToHast(source, {
-					lang, theme: "gruvbox-light-hard", meta: { __raw: meta },
-					transformers: [...options.transformers, {
-						name: "capture-guide-types",
-						preprocess() { queries = this.meta.twoslash?.nodes ?? []; },
-					}],
+				const include = {
+					type: "mdxJsxFlowElement", name: "include", children: [{ type: "text", value: specifier }],
+					attributes: [{ type: "mdxJsxAttribute", name: "lang", value: lang }, ...(meta ? [{ type: "mdxJsxAttribute", name: "meta", value: meta }] : [])],
+				};
+				await remarkInclude.call({})({ type: "root", children: [include] }, { dirname: resolve("content/docs/guide"), cwd: process.cwd(), data: {} });
+				assert.equal(include.type, "code", specifier);
+				const hast = highlighter.codeToHast(include.value, {
+					lang, theme: "gruvbox-light-hard", meta: { __raw: meta }, transformers: options.transformers,
 				});
-				const selected = [...source.matchAll(/\/\/\s*\^\?/g)].length;
-				assert.equal(queries.length, selected, specifier);
-				if (meta.includes("twoslash")) assert.ok(selected > 0, specifier);
-				assert.ok(queries.every(node => node.type === "hover" && !node.text.includes(": any")), specifier);
-				const html = JSON.stringify(hast);
-				assert.ok(html.includes("highlighted"), specifier);
-				const text = visibleText(hast);
-				assert.ok(!text.includes("^?") && !text.includes("[!code"), specifier);
-				if (selected) assert.ok(html.includes("PopupTrigger"), specifier);
+				const popups = checkRendered(specifier, include.value, meta, hast);
+				if (meta.split(/\s+/).includes("twoslash")) assert.ok(popups > 0, specifier + ": twoslash meta without a selection");
+				popups ? annotated++ : plain++;
+				checked.add(specifier);
 			}
 		}
+		assert.ok(plain > 0 && annotated > 0, "both plain and annotated guide includes are rendered");
+		for (const key of Object.keys(EXPECTED_HOVERS)) if (!key.startsWith("examples/")) assert.ok(checked.has(key), key + " is not included by a guide");
 		highlighter.dispose();
 	`,
 		],

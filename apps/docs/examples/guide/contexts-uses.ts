@@ -4,7 +4,7 @@ const config = defineContext("config", () => ({ region: "eu" }));
 // [!code highlight]
 const api = defineContext("api", { use: [config] }, async ({ ctx }) => {
 	const { region } = await ctx.config; // [!code highlight]
-	//      ^?
+	//                           ^?
 	return { get: (path: string) => `https://${region}.api.example.com${path}` };
 });
 

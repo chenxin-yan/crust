@@ -12,7 +12,7 @@ const query = defineCommand("query", (command) =>
 	}),
 );
 
-// [!code highlight:2]
+// [!code highlight]
 const fakeDatabase = database.of({ query: (sql: string) => `fake: ${sql}` });
 const testApp = new Crust("work").provide(fakeDatabase).add(query);
 

@@ -1,7 +1,6 @@
 import { Crust } from "@crustjs/core";
 
 const serve = new Crust("serve")
-	// [!code highlight]
 	.flags({ name: "color", type: "boolean" }, { name: "port", type: "number" })
 	.action(({ flags, stdout }) => {
 		//         ^?

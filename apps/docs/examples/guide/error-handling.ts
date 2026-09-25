@@ -43,7 +43,6 @@ export const deploy = new Crust("deploy").provide(database()).action(async ({ ct
 
 //#region cancellation
 async function createProject() {
-	// [!code highlight]
 	const name = await input({ message: "Project name?" });
 	await mkdir(name);
 	await writeFile(`${name}/package.json`, "{}");
@@ -77,13 +76,11 @@ const cancelled = new Crust("app").action(() => {
 	throw new DOMException("Cancelled", "AbortError");
 });
 //#region tests
-// [!code highlight:2]
 const outcome = await deploy.run([]);
 if (outcome.status === "failed" && outcome.error instanceof Error) {
 	console.log(outcome.error.message); // Deployment service is unavailable. Try again later.
 }
 
-// [!code highlight]
 const terminal = await captureExecute(declared, []);
 console.log(terminal.stderr); // Error: Missing required flag "--name"
 console.log(terminal.exitCode); // 1

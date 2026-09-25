@@ -48,7 +48,7 @@ $ deploy
 deploying to the default region
 ```
 
-`parse` runs once on the raw string and its return type becomes the action value, here `string[]`. It only converts. To reject a value, throw; the error is reported as `Failed to parse --regions: <message>`.
+`parse` runs once on the raw string and its return type becomes the action value. Here `parse` returns `string[]`, and the flag is neither required nor defaulted, so the action receives `string[] | undefined`. It only converts. To reject a value, throw; the error is reported as `Failed to parse --regions: <message>`.
 
 ## Schema-backed definitions
 

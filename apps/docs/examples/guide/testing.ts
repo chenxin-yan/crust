@@ -1,30 +1,33 @@
+//#region run
+// @types: bun
 import { expect, test } from "bun:test";
 
 import { Crust } from "@crustjs/core";
 import { input } from "@crustjs/prompts";
 import { captureExecute } from "@crustjs/testing";
 import { runInteractive } from "@crustjs/testing/interactive";
-
-//#region run
+// ---cut---
 const app = new Crust("app").action(({ stdout }) => {
 	stdout("first\nsecond");
 	return 3;
 });
 
 test("returns output and the action result", async () => {
-	// [!code highlight]
 	const outcome = await app.run([]);
+	//    ^?
 
 	expect(outcome.stdout).toBe("first\nsecond");
 	expect(outcome.status).toBe("completed");
 	// [!code highlight]
-	if (outcome.status === "completed") expect(outcome.result).toBe(3);
+	if (outcome.status === "completed") {
+		expect(outcome.result).toBe(3);
+		//             ^?
+	}
 });
 //#endregion
 
 //#region capture-execute
 test("captures terminal errors", async () => {
-	// [!code highlight]
 	const result = await captureExecute(app, ["--unknown"]);
 
 	expect(result.stdout).toBe("");
@@ -41,7 +44,6 @@ const greeting = new Crust("greet").action(async ({ stderr }) => {
 });
 
 test("drives a prompt", async () => {
-	// [!code highlight:5]
 	const run = runInteractive(greeting, []);
 	await run.waitFor(/Name\?/);
 	run.type("Ada");

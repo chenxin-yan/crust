@@ -90,7 +90,7 @@ $ app regions
 https://eu.api.example.com/regions
 ```
 
-List the factories a Context needs in `use` and read them from `ctx` in setup, the same way an action does. Dependencies are lazy too: `config` is built only because `api` reads it. Provide every instance; order within one `.provide()` call does not matter.
+List the factories a Context needs in `use` and read them from `ctx` in setup, the same way an action does: each is a promise of that Context's value. Dependencies are lazy too: `config` is built only because `api` reads it. Provide every instance; order within one `.provide()` call does not matter.
 
 ## Replace a Context in tests
 
