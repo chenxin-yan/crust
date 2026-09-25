@@ -126,7 +126,7 @@ describe("input — interactive", () => {
 		expect(result).toBe("X");
 	});
 
-	it("renders submitted value with success styling", async () => {
+	it("renders the submitted success line", async () => {
 		const prompt = renderPrompt(input, { message: "Name?" });
 
 		await tick();
@@ -137,8 +137,7 @@ describe("input — interactive", () => {
 		prompt.keys("return");
 
 		await prompt.answer;
-		// After submission, the confirmed value should appear in output
-		expect(prompt.screen()).toContain("OK");
+		expect(prompt.screen()).toBe("✓ Name? OK");
 	});
 });
 
@@ -334,12 +333,14 @@ describe("input — validation", () => {
 		expect(validateCallCount).toBe(2);
 	});
 
-	it("supports async validation", async () => {
+	it("awaits async validation before resolving", async () => {
+		let validated = false;
 		const prompt = renderPrompt(input, {
 			message: "Code?",
 			validate: async (v) => {
 				await new Promise((r) => setTimeout(r, 5));
 				if (v !== "1234") throw new Error("Wrong code");
+				validated = true;
 			},
 		});
 
@@ -356,6 +357,7 @@ describe("input — validation", () => {
 
 		const result = await prompt.answer;
 		expect(result).toBe("1234");
+		expect(validated).toBe(true);
 	});
 
 	it("validates default value when used", async () => {

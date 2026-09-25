@@ -261,8 +261,7 @@ describe("select — rendering", () => {
 		prompt.keys("return");
 
 		await prompt.answer;
-		// After submit, the selected label should appear in the output
-		expect(prompt.screen()).toContain("banana");
+		expect(prompt.screen()).toBe("✓ Pick a fruit banana");
 	});
 
 	it("renders labels for object choices", async () => {

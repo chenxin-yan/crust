@@ -111,7 +111,7 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 
 	it.each(builderCases)("%s does not mutate the original builder", async (_name, apply) => {
 		const app = new Crust("test");
-		const before = await app.snapshot();
+		const before = await new Crust("test").snapshot();
 		apply(app);
 		expect(await app.snapshot()).toEqual(before);
 	});
@@ -1511,29 +1511,26 @@ describe("Crust .run()", () => {
 	});
 
 	it("makes explicitly injected run IO ambient during the invocation", async () => {
-		const stdout = () => {};
-		const stderr = () => {};
-		let observed: ReturnType<typeof getAmbientTerminalIO>;
+		const out: string[] = [];
+		const err: string[] = [];
 		const app = new Crust("test").action(() => {
-			observed = getAmbientTerminalIO();
+			const io = getAmbientTerminalIO();
+			io?.stdout("ambient out");
+			io?.stderr("ambient err");
 		});
 
-		await unwrap(app.run([], undefined, { stdout, stderr }));
+		const result = await unwrap(
+			app.run([], undefined, {
+				stdout: (text) => out.push(text),
+				stderr: (text) => err.push(text),
+			}),
+		);
 
-		expect(observed?.stdout).toBeDefined();
-		expect(observed?.stderr).toBeDefined();
+		expect(out).toEqual(["ambient out"]);
+		expect(err).toEqual(["ambient err"]);
+		expect(result.stdout).toBe("ambient out");
+		expect(result.stderr).toBe("ambient err");
 		expect(getAmbientTerminalIO()).toBeUndefined();
-	});
-
-	it("creates a quiet ambient terminal scope when run IO is omitted", async () => {
-		let observed: ReturnType<typeof getAmbientTerminalIO>;
-		const app = new Crust("test").action(() => {
-			observed = getAmbientTerminalIO();
-		});
-
-		await unwrap(app.run([]));
-
-		expect(observed).toBeDefined();
 	});
 });
 

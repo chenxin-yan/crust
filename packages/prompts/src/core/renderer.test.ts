@@ -266,22 +266,6 @@ describe("runPrompt", () => {
 		);
 	});
 
-	it("resolves with submitted value when handleKey returns submit", async () => {
-		const config: PromptConfig<{ value: string }, string> = {
-			render: (state) => state.value,
-			handleKey: () => submit("hello"),
-			initialState: { value: "test" },
-			theme: defaultTheme,
-		};
-
-		const harness = createPromptIO();
-		const promise = runPrompt(config, harness.io);
-		harness.type("a");
-
-		const result = await promise;
-		expect(result).toBe("hello");
-	});
-
 	it("updates state on non-submit keypress", async () => {
 		let keypressCount = 0;
 

@@ -115,7 +115,8 @@ function expectClean(command: string[], cwd: string, expectedStdout: string): vo
 	const [file, ...args] = command;
 	const result = spawnSync(file!, args, { cwd, timeout: 60_000 });
 	expect(result.stderr.toString()).toBe("");
-	expect(result.stdout.toString()).toContain(expectedStdout);
+	if (expectedStdout === "") expect(result.stdout.toString()).toBe("");
+	else expect(result.stdout.toString()).toContain(expectedStdout);
 	expect(result.status).toBe(0);
 }
 

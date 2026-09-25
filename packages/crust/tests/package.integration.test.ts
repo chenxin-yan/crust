@@ -207,6 +207,7 @@ describe("crust build integration", () => {
 				env: {},
 				timeout: 25_000,
 			});
+			expect(env.exitCode, env.stderr).toBe(0);
 			expect(env.stdout.trim().split("\n").at(-1)).toBe("hello-from-build undefined");
 		},
 		30_000,

@@ -408,8 +408,7 @@ describe("spinner — message updates", () => {
 			});
 		} catch {}
 
-		expect(writes.join("")).toContain("✗");
-		expect(writes.join("")).toContain("Failed step...");
+		expect(writes.at(-2)).toBe("\x1B[2K\r✗ Failed step...\n");
 	});
 
 	it("ignores updateMessage calls after task completes", async () => {

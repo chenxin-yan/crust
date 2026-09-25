@@ -1,7 +1,7 @@
 import type { StandardSchema } from "@crustjs/utils/schema";
 import { describe, expect, it } from "vite-plus/test";
 
-import { unwrap } from "../../tests/helpers.ts";
+import { executeCrust, unwrap } from "../../tests/helpers.ts";
 
 type StandardInput = Parameters<StandardSchema["~standard"]["validate"]>[0];
 
@@ -112,17 +112,25 @@ describe("Standard Schema on flag definitions", () => {
 
 		await unwrap(app.run([], { flags: { port: "9090" } }));
 		expect(received).toBe(9090);
+
+		received = undefined;
+		const result = await executeCrust(app, ["--port", "9090"]);
+		expect(result.exitCode, result.stderr).toBe(0);
+		expect(received).toBe(9090);
 	});
 
 	it("boolean flags do not consume a token and pass the raw boolean to the schema", async () => {
 		let received: "on" | "off" | undefined;
+		let positional: string | undefined;
 		const onOff = schema<boolean | undefined, "on" | "off">((raw) => ({
 			value: raw === true ? "on" : "off",
 		}));
 		const app = new Crust("cli")
 			.flags({ name: "loud", type: "boolean", schema: onOff })
-			.action(({ flags }) => {
+			.args({ name: "sentinel", type: "string" })
+			.action(({ args, flags }) => {
 				received = flags.loud;
+				positional = args.sentinel;
 			});
 
 		await unwrap(app.run([], { flags: { loud: true } }));
@@ -130,6 +138,12 @@ describe("Standard Schema on flag definitions", () => {
 
 		await unwrap(app.run([]));
 		expect(received).toBe("off");
+
+		received = undefined;
+		const result = await executeCrust(app, ["--loud", "sentinel"]);
+		expect(result.exitCode, result.stderr).toBe(0);
+		expect(received).toBe("on");
+		expect(positional).toBe("sentinel");
 	});
 
 	it("aggregates issues across args and flags into one VALIDATION error", async () => {
@@ -160,6 +174,11 @@ describe("Standard Schema on flag definitions", () => {
 			});
 
 		await unwrap(app.run([], { flags: { loud: false } }));
+		expect(received).toBe("false");
+
+		received = undefined;
+		const result = await executeCrust(app, ["--no-loud"]);
+		expect(result.exitCode, result.stderr).toBe(0);
 		expect(received).toBe("false");
 	});
 

@@ -97,7 +97,11 @@ it("landing scaffold tabs match the Quick Start `npm` fence and share its group"
 			?.value;
 	const tabs = tree.children?.[0];
 	expect(tabs?.name).toBe("CodeBlockTabs");
-	expect(tabs && attribute(tabs, "groupId")).toBe("package-manager");
+	const landingSource = await readFile(new URL("../src/routes/index.tsx", import.meta.url), "utf8");
+	const landingGroup = /const PACKAGE_MANAGER_GROUP_ID = "([^"]+)"/.exec(landingSource)?.[1];
+	expect(landingGroup).toBeDefined();
+	expect(landingSource).toMatch(/<Tabs\s[^>]*groupId=\{PACKAGE_MANAGER_GROUP_ID\}/);
+	expect(tabs && attribute(tabs, "groupId")).toBe(landingGroup);
 	const commands = Object.fromEntries(
 		(tabs?.children ?? []).flatMap((child) =>
 			child.name === "CodeBlockTab"

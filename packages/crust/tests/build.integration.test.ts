@@ -16,7 +16,7 @@ import { Crust } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import type { JsonValue } from "@crustjs/utils/json";
 import { which } from "@crustjs/utils/process";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 
 import { buildCommand } from "../src/commands/build.ts";
 import { BUN_TARGETS, type BunTarget, DENO_TARGETS } from "../src/utils/build-helpers.ts";
@@ -109,18 +109,25 @@ console.log("hello from crust build test");
 
 	it("builds without --minify when --no-minify is passed", async () => {
 		process.cwd = () => tmpDir;
+		const processSpy = vi.spyOn(await import("@crustjs/utils/process"), "runProcess");
+		try {
+			const { stdout, exitCode } = await captureExecute(new Crust("test").add(buildCommand), [
+				"build",
+				"--no-validate",
+				"--no-minify",
+				"--target",
+				"bun-darwin-arm64",
+			]);
 
-		const { stdout, exitCode } = await captureExecute(new Crust("test").add(buildCommand), [
-			"build",
-			"--no-validate",
-			"--no-minify",
-			"--target",
-			"bun-darwin-arm64",
-		]);
-
-		expect(exitCode).toBe(0);
-		expect(existsSync(stagedBunBinary(tmpDir, "test-build-cli", "bun-darwin-arm64"))).toBe(true);
-		expect(stdout).toContain("Staged");
+			expect(exitCode).toBe(0);
+			expect(existsSync(stagedBunBinary(tmpDir, "test-build-cli", "bun-darwin-arm64"))).toBe(true);
+			expect(stdout).toContain("Staged");
+			const compile = processSpy.mock.calls.find(([, args]) => args?.includes("--compile"));
+			expect(compile?.[1]).toContain("--compile");
+			expect(compile?.[1]).not.toContain("--minify");
+		} finally {
+			processSpy.mockRestore();
+		}
 	});
 
 	it.skipIf(getHostBunTarget() === null)(

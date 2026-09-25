@@ -74,9 +74,11 @@ describe("multifilter — interactive", () => {
 		});
 
 		await tick();
+		prompt.keys("down");
+		await tick();
 		prompt.keys("space");
 		await tick();
-		prompt.keys("down");
+		prompt.keys("up");
 		await tick();
 		prompt.keys("space");
 		await tick();
@@ -179,14 +181,15 @@ describe("multifilter — interactive", () => {
 		await tick();
 		prompt.keys("space");
 		await tick();
-		prompt.type("g");
-		await tick();
 		prompt.type("a");
 		await tick();
-		prompt.type("m");
+		prompt.type("l");
+		await tick();
+		prompt.type("p");
 		await tick();
 
-		expect(prompt.screen()).toContain("gamma");
+		expect(prompt.screen()).toContain("alpha");
+		expect(prompt.screen()).not.toContain("gamma");
 		prompt.keys("return");
 
 		const result = await prompt.answer;

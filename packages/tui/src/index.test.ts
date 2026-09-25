@@ -100,9 +100,10 @@ describe("runTui", () => {
 	});
 
 	it("does not destroy on Ctrl+C when exitOnCtrlC is false", () => {
-		const { outcome, rendererDestroyed } = observe("ctrl-c-without-exit");
+		const { outcome, rendererDestroyed, manualTeardownReached } = observe("ctrl-c-without-exit");
 
 		expect(outcome).toEqual({ status: "resolved", valueType: "undefined" });
+		expect(manualTeardownReached).toBe(true);
 		expect(rendererDestroyed).toBe(true);
 	});
 });

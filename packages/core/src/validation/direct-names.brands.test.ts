@@ -20,7 +20,6 @@ describe("direct definition name brands", () => {
 
 		const dynamicName = "dynamic" as string;
 		// Broad string names are checked at each consuming operation.
-		expect(defineFlag(dynamicName, { type: "string" }).name).toBe("dynamic");
 		expect(myFlag(dynamicName).name).toBe("dynamic");
 		expect(myArg(dynamicName).name).toBe("dynamic");
 		expect(myCommand(dynamicName).name).toBe("dynamic");

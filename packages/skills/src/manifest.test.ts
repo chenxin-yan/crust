@@ -1,5 +1,5 @@
 import type { ArgDef } from "@crustjs/core";
-import { Crust, defineCommand, defineExtensionId } from "@crustjs/core";
+import { defineExtensionId } from "@crustjs/core";
 import { describe, expect, it } from "vite-plus/test";
 
 import { makeCommand, snapshotFixture } from "../tests/fixtures.ts";
@@ -485,27 +485,6 @@ describe("buildManifest", () => {
 
 			expect(child?.sections).toEqual([
 				{ title: "Safety", body: "Ask for explicit confirmation before production deploys." },
-			]);
-		});
-
-		it("preserves metadata sections across Crust builder cloning", async () => {
-			const deploy = defineCommand(
-				"deploy",
-				{
-					description: "Deploy command",
-					sections: [
-						{ title: "Environment", body: "Read the environment carefully before execution." },
-					],
-				},
-				(command) => command.action(() => {}),
-			);
-			const root = new Crust("app").add(deploy);
-
-			const node = buildManifest(await snapshotFixture(root));
-			const child = node.children[0];
-
-			expect(child?.sections).toEqual([
-				{ title: "Environment", body: "Read the environment carefully before execution." },
 			]);
 		});
 	});

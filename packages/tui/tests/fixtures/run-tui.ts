@@ -71,6 +71,7 @@ export type TuiOutcome =
 export type TuiObservation = {
 	outcome: TuiOutcome;
 	rendererDestroyed?: boolean;
+	manualTeardownReached?: boolean;
 	keypressListenersBefore?: number;
 	keypressListenersAfter?: number;
 	stdinDataListeners?: number;
@@ -185,14 +186,18 @@ const scenarios = {
 	"ctrl-c-without-exit": async () => {
 		const { config, stdin } = createTtyConfig({ exitOnCtrlC: false });
 		let renderer: CliRenderer | undefined;
+		let manualTeardownReached = false;
 		const outcome = await settle(
 			runTui((created) => {
 				renderer = created;
 				stdin.write("\x03");
-				setTimeout(() => created.destroy(), 10);
+				setTimeout(() => {
+					manualTeardownReached = true;
+					created.destroy();
+				}, 10);
 			}, config),
 		);
-		return { outcome, rendererDestroyed: renderer?.isDestroyed };
+		return { outcome, rendererDestroyed: renderer?.isDestroyed, manualTeardownReached };
 	},
 } satisfies Record<TuiScenario, () => Promise<TuiObservation>>;
 

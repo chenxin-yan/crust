@@ -1,5 +1,4 @@
 import {
-	chmodSync,
 	cpSync,
 	existsSync,
 	mkdirSync,
@@ -336,8 +335,8 @@ writeFileSync(resultPath, JSON.stringify({ ...result, logged }));
 		);
 		expect(result.logged.every(([, stream]) => stream === "stdout")).toBe(true);
 
-		chmodSync(executable!.path, 0o755);
 		const run = await runBoundedProcess(executable!.path, [], { cwd: app, timeout: 100_000 });
+		expect(run.exitCode, run.stderr).toBe(0);
 		expect(run.stdout.trim()).toBe("hello from installed-app");
 	}, 120_000);
 });
