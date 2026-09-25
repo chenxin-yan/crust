@@ -1,5 +1,4 @@
-import { describe, expect, it } from "bun:test";
-
+import { describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
 
 import { renderPrompt } from "../testing.ts";

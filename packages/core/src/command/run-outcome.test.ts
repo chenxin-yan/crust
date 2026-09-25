@@ -1,6 +1,5 @@
-import { describe, expect, it } from "bun:test";
-
 import { getAmbientTerminalIO, getTerminalIO, withTerminalIO } from "@crustjs/utils/terminal";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
 	Crust,
@@ -41,7 +40,7 @@ describe("captured run outcomes", () => {
 		}
 	});
 	it.each([undefined, null, 0, "failure", { identity: true }])(
-		"retains primitive and object failures: %p",
+		"retains primitive and object failures: %o",
 		async (error) => {
 			const result = await new Crust("app")
 				.action(({ stdout }) => {

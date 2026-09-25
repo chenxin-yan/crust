@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { formatPromptLine, formatSubmitted, moveCursor, normalizeChoices } from "./utils.ts";
 

@@ -1,6 +1,5 @@
-import { describe, expect, it } from "bun:test";
-
 import { type AnyCrust, Crust, defineCommand } from "@crustjs/core";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
 	MCP_CLIENTS,

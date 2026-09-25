@@ -1,0 +1,26 @@
+packages:
+  - apps/*
+  - packages/*
+  - scripts
+  - tools
+
+catalog:
+  vite: npm:@voidzero-dev/vite-plus-core@1.0.0-rc.0
+  vite-plus: 1.0.0-rc.0
+
+overrides:
+  "@types/node": ^24
+  # Vite plugins resolve the same Vite+ core that `vp build`/`vp test` run on.
+  vite@*: "catalog:"
+
+# The core alias versions as 1.0.0-rc.0, which no plugin's `vite` peer range names.
+peerDependencyRules:
+  allowAny:
+    - vite
+  allowedVersions:
+    vite: "*"
+
+# Dependency install scripts stay blocked; these platform binaries resolve through optionalDependencies.
+allowBuilds:
+  esbuild: false
+  workerd: false

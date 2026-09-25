@@ -1,4 +1,3 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import {
 	existsSync,
 	mkdirSync,
@@ -16,10 +15,12 @@ import { fileURLToPath } from "node:url";
 import { Crust } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import type { JsonValue } from "@crustjs/utils/json";
-import { runProcess } from "@crustjs/utils/process";
+import { which } from "@crustjs/utils/process";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
 
 import { buildCommand } from "../src/commands/build.ts";
 import { BUN_TARGETS, type BunTarget, DENO_TARGETS } from "../src/utils/build-helpers.ts";
+import { reapBoundedProcesses, runBoundedProcess } from "./bounded-process.ts";
 import { hostDenoTarget, hostTarget } from "./helpers.ts";
 
 function getHostBunTarget() {
@@ -50,9 +51,12 @@ function writePackageJson(projectDir: string, pkg: JsonValue): void {
 // Integration test: staged builds (--target flag)
 // ────────────────────────────────────────────────────────────────────────────
 
+// Runs after each describe's own afterEach and before its afterAll fixture removal.
+afterEach(reapBoundedProcesses);
+
 describe("crust build integration — staged targets", () => {
 	const tmpDir = mkdtempSync(join(tmpdir(), "crust-build-integration-"));
-	const crustCliPath = resolve(import.meta.dir, "..", "src", "cli.ts");
+	const crustCliPath = resolve(import.meta.dirname, "..", "src", "cli.ts");
 	const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 	const originalCwd = process.cwd;
 	const basePackageJson = { name: "test-build-cli", version: "0.1.0" };
@@ -71,7 +75,8 @@ console.log("hello from crust build test");
 		writePackageJson(tmpDir, basePackageJson);
 	});
 
-	afterEach(() => {
+	afterEach(async () => {
+		await reapBoundedProcesses();
 		process.cwd = originalCwd;
 		writePackageJson(tmpDir, basePackageJson);
 	});
@@ -138,15 +143,16 @@ console.log("hello from crust build test");
 				"root",
 			]);
 			const outPath = stagedBunBinary(tmpDir, "test-build-cli", host);
-			const { exitCode: runExitCode, stdout: runStdout } = await runProcess(outPath, [], {
+			const { exitCode: runExitCode, stdout: runStdout } = await runBoundedProcess(outPath, [], {
 				cwd: tmpDir,
+				timeout: 4_000,
 			});
 			expect(runExitCode).toBe(0);
 			expect(runStdout.trim()).toBe("hello from crust build test");
 		},
 	);
 
-	it.skipIf(getHostBunTarget() === null || Bun.which("node") === null)(
+	it.skipIf(getHostBunTarget() === null || which("node") === null)(
 		"builds two bin entries into their own launchers and binaries with merged artifacts",
 		async () => {
 			const host = getHostBunTarget()!;
@@ -214,15 +220,16 @@ await new Crust("${name}").extend(hook).action(({ stdout }) => stdout("running $
 			).toEqual(["greet", "admin-tool"]);
 
 			for (const command of ["greet", "admin-tool"]) {
-				const binary = await runProcess(stagedBunBinary(projectDir, command, host), [], {
+				const binary = await runBoundedProcess(stagedBunBinary(projectDir, command, host), [], {
 					cwd: projectDir,
+					timeout: 50_000,
 				});
 				expect(binary.exitCode, binary.stderr).toBe(0);
 				expect(binary.stdout.trim()).toBe(`running ${command}`);
-				const launcher = await runProcess(
-					Bun.which("node")!,
+				const launcher = await runBoundedProcess(
+					which("node")!,
 					[join(projectDir, ".crust", "root", "bin", `${command}.js`)],
-					{ cwd: projectDir },
+					{ cwd: projectDir, timeout: 50_000 },
 				);
 				expect(launcher.exitCode, launcher.stderr).toBe(0);
 				expect(launcher.stdout.trim()).toBe(`running ${command}`);
@@ -268,7 +275,11 @@ await app.execute();
 			const outPath = stagedBunBinary(tmpDir, "env-cli", host);
 			expect(existsSync(outPath)).toBe(true);
 
-			const { exitCode, stdout } = await runProcess(outPath, [], { cwd: tmpDir, env: {} });
+			const { exitCode, stdout } = await runBoundedProcess(outPath, [], {
+				cwd: tmpDir,
+				env: {},
+				timeout: 4_000,
+			});
 
 			expect(exitCode).toBe(0);
 			expect(JSON.parse(stdout.trim())).toEqual({
@@ -278,7 +289,7 @@ await app.execute();
 		},
 	);
 
-	it.skipIf(Bun.which("node") === null)(
+	it.skipIf(which("node") === null)(
 		"builds an executable Node artifact from package.json runtime config",
 		async () => {
 			process.cwd = () => tmpDir;
@@ -301,12 +312,14 @@ await app.execute();
 			expect(readFileSync(outPath, "utf8").startsWith("#!/usr/bin/env node\n")).toBe(true);
 			if (process.platform !== "win32") expect(statSync(outPath).mode & 0o111).not.toBe(0);
 
-			const action = await runProcess(Bun.which("node")!, [outPath]);
+			const action = await runBoundedProcess(which("node")!, [outPath], { timeout: 25_000 });
 			expect(action.exitCode).toBe(0);
 			expect(action.stdout.trim()).toBe("core under node");
 
 			// Unknown flag exercises core's dispatch/error path in the bundle.
-			const bad = await runProcess(Bun.which("node")!, [outPath, "--definitely-not-a-flag"]);
+			const bad = await runBoundedProcess(which("node")!, [outPath, "--definitely-not-a-flag"], {
+				timeout: 25_000,
+			});
 			expect(bad.exitCode).toBe(1);
 			expect(bad.stderr).toContain("Unknown flag");
 		},
@@ -318,7 +331,7 @@ await app.execute();
 	// for monorepo reasons real users never hit. The dist-layer "core runs under
 	// Deno" claim is covered by the CI smoke matrix; a faithful compile-with-deps
 	// test needs a pack+install harness.
-	it.skipIf(Bun.which("deno") === null || hostDenoTarget() === null)(
+	it.skipIf(which("deno") === null || hostDenoTarget() === null)(
 		"builds and runs a Deno standalone executable for the host target",
 		async () => {
 			const denoTarget = hostDenoTarget()!;
@@ -335,7 +348,7 @@ await app.execute();
 				"bin",
 				`test-build-cli-${denoTarget}${info.os === "win32" ? ".exe" : ""}`,
 			);
-			const { exitCode, stdout } = await runProcess(outPath);
+			const { exitCode, stdout } = await runBoundedProcess(outPath, [], { timeout: 50_000 });
 			expect(exitCode).toBe(0);
 			expect(stdout.trim()).toBe("hello from crust build test");
 		},
@@ -373,10 +386,10 @@ await app.execute();
 			);
 			writePackageJson(autoloadDir, { name: "autoload-cli", version: "0.1.0" });
 
-			const { exitCode, stderr } = await runProcess(
-				process.execPath,
+			const { exitCode, stderr } = await runBoundedProcess(
+				which("bun")!,
 				[crustCliPath, "build", "--target", "host"],
-				{ cwd: autoloadDir, env: { ...process.env, BUN_BE_BUN: "1" } },
+				{ cwd: autoloadDir, env: { ...process.env, BUN_BE_BUN: "1" }, timeout: 4_000 },
 			);
 			expect(exitCode, stderr).toBe(0);
 			const outPath = stagedBunBinary(autoloadDir, "autoload-cli", host);
@@ -385,9 +398,10 @@ await app.execute();
 			const runtimeDir = join(autoloadDir, "runtime-no-env");
 			mkdirSync(runtimeDir, { recursive: true });
 
-			const { exitCode: builtExitCode, stdout } = await runProcess(outPath, [], {
+			const { exitCode: builtExitCode, stdout } = await runBoundedProcess(outPath, [], {
 				cwd: runtimeDir,
 				env: {},
+				timeout: 4_000,
 			});
 
 			expect(builtExitCode).toBe(0);
@@ -471,7 +485,11 @@ await new Crust("marker-cli").action(() => console.log(JSON.stringify({
 		expect(readdirSync(tmpDir).filter((name) => name.startsWith(".crust-build-"))).toEqual([]);
 
 		const outPath = stagedBunBinary(tmpDir, "marker-cli", getHostBunTarget()!);
-		const run = await runProcess(outPath, [], { cwd: join(tmpDir, ".crust"), env: {} });
+		const run = await runBoundedProcess(outPath, [], {
+			cwd: join(tmpDir, ".crust"),
+			env: {},
+			timeout: 25_000,
+		});
 		expect(run.exitCode).toBe(0);
 		expect(JSON.parse(run.stdout.trim())).toEqual({
 			marker: "transformed-by-plugin",
@@ -482,7 +500,7 @@ await new Crust("marker-cli").action(() => console.log(JSON.stringify({
 		});
 	}, 30_000);
 
-	it.skipIf(Bun.which("node") === null)(
+	it.skipIf(which("node") === null)(
 		"bundles Node artifacts through the plugin and keeps the shebang",
 		async () => {
 			writePackageJson(tmpDir, {
@@ -498,7 +516,7 @@ await new Crust("marker-cli").action(() => console.log(JSON.stringify({
 			expect(readFileSync(outPath, "utf8").startsWith("#!/usr/bin/env node\n")).toBe(true);
 			if (process.platform !== "win32") expect(statSync(outPath).mode & 0o111).not.toBe(0);
 
-			const run = await runProcess(Bun.which("node")!, [outPath], { env: {} });
+			const run = await runBoundedProcess(which("node")!, [outPath], { env: {}, timeout: 25_000 });
 			expect(run.exitCode).toBe(0);
 			expect(JSON.parse(run.stdout.trim())).toMatchObject({
 				marker: "transformed-by-plugin",
@@ -517,7 +535,7 @@ describe.skipIf(getHostBunTarget() === null)(
 	"crust build integration — compiled executables and cwd autoloading",
 	() => {
 		const tmpDir = mkdtempSync(join(tmpdir(), "crust-build-autoload-"));
-		const crustPackageDir = resolve(import.meta.dir, "..");
+		const crustPackageDir = resolve(import.meta.dirname, "..");
 		const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 		const originalCwd = process.cwd;
 		// A cwd whose bunfig preload cannot resolve: Bun standalones that autoload
@@ -552,8 +570,9 @@ describe.skipIf(getHostBunTarget() === null)(
 		});
 
 		it("starts crust's own executable from a cwd with an unresolvable bunfig preload", async () => {
-			const { exitCode, stdout, stderr } = await runProcess(crustBinary, ["--version"], {
+			const { exitCode, stdout, stderr } = await runBoundedProcess(crustBinary, ["--version"], {
 				cwd: preloadCwd,
+				timeout: 4_000,
 			});
 			expect(stderr).not.toContain("preload not found");
 			expect(exitCode).toBe(0);
@@ -579,7 +598,11 @@ describe.skipIf(getHostBunTarget() === null)(
 			if (exitCode !== 0) throw new Error(stderr);
 
 			const outPath = stagedBunBinary(projectDir, "env-cli", getHostBunTarget()!);
-			const run = await runProcess(outPath, [], { cwd: preloadCwd, env: {} });
+			const run = await runBoundedProcess(outPath, [], {
+				cwd: preloadCwd,
+				env: {},
+				timeout: 4_000,
+			});
 			expect(run.stderr).not.toContain("preload not found");
 			expect(run.exitCode).toBe(0);
 			expect(run.stdout.trim()).toBe("from-cwd-env");
@@ -599,9 +622,14 @@ await new Crust("preload-cli").action(() => {}).execute();
 			);
 			writePackageJson(projectDir, { name: "preload-cli", version: "0.1.0" });
 
-			const { exitCode, stderr } = await runProcess(crustBinary, ["build", "--target", "host"], {
-				cwd: projectDir,
-			});
+			const { exitCode, stderr } = await runBoundedProcess(
+				crustBinary,
+				["build", "--target", "host"],
+				{
+					cwd: projectDir,
+					timeout: 4_000,
+				},
+			);
 			expect(stderr).toBe("");
 			expect(exitCode).toBe(0);
 			expect(existsSync(stagedBunBinary(projectDir, "preload-cli", getHostBunTarget()!))).toBe(

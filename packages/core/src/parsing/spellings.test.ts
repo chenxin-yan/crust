@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { createCommandNode, registerFlag } from "../command/node.ts";
 import { resolveCommand } from "../command/router.ts";

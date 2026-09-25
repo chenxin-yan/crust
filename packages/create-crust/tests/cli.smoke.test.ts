@@ -1,4 +1,3 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import {
 	existsSync,
 	mkdirSync,
@@ -12,15 +11,20 @@ import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
+
+import { reapBoundedProcesses, runBoundedProcess } from "../../crust/tests/bounded-process.ts";
+import { type RunProcessResult, which } from "../../utils/src/process.ts";
+
 type Runtime = "bun" | "node" | "deno";
 
-const builtCliPath = resolve(import.meta.dir, "..", ".crust", "root", "bin", "create-crust.js");
-const repoRoot = resolve(import.meta.dir, "..", "..", "..");
+const builtCliPath = resolve(import.meta.dirname, "..", ".crust", "root", "bin", "create-crust.js");
+const repoRoot = resolve(import.meta.dirname, "..", "..", "..");
 const smokeRoot = join(process.env.RUNNER_TEMP ?? tmpdir(), "create-crust-smoke");
 const localPackageDir = join(smokeRoot, "local-packages");
 const smokeEnabled = process.env.CREATE_CRUST_SMOKE === "1";
 // Resolved path so Windows spawns deno.exe without a shell; also the presence probe.
-const denoPath = Bun.which("deno");
+const denoPath = which("deno");
 // Deno is optional locally but mandatory in CI, where a missing binary must fail loudly.
 const denoSkipReason =
 	denoPath === null && !process.env.CI
@@ -60,13 +64,9 @@ const localDependencyPackages = [
 	},
 ] as const;
 
-interface CommandResult {
-	exitCode: number;
-	stdout: string;
-	stderr: string;
-}
-
 let localSpecs: Record<string, string> = {};
+// Every command is killed by this deadline, set below the running hook or case timeout.
+let commandDeadline = 0;
 // A failed case leaves the workspace behind for the CI failure artifact.
 let keepSmokeRoot = false;
 
@@ -85,33 +85,26 @@ function denoArgv(args: string[]): string[] {
 	return [denoPath, ...args];
 }
 
-async function run(
+function run(
 	command: string[],
 	cwd: string,
 	env?: Record<string, string>,
-): Promise<CommandResult> {
-	const proc = Bun.spawn(command, {
+): Promise<RunProcessResult> {
+	return runBoundedProcess(command[0]!, command.slice(1), {
 		cwd,
 		env: {
 			...process.env,
 			...env,
 		},
-		stdout: "pipe",
-		stderr: "pipe",
+		timeout: Math.max(1, commandDeadline - Date.now()),
 	});
-
-	return {
-		exitCode: await proc.exited,
-		stdout: await new Response(proc.stdout).text(),
-		stderr: await new Response(proc.stderr).text(),
-	};
 }
 
 function formatFailure(
 	label: string,
 	command: string[],
 	cwd: string,
-	result: CommandResult,
+	result: RunProcessResult,
 ): string {
 	return [
 		`${label} failed`,
@@ -123,7 +116,12 @@ function formatFailure(
 	].join("\n\n");
 }
 
-function assertSuccess(label: string, command: string[], cwd: string, result: CommandResult): void {
+function assertSuccess(
+	label: string,
+	command: string[],
+	cwd: string,
+	result: RunProcessResult,
+): void {
 	if (result.exitCode !== 0) {
 		throw new Error(formatFailure(label, command, cwd, result));
 	}
@@ -133,7 +131,7 @@ function assertSuccess(label: string, command: string[], cwd: string, result: Co
 function crustBuildArgv(projectDir: string, runtime: Runtime): string[] {
 	const crustCli = join(projectDir, "node_modules", "@crustjs", "crust", "src", "cli.ts");
 	// Host-only target avoids cross-compile downloads (flaky on Windows CI for Linux Bun artifacts).
-	return [process.execPath, crustCli, "build", ...(runtime === "node" ? [] : ["--target", "host"])];
+	return [which("bun")!, crustCli, "build", ...(runtime === "node" ? [] : ["--target", "host"])];
 }
 
 async function packLocalDependencyPackages(): Promise<Record<string, string>> {
@@ -156,15 +154,14 @@ async function packLocalDependencyPackages(): Promise<Record<string, string>> {
 
 		const before = new Set(readdirSync(localPackageDir));
 		const packCommand = [
-			process.execPath,
-			"pm",
+			"pnpm",
 			"pack",
-			"--destination",
+			"--pack-destination",
 			localPackageDir,
-			"--cwd",
+			"--dir",
 			packageDir,
 		];
-		const pack = await run(packCommand, repoRoot, { BUN_BE_BUN: "1" });
+		const pack = await run(packCommand, repoRoot);
 		assertSuccess(`pack ${pkg.name}`, packCommand, repoRoot, pack);
 
 		const tarballs = readdirSync(localPackageDir).filter(
@@ -272,7 +269,7 @@ async function linkAndRunCommands(
 async function smokeRuntime(runtime: Runtime): Promise<void> {
 	const sampleDir = join(smokeRoot, `smoke-${runtime}`);
 	const scaffoldCommand = [
-		process.execPath,
+		which("bun")!,
 		builtCliPath,
 		sampleDir,
 		"--runtime",
@@ -389,6 +386,8 @@ async function smokeRuntime(runtime: Runtime): Promise<void> {
 
 function smokeCase(runtime: Runtime): () => Promise<void> {
 	return async () => {
+		// Leaves headroom before the 300s case timeout to fail with the command's output.
+		commandDeadline = Date.now() + 280_000;
 		try {
 			await smokeRuntime(runtime);
 		} catch (error) {
@@ -398,7 +397,10 @@ function smokeCase(runtime: Runtime): () => Promise<void> {
 	};
 }
 
-afterAll(() => {
+afterEach(reapBoundedProcesses);
+
+afterAll(async () => {
+	await reapBoundedProcesses();
 	if (smokeEnabled && !keepSmokeRoot) {
 		rmSync(smokeRoot, { recursive: true, force: true });
 	}
@@ -418,6 +420,8 @@ describe.skipIf(!smokeEnabled)("create-crust smoke test", () => {
 			console.warn(denoSkipReason);
 		}
 
+		// Below the 10s default hook timeout.
+		commandDeadline = Date.now() + 9_000;
 		localSpecs = await packLocalDependencyPackages();
 	});
 

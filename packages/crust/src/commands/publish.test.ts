@@ -1,10 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import * as processUtils from "@crustjs/utils/process";
 import type { RunProcessResult } from "@crustjs/utils/process";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
 	buildPublishCommand,
@@ -41,7 +41,7 @@ type NpmHandlers = {
 
 /** Default: every version is missing (E404) and every publish succeeds. */
 function mockNpm(handlers: NpmHandlers = {}) {
-	return mock(async (dir: string, args: string[]): Promise<RunProcessResult> => {
+	return vi.fn(async (dir: string, args: string[]): Promise<RunProcessResult> => {
 		if (args[0] === "view") {
 			return (handlers.view ?? ((spec) => viewError("E404", spec)))(args[1]!, dir, args);
 		}
@@ -412,18 +412,20 @@ describe("publish manifest validation", () => {
 	it.each([true, false, undefined])("selects npm stdio when stdin.isTTY is %s", async (isTTY) => {
 		const descriptor = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
 		const npm = join(tmpDir, "npm");
-		const which = spyOn(processUtils, "which").mockReturnValue(npm);
-		const runProcess = spyOn(processUtils, "runProcess").mockImplementation(async (_npm, args) =>
-			args?.[0] === "view"
-				? viewError("E404", args[1]!)
-				: {
-						exitCode: 0,
-						stdout: isTTY ? "" : "registry stdout\n",
-						stderr: isTTY ? "" : "registry stderr\r\n",
-					},
-		);
-		const stdout = mock((_text: string) => {});
-		const stderr = mock((_text: string) => {});
+		const which = vi.spyOn(processUtils, "which").mockReturnValue(npm);
+		const runProcess = vi
+			.spyOn(processUtils, "runProcess")
+			.mockImplementation(async (_npm, args) =>
+				args?.[0] === "view"
+					? viewError("E404", args[1]!)
+					: {
+							exitCode: 0,
+							stdout: isTTY ? "" : "registry stdout\n",
+							stderr: isTTY ? "" : "registry stderr\r\n",
+						},
+			);
+		const stdout = vi.fn((_text: string) => {});
+		const stderr = vi.fn((_text: string) => {});
 		try {
 			Object.defineProperty(process.stdin, "isTTY", { configurable: true, value: isTTY });
 			await publishStagedPackages(

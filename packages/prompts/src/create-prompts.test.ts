@@ -1,6 +1,5 @@
-import { describe, expect, it } from "bun:test";
-
 import { bold, magenta } from "@crustjs/style";
+import { describe, expect, it } from "vite-plus/test";
 
 import { defaultTheme } from "./core/theme.ts";
 import { createPrompts } from "./create-prompts.ts";

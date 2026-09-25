@@ -1,4 +1,3 @@
-import { afterEach, beforeAll, describe, expect, it } from "bun:test";
 import {
 	chmodSync,
 	existsSync,
@@ -13,11 +12,15 @@ import { tmpdir } from "node:os";
 import { basename, delimiter, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
+
 import corePackage from "../../core/package.json";
 import crustPackage from "../../crust/package.json";
+import { reapBoundedProcesses, runBoundedProcess } from "../../crust/tests/bounded-process.ts";
 import extensionsPackage from "../../extensions/package.json";
+import type { RunProcessResult } from "../../utils/src/process.ts";
 
-const packageRoot = resolve(import.meta.dir, "..");
+const packageRoot = resolve(import.meta.dirname, "..");
 const builtCliPath = join(packageRoot, ".crust", "root", "bin", "create-crust.js");
 const tempRoots: string[] = [];
 // Every runtime template ships exactly these scripts.
@@ -33,25 +36,20 @@ function makeTempRoot(label: string): string {
 async function runCreateCrust(
 	args: string[],
 	options?: { env?: Record<string, string>; cwd?: string; entrypoint?: string },
-): Promise<{ exitCode: number; stdout: string; stderr: string }> {
-	const proc = Bun.spawn(["node", options?.entrypoint ?? builtCliPath, ...args], {
+): Promise<RunProcessResult> {
+	return runBoundedProcess("node", [options?.entrypoint ?? builtCliPath, ...args], {
 		cwd: options?.cwd ?? packageRoot,
 		env: {
 			...process.env,
 			...options?.env,
 		},
-		stdout: "pipe",
-		stderr: "pipe",
+		// Below the 30s test timeout, so a hung CLI fails with its output.
+		timeout: 20_000,
 	});
-
-	return {
-		exitCode: await proc.exited,
-		stdout: await new Response(proc.stdout).text(),
-		stderr: await new Response(proc.stderr).text(),
-	};
 }
 
-afterEach(() => {
+afterEach(async () => {
+	await reapBoundedProcesses();
 	for (const root of tempRoots.splice(0)) {
 		rmSync(root, { recursive: true, force: true });
 	}
@@ -61,7 +59,7 @@ describe("create-crust CLI", () => {
 	beforeAll(() => {
 		if (!existsSync(builtCliPath)) {
 			throw new Error(
-				`Built CLI not found at ${builtCliPath}. Run the package build before tests (e.g. bun run build in this package or turbo run test).`,
+				`Built CLI not found at ${builtCliPath}. Run the package build before tests (e.g. pnpm run build in this package or pnpm run test).`,
 			);
 		}
 	});
@@ -424,11 +422,7 @@ describe("create-crust CLI", () => {
 		const projectDir = join(repoRoot, projectName);
 		mkdirSync(repoRoot, { recursive: true });
 
-		const gitInit = Bun.spawnSync(["git", "init"], {
-			cwd: repoRoot,
-			stdout: "ignore",
-			stderr: "pipe",
-		});
+		const gitInit = await runBoundedProcess("git", ["init"], { cwd: repoRoot, timeout: 10_000 });
 		expect(gitInit.exitCode).toBe(0);
 
 		const result = await runCreateCrust([projectDir, "--runtime", "bun", "--no-install", "--git"]);

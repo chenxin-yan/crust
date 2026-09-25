@@ -1,8 +1,7 @@
-import { describe, expect, it } from "bun:test";
-
 import { Crust, CrustError, defineContext } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import { Cause, Context, Effect, Exit, Layer } from "effect";
+import { describe, expect, it } from "vite-plus/test";
 
 import { CrustDefinitionError, tryCrust } from "./errors.ts";
 import { handler, service } from "./handler.ts";

@@ -1,6 +1,5 @@
-import { describe, expect, it } from "bun:test";
-
 import { Crust, defineCommand, defineExtension, defineExtensionId } from "@crustjs/core";
+import { describe, expect, it } from "vite-plus/test";
 
 import { toolsFromSnapshot } from "./tools.ts";
 

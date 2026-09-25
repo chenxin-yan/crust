@@ -1,4 +1,4 @@
-import { expect, it } from "bun:test";
+import { expect, it } from "vite-plus/test";
 
 import { defineContext } from "../api/context.ts";
 import { Crust, defineCommand } from "./crust.ts";

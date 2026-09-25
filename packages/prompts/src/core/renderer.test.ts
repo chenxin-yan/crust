@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, it } from "bun:test";
 import { PassThrough, Writable } from "node:stream";
 
 import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import { createPromptIO } from "../testing.ts";
 import {

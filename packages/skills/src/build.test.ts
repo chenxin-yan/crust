@@ -1,9 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { lstat, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { renderSkills, writeSkills } from "./build.ts";
 import { SkillSourceConflictError } from "./errors.ts";

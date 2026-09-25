@@ -1,15 +1,23 @@
-import { expect, it } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-const namespace = ["unshare", "--user", "--map-auto", "--map-root-user"];
+import { expect, it } from "vite-plus/test";
+
+import { which } from "../src/process.ts";
+
+const namespace = ["--user", "--map-auto", "--map-root-user"];
 // Starting a namespace alone does not prove its ownership/capability operations are allowed.
 const canSetUpPermissions =
 	process.platform === "linux" &&
-	Bun.which("unshare") !== null &&
-	Bun.which("setpriv") !== null &&
-	Bun.spawnSync(
+	which("unshare") !== null &&
+	which("setpriv") !== null &&
+	probePermissions();
+
+function probePermissions(): boolean {
+	const probe = spawnSync(
+		"unshare",
 		[
 			...namespace,
 			"sh",
@@ -19,8 +27,12 @@ const canSetUpPermissions =
 			touch "$dir/probe" && chown 1:1 "$dir/probe" &&
 			setpriv --bounding-set=-dac_override,-dac_read_search true`,
 		],
-		{ stdout: "ignore", stderr: "ignore" },
-	).exitCode === 0;
+		{ stdio: "ignore", timeout: 10_000 },
+	);
+	// Both tools are on PATH, so a spawn error is the deadline: fail instead of skipping.
+	if (probe.error) throw probe.error;
+	return probe.status === 0;
+}
 
 it.skipIf(!canSetUpPermissions)(
 	"resolves PATH using the caller's execute permissions, not the owner's",
@@ -43,13 +55,14 @@ it.skipIf(!canSetUpPermissions)(
 				probe,
 				`
 			import assert from "node:assert/strict";
-			import { which } from ${JSON.stringify(resolve(import.meta.dir, "../src/process.ts"))};
+			import { which } from ${JSON.stringify(resolve(import.meta.dirname, "../src/process.ts"))};
 			process.env.PATH = ${JSON.stringify(`${first}:${second}`)};
 			assert.equal(which("denied"), ${JSON.stringify(join(second, "denied"))});
 			assert.equal(which("allowed"), ${JSON.stringify(join(first, "allowed"))});
 		`,
 			);
-			const result = Bun.spawnSync(
+			const result = spawnSync(
+				"unshare",
 				[
 					...namespace,
 					"sh",
@@ -61,10 +74,10 @@ it.skipIf(!canSetUpPermissions)(
 					process.execPath,
 					probe,
 				],
-				{ stdout: "pipe", stderr: "pipe" },
+				{ timeout: 10_000 },
 			);
 			expect(result.stderr.toString()).toBe("");
-			expect(result.exitCode).toBe(0);
+			expect(result.status).toBe(0);
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 		}

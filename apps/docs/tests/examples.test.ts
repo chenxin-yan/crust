@@ -1,5 +1,6 @@
-import { expect, it } from "bun:test";
 import { readFile } from "node:fs/promises";
+
+import { expect, it } from "vite-plus/test";
 
 import { app as extensionsExample } from "../examples/modules/extensions/index";
 

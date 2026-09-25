@@ -1,4 +1,3 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
 	chmod,
 	lstat,
@@ -18,7 +17,9 @@ import { renderHelp } from "@crustjs/extensions";
 import { withPromptIO } from "@crustjs/prompts";
 import { createPromptIO } from "@crustjs/prompts/testing";
 import { captureExecute } from "@crustjs/testing";
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
+import { reapBoundedProcesses, runBoundedProcess } from "../../crust/tests/bounded-process.ts";
 import { withCwd } from "../tests/fixtures.ts";
 import { skill } from "./extension.ts";
 import { installSkill } from "./generate.ts";
@@ -43,6 +44,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+	await reapBoundedProcesses();
 	process.exitCode = originalExitCode ?? 0;
 	if (originalArgv1 === undefined) process.argv.length = 1;
 	else process.argv[1] = originalArgv1;
@@ -425,7 +427,7 @@ try {
 console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 `,
 		);
-		const proc = Bun.spawn([process.execPath, script], {
+		const { stdout, stderr, exitCode } = await runBoundedProcess(process.execPath, [script], {
 			cwd: tempRoot,
 			env: {
 				...process.env,
@@ -435,14 +437,8 @@ console.log("RESULT " + JSON.stringify({ repairErrors, traeCnInstalled }));
 				CLAUDE_CONFIG_DIR: join(tempRoot, ".claude"),
 				VIBE_HOME: join(tempRoot, ".vibe"),
 			},
-			stdout: "pipe",
-			stderr: "pipe",
+			timeout: 4_000,
 		});
-		const [stdout, stderr, exitCode] = await Promise.all([
-			new Response(proc.stdout).text(),
-			new Response(proc.stderr).text(),
-			proc.exited,
-		]);
 		expect(exitCode, stderr).toBe(0);
 		const resultLine = stdout.match(/^RESULT (.+)$/m)?.[1];
 		expect(resultLine, stdout).toBeDefined();

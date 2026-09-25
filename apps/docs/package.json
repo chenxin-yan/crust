@@ -4,13 +4,13 @@
   "type": "module",
   "sideEffects": false,
   "scripts": {
-    "dev": "vite dev",
-    "build": "vite build",
-    "preview": "vite preview",
+    "dev": "vp dev",
+    "build": "vp build",
+    "preview": "vp preview",
     "check:types": "fumadocs-mdx && tsc --noEmit",
-    "test": "bun test tests",
+    "test": "vp test",
     "postinstall": "fumadocs-mdx",
-    "deploy": "bun run build && wrangler deploy",
+    "deploy": "pnpm run build && wrangler deploy",
     "cf-typegen": "wrangler types"
   },
   "dependencies": {
@@ -25,7 +25,7 @@
     "react-dom": "^19.2.8",
     "shiki": "^4.4.3",
     "tailwind-merge": "^3.6.0",
-    "vite": "^8.2.2"
+    "vite": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.54.4",
@@ -51,6 +51,7 @@
     "effect": "4.0.0-rc.115",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
+    "vite-plus": "catalog:",
     "wrangler": "^4.129.0",
     "zod": "^4.5.4"
   }

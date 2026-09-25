@@ -12,10 +12,20 @@ async function readJson(path) {
 }
 
 async function loadWorkspacePackages() {
-	const { workspaces } = await readJson(join(ROOT_DIR, "package.json"));
+	const { packages: patterns } = Bun.YAML.parse(
+		await readFile(join(ROOT_DIR, "pnpm-workspace.yaml"), "utf8"),
+	);
+	if (
+		!Array.isArray(patterns) ||
+		patterns.length === 0 ||
+		// oxlint-disable-next-line anti-slop/no-runtime-typeof -- Validate workspace YAML at its I/O boundary.
+		!patterns.every((pattern) => typeof pattern === "string" && pattern !== "")
+	) {
+		throw new Error("pnpm-workspace.yaml must list workspace package patterns.");
+	}
 	const packages = [];
 	for await (const file of glob(
-		workspaces.map((pattern) => `${pattern}/package.json`),
+		patterns.map((pattern) => `${pattern}/package.json`),
 		{ cwd: ROOT_DIR },
 	)) {
 		const packageJson = await readJson(join(ROOT_DIR, file));
@@ -109,11 +119,8 @@ async function packPackages(directory) {
 			const { name, version } = entry.packageJson;
 			const file = `${inventory.length}.tgz`;
 			console.log(`Packing ${name}@${version}`);
-			// Bun rewrites workspace/catalog ranges; prepack hooks include LICENSE files.
-			await runCommand(
-				[process.execPath, "pm", "pack", "--quiet", "--filename", join(directory, file)],
-				entry.path,
-			);
+			// pnpm rewrites workspace/catalog ranges; prepack hooks include LICENSE files.
+			await runCommand(["pnpm", "pack", "--out", join(directory, file)], entry.path);
 			inventory.push({ name, version, file });
 		}
 	}

@@ -1,10 +1,12 @@
-import { afterEach, describe, expect, it } from "bun:test";
-import { access, mkdtemp, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { access, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { defineExtensionId } from "@crustjs/core";
+import { which } from "@crustjs/utils/process";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import {
 	assertTargetsBuildableWithoutBun,
@@ -36,15 +38,30 @@ async function withoutBunOnPath<T>(run: () => T): Promise<T> {
 }
 
 describe("resolveBunBuildRunner", () => {
-	it("prefers bun on PATH and falls back to this executable as bun", async () => {
-		expect(resolveBunBuildRunner().command).toBe(Bun.which("bun")!);
-		const fallback = await withoutBunOnPath(() => resolveBunBuildRunner());
-		expect(fallback.command).toBe(process.execPath);
-		expect(fallback.env.BUN_BE_BUN).toBe("1");
+	it("prefers bun on PATH and falls back to this executable as bun", () => {
+		const bun = which("bun")!;
+		expect(resolveBunBuildRunner().command).toBe(bun);
+		// Only a Bun process can stand in for bun, so observe the fallback inside real Bun with no PATH.
+		const helpers = JSON.stringify(new URL("./build-helpers.ts", import.meta.url).href);
+		const probe = spawnSync(
+			bun,
+			[
+				"--eval",
+				`import { resolveBunBuildRunner } from ${helpers};
+const runner = resolveBunBuildRunner();
+console.log(JSON.stringify({ command: runner.command, execPath: process.execPath, bunBeBun: runner.env.BUN_BE_BUN }));`,
+			],
+			{ env: { ...process.env, PATH: "" }, encoding: "utf8", timeout: 10_000 },
+		);
+		expect(probe.stderr).toBe("");
+		expect(probe.status).toBe(0);
+		const fallback = JSON.parse(probe.stdout) as Record<string, string>;
+		expect(fallback.command).toBe(fallback.execPath);
+		expect(fallback.bunBeBun).toBe("1");
 	});
 
 	it("refuses to stand in for bun from a non-Bun process such as Node running the library", async () => {
-		expect(resolveBunBuildRunner(false).command).toBe(Bun.which("bun")!);
+		expect(resolveBunBuildRunner(false).command).toBe(which("bun")!);
 		await expect(withoutBunOnPath(() => resolveBunBuildRunner(false))).rejects.toThrow(
 			"bun was not found on PATH",
 		);
@@ -300,7 +317,7 @@ describe("assertTargetsBuildableWithoutBun", () => {
 	});
 
 	it("allows the self-copying target when bun is on PATH", () => {
-		expect(Bun.which("bun")).not.toBeNull();
+		expect(which("bun")).not.toBeNull();
 		expect(() =>
 			assertTargetsBuildableWithoutBun(BUN_TARGETS.targets, "bun-darwin-arm64"),
 		).not.toThrow();
@@ -398,8 +415,8 @@ describe("buildEntrypoint", () => {
 		expect(result.build.extensions).toHaveLength(1);
 		expect(String(result.build.extensions[0]?.id)).toBe("artifact");
 		expect(result.build.extensions[0]?.files).toEqual(["artifact.txt", "assets/bytes.bin"]);
-		expect(await Bun.file(join(outDir, "artifact.txt")).text()).toBe("built");
-		expect(new Uint8Array(await Bun.file(join(outDir, "assets/bytes.bin")).arrayBuffer())).toEqual(
+		expect(await readFile(join(outDir, "artifact.txt"), "utf8")).toBe("built");
+		expect(new Uint8Array(await readFile(join(outDir, "assets/bytes.bin")))).toEqual(
 			new Uint8Array([0, 255, 128, 10]),
 		);
 	});
@@ -409,9 +426,11 @@ describe("buildEntrypoint", () => {
 		tempDirs.push(directory);
 		const entry = join(directory, "cli.ts");
 		const outDir = join(directory, "dist");
-		await Bun.write(join(directory, "package.json"), '{"name":"demo"}');
-		const skillsUrl = pathToFileURL(resolve(import.meta.dir, "../../../skills/src/index.ts")).href;
-		const manUrl = pathToFileURL(resolve(import.meta.dir, "../../../man/src/index.ts")).href;
+		await writeFile(join(directory, "package.json"), '{"name":"demo"}');
+		const skillsUrl = pathToFileURL(
+			resolve(import.meta.dirname, "../../../skills/src/index.ts"),
+		).href;
+		const manUrl = pathToFileURL(resolve(import.meta.dirname, "../../../man/src/index.ts")).href;
 		await writeFile(
 			entry,
 			`import { Crust } from ${JSON.stringify(coreUrl)};\n` +
@@ -426,8 +445,8 @@ describe("buildEntrypoint", () => {
 
 		// The man hook runs after the skills hook and reads the skill it just wrote
 		// into the build output, advertised relative to the project root.
-		const manual = await Bun.file(join(outDir, "man", "demo.1")).text();
-		const packagedSkill = await Bun.file(join(outDir, "skills", "demo", "SKILL.md")).text();
+		const manual = await readFile(join(outDir, "man", "demo.1"), "utf8");
+		const packagedSkill = await readFile(join(outDir, "skills", "demo", "SKILL.md"), "utf8");
 		expect(manual).toContain(`Source: ${join("dist", "skills", "demo")}`);
 		expect(manual).not.toContain(directory);
 		expect(packagedSkill).not.toContain(directory);
@@ -549,7 +568,7 @@ describe("buildEntrypoint", () => {
 		);
 		const result = await buildEntrypoint(entry, outDir, [], io, directory);
 		expect(result.build.extensions[0]?.files).toEqual(["assets/real.txt"]);
-		expect(await Bun.file(join(outDir, "extra.txt")).text()).toBe("side effect");
+		expect(await readFile(join(outDir, "extra.txt"), "utf8")).toBe("side effect");
 	});
 
 	it("preserves an executed hook's empty array report", async () => {

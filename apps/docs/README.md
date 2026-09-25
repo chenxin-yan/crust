@@ -3,7 +3,7 @@
 Documentation site for the Crust CLI framework, built with [Fumadocs](https://fumadocs.vercel.app) + TanStack Start.
 
 ```bash
-bun run dev
+pnpm run dev
 ```
 
 ## Source-derived references
@@ -18,9 +18,9 @@ bun run dev
 Run the existing docs gates from the repository root (also run by CI for docs and package changes):
 
 ```sh
-bun run check:types --filter=./apps/docs
-bun run lint apps/docs
-bun run format apps/docs
-bun run --cwd apps/docs test
-bun run build:docs
+pnpm exec vp run --fail-if-no-match --filter ./apps/docs check:types:task
+pnpm run lint apps/docs
+pnpm run format apps/docs
+pnpm --dir apps/docs exec vp test run
+pnpm run build:docs
 ```

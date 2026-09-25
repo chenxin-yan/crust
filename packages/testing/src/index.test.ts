@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { setTimeout as sleep } from "node:timers/promises";
 import { stripVTControlCharacters } from "node:util";
 
 import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
 import { spinner } from "@crustjs/progress";
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { captureExecute } from "./index.ts";
 
@@ -104,10 +105,10 @@ describe("captureExecute", () => {
 		});
 
 		const pendingFailure = captureExecute(failingApp, []);
-		await Bun.sleep(0);
+		await sleep(0);
 		expect(process.exitCode).toBe(1);
 		const pendingSuccess = captureExecute(successfulApp, []);
-		await Bun.sleep(0);
+		await sleep(0);
 
 		releaseErrorRenderer();
 		expect((await pendingFailure).exitCode).toBe(1);

@@ -29,12 +29,12 @@ jobs:
       - name: Setup runtimes
         uses: jdx/mise-action@v4
         with:
-          install_args: bun node
+          install_args: bun node pnpm
 
       - name: Install dependencies
-        run: bun ci
+        run: pnpm install --frozen-lockfile
 
       - name: Lint and format check (tooling and repository files)
         run: |
-          bun run lint . --ignore-pattern 'packages/**' --ignore-pattern 'apps/**'
-          bun run format . '!packages/**' '!apps/**'
+          pnpm run lint . --ignore-pattern 'packages/**' --ignore-pattern 'apps/**'
+          pnpm run format . '!packages/**' '!apps/**'

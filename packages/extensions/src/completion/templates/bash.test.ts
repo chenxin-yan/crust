@@ -1,8 +1,13 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
+
+import {
+	reapBoundedProcesses,
+	runBoundedProcess,
+} from "../../../../crust/tests/bounded-process.ts";
 import type { CompletionCommand } from "../spec.ts";
 import { renderBash } from "./bash.ts";
 
@@ -33,16 +38,11 @@ COMP_POINT=${words.join(" ").length}
 ${fnName}
 for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
 `;
-	const proc = Bun.spawn(["bash", "-c", driver], {
-		stdout: "pipe",
-		stderr: "pipe",
-		cwd,
-	});
-	const [out, err] = await Promise.all([
-		new Response(proc.stdout).text(),
-		new Response(proc.stderr).text(),
-	]);
-	const code = await proc.exited;
+	const {
+		exitCode: code,
+		stdout: out,
+		stderr: err,
+	} = await runBoundedProcess("bash", ["-c", driver], { cwd, timeout: 4_000 });
 	if (code !== 0) {
 		throw new Error(`bash exited ${code}\nstderr:\n${err}\nstdout:\n${out}`);
 	}
@@ -110,6 +110,8 @@ const fixture: CompletionCommand = {
 		},
 	],
 };
+
+afterEach(reapBoundedProcesses);
 
 describe("renderBash", () => {
 	it("registers via `complete -F _<bin>` and includes a fallback init shim", () => {

@@ -1,4 +1,3 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -6,6 +5,7 @@ import { dirname, join } from "node:path";
 
 import { BUILD_OUT_DIR_ENV } from "@crustjs/utils/artifacts";
 import { getAmbientTerminalIO } from "@crustjs/utils/terminal";
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { unwrap } from "../../tests/helpers.ts";
@@ -2131,7 +2131,7 @@ describe("Crust .execute()", () => {
 		});
 
 		it.each(["x", Number.NaN])(
-			"associates the cleanup failure with a primitive action failure: %p",
+			"associates the cleanup failure with a primitive action failure: %o",
 			async (actionError) => {
 				const seen: unknown[] = [];
 				const app = new Crust("cli")
@@ -2168,7 +2168,7 @@ describe("Crust .execute()", () => {
 		});
 
 		it.each([false, true])(
-			"lists all ten cleanup failures with action failure: %p",
+			"lists all ten cleanup failures with action failure: %o",
 			async (actionFails) => {
 				const resource = defineContext("resource", ({ defer }) => {
 					for (let index = 0; index < 10; index++) {
@@ -2495,7 +2495,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
 
 		expect(errorCalls).toHaveLength(1);
-		expect(errorCalls[0]).toStartWith('Extension "second" build failed:');
+		expect(errorCalls[0]).toMatch(/^Extension "second" build failed:/);
 		expect(errorCalls[0]).toContain('"shared/config.json"');
 		expect(errorCalls[0]).toContain('Extension "first"');
 		expect(await readFile(join(outDir, "shared", "config.json"), "utf8")).toBe("first");
@@ -2519,7 +2519,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
 
 		expect(errorCalls).toHaveLength(1);
-		expect(errorCalls[0]).toStartWith('Extension "second" build failed:');
+		expect(errorCalls[0]).toMatch(/^Extension "second" build failed:/);
 		expect(errorCalls[0]).toContain('"shared/config.json"');
 		expect(errorCalls[0]).toContain('"shared/Config.json"');
 		expect(errorCalls[0]).toContain('Extension "first"');
@@ -2547,7 +2547,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
 
 		expect(errorCalls).toHaveLength(1);
-		expect(errorCalls[0]).toStartWith('Extension "second" build failed:');
+		expect(errorCalls[0]).toMatch(/^Extension "second" build failed:/);
 		expect(errorCalls[0]).toContain('"foo/bar"');
 		expect(errorCalls[0]).toContain('"Foo"');
 		expect(errorCalls[0]).toContain('Extension "first"');
@@ -2572,7 +2572,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
 
 		expect(errorCalls).toHaveLength(1);
-		expect(errorCalls[0]).toStartWith('Extension "only" build failed:');
+		expect(errorCalls[0]).toMatch(/^Extension "only" build failed:/);
 		expect(errorCalls[0]).toContain('"foo"');
 		expect(errorCalls[0]).toContain('"foo/bar"');
 		expect(errorCalls[0]).toContain('Extension "only"');
@@ -2714,7 +2714,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
 
 		expect(errorCalls).toHaveLength(1);
-		expect(errorCalls[0]).toStartWith('Extension "unsafe" build failed:');
+		expect(errorCalls[0]).toMatch(/^Extension "unsafe" build failed:/);
 		expect(errorCalls[0]).toContain(message);
 		expect(existsSync(outDir)).toBe(false);
 	});

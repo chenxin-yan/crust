@@ -1,7 +1,7 @@
-import { describe, expect, it } from "bun:test";
 import { inspect, isDeepStrictEqual } from "node:util";
 
 import type { StandardSchema } from "@crustjs/utils/schema";
+import { describe, expect, it } from "vite-plus/test";
 
 import { makeNode } from "../../tests/helpers.ts";
 import { resolveTypedPath } from "../command/invocation.ts";

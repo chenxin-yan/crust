@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { applyFieldDefaults } from "./merge.ts";
 import type { FieldsDef } from "./types.ts";

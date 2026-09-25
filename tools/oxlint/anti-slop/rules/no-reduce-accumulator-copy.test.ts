@@ -1,4 +1,4 @@
-import { RuleTester } from "oxlint/plugins-dev";
+import { RuleTester } from "vite-plus/lint/plugins-dev";
 
 import { noReduceAccumulatorCopyRule } from "./no-reduce-accumulator-copy.ts";
 

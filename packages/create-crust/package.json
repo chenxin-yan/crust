@@ -38,11 +38,11 @@
 	},
 	"scripts": {
 		"build": "crust build",
-		"dev": "bun run build && bun src/index.ts",
+		"dev": "pnpm run build && bun src/index.ts",
 		"release": "crust publish",
 		"check:types": "tsc --noEmit",
-		"test": "bun test",
-		"test:smoke": "bun test tests/cli.smoke.test.ts"
+		"test": "vp test",
+		"test:smoke": "vp test tests/cli.smoke.test.ts"
 	},
 	"dependencies": {
 		"@crustjs/core": "workspace:^",
@@ -53,7 +53,8 @@
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
 		"@crustjs/crust": "workspace:*",
-		"@crustjs/extensions": "workspace:*"
+		"@crustjs/extensions": "workspace:*",
+		"vite-plus": "catalog:"
 	},
 	"engines": {
 		"bun": ">=1.4.0",

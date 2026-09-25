@@ -1,4 +1,3 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import {
 	cpSync,
 	existsSync,
@@ -13,10 +12,12 @@ import { join, resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
-import { runProcess } from "@crustjs/utils/process";
+import { which } from "@crustjs/utils/process";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
 
 import { buildCommand } from "../src/commands/build.ts";
 import { BUN_TARGETS, DENO_TARGETS } from "../src/utils/build-helpers.ts";
+import { reapBoundedProcesses, runBoundedProcess } from "./bounded-process.ts";
 import { hostDenoTarget, hostTarget } from "./helpers.ts";
 
 const tmpDir = mkdtempSync(join(tmpdir(), "crust-package-integration-"));
@@ -59,6 +60,8 @@ beforeAll(() => {
 	);
 });
 
+afterEach(reapBoundedProcesses);
+
 afterAll(() => {
 	process.cwd = originalCwd;
 	rmSync(tmpDir, { recursive: true, force: true });
@@ -99,18 +102,21 @@ describe("crust build integration", () => {
 		expect(existsSync(join(stageDir, "darwin-arm64"))).toBe(false);
 	});
 
-	it.skipIf(hostTarget() === null || !Bun.which("node"))(
+	it.skipIf(hostTarget() === null || !which("node"))(
 		"runs the staged launcher in place and from an installed layout",
 		async () => {
 			const hostBunTarget = hostTarget();
-			const nodePath = Bun.which("node");
+			const nodePath = which("node");
 			if (!hostBunTarget || !nodePath) return;
 			const hostAlias = BUN_TARGETS.info[hostBunTarget].alias;
 
 			await runBuild(["--target", hostBunTarget, "--no-validate"]);
 
 			const launcherPath = join(stageDir, "root", "bin", "test-cli.js");
-			const inPlace = await runProcess(nodePath, [launcherPath], { cwd: tmpDir });
+			const inPlace = await runBoundedProcess(nodePath, [launcherPath], {
+				cwd: tmpDir,
+				timeout: 4_000,
+			});
 			expect(inPlace.stderr.trim()).toBe("");
 			expect(inPlace.exitCode).toBe(0);
 			expect(inPlace.stdout.trim()).toBe("hello from packaged test");
@@ -125,16 +131,21 @@ describe("crust build integration", () => {
 				join(installedRoot, "node_modules", "@scope", `test-cli-${hostAlias}`),
 				{ recursive: true },
 			);
-			const installed = await runProcess(nodePath, [join(installedRoot, "bin", "test-cli.js")], {
-				cwd: tmpDir,
-			});
+			const installed = await runBoundedProcess(
+				nodePath,
+				[join(installedRoot, "bin", "test-cli.js")],
+				{
+					cwd: tmpDir,
+					timeout: 4_000,
+				},
+			);
 			expect(installed.stderr.trim()).toBe("");
 			expect(installed.exitCode).toBe(0);
 			expect(installed.stdout.trim()).toBe("hello from packaged test");
 		},
 	);
 
-	it.skipIf(!Bun.which("node"))(
+	it.skipIf(!which("node"))(
 		"stages a root-only Node package whose bin is the runnable bundle",
 		async () => {
 			mkdirSync(join(tmpDir, "assets"), { recursive: true });
@@ -154,7 +165,7 @@ describe("crust build integration", () => {
 			const originalEntry = readFileSync(entryPath, "utf8");
 			writeFileSync(
 				entryPath,
-				`import { resolveArtifactDir } from ${JSON.stringify(resolve(import.meta.dir, "../../core/dist/index.js"))};\n` +
+				`import { resolveArtifactDir } from ${JSON.stringify(resolve(import.meta.dirname, "../../core/dist/index.js"))};\n` +
 					'console.log("hello from packaged test");\n' +
 					'if (process.argv.includes("assets")) console.log(resolveArtifactDir("assets"));\n' +
 					'if (process.argv.includes("env")) console.log(process.env.PUBLIC_MESSAGE, process.env.SECRET_MESSAGE);\n',
@@ -181,8 +192,9 @@ describe("crust build integration", () => {
 			expect(bundle.startsWith("#!/usr/bin/env node\n")).toBe(true);
 			// The marker is inlined as a literal, not read from the environment.
 			expect(bundle).not.toContain("process.env.CRUST_INTERNAL_BUILD");
-			const { exitCode, stdout } = await runProcess(Bun.which("node")!, [bundlePath, "assets"], {
+			const { exitCode, stdout } = await runBoundedProcess(which("node")!, [bundlePath, "assets"], {
 				cwd: tmpDir,
+				timeout: 25_000,
 			});
 			expect(exitCode).toBe(0);
 			expect(stdout.trim().split("\n")).toEqual([
@@ -190,9 +202,10 @@ describe("crust build integration", () => {
 				join(stageDir, "root", "assets"),
 			]);
 			// The non-plugin Node build forwards --env-file and inlines only PUBLIC_* values.
-			const env = await runProcess(Bun.which("node")!, [bundlePath, "env"], {
+			const env = await runBoundedProcess(which("node")!, [bundlePath, "env"], {
 				cwd: tmpDir,
 				env: {},
+				timeout: 25_000,
 			});
 			expect(env.stdout.trim().split("\n").at(-1)).toBe("hello-from-build undefined");
 		},
@@ -200,7 +213,7 @@ describe("crust build integration", () => {
 	);
 
 	// One host target only: compiling all six Deno targets downloads six runtimes.
-	it.skipIf(Bun.which("deno") === null || hostDenoTarget() === null || !Bun.which("node"))(
+	it.skipIf(which("deno") === null || hostDenoTarget() === null || !which("node"))(
 		"stages Deno platform packages and runs them through the Node launcher",
 		async () => {
 			const denoTarget = hostDenoTarget()!;
@@ -231,10 +244,10 @@ describe("crust build integration", () => {
 				),
 			).toBe(true);
 
-			const { exitCode, stdout, stderr } = await runProcess(
-				Bun.which("node")!,
+			const { exitCode, stdout, stderr } = await runBoundedProcess(
+				which("node")!,
 				[join(stageDir, "root", "bin", "test-cli.js")],
-				{ cwd: tmpDir },
+				{ cwd: tmpDir, timeout: 100_000 },
 			);
 			expect(stderr.trim()).toBe("");
 			expect(exitCode).toBe(0);

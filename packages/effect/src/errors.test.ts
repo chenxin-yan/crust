@@ -1,7 +1,6 @@
-import { describe, expect, it } from "bun:test";
-
 import { Crust, CrustError } from "@crustjs/core";
 import { Cause, Effect, Exit } from "effect";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
 	CrustCommandNotFoundError,

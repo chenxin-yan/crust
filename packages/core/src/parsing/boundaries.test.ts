@@ -1,7 +1,7 @@
-import { describe, expect, it } from "bun:test";
 import { runInNewContext } from "node:vm";
 
 import type { StandardSchema } from "@crustjs/utils/schema";
+import { describe, expect, it } from "vite-plus/test";
 
 import { makeNode, unwrap } from "../../tests/helpers.ts";
 import { Crust } from "../command/crust.ts";

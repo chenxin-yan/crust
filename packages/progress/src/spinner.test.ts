@@ -1,6 +1,5 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
-
 import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { setEnv, snapshotEnv } from "../../style/src/testEnv.ts";
 import { type ProgressSink, spinner, withProgressSink } from "./spinner.ts";
@@ -195,7 +194,7 @@ describe("spinner — sink resolution", () => {
 
 		expect(errors).toHaveLength(1);
 		expect(errors[0]).toContain("✓ Bridged");
-		expect(errors[0]).not.toEndWith("\n");
+		expect(errors[0]).not.toMatch(/\n$/);
 	});
 
 	it("prefers the progress ambient sink over ambient terminal IO", () => {

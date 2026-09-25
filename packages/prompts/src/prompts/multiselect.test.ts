@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { renderPrompt } from "../testing.ts";
 import { multiselect, type MultiselectOptions } from "./multiselect.ts";

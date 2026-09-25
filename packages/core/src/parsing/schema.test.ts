@@ -1,6 +1,5 @@
-import { describe, expect, it } from "bun:test";
-
 import type { StandardSchema } from "@crustjs/utils/schema";
+import { describe, expect, it } from "vite-plus/test";
 
 import { unwrap } from "../../tests/helpers.ts";
 

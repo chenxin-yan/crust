@@ -1,6 +1,5 @@
-import { expect, it } from "bun:test";
-
 import type { StandardSchema } from "@crustjs/utils/schema";
+import { expect, it } from "vite-plus/test";
 
 import { Crust } from "../command/crust.ts";
 import { defineExtensionId } from "../identity.ts";

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { defineArg, defineFlag } from "../api/flags.ts";
 import { defineCommand } from "../command/crust.ts";

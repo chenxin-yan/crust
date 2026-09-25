@@ -1,5 +1,6 @@
-import { describe, expect, it } from "bun:test";
 import { join } from "node:path";
+
+import { describe, expect, it } from "vite-plus/test";
 
 import { CrustStoreError } from "./errors.ts";
 import {
@@ -188,7 +189,7 @@ describe("configDir", () => {
 	describe("runtime environment fallback", () => {
 		it("should resolve a path using real runtime environment", () => {
 			const result = configDir("my-cli");
-			expect(result).toEndWith("my-cli");
+			expect(result).toMatch(/my-cli$/);
 		});
 	});
 });
@@ -396,9 +397,9 @@ describe("resolveStorePath", () => {
 		});
 
 		it("should accept valid name characters", () => {
-			expect(resolveStorePath("/tmp/dir", "auth")).toEndWith("auth.json");
-			expect(resolveStorePath("/tmp/dir", "my-store")).toEndWith("my-store.json");
-			expect(resolveStorePath("/tmp/dir", "cache_v2")).toEndWith("cache_v2.json");
+			expect(resolveStorePath("/tmp/dir", "auth")).toMatch(/auth\.json$/);
+			expect(resolveStorePath("/tmp/dir", "my-store")).toMatch(/my-store\.json$/);
+			expect(resolveStorePath("/tmp/dir", "cache_v2")).toMatch(/cache_v2\.json$/);
 		});
 	});
 });

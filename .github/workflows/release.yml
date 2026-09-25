@@ -10,9 +10,10 @@ on:
       - "scripts/**"
       - "package.json"
       - "mise.toml"
-      - "bun.lock"
-      - "turbo.json"
-      - "tsdown.config.ts"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "vite.config.ts"
+      - "vite.shared.ts"
       - ".github/workflows/ci-packages.yml"
       - ".github/workflows/release.yml"
 
@@ -47,10 +48,10 @@ jobs:
       - name: Setup runtimes
         uses: jdx/mise-action@v4
         with:
-          install_args: bun node
+          install_args: bun node pnpm
 
       - name: Install dependencies
-        run: bun ci --ignore-scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Select Changesets mode
         id: select-mode
@@ -75,11 +76,11 @@ jobs:
       - name: Setup runtimes
         uses: jdx/mise-action@v4
         with:
-          install_args: bun node
+          install_args: bun node pnpm
           cache: false
 
       - name: Install dependencies
-        run: bun ci --ignore-scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Version packages and update release PR
         id: version
@@ -87,7 +88,7 @@ jobs:
         with:
           pr-title: "chore: release packages"
           commit-message: "chore: version packages"
-          script: bun run packages:version
+          script: pnpm run packages:version
 
   pack:
     if: needs.select-mode.outputs.mode == 'publish'
@@ -107,17 +108,17 @@ jobs:
       - name: Setup runtimes
         uses: jdx/mise-action@v4
         with:
-          install_args: bun node
+          install_args: bun node pnpm
           cache: false
 
       - name: Install dependencies
-        run: bun ci
+        run: pnpm install --frozen-lockfile
 
       # Build and lifecycle hooks run without publishing credentials or restored caches.
       - name: Build and pack packages
         run: |
-          bun run build:pkgs --force
-          bun run packages:pack "$RUNNER_TEMP/release-pack"
+          pnpm exec vp run --no-cache --fail-if-no-match --filter './packages/*' build:task
+          pnpm run packages:pack "$RUNNER_TEMP/release-pack"
 
       - name: Upload release tarballs
         id: tarballs
@@ -159,7 +160,8 @@ jobs:
           path: ${{ runner.temp }}/release-pack
 
       - name: Publish packages
-        run: bun run packages:publish "$RUNNER_TEMP/release-pack"
+        # Call Bun directly: `pnpm run` installs missing dependencies, with lifecycle scripts, first.
+        run: bun scripts/publish-packages.mjs --publish-dir "$RUNNER_TEMP/release-pack"
 
   finalize:
     needs: publish
@@ -179,18 +181,18 @@ jobs:
       - name: Setup runtimes
         uses: jdx/mise-action@v4
         with:
-          install_args: bun node
+          install_args: bun node pnpm
           cache: false
 
       - name: Install Changesets without lifecycle hooks
-        run: bun ci --ignore-scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       # Tag the full cohort even when a retry found every version already uploaded.
       - name: Create tags and GitHub releases
         id: tags
         uses: changesets/action/publish@v2
         with:
-          script: bun run changeset git-tag
+          script: pnpm run changeset git-tag
 
   release-pr-size:
     needs: version
@@ -213,20 +215,12 @@ jobs:
       - name: Setup runtimes
         uses: jdx/mise-action@v4
         with:
-          install_args: bun node
-
-      - name: Cache Turbo
-        uses: actions/cache@v6
-        with:
-          path: .turbo
-          key: turbo-packages-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            turbo-packages-${{ runner.os }}-
+          install_args: bun node pnpm
 
       - name: Build and measure
         run: |
-          bun ci
-          bun turbo run build --filter='./packages/*'
+          pnpm install --frozen-lockfile
+          pnpm run build:pkgs
           bun scripts/package-size-report.mjs sizes > "$RUNNER_TEMP/head.json"
           bun scripts/package-size-report.mjs sizes-published > "$RUNNER_TEMP/base.json"
 
@@ -269,21 +263,13 @@ jobs:
       - name: Setup runtimes
         uses: jdx/mise-action@v4
         with:
-          install_args: bun node
+          install_args: bun node pnpm
 
       - name: Install dependencies
-        run: bun ci
-
-      - name: Cache Turbo
-        uses: actions/cache@v6
-        with:
-          path: .turbo
-          key: turbo-release-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            turbo-release-${{ runner.os }}-
+        run: pnpm install --frozen-lockfile
 
       - name: Build docs
-        run: bun run build:docs
+        run: pnpm run build:docs
 
       - name: Deploy docs to Cloudflare Workers
         uses: cloudflare/wrangler-action@v4

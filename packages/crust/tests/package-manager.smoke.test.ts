@@ -1,13 +1,14 @@
-import { afterAll, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { Crust } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
-import { runProcess } from "@crustjs/utils/process";
+import { which } from "@crustjs/utils/process";
+import { afterAll, afterEach, describe, expect, it } from "vite-plus/test";
 
 import { buildCommand } from "../src/commands/build.ts";
+import { reapBoundedProcesses, runBoundedProcess } from "./bounded-process.ts";
 import { hostTarget } from "./helpers.ts";
 
 const packageManager = process.env.CRUST_SMOKE_PM;
@@ -18,7 +19,7 @@ const installDir = join(testRoot, `install-${packageManager ?? "skip"}`);
 const packDir = join(testRoot, "packs");
 
 function hasCommand(command: string): boolean {
-	return Bun.which(command) !== null;
+	return which(command) !== null;
 }
 
 async function stageSampleCli() {
@@ -60,7 +61,7 @@ console.log(args.join(" ") || "resolver-ok");
 
 async function packStageDir(dir: string): Promise<string> {
 	mkdirSync(packDir, { recursive: true });
-	const packed = await runProcess("npm", ["pack", dir], { cwd: packDir });
+	const packed = await runBoundedProcess("npm", ["pack", dir], { cwd: packDir, timeout: 25_000 });
 	if (packed.exitCode !== 0) {
 		throw new Error(`npm pack failed for ${dir}\n${packed.stderr}`);
 	}
@@ -72,6 +73,8 @@ async function packStageDir(dir: string): Promise<string> {
 
 	return join(packDir, filename);
 }
+
+afterEach(reapBoundedProcesses);
 
 afterAll(() => {
 	rmSync(testRoot, { recursive: true, force: true });
@@ -127,13 +130,17 @@ describe.skipIf(!packageManager)("package manager smoke", () => {
 		// Audit/funding lookups hit registry endpoints the smoke test does not need;
 		// when they degrade, npm blocks on them and the test times out.
 		const auditFlags = packageManager === "npm" ? ["--no-audit", "--no-fund"] : [];
-		const install = await runProcess(packageManager!, ["install", ...auditFlags], {
+		const install = await runBoundedProcess(packageManager!, ["install", ...auditFlags], {
 			cwd: installDir,
+			timeout: 25_000,
 		});
 		expect(install.exitCode).toBe(0);
 
 		const binPath = join(installDir, "node_modules", ".bin", "resolver-smoke");
-		const exec = await runProcess(binPath, ["smoke-ok"], { cwd: installDir });
+		const exec = await runBoundedProcess(binPath, ["smoke-ok"], {
+			cwd: installDir,
+			timeout: 25_000,
+		});
 		expect(exec.exitCode).toBe(0);
 		expect(exec.stdout.trim()).toBe("smoke-ok");
 
@@ -146,8 +153,9 @@ describe.skipIf(!packageManager)("package manager smoke", () => {
 			"bin",
 			"resolver-smoke.js",
 		);
-		const launcher = await runProcess("node", [launcherPath, "launcher-ok"], {
+		const launcher = await runBoundedProcess("node", [launcherPath, "launcher-ok"], {
 			cwd: installDir,
+			timeout: 25_000,
 		});
 		expect(launcher.exitCode, launcher.stderr).toBe(0);
 		expect(launcher.stdout.trim()).toBe("launcher-ok");

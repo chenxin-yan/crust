@@ -1,11 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
 import { buildCommandDocumentation } from "@crustjs/core/tooling";
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
+import { reapBoundedProcesses, runBoundedProcess } from "../../../crust/tests/bounded-process.ts";
 import { completion } from "./index.ts";
 import type { CompletionCommand } from "./spec.ts";
 import { renderBash } from "./templates/bash.ts";
@@ -135,10 +136,11 @@ describe("renderBash · behavioural · -- and --name=value", () => {
 	beforeEach(async () => {
 		tmpDir = await mkdtemp(join(tmpdir(), "tp010-bash-adv-"));
 		scriptPath = join(tmpDir, "mycli-completion.bash");
-		await Bun.write(scriptPath, renderBash(spec, "mycli", "1"));
+		await writeFile(scriptPath, renderBash(spec, "mycli", "1"));
 	});
 
 	afterEach(async () => {
+		await reapBoundedProcesses();
 		await rm(tmpDir, { recursive: true, force: true });
 	});
 
@@ -155,15 +157,11 @@ COMP_POINT=${words.join(" ").length}
 _mycli
 for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
 `;
-		const proc = Bun.spawn(["bash", "-c", driver], {
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		const [out, err] = await Promise.all([
-			new Response(proc.stdout).text(),
-			new Response(proc.stderr).text(),
-		]);
-		const code = await proc.exited;
+		const {
+			exitCode: code,
+			stdout: out,
+			stderr: err,
+		} = await runBoundedProcess("bash", ["-c", driver], { timeout: 4_000 });
 		if (code !== 0) {
 			throw new Error(`bash exit ${code}\n${err}\n${out}`);
 		}

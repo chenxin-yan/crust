@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { BUILD_OUT_DIR_ENV, resolveArtifactDir } from "./artifacts.ts";
 
@@ -38,15 +39,17 @@ function withDenoGlobal<T>(value: { build: { standalone: boolean } }, run: () =>
 	}
 }
 
-// The Bun global is frozen, but Bun.main has a setter (typed readonly).
+// Tests run on Node, which has no Bun global; stand one in the way withDenoGlobal does.
 function withBunMain<T>(value: string, run: () => T): T {
-	const bun = Bun as { main: string };
-	const original = bun.main;
-	bun.main = value;
+	Object.defineProperty(globalThis, "Bun", {
+		value: { main: value },
+		configurable: true,
+		writable: true,
+	});
 	try {
 		return run();
 	} finally {
-		bun.main = original;
+		delete (globalThis as { Bun?: unknown }).Bun;
 	}
 }
 

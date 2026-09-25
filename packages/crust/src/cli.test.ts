@@ -7,9 +7,8 @@
  * Uses `captureExecute(app, argv)` to exercise and capture the terminal path.
  */
 
-import { describe, expect, it } from "bun:test";
-
 import { captureExecute } from "@crustjs/testing";
+import { describe, expect, it } from "vite-plus/test";
 
 import pkg from "../package.json";
 import { crustBase } from "./app.ts";

@@ -1,7 +1,6 @@
-import { describe, expect, it } from "bun:test";
-
 import type { ArgDef } from "@crustjs/core";
 import { Crust, defineCommand, defineExtensionId } from "@crustjs/core";
+import { describe, expect, it } from "vite-plus/test";
 
 import { makeCommand, snapshotFixture } from "../tests/fixtures.ts";
 import { SKILLS } from "./extension.ts";

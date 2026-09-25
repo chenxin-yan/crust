@@ -1,7 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { scaffold } from "../src/scaffold.ts";
 import { runSteps } from "../src/steps.ts";
@@ -97,17 +99,19 @@ describe("end-to-end scaffold + runSteps", () => {
 		expect(existsSync(join(destDir, ".git"))).toBe(true);
 
 		// Verify the initial commit was created with the correct message
-		const gitLog = Bun.spawnSync(["git", "log", "--oneline", "-1", "--format=%s"], {
+		const gitLog = spawnSync("git", ["log", "--oneline", "-1", "--format=%s"], {
 			cwd: destDir,
+			timeout: 10_000,
 		});
-		expect(gitLog.exitCode).toBe(0);
+		expect(gitLog.status).toBe(0);
 		expect(gitLog.stdout.toString().trim()).toBe("Initial commit");
 
 		// Verify all files were committed (no untracked or modified files)
-		const gitStatus = Bun.spawnSync(["git", "status", "--porcelain"], {
+		const gitStatus = spawnSync("git", ["status", "--porcelain"], {
 			cwd: destDir,
+			timeout: 10_000,
 		});
-		expect(gitStatus.exitCode).toBe(0);
+		expect(gitStatus.status).toBe(0);
 		expect(gitStatus.stdout.toString().trim()).toBe("");
 	});
 });

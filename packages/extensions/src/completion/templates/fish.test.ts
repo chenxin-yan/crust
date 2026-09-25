@@ -1,8 +1,14 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { which } from "@crustjs/utils/process";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
+
+import {
+	reapBoundedProcesses,
+	runBoundedProcess,
+} from "../../../../crust/tests/bounded-process.ts";
 import type { CompletionCommand } from "../spec.ts";
 import { renderFish } from "./fish.ts";
 
@@ -65,6 +71,8 @@ const fixture: CompletionCommand = {
 		},
 	],
 };
+
+afterEach(reapBoundedProcesses);
 
 describe("renderFish", () => {
 	it("disables global file completion before emitting rules", () => {
@@ -255,12 +263,12 @@ describeIfFish("renderFish · subprocess completion", () => {
 			["mycli build --target ", ["browser", "bun", "node"]],
 		] as const) {
 			const driver = `source ${shQuoteForFish(scriptPath)}; complete -C ${shQuoteForFish(line)}`;
-			const proc = Bun.spawn(["fish", "-c", driver], { stdout: "pipe", stderr: "pipe" });
-			const [out, err] = await Promise.all([
-				new Response(proc.stdout).text(),
-				new Response(proc.stderr).text(),
-			]);
-			expect(await proc.exited).toBe(0);
+			const {
+				exitCode,
+				stdout: out,
+				stderr: err,
+			} = await runBoundedProcess("fish", ["-c", driver], { timeout: 4_000 });
+			expect(exitCode).toBe(0);
 			expect(err).toBe("");
 			expect(
 				out
@@ -273,16 +281,9 @@ describeIfFish("renderFish · subprocess completion", () => {
 });
 
 async function isFishAvailable(): Promise<boolean> {
-	try {
-		const proc = Bun.spawn(["fish", "--version"], {
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		await proc.exited;
-		return proc.exitCode === 0;
-	} catch {
-		return false;
-	}
+	// A missing fish skips; a hung one fails at the probe deadline instead of skipping.
+	if (which("fish") === null) return false;
+	return (await runBoundedProcess("fish", ["--version"], { timeout: 5_000 })).exitCode === 0;
 }
 
 function shQuoteForFish(value: string): string {

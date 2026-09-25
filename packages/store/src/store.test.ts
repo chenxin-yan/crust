@@ -1,10 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
 
 import { CrustStoreError } from "./errors.ts";

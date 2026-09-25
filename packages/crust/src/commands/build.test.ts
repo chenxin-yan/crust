@@ -1,4 +1,3 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import {
 	existsSync,
 	mkdirSync,
@@ -16,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import { Crust, defineExtensionId } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
 import type { JsonValue } from "@crustjs/utils/json";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
 const corePath = fileURLToPath(import.meta.resolve("@crustjs/core"));
 
@@ -685,7 +685,7 @@ describe("build", () => {
 				{ kind: "bundle", path: bundlePath, command: "node-cli" },
 			],
 		});
-		expect(readFileSync(bundlePath, "utf8")).toStartWith("#!/usr/bin/env node\n");
+		expect(readFileSync(bundlePath, "utf8")).toMatch(/^#!\/usr\/bin\/env node\n/);
 		expect(existsSync(join(stageDir, "stale.txt"))).toBe(false);
 		expect(readManifest(join(stageDir, "manifest.json"))).not.toHaveProperty("build");
 
