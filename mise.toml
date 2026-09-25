@@ -1,3 +1,6 @@
+[tools]
+go = "1.26.5"
+
 [settings]
 idiomatic_version_file_enable_tools = ["bun"]
 
