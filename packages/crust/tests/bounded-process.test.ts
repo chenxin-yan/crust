@@ -33,10 +33,16 @@ function startHungTree(timeout: number) {
 function isRunning(pid: number): boolean {
 	try {
 		process.kill(pid, 0);
+		if (process.platform === "linux") {
+			// A non-reaping container init can retain terminated children as zombies.
+			const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+			return stat[stat.lastIndexOf(")") + 2] !== "Z";
+		}
 		return true;
 	} catch (error) {
-		// SAFETY: process.kill throws errno exceptions.
-		return (error as NodeJS.ErrnoException).code !== "ESRCH";
+		// SAFETY: process.kill and readFileSync throw errno exceptions.
+		const code = (error as NodeJS.ErrnoException).code;
+		return code !== "ESRCH" && code !== "ENOENT";
 	}
 }
 
@@ -44,7 +50,6 @@ async function expectKilled(pidFile: string): Promise<void> {
 	// SAFETY: the hung child wrote a [childPid, grandchildPid] JSON array.
 	const pids = JSON.parse(readFileSync(pidFile, "utf8")) as number[];
 	expect(pids).toHaveLength(2);
-	// The orphaned grandchild is reaped by init asynchronously after its kill.
 	await vi.waitFor(() => expect(pids.filter(isRunning)).toEqual([]), { timeout: 5_000 });
 }
 
@@ -61,6 +66,10 @@ describe("runBoundedProcess", () => {
 	it("reapBoundedProcesses kills children still running at teardown", async () => {
 		const { pidFile, settled } = startHungTree(60_000);
 		await vi.waitFor(() => readFileSync(pidFile), { timeout: 5_000 });
+		// SAFETY: the fixture writes its child and grandchild PIDs.
+		const pids = JSON.parse(readFileSync(pidFile, "utf8")) as number[];
+		expect(pids).toHaveLength(2);
+		expect(pids.filter(isRunning)).toEqual(pids);
 
 		await reapBoundedProcesses();
 
