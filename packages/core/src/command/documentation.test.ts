@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { defineCommand } from "../index.ts";
 import { type AnyCrust, Crust } from "./crust.ts";

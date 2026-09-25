@@ -1,11 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
 import { buildCommandDocumentation } from "@crustjs/core/tooling";
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
+import { reapBoundedProcesses, runBoundedProcess } from "../../../crust/tests/bounded-process.ts";
 import { completion } from "./index.ts";
 import type { CompletionCommand } from "./spec.ts";
 import { renderBash } from "./templates/bash.ts";
@@ -124,7 +125,7 @@ describe("renderBash · behavioural · -- and --name=value", () => {
 					{ name: "out", type: "string", takesValue: true, negatable: false },
 				],
 				args: [],
-				subCommands: [],
+				subCommands: [{ name: "deploy", flags: [], args: [], subCommands: [] }],
 			},
 		],
 	};
@@ -135,10 +136,11 @@ describe("renderBash · behavioural · -- and --name=value", () => {
 	beforeEach(async () => {
 		tmpDir = await mkdtemp(join(tmpdir(), "tp010-bash-adv-"));
 		scriptPath = join(tmpDir, "mycli-completion.bash");
-		await Bun.write(scriptPath, renderBash(spec, "mycli", "1"));
+		await writeFile(scriptPath, renderBash(spec, "mycli", "1"));
 	});
 
 	afterEach(async () => {
+		await reapBoundedProcesses();
 		await rm(tmpDir, { recursive: true, force: true });
 	});
 
@@ -155,15 +157,11 @@ COMP_POINT=${words.join(" ").length}
 _mycli
 for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
 `;
-		const proc = Bun.spawn(["bash", "-c", driver], {
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		const [out, err] = await Promise.all([
-			new Response(proc.stdout).text(),
-			new Response(proc.stderr).text(),
-		]);
-		const code = await proc.exited;
+		const {
+			exitCode: code,
+			stdout: out,
+			stderr: err,
+		} = await runBoundedProcess("bash", ["-c", driver], { timeout: 4_000 });
 		if (code !== 0) {
 			throw new Error(`bash exit ${code}\n${err}\n${out}`);
 		}
@@ -186,6 +184,9 @@ for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
 	});
 
 	it("after `--`, no subcommand or flag candidates are offered", async () => {
+		expect(await complete(["mycli", "build", ""])).toEqual(["deploy"]);
+		expect(await complete(["mycli", "build", "--"])).toEqual(["--out", "--target"]);
+		expect(await complete(["mycli", "build", "--", "--"])).toEqual([]);
 		const candidates = await complete(["mycli", "build", "--", ""]);
 		// Past the `--` terminator we return without setting COMPREPLY,
 		// so the candidate set is empty (filename completion happens via
@@ -196,6 +197,7 @@ for r in "\${COMPREPLY[@]}"; do printf '%s\\n' "$r"; done
 	it("after a free-form value flag, no subcommand candidates are offered", async () => {
 		// `--out` is a value-taking flag with no choices; the next word
 		// is a free-form value, not a subcommand.
+		expect(await complete(["mycli", "build", ""])).toEqual(["deploy"]);
 		const candidates = await complete(["mycli", "build", "--out", ""]);
 		expect(candidates).toEqual([]);
 	});
@@ -237,11 +239,9 @@ describe("completion · --output-dir traversal", () => {
 		process.exitCode = originalExitCode;
 	});
 
-	it("rejects a binName containing path separators at render time", async () => {
-		// `binName` validation runs in the completion action. Crust
-		// catches action errors and reports them via stderr + exitCode=1,
-		// rather than rethrowing, so we observe both side-effects to
-		// confirm the error fired before any file could be written.
+	it("rejects a binName containing path separators before rendering or writing files", async () => {
+		const root = await mkdtemp(join(tmpdir(), "completion-traversal-"));
+		const outputDir = join(root, "completions");
 		const stderrChunks: string[] = [];
 		const origWrite = process.stderr.write;
 		process.stderr.write = (chunk: string | Uint8Array) => {
@@ -249,13 +249,25 @@ describe("completion · --output-dir traversal", () => {
 			return true;
 		};
 		try {
-			const cli = new Crust("real").extend(completion({ binName: "../pwn" })).action(() => {});
-			await cli.execute({ argv: ["completion", "bash"] });
+			const cli = new Crust("real", { version: "1.0.0" })
+				.extend(completion({ binName: "../pwn" }))
+				.action(() => {});
+			for (const argv of [
+				["completion", "bash"],
+				["completion", "bash", "--output-dir", outputDir],
+			]) {
+				stderrChunks.length = 0;
+				process.exitCode = 0;
+				await cli.execute({ argv });
+				expect(stderrChunks.join("\n")).toMatch(/invalid binName/);
+				expect(process.exitCode).toBe(1);
+				// Neither the output directory nor a path-traversing sibling should be written.
+				expect(await readdir(root)).toEqual([]);
+			}
 		} finally {
 			process.stderr.write = origWrite;
+			await rm(root, { recursive: true, force: true });
 		}
-		expect(stderrChunks.join("\n")).toMatch(/invalid binName/);
-		expect(process.exitCode).toBe(1);
 	});
 });
 

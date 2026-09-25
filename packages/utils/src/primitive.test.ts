@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { coerceBooleanString, type ResolvePrimitive, tryCoerceNumber } from "./primitive.ts";
 

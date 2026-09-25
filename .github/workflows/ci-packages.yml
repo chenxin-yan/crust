@@ -10,11 +10,10 @@ on:
       - "tools/**"
       - "package.json"
       - "mise.toml"
-      - "bun.lock"
-      - "turbo.json"
-      - "tsdown.config.ts"
-      - ".oxlintrc.json"
-      - ".oxfmtrc.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "vite.config.ts"
+      - "vite.shared.ts"
       - "tsconfig*.json"
       - ".github/workflows/ci-packages.yml"
       - ".github/workflows/release.yml"
@@ -48,22 +47,13 @@ jobs:
       - name: Setup runtimes
         uses: jdx/mise-action@v4
         with:
-          install_args: bun node
+          install_args: bun node pnpm
 
       - name: Install dependencies
-        run: bun ci
-
-      - name: Cache Turbo
-        uses: actions/cache@v6
-        with:
-          path: .turbo
-          key: turbo-${{ matrix.runtime }}-smoke-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            turbo-${{ matrix.runtime }}-smoke-${{ runner.os }}-
-            turbo-packages-${{ runner.os }}-
+        run: pnpm install --frozen-lockfile
 
       - name: Build packages
-        run: bun turbo run build --filter='./packages/*'
+        run: pnpm run build:pkgs
 
       - name: Smoke built distributions with ${{ matrix.runtime }}
         run: ${{ matrix.smoke }}
@@ -85,29 +75,20 @@ jobs:
         uses: jdx/mise-action@v4
 
       - name: Install dependencies
-        run: bun ci
-
-      - name: Cache Turbo
-        uses: actions/cache@v6
-        with:
-          path: .turbo
-          key: turbo-packages-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            turbo-packages-${{ runner.os }}-
+        run: pnpm install --frozen-lockfile
 
       - name: Build, type check, and test
         run: |
-          bun run check:types
-          bun run test
+          pnpm run check:types
+          pnpm run test
 
       - name: Lint and format check (packages)
         run: |
-          bun run lint packages
-          bun run format packages
+          pnpm run lint packages
+          pnpm run format packages
 
       - name: Run package-manager smoke tests
         run: |
-          npm install --global pnpm@10
           for package_manager in bun npm pnpm; do
-            CRUST_SMOKE_PM="$package_manager" bun test ./packages/crust/tests/package-manager.smoke.test.ts
+            CRUST_SMOKE_PM="$package_manager" pnpm --dir packages/crust exec vp test run tests/package-manager.smoke.test.ts
           done

@@ -17,7 +17,7 @@
 // against main is empty and the meaningful base is the last release).
 // Each release is installed separately: latest versions across packages may
 // require incompatible peers and need not form one valid dependency tree.
-// Local runs: rm -rf packages/*/dist first — turbo cache restore doesn't prune
+// Local runs: rm -rf packages/*/dist first — Vite Task cache hits don't prune
 // stray dist files from other branches, which inflates install sizes.
 import { execFileSync } from "node:child_process";
 import {
@@ -150,10 +150,8 @@ function footprint(pkgDir, pkg, resolveDep, unpackedOf) {
 	return total;
 }
 
-// TODO: switch to `bun pm pack` (the tool we publish with) once it has
-// machine-readable output — https://github.com/oven-sh/bun/issues/14155.
-// npm is safe meanwhile: file selection and unpacked bytes match bun's
-// exactly; only tarball gzip bytes differ slightly.
+// Releases pack with `pnpm pack`, which only packs local directories;
+// `sizes-published` also needs registry specs, so sizes come from npm.
 const npmPack = (extraArgs, cwd) =>
 	JSON.parse(
 		execFileSync("npm", ["pack", "--dry-run", "--json", ...extraArgs], {

@@ -1,4 +1,3 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { stripVTControlCharacters } from "node:util";
 
 import {
@@ -9,6 +8,7 @@ import {
 	defineExtensionId,
 	defineFlag,
 } from "@crustjs/core";
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { completion } from "./completion/index.ts";
 import { didYouMean } from "./did-you-mean.ts";

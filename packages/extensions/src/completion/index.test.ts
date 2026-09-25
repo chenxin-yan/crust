@@ -1,9 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import {
 	completion,
@@ -98,7 +98,7 @@ describe("completion", () => {
 			.extend(completion({ version: "2.0.0" }))
 			.action(() => {});
 		await app.execute({ argv: ["completion", "bash"] });
-		expect(getStdout()).toStartWith("# completion script for mycli v2.0.0");
+		expect(getStdout()).toMatch(/^# completion script for mycli v2\.0\.0/);
 	});
 
 	it("reports a missing version", async () => {
@@ -129,7 +129,7 @@ describe("completion", () => {
 			io: { stdout: (text) => output.push(text) },
 		});
 
-		expect(output.join("\n")).toStartWith("# completion script for mycli v1.2.3");
+		expect(output.join("\n")).toMatch(/^# completion script for mycli v1\.2\.3/);
 		expect(getStdout()).toBe("");
 	});
 
@@ -244,7 +244,7 @@ describe("completion build hook", () => {
 		const [bash, zsh, fish] = artifacts!.map((file) => text(file.content));
 		expect(bash).toContain("# completion script for mycli v1.2.3");
 		expect(bash).toContain("complete -o default -F _mycli 'mycli'");
-		expect(zsh).toStartWith("#compdef mycli\n");
+		expect(zsh).toMatch(/^#compdef mycli\n/);
 		expect(fish).toContain("complete -c 'mycli' -f");
 	});
 
@@ -259,7 +259,7 @@ describe("completion build hook", () => {
 			"completions/_my-tool",
 			"completions/my-tool.fish",
 		]);
-		expect(text(artifacts![1]!.content)).toStartWith("#compdef my-tool\n");
+		expect(text(artifacts![1]!.content)).toMatch(/^#compdef my-tool\n/);
 		expect(text(artifacts![0]!.content)).toContain("my-tool v2.0.0");
 	});
 
@@ -303,10 +303,10 @@ describe("completion build hook", () => {
 describe("completion renderers", () => {
 	it("uses snapshot metadata by default and honors overrides", async () => {
 		const snapshot = await buildCli().snapshot();
-		expect(renderBashCompletion(snapshot)).toStartWith("# completion script for mycli v1.2.3");
-		expect(renderZshCompletion(snapshot)).toStartWith("#compdef mycli\n");
-		expect(renderFishCompletion(snapshot, { binName: "my-tool", version: "9.9.9" })).toStartWith(
-			"# completion script for my-tool v9.9.9",
+		expect(renderBashCompletion(snapshot)).toMatch(/^# completion script for mycli v1\.2\.3/);
+		expect(renderZshCompletion(snapshot)).toMatch(/^#compdef mycli\n/);
+		expect(renderFishCompletion(snapshot, { binName: "my-tool", version: "9.9.9" })).toMatch(
+			/^# completion script for my-tool v9\.9\.9/,
 		);
 	});
 

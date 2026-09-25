@@ -37,10 +37,10 @@
 		"access": "public"
 	},
 	"scripts": {
-		"build": "tsdown",
-		"dev": "tsdown --watch",
+		"build": "vp pack",
+		"dev": "vp pack --watch",
 		"check:types": "tsc --noEmit",
-		"test": "bun test",
+		"test": "vp test",
 		"prepack": "cp ../../LICENSE LICENSE",
 		"postpack": "rm -f LICENSE"
 	},
@@ -49,7 +49,7 @@
 	},
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
-		"tsdown": "catalog:"
+		"vite-plus": "catalog:"
 	},
 	"peerDependencies": {
 		"typescript": "^7.0.0"

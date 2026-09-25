@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { styleMethodNames } from "./ansiCodes.ts";
 import * as runtimeExports from "./runtimeExports.ts";

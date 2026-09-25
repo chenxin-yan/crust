@@ -6,9 +6,9 @@ on:
       - "packages/**"
       - "package.json"
       - "mise.toml"
-      - "bun.lock"
-      - "turbo.json"
-      - "tsdown.config.ts"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "vite.shared.ts"
       - "scripts/package-size-report.mjs"
       - "scripts/package-size-fixtures/**"
       - ".github/workflows/package-size.yml"
@@ -38,20 +38,12 @@ jobs:
       - name: Setup runtimes
         uses: jdx/mise-action@v4
         with:
-          install_args: bun node
-
-      - name: Cache Turbo
-        uses: actions/cache@v6
-        with:
-          path: .turbo
-          key: turbo-packages-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            turbo-packages-${{ runner.os }}-
+          install_args: bun node pnpm
 
       - name: Build and measure head
         run: |
-          bun ci
-          bun turbo run build --filter='./packages/*'
+          pnpm install --frozen-lockfile
+          pnpm run build:pkgs
           bun scripts/package-size-report.mjs sizes > "$RUNNER_TEMP/head.json"
 
       - name: Checkout base
@@ -64,8 +56,8 @@ jobs:
       - name: Build and measure base
         run: |
           cd base
-          bun ci
-          bun turbo run build --filter='./packages/*'
+          pnpm install --frozen-lockfile
+          pnpm run build:pkgs
           cd ..
           # Head's script measures both trees so old base refs need no copy of it.
           bun scripts/package-size-report.mjs sizes base > "$RUNNER_TEMP/base.json"

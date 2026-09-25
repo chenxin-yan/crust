@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 
 import * as codes from "./ansiCodes.ts";
 import {

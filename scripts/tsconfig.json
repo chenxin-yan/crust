@@ -4,5 +4,11 @@
 		"declaration": false,
 		"isolatedDeclarations": false
 	},
-	"include": [".", "../tsdown.config.ts", "../packages/*/tsdown.config.ts"]
+	"include": [
+		".",
+		"../vite.config.ts",
+		"../vite.shared.ts",
+		"../packages/*/vite.config.ts",
+		"../tools/vite.config.ts"
+	]
 }

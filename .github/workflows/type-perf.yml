@@ -8,9 +8,9 @@ on:
       - "packages/utils/**"
       - "package.json"
       - "mise.toml"
-      - "turbo.json"
-      - "bun.lock"
-      - "tsdown.config.ts"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "vite.shared.ts"
       - "scripts/type-perf-report*"
       - ".github/workflows/type-perf.yml"
 
@@ -38,13 +38,13 @@ jobs:
       - name: Setup runtimes
         uses: jdx/mise-action@v4
         with:
-          install_args: bun node
+          install_args: bun node pnpm
 
       - name: Measure PR merge
         run: |
-          bun ci
-          # Turbo builds core's runtime dependency @crustjs/utils first (^build).
-          bun turbo run build --filter=@crustjs/core
+          pnpm install --frozen-lockfile
+          # build:task builds core's runtime dependency @crustjs/utils first.
+          pnpm exec vp run --fail-if-no-match --filter @crustjs/core build:task
           bun scripts/type-perf-report.ts measure "$RUNNER_TEMP/head.json"
 
       - name: Checkout base
@@ -57,8 +57,8 @@ jobs:
       - name: Measure base
         run: |
           cd base
-          bun ci
-          bun turbo run build --filter=@crustjs/core
+          pnpm install --frozen-lockfile
+          pnpm exec vp run --fail-if-no-match --filter @crustjs/core build:task
           cd ..
           # Use the PR merge's harness and compiler for both declaration sets.
           bun scripts/type-perf-report.ts measure "$RUNNER_TEMP/base.json" base

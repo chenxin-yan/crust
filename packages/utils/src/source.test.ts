@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { resolveSourceDir } from "./source.ts";
 

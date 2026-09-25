@@ -1,7 +1,6 @@
-import { describe, expect, it } from "bun:test";
-
 import { Crust, defineCommand, defineExtension, defineExtensionId } from "@crustjs/core";
 import { help } from "@crustjs/extensions";
+import { describe, expect, it } from "vite-plus/test";
 
 import { man } from "./extension.ts";
 import { renderManPageMdoc } from "./mdoc.ts";

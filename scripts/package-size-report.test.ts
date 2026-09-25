@@ -1,13 +1,19 @@
-import { afterAll, beforeEach, describe, expect, it } from "bun:test";
 import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+
+import {
+	reapBoundedProcesses,
+	runBoundedProcess,
+} from "../packages/crust/tests/bounded-process.ts";
 
 const testRoot = join(tmpdir(), `package-size-report-${process.pid}`);
 const fixtureRoot = join(testRoot, "fixture");
 const fakeBin = join(testRoot, "bin");
 const installArgs = join(testRoot, "install-args.json");
-const reportScript = join(import.meta.dir, "package-size-report.mjs");
+const reportScript = join(import.meta.dirname, "package-size-report.mjs");
 
 // Fake npm: `pack` reports the optional `x-unpacked` field of the cwd package
 // (2 when absent) so tests can assert dependency accounting. `install` lays
@@ -95,11 +101,12 @@ beforeEach(() => {
 	chmodSync(npm, 0o755);
 });
 
+afterEach(reapBoundedProcesses);
+
 afterAll(() => rmSync(testRoot, { recursive: true, force: true }));
 
 function run(cmd: string[], errorCode?: string, tree?: Record<string, Manifest>) {
-	return Bun.spawnSync({
-		cmd: [process.execPath, reportScript, ...cmd],
+	return runBoundedProcess("bun", [reportScript, ...cmd], {
 		env: {
 			...process.env,
 			PATH: `${fakeBin}:${process.env.PATH}`,
@@ -107,20 +114,19 @@ function run(cmd: string[], errorCode?: string, tree?: Record<string, Manifest>)
 			...(errorCode ? { FAKE_NPM_ERROR: errorCode } : {}),
 			...(tree ? { FAKE_NPM_TREE: JSON.stringify(tree) } : {}),
 		},
-		stdout: "pipe",
-		stderr: "pipe",
+		timeout: 4_000,
 	});
 }
 
-function runJson(cmd: string[]) {
-	const result = run(cmd);
-	expect(result.stderr.toString()).toBe("");
+async function runJson(cmd: string[]) {
+	const result = await run(cmd);
+	expect(result.stderr).toBe("");
 	expect(result.exitCode).toBe(0);
-	return JSON.parse(result.stdout.toString());
+	return JSON.parse(result.stdout);
 }
 
 describe("sizes", () => {
-	it("counts the workspace dependency graph once and excludes peers", () => {
+	it("counts the workspace dependency graph once and excludes peers", async () => {
 		writePackage(fixtureRoot, "a", {
 			name: "@fixture/a",
 			"x-unpacked": 100,
@@ -135,7 +141,7 @@ describe("sizes", () => {
 		writePackage(fixtureRoot, "c", { name: "@fixture/c", "x-unpacked": 1000 });
 		writePackage(fixtureRoot, "d", { name: "@fixture/d", "x-unpacked": 1 });
 
-		const sizes = runJson(["sizes", fixtureRoot]);
+		const sizes = await runJson(["sizes", fixtureRoot]);
 		expect(sizes["@fixture/a"]).toEqual({
 			entries: {},
 			consumers: {},
@@ -147,14 +153,14 @@ describe("sizes", () => {
 		expect(sizes["@fixture/c"].footprint).toBe(1000);
 	});
 
-	it("bundles consumer fixtures against the given root's artifacts", () => {
+	it("bundles consumer fixtures against the given root's artifacts", async () => {
 		const otherRoot = join(testRoot, "other");
 		writeFakeCore(fixtureRoot, 1);
 		writeFakeCore(otherRoot, 2000);
 
-		const sizes = runJson(["sizes", fixtureRoot]);
+		const sizes = await runJson(["sizes", fixtureRoot]);
 		const small = sizes["@crustjs/core"].consumers;
-		const large = runJson(["sizes", otherRoot])["@crustjs/core"].consumers;
+		const large = (await runJson(["sizes", otherRoot]))["@crustjs/core"].consumers;
 		expect(Object.keys(small).sort()).toEqual(["cli", "error-only", "tooling-docs"]);
 		for (const fixture of ["error-only", "tooling-docs"]) {
 			expect(small[fixture]).toBeGreaterThan(0);
@@ -165,28 +171,28 @@ describe("sizes", () => {
 });
 
 describe("sizes-published", () => {
-	it("only treats npm E404 responses as unpublished", () => {
-		const notFound = run(["sizes-published", fixtureRoot], "E404");
+	it("only treats npm E404 responses as unpublished", async () => {
+		const notFound = await run(["sizes-published", fixtureRoot], "E404");
 		expect(notFound.exitCode).toBe(0);
-		expect(JSON.parse(notFound.stdout.toString())).toEqual({});
-		expect(run(["sizes-published", fixtureRoot], "E503").exitCode).not.toBe(0);
+		expect(JSON.parse(notFound.stdout)).toEqual({});
+		expect((await run(["sizes-published", fixtureRoot], "E503")).exitCode).not.toBe(0);
 	});
 
-	it("measures releases with incompatible peers in separate installs", () => {
+	it("measures releases with incompatible peers in separate installs", async () => {
 		writePackage(fixtureRoot, "other", { name: "@fixture/other" });
 		const measured = { tarball: 1, unpacked: 2, entries: {}, consumers: {}, footprint: 2 };
-		expect(runJson(["sizes-published", fixtureRoot])).toEqual({
+		expect(await runJson(["sizes-published", fixtureRoot])).toEqual({
 			"@fixture/package": measured,
 			"@fixture/other": measured,
 		});
 	});
 
-	it("disables lifecycle scripts when installing published packages", () => {
-		expect(run(["sizes-published", fixtureRoot]).exitCode).toBe(0);
+	it("disables lifecycle scripts when installing published packages", async () => {
+		expect((await run(["sizes-published", fixtureRoot])).exitCode).toBe(0);
 		expect(JSON.parse(readFileSync(installArgs, "utf8"))).toContain("--ignore-scripts");
 	});
 
-	it("counts a nested and a hoisted copy of one dependency as separate installed bytes", () => {
+	it("counts a nested and a hoisted copy of one dependency as separate installed bytes", async () => {
 		const manifest = (name: string, unpacked: number, dependencies?: Record<string, string>) => ({
 			name,
 			exports: {},
@@ -194,7 +200,7 @@ describe("sizes-published", () => {
 			...(dependencies ? { dependencies } : {}),
 		});
 		// package -> b, d@1 (hoisted); b -> d@2 (nested under b). All four are installed.
-		const result = run(["sizes-published", fixtureRoot], undefined, {
+		const result = await run(["sizes-published", fixtureRoot], undefined, {
 			"node_modules/@fixture/package/package.json": manifest("@fixture/package", 100, {
 				"@fixture/b": "^1.0.0",
 				"@fixture/d": "^1.0.0",
@@ -205,13 +211,13 @@ describe("sizes-published", () => {
 			"node_modules/@fixture/b/node_modules/@fixture/d/package.json": manifest("@fixture/d", 2),
 			"node_modules/@fixture/d/package.json": manifest("@fixture/d", 1),
 		});
-		expect(result.stderr.toString()).toBe("");
-		expect(JSON.parse(result.stdout.toString())["@fixture/package"].footprint).toBe(113);
+		expect(result.stderr).toBe("");
+		expect(JSON.parse(result.stdout)["@fixture/package"].footprint).toBe(113);
 	});
 });
 
 describe("compare", () => {
-	it("reports consumer bundles and runtime footprint next to the old rows", () => {
+	it("reports consumer bundles and runtime footprint next to the old rows", async () => {
 		// base.json from a ref predating consumers/footprint still compares.
 		const base = join(testRoot, "base.json");
 		const head = join(testRoot, "head.json");
@@ -231,9 +237,9 @@ describe("compare", () => {
 				},
 			}),
 		);
-		const result = run(["compare", base, head]);
+		const result = await run(["compare", base, head]);
 		expect(result.exitCode).toBe(0);
-		const table = result.stdout.toString();
+		const table = result.stdout;
 		expect(table).toContain("### Consumer bundles (minified + gzip)");
 		expect(table).toContain("| `@x/core` cli | — | 0.50 KB | new |");
 		expect(table).toContain("| `@x/core` | 0.00 KB | 2.00 KB | ±0 | 4.00 KB | new |");

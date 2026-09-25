@@ -1,8 +1,8 @@
-import { afterEach, expect, it, spyOn } from "bun:test";
+import { afterEach, expect, it, vi } from "vite-plus/test";
 
 import { loadMarkdown } from "../src/components/ai/page-actions";
 
-const fetchSpy = spyOn(globalThis, "fetch");
+const fetchSpy = vi.spyOn(globalThis, "fetch");
 
 afterEach(() => {
 	fetchSpy.mockReset();

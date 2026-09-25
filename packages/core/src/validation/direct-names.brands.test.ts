@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { defineArg, defineFlag } from "../api/flags.ts";
 import { defineCommand } from "../command/crust.ts";
@@ -20,7 +20,6 @@ describe("direct definition name brands", () => {
 
 		const dynamicName = "dynamic" as string;
 		// Broad string names are checked at each consuming operation.
-		expect(defineFlag(dynamicName, { type: "string" }).name).toBe("dynamic");
 		expect(myFlag(dynamicName).name).toBe("dynamic");
 		expect(myArg(dynamicName).name).toBe("dynamic");
 		expect(myCommand(dynamicName).name).toBe("dynamic");

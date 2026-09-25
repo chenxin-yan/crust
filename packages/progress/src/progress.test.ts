@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 
 import { setEnv, snapshotEnv } from "../../style/src/testEnv.ts";
 import { progress as createProgressBar } from "./progress.ts";

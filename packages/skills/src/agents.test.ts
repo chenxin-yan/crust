@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { accessSync, chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { detectInstalledAgents, resolveAgentPath } from "./agents.ts";
 

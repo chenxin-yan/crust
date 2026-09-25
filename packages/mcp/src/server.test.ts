@@ -1,5 +1,3 @@
-import { afterEach, describe, expect, it } from "bun:test";
-
 import {
 	type AnyCrust,
 	Crust,
@@ -12,6 +10,7 @@ import {
 } from "@crustjs/core";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import { createMcpServer, DEFAULT_SERVER_VERSION, toolResultFromOutcome } from "./server.ts";
 

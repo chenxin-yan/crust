@@ -1,7 +1,7 @@
-import { describe, expect, it } from "bun:test";
 import { Writable } from "node:stream";
 import { stripVTControlCharacters } from "node:util";
 
+import { describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
 
 import { createPromptIO, renderPrompt } from "../testing.ts";

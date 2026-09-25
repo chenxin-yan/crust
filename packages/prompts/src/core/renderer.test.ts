@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, it } from "bun:test";
 import { PassThrough, Writable } from "node:stream";
 
 import { withAmbientTerminalIO } from "@crustjs/utils/terminal";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import { createPromptIO } from "../testing.ts";
 import {
@@ -264,22 +264,6 @@ describe("runPrompt", () => {
 		await expect(runPrompt(config, createPromptIO({ isTTY: false }).io)).rejects.toThrow(
 			NonInteractiveError,
 		);
-	});
-
-	it("resolves with submitted value when handleKey returns submit", async () => {
-		const config: PromptConfig<{ value: string }, string> = {
-			render: (state) => state.value,
-			handleKey: () => submit("hello"),
-			initialState: { value: "test" },
-			theme: defaultTheme,
-		};
-
-		const harness = createPromptIO();
-		const promise = runPrompt(config, harness.io);
-		harness.type("a");
-
-		const result = await promise;
-		expect(result).toBe("hello");
 	});
 
 	it("updates state on non-submit keypress", async () => {

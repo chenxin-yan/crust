@@ -1,8 +1,14 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { which } from "@crustjs/utils/process";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
+
+import {
+	reapBoundedProcesses,
+	runBoundedProcess,
+} from "../../../../crust/tests/bounded-process.ts";
 import type { CompletionCommand } from "../spec.ts";
 import { renderZsh } from "./zsh.ts";
 
@@ -60,6 +66,8 @@ const fixture: CompletionCommand = {
 		},
 	],
 };
+
+afterEach(reapBoundedProcesses);
 
 describe("renderZsh", () => {
 	it("first line is `#compdef <bin>` (required by zsh autoload)", () => {
@@ -179,19 +187,17 @@ source ${shQuoteForZsh(scriptPath)} || exit 1
 [[ $_comps[mycli] == _mycli ]] || exit 1
 echo OK
 `;
-		const proc = Bun.spawn(["zsh", "-c", driver], {
-			stdout: "pipe",
-			stderr: "pipe",
+		const {
+			exitCode: code,
+			stdout: out,
+			stderr: err,
+		} = await runBoundedProcess("zsh", ["-c", driver], {
 			env: {
 				...process.env,
 				TMPDIR: tmpDir,
 			},
+			timeout: 4_000,
 		});
-		const [out, err] = await Promise.all([
-			new Response(proc.stdout).text(),
-			new Response(proc.stderr).text(),
-		]);
-		const code = await proc.exited;
 		if (code !== 0) {
 			throw new Error(`zsh failed: code=${code}\nstdout:\n${out}\nstderr:\n${err}`);
 		}
@@ -296,12 +302,11 @@ _arguments() { print -rl -- "$@"; }
 source ${shQuoteForZsh(scriptPath)} || exit 1
 ${helper}
 `;
-		const proc = Bun.spawn(["zsh", "-c", driver], { stdout: "pipe", stderr: "pipe" });
-		const [out, err] = await Promise.all([
-			new Response(proc.stdout).text(),
-			new Response(proc.stderr).text(),
-		]);
-		const code = await proc.exited;
+		const {
+			exitCode: code,
+			stdout: out,
+			stderr: err,
+		} = await runBoundedProcess("zsh", ["-c", driver], { timeout: 4_000 });
 		if (code !== 0) throw new Error(`zsh exited ${code}\nstderr:\n${err}\nstdout:\n${out}`);
 		return out;
 	}
@@ -330,16 +335,9 @@ ${helper}
 });
 
 async function isZshAvailable(): Promise<boolean> {
-	try {
-		const proc = Bun.spawn(["zsh", "--version"], {
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		await proc.exited;
-		return proc.exitCode === 0;
-	} catch {
-		return false;
-	}
+	// A missing zsh skips; a hung one fails at the probe deadline instead of skipping.
+	if (which("zsh") === null) return false;
+	return (await runBoundedProcess("zsh", ["--version"], { timeout: 5_000 })).exitCode === 0;
 }
 
 function shQuoteForZsh(value: string): string {

@@ -5,9 +5,10 @@
 	"type": "module",
 	"scripts": {
 		"check:types": "tsc --noEmit",
-		"test": "bun test"
+		"test": "vp test"
 	},
 	"devDependencies": {
-		"@crustjs/core": "workspace:*"
+		"@crustjs/core": "workspace:*",
+		"vite-plus": "catalog:"
 	}
 }

@@ -1,4 +1,4 @@
-import { RuleTester } from "oxlint/plugins-dev";
+import { RuleTester } from "vite-plus/lint/plugins-dev";
 
 import { noUnknownTypeAliasesRule } from "./no-unknown-type-aliases.ts";
 

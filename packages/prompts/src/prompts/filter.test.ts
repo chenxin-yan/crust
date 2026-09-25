@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { renderPrompt } from "../testing.ts";
 import { filter, type FilterOptions } from "./filter.ts";
@@ -274,7 +274,7 @@ describe("filter — rendering", () => {
 		prompt.keys("return");
 
 		await prompt.answer;
-		expect(prompt.screen()).toContain("banana");
+		expect(prompt.screen()).toBe("✓ Pick a fruit banana");
 	});
 
 	it("renders labels for object choices", async () => {

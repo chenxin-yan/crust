@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { resolveColorDepth } from "./capability.ts";
 import { createStyle, style } from "./createStyle.ts";
@@ -484,8 +484,7 @@ describe("createStyle — dynamic colors auto mode with truecolor overrides", ()
 		expect(s.trueColorEnabled).toBe(false);
 		expect(s.colorDepth).toBe("256");
 		// fg now downgrades to ansi-256 instead of returning plain text.
-		const expectedOpen = Bun.color([255, 0, 0], "ansi-256");
-		expect(s.fg("text", [255, 0, 0])).toBe(`${expectedOpen}text\x1b[39m`);
+		expect(s.fg("text", [255, 0, 0])).toBe("\x1b[38;5;196mtext\x1b[39m");
 	});
 
 	it("falls back to 16-color when TTY but no truecolor / 256 env", () => {

@@ -1,4 +1,4 @@
-// Compile-time contracts, enforced by check:types (not bun test).
+// Compile-time contracts, enforced by check:types (not vp test).
 
 import { type ColumnAlignment, table } from "./tables.ts";
 

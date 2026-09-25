@@ -1,62 +1,27 @@
-import { describe, expect, it } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { PassThrough, Writable } from "node:stream";
+import { fileURLToPath } from "node:url";
 
-import { type CliRenderer, type CliRendererConfig, KeyEvent, type ParsedKey } from "@opentui/core";
+import { describe, expect, it } from "vite-plus/test";
 
+import type { TuiObservation, TuiScenario } from "../tests/fixtures/run-tui.ts";
 import { NonInteractiveError, runTui } from "./index.ts";
-
-class TtyInput extends PassThrough {
-	readonly isTTY = true;
-	isRaw = false;
-
-	setRawMode(mode: boolean): this {
-		this.isRaw = mode;
-		return this;
-	}
-}
 
 function asReadStream(stream: PassThrough): NodeJS.ReadStream {
 	// oxlint-disable-next-line anti-slop/no-chained-type-assertions -- OpenTUI requires a concrete tty.ReadStream type; this fake implements the runtime surface it uses.
 	return stream as unknown as NodeJS.ReadStream;
 }
 
-function key(overrides: Partial<ParsedKey> & Pick<ParsedKey, "name">): KeyEvent {
-	return new KeyEvent({
-		ctrl: false,
-		meta: false,
-		shift: false,
-		option: false,
-		sequence: "",
-		number: false,
-		raw: "",
-		eventType: "press",
-		source: "raw",
-		...overrides,
-	});
-}
+const fixture = fileURLToPath(new URL("../tests/fixtures/run-tui.ts", import.meta.url));
 
-function createTtyConfig(overrides: CliRendererConfig = {}) {
-	const stdin = new TtyInput();
-	const stdout = Object.assign(
-		new Writable({
-			write(_chunk, _encoding, callback) {
-				callback();
-			},
-		}),
-		{ isTTY: true, columns: 80, rows: 24 },
-	);
-
-	return {
-		stdin,
-		config: {
-			stdin: asReadStream(stdin),
-			stdout: stdout as NodeJS.WriteStream,
-			width: 80,
-			height: 24,
-			bufferedOutput: "memory",
-			...overrides,
-		} satisfies CliRendererConfig,
-	};
+/** OpenTUI's native renderer is unavailable on the pinned Node 24, so the scenario runs on Bun. */
+function observe(scenario: TuiScenario): TuiObservation {
+	const result = spawnSync("bun", [fixture, scenario], { encoding: "utf8", timeout: 10_000 });
+	expect(result.status, result.stderr).toBe(0);
+	const observation = result.stdout.match(/^OBSERVATION (.+)$/m)?.[1];
+	expect(observation, result.stdout).toBeDefined();
+	// SAFETY: the fixture prints exactly one serialized TuiObservation.
+	return JSON.parse(observation!) as TuiObservation;
 }
 
 describe("runTui", () => {
@@ -79,99 +44,66 @@ describe("runTui", () => {
 		expect(mounted).toBe(false);
 	});
 
-	it("destroys the renderer and rethrows when mounting fails", async () => {
-		const failure = new Error("mount failed");
-		let renderer: CliRenderer | undefined;
-		const { config } = createTtyConfig();
+	it("destroys the renderer and rethrows when mounting fails", () => {
+		const { outcome, rendererDestroyed } = observe("mount-failure");
 
-		await expect(
-			runTui((created) => {
-				renderer = created;
-				throw failure;
-			}, config),
-		).rejects.toBe(failure);
-		expect(renderer?.isDestroyed).toBe(true);
+		expect(outcome).toMatchObject({ status: "rejected", isMountFailure: true });
+		expect(rendererDestroyed).toBe(true);
 	});
 
-	it("resolves when the renderer is destroyed", async () => {
-		const { config } = createTtyConfig();
-
-		await expect(runTui((renderer) => renderer.destroy(), config)).resolves.toBeUndefined();
+	it("resolves when the renderer is destroyed", () => {
+		expect(observe("destroy-resolves").outcome).toEqual({
+			status: "resolved",
+			valueType: "undefined",
+		});
 	});
 
-	it("rejects with AbortError when Ctrl+C destroys the renderer", async () => {
-		const { config, stdin } = createTtyConfig();
-		const result = runTui(() => {
-			stdin.write("\x03");
-		}, config);
-
-		await expect(result).rejects.toMatchObject({ name: "AbortError" });
+	it("rejects with AbortError when Ctrl+C destroys the renderer", () => {
+		expect(observe("ctrl-c-aborts").outcome).toMatchObject({
+			status: "rejected",
+			name: "AbortError",
+		});
 	});
 
-	it("settles on destroy while an async mount is still pending", async () => {
-		const { config } = createTtyConfig();
-		let listeners = -1;
+	it("settles on destroy while an async mount is still pending", () => {
+		const { outcome, keypressListenersBefore, stdinDataListeners } = observe(
+			"destroy-during-pending-mount",
+		);
 
-		const result = runTui(async (renderer) => {
-			setTimeout(() => {
-				listeners = renderer.keyInput.listenerCount("keypress");
-				renderer.destroy();
-			}, 10);
-			await new Promise<never>(() => {});
-		}, config);
-
-		await expect(result).resolves.toBeUndefined();
-		expect(listeners).toBeGreaterThan(0);
-		expect(config.stdin.listenerCount("data")).toBe(0);
+		expect(outcome).toEqual({ status: "resolved", valueType: "undefined" });
+		expect(keypressListenersBefore).toBeGreaterThan(0);
+		expect(stdinDataListeners).toBe(0);
 	});
 
-	it("removes its keypress listener after teardown", async () => {
-		const { config } = createTtyConfig();
-		let renderer: CliRenderer | undefined;
-		let before = 0;
+	it("removes its keypress listener after teardown", () => {
+		const { outcome, keypressListenersBefore, keypressListenersAfter } = observe(
+			"keypress-listener-teardown",
+		);
 
-		await runTui((created) => {
-			renderer = created;
-			before = created.keyInput.listenerCount("keypress");
-			created.destroy();
-		}, config);
-
+		expect(outcome).toEqual({ status: "resolved", valueType: "undefined" });
 		// OpenTUI's own exitOnCtrlC handler stays; only the adapter's listener is removed.
-		expect(renderer?.keyInput.listenerCount("keypress")).toBe(before - 1);
+		expect(keypressListenersAfter).toBe(keypressListenersBefore! - 1);
 	});
 
-	it("treats Ctrl+C with extra modifiers as a normal key, not cancellation", async () => {
-		const { config } = createTtyConfig();
-
-		const result = runTui((renderer) => {
-			renderer.keyInput.emit("keypress", key({ name: "c", ctrl: true, shift: true }));
-			setTimeout(() => renderer.destroy(), 10);
-		}, config);
-
-		await expect(result).resolves.toBeUndefined();
+	it("treats Ctrl+C with extra modifiers as a normal key, not cancellation", () => {
+		expect(observe("ctrl-shift-c").outcome).toEqual({
+			status: "resolved",
+			valueType: "undefined",
+		});
 	});
 
-	it("detects Ctrl+C through baseCode on non-Latin layouts", async () => {
-		const { config } = createTtyConfig();
-
-		const result = runTui((renderer) => {
-			renderer.keyInput.emit("keypress", key({ name: "с", ctrl: true, baseCode: 99 }));
-			setTimeout(() => renderer.destroy(), 10);
-		}, config);
-
-		await expect(result).rejects.toMatchObject({ name: "AbortError" });
+	it("detects Ctrl+C through baseCode on non-Latin layouts", () => {
+		expect(observe("ctrl-c-base-code").outcome).toMatchObject({
+			status: "rejected",
+			name: "AbortError",
+		});
 	});
 
-	it("does not destroy on Ctrl+C when exitOnCtrlC is false", async () => {
-		const { config, stdin } = createTtyConfig({ exitOnCtrlC: false });
-		let renderer: CliRenderer | undefined;
-		const result = runTui((created) => {
-			renderer = created;
-			stdin.write("\x03");
-			setTimeout(() => created.destroy(), 10);
-		}, config);
+	it("does not destroy on Ctrl+C when exitOnCtrlC is false", () => {
+		const { outcome, rendererDestroyed, manualTeardownReached } = observe("ctrl-c-without-exit");
 
-		await expect(result).resolves.toBeUndefined();
-		expect(renderer?.isDestroyed).toBe(true);
+		expect(outcome).toEqual({ status: "resolved", valueType: "undefined" });
+		expect(manualTeardownReached).toBe(true);
+		expect(rendererDestroyed).toBe(true);
 	});
 });

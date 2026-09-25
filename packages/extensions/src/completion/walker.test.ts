@@ -1,7 +1,6 @@
-import { describe, expect, it } from "bun:test";
-
 import { type AnyCrust, Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
 import { buildCommandDocumentation } from "@crustjs/core/tooling";
+import { describe, expect, it } from "vite-plus/test";
 
 import { walkCommandNode } from "./walker.ts";
 

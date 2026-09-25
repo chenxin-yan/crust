@@ -1,9 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust } from "@crustjs/core";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
 	createStoreCacheAdapter,
@@ -21,7 +21,7 @@ import {
 
 /** Helper to mock globalThis.fetch without type errors from `preconnect`. */
 function mockFetch(fn: (...args: Parameters<typeof fetch>) => ReturnType<typeof fetch>) {
-	globalThis.fetch = Object.assign(mock(fn), {
+	globalThis.fetch = Object.assign(vi.fn(fn), {
 		preconnect: globalThis.fetch.preconnect,
 	});
 }
@@ -257,7 +257,7 @@ describe("lazy store import", () => {
 	it("never imports @crustjs/store statically", async () => {
 		// The env-sandbox tests can't detect an eager import (env is read at call
 		// time), so pin the deferred-import invariant against the source itself.
-		const source = await Bun.file(new URL("./update-notifier.ts", import.meta.url)).text();
+		const source = await readFile(new URL("./update-notifier.ts", import.meta.url), "utf8");
 		expect(source).not.toMatch(/^import[^;]*["']@crustjs\/store["']/m);
 		expect(source).toContain('await import("@crustjs/store")');
 	});
@@ -504,7 +504,7 @@ describe("updateNotifier post-run hook", () => {
 			});
 
 			// Fetch should NOT be called since cache is fresh
-			const fetchFn = mock(() =>
+			const fetchFn = vi.fn(() =>
 				Promise.resolve(
 					new Response(JSON.stringify({ "dist-tags": { latest: "3.0.0" } }), {
 						status: 200,
@@ -1055,7 +1055,7 @@ describe("updateNotifier post-run hook", () => {
 				registryUrl: "https://custom-registry.example.com",
 			});
 
-			expect(capturedUrl).toStartWith("https://custom-registry.example.com/");
+			expect(capturedUrl).toMatch(/^https:\/\/custom-registry\.example\.com\//);
 		});
 
 		it("uses custom updateCommand in the notice", async () => {

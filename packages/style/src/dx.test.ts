@@ -10,7 +10,7 @@
 //   5. Error messages are stable (snapshotted) — refactors must update
 //      both the message and these snapshots in the same change.
 
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import { linkCode } from "./hyperlinks.ts";
 import { bold, createStyle, fg, red, style } from "./index.ts";

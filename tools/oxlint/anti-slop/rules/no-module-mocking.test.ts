@@ -1,4 +1,4 @@
-import { RuleTester } from "oxlint/plugins-dev";
+import { RuleTester } from "vite-plus/lint/plugins-dev";
 
 import { noModuleMockingRule } from "./no-module-mocking.ts";
 
@@ -14,6 +14,8 @@ tester.run("anti-slop/no-module-mocking", noModuleMockingRule, {
 		"import { vi as localVi } from './helpers'; localVi.mock('./module');",
 		"const mock = { module() {} }; mock.module('./module');",
 		"import { mock } from 'bun:test'; mock.restore();",
+		"import { vi } from 'vite-plus/test'; vi.spyOn(store, 'save');",
+		"import { vi } from 'vite-plus'; vi.mock('./module');",
 		"import * as bunTest from './bun-test'; bunTest.mock.module('./module');",
 	],
 	invalid: [
@@ -25,6 +27,11 @@ tester.run("anti-slop/no-module-mocking", noModuleMockingRule, {
 		{ code: "import { vi } from 'vitest'; vi.mock('./user-store');", errors: [error] },
 		{
 			code: "import { vi as testApi } from 'vitest'; testApi.mock('./user-store');",
+			errors: [error],
+		},
+		{ code: "import { vi } from 'vite-plus/test'; vi.mock('./user-store');", errors: [error] },
+		{
+			code: "import { vi as testApi } from 'vite-plus/test'; testApi.doMock('./user-store');",
 			errors: [error],
 		},
 		{
@@ -45,6 +52,10 @@ tester.run("anti-slop/no-module-mocking", noModuleMockingRule, {
 		},
 		{
 			code: "import * as vitest from 'vitest'; vitest.vi.mock('./user-store');",
+			errors: [error],
+		},
+		{
+			code: "import * as vitePlusTest from 'vite-plus/test'; vitePlusTest.vi.mock('./user-store');",
 			errors: [error],
 		},
 		{

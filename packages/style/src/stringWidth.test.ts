@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { widthCorpus } from "./stringWidth.corpus.ts";
 import { stringWidth, stringWidthJs } from "./stringWidth.ts";

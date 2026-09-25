@@ -1,4 +1,3 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
 	chmod,
 	lstat,
@@ -12,6 +11,8 @@ import {
 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { withCwd } from "../tests/fixtures.ts";
 import { SkillConflictError } from "./errors.ts";

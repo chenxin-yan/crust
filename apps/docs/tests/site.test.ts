@@ -1,40 +1,29 @@
-import { expect, it, mock, spyOn } from "bun:test";
+import { globSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
-import { Glob, plugin } from "bun";
 import { remarkNpm } from "fumadocs-core/mdx-plugins";
+import { expect, it, vi } from "vite-plus/test";
 
 import docsConfig from "../source.config";
 
 // Keep Fumadocs URL generation real without compiling every MDX page.
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Adapt the Vite-only collection boundary; the actual Fumadocs loader still resolves every page.
-await mock.module("fumadocs-mdx:collections/server", () => ({
+vi.mock("fumadocs-mdx:collections/server", () => ({
 	docs: {
 		toFumadocsSource: () => ({
-			files: [
-				...new Glob("**/*.mdx").scanSync(
-					fileURLToPath(new URL("../content/docs", import.meta.url)),
-				),
-			].map((path) => ({ type: "page", path, data: { title: path } })),
+			files: globSync("**/*.mdx", {
+				cwd: fileURLToPath(new URL("../content/docs", import.meta.url)),
+			}).map((path) => ({ type: "page", path, data: { title: path } })),
 		}),
 	},
 }));
 
-// Server functions run locally; Vite's raw imports become text in Bun.
-// oxlint-disable-next-line anti-slop/no-module-mocking -- Bun has no Start server transport; execute the real handlers locally.
-await mock.module("@tanstack/react-start", () => ({
+// Server functions run locally; Vite's native `?raw` transform supplies the example text.
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Test mode has no Start server transport; execute the real handlers locally.
+vi.mock("@tanstack/react-start", () => ({
 	createServerFn: () => ({ handler: <T>(fn: T) => fn }),
 }));
-plugin({
-	name: "vite-raw-example",
-	setup(build) {
-		build.onLoad({ filter: /greet\.ts\?raw$/ }, async ({ path }) => ({
-			exports: { default: await readFile(path.slice(0, -4), "utf8") },
-			loader: "object",
-		}));
-	},
-});
 
 const { Route: sitemap } = await import("../src/routes/sitemap[.]xml");
 const { Route: landing, SCAFFOLD_COMMANDS } = await import("../src/routes/index");
@@ -59,9 +48,9 @@ it("sitemap lists each Fumadocs page once, including the docs index", async () =
 it("landing highlights the checked greeting example", async () => {
 	// The loader ignores router context; only the external registry boundary is stubbed.
 	const load = landing.options.loader as () => Promise<typeof landing.types.loaderData>;
-	const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
-		new Response(null, { status: 503 }),
-	);
+	const fetchSpy = vi
+		.spyOn(globalThis, "fetch")
+		.mockResolvedValue(new Response(null, { status: 503 }));
 	let data: typeof landing.types.loaderData;
 	try {
 		data = await load();
@@ -69,15 +58,11 @@ it("landing highlights the checked greeting example", async () => {
 		fetchSpy.mockRestore();
 	}
 	expect(data.highlightedCode).toContain("--shiki-light");
-	let code = "";
-	await new HTMLRewriter()
-		.on("code", {
-			text(chunk) {
-				code += chunk.text;
-			},
-		})
-		.transform(new Response(data.highlightedCode))
-		.text();
+	// The raw text inside `<code>`, with Shiki's token markup removed.
+	const code = (/<code[^>]*>([\s\S]*)<\/code>/.exec(data.highlightedCode)?.[1] ?? "").replace(
+		/<[^>]*>/g,
+		"",
+	);
 	const example = await readFile(new URL("../examples/landing/greet.ts", import.meta.url), "utf8");
 	expect(code).toBe(example.trimEnd());
 }, 10000);
@@ -112,7 +97,11 @@ it("landing scaffold tabs match the Quick Start `npm` fence and share its group"
 			?.value;
 	const tabs = tree.children?.[0];
 	expect(tabs?.name).toBe("CodeBlockTabs");
-	expect(tabs && attribute(tabs, "groupId")).toBe("package-manager");
+	const landingSource = await readFile(new URL("../src/routes/index.tsx", import.meta.url), "utf8");
+	const landingGroup = /const PACKAGE_MANAGER_GROUP_ID = "([^"]+)"/.exec(landingSource)?.[1];
+	expect(landingGroup).toBeDefined();
+	expect(landingSource).toMatch(/<Tabs\s[^>]*groupId=\{PACKAGE_MANAGER_GROUP_ID\}/);
+	expect(tabs && attribute(tabs, "groupId")).toBe(landingGroup);
 	const commands = Object.fromEntries(
 		(tabs?.children ?? []).flatMap((child) =>
 			child.name === "CodeBlockTab"

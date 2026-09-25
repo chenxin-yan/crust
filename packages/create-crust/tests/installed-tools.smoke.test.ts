@@ -1,4 +1,3 @@
-import { describe, expect, it } from "bun:test";
 import { spawn } from "node:child_process";
 import {
 	appendFileSync,
@@ -16,9 +15,12 @@ import { tmpdir } from "node:os";
 import { delimiter, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { hostTarget } from "../../crust/tests/helpers.ts";
+import { describe, expect, it } from "vite-plus/test";
 
-const repoRoot = realpathSync(resolve(import.meta.dir, "../../.."));
+import { hostTarget } from "../../crust/tests/helpers.ts";
+import { which } from "../../utils/src/process.ts";
+
+const repoRoot = realpathSync(resolve(import.meta.dirname, "../../.."));
 const enabled = process.env.CREATE_CRUST_INSTALLED_SMOKE === "1";
 const readJson = (path: string) => JSON.parse(readFileSync(path, "utf8"));
 
@@ -32,8 +34,8 @@ describe.skipIf(!enabled)("installed create-crust and crust (Linux/npm)", () => 
 		if (process.platform !== "linux") throw new Error("This opt-in smoke requires Linux.");
 		const target = hostTarget()?.replace(/^bun-/, "");
 		if (!target) throw new Error("Unsupported host for installed-tool smoke.");
-		for (const tool of ["node", "npm", "bun", "git"]) {
-			if (!Bun.which(tool)) throw new Error(`${tool} is required on PATH.`);
+		for (const tool of ["node", "npm", "bun", "git", "pnpm"]) {
+			if (!which(tool)) throw new Error(`${tool} is required on PATH.`);
 		}
 		const base = realpathSync(process.env.RUNNER_TEMP ?? tmpdir());
 		if (isInside(repoRoot, base)) throw new Error("Fixture base must be outside the workspace.");
@@ -71,7 +73,7 @@ describe.skipIf(!enabled)("installed create-crust and crust (Linux/npm)", () => 
 			npm_config_globalconfig: join(root, "global-npmrc"),
 			NO_COLOR: "1",
 		});
-		// Leave headroom before bun:test's deadline to reap children and preserve diagnostics.
+		// Leave headroom before the test's deadline to reap children and preserve diagnostics.
 		const deadline = Date.now() + 240_000;
 		async function run(command: string[], cwd: string, expectedExit = 0, timeout = 30_000) {
 			const started = Date.now();
@@ -170,14 +172,14 @@ describe.skipIf(!enabled)("installed create-crust and crust (Linux/npm)", () => 
 				const dir = join(repoRoot, "packages", name);
 				if (!existsSync(join(dir, builtOutput))) throw new Error(`Build ${name} first.`);
 				const pkg = readJson(join(dir, "package.json"));
-				// Bun rewrites workspace ranges; disabling lifecycle scripts avoids source-tree writes.
+				// pnpm rewrites workspace ranges; disabling lifecycle scripts avoids source-tree writes.
 				const result = await run(
-					["bun", "pm", "pack", "--ignore-scripts", "--quiet", "--destination", packs],
+					["pnpm", "pack", "--ignore-scripts", "--json", "--pack-destination", packs],
 					dir,
 					0,
 					60_000,
 				);
-				specs[pkg.name] = pathToFileURL(resolve(dir, result.stdout.trim())).href;
+				specs[pkg.name] = pathToFileURL(JSON.parse(result.stdout).filename).href;
 				versions[pkg.name] = pkg.version;
 			}
 			async function install(dir: string) {

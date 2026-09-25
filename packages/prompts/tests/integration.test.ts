@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vite-plus/test";
 // ────────────────────────────────────────────────────────────────────────────
 // Integration tests — exercise @crustjs/prompts through its public barrel
 // ────────────────────────────────────────────────────────────────────────────

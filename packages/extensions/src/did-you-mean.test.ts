@@ -1,6 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-
 import { Crust, defineCommand } from "@crustjs/core";
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { didYouMean } from "./did-you-mean.ts";
 

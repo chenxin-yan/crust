@@ -1,8 +1,13 @@
-import { describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
+import { afterEach, describe, expect, it } from "vite-plus/test";
+
+import {
+	reapBoundedProcesses,
+	runBoundedProcess,
+} from "../packages/crust/tests/bounded-process.ts";
 import {
 	formatComparison,
 	generateConsumerSource,
@@ -15,16 +20,18 @@ const report = (small: number, large: number, stress: number): TypePerfReport =>
 	instantiations: { 10: small, 100: large, 200: stress },
 });
 
-const repoRoot = resolve(import.meta.dir, "..");
+const repoRoot = resolve(import.meta.dirname, "..");
 const script = join(repoRoot, "scripts/type-perf-report.ts");
 
+// Below the 30s measurement test timeout; afterEach reaps shorter tests' children.
 function measure(root: string, output: string) {
-	return Bun.spawnSync([process.execPath, script, "measure", output, root], {
+	return runBoundedProcess("bun", [script, "measure", output, root], {
 		cwd: repoRoot,
-		stdout: "pipe",
-		stderr: "pipe",
+		timeout: 25_000,
 	});
 }
+
+afterEach(reapBoundedProcesses);
 
 describe("type performance report", () => {
 	it("requires only the instantiation count from extended diagnostics", () => {
@@ -36,15 +43,15 @@ describe("type performance report", () => {
 		expect(generateConsumerSource(10).match(/const command\d+ = defineCommand/g)).toHaveLength(10);
 	});
 
-	it("measures all consumer sizes using the harness compiler, not the target tree's compiler", () => {
+	it("measures all consumer sizes using the harness compiler, not the target tree's compiler", async () => {
 		const root = mkdtempSync(join(tmpdir(), "crust-type-perf-test-"));
 		try {
 			mkdirSync(join(root, "packages"));
 			symlinkSync(join(repoRoot, "packages/core"), join(root, "packages/core"), "dir");
 			const output = join(root, "report.json");
-			const result = measure(root, output);
+			const result = await measure(root, output);
 
-			expect(result.stdout.toString() + result.stderr.toString()).toBe("");
+			expect(result.stdout + result.stderr).toBe("");
 			expect(result.exitCode).toBe(0);
 			const measured = JSON.parse(readFileSync(output, "utf8"));
 			expect(Object.keys(measured.instantiations)).toEqual(["10", "100", "200"]);
@@ -57,7 +64,7 @@ describe("type performance report", () => {
 		}
 	}, 30_000);
 
-	it("fails measurement when a consumer cannot compile instead of publishing missing data", () => {
+	it("fails measurement when a consumer cannot compile instead of publishing missing data", async () => {
 		const root = mkdtempSync(join(tmpdir(), "crust-type-perf-failure-"));
 		try {
 			const core = join(root, "packages/core");
@@ -68,10 +75,10 @@ describe("type performance report", () => {
 			);
 			writeFileSync(join(core, "index.d.ts"), "export {};\n");
 			const output = join(root, "report.json");
-			const result = measure(root, output);
+			const result = await measure(root, output);
 
 			expect(result.exitCode).toBe(1);
-			expect(result.stderr.toString()).toContain("has no exported member");
+			expect(result.stderr).toContain("has no exported member");
 			expect(() => readFileSync(output)).toThrow();
 		} finally {
 			rmSync(root, { recursive: true, force: true });

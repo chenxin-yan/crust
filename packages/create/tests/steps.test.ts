@@ -1,7 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { runSteps } from "../src/steps.ts";
 
@@ -37,10 +39,11 @@ describe("runSteps", () => {
 			expect(existsSync(join(tempDir, ".git"))).toBe(true);
 
 			// Verify the commit exists with the correct message
-			const result = Bun.spawnSync(["git", "log", "--oneline", "-1", "--format=%s"], {
+			const result = spawnSync("git", ["log", "--oneline", "-1", "--format=%s"], {
 				cwd: tempDir,
+				timeout: 10_000,
 			});
-			expect(result.exitCode).toBe(0);
+			expect(result.status).toBe(0);
 			expect(result.stdout.toString().trim()).toBe("Initial commit");
 		});
 
@@ -52,11 +55,12 @@ describe("runSteps", () => {
 			expect(existsSync(join(tempDir, ".git"))).toBe(true);
 
 			// Verify there are no commits
-			const result = Bun.spawnSync(["git", "log", "--oneline"], {
+			const result = spawnSync("git", ["log", "--oneline"], {
 				cwd: tempDir,
+				timeout: 10_000,
 			});
 			// git log should fail or show nothing when there are no commits
-			expect(result.exitCode).not.toBe(0);
+			expect(result.status).not.toBe(0);
 		});
 	});
 

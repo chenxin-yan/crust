@@ -1,7 +1,9 @@
-import { beforeAll, describe, expect, it } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+
+import { beforeAll, describe, expect, it } from "vite-plus/test";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Declaration emission — a consumer with `declaration: true` must be able to
@@ -10,8 +12,8 @@ import { join, resolve } from "node:path";
 // TS2742 ("cannot be named").
 // ────────────────────────────────────────────────────────────────────────────
 
-const repoRoot = resolve(import.meta.dir, "../../..");
-const corePkg = resolve(import.meta.dir, "..");
+const repoRoot = resolve(import.meta.dirname, "../../..");
+const corePkg = resolve(import.meta.dirname, "..");
 const tscBin = join(repoRoot, "node_modules/.bin/tsc");
 
 const CONSUMER_SOURCE = `import { Crust, defineCommand, defineContext, defineExtension, defineExtensionId, defineFlag, type AnyCrust } from "@crustjs/core";
@@ -123,11 +125,11 @@ beforeAll(() => {
 	// Declaration emission must be checked against dist, where types live in
 	// a private chunk. Never rebuild an existing dist here: sibling packages'
 	// tests import @crustjs/core from dist in parallel, and a rebuild races
-	// them. In turbo runs the root test dependency makes core:build precede
-	// core:test; this fallback only serves a direct `bun test` on a fresh checkout.
+	// them. In `pnpm run test`, core's test:task depends on its build:task; this
+	// fallback only serves a direct `vp test` on a fresh checkout.
 	if (!existsSync(join(corePkg, "dist/index.d.ts"))) {
-		const build = Bun.spawnSync(["bun", "run", "build"], { cwd: corePkg });
-		if (build.exitCode !== 0) {
+		const build = spawnSync("bun", ["run", "build"], { cwd: corePkg, timeout: 120_000 });
+		if (build.status !== 0) {
 			throw new Error(`core build failed:\n${build.stdout.toString()}\n${build.stderr.toString()}`);
 		}
 	}
@@ -158,9 +160,9 @@ beforeAll(() => {
 
 describe("declaration emission for consumers", () => {
 	it("emits declarations for exported inferred builder types without TS2742/TS4058", () => {
-		const result = Bun.spawnSync([tscBin, "-p", "."], { cwd: fixtureDir });
+		const result = spawnSync(tscBin, ["-p", "."], { cwd: fixtureDir, timeout: 60_000 });
 		const output = result.stdout.toString() + result.stderr.toString();
 		expect(output).toBe("");
-		expect(result.exitCode).toBe(0);
+		expect(result.status).toBe(0);
 	});
 });

@@ -1,4 +1,3 @@
-import { afterAll, beforeEach, describe, expect, it } from "bun:test";
 import {
 	existsSync,
 	mkdirSync,
@@ -15,6 +14,7 @@ import { join } from "node:path";
 
 import { type BuildReport, defineExtensionId } from "@crustjs/core";
 import type { JsonValue } from "@crustjs/utils/json";
+import { afterAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { BUN_TARGETS, type BunTarget, DENO_TARGETS, type DenoTarget } from "./build-helpers.ts";
 import {

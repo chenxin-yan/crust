@@ -1,8 +1,7 @@
-import { describe, expect, it } from "bun:test";
-
 import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
 import { progress, spinner } from "@crustjs/progress";
 import { input } from "@crustjs/prompts";
+import { describe, expect, it } from "vite-plus/test";
 
 import { runInteractive } from "./interactive.ts";
 

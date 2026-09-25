@@ -1,4 +1,4 @@
-import { RuleTester } from "oxlint/plugins-dev";
+import { RuleTester } from "vite-plus/lint/plugins-dev";
 
 import { noChainedTypeAssertionsRule } from "./no-chained-type-assertions.ts";
 

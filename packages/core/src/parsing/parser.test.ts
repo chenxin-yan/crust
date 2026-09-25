@@ -1,6 +1,8 @@
-import { describe, expect, it } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { runInNewContext } from "node:vm";
+
+import { describe, expect, it } from "vite-plus/test";
 
 import { makeNode, unwrap } from "../../tests/helpers.ts";
 import { Crust } from "../command/crust.ts";
@@ -711,9 +713,10 @@ describe("parseArgs — negated boolean flag with value assignment", () => {
 		},
 	});
 
-	// Node's parseArgs does not recognize --no-<flag>=<value> as a combined
-	// form, so it surfaces as an "Unknown option" error rather than the
-	// "does not take an argument" path used for --flag=value.
+	// util.parseArgs rejects --no-<flag>=<value> differently per runtime, and
+	// Crust forwards each: Node 24 reports the negated option taking a value
+	// ("does not take an argument", as for --flag=value), while Bun reports the
+	// whole spelling as an unknown option. Tests run on Node; Bun runs in a child.
 	it("throws CrustError with PARSE code on --no-flag=true", () => {
 		try {
 			parseArgs(cmd, ["--no-verbose=true"]);
@@ -721,8 +724,28 @@ describe("parseArgs — negated boolean flag with value assignment", () => {
 		} catch (err) {
 			expect(err).toBeInstanceOf(CrustError);
 			expect((err as CrustError).code).toBe("PARSE");
-			expect((err as CrustError).message).toBe('Unknown flag "--no-verbose"');
+			expect((err as CrustError).message).toBe("Option '--verbose' does not take an argument");
 		}
+
+		const source = `import { makeNode } from ${JSON.stringify(resolve(import.meta.dirname, "../../tests/helpers.ts"))};
+import { CrustError } from ${JSON.stringify(resolve(import.meta.dirname, "../errors.ts"))};
+import { parseArgs } from ${JSON.stringify(resolve(import.meta.dirname, "parser.ts"))};
+const cmd = makeNode({ meta: { name: "test" }, flags: { verbose: { type: "boolean" } } });
+try {
+	parseArgs(cmd, ["--no-verbose=true"]);
+	console.log(JSON.stringify({ threw: false }));
+} catch (err) {
+	console.log(JSON.stringify({ isCrustError: err instanceof CrustError, code: err.code, message: err.message }));
+}
+`;
+		const bun = spawnSync("bun", ["--eval", source], { encoding: "utf8", timeout: 10_000 });
+		expect(bun.stderr).toBe("");
+		expect(bun.status).toBe(0);
+		expect(JSON.parse(bun.stdout)).toEqual({
+			isCrustError: true,
+			code: "PARSE",
+			message: 'Unknown flag "--no-verbose"',
+		});
 	});
 });
 

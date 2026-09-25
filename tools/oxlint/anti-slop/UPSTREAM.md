@@ -34,7 +34,7 @@ diverges deliberately.
   for expression bindings so type-only declarations do not shadow value references.
 - Formatted with repo `oxfmt` (tabs); linted by the repo config including these rules,
   so upstream's `x as unknown as T` double-casts are rewritten.
-- Tests run under Node's test runner (`bun test` cannot host Oxlint `RuleTester`).
+- Tests run under Vitest on Node; `rule-tester.setup.ts` registers Vitest's `describe`/`it` with `RuleTester`.
 
 ## Intentionally not vendored
 

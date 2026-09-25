@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, it } from "bun:test";
 import { lstat, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Crust, defineCommand } from "@crustjs/core";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import { writeSkills } from "../src/build.ts";
 import { installSkill } from "../src/generate.ts";

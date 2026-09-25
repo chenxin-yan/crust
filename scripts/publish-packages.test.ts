@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
 	chmodSync,
 	copyFileSync,
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
@@ -11,6 +11,13 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+
+import {
+	reapBoundedProcesses,
+	runBoundedProcess,
+} from "../packages/crust/tests/bounded-process.ts";
 
 let root: string;
 let artifacts: string;
@@ -24,7 +31,7 @@ beforeEach(() => {
 	mkdirSync(join(root, "bin"));
 	script = join(root, "publish-packages.mjs");
 	// Upload must work without workspace source, staging trees, or node_modules.
-	copyFileSync(join(import.meta.dir, "publish-packages.mjs"), script);
+	copyFileSync(join(import.meta.dirname, "publish-packages.mjs"), script);
 	writeFileSync(join(root, "registry.json"), "[]");
 	writeFileSync(join(root, "calls.jsonl"), "");
 	const packages = names.map((name, index) => {
@@ -36,7 +43,7 @@ beforeEach(() => {
 	const npm = join(root, "bin", "npm");
 	writeFileSync(
 		npm,
-		`#!${process.execPath}
+		`#!/usr/bin/env bun
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 const args = process.argv.slice(2);
 appendFileSync(process.env.CALLS, JSON.stringify(args) + "\\n");
@@ -69,10 +76,13 @@ if (args[0] === "view") {
 	chmodSync(npm, 0o755);
 });
 
-afterEach(() => rmSync(root, { recursive: true, force: true }));
+afterEach(async () => {
+	await reapBoundedProcesses();
+	rmSync(root, { recursive: true, force: true });
+});
 
 function run(env: Record<string, string> = {}, flags: string[] = []) {
-	return Bun.spawnSync([process.execPath, script, "--publish-dir", artifacts, ...flags], {
+	return runBoundedProcess("bun", [script, "--publish-dir", artifacts, ...flags], {
 		cwd: root,
 		env: {
 			...process.env,
@@ -81,8 +91,7 @@ function run(env: Record<string, string> = {}, flags: string[] = []) {
 			CALLS: join(root, "calls.jsonl"),
 			...env,
 		},
-		stdout: "pipe",
-		stderr: "pipe",
+		timeout: 4_000,
 	});
 }
 
@@ -95,10 +104,10 @@ function calls(): string[][] {
 }
 
 describe("repository release upload", () => {
-	it("preflights the full cohort, resumes partial uploads, and succeeds when nothing remains", () => {
-		const first = run({ FAIL_PACKAGE: "@fixture/platform-b" });
+	it("preflights the full cohort, resumes partial uploads, and succeeds when nothing remains", async () => {
+		const first = await run({ FAIL_PACKAGE: "@fixture/platform-b" });
 		expect(first.exitCode).not.toBe(0);
-		expect(first.stderr.toString()).toContain("Upload failed: @fixture/platform-b");
+		expect(first.stderr).toContain("Upload failed: @fixture/platform-b");
 		expect(calls().map((args) => args[0])).toEqual([
 			"view",
 			"view",
@@ -113,7 +122,7 @@ describe("repository release upload", () => {
 		);
 
 		writeFileSync(join(root, "calls.jsonl"), "");
-		const retry = run();
+		const retry = await run();
 		expect(retry.exitCode).toBe(0);
 		const uploads = calls().filter((args) => args[0] === "publish");
 		expect(uploads.map((args) => args[1])).toEqual([
@@ -128,49 +137,123 @@ describe("repository release upload", () => {
 		expect(JSON.parse(readFileSync(join(root, "registry.json"), "utf8"))).toEqual(names);
 
 		writeFileSync(join(root, "calls.jsonl"), "");
-		expect(run().exitCode).toBe(0);
+		expect((await run()).exitCode).toBe(0);
 		expect(calls().map((args) => args[0])).toEqual(["view", "view", "view", "view"]);
 	});
 
-	it.each(["E401", "ETIMEDOUT"])("aborts before upload when preflight returns %s", (code) => {
-		const result = run({ VIEW_ERROR: code });
+	it.each(["E401", "ETIMEDOUT"])("aborts before upload when preflight returns %s", async (code) => {
+		const result = await run({ VIEW_ERROR: code });
 		expect(result.exitCode).not.toBe(0);
-		expect(result.stderr.toString()).toContain("Could not check @fixture/library@1.0.0");
+		expect(result.stderr).toContain("Could not check @fixture/library@1.0.0");
 		expect(calls().map((args) => args[0])).toEqual(["view"]);
 	});
 
-	it("rejects ambiguous successful preflight output", () => {
-		const result = run({ EMPTY_VIEW: "1" });
+	it("rejects ambiguous successful preflight output", async () => {
+		const result = await run({ EMPTY_VIEW: "1" });
 		expect(result.exitCode).not.toBe(0);
-		expect(result.stderr.toString()).toContain("Inconclusive npm lookup");
+		expect(result.stderr).toContain("Inconclusive npm lookup");
 		expect(calls().map((args) => args[0])).toEqual(["view"]);
 	});
 
-	it("preflights a dry run without uploading", () => {
-		expect(run({}, ["--dry-run"]).exitCode).toBe(0);
+	it("preflights a dry run without uploading", async () => {
+		expect((await run({}, ["--dry-run"])).exitCode).toBe(0);
 		expect(calls().map((args) => args[0])).toEqual(["view", "view", "view", "view"]);
 	});
 
-	it("validates every artifact before any registry request", () => {
+	it("validates every artifact before any registry request", async () => {
 		rmSync(join(artifacts, "3.tgz"));
 		symlinkSync(join(artifacts, "0.tgz"), join(artifacts, "3.tgz"));
-		const result = run();
+		const result = await run();
 		expect(result.exitCode).not.toBe(0);
-		expect(result.stderr.toString()).toContain("Release artifact must be a regular file");
+		expect(result.stderr).toContain("Release artifact must be a regular file");
 		expect(calls()).toEqual([]);
 	});
 
-	it("rejects escaped artifact paths and conflicting modes", () => {
+	it("rejects escaped artifact paths and conflicting modes", async () => {
 		writeFileSync(
 			join(artifacts, "packages.json"),
 			JSON.stringify([{ name: "@fixture/library", version: "1.0.0", file: "../outside.tgz" }]),
 		);
-		const escaped = run();
+		const escaped = await run();
 		expect(escaped.exitCode).not.toBe(0);
-		expect(escaped.stderr.toString()).toContain("Invalid release inventory");
-		const conflicting = run({}, ["--pack-dir", artifacts]);
+		expect(escaped.stderr).toContain("Invalid release inventory");
+		const conflicting = await run({}, ["--pack-dir", artifacts]);
 		expect(conflicting.exitCode).not.toBe(0);
-		expect(conflicting.stderr.toString()).toContain("Choose --pack-dir");
+		expect(conflicting.stderr).toContain("Choose --pack-dir");
 		expect(calls()).toEqual([]);
+	});
+});
+
+type PackageManifest = {
+	name: string;
+	version?: string;
+	private?: boolean;
+	dependencies?: Record<string, string>;
+	scripts?: Record<string, string>;
+};
+
+describe("repository release pack", () => {
+	it("packs public pnpm workspace packages in dependency order with lifecycle LICENSE files", async () => {
+		const workspace = join(root, "workspace");
+		const pack = join(root, "pack");
+		const writeJson = (path: string, manifest: PackageManifest) => {
+			mkdirSync(join(path, ".."), { recursive: true });
+			writeFileSync(path, JSON.stringify(manifest));
+		};
+		mkdirSync(join(workspace, "scripts"), { recursive: true });
+		copyFileSync(script, join(workspace, "scripts", "publish-packages.mjs"));
+		mkdirSync(join(workspace, "packages", "crust", "src", "commands"), { recursive: true });
+		writeFileSync(join(workspace, "packages", "crust", "src", "commands", "publish.ts"), "");
+		writeFileSync(join(workspace, "pnpm-workspace.yaml"), "packages:\n  - packages/*\n");
+		writeFileSync(join(workspace, "LICENSE"), "fixture license");
+		writeJson(join(workspace, "package.json"), { name: "fixture-root", private: true });
+		const scripts = { prepack: "cp ../../LICENSE LICENSE", postpack: "rm -f LICENSE" };
+		writeJson(join(workspace, "packages", "lib", "package.json"), {
+			name: "@fixture/lib",
+			version: "1.0.0",
+			scripts,
+		});
+		writeJson(join(workspace, "packages", "app", "package.json"), {
+			name: "@fixture/app",
+			version: "1.0.0",
+			dependencies: { "@fixture/lib": "workspace:^" },
+			scripts,
+		});
+		writeJson(join(workspace, "packages", "private", "package.json"), {
+			name: "@fixture/private",
+			private: true,
+		});
+
+		// pnpm pack resolves workspace: ranges from the installed workspace.
+		const install = await runBoundedProcess("pnpm", ["install"], {
+			cwd: workspace,
+			timeout: 4_000,
+		});
+		expect(install.exitCode, install.stderr).toBe(0);
+		const result = await runBoundedProcess(
+			"bun",
+			[join(workspace, "scripts", "publish-packages.mjs"), "--pack-dir", pack],
+			{ cwd: workspace, timeout: 4_000 },
+		);
+		expect(result.exitCode, result.stderr).toBe(0);
+		expect(JSON.parse(readFileSync(join(pack, "packages.json"), "utf8"))).toEqual([
+			{ name: "@fixture/lib", version: "1.0.0", file: "0.tgz" },
+			{ name: "@fixture/app", version: "1.0.0", file: "1.tgz" },
+		]);
+		const extracted = join(root, "extracted");
+		mkdirSync(extracted);
+		const untar = await runBoundedProcess("tar", ["-xzf", join(pack, "1.tgz"), "-C", extracted], {
+			timeout: 4_000,
+		});
+		expect(untar.exitCode).toBe(0);
+		expect(readFileSync(join(extracted, "package", "LICENSE"), "utf8")).toBe("fixture license");
+		// pnpm strips publish-lifecycle scripts from packed manifests by default.
+		expect(JSON.parse(readFileSync(join(extracted, "package", "package.json"), "utf8"))).toEqual({
+			name: "@fixture/app",
+			version: "1.0.0",
+			dependencies: { "@fixture/lib": "^1.0.0" },
+			scripts: {},
+		});
+		expect(existsSync(join(workspace, "packages", "app", "LICENSE"))).toBe(false);
 	});
 });

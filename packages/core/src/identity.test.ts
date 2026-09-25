@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { CrustError } from "./errors.ts";
 import { defineExtensionId } from "./identity.ts";

@@ -41,12 +41,12 @@
 		"crust": "src/cli.ts"
 	},
 	"scripts": {
-		"build": "tsdown && bun src/cli.ts build",
+		"build": "vp pack && bun src/cli.ts build",
 		"release": "bun src/cli.ts publish",
 		"dev": "bun src/cli.ts",
 		"start": "bun .crust/root/bin/crust.js",
 		"check:types": "tsc --noEmit",
-		"test": "bun test"
+		"test": "vp test"
 	},
 	"dependencies": {
 		"@crustjs/core": "workspace:^",
@@ -62,7 +62,7 @@
 		"@crustjs/testing": "workspace:*",
 		"@crustjs/utils": "workspace:*",
 		"publint": "^0.3.24",
-		"tsdown": "catalog:"
+		"vite-plus": "catalog:"
 	},
 	"engines": {
 		"bun": ">=1.4.0"

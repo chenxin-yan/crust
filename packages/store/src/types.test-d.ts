@@ -1,4 +1,4 @@
-// Compile-time contracts, enforced by check:types (not bun test).
+// Compile-time contracts, enforced by check:types (not vp test).
 
 import type { StandardSchema } from "@crustjs/utils/schema";
 import { z } from "zod";

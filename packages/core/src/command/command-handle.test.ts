@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vite-plus/test";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { unwrap } from "../../tests/helpers.ts";

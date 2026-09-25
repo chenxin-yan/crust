@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach } from "bun:test";
+import { describe, expect, it, beforeEach, afterEach } from "vite-plus/test";
 
 import { Crust, defineContext, defineExtension, defineExtensionId } from "../index.ts";
 

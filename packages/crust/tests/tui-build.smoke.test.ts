@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,10 +6,12 @@ import { fileURLToPath } from "node:url";
 
 import { Crust } from "@crustjs/core";
 import { captureExecute } from "@crustjs/testing";
-import { runProcess } from "@crustjs/utils/process";
+import { which } from "@crustjs/utils/process";
+import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 
 import { buildCommand } from "../src/commands/build.ts";
 import { BUN_TARGETS } from "../src/utils/build-helpers.ts";
+import { reapBoundedProcesses, runBoundedProcess } from "./bounded-process.ts";
 import { hostTarget } from "./helpers.ts";
 
 // Opt-in (CRUST_TUI_SMOKE=1): installs pinned OpenTUI packages from npm into a
@@ -64,30 +66,24 @@ async function buildFixture(command: string, entry: string, bunPlugins: string[]
 	return join(fixtureDir, ".crust", BUN_TARGETS.info[target].alias, "bin", `${command}-${target}`);
 }
 
-async function runInTerminal(
+const terminalFixture = join(import.meta.dirname, "fixtures", "run-in-terminal.ts");
+
+/** Runs `binary` in a Bun pseudo-terminal (via the fixture), presses `q` once `readyMarker` renders. */
+function runInTerminal(
 	binary: string,
 	readyMarker: string,
-): Promise<{ exitCode: number | null; output: string }> {
-	let output = "";
-	const terminal = new Bun.Terminal({
-		cols: 140,
-		rows: 40,
-		data: (_terminal, chunk) => {
-			output += new TextDecoder().decode(chunk);
-		},
+): { exitCode: number | null; output: string } {
+	// The fixture waits up to 10s for the marker and 6s for exit, then kills the binary.
+	const run = spawnSync(which("bun")!, [terminalFixture, binary, readyMarker, fixtureDir], {
+		encoding: "utf8",
+		timeout: 30_000,
 	});
-	const proc = Bun.spawn([binary], {
-		cwd: fixtureDir,
-		env: { ...process.env, TERM: "xterm-256color" },
-		terminal,
-	});
-	const deadline = Date.now() + 10_000;
-	while (!output.includes(readyMarker) && Date.now() < deadline) await Bun.sleep(100);
-	terminal.write("q");
-	const exitCode = await Promise.race([proc.exited, Bun.sleep(6_000).then(() => null)]);
-	if (exitCode === null) proc.kill(9);
-	terminal.close();
-	return { exitCode, output };
+	if (run.status !== 0) {
+		throw new Error(
+			`PTY fixture failed (status ${run.status}, signal ${run.signal}):\n${run.stderr}`,
+		);
+	}
+	return JSON.parse(run.stdout) as { exitCode: number | null; output: string };
 }
 
 describe.skipIf(!enabled)("crust build OpenTUI smoke (CRUST_TUI_SMOKE=1)", () => {
@@ -172,21 +168,24 @@ await new Crust("core-smoke")
 `,
 		);
 
-		const install = await runProcess(process.execPath, ["install", "--minimum-release-age=0"], {
+		const install = await runBoundedProcess(which("bun")!, ["install", "--minimum-release-age=0"], {
 			cwd: fixtureDir,
 			env: { ...process.env, BUN_BE_BUN: "1" },
+			timeout: 170_000,
 		});
 		if (install.exitCode !== 0) throw new Error(`bun install failed:\n${install.stderr}`);
 	}, 180_000);
 
-	afterAll(() => {
+	// beforeAll's bun install is reaped before the fixture goes.
+	afterAll(async () => {
+		await reapBoundedProcesses();
 		rmSync(fixtureDir, { recursive: true, force: true });
 	});
 
 	it("compiles a Solid app with crust.bunPlugins @opentui/solid/bun-plugin and runs it reactively", async () => {
 		const outfile = await buildFixture("solid-smoke", "solid.tsx", ["@opentui/solid/bun-plugin"]);
 
-		const { exitCode, output } = await runInTerminal(outfile, "SOLID_REACTIVE_OK");
+		const { exitCode, output } = runInTerminal(outfile, "SOLID_REACTIVE_OK");
 		expect(output).toContain("SOLID_MOUNTED");
 		expect(output).toContain("SOLID_REACTIVE_OK");
 		expect(output).not.toContain("Orphan text");
@@ -196,7 +195,7 @@ await new Crust("core-smoke")
 	it("compiles a core app without plugins and runs it reactively", async () => {
 		const outfile = await buildFixture("core-smoke", "core.ts", []);
 
-		const { exitCode, output } = await runInTerminal(outfile, "CORE_REACTIVE_OK");
+		const { exitCode, output } = runInTerminal(outfile, "CORE_REACTIVE_OK");
 		expect(output).toContain("CORE_REACTIVE_OK");
 		expect(exitCode).toBe(0);
 	}, 120_000);

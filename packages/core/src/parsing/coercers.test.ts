@@ -1,6 +1,7 @@
-import { describe, expect, it } from "bun:test";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
+
+import { describe, expect, it } from "vite-plus/test";
 
 import { CrustError } from "../errors.ts";
 import { coerceJson, coercePath, coerceUrl } from "./coercers.ts";

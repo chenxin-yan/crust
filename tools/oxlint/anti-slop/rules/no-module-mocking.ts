@@ -5,6 +5,9 @@ import { resolveVariable } from "../shared/scope.ts";
 
 const moduleMockMethods = new Set(["doMock", "mock", "setMock", "unstable_mockModule"]);
 
+// Vite+ re-exports Vitest's `vi` from `vite-plus/test`.
+const vitestSources = new Set(["vitest", "vite-plus/test"]);
+
 type TestFramework = "bun" | "jest" | "vitest";
 
 function importedName(node: ESTree.Node): string | null {
@@ -23,7 +26,7 @@ function importedFrameworkObject(variable: Variable): TestFramework | null {
 		}
 		const source = definition.parent.source.value;
 		const name = importedName(definition.node);
-		if (source === "vitest" && name === "vi") return "vitest";
+		if (vitestSources.has(source) && name === "vi") return "vitest";
 		if (source === "@jest/globals" && name === "jest") return "jest";
 		if (source === "bun:test" && name === "mock") return "bun";
 	}
@@ -43,7 +46,7 @@ function importedNamespaceFrameworkObject(
 			continue;
 		}
 		const source = definition.parent.source.value;
-		if (source === "vitest" && member === "vi") return "vitest";
+		if (vitestSources.has(source) && member === "vi") return "vitest";
 		if (source === "@jest/globals" && member === "jest") return "jest";
 		if (source === "bun:test" && member === "mock") return "bun";
 	}
