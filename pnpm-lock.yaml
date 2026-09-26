@@ -438,6 +438,9 @@ importers:
       '@crustjs/core':
         specifier: workspace:*
         version: link:../core
+      '@crustjs/env':
+        specifier: workspace:*
+        version: link:../env
       '@crustjs/testing':
         specifier: workspace:*
         version: link:../testing
