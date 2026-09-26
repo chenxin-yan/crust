@@ -380,7 +380,9 @@ describe("Context-owned sections", () => {
 	const envSection = { title: "Environment", body: "APP_TOKEN  API token" };
 	const sectioned = (name = "env") => {
 		let setups = 0;
-		const factory = defineContext(name, { sections: [envSection] }, () => ++setups);
+		const factory = defineContext(name)
+			.sections(envSection)
+			.setup(() => ++setups);
 		return { factory, setups: () => setups };
 	};
 
@@ -388,9 +390,10 @@ describe("Context-owned sections", () => {
 		const sections = [
 			{ title: "Environment", body: "APP_TOKEN", except: [defineExtensionId("man")] },
 		];
-		const env = defineContext("env", { sections }, () => 1);
+		const builder = defineContext("env").sections(...sections);
 		sections[0]!.title = "Mutated";
 		sections.length = 0;
+		const env = builder.setup(() => 1);
 
 		for (const instance of [env(), env.of(2)]) {
 			expect(instance.sections).toEqual([
@@ -401,17 +404,41 @@ describe("Context-owned sections", () => {
 			expect(Object.isFrozen(instance.sections[0]?.except)).toBe(true);
 		}
 		expect(env().sections).toBe(env.of(3).sections);
-		expect(defineContext("plain", () => 1)().sections).toEqual([]);
+		expect(defineContext("plain").setup(() => 1)().sections).toEqual([]);
 	});
 
-	it("rejects invalid sections at definition with Context attribution", () => {
+	it("appends sections without mutating sibling builders or losing flags and dependencies", async () => {
+		const config = defineContext("config").setup(() => "configured");
+		const base = defineContext("env").sections(envSection);
+		const notes = { title: "Notes", body: "Setup notes" };
+		const extended = base
+			.use(config)
+			.sections(notes)
+			.flags({ name: "port", type: "number", default: 3000 })
+			.sections()
+			.setup(async ({ ctx, flags }) => `${await ctx.config}:${flags.port}`);
+		const sibling = base.sections({ title: "Other", body: "Other notes" }).setup(() => 0);
+
+		expect(Object.isFrozen(base)).toBe(true);
+		expect(base.setup(() => 0)().sections).toEqual([envSection]);
+		expect(sibling().sections.map(({ title }) => title)).toEqual(["Environment", "Other"]);
+		expect(extended().sections).toEqual([envSection, notes]);
+		await expect(
+			new Crust("cli")
+				.provide(config(), extended())
+				.action(({ ctx }) => ctx.env)
+				.run([]),
+		).resolves.toMatchObject({ status: "completed", result: "configured:3000" });
+	});
+
+	it("rejects invalid sections at declaration with Context attribution", () => {
 		for (const section of [
 			{ title: " ", body: "body" },
 			{ title: "Multi\nline", body: "body" },
 			{ title: "Title", body: "" },
 			{ title: "Title", body: "body", only: [] },
 		]) {
-			expect(() => defineContext("env", { sections: [section] }, () => 1)).toThrow(
+			expect(() => defineContext("env").sections(section)).toThrow(
 				expect.objectContaining({
 					code: "DEFINITION",
 					message: 'Context "env" contains invalid documentation sections',
@@ -500,7 +527,9 @@ describe("Context-owned sections", () => {
 	});
 
 	it("documents a same-name .of() replacement inside an Extension only once", async () => {
-		const env = defineContext("env", { sections: [envSection] }, () => 1);
+		const env = defineContext("env")
+			.sections(envSection)
+			.setup(() => 1);
 		const provider = defineExtension(defineExtensionId("env-provider")).provide(env(), env.of(2));
 		const app = new Crust("cli").extend(provider).action(({ ctx }) => ctx.env);
 
@@ -512,8 +541,12 @@ describe("Context-owned sections", () => {
 		{ sections: [{ title: "Environment", body: "Replacement documentation" }] },
 		{ sections: [] },
 	])("uses only the replacement Context's sections: $sections", async ({ sections }) => {
-		const old = defineContext("env", { sections: [envSection] }, () => 1);
-		const current = defineContext("env", { sections }, () => 2);
+		const old = defineContext("env")
+			.sections(envSection)
+			.setup(() => 1);
+		const current = defineContext("env")
+			.sections(...sections)
+			.setup(() => 2);
 		const provider = defineExtension(defineExtensionId("env-provider"))
 			.provide(old())
 			.provide(current());

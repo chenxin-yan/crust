@@ -333,16 +333,12 @@ describe("built-in extensions", () => {
 	});
 
 	it("renders Context sections only on the command where the Context is provided", async () => {
-		const env = defineContext(
-			"env",
-			{ sections: [{ title: "Environment", body: "APP_TOKEN  API token" }] },
-			() => ({}),
-		);
-		const database = defineContext(
-			"database",
-			{ sections: [{ title: "Database", body: "DATABASE_URL  connection" }] },
-			() => ({}),
-		);
+		const env = defineContext("env")
+			.sections({ title: "Environment", body: "APP_TOKEN  API token" })
+			.setup(() => ({}));
+		const database = defineContext("database")
+			.sections({ title: "Database", body: "DATABASE_URL  connection" })
+			.setup(() => ({}));
 		const app = new Crust("app")
 			.extend(help())
 			.provide(env())

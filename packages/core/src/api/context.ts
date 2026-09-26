@@ -298,13 +298,24 @@ function createContextBuilder(
 ): ErasedContextBuilder {
 	const builder = {
 		use: (...factories: readonly AnyContextFactory[]) =>
-			createContextBuilder(name, Object.freeze([...use, ...factories.map(definingOf)]), ownedFlags, sections),
+			createContextBuilder(
+				name,
+				Object.freeze([...use, ...factories.map(definingOf)]),
+				ownedFlags,
+				sections,
+			),
 		// Snapshot and collision-check each call's definitions eagerly, like one combined list.
 		flags: (...defs: readonly NamedFlagDef[]) =>
 			createContextBuilder(name, use, Object.freeze(toFlagsRecord(defs, ownedFlags)), sections),
 		sections: (...inputs: readonly RuntimeCommandSectionInput[]) =>
-			createContextBuilder(name, use, ownedFlags, Object.freeze([...sections, ...validateCommandSections(name, inputs, "context")])),
-		setup: (setup: ErasedContextSetup) => createContextFactory(name, use, ownedFlags, sections, setup),
+			createContextBuilder(
+				name,
+				use,
+				ownedFlags,
+				Object.freeze([...sections, ...validateCommandSections(name, inputs, "context")]),
+			),
+		setup: (setup: ErasedContextSetup) =>
+			createContextFactory(name, use, ownedFlags, sections, setup),
 	};
 	// SAFETY: public signatures check inputs; the erased setup receives exactly (input, options).
 	return Object.freeze(builder) as ErasedContextBuilder;
@@ -342,7 +353,12 @@ function createContextFactory(
  */
 export function defineContext<Name extends string>(name: Name): ContextBuilder<Name> {
 	// SAFETY: the builder's public signatures carry the phantoms the erased runtime handle drops.
-	return createContextBuilder(name, Object.freeze([]), Object.freeze({}), Object.freeze([])) as ContextBuilder<Name>;
+	return createContextBuilder(
+		name,
+		Object.freeze([]),
+		Object.freeze({}),
+		Object.freeze([]),
+	) as ContextBuilder<Name>;
 }
 
 export type FactoryValueOf<F extends AnyContextFactory> =

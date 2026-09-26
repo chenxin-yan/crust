@@ -197,10 +197,9 @@ export function defineEnv<
 	const source = options?.source;
 	const skipValidation = options?.skipValidation === true;
 	const emptyStringAsUndefined = options?.emptyStringAsUndefined === true;
-	return defineContext(
-		name,
-		{ sections: environmentSection(owned) },
-		async (): Promise<EnvValue<V, O>> => {
+	return defineContext(name)
+		.sections(...environmentSection(owned))
+		.setup(async (): Promise<EnvValue<V, O>> => {
 			const values = source ?? process.env;
 			if (skipValidation) {
 				const raw = owned.map(([key]) => [key, readRaw(values, key, emptyStringAsUndefined)]);
@@ -209,6 +208,5 @@ export function defineEnv<
 			}
 			// SAFETY: skipValidation was not true, so O admits the validated branch.
 			return (await validate<V>(owned, values, emptyStringAsUndefined)) as EnvValue<V, O>;
-		},
-	);
+		});
 }

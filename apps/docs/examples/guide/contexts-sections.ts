@@ -1,14 +1,10 @@
 import { Crust, defineCommand, defineContext } from "@crustjs/core";
 import { help } from "@crustjs/extensions";
 
-const api = defineContext(
-	"api",
-	{
-		// [!code highlight]
-		sections: [{ title: "Environment", body: "API_TOKEN  Token sent with every request" }],
-	},
-	() => ({ token: process.env.API_TOKEN }),
-);
+const api = defineContext("api")
+	// [!code highlight]
+	.sections({ title: "Environment", body: "API_TOKEN  Token sent with every request" })
+	.setup(() => ({ token: process.env.API_TOKEN }));
 
 const deploy = defineCommand("deploy", (command) =>
 	command.use(api).action(async ({ ctx, stdout }) => {

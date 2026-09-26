@@ -220,10 +220,11 @@ Declared in [`api/context.ts`](https://github.com/chenxin-yan/crust/blob/main/pa
 
 <auto-type-table path="../../../../../packages/core/src/api/context.ts" name="ContextBuilder" />
 
-`defineContext(name)` starts an immutable definition. `.use()` and `.flags()` append and return new frozen builders; the original is unchanged. The terminal `.setup(callback)` returns a [`ContextFactory`](#contextfactory). An unfinished builder cannot be provided or used as a factory.
+`defineContext(name)` starts an immutable definition. `.use()`, `.flags()`, and `.sections()` append and return new frozen builders; the original is unchanged. The terminal `.setup(callback)` returns a [`ContextFactory`](#contextfactory). An unfinished builder cannot be provided or used as a factory.
 
 - `.use(...factories)` declares the dependencies setup reads from `ctx`. Literal lists retain exact types; widened arrays declare open dependencies checked at runtime during composition. Empty calls are allowed.
 - `.flags(...defs)` declares owned flags. Definitions are copied, and spellings are checked against earlier calls both by TypeScript and when the method runs.
+- `.sections(...sections)` declares [`CommandSectionInput`](#commandsectioninput) documentation, validated and frozen at declaration. It documents only the providing command (the root for Extension-provided Contexts); duplicate titles from other Contexts or command sections fail preparation. See [Context-owned documentation](/docs/guide/contexts#documentation-owned-by-a-context).
 - Setup receives types from the preceding declarations. Annotate its second parameter for factory options without restating `ctx`, flag, or return types:
 
 <include lang="ts">../../../examples/guide/contexts-setup.ts#options</include>
@@ -248,8 +249,6 @@ app.provide(config.of({ region: "us" })); // precomputed value, e.g. a test doub
 <auto-type-table path="../../../../../packages/core/src/api/context.ts" name="ContextSetup" />
 
 `ContextSetup<Flags, Deps>` describes setup's first parameter; factory options are its second parameter. `flags` contains validated values from `.flags()`, and `.use()` determines the setup's `ctx` bag. A `ContextBag<Deps>` maps each name to a `Promise` of its value: reading a property starts memoized construction, so destructuring the bag starts every construction immediately.
-
-`sections` declares [`CommandSectionInput`](#commandsectioninput) documentation, validated and frozen at definition. It documents only the providing command (the root for Extension-provided Contexts); duplicate titles on that command fail preparation. See [Context-owned documentation](/docs/guide/contexts#documentation-owned-by-a-context).
 
 Setup also receives the invocation's `stdout`, `stderr`, `signal`, and `defer(cleanup)`.
 

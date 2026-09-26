@@ -27,16 +27,12 @@ describe("man Extension", () => {
 	});
 
 	it("documents Context sections where each Context is provided", async () => {
-		const env = defineContext(
-			"env",
-			{ sections: [{ title: "Environment", body: "APP_TOKEN  API token" }] },
-			() => ({}),
-		);
-		const database = defineContext(
-			"database",
-			{ sections: [{ title: "Database", body: "DATABASE_URL  connection" }] },
-			() => ({}),
-		);
+		const env = defineContext("env")
+			.sections({ title: "Environment", body: "APP_TOKEN  API token" })
+			.setup(() => ({}));
+		const database = defineContext("database")
+			.sections({ title: "Database", body: "DATABASE_URL  connection" })
+			.setup(() => ({}));
 		const { files } = await runBuildHooks(
 			new Crust("demo")
 				.extend(man())

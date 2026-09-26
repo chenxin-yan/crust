@@ -126,7 +126,7 @@ Environment:
   API_TOKEN  Token sent with every request
 ```
 
-When a Context needs explaining — the environment variables it reads, the files it opens — list the text in its `sections`. They take the same `{ title, body, only?, except? }` shape and validation as a [command's own `sections`](/docs/api/types#commandsectioninput), checked once when the Context is defined.
+When a Context needs explaining — the environment variables it reads, the files it opens — declare it with `.sections(...sections)` before `.setup()`. Each call appends to a new builder, taking the same `{ title, body, only?, except? }` shape as a [command's own `sections`](/docs/api/types#commandsectioninput). Sections are validated and copied when declared.
 
 Unlike flags, sections document **only the command where the Context is provided**, never the commands below it: the reader sees them once, where the dependency is set up. `.provide(api())` on the root puts them in root help; `.provide(api())` inside `db` puts them in `app db --help` only. A Context provided by an [Extension](/docs/guide/extensions) documents the root once. Help, [manual pages](/docs/modules/man), and every other consumer of the [command snapshot](/docs/api/crust#snapshot) render them after the command's own sections, the same way.
 
