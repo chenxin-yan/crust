@@ -76,7 +76,9 @@ The effective provider on the path must come from the **same factory**, includin
 
 Install [`@crustjs/env`](/docs/modules/env) alongside the Effect adaptor. `defineEnv()` returns a plain Crust Context, so the existing `service()` helper provides typed values and catchable errors without an additional Layer or adapter:
 
-<include lang="ts">../../../examples/modules/effect-env.ts#env-example</include>
+<include lang="ts" meta="twoslash">
+  ../../../examples/modules/effect-env.ts#env-example
+</include>
 
 `PORT` is a `number` and `API_TOKEN` is a `string`. Validation runs only when the program reads `service(env)`; repeated reads share the invocation's result. Providing the Context adds its Environment section to help and man pages without reading source values. Unhandled failures are restored to the original Core error for CLI reporting.
 

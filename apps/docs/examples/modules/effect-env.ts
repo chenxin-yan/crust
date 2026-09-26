@@ -12,7 +12,8 @@ const env = defineEnv("env", {
 const app = new Crust("app").provide(env()).action(
 	handler(function* () {
 		const { PORT } = yield* service(env);
-		return PORT; // number
+		//      ^?
+		return PORT;
 	}),
 );
 //#endregion

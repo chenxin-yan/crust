@@ -11,7 +11,8 @@ const env = defineEnv("env", {
 
 const app = new Crust("app").provide(env()).command("serve", (cmd) =>
 	cmd.action(async ({ ctx }) => {
-		const { DATABASE_URL, PORT } = await ctx.env; // URL, number
+		const { DATABASE_URL, PORT } = await ctx.env;
+		//      ^?
 		console.log(`listening on ${PORT} for ${DATABASE_URL.host}`);
 	}),
 );
