@@ -203,9 +203,11 @@ export function applyContextSections(
 		path: string,
 		instances: readonly AnyContextInstance[],
 	): void => {
-		if (instances.some((instance) => instance.sections.length > 0)) {
+		// Match Context resolution: the last provider for a name replaces earlier ones.
+		const effective = [...new Map(instances.map((instance) => [instance.name, instance])).values()];
+		if (effective.some((instance) => instance.sections.length > 0)) {
 			const titles = new Set((node.meta.sections ?? []).map(({ title }) => title));
-			for (const instance of instances) {
+			for (const instance of effective) {
 				for (const { title } of instance.sections) {
 					if (titles.has(title)) {
 						throw new CrustError(
@@ -220,7 +222,7 @@ export function applyContextSections(
 			}
 			node.meta.sections = [
 				...(node.meta.sections ?? []),
-				...instances.flatMap((instance) => instance.sections),
+				...effective.flatMap((instance) => instance.sections),
 			];
 		}
 		for (const [name, child] of Object.entries(node.subCommands)) {
