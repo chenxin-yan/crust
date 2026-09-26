@@ -1390,6 +1390,8 @@ export class Crust<
 	 * reverse construction order after post-run hooks. TypeScript rejects known Context-owned flag collisions, including pending
 	 * Extension commands. Consuming operations throw `DEFINITION` for actual collisions.
 	 *
+	 * Context `sections` document only this command, never descendants. Preparation throws
+	 * `DEFINITION` when one repeats a section title already on this command.
 	 */
 	provide<const Cs extends readonly AnyContextInstance[] = never>(
 		...instances: KnownContextInstances<Cs> &
@@ -1419,6 +1421,7 @@ export class Crust<
 		>({
 			...cloneFlagRegistry(this._node),
 			contexts: [...this._node.contexts, ...instances.map((instance) => ({ instance }))],
+			providedContexts: [...this._node.providedContexts, ...instances],
 		});
 		for (const instance of instances) {
 			for (const [name, definition] of Object.entries(instance.ownedFlags)) {

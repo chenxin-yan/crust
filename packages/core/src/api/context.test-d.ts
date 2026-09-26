@@ -142,3 +142,22 @@ function _typecheckBrandsInlineFlagsThatCollideWithRegisteredExtensionFlagsMatch
 	};
 	void invalidCompositions;
 }
+
+// checks literal Context sections like command sections
+function _typecheckChecksLiteralContextSections() {
+	const man = defineExtensionId("man");
+	defineContext("env", { sections: [{ title: "Environment", body: "APP_TOKEN" }] }, () => 1);
+	defineContext("env", { sections: [{ title: "Env", body: "x", only: [man] }] }, () => 1);
+	// @ts-expect-error -- section titles must be nonblank
+	defineContext("env", { sections: [{ title: "", body: "APP_TOKEN" }] }, () => 1);
+	// @ts-expect-error -- section audiences must be nonempty
+	defineContext("env", { sections: [{ title: "Env", body: "x", only: [] }] }, () => 1);
+	defineContext(
+		"env",
+		// @ts-expect-error -- only and except are mutually exclusive
+		{ sections: [{ title: "Env", body: "x", only: [man], except: [man] }] },
+		() => 1,
+	);
+	const env = defineContext("env", { sections: [{ title: "Env", body: "x" }] }, () => "value");
+	type _Value = Expect<Equal<Awaited<ReturnType<ReturnType<typeof env>["setup"]>>, string>>;
+}

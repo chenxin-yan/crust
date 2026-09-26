@@ -117,6 +117,7 @@ const app = new Crust("my-cli")
 ```
 
 - A Context's `flags` are installed on this command and later-added descendants. The builder's flag type includes them.
+- Its `sections` document only the providing command, after the command's own sections. Duplicate titles throw `DEFINITION` (`duplicate-section`) during preparation, not at `.provide()`. See [Context-owned documentation](/docs/guide/contexts#documentation-owned-by-a-context).
 - Within one call, dependencies may appear in any order; across calls, providers must precede their consumers.
 - Names, dependencies, and owned-flag collisions are checked by TypeScript. Dynamic collections that collide throw a `DEFINITION` error. Missing providers, dependency cycles, and lifecycle misuse on dynamic paths are reported as `DEFINITION` errors when a Context is pulled.
 - A command can shadow an inherited Context. After `.action()`, a local replacement must satisfy the value type that action received.
@@ -206,7 +207,7 @@ Editors complete command names, argument and flag names, and the action's result
 
 - Values bind directly against definitions without producing argv, then flow through parsers, schemas, Contexts, and the action. Custom parsers and schemas still receive their raw input, usually strings.
 - Supplied positionals must form a prefix. `undefined` means omitted. An empty `multiple` array means zero occurrences.
-- `run()` never reads `process.env`, so a flag's `env` fallback does not apply. Only [`.execute()`](#executeoptions) consults the environment.
+- Structured input binding never reads `process.env`, so a flag's `env` fallback does not apply. Only [`.execute()`](#executeoptions) uses flag environment fallbacks. Contexts such as [`@crustjs/env`](/docs/modules/env) can still read the environment when pulled.
 - Unknown argument or flag keys return a failed outcome before the action runs.
 - `raw` reaches the action as `rawArgs`, like tokens after `--`.
 - The path alone selects the command. Unknown path segments return a `COMMAND_NOT_FOUND` failure, even when the nearest parent has an action.

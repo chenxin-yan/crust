@@ -63,6 +63,8 @@ export type {
 	CrustErrorJson,
 	CrustErrorDetailsMap,
 	DefinitionErrorDetails,
+	EnvErrorDetails,
+	EnvIssue,
 	ParseErrorDetails,
 	ValidationErrorDetails,
 } from "./errors.ts";

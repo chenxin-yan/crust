@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { Crust } from "../../packages/core/dist/index.js";
 import { isInGitRepo } from "../../packages/create/dist/index.js";
 import { handler } from "../../packages/effect/dist/index.js";
+import { defineEnv } from "../../packages/env/dist/index.js";
 import { help } from "../../packages/extensions/dist/index.js";
 import * as man from "../../packages/man/dist/index.js";
 import { createMcpServer } from "../../packages/mcp/dist/index.js";
@@ -25,6 +26,7 @@ const roots = {
 	core: Crust,
 	create: isInGitRepo,
 	effect: handler,
+	env: defineEnv,
 	extensions: help,
 	man: man.man,
 	mcp: createMcpServer,

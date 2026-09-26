@@ -129,7 +129,7 @@ Command Snapshots are frozen, serializable descriptions of the command tree. The
   name="CommandSnapshot"
 />
 
-`flags` contains effective local and Context-owned flags. `meta.sections` holds each authored and Extension-contributed section separately; same-title merging happens only when a renderer consumes them.
+`flags` contains effective local and Context-owned flags. `meta.sections` holds each command-authored, Context-owned, and Extension-contributed section separately; same-title merging happens only when a renderer consumes them.
 
 ### `ArgSnapshot`
 
@@ -227,7 +227,7 @@ app.provide(config()); // runs setup lazily in each invocation
 app.provide(config.of({ region: "us" })); // precomputed value, e.g. a test double
 ```
 
-`.of(value)` creates an instance with no dependencies that keeps the factory's owned flags. Every invocation that pulls it disposes `value` if it is disposable (see [replacing a Context in tests](/docs/guide/contexts#replace-a-context-in-tests)).
+`.of(value)` creates an instance with no dependencies that keeps the factory's owned flags and sections. Every invocation that pulls it disposes `value` if it is disposable (see [replacing a Context in tests](/docs/guide/contexts#replace-a-context-in-tests)).
 
 ### `ContextConfig`, `ContextSetup`, and `ContextBag`
 
@@ -236,6 +236,8 @@ app.provide(config.of({ region: "us" })); // precomputed value, e.g. a test doub
 <auto-type-table path="../../../../../packages/core/src/api/context.ts" name="ContextSetup" />
 
 `flags` declares flags the Context owns and propagates. `use` declares Context dependencies and determines the setup's `ctx` bag. A `ContextBag<Deps>` maps each name to a `Promise` of its value: reading a property starts memoized construction, so destructuring the bag starts every construction immediately.
+
+`sections` declares [`CommandSectionInput`](#commandsectioninput) documentation, validated and frozen at definition. It documents only the providing command (the root for Extension-provided Contexts); duplicate titles on that command fail preparation. See [Context-owned documentation](/docs/guide/contexts#documentation-owned-by-a-context).
 
 Setup also receives the invocation's `stdout`, `stderr`, `signal`, and `defer(cleanup)`.
 

@@ -1,0 +1,66 @@
+{
+	"name": "@crustjs/env",
+	"version": "0.0.0",
+	"description": "Typed, validated environment variables as a Crust Context, documented in help and man pages",
+	"type": "module",
+	"sideEffects": false,
+	"license": "MIT",
+	"author": "chenxin-yan",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/chenxin-yan/crust.git",
+		"directory": "packages/env"
+	},
+	"homepage": "https://crustjs.com",
+	"bugs": {
+		"url": "https://github.com/chenxin-yan/crust/issues"
+	},
+	"keywords": [
+		"cli",
+		"env",
+		"environment",
+		"validation",
+		"crust",
+		"bun",
+		"typescript"
+	],
+	"files": [
+		"dist"
+	],
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"build": "vp pack",
+		"dev": "vp pack --watch",
+		"check:types": "tsc --noEmit",
+		"test": "vp test",
+		"prepack": "cp ../../LICENSE LICENSE",
+		"postpack": "rm -f LICENSE"
+	},
+	"devDependencies": {
+		"@crustjs/config": "workspace:*",
+		"@crustjs/core": "workspace:*",
+		"vite-plus": "catalog:"
+	},
+	"peerDependencies": {
+		"@crustjs/core": "workspace:^",
+		"typescript": "^7.0.0"
+	},
+	"peerDependenciesMeta": {
+		"typescript": {
+			"optional": true
+		}
+	},
+	"engines": {
+		"bun": ">=1.4.0",
+		"node": ">=22",
+		"deno": ">=2.8"
+	}
+}

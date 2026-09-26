@@ -25,6 +25,7 @@ import { isListed } from "../sections.ts";
 import type { ExecuteOptions, InvocationIO, InvocationOptions, ParseResult } from "../types.ts";
 import type { CrustCommandContext, RunOutcome } from "./crust.ts";
 import {
+	applyContextSections,
 	applyExtensionCommands,
 	applyExtensionFlags,
 	applyExtensionSections,
@@ -239,11 +240,13 @@ function buildExtensionTree(
 	return { rootNode, extensions };
 }
 
-/** Evaluate Extension section callbacks against current state and freeze the tree. */
+/** Install Context sections, evaluate Extension section callbacks, and freeze the tree. */
 function applySectionsAndFreeze(
 	rootNode: CommandNode,
 	extensions: readonly ExtensionData[],
 ): CommandNode {
+	// Before the authored snapshot, so Extension section callbacks observe Context sections.
+	applyContextSections(rootNode, extensions);
 	// The authored snapshot exists only to feed section callbacks; projecting the
 	// whole tree when nothing consumes it is wasted work on every fresh preparation.
 	if (extensions.some((extension) => extension.sections !== undefined)) {

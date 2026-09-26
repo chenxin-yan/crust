@@ -1,6 +1,16 @@
+import { validateCommandSections } from "../command/extensions-install.ts";
 import { CrustError, type CaughtError } from "../errors.ts";
 import { toFlagsRecord } from "../parsing/spellings.ts";
-import type { FlagsDef, InferFlags, InvocationIO, MergeFlags, NamedFlagDef } from "../types.ts";
+import type {
+	CommandSection,
+	FlagsDef,
+	InferFlags,
+	InvocationIO,
+	MergeFlags,
+	NamedFlagDef,
+	RuntimeCommandSectionInput,
+} from "../types.ts";
+import type { LocalSectionsBrand } from "../validation/commands.brands.ts";
 import type {
 	AttachedFlags,
 	ContextOwnedFlags,
@@ -62,9 +72,14 @@ export type ContextBag<Deps extends ContextMap = {}> = {
 export interface ContextConfig {
 	readonly flags?: readonly NamedFlagDef[];
 	readonly use?: readonly AnyContextFactory[];
+	/**
+	 * Documentation sections for the command that provides this Context (never its
+	 * descendants); an Extension-provided Context documents the root once.
+	 */
+	readonly sections?: readonly RuntimeCommandSectionInput[];
 }
 
-type ValidateContextConfig<R extends ContextConfig> = {
+type ValidateContextConfig<R extends ContextConfig> = LocalSectionsBrand<R> & {
 	readonly flags?: R["flags"] extends readonly NamedFlagDef[]
 		? ValidateLocalFlagDefs<R["flags"], never>
 		: "flags" extends keyof R
@@ -95,6 +110,8 @@ export interface ContextInstance<
 		: (state: [OF, Deps]) => void;
 	readonly name: Name;
 	readonly ownedFlags: FlagsDef;
+	/** Validated {@link ContextConfig.sections}, frozen at definition. */
+	readonly sections: readonly CommandSection[];
 	/** @internal — declared direct dependency factories */
 	readonly use: readonly AnyContextFactory[];
 	/** @internal defining factory, for adapters that identify Contexts by factory */
@@ -299,11 +316,12 @@ export function defineContext(
 	const setup = hasConfig ? maybeSetup! : configOrSetup;
 	const ownedFlags = Object.freeze(toFlagsRecord(config.flags ?? []));
 	const use = Object.freeze((config.use ?? []).map(definingOf));
+	const sections = Object.freeze(validateCommandSections(name, config.sections ?? [], "context"));
 	const instance = (
 		instanceUse: readonly AnyContextFactory[],
 		run: AnyContextInstance["setup"],
 	): AnyContextInstance => {
-		const value = { name, ownedFlags, use: instanceUse, factory: sealed, setup: run };
+		const value = { name, ownedFlags, sections, use: instanceUse, factory: sealed, setup: run };
 		// SAFETY: seal installs the private defining proof before this runtime value is erased.
 		return seal(value) as AnyContextInstance;
 	};
