@@ -1,6 +1,10 @@
+import { transformerMetaHighlight } from "@shikijs/transformers";
+import { rehypeCodeDefaultOptions } from "fumadocs-core/mdx-plugins";
 import { defineConfig, defineDocs } from "fumadocs-mdx/config";
 import lastModified from "fumadocs-mdx/plugins/last-modified";
 import { createGenerator, remarkAutoTypeTable } from "fumadocs-typescript";
+
+import { twoslashHovers } from "./twoslash.ts";
 
 const typeScriptGenerator = createGenerator({
 	tsconfigPath: "tsconfig.json",
@@ -27,6 +31,13 @@ export default defineConfig({
 				light: "gruvbox-light-hard",
 				dark: "gruvbox-dark-hard",
 			},
+			// Twoslash popups cannot lazy-load grammars, so every fence grammar used in content/ is preloaded (`text` is built in).
+			langs: ["ts", "tsx", "sh", "json"],
+			transformers: [
+				...(rehypeCodeDefaultOptions.transformers ?? []),
+				transformerMetaHighlight(),
+				...twoslashHovers(),
+			],
 		},
 	},
 });

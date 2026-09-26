@@ -7,6 +7,7 @@ icon: Rocket
 import { Callout } from "fumadocs-ui/components/callout";
 import { File, Files, Folder } from "fumadocs-ui/components/files";
 import { Step, Steps } from "fumadocs-ui/components/steps";
+import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 
 ## Create a new project
 
@@ -18,8 +19,6 @@ import { Step, Steps } from "fumadocs-ui/components/steps";
 npx create-crust@latest my-cli
 cd my-cli
 ```
-
-Pick a package manager once; the tabs remember it across the docs. `create-crust` detects the package manager that launched it and installs dependencies with the same one. It also asks which runtime the project develops and builds for: Bun (the default), Node.js, or Deno; pass `--runtime bun|node|deno` to skip the prompt. Deno projects are the exception: they always install with `deno install`, whichever package manager launched the scaffolder. The scaffolder creates:
 
 <Files>
   <Folder name="my-cli" defaultOpen>
@@ -36,8 +35,6 @@ Pick a package manager once; the tabs remember it across the docs. `create-crust
 </Step>
 <Step>
 ### Run it
-
-The generated `dev` script runs `src/cli.ts` with the runtime you picked (`bun run`, `node`, or `deno run -A`), whichever package manager installed the dependencies.
 
 ```npm
 npm run dev -- Ada --greet Welcome
@@ -94,7 +91,7 @@ npm run build
 npm run start Ada
 ```
 
-`crust build` stages the publishable npm package(s) in `.crust/`: Bun and Deno projects get one standalone binary per platform behind a Node launcher at `.crust/root/bin/my-cli.js`; Node projects get one JavaScript bundle at that path. `npm run release` publishes them. See [Build and distribution](/docs/guide/build-and-distribution) for cross-platform targets and the `.crust/` layout.
+`crust build` stages the publishable npm package(s) in `.crust/`. See [Build and distribution](/docs/guide/build-and-distribution) for cross-platform targets and the `.crust/` layout.
 
 <Callout type="info">
   Both `create-crust` and `crust` CLI are built with crust. If you would like to see crust in
@@ -104,79 +101,157 @@ npm run start Ada
 </Step>
 </Steps>
 
-## Add to an existing project
+## Manual setup
+
+To add Crust without the scaffolder, follow the steps below from your project directory. If configuration files already exist, merge the settings rather than replacing them.
 
 <Steps>
 <Step>
-### Install
+### Choose your runtime
+
+The runtime runs your CLI; the package manager installs dependencies. For Bun and Node.js, use whichever package-manager tab you prefer.
+
+<Tabs items={["Bun", "Node.js", "Deno"]} groupId="quick-start-runtime" persist>
+<Tab value="Bun">
+
+Use Bun 1.4 or later.
 
 ```npm
 npm install @crustjs/core @crustjs/extensions
-npm install -D @crustjs/crust
+npm install -D typescript @types/bun
 ```
 
-`@crustjs/crust` is only needed for `crust build`. Skip it if you bundle another way or run the source directly. Deno projects install with `deno add npm:`; see [Runtime support](/docs/guide/runtime-support).
+Set the module format in `package.json`, keeping the dependencies added above:
 
-</Step>
-<Step>
-### Configure `package.json`
-
-```json title="package.json"
+```json title="package.json (partial)"
 {
-  "private": true,
-  "type": "module",
-  "crust": { "runtime": "bun" },
-  "bin": { "my-cli": "src/cli.ts" },
-  "scripts": {
-    "dev": "bun run src/cli.ts",
-    "build": "crust build",
-    "release": "crust publish",
-    "start": "bun .crust/root/bin/my-cli.js"
-  }
+  "type": "module"
 }
 ```
-
-This is the Bun shape; `dev` runs the TypeScript source with Bun regardless of which package manager installed the dependencies. `bin` names the command and points at its source entry: `crust build` compiles it into `.crust/`, and `npm link` exposes the command locally by running the source, so start `src/cli.ts` with `#!/usr/bin/env bun`. `private` keeps a stray `npm publish` from uploading the source; `crust publish` ships the staged packages, which are not private. Node and Deno projects set `"crust": { "runtime": "node" }` or `"deno"` and use their own `dev` and `start` values; see [Set up `package.json`](/docs/guide/build-and-distribution#set-up-packagejson).
-
-</Step>
-<Step>
-### Configure `tsconfig.json`
-
-The scaffolder ships this config for Bun. Match `types`, `module`, and `moduleResolution` if you merge into an existing one; the rest is strictness. Node projects use `"types": ["node"]`; Deno projects use `"lib": ["ESNext", "deno.window"]` and `"types": []` because `deno check` reads this file and a supplied `lib` replaces Deno's own globals.
 
 ```json title="tsconfig.json"
 {
   "compilerOptions": {
+    "target": "ESNext",
     "lib": ["ESNext"],
     "types": ["bun"],
-    "target": "ESNext",
     "module": "Preserve",
-    "moduleDetection": "force",
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "noEmit": true,
     "strict": true,
-    "skipLibCheck": true,
-    "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": true
+    "skipLibCheck": true
   },
   "include": ["src"]
 }
 ```
 
-</Step>
-<Step>
-### Add the entrypoint
+</Tab>
+<Tab value="Node.js">
 
-Create `src/cli.ts` with the file from [Add a subcommand](#add-a-subcommand), then:
+Use Node.js 22.18 or later to run TypeScript directly, without a separate runner.
 
 ```npm
-npm run dev -- --help
+npm install @crustjs/core @crustjs/extensions
+npm install -D typescript @types/node@22
 ```
+
+Set the module format in `package.json`, keeping the dependencies added above:
+
+```json title="package.json (partial)"
+{
+  "type": "module"
+}
+```
+
+```json title="tsconfig.json"
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["ESNext"],
+    "types": ["node"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true
+  },
+  "include": ["src"]
+}
+```
+
+</Tab>
+<Tab value="Deno">
+
+Use Deno 2.8 or later. Deno installs npm packages and checks TypeScript itself:
+
+```sh
+deno add npm:@crustjs/core npm:@crustjs/extensions
+```
+
+For a new Deno-only project, this creates the dependency mappings in `deno.json`; no `package.json`, `tsconfig.json`, or separate TypeScript installation is needed. In an existing npm-based project, Deno can use its `package.json` dependencies instead.
+
+If your project already has a `tsconfig.json`, preserve Deno's globals with `"lib": ["ESNext", "deno.window"]` and `"types": []` in its `compilerOptions`.
+
+</Tab>
+</Tabs>
+
+</Step>
+<Step>
+### Create the entrypoint
+
+Create `src/cli.ts`. The same code works on all three runtimes:
+
+<include lang="ts" meta='title="src/cli.ts"'>
+  ../../examples/quick-start/manual.ts
+</include>
+
+</Step>
+<Step>
+### Run and check it
+
+<Tabs items={["Bun", "Node.js", "Deno"]} groupId="quick-start-runtime" persist>
+<Tab value="Bun">
+
+```sh
+bun run src/cli.ts Ada
+bun run src/cli.ts --help
+bunx tsc --noEmit
+```
+
+</Tab>
+<Tab value="Node.js">
+
+```sh
+node src/cli.ts Ada
+node src/cli.ts --help
+npx tsc --noEmit
+```
+
+</Tab>
+<Tab value="Deno">
+
+```sh
+deno run --allow-env src/cli.ts Ada
+deno run --allow-env src/cli.ts --help
+deno check src/cli.ts
+```
+
+`--allow-env` lets Crust read environment variables for execution and terminal styling. As your CLI adds file, network, or subprocess access, grant the additional [Deno permissions](/docs/guide/runtime-support#deno-permissions) it needs.
+
+</Tab>
+</Tabs>
 
 </Step>
 </Steps>
+
+### Build when ready
+
+You don't need `@crustjs/crust` to run the source. When you're ready to distribute your CLI, follow [Build and distribution](/docs/guide/build-and-distribution#set-up-packagejson) to add the build tooling and package configuration.
 
 ## Next steps
 

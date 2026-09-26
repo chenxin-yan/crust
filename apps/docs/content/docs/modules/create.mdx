@@ -19,7 +19,7 @@ Pair it with any CLI and prompt libraries needed by your create tool.
   ../../../examples/modules/create.ts
 </include>
 
-`new URL("../templates/base", import.meta.url)` points at the `templates/base` directory next to this module's parent folder, so the template stays with the generator wherever it is installed or run from. `scaffold()` returns every written path relative to the destination; the exact list depends on the files in that directory.
+`scaffold()` returns every written path relative to the destination.
 
 ## Locating templates
 
@@ -29,9 +29,7 @@ Pair it with any CLI and prompt libraries needed by your create tool.
 | `"./templates/base"`                            | The user's current working directory | Templates in the project where the command runs               |
 | `"/srv/templates/base"`                         | That exact filesystem path           | A location already resolved by your own code or configuration |
 
-A generator's templates belong to its package, but the package rarely runs from its own directory: `npx`, `bun x`, and global installs run it from a cache or install location while the user sits in their project. A relative string cannot express "next to my code" because `scaffold()` receives only the path text, not the file that wrote it. `import.meta.url` supplies that file, and `new URL()` resolves the path against it.
-
-String paths behave like `dest`: they resolve from the working directory, which is right when the template lives in the user's project or was supplied by the user. Convert an existing filesystem path to a URL with `pathToFileURL()` rather than concatenating `file://`.
+Ship templates inside your generator with an `import.meta.url` URL: `npx`, `bun x`, and global installs run the generator from a cache while the working directory is the user's project, so a relative string would resolve there instead. Convert an existing filesystem path with `pathToFileURL()` rather than concatenating `file://`. Only `file:` URLs are accepted, and the template must be a directory.
 
 ## Template conventions
 
@@ -53,14 +51,10 @@ A single leading `_` on a filename becomes `.`, while `__` stays unchanged. Call
 
 ## `scaffold(options)`
 
-```ts
-function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult>;
-```
-
 <auto-type-table path="../../../../../packages/create/src/types.ts" name="ScaffoldOptions" />
 <auto-type-table path="../../../../../packages/create/src/types.ts" name="ScaffoldResult" />
 
-See [Locating templates](#locating-templates) for how `template` resolves. Resolution throws when the URL scheme is not `file:` or the resolved template is not a directory.
+See [Locating templates](#locating-templates) for how `template` resolves.
 
 The default `conflict: "abort"` throws for a non-empty destination. `"overwrite"` replaces conflicting files and leaves unrelated destination files in place.
 
@@ -94,22 +88,4 @@ interpolate("Hello, {{name}}!", { name: "world" }); // => "Hello, world!"
 
 `interpolate()` replaces placeholders in a string. `detectPackageManager(cwd?)` checks lockfiles, then `npm_config_user_agent`, and defaults to npm; `isInGitRepo(cwd?)` reports whether the path is inside a Git work tree.
 
-## Exports
-
-```ts
-import {
-  detectPackageManager,
-  interpolate,
-  isInGitRepo,
-  runSteps,
-  scaffold,
-} from "@crustjs/create";
-import type {
-  PackageManager,
-  PostScaffoldStep,
-  ScaffoldOptions,
-  ScaffoldResult,
-} from "@crustjs/create";
-```
-
-The package root exports only the listed functions and types.
+`PackageManager` is the type `detectPackageManager()` returns. The [package entry point](https://github.com/chenxin-yan/crust/blob/main/packages/create/src/index.ts) is the complete export list.

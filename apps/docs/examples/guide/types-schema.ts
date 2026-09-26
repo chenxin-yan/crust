@@ -2,10 +2,13 @@
 import { Crust } from "@crustjs/core";
 import { z } from "zod";
 
+// [!code highlight]
 const Port = z.coerce.number().int().min(1).max(65535).default(3000);
 
+// [!code highlight]
 const serve = new Crust("serve").args({ name: "port", schema: Port }).action(({ args, stdout }) => {
-	const port = args.port; // number
+	const port = args.port;
+	//    ^?
 	stdout(`listening on port ${port}`);
 });
 

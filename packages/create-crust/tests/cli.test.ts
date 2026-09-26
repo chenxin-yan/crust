@@ -41,6 +41,7 @@ async function runCreateCrust(
 		cwd: options?.cwd ?? packageRoot,
 		env: {
 			...process.env,
+			npm_config_user_agent: "npm/11.0.0",
 			...options?.env,
 		},
 		// Below the 30s test timeout, so a hung CLI fails with its output.
@@ -127,12 +128,59 @@ describe("create-crust CLI", () => {
 		expect(gitignore).toContain(".crust");
 		const readme = readFileSync(join(projectDir, "README.md"), "utf-8");
 		expect(readme).toContain("# my-cli");
-		expect(readme).toContain("bun run dev");
-		expect(readme).toContain("bun run release");
+		expect(readme).toContain("npm run dev");
+		expect(readme).toContain("npm run release");
 		expect(readme).not.toContain("{{");
 		expect(existsSync(join(projectDir, "node_modules"))).toBe(false);
 		expect(existsSync(join(projectDir, ".git"))).toBe(false);
 	}, 30_000);
+
+	for (const runtime of ["bun", "node", "deno"]) {
+		it.each([
+			["bun/1.4.2", "bun"],
+			["npm/11.0.0", "npm"],
+			["pnpm/10.0.0", "pnpm"],
+			["yarn/1.22.22", "yarn"],
+			["yarn/4.0.0", "yarn"],
+			["", "npm"],
+		])(`uses %s instructions for ${runtime} projects`, async (userAgent, manager) => {
+			const projectDir = join(makeTempRoot("create-crust-manager"), "my-cli");
+			const result = await runCreateCrust(
+				[projectDir, "--runtime", runtime, "--no-install", "--no-git"],
+				{ env: { npm_config_user_agent: userAgent } },
+			);
+			const pm = runtime === "deno" ? "deno" : manager;
+			const run = pm === "deno" ? "deno task" : `${pm} run`;
+
+			expect(result.exitCode).toBe(0);
+			expect(result.stdout).toContain(`  ${pm} install\n  ${run} dev\n  ${run} build`);
+			const readme = readFileSync(join(projectDir, "README.md"), "utf-8");
+			expect(readme).toContain(`${pm} install`);
+			for (const script of templateScriptKeys) {
+				expect(readme).toContain(`${run} ${script}`);
+			}
+			expect(readme).not.toContain("{{");
+		});
+	}
+
+	it("uses the destination lockfile for instructions before installation", async () => {
+		const projectDir = join(makeTempRoot("create-crust-lockfile"), "my-cli");
+		mkdirSync(projectDir);
+		writeFileSync(join(projectDir, "pnpm-lock.yaml"), "");
+
+		const result = await runCreateCrust([
+			projectDir,
+			"--runtime",
+			"node",
+			"--overwrite",
+			"--no-install",
+			"--no-git",
+		]);
+
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("  pnpm install\n  pnpm run dev");
+		expect(readFileSync(join(projectDir, "README.md"), "utf-8")).toContain("pnpm run dev");
+	});
 
 	it.each(["bundle", "source"])(
 		"finds %s templates through a .bin entry in another package root",
@@ -288,6 +336,8 @@ describe("create-crust CLI", () => {
 
 		expect(result.exitCode).toBe(0);
 		expect(readFileSync(argvLog, "utf-8").trim()).toBe("install");
+		expect(result.stdout).not.toContain("  deno install");
+		expect(readFileSync(join(projectDir, "README.md"), "utf-8")).toContain("deno install");
 		expect(existsSync(join(projectDir, "package-lock.json"))).toBe(false);
 	}, 30_000);
 

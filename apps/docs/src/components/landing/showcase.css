@@ -1,0 +1,325 @@
+/* Aside: a pinned label column on the left; the panels pass on the right. */
+.fn-showcase {
+	position: relative;
+	z-index: 2;
+	display: grid;
+	grid-template-columns: 170px 1fr;
+	gap: 20px;
+	align-items: start;
+	max-width: 1100px; /* same container as the hero and Modules */
+	margin: 0 auto;
+	padding: 16px 40px 96px; /* the hero's 48px bottom plus 16px keeps the index close to the fold */
+	color: var(--fn-primary);
+	font-family: "Saira", sans-serif;
+}
+.fn-showcase-eyebrow {
+	grid-column: 1 / -1;
+}
+.fn-showcase > * {
+	min-width: 0; /* long lines scroll inside a pane instead of widening its column */
+}
+
+/* Label column: counter, name, claim stacked at eye level; a vertical rule fills with progress. */
+.fn-showcase-head {
+	position: sticky;
+	top: calc(56px + 40vh - 60px); /* fumadocs header + roughly eye level */
+	padding-left: 16px;
+}
+.fn-showcase-title {
+	animation: fn-showcase-in 0.3s ease;
+}
+.fn-showcase-counter {
+	display: block;
+	margin-bottom: 14px;
+	font:
+		13px/1 "Fira Code",
+		monospace;
+	color: var(--fn-molten);
+}
+.fn-showcase-counter-total {
+	color: var(--fn-dim);
+}
+.fn-showcase-name {
+	margin: 0;
+	font:
+		600 36px/0.95 "Saira Condensed",
+		sans-serif;
+	letter-spacing: 0.5px;
+	text-transform: uppercase;
+}
+.fn-showcase-claim {
+	margin: 14px 0 0;
+	font-size: 14px;
+	line-height: 1.45;
+	text-wrap: pretty; /* no single-word last lines */
+	color: var(--fn-dim);
+}
+@keyframes fn-showcase-in {
+	from {
+		opacity: 0;
+	}
+}
+/* Track for the rule: full column height in border colour, molten fill scaled from the top. */
+.fn-showcase-head::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 1px;
+	background: var(--fn-border);
+}
+.fn-showcase-rule {
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 1px;
+	height: 100%;
+	background: var(--fn-molten);
+	transform: scaleY(var(--fn-showcase-progress, 0));
+	transform-origin: top;
+}
+
+/* Column: one panel per beat; the nearest to the viewport centre is the one in focus. */
+.fn-showcase-column {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.fn-showcase-slot {
+	opacity: 0.45;
+	transition: opacity 0.4s ease;
+}
+/* A short gap keeps the next, dimmed panel peeking above the fold so the page never looks finished. */
+.fn-showcase-slot + .fn-showcase-slot {
+	margin-top: 48px;
+}
+.fn-showcase-slot[data-active] {
+	opacity: 1;
+}
+
+/* Panel: the hero's code panel with the terminal beside it, sized to its content. */
+.fn-showcase-panel {
+	display: grid;
+	/* Fira Code is 0.615em per column. 830px panel → 468 | 360: the widest snippet line (58 cols) needs
+	   ~400px + 36px gutter and padding; the terminal fits 49 columns, so only the schema error line wraps. */
+	grid-template-columns: 1.3fr 1fr;
+	background: var(--fn-surface);
+	border: 1px solid var(--fn-border);
+}
+.fn-showcase-panel > * {
+	min-width: 0; /* long lines scroll inside a pane instead of widening its column */
+}
+.fn-showcase-output {
+	border-left: 1px solid var(--fn-border);
+}
+.fn-showcase-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 16px;
+	min-height: 41px;
+	padding: 6px 16px;
+	border-bottom: 1px solid var(--fn-border);
+	font-size: 12px;
+	color: var(--fn-dim);
+}
+.fn-showcase-header-end {
+	justify-content: flex-end;
+}
+.fn-showcase-runtime {
+	display: flex;
+	gap: 2px;
+}
+.fn-showcase-runtime-option {
+	padding: 2px 8px;
+	background: transparent;
+	border: 1px solid transparent;
+	font:
+		11px/1.5 "Fira Code",
+		monospace;
+	color: var(--fn-dim);
+	cursor: pointer;
+	transition: all 0.2s;
+}
+.fn-showcase-runtime-option:hover {
+	color: var(--fn-primary);
+}
+.fn-showcase-runtime-option[aria-pressed="true"] {
+	color: var(--fn-molten);
+	border-color: var(--fn-border);
+}
+
+.fn-showcase-body {
+	padding: 12px;
+	font:
+		11px/1.65 "Fira Code",
+		monospace;
+	overflow-x: auto;
+	scrollbar-width: none; /* lines are sized to fit; if a viewport still clips one, scroll without chrome */
+}
+.fn-showcase-body::-webkit-scrollbar {
+	display: none;
+}
+.fn-showcase-shiki {
+	padding-left: 0; /* line numbers provide the gutter, as in the hero */
+	padding-right: 8px;
+}
+
+.fn-showcase-lines {
+	margin: 0;
+	font: inherit;
+	white-space: pre-wrap;
+}
+.fn-showcase-line {
+	display: block;
+	color: var(--fn-cool);
+}
+.fn-showcase-line-cmd {
+	color: var(--fn-primary);
+}
+.fn-showcase-line-cmd::before {
+	content: "$ ";
+	color: var(--fn-molten);
+}
+.fn-showcase-line-err {
+	color: var(--fn-hot);
+}
+
+.fn-showcase-runtime-option:focus-visible,
+.fn-showcase-shiki .shiki:focus-visible {
+	outline: 1px solid var(--fn-molten);
+	outline-offset: 2px;
+}
+
+/* Shiki (copied from the hero's .fn-shiki-container) */
+.fn-showcase-shiki .shiki {
+	background: transparent !important;
+	margin: 0;
+	padding: 0;
+	width: 100%;
+	overflow: visible;
+	tab-size: 2;
+	font-family: "Fira Code", monospace;
+	font-size: 11px;
+	line-height: 1.65;
+}
+.fn-showcase-shiki .shiki code {
+	font-family: inherit;
+	counter-reset: line;
+	display: flex;
+	flex-direction: column;
+}
+.fn-showcase-shiki .shiki code .line {
+	display: block;
+}
+/* `// [!code highlight]` lines are where to look first: molten bar and tint, the rest of the snippet
+   steps back. Overrides fumadocs-ui's global .highlighted. */
+.fn-showcase-shiki .shiki code:has(.highlighted) .line:not(.highlighted) {
+	opacity: 0.8; /* the bar and tint lead; inactive panels already dim to 0.45 */
+	transition: opacity 0.3s ease;
+}
+.fn-showcase-shiki .shiki code:has(.highlighted):hover .line {
+	opacity: 1; /* hovering the code brings the whole snippet back */
+}
+.fn-showcase-shiki .shiki code .line.highlighted {
+	margin-right: -8px; /* run the tint to the pane edge */
+	padding-right: 8px;
+	background-color: color-mix(in srgb, var(--fn-molten) 16%, transparent) !important;
+	box-shadow: inset 3px 0 0 var(--fn-molten);
+}
+.fn-showcase-shiki .shiki code .line.highlighted::after {
+	content: none;
+}
+.fn-showcase-shiki .shiki code .line.highlighted::before {
+	opacity: 1;
+	color: var(--fn-molten);
+}
+.fn-showcase-shiki .shiki code .line::before {
+	counter-increment: line;
+	content: counter(line);
+	display: inline-block;
+	width: 22px;
+	text-align: right;
+	margin-right: 6px;
+	color: var(--fn-dim);
+	opacity: 0.5;
+	font-size: 10px;
+	user-select: none;
+}
+.fn-showcase-shiki .shiki,
+.fn-showcase-shiki .shiki span {
+	color: var(--shiki-light) !important;
+	background-color: transparent !important;
+}
+.dark .fn-showcase-shiki .shiki,
+.dark .fn-showcase-shiki .shiki span {
+	color: var(--shiki-dark) !important;
+}
+
+@media (max-width: 900px) {
+	/* Column becomes a pinned bar above the panels. */
+	.fn-showcase {
+		grid-template-columns: 1fr;
+		gap: 0;
+	}
+	.fn-showcase-head {
+		top: 56px;
+		z-index: 3;
+		margin: 0 0 24px;
+		padding: 16px 0 12px;
+		background: var(--fn-bg);
+		border-bottom: 1px solid var(--fn-border);
+	}
+	.fn-showcase-head::before {
+		display: none;
+	}
+	.fn-showcase-rule {
+		top: auto;
+		bottom: -1px;
+		width: 100%;
+		height: 2px;
+		transform: scaleX(var(--fn-showcase-progress, 0));
+		transform-origin: left;
+	}
+	.fn-showcase-title {
+		display: flex;
+		align-items: baseline;
+		gap: 16px;
+	}
+	.fn-showcase-counter {
+		margin: 0;
+	}
+	.fn-showcase-name {
+		font-size: 26px;
+	}
+	.fn-showcase-claim {
+		display: none;
+	}
+	.fn-showcase-slot + .fn-showcase-slot {
+		margin-top: 32px;
+	}
+	.fn-showcase-panel {
+		grid-template-columns: 1fr;
+	}
+	.fn-showcase-output {
+		border-left: 0;
+		border-top: 1px solid var(--fn-border);
+	}
+}
+
+@media (max-width: 640px) {
+	.fn-showcase {
+		padding: 0 20px 12vh;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.fn-showcase * {
+		transition: none;
+		animation: none;
+	}
+	.fn-showcase-slot {
+		opacity: 1;
+	}
+}

@@ -1,6 +1,6 @@
 ---
 title: Update Notifier
-description: Check npm for a newer stable version after a command succeeds.
+description: Check npm's latest dist-tag for a newer version after a command succeeds.
 ---
 
 ## Usage
@@ -9,11 +9,9 @@ description: Check npm for a newer stable version after a command succeeds.
   ../../../../examples/modules/extensions/update-notifier.ts
 </include>
 
-When the registry reports version `2.0.0`, combined stdout and stderr show the completed action followed by this notice:
+When the registry reports version `2.0.0`, the action writes `Done` to stdout and the hook writes this notice to stderr, so piped stdout stays clean:
 
 ```text
-Done
-
 ╭──────────────────────────────────────╮
 │                                      │
 │   Update available  1.2.3 → 2.0.0    │
@@ -26,19 +24,10 @@ The hook checks only after a completed Command Action. Network, registry, cache,
 
 ## API
 
-```ts
-const updateNotifier: ExtensionFactory<[options: UpdateNotifierOptions]>;
-```
-
-| Option           | Type                                                                | Default                          |
-| ---------------- | ------------------------------------------------------------------- | -------------------------------- |
-| `packageName`    | `string`                                                            | Required                         |
-| `currentVersion` | `string`                                                            | Root command `meta.version`      |
-| `timeoutMs`      | `number`                                                            | `5_000`                          |
-| `registryUrl`    | `string`                                                            | `"https://registry.npmjs.org"`   |
-| `updateCommand`  | `string \| UpdateCommandResolver \| { scope: "global" \| "local" }` | No command                       |
-| `updateDocsUrl`  | `string`                                                            | No URL                           |
-| `cache`          | `false \| UpdateNotifierCacheConfig`                                | Built-in cache, 24-hour interval |
+<auto-type-table
+  path="../../../../../../packages/extensions/src/update-notifier.ts"
+  name="UpdateNotifierOptions"
+/>
 
 The current version must come from `currentVersion` or root metadata. If neither exists, the hook throws `DEFINITION` before network or cache work.
 
@@ -74,6 +63,11 @@ updateNotifier({
 ```
 
 The default adapter stores state under the package's platform state directory. Set `cache: false` to skip all cache reads and writes.
+
+<auto-type-table
+  path="../../../../../../packages/extensions/src/update-notifier.ts"
+  name="UpdateNotifierCacheConfig"
+/>
 
 <include lang="ts" meta='title="cache-adapter.ts"'>
   ../../../../examples/modules/extensions/update-notifier-cache.ts

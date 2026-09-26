@@ -24,7 +24,7 @@ version("1.2.3");
 version(() => process.env.APP_VERSION ?? "dev");
 ```
 
-Without an explicit value, `version()` requires root `version` metadata. A value typed `string | undefined` still requires that metadata, as described by [`RootMetaKey`](/docs/api/types#rootmetakey-and-defineextensionwith). An explicit value affects only the version flag and does not populate root metadata for completion, skills, or other Extensions.
+Without an explicit value, `version()` requires root `version` metadata. A value typed `string | undefined` still requires that metadata, as described by [`RootMetaKey`](/docs/api/types#rootmetakey). An explicit value affects only the version flag and does not populate root metadata for completion, skills, or other Extensions.
 
 ## Options
 
@@ -34,8 +34,9 @@ version("1.2.3", { format: "plain" });
 // 1.2.3
 ```
 
-| Option   | Type                                                                  | Default                         |
-| -------- | --------------------------------------------------------------------- | ------------------------------- |
-| `format` | `"plain" \| ((version: string, context: ExtensionContext) => string)` | `` `${rootName} v${version}` `` |
+<auto-type-table
+  path="../../../../../../packages/extensions/src/version.ts"
+  name="VersionOptions"
+/>
 
 A format function returns the line written for the flag. An explicit value may be a string or a function that resolves a string when the flag is handled.

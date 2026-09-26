@@ -12,9 +12,11 @@ const query = defineCommand("query", (command) =>
 	}),
 );
 
-// [!code highlight:2]
+//#region replacement
+// [!code highlight]
 const fakeDatabase = database.of({ query: (sql: string) => `fake: ${sql}` });
 const testApp = new Crust("work").provide(fakeDatabase).add(query);
 
 const outcome = await testApp.run(["query"]);
 console.log(outcome.stdout); // => fake: select 1
+//#endregion

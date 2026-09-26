@@ -1,0 +1,11 @@
+{
+  "name": "my-cli",
+  "version": "1.2.3",
+  "bin": {
+    "my-cli": "src/cli.ts"
+  },
+  "scripts": {
+    "build": "crust build",
+    "release": "crust publish"
+  }
+}

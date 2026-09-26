@@ -1,43 +1,43 @@
 ---
 title: Error handling
-description: Handle application errors, validation failures, and cancellation.
+description: Report failures, clean up resources, and handle cancellation.
 ---
 
-Throw an `Error` with a message the user can act on. Crust prints the message and exits with status 1.
+Throw an actionable `Error`. At the CLI entry point, `execute()` writes its message to stderr and sets exit status 1:
 
-<include lang="ts">../../../examples/guide/error-handling-cli.ts</include>
+<include lang="ts" meta='title="cli.ts"'>
+  ../../../examples/guide/error-handling-cli.ts
+</include>
 
 ```sh
-$ deploy
+$ bun cli.ts
 Error: Could not connect to api.example.com. Check your network connection.
-$ echo $?
-1
+# exit 1
 ```
 
-## What your user sees
+`execute()` resolves to the exit code rather than rethrowing the error. For tests and programmatic callers, use [`run()`](#handle-errors-in-code) to inspect failures without rendering them.
+
+- Don't catch an error just to print it: that hides the failure from Crust and can leave the exit status at 0.
+- Don't call `process.exit()`: it stops the process before cleanup can finish.
+
+## Let Crust validate
+
+Declare required values and allowed choices instead of checking them in the Command Action:
+
+<include lang="ts">../../../examples/guide/error-handling.ts#validation</include>
 
 ```sh
 $ greet
 Error: Missing required flag "--name"
-$ echo $?
-1
+$ greet --name Linus
+Error: Invalid value "Linus" for --name. Expected one of: Ada, Grace
 ```
 
-Crust uses one terminal failure format whether the error comes from your code or from its checks.
-
-| Failure            | Stderr                                                                                                                                                                                                | Exit code |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------: |
-| Your `Error`       | `Error: Could not connect to api.example.com. Check your network connection.`                                                                                                                         |         1 |
-| A Crust check      | Missing flag: `Error: Missing required flag "--name"`<br />Bad choice: `Error: Invalid value "Linus" for --name. Expected one of: Ada, Grace`<br />Unknown command: `Error: Unknown command "stats".` |         1 |
-| Ctrl+C in a prompt | Nothing                                                                                                                                                                                               |       130 |
-
-## Let Crust validate
-
-<include lang="ts">../../../examples/guide/error-handling.ts#validation</include>
-
-Prefer `required: true` to checking for a missing value in the Command Action. The declaration keeps help text, inferred types, and terminal messages in sync. Put allowed values in `choices` for the same reason.
+Both exit with status 1 before the action runs. These declarations also drive help text and inferred types. See [Values and validation](/docs/guide/values-and-validation) for custom parsing and schemas.
 
 ## Fail from anywhere
+
+Throw from actions, awaited helpers, or Context setup. Crust still disposes constructed [Contexts](/docs/guide/contexts):
 
 <include lang="ts">../../../examples/guide/error-handling.ts#cleanup</include>
 
@@ -45,44 +45,46 @@ Prefer `required: true` to checking for a missing value in the Command Action. T
 $ deploy
 Error: Deployment service is unavailable. Try again later.
 Closed database
-$ echo $?
-1
+# exit 1
 ```
 
-An `Error` from the helper reaches the same renderer as one from a Command Action. Context disposal still runs after failure, so the Command Action does not need `try`/`finally` for Context cleanup.
-
-Do not call `process.exit()`. It stops the process before Crust can run cleanup.
-
-Do not catch an error just to print it. That hides the failure from `run()` and can leave the terminal exit code at 0.
-
-## Cancellation
-
-<include lang="ts">../../../examples/guide/error-handling.ts#cancellation</include>
-
-```sh
-$ scaffold
-? Project name? ^C
-$ echo $?
-130
-```
-
-Ctrl+C in a prompt prints no error and exits with status 130. To cancel from your own code, throw `new DOMException("Cancelled", "AbortError")`. Put file writes and other side effects after prompts so cancellation leaves nothing to undo.
-
-During `execute()`, the first Ctrl+C aborts `ctx.signal` with an `AbortError`. Pass `ctx.signal` to work that should stop cleanly (an HTTP request, a child process, a long loop): when that work fails with the abort reason, cleanup runs and the exit status is 130. Work that ignores the signal keeps running. A second Ctrl+C terminates the process unless another listener owns the signal. See [`execute()`](/docs/api/crust#executeoptions).
+Context-managed resources don't need action-level `try`/`finally`. If disposal also fails, Crust adds `Cleanup failed: …` without hiding the original failure. See [failure propagation](/docs/api/errors#propagation-boundaries) for lifecycle details.
 
 ## Customize the message
 
-<include lang="ts">../../../examples/guide/error-handling.ts#custom-message</include>
+Use an Extension's `onError` hook to add context for a known error:
 
-Extending the root with `configErrors` adds a hint for this known error class; returning `true` prevents the default renderer from printing it again. [`didYouMean()`](/docs/modules/extensions/did-you-mean) is the built-in example. See [Extension hooks](/docs/api/types#extensionhooks) for the hook contract.
+<include lang="ts">../../../examples/guide/error-handling.ts#custom-message</include>
 
 ```text
 Error: Config file not found.
 Hint: Run init to create the config file.
 ```
 
-## In tests
+- Return `true` after rendering to stop later hooks and the default renderer.
+- Return nothing to pass the error to the next hook in `.extend()` order, then the default renderer.
+- Hooks only run for `execute()`. Rendering this `ConfigError` still exits with status 1; it doesn't turn failure into success.
+
+[`didYouMean()`](/docs/modules/extensions/did-you-mean) uses this hook for command suggestions. See [`onError`](/docs/api/types#extensionhooks) for the full contract.
+
+## Cancellation
+
+Ctrl+C in a Crust prompt raises an `AbortError`. By default, `execute()` prints no error and returns exit code 130:
+
+<include lang="ts">../../../examples/guide/error-handling.ts#cancellation</include>
+
+Keep side effects after prompts so cancelling leaves nothing to undo. To cancel explicitly, throw `new DOMException("Cancelled", "AbortError")`.
+
+The first Ctrl+C during `execute()` aborts the action's `signal`. Pass it to cancellable APIs such as `fetch(url, { signal })`; work that ignores it keeps running. An `AbortError` still allows cleanup; failed cleanup changes the exit code to 1. See [`execute()`](/docs/api/crust#executeoptions) for caller signals and repeated Ctrl+C.
+
+## Handle errors in code
+
+`run()` resolves to a failed outcome instead of rendering the error or changing `process.exitCode`. Using the `configured` app above:
 
 <include lang="ts">../../../examples/guide/error-handling.ts#tests</include>
 
-`run()` hands your `Error` back unchanged in a failed outcome; `captureExecute()` from [`@crustjs/testing`](/docs/guide/testing) shows what the terminal user would see. Errors raised by Crust itself are `CrustError` values; narrow them with `.is(code)` as shown in the [error reference](/docs/api/errors#codes).
+The outcome preserves the original error unless disposal also fails; then a `SuppressedError` contains both failures.
+
+Framework errors use [`CrustError`](/docs/api/errors). Check `error instanceof CrustError`, then `.is(code)`—not message text. Application errors don't need this wrapper.
+
+To assert rendered messages and exit codes, use [`captureExecute()`](/docs/guide/testing#capture-terminal-behavior) from `@crustjs/testing`.

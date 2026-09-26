@@ -1,9 +1,12 @@
 import type { UserConfig } from "vite-plus";
 
-// Settings every workspace package's vite.config.ts spreads. Task names carry a
-// `:task` suffix because a name cannot be both a package.json script and a
-// vite.config.ts task; each task delegates to the same-named script, which
-// stays the single definition of the command.
+// Settings every workspace package's vite.config.ts spreads. These tasks own
+// the actual build, test and type-check commands; a package whose command
+// differs overrides the task in its own vite.config.ts. Task names carry
+// a `:task` suffix because a name cannot be both a package.json script and a
+// vite.config.ts task; the `build`, `test` and `check:types` scripts are
+// aliases that run `vp run <name>:task`, so they also get each task's
+// dependencies and cache settings.
 
 type RunTasks = NonNullable<NonNullable<UserConfig["run"]>["tasks"]>;
 
@@ -33,13 +36,13 @@ export const runtimeInput = [
 /** Type check and test after the workspace packages they import are built. */
 export const toolingTasks = {
 	"check:types:task": {
-		command: "pnpm run check:types",
+		command: "tsc --noEmit",
 		dependsOn: [upstreamBuild],
 		input: runtimeInput,
 		output: [],
 	},
 	"test:task": {
-		command: "pnpm run test",
+		command: "vp test",
 		dependsOn: [upstreamBuild],
 		cache: false,
 	},
@@ -49,7 +52,7 @@ export const toolingTasks = {
 export const libraryTasks = {
 	...toolingTasks,
 	"build:task": {
-		command: "pnpm run build",
+		command: "vp pack",
 		dependsOn: [upstreamBuild],
 		// publint and ATTW run only when CI is set.
 		env: ["CI"],

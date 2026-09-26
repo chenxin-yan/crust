@@ -1,8 +1,5 @@
 import { defineConfig } from "vite-plus";
 
-// Workspace root: `vp lint` and `vp fmt` read only these blocks, wherever they
-// run, so package-specific settings live in `overrides`. Per-package pack and
-// task settings are in each package's vite.config.ts (see vite.shared.ts).
 export default defineConfig({
 	fmt: {
 		useTabs: true,
@@ -20,6 +17,12 @@ export default defineConfig({
 			"apps/docs/src/routeTree.gen.ts",
 		],
 		overrides: [
+			{
+				files: ["apps/docs/examples/landing/**"],
+				options: {
+					printWidth: 60,
+				},
+			},
 			{
 				files: ["apps/docs/**/*.{md,mdx,json,jsonc,yml,yaml}"],
 				options: {
@@ -167,13 +170,10 @@ export default defineConfig({
 	},
 	run: {
 		tasks: {
-			"lint:task": "vp lint",
-			"format:task": "vp fmt --check",
+			"check:task": "vp check",
 		},
 	},
 	test: {
-		// Root `vp test` runs these projects, each with its own vite.config.ts;
-		// docs tests stay separate (`vp test` in apps/docs).
 		projects: ["packages/*", "scripts", "tools"],
 	},
 });

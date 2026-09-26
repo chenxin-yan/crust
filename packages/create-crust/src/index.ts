@@ -4,7 +4,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 
 import { Crust, resolveArtifactDir } from "@crustjs/core";
-import { isInGitRepo, runSteps, scaffold } from "@crustjs/create";
+import { detectPackageManager, isInGitRepo, runSteps, scaffold } from "@crustjs/create";
 import { spinner } from "@crustjs/progress";
 import { confirm, input, select } from "@crustjs/prompts";
 
@@ -20,15 +20,14 @@ type Runtime = "bun" | "node" | "deno";
 // `shebang` heads src/cli.ts: package.json `bin` points at the source, so a linked
 // command must start the project's runtime itself.
 const RUNTIME_TEMPLATE_CONTEXT = {
-	bun: { run: "bun run", shebang: "#!/usr/bin/env bun", tsLib: '"ESNext"', tsTypes: '"bun"' },
-	node: { run: "npm run", shebang: "#!/usr/bin/env node", tsLib: '"ESNext"', tsTypes: '"node"' },
+	bun: { shebang: "#!/usr/bin/env bun", tsLib: '"ESNext"', tsTypes: '"bun"' },
+	node: { shebang: "#!/usr/bin/env node", tsLib: '"ESNext"', tsTypes: '"node"' },
 	deno: {
-		run: "deno task",
 		shebang: "#!/usr/bin/env -S deno run -A",
 		tsLib: '"ESNext", "deno.window"',
 		tsTypes: "",
 	},
-} satisfies Record<Runtime, { run: string; shebang: string; tsLib: string; tsTypes: string }>;
+} satisfies Record<Runtime, { shebang: string; tsLib: string; tsTypes: string }>;
 
 // The bundle inlines these JSON imports, so scaffolded package.json files pin
 // the sibling package versions from the build that produced create-crust.
@@ -188,9 +187,12 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 
 		// `templates` is a crust.include directory staged next to this bundle.
 		const templatePath = (template: string) => join(resolveArtifactDir("templates"), template);
+		const packageManager = runtime === "deno" ? "deno" : detectPackageManager(resolvedDir);
 		// Scaffolding produces no console output, so it is safe inside a spinner.
 		const context = {
 			name,
+			run: packageManager === "deno" ? "deno task" : `${packageManager} run`,
+			install: `${packageManager} install`,
 			...RUNTIME_TEMPLATE_CONTEXT[runtime],
 			...CRUST_TEMPLATE_VERSION_CONTEXT,
 		};
@@ -236,6 +238,7 @@ const app = new Crust("create-crust", { description: "Scaffold a new Crust CLI p
 			const relativeDir = targetDir.startsWith("/") ? targetDir : `./${targetDir}`;
 			console.log(`  cd ${relativeDir}`);
 		}
+		if (!installDeps) console.log(`  ${context.install}`);
 		console.log(`  ${context.run} dev`);
 		console.log(`  ${context.run} build`);
 	});

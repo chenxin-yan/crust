@@ -3,17 +3,9 @@ title: "Crust"
 description: Build and distribute Crust applications for Bun, Deno, and Node.
 ---
 
-`@crustjs/crust` provides the `crust` CLI. `crust build` writes the publishable npm packages for your CLI to `.crust/`, and `crust publish` uploads them. The same build is available to scripts as [`build()`](#programmatic-api):
+import { Callout } from "fumadocs-ui/components/callout";
 
-```ts
-import {
-  build,
-  type BuildArtifact,
-  type BuildOptions,
-  type BuildReport,
-  type BuildResult,
-} from "@crustjs/crust";
-```
+`@crustjs/crust` provides the `crust` CLI. `crust build` writes the publishable npm packages for your CLI to `.crust/`, and `crust publish` uploads them. The same build is available to scripts as [`build()`](#programmatic-api). The [Build and distribution guide](/docs/guide/build-and-distribution) walks through the workflow; this page is the reference.
 
 ## Install
 
@@ -21,7 +13,18 @@ import {
 npm install -D @crustjs/crust
 ```
 
-The npm package is itself built with `crust build`, so its `bin` is a Node launcher that runs a platform-specific standalone executable with Bun embedded. Node is required to start it; a separate Bun installation is not. Without `bun` on `PATH`, arm64 hosts cannot build their own target (Bun would copy the running `crust` executable onto itself); the error names the other targets, or install Bun. The package root exports the [`build()`](#programmatic-api) library, a bundled JavaScript module whose declarations import `BuildReport` from `@crustjs/core`, declared as a peer dependency so the type stays the same one your Extensions see; because it is not a Bun executable, it needs `bun` on `PATH` unless the script itself runs under `bun`.
+- The `crust` command is a Node launcher for a standalone executable with Bun embedded. Node is required to start it; a separate Bun installation is not.
+- Without `bun` on `PATH`, arm64 hosts cannot build their own target. The error names the targets you can build; otherwise install Bun.
+- The [`build()`](#programmatic-api) library is a plain JavaScript module, so it needs `bun` on `PATH` unless the script runs under Bun. `@crustjs/core` is a peer dependency so `BuildReport` is the same type your Extensions see.
+
+### npm installation caveat
+
+<Callout type="warn">
+  npm 10.9.8 can report a successful install but remove the root command shim while skipping
+  incompatible optional platform packages with the same bin name. npm 11.19.1 is verified on Linux
+  with Node 22.23.2. The minimum fixed npm version has not been established; this does not imply
+  every npm 11 release is fixed.
+</Callout>
 
 ## Commands
 
@@ -33,18 +36,18 @@ crust build --target bun-linux-x64
 # ✓ Staged 2 npm package(s) successfully: (excerpt)
 ```
 
-[`crust build`](/docs/guide/build-and-distribution) validates your CLI and stages it in `.crust/`. [`crust publish`](/docs/guide/build-and-distribution#publish-with-crust-publish) publishes what `crust build` staged.
+[`crust build`](/docs/guide/build-and-distribution#build) validates your CLI and stages it in `.crust/`. [`crust publish`](/docs/guide/build-and-distribution#publish-with-crust-publish) publishes what `crust build` staged.
 
 ### `crust build` options
 
-| Option                        | Type               | Default | Description                                                                                                                   |
-| ----------------------------- | ------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `-t, --target`                | string, repeatable | none    | Canonical compiler target(s), or `host` for this machine; repeatable. Omit to stage `crust.targets`, or every Bun/Deno target |
-| `--env-file`                  | string, repeatable | none    | Explicit env file(s) used for build-time constants; repeatable                                                                |
-| `--validate`, `--no-validate` | boolean            | `true`  | Materialize command definitions before compiling; `--no-validate` also skips Extension build hooks                            |
-| `--minify`, `--no-minify`     | boolean            | none    | Minify the output (default for bun and node; unsupported for deno)                                                            |
+| Option                        | Type               | Default | Description                                                                                                       |
+| ----------------------------- | ------------------ | ------- | ----------------------------------------------------------------------------------------------------------------- |
+| `-t, --target`                | string, repeatable | none    | Canonical compiler target(s), or `host` for this machine. Omit to stage `crust.targets`, or every Bun/Deno target |
+| `--env-file`                  | string, repeatable | none    | Explicit env file(s) used for build-time constants                                                                |
+| `--validate`, `--no-validate` | boolean            | `true`  | Materialize command definitions before compiling; `--no-validate` also skips Extension build hooks                |
+| `--minify`, `--no-minify`     | boolean            | none    | Minify the output (default for bun and node; unsupported for deno)                                                |
 
-None of the command names, entry files, runtime, default targets, Bun bundler plugins, or extra directories are flags: they come from [`bin`](#commands-and-entries-bin) and the [`crust` block](#packagejson-configuration) in `package.json`.
+Command names, entry files, runtime, default targets, Bun bundler plugins, and extra directories are not flags: they come from [`bin`](#commands-and-entries-bin) and the [`crust` block](#packagejson-configuration) in `package.json`.
 
 ### `crust publish` options
 
@@ -54,52 +57,93 @@ crust publish --dry-run
 #   → linux-x64: npm publish
 ```
 
-Publishing reads `.crust/manifest.json`, verifies the staged directories and metadata, checks each staged `name@version` on the target registry with `npm view`, and runs `npm publish` in each staged directory whose version is missing, so `npm` must be on `PATH`. Versions that already exist are skipped and never re-tagged, which makes a rerun after a failed publish resume; the lookup is not a permission check (trusted publishing supplies no read credential), it targets the registry `npm publish` would under npm 10.6+ precedence (see [Publishing from CI](/docs/guide/build-and-distribution#publishing-from-ci)), and `--dry-run` stays offline. npm is used instead of `bun publish` because it supports [trusted publishing](https://docs.npmjs.com/trusted-publishers) from CI; `bun publish` does not. Without a prior `crust build`, it fails with `Run crust build before crust publish`.
-
-When stdin is a TTY, npm inherits stdin, stdout, and stderr so its interactive browser/OTP authentication can complete. Non-interactive runs capture and forward npm output after each package finishes.
-
-Before any publisher runs (including dry-run validation), manifest fields and staged package identities are checked, root and platform package names must be unique, and every listed package directory must resolve to a distinct directory inside the canonical staging root. A symlinked staging root is allowed; descendant directory or `package.json` links escaping it are rejected. This preflight is not protection against concurrent filesystem changes.
-
-npm reads `publishConfig.access` from each staged `package.json`, which `crust build` copies from your project. Scoped public packages need `"publishConfig": { "access": "public" }`. See [Publishing from CI](/docs/guide/build-and-distribution#publishing-from-ci) for registry credentials.
-
 | Option       | Type    | Default | Description                                         |
 | ------------ | ------- | ------- | --------------------------------------------------- |
 | `--tag`      | string  | none    | Override the npm dist-tag passed to npm publish     |
 | `--dry-run`  | boolean | `false` | Print publish order and commands without publishing |
 | `--registry` | string  | none    | Override the registry passed to npm publish         |
 
+`crust publish` reads `.crust/manifest.json` and fails with `Run crust build before crust publish` if there is none. It uses `npm`, which must be on `PATH`, because npm supports [trusted publishing](https://docs.npmjs.com/trusted-publishers) from CI.
+
+- For each staged package, it checks `name@version` with `npm view` and runs `npm publish` only if that version is missing. Existing versions are skipped and never re-tagged, so rerunning after a failure resumes. `--dry-run` stays offline.
+- Before anything publishes, it verifies the manifest, that package names are unique, and that every package directory resolves inside the staging root.
+- When stdin is a TTY, npm inherits the terminal so browser or OTP authentication can complete.
+- npm reads `publishConfig.access` from each staged `package.json`, copied from your project. Scoped public packages need `"publishConfig": { "access": "public" }`. See [Publishing from CI](/docs/guide/build-and-distribution#publishing-from-ci) for credentials.
+
+<Callout type="warn">
+  The version lookup replays the staged `publishConfig` registry settings to `npm view` using npm
+  10.6+ precedence, where CLI flags override `publishConfig`. npm 9 gives `publishConfig` priority,
+  so a conflicting `--registry` can make the lookup and the upload use different registries. Avoid
+  that combination or upgrade npm.
+</Callout>
+
 ## Programmatic API
 
-```ts
-function build(options?: BuildOptions): Promise<BuildResult>;
+`build(options?)` runs the `crust build` pipeline and resolves to what it staged. See [Programmatic builds](/docs/guide/build-and-distribution#programmatic-builds) for a release-script example.
 
-type BuildOptions = {
-  cwd?: string; // project root; default process.cwd()
-  targets?: readonly string[]; // canonical targets or "host"; overrides crust.targets; rejected for node
-  envFiles?: readonly string[]; // resolved against cwd; rejected for deno
-  minify?: boolean; // default true for bun and node; explicit true rejected for deno
-  validate?: boolean; // default true; false skips snapshots and Extension build hooks
-  onLog?: (line: string, stream: "stdout" | "stderr") => void; // silent when omitted
-};
+<auto-type-table path="../../../../../packages/crust/src/commands/build.ts" name="BuildOptions" />
 
-type BuildResult = {
-  stageDir: string; // <cwd>/.crust
-  artifacts: BuildArtifact[];
-  reports?: Record<string, BuildReport>; // per bin command; absent when validate is false
-};
+<auto-type-table path="../../../../../packages/crust/src/commands/build.ts" name="BuildResult" />
 
-type BuildArtifact =
-  | { kind: "package-json"; path: string; target?: string } // root, then one per platform package
-  | { kind: "launcher"; path: string; command: string } // root/bin/<command>.js for Bun and Deno
-  | { kind: "executable"; path: string; command: string; target: string } // <platform>/bin/<command>-<target>
-  | { kind: "bundle"; path: string; command: string }; // root/bin/<command>.js for Node
-```
+| `BuildArtifact` kind | Path                                               | Extra fields                   |
+| -------------------- | -------------------------------------------------- | ------------------------------ |
+| `package-json`       | Root manifest first, then one per platform package | `target` on platform manifests |
+| `launcher`           | `root/bin/<command>.js` for Bun and Deno           | `command`                      |
+| `executable`         | `<platform>/bin/<command>-<target>`                | `command`, canonical `target`  |
+| `bundle`             | `root/bin/<command>.js` for Node                   | `command`                      |
 
-`build()` is the `crust build` pipeline behind the command: it reads `bin` and the `crust` block from `cwd`, validates them and the options with the same errors the command prints, wipes `.crust/`, prepares each entry's Command Snapshot and Extension build hooks unless `validate` is `false`, then compiles and stages every package and writes `manifest.json` last. It throws on failure and prints nothing; pass `onLog` to receive the command's progress lines with the stream they would go to. `target` in artifacts is the canonical compiler target (`bun-linux-x64`), and `BuildReport` is `@crustjs/core`'s type, re-exported. Overlapping calls for the same real project directory in one process reject before staging; different projects can build concurrently. Serialize builds across separate processes yourself, and consume staged artifacts before rebuilding that project. See [Programmatic builds](/docs/guide/build-and-distribution#programmatic-builds) for a release-script example.
+- `build()` validates `bin`, the `crust` block, and its options with the same errors the CLI prints, then wipes `.crust/` and stages every package. `manifest.json` is written last.
+- It throws on failure and prints nothing; `onLog` receives each progress line with its stream.
+- `BuildReport` is `@crustjs/core`'s type, re-exported.
+- Overlapping calls for the same project in one process reject before staging. Serialize builds across processes yourself, and consume staged artifacts before rebuilding.
 
 ## Build output
 
-`crust build` stages the publishable npm tree in `.crust/` (`manifest.json`, `root/`, one `<platform>/` per target for Bun and Deno, and `artifacts/` from Extension build hooks). It checks that `package.json` has non-empty string `name` and `version` fields before wiping the previous stage, even with `--no-validate`. See [Build](/docs/guide/build-and-distribution#build) for the tree, the launcher, and naming rules.
+`crust build` stages the publishable npm tree in `.crust/`: `manifest.json`, `root/`, one `<platform>/` per target for Bun and Deno, and `artifacts/` from Extension build hooks. It checks that `package.json` has non-empty `name` and `version` before wiping the previous stage, even with `--no-validate`. See [Build](/docs/guide/build-and-distribution#build) for the tree and the launcher.
+
+### Staged `package.json` files
+
+Staged manifests are generated rather than copied:
+
+| Project field                                         | Staged behavior                                                                                                                        |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`, `version`                                     | Required; platform names append the alias, such as `@scope/my-cli-linux-x64`                                                           |
+| npm metadata                                          | `description`, `license`, `author`, `homepage`, `bugs`, `repository`, `keywords`, `publishConfig`, `funding`, and `engines` are copied |
+| `bin`, `files`, `type`                                | Generated for the output; the root always uses `"type": "module"`                                                                      |
+| `dependencies`, `devDependencies`                     | Omitted; the compiler bundles the CLI code                                                                                             |
+| `optionalDependencies`                                | Generated for Bun/Deno platform packages; absent for Node                                                                              |
+| `exports`, `peerDependencies`, `peerDependenciesMeta` | Preserved in the root only, subject to the rules below                                                                                 |
+| `private`, source scripts, `$schema`                  | Omitted                                                                                                                                |
+
+`README.md` is copied into the root package and the license file into every package. Platform manifests carry `os`, `cpu`, and, on Linux, `libc`.
+
+To ship a library alongside the CLI:
+
+- `exports` targets must be `./` paths to staged files: a `crust.include` file, an Extension artifact, or `./package.json`. Nested conditions and `null` are supported; wildcards, fallback arrays, missing files, and `.`, `..`, `node_modules`, or empty segments are rejected.
+- Included files are copied, not transformed. A CommonJS source package needs an included nested `package.json` such as `dist/package.json` with `{"type":"commonjs"}`, or explicit `.cjs`/`.d.cts` extensions.
+- Peer ranges are published as written: `workspace:` and `catalog:` ranges are rejected. `peerDependenciesMeta` entries must name declared peers.
+
+## Supported targets
+
+`--target` overrides `crust.targets`; without either, all targets for the runtime are built. `host` selects this machine's OS, architecture, and Linux C library and can be mixed with explicit targets. Node builds reject both `--target` and `crust.targets`.
+
+| Bun target                                   | Deno target                                             | Platform alias                       |
+| -------------------------------------------- | ------------------------------------------------------- | ------------------------------------ |
+| `bun-linux-x64`, `bun-linux-arm64`           | `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu` | `linux-x64`, `linux-arm64`           |
+| `bun-linux-x64-musl`, `bun-linux-arm64-musl` | none                                                    | `linux-x64-musl`, `linux-arm64-musl` |
+| `bun-darwin-x64`, `bun-darwin-arm64`         | `x86_64-apple-darwin`, `aarch64-apple-darwin`           | `darwin-x64`, `darwin-arm64`         |
+| `bun-windows-x64`, `bun-windows-arm64`       | `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc`     | `windows-x64`, `windows-arm64`       |
+
+Each platform package contains `bin/<command>-<target>` (`.exe` on Windows) per command. The launcher supports only the targets included in the build.
+
+### Linux glibc and musl
+
+Plain Linux targets use glibc; Alpine needs Bun's `-musl` targets. The launcher detects the host C library and selects the matching binary. Deno has no musl target.
+
+<Callout type="warn">
+  Bun's musl executables still load `libstdc++` and `libgcc` dynamically. A bare Alpine image needs
+  `apk add libstdc++ libgcc`; `node:alpine` already includes them.
+</Callout>
 
 ## Commands and entries (`bin`)
 
@@ -109,11 +153,12 @@ type BuildArtifact =
 }
 ```
 
-The standard `bin` field declares what `crust build` builds: each key is an installed command name and each value is the TypeScript source entry compiled for it. Every entry becomes `bin/<command>.js` in the root package and, for Bun and Deno, a `<command>-<target>` binary in every platform package. A string `bin` is the entry of one command named after the unscoped package name, and without `bin` the build compiles `src/cli.ts` under that name.
+Each `bin` key is an installed command name and each value is the TypeScript entry compiled for it. Every entry becomes `bin/<command>.js` in the root package and, for Bun and Deno, a `<command>-<target>` binary in every platform package. A string `bin` names one command after the unscoped package name; without `bin`, the build compiles `src/cli.ts` under that name.
 
-Entries must be relative paths to existing files inside the project (checked lexically, so a symlink may point elsewhere), and two commands cannot share one entry: entries are compared by real path, so `./src/cli.ts`, `src/../src/cli.ts`, and a symlink to `src/cli.ts` all count as the same file. Command names are limited to letters, digits, `.`, `_`, `~`, and `-`, cannot start with `.` or `-`, and cannot differ only by case (`Tool` and `tool` would be one `bin/` file on a case-insensitive filesystem), because they become file names and launcher text. These checks run before `.crust/` is wiped, with or without `--no-validate`. Because the values are source files, `npm link` runs the source directly: the entry needs the runtime's shebang (`#!/usr/bin/env bun`, `#!/usr/bin/env node`, or `#!/usr/bin/env -S deno run -A`), which `create-crust` templates include; link `.crust/root` instead to exercise the built distribution.
-
-During a validated build each entry's root command must be named after its key (`new Crust("my-cli-admin")` for `"my-cli-admin": "src/admin.ts"`), since help, man pages, completions, and skills all use that name; a mismatch fails the build with both names and the entry path. `--no-validate` skips this check along with the snapshots it needs.
+- Entries must be relative paths to existing files inside the project. Containment is checked lexically; symlinks may point elsewhere. Two commands cannot share one entry (compared by real path).
+- Command names use letters, digits, `.`, `_`, `~`, and `-`, cannot start with `.` or `-`, and cannot differ only by case.
+- A validated build requires each entry's root command to be named after its key, such as `new Crust("my-cli-admin")` for `"my-cli-admin": "src/admin.ts"`. `--no-validate` skips this check.
+- `npm link` runs the source entry directly, so it needs the runtime's shebang (`#!/usr/bin/env bun`, `#!/usr/bin/env node`, or `#!/usr/bin/env -S deno run -A`). `create-crust` templates include it. Link `.crust/root` to exercise the built distribution instead.
 
 ## `package.json` configuration
 
@@ -128,20 +173,20 @@ During a validated build each entry's root command must be named after its key (
 }
 ```
 
-Every key is optional. Any other key under `crust` is an error that lists the allowed keys, so typos such as `bunPlugin` fail the build instead of being ignored. The entry file is not configured here: it is the value of [`bin`](#commands-and-entries-bin).
+Every key is optional. Unknown keys under `crust` fail the build, so typos such as `bunPlugin` are not ignored.
 
 | Key                | Description                                                                                                                                                                                                                                  |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `crust.runtime`    | `bun`, `deno`, or `node`. Without it, `deno.json`/`deno.jsonc` selects Deno and `@types/node` without `@types/bun` selects Node; otherwise Bun.                                                                                              |
-| `crust.targets`    | Canonical compiler targets staged when `crust build` runs without `--target`, `host` included; the flag overrides it per run. Without it every Bun or Deno target is staged. Rejected for Node.                                              |
+| `crust.targets`    | Canonical compiler targets staged when `crust build` runs without `--target`, `host` included. Without it every Bun or Deno target is staged. Rejected for Node.                                                                             |
 | `crust.bunPlugins` | [Bun bundler plugin](https://bun.com/docs/bundler/plugins) modules applied to Bun and Node builds, in order. A bare name resolves from `node_modules`, a path from the project root; each must default-export the plugin. Rejected for Deno. |
 | `crust.include`    | Directories relative to the project root that `crust build` copies into `.crust/root/` (listed in `files`) and into each platform package's `bin/`.                                                                                          |
 
-`crust.include` entries must be existing directories inside the project (symlinks are copied dereferenced, so every symlink inside them must also resolve inside the project), cannot be named `bin`, cannot be inside `.crust`, and cannot repeat an Extension artifact directory name.
+`crust.include` entries must be existing directories inside the project, cannot be named `bin`, cannot be inside `.crust`, and cannot reuse an Extension artifact directory name. Symlinks are copied dereferenced and must resolve inside the project.
 
 ### Editor completion
 
-`@crustjs/crust` ships a JSON schema for this block at `node_modules/@crustjs/crust/schema/package.json`. It extends the standard [SchemaStore package.json schema](https://json.schemastore.org/package.json) with the `crust` keys above, so pointing `$schema` at it keeps completion for `name`, `scripts`, and the rest while adding completion and validation for `crust`. `create-crust` templates set it; `crust build` never copies `$schema` into the staged packages.
+`@crustjs/crust` ships a JSON schema for this block. It extends the [SchemaStore package.json schema](https://json.schemastore.org/package.json), so completion for the standard fields keeps working. `create-crust` templates set it; `crust build` never copies `$schema` into staged packages.
 
 ```json title="package.json"
 {
@@ -158,10 +203,11 @@ Every key is optional. Any other key under `crust` is an error that lists the al
 └── completions/
 ```
 
-Registered Extensions own build artifacts. `man()`, `skill()`, and `completion()` return the files shown when registered; `crust build` writes them, copies each top-level directory into `.crust/root/` and every platform package's `bin/`, and records each hook's returned paths per `bin` entry under `build` in `.crust/manifest.json`. These reports describe hook output, not all packaged files or arbitrary module side effects; entry execution is not sandboxed. Loose top-level artifact files are reported but not copied into packages. A CLI reads the directories back with [`resolveArtifactDir(name)`](/docs/api/crust#resolveartifactdirname).
+Registered Extensions such as [`man()`](/docs/modules/man), [`skill()`](/docs/modules/skills), and [`completion()`](/docs/modules/extensions/completion) contribute build hooks. `crust build` runs those hooks while preparing each entry, writes the files they return, and copies each top-level directory into `.crust/root/` and every platform package's `bin/`. A CLI reads them back with [`resolveArtifactDir(name)`](/docs/api/crust#resolveartifactdirname).
 
-With several `bin` entries, each entry's hooks run in their own temporary directory and the results are merged into `.crust/artifacts/`. Identically spelled directories merge, so `man/greet.1` and `man/admin.1` coexist. Case-only directory aliases such as `Assets/a` and `assets/b` are rejected at every depth to keep the layout portable. A path two entries both write (or a file in one and a directory in another) fails the build naming both commands. These collisions are checked case-insensitively across entries, including file/ancestor conflicts. Unexpected symlinks and nonregular entries are rejected rather than copied.
+- Each hook's returned paths are recorded per `bin` entry under `build` in `.crust/manifest.json`. Loose top-level files are recorded but not copied into packages.
+- With several `bin` entries, same-named directories merge, so `man/greet.1` and `man/admin.1` coexist. A path two entries both write fails the build naming both commands; collisions are compared case-insensitively.
+- Upgrade `@crustjs/core`, `@crustjs/crust`, and build-hook Extensions together. Reports from an incompatible Core fail preparation with upgrade guidance.
+- `--no-validate` skips all build hooks, so no artifact directories are staged and the manifest has no `build` field.
 
-Upgrade the application's `@crustjs/core`, `@crustjs/crust`, and build-hook Extensions together to the pure-return build API. Malformed or legacy subprocess reports (such as `files: "unknown"`) fail preparation with compatible-Core guidance; there is no writer-hook compatibility shim. Report IDs must be nonblank and trimmed, and each reported path must be normalized, contained in the entry output directory, and name an existing regular file. This does not require all entry side-effect files to be reported or make entry execution a sandbox. An executed hook returning `[]` remains a valid, empty report. Failed preparation produces no completed manifest.
-
-`--no-validate` skips snapshot preparation and all Extension build hooks, so no artifact directories are staged and the manifest has no `build` field.
+Entry modules run during preparation and are not sandboxed; files they write elsewhere are not reported.

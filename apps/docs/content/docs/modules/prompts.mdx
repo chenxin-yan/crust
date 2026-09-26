@@ -31,40 +31,7 @@ Each prompt accepts an optional second `PromptIO` argument with optional `input`
 
 `withPromptIO()` is an output-compatible alias. The ambient scope is shared with `@crustjs/progress`.
 
-## Testing custom prompts
-
-```ts
-const prompt = renderPrompt(myPrompt, { message: "Name?" });
-prompt.type("Ada");
-prompt.keys("return");
-expect(await prompt.answer).toBe("Ada");
-```
-
-Import `renderPrompt` from `@crustjs/prompts/testing`. Its `screen()` method returns the latest ANSI-stripped frame, while `answer` settles after submission.
-
-The subpath also exports `createPromptIO`, `encodeKey`, and their key and harness types. Custom prompt functions passed to `renderPrompt` accept `(options, io?)`, like built-in prompts.
-
-## Building custom prompts
-
-```ts
-import { runPrompt, submit, handleTextEdit, fuzzyFilter } from "@crustjs/prompts";
-```
-
-The root exports the renderer, submission, fuzzy matching, list rendering, line formatting, text editing, and shared glyph helpers used by the built-ins. Use these exports when a custom prompt should follow the same terminal behavior.
-
 ## Prompts
-
-```ts
-import {
-  input,
-  password,
-  confirm,
-  select,
-  multiselect,
-  filter,
-  multifilter,
-} from "@crustjs/prompts";
-```
 
 All prompt functions accept `(options, io?)`. Choice functions preserve literal choice value types when their choices are not widened. A plain-string choice is its own value, so `Choice<T>` only accepts plain strings that are themselves a `T`; non-string values such as numbers must use `{ label, value }` objects.
 
@@ -172,7 +139,9 @@ Async validators and schemas are supported. `initial` and non-TTY `default` valu
 
 <include lang="ts">../../../examples/modules/prompts.ts#theme</include>
 
-A `PromptTheme` contains `prefix`, `message`, `placeholder`, `cursor`, `selected`, `unselected`, `error`, `success`, `hint`, and `filterMatch`. Instance overrides from `createPrompts()` sit between `defaultTheme` and per-prompt overrides.
+Instance overrides from `createPrompts()` sit between `defaultTheme` and per-prompt overrides. Each theme slot is a style function:
+
+<auto-type-table path="../../../../../packages/prompts/src/core/types.ts" name="PromptTheme" />
 
 Style capability behavior comes from [`@crustjs/style`](/docs/modules/style#color-control).
 
@@ -192,33 +161,14 @@ Ctrl+C rejects with a `DOMException` whose name is `AbortError`.
 
 ## Custom prompts
 
-```ts
-const result = await runPrompt({
-  initialState: { count: 0 },
-  render: (state) => `Count: ${state.count}`,
-  handleKey: (key, state) => (key.name === "return" ? submit(state.count) : state),
-});
-```
+<include lang="ts">../../../examples/modules/prompts.ts#custom</include>
 
-`runPrompt()` owns rendering, input, submission, cancellation, and theme merging. Only one prompt may use a given input or output stream at a time. An error thrown by `render`, `handleKey`, or `renderSubmitted` rejects the returned promise after the terminal and stream reservations are restored. Pending key-handler results are ignored after cleanup, so they cannot write into a replacement prompt.
+`runPrompt()` owns rendering, input, submission, cancellation, and theme merging. Accept `(options, io?)` and forward the IO argument to `runPrompt()`, like the built-ins, so callers and tests can inject streams.
 
-Use `handleTextEdit()` for shared cursor editing. It returns `null` for keys it does not handle.
+- Only one prompt may use a given input or output stream at a time.
+- An error thrown by `render`, `handleKey`, or `renderSubmitted` rejects the promise after the terminal is restored.
+- `handleTextEdit()` provides the built-ins' cursor editing and returns `null` for keys it does not handle. The root also exports the fuzzy matching, list rendering, formatting, and glyph helpers the built-ins use; see [`index.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/prompts/src/index.ts).
 
-## Exports
+### Testing custom prompts
 
-```ts
-import { input, runPrompt, createPrompts, defaultTheme } from "@crustjs/prompts";
-```
-
-The root includes all seven prompts, renderer and IO helpers, theme APIs, fuzzy and text-editing helpers, render-format helpers, glyphs, errors, and their public types. Testing helpers remain in `@crustjs/prompts/testing`.
-
-See the source inventory in [`packages/prompts/src/index.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/prompts/src/index.ts).
-
-## Design
-
-```text
-stdout: application data
-stderr: prompt frames
-```
-
-The package depends on `@crustjs/style` for ANSI styling. It keeps prompt output off stdout by default and shares terminal IO with progress indicators.
+`renderPrompt()` from `@crustjs/prompts/testing` runs a prompt against a fake TTY, as in the example above. `type()` and `keys()` send input, `screen()` returns the latest ANSI-stripped frame, and `answer` settles after submission. The subpath also exports `createPromptIO()` and `encodeKey()` for lower-level harnesses.

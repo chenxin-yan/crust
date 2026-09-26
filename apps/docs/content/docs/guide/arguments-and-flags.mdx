@@ -5,7 +5,9 @@ description: Choose and define typed positional and named command inputs.
 
 Use a positional argument for the thing a command acts on, and a flag for how it should act.
 
-<include lang="ts">../../../examples/guide/inputs.ts</include>
+<include lang="ts" meta="twoslash">
+  ../../../examples/guide/inputs.ts
+</include>
 
 ```sh
 $ convert report.md --format markdown
@@ -16,7 +18,9 @@ The Command Action receives both values under the names in their definitions.
 
 ## Arguments
 
-<include lang="ts">../../../examples/guide/arguments.ts#defaults</include>
+<include lang="ts" meta="twoslash">
+  ../../../examples/guide/arguments-defaults.ts
+</include>
 
 ```sh
 $ convert report.md
@@ -29,7 +33,9 @@ Positional values fill definitions in order. Set `required: true` when omission 
 
 ### Variadic arguments
 
-<include lang="ts">../../../examples/guide/arguments.ts#variadic</include>
+<include lang="ts" meta="twoslash">
+  ../../../examples/guide/arguments-variadic.ts
+</include>
 
 ```sh
 $ copy dist a.ts b.ts
@@ -40,18 +46,20 @@ Use a final variadic argument when the command accepts any number of values in t
 
 ### Choices
 
-<include lang="ts">../../../examples/guide/arguments.ts#choices</include>
+<include lang="ts" meta="twoslash">
+  ../../../examples/guide/arguments-choices.ts
+</include>
 
 ```sh
 $ run deno
 Error: Invalid value "deno" for <runtime>. Expected one of: bun, node
 ```
 
-Use `choices` when the accepted strings are known in advance. The Command Action gets their string union, and an invalid value fails before the action runs.
+Use `choices` when the accepted strings are known in advance. The Command Action gets their string union, plus `undefined` here because the argument is neither required nor defaulted, and an invalid value fails before the action runs.
 
 ### Pass through raw tokens
 
-<include lang="ts">../../../examples/guide/arguments.ts#raw</include>
+<include lang="ts">../../../examples/guide/arguments-raw.ts</include>
 
 ```sh
 $ wrap -- --watch src
@@ -64,7 +72,7 @@ Tokens after `--` bypass argument and flag parsing and reach the Command Action 
 
 Use boolean flags for switches and value-taking flags for named settings.
 
-<include lang="ts" meta='title="src/cli.ts"'>
+<include lang="ts" meta='title="src/cli.ts" twoslash'>
   ../../../examples/guide/flags.ts
 </include>
 
@@ -77,7 +85,7 @@ color=undefined port=undefined
 
 The definitions use `name: "color"` and `name: "port"` without dashes. A user types `--color --port 3000`, and the action reads `flags.color` and the converted number in `flags.port`.
 
-Without `required` or `default`, either flag may be omitted and its action value is `undefined`. When supplied, a value-taking flag needs one value, so `serve --port` fails. Built-in types convert CLI text and reject invalid input before the action runs:
+In this example, neither flag has `required`, `default`, or an environment binding, so omitting it gives an action value of `undefined`. When supplied, a value-taking flag needs one value, so `serve --port` fails. Built-in types convert CLI text and reject invalid input before the action runs:
 
 ```sh
 $ serve --port nope
@@ -86,7 +94,7 @@ Error: Expected number for --port, got "nope"
 
 ### Required and defaulted values
 
-<include lang="ts" meta='title="src/publish.ts"'>
+<include lang="ts" meta='title="src/publish.ts" twoslash'>
   ../../../examples/guide/flags-required.ts
 </include>
 
@@ -97,7 +105,7 @@ $ publish --token example
 publishing to npm
 ```
 
-Set `required: true` when the user must supply a value. A missing required flag fails before the action runs:
+Set `required: true` when a value must be supplied. This example has no environment binding, so a missing required flag fails before the action runs:
 
 ```sh
 $ publish
@@ -134,18 +142,18 @@ See the [`.flags()` contract](/docs/api/crust#flagsdefs) for all accepted spelli
 
 ### Repeated values
 
-<include lang="ts" meta='title="src/serve-values.ts"'>
+<include lang="ts" meta='title="src/serve-values.ts" twoslash'>
   ../../../examples/guide/flags-values.ts
 </include>
 
-Set `multiple: true` when a flag may occur more than once. Each occurrence contributes one value in order:
+Set `multiple: true` when a flag may occur more than once. Without a `delimiter`, each occurrence contributes one value in order:
 
 ```sh
 $ serve --target linux -t darwin
 targets=linux,darwin runtime=bun tag=undefined
 ```
 
-Without a default, omitting a repeated flag gives `undefined`. Repeat the flag for every value. In `--target linux darwin`, `darwin` is a positional argument, not another target.
+Without a default or environment binding, omitting a repeated flag gives `undefined`. Repeat the flag for every value, or configure a [delimiter](#environment-variables). In `--target linux darwin`, `darwin` is a positional argument, not another target.
 
 ### Flag choices
 

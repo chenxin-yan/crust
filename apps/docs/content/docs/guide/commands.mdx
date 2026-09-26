@@ -27,7 +27,7 @@ You can use both approaches in the same app.
 
 Keep small subcommands alongside the root with `.command()`. Its callback defines the subcommand's flags and action.
 
-<include lang="ts" meta='title="src/cli.ts"'>
+<include lang="ts" meta='title="src/cli.ts" twoslash'>
   ../../../examples/guide/commands.ts
 </include>
 
@@ -35,8 +35,6 @@ Keep small subcommands alongside the root with `.command()`. Its callback define
 $ tool build --minify
 minify: true
 ```
-
-Here, `tool build --minify` runs the `build` action with `flags.minify` set to `true`. Add more `.command()` calls before `.execute()` as your CLI grows.
 
 ## Split across files
 

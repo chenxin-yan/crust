@@ -1,9 +1,9 @@
 import { defineConfig } from "vite-plus";
 
-import { libraryTasks, pack } from "../../vite.shared.ts";
+import { libraryTasks, pack, runtimeInput, upstreamBuild } from "../../vite.shared.ts";
 
 // The programmatic `build()` library. The `crust` executable itself is staged
-// by `crust build` (see package.json scripts), which ships this `dist/` via
+// by `crust build` (`build:task` below), which ships this `dist/` via
 // `crust.include` and carries `exports` into the generated root package.
 export default defineConfig({
 	pack: {
@@ -25,5 +25,22 @@ export default defineConfig({
 		publint: false,
 		attw: false,
 	},
-	run: { tasks: libraryTasks },
+	// Two cached stages: each restores only its own output, and staging
+	// fingerprints `dist/`, so a library-only change re-stages `.crust/`.
+	run: {
+		tasks: {
+			...libraryTasks,
+			"pack:task": {
+				...libraryTasks["build:task"],
+				output: ["dist/**"],
+			},
+			"build:task": {
+				command: "bun src/cli.ts build",
+				dependsOn: ["pack:task", upstreamBuild],
+				env: ["CI"],
+				input: [...runtimeInput, "dist/**", "!.crust/**"],
+				output: [".crust/**"],
+			},
+		},
+	},
 });

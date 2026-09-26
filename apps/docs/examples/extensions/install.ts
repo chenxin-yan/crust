@@ -7,6 +7,7 @@ const deploy = defineCommand("deploy", { description: "Deploy the app" }, (comma
 
 export const app = new Crust("my-cli", { version: "0.2.0" })
 	.add(deploy)
+	// [!code highlight]
 	.extend(noColor(), version(), help(), didYouMean());
 
 await app.execute();

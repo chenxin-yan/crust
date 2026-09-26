@@ -1,6 +1,10 @@
 import { redirect } from "@tanstack/react-router";
-import { createMiddleware, createStart } from "@tanstack/react-start";
+import { createCsrfMiddleware, createMiddleware, createStart } from "@tanstack/react-start";
 import { rewritePath } from "fumadocs-core/negotiation";
+
+const csrfMiddleware = createCsrfMiddleware({
+	filter: (ctx) => ctx.handlerType === "serverFn",
+});
 
 const llmRewriter = rewritePath("/docs{/*path}.mdx", "/llms.mdx/docs{/*path}");
 
@@ -17,6 +21,6 @@ const llmMiddleware = createMiddleware().server(({ next, request }) => {
 
 export const startInstance = createStart(() => {
 	return {
-		requestMiddleware: [llmMiddleware],
+		requestMiddleware: [csrfMiddleware, llmMiddleware],
 	};
 });

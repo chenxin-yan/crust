@@ -15,23 +15,9 @@ npm install @crustjs/skills
 
 <include lang="ts">../../../examples/modules/skills.ts#write</include>
 
-`writeSkills()` generates one skill from `app` and copies any authored `extras`. It replaces a dedicated output directory named `skills` and returns paths relative to that directory. An authored skill with the generated skill's name replaces the generated skill.
+`writeSkills()` generates one skill directory from `app` (a `SKILL.md` plus one file per command under `commands/`) and copies any authored `extras`. It replaces a dedicated output directory named `skills` and returns paths relative to it. An authored skill with the generated skill's name replaces the generated one.
 
-Each skill has its own directory:
-
-```text
-.crust/artifacts/skills/
-└── my-cli/
-    ├── SKILL.md
-    └── commands/
-        ├── my-cli.md
-        ├── deploy.md
-        ├── skills.md
-        └── skills/
-            ├── install.md
-            ├── repair.md
-            └── uninstall.md
-```
+<auto-type-table path="../../../../../packages/skills/src/build.ts" name="WriteSkillsOptions" />
 
 Use `writeSkillsFromSnapshot()` when a prepared Command Snapshot is available. Omit `app` only when at least one authored extra is provided.
 
@@ -39,19 +25,11 @@ Use `writeSkillsFromSnapshot()` when a prepared Command Snapshot is available. O
 
 <include lang="ts">../../../examples/modules/skills.ts#extension</include>
 
-The Extension registers `my-cli skills` (alias `skill`) with the `install`, `uninstall`, and `repair` subcommands. `skills install` is the canonical install command; bare `my-cli skills` is shorthand for it and shares the same handler and flags. Setting `command` to a custom name replaces the default command without adding the alias. It also contributes an `Agent skills` root section with `except: [skill]` (the Extension factory), so it appears in help, man pages, and any other consumer, but not in the skills it generates.
+The Extension registers `my-cli skills` (alias `skill`) with `install`, `uninstall`, and `repair` subcommands; bare `my-cli skills` is shorthand for `skills install`. A custom `command` name replaces the default command without adding the alias. It also contributes an `Agent skills` root section, excluded from the generated skills with `except: [skill]`, that lists each packaged skill and its source directory.
 
-The help section includes this escaped excerpt:
+During `crust build`, the Extension's build hook renders generated and authored skills under `skills/`, recorded as artifacts owned by `crust:skills`. At runtime the commands read them from [`resolveArtifactDir("skills")`](/docs/api/crust#resolveartifactdirname), so run `crust build` before using them; until then help shows a note instead of failing.
 
-```text
-Agent skills:
-  my-cli \u2014 Manage deployments
-    Source: .crust/root/skills/my-cli
-```
-
-Packaged skills are read at runtime from [`resolveArtifactDir("skills")`](/docs/api/crust#resolveartifactdirname); before the first build, help shows a note asking you to run `crust build` instead of failing. The build hook renders generated and authored skills under `skills/`; `crust build` writes them to `.crust/artifacts/skills` and records those files as artifacts owned by `crust:skills`.
-
-Generated man pages can embed source paths resolved on the build machine. Run builds from the project root that contains the packaged skills directory to avoid absolute build-machine paths.
+The section's source paths are resolved when help or man output is generated. Build from the project root that contains the packaged skills directory so man pages do not embed absolute build-machine paths.
 
 ```sh
 my-cli skills install
@@ -63,9 +41,9 @@ my-cli skills repair
 
 `--scope` accepts `project` or `global`. With `--all`, scope comes from `--scope`, then `defaultScope`, then `global`; without `--all`, an interactive run prompts when neither setting is supplied. `install --all` links every packaged skill for the Universal group, every agent detected on `PATH`, and every agent that already holds one of the packaged skills.
 
-Install is additive only: it links or repairs the selected skills for the selected agents and never removes links. An interactive install asks once which packaged skills to install (only when more than one is packaged), then once which agents to install every selected skill for, with an overwrite confirmation for each unowned directory. Unselected skills and agents are left untouched, even when they already hold an installed link; removal happens only through `skills uninstall`.
-
-`skills uninstall` lists the packaged skills currently linked at the chosen scope, with nothing preselected, and removes the selected ones from every agent directory; `--all` removes them without prompting and is the only non-interactive form. `skills repair` relinks stale or dangling links without prompting for agents.
+- **Install is additive.** It links or repairs the selected skills for the selected agents and never removes links. Interactively, it asks which skills (when more than one is packaged) and which agents, and confirms before overwriting each directory it does not own.
+- **Uninstall removes selected links.** It lists the skills linked at the chosen scope, with nothing preselected, and removes the selected ones from every agent directory. `--all` is the only non-interactive form.
+- **Repair** relinks stale or dangling links without prompting.
 
 <auto-type-table path="../../../../../packages/skills/src/types.ts" name="SkillOptions" />
 
@@ -99,18 +77,15 @@ const status = await getSkillStatus({ name: "my-cli", sourceDir });
 await uninstallSkill({ name: "my-cli" });
 ```
 
-`getSkillStatus()` reports `linked`, `dangling`, `conflict`, or `absent` per agent directory. `uninstallSkill()` removes only owned links, including dangling links. Only missing paths (`ENOENT`) count as absent or non-resolving; permission and other filesystem failures reject instead of being reported as missing. This applies to link inspection during installation, status checks, and uninstallation.
+`getSkillStatus()` reports `linked`, `dangling`, `conflict`, or `absent` per agent directory. `uninstallSkill()` removes only owned links, including dangling ones. Only missing paths (`ENOENT`) count as absent; permission and other filesystem failures reject. Each result lists one entry per agent with its effective `scope` and status.
 
 <auto-type-table path="../../../../../packages/skills/src/types.ts" name="InstallSkillOptions" />
 
-### Public workflow types
+<auto-type-table path="../../../../../packages/skills/src/types.ts" name="SkillStatusOptions" />
 
-```ts
-type Scope = "global" | "project";
-type SkillLinkStatus = "linked" | "dangling" | "conflict" | "absent";
-```
+<auto-type-table path="../../../../../packages/skills/src/types.ts" name="UninstallSkillOptions" />
 
-The root exports the option, result, status, source, scope, agent, and packaged-skill types used by these functions.
+`detectInstalledAgents()`, `getUniversalAgents()`, `getAdditionalAgents()`, and `isUniversalAgent()` expose the agent catalog. The [package entry point](https://github.com/chenxin-yan/crust/blob/main/packages/skills/src/index.ts) lists every exported type.
 
 ## Command sections
 
@@ -118,7 +93,7 @@ The root exports the option, result, status, source, scope, agent, and packaged-
 
 Command metadata sections render as `## Title` blocks in each command's file under `commands/`. Passing the `skill` factory in `only` limits a section to the skills renderer.
 
-Sections with the same exact title share one heading and join their bodies. See [Command Snapshot sections](/docs/api/crust#snapshot) for shared snapshot behavior.
+Sections with the same exact title share one heading and join their bodies. See [`CommandSectionInput`](/docs/api/types#commandsectioninput) for audience rules.
 
 ## Name validation
 

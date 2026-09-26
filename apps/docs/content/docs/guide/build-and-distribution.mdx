@@ -1,307 +1,218 @@
 ---
 title: Build and distribution
-description: Build and publish your CLI for Bun, Deno, or Node.
+description: Configure, build, test, and publish your CLI.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
-import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 
-Use `crust build` when your CLI is ready to run without its TypeScript source. One command produces the tree you run locally and publish to npm.
+`crust build` turns your TypeScript entry into a Node.js bundle or standalone Bun/Deno executables. The examples below use the `my-cli` command from [Quick Start](/docs/quick-start).
 
-```sh
-crust build
-node .crust/root/bin/my-cli.js --help
-crust publish --dry-run
-crust publish
+## Set up `package.json`
+
+Scaffolded projects already have the build tooling and scripts. For an existing project, install the tool:
+
+```npm
+npm install -D @crustjs/crust
 ```
+
+Merge these fields into your `package.json`, keeping your dependencies:
+
+```json title="package.json"
+{
+  "name": "my-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": { "my-cli": "src/cli.ts" },
+  "crust": { "runtime": "bun" },
+  "scripts": {
+    "build": "crust build",
+    "start": "node .crust/root/bin/my-cli.js",
+    "release": "crust publish"
+  }
+}
+```
+
+The `bin` key must match your root command: `new Crust("my-cli")`. `"private": true` prevents accidentally publishing the source project; Crust generates separate publishable packages in `.crust/`.
+
+Choose `crust.runtime` for the output you want:
+
+| Runtime | Build output                                       | Users need after npm install |
+| ------- | -------------------------------------------------- | ---------------------------- |
+| `bun`   | Node launcher + standalone executable per platform | Node.js, not Bun             |
+| `deno`  | Node launcher + standalone executable per platform | Node.js, not Deno            |
+| `node`  | JavaScript bundle                                  | Node.js                      |
+
+The commands below assume Node.js and Bun are installed; Deno builds also need `deno` on `PATH`. See [tooling requirements](/docs/modules/crust#install) and [runtime versions](/docs/guide/runtime-support#run-the-same-cli).
 
 ## Build
 
+For a quick local Bun or Deno build, compile only for your machine:
+
 ```sh
-crust build
-# Runtime: bun (default)
-# Manifest: .../.crust/manifest.json (excerpt)
+npm run build -- --target host
 ```
 
-`crust build` writes everything to `.crust/`, wiping it first. It requires `name` and `version` in `package.json`; add `.crust` to `.gitignore`.
+For Node.js, run `npm run build` without `--target`.
+
+Builds replace `.crust/`; add it to `.gitignore`. On Linux x64 with Bun selected, the output looks like this:
 
 ```text
 .crust/
-├── manifest.json        # staged packages, publish order, and per-bin build hook output
-├── artifacts/           # Extension build hook output, written by crust build
-├── root/                # the npm package users install
-│   └── bin/my-cli.js    # one per bin entry: Node launcher (Bun, Deno) or the bundle itself (Node)
-└── linux-x64/           # one platform package per target (Bun and Deno)
-    └── bin/my-cli-bun-linux-x64   # <command>-<target> per bin entry, .exe on Windows
+├── manifest.json                       # package paths and publish order
+├── root/                               # the package users install
+│   ├── package.json
+│   └── bin/my-cli.js                    # Node launcher
+└── linux-x64/
+    ├── package.json
+    └── bin/my-cli-bun-linux-x64         # standalone executable
 ```
 
-Every build prints the runtime it resolved and where it came from, for example `Runtime: node (inferred from @types/node)`. The order is:
+Node.js builds omit the platform directories; `root/bin/my-cli.js` is the bundle itself. [Generated manifests](/docs/modules/crust#staged-packagejson-files) describe which metadata and files are shipped.
 
-1. `"crust": { "runtime": "deno" }` in `package.json`
-2. Inference: a `deno.json` or `deno.jsonc` in the project selects Deno; `@types/node` in `dependencies` or `devDependencies` without `@types/bun` selects Node
-3. Bun
-
-Lockfiles are not a signal, because the package manager that installed your dependencies says nothing about the runtime your CLI runs on.
-
-| Runtime | Staged in `.crust/`                                                                                         | Needed by the user |
-| ------- | ----------------------------------------------------------------------------------------------------------- | ------------------ |
-| Bun     | Root package with a Node launcher plus one platform package per target                                      | Node               |
-| Deno    | Same layout as Bun; Linux platform packages are glibc only                                                  | Node               |
-| Node    | Root package only: `bin/<command>.js` is the self-contained bundle, so no launcher and no platform packages | Node               |
-
-The entry file is the value of `bin` in `package.json`: `"bin": { "my-cli": "src/main.ts" }` builds `src/main.ts` as the `my-cli` command, and several keys build several commands (see [Commands and entries](/docs/modules/crust#commands-and-entries-bin)). Without `bin`, the build compiles `src/cli.ts` under the unscoped package name. The runtime, Bun plugins, and included directories live in the [`crust` block](/docs/modules/crust#packagejson-configuration); see the [`crust build` options](/docs/modules/crust#crust-build-options) for the flags.
-
-### Choose targets
+### Choose release targets
 
 ```sh
-crust build --target bun-linux-x64 --target bun-darwin-arm64
+# Build all supported targets, or the subset in crust.targets
+npm run build
+
+# Override the subset for this build (Bun example)
+npm run build -- --target bun-linux-x64 --target bun-darwin-arm64
 ```
 
-Omitting `--target` builds every supported Bun or Deno target; repeat it for the platforms you ship, or pass `--target host` for a fast local build of just your own machine's target (`host` can be mixed with explicit targets, and duplicates are dropped). A CLI that always ships the same subset records it once as [`crust.targets`](/docs/modules/crust#packagejson-configuration) in `package.json`, so a bare `crust build` stages exactly those and `--target` still overrides per run. The launcher only knows the targets that were built, so a release build should include every platform your users run.
-
-| Bun target                                   | Deno target                                             | Platform alias                       |
-| -------------------------------------------- | ------------------------------------------------------- | ------------------------------------ |
-| `bun-linux-x64`, `bun-linux-arm64`           | `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu` | `linux-x64`, `linux-arm64`           |
-| `bun-linux-x64-musl`, `bun-linux-arm64-musl` | none                                                    | `linux-x64-musl`, `linux-arm64-musl` |
-| `bun-darwin-x64`, `bun-darwin-arm64`         | `x86_64-apple-darwin`, `aarch64-apple-darwin`           | `darwin-x64`, `darwin-arm64`         |
-| `bun-windows-x64`, `bun-windows-arm64`       | `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc`     | `windows-x64`, `windows-arm64`       |
-
-Node builds take no `--target`; the bundle runs wherever Node does.
-
-#### Linux glibc and musl
-
-The plain Linux targets link against glibc and do not start on musl-based distributions such as Alpine; the `-musl` targets cover those. The launcher detects the host C library and picks the matching binary, so shipping both is enough for the default `node:alpine` images.
-
-<Callout type="warn">
-  Bun's musl executables still load `libstdc++` and `libgcc` dynamically. A bare Alpine image needs
-  `apk add libstdc++ libgcc`; `node:alpine` already includes them.
-</Callout>
-
-### Staged `package.json` files
-
-The staged `package.json` files are generated, not copied: they take `name`, `version`, and npm metadata (`description`, `license`, `author`, `repository`, `keywords`, `engines`, and similar) from your `package.json`, and a Bun or Deno root package lists the platform packages as `optionalDependencies`. Your own `bin`, `files`, `dependencies`, and `devDependencies` are not carried over, because the binaries and the Node bundle already inline them, so keep the usual split in your project: Crust packages your code imports in `dependencies`, `@crustjs/crust` in `devDependencies`. A Node root package has no generated platform `optionalDependencies`; explicitly declared peers are preserved as described below.
-
-`exports` is carried as written, into the root package only, so a CLI package can also expose a library entry (this is how `@crustjs/crust` ships [`build()`](#programmatic-builds)). Every target must be a `./` path to a file the build staged into the root package, that is, inside a [`crust.include`](#ship-extra-directories-with-crustinclude) directory or an Extension artifact directory; `null` targets and nested condition objects are fine, while `*` patterns, fallback arrays, paths Node rejects (`.`, `..`, `node_modules`, or empty segments), and paths to source files that stay behind fail the build with the offending target.
-
-The staged root always uses `"type": "module"` for its generated CLI files. If your source root has `"type": "commonjs"` or omits `type`, exported `.js` and `.d.ts` files must sit under an included nested `package.json` declaring the library's type, such as `dist/package.json` with `{"type":"commonjs"}`; otherwise the build rejects them rather than changing their module format. Alternatively, use explicit `.cjs`/`.d.cts` extensions for CommonJS or `.mjs`/`.d.mts` for ESM. Included library files are copied, not transformed; keep their internal imports compatible with the staged package scopes too.
-
-`peerDependencies` and `peerDependenciesMeta` travel with it, root package only, so a library entry can declare the packages its published declarations import; ranges must be publishable as written (`workspace:`, `catalog:`, and named `catalog:<name>` ranges fail the build, since staged manifests are published without rewriting). No other dependency field is carried. Projects without these fields are staged exactly as before.
-
-Each key of your `bin` field is a command: the root package gets `bin/<command>.js` and every platform package gets `bin/<command>-<target>` (`.exe` on Windows), so two commands mean two launchers and two binaries per platform, all in the same packages. A string `bin` or no `bin` gives one command named after the unscoped package name. Platform package names append the platform alias, such as `my-cli-linux-x64` or `@scope/my-cli-linux-x64`, and Linux packages carry an npm `libc` field (`glibc` or `musl`), so package managers download only the platform package that matches the host. The project's `README.md` is copied into the root package and its `LICENSE` into every package.
+Publish every platform you intend to support—not just `host`. Set [`crust.targets`](/docs/modules/crust#packagejson-configuration) to keep a release subset in configuration. See [supported targets](/docs/modules/crust#supported-targets), including musl targets and prerequisites for Alpine Linux.
 
 ## Run locally
 
 ```sh
+npm run start -- --help
+# Equivalent with the configuration above:
 node .crust/root/bin/my-cli.js --help
 ```
 
-`.crust/root/bin/<command>.js` runs in place: the Bun and Deno launcher finds the platform binary in the sibling `.crust/<platform>/` directory, and the Node bundle needs nothing else. Projects scaffolded by `create-crust` expose this as the `start` script. Your project's `bin` points at the source entry, so `npm link` in the project runs the TypeScript source through the shebang at the top of the entry (`#!/usr/bin/env bun`, `node`, or `-S deno run -A`); run `npm link` inside `.crust/root` to link the built distribution instead.
+Run the staged entry before publishing. Bun and Deno launchers find their binaries in the sibling platform directories; the Node.js bundle runs directly.
+
+To test through `npm link`, link from `.crust/root`. Linking from the project root runs the source entry instead.
 
 ## Publish with `crust publish`
 
+Use a package name you own and a new version, then build your release targets:
+
 ```sh
-crust publish --dry-run
-# Publish order: linux-x64 -> darwin-arm64 -> root (excerpt)
-crust publish
+npm run build
+npm run release -- --dry-run
+# Publish order: ... -> root
+
+npm login
+npm run release
 ```
 
-The dry run prints the order and commands without publishing and stays offline. `crust publish` reads `.crust/manifest.json`, verifies package metadata, asks the target registry (`npm view`) which staged packages already have this exact version, publishes the missing ones with `npm publish` (platform packages before the root; a Node manifest publishes just `root`), and stops at the first failure. Existing `name@version` pairs are skipped and never re-tagged, so rerunning after a failure resumes where the previous run stopped; identity is name and version only, not tarball contents or ownership, and the lookup is not a permission check (trusted publishing supplies no read credential), so a half-published release is recoverable rather than prevented. See its [options](/docs/modules/crust#crust-publish-options). Because npm does the upload, [trusted publishing](https://docs.npmjs.com/trusted-publishers) works from GitHub Actions: give the job `id-token: write` and configure a trusted publisher for the root package and each platform package.
+The dry run validates staged metadata and prints the plan **without contacting the registry**. Real publishing uses npm, uploads platform packages before the root, and stops on failure. Rerun to resume: existing `name@version` pairs are skipped, not overwritten or re-tagged.
 
-For a local bootstrap publish, run `npm login`, then `crust publish` from a terminal. When stdin is a TTY, npm inherits the terminal so you can complete its browser or one-time-password (2FA) prompts for each package. Without a TTY, output remains captured and forwarded after each publish; use non-interactive credentials or trusted publishing in CI.
+For a scoped public package, add `"publishConfig": { "access": "public" }` to your project's `package.json` before building. Users install only the root package:
 
-```sh tab="npm" tab-group="package-manager"
+```sh
 npm install -g my-cli
 my-cli --help
 ```
 
-```sh tab="pnpm"
-pnpm add -g my-cli
-my-cli --help
-```
-
-```sh tab="yarn"
-yarn dlx my-cli --help
-```
-
-```sh tab="bun"
-bun add -g my-cli
-my-cli --help
-```
-
-Users install the root package; for Bun and Deno builds the package manager pulls only the platform package for their machine, and for Node builds the root package is the whole CLI. Yarn 2+ has no global install, so Yarn users run the CLI once with `yarn dlx` or add it to a project and run it with `yarn my-cli`.
-
-<Callout type="warn">
-  npm 10.9.8 can report a successful install but remove the root command shim while skipping
-  incompatible optional platform packages with the same bin name. Use npm 11.19.1, verified on Linux
-  with Node 22.23.2. The minimum fixed npm version has not been established; this does not imply
-  every npm11 release is fixed.
-</Callout>
+For Bun and Deno, the package manager selects the matching platform dependency. See the [npm installation caveat](/docs/modules/crust#npm-installation-caveat) for an affected npm version and a verified alternative.
 
 ### Publishing from CI
 
-`npm publish` runs inside each `.crust/<package>` directory, so a project-level `.npmrc` is not read. Authenticate with [trusted publishing](https://docs.npmjs.com/trusted-publishers), point `NPM_CONFIG_USERCONFIG` at an `.npmrc` you write in the workflow, or use `~/.npmrc`; `--registry` overrides the destination. The existence lookup replays the staged `publishConfig` registry settings (`registry`, `@scope:registry`, `scope`) to `npm view` and follows npm 10.6+ precedence, where CLI flags win over `publishConfig`; npm 9 resolves `publishConfig` first, so there a `--registry` that conflicts with `publishConfig.registry` is checked against the wrong registry. npm reads `publishConfig.access` from each staged `package.json`, so a scoped public package needs `"publishConfig": { "access": "public" }` in its `package.json`, which `crust build` copies into every staged package.
+For GitHub Actions [trusted publishing](https://docs.npmjs.com/trusted-publishers), configure a trusted publisher on npm for **the root and every platform package**, then give the release job:
+
+```yaml title="Workflow permissions"
+permissions:
+  contents: read
+  id-token: write
+```
+
+After installing dependencies and building the release targets, run `npm run release`; do not run `npm login` in CI.
+
+npm runs inside each staged package, so it does not read the project's `.npmrc`. If you use a credentials file instead, select it explicitly:
+
+```sh
+NPM_CONFIG_USERCONFIG="$PWD/.npmrc" npm run release
+```
+
+Keep credentials out of version control. Use `--registry` or `--tag` through the release script as needed; see [publish options and registry precedence](/docs/modules/crust#crust-publish-options).
 
 ## Custom distribution
 
-```sh
-crust build --target host       # Bun and Deno; Node takes no --target
-ls .crust/linux-x64/bin/        # my-cli-bun-linux-x64
-cat .crust/manifest.json        # every staged directory, its target, and the publish order
-```
-
-Every build stages into `.crust/`, so for release assets, containers, or any channel other than npm, build the targets you need and take the files from there: the standalone executable at `.crust/<platform alias>/bin/<command>-<target>` for Bun and Deno (`.exe` on Windows), or the executable JavaScript bundle at `.crust/root/bin/<command>.js` for Node. `.crust/manifest.json` is the index. Staging requires `name` and `version` in `package.json` and replaces `.crust/` on every build, so copy what you need out before building again.
-
-```json title=".crust/manifest.json (excerpt)"
-{
-  "root": { "name": "my-cli", "dir": "root", "bins": ["my-cli"] },
-  "publishOrder": ["linux-x64", "root"],
-  "build": {
-    "my-cli": {
-      "extensions": [
-        {
-          "id": "crust:skills",
-          "files": ["skills/my-cli/SKILL.md", "skills/my-cli/commands/my-cli.md"]
-        },
-        { "id": "crust:man", "files": ["man/my-cli.1"] }
-      ]
-    }
-  }
-}
-```
-
-`build` records, per `bin` entry, every file each Extension build hook produced under `.crust/artifacts/`, in hook order. It is absent when `--no-validate` skipped the hooks.
-
-## Programmatic builds
-
-```ts title="scripts/release.ts"
-import { build } from "@crustjs/crust";
-
-const result = await build({
-  cwd: process.cwd(), // default; package.json bin and crust are read from here
-  targets: ["bun-linux-x64", "bun-darwin-arm64"], // overrides crust.targets; omit for config, then every target
-  envFiles: [".env.production"],
-  onLog: (line) => console.log(line), // silent without it
-});
-
-console.log(result.stageDir); // <cwd>/.crust
-for (const artifact of result.artifacts) {
-  if (artifact.kind === "executable") {
-    console.log(`${artifact.command} for ${artifact.target}: ${artifact.path}`);
-  }
-}
-for (const [command, report] of Object.entries(result.reports ?? {})) {
-  console.log(
-    command,
-    report.extensions.map((extension) => extension.id),
-  );
-}
-```
-
-`crust build` is a thin wrapper over `build()` from `@crustjs/crust`, so release scripts, CI matrices, and custom publish flows can run the same pipeline and get the result back instead of parsing output. The options mirror the flags (`targets` for `--target`, `envFiles` for `--env-file`, `minify`, `validate`) with the same defaults and the same errors, and `cwd` names the project whose `package.json` is read. The function throws on any failure, exactly where the command would exit 1, and is silent unless `onLog` is passed; the callback receives every line the command prints and, as a second argument, whether it was bound for `stdout` or `stderr` (snapshot warnings).
-
-The result lists what staging generated: `stageDir`, `artifacts` (one record per generated `package.json`, Node launcher, compiled executable per command and target, or Node bundle, each with its absolute `path`), and `reports`, the same per-command Extension build hook output that `manifest.json` records under `build`. Extension artifact files are not repeated in `artifacts`; `reports` is their source of truth, with paths relative to `.crust/artifacts/`. Compilation and Command Snapshots run in `bun` subprocesses just as they do for the command, so a script can run under Node as long as `bun` is on `PATH`; run it with `bun` to need nothing else. See the [`build()` reference](/docs/modules/crust#programmatic-api) for the option and result types.
-
-## Prepare Extension artifacts
+For release archives or containers, take the built files directly—npm is optional. For example, package a Linux x64/glibc Bun build:
 
 ```sh
-crust build
-# Preparing Command Snapshot for my-cli... (excerpt)
-#   crust:man  1 file  man/my-cli.1
+npm run build -- --target bun-linux-x64
+tar -czf my-cli-linux-x64.tar.gz -C .crust/linux-x64/bin .
 ```
 
-Before compilation, the build materializes and validates the command tree of every `bin` entry, checks that its root command is named after the `bin` key, and runs Extension build hooks. Each hook returns the files it ships; the build validates their paths, writes them to `.crust/artifacts/`, and records them under `build` in `.crust/manifest.json`. The entry module's top-level code runs during this step, but Command Actions and code after `await app.execute()` do not. Each top-level artifact directory is copied into `.crust/root/` (and listed in its `files`) and into every platform package's `bin/`, as described in [Extension artifacts](/docs/modules/crust#extension-artifacts). A path two hooks of one entry both return fails the build naming both Extensions. With several entries, each entry's hooks run in isolation and their output is merged; a path two entries both write fails the build naming both commands.
+This includes the executable **and any adjacent data directories**. Bun and Deno executables need no runtime installation; Node.js distributions still need Node.js and should include the contents of `.crust/root/`. Copy or archive your output before the next build replaces it.
 
-Use `--no-validate` only when preparation cannot run; it skips the name check and Extension build hooks, so nothing is staged from `.crust/artifacts/` and the manifest has no `build` field. `bin` itself is still validated: missing entries, duplicate entries, and invalid command names fail before `.crust/` is touched.
+## Customize the build
 
 ### Ship extra directories with `crust.include`
 
-```json title="package.json"
+```json title="package.json (partial)"
 {
   "crust": { "include": ["templates"] }
 }
 ```
 
-`crust.include` lists directories, relative to the project root, that `crust build` copies exactly like Extension artifacts: into `.crust/root/` (added to its `files`) and into each platform package's `bin/`. Entries cannot be inside `.crust`.
+Create `templates/` in your project, then build. Read the shipped copy with `resolveArtifactDir("templates")` from `@crustjs/core`, rather than a path relative to the working directory. It works from the staged tree, an npm install, or a standalone executable. See [artifact paths](/docs/api/crust#resolveartifactdirname).
 
-Read Extension artifacts and included directories at runtime with [`resolveArtifactDir(name)`](/docs/api/crust#resolveartifactdirname) from `@crustjs/core`: it returns the staged copy for the running layout (compiled binary, Node bundle, or source after a build), so `resolveArtifactDir("templates")` works in place, after install, and inside a compiled executable.
+Extensions such as `man()`, `skill()`, and `completion()` generate their own directories during build preparation. That step runs entry-module top-level code, but not Command Actions. `--no-validate` skips preparation **and those Extension artifacts**; see [Extension artifacts](/docs/modules/crust#extension-artifacts).
 
-## Add Bun bundler plugins
+### Environment variables
 
-```json title="package.json"
-{
-  "crust": { "bunPlugins": ["@opentui/solid/bun-plugin", "./build/plugin.ts"] }
-}
-```
-
-See [`crust.bunPlugins`](/docs/modules/crust#packagejson-configuration) for resolution rules. Validation runs the entry under Bun's runtime without bundler plugins, so a plugin that transforms sources at import time needs a matching runtime plugin in `bunfig.toml` `preload`; otherwise pass `--no-validate`.
-
-## Environment variables
-
-<include lang="ts">../../../examples/guide/build.ts#runtime-secret</include>
-
-Read secrets and deployment configuration from the runtime environment; Crust adds no abstraction, and [Bun environment variables](https://bun.sh/docs/runtime/environment-variables) covers Bun's `.env` loading and precedence.
-
-### Build-time constants
+Keep secrets in runtime variables; use `PUBLIC_*` only for values safe to embed. This entry reads one of each:
 
 <include lang="ts" meta='title="src/cli.ts"'>
   ../../../examples/guide/build.ts
 </include>
 
-```sh
-cat > .env.production <<'EOF'
+```dotenv title=".env.production"
 PUBLIC_API_ORIGIN=https://api.example.com
-API_TOKEN=private-value
-EOF
-crust build --env-file .env.production --target host
-env -u PUBLIC_API_ORIGIN -u API_TOKEN node .crust/root/bin/my-cli.js origin
-# https://api.example.com
-grep -a -o 'private-value' .crust/*/bin/my-cli-* || echo 'private-value: not embedded'
-# private-value: not embedded
 ```
 
-For Bun and Node builds, `--env-file` passes explicit files to the compiler, embeds only `PUBLIC_*` values, and reaches snapshot preparation. The one other name the bundler rewrites is the reserved [`CRUST_INTERNAL_BUILD`](/docs/api/crust#resolveartifactdirname) marker.
+For Bun or Node.js builds:
+
+```sh
+npm run build -- --env-file .env.production
+node .crust/root/bin/my-cli.js origin
+# https://api.example.com
+
+API_TOKEN=your-token node .crust/root/bin/my-cli.js
+# Deploying
+```
 
 <Callout type="warn">
-  Embedded `PUBLIC_*` values are visible in the output. Keep secrets in runtime environment
-  variables without that prefix.
+  Only `PUBLIC_*` variables are embedded from env files; anyone with the output can read them. Deno
+  builds reject `--env-file`—supply their configuration at runtime instead.
 </Callout>
 
-Deno builds reject `--env-file`, so load their configuration at runtime instead.
+Bun executables also load `.env` from their working directory at startup, but do not load that directory's `bunfig.toml`.
 
-### Runtime autoloading
+### Add Bun bundler plugins
 
-Bun executables built by `crust build` autoload `.env` from the directory they start in, but not its `bunfig.toml`.
+```json title="package.json (partial)"
+{
+  "crust": { "bunPlugins": ["@opentui/solid/bun-plugin"] }
+}
+```
 
-## Set up `package.json`
+Plugins apply to Bun and Node.js compilation, not build preparation. If entry imports need the same transform during preparation, register a runtime plugin in `bunfig.toml` `preload` too. See [plugin configuration](/docs/modules/crust#packagejson-configuration) and the [TUI setup](/docs/modules/tui).
 
-These are the files `create-crust --runtime bun|node|deno` scaffolds, with `{{name}}` and the version placeholders filled in. Every runtime shares the same flow: `build` stages `.crust/`, `start` runs `.crust/root/bin/<command>.js`, and `release` publishes with `crust publish`. `bin` maps the command name to its source entry, which `crust build` compiles and `npm link` runs directly through the entry's shebang. The staged packages regenerate `bin` and `files` and omit dependency fields. The project itself is `"private": true`: only the staged packages are published, so a stray `npm publish` in the project directory is refused instead of uploading the source (`private` is not copied into the staged packages, and `npm link` ignores it).
+### Programmatic builds
 
-<Tabs items={["Bun", "Node", "Deno"]}>
-<Tab value="Bun">
+```ts title="scripts/build.ts"
+import { build } from "@crustjs/crust";
 
-<include lang="json" meta='title="package.json"'>
-  ../../../../../packages/create-crust/templates/runtime/bun/package.json
-</include>
+const result = await build({
+  onLog: (line) => console.log(line),
+});
 
-`dev` runs the TypeScript source with Bun.
+console.log(result.stageDir); // <cwd>/.crust
+```
 
-</Tab>
-<Tab value="Node">
-
-<include lang="json" meta='title="package.json"'>
-  ../../../../../packages/create-crust/templates/runtime/node/package.json
-</include>
-
-`"crust": { "runtime": "node" }` makes `crust build` stage the root-only bundle package. End users need Node 22.18+ but not Bun. `dev` runs the source with Node's built-in type stripping, so keep to erasable syntax (no enums or parameter properties).
-
-</Tab>
-<Tab value="Deno">
-
-<include lang="json" meta='title="package.json"'>
-  ../../../../../packages/create-crust/templates/runtime/deno/package.json
-</include>
-
-`"crust": { "runtime": "deno" }` makes `crust build` compile with `deno compile`; Deno must be on `PATH` for the build, but the executables do not need it. Deno resolves `dependencies` from `node_modules`, so run `deno install` (or any package manager's install) before `deno task dev`.
-
-</Tab>
-</Tabs>
+Run with Bun, or with Node.js and `bun` on `PATH`. `build()` uses the same configuration as the CLI and returns artifact paths and Extension reports; it throws on failure. See the [options and result types](/docs/modules/crust#programmatic-api).

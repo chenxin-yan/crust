@@ -1,10 +1,10 @@
-//#region use
 import { Crust, defineCommand, defineContext } from "@crustjs/core";
 
 const api = defineContext("api", () => ({
 	get: (path: string) => `https://api.example.com${path}`,
 }));
 
+//#region use
 const health = defineCommand("health", (command) =>
 	// [!code highlight]
 	command.use(api).action(async ({ ctx, stdout }) => {
@@ -12,7 +12,7 @@ const health = defineCommand("health", (command) =>
 	}),
 );
 
-const app = new Crust("app").provide(api()).add(health); // [!code highlight]
+const app = new Crust("app").provide(api()).add(health);
 
 await app.execute();
 //#endregion

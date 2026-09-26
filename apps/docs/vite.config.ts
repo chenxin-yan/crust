@@ -6,6 +6,7 @@ import mdx from "fumadocs-mdx/vite";
 import { defineConfig, lazyPlugins } from "vite-plus";
 
 import { toolingTasks, upstreamBuild } from "../../vite.shared.ts";
+import { landingTwoslash } from "./vite/landing-twoslash.ts";
 
 export default defineConfig(({ mode }) => ({
 	server: {
@@ -14,6 +15,25 @@ export default defineConfig(({ mode }) => ({
 	resolve: {
 		tsconfigPaths: true,
 	},
+	environments: {
+		ssr: {
+			optimizeDeps: {
+				// TODO: the Cloudflare Vite plugin crawls SSR deps from the worker entry, so modules
+				// first imported by lazily loaded routes (MDX components, Twoslash popups) are only found on
+				// first render, and that mid-session re-optimization loads a second React copy ("Invalid hook
+				// call" / null `use`). Listing them here leaves nothing to discover; drop once dev-time SSR
+				// re-optimization stops duplicating React.
+				include: [
+					"fumadocs-ui/components/callout",
+					"fumadocs-ui/components/card",
+					"fumadocs-ui/components/files",
+					"fumadocs-ui/components/steps",
+					"fumadocs-ui/components/tabs",
+					"fumadocs-twoslash/ui",
+				],
+			},
+		},
+	},
 	// `vp test` (mode "test") imports site modules directly; the MDX, Cloudflare
 	// and TanStack Start plugins serve only dev and build.
 	plugins:
@@ -21,6 +41,7 @@ export default defineConfig(({ mode }) => ({
 			? []
 			: lazyPlugins(async () => [
 					mdx(await import("./source.config.ts")),
+					landingTwoslash(),
 					tailwindcss(),
 					cloudflare({ viteEnvironment: { name: "ssr" } }),
 					tanstackStart({
@@ -33,14 +54,19 @@ export default defineConfig(({ mode }) => ({
 	run: {
 		tasks: {
 			...toolingTasks,
+			// Generate the `.source/` MDX types before type checking.
+			"check:types:task": {
+				...toolingTasks["check:types:task"],
+				command: "fumadocs-mdx && tsc --noEmit",
+			},
 			// The site build (prerender) and dev server always run fresh.
 			"build:task": {
-				command: "pnpm run build",
+				command: "vp build",
 				dependsOn: [upstreamBuild],
 				cache: false,
 			},
 			"dev:task": {
-				command: "pnpm run dev",
+				command: "vp dev",
 				dependsOn: [upstreamBuild],
 				cache: false,
 			},

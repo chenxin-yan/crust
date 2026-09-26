@@ -3,19 +3,12 @@ import { createServerFn } from "@tanstack/react-start";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "fumadocs-ui/components/ui/tabs";
 import { HomeLayout } from "fumadocs-ui/layouts/home";
 import { useCallback, useState } from "react";
-import { createHighlighterCore } from "shiki/core";
-import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
-import langTypescript from "shiki/langs/typescript.mjs";
-import gruvboxDarkHard from "shiki/themes/gruvbox-dark-hard.mjs";
-import gruvboxLightHard from "shiki/themes/gruvbox-light-hard.mjs";
+import HIGHLIGHTED from "virtual:landing-twoslash";
 
-import { baseOptions } from "@/lib/layout.shared";
+import { Code } from "@/components/landing/Code";
+import Showcase from "@/components/landing/Showcase";
+import { baseOptions, roadmapUrl } from "@/lib/layout.shared";
 import { buildPageMeta } from "@/lib/seo";
-
-// oxlint-disable-next-line import/default -- Vite's ?raw loader exports the file text; the TypeScript source needs no default export.
-import codeExampleSource from "../../examples/landing/greet.ts?raw";
-
-const CODE_EXAMPLE = codeExampleSource.trimEnd();
 
 // Docs `npm` fences share this group id (source.config.ts), so one selection follows the reader everywhere.
 const PACKAGE_MANAGER_GROUP_ID = "package-manager";
@@ -28,52 +21,9 @@ export const SCAFFOLD_COMMANDS = {
 	bun: "bun x create-crust@latest my-cli",
 };
 
-let highlighterPromise: Promise<Awaited<ReturnType<typeof createHighlighterCore>>> | null = null;
-
-function getHighlighter() {
-	if (!highlighterPromise) {
-		highlighterPromise = createHighlighterCore({
-			themes: [gruvboxLightHard, gruvboxDarkHard],
-			langs: [langTypescript],
-			engine: createJavaScriptRegexEngine(),
-		});
-	}
-
-	return highlighterPromise;
-}
-
-function escapeHtml(value: string) {
-	return value
-		.replaceAll("&", "&amp;")
-		.replaceAll("<", "&lt;")
-		.replaceAll(">", "&gt;")
-		.replaceAll('"', "&quot;")
-		.replaceAll("'", "&#39;");
-}
-
-function createFallbackHighlightedCode(code: string) {
-	const lines = code
-		.split("\n")
-		.map((line) => `<span class="line">${escapeHtml(line)}</span>`)
-		.join("\n");
-
-	return `<pre class="shiki" tabindex="0"><code>${lines}</code></pre>`;
-}
-
-const getHighlightedCode = createServerFn({ method: "GET" }).handler(async () => {
-	const highlighter = await getHighlighter();
-	return highlighter.codeToHtml(CODE_EXAMPLE, {
-		lang: "typescript",
-		themes: {
-			light: "gruvbox-light-hard",
-			dark: "gruvbox-dark-hard",
-		},
-		defaultColor: false,
-	});
-});
-
 const { meta: homeMeta, links: homeLinks } = buildPageMeta({
-	description: "CrustJS is a TypeScript-first, Bun-native CLI framework with composable modules.",
+	description:
+		"CrustJS is a TypeScript CLI framework with composable modules for humans and agents.",
 	canonical: "/",
 });
 
@@ -84,24 +34,12 @@ export const Route = createFileRoute("/")({
 		links: homeLinks,
 	}),
 	loader: async () => {
-		// allSettled so a shiki failure doesn't also degrade npm versions (and vice versa)
-		const [codeResult, versionsResult] = await Promise.allSettled([
-			getHighlightedCode(),
-			getNpmVersions(),
-		]);
-
-		if (codeResult.status === "rejected") {
-			console.error("[docs] Failed to highlight code example", codeResult.reason);
+		try {
+			return { npmVersions: await getNpmVersions() };
+		} catch (error) {
+			console.error("[docs] Failed to load npm versions", error);
+			return { npmVersions: {} };
 		}
-		if (versionsResult.status === "rejected") {
-			console.error("[docs] Failed to load npm versions", versionsResult.reason);
-		}
-
-		return {
-			highlightedCode:
-				codeResult.status === "fulfilled" ? codeResult.value : FALLBACK_HIGHLIGHTED_CODE,
-			npmVersions: versionsResult.status === "fulfilled" ? versionsResult.value : {},
-		};
 	},
 });
 
@@ -123,7 +61,7 @@ const MODULES: Array<{
 	},
 	{
 		pkg: "@crustjs/crust",
-		desc: "CLI build tooling",
+		desc: "CLI build and distribution tooling",
 		doc: "modules/crust",
 	},
 	{
@@ -142,23 +80,28 @@ const MODULES: Array<{
 		doc: "modules/tui",
 	},
 	{
+		pkg: "@crustjs/effect",
+		desc: "Effect.ts adaptor",
+		doc: "modules/effect",
+	},
+	{
 		pkg: "@crustjs/prompts",
 		desc: "Interactive prompts",
 		doc: "modules/prompts",
 	},
 	{
 		pkg: "@crustjs/style",
-		desc: "Terminal styling",
+		desc: "Terminal styling and layout",
 		doc: "modules/style",
 	},
 	{
 		pkg: "@crustjs/store",
-		desc: "Type-safe config persistence",
+		desc: "Typed config, data, state, and cache persistence",
 		doc: "modules/store",
 	},
 	{
 		pkg: "@crustjs/skills",
-		desc: "Agent skills generation",
+		desc: "Package and install agent skills",
 		doc: "modules/skills",
 	},
 	{
@@ -170,6 +113,11 @@ const MODULES: Array<{
 		pkg: "@crustjs/testing",
 		desc: "CLI testing helpers",
 		doc: "modules/testing",
+	},
+	{
+		pkg: "@crustjs/mcp",
+		desc: "Serve commands as MCP tools over stdio",
+		doc: "modules/mcp",
 	},
 	{
 		pkg: "@crustjs/render",
@@ -184,21 +132,6 @@ const MODULES: Array<{
 ];
 
 const PUBLISHED_PACKAGES = MODULES.flatMap((m) => (m.upcoming ? [] : [m.pkg]));
-
-type ReleaseChannel = "alpha" | "beta";
-
-function getReleaseChannel(version: string): ReleaseChannel | null {
-	const match = version.match(/^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/);
-	if (!match) return null;
-
-	const major = Number(match[1]);
-	const minor = Number(match[2]);
-
-	if (major === 0 && minor === 0) return "alpha";
-	if (major === 0) return "beta";
-
-	return null;
-}
 
 function hasVersion<Value>(value: Value): value is Value & { version: string } {
 	return (
@@ -233,10 +166,9 @@ const getNpmVersions = createServerFn({ method: "GET" }).handler(async () => {
 	return Object.fromEntries(entries);
 });
 
-const FALLBACK_HIGHLIGHTED_CODE = createFallbackHighlightedCode(CODE_EXAMPLE);
-
 function FurnaceHome() {
-	const { highlightedCode, npmVersions } = Route.useLoaderData();
+	const { npmVersions } = Route.useLoaderData();
+	const coreVersion = npmVersions["@crustjs/core"];
 	const [copied, setCopied] = useState<string | null>(null);
 
 	const handleCopy = useCallback((command: string) => {
@@ -320,7 +252,7 @@ function FurnaceHome() {
           z-index: 0;
         }
 
-        /* Dev badge — roadmap link */
+        /* Version badge — links to the roadmap */
         .fn-dev-badge {
           display: inline-flex;
           align-items: center;
@@ -337,19 +269,6 @@ function FurnaceHome() {
         }
         .fn-dev-badge:hover {
           border-color: var(--fn-molten);
-        }
-        .fn-dev-badge-dot {
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-          background: var(--fn-molten);
-          box-shadow: 0 0 8px rgba(255, 106, 16, 0.5);
-          flex-shrink: 0;
-          animation: fn-pulse 2.5s ease-in-out infinite;
-        }
-        @keyframes fn-pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.4; }
         }
         .fn-dev-badge-status {
           color: var(--fn-primary);
@@ -387,6 +306,14 @@ function FurnaceHome() {
 
         .fn-mono {
           font-family: 'Fira Code', monospace;
+        }
+        /* Section eyebrow, shared with the showcase */
+        .fn-eyebrow {
+          margin: 0 0 16px;
+          font: 10px/1 'Fira Code', monospace;
+          letter-spacing: 4px;
+          text-transform: uppercase;
+          color: var(--fn-dim);
         }
 
         /* Install command — package manager tabs, click the command to copy */
@@ -465,11 +392,12 @@ function FurnaceHome() {
           flex-shrink: 0;
         }
         .fn-code-body {
-          padding: 3px 3px 3px 0;
+          padding: 12px 10px 12px 0; /* Fira Code is 0.615em/col: the 59-col line needs 436px of the 484px pane */
           font-family: 'Fira Code', monospace;
           font-size: 12px;
           line-height: 1.65;
           overflow-x: auto;
+          scrollbar-width: none;
           overflow-y: hidden;
           flex: 1;
           display: flex;
@@ -483,6 +411,7 @@ function FurnaceHome() {
           margin: 0;
           padding: 0;
           width: 100%;
+          tab-size: 2;
           font-family: 'Fira Code', monospace;
           font-size: 12px;
           line-height: 1.65;
@@ -502,7 +431,7 @@ function FurnaceHome() {
           display: inline-block;
           width: 20px;
           text-align: right;
-          margin-right: 12px;
+          margin-right: 8px;
           color: var(--fn-dim);
           opacity: 0.5;
           font-size: 11px;
@@ -619,25 +548,6 @@ function FurnaceHome() {
           letter-spacing: 0.5px;
         }
 
-        /* Release channel badge */
-        .fn-badge-channel {
-          font-size: 10px;
-          padding: 1px 8px;
-          white-space: nowrap;
-          opacity: 0.8;
-          letter-spacing: 0.5px;
-          text-transform: uppercase;
-          border: 1px solid;
-        }
-        .fn-badge-channel-alpha {
-          color: var(--fn-hot);
-          border-color: var(--fn-hot);
-        }
-        .fn-badge-channel-beta {
-          color: var(--fn-cool);
-          border-color: var(--fn-cool);
-        }
-
         /* Coming soon badge */
         .fn-badge-soon {
           font-family: 'Saira Condensed', sans-serif;
@@ -654,14 +564,15 @@ function FurnaceHome() {
         /* Hero layout */
         .fn-hero-grid {
           display: grid;
-          grid-template-columns: 1fr 1fr;
+          /* The code panel gets the larger share: its 59-column line needs ~440px at 12px Fira Code. */
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr);
           gap: 48px;
           align-items: stretch;
         }
 
         /* Hero section */
         .fn-hero-section {
-          padding: 80px 40px 80px;
+          padding: 80px 40px 48px;
           max-width: 1100px;
           margin: 0 auto;
           position: relative;
@@ -725,16 +636,20 @@ function FurnaceHome() {
 					{/* Hero */}
 					<section className="fn-hero-section">
 						<a
-							href="https://github.com/users/chenxin-yan/projects/10"
+							href={roadmapUrl}
 							target="_blank"
 							rel="noopener noreferrer"
 							className="fn-mono fn-dev-badge"
 						>
-							<span className="fn-dev-badge-dot" />
-							<span className="fn-dev-badge-status">Now in Beta</span>
-							<span className="fn-dev-badge-sep" />
+							{/* The same npm lookup the module list uses; omitted when the registry was unreachable. */}
+							{coreVersion && (
+								<>
+									<span className="fn-dev-badge-status">@crustjs/core v{coreVersion}</span>
+									<span className="fn-dev-badge-sep" />
+								</>
+							)}
 							<span className="fn-dev-badge-cta">
-								See Roadmap
+								Roadmap
 								<span className="fn-dev-badge-arrow" aria-hidden="true">
 									→
 								</span>
@@ -747,7 +662,7 @@ function FurnaceHome() {
 								<h1
 									className="fn-condensed"
 									style={{
-										fontSize: "clamp(42px, 6vw, 80px)",
+										fontSize: "clamp(42px, 6vw, 76px)",
 										fontWeight: 800,
 										lineHeight: 0.95,
 										margin: 0,
@@ -758,7 +673,7 @@ function FurnaceHome() {
 									Build CLIs
 									<br />
 									<span style={{ color: "var(--fn-molten)", whiteSpace: "nowrap" }}>
-										with types.
+										agents can use.
 									</span>
 								</h1>
 
@@ -767,12 +682,12 @@ function FurnaceHome() {
 										fontSize: 16,
 										lineHeight: 1.7,
 										color: "var(--fn-dim)",
-										maxWidth: 420,
+										maxWidth: 460,
 										marginTop: 20,
 										fontWeight: 400,
 									}}
 								>
-									A TypeScript-first, Bun-native CLI framework with composable modules.
+									A TypeScript CLI framework with composable modules for humans and agents.
 								</p>
 
 								{/* Install — pick a package manager, click the command to copy */}
@@ -843,28 +758,19 @@ function FurnaceHome() {
 									<span>src/cli.ts</span>
 									<span>TypeScript</span>
 								</div>
-								<div
-									className="fn-code-body fn-shiki-container"
-									dangerouslySetInnerHTML={{ __html: highlightedCode }}
-								/>
+								<div className="fn-code-body fn-shiki-container">
+									<Code code={HIGHLIGHTED.greet} />
+								</div>
 							</div>
 						</div>
 					</section>
 
+					{/* Showcase: eight features, real code and real output, driven by scroll */}
+					<Showcase />
+
 					{/* Modules */}
 					<section className="fn-content-section">
-						<p
-							className="fn-mono"
-							style={{
-								fontSize: 10,
-								letterSpacing: 4,
-								color: "var(--fn-dim)",
-								textTransform: "uppercase",
-								marginBottom: 16,
-							}}
-						>
-							Modules
-						</p>
+						<p className="fn-eyebrow">Modules</p>
 
 						{MODULES.map((m) => {
 							if (m.upcoming) {
@@ -888,7 +794,6 @@ function FurnaceHome() {
 							}
 
 							const version = npmVersions[m.pkg];
-							const channel = version ? getReleaseChannel(version) : null;
 
 							return (
 								<Link key={m.pkg} to="/docs/$" params={{ _splat: m.doc }} className="fn-module-row">
@@ -904,11 +809,6 @@ function FurnaceHome() {
 											{m.pkg}
 										</code>
 										{version && <span className="fn-badge-version fn-mono">v{version}</span>}
-										{channel && (
-											<span className={`fn-badge-channel fn-badge-channel-${channel} fn-mono`}>
-												{channel}
-											</span>
-										)}
 										<span style={{ fontSize: 13, color: "var(--fn-dim)" }}>{m.desc}</span>
 									</div>
 									<span className="fn-module-arrow">→</span>

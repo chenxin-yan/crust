@@ -3,10 +3,11 @@ import { help } from "@crustjs/extensions";
 
 export const guidance = defineExtension(defineExtensionId("acme:guidance")).sections(() => [
 	{
-		command: [],
+		command: [], // [!code highlight]
 		title: "Environment",
 		body: "Set DEPLOY_TOKEN before running.",
 	},
 ]);
 
-export const app = new Crust("my-cli").extend(guidance, help()).action(() => {});
+const app = new Crust("my-cli").extend(guidance, help()).action(() => {});
+await app.execute();

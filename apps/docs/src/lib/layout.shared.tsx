@@ -9,6 +9,9 @@ export const gitConfig = {
 	branch: "main",
 };
 
+/** GitHub Project tracking what ships next; linked from the nav and the landing hero badge. */
+export const roadmapUrl = "https://github.com/users/chenxin-yan/projects/10";
+
 function DiscordIcon() {
 	return (
 		<svg role="img" viewBox="0 0 24 24" fill="currentColor" width={20} height={20}>
@@ -61,7 +64,7 @@ export const baseOptions: BaseLayoutProps = {
 		},
 		{
 			text: "Roadmap",
-			url: "https://github.com/users/chenxin-yan/projects/10",
+			url: roadmapUrl,
 			active: "url",
 			on: "nav",
 			external: true,
