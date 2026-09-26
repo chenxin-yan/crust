@@ -4,7 +4,7 @@
 
 There is no universal convention for the shape of an omitted variadic argument's default. The common behavior in ordinary parsing is **fallback, not accumulation**: explicitly supplied arguments replace the default. Custom reducers can deliberately behave differently.
 
-Crust already accepts scalar positional defaults and promises an array for variadic results. The approved fix therefore keeps that API:
+Crust accepts scalar positional defaults and promises an array for variadic results. Omitted variadics resolve defaults as follows:
 
 | Input                  | Result for `variadic: true, default: "fallback"` |
 | ---------------------- | ------------------------------------------------ |
@@ -14,7 +14,7 @@ Crust already accepts scalar positional defaults and promises an array for varia
 
 Without a default, omission remains `[]`. Required variadics without defaults still need at least one value. A declared default continues to satisfy Crust's existing required/default rule.
 
-This is a deliberate Crust contract, **not a claim that other frameworks wrap scalar defaults automatically**. It is proposed by the separate core fix; adding this research note does not mean that fix has shipped.
+This is a deliberate Crust contract, **not a claim that other frameworks wrap scalar defaults automatically**. It was implemented in [#452](https://github.com/chenxin-yan/crust/pull/452), now merged into `main`.
 
 ## Primary-source comparison
 
@@ -54,10 +54,10 @@ The baseline inspected was `c4f44d6f`:
 - [`ArgDef` and `InferArgValue`](../packages/core/src/types.ts) already allow scalar defaults and preserve array-valued variadic output.
 - [`resolveArgs` and `resolveDefault`](../packages/core/src/parsing/parser.ts) are shared by argv and structured invocation. The original variadic branch skipped default resolution entirely.
 - Reusing `resolveDefault` retains existing custom parsing and path resolution. JSON/URL defaults are already resolved values.
-- String choices/default compatibility is checked during [definition normalization](../packages/core/src/parsing/spellings.ts), not newly during omission. The fix should not introduce different validation rules for scalar and variadic defaults.
+- String choices/default compatibility is checked during [definition normalization](../packages/core/src/parsing/spellings.ts), not newly during omission. The fix does not introduce different validation rules for scalar and variadic defaults.
 - Repeated flags have a separate array-default authoring API; this fix does not change it or introduce array-default shorthand for string positionals.
 
-The approved implementation preserves those choices rather than copying another framework's shape-changing default behavior.
+The implementation preserves those choices rather than copying another framework's shape-changing default behavior.
 
 ## Evidence limits
 
