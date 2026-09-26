@@ -13,9 +13,9 @@ import langJson from "shiki/langs/json.mjs";
 import langTypescript from "shiki/langs/typescript.mjs";
 import gruvboxDarkHard from "shiki/themes/gruvbox-dark-hard.mjs";
 import gruvboxLightHard from "shiki/themes/gruvbox-light-hard.mjs";
-import type { Plugin } from "vite";
+import type { Plugin } from "vite-plus";
 
-import { SNIPPET_SOURCES, type SnippetKey } from "../src/components/landing/snippets";
+import { SNIPPET_SOURCES, type SnippetKey } from "../src/components/landing/snippets.ts";
 import { twoslashHovers } from "../twoslash.ts";
 
 const MODULE_ID = "virtual:landing-twoslash";

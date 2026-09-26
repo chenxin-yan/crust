@@ -5,18 +5,15 @@ import {
 } from "@crustjs/core";
 
 const id = defineExtensionId("acme:preview");
-const preview = defineExtension(id, {
+const preview = defineExtension(id)
 	// [!code highlight]
-	flags: [{ name: "preview", type: "boolean" }],
-	hooks: {
-		preRun(ctx) {
-			if (ctx.flags.preview !== true) return;
-			//            ^?
-			ctx.stdout("nothing changed");
-			return ctx.finish();
-		},
-	},
-});
+	.flags({ name: "preview", type: "boolean" })
+	.preRun((ctx) => {
+		if (ctx.flags.preview !== true) return;
+		//            ^?
+		ctx.stdout("nothing changed");
+		return ctx.finish();
+	});
 
 const deploy = new Crust("deploy")
 	// [!code highlight]

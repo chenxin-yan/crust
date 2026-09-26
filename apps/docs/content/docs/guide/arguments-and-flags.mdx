@@ -85,7 +85,7 @@ color=undefined port=undefined
 
 The definitions use `name: "color"` and `name: "port"` without dashes. A user types `--color --port 3000`, and the action reads `flags.color` and the converted number in `flags.port`.
 
-Without `required` or `default`, either flag may be omitted and its action value is `undefined`. When supplied, a value-taking flag needs one value, so `serve --port` fails. Built-in types convert CLI text and reject invalid input before the action runs:
+In this example, neither flag has `required`, `default`, or an environment binding, so omitting it gives an action value of `undefined`. When supplied, a value-taking flag needs one value, so `serve --port` fails. Built-in types convert CLI text and reject invalid input before the action runs:
 
 ```sh
 $ serve --port nope
@@ -105,7 +105,7 @@ $ publish --token example
 publishing to npm
 ```
 
-Set `required: true` when the user must supply a value. A missing required flag fails before the action runs:
+Set `required: true` when a value must be supplied. This example has no environment binding, so a missing required flag fails before the action runs:
 
 ```sh
 $ publish
@@ -146,14 +146,14 @@ See the [`.flags()` contract](/docs/api/crust#flagsdefs) for all accepted spelli
   ../../../examples/guide/flags-values.ts
 </include>
 
-Set `multiple: true` when a flag may occur more than once. Each occurrence contributes one value in order:
+Set `multiple: true` when a flag may occur more than once. Without a `delimiter`, each occurrence contributes one value in order:
 
 ```sh
 $ serve --target linux -t darwin
 targets=linux,darwin runtime=bun tag=undefined
 ```
 
-Without a default, omitting a repeated flag gives `undefined`. Repeat the flag for every value. In `--target linux darwin`, `darwin` is a positional argument, not another target.
+Without a default or environment binding, omitting a repeated flag gives `undefined`. Repeat the flag for every value, or configure a [delimiter](#environment-variables). In `--target linux darwin`, `darwin` is a positional argument, not another target.
 
 ### Flag choices
 

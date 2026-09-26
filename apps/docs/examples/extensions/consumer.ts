@@ -3,17 +3,15 @@ import { visibleSectionsFor } from "@crustjs/core/tooling";
 
 const WEB_DOCS = defineExtensionId("acme:web-docs");
 
-export const webDocs = defineExtension(WEB_DOCS, {
-	build({ snapshot }) {
-		// [!code highlight]
-		const lines = visibleSectionsFor(snapshot, WEB_DOCS).flatMap(({ path, sections }) => [
-			//                                                             ^?
-			//                                                                   ^?
-			`# ${[snapshot.meta.name, ...path].join(" ")}`,
-			...sections.map((s) => `## ${s.title}\n${s.body}`),
-		]);
-		return [{ path: "web-docs/docs.md", content: lines.join("\n\n") }];
-	},
+export const webDocs = defineExtension(WEB_DOCS).build(({ snapshot }) => {
+	// [!code highlight]
+	const lines = visibleSectionsFor(snapshot, WEB_DOCS).flatMap(({ path, sections }) => [
+		//                                                             ^?
+		//                                                                   ^?
+		`# ${[snapshot.meta.name, ...path].join(" ")}`,
+		...sections.map((s) => `## ${s.title}\n${s.body}`),
+	]);
+	return [{ path: "web-docs/docs.md", content: lines.join("\n\n") }];
 });
 
 const deploy = defineCommand(

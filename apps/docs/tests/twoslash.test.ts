@@ -1,6 +1,7 @@
-import { expect, it } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+
+import { expect, it } from "vite-plus/test";
 
 it("docs and landing hovers explain selected values without builder or boilerplate hovers", () => {
 	// TS7's synchronous API needs Node's child-process internals, which Bun does not implement.
@@ -115,7 +116,8 @@ it("docs and landing hovers explain selected values without builder or boilerpla
 		{
 			cwd: fileURLToPath(new URL("..", import.meta.url)),
 			encoding: "utf8",
+			timeout: 60_000,
 		},
 	);
 	expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: "" });
-});
+}, 65_000);

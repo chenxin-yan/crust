@@ -116,8 +116,8 @@ const MODULES: Array<{
 	},
 	{
 		pkg: "@crustjs/mcp",
-		desc: "MCP server generation",
-		upcoming: true,
+		desc: "Serve commands as MCP tools over stdio",
+		doc: "modules/mcp",
 	},
 	{
 		pkg: "@crustjs/render",

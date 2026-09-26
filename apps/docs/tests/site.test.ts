@@ -7,6 +7,10 @@ import { expect, it, vi } from "vite-plus/test";
 
 import docsConfig from "../source.config";
 
+// HAST is checked by twoslash.test.ts; these tests only need the route's static configuration.
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Replace the build-only virtual module at the Vite boundary.
+vi.mock("virtual:landing-twoslash", () => ({ default: {} }));
+
 // Keep Fumadocs URL generation real without compiling every MDX page.
 // oxlint-disable-next-line anti-slop/no-module-mocking -- Adapt the Vite-only collection boundary; the actual Fumadocs loader still resolves every page.
 vi.mock("fumadocs-mdx:collections/server", () => ({

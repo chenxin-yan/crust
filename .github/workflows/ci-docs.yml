@@ -36,12 +36,6 @@ jobs:
         with:
           install_args: bun node pnpm
 
-      # Vite runs under Node; the Twoslash transformers need typescript@7's sync API, which Bun cannot run
-      - name: Setup Node
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 

@@ -57,7 +57,7 @@ The entry file is the value of `bin` in `package.json`: `"bin": { "my-cli": "src
 crust build --target bun-linux-x64 --target bun-darwin-arm64
 ```
 
-Omitting `--target` builds every supported Bun or Deno target; repeat it for the platforms you ship, or pass `--target host` for a fast local build of just your own machine's target (`host` can be mixed with explicit targets, and duplicates are dropped). A CLI that always ships the same subset records it once as [`crust.targets`](/docs/modules/crust#packagejson-configuration) in `package.json`, so a bare `crust build` stages exactly those and `--target` still overrides per run. The launcher only knows the targets that were built, so a release build should include every platform your users run.
+Without `--target` or `crust.targets`, Crust builds every supported Bun or Deno target; repeat it for the platforms you ship, or pass `--target host` for a fast local build of just your own machine's target (`host` can be mixed with explicit targets, and duplicates are dropped). A CLI that always ships the same subset records it once as [`crust.targets`](/docs/modules/crust#packagejson-configuration) in `package.json`, so a bare `crust build` stages exactly those and `--target` still overrides per run. The launcher only knows the targets that were built, so a release build should include every platform your users run.
 
 | Bun target                                   | Deno target                                             | Platform alias                       |
 | -------------------------------------------- | ------------------------------------------------------- | ------------------------------------ |
@@ -241,7 +241,7 @@ See [`crust.bunPlugins`](/docs/modules/crust#packagejson-configuration) for reso
 
 <include lang="ts">../../../examples/guide/build.ts#runtime-secret</include>
 
-Read secrets and deployment configuration from the runtime environment; Crust adds no abstraction, and [Bun environment variables](https://bun.sh/docs/runtime/environment-variables) covers Bun's `.env` loading and precedence.
+Read secrets and deployment configuration from the runtime environment, directly or through [flag environment bindings](/docs/guide/arguments-and-flags#environment-variables). [Bun environment variables](https://bun.sh/docs/runtime/environment-variables) covers Bun's `.env` loading and precedence.
 
 ### Build-time constants
 
@@ -276,7 +276,7 @@ Bun executables built by `crust build` autoload `.env` from the directory they s
 
 ## Set up `package.json`
 
-These are the files `create-crust --runtime bun|node|deno` scaffolds, with `{{name}}` and the version placeholders filled in. Every runtime shares the same flow: `build` stages `.crust/`, `start` runs `.crust/root/bin/<command>.js`, and `release` publishes with `crust publish`. `bin` maps the command name to its source entry, which `crust build` compiles and `npm link` runs directly through the entry's shebang. The staged packages regenerate `bin` and `files` and omit dependency fields. The project itself is `"private": true`: only the staged packages are published, so a stray `npm publish` in the project directory is refused instead of uploading the source (`private` is not copied into the staged packages, and `npm link` ignores it).
+These are the files `create-crust --runtime bun|node|deno` scaffolds, with `{{name}}` and the version placeholders filled in. Every runtime shares the same flow: `build` stages `.crust/`, `start` runs `.crust/root/bin/<command>.js`, and `release` publishes with `crust publish`. `bin` maps the command name to its source entry, which `crust build` compiles and `npm link` runs directly through the entry's shebang. The staged packages regenerate `bin` and `files`, omit source dependencies and devDependencies, and preserve explicit peer dependencies. The project itself is `"private": true`: only the staged packages are published, so a stray `npm publish` in the project directory is refused instead of uploading the source (`private` is not copied into the staged packages, and `npm link` ignores it).
 
 <Tabs items={["Bun", "Node", "Deno"]}>
 <Tab value="Bun">
