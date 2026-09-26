@@ -1118,14 +1118,13 @@ type AfterAdd<
 	Caps
 >;
 
+type ExtensionHookDemand<E> = E extends AnyExtension
+	? (deps: NonNullable<DefiningOf<E>["_hookDeps"]>) => void
+	: never;
+
+// Intersect hook demands before an empty branch can erase another branch's keys.
 type ExtensionDemandValues<Es extends readonly AnyExtension[]> =
-	UnionToIntersection<
-		DefiningOf<Es[number]> extends { readonly _hookDeps?: infer H extends ContextMap }
-			? H
-			: Record<string, ContextValue>
-	> extends infer D extends ContextMap
-		? D
-		: {};
+	ExtensionHookDemand<Es[number]> extends (deps: infer D extends ContextMap) => void ? D : {};
 
 // Conditional recipes retain every provider and child branch, including beside an empty branch.
 type DescendantShapeValuesBrand<S, Deps> = S extends CommandShape

@@ -223,6 +223,36 @@ function _fluentInference() {
 	defineExtension(ID).factory(() => ({ id: ID }));
 }
 
+function _conditionalFactoryDependencies() {
+	const ID = defineExtensionId("test:conditional-factory");
+	const db = defineContext("db", () => "ok");
+	const make = defineExtension<"version">(ID).factory((extension, enabled: boolean) =>
+		enabled
+			? extension.use(db).preRun(async ({ ctx, rootCommand }) => {
+					(await ctx.db).toUpperCase();
+					const _version: string = rootCommand.meta.version;
+				})
+			: extension,
+	);
+	type _args = Expect<Equal<Parameters<typeof make>, [enabled: boolean]>>;
+	new Crust("app", { version: "1" }).provide(db()).extend(make(true));
+	new Crust("app", { version: "1" }).provide(db()).extend(make(false));
+	// @ts-expect-error Conditional factories retain every branch's Context requirements.
+	new Crust("app", { version: "1" }).extend(make(true));
+	// @ts-expect-error Conditional factories retain required root metadata.
+	new Crust("app").provide(db()).extend(make(true));
+	// @ts-expect-error Conditional factories retain their inferred arguments.
+	make("enabled");
+	const wrongDb = defineContext("db", () => 42);
+	// @ts-expect-error A provider must satisfy every possible branch's value contract.
+	new Crust("app", { version: "1" }).provide(wrongDb()).extend(make(true));
+	new Crust("app", { version: "1" })
+		.provide(db())
+		.extend(make(true))
+		// @ts-expect-error Conditional hook demands also constrain future descendants.
+		.command("child", (command) => command.provide(wrongDb()));
+}
+
 function _positionalCallbacks() {
 	const ID = defineExtensionId("test:positions");
 	const logger = defineContext("logger", () => "logger");

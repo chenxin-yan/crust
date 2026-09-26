@@ -403,13 +403,15 @@ export type ExtensionFactory<
 };
 
 type ExtensionFactoryOf<Args extends readonly unknown[], E> =
-	DefiningOf<E> extends ExtensionData<
-		infer Deps,
-		infer Provide,
-		infer Defs,
-		infer Commands,
-		infer MetaKeys,
-		infer HookDeps
+	E extends Defining<
+		ExtensionData<
+			infer Deps,
+			infer Provide,
+			infer Defs,
+			infer Commands,
+			infer MetaKeys,
+			infer HookDeps
+		>
 	>
 		? ExtensionFactory<Args, Deps, Provide, Defs, Commands, MetaKeys, HookDeps>
 		: never;
