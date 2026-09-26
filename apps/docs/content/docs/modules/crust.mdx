@@ -3,6 +3,8 @@ title: "Crust"
 description: Build and distribute Crust applications for Bun, Deno, and Node.
 ---
 
+import { Callout } from "fumadocs-ui/components/callout";
+
 `@crustjs/crust` provides the `crust` CLI. `crust build` writes the publishable npm packages for your CLI to `.crust/`, and `crust publish` uploads them. The same build is available to scripts as [`build()`](#programmatic-api):
 
 ```ts
@@ -22,6 +24,15 @@ npm install -D @crustjs/crust
 ```
 
 The npm package is itself built with `crust build`, so its `bin` is a Node launcher that runs a platform-specific standalone executable with Bun embedded. Node is required to start it; a separate Bun installation is not. Without `bun` on `PATH`, arm64 hosts cannot build their own target (Bun would copy the running `crust` executable onto itself); the error names the other targets, or install Bun. The package root exports the [`build()`](#programmatic-api) library, a bundled JavaScript module whose declarations import `BuildReport` from `@crustjs/core`, declared as a peer dependency so the type stays the same one your Extensions see; because it is not a Bun executable, it needs `bun` on `PATH` unless the script itself runs under `bun`.
+
+### npm installation caveat
+
+<Callout type="warn">
+  npm 10.9.8 can report a successful install but remove the root command shim while skipping
+  incompatible optional platform packages with the same bin name. npm 11.19.1 is verified on Linux
+  with Node 22.23.2. The minimum fixed npm version has not been established; this does not imply
+  every npm 11 release is fixed.
+</Callout>
 
 ## Commands
 
@@ -62,6 +73,8 @@ Before any publisher runs (including dry-run validation), manifest fields and st
 
 npm reads `publishConfig.access` from each staged `package.json`, which `crust build` copies from your project. Scoped public packages need `"publishConfig": { "access": "public" }`. See [Publishing from CI](/docs/guide/build-and-distribution#publishing-from-ci) for registry credentials.
 
+The registry lookup replays the staged `publishConfig` registry settings (`registry`, `@scope:registry`, `scope`) to `npm view`. It follows npm 10.6+ precedence, where CLI flags override corresponding `publishConfig` keys. npm 9 gives `publishConfig` priority instead: a conflicting `--registry` can make the lookup and upload use different registries. Avoid that combination or upgrade npm.
+
 | Option       | Type    | Default | Description                                         |
 | ------------ | ------- | ------- | --------------------------------------------------- |
 | `--tag`      | string  | none    | Override the npm dist-tag passed to npm publish     |
@@ -100,6 +113,50 @@ type BuildArtifact =
 ## Build output
 
 `crust build` stages the publishable npm tree in `.crust/` (`manifest.json`, `root/`, one `<platform>/` per target for Bun and Deno, and `artifacts/` from Extension build hooks). It checks that `package.json` has non-empty string `name` and `version` fields before wiping the previous stage, even with `--no-validate`. See [Build](/docs/guide/build-and-distribution#build) for the tree, the launcher, and naming rules.
+
+### Staged `package.json` files
+
+Staged manifests are generated rather than copied:
+
+| Project field                                         | Staged behavior                                                                                                                        |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`, `version`                                     | Required; platform names append the alias, such as `@scope/my-cli-linux-x64`                                                           |
+| npm metadata                                          | `description`, `license`, `author`, `homepage`, `bugs`, `repository`, `keywords`, `publishConfig`, `funding`, and `engines` are copied |
+| `bin`, `files`, `type`                                | Generated for the output; the root always uses `"type": "module"`                                                                      |
+| `dependencies`, `devDependencies`                     | Omitted; the compiler bundles the CLI code                                                                                             |
+| `optionalDependencies`                                | Generated for Bun/Deno platform packages; absent for Node                                                                              |
+| `exports`, `peerDependencies`, `peerDependenciesMeta` | Preserved in the root only, subject to validation below                                                                                |
+| `private`, source scripts, `$schema`                  | Omitted                                                                                                                                |
+
+The project's `README.md` is copied into the root package and its license file into every package. Platform manifests carry `os`, `cpu`, and, on Linux, `libc` so package managers select the matching executable.
+
+**Library exports must point to staged files.** Use a `./` path to a file copied by `crust.include`, generated by an Extension, or the staged `./package.json`. Nested conditions and `null` targets are supported; wildcard patterns, fallback arrays, missing files, and paths containing `.`, `..`, `node_modules`, or empty segments are rejected.
+
+Included library files are copied, not transformed. If the source package is CommonJS (including an omitted `type`), exported `.js` and `.d.ts` files need an included nested `package.json` declaring their type, such as `dist/package.json` with `{"type":"commonjs"}`. Otherwise the build rejects the changed package scope. Explicit `.cjs`/`.d.cts` and `.mjs`/`.d.mts` extensions also work; internal imports must remain compatible with the staged scopes.
+
+Peer ranges must be publishable as written: `workspace:`, `catalog:`, and named `catalog:<name>` ranges are rejected rather than rewritten. `peerDependenciesMeta` entries must refer to declared peers.
+
+## Supported targets
+
+`--target` overrides `crust.targets`; without either, all targets for the selected runtime are built. `host` selects this machine's OS, architecture, and Linux C library and can be mixed with explicit targets; duplicates are removed. Node builds reject both `--target` and `crust.targets`.
+
+| Bun target                                   | Deno target                                             | Platform alias                       |
+| -------------------------------------------- | ------------------------------------------------------- | ------------------------------------ |
+| `bun-linux-x64`, `bun-linux-arm64`           | `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu` | `linux-x64`, `linux-arm64`           |
+| `bun-linux-x64-musl`, `bun-linux-arm64-musl` | none                                                    | `linux-x64-musl`, `linux-arm64-musl` |
+| `bun-darwin-x64`, `bun-darwin-arm64`         | `x86_64-apple-darwin`, `aarch64-apple-darwin`           | `darwin-x64`, `darwin-arm64`         |
+| `bun-windows-x64`, `bun-windows-arm64`       | `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc`     | `windows-x64`, `windows-arm64`       |
+
+For each command, a platform package contains `bin/<command>-<target>` (`.exe` on Windows). The launcher only supports targets included in the build.
+
+### Linux glibc and musl
+
+Plain Linux targets use glibc; Alpine needs Bun's `-musl` targets. The launcher detects the host C library and selects the matching binary. Deno has no musl target.
+
+<Callout type="warn">
+  Bun's musl executables still load `libstdc++` and `libgcc` dynamically. A bare Alpine image needs
+  `apk add libstdc++ libgcc`; `node:alpine` already includes them.
+</Callout>
 
 ## Commands and entries (`bin`)
 
