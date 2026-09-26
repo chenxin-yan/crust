@@ -3,17 +3,13 @@ title: "Types"
 description: Public command definitions, snapshots, Command Action contexts, Contexts, and Extensions.
 ---
 
-All types on this page are exported from `@crustjs/core`. Tables summarize object properties; the readable signature sketches do not reproduce every generic constraint or overload.
+Every type on this page is a type export of `@crustjs/core`. Tables are generated from the owning declarations and omit some generic constraints and overloads; follow each section's source link for the exact contract. Most applications never name these types: `.args()`, `.flags()`, `.provide()`, and `.action()` infer them.
 
 ## Definition types
 
-[Exact declarations](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/types.ts).
+Declared in [`types.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/types.ts).
 
 ### `ValueType`
-
-```ts
-type ValueType = "string" | "number" | "boolean" | "url" | "path" | "json";
-```
 
 | Value     | Runtime value                        |
 | --------- | ------------------------------------ |
@@ -26,15 +22,9 @@ type ValueType = "string" | "number" | "boolean" | "url" | "path" | "json";
 
 ### `ArgDef`
 
-```ts
-type ArgsDef = readonly ArgDef[];
-```
-
-Core-value argument definitions share these fields:
+`ArgsDef` is `readonly ArgDef[]`. Core-value argument definitions share these fields:
 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="ArgDef" />
-
-A core variadic value is always an array. Required core variadics without defaults accept and resolve to nonempty `[T, ...T[]]` tuples after validation; optional and default-backed variadics remain `T[]`. An omitted variadic with a scalar `default` resolves to `[default]`; supplied values replace it. `parse` runs once per element for a variadic string argument.
 
 ```ts
 const args = [
@@ -43,36 +33,24 @@ const args = [
 ] as const satisfies ArgsDef;
 ```
 
-A schema-backed argument has `name`, optional `description` and `variadic`, and a Standard Schema:
+A core variadic value is always an array. A required core variadic without a default resolves to a nonempty tuple; an omitted variadic with a scalar `default` resolves to `[default]`. `parse` runs once per element.
+
+A schema-backed argument has `name`, optional `description` and `variadic`, and a Standard Schema that receives `string | undefined` (or `string[]` when variadic). The schema owns coercion, defaults, requiredness, choices, and validation, so `type`, `required`, `default`, `choices`, and `parse` are unavailable. Its output type reaches the Command Action.
 
 ```ts
 const args = [{ name: "port", schema: z.coerce.number().int().min(1) }] as const satisfies ArgsDef;
 ```
 
-The schema receives `string | undefined`, or `string[]` for a variadic argument. It exclusively owns coercion, defaults, requiredness, choices, and validation, so `type`, `required`, `default`, `choices`, and `parse` are not available in this variant. The schema's output type reaches the Command Action.
-
 ### `FlagDef`
 
-```ts
-type FlagsDef = Record<string, FlagDef>;
-```
-
-Core-value flag definitions support:
+`FlagsDef` is `Record<string, FlagDef>`. Core-value flag definitions support:
 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="FlagDef" />
 
 ```ts
 const flags = {
   verbose: { type: "boolean", short: "v" },
-  include: { type: "string", multiple: true },
   port: { type: "number", default: 3000 },
-} satisfies FlagsDef;
-```
-
-`env: { name, delimiter? }` declares an environment fallback that terminal parsing consults when the flag has no argv occurrence: argv wins over env, and env wins over `default`. After optional splitting, the value enters the same conversion path as an argv token (`type`, `choices`, `parse`, or the schema) and satisfies `required`; help and man pages show `[env: NAME]` but never the value. Flag-level `delimiter` splits string argv occurrences; `env.delimiter` independently splits environment text. Both require `multiple: true` (a type error otherwise, and a `DEFINITION` error for dynamic definitions), use nonempty literal separators, and drop empty segments. Neither delimiter is inherited by the other source. Boolean argv switches already supply booleans and are not split; use `env.delimiter` to split repeated boolean environment text. Environment names must be nonempty, and a bare string `env` is not accepted. Structured [`run()`](/docs/api/crust#runpath-input-options) input consults neither setting.
-
-```ts
-const flags = {
   token: { type: "string", env: { name: "MYAPP_TOKEN" }, required: true },
   tags: {
     type: "string",
@@ -83,7 +61,11 @@ const flags = {
 } satisfies FlagsDef;
 ```
 
-Schema-backed flags support `type: "string" | "boolean"`, `schema`, and the syntax fields `description`, `short`, `aliases`, `multiple`, `env`, and `delimiter` (with `multiple: true`). Boolean schema flags also support `noNegate`. `type` only declares token consumption: a string flag consumes a token; a boolean flag is a toggle.
+`env` is consulted by terminal parsing only when the flag has no argv occurrence: argv wins over env, and env wins over `default`. The env value goes through the same conversion as an argv token and satisfies `required`. Help and man pages show `[env: NAME]`, never the value. Structured [`run()`](/docs/api/crust#runpath-input-options) input ignores `env`.
+
+`delimiter` splits string argv occurrences; `env.delimiter` independently splits environment text. Both require `multiple: true` and drop empty segments. Boolean argv switches are never split.
+
+Schema-backed flags set `type: "string" | "boolean"` only to declare whether a value token follows, plus `schema` and the syntax fields `description`, `short`, `aliases`, `multiple`, `env`, `delimiter`, and (boolean only) `noNegate`. The schema receives the raw `string | undefined` or `boolean | undefined`; with `multiple: true` it receives an array when the flag appears and `undefined` when omitted.
 
 ```ts
 const flags = {
@@ -92,29 +74,13 @@ const flags = {
 } satisfies FlagsDef;
 ```
 
-The schema receives the raw `string | undefined` or `boolean | undefined`. With `multiple: true`, it receives `string[]` or `boolean[]` when the flag appears at least once, and `undefined` when omitted. Variadic arguments, by contrast, always supply an array.
-
-`required`, `default`, `choices`, and `parse` cannot be mixed into schema mode.
-
-### `MergeFlags`
-
-```ts
-type MergeFlags<Base extends FlagsDef, Override extends FlagsDef> = Base & Override;
-```
-
-The intersection of two flag definition maps.
-
 ### `NamedFlagDef`
 
-```ts
-type NamedFlagDef = FlagDef & { readonly name: string };
-```
-
-The public authoring shape: a flag definition carrying its name. `.flags(...defs)`, Context-owned `flags`, and `defineFlag()` all use it.
+A `FlagDef` carrying its `name`: the shape accepted by `.flags(...defs)`, Context-owned `flags`, and `defineFlag()`.
 
 ### `defineFlag` and `defineArg`
 
-Use these const-generic helpers when a definition is declared separately from `.flags()` or `.args()`. They preserve literal fields without `as const`:
+Declare a definition separately from `.flags()` or `.args()` while keeping its literal types, without `as const`:
 
 ```ts
 import { defineArg, defineFlag } from "@crustjs/core";
@@ -123,38 +89,38 @@ const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
 const target = defineArg("target", { type: "string", required: true });
 ```
 
-`defineFlag(name, def)` returns a named flag definition; `defineArg(name, def)` returns a named argument definition. Literal fields retain inference and provably invalid names/defaults/parsers fail typecheck; an invalid literal member of a name union is rejected even beside an open template member. Broad names and dynamic definitions use the same helpers and are checked automatically at consumption.
+Invalid literal names, defaults, and parsers fail typecheck. Dynamic definitions are checked where they are consumed. `UnnamedArgDef` is the `defineArg()` definition without its name.
 
-Helpers own readonly structural arrays, without cloning payloads; local proof does not certify another destination. `UnnamedArgDef` is the argument helper input without its name.
+### `MergeFlags`
+
+`MergeFlags<Base, Override>` is `Base & Override` for two flag definition maps.
 
 ### `CommandMeta`
 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="CommandMeta" />
 
-`version` is the application version declared through `new Crust(name, { version })`; it is available on the root `CommandSnapshot.meta` for Extensions and tooling. `sections` is an ordered list of plain-text `{ title, body }` entries, optionally scoped to renderer identities with `only` or `except` audiences. At consumption, audience filtering runs first, then entries with the same exact, case-sensitive title merge at their first position with bodies joined by a single newline.
+`version` comes from `new Crust(name, { version })` and appears on the root snapshot. `hidden` removes a command from help, completion, man-page, typo-suggestion, and skill listings without disabling routing. `sections` are rendered by help and man after their built-in sections.
 
-Declare sections in the metadata passed to `new Crust()` or `defineCommand()`; help and man render them after their built-in sections. `hidden` removes a command from user-facing help, completion, man-page, typo-suggestion, and skill listings without disabling direct routing.
+### `CommandSectionInput`
 
-### `SectionConsumer`, `SectionAudience`, `CommandSectionInput`, and `CommandSection`
+<auto-type-table path="../../../../../packages/core/src/types.ts" name="CommandSectionInput" />
+
+A plain-text section, optionally scoped with `only` or `except` (never both) to a nonempty list of `SectionConsumer`s. A `SectionConsumer` is an `ExtensionId` or any value exposing one at `.id`, such as the `help`, `man`, and `skill` Extension factories. `SectionAudience` is the `only` / `except` part alone.
 
 ```ts
-type SectionConsumer = ExtensionId | { readonly id: ExtensionId };
+import { help } from "@crustjs/extensions";
 
-type SectionAudience =
-  | { readonly only: readonly [SectionConsumer, ...SectionConsumer[]]; readonly except?: never }
-  | { readonly except: readonly [SectionConsumer, ...SectionConsumer[]]; readonly only?: never }
-  | { readonly only?: never; readonly except?: never };
-
-type CommandSectionInput = { readonly title: string; readonly body: string } & SectionAudience;
+const sections = [
+  { title: "Examples", body: "my-cli deploy prod" },
+  { title: "Agent notes", body: "Prefer --json output.", except: [help] },
+] satisfies CommandSectionInput[];
 ```
 
-`SectionConsumer` identifies a renderer: a branded `ExtensionId`, or any value exposing one at `.id` (such as the help, man, and skills Extension factory values). `SectionAudience` is the optional `only`/`except` scoping accepted on authored sections, and `CommandSectionInput` is the ordinary command-authoring shape. Extension section callbacks retain their consumption-time validation for dynamic contributions.
-
-`CommandSection` is the validated section stored on snapshot `meta.sections`, with its audience consumers resolved to nonempty readonly `ExtensionId` tuples. Metadata accepts typed dynamic audience arrays and checks nonemptiness when consumed.
+Renderers filter sections for their audience first, then merge entries with the same exact, case-sensitive title, joining bodies with a newline. `CommandSection` is the validated form stored on snapshot `meta.sections`, with consumers resolved to `ExtensionId`s.
 
 ## Command Snapshots
 
-Command Snapshots are readonly, serializable descriptions. They omit Command Actions, parsers, schemas, and Context functions. Core freezes the snapshot structure at public boundaries, but does not clone or freeze object-valued JSON defaults.
+Command Snapshots are frozen, serializable descriptions of the command tree. They omit Command Actions, parsers, schemas, and Context functions. Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details receive snapshots. Declared in [`snapshot.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/snapshot.ts).
 
 ### `CommandSnapshot`
 
@@ -163,7 +129,7 @@ Command Snapshots are readonly, serializable descriptions. They omit Command Act
   name="CommandSnapshot"
 />
 
-`flags` contains effective local and Context-owned flags. `meta.sections` contains the individual frozen authored and Extension-contributed sections for that command; same-title merging happens only when a renderer consumes them. Command Actions, Extension hooks, and `COMMAND_NOT_FOUND` details receive snapshots rather than mutable runtime internals.
+`flags` contains effective local and Context-owned flags. `meta.sections` holds each authored and Extension-contributed section separately; same-title merging happens only when a renderer consumes them.
 
 ### `ArgSnapshot`
 
@@ -173,60 +139,47 @@ Command Snapshots are readonly, serializable descriptions. They omit Command Act
 
 <auto-type-table path="../../../../../packages/core/src/command/snapshot.ts" name="FlagSnapshot" />
 
-Snapshots omit schemas and parse functions. Every flag snapshot includes `negatable`, derived from the parser's spelling policy. `URL` defaults become strings, and array defaults are recursively copied and frozen. `env` is a copied, frozen binding containing only the declared variable `name` and optional environment `delimiter`; the flag's own `delimiter` describes argv splitting. A snapshot never contains an environment value.
-
-Object-valued JSON defaults, including objects inside arrays, remain shared references; treat them as immutable.
+`URL` defaults become strings. `env` records the variable name and delimiter, never the value. Object-valued JSON defaults are shared references, not copies; treat them as immutable.
 
 ## Typed invocation
 
-[Exact declarations](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts).
+Declared in [`command/crust.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts). These types back [`run()`](/docs/api/crust#runpath-input-options), [`at()`](/docs/api/crust#atpath), and the [`@crustjs/testing`](/docs/modules/testing) helpers.
 
-Types inferred from the application definition that back [`run(path, input?, options?)`](/docs/api/crust#runpath-input-options) and the [`@crustjs/testing`](/docs/modules/testing) helpers. `CommandTree` is the compile-time tree accumulated by `.add()`; `CommandPath` enumerates every valid path through it (including the root path `[]`); `CommandShapeAt` resolves the `CommandShape` a path selects; and `RunInput` is the structured `args`/`flags`/`raw` input for that shape, built from the pre-parse `InputArgs` and `InputFlags` value types. When calling `run()`, inputs declared with `type: "json"` accept JSON primitives, structurally JSON-compatible object types (including named interfaces), and mutable or readonly arrays/tuples (`RunInput` itself and the testing helpers constrain leaves to `JsonValue`); variadic JSON arguments and multiple JSON flags use a mutable array whose items are JSON values.
-
-Inputs declared with `type: "url"` accept `URL`; `Date`, `bigint`, functions, and other non-JSON values are excluded from JSON inputs. `RunInputArguments` and `RunArguments` are the tuple types that make `input` optional when the selected command requires nothing; `RunOutcome` is the status-discriminated value `run()` resolves to. `CommandHandle<Shape>` is the path-bound invoker returned by [`at(path)`](/docs/api/crust#atpath): a readonly `path` plus `run(input?, options?)` typed from `Shape`. `AnyCrust` accepts any fully-built application.
+| Type                                 | Role                                                                       |
+| ------------------------------------ | -------------------------------------------------------------------------- |
+| `CommandTree`                        | Compile-time command tree accumulated by `.add()` and `.command()`         |
+| `CommandPath<Tree>`                  | Every valid path through the tree, including the root path `[]`            |
+| `CommandShape` / `CommandShapeAt`    | Argument, flag, subtree, and result types of the command a path selects    |
+| `RunInput<Shape>`                    | Structured `args` / `flags` / `raw` input for a shape                      |
+| `InputArgs` / `InputFlags`           | Pre-parse input value types used by `RunInput`                             |
+| `RunInputArguments` / `RunArguments` | Argument tuples that make `input` optional when nothing is required        |
+| `CommandHandle<Shape>`               | Path-bound invoker returned by `at()`: a readonly `path` and `run()`       |
+| `AnyCrust`                           | Any completed application; broad `run()` resolves to `RunOutcome<unknown>` |
 
 ```ts
 import type { CommandPath, CommandShapeAt, RunInput } from "@crustjs/core";
 
-type Tree = (typeof app)["_types"]["tree"];
-type Path = CommandPath<Tree>; // e.g. readonly [] | readonly ["greet"]
+type Path = CommandPath<(typeof app)["_types"]["tree"]>; // e.g. readonly [] | readonly ["greet"]
 type GreetInput = RunInput<CommandShapeAt<(typeof app)["_types"]["shape"], readonly ["greet"]>>;
 ```
 
-`InputArgs` requires a supplied prefix: defaults do not fill gaps, and required trailing arguments require preceding positions. Known choices, required fields, and paths remain strict. Conditional definitions retain conservative obligations; fully erased/open shapes accept broad structured input while preserving independently known facts.
+`Crust._types` is a type-only view of an application's inferred flags, arguments, Contexts, tree, shape, and root metadata (`rootMeta`); it has no runtime value. `AnyCrust` has no authoring methods; use it for inspection, `execute()`, and genuinely dynamic `run()` calls.
 
-See [`run()` input](/docs/api/crust#runpath-input-options).
-
-`Crust` defaults its argument state to `[]`. Prefer inferred authoring builders.
-
-`AnyCrust` is for completed-app inspection, `execute()`, and broad `run()` with an unknown action result; it has no authoring methods and cannot be assigned back to an empty root. `Crust<Flags, ArgsDef>` intentionally describes an open argument state.
-
-`Crust._types` is a supported type-level seam for accessing an application's inferred flags, arguments, Contexts, command tree, command shape, and authored root metadata (`rootMeta`); it has no runtime value.
+JSON inputs accept JSON primitives, structurally JSON-compatible objects, and arrays; `Date`, `bigint`, and functions are excluded. `url` inputs accept `URL`.
 
 ### `RunOutcome<Result>`
 
-```ts
-type RunOutcome<Result> = {
-  readonly stdout: string;
-  readonly stderr: string;
-} & (
-  | { readonly status: "completed"; readonly result: Result }
-  | { readonly status: "finished"; readonly by: ExtensionId }
-  | { readonly status: "failed"; readonly error: unknown }
-);
-```
+The inferred return value of `run()`. Every branch carries readonly captured `stdout` and `stderr`. Narrow `status` before reading its branch-specific field:
 
-Core `run()` is quiet, captures output, and returns invocation failures instead of rejecting them. Narrow `status` before reading the branch-specific field. See [capture semantics](/docs/api/crust#runpath-input-options) for live sinks, output boundaries, and memory cost.
+- `completed`: the action's awaited `result`.
+- `finished`: the finishing Extension id, `by`.
+- `failed`: the original thrown `error`.
 
-This differs from the internal hook-facing `InvocationOutcome`, which does not carry captured output or action results.
+See the [source declaration](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/command/crust.ts) for the union and [`run()`](/docs/api/crust#runpath-input-options) for a narrowing example and capture behavior. Extension `postRun` hooks receive [`InvocationOutcome`](#invocationoutcome) instead, which carries no output or result.
 
-## Parser boundary types
+### Parser boundary types
 
-`ParseResult<A, F>` is the syntax-parsed result before required-value and Standard Schema validation. Required core variadics still have ordinary array types here, because binding can produce an empty array before a finishing hook skips validation. Its generic `args` and `flags` preserve definition-specific raw value types; `ParsedArgValue` and `ParsedFlagValue` are the runtime-erased fallbacks for widened definitions.
-
-Its `excessArgs` holds positionals before `--` that no declared argument consumed (validation rejects them); its `rawArgs` holds tokens after `--`. `ValidatedInput<A, F>` is the validated boundary passed onward to Command Actions, with `InferArgs<A>` and `InferFlags<F>` applied.
-
-Most application authors consume the inferred Action context rather than naming these types directly. They are exported for parser integrations and tooling that need to distinguish syntax parsing from schema-validated values.
+For parser integrations and tooling. `ParseResult<A, F>` is the syntax-parsed input before required-value and schema validation: `excessArgs` holds unconsumed positionals and `rawArgs` holds tokens after `--`. `ParsedArgValue` and `ParsedFlagValue` are its erased value types. `ValidatedInput<A, F>` is the validated input passed to Command Actions.
 
 ## Invocation I/O
 
@@ -234,19 +187,19 @@ Most application authors consume the inferred Action context rather than naming 
 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="InvocationIO" />
 
-The same injectable callbacks are passed to the Command Action and every Context setup constructed for that invocation.
+The same callbacks are passed to the Command Action and every Context setup in the invocation.
 
 ### `InvocationOptions`
 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="InvocationOptions" />
 
-The optional last argument of [`run(path, input?, options?)`](/docs/api/crust#runpath-input-options) and `handle.run(input?, options?)`: live output sinks plus a caller-owned `signal` that aborts the invocation's `ctx.signal`.
+The optional last argument of `run(path, input?, options?)` and `handle.run(input?, options?)`.
 
 ### `ExecuteOptions`
 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="ExecuteOptions" />
 
-The optional argument of [`execute(options?)`](/docs/api/crust#executeoptions). During `execute()`, the first Ctrl-C aborts `ctx.signal` with an `AbortError`; a second terminates the process unless another listener owns the signal.
+The optional argument of [`execute(options?)`](/docs/api/crust#executeoptions).
 
 ## Command Action context
 
@@ -257,27 +210,24 @@ The optional argument of [`execute(options?)`](/docs/api/crust#executeoptions). 
   name="CrustCommandContext"
 />
 
-`Ctx` (default `{}`) is the inferred Context registry for the command path; it backs the lazy `ctx` bag as `ContextBag<Ctx>`. `rootCommand` is the readonly serializable snapshot of the application root, including Extension contributions. `InferArgs` and `InferFlags` are internal type plumbing, not root exports.
-
-`.args()`, `.flags()`, and `.provide()` infer these fields without explicit generic arguments.
+`ctx` is a lazy `ContextBag` of the Contexts available on the command path. `rootCommand` is the root snapshot, including Extension contributions.
 
 ## Context types
 
-[Exact declarations](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/api/context.ts).
+Declared in [`api/context.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/api/context.ts). See [Contexts](/docs/guide/contexts) for worked examples and [Context lifecycle](/docs/api/crust#context-lifecycle) for cleanup rules.
 
 ### `ContextFactory`
 
+`defineContext(name, setup)` and `defineContext(name, config, setup)` return a `ContextFactory`. Call it to create a `ContextInstance`, even when it takes no options. `factory.contextName` is the `ctx` property name.
+
 ```ts
-interface ContextFactory<Name extends string, Options, Value, OF, Deps> {
-  (options: Options): ContextInstance<Name, Value, OF, Deps>;
-  readonly contextName: Name;
-  of(value: Value): ContextInstance<Name, Value, OF, {}>;
-}
+const config = defineContext("config", () => ({ region: "eu" }));
+
+app.provide(config()); // runs setup lazily in each invocation
+app.provide(config.of({ region: "us" })); // precomputed value, e.g. a test double
 ```
 
-`defineContext(name, setup)` and `defineContext(name, config, setup)` always return a factory. Invoke it even when `Options` is `void`. `contextName` is the bag property name.
-
-`.of(value)` creates a precomputed instance with no dependencies while retaining owned flags. The invocation still owns `value`: when it implements `Symbol.dispose` or `Symbol.asyncDispose`, every invocation that pulls the Context disposes it; an unpulled value is left untouched (see [Contexts](/docs/guide/contexts#replace-a-context-in-tests)).
+`.of(value)` creates an instance with no dependencies that keeps the factory's owned flags. Every invocation that pulls it disposes `value` if it is disposable (see [replacing a Context in tests](/docs/guide/contexts#replace-a-context-in-tests)).
 
 ### `ContextConfig`, `ContextSetup`, and `ContextBag`
 
@@ -285,15 +235,9 @@ interface ContextFactory<Name extends string, Options, Value, OF, Deps> {
 
 <auto-type-table path="../../../../../packages/core/src/api/context.ts" name="ContextSetup" />
 
-```ts
-type ContextBag<Deps> = {
-  readonly [K in keyof Deps]: Promise<Deps[K]>;
-};
-```
+`flags` declares flags the Context owns and propagates. `use` declares Context dependencies and determines the setup's `ctx` bag. A `ContextBag<Deps>` maps each name to a `Promise` of its value: reading a property starts memoized construction, so destructuring the bag starts every construction immediately.
 
-`flags` declares propagating flags. `use` declares Context dependencies and determines the exact lazy bag exposed to setup. Reading a property starts memoized construction; destructuring therefore starts construction immediately.
-
-Setup also receives the invocation's `stdout` and `stderr` callbacks, and `defer(cleanup)`. Deferred callbacks run after post-run hooks in reverse registration order, even when setup later throws; call `defer` right after acquiring each resource. `defer` throws a `DEFINITION` error once setup has settled. A cleanup callback may read `ctx`, but only Contexts built during the invocation resolve there; a never-built one rejects with `context-during-disposal`.
+Setup also receives the invocation's `stdout`, `stderr`, `signal`, and `defer(cleanup)`.
 
 ### `ContextInstance`
 
@@ -302,39 +246,19 @@ Setup also receives the invocation's `stdout` and `stderr` callbacks, and `defer
   name="ContextInstance"
 />
 
-Attach helper-created instances with `.provide()`, or `.provide(...instances)` for dynamic collections. Owned-flag/dependency state cannot be erased into an explicitly empty `ContextInstance` holder. The default open instantiation is not an existential upper bound; prefer inference or a generic identity helper.
-
-Construction stays lazy.
+Attach instances with `.provide()`. Prefer inferred instance types over explicitly annotated `ContextInstance` holders, which cannot carry owned-flag and dependency state.
 
 ### `FactoryValueOf<F>`
 
-```ts
-type FactoryValueOf<F extends AnyContextFactory> = /* awaited Context value */;
-```
+The awaited value a factory produces: `FactoryValueOf<typeof config>` is what `await ctx.config` resolves to. Use it to type helpers that take a Context value.
 
-Extracts the awaited value type a Context factory produces: `FactoryValueOf<typeof config>` is the value `await ctx.config` resolves to. Useful when typing helpers that consume a Context value outside an inferred bag.
+### `ContextMap` and `MergeContext`
 
-### `ContextMap`
-
-```ts
-type ContextMap = object;
-```
-
-The upper bound for the name/value registry accumulated by `.provide()` on commands and Extensions. It is a phantom constraint: the builder infers the concrete property map, so consumer-defined context shapes do not need a string index signature. Command actions receive `ContextBag<Ctx>` for that inferred registry.
-
-Reusable command definitions and Extension hooks expose only Contexts declared through their own `.use()`.
-
-### `MergeContext`
-
-```ts
-type MergeContext<A, B> = A & B;
-```
-
-The intersection of two Context maps.
+`ContextMap` is the upper bound for Context registries inferred by `.provide()`; consumer-defined shapes need no index signature. `MergeContext<A, B>` is `A & B`. `AnyContextFactory` accepts any Context factory.
 
 ## Extension types
 
-[Exact declarations](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/api/extension.ts).
+Declared in [`api/extension.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/api/extension.ts). See [Extensions](/docs/guide/extensions) for authoring.
 
 ### `ExtensionBuilder`
 
@@ -343,117 +267,38 @@ The intersection of two Context maps.
   name="ExtensionBuilder"
 />
 
-`defineExtension(id)` starts an immutable fluent definition; `defineExtension<MetaKeys>(id)` also [requires root metadata](#rootmetakey). Every method except `.factory()` returns a new frozen handle and leaves the original unchanged, and every handle is an `Extension` accepted by `.extend()`. There is no final build step.
+`defineExtension(id)` starts an immutable fluent definition; `defineExtension<MetaKeys>(id)` also [requires root metadata](#rootmetakey). Every method except `.factory()` returns a new frozen handle, and every handle is an `Extension` accepted by `.extend()`. There is no final build step.
 
-Collection methods append on repeated calls: `.use()` declares Contexts the hooks consume (the app or a `.provide()` supplies them), `.provide()` installs Context instances application-wide regardless of chain position, `.flags()` owns flags, and `.add()` contributes `defineCommand()` definitions at the application root. Provided Contexts are not exposed to the Extension's own hooks unless also declared with `.use()`. Flag spellings are checked against earlier `.flags()` and provided Context-owned flags, both by TypeScript and when the method runs. TypeScript also rejects known command-name and alias collisions across `.add()` calls. Dynamic command collections retain the runtime replacement behavior: later canonical definitions replace earlier ones.
+- Collection methods append on repeated calls. `.use()` declares Contexts the hooks consume. `.provide()` installs Context instances application-wide regardless of chain position; hooks see them only if also declared with `.use()`. `.flags()` owns flags. `.add()` contributes `defineCommand()` definitions at the root.
+- Lifecycle setters replace the previous callback: `.preRun()`, `.postRun()`, and `.onError()` set the [hooks](#extensionhooks); `.sections(snapshot)` returns [section contributions](#extensionsectioncontribution); `.build(ctx)` returns [`BuildArtifacts`](#buildartifacts) for build tooling to write.
+- Each callback is typed by the declarations made before it in the chain.
+- Flag spellings and contributed command names are checked for collisions by TypeScript and when the method runs.
 
-Lifecycle setters replace the previous callback on repeated calls: `.preRun()`, `.postRun()`, and `.onError()` set the [hooks](#extensionhooks); `.sections(snapshot)` returns plain-text sections targeted by canonical command paths relative to the root, appended to each target's `meta.sections` in Extension registration order (renderers filter audiences and merge exact same-title entries while preserving this body order); `.build(ctx)` runs in Extension registration order when invoked by build tooling, may be async, and returns `BuildArtifacts`, the files for the tooling to write, with its errors propagating to the caller. Each callback is typed by the declarations made before it in the chain.
+`.factory(define)` returns an [`ExtensionFactory`](#extensionfactory).
 
-`.factory(define)` returns an [`ExtensionFactory`](#extensionfactory) with the handle's `.id`. Each call passes the handle and the call arguments to `define`, whose return value must be an Extension with the same id (typically a chain on the received handle); a differently identified Extension throws a `DEFINITION` error with reason `factory-id-mismatch`. See [Extensions](/docs/guide/extensions).
+### `ExtensionFactory`
 
-### `ExtensionSectionContribution`
+A callable `(...args) => Extension` with the handle's `id`. `.factory((extension, ...args) => ...)` keeps the callback's parameters after the handle, including optional and defaulted ones, and infers flags, dependencies, providers, and commands. `define` must return an Extension with the same id, typically a chain on the received handle; otherwise the call throws a `DEFINITION` error (`factory-id-mismatch`).
 
-```ts
-type ExtensionSectionContribution = RuntimeCommandSectionInput & {
-  readonly command: readonly string[];
-};
-```
-
-The entry shape inside the collection returned by the `.sections(snapshot)` callback. `RuntimeCommandSectionInput` accepts typed audience arrays whose nonemptiness is checked at consumption: a plain-text section plus the required canonical `command` path it targets, relative to the application root (`[]` targets the root command).
-
-Every callback receives the authored snapshot, including Extension-contributed commands and flags but no Extension-contributed sections. Blank or multi-line titles, blank bodies, empty audiences, both `only` and `except`, and noncanonical or missing command paths fail preparation with a `DEFINITION` error.
-
-### `ExtensionBuildContext`
-
-<auto-type-table
-  path="../../../../../packages/core/src/api/extension.ts"
-  name="ExtensionBuildContext"
-/>
-
-The build context contains the frozen root Command Snapshot. Its optional `MetaKeys` type parameter refines required snapshot metadata fields. Hooks run in registration order; section callbacks are re-evaluated after each hook's files are written, so later hooks receive refreshed snapshots. A hook does not see its own outputs in its input snapshot.
-
-It deliberately carries no output directory: return files for build tooling to write and record in the [`BuildReport`](#buildreport). If a generator requires disk access, use your own temporary directory and read the results back. During this phase, [`resolveArtifactDir(name)`](/docs/api/crust#resolveartifactdirname) points at the build output directory rather than `.crust/root/`, which the build has already cleared.
-
-### `BuildFile`
-
-<auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="BuildFile" />
-
-One file a build hook produces: a path relative to the build output directory and its `string` or `Uint8Array` content. Build tooling normalizes separators, rejects absolute or escaping paths, and rejects a path that collides with one already produced, in this or an earlier hook: equal paths, compared case-insensitively so the tree stays valid on case-insensitive filesystems, and paths nested under or above an existing file, since a file and a directory cannot share a name.
-
-### `BuildArtifacts`
-
-<auto-type-table
-  path="../../../../../packages/core/src/api/extension.ts"
-  name="BuildArtifacts"
-/>
-
-The files returned by one build hook; an empty array means the hook emits nothing. For package staging, use an Extension-specific top-level directory such as `acme-manifest/manifest.json`. Only top-level directories under `.crust/artifacts/` are copied into packages; a loose top-level file is recorded in the manifest but not shipped.
-
-### `BuildReport`
-
-<auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="BuildReport" />
-
-One entry per executed build hook, in execution order, listing exactly the files build tooling wrote for it. `crust build` records this per `bin` entry under `build` in `.crust/manifest.json`.
-
-The report covers returned files written under `.crust/artifacts/`, not every packaged file. Launchers, binaries, `crust.include` directories, `README.md`, and `LICENSE` are staged separately. It is not a sandbox: files a hook writes elsewhere on its own are outside the report.
+When annotating a published factory, preserve literal tuples for precise typed invocation, and preserve its metadata keys if it requires root metadata. See [authoring an Extension](/docs/guide/extensions#write-your-own).
 
 ### `Extension`
 
 <auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="Extension" />
 
-An `Extension` is a frozen handle with an `id` and private defining data, created only by `defineExtension()`. Holders keep the private dependency, hook-demand, and metadata proofs; structural copies keep the original definition. Mint the branded `ExtensionId` with `defineExtensionId()`, which requires a non-empty, already-trimmed string.
-
-### `ExtensionFactory`
-
-```ts
-type ExtensionFactory<
-  Args extends readonly unknown[] = [],
-  Deps extends ContextMap = {},
-  Provide extends readonly AnyContextInstance[] = [],
-  Defs extends readonly NamedExtensionFlagDef[] = [],
-  Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
-  MetaKeys extends RootMetaKey = never,
-  HookDeps extends ContextMap = Deps,
-> = ((...args: Args) => Extension<Deps, Provide, Defs, Commands, MetaKeys, HookDeps>) & {
-  readonly id: ExtensionId;
-};
-```
-
-`.factory((extension, ...args) => ...)` preserves the callback's arguments after the handle, including optional and defaulted parameters, and infers its flags, dependencies, providers, and commands. Each call runs the callback and checks the returned Extension's id. Contribution namespaces are closed by default.
-
-Preserve literal tuples in published annotations for precise typed invocation. To keep a namespace open, explicitly use `ContextMap`, `readonly ContextInstance[]`, `readonly NamedExtensionFlagDef[]`, or `readonly CommandDefinition<any, any, any, any>[]` for its parameter. `MetaKeys` defaults to `never`, meaning no required metadata.
-
-`HookDeps` defaults to `Deps`. An annotation for a metadata-requiring factory must preserve its metadata keys. See [authoring an Extension](/docs/guide/extensions#write-your-own).
+A frozen handle created only by `defineExtension()`. Spreading or copying it does not redefine the Extension. Mint the branded `ExtensionId` with `defineExtensionId()`, which requires a non-empty, trimmed string.
 
 ### `RootMetaKey`
 
-`RootMetaKey` is `keyof RootCommandMeta`. `defineExtension<MetaKeys>(id)` accepts only these keys as its single optional type argument; the chain infers everything else. Required fields retain their schema types and become non-optional in root snapshots passed to hooks, `build`, and `sections`.
+`keyof RootCommandMeta`: the keys `defineExtension<MetaKeys>(id)` accepts as its only type argument. Required keys become non-optional in the root snapshots passed to hooks, `build`, and `sections`, and `.extend()` checks at compile time that the root supplies them. See [required root metadata](/docs/guide/extensions#required-root-metadata).
 
-`.extend()` checks that the root's inferred metadata supplies them.
+### `ExtensionFlagDef` and `NamedExtensionFlagDef`
 
-[Declare required keys](/docs/guide/extensions#required-root-metadata) without losing flag, Context, or factory-argument inference. These requirements are compile-time-only.
-
-### `ExtensionFlagDef`
-
-```ts
-type ExtensionFlagDef = FlagDef & { readonly recursive?: boolean };
-```
-
-An Extension owns contributed flags. `recursive` defaults to `true`; `false` contributes the flag only to the root.
-
-### `NamedExtensionFlagDef`
-
-```ts
-type NamedExtensionFlagDef = NamedFlagDef & { readonly recursive?: boolean };
-```
-
-The public authoring shape accepted by the Extension `.flags()` method: an Extension flag definition carrying its name and optional recursive scope.
+A `FlagDef` (or `NamedFlagDef`) plus `recursive?: boolean`. `recursive` defaults to `true`; `false` contributes the flag only to the root.
 
 ### `InferExtensionFlags<Defs>`
 
-Infers pre-validation values from an Extension's named-definition array and exposes them to its hooks, not schema outputs. A required flag without a default can still be absent before validation. A false-capable `recursive` value makes even defaulted flags possibly absent on descendants; optional schema `multiple` can produce a scalar or an array.
-
-Fixed tuples with one known name per definition retain precise hook types. Dynamic arrays, conditional collections, and uncertain names expose raw flag values that require narrowing: an absent definition leaves its name available to other Extensions.
+The flag values an Extension's hooks see. They are pre-validation values, not schema outputs: a required flag can still be absent, and a non-recursive flag can be absent on descendants.
 
 ### `ExtensionContext`
 
@@ -462,7 +307,7 @@ Fixed tuples with one known name per definition retain precise hook types. Dynam
   name="ExtensionContext"
 />
 
-`args` and `flags` are syntax-parsed values. Extension hooks do not alter application Command Action types.
+`args` and `flags` are syntax-parsed values. Hooks do not change Command Action types.
 
 ### `ExtensionHooks`
 
@@ -471,19 +316,17 @@ Fixed tuples with one known name per definition retain precise hook types. Dynam
   name="ExtensionHooks"
 />
 
-`preRun` runs in `.extend()` order after routing and input binding (argv parsing for `execute()`, structured binding for typed `run()`), before validation. Its declared Context bag is lazy, but accessing a flag-owning Context directly or transitively rejects before validation; a later post-validation access re-executes that Context's setup from the start. Return `ctx.finish()` to end successfully.
+- `preRun` runs in `.extend()` order after routing and input binding, before validation. Return `ctx.finish()` to end the invocation successfully. Pulling a flag-owning Context here rejects, because its flags are not validated yet.
+- `onError` runs for `execute()` only. Return `true` after rendering to stop the chain, or a falsy value to fall through to Core's renderer.
+- `postRun` runs in reverse `.extend()` order after every completed, finished, or failed invocation that reached hooks, like `finally`. Contexts remain available until it completes. Preparation, routing, and parse failures skip it.
 
-`onError` is used by `.execute()` only. For failures raised during dispatch before `postRun`, it settles before `postRun`; return `true` after rendering to stop the chain, or a falsy value to continue to Core's renderer. `postRun` is the reverse-`.extend()`-order `finally` hook: it can pull or reuse Contexts, observes any failed-outcome attribution from `onError`, and runs for every Extension after a completed, finished, or failed invocation once hooks start. Preparation, routing, and input-binding failures happen before hooks and skip `postRun`.
-
-Invocation Contexts remain available through `postRun`, and disposal follows. An `onError` call for a post-run or disposal failure runs after cleanup, with Context pulls unavailable. Routing and parse failures use a fallback context with no available Contexts.
-
-See [failure handling](/docs/guide/error-handling#fail-from-anywhere).
+See [propagation boundaries](/docs/api/errors#propagation-boundaries) for hook timing on failure.
 
 ### `Finished`
 
 <auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="Finished" />
 
-`ctx.finish()` returns this opaque token. Return that exact value from `preRun`; do not construct one yourself.
+The opaque token returned by `ctx.finish()`. Return that exact value from `preRun`.
 
 ### `InvocationOutcome`
 
@@ -492,8 +335,47 @@ See [failure handling](/docs/guide/error-handling#fail-from-anywhere).
   name="InvocationOutcome"
 />
 
-`postRun` receives `completed` after a Command Action completes, `finished` with the short-circuiting Extension's `by` id, or `failed` with the thrown value. A failed outcome's optional `by` identifies the Extension whose `onError` returned true; it is absent when Core's fallback renderer handled the failure.
+`postRun` receives `completed`, `finished` with the short-circuiting Extension's `by`, or `failed` with the thrown value. On `failed`, `by` names the Extension whose `onError` claimed the failure.
+
+### `ExtensionSectionContribution`
+
+<auto-type-table
+  path="../../../../../packages/core/src/api/extension.ts"
+  name="ExtensionSectionContribution"
+/>
+
+One entry returned by `.sections(snapshot)`: a section plus the canonical `command` path it targets, relative to the root (`[]` is the root). Contributions append to the target's `meta.sections` in Extension registration order. The callback receives a snapshot without Extension-contributed sections. Blank or multi-line titles, blank bodies, empty audiences, both `only` and `except`, and unknown command paths fail preparation with a `DEFINITION` error.
+
+### `ExtensionBuildContext`
+
+<auto-type-table
+  path="../../../../../packages/core/src/api/extension.ts"
+  name="ExtensionBuildContext"
+/>
+
+Build hooks run in registration order, and each receives a snapshot refreshed after earlier hooks' files were written; a hook does not see its own outputs. There is no output directory: return files instead. During this phase, [`resolveArtifactDir(name)`](/docs/api/crust#resolveartifactdirname) points at the entry's build output directory.
+
+### `BuildFile`
+
+<auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="BuildFile" />
+
+`path` is relative to the build output directory. Build tooling rejects absolute or escaping paths and paths that collide with an earlier file, compared case-insensitively, including a file and a directory with the same name.
+
+### `BuildArtifacts`
+
+<auto-type-table
+  path="../../../../../packages/core/src/api/extension.ts"
+  name="BuildArtifacts"
+/>
+
+The files one build hook returns; `[]` emits nothing. Put files under an Extension-specific top-level directory such as `acme-manifest/manifest.json`: only top-level directories are copied into packages, and a loose top-level file is not shipped.
+
+### `BuildReport`
+
+<auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="BuildReport" />
+
+One entry per executed build hook, in order, listing the files build tooling wrote for it. `crust build` records it per `bin` entry in `.crust/manifest.json`. Files a hook writes elsewhere itself are not reported.
 
 ## Error types
 
-See [Errors](/docs/api/errors) for `CrustError`, `CrustErrorCode`, `CrustErrorDetails`, `CrustErrorDetailsMap`, `CrustErrorJson` (the serializable shape returned by `.toJSON()`), and the four detail interfaces.
+See [Errors](/docs/api/errors) for `CrustError`, `CrustErrorCode`, `CrustErrorDetails`, `CrustErrorDetailsMap`, `CrustErrorJson` (the `.toJSON()` shape), and the detail interfaces.

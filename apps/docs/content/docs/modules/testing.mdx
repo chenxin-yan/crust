@@ -3,7 +3,7 @@ title: Testing
 description: Test Crust applications with captured output and fake interactive terminals.
 ---
 
-`@crustjs/testing` adds helpers for raw `execute()` capture and fake interactive terminals. Use core `run()` for ordinary typed action tests.
+`@crustjs/testing` adds helpers for raw `execute()` capture and fake interactive terminals. For ordinary typed action tests, use Core's [`app.run()`](/docs/api/crust#runpath-input-options), which already captures output and returns the action result; see [Testing](/docs/guide/testing).
 
 ## Install
 
@@ -13,39 +13,17 @@ npm install -D @crustjs/testing
 
 `@crustjs/core` is a required peer. `@crustjs/prompts` is an optional peer needed only by the `@crustjs/testing/interactive` entry point; the root entry point works without it. TypeScript is an optional peer.
 
-## Application contracts
-
-```ts
-interface ExecutableApp {
-  execute(options?: { argv?: string[]; io?: CaptureIO }): Promise<number>;
-}
-```
-
-`captureExecute()` accepts this structural contract. `runInteractive()` (from `@crustjs/testing/interactive`) accepts a Crust application and infers its command path and input.
-
-An inert definition must be added to an application before the typed helpers can address it. Core's typed invocation rules are documented under [`run()` path and input](/docs/api/crust#runpath-input-options).
-
-## `app.run(path, input?)`
-
-```ts
-const outcome = await app.run(["build"], { flags: { minify: true } });
-if (outcome.status === "failed") throw outcome.error;
-expect(outcome.stdout).toContain("Built");
-```
-
-Use `run()` to capture stdout, stderr, and the Command Action outcome without terminal parsing. See the [core `run()` reference](/docs/api/crust#runpath-input-options) for result branches and capture boundaries.
-
 ## `captureExecute(app, argv)`
 
 <include lang="ts">../../../examples/modules/testing.ts#execute</include>
 
-`captureExecute()` drives raw argv through `execute()` in-process and returns `stdout`, `stderr`, and `exitCode`. It restores the previous process exit state after capture. Use it for parser errors, rendered failures, and Extension `onError` output.
+`captureExecute()` drives raw argv through `execute()` in-process and returns `stdout`, `stderr`, and `exitCode`. It restores the previous process exit state after capture. Use it for parser errors, rendered failures, and Extension `onError` output. `app` is anything with Crust's `execute({ argv, io })` method (`ExecutableApp`).
 
 <auto-type-table path="../../../../../packages/testing/src/index.ts" name="CapturedExecute" />
 
 ## `runInteractive(app, path, input?)`
 
-Import from `@crustjs/testing/interactive`; this entry point requires `@crustjs/prompts`.
+Import from `@crustjs/testing/interactive`; this entry point requires `@crustjs/prompts`. `path` and `input` are typed like `app.run()`, so a definition must be added to the application before it can be addressed.
 
 <include lang="ts">../../../examples/modules/testing.ts#interactive</include>
 
@@ -59,8 +37,4 @@ Import from `@crustjs/testing/interactive`; this entry point requires `@crustjs/
 
 ## Custom prompts
 
-```ts
-import { renderPrompt } from "@crustjs/prompts/testing";
-```
-
-`@crustjs/testing` does not re-export prompt-author helpers. Use [`renderPrompt()`](/docs/modules/prompts#testing-custom-prompts) for custom `(options, io?)` prompts.
+`@crustjs/testing` does not re-export prompt-author helpers. Test custom prompts with [`renderPrompt()`](/docs/modules/prompts#testing-custom-prompts) from `@crustjs/prompts/testing`.

@@ -4,7 +4,6 @@ import {
 	input,
 	multiselect,
 	select,
-	type PromptIO,
 	withTerminalIO,
 } from "@crustjs/prompts";
 import { cyan, magenta } from "@crustjs/style";
@@ -34,4 +33,25 @@ await withTerminalIO(io, () => input({ message: "Name?" }));
 //#region theme
 const prompts = createPrompts({ theme: { prefix: magenta, success: cyan } });
 await prompts.input({ message: "Name?", initial: "Ada" });
+//#endregion
+
+//#region custom
+import { type PromptIO, runPrompt, submit } from "@crustjs/prompts";
+import { renderPrompt } from "@crustjs/prompts/testing";
+
+function counter(options: { message: string }, promptIO?: PromptIO) {
+	return runPrompt(
+		{
+			initialState: 0,
+			render: (count) => `${options.message} ${count}`,
+			handleKey: (key, count) => (key.name === "return" ? submit(count) : count + 1),
+		},
+		promptIO,
+	);
+}
+
+const prompt = renderPrompt(counter, { message: "Presses:" });
+prompt.type("ab");
+prompt.keys("return");
+console.log(await prompt.answer); // => 2
 //#endregion

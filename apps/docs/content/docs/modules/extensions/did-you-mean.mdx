@@ -25,9 +25,10 @@ Available commands: deploy
 new Crust("my-cli").extend(didYouMean({ mode: "help" }));
 ```
 
-| Option | Type                | Default   |
-| ------ | ------------------- | --------- |
-| `mode` | `"error" \| "help"` | `"error"` |
+<auto-type-table
+  path="../../../../../../packages/extensions/src/did-you-mean.ts"
+  name="DidYouMeanOptions"
+/>
 
 `"error"` writes the message and available commands to stderr. `"help"` writes the message and parent help to stdout, while core keeps the nonzero exit code.
 

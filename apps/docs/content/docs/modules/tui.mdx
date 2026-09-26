@@ -30,9 +30,7 @@ npm install @opentui/react react
 
 ## `runTui(mount, config?)`
 
-```ts
-function runTui(mount: TuiMount, config?: CliRendererConfig): Promise<void>;
-```
+`mount` receives the OpenTUI renderer and may be async; `config` is OpenTUI's `CliRendererConfig`. See the [examples](#solid) below and the [declaration](https://github.com/chenxin-yan/crust/blob/main/packages/tui/src/index.ts).
 
 `runTui()` requires both the configured (or process) stdin and stdout to be TTYs. It throws a `NonInteractiveError` before creating a renderer otherwise. Match this portable convention with `error.name === "NonInteractiveError"`.
 

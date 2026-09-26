@@ -31,19 +31,6 @@ A Context can own the flags needed by its setup. `.provide()` installs that Cont
 
 ## Runtime exports
 
-```ts
-import {
-  Crust,
-  CrustError,
-  defineArg,
-  defineCommand,
-  defineContext,
-  defineExtension,
-  defineExtensionId,
-  defineFlag,
-} from "@crustjs/core";
-```
-
 | Export                                                               | Role                                                                      |
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | [`Crust`](/docs/api/crust)                                           | Root command builder with `run()`, `execute()`, and `snapshot()`          |
@@ -53,36 +40,24 @@ import {
 | `defineExtensionId()`                                                | Creates a branded Extension identity                                      |
 | `defineArg()` / `defineFlag()`                                       | Creates named argument and flag definitions                               |
 | [`CrustError`](/docs/api/errors)                                     | Framework error for definition, routing, parsing, and validation failures |
+| [`resolveArtifactDir()`](/docs/api/crust#resolveartifactdirname)     | Locates artifact and `crust.include` directories shipped with the CLI     |
 
-## Definition and boundary types
-
-```ts
-import type {
-  ArgDef,
-  CommandSnapshot,
-  CrustCommandContext,
-  ExecuteOptions,
-  Extension,
-  FlagDef,
-  InvocationIO,
-  InvocationOptions,
-} from "@crustjs/core";
-```
+## Types
 
 The root barrel exports the command, Context, Extension, input, snapshot, and error types used by applications. See [Types](/docs/api/types) for their fields and constraints.
 
-| Type                                                  | Reference                                                                                       |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `ArgDef` / `FlagDef`                                  | [`ArgDef`](/docs/api/types#argdef) and [`FlagDef`](/docs/api/types#flagdef)                     |
-| `ContextBag` / `ContextFactory` / `ContextSetup`      | [Context types](/docs/api/types#context-types)                                                  |
-| `Extension` / `ExtensionBuilder` / `ExtensionFactory` | [Extension types](/docs/api/types#extension-types)                                              |
-| `CommandSnapshot` / `ArgSnapshot` / `FlagSnapshot`    | [Command Snapshot](/docs/api/crust#snapshot)                                                    |
-| `BuildFile` / `BuildArtifacts`                        | [`BuildFile`](/docs/api/types#buildfile) and [`BuildArtifacts`](/docs/api/types#buildartifacts) |
-| `BuildReport`                                         | [`BuildReport`](/docs/api/types#buildreport)                                                    |
-| `RootMetaKey`                                         | [`RootMetaKey`](/docs/api/types#rootmetakey)                                                    |
-| `MergeFlags`                                          | [`MergeFlags`](/docs/api/types#mergeflags)                                                      |
-| `MergeContext`                                        | [`MergeContext`](/docs/api/types#mergecontext)                                                  |
-| `InvocationOptions` / `ExecuteOptions`                | [Invocation I/O](/docs/api/types#invocation-io)                                                 |
+| Type                                                   | Reference                                                                                       |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `ArgDef` / `FlagDef`                                   | [`ArgDef`](/docs/api/types#argdef) and [`FlagDef`](/docs/api/types#flagdef)                     |
+| `ContextBag` / `ContextFactory` / `ContextSetup`       | [Context types](/docs/api/types#context-types)                                                  |
+| `Extension` / `ExtensionBuilder` / `ExtensionFactory`  | [Extension types](/docs/api/types#extension-types)                                              |
+| `CommandSnapshot` / `ArgSnapshot` / `FlagSnapshot`     | [Command Snapshots](/docs/api/types#command-snapshots)                                          |
+| `BuildFile` / `BuildArtifacts` (Extension build hooks) | [`BuildFile`](/docs/api/types#buildfile) and [`BuildArtifacts`](/docs/api/types#buildartifacts) |
+| `BuildReport`                                          | [`BuildReport`](/docs/api/types#buildreport)                                                    |
+| `RootMetaKey`                                          | [`RootMetaKey`](/docs/api/types#rootmetakey)                                                    |
+| `MergeFlags`                                           | [`MergeFlags`](/docs/api/types#mergeflags)                                                      |
+| `MergeContext`                                         | [`MergeContext`](/docs/api/types#contextmap-and-mergecontext)                                   |
+| `InvocationOptions` / `ExecuteOptions`                 | [Invocation I/O](/docs/api/types#invocation-io)                                                 |
 
 The [root barrel](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/index.ts) is the full supported export list.
 
@@ -113,6 +88,6 @@ const visible = visibleSectionsFor(snapshot, defineExtensionId("acme:web-docs"))
 | `formatDefault()` / `formatDescription()`                                          | Formats input defaults and descriptions                            |
 | `isListed()` / `sectionsFor()` / `visibleSectionsFor()`                            | Filters commands and sections for an Extension identity            |
 | `CommandDocumentation` / `DocumentationArg` / `DocumentationFlag` / `UsageSegment` | Documentation model types                                          |
-| `CommandSnapshot`                                                                  | Command Snapshot type used by tooling consumers                    |
+| `CommandSnapshot`                                                                  | Same type as the root export, for tooling-only imports             |
 
-`@crustjs/core/tooling` contains build-time helpers for Command Snapshots, documentation trees, [section filtering](/docs/guide/extensions#section-consumers), formatting, and the first-party subprocess protocol. Application authoring and invocation APIs stay at the package root. The subprocess protocol applies to source entries run by `crust build`; finished Bun and Node bundles compile it out through the [`CRUST_INTERNAL_BUILD`](/docs/api/crust#resolveartifactdirname) marker, and Deno binaries are unchanged.
+`@crustjs/core/tooling` contains build- and render-time helpers for Command Snapshots, documentation trees, [section filtering](/docs/guide/extensions#section-consumers), and formatting. They move in lockstep with first-party tooling. Application authoring and invocation APIs stay at the package root. `SNAPSHOT_PATH_ENV` and `BUILD_OUT_DIR_ENV` name the variables `crust build` sets when it runs a source entry to prepare its snapshot; do not set them in your CLI.

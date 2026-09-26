@@ -3,7 +3,7 @@ title: "Effect"
 description: Effect.ts v4 adaptor for Command Actions, Contexts, and Core errors.
 ---
 
-`@crustjs/effect` lets you author Command Actions and Contexts in [Effect](https://effect.website) idiom with nothing restated. Crust remains the runtime: routing, parsing, rendering, and cleanup are unchanged, and applications that do not use Effect are unaffected.
+`@crustjs/effect` lets you author Command Actions and Contexts in [Effect](https://effect.website) idiom. Crust remains the runtime: routing, parsing, rendering, and cleanup are unchanged. It is a set of helpers, not an Extension, so it registers no flags, commands, or hooks.
 
 <Callout type="warn" title="Effect v4 prerelease">
   The adaptor targets `effect@4.x` prereleases. Install the exact `effect` version the package was
@@ -24,17 +24,16 @@ npm install @crustjs/effect effect@4.0.0-rc.115
 
 `DbLive` is built when the action starts; `db closed` prints after the action finishes, whether it succeeded, failed, or was interrupted. `config` is a plain Crust Context and stays lazy.
 
-## Mental model
+## How it fits
 
-Crust is the outer runtime. Each `handler()` invocation opens one Effect run, provides it with every `layer()` on the command path, and closes the run before Crust's own cleanup releases the Layers.
+Each `handler()` invocation runs one Effect program, provided with every `layer()` on the command path. The Layers are released by Crust's normal Context cleanup afterwards.
 
-| Boundary                         | Crust side                                 | Effect side                                            |
-| -------------------------------- | ------------------------------------------ | ------------------------------------------------------ |
-| Action                           | `.action(handler(fn))`                     | `fn` returns an Effect or is a generator (`function*`) |
-| Layer-backed Context             | `.provide(db())`, `.use(db)`, `ctx.db`     | `yield* Db` — services are provided, nothing to list   |
-| Plain Context inside a program   | `defineContext("config", …)`               | `yield* service(config)`                               |
-| Throwing Crust code in a program | prompts, `CrustError`, `AbortError`        | `tryCrust(() => …)` → tagged failure / interruption    |
-| Errors reaching `execute()`      | rendered exactly like a plain thrown error | unwrapped from the Exit, see below                     |
+| Boundary                         | Crust side                             | Effect side                                            |
+| -------------------------------- | -------------------------------------- | ------------------------------------------------------ |
+| Action                           | `.action(handler(fn))`                 | `fn` returns an Effect or is a generator (`function*`) |
+| Layer-backed Context             | `.provide(db())`, `.use(db)`, `ctx.db` | `yield* Db`: services are provided automatically       |
+| Plain Context inside a program   | `defineContext("config", …)`           | `yield* service(config)`                               |
+| Throwing Crust code in a program | prompts, `CrustError`, `AbortError`    | `tryCrust(() => …)`: tagged failure or interruption    |
 
 ### Error outcomes
 
@@ -46,126 +45,40 @@ Crust is the outer runtime. Each `handler()` invocation opens one Effect run, pr
 | `Die` (defect)                   | Rethrown as-is; rendered like a plain thrown error (exit 1)                          |
 | Interruption                     | An `AbortError` is rethrown; Core exits 130 with no output, like prompt cancellation |
 
-Both the program and Layer builds run with the invocation's `ctx.signal`: caller cancellation or Ctrl-C during `execute()` interrupts their fibers, including interruptible resource acquisition. Layer finalizers receive the interruption Exit. The adapter converts signal interruption into an `AbortError` regardless of the caller's abort reason, so the interruption row above applies even for a custom `Error` or `TimeoutError`. Cleanup runs without the aborted signal; uninterruptible acquisition still has to settle before cleanup can finish.
+The program and Layer builds run with the invocation's `ctx.signal`, so caller cancellation or Ctrl-C interrupts them. Interruption always becomes an `AbortError`, even when the caller aborted with a custom reason such as a `TimeoutError`. Layer finalizers still run; uninterruptible acquisition must settle before cleanup finishes.
 
 ## `layer(name, layer)`
 
-```ts
-function layer<Name extends string, ROut, E>(
-  name: Name,
-  layer: Layer.Layer<ROut, E>,
-): ContextFactory<Name, void, LayerValue<ROut>>;
-```
+Turns one fully composed Layer into an ordinary Crust Context factory whose value is the built `Context.Context`. The Layer must have no remaining requirements: compose it in Effect first, then pass the result. Attach it with `.provide(db())`, declare it in reusable definitions with `.use(db)`, and read it outside a handler as `Context.get(await ctx.db, Db)`.
 
-Takes one fully composed Layer (no remaining requirements — the type rejects `RIn ≠ never`) and returns an ordinary Crust Context factory. Attach it with `.provide(db())`, declare it in inert definitions with `.use(db)`, and read it from hooks or plain actions as `Context.get(await ctx.db, Db)`.
-
-Setup opens a fresh Effect `Scope`, builds the Layer inside it, and registers a `Scope.close` on the invocation's disposal stack. Resources are released after post-run hooks in reverse order with every other Context. Finalizers receive the handler's `Exit`, so an `Effect.acquireRelease` release step can commit on success and roll back on failure or interruption. A Layer pulled without a `handler()` having run closes with `Exit.void`.
-
-The Context value is the built `Context.Context<ROut>`, branded as `LayerValue<ROut>` so `handler()` knows which `ctx` entries provide services.
-
-## `handler(fn)`
-
-```ts
-import { Crust } from "@crustjs/core";
-import { handler, layer } from "@crustjs/effect";
-import { Context, Effect, Layer } from "effect";
-
-class Db extends Context.Service<Db, { readonly query: (sql: string) => string }>()("app/Db") {}
-const db = layer("db", Layer.succeed(Db, { query: (sql) => `rows for ${sql}` }));
-
-const base = new Crust("app").provide(db()).args({ name: "table", type: "string", required: true });
-
-// Generator form: `fn` is a generator function, like `Effect.fn`.
-base.action(
-  handler(function* ({ args }) {
-    const d = yield* Db;
-    return d.query(`select * from ${args.table}`);
-  }),
-);
-
-// Effect form: `fn` returns an Effect.
-base.action(handler(({ args }) => Effect.map(Db, (d) => d.query(`select * from ${args.table}`))));
-```
-
-`fn` receives the same input a plain action receives: `args`, `flags`, `ctx`, `rawArgs`, `signal`, `command`, `rootCommand`, `stdout`, and `stderr`. Inference is unchanged. Both forms produce identical results, and the adapted action resolves with the program's success value.
-
-The program's requirements are checked against `ServicesOf<Input>`: the union of services provided by the `layer()` Contexts in `ctx`. A program requiring a service with no `layer()` on the command path is a compile error. A plain `defineContext` that happens to return a `Context.Context` does not count, and neither does a `layer()` whose name is not a string literal. `handler()` also provides one internal service carrying the action input; `service()` requires it, so `service()` only runs inside a `handler()` program.
+Each invocation builds the Layer in a fresh `Scope`, closed with the other Contexts after `postRun` hooks. Finalizers receive the handler's `Exit`, so an `Effect.acquireRelease` release can commit on success and roll back on failure or interruption. A Layer pulled without a `handler()` closes with `Exit.void`.
 
 <Callout title="Every layer() on the path is built eagerly">
   When a `handler()` action starts, every `layer()` Context on the command path is built, whether or
-  not the program uses it — the same trade Effect CLI makes with `Command.provide`. Plain Contexts
-  stay lazy. Attach Layers to the commands that need them.
+  not the program uses it. Plain Contexts stay lazy. Attach Layers to the commands that need them.
 </Callout>
+
+## `handler(fn)`
+
+<include lang="ts">../../../examples/modules/effect.ts#handler</include>
+
+`fn` receives the same input a plain action receives, with the same inference, and the action resolves with the program's success value. The program's requirements are checked against `ServicesOf<Input>`, the services of the `layer()` Contexts on the path: requiring a service with no `layer()` there is a compile error. A plain `defineContext()` returning a `Context.Context`, or a `layer()` without a literal name, does not count.
 
 ## `service(factory)`
 
-```ts
-import { Crust, defineContext } from "@crustjs/core";
-import { handler, service } from "@crustjs/effect";
-import { Effect } from "effect";
+<include lang="ts">../../../examples/modules/effect.ts#service</include>
 
-const config = defineContext("config", () => ({ limit: 10 }));
+Pulls a plain Crust Context inside a `handler()` program, typed by the factory's value. It is lazy like `ctx.<name>`, and repeated pulls share one build. It works only inside `handler()`.
 
-new Crust("app").provide(config()).action(
-  handler(function* () {
-    const cfg = yield* service(config); // typed { limit: number }
-    return cfg.limit;
-  }),
-);
-
-// Off the path: fails with CrustDefinitionError, catchable by tag.
-new Crust("app").action(
-  handler(() =>
-    service(config).pipe(
-      Effect.map((cfg) => cfg.limit),
-      Effect.catchTag("CrustDefinitionError", () => Effect.succeed(0)),
-    ),
-  ),
-);
-```
-
-Pulls a plain Crust Context from inside a `handler()` program, typed by the factory's value (`FactoryValueOf<F>`) and failing with `CrustTaggedError`. Like `ctx.<name>`, it is lazy: untouched Contexts never build, and repeated pulls share one build. The effective (last same-name) provider must come from the **same factory**, including that factory's `.of(...)` test doubles; a shadowed ancestor does not satisfy this requirement. An absent factory or a different same-name factory (even with a compatible value shape) fails with Core's missing-context `CrustError`, surfaced as a `CrustDefinitionError` for `Effect.catchTag`. Factory identity on the path is checked at runtime, not compile time.
-
-`service()` requires the internal input service that `handler()` provides, so it cannot be run outside a `handler()` program; that service is not exported.
+The effective provider on the path must come from the **same factory**, including its `.of(...)` test doubles. A missing factory, or a different factory with the same name, fails with a `CrustDefinitionError`. This is checked at runtime, not compile time.
 
 ## Tagged errors
 
-```ts
-import { CrustError } from "@crustjs/core";
-import { tryCrust } from "@crustjs/effect";
-import { Effect } from "effect";
+<include lang="ts">../../../examples/modules/effect.ts#tagged-errors</include>
 
-const program = tryCrust(() => {
-  throw new CrustError("PARSE", 'Unknown flag "--bogus"', {
-    flag: "bogus",
-    reason: "unknown-flag",
-  });
-}).pipe(Effect.catchTag("CrustParseError", (error) => Effect.succeed(error.details?.flag)));
-```
-
-One `Data.TaggedError` class exists per Core error code: `CrustDefinitionError`, `CrustValidationError`, `CrustParseError`, and `CrustCommandNotFoundError`. Each carries `message`, `details` (typed by the corresponding Core details type), and `cause` (the original `CrustError`).
+Each Core error code has a `Data.TaggedError` class: `CrustDefinitionError`, `CrustValidationError`, `CrustParseError`, and `CrustCommandNotFoundError`. Each carries `message`, typed `details`, and `cause` (the original `CrustError`). `CrustTaggedError` is their union.
 
 - `fromCrustError(error)` wraps a caught `CrustError` in the class for its `code`.
-- `tryCrust(thunk)` lifts a sync or async thunk into an Effect: a thrown `CrustError` fails with its tagged class, an `AbortError` (prompt cancellation) interrupts the fiber, and anything else is a defect.
+- `tryCrust(thunk)` lifts a sync or async thunk into an Effect: a thrown `CrustError` fails with its tagged class, an `AbortError` interrupts the fiber, and anything else is a defect.
 
-## Exports
-
-```ts
-import {
-  layer,
-  handler,
-  service,
-  tryCrust,
-  fromCrustError,
-  CrustDefinitionError,
-  CrustValidationError,
-  CrustParseError,
-  CrustCommandNotFoundError,
-} from "@crustjs/effect";
-```
-
-The package also exports the `CrustTaggedError`, `LayerValue`, and `ServicesOf` types. `import * as CrustEffect from "@crustjs/effect"` keeps the short names out of your module scope when they clash with Effect's own `Layer`/`Context`.
-
-## Out of scope
-
-The adaptor is a set of helpers, not an Extension: it registers no flags, commands, or hooks. Sharing a Layer between two `layer()` Contexts (compose in Effect-land and pass one Layer), embedding a Crust application inside an Effect program, `ManagedRuntime`, lazy per-service Layer building, and exporting `HandlerInput` are out of scope.
+`import * as CrustEffect from "@crustjs/effect"` keeps these names out of your module scope if they clash with Effect's own.

@@ -63,16 +63,11 @@ Links emit OSC 8 sequences when capability checks allow them and otherwise retur
 
 <include lang="ts">../../../examples/modules/style.ts#layout</include>
 
-`padStart`, `padEnd`, `center`, and `stringWidth` measure visible terminal columns rather than ANSI bytes. On Bun they call `Bun.stringWidth`; on Node and Deno a JavaScript fallback matches Bun for common terminal text (ASCII, ANSI escapes, CJK, emoji, combining marks), while exotic clusters may measure differently. `table()` uses headers for its column count, supports per-column alignment, and accepts readonly (`as const`) headers, rows, and alignments.
+`padStart`, `padEnd`, `center`, and `stringWidth` measure visible terminal columns rather than ANSI bytes. Bun uses `Bun.stringWidth`; the Node and Deno fallback may differ for uncommon grapheme clusters. `table()` uses headers for its column count, supports per-column alignment, and accepts readonly (`as const`) headers, rows, and alignments.
 
 ## Reference
 
-```ts
-type ColorMode = "auto" | "always" | "never";
-type ColorDepth = "truecolor" | "256" | "16" | "none";
-```
-
-The root exports `style`, `createStyle`, named chainables, `fg`, `bg`, `link`, layout helpers, and their option and input types. See the source inventory in [`packages/style/src/index.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/style/src/index.ts).
+The [package entry point](https://github.com/chenxin-yan/crust/blob/main/packages/style/src/index.ts) lists every export, including the `ColorMode` and `ColorDepth` types.
 
 <auto-type-table path="../../../../../packages/style/src/types.ts" name="StyleOptions" />
 

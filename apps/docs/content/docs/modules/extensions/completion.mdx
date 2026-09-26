@@ -9,15 +9,6 @@ description: Generate static shell completion scripts for bash, zsh, and fish.
   ../../../../examples/modules/extensions/completion.ts
 </include>
 
-```sh
-$ my-cli completion bash | sed -n '3,7p'
-__my_cli_init_completion() {
-	COMPREPLY=()
-	cur="${COMP_WORDS[COMP_CWORD]}"
-	if (( COMP_CWORD > 0 )); then prev="${COMP_WORDS[COMP_CWORD-1]}"; else prev=""; fi
-	words=("${COMP_WORDS[@]}")
-```
-
 `completion()` adds a `completion <shell>` root command and a build hook. The generated bash, zsh, and fish scripts contain static commands, flags, and choices, so they do not call the CLI when the user presses Tab.
 
 ## Quick shell setup
@@ -46,11 +37,10 @@ const zsh = renderZshCompletion(snapshot);
 const fish = renderFishCompletion(snapshot);
 ```
 
-| `CompletionOptions` option | Type     | Default                     |
-| -------------------------- | -------- | --------------------------- |
-| `command`                  | `string` | `"completion"`              |
-| `binName`                  | `string` | Root command `meta.name`    |
-| `version`                  | `string` | Root command `meta.version` |
+<auto-type-table
+  path="../../../../../../packages/extensions/src/completion/index.ts"
+  name="CompletionOptions"
+/>
 
 The renderers accept a root Command Snapshot plus `binName` and `version` overrides. The runtime command, renderers, and build hook require a version from the option or root metadata.
 
@@ -75,7 +65,7 @@ Boolean flags do not consume a value. Hidden commands and their descendants are 
 
 ```sh
 $ my-cli completion bash --output-dir completions/
-$ find completions -maxdepth 1 -type f -printf '%f\n' | sort
+$ ls -1 completions
 _my-cli
 my-cli
 my-cli.fish

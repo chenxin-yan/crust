@@ -3,7 +3,7 @@ title: "Store"
 description: Typed JSON persistence with config, data, state, and cache paths.
 ---
 
-`@crustjs/store` creates typed JSON stores from field definitions. A store supports `read`, `write`, `update`, `patch`, and `reset`.
+`@crustjs/store` creates typed JSON stores from field definitions. It is standalone: it does not inject values into a Crust Context.
 
 ## Install
 
@@ -15,58 +15,40 @@ npm install @crustjs/store
 
 <include lang="ts">../../../examples/modules/store.ts#store</include>
 
-Field types and defaults determine the returned state type. Mutations validate and return the state they persisted.
-
-## How it works
-
-```text
-~/.config/my-cli/config.json
-```
-
-`createStore()` resolves `<dirPath>/<name>.json` once. Reads merge defaults in memory; writes, updates, and patches validate before replacing the file atomically.
-
-`reset()` removes the file. The next `read()` returns defaults without recreating it.
-
-## Storage intent
-
-```ts
-configDir("my-cli");
-dataDir("my-cli");
-stateDir("my-cli");
-cacheDir("my-cli");
-```
-
-Choose the helper that matches user configuration, durable app data, runtime state, or regenerable cache data.
-
-| Helper      | Linux and macOS        | Windows                      | Environment variable                                       |
-| ----------- | ---------------------- | ---------------------------- | ---------------------------------------------------------- |
-| `configDir` | `~/.config/<app>`      | `%APPDATA%\<app>`            | `XDG_CONFIG_HOME` on Linux/macOS; `APPDATA` on Windows     |
-| `dataDir`   | `~/.local/share/<app>` | `%LOCALAPPDATA%\<app>\Data`  | `XDG_DATA_HOME` on Linux/macOS; `LOCALAPPDATA` on Windows  |
-| `stateDir`  | `~/.local/state/<app>` | `%LOCALAPPDATA%\<app>\State` | `XDG_STATE_HOME` on Linux/macOS; `LOCALAPPDATA` on Windows |
-| `cacheDir`  | `~/.cache/<app>`       | `%LOCALAPPDATA%\<app>\Cache` | `XDG_CACHE_HOME` on Linux/macOS; `LOCALAPPDATA` on Windows |
-
-macOS uses the same XDG paths as Linux. Each helper accepts a `PlatformEnv` as its second argument for deterministic tests.
-
-### Multiple stores
-
-```ts
-const settings = createStore({ dirPath, name: "config", fields });
-const auth = createStore({ dirPath, name: "auth", fields: authFields });
-```
-
-Each name maps to an independent JSON file. A name cannot contain path separators or end in `.json`.
-
-## API
-
-```ts
-const store = createStore({ dirPath, name, fields });
-```
-
-`dirPath` must be absolute. Core fields use `type`, optional `array: true`, `default`, and a throw-based `validate` function; schema fields use a Standard Schema v1 `schema`.
+Field types and defaults determine the state type. `createStore()` resolves `<dirPath>/<name>.json` once; `dirPath` must be absolute, and `name` cannot contain path separators or end in `.json`. Each name is an independent file, so use one store per file, such as `config` and `auth`.
 
 <auto-type-table path="../../../../../packages/store/src/types.ts" name="CreateStoreOptions" />
 
-### Secure secret files
+## Operations
+
+| Method           | Behavior                                                                                      |
+| ---------------- | --------------------------------------------------------------------------------------------- |
+| `read()`         | Parse, coerce, merge missing defaults, and validate in memory. Never writes.                  |
+| `write(state)`   | Validate a complete state, create parent directories, replace the file atomically, return it. |
+| `update(fn)`     | Read and validate current state, call `fn` with it, then validate and persist the result.     |
+| `patch(partial)` | Shallow-merge the supplied keys, then validate and persist.                                   |
+| `reset()`        | Remove the file; the next `read()` returns defaults. Idempotent.                              |
+
+<auto-type-table path="../../../../../packages/store/src/types.ts" name="Store" />
+
+- `update()` rejects without calling `fn` when current state is invalid or a required value is missing. Use `write()` to initialize or `patch()` to repair.
+- Mutations are atomic replacements, not locks. Await operations on the same file in sequence, and coordinate across processes yourself.
+- `read()` coerces core number and boolean strings; only `"true"` and `"1"` become `true`.
+- Unknown keys are dropped by default (`pruneUnknown: true`); pass `false` to keep them. Persisted falsy values are kept.
+- Malformed JSON and non-object roots reject with `PARSE`. They never fall back to defaults.
+
+## Storage paths
+
+| Helper      | Linux and macOS        | Windows                      | Override                                    |
+| ----------- | ---------------------- | ---------------------------- | ------------------------------------------- |
+| `configDir` | `~/.config/<app>`      | `%APPDATA%\<app>`            | `XDG_CONFIG_HOME`; `APPDATA` on Windows     |
+| `dataDir`   | `~/.local/share/<app>` | `%LOCALAPPDATA%\<app>\Data`  | `XDG_DATA_HOME`; `LOCALAPPDATA` on Windows  |
+| `stateDir`  | `~/.local/state/<app>` | `%LOCALAPPDATA%\<app>\State` | `XDG_STATE_HOME`; `LOCALAPPDATA` on Windows |
+| `cacheDir`  | `~/.cache/<app>`       | `%LOCALAPPDATA%\<app>\Cache` | `XDG_CACHE_HOME`; `LOCALAPPDATA` on Windows |
+
+Choose by intent: user configuration, durable app data, runtime state, or regenerable cache. macOS uses the XDG paths. Each helper accepts a `PlatformEnv` second argument for deterministic tests.
+
+## Secret files
 
 ```ts
 const auth = createStore({
@@ -77,95 +59,20 @@ const auth = createStore({
 });
 ```
 
-On Unix, `access: "private"` uses mode `0600` for the file and `0700` for a parent directory the store creates. Windows uses inherited ACLs, so Unix permission bits are not enforced there.
-
-An explicit `{ file, directory }` object sets custom Unix permission bits.
-
-### `store.read()`
-
-```ts
-const state = await store.read();
-```
-
-`read()` parses the file, coerces core number and boolean strings, merges missing defaults, and validates fields. Only the strings `"true"` and `"1"` coerce to boolean `true`; every other string coerces to `false`. It does not write merged defaults to disk.
-
-### `store.write(state)`
-
-```ts
-const persisted = await store.write({ theme: "dark", verbose: false });
-```
-
-`write()` validates a complete state, atomically replaces the file, and returns the persisted state. Parent directories are created when needed.
-
-### `store.update(updater)`
-
-```ts
-const persisted = await store.update((current) => ({ ...current, verbose: true }));
-```
-
-`update()` reads and validates current values, resolving defaults and schema output **before** calling the typed updater. Invalid or missing required state rejects without calling it; use `write()` to initialize or `patch()` to repair instead. The updater result is also validated before persistence. Mutations are not serialized, so await operations on the same file in sequence.
-
-### `store.patch(partial)`
-
-```ts
-await store.patch({ verbose: true });
-```
-
-Before `patch()`:
-
-```json
-{
-  "theme": "dark",
-  "verbose": false
-}
-```
-
-After `patch()`:
-
-```json
-{
-  "theme": "dark",
-  "verbose": true
-}
-```
-
-`patch()` shallow-merges only the supplied keys, then validates and persists the result.
-
-### `store.reset()`
-
-```ts
-await store.reset();
-```
-
-Before reset, `config.json` contains the persisted JSON above. After reset, `config.json` does not exist, and `read()` returns `{ theme: "light", verbose: false }` from defaults.
-
-Reset is idempotent.
-
-## Defaults and merge
-
-```json
-{ "theme": "dark", "verbose": false, "oldKey": true }
-```
-
-Missing defined keys receive defaults. Persisted falsy values are kept, and unknown keys are dropped by the default `pruneUnknown: true`; use `false` to preserve them.
-
-Defaults are merged in memory only. Array defaults are copied so callers do not mutate the definition.
+On Unix, `access: "private"` writes the file with mode `0600` and a parent directory the store creates with `0700`; an existing directory keeps its permissions. Pass `{ file, directory }` for custom bits. Windows uses inherited ACLs, so the bits are not enforced there.
 
 ## Validation
 
 <include lang="ts">../../../examples/modules/store.ts#validate</include>
 
-Core field validators run on read and mutation and throw to reject a value. They may return `{ value }` to transform within the declared field type.
+<auto-type-table path="../../../../../packages/store/src/types.ts" name="FieldDef" />
 
-A schema-backed field gives validation, transformation, defaults, and optionality to its Standard Schema. It cannot also declare a Crust `default` or `validate` callback.
+- Core `validate` callbacks run on read and mutation and throw to reject. They may return `{ value }` to transform, but transforms apply only on mutation.
+- A schema field gives validation, transformation, defaults, and optionality to its Standard Schema v1 `schema`, and cannot also set `default` or `validate`. `read()` returns the schema output without writing it.
+- Mutations revalidate transformed values and reject transforms whose result would read back differently.
+- Mutations reject explicit `undefined` for defaulted core fields, and values JSON cannot round-trip, such as `NaN`, `Infinity`, `-0`, sparse arrays, `undefined` properties, and cycles.
 
-Reads return successful schema output in memory, including coercion, transforms, and nested defaults, without writing to disk. Core `validate` callback transforms remain mutation-only. Mutations revalidate transformed output and reject read-unstable transforms so returned values agree with the next read.
-
-Explicit `undefined` is rejected for defaulted core fields on mutations; core fields without defaults remain optional. Schema fields retain schema-owned defaults and optionality; required schemas reject `undefined` unless the schema supplies a value.
-
-Mutations also reject values changed by JSON serialization, including `NaN`, `Infinity`, `-0`, sparse arrays, and objects with `undefined` properties. Cyclic values and other serialization failures reject with field-scoped `VALIDATION` errors before persistence.
-
-## Error handling
+## Errors
 
 ```ts
 try {
@@ -175,26 +82,6 @@ try {
 }
 ```
 
-`CrustStoreError.code` is `PATH`, `PARSE`, `IO`, `VALIDATION`, or `DEFINITION`. The `.is()` method narrows the corresponding `details` shape.
+`CrustStoreError.code` is `PATH`, `PARSE`, `IO`, `VALIDATION`, or `DEFINITION`; `.is(code)` narrows `details`.
 
-Malformed JSON and non-object JSON roots reject with `PARSE`; they do not fall back to defaults.
-
-## Exports
-
-```ts
-import { createStore, configDir, dataDir, stateDir, cacheDir } from "@crustjs/store";
-```
-
-The package also exports `CrustStoreError` and the store, field, path, access, inference, and validation types.
-
-<auto-type-table path="../../../../../packages/store/src/types.ts" name="FieldDef" />
-
-<auto-type-table path="../../../../../packages/store/src/types.ts" name="Store" />
-
-## Design
-
-```json
-{ "format": "JSON", "locking": false }
-```
-
-The package is standalone and does not inject values into a Crust Context. It does not provide other formats, locking, encryption, migrations, remote storage, or synchronous methods.
+Store has no locking, encryption, migrations, other formats, or synchronous methods. The [package entry point](https://github.com/chenxin-yan/crust/blob/main/packages/store/src/index.ts) lists every export.

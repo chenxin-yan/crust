@@ -3,55 +3,17 @@ title: "Errors"
 description: CrustError codes, structured details, and error-boundary behavior.
 ---
 
-```ts
-import { CrustError, type CrustErrorCode } from "@crustjs/core";
-```
-
-The class and union sketches below are readable summaries. [Exact declarations](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/errors.ts) retain the full generic contracts.
-
 ## `CrustError`
 
-Framework definition, routing, parsing, and validation failures use `CrustError`.
+Framework definition, routing, parsing, and validation failures use `CrustError`. Branch on `code` or `.is(code)`, never on the message.
 
-```ts
-class CrustError<C extends CrustErrorCode = CrustErrorCode> extends Error {
-  readonly code: C;
-  readonly details: CrustErrorDetails<C>;
-  cause?: unknown;
+<include lang="ts" meta='title="src/cli.ts"'>
+  ../../../examples/api/errors.ts#handle
+</include>
 
-  constructor(
-    code: C,
-    message: string,
-    ...details: undefined extends CrustErrorDetails<C>
-      ? [] | [CrustErrorDetails<C>]
-      : [CrustErrorDetails<C>]
-  );
-
-  is<T extends CrustErrorCode>(code: T): this is CrustError<T>;
-  withCause(cause: unknown): this;
-  toJSON(): { code: C; message: string; details: CrustErrorDetails<C> };
-}
-```
-
-Use `code` or `.is(code)` instead of matching messages. The constructor's details argument is optional for codes whose entry in `CrustErrorDetailsMap` includes `undefined`; `COMMAND_NOT_FOUND` requires its details payload.
-
-```ts
-const outcome = await app.run(path, input);
-if (outcome.status === "failed") {
-  const { error } = outcome;
-  if (error instanceof CrustError && error.is("VALIDATION")) {
-    for (const issue of error.details?.issues ?? []) {
-      console.error(`${issue.path}: ${issue.message}`);
-    }
-  }
-}
-```
+`.is(code)` narrows `details` to that code's shape. `.withCause(cause)` sets `cause` and returns the error. `toJSON()` returns `code`, `message`, and `details`, and omits `cause`. The constructor's details argument is required only for `COMMAND_NOT_FOUND`. See the [declaration](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/errors.ts) for the exact generic contract.
 
 ## Codes
-
-```ts
-type CrustErrorCode = "DEFINITION" | "PARSE" | "VALIDATION" | "COMMAND_NOT_FOUND";
-```
 
 | Code                | Meaning                                                                                                 |
 | ------------------- | ------------------------------------------------------------------------------------------------------- |
@@ -60,7 +22,7 @@ type CrustErrorCode = "DEFINITION" | "PARSE" | "VALIDATION" | "COMMAND_NOT_FOUND
 | `VALIDATION`        | Required-value or Standard Schema validation failed                                                     |
 | `COMMAND_NOT_FOUND` | An unknown command under the [routing rules](/docs/guide/commands#unknown-commands)                     |
 
-With `execute()`, an unmatched subcommand token becomes a positional argument if the parent has a Command Action. Without an action, the parent reports `COMMAND_NOT_FOUND`. Typed `run()` resolves a failed outcome carrying `COMMAND_NOT_FOUND` for unknown path segments.
+With `execute()`, an unmatched subcommand token becomes a positional argument if the parent has a Command Action; without an action, the parent reports `COMMAND_NOT_FOUND`. Typed `run()` returns `COMMAND_NOT_FOUND` for any unknown path segment.
 
 ## Details
 
@@ -72,15 +34,19 @@ With `execute()`, an unmatched subcommand token becomes a positional argument if
 
 <auto-type-table path="../../../../../packages/core/src/errors.ts" name="DefinitionErrorDetails" />
 
+Context failures set `reason`: `missing-context` for an unprovided Context, `context-cycle` for a dependency cycle, `flags-before-validation` when a flag-owning Context is pulled before validation, `context-during-disposal` when a never-built Context is pulled once cleanup has begun, and `context-after-disposal` for any pull after disposal.
+
 ### `ParseErrorDetails`
 
 <auto-type-table path="../../../../../packages/core/src/errors.ts" name="ParseErrorDetails" />
+
+`value` is retained for compatibility; Core no longer populates it.
 
 ### `ValidationErrorDetails`
 
 <auto-type-table path="../../../../../packages/core/src/errors.ts" name="ValidationErrorDetails" />
 
-Standard Schema failures are aggregated into one `VALIDATION` error. Paths are normalized under `args.<name>` or `flags.<name>`.
+Every schema failure in one invocation is aggregated into one `VALIDATION` error. Issue paths are normalized under `args.<name>` or `flags.<name>`.
 
 ### `CommandNotFoundErrorDetails`
 
@@ -89,60 +55,35 @@ Standard Schema failures are aggregated into one `VALIDATION` error. Paths are n
   name="CommandNotFoundErrorDetails"
 />
 
-`parentCommand` is a readonly, serializable snapshot of the command whose child could not be resolved.
+`available` lists visible children only; `parentCommand` is a serializable snapshot.
 
 ## Propagation boundaries
 
-Authoring and attachment errors throw at the consuming operation, and `snapshot()` preparation errors reject. Public `run()` captures preparation and invocation failures as returned outcomes.
+| Failure                                                          | `run()`                                | `execute()`                                   |
+| ---------------------------------------------------------------- | -------------------------------------- | --------------------------------------------- |
+| Authoring and attachment (`.flags()`, `.provide()`, `.add()`, …) | Throws at the builder call             | Throws at the builder call                    |
+| Preparation                                                      | `failed` outcome; no hooks run         | Rendered directly; exit `1`                   |
+| Routing, parsing                                                 | `failed` outcome; no hooks run         | Rendered via `onError`; exit `1`              |
+| `preRun`, validation, Context setup, Command Action              | `failed` outcome after `postRun` hooks | Rendered via `onError`; exit `1`              |
+| Cancellation (`AbortError`)                                      | `failed` outcome                       | Offered to `onError`, else silent; exit `130` |
 
-Routing and parse failures occur before `preRun`, `postRun`, and invocation Context setup. A failure from `preRun`, validation, schema application, Context construction, or the Command Action becomes a failed lifecycle outcome passed to every `postRun` hook in reverse registration order. Constructed Contexts remain available through `postRun` and are disposed after the hooks complete, including after failure.
+`snapshot()` rejects with preparation errors. Context setup and Command Action failures are not wrapped in `CrustError`.
 
-An invocation failure takes precedence over `postRun` failures. After a completed or finished invocation, the first `postRun` failure becomes the escaping error after the remaining hooks run.
+- After a lifecycle failure, every `postRun` hook still runs in reverse registration order, and constructed Contexts are disposed afterwards.
+- An invocation failure takes precedence over `postRun` failures. After a successful invocation, the first `postRun` failure escapes once the remaining hooks run.
+- When invocation and disposal both fail, the escaping error is a `SuppressedError`: `.error` is the disposal failure and `.suppressed` is the invocation failure.
+- `run()` returns the escaping error and all captured output, including cleanup output. It never calls `onError` or changes `process.exitCode`.
 
-```ts
-const failure = new Error("database unavailable");
-const app = new Crust("my-cli").action(() => {
-  throw failure;
-});
+`execute()` renders a failure once. Extension `onError` hooks are presentation only and cannot turn a failure into success: they run in registration order until one returns a truthy value. If none claims the failure, Core's renderer writes one `Error: message` line per underlying failure (each member of a `SuppressedError` chain or `AggregateError`). If cleanup fails after a failure was already rendered, Core writes `Cleanup failed: message` lines without calling `onError` again.
 
-const outcome = await app.run([]);
-// outcome is { status: "failed", error: failure, stdout: "", stderr: "" }
-```
+For `preRun`, validation, setup, and action failures, `onError` runs before `postRun` while Contexts are live. A `postRun` or disposal failure reaches `onError` after cleanup, when Context pulls reject. Routing and parse failures receive empty `args` and `flags` and no Contexts. See [error handling](/docs/guide/error-handling) for worked examples.
 
-`.run(path, input, io)` returns a quiet `failed` outcome containing the error that escapes the complete lifecycle and all captured output, including cleanup output. It does not change `process.exitCode`, and Extension `onError` hooks never run. If invocation and disposal both fail, the escaping error is a `SuppressedError` whose `error` is the disposal failure and whose `suppressed` value is the invocation failure.
+## Cancellation
 
-Context setup and Command Action failures are not wrapped in `CrustError`.
+Any `Error` whose `name` is `"AbortError"`, including a `DOMException`, is cancellation.
 
-Pulling an unprovided Context produces a `DEFINITION` `CrustError` with `details.reason === "missing-context"`. Its message names the Context, identifies the requesting setup when applicable, and recommends `.provide()`. A dynamic pull cycle reports `context-cycle`.
+Every invocation carries `ctx.signal`, shared by Context setups, Extension hooks, and the Command Action. It aborts when the caller aborts `execute({ signal })` or `run(path, input, { signal })`, or on the first Ctrl-C during `execute()`. Cancellation is cooperative: once the work settles, `postRun` hooks and Context disposal still run, and work that ignores the signal delays cleanup.
 
-Pulling a flag-owning Context before validation reports `flags-before-validation`. Once cleanup has begun, pulling a Context that was never built during the invocation reports `context-during-disposal` while already-built values still resolve; pulling after disposal reports `context-after-disposal`.
+When work throws the signal's reason, as `signal.throwIfAborted()` does, that error decides the exit path. Ctrl-C and a bare `controller.abort()` supply an `AbortError`, which exits `130` silently; a custom reason such as a `TimeoutError` renders and exits `1`. [`@crustjs/effect`](/docs/modules/effect) turns interruption into an `AbortError` regardless of the reason.
 
-`.execute()` sets `process.exitCode = 1`, renders a failure once, and returns `1`. Non-cancellation preparation failures render directly because no successfully applied Extension hook chain is available.
-
-Extension `onError` hooks handle presentation only and cannot change a failed invocation into success. After preparation, `execute()` calls them in registration order until a hook returns a truthy value; otherwise Core renders the error to `stderr`. Core's renderer writes one `Error: message` line per underlying failure: a `SuppressedError` chain or a genuine `AggregateError` lists its members instead of its own message; an ordinary error that happens to carry an `errors` property renders its own message.
-
-Diagnostic traversal is cycle-safe and visits at most 256 values, including containers and unreadable members. If more remain, it ends with `[additional failures omitted]` under the same label instead of silently hiding the truncation.
-
-When disposal fails after an action or `preRun` failure was already rendered, `execute()` writes the disposal side of the escaping `SuppressedError` as `Cleanup failed: message` lines. `onError` hooks are not called again for it, and a hook that claimed the earlier failure does not suppress it.
-
-Routing and parse failures receive a fallback hook context with empty `args` and `flags` and unavailable Contexts. For failures raised during dispatch, `onError` runs before `postRun` while Contexts are live. For `postRun` or disposal failures, it runs after cleanup, so Context pulls reject with `context-after-disposal`.
-
-```ts
-const outcome = await app.run(path, input);
-if (outcome.status === "failed") {
-  const { error } = outcome;
-  if (error instanceof Error && error.name === "AbortError") {
-    // cancellation
-  }
-}
-```
-
-Any `Error` whose `name` is `"AbortError"` is cancellation. `run()` returns cancellation in a `failed` outcome unless disposal changes the escaping failure. `execute()` sets and returns exit code `130`; after successful preparation it offers the error to `onError` hooks, and Core renders nothing when no hook claims it. If disposal then fails, the escaping error is a `SuppressedError`, not cancellation, and `execute()` sets and returns `1`; when the cancellation was already offered to `onError` during dispatch, Core renders only the `Cleanup failed:` lines.
-
-Cancellation can also start outside the action. Every invocation carries `ctx.signal`, an `AbortSignal` shared by Context setups, Extension hooks, and the Command Action. It aborts when the caller aborts `execute({ signal })` or `run(path, input, { signal })`, or on the first Ctrl-C during `execute()`.
-
-When work throws the signal's reason (for example, `signal.throwIfAborted()`), Core classifies that escaping error: Ctrl-C and a bare `controller.abort()` supply an `AbortError` (silent exit 130); a caller's custom `Error` or `TimeoutError` renders and exits 1. By contrast, signal cancellation in `@crustjs/effect` interrupts the handler and Layer-build fibers. The adapter converts interruption into an `AbortError`, taking the silent exit-130 path regardless of the caller's reason.
-
-Cancellation is cooperative. Once the work settles, `postRun` hooks and Context disposal still run; work that ignores the signal can delay cleanup.
-
-`toJSON()` returns `code`, `message`, and `details`. It omits `cause`.
+If disposal fails after cancellation, the escaping error is a `SuppressedError` rather than cancellation, and `execute()` exits `1`.
