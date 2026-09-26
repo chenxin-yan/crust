@@ -2,8 +2,8 @@ import type { Equal, Expect } from "../../tests/helpers.ts";
 import { defineContext } from "../api/context.ts";
 import { Crust, defineCommand } from "./crust.ts";
 
-const text = defineContext("db", () => "text");
-const numeric = defineContext("db", () => 42);
+const text = defineContext("db").setup(() => "text");
+const numeric = defineContext("db").setup(() => 42);
 const root = new Crust("cli").provide(text());
 
 root.command("unsafe", (c) =>

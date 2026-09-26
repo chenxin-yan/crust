@@ -55,7 +55,9 @@ describe("walkCommandNode", () => {
 
 	it("captures Context-owned flags from a Core-built provider tree", async () => {
 		const apiKey = defineFlag("api-key", { type: "string", short: "k" });
-		const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
+		const auth = defineContext("auth")
+			.flags(apiKey)
+			.setup(() => ({}));
 		const app = new Crust("mycli")
 			.provide(auth())
 			.add(defineCommand("deploy", (command) => command.action(() => {})));
@@ -99,7 +101,9 @@ describe("walkCommandNode", () => {
 
 	it("walks nested subcommands recursively with Context-owned flags", async () => {
 		const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
-		const logging = defineContext("logging", { flags: [verbose] }, () => ({}));
+		const logging = defineContext("logging")
+			.flags(verbose)
+			.setup(() => ({}));
 		const app = new Crust("mycli")
 			.provide(logging())
 			.add(

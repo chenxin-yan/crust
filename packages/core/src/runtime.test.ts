@@ -166,11 +166,9 @@ describe("local metadata boundaries", () => {
 
 it("checks command relations at each actual destination and keeps Context setup lazy", async () => {
 	let setups = 0;
-	const owner = defineContext(
-		"owner",
-		{ flags: [{ name: "token", type: "string" }] },
-		() => ++setups,
-	);
+	const owner = defineContext("owner")
+		.flags({ name: "token", type: "string" })
+		.setup(() => ++setups);
 	const definition = defineCommand("child", (command) =>
 		command.flags({ name: "token", type: "number" }),
 	);

@@ -15,9 +15,11 @@ class Cache extends Context.Service<Cache, { readonly get: (key: string) => stri
 ) {}
 
 const db = layer("db", Layer.succeed(Db, { query: (sql) => sql }));
-const config = defineContext("config", () => ({ prefix: "cfg" }));
+const config = defineContext("config").setup(() => ({ prefix: "cfg" }));
 // A plain Context that happens to return an Effect Context is not a layer().
-const unbranded = defineContext("unbranded", () => Context.make(Cache, { get: (key) => key }));
+const unbranded = defineContext("unbranded").setup(() =>
+	Context.make(Cache, { get: (key) => key }),
+);
 
 // args / flags / ctx inference is unchanged versus a plain action, in both forms.
 new Crust("cli")

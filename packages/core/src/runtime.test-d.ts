@@ -7,6 +7,7 @@ import {
 	type AnyCrust,
 	type ArgsDef,
 	type CommandShape,
+	type ContextInstance,
 	type InputArgs,
 	type InputFlags,
 	type RunInput,
@@ -168,38 +169,40 @@ function _largeFlagBatch(defs: FlagBatch) {
 }
 
 function _contextBoundaries(name: string, flags: readonly NamedFlagDef[]) {
-	defineContext(name, () => 1);
-	defineContext("auth", { flags }, () => 1);
-	// @ts-expect-error -- Context config closes the same local spelling proof
-	defineContext("auth", { flags: [{ name: "token", type: "string", short: "xx" }] }, () => 1);
-	const auth = defineContext(
-		name,
-		{ flags: [{ name: "token", type: "string" }] },
-		({ flags }) => flags.token,
-	);
-	const checked = defineContext("auth", { flags }, () => 1);
+	defineContext(name).setup(() => 1);
+	defineContext("auth")
+		.flags(...flags)
+		.setup(() => 1);
+	defineContext("auth")
+		// @ts-expect-error -- Context flags close the same local spelling proof
+		.flags({ name: "token", type: "string", short: "xx" })
+		.setup(() => 1);
+	const auth = defineContext(name)
+		.flags({ name: "token", type: "string" })
+		.setup(({ flags }) => flags.token);
+	const checked = defineContext("auth")
+		.flags(...flags)
+		.setup(() => 1);
 	void [auth, checked];
 }
 
-function _providedContextCollections(
-	instances: readonly ReturnType<ReturnType<typeof defineContext>>[],
-) {
+function _providedContextCollections(instances: readonly ContextInstance[]) {
 	new Crust("cli").provide(...instances);
 }
 
 function _broadProviderValueEvidence(name: string) {
-	const text = defineContext("db", () => "ok");
-	const numeric = defineContext(name, () => 42);
-	const dependent = defineContext("consumer", { use: [text] }, async ({ ctx }) =>
-		(await ctx.db).toUpperCase(),
-	);
+	const text = defineContext("db").setup(() => "ok");
+	const numeric = defineContext(name).setup(() => 42);
+	const dependent = defineContext("consumer")
+		.use(text)
+		.setup(async ({ ctx }) => (await ctx.db).toUpperCase());
 	// @ts-expect-error -- a broad-named number provider cannot satisfy the string dependency
 	new Crust("app").provide(numeric()).provide(dependent());
-	new Crust("app").provide(defineContext(name, () => "ok")()).provide(dependent());
+	new Crust("app").provide(defineContext(name).setup(() => "ok")()).provide(dependent());
 
 	// oxlint-disable-next-line anti-slop/no-unknown-returns, anti-slop/no-known-value-widening -- regression models an explicitly opaque broad provider.
-	const unknownProvider = defineContext(name, (): unknown => null);
-	const literalNumeric = defineContext("db", () => 42);
+	const unknownProvider = defineContext(name).setup((): unknown => null);
+	const literalNumeric = defineContext("db").setup(() => 42);
 	// @ts-expect-error -- the literal provider retains its number evidence beside the unknown provider
 	new Crust("app").provide(unknownProvider()).provide(literalNumeric()).provide(dependent());
 	new Crust("app").provide(unknownProvider()).provide(text()).provide(dependent());
@@ -211,7 +214,9 @@ function _commandCompositionBoundary(definitions: readonly ReturnType<typeof def
 	void app.run([], { flags: { known: 1 } });
 	// @ts-expect-error -- opening child paths does not erase root flag value types
 	void app.run([], { flags: { known: "wrong" } });
-	const owner = defineContext("owner", { flags: [{ name: "token", type: "string" }] }, () => 1);
+	const owner = defineContext("owner")
+		.flags({ name: "token", type: "string" })
+		.setup(() => 1);
 	const colliding = defineCommand("child", (b) => b.flags({ name: "token", type: "number" }));
 	// @ts-expect-error -- sealed recipes must prove their relation to inherited Context flags
 	new Crust("cli").provide(owner()).add(colliding);
@@ -222,7 +227,7 @@ function _commandCompositionBoundary(definitions: readonly ReturnType<typeof def
 function _contextProofCannotBeForged() {
 	// @ts-expect-error -- handwritten instances have no owned private definition
 	new Crust("cli").provide({ name: "fake", ownedFlags: {}, use: [], setup: () => 1 });
-	const instance = defineContext("real", () => 1)();
+	const instance = defineContext("real").setup(() => 1)();
 	// @ts-expect-error -- public renaming cannot contradict the retained defining instance
 	new Crust("cli").provide({ ...instance, name: "fake" });
 	new Crust("cli")
@@ -243,7 +248,7 @@ function _checkedExtensionMetadata() {
 }
 
 function _uncertainContextIdentity(name: "a" | "b") {
-	const factory = defineContext(name, () => 1);
+	const factory = defineContext(name).setup(() => 1);
 	new Crust("cli").provide(factory()).action(async ({ ctx }) => {
 		// @ts-expect-error -- one dynamic provider does not promise every alternative name
 		const value: number = await ctx.a;
@@ -442,13 +447,9 @@ function _possiblyRequiredVariadic(required: true | undefined, defaultValue: str
 }
 
 function _openInheritedFlags(recursive: boolean) {
-	const owner = defineContext(
-		"owner",
-		{
-			flags: [{ name: "token", type: "string", required: true }],
-		},
-		() => 1,
-	);
+	const owner = defineContext("owner")
+		.flags({ name: "token", type: "string", required: true })
+		.setup(() => 1);
 	const providers = [owner()];
 	const child = defineCommand("child", (c) =>
 		c.add(defineCommand("leaf", (c) => c.action(() => 1))),
@@ -488,7 +489,7 @@ function _infiniteNames(
 	defineArg(numeric, { type: "string", required: true });
 	new Crust(blank);
 	defineCommand(name, (c) => c);
-	defineContext(name, () => 1);
+	defineContext(name).setup(() => 1);
 	defineFlag(mixed, { type: "string" });
 	defineFlag(branded, { type: "string" });
 	const flag = defineFlag(name, { type: "string", required: true });
@@ -504,10 +505,10 @@ function _infiniteNames(
 	void tree.run([name]);
 	void tree.run([]);
 	void tree.run([name], { args: { value: "ok" } });
-	const provider = defineContext(name, () => 1);
+	const provider = defineContext(name).setup(() => 1);
 	defineCommand("consumer", (c) => c.use(provider));
 	const provided = new Crust("app").provide(provider());
-	provided.provide(defineContext("other", () => 1)());
+	provided.provide(defineContext("other").setup(() => 1)());
 	void provided.run([]);
 	const alias = defineFlag("safe", { type: "string", aliases: [name] as const });
 	const aliased = new Crust("app").flags(alias);
@@ -526,13 +527,13 @@ function _finiteAndConditionalNames(name: `mode-${"a" | "b"}`) {
 	const flag = defineFlag(name, { type: "string", required: true });
 	const arg = defineArg(name, { type: "string", required: true });
 	const command = defineCommand(name, (c) => c);
-	const provider = defineContext(name, () => 1);
+	const provider = defineContext(name).setup(() => 1);
 	new Crust("app").flags(flag);
 	void new Crust("app").flags(flag).run([]);
 	void new Crust("app").args(arg).run([]);
 	void new Crust("app").add(command).run([name]);
 	void new Crust("app").add(command).run(["mode-a"]);
-	new Crust("app").provide(provider()).provide(defineContext("other", () => 1)());
+	new Crust("app").provide(provider()).provide(defineContext("other").setup(() => 1)());
 	void new Crust("app").flags(defineFlag("mode-a", { type: "string" })).run([]);
 	void new Crust("app")
 		.flags(defineFlag("mode", { type: "string", choices: ["mode-a", "mode-b"] }))
@@ -606,8 +607,12 @@ function _infiniteChoiceMembers(choice: `mode-${string}`, numeric: `${number}`) 
 }
 
 function _disjointOpenProviderFlags(condition: boolean) {
-	const a = defineContext("a", { flags: [{ name: "a", type: "string", required: true }] }, () => 1);
-	const b = defineContext("b", { flags: [{ name: "b", type: "string", required: true }] }, () => 1);
+	const a = defineContext("a")
+		.flags({ name: "a", type: "string", required: true })
+		.setup(() => 1);
+	const b = defineContext("b")
+		.flags({ name: "b", type: "string", required: true })
+		.setup(() => 1);
 	const providers = condition ? [a()] : [b()];
 	const child = defineCommand("child", (c) => c);
 	const app = new Crust("app").provide(...providers).add(child);

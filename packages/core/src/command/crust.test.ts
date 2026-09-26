@@ -97,7 +97,9 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 			".provide()",
 			(app) =>
 				app.provide(
-					defineContext("auth", { flags: [{ name: "api-key", type: "string" }] }, () => ({}))(),
+					defineContext("auth")
+						.flags({ name: "api-key", type: "string" })
+						.setup(() => ({}))(),
 				),
 		],
 		[".add()", (app) => app.add(defineCommand("sub", (command) => command))],
@@ -130,12 +132,10 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 	});
 
 	it("copies exactly the containers a builder method changes", () => {
-		const auth = defineContext(
-			"auth",
-			{ flags: [{ name: "api-key", type: "string" }] },
-			() => ({}),
-		)();
-		const db = defineContext("db", () => "db");
+		const auth = defineContext("auth")
+			.flags({ name: "api-key", type: "string" })
+			.setup(() => ({}))();
+		const db = defineContext("db").setup(() => "db");
 		const base = new Crust("test")
 			.flags({ name: "verbose", type: "boolean", short: "v" })
 			.add(defineCommand("existing", (command) => command));
@@ -419,7 +419,9 @@ describe("Crust .add() with inline definitions", () => {
 
 	it("subcommand effective flags include Context-owned and local flags only", async () => {
 		const verbose = defineFlag("verbose", { type: "boolean" });
-		const logging = defineContext("logging", { flags: [verbose] }, () => ({}));
+		const logging = defineContext("logging")
+			.flags(verbose)
+			.setup(() => ({}));
 		const app = new Crust("cli")
 			.flags({ name: "port", type: "number" })
 			.provide(logging())
@@ -461,7 +463,7 @@ describe("Crust .add() with inline definitions", () => {
 	});
 
 	it("rejects a nested definition with a missing Context demand", () => {
-		const db = defineContext("db", () => "db");
+		const db = defineContext("db").setup(() => "db");
 		const nested = defineCommand("grandchild", (command) => command.use(db));
 		const definition = defineCommand("child", (command) =>
 			// @ts-expect-error -- runtime regression deliberately exercises the consuming check.
@@ -535,7 +537,7 @@ describe("Crust .extend()", () => {
 		let sections = 0;
 		let setups = 0;
 		let disposals = 0;
-		const resource = defineContext("resource", () => {
+		const resource = defineContext("resource").setup(() => {
 			setups++;
 			return {
 				[Symbol.dispose]() {
@@ -570,15 +572,13 @@ describe("Crust .extend()", () => {
 	it("keeps the last Extension registration for a shared id", async () => {
 		const id = defineExtensionId("shared");
 		const calls: string[] = [];
-		const firstResource = defineContext(
-			"firstResource",
-			{ flags: [{ name: "legacyProvider", type: "boolean" }] },
-			() => {
+		const firstResource = defineContext("firstResource")
+			.flags({ name: "legacyProvider", type: "boolean" })
+			.setup(() => {
 				calls.push("first:setup");
 				return { [Symbol.dispose]: () => calls.push("first:dispose") };
-			},
-		);
-		const secondResource = defineContext("secondResource", () => {
+			});
+		const secondResource = defineContext("secondResource").setup(() => {
 			calls.push("second:setup");
 			return { [Symbol.dispose]: () => calls.push("second:dispose") };
 		});
@@ -616,8 +616,8 @@ describe("Crust .extend()", () => {
 
 	it("moves re-registered Extension providers to the last registration", async () => {
 		let value: string | undefined;
-		const fromA = defineContext("sharedProvider", () => "A");
-		const fromB = defineContext("sharedProvider", () => "B");
+		const fromA = defineContext("sharedProvider").setup(() => "A");
+		const fromB = defineContext("sharedProvider").setup(() => "B");
 		const a = defineExtension(defineExtensionId("provider-a")).provide(fromA());
 		const b = defineExtension(defineExtensionId("provider-b")).provide(fromB());
 		const app = new Crust("test")
@@ -635,8 +635,8 @@ describe("Crust .extend()", () => {
 
 	it("replaces an inherited Extension provider on existing descendants", async () => {
 		let value: string | undefined;
-		const original = defineContext("resource", () => "original");
-		const replacement = defineContext("resource", () => "replacement");
+		const original = defineContext("resource").setup(() => "original");
+		const replacement = defineContext("resource").setup(() => "replacement");
 		const child = defineCommand("child", (command) =>
 			command.action(async ({ ctx }) => {
 				value = await (ctx as { resource: Promise<string> }).resource;
@@ -655,11 +655,9 @@ describe("Crust .extend()", () => {
 
 	it("rejects an Extension provider flag colliding with a local flag", () => {
 		const id = defineExtensionId("flag-provider");
-		const provider = defineContext(
-			"flagProvider",
-			{ flags: [{ name: "mode", type: "number", aliases: ["extension-mode"] }] },
-			() => ({}),
-		);
+		const provider = defineContext("flagProvider")
+			.flags({ name: "mode", type: "number", aliases: ["extension-mode"] })
+			.setup(() => ({}));
 		const first = defineExtension(id).provide(provider());
 		const app = new Crust("test").flags({
 			name: "mode",
@@ -677,9 +675,9 @@ describe("Crust .extend()", () => {
 
 	it("keeps a local provider override across unrelated .extend() calls", async () => {
 		let value: string | undefined;
-		const resource = defineContext("resource", () => "extension");
+		const resource = defineContext("resource").setup(() => "extension");
 		const name: string = "resource";
-		const local = [defineContext(name, () => "local")()];
+		const local = [defineContext(name).setup(() => "local")()];
 		const providing = defineExtension(defineExtensionId("providing")).provide(resource());
 		const app = new Crust("test")
 			.extend(providing)
@@ -695,11 +693,9 @@ describe("Crust .extend()", () => {
 	});
 
 	it("preserves interleaved local and Context flag order across .extend()", async () => {
-		const owner = defineContext(
-			"owner",
-			{ flags: [{ name: "bFlag", type: "boolean" }] },
-			() => ({}),
-		);
+		const owner = defineContext("owner")
+			.flags({ name: "bFlag", type: "boolean" })
+			.setup(() => ({}));
 		const app = new Crust("test")
 			.flags({ name: "aFlag", type: "boolean" })
 			.provide(owner())
@@ -754,8 +750,8 @@ describe("Crust .extend()", () => {
 
 describe("Extension application at prepare time", () => {
 	it("rejects an Extension providing a Context name already on the path at compile time", () => {
-		const db = defineContext("db", {}, () => "real");
-		const impostor = defineContext("db", {}, () => 42);
+		const db = defineContext("db").setup(() => "real");
+		const impostor = defineContext("db").setup(() => 42);
 		const ext = defineExtension(defineExtensionId("impostor")).provide(impostor());
 		const app = new Crust("cli").provide(db());
 		// @ts-expect-error -- Extension-provided Context "db" is already on the path (FIX_DUPLICATE_CONTEXT)
@@ -763,12 +759,12 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("rejects an Extension providing two Contexts that share a flag spelling at compile time", () => {
-		const first = defineContext("first", { flags: [{ name: "mode", type: "number" }] }, () => ({}));
-		const second = defineContext(
-			"second",
-			{ flags: [{ name: "mode", type: "string" }] },
-			() => ({}),
-		);
+		const first = defineContext("first")
+			.flags({ name: "mode", type: "number" })
+			.setup(() => ({}));
+		const second = defineContext("second")
+			.flags({ name: "mode", type: "string" })
+			.setup(() => ({}));
 		expect(() =>
 			defineExtension(defineExtensionId("double-provider"))
 				// @ts-expect-error -- second Context's owned flag "mode" collides with the first's (FIX_ALIAS_COLLISION)
@@ -796,11 +792,9 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("rejects an Extension flag colliding with its own provided Context's flag at compile time", () => {
-		const modeContext = defineContext(
-			"mode-owner",
-			{ flags: [{ name: "mode", type: "number" }] },
-			() => ({}),
-		);
+		const modeContext = defineContext("mode-owner")
+			.flags({ name: "mode", type: "number" })
+			.setup(() => ({}));
 		expect(() =>
 			defineExtension(defineExtensionId("self-collider"))
 				.provide(modeContext())
@@ -1249,7 +1243,7 @@ describe("Extension onError hooks", () => {
 	it("keeps invocation Contexts live through onError and disposes them afterwards", async () => {
 		let disposed = false;
 		let pulled = false;
-		const resource = defineContext("resource", () => ({
+		const resource = defineContext("resource").setup(() => ({
 			[Symbol.dispose]() {
 				disposed = true;
 			},
@@ -1504,7 +1498,9 @@ describe("Crust .execute()", () => {
 	it("passes Context-owned flags but not parent-local flags to subcommand actions", async () => {
 		let subFlags: Record<string, ParsedFlagValue> = {};
 		const verbose = defineFlag("verbose", { type: "boolean" });
-		const logging = defineContext("logging", { flags: [verbose] }, () => ({}));
+		const logging = defineContext("logging")
+			.flags(verbose)
+			.setup(() => ({}));
 
 		const app = new Crust("cli")
 			.flags({ name: "port", type: "number", default: 3000 })
@@ -1527,7 +1523,9 @@ describe("Crust .execute()", () => {
 	it("dispatches a Context-owned flag written before the subcommand", async () => {
 		let subFlags: Record<string, ParsedFlagValue> = {};
 		const verbose = defineFlag("verbose", { type: "boolean" });
-		const logging = defineContext("logging", { flags: [verbose] }, () => ({}));
+		const logging = defineContext("logging")
+			.flags(verbose)
+			.setup(() => ({}));
 
 		const app = new Crust("cli").provide(logging()).add(
 			defineCommand("sub", (cmd) =>
@@ -1575,7 +1573,7 @@ describe("Crust .execute()", () => {
 	});
 
 	it("treats prompt cancellation as a silent user abort", async () => {
-		const resource = defineContext("resource", () => ({ [Symbol.dispose]() {} }));
+		const resource = defineContext("resource").setup(() => ({ [Symbol.dispose]() {} }));
 		const app = new Crust("test").provide(resource()).action(async ({ ctx }) => {
 			await ctx.resource;
 			throw new DOMException("Prompt was cancelled.", "AbortError");
@@ -1787,9 +1785,11 @@ describe("Crust .execute()", () => {
 	it("Context capabilities work across file-boundary pattern", async () => {
 		let receivedVerbose = false;
 		const verbose = defineFlag("verbose", { type: "boolean" });
-		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
-			verbose: flags.verbose === true,
-		}));
+		const logging = defineContext("logging")
+			.flags(verbose)
+			.setup(({ flags }) => ({
+				verbose: flags.verbose === true,
+			}));
 		const sub = defineCommand("sub", (command) =>
 			command.use(logging).action(async ({ ctx }) => {
 				receivedVerbose = (await ctx.logging).verbose;
@@ -1806,9 +1806,11 @@ describe("Crust .execute()", () => {
 		let receivedPort: number | undefined;
 		const port = defineFlag("port", { type: "number", default: 3000 });
 
-		const ports = defineContext("ports", { flags: [port] }, ({ flags }) => ({
-			port: flags.port,
-		}));
+		const ports = defineContext("ports")
+			.flags(port)
+			.setup(({ flags }) => ({
+				port: flags.port,
+			}));
 		const app = new Crust("cli").provide(ports()).add(
 			defineCommand("sub", (cmd) =>
 				cmd.use(ports).action(async ({ ctx }) => {
@@ -1826,9 +1828,11 @@ describe("Crust .execute()", () => {
 		let receivedVerbose: boolean | undefined;
 		const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
 
-		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
-			verbose: flags.verbose,
-		}));
+		const logging = defineContext("logging")
+			.flags(verbose)
+			.setup(({ flags }) => ({
+				verbose: flags.verbose,
+			}));
 		const app = new Crust("cli").provide(logging()).add(
 			defineCommand("sub", (cmd) =>
 				cmd.use(logging).action(async ({ ctx }) => {
@@ -1944,7 +1948,7 @@ describe("Crust .execute()", () => {
 
 	describe("cleanup failure diagnostics", () => {
 		const failingDisposer = (message: string) =>
-			defineContext("resource", () => ({
+			defineContext("resource").setup(() => ({
 				[Symbol.dispose]() {
 					throw new Error(message);
 				},
@@ -1960,7 +1964,7 @@ describe("Crust .execute()", () => {
 			const seen: unknown[] = [];
 			const actionError = new Error("action failed");
 			const cleanupError = new Error("db close failed");
-			const resource = defineContext("resource", () => ({
+			const resource = defineContext("resource").setup(() => ({
 				[Symbol.dispose]() {
 					throw cleanupError;
 				},
@@ -2045,7 +2049,7 @@ describe("Crust .execute()", () => {
 		it.each([false, true])(
 			"lists all ten cleanup failures with action failure: %o",
 			async (actionFails) => {
-				const resource = defineContext("resource", ({ defer }) => {
+				const resource = defineContext("resource").setup(({ defer }) => {
 					for (let index = 0; index < 10; index++) {
 						defer(() => {
 							throw new Error(`close ${index}`);
@@ -2755,11 +2759,9 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 
 	it("rejects __proto__ flags at defineContext/defineExtension time", () => {
 		expect(() =>
-			defineContext(
-				"cfg",
-				{ flags: asDynamic([{ name: "__proto__", type: "string" }]) },
-				() => ({}),
-			),
+			defineContext("cfg")
+				.flags(...asDynamic([{ name: "__proto__", type: "string" }]))
+				.setup(() => ({})),
 		).toThrow(expect.objectContaining({ code: "DEFINITION" }));
 		expect(() =>
 			defineExtension(defineExtensionId("cfg-ext")).flags(

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 const scalingSizes = [10, 100, 200] as const;
-type FixtureApi = "object" | "fluent";
+type FixtureApi = "context-config" | "fluent";
 
 export interface TypePerfReport {
 	typescriptVersion: string;
@@ -56,7 +56,7 @@ export function formatComparison(base: TypePerfReport, head: TypePerfReport): st
  * Generate a deterministic downstream app with `size` top-level sibling commands.
  * Each command has three chained flags and two chained args. Context count is
  * max(3, ceil(size / 10)); every tenth command also owns one nested subcommand.
- * The object dialect supports comparisons across the fluent-extension API transition.
+ * The context-config dialect supports comparisons across the fluent-Context API transition.
  */
 export function generateConsumerSource(size: number, fixtureApi: FixtureApi = "fluent"): string {
 	if (!Number.isInteger(size) || size < 1) throw new Error("size must be a positive integer");
@@ -66,19 +66,23 @@ export function generateConsumerSource(size: number, fixtureApi: FixtureApi = "f
 		"",
 	];
 
+	const context = (index: number, setup: string, use?: string) =>
+		fixtureApi === "fluent"
+			? `defineContext("context-${index}").flags(contextFlag${index})${use ? `.use(${use})` : ""}.setup(${setup})`
+			: `defineContext("context-${index}", { flags: [contextFlag${index}]${use ? `, use: [${use}]` : ""} }, ${setup})`;
 	for (let index = 0; index < contextCount; index++) {
 		lines.push(
 			`const contextFlag${index} = defineFlag("context-${index}-token", { type: "string", aliases: ["ctx-${index}-token"] });`,
+			`const context${index} = ${
+				index === 0
+					? context(index, `({ flags }) => ({ value: flags["context-${index}-token"] ?? "" })`)
+					: context(
+							index,
+							`async ({ flags, ctx }) => ({ value: (await ctx["context-${index - 1}"]).value + (flags["context-${index}-token"] ?? "") })`,
+							`context${index - 1}`,
+						)
+			};`,
 		);
-		if (index === 0) {
-			lines.push(
-				`const context${index} = defineContext("context-${index}", { flags: [contextFlag${index}] }, ({ flags }) => ({ value: flags["context-${index}-token"] ?? "" }));`,
-			);
-		} else {
-			lines.push(
-				`const context${index} = defineContext("context-${index}", { flags: [contextFlag${index}], ${fixtureApi === "fluent" ? "use" : "uses"}: [context${index - 1}] }, async ({ flags, ctx }) => ({ value: (await ctx["context-${index - 1}"]).value + (flags["context-${index}-token"] ?? "") }));`,
-			);
-		}
 	}
 	lines.push("");
 
@@ -110,20 +114,11 @@ export function generateConsumerSource(size: number, fixtureApi: FixtureApi = "f
 
 	const extensionCommand =
 		'defineCommand("extension-command", { aliases: ["ext"] }, (command) => command.flags({ name: "extension-mode", type: "string" }).action(() => ({ source: "extension" as const })))';
-	if (fixtureApi === "fluent") {
-		lines.push(
-			'const extension = defineExtension(defineExtensionId("type-perf-extension"))',
-			'\t.flags({ name: "extension-trace", type: "boolean" })',
-			`\t.add(${extensionCommand});`,
-		);
-	} else {
-		lines.push(
-			'const extension = defineExtension(defineExtensionId("type-perf-extension"), {',
-			'\tflags: [{ name: "extension-trace", type: "boolean" }],',
-			`\tcommands: [${extensionCommand}],`,
-			"});",
-		);
-	}
+	lines.push(
+		'const extension = defineExtension(defineExtensionId("type-perf-extension"))',
+		'\t.flags({ name: "extension-trace", type: "boolean" })',
+		`\t.add(${extensionCommand});`,
+	);
 	lines.push(
 		"",
 		'export const app = new Crust("type-perf-consumer", { description: "Synthetic type-performance fixture" })',
@@ -202,12 +197,15 @@ function measure(outputPath: string, rootDir = "."): void {
 		[
 			process.execPath,
 			"--eval",
-			`import { defineExtension, defineExtensionId } from ${JSON.stringify(join(root, "packages/core/dist/index.js"))};
-console.log(typeof defineExtension(defineExtensionId("type-perf-probe")).flags === "function" ? "fluent" : "object");`,
+			`import { defineContext } from ${JSON.stringify(join(root, "packages/core/dist/index.js"))};
+let api = "context-config";
+// The config-era defineContext(name) throws reading its missing config.
+try { if (typeof defineContext("type-perf-probe").setup === "function") api = "fluent"; } catch {}
+console.log(api);`,
 		],
 		root,
 	);
-	if (fixtureApi !== "fluent" && fixtureApi !== "object") {
+	if (fixtureApi !== "fluent" && fixtureApi !== "context-config") {
 		throw new Error(`Unexpected fixture API: ${fixtureApi}`);
 	}
 	// Both trees use the harness's compiler, even when their lockfiles differ.

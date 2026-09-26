@@ -14,9 +14,11 @@ console.log(outcome.stdout); // => hello!
 import { Crust as ContextApp, defineContext, defineFlag } from "@crustjs/core";
 
 const apiKey = defineFlag("api-key", { type: "string", required: true });
-const api = defineContext("api", { flags: [apiKey] }, ({ flags }) => ({
-	apiKey: flags["api-key"],
-}));
+const api = defineContext("api")
+	.flags(apiKey)
+	.setup(({ flags }) => ({
+		apiKey: flags["api-key"],
+	}));
 
 const contextApp = new ContextApp("my-cli")
 	.provide(api())

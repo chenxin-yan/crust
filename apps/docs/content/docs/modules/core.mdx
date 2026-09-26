@@ -35,7 +35,7 @@ A Context can own the flags needed by its setup. `.provide()` installs that Cont
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | [`Crust`](/docs/api/crust)                                           | Root command builder with `run()`, `execute()`, and `snapshot()`          |
 | [`defineCommand()`](/docs/api/crust#definecommandname-config-recipe) | Creates an inert reusable command definition                              |
-| [`defineContext()`](/docs/api/types#context-types)                   | Creates a named Context factory                                           |
+| [`defineContext()`](/docs/api/types#contextbuilder)                  | Starts a fluent Context definition; `.setup()` returns its factory        |
 | [`defineExtension()`](/docs/api/types#extensionbuilder)              | Starts a fluent Extension definition; `.factory()` makes it configurable  |
 | `defineExtensionId()`                                                | Creates a branded Extension identity                                      |
 | `defineArg()` / `defineFlag()`                                       | Creates named argument and flag definitions                               |
@@ -46,18 +46,18 @@ A Context can own the flags needed by its setup. `.provide()` installs that Cont
 
 The root barrel exports the command, Context, Extension, input, snapshot, and error types used by applications. See [Types](/docs/api/types) for their fields and constraints.
 
-| Type                                                   | Reference                                                                                       |
-| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| `ArgDef` / `FlagDef`                                   | [`ArgDef`](/docs/api/types#argdef) and [`FlagDef`](/docs/api/types#flagdef)                     |
-| `ContextBag` / `ContextFactory` / `ContextSetup`       | [Context types](/docs/api/types#context-types)                                                  |
-| `Extension` / `ExtensionBuilder` / `ExtensionFactory`  | [Extension types](/docs/api/types#extension-types)                                              |
-| `CommandSnapshot` / `ArgSnapshot` / `FlagSnapshot`     | [Command Snapshots](/docs/api/types#command-snapshots)                                          |
-| `BuildFile` / `BuildArtifacts` (Extension build hooks) | [`BuildFile`](/docs/api/types#buildfile) and [`BuildArtifacts`](/docs/api/types#buildartifacts) |
-| `BuildReport`                                          | [`BuildReport`](/docs/api/types#buildreport)                                                    |
-| `RootMetaKey`                                          | [`RootMetaKey`](/docs/api/types#rootmetakey)                                                    |
-| `MergeFlags`                                           | [`MergeFlags`](/docs/api/types#mergeflags)                                                      |
-| `MergeContext`                                         | [`MergeContext`](/docs/api/types#contextmap-and-mergecontext)                                   |
-| `InvocationOptions` / `ExecuteOptions`                 | [Invocation I/O](/docs/api/types#invocation-io)                                                 |
+| Type                                                                | Reference                                                                                       |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `ArgDef` / `FlagDef`                                                | [`ArgDef`](/docs/api/types#argdef) and [`FlagDef`](/docs/api/types#flagdef)                     |
+| `ContextBag` / `ContextBuilder` / `ContextFactory` / `ContextSetup` | [Context types](/docs/api/types#context-types)                                                  |
+| `Extension` / `ExtensionBuilder` / `ExtensionFactory`               | [Extension types](/docs/api/types#extension-types)                                              |
+| `CommandSnapshot` / `ArgSnapshot` / `FlagSnapshot`                  | [Command Snapshots](/docs/api/types#command-snapshots)                                          |
+| `BuildFile` / `BuildArtifacts` (Extension build hooks)              | [`BuildFile`](/docs/api/types#buildfile) and [`BuildArtifacts`](/docs/api/types#buildartifacts) |
+| `BuildReport`                                                       | [`BuildReport`](/docs/api/types#buildreport)                                                    |
+| `RootMetaKey`                                                       | [`RootMetaKey`](/docs/api/types#rootmetakey)                                                    |
+| `MergeFlags`                                                        | [`MergeFlags`](/docs/api/types#mergeflags)                                                      |
+| `MergeContext`                                                      | [`MergeContext`](/docs/api/types#contextmap-and-mergecontext)                                   |
+| `InvocationOptions` / `ExecuteOptions`                              | [Invocation I/O](/docs/api/types#invocation-io)                                                 |
 
 The [root barrel](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/index.ts) is the full supported export list.
 
