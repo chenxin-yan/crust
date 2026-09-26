@@ -1,5 +1,13 @@
 # create-crust
 
+## 0.5.0
+
+### Patch Changes
+
+- [#389](https://github.com/chenxin-yan/crust/pull/389) [`38d047c`](https://github.com/chenxin-yan/crust/commit/38d047c01b04186ca63447938d2a11762c04d183) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Use the detected package manager for generated README and next-step commands independently of the selected runtime. Include an install command when dependency installation is skipped, and document installation for freshly cloned projects.
+- Updated dependencies [[`c4f44d6`](https://github.com/chenxin-yan/crust/commit/c4f44d6f9e3dd206154d0b18a84fb75464dc2dfe), [`eb9928d`](https://github.com/chenxin-yan/crust/commit/eb9928d60edc3033652ad55a3a019e790dafdf06)]:
+  - @crustjs/core@0.5.0
+
 ## 0.4.1
 
 ### Patch Changes
