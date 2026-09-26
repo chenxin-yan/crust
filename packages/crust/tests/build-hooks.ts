@@ -18,6 +18,9 @@ export async function runBuildHooks(
 	// oxlint-disable-next-line typescript/unbound-method -- restored unchanged after the stub.
 	const originalExit = process.exit;
 	const originalConsoleError = console.error;
+	const originalEnv = [SNAPSHOT_PATH_ENV, BUILD_OUT_DIR_ENV].map(
+		(key) => [key, process.env[key]] as const,
+	);
 	const exited = new Error("process.exit");
 	let error: string | undefined;
 	process.env[SNAPSHOT_PATH_ENV] = join(dir, "snapshot.json");
@@ -45,8 +48,10 @@ export async function runBuildHooks(
 	} finally {
 		process.exit = originalExit;
 		console.error = originalConsoleError;
-		delete process.env[SNAPSHOT_PATH_ENV];
-		delete process.env[BUILD_OUT_DIR_ENV];
+		for (const [key, value] of originalEnv) {
+			if (value === undefined) delete process.env[key];
+			else process.env[key] = value;
+		}
 		await rm(dir, { recursive: true, force: true });
 	}
 }
