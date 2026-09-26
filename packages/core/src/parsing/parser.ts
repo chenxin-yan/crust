@@ -20,7 +20,7 @@ import type {
 	ValueType,
 } from "../types.ts";
 import { coerceJson, coercePath, coerceUrl } from "./coercers.ts";
-import { applyFlagSchemas } from "./schema.ts";
+import { applySchemas } from "./schema.ts";
 import { normalizeFlag, type FlagSpelling } from "./spellings.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -621,7 +621,11 @@ export async function parseFlagValues<F extends FlagsDef>(
 	for (const [name, def] of Object.entries(flags)) normalizeFlag(name, def);
 	const resolved = resolveFlags(flags, applyEnvAndDelimiter(flags, {}, env), coerceFlagValue);
 	validateRequiredFlags(flags, resolved);
-	return applyFlagSchemas(flags, resolved);
+	const validated = await applySchemas(
+		{ args: [], effectiveFlags: flags },
+		{ args: {}, flags: resolved },
+	);
+	return validated.flags;
 }
 
 /** Bind typed input without producing argv; the path alone selects the command. */
