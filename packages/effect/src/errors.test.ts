@@ -5,6 +5,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
 	CrustCommandNotFoundError,
 	CrustDefinitionError,
+	CrustEnvError,
 	CrustParseError,
 	type CrustTaggedError,
 	CrustValidationError,
@@ -78,6 +79,13 @@ describe("tagged errors", () => {
 			}),
 			class: CrustCommandNotFoundError,
 			tag: "CrustCommandNotFoundError",
+		},
+		{
+			error: new CrustError("ENV", "e", {
+				issues: [{ name: "PORT", expected: "number", received: "invalid" }],
+			}),
+			class: CrustEnvError,
+			tag: "CrustEnvError",
 		},
 	];
 

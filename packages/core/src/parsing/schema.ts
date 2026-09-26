@@ -5,7 +5,6 @@ import {
 	type ValidationIssue,
 } from "@crustjs/utils/schema";
 
-import type { CommandNode } from "../command/node.ts";
 import { CrustError } from "../errors.ts";
 import type { ArgsDef, FlagsDef, ParseResult, ValidatedInput } from "../types.ts";
 
@@ -37,8 +36,8 @@ async function runSchema<S extends StandardSchema, Raw>(
  * @throws {CrustError} `VALIDATION` aggregating every schema issue
  */
 export async function applySchemas<A extends ArgsDef = ArgsDef, F extends FlagsDef = FlagsDef>(
-	node: CommandNode & { args: A; effectiveFlags: F },
-	parsed: ParseResult<A, F>,
+	node: { args: A; effectiveFlags: F },
+	parsed: Pick<ParseResult<A, F>, "args" | "flags">,
 ): Promise<ValidatedInput<A, F>> {
 	const issues: ValidationIssue[] = [];
 	const args = new Map<string, unknown>(Object.entries(parsed.args));
@@ -61,8 +60,7 @@ export async function applySchemas<A extends ArgsDef = ArgsDef, F extends FlagsD
 		throw new CrustError("VALIDATION", `Invalid input:\n${lines.join("\n")}`, { issues });
 	}
 
-	// SAFETY: schema-backed keys were replaced by schema outputs above; callers run
-	// validateParsed before this boundary (dispatch ordering), which owns requiredness.
+	// SAFETY: schema-backed keys were replaced by schema outputs above; callers own requiredness.
 	return { args: Object.fromEntries(args), flags: Object.fromEntries(flags) } as ValidatedInput<
 		A,
 		F

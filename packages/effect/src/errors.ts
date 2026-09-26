@@ -23,17 +23,20 @@ const ValidationBase: TaggedCrustError<"CrustValidationError", "VALIDATION"> =
 const ParseBase: TaggedCrustError<"CrustParseError", "PARSE"> = tagged("CrustParseError");
 const CommandNotFoundBase: TaggedCrustError<"CrustCommandNotFoundError", "COMMAND_NOT_FOUND"> =
 	tagged("CrustCommandNotFoundError");
+const EnvBase: TaggedCrustError<"CrustEnvError", "ENV"> = tagged("CrustEnvError");
 
 export class CrustDefinitionError extends DefinitionBase {}
 export class CrustValidationError extends ValidationBase {}
 export class CrustParseError extends ParseBase {}
 export class CrustCommandNotFoundError extends CommandNotFoundBase {}
+export class CrustEnvError extends EnvBase {}
 
 export type CrustTaggedError =
 	| CrustDefinitionError
 	| CrustValidationError
 	| CrustParseError
-	| CrustCommandNotFoundError;
+	| CrustCommandNotFoundError
+	| CrustEnvError;
 
 const fields = <C extends CrustErrorCode>(error: CrustError<C>): CrustErrorFields<C> => ({
 	message: error.message,
@@ -46,7 +49,8 @@ export function fromCrustError(error: CrustError): CrustTaggedError {
 	if (error.is("DEFINITION")) return new CrustDefinitionError(fields(error));
 	if (error.is("VALIDATION")) return new CrustValidationError(fields(error));
 	if (error.is("PARSE")) return new CrustParseError(fields(error));
-	// SAFETY: only four codes exist and `is()` narrows `this`, not the remainder, so this is COMMAND_NOT_FOUND.
+	if (error.is("ENV")) return new CrustEnvError(fields(error));
+	// SAFETY: only five codes exist and `is()` narrows `this`, not the remainder, so this is COMMAND_NOT_FOUND.
 	return new CrustCommandNotFoundError(fields(error as CrustError<"COMMAND_NOT_FOUND">));
 }
 
@@ -55,7 +59,8 @@ function isCrustTaggedError(value: unknown): value is CrustTaggedError {
 		value instanceof CrustDefinitionError ||
 		value instanceof CrustValidationError ||
 		value instanceof CrustParseError ||
-		value instanceof CrustCommandNotFoundError
+		value instanceof CrustCommandNotFoundError ||
+		value instanceof CrustEnvError
 	);
 }
 

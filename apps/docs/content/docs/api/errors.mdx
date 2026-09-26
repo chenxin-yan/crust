@@ -11,7 +11,7 @@ Framework definition, routing, parsing, and validation failures use `CrustError`
   ../../../examples/api/errors.ts#handle
 </include>
 
-`.is(code)` narrows `details` to that code's shape. `.withCause(cause)` sets `cause` and returns the error. `toJSON()` returns `code`, `message`, and `details`, and omits `cause`. The constructor's details argument is required only for `COMMAND_NOT_FOUND`. See the [declaration](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/errors.ts) for the exact generic contract.
+`.is(code)` narrows `details` to that code's shape. `.withCause(cause)` sets `cause` and returns the error. `toJSON()` returns `code`, `message`, and `details`, and omits `cause`. The constructor's details argument is required for `COMMAND_NOT_FOUND` and `ENV`. See the [declaration](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/errors.ts) for the exact generic contract.
 
 ## Codes
 
@@ -21,6 +21,7 @@ Framework definition, routing, parsing, and validation failures use `CrustError`
 | `PARSE`             | Argv syntax, structured `run()` input binding, or built-in value parsing failed                         |
 | `VALIDATION`        | Required-value or Standard Schema validation failed                                                     |
 | `COMMAND_NOT_FOUND` | An unknown command under the [routing rules](/docs/guide/commands#unknown-commands)                     |
+| `ENV`               | [`@crustjs/env`](/docs/modules/env) variables were missing or invalid                                   |
 
 With `execute()`, an unmatched subcommand token becomes a positional argument if the parent has a Command Action; without an action, the parent reports `COMMAND_NOT_FOUND`. Typed `run()` returns `COMMAND_NOT_FOUND` for any unknown path segment.
 
@@ -56,6 +57,16 @@ Every schema failure in one invocation is aggregated into one `VALIDATION` error
 />
 
 `available` lists visible children only; `parentCommand` is a serializable snapshot.
+
+### `EnvErrorDetails`
+
+<auto-type-table path="../../../../../packages/core/src/errors.ts" name="EnvErrorDetails" />
+
+### `EnvIssue`
+
+<auto-type-table path="../../../../../packages/core/src/errors.ts" name="EnvIssue" />
+
+One `ENV` error aggregates every missing or invalid variable of a `defineEnv()` Context. Its message, details, and `toJSON()` name variables and their declared expectations but never their values, and it carries no `cause`.
 
 ## Propagation boundaries
 

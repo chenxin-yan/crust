@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { runInNewContext } from "node:vm";
 
+import type { StandardSchema } from "@crustjs/utils/schema";
 import { describe, expect, it } from "vite-plus/test";
 
 import { makeNode, unwrap } from "../../tests/helpers.ts";
@@ -9,7 +10,7 @@ import { Crust } from "../command/crust.ts";
 import { createCommandNode, registerFlag } from "../command/node.ts";
 import { CrustError } from "../errors.ts";
 import type { ArgDef } from "../types.ts";
-import { parseArgs, parseStructured, validateParsed } from "./parser.ts";
+import { parseArgs, parseFlagValues, parseStructured, validateParsed } from "./parser.ts";
 
 type DynamicParser = NonNullable<Extract<ArgDef, { type: "string" }>["parse"]>;
 
@@ -1844,5 +1845,71 @@ describe("parseStructured", () => {
 		});
 		expect(result).toEqual(parseArgs(command, []));
 		expect(() => validateParsed(command, result)).toThrow('Missing required flag "--required"');
+	});
+});
+
+describe("parseFlagValues", () => {
+	it("runs env text through choices, parse, coercion, delimiter, and defaults", async () => {
+		const flags = {
+			port: { type: "number", env: { name: "PORT" } },
+			level: { type: "string", choices: ["info", "debug"], env: { name: "LEVEL" } },
+			upper: { type: "string", parse: (raw: string) => raw.toUpperCase(), env: { name: "UP" } },
+			tags: { type: "string", multiple: true, env: { name: "TAGS", delimiter: "," } },
+			on: { type: "boolean", env: { name: "ON" } },
+			fallback: { type: "number", default: 7, env: { name: "UNSET" } },
+		} as const;
+		const env = { PORT: "8080", LEVEL: "debug", UP: "abc", TAGS: "a,,b", ON: "1" };
+		await expect(parseFlagValues(flags, env)).resolves.toEqual({
+			port: 8080,
+			level: "debug",
+			upper: "ABC",
+			tags: ["a", "b"],
+			on: true,
+			fallback: 7,
+		});
+	});
+
+	it("rejects coercion and requiredness failures", async () => {
+		await expect(
+			parseFlagValues({ port: { type: "number", env: { name: "PORT" } } }, { PORT: "x" }),
+		).rejects.toMatchObject({ code: "PARSE" });
+		await expect(
+			parseFlagValues({ key: { type: "string", required: true, env: { name: "KEY" } } }, {}),
+		).rejects.toMatchObject({ code: "VALIDATION" });
+	});
+
+	it("rejects definitions core normalization rejects, including a __proto__ key", async () => {
+		const reserved = Object.defineProperty({}, "__proto__", {
+			value: { type: "string", env: { name: "X" } },
+			enumerable: true,
+		});
+		await expect(parseFlagValues(reserved, { X: "x" })).rejects.toMatchObject({
+			code: "DEFINITION",
+			details: { reason: "reserved-spelling" },
+		});
+		await expect(
+			parseFlagValues(
+				{ level: { type: "string", choices: ["ok"], default: "bad", env: { name: "L" } } },
+				{},
+			),
+		).rejects.toMatchObject({ code: "DEFINITION" });
+	});
+
+	it("awaits async schemas and ignores inherited variables", async () => {
+		const upper: StandardSchema<string | undefined, string> = {
+			"~standard": {
+				version: 1,
+				vendor: "crust-test",
+				validate: async (value) => ({ value: String(value).toUpperCase() }),
+			},
+		};
+		const flags = {
+			name: { type: "string", schema: upper, env: { name: "NAME" } },
+			inherited: { type: "string", env: { name: "constructor" } },
+		} as const;
+		await expect(parseFlagValues(flags, { NAME: "crust" })).resolves.toEqual({
+			name: "CRUST",
+			inherited: undefined,
+		});
 	});
 });

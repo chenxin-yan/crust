@@ -11,6 +11,7 @@ import type {
 	ArgsDef,
 	FlagDef,
 	FlagsDef,
+	InferFlags,
 	ParseResult,
 	ParsedArgValue,
 	ParsedFlagValue,
@@ -19,7 +20,8 @@ import type {
 	ValueType,
 } from "../types.ts";
 import { coerceJson, coercePath, coerceUrl } from "./coercers.ts";
-import type { FlagSpelling } from "./spellings.ts";
+import { applySchemas } from "./schema.ts";
+import { normalizeFlag, type FlagSpelling } from "./spellings.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Internal types
@@ -596,6 +598,34 @@ export function parseArgs<A extends ArgsDef = ArgsDef, F extends FlagsDef = Flag
 		coerceFlagValue,
 	);
 	return { args, flags, excessArgs: positionals.slice(consumed), rawArgs };
+}
+
+/**
+ * Resolve flags from their `env` bindings alone, as {@link parseArgs} does for an
+ * empty argv: `env.delimiter` splitting, `choices`, `parse`, built-in coercion,
+ * defaults, requiredness, then Standard Schemas. Flags without `env` resolve
+ * to their defaults.
+ *
+ * @param flags - Flag definitions keyed by result name; each `env.name` selects its variable
+ * @param env - Raw variable text; only own properties are read
+ * @throws {CrustError} `DEFINITION` for a definition `defineFlag` rejects (e.g. a
+ *   `__proto__` key or a default outside `choices`); `PARSE` or `VALIDATION` on the first
+ *   coercion or requiredness failure, or `VALIDATION` aggregating schema issues. Messages
+ *   may quote raw values.
+ */
+export async function parseFlagValues<F extends FlagsDef>(
+	flags: F,
+	env: FlagEnvironment,
+): Promise<InferFlags<F>> {
+	// defineFlag's checks, run for the throw: a `__proto__` key would swap the result record's prototype.
+	for (const [name, def] of Object.entries(flags)) normalizeFlag(name, def);
+	const resolved = resolveFlags(flags, applyEnvAndDelimiter(flags, {}, env), coerceFlagValue);
+	validateRequiredFlags(flags, resolved);
+	const validated = await applySchemas(
+		{ args: [], effectiveFlags: flags },
+		{ args: {}, flags: resolved },
+	);
+	return validated.flags;
 }
 
 /** Bind typed input without producing argv; the path alone selects the command. */

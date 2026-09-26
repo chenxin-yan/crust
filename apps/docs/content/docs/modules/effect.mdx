@@ -72,11 +72,33 @@ Pulls a plain Crust Context inside a `handler()` program, typed by the factory's
 
 The effective provider on the path must come from the **same factory**, including its `.of(...)` test doubles. A missing factory, or a different factory with the same name, fails with a `CrustDefinitionError`. This is checked at runtime, not compile time.
 
+## Environment variables
+
+Install [`@crustjs/env`](/docs/modules/env) alongside the Effect adaptor. `defineEnv()` returns a plain Crust Context, so the existing `service()` helper provides typed values and catchable errors without an additional Layer or adapter:
+
+<include lang="ts" meta="twoslash">
+  ../../../examples/modules/effect-env.ts#env-example
+</include>
+
+`PORT` is a `number` and `API_TOKEN` is a `string`. Validation runs only when the program reads `service(env)`; repeated reads share the invocation's result. Providing the Context adds its Environment section to help and man pages without reading source values. Unhandled failures are restored to the original Core error for CLI reporting.
+
+For commands that intentionally recover, such as a configuration diagnostic, catch `CrustEnvError`:
+
+<include lang="ts">../../../examples/modules/effect-env.ts#env-recovery</include>
+
+`error.details.issues` contains all invalid or missing variables. Each `received` field is only `"missing"` or `"invalid"`, never the raw value. `service(env)` has the full `CrustTaggedError` error union: catching `CrustEnvError` leaves other failures, such as a missing provider, in the error channel. Definition mistakes still throw when `defineEnv()` is called, before the handler runs.
+
+Use `tryCrust(() => ctx.env)` for explicit action-input access. Avoid `Effect.promise(() => ctx.env)` when you want typed recovery: rejected promises become defects rather than catchable tagged failures.
+
+Tests can bypass environment reads and validation with the same factory's `.of()`:
+
+<include lang="ts">../../../examples/modules/effect-env.ts#env-testing</include>
+
 ## Tagged errors
 
 <include lang="ts">../../../examples/modules/effect.ts#tagged-errors</include>
 
-Each Core error code has a `Data.TaggedError` class: `CrustDefinitionError`, `CrustValidationError`, `CrustParseError`, and `CrustCommandNotFoundError`. Each carries `message`, typed `details`, and `cause` (the original `CrustError`). `CrustTaggedError` is their union.
+Each Core error code has a `Data.TaggedError` class: `CrustDefinitionError`, `CrustValidationError`, `CrustParseError`, `CrustCommandNotFoundError`, and `CrustEnvError`. Each carries `message`, typed `details`, and `cause` (the original `CrustError`). `CrustTaggedError` is their union.
 
 - `fromCrustError(error)` wraps a caught `CrustError` in the class for its `code`.
 - `tryCrust(thunk)` lifts a sync or async thunk into an Effect: a thrown `CrustError` fails with its tagged class, an `AbortError` interrupts the fiber, and anything else is a defect.

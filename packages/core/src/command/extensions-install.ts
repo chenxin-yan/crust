@@ -1,3 +1,4 @@
+import type { AnyContextInstance } from "../api/context.ts";
 import type { ExtensionData } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
@@ -86,6 +87,7 @@ export function cloneCommandNode(node: CommandNode): CommandNode {
 		args: [...node.args],
 		subCommands,
 		contexts: node.contexts.map((context) => ({ ...context })),
+		providedContexts: [...node.providedContexts],
 		demands: [...node.demands],
 		extensions: [...node.extensions],
 		run: node.run,
@@ -94,10 +96,12 @@ export function cloneCommandNode(node: CommandNode): CommandNode {
 }
 
 /** Who authored the sections being validated; error labels derive from this. */
-type SectionOwner = { subject: "command" | "extension"; name: string };
+type SectionOwner = { subject: "command" | "context" | "extension"; name: string };
+
+const sectionOwnerLabels = { command: "Command", context: "Context", extension: "Extension" };
 
 function invalidSections({ subject, name }: SectionOwner): CrustError {
-	const label = subject === "command" ? "Command" : "Extension";
+	const label = sectionOwnerLabels[subject];
 	return new CrustError(
 		"DEFINITION",
 		`${label} "${name}" contains invalid documentation sections`,
@@ -138,8 +142,9 @@ function normalizeSection(
 export function validateCommandSections(
 	name: string,
 	sections: readonly RuntimeCommandSectionInput[],
+	subject: "command" | "context" = "command",
 ): CommandSection[] {
-	return sections.map((section) => normalizeSection(section, { subject: "command", name }));
+	return sections.map((section) => normalizeSection(section, { subject, name }));
 }
 
 function contributionTarget(
@@ -182,6 +187,52 @@ export function applyExtensionSections(
 		const target = contributionTarget(root, contribution.command, extension);
 		target.meta.sections = [...(target.meta.sections ?? []), section];
 	}
+}
+
+/**
+ * Install Context sections where each Context is provided: `.provide()` on its own
+ * command only, Extension providers once on the root. Unlike Extension section
+ * contributions, a title already on the command is a `DEFINITION` error.
+ */
+export function applyContextSections(
+	root: CommandNode,
+	extensions: readonly ExtensionData[],
+): void {
+	const visit = (
+		node: CommandNode,
+		path: string,
+		instances: readonly AnyContextInstance[],
+	): void => {
+		// Match Context resolution: the last provider for a name replaces earlier ones.
+		const effective = [...new Map(instances.map((instance) => [instance.name, instance])).values()];
+		if (effective.some((instance) => instance.sections.length > 0)) {
+			const titles = new Set((node.meta.sections ?? []).map(({ title }) => title));
+			for (const instance of effective) {
+				for (const { title } of instance.sections) {
+					if (titles.has(title)) {
+						throw new CrustError(
+							"DEFINITION",
+							`Context "${instance.name}" section "${title}" duplicates a section on command "${path}"`,
+							{ subject: "context", name: instance.name, reason: "duplicate-section" },
+						);
+					}
+				}
+				// One Context may repeat its own titles, like a command's static sections.
+				for (const { title } of instance.sections) titles.add(title);
+			}
+			node.meta.sections = [
+				...(node.meta.sections ?? []),
+				...effective.flatMap((instance) => instance.sections),
+			];
+		}
+		for (const [name, child] of Object.entries(node.subCommands)) {
+			visit(child, `${path} ${name}`, child.providedContexts);
+		}
+	};
+	visit(root, root.meta.name, [
+		...root.providedContexts,
+		...extensions.flatMap((extension) => extension.provide),
+	]);
 }
 
 export function installExtensionContexts(

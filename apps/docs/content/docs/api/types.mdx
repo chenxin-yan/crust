@@ -129,7 +129,7 @@ Command Snapshots are frozen, serializable descriptions of the command tree. The
   name="CommandSnapshot"
 />
 
-`flags` contains effective local and Context-owned flags. `meta.sections` holds each authored and Extension-contributed section separately; same-title merging happens only when a renderer consumes them.
+`flags` contains effective local and Context-owned flags. `meta.sections` holds each command-authored, Context-owned, and Extension-contributed section separately; same-title merging happens only when a renderer consumes them.
 
 ### `ArgSnapshot`
 
@@ -220,10 +220,11 @@ Declared in [`api/context.ts`](https://github.com/chenxin-yan/crust/blob/main/pa
 
 <auto-type-table path="../../../../../packages/core/src/api/context.ts" name="ContextBuilder" />
 
-`defineContext(name)` starts an immutable definition. `.use()` and `.flags()` append and return new frozen builders; the original is unchanged. The terminal `.setup(callback)` returns a [`ContextFactory`](#contextfactory). An unfinished builder cannot be provided or used as a factory.
+`defineContext(name)` starts an immutable definition. `.use()`, `.flags()`, and `.sections()` append and return new frozen builders; the original is unchanged. The terminal `.setup(callback)` returns a [`ContextFactory`](#contextfactory). An unfinished builder cannot be provided or used as a factory.
 
 - `.use(...factories)` declares the dependencies setup reads from `ctx`. Literal lists retain exact types; widened arrays declare open dependencies checked at runtime during composition. Empty calls are allowed.
 - `.flags(...defs)` declares owned flags. Definitions are copied, and spellings are checked against earlier calls both by TypeScript and when the method runs.
+- `.sections(...sections)` declares [`CommandSectionInput`](#commandsectioninput) documentation, validated and frozen at declaration. It documents only the providing command (the root for Extension-provided Contexts); duplicate titles from other Contexts or command sections fail preparation. See [Context-owned documentation](/docs/guide/contexts#documentation-owned-by-a-context).
 - Setup receives types from the preceding declarations. Annotate its second parameter for factory options without restating `ctx`, flag, or return types:
 
 <include lang="ts">../../../examples/guide/contexts-setup.ts#options</include>
@@ -241,7 +242,7 @@ app.provide(config()); // runs setup lazily in each invocation
 app.provide(config.of({ region: "us" })); // precomputed value, e.g. a test double
 ```
 
-`.of(value)` creates an instance with no dependencies that keeps the factory's owned flags. Every invocation that pulls it disposes `value` if it is disposable (see [replacing a Context in tests](/docs/guide/contexts#replace-a-context-in-tests)).
+`.of(value)` creates an instance with no dependencies that keeps the factory's owned flags and sections. Every invocation that pulls it disposes `value` if it is disposable (see [replacing a Context in tests](/docs/guide/contexts#replace-a-context-in-tests)).
 
 ### `ContextSetup` and `ContextBag`
 

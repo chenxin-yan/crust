@@ -1,9 +1,10 @@
 import { Crust, CrustError, defineContext } from "@crustjs/core";
+import { defineEnv } from "@crustjs/env";
 import { captureExecute } from "@crustjs/testing";
 import { Cause, Context, Effect, Exit, Layer } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 
-import { CrustDefinitionError, tryCrust } from "./errors.ts";
+import { CrustDefinitionError, CrustEnvError, tryCrust } from "./errors.ts";
 import { handler, service } from "./handler.ts";
 import { layer } from "./layer.ts";
 
@@ -240,6 +241,70 @@ describe("handler with layer", () => {
 
 		expect(outcome.status === "completed" && outcome.result).toBe("cfg:cfg");
 		expect(configBuilt).toBe(1);
+	});
+
+	it("lazily reads Env with typed redacted failures and supports .of() doubles", async () => {
+		let reads = 0;
+		let raw = "secret-invalid";
+		const env = defineEnv(
+			"env",
+			{ PORT: { type: "number", required: true } },
+			{
+				source: {
+					get PORT() {
+						reads++;
+						return raw;
+					},
+				},
+			},
+		);
+		const read = service(env);
+		const base = new Crust("cli").provide(env());
+		await base.snapshot();
+		await expect(base.action(handler(() => Effect.void)).run([])).resolves.toMatchObject({
+			status: "completed",
+		});
+		expect(reads).toBe(0);
+
+		const recovered = await base
+			.action(
+				handler(() =>
+					read.pipe(
+						Effect.map(() => undefined),
+						Effect.catchTag("CrustEnvError", (error) => Effect.succeed(error)),
+					),
+				),
+			)
+			.run([]);
+		expect(recovered.status).toBe("completed");
+		const caught = recovered.status === "completed" ? recovered.result : undefined;
+		expect(caught).toBeInstanceOf(CrustEnvError);
+		expect(caught?.details.issues).toEqual([
+			{ name: "PORT", expected: "number", received: "invalid" },
+		]);
+		expect(caught?.cause).toBeInstanceOf(CrustError);
+		expect(caught?.cause.cause).toBeUndefined();
+		expect(JSON.stringify(caught)).not.toContain(raw);
+		expect(reads).toBe(1);
+
+		raw = "8080";
+		const action = handler(function* () {
+			const first = yield* read;
+			expect(yield* read).toBe(first);
+			return first.PORT;
+		});
+		await expect(base.action(action).run([])).resolves.toMatchObject({
+			status: "completed",
+			result: 8080,
+		});
+		expect(reads).toBe(2);
+		await expect(
+			new Crust("cli")
+				.provide(env.of({ PORT: 9000 }))
+				.action(action)
+				.run([]),
+		).resolves.toMatchObject({ status: "completed", result: 9000 });
+		expect(reads).toBe(2);
 	});
 
 	it("ignores a plain Context that shares its name with a layer in another app", async () => {

@@ -89,5 +89,8 @@ const visible = visibleSectionsFor(snapshot, defineExtensionId("acme:web-docs"))
 | `isListed()` / `sectionsFor()` / `visibleSectionsFor()`                            | Filters commands and sections for an Extension identity            |
 | `CommandDocumentation` / `DocumentationArg` / `DocumentationFlag` / `UsageSegment` | Documentation model types                                          |
 | `CommandSnapshot`                                                                  | Same type as the root export, for tooling-only imports             |
+| `parseFlagValues()` / `FlagEnvironment`                                            | Resolves flags from their `env` bindings without argv              |
 
 `@crustjs/core/tooling` contains build- and render-time helpers for Command Snapshots, documentation trees, [section filtering](/docs/guide/extensions#section-consumers), and formatting. They move in lockstep with first-party tooling. Application authoring and invocation APIs stay at the package root. `SNAPSHOT_PATH_ENV` and `BUILD_OUT_DIR_ENV` name the variables `crust build` sets when it runs a source entry to prepare its snapshot; do not set them in your CLI.
+
+`parseFlagValues(flags, env)` reuses terminal flag conversion without argv: environment splitting, choices, parsers or built-in coercion, defaults, requiredness, and Standard Schemas. Invalid definitions reject with `DEFINITION`; value failures reject with `PARSE` or `VALIDATION` and may quote raw input. [`@crustjs/env`](/docs/modules/env) aggregates and redacts those failures for environment validation.
