@@ -283,6 +283,176 @@ describe("Crust .provide()", () => {
 
 const apiKey = defineFlag("api-key", { type: "string", short: "k", aliases: ["token"] });
 
+describe("Context-owned sections", () => {
+	const envSection = { title: "Environment", body: "APP_TOKEN  API token" };
+	const sectioned = (name = "env") => {
+		let setups = 0;
+		const factory = defineContext(name, { sections: [envSection] }, () => ++setups);
+		return { factory, setups: () => setups };
+	};
+
+	it("retains frozen validated sections on factory and .of() instances", () => {
+		const sections = [
+			{ title: "Environment", body: "APP_TOKEN", except: [defineExtensionId("man")] },
+		];
+		const env = defineContext("env", { sections }, () => 1);
+		sections[0]!.title = "Mutated";
+		sections.length = 0;
+
+		for (const instance of [env(), env.of(2)]) {
+			expect(instance.sections).toEqual([
+				{ title: "Environment", body: "APP_TOKEN", except: ["man"] },
+			]);
+			expect(Object.isFrozen(instance.sections)).toBe(true);
+			expect(Object.isFrozen(instance.sections[0])).toBe(true);
+			expect(Object.isFrozen(instance.sections[0]?.except)).toBe(true);
+		}
+		expect(env().sections).toBe(env.of(3).sections);
+		expect(defineContext("plain", () => 1)().sections).toEqual([]);
+	});
+
+	it("rejects invalid sections at definition with Context attribution", () => {
+		for (const section of [
+			{ title: " ", body: "body" },
+			{ title: "Multi\nline", body: "body" },
+			{ title: "Title", body: "" },
+			{ title: "Title", body: "body", only: [] },
+		]) {
+			expect(() => defineContext("env", { sections: [section] }, () => 1)).toThrow(
+				expect.objectContaining({
+					code: "DEFINITION",
+					message: 'Context "env" contains invalid documentation sections',
+					details: { subject: "context", name: "env", reason: "invalid-sections" },
+				}),
+			);
+		}
+	});
+
+	it("documents the root once, after static sections, without lazy setup", async () => {
+		const { factory: env, setups } = sectioned();
+		const app = new Crust("cli", { sections: [{ title: "Notes", body: "Root notes" }] })
+			.provide(env())
+			.add(defineCommand("db", (db) => db.use(env).action(async ({ ctx }) => await ctx.env)));
+
+		const snapshot = await app.snapshot();
+		expect(snapshot.meta.sections).toEqual([{ title: "Notes", body: "Root notes" }, envSection]);
+		expect(Object.isFrozen(snapshot.meta.sections)).toBe(true);
+		expect(snapshot.subCommands.db?.meta.sections).toBeUndefined();
+		expect(setups()).toBe(0);
+		expect(await app.run(["db"])).toMatchObject({ status: "completed", result: 1 });
+	});
+
+	it("documents only the subtree command where it is provided, not descendants", async () => {
+		const { factory: env } = sectioned();
+		const app = new Crust("cli")
+			.add(
+				defineCommand("db", { sections: [{ title: "Notes", body: "Database" }] }, (db) =>
+					db.provide(env()).add(defineCommand("migrate", (migrate) => migrate.action(() => {}))),
+				),
+			)
+			.command("inline", (inline) => inline.provide(env.of(0)).action(() => {}));
+
+		const snapshot = await app.snapshot();
+		expect(snapshot.meta.sections).toBeUndefined();
+		expect(snapshot.subCommands.db?.meta.sections).toEqual([
+			{ title: "Notes", body: "Database" },
+			envSection,
+		]);
+		expect(snapshot.subCommands.db?.subCommands.migrate?.meta.sections).toBeUndefined();
+		expect(snapshot.subCommands.inline?.meta.sections).toEqual([envSection]);
+	});
+
+	it("rejects titles colliding with static or other Context sections at preparation", async () => {
+		const { factory: env } = sectioned();
+		const { factory: other } = sectioned("other");
+		const collision = (command: string, name: string) =>
+			expect.objectContaining({
+				code: "DEFINITION",
+				message: `Context "${name}" section "Environment" duplicates a section on command "${command}"`,
+				details: { subject: "context", name, reason: "duplicate-section" },
+			});
+
+		// Recorded at .provide(); the check runs where sections merge, at preparation.
+		const staticRoot = new Crust("cli", { sections: [envSection] }).provide(env());
+		await expect(staticRoot.snapshot()).rejects.toThrow(collision("cli", "env"));
+		const outcome = await staticRoot.action(() => {}).run([]);
+		expect(outcome).toMatchObject({ status: "failed", error: collision("cli", "env") });
+
+		const staticChild = new Crust("cli").add(
+			defineCommand("db", { sections: [envSection] }, (db) => db.provide(env())),
+		);
+		await expect(staticChild.snapshot()).rejects.toThrow(collision("cli db", "env"));
+
+		const twoContexts = new Crust("cli").provide(env(), other());
+		await expect(twoContexts.snapshot()).rejects.toThrow(collision("cli", "other"));
+
+		// A parent's Context sections stay on the parent, so a child may reuse the title.
+		const nested = new Crust("cli")
+			.provide(env())
+			.add(defineCommand("db", (db) => db.provide(other())));
+		await expect(nested.snapshot()).resolves.toBeDefined();
+	});
+
+	it("keeps Extension section contributions merging after Context sections", async () => {
+		const { factory: env } = sectioned();
+		const seen: unknown[] = [];
+		const docs = defineExtension(defineExtensionId("docs")).sections((snapshot) => {
+			seen.push(snapshot.meta.sections);
+			return [{ command: [], title: "Environment", body: "More" }];
+		});
+		const snapshot = await new Crust("cli").extend(docs).provide(env()).snapshot();
+
+		expect(seen).toEqual([[envSection]]);
+		expect(snapshot.meta.sections).toEqual([envSection, { title: "Environment", body: "More" }]);
+	});
+
+	it("documents a same-name .of() replacement inside an Extension only once", async () => {
+		const env = defineContext("env", { sections: [envSection] }, () => 1);
+		const provider = defineExtension(defineExtensionId("env-provider")).provide(env(), env.of(2));
+		const app = new Crust("cli").extend(provider).action(({ ctx }) => ctx.env);
+
+		expect(await app.run([])).toMatchObject({ status: "completed", result: 2 });
+		expect((await app.snapshot()).meta.sections).toEqual([envSection]);
+	});
+
+	it.each([
+		{ sections: [{ title: "Environment", body: "Replacement documentation" }] },
+		{ sections: [] },
+	])("uses only the replacement Context's sections: $sections", async ({ sections }) => {
+		const old = defineContext("env", { sections: [envSection] }, () => 1);
+		const current = defineContext("env", { sections }, () => 2);
+		const provider = defineExtension(defineExtensionId("env-provider"))
+			.provide(old())
+			.provide(current());
+		const app = new Crust("cli").extend(provider).action(({ ctx }) => ctx.env);
+
+		expect(await app.run([])).toMatchObject({ status: "completed", result: 2 });
+		expect((await app.snapshot()).meta.sections ?? []).toEqual(sections);
+	});
+
+	it("documents Extension-provided Contexts once on the root across re-registration", async () => {
+		const { factory: env } = sectioned();
+		const id = defineExtensionId("env-provider");
+		const provider = defineExtension(id).provide(env());
+		const app = new Crust("cli")
+			.extend(provider)
+			.add(defineCommand("db", (db) => db.action(() => {})));
+
+		const snapshot = await app.snapshot();
+		expect(snapshot.meta.sections).toEqual([envSection]);
+		expect(snapshot.subCommands.db?.meta.sections).toBeUndefined();
+
+		const replaced = await app.extend(provider).snapshot();
+		expect(replaced.meta.sections).toEqual([envSection]);
+		const removed = await app.extend(defineExtension(id)).snapshot();
+		expect(removed.meta.sections).toBeUndefined();
+
+		await expect(
+			new Crust("cli", { sections: [envSection] }).extend(provider).snapshot(),
+		).rejects.toThrow(expect.objectContaining({ code: "DEFINITION" }));
+	});
+});
+
 describe("Context-owned flags", () => {
 	it("installs a propagating cloned flag and exposes its validated value to setup", async () => {
 		const seen: unknown[] = [];

@@ -1,7 +1,7 @@
 {
-	"name": "@crustjs/effect",
-	"version": "0.1.3",
-	"description": "Effect.ts v4 adaptor for the Crust CLI framework: tagged errors, Effect actions, and Layer-backed Contexts",
+	"name": "@crustjs/env",
+	"version": "0.0.0",
+	"description": "Typed, validated environment variables as a Crust Context, documented in help and man pages",
 	"type": "module",
 	"sideEffects": false,
 	"license": "MIT",
@@ -9,7 +9,7 @@
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/chenxin-yan/crust.git",
-		"directory": "packages/effect"
+		"directory": "packages/env"
 	},
 	"homepage": "https://crustjs.com",
 	"bugs": {
@@ -17,9 +17,9 @@
 	},
 	"keywords": [
 		"cli",
-		"effect",
-		"effect-ts",
-		"layer",
+		"env",
+		"environment",
+		"validation",
 		"crust",
 		"bun",
 		"typescript"
@@ -47,14 +47,10 @@
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
 		"@crustjs/core": "workspace:*",
-		"@crustjs/env": "workspace:*",
-		"@crustjs/testing": "workspace:*",
-		"effect": "4.0.0-rc.115",
 		"vite-plus": "catalog:"
 	},
 	"peerDependencies": {
 		"@crustjs/core": "workspace:^",
-		"effect": "^4.0.0-rc.115",
 		"typescript": "^7.0.0"
 	},
 	"peerDependenciesMeta": {

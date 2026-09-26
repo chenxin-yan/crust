@@ -5,6 +5,7 @@
 		"@crustjs/core/tooling": "../../packages/core/dist/tooling.js",
 		"@crustjs/create": "../../packages/create/dist/index.js",
 		"@crustjs/effect": "../../packages/effect/dist/index.js",
+		"@crustjs/env": "../../packages/env/dist/index.js",
 		"@crustjs/extensions": "../../packages/extensions/dist/index.js",
 		"@crustjs/man": "../../packages/man/dist/index.js",
 		"@crustjs/mcp": "../../packages/mcp/dist/index.js",

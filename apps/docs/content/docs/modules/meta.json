@@ -13,6 +13,7 @@
     "prompts",
     "tui",
     "effect",
+    "env",
     "store",
     "style",
     "testing"

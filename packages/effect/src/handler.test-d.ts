@@ -1,7 +1,8 @@
 import { Crust, defineContext } from "@crustjs/core";
+import { defineEnv } from "@crustjs/env";
 import { Context, Effect, Layer } from "effect";
 
-import { type CrustTaggedError, tryCrust } from "./errors.ts";
+import { type CrustEnvError, type CrustTaggedError, tryCrust } from "./errors.ts";
 import { handler, type ServicesOf, service } from "./handler.ts";
 import { layer, type LayerValue } from "./layer.ts";
 
@@ -125,6 +126,25 @@ layer("needsCache", needsCache);
 type ConfigService = ReturnType<typeof service<typeof config>>;
 type _ServiceValue = Expect<Equal<Effect.Success<ConfigService>, { prefix: string }>>;
 type _ServiceError = Expect<Equal<Effect.Error<ConfigService>, CrustTaggedError>>;
+
+const env = defineEnv("env", {
+	PORT: { type: "number", default: 3000 },
+	API_TOKEN: { type: "string", required: true },
+});
+const envService = service(env);
+type _EnvValue = Expect<
+	Equal<Effect.Success<typeof envService>, Readonly<{ PORT: number; API_TOKEN: string }>>
+>;
+type _EnvError = Expect<Equal<Effect.Error<typeof envService>, CrustTaggedError>>;
+const recoveredEnv = envService.pipe(
+	Effect.catchTag("CrustEnvError", (error) => {
+		type _CaughtEnvError = Expect<Equal<typeof error, CrustEnvError>>;
+		return Effect.succeed({ PORT: 3000, API_TOKEN: "test" });
+	}),
+);
+type _RemainingEnvErrors = Expect<
+	Equal<Effect.Error<typeof recoveredEnv>, Exclude<CrustTaggedError, CrustEnvError>>
+>;
 
 // tryCrust unwraps sync and async thunks and fails with the tagged union.
 type _Sync = Expect<

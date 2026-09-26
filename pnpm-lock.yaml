@@ -260,6 +260,9 @@ importers:
       '@crustjs/effect':
         specifier: workspace:*
         version: link:../../packages/effect
+      '@crustjs/env':
+        specifier: workspace:*
+        version: link:../../packages/env
       '@crustjs/extensions':
         specifier: workspace:*
         version: link:../../packages/extensions
@@ -435,12 +438,31 @@ importers:
       '@crustjs/core':
         specifier: workspace:*
         version: link:../core
+      '@crustjs/env':
+        specifier: workspace:*
+        version: link:../env
       '@crustjs/testing':
         specifier: workspace:*
         version: link:../testing
       effect:
         specifier: 4.0.0-rc.115
         version: 4.0.0-rc.115
+      vite-plus:
+        specifier: 'catalog:'
+        version: 1.0.0-rc.0(@arethetypeswrong/core@0.18.5)(@types/node@24.13.3)(@vitest/ui@5.0.1)(esbuild@0.28.2)(jiti@2.7.0)(publint@0.3.24)(typescript@7.0.2)(yaml@2.9.0)
+
+  packages/env:
+    dependencies:
+      typescript:
+        specifier: ^7.0.0
+        version: 7.0.2
+    devDependencies:
+      '@crustjs/config':
+        specifier: workspace:*
+        version: link:../config
+      '@crustjs/core':
+        specifier: workspace:*
+        version: link:../core
       vite-plus:
         specifier: 'catalog:'
         version: 1.0.0-rc.0(@arethetypeswrong/core@0.18.5)(@types/node@24.13.3)(@vitest/ui@5.0.1)(esbuild@0.28.2)(jiti@2.7.0)(publint@0.3.24)(typescript@7.0.2)(yaml@2.9.0)
