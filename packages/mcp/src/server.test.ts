@@ -150,6 +150,21 @@ describe("createMcpServer", () => {
 		expect(result.content).toEqual([{ type: "text", text: JSON.stringify(expected, null, 2) }]);
 	});
 
+	it("accepts -0 input, which JSON.parse can produce", async () => {
+		const client = await connect(fixture);
+		const result = await client.callTool({
+			name: "echo",
+			arguments: { word: "ab", times: -0, origin: "https://example.com/", tag: ["t"], raw: [] },
+		});
+		expect(result.isError).toBeUndefined();
+		expect(result.structuredContent).toEqual({
+			word: "",
+			origin: "https://example.com/",
+			tags: ["t"],
+			rawArgs: [],
+		});
+	});
+
 	it("reaches Extension-contributed commands", async () => {
 		const client = await connect(fixture);
 		const result = await client.callTool({ name: "extra" });
@@ -418,6 +433,7 @@ describe("toolResultFromOutcome", () => {
 		// One object referenced twice is not a cycle.
 		["shared reference", { first: shared, second: shared }, { first: shared, second: shared }],
 		["shared reference in arrays", [shared, [shared]], { result: [shared, [shared]] }],
+		["null-prototype object", Object.assign(Object.create(null), { a: 1 }), { a: 1 }],
 	])("structures faithful JSON: %s", (_label, result, structured) => {
 		expect(toolResultFromOutcome(completed(result))).toEqual({
 			content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
@@ -429,6 +445,14 @@ describe("toolResultFromOutcome", () => {
 		["undefined", undefined],
 		["BigInt", 1n],
 		["NaN", Number.NaN],
+		["negative zero", -0],
+		["nested negative zero", { a: [-0] }],
+		["array hole", Array(1)],
+		["array with a named property", Object.assign([1], { extra: 2 })],
+		["array with a symbol key", Object.assign([1], { [Symbol("s")]: 2 })],
+		["array subclass", new (class extends Array {})()],
+		["object with a non-enumerable key", Object.defineProperty({}, "hidden", { value: 1 })],
+		["object with a toJSON method", { toJSON: () => 1 }],
 		["function", () => {}],
 		["Date", new Date(0)],
 		["Map", new Map()],

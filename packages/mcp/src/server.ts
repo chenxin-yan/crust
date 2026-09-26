@@ -24,19 +24,30 @@ interface JsonObject {
 
 /**
  * True when `JSON.stringify` round-trips the value without loss: finite numbers,
- * strings, booleans, `null`, arrays of such, and plain objects with only string
- * keys. `undefined`, functions, symbols, BigInt, `NaN`, class instances (`Date`,
- * `Map`, `URL`, …), symbol keys, and cycles are not. `ancestors` holds the
+ * strings, booleans, `null`, dense plain arrays of such, and plain objects whose
+ * own keys are all enumerable strings. `undefined`, functions, symbols, BigInt,
+ * `NaN`, class instances (`Date`, `Map`, `URL`, Array subclasses, …), array
+ * holes (serialized as `null`), non-index array keys, symbol or non-enumerable
+ * keys, and cycles are not. `-0` passes because `JSON.parse` yields it for client
+ * input; results reject it during serialization. `ancestors` holds the
  * active path only, so one object referenced twice is not mistaken for a cycle.
  */
 function isJsonValue(value: unknown, ancestors = new Set<object>()): value is JsonValue {
 	if (value === null || typeof value === "string" || typeof value === "boolean") return true;
 	if (typeof value === "number") return Number.isFinite(value);
 	if (typeof value !== "object" || ancestors.has(value)) return false;
-	if (!Array.isArray(value)) {
-		const proto = Object.getPrototypeOf(value);
+	if (Object.getOwnPropertySymbols(value).length > 0) return false;
+	const proto = Object.getPrototypeOf(value);
+	const names = Object.getOwnPropertyNames(value);
+	if (Array.isArray(value)) {
+		// Holes serialize as `null` and named keys are dropped: require exactly the indices plus `length`.
+		if (proto !== Array.prototype || names.length !== value.length + 1) return false;
+		if (!Array.from(value.keys()).every((index) => Object.hasOwn(value, index))) return false;
+	} else {
 		if (proto !== Object.prototype && proto !== null) return false;
-		if (Object.getOwnPropertySymbols(value).length > 0) return false;
+		// Non-enumerable keys are dropped.
+		if (!names.every((name) => Object.prototype.propertyIsEnumerable.call(value, name)))
+			return false;
 	}
 	ancestors.add(value);
 	const items = Array.isArray(value) ? value : Object.values(value);
@@ -79,7 +90,15 @@ export function toolResultFromOutcome(outcome: RunOutcome<unknown>): CallToolRes
 		case "completed": {
 			try {
 				if (isJsonValue(outcome.result)) {
-					const json = JSON.stringify(outcome.result, null, 2);
+					const json = JSON.stringify(
+						outcome.result,
+						// `-0` serializes as `0`; throwing takes the stdout fallback below.
+						(_key, value) => {
+							if (Object.is(value, -0)) throw new RangeError("-0 does not survive JSON");
+							return value;
+						},
+						2,
+					);
 					// Detach action objects so the transport cannot invoke their getters again.
 					const result: JsonValue = JSON.parse(json);
 					return {
