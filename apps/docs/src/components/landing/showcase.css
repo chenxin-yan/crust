@@ -225,7 +225,7 @@
 .fn-showcase-shiki .shiki code .line.highlighted {
 	margin-right: -8px; /* run the tint to the pane edge */
 	padding-right: 8px;
-	background-color: color-mix(in srgb, var(--fn-molten) 16%, transparent);
+	background-color: color-mix(in srgb, var(--fn-molten) 16%, transparent) !important;
 	box-shadow: inset 3px 0 0 var(--fn-molten);
 }
 .fn-showcase-shiki .shiki code .line.highlighted::after {
