@@ -81,9 +81,11 @@ function parseJsonValue(
 	copies.set(value, undefined);
 	const copy = Array.isArray(value)
 		? Array.from({ length: value.length }, (_, index) => parseJsonValue(value[index], copies))
-		: // `fromEntries` defines own properties, so a `__proto__` key cannot set the prototype.
+		: // Capture the validated names even if a getter hides a later property.
+			// `fromEntries` defines own properties, so a `__proto__` key cannot set the prototype.
 			Object.fromEntries(
-				Object.entries(value).map(([key, item]) => [key, parseJsonValue(item, copies)] as const),
+				// oxlint-disable-next-line eslint/no-restricted-properties -- this JSON boundary recursively validates each dynamic property before accepting it.
+				names.map((key) => [key, parseJsonValue(Reflect.get(value, key), copies)] as const),
 			);
 	copies.set(value, copy);
 	return copy;

@@ -453,6 +453,43 @@ describe("toolResultFromOutcome", () => {
 		expect(reads).toBe(1);
 	});
 
+	it("captures validated object keys even when a getter hides a later property", () => {
+		const first = vi.fn(() => {
+			Object.defineProperty(result, "second", { enumerable: false });
+			return 1;
+		});
+		const second = vi.fn(() => 2);
+		const result = {
+			get first() {
+				return first();
+			},
+			get second() {
+				return second();
+			},
+		};
+		const response = toolResultFromOutcome(completed(result));
+		const captured = { first: 1, second: 2 };
+		expect(JSON.parse(JSON.stringify(response))).toEqual({
+			content: [{ type: "text", text: JSON.stringify(captured, null, 2) }],
+			structuredContent: captured,
+		});
+		expect(first).toHaveBeenCalledTimes(1);
+		expect(second).toHaveBeenCalledTimes(1);
+	});
+
+	it("falls back when a getter deletes a later object property during capture", () => {
+		const result = {
+			get first() {
+				Reflect.deleteProperty(result, "second");
+				return 1;
+			},
+			second: 2,
+		};
+		expect(toolResultFromOutcome(completed(result))).toEqual({
+			content: [{ type: "text", text: "out" }],
+		});
+	});
+
 	it("never runs a result's toJSON hook", () => {
 		const toJSON = vi.fn(() => 1);
 		expect(toolResultFromOutcome(completed({ toJSON }))).toEqual({
