@@ -87,8 +87,8 @@ function _typecheckChainingFlagsArgsPreservesBothGenerics() {
 
 // rejects conditional calls that would silently erase rest-parameter inference
 function _typecheckRejectsVariadicMethodsOnConditionalBuilderUnion(condition: boolean) {
-	const text = defineContext("db", () => "text");
-	const other = defineContext("other", () => 1);
+	const text = defineContext("db").setup(() => "text");
+	const other = defineContext("other").setup(() => 1);
 	const c = new Crust("cli");
 
 	// @ts-expect-error -- .provide() rejects failed input inference on a builder union
@@ -137,8 +137,8 @@ function _typecheckRejectsVariadicMethodsOnConditionalBuilderUnion(condition: bo
 
 // explicit registration inputs preserve inference without bypassing collision checks
 function _typecheckExplicitInputsOnConditionalBuilderUnion(condition: boolean) {
-	const text = defineContext("db", () => "text");
-	const other = defineContext("other", () => 1);
+	const text = defineContext("db").setup(() => "text");
+	const other = defineContext("other").setup(() => 1);
 	const c = new Crust("cli");
 	const contextUnion = condition ? c.provide(text()) : c;
 
@@ -218,9 +218,11 @@ function _typecheckAcceptsCrossAliasedDefinitionUnion(condition: boolean) {
 // types pulled capabilities and local values in actions
 function _typecheckTypesPulledCapabilitiesAndLocalValuesInActions() {
 	const verbose = defineFlag("verbose", { type: "boolean" });
-	const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
-		verbose: flags.verbose === true,
-	}));
+	const logging = defineContext("logging")
+		.flags(verbose)
+		.setup(({ flags }) => ({
+			verbose: flags.verbose === true,
+		}));
 	new Crust("cli")
 		.flags({ name: "rootOnly", type: "string" })
 		.provide(logging())

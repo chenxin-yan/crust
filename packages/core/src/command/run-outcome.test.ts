@@ -101,7 +101,7 @@ it("captures cleanup failure only after disposal, without presenting errors or c
 	const error = new Error("cleanup");
 	const status = process.exitCode;
 	let presented = false;
-	const resource = defineContext("resource", ({ stderr }) => ({
+	const resource = defineContext("resource").setup(({ stderr }) => ({
 		[Symbol.asyncDispose]: async () => {
 			await Promise.resolve();
 			stderr("disposed");
@@ -195,7 +195,7 @@ it("preserves explicit terminal streams without claiming to capture their writes
 it("resolves conditional inline providers once for the action and postRun", async () => {
 	for (const selected of [true, false]) {
 		let setups = 0;
-		const db = defineContext("db", () => {
+		const db = defineContext("db").setup(() => {
 			setups++;
 			return "text";
 		});

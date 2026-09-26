@@ -2,7 +2,7 @@
 export type {
 	AnyContextFactory,
 	ContextBag,
-	ContextConfig,
+	ContextBuilder,
 	ContextFactory,
 	ContextInstance,
 	ContextMap,

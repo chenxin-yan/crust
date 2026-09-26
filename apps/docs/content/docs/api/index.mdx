@@ -13,7 +13,7 @@ These pages cover the `@crustjs/core` root API. For installation and a quick sta
 | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | [`Crust`](/docs/api/crust)                                                                | Immutable, chainable command builder and invocation boundary         |
 | [`defineCommand(name, config?, recipe)`](/docs/api/crust#definecommandname-config-recipe) | Define a named, inert reusable command definition for `.add()`       |
-| [`defineContext(name, config?, setup)`](/docs/api/types#context-types)                    | Define a named command dependency factory                            |
+| [`defineContext(name)`](/docs/api/types#contextbuilder)                                   | Start a fluent Context definition; `.setup()` returns its factory    |
 | [`defineExtension(id)`](/docs/api/types#extensionbuilder)                                 | Start an immutable fluent application-wide Extension definition      |
 | [`defineExtension<MetaKeys>(id)`](/docs/guide/extensions#required-root-metadata)          | Start an Extension that requires root metadata keys                  |
 | [`defineExtensionId(id)`](/docs/api/types#extension)                                      | Mint a branded Extension identity from a non-empty, trimmed string   |

@@ -16,7 +16,7 @@ const DbLive = Layer.effect(
 );
 
 const db = layer("db", DbLive);
-const config = defineContext("config", () => ({ limit: 10 }));
+const config = defineContext("config").setup(() => ({ limit: 10 }));
 
 const app = new Crust("app")
 	.provide(db(), config())
@@ -57,7 +57,7 @@ base.action(
 //#endregion
 
 //#region service
-const limits = defineContext("limits", () => ({ limit: 10 }));
+const limits = defineContext("limits").setup(() => ({ limit: 10 }));
 
 new Crust("app").provide(limits()).action(
 	handler(function* () {

@@ -250,12 +250,10 @@ function _openInvalidDefinitions(condition: boolean) {
 }
 
 function _otherFlagSpellingEntryPoints() {
-	defineContext(
-		"context",
+	defineContext("context")
 		// @ts-expect-error -- Context flags use the same local spelling contract
-		{ flags: [{ name: "flag", type: "boolean", aliases: ["f", "f"] }] },
-		() => true,
-	);
+		.flags({ name: "flag", type: "boolean", aliases: ["f", "f"] })
+		.setup(() => true);
 	defineExtension(defineExtensionId("extension"))
 		// @ts-expect-error -- Extension flags use the same local spelling contract
 		.flags({ name: "flag", type: "boolean", short: "ff" });
