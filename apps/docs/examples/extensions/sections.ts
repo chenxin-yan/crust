@@ -12,4 +12,5 @@ export const guidance = defineExtension(defineExtensionId("acme:guidance"), {
 	],
 });
 
-export const app = new Crust("my-cli").extend(guidance, help()).action(() => {});
+const app = new Crust("my-cli").extend(guidance, help()).action(() => {});
+await app.execute();

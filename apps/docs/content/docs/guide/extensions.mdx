@@ -1,33 +1,17 @@
 ---
 title: Extensions
-description: Install and author app-wide reusable capabilities.
+description: Add shared flags, commands, hooks, and generated files to your CLI.
 ---
 
-Use built-in Extensions when behavior should apply across the whole command tree.
+Extensions add behavior across your CLI. Start with the built-ins for help, version output, color control, and command suggestions:
 
 <include lang="ts" meta='title="cli.ts"'>
   ../../../examples/extensions/install.ts
 </include>
 
-`help()` adds `-h` and `--help`, `version()` adds root `-v` and `--version`, and `didYouMean()` handles unknown command errors. `preRun` hooks follow `.extend()` order, so `noColor()` comes before output hooks to set their color mode, and `version()` comes before `help()` because help finishes an actionless root.
-
 ```sh
-$ my-cli
-my-cli
-
-Usage:
-  my-cli <command> [options]
-
-Commands:
-  deploy     Deploy the app
-
-Options:
-  --color, --no-color          Enable colored output
-  -v, --version                Show version number
-  -h, --help                   Show help
 $ my-cli --version
 my-cli v0.2.0
-
 $ my-cli deply
 Unknown command "deply". Did you mean "deploy"?
 
@@ -35,106 +19,158 @@ Available commands: deploy
 # exit 1
 ```
 
-See the [Extensions module](/docs/modules/extensions) for the other built-ins. Call `.extend()` on the root builder, not inside a `defineCommand()` recipe.
+`help()` adds `-h` and `--help` and shows help when this actionless root is invoked. Registration order matters: `noColor()` configures color before output hooks, and `version()` handles `--version` before `help()` can finish the invocation.
+
+Call `.extend()` on the root builder, not inside a command recipe. See [built-in Extensions](/docs/modules/extensions) for the full list.
 
 ## Write your own
 
-<include lang="ts" meta='title="preview.ts"'>
-  ../../../examples/extensions/diagnostics.ts#author
+Use an Extension when shared behavior needs flags, commands, or lifecycle hooks. For a helper used only inside actions, a plain function is enough.
+
+This Extension adds a preview mode that skips the action:
+
+<include lang="ts" meta='title="deploy.ts"'>
+  ../../../examples/extensions/preview.ts
 </include>
 
-Import a function when shared code only needs values from a Command Action. Write an Extension when that code needs to own an app-wide flag or run around invocations; `ctx.finish()` ends this preview without running the action. The id is a namespaced string such as `acme:preview`, and registering the same id twice keeps the last registration.
+```sh
+$ deploy
+deployed
+$ deploy --preview
+nothing changed
+```
 
-Every method returns a new frozen Extension, so there is no final build step. Collection methods (`.use()`, `.provide()`, `.flags()`, `.add()`) append on repeated calls; lifecycle setters (`.preRun()`, `.postRun()`, `.onError()`, `.sections()`, `.build()`) replace the earlier callback, and each callback is typed by the declarations before it.
+Return `ctx.finish()` from `preRun` to stop before validation and the action. Calling it without returning it does not stop the invocation.
 
-Chain `.factory()` when callers need to configure the Extension:
+Give each Extension a namespaced id such as `acme:preview`. Registering the same id again replaces the earlier registration.
+
+Builder methods return new frozen Extensions; there is no finalization step. Declare flags and Contexts before the hooks that read them. Collection methods append; setting a hook again replaces its callback.
+
+For configurable Extensions, chain `.factory()`:
 
 <include lang="ts" meta='title="banner.ts"'>
-  ../../../examples/extensions/diagnostics.ts#factory
+  ../../../examples/extensions/factory.ts
 </include>
 
-The factory keeps the handle's `.id` for section audiences. Each call passes the handle plus the call's arguments, and must return an Extension with the same id, usually a chain on the received handle. See [`ExtensionBuilder` and `ExtensionFactory`](/docs/api/types#extension-types) for the full contribution shapes.
+Return a chain on the supplied Extension to keep its id. See [`ExtensionBuilder` and `ExtensionFactory`](/docs/api/types#extension-types) for the full contracts.
 
 ## Owned flags and commands
 
-<include lang="ts" meta='title="diagnostics.ts"'>
-  ../../../examples/extensions/diagnostics.ts#owned-command
+The preview flag above is available on every command. Set `recursive: false` on a flag definition to make it root-only.
+
+An Extension can also install top-level commands:
+
+<include lang="ts" meta='title="cli.ts"'>
+  ../../../examples/extensions/diagnostics.ts
 </include>
 
-Own a flag when every command installed with the Extension should accept it. Own a definition when installing the Extension should also add a top-level command; these commands are available in typed `run()` paths. [`@crustjs/mcp`](/docs/modules/mcp) is built this way: `mcpExtension()` owns the `mcp` command that serves the application's commands as MCP tools.
+```sh
+$ my-cli doctor
+checking my-cli
+```
 
-Extension flags are recursive by default. Set `recursive: false` on an inline flag definition when only the root should accept it, and see [`ExtensionFlagDef`](/docs/api/types#extensionflagdef) for the flag contract.
-
-Hooks see pre-validation values, not schema outputs. A false-capable `recursive` value makes even defaulted flags possibly absent on descendants; optional schema `multiple` can produce a scalar or an array. Fixed tuples with one known name per definition retain precise hook types. Dynamic arrays, conditional collections, and uncertain names expose raw flag values that require narrowing: an absent definition leaves its name available to other Extensions.
+Contributed commands work like commands added with `.add()`, including typed `run()` paths. [`@crustjs/mcp`](/docs/modules/mcp) uses this pattern to install an `mcp` command that serves your commands as MCP tools.
 
 ## Hooks
+
+Use `preRun` for work before validation and the action, and `postRun` for work after the invocation settles:
 
 <include lang="ts" meta='title="hooks.ts" twoslash'>
   ../../../examples/extensions/hooks.ts
 </include>
 
-Use hooks for app-wide work around every invocation, not work local to one Command Action. `preRun` runs before validation and the action, while `postRun` runs after the invocation settles and receives its completed, finished, or failed outcome.
+- `preRun` follows `.extend()` order. Returning `ctx.finish()` skips later `preRun` hooks and the action.
+- `postRun` runs in reverse order, including after an early finish or failure. Context cleanup runs afterwards.
+- `onError` handles terminal errors from `.execute()`; see [Error handling](/docs/guide/error-handling).
 
-The Command Action is skipped when `preRun` returns `ctx.finish()`, but `postRun` still runs. See [`ExtensionHooks`](/docs/api/types#extensionhooks) for ordering, error handling, and the full hook context.
+Hook flags are **pre-validation values**, not schema outputs. Check values before using them. See [`ExtensionHooks`](/docs/api/types#extensionhooks) for the full lifecycle.
 
 ## Dependency injection
 
-<include lang="ts" meta='title="providers.ts" twoslash'>
+Extensions can install [Contexts](/docs/guide/contexts) and use them from hooks:
+
+<include lang="ts" meta='title="cli.ts" twoslash'>
   ../../../examples/extensions/providers.ts
 </include>
 
-Use `.provide()` when installing the Extension should also install a Context across the whole command tree, wherever it appears in the chain. Hooks read only Contexts declared with `.use()`: `.use()` consumes without supplying, so the app or another Extension must provide the Context, and a Context the Extension provides reaches its own hooks only when it also declares `.use()`.
+```sh
+$ my-cli
+ready
+outcome: completed
+```
+
+`.provide()` installs Context instances across the command tree; `.use()` declares which factories the hooks need. An Extension that supplies and reads a Context needs both. To use an app-supplied Context instead, omit the Extension's `.provide()` and call `.provide(logger())` on the app before `.extend(logging)`.
+
+A flag-owning Context requires successful validation. Use it in the action, or in `postRun` after validation has succeeded—not after an early finish that skipped validation.
 
 ## Required root metadata
+
+An Extension that needs `version` can require it with `defineExtension<"version">(id)`:
 
 <include lang="ts" meta='title="metadata.ts" twoslash'>
   ../../../examples/extensions/metadata.ts
 </include>
 
-Pass the required keys as `defineExtension`'s only type argument when an Extension needs root metadata such as `version`. `.extend()` then rejects a root that does not declare the field, and hooks receive it as required.
-
-Neither [`bun build`](https://bun.sh/docs/bundler) nor `crust build` runs a TypeScript check. Run `tsc --noEmit` before building so missing metadata fails during development.
+TypeScript rejects `.extend(stamp)` unless the root declares `version`. Run `tsc --noEmit` before building—neither `bun build` nor `crust build` performs this check.
 
 ## Command sections
+
+Add documentation with `.sections()`. `command: []` targets the root; `command: ["deploy"]` would target a `deploy` command:
 
 <include lang="ts" meta='title="sections.ts"'>
   ../../../examples/extensions/sections.ts
 </include>
 
-Use `.sections()` when installing an Extension should add help text to a command. Here `command: []` targets the root, and `my-cli --help` includes:
+`my-cli --help` includes:
 
 ```text
 Environment:
   Set DEPLOY_TOKEN before running.
 ```
 
-The `.sections()` callback receives the snapshot as authored, before any Extension's sections are applied, so it sees Extension-contributed commands and flags but not other Extensions' sections. Invalid entries (blank or multi-line title, blank body, empty audience, both `only` and `except`, or a `command` path that is not a canonical command) fail preparation with a `DEFINITION` error.
-
-See the [help Extension](/docs/modules/extensions/help) for rendering and [`ExtensionSectionContribution`](/docs/api/types#extensionsectioncontribution) for targeting and audiences.
-
-## Section consumers
-
-A consumer is any Extension identity that reads sections. `help` renders the current command's sections after Options, `man` collects the whole tree into one page, and `skill` writes them into per-command markdown files. Authors scope a section with `only` or `except`, passing either the Extension value or its id.
-
-<include lang="ts" meta='title="consumer.ts" twoslash'>
-  ../../../examples/extensions/consumer.ts
-</include>
-
-`visibleSectionsFor(snapshot, id)` walks listed commands in name order and returns each section-bearing command as `{ path, sections }`, where `path` is `[]` for the root. It skips hidden commands and their subtrees, and applies the audience filter and same-title merge for `id`. Use `sectionsFor(sections, id)` for a single command. Both live in [`@crustjs/core/tooling`](/docs/modules/core#tooling-subpath).
+The callback receives a snapshot containing contributed commands and flags, but no Extension-contributed sections. See [`ExtensionSectionContribution`](/docs/api/types#extensionsectioncontribution) for validation and audience rules.
 
 ## Build hooks
 
-<include lang="ts" meta='title="build.ts"'>
+A build hook returns files; Crust writes them. This one saves the frozen Command Snapshot as JSON:
+
+<include lang="ts" meta='title="cli.ts"'>
   ../../../examples/extensions/build.ts
 </include>
 
-Use a build hook when an Extension must generate files alongside the CLI. It receives the frozen Command Snapshot and returns the files to ship, each a path relative to the output directory plus its `string` or `Uint8Array` content. Core validates every path, rejects a path that another file already claims, whether equal (compared case-insensitively, since the tree may land on a case-insensitive filesystem) or nested under it (a file and a directory cannot share a name), writes the files, and records exactly what it wrote; the hook itself touches no disk.
+During `crust build`:
 
 ```text
 Preparing Command Snapshot for my-cli...
   acme:manifest  1 file  acme-manifest/manifest.json
 ```
 
-Hooks run in `.extend()` registration order, and section callbacks are re-evaluated after each hook's files are written, so a later hook's snapshot reflects what earlier hooks produced: register `skill()` before `man()` for the man page to list packaged skills. During this step [`resolveArtifactDir(name)`](/docs/api/crust#resolveartifactdirname) points at the build output directory rather than `.crust/root/`, which the build has already wiped. The context carries no output directory: render into memory, or write to your own temporary directory and read the results back; the output directory is owned by the build tooling, which is what keeps the Build Report exact.
+Put files under an Extension-specific directory such as `acme-manifest/`. Loose files at the root of `.crust/artifacts/` are not copied into staged packages. Return file contents rather than writing into the build output yourself.
 
-For package staging, give each build hook a unique top-level directory, as `web-docs/docs.md` above does: only top-level directories under `.crust/artifacts/` are copied into the packages, so a loose top-level file is recorded in the manifest but never shipped. The Build Report is exact about one thing, the files hooks returned and the build wrote under `.crust/artifacts/`. It is not an inventory of every packaged file (launchers, binaries, `crust.include` directories, `README.md`, `LICENSE` are staged separately) and not a sandbox: files a hook writes elsewhere on its own are outside the report. See [`ExtensionBuildContext`](/docs/api/types#extensionbuildcontext), [`BuildFile`](/docs/api/types#buildfile), and [`BuildArtifacts`](/docs/api/types#buildartifacts) for the contracts.
+Hooks run in registration order. Section callbacks refresh after each hook, so later hooks can see sections based on earlier artifacts. For example, register `skill()` before `man()` to list packaged skills in the man page. See [`ExtensionBuildContext`](/docs/api/types#extensionbuildcontext) and [`BuildFile`](/docs/api/types#buildfile) for output and path rules.
+
+## Section consumers
+
+The built-in `help`, `man`, and `skill` Extensions render sections for different audiences. A custom generator can do the same with `visibleSectionsFor()`:
+
+<include lang="ts" meta='title="web-docs.ts" twoslash'>
+  ../../../examples/extensions/consumer.ts
+</include>
+
+The generated `web-docs/docs.md` contains:
+
+```md
+# my-cli deploy
+
+## Safety
+
+Run preview first.
+
+## Screenshots
+
+![preview](preview.png)
+```
+
+`only: [webDocs]` keeps the Screenshots section out of other consumers, such as help. Use `except` to exclude consumers instead; both accept Extension values or ids.
+
+`visibleSectionsFor(snapshot, id)` selects visible commands and merges same-title sections for that consumer. For one command, use `sectionsFor(sections, id)`. Both come from [`@crustjs/core/tooling`](/docs/modules/core#tooling-subpath).

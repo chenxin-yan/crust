@@ -361,6 +361,8 @@ type ExtensionSectionContribution = RuntimeCommandSectionInput & {
 
 The entry shape inside the collection returned by the `.sections(snapshot)` callback. `RuntimeCommandSectionInput` accepts typed audience arrays whose nonemptiness is checked at consumption: a plain-text section plus the required canonical `command` path it targets, relative to the application root (`[]` targets the root command).
 
+Every callback receives the authored snapshot, including Extension-contributed commands and flags but no Extension-contributed sections. Blank or multi-line titles, blank bodies, empty audiences, both `only` and `except`, and noncanonical or missing command paths fail preparation with a `DEFINITION` error.
+
 ### `ExtensionBuildContext`
 
 <auto-type-table
@@ -368,7 +370,9 @@ The entry shape inside the collection returned by the `.sections(snapshot)` call
   name="ExtensionBuildContext"
 />
 
-The build context contains the frozen root Command Snapshot. It deliberately carries no output directory: build tooling owns that tree, so a hook's only way to ship a file is to return it, and the [`BuildReport`](#buildreport) lists every shipped file. Its optional `MetaKeys` type parameter refines required snapshot metadata fields.
+The build context contains the frozen root Command Snapshot. Its optional `MetaKeys` type parameter refines required snapshot metadata fields. Hooks run in registration order; section callbacks are re-evaluated after each hook's files are written, so later hooks receive refreshed snapshots. A hook does not see its own outputs in its input snapshot.
+
+It deliberately carries no output directory: return files for build tooling to write and record in the [`BuildReport`](#buildreport). If a generator requires disk access, use your own temporary directory and read the results back. During this phase, [`resolveArtifactDir(name)`](/docs/api/crust#resolveartifactdirname) points at the build output directory rather than `.crust/root/`, which the build has already cleared.
 
 ### `BuildFile`
 
@@ -383,13 +387,15 @@ One file a build hook produces: a path relative to the build output directory an
   name="BuildArtifacts"
 />
 
-The files returned by one build hook; an empty array means the hook ships nothing.
+The files returned by one build hook; an empty array means the hook emits nothing. For package staging, use an Extension-specific top-level directory such as `acme-manifest/manifest.json`. Only top-level directories under `.crust/artifacts/` are copied into packages; a loose top-level file is recorded in the manifest but not shipped.
 
 ### `BuildReport`
 
 <auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="BuildReport" />
 
 One entry per executed build hook, in execution order, listing exactly the files build tooling wrote for it. `crust build` records this per `bin` entry under `build` in `.crust/manifest.json`.
+
+The report covers returned files written under `.crust/artifacts/`, not every packaged file. Launchers, binaries, `crust.include` directories, `README.md`, and `LICENSE` are staged separately. It is not a sandbox: files a hook writes elsewhere on its own are outside the report.
 
 ### `Extension`
 
@@ -445,7 +451,9 @@ The public authoring shape accepted by the Extension `.flags()` method: an Exten
 
 ### `InferExtensionFlags<Defs>`
 
-Infers the syntax-parsed values from an Extension's named-definition array and exposes them to its hooks. A flag with `recursive: false` may be `undefined` when a descendant command is invoked because that flag is contributed only to the root.
+Infers pre-validation values from an Extension's named-definition array and exposes them to its hooks, not schema outputs. A required flag without a default can still be absent before validation. A false-capable `recursive` value makes even defaulted flags possibly absent on descendants; optional schema `multiple` can produce a scalar or an array.
+
+Fixed tuples with one known name per definition retain precise hook types. Dynamic arrays, conditional collections, and uncertain names expose raw flag values that require narrowing: an absent definition leaves its name available to other Extensions.
 
 ### `ExtensionContext`
 

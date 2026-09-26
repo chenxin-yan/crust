@@ -1,13 +1,15 @@
 ---
 title: Contexts
-description: Supply dependencies to commands with lazy setup, automatic cleanup, and test replacements.
+description: Share dependencies across commands with lazy setup, automatic cleanup, and test replacements.
 ---
 
-A Context is a named dependency, such as an API client or database connection, that the app creates and commands consume. This is dependency injection: commands declare what they need, the app decides how to build it, and Crust runs setup lazily and cleans up afterwards.
+A Context supplies a dependency, such as an API client or database connection, to your commands, exposing through `ctx`.
 
-Reach for a Context when several commands share a service, setup should run only when used, a resource must be released afterwards, or you want to swap in a fake for tests. For stateless helpers, a plain import is enough.
+Use a Context when commands share a service, setup or cleanup needs managing, or tests need a replacement. For stateless helpers, a plain import is enough.
 
 ## Define and provide
+
+Define the dependency with `defineContext()`, provide an instance to the app, and await its value in the action:
 
 <include lang="ts" meta='title="status.ts" twoslash'>
   ../../../examples/guide/contexts-provide.ts
@@ -18,11 +20,15 @@ $ status
 https://api.example.com/status
 ```
 
-`defineContext` returns a factory. `api()` creates an instance and `.provide()` attaches it to the app. In the action, `ctx.api` is the value setup returned; it is always awaited because setup may be asynchronous.
+- `api` is the factory returned by `defineContext()`.
+- `api()` creates an instance for `.provide()`; it does not run setup yet.
+- `await ctx.api` runs setup on first access and returns its value. Context values are always accessed through promises, even when setup is synchronous.
 
-An inline command can shadow an inherited Context with a different value type **before** binding its action. After `.action()`, a local replacement must satisfy the Context value types that action received. Calling `.action()` again replaces the callback and binds the current Context contract. These obligations belong to that command, not its descendants: a child may still shadow independently.
+Provide a Context before adding commands that need it. Later-added descendants inherit it.
 
 ## Use from a reusable command
+
+A [reusable command](/docs/guide/commands) declares its dependencies with `.use()`. Using `api` from above:
 
 <include lang="ts" meta='title="app.ts"'>
   ../../../examples/guide/contexts-use.ts#use
@@ -33,9 +39,11 @@ $ app health
 https://api.example.com/health
 ```
 
-`.use(api)` declares that the [reusable command](/docs/guide/commands) needs `api`; it creates nothing. The app supplies the instance with `.provide(api())` and then adds the command. Reversing that order is a type error: `Uses Context "api" which is not provided`.
+`.use(api)` says “I need this Context”; `.provide(api())` supplies it. Add the command after providing its dependencies—reversing the order is a type error.
 
 ## Setup and cleanup
+
+Setup starts on first access to `ctx.database`. Once it succeeds, its value is shared for that invocation. Register cleanup with `defer()` as soon as you acquire a resource:
 
 <include lang="ts" meta='title="work.ts"'>
   ../../../examples/guide/contexts-lifecycle.ts
@@ -54,17 +62,33 @@ Error: query failed
 database closed
 ```
 
-Setup runs the first time a command reads `ctx.database`, so `ping` never opens it. Each invocation gets its own value. `defer(cleanup)` registers cleanup for that value; Crust runs it after the action and `postRun` hooks, including when the action throws. Callbacks may be async and run in reverse registration order. Calling `defer` after setup has settled throws a `DEFINITION` error.
+Cleanup runs after `postRun` hooks. Deferred callbacks can be async and run in reverse registration order.
 
-Setup receives the invocation's `signal: AbortSignal`, shared with actions and Extension hooks. Pass it to cancellable initialization, such as `fetch(url, { signal })`. Caller cancellation or the first Ctrl-C during `execute()` aborts it. Crust waits for setup to settle before disposal, so work that ignores the signal can delay shutdown. Do not reuse the aborted signal for cleanup work that must finish.
+### Disposable values
 
-When setup acquires several resources, call `defer` right after each acquire. Then a later failure in the same setup still releases what was already opened. Returned values that implement `[Symbol.dispose]` or `[Symbol.asyncDispose]` are still disposed automatically, before that setup's deferred callbacks.
+Instead of `defer()`, the returned value can own its cleanup. Replace the `database` definition above with:
 
-Read every Context a cleanup callback needs during setup. Once cleanup starts, `ctx` still resolves Contexts that were built during the invocation, but pulling one that was never built rejects with a `DEFINITION` error (`context-during-disposal`) instead of opening a resource nothing will close. A dependency read from a cleanup callback is live only if you registered that `defer` after awaiting it; otherwise it is torn down first.
+<include lang="ts" meta='title="database.ts"'>
+  ../../../examples/guide/contexts-setup.ts#disposable
+</include>
 
-A Context value belongs to the invocation. Crust disposes a returned disposable itself, so do not `await using` it or close it in the action as well, and do not let it escape through a return value, stored result, or shared variable that is read after the invocation ends: it is already disposed by then. Only automatic registration of returned values is deduplicated, by object identity within one invocation; a setup that returns a disposable and also `defer`s its close runs both. Pick one mechanism per resource.
+The commands and output stay the same. For asynchronous cleanup, use `async [Symbol.asyncDispose]()` instead of `[Symbol.dispose]()`.
+
+Crust disposes the value for you. Do not also close it with `defer()` or `await using`, or use it after the invocation ends. See the [lifecycle rules](/docs/api/crust#context-lifecycle) for ordering and cleanup dependencies.
+
+### Cancellable setup
+
+Pass setup's `signal` to work that should stop when the invocation is cancelled:
+
+<include lang="ts" meta='title="config.ts"'>
+  ../../../examples/guide/contexts-setup.ts#cancellation
+</include>
+
+Crust waits for setup to settle before cleanup, so ignoring cancellation can delay shutdown. Cleanup that must finish should not use the aborted signal.
 
 ## Flags owned by a Context
+
+When a flag configures the dependency rather than a particular command, declare it on the Context:
 
 <include lang="ts" meta='title="app.ts" twoslash'>
   ../../../examples/guide/contexts-flags.ts
@@ -77,9 +101,11 @@ $ app deploy --api-url https://staging.example.com
 https://staging.example.com/deploy
 ```
 
-When a flag configures the dependency rather than the command, list it in the Context's `flags`. `.provide()` installs it on that command and every command added below, and setup receives the validated value. See [`.provide()`](/docs/api/crust#provideinstances) for collision rules.
+`.provide()` installs these flags on the providing command and later-added descendants. Setup receives their validated values. See [`.provide()`](/docs/api/crust#provideinstances) for collision rules.
 
 ## Contexts that use other Contexts
+
+List dependencies in `use`, then await them through `ctx` inside setup:
 
 <include lang="ts" meta='title="app.ts" twoslash'>
   ../../../examples/guide/contexts-uses.ts
@@ -90,16 +116,16 @@ $ app regions
 https://eu.api.example.com/regions
 ```
 
-List the factories a Context needs in `use` and read them from `ctx` in setup, the same way an action does: each is a promise of that Context's value. Dependencies are lazy too: `config` is built only because `api` reads it. Provide every instance; order within one `.provide()` call does not matter.
+Provide every dependency. Order within one `.provide()` call does not matter. Setup stays lazy: `config` is built only because `api` reads it.
 
 ## Replace a Context in tests
 
+`.of(value)` supplies a value without running the factory's setup. Using the original `defer()`-based `database` and `query`:
+
 <include lang="ts" meta='title="work.test.ts"'>
-  ../../../examples/guide/contexts-doubles.ts
+  ../../../examples/guide/contexts-doubles.ts#replacement
 </include>
 
-`database.of(value)` builds an instance that returns `value` without running setup, so neither `database opened` nor the deferred `database closed` runs. It keeps the Context's name and value type, which is why `query` is unchanged. See [Testing](/docs/guide/testing) for `run()`.
+The command stays unchanged, but neither `database opened` nor its deferred `database closed` runs. Use a plain fake for repeated tests: a disposable supplied through `.of()` is still disposed by each invocation that reads it.
 
-Ownership still transfers: if `value` implements `[Symbol.dispose]` or `[Symbol.asyncDispose]`, every invocation that pulls the Context disposes it like a returned value; Crust leaves an unpulled value untouched. For a double that survives repeated `run()` calls, pass a fake without a disposer, or keep the real factory so setup builds a fresh resource per invocation.
-
-For the full contracts, see [Context types](/docs/api/types#context-types) and [`.use()`](/docs/api/crust#usefactories).
+See [Testing](/docs/guide/testing) for `run()` and assertions, or [Context types](/docs/api/types#context-types) for the full API.

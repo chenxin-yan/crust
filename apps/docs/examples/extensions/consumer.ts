@@ -28,4 +28,5 @@ const deploy = defineCommand(
 	(command) => command.action(() => {}),
 );
 
-export const app = new Crust("my-cli").add(deploy).extend(webDocs);
+const app = new Crust("my-cli").add(deploy).extend(webDocs);
+await app.execute();

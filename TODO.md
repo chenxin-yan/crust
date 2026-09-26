@@ -11,8 +11,8 @@ Branch `update-docs`, PR #389. Reviewing each surface from scratch, top to botto
   - [x] index
   - [x] commands
   - [x] arguments-and-flags
-  - [ ] values-and-validation
-  - [ ] contexts
+  - [x] values-and-validation
+  - [x] contexts
   - [ ] extensions
   - [ ] error-handling
   - [ ] testing

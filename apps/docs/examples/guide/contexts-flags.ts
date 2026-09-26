@@ -1,18 +1,19 @@
-import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
+import { Crust, defineContext } from "@crustjs/core";
 
-const apiUrl = defineFlag("api-url", { type: "string", default: "https://api.example.com" });
-// [!code highlight]
-const api = defineContext("api", { flags: [apiUrl] }, ({ flags }) => ({
-	//                                                      ^?
-	get: (path: string) => `${flags["api-url"]}${path}`,
-}));
-
-const deploy = defineCommand("deploy", (command) =>
-	command.use(api).action(async ({ ctx, stdout }) => {
-		stdout((await ctx.api).get("/deploy"));
+const api = defineContext(
+	"api",
+	// [!code highlight]
+	{ flags: [{ name: "api-url", type: "string", default: "https://api.example.com" }] },
+	({ flags }) => ({
+		// ^?
+		get: (path: string) => `${flags["api-url"]}${path}`,
 	}),
 );
 
-const app = new Crust("app").provide(api()).add(deploy);
+const app = new Crust("app").provide(api()).command("deploy", (command) =>
+	command.action(async ({ ctx, stdout }) => {
+		stdout((await ctx.api).get("/deploy"));
+	}),
+);
 
 await app.execute();
