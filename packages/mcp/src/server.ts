@@ -80,7 +80,7 @@ function parseJsonValue(
 	}
 	copies.set(value, undefined);
 	const copy = Array.isArray(value)
-		? value.map((item) => parseJsonValue(item, copies))
+		? Array.from({ length: value.length }, (_, index) => parseJsonValue(value[index], copies))
 		: // `fromEntries` defines own properties, so a `__proto__` key cannot set the prototype.
 			Object.fromEntries(
 				Object.entries(value).map(([key, item]) => [key, parseJsonValue(item, copies)] as const),

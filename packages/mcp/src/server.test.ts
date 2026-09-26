@@ -436,6 +436,23 @@ describe("toolResultFromOutcome", () => {
 		expect(reads).toBe(1);
 	});
 
+	it("falls back when a getter creates an array hole during capture", () => {
+		let reads = 0;
+		const result = [1, 2];
+		Object.defineProperty(result, "0", {
+			get() {
+				reads++;
+				// oxlint-disable-next-line typescript/no-array-delete -- the fixture intentionally creates a hole during capture.
+				delete result[1];
+				return 1;
+			},
+		});
+		expect(toolResultFromOutcome(completed(result))).toEqual({
+			content: [{ type: "text", text: "out" }],
+		});
+		expect(reads).toBe(1);
+	});
+
 	it("never runs a result's toJSON hook", () => {
 		const toJSON = vi.fn(() => 1);
 		expect(toolResultFromOutcome(completed({ toJSON }))).toEqual({
