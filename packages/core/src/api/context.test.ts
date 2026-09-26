@@ -406,6 +406,30 @@ describe("Context-owned sections", () => {
 		expect(snapshot.meta.sections).toEqual([envSection, { title: "Environment", body: "More" }]);
 	});
 
+	it("documents a same-name .of() replacement inside an Extension only once", async () => {
+		const env = defineContext("env", { sections: [envSection] }, () => 1);
+		const provider = defineExtension(defineExtensionId("env-provider")).provide(env(), env.of(2));
+		const app = new Crust("cli").extend(provider).action(({ ctx }) => ctx.env);
+
+		expect(await app.run([])).toMatchObject({ status: "completed", result: 2 });
+		expect((await app.snapshot()).meta.sections).toEqual([envSection]);
+	});
+
+	it.each([
+		{ sections: [{ title: "Environment", body: "Replacement documentation" }] },
+		{ sections: [] },
+	])("uses only the replacement Context's sections: $sections", async ({ sections }) => {
+		const old = defineContext("env", { sections: [envSection] }, () => 1);
+		const current = defineContext("env", { sections }, () => 2);
+		const provider = defineExtension(defineExtensionId("env-provider"))
+			.provide(old())
+			.provide(current());
+		const app = new Crust("cli").extend(provider).action(({ ctx }) => ctx.env);
+
+		expect(await app.run([])).toMatchObject({ status: "completed", result: 2 });
+		expect((await app.snapshot()).meta.sections ?? []).toEqual(sections);
+	});
+
 	it("documents Extension-provided Contexts once on the root across re-registration", async () => {
 		const { factory: env } = sectioned();
 		const id = defineExtensionId("env-provider");

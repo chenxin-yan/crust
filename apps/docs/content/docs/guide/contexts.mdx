@@ -130,7 +130,7 @@ When a Context needs explaining — the environment variables it reads, the file
 
 Unlike flags, sections document **only the command where the Context is provided**, never the commands below it: the reader sees them once, where the dependency is set up. `.provide(api())` on the root puts them in root help; `.provide(api())` inside `db` puts them in `app db --help` only. A Context provided by an [Extension](/docs/guide/extensions) documents the root once. Help, [manual pages](/docs/modules/man), and every other consumer of the [command snapshot](/docs/api/crust#snapshot) render them after the command's own sections, the same way.
 
-A Context section cannot reuse a title already on that command, from the command's own `sections` or another provided Context: preparing the app throws a `DEFINITION` error (`duplicate-section`). [`@crustjs/env`](/docs/modules/env) uses this to document the variables its Context reads.
+A Context section cannot reuse a title already on that command, from the command's own `sections` or another provided Context: preparing the app throws a `DEFINITION` error (`duplicate-section`). When an Extension replaces a same-name Context, only the final provider's sections are used, including for `.of()` replacements. [`@crustjs/env`](/docs/modules/env) uses this to document the variables its Context reads.
 
 ## Contexts that use other Contexts
 
