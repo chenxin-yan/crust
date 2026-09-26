@@ -10,7 +10,7 @@ import {
 } from "@crustjs/core";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { createMcpServer, DEFAULT_SERVER_VERSION, toolResultFromOutcome } from "./server.ts";
 
@@ -390,37 +390,42 @@ describe("toolResultFromOutcome", () => {
 		stderr: "",
 	});
 
-	it.each([1, 2])(
-		"falls back when result inspection or serialization throws on read %s",
-		(failureAt) => {
-			let reads = 0;
-			const result = {
-				get value() {
-					if (++reads === failureAt) throw new Error("result getter");
-					return 1;
-				},
-			};
-			expect(toolResultFromOutcome(completed(result))).toEqual({
-				content: [{ type: "text", text: "out" }],
-			});
-		},
-	);
+	it("falls back to stdout when a result getter throws", () => {
+		const result = {
+			get value() {
+				throw new Error("result getter");
+			},
+		};
+		expect(toolResultFromOutcome(completed(result))).toEqual({
+			content: [{ type: "text", text: "out" }],
+		});
+	});
 
-	it("detaches structured results so transport serialization never rereads action getters", () => {
+	it.each([
+		["undefined", undefined],
+		["a Date", new Date(0)],
+	])("captures each result getter once, even if it would later return %s", (_label, later) => {
 		let reads = 0;
 		const result = {
 			get value() {
-				if (++reads > 2) throw new Error("result read again by transport");
-				return reads;
+				return ++reads === 1 ? 1 : later;
 			},
 		};
 		const response = toolResultFromOutcome(completed(result));
-		expect(response.structuredContent).toEqual({ value: 2 });
-		expect(response.content).toEqual([
-			{ type: "text", text: JSON.stringify({ value: 2 }, null, 2) },
-		]);
-		expect(() => JSON.stringify(response)).not.toThrow();
-		expect(reads).toBe(2);
+		// Round-trip like a transport would; it must not reach the action's getter.
+		expect(JSON.parse(JSON.stringify(response))).toEqual({
+			content: [{ type: "text", text: JSON.stringify({ value: 1 }, null, 2) }],
+			structuredContent: { value: 1 },
+		});
+		expect(reads).toBe(1);
+	});
+
+	it("never runs a result's toJSON hook", () => {
+		const toJSON = vi.fn(() => 1);
+		expect(toolResultFromOutcome(completed({ toJSON }))).toEqual({
+			content: [{ type: "text", text: "out" }],
+		});
+		expect(toJSON).not.toHaveBeenCalled();
 	});
 
 	const shared = { value: 1 };
@@ -434,6 +439,7 @@ describe("toolResultFromOutcome", () => {
 		["shared reference", { first: shared, second: shared }, { first: shared, second: shared }],
 		["shared reference in arrays", [shared, [shared]], { result: [shared, [shared]] }],
 		["null-prototype object", Object.assign(Object.create(null), { a: 1 }), { a: 1 }],
+		["own __proto__ key", JSON.parse('{"__proto__":{"a":1}}'), JSON.parse('{"__proto__":{"a":1}}')],
 	])("structures faithful JSON: %s", (_label, result, structured) => {
 		expect(toolResultFromOutcome(completed(result))).toEqual({
 			content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
@@ -452,7 +458,6 @@ describe("toolResultFromOutcome", () => {
 		["array with a symbol key", Object.assign([1], { [Symbol("s")]: 2 })],
 		["array subclass", new (class extends Array {})()],
 		["object with a non-enumerable key", Object.defineProperty({}, "hidden", { value: 1 })],
-		["object with a toJSON method", { toJSON: () => 1 }],
 		["function", () => {}],
 		["Date", new Date(0)],
 		["Map", new Map()],
