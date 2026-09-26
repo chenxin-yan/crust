@@ -60,10 +60,10 @@
 		"access": "public"
 	},
 	"scripts": {
-		"build": "vp pack",
+		"build": "vp run build:task",
 		"dev": "vp pack --watch",
-		"check:types": "tsc --noEmit",
-		"test": "vp test",
+		"check:types": "vp run check:types:task",
+		"test": "vp run test:task",
 		"prepack": "cp ../../LICENSE LICENSE",
 		"postpack": "rm -f LICENSE"
 	},

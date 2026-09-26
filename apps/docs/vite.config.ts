@@ -54,14 +54,19 @@ export default defineConfig(({ mode }) => ({
 	run: {
 		tasks: {
 			...toolingTasks,
+			// Generate the `.source/` MDX types before type checking.
+			"check:types:task": {
+				...toolingTasks["check:types:task"],
+				command: "fumadocs-mdx && tsc --noEmit",
+			},
 			// The site build (prerender) and dev server always run fresh.
 			"build:task": {
-				command: "pnpm run build",
+				command: "vp build",
 				dependsOn: [upstreamBuild],
 				cache: false,
 			},
 			"dev:task": {
-				command: "pnpm run dev",
+				command: "vp dev",
 				dependsOn: [upstreamBuild],
 				cache: false,
 			},

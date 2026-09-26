@@ -4,11 +4,11 @@
   "type": "module",
   "sideEffects": false,
   "scripts": {
-    "dev": "vp dev",
-    "build": "vp build",
+    "dev": "vp run dev:task",
+    "build": "vp run build:task",
     "preview": "vp preview",
-    "check:types": "fumadocs-mdx && tsc --noEmit",
-    "test": "vp test",
+    "check:types": "vp run check:types:task",
+    "test": "vp run test:task",
     "postinstall": "fumadocs-mdx",
     "deploy": "pnpm run build && wrangler deploy",
     "cf-typegen": "wrangler types"

@@ -34,11 +34,16 @@ pnpm run test          # Build and test packages, tooling, and scripts
 pnpm run dev:docs      # Start the docs site
 ```
 
-Tasks run through Vite Task (`vp run`), which builds upstream packages first. Builds and type checks are cached; tests always rerun so environment-controlled smoke tests are not replayed from cache. Run one workspace's tasks with a filter. Docs tests remain separate:
+Tasks run through Vite Task (`vp run`), which builds upstream packages first. Package builds, type checks, and the combined `vp check` lint/format task are cached; tests always rerun so environment-controlled smoke tests are not replayed from cache. The docs build and dev server are uncached.
+
+Use `pnpm run check` for the package prebuild followed by `vp check`; bare `vp check` runs the built-in command without that prerequisite. `pnpm run check:fix` applies formatting and lint fixes without caching the fix step. Keep `pnpm run check:types` separate: type-aware lint rules do not replace workspace compiler checks or docs source generation.
+
+The build, test, and type-check commands are defined once as `build:task`, `test:task`, and `check:types:task` in [`vite.shared.ts`](vite.shared.ts); a package with a different command overrides it in its own `vite.config.ts`. Each workspace's `build`, `test`, and `check:types` scripts run `vp run <name>:task`, so running a script inside a package also builds its upstream packages. Arguments after the script name reach the underlying command. Run one workspace's tasks with a filter or from its directory. Docs tests remain separate:
 
 ```sh
 pnpm exec vp run --filter ./scripts check:types:task
 pnpm exec vp run --filter ./scripts test:task
+pnpm --dir packages/core run test --run
 pnpm --dir apps/docs exec vp test run
 ```
 
