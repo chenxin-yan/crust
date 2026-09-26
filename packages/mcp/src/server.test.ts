@@ -453,6 +453,35 @@ describe("toolResultFromOutcome", () => {
 		expect(reads).toBe(1);
 	});
 
+	it.each(["object", "array", "symbol", "non-enumerable", "array length"])(
+		"falls back when getter capture adds data: %s",
+		(kind) => {
+			let reads = 0;
+			const added = vi.fn(() => 2);
+			const result = kind.startsWith("array") ? [1] : { first: 1 };
+			Object.defineProperty(result, Array.isArray(result) ? "0" : "first", {
+				get() {
+					reads++;
+					if (kind === "array length" && Array.isArray(result)) {
+						result.length = 2;
+					} else {
+						const key = Array.isArray(result) ? "1" : kind === "symbol" ? Symbol() : "added";
+						Object.defineProperty(result, key, {
+							enumerable: kind !== "non-enumerable",
+							get: added,
+						});
+					}
+					return 1;
+				},
+			});
+			expect(toolResultFromOutcome(completed(result))).toEqual({
+				content: [{ type: "text", text: "out" }],
+			});
+			expect(reads).toBe(1);
+			expect(added).not.toHaveBeenCalled();
+		},
+	);
+
 	it("captures validated object keys even when a getter hides a later property", () => {
 		const first = vi.fn(() => {
 			Object.defineProperty(result, "second", { enumerable: false });
@@ -524,6 +553,7 @@ describe("toolResultFromOutcome", () => {
 		["negative zero", -0],
 		["nested negative zero", { a: [-0] }],
 		["array hole", Array(1)],
+		["array hole masked by a named key", Object.assign(Array(1), { extra: 2 })],
 		["array with a named property", Object.assign([1], { extra: 2 })],
 		["array with a symbol key", Object.assign([1], { [Symbol("s")]: 2 })],
 		["array subclass", new (class extends Array {})()],

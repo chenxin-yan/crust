@@ -68,7 +68,7 @@ function parseJsonValue(
 		if (proto !== Array.prototype || names.length !== value.length + 1) {
 			throw new TypeError("Not a dense plain array");
 		}
-		if (!Array.from(value.keys()).every((index) => Object.hasOwn(value, index))) {
+		if (!names.every((name, index) => name === "length" || name === String(index))) {
 			throw new TypeError("Array hole");
 		}
 	} else {
@@ -87,6 +87,12 @@ function parseJsonValue(
 				// oxlint-disable-next-line eslint/no-restricted-properties -- this JSON boundary recursively validates each dynamic property before accepting it.
 				names.map((key) => [key, parseJsonValue(Reflect.get(value, key), copies)] as const),
 			);
+	if (
+		(Array.isArray(value) && value.length !== copy.length) ||
+		Reflect.ownKeys(value).some((key) => !Object.hasOwn(copy, key))
+	) {
+		throw new TypeError("Properties added during capture");
+	}
 	copies.set(value, copy);
 	return copy;
 }
