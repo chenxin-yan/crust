@@ -190,7 +190,7 @@ function _providedContextCollections(
 function _broadProviderValueEvidence(name: string) {
 	const text = defineContext("db", () => "ok");
 	const numeric = defineContext(name, () => 42);
-	const dependent = defineContext("consumer", { uses: [text] }, async ({ ctx }) =>
+	const dependent = defineContext("consumer", { use: [text] }, async ({ ctx }) =>
 		(await ctx.db).toUpperCase(),
 	);
 	// @ts-expect-error -- a broad-named number provider cannot satisfy the string dependency
@@ -221,7 +221,7 @@ function _commandCompositionBoundary(definitions: readonly ReturnType<typeof def
 
 function _contextProofCannotBeForged() {
 	// @ts-expect-error -- handwritten instances have no owned private definition
-	new Crust("cli").provide({ name: "fake", ownedFlags: {}, uses: [], setup: () => 1 });
+	new Crust("cli").provide({ name: "fake", ownedFlags: {}, use: [], setup: () => 1 });
 	const instance = defineContext("real", () => 1)();
 	// @ts-expect-error -- public renaming cannot contradict the retained defining instance
 	new Crust("cli").provide({ ...instance, name: "fake" });
@@ -235,9 +235,9 @@ function _contextProofCannotBeForged() {
 		});
 }
 
-function _checkedExtensionConfigMetadata() {
-	const requiresVersion = defineExtension<"version">()(defineExtensionId("version"), {});
-	// @ts-expect-error -- checked local configs do not erase TS-owned metadata requirements
+function _checkedExtensionMetadata() {
+	const requiresVersion = defineExtension<"version">(defineExtensionId("version"));
+	// @ts-expect-error -- an Extension without contributions keeps TS-owned metadata requirements
 	new Crust("missing").extend(requiresVersion);
 	new Crust("present", { version: "1" }).extend(requiresVersion);
 }
@@ -462,8 +462,11 @@ function _openInheritedFlags(recursive: boolean) {
 		.add(child)
 		.provide(...providers)
 		.run(["child", "leaf"]);
-	const ext = defineExtension(defineExtensionId("recursive-open"), {
-		flags: [{ name: "token", type: "string", required: true, recursive }],
+	const ext = defineExtension(defineExtensionId("recursive-open")).flags({
+		name: "token",
+		type: "string",
+		required: true,
+		recursive,
 	});
 	const after = new Crust("app").add(child).extend(ext);
 	const before = new Crust("app").extend(ext).add(child);
@@ -510,14 +513,12 @@ function _infiniteNames(
 	const aliased = new Crust("app").flags(alias);
 	void aliased.run([], { flags: { safe: "ok" } });
 	aliased.flags({ name: "other", type: "boolean" });
-	const ext = defineExtension(defineExtensionId("infinite-recursive"), { flags: [flag] as const });
+	const ext = defineExtension(defineExtensionId("infinite-recursive")).flags(flag);
 	const extended = new Crust("app").add(defineCommand("child", (c) => c)).extend(ext);
 	void extended.run(["child"]);
 	const replacement = new Crust("app")
 		.add(defineCommand("known", (c) => c))
-		.extend(
-			defineExtension(defineExtensionId("open-replacement"), { commands: [command] as const }),
-		);
+		.extend(defineExtension(defineExtensionId("open-replacement")).add(command));
 	void replacement.run([name]);
 }
 
@@ -612,13 +613,16 @@ function _disjointOpenProviderFlags(condition: boolean) {
 	const app = new Crust("app").provide(...providers).add(child);
 	void app.run(["child"]);
 	void app.run([]);
-	const ext = defineExtension(defineExtensionId("disjoint-owned"), { provides: providers });
+	const ext = defineExtension(defineExtensionId("disjoint-owned")).provide(...providers);
 	void new Crust("app").add(child).extend(ext).run(["child"]);
 }
 
 function _nonrecursiveTemplateFlags(name: `mode-${string}`) {
-	const ext = defineExtension(defineExtensionId("local-template"), {
-		flags: [{ name, type: "string", required: true, recursive: false }] as const,
+	const ext = defineExtension(defineExtensionId("local-template")).flags({
+		name,
+		type: "string",
+		required: true,
+		recursive: false,
 	});
 	const child = defineCommand("child", (c) => c.action(() => "safe" as const));
 	// A definitely nonrecursive contribution cannot affect either child attachment order.

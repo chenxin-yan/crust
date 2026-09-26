@@ -434,118 +434,113 @@ function resolveUpdateCommand(
  */
 export const updateNotifier: ExtensionFactory<[options: UpdateNotifierOptions]> = defineExtension(
 	UPDATE_NOTIFIER,
-	(options) => {
-		const {
-			currentVersion,
-			packageName,
-			timeoutMs = DEFAULT_TIMEOUT_MS,
-			registryUrl = DEFAULT_REGISTRY_URL,
-			updateCommand,
-			updateDocsUrl,
-			cache,
-		} = options;
-		const intervalMs = (cache === false ? undefined : cache?.intervalMs) ?? DEFAULT_INTERVAL_MS;
+).factory((extension, options) => {
+	const {
+		currentVersion,
+		packageName,
+		timeoutMs = DEFAULT_TIMEOUT_MS,
+		registryUrl = DEFAULT_REGISTRY_URL,
+		updateCommand,
+		updateDocsUrl,
+		cache,
+	} = options;
+	const intervalMs = (cache === false ? undefined : cache?.intervalMs) ?? DEFAULT_INTERVAL_MS;
 
-		return {
-			hooks: {
-				async postRun(context, outcome) {
-					if (outcome.status !== "completed") return;
+	return extension.postRun(async (context, outcome) => {
+		if (outcome.status !== "completed") return;
 
-					const resolvedCurrentVersion = currentVersion ?? context.rootCommand.meta.version;
-					if (resolvedCurrentVersion === undefined) {
-						throw new CrustError(
-							"DEFINITION",
-							"The update notifier extension requires a version in new Crust(name, { version }) or currentVersion",
-						);
-					}
+		const resolvedCurrentVersion = currentVersion ?? context.rootCommand.meta.version;
+		if (resolvedCurrentVersion === undefined) {
+			throw new CrustError(
+				"DEFINITION",
+				"The update notifier extension requires a version in new Crust(name, { version }) or currentVersion",
+			);
+		}
 
-					try {
-						let cacheAdapter: UpdateNotifierCacheAdapter = NO_CACHE_ADAPTER;
-						if (cache !== false) {
-							if (cache?.adapter) {
-								cacheAdapter = cache.adapter;
-							} else {
-								cacheAdapter = await createStoreCacheAdapter(packageName, registryUrl);
-							}
-						}
+		try {
+			let cacheAdapter: UpdateNotifierCacheAdapter = NO_CACHE_ADAPTER;
+			if (cache !== false) {
+				if (cache?.adapter) {
+					cacheAdapter = cache.adapter;
+				} else {
+					cacheAdapter = await createStoreCacheAdapter(packageName, registryUrl);
+				}
+			}
 
-						// Corrupt/unreadable cache (e.g. CrustStoreError PARSE) reads as empty
-						// so the next successful write repairs the file instead of permanently
-						// disabling the notifier.
-						const state = normalizeNotifierState(await cacheAdapter.read().catch(() => null));
-						const resolvedUpdateCommand = resolveUpdateCommand(packageName, updateCommand);
+			// Corrupt/unreadable cache (e.g. CrustStoreError PARSE) reads as empty
+			// so the next successful write repairs the file instead of permanently
+			// disabling the notifier.
+			const state = normalizeNotifierState(await cacheAdapter.read().catch(() => null));
+			const resolvedUpdateCommand = resolveUpdateCommand(packageName, updateCommand);
 
-						// ── Cache gate: skip network if within interval ──────────
-						const now = Date.now();
-						const elapsed = now - state.lastCheckedAt;
+			// ── Cache gate: skip network if within interval ──────────
+			const now = Date.now();
+			const elapsed = now - state.lastCheckedAt;
 
-						// Negative elapsed (clock rollback, corrupt future timestamp) is
-						// treated as stale so the refetch rewrites lastCheckedAt.
-						if (cache !== false && elapsed >= 0 && elapsed < intervalMs) {
-							// Cache is still fresh — use cached version if available
-							if (
-								state.latestVersion &&
-								isNewerVersion(resolvedCurrentVersion, state.latestVersion) &&
-								state.lastNotifiedVersion !== state.latestVersion
-							) {
-								emitUpdateNotice(
-									resolvedCurrentVersion,
-									state.latestVersion,
-									resolvedUpdateCommand,
-									updateDocsUrl,
-									context.stderr,
-								);
-								await cacheAdapter.write({
-									...state,
-									lastNotifiedVersion: state.latestVersion,
-								});
-							}
-							return;
-						}
+			// Negative elapsed (clock rollback, corrupt future timestamp) is
+			// treated as stale so the refetch rewrites lastCheckedAt.
+			if (cache !== false && elapsed >= 0 && elapsed < intervalMs) {
+				// Cache is still fresh — use cached version if available
+				if (
+					state.latestVersion &&
+					isNewerVersion(resolvedCurrentVersion, state.latestVersion) &&
+					state.lastNotifiedVersion !== state.latestVersion
+				) {
+					emitUpdateNotice(
+						resolvedCurrentVersion,
+						state.latestVersion,
+						resolvedUpdateCommand,
+						updateDocsUrl,
+						context.stderr,
+					);
+					await cacheAdapter.write({
+						...state,
+						lastNotifiedVersion: state.latestVersion,
+					});
+				}
+				return;
+			}
 
-						// ── Network check: fetch latest version ──────────────────
-						const latestVersion = await fetchLatestVersion(packageName, registryUrl, timeoutMs);
+			// ── Network check: fetch latest version ──────────────────
+			const latestVersion = await fetchLatestVersion(packageName, registryUrl, timeoutMs);
 
-						if (latestVersion === null) {
-							// Soft failure — update timestamp to avoid retrying too soon
-							await cacheAdapter.write({
-								...state,
-								lastCheckedAt: now,
-							});
-							return;
-						}
+			if (latestVersion === null) {
+				// Soft failure — update timestamp to avoid retrying too soon
+				await cacheAdapter.write({
+					...state,
+					lastCheckedAt: now,
+				});
+				return;
+			}
 
-						// ── Persist fetched version and timestamp ─────────────────
-						const nextState: UpdateNotifierState = {
-							...state,
-							lastCheckedAt: now,
-							latestVersion,
-						};
+			// ── Persist fetched version and timestamp ─────────────────
+			const nextState: UpdateNotifierState = {
+				...state,
+				lastCheckedAt: now,
+				latestVersion,
+			};
 
-						// ── Emit notice if newer and not already notified ─────────
-						if (
-							isNewerVersion(resolvedCurrentVersion, latestVersion) &&
-							state.lastNotifiedVersion !== latestVersion
-						) {
-							emitUpdateNotice(
-								resolvedCurrentVersion,
-								latestVersion,
-								resolvedUpdateCommand,
-								updateDocsUrl,
-								context.stderr,
-							);
-							nextState.lastNotifiedVersion = latestVersion;
-						}
+			// ── Emit notice if newer and not already notified ─────────
+			if (
+				isNewerVersion(resolvedCurrentVersion, latestVersion) &&
+				state.lastNotifiedVersion !== latestVersion
+			) {
+				emitUpdateNotice(
+					resolvedCurrentVersion,
+					latestVersion,
+					resolvedUpdateCommand,
+					updateDocsUrl,
+					context.stderr,
+				);
+				nextState.lastNotifiedVersion = latestVersion;
+			}
 
-						await cacheAdapter.write(nextState);
-					} catch {
-						// Registry, cache, and notification failures must not fail the completed command.
-					}
-				},
-			},
-		};
-	},
-);
+			await cacheAdapter.write(nextState);
+		} catch {
+			// Registry, cache, and notification failures must not fail the completed command.
+		}
+	});
+});
 
 // ────────────────────────────────────────────────────────────────────────────
 // Internal — Update notice output

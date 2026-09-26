@@ -1,6 +1,7 @@
 import { Crust } from "@crustjs/core";
 import { describe, expect, it } from "vite-plus/test";
 
+import { runBuildHooks } from "../../crust/tests/build-hooks.ts";
 import { man } from "./extension.ts";
 
 describe("man Extension", () => {
@@ -10,34 +11,24 @@ describe("man Extension", () => {
 	});
 
 	it("returns the root manual with a configurable section", async () => {
-		const extension = man({ section: 5 });
-		const snapshot = await new Crust("demo", { description: "Demo CLI" })
-			.extend(extension)
-			.snapshot();
+		const { files } = await runBuildHooks(
+			new Crust("demo", { description: "Demo CLI" }).extend(man({ section: 5 })),
+		);
 
-		const artifacts = await extension.build?.({ snapshot });
-
-		expect(artifacts).toEqual([{ path: "man/demo.5", content: expect.any(String) }]);
-		const output = artifacts?.[0]?.content as string;
-		expect(output).toContain(".Dt DEMO 5");
+		expect([...files.keys()]).toEqual(["man/demo.5"]);
+		expect(files.get("man/demo.5")).toContain(".Dt DEMO 5");
 	});
 
 	it("honors a configured installed name", async () => {
-		const extension = man({ name: "my-tool" });
-		const snapshot = await new Crust("demo").extend(extension).snapshot();
+		const { files } = await runBuildHooks(new Crust("demo").extend(man({ name: "my-tool" })));
 
-		const artifacts = await extension.build?.({ snapshot });
-
-		expect(artifacts?.[0]?.path).toBe("man/my-tool.1");
-		expect(artifacts?.[0]?.content).toContain(".Nm my-tool");
+		expect([...files.keys()]).toEqual(["man/my-tool.1"]);
+		expect(files.get("man/my-tool.1")).toContain(".Nm my-tool");
 	});
 
 	it("rejects names containing path separators", async () => {
-		const extension = man({ name: "foo\\bar" });
-		const snapshot = await new Crust("demo").extend(extension).snapshot();
+		const { error } = await runBuildHooks(new Crust("demo").extend(man({ name: "foo\\bar" })));
 
-		await expect(extension.build?.({ snapshot })).rejects.toThrow(
-			"must not contain path separators",
-		);
+		expect(error).toContain("must not contain path separators");
 	});
 });

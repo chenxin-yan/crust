@@ -37,9 +37,9 @@ import type {
 
 {
 	// brands Extension flag spellings colliding with existing or earlier-Extension flags
-	type Ext<Defs extends readonly NamedFlagDef[], Provides extends readonly unknown[] = []> = {
+	type Ext<Defs extends readonly NamedFlagDef[], Provide extends readonly unknown[] = []> = {
 		readonly _flagDefs?: Defs;
-		readonly provides?: Provides;
+		readonly provide?: Provide;
 	};
 	type AppCollision = ValidateExtensionFlags<
 		readonly [Ext<readonly [{ name: "mode"; type: "boolean" }]>],

@@ -60,13 +60,9 @@ describe("captureExecute", () => {
 	});
 
 	it("captures onError extension rendering", async () => {
-		const renderer = defineExtension(defineExtensionId("renderer"), {
-			hooks: {
-				onError(error, ctx) {
-					ctx.stderr(`custom: ${(error as Error).message}`);
-					return true;
-				},
-			},
+		const renderer = defineExtension(defineExtensionId("renderer")).onError((error, ctx) => {
+			ctx.stderr(`custom: ${(error as Error).message}`);
+			return true;
 		});
 		const app = new Crust("test-cli").extend(renderer).action(() => {
 			throw new Error("boom");
@@ -89,14 +85,12 @@ describe("captureExecute", () => {
 			releaseSuccess = resolve;
 		});
 
-		const delayedRenderer = defineExtension(defineExtensionId("delayed-renderer"), {
-			hooks: {
-				async onError() {
-					await errorRendererGate;
-					return true;
-				},
+		const delayedRenderer = defineExtension(defineExtensionId("delayed-renderer")).onError(
+			async () => {
+				await errorRendererGate;
+				return true;
 			},
-		});
+		);
 		const failingApp = new Crust("test-cli").extend(delayedRenderer).action(() => {
 			throw new Error("boom");
 		});

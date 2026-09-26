@@ -270,7 +270,7 @@ export const coreAcceptsResult: CoreReport | undefined = result.reports?.["cli"]
 		writeFileSync(
 			join(app, "src", "cli.ts"),
 			`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(corePath)};\n` +
-				`const hook = defineExtension(defineExtensionId("hook"), { build: () => [{ path: "man/installed-app.1", content: ".Dd" }] });\n` +
+				`const hook = defineExtension(defineExtensionId("hook")).build(() => [{ path: "man/installed-app.1", content: ".Dd" }]);\n` +
 				`await new Crust("installed-app").extend(hook).action(({ stdout }) => stdout("hello from installed-app")).execute();\n`,
 		);
 

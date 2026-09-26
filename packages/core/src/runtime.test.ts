@@ -74,11 +74,7 @@ describe("runtime structured invocation", () => {
 					},
 				},
 			})
-			.extend(
-				defineExtension(defineExtensionId("finish"), {
-					hooks: { preRun: ({ finish }) => finish() },
-				}),
-			);
+			.extend(defineExtension(defineExtensionId("finish")).preRun(({ finish }) => finish()));
 		const erased: AnyCrust = app;
 		expect(await erased.run([], {})).toMatchObject({
 			status: "finished",
@@ -192,9 +188,9 @@ it("checks command relations at each actual destination and keeps Context setup 
 
 it("checks each future Extension section result when prepared", async () => {
 	let title = "Notes";
-	const docs = defineExtension(defineExtensionId("future"), {
-		sections: () => [{ command: [], title, body: "Body" }],
-	});
+	const docs = defineExtension(defineExtensionId("future")).sections(() => [
+		{ command: [], title, body: "Body" },
+	]);
 	const first = new Crust("one").extend(docs);
 	expect((await first.snapshot()).meta.sections?.[0]?.title).toBe("Notes");
 	title = "\n";

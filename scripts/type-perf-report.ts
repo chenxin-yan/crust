@@ -67,7 +67,7 @@ export function generateConsumerSource(size: number): string {
 			);
 		} else {
 			lines.push(
-				`const context${index} = defineContext("context-${index}", { flags: [contextFlag${index}], uses: [context${index - 1}] }, async ({ flags, ctx }) => ({ value: (await ctx["context-${index - 1}"]).value + (flags["context-${index}-token"] ?? "") }));`,
+				`const context${index} = defineContext("context-${index}", { flags: [contextFlag${index}], use: [context${index - 1}] }, async ({ flags, ctx }) => ({ value: (await ctx["context-${index - 1}"]).value + (flags["context-${index}-token"] ?? "") }));`,
 			);
 		}
 	}
@@ -100,10 +100,9 @@ export function generateConsumerSource(size: number): string {
 	}
 
 	lines.push(
-		'const extension = defineExtension(defineExtensionId("type-perf-extension"), {',
-		'\tflags: [{ name: "extension-trace", type: "boolean" }],',
-		'\tcommands: [defineCommand("extension-command", { aliases: ["ext"] }, (command) => command.flags({ name: "extension-mode", type: "string" }).action(() => ({ source: "extension" as const })))],',
-		"});",
+		'const extension = defineExtension(defineExtensionId("type-perf-extension"))',
+		'\t.flags({ name: "extension-trace", type: "boolean" })',
+		'\t.add(defineCommand("extension-command", { aliases: ["ext"] }, (command) => command.flags({ name: "extension-mode", type: "string" }).action(() => ({ source: "extension" as const }))));',
 		"",
 		'export const app = new Crust("type-perf-consumer", { description: "Synthetic type-performance fixture" })',
 		'\t.flags({ name: "root-verbose", type: "boolean", short: "v", aliases: ["verbose"] })',

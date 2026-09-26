@@ -49,49 +49,47 @@ const colorFlags = [
  */
 export const noColor: ExtensionFactory<[], {}, [], typeof colorFlags> = defineExtension(
 	NO_COLOR,
-	() => ({
-		flags: colorFlags,
-		hooks: {
-			preRun(context) {
-				const flagValue = context.flags.color;
-				if (flagValue !== true && flagValue !== false) return;
+).factory((extension) =>
+	extension
+		.flags(...colorFlags)
+		.preRun((context) => {
+			const flagValue = context.flags.color;
+			if (flagValue !== true && flagValue !== false) return;
 
-				if (activeRuns > 0 && activeFlag !== flagValue) {
-					throw new CrustError(
-						"DEFINITION",
-						"noColor: cannot start a --color run while a --no-color run is in flight (or vice versa); opposing overlapping runs share process.env",
-						{ subject: "extension", name: NO_COLOR, reason: "opposing-overlap" },
-					);
-				}
-				activeFlag = flagValue;
+			if (activeRuns > 0 && activeFlag !== flagValue) {
+				throw new CrustError(
+					"DEFINITION",
+					"noColor: cannot start a --color run while a --no-color run is in flight (or vice versa); opposing overlapping runs share process.env",
+					{ subject: "extension", name: NO_COLOR, reason: "opposing-overlap" },
+				);
+			}
+			activeFlag = flagValue;
 
-				if (activeRuns === 0) {
-					baseForceColor = process.env.FORCE_COLOR;
-					baseNoColor = process.env.NO_COLOR;
-				}
-				activeRuns++;
-				colorRuns.add(context);
+			if (activeRuns === 0) {
+				baseForceColor = process.env.FORCE_COLOR;
+				baseNoColor = process.env.NO_COLOR;
+			}
+			activeRuns++;
+			colorRuns.add(context);
 
-				if (flagValue) {
-					delete process.env.NO_COLOR;
-					process.env.FORCE_COLOR = "3";
-				} else {
-					delete process.env.FORCE_COLOR;
-					process.env.NO_COLOR = "1";
-				}
-			},
-			postRun(context) {
-				if (!colorRuns.has(context)) return;
-				colorRuns.delete(context);
-				activeRuns--;
-				if (activeRuns === 0) {
-					activeFlag = undefined;
-					if (baseForceColor === undefined) delete process.env.FORCE_COLOR;
-					else process.env.FORCE_COLOR = baseForceColor;
-					if (baseNoColor === undefined) delete process.env.NO_COLOR;
-					else process.env.NO_COLOR = baseNoColor;
-				}
-			},
-		},
-	}),
+			if (flagValue) {
+				delete process.env.NO_COLOR;
+				process.env.FORCE_COLOR = "3";
+			} else {
+				delete process.env.FORCE_COLOR;
+				process.env.NO_COLOR = "1";
+			}
+		})
+		.postRun((context) => {
+			if (!colorRuns.has(context)) return;
+			colorRuns.delete(context);
+			activeRuns--;
+			if (activeRuns === 0) {
+				activeFlag = undefined;
+				if (baseForceColor === undefined) delete process.env.FORCE_COLOR;
+				else process.env.FORCE_COLOR = baseForceColor;
+				if (baseNoColor === undefined) delete process.env.NO_COLOR;
+				else process.env.NO_COLOR = baseNoColor;
+			}
+		}),
 );

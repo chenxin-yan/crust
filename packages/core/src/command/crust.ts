@@ -15,6 +15,7 @@ import type {
 import type {
 	AnyExtension,
 	Extension,
+	ExtensionData,
 	ExtensionsProvidesOutput,
 	RootMetaKey,
 } from "../api/extension.ts";
@@ -586,7 +587,7 @@ type ExtensionCommands<Es extends readonly AnyExtension[]> = Es extends readonly
 
 type ExtensionProviders<E> = [E] extends [never]
 	? []
-	: DefiningOf<E> extends { provides?: infer P extends readonly AnyContextInstance[] }
+	: DefiningOf<E> extends { provide?: infer P extends readonly AnyContextInstance[] }
 		? P
 		: [];
 type ExtensionOwnDefs<E> = [E] extends [never]
@@ -809,7 +810,7 @@ export function defineCommand(
 	return named(name);
 }
 
-function dedupeExtensions(extensions: readonly Extension[]): Extension[] {
+function dedupeExtensions(extensions: readonly ExtensionData[]): ExtensionData[] {
 	return extensions.filter((e, i) => extensions.findLastIndex((x) => x.id === e.id) === i);
 }
 
@@ -1412,7 +1413,7 @@ export class Crust<
 		);
 
 		// Positional by design: providers reach only this node and children added
-		// afterwards (flag scoping; see definition.test.ts). Extension `provides`
+		// afterwards (flag scoping; see definition.test.ts). Extension `.provide()`
 		// differ deliberately — they are application-wide and walk the whole tree.
 		const cloned = this._clone<
 			AfterProvide<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Cs, Meta, Caps>
@@ -1513,7 +1514,7 @@ export class Crust<
 		const activeExtensions = dedupeExtensions([
 			...this._node.extensions,
 			...extensions,
-		] as Extension[]);
+		] as ExtensionData[]);
 		const node = installExtensionContexts(
 			this._node,
 			activeExtensions,
@@ -1522,7 +1523,7 @@ export class Crust<
 
 		validateContextAvailability(
 			node.contexts.map(({ instance }) => instance),
-			activeExtensions.flatMap((extension) => [...extension.uses, ...(extension.provides ?? [])]),
+			activeExtensions.flatMap((extension) => [...extension.use, ...extension.provide]),
 		);
 
 		return this._clone<

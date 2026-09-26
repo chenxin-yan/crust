@@ -110,7 +110,7 @@ function _typecheckRejectsVariadicMethodsOnConditionalBuilderUnion(condition: bo
 	// @ts-expect-error -- .add() rejects failed input inference on a tree-only union
 	void treeUnion.add(child.as("other"));
 
-	const extension = defineExtension(defineExtensionId("conditional"), {});
+	const extension = defineExtension(defineExtensionId("conditional"));
 	// @ts-expect-error -- app-capability builders still reject union calls via .extend()
 	void flagsUnion.extend(extension);
 
@@ -305,22 +305,22 @@ function _typecheckFlagWithDefaultResolvesToNonOptionalTypeInAction() {
 // brands statically known Extension command collisions at .extend()
 function _typecheckBrandsStaticallyKnownExtensionCommandCollisionsAtExtend() {
 	const build = defineCommand("build", (command) => command);
-	const collidingName = defineExtension(defineExtensionId("name-collision"), {
-		commands: [defineCommand("build", (command) => command)],
-	});
-	const collidingAlias = defineExtension(defineExtensionId("alias-collision"), {
-		commands: [defineCommand("inspect", { aliases: ["build"] }, (command) => command)],
-	});
-	const first = defineExtension(defineExtensionId("first-command"), {
-		commands: [defineCommand("deploy", { aliases: ["d"] }, (command) => command)],
-	});
-	const second = defineExtension(defineExtensionId("second-command"), {
-		commands: [defineCommand("d", (command) => command)],
-	});
+	const collidingName = defineExtension(defineExtensionId("name-collision")).add(
+		defineCommand("build", (command) => command),
+	);
+	const collidingAlias = defineExtension(defineExtensionId("alias-collision")).add(
+		defineCommand("inspect", { aliases: ["build"] }, (command) => command),
+	);
+	const first = defineExtension(defineExtensionId("first-command")).add(
+		defineCommand("deploy", { aliases: ["d"] }, (command) => command),
+	);
+	const second = defineExtension(defineExtensionId("second-command")).add(
+		defineCommand("d", (command) => command),
+	);
 	const dynamic: Extension = collidingName;
-	const clean = defineExtension(defineExtensionId("clean-command"), {
-		commands: [defineCommand("inspect", (command) => command)],
-	});
+	const clean = defineExtension(defineExtensionId("clean-command")).add(
+		defineCommand("inspect", (command) => command),
+	);
 
 	const app = new Crust("cli").add(build);
 	// @ts-expect-error -- command name collides with an app sibling (FIX_COMMAND_COLLISION)
@@ -335,32 +335,30 @@ function _typecheckBrandsStaticallyKnownExtensionCommandCollisionsAtExtend() {
 
 // brands duplicate command spellings within one Extension at defineExtension()
 function _typecheckBrandsDuplicateCommandSpellingsWithinOneExtensionAtDefineExtension() {
-	void defineExtension(defineExtensionId("self-name-collision"), {
-		commands: [
-			defineCommand("dup", (command) => command),
-			// @ts-expect-error -- duplicate canonical name within one Extension (FIX_COMMAND_COLLISION)
-			defineCommand("dup", (command) => command),
-		],
-	});
-	void defineExtension(defineExtensionId("self-alias-collision"), {
-		commands: [
-			defineCommand("deploy", { aliases: ["d"] }, (command) => command),
-			// @ts-expect-error -- command name collides with an Extension alias (FIX_COMMAND_COLLISION)
-			defineCommand("d", (command) => command),
-		],
-	});
-	void defineExtension(defineExtensionId("self-clean"), {
-		commands: [
-			defineCommand("build", (command) => command),
-			defineCommand("deploy", (command) => command),
-		],
-	});
+	void defineExtension(defineExtensionId("self-name-collision")).add(
+		// @ts-expect-error -- duplicate canonical name within one Extension (FIX_COMMAND_COLLISION)
+		defineCommand("dup", (command) => command),
+		defineCommand("dup", (command) => command),
+	);
+	void defineExtension(defineExtensionId("self-alias-collision")).add(
+		// @ts-expect-error -- command name collides with an Extension alias (FIX_COMMAND_COLLISION)
+		defineCommand("deploy", { aliases: ["d"] }, (command) => command),
+		defineCommand("d", (command) => command),
+	);
+	void defineExtension(defineExtensionId("cross-call-collision"))
+		.add(defineCommand("deploy", { aliases: ["d"] }, (command) => command))
+		// @ts-expect-error -- repeated add() calls check earlier Extension commands (FIX_COMMAND_COLLISION)
+		.add(defineCommand("d", (command) => command));
+	void defineExtension(defineExtensionId("self-clean")).add(
+		defineCommand("build", (command) => command),
+		defineCommand("deploy", (command) => command),
+	);
 }
 
 // infers Extension-owned flags in hook contexts
 function _typecheckExtensionOwnedHookFlags() {
-	defineExtension(defineExtensionId("typed-flags"), {
-		flags: [
+	defineExtension(defineExtensionId("typed-flags"))
+		.flags(
 			{ name: "verbose", type: "boolean", default: false },
 			{ name: "rootPort", type: "number", default: 3000, recursive: false },
 			{ name: "token", type: "string", required: true },
@@ -375,33 +373,27 @@ function _typecheckExtensionOwnedHookFlags() {
 				multiple: true,
 				schema: {} as StandardSchema<string[], string[]>,
 			},
-		],
-		hooks: {
-			preRun(ctx) {
-				type _verbose = Expect<Equal<typeof ctx.flags.verbose, boolean>>;
-				type _rootPort = Expect<Equal<typeof ctx.flags.rootPort, number | undefined>>;
-				// Hooks run before validation, so a required flag may still be absent.
-				type _token = Expect<Equal<typeof ctx.flags.token, string | undefined>>;
-				// Schema flags reflect the raw syntax token, not the schema output.
-				type _endpoint = Expect<Equal<typeof ctx.flags.endpoint, string | undefined>>;
-				type _tags = Expect<Equal<typeof ctx.flags.tags, string[] | undefined>>;
-				type _commandFlag = Expect<Equal<typeof ctx.flags.commandFlag, unknown>>;
-				const commandFlag: unknown = ctx.flags.commandFlag;
-				void commandFlag;
-			},
-		},
-	});
+		)
+		.preRun((ctx) => {
+			type _verbose = Expect<Equal<typeof ctx.flags.verbose, boolean>>;
+			type _rootPort = Expect<Equal<typeof ctx.flags.rootPort, number | undefined>>;
+			// Hooks run before validation, so a required flag may still be absent.
+			type _token = Expect<Equal<typeof ctx.flags.token, string | undefined>>;
+			// Schema flags reflect the raw syntax token, not the schema output.
+			type _endpoint = Expect<Equal<typeof ctx.flags.endpoint, string | undefined>>;
+			type _tags = Expect<Equal<typeof ctx.flags.tags, string[] | undefined>>;
+			type _commandFlag = Expect<Equal<typeof ctx.flags.commandFlag, unknown>>;
+			const commandFlag: unknown = ctx.flags.commandFlag;
+			void commandFlag;
+		});
 }
 
 // infers defineFlag() values attached to an Extension
 function _typecheckDefinedExtensionFlags() {
 	const trace = defineFlag("trace", { type: "boolean", default: false });
-	defineExtension(defineExtensionId("defined-flags"), {
-		flags: [trace],
-		hooks: {
-			preRun(ctx) {
-				type _trace = Expect<Equal<typeof ctx.flags.trace, boolean>>;
-			},
-		},
-	});
+	defineExtension(defineExtensionId("defined-flags"))
+		.flags(trace)
+		.preRun((ctx) => {
+			type _trace = Expect<Equal<typeof ctx.flags.trace, boolean>>;
+		});
 }

@@ -169,10 +169,10 @@ console.log("hello from crust build test");
 			// `skills/` and `man/` directories merge into the shared artifact tree.
 			const entry = (name: string) =>
 				`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(corePath)};
-const hook = defineExtension(defineExtensionId("hook"), { build: () => [
+const hook = defineExtension(defineExtensionId("hook")).build(() => [
   { path: "skills/${name}/SKILL.md", content: "${name}" },
   { path: "man/${name}.1", content: "${name}" },
-] });
+]);
 await new Crust("${name}").extend(hook).action(({ stdout }) => stdout("running ${name}")).execute();
 `;
 			writeFileSync(join(projectDir, "src", "first.ts"), entry("greet"));

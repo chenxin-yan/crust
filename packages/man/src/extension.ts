@@ -19,26 +19,23 @@ export interface ManOptions {
 }
 
 /** Adds build-time mdoc generation for the application. */
-export const man: ExtensionFactory<[options?: ManOptions]> = defineExtension(
-	MAN,
-	(options = {}) => {
+export const man: ExtensionFactory<[options?: ManOptions]> = defineExtension(MAN).factory(
+	(extension, options = {}) => {
 		const section = options.section ?? 1;
-		return {
-			async build({ snapshot }) {
-				const { renderManPageMdoc } = await import("./mdoc.ts");
-				const name = options.name ?? snapshot.meta.name;
-				// The name is a filename segment; a separator would nest the page where
-				// npm's `man` field and `man -l` would not find it.
-				if (/[\\/]/.test(name)) {
-					throw new Error(`Manual name "${name}" must not contain path separators.`);
-				}
-				return [
-					{
-						path: `man/${name}.${section}`,
-						content: renderManPageMdoc({ root: snapshot, name, section }),
-					},
-				];
-			},
-		};
+		return extension.build(async ({ snapshot }) => {
+			const { renderManPageMdoc } = await import("./mdoc.ts");
+			const name = options.name ?? snapshot.meta.name;
+			// The name is a filename segment; a separator would nest the page where
+			// npm's `man` field and `man -l` would not find it.
+			if (/[\\/]/.test(name)) {
+				throw new Error(`Manual name "${name}" must not contain path separators.`);
+			}
+			return [
+				{
+					path: `man/${name}.${section}`,
+					content: renderManPageMdoc({ root: snapshot, name, section }),
+				},
+			];
+		});
 	},
 );

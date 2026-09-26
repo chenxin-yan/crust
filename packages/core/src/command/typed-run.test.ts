@@ -42,17 +42,16 @@ describe("typed programmatic invocation", () => {
 	});
 
 	it("runs statically known Extension commands, aliases, flags, and typed results", async () => {
-		const tools = defineExtension(defineExtensionId("tools"), {
-			flags: [
+		const tools = defineExtension(defineExtensionId("tools"))
+			.flags(
 				{ name: "trace", type: "boolean" },
 				{ name: "version", type: "boolean", recursive: false },
-			],
-			commands: [
+			)
+			.add(
 				defineCommand("inspect", { aliases: ["scan"] }, (command) =>
 					command.action(() => ({ kind: "extension" as const })),
 				),
-			],
-		});
+			);
 		const local = defineCommand("local", (command) => command.action(() => {}));
 		const app = new Crust("cli").extend(tools).add(local);
 
@@ -79,15 +78,13 @@ describe("typed programmatic invocation", () => {
 
 	it("keeps widened Extension commands runtime-only", async () => {
 		let ran = false;
-		const dynamic: Extension = defineExtension(defineExtensionId("dynamic"), {
-			commands: [
-				defineCommand("generated", (command) =>
-					command.action(() => {
-						ran = true;
-					}),
-				),
-			],
-		});
+		const dynamic: Extension = defineExtension(defineExtensionId("dynamic")).add(
+			defineCommand("generated", (command) =>
+				command.action(() => {
+					ran = true;
+				}),
+			),
+		);
 		const app = new Crust("cli").extend(dynamic);
 
 		function typecheckHarness() {
@@ -100,14 +97,12 @@ describe("typed programmatic invocation", () => {
 	});
 
 	it("opens child results when a later Extension can replace any canonical child", async () => {
-		const lit = defineExtension(defineExtensionId("lit"), {
-			commands: [
-				defineCommand("inspect", (command) => command.action(() => ({ kind: "lit" as const }))),
-			],
-		});
-		const widened: Extension = defineExtension(defineExtensionId("dyn"), {
-			commands: [defineCommand("generated", (command) => command.action(() => {}))],
-		});
+		const lit = defineExtension(defineExtensionId("lit")).add(
+			defineCommand("inspect", (command) => command.action(() => ({ kind: "lit" as const }))),
+		);
+		const widened: Extension = defineExtension(defineExtensionId("dyn")).add(
+			defineCommand("generated", (command) => command.action(() => {})),
+		);
 		const app = new Crust("cli").extend(lit, widened);
 
 		const pending = app.run(["inspect"], {});
@@ -117,13 +112,11 @@ describe("typed programmatic invocation", () => {
 
 	it("surfaces delayed checked recipe failures before typed dispatch", async () => {
 		const app = new Crust("cli").extend(
-			defineExtension(defineExtensionId("failure"), {
-				commands: [
-					defineCommand("child", () => {
-						throw new Error("recipe failed");
-					}),
-				],
-			}),
+			defineExtension(defineExtensionId("failure")).add(
+				defineCommand("child", () => {
+					throw new Error("recipe failed");
+				}),
+			),
 		);
 		await expect(unwrap(app.run([]))).rejects.toThrow("recipe failed");
 	});
@@ -138,9 +131,7 @@ describe("typed programmatic invocation", () => {
 
 	it("returns the finishing Extension when preRun finishes before the action", async () => {
 		const gateId = defineExtensionId("gate");
-		const gate = defineExtension(gateId, {
-			hooks: { preRun: (ctx) => ctx.finish() },
-		});
+		const gate = defineExtension(gateId).preRun((ctx) => ctx.finish());
 		const app = new Crust("cli").extend(gate).action(() => ({ ran: true as const }));
 		const pending = app.run([]);
 		type _result = Expect<Equal<typeof pending, Promise<RunOutcome<{ ran: true }>>>>;
@@ -168,12 +159,8 @@ describe("typed programmatic invocation", () => {
 				}),
 		);
 		const app = new Crust("git").add(remoteAdd).extend(
-			defineExtension(defineExtensionId("argv"), {
-				hooks: {
-					preRun: (ctx) => {
-						expect(ctx.argv).toEqual(["remote-add"]);
-					},
-				},
+			defineExtension(defineExtensionId("argv")).preRun((ctx) => {
+				expect(ctx.argv).toEqual(["remote-add"]);
 			}),
 		);
 

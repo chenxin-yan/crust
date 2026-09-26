@@ -74,13 +74,9 @@ describe("runInteractive", () => {
 	}
 
 	it("allows an Extension to finish without running the action", async () => {
-		const gate = defineExtension(defineExtensionId("gate"), {
-			hooks: {
-				preRun: (ctx) => {
-					ctx.stderr("finished");
-					return ctx.finish();
-				},
-			},
+		const gate = defineExtension(defineExtensionId("gate")).preRun((ctx) => {
+			ctx.stderr("finished");
+			return ctx.finish();
 		});
 		let called = false;
 		const app = new Crust("test-cli").extend(gate).action(() => {

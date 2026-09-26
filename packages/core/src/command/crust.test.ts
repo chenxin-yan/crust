@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import type { Equal, Expect } from "../../tests/helpers.ts";
 import { unwrap } from "../../tests/helpers.ts";
-import { defineContext } from "../api/context.ts";
+import { defineContext, definingOf } from "../api/context.ts";
 import { defineExtension } from "../api/extension.ts";
 import { defineFlag } from "../api/flags.ts";
 import { CrustError } from "../errors.ts";
@@ -165,9 +165,7 @@ describe("Crust builder methods — immutability + non-mutation", () => {
 		const withAction = base.action(() => {});
 		expect(withAction._node.run).toBeDefined();
 
-		const withExtension = base.extend(
-			defineExtension(defineExtensionId("ext"), { provides: [db()] }),
-		);
+		const withExtension = base.extend(defineExtension(defineExtensionId("ext")).provide(db()));
 		for (const key of [
 			"localFlags",
 			"ownedFlags",
@@ -520,12 +518,8 @@ describe("Crust .extend()", () => {
 	it("runs Extensions in registration order", async () => {
 		const calls: string[] = [];
 		const extension = (name: string) =>
-			defineExtension(defineExtensionId(name), {
-				hooks: {
-					preRun: () => {
-						calls.push(name);
-					},
-				},
+			defineExtension(defineExtensionId(name)).preRun(() => {
+				calls.push(name);
 			});
 		const app = new Crust("test")
 			.extend(extension("one"))
@@ -549,14 +543,13 @@ describe("Crust .extend()", () => {
 				},
 			};
 		});
-		const extension = defineExtension(defineExtensionId("deduplicated"), {
-			provides: [resource()],
-			sections: () => {
+		const extension = defineExtension(defineExtensionId("deduplicated"))
+			.provide(resource())
+			.preRun(() => void preRuns++)
+			.sections(() => {
 				sections++;
 				return [];
-			},
-			hooks: { preRun: () => void preRuns++ },
-		});
+			});
 		const base = new Crust("test")
 			.extend(extension)
 			.action(async ({ ctx }) => void (await ctx.resource));
@@ -589,20 +582,18 @@ describe("Crust .extend()", () => {
 			calls.push("second:setup");
 			return { [Symbol.dispose]: () => calls.push("second:dispose") };
 		});
-		const first = defineExtension(id, {
-			flags: [{ name: "legacy", type: "boolean" }],
-			commands: [defineCommand("legacy", (command) => command)],
-			provides: [firstResource()],
-			sections: () => (calls.push("first:sections"), []),
-			hooks: { preRun: () => void calls.push("first:preRun") },
-		});
-		const second = defineExtension(id, {
-			flags: [{ name: "current", type: "boolean" }],
-			commands: [defineCommand("current", (command) => command)],
-			provides: [secondResource()],
-			sections: () => (calls.push("second:sections"), []),
-			hooks: { preRun: () => void calls.push("second:preRun") },
-		});
+		const first = defineExtension(id)
+			.provide(firstResource())
+			.flags({ name: "legacy", type: "boolean" })
+			.add(defineCommand("legacy", (command) => command))
+			.preRun(() => void calls.push("first:preRun"))
+			.sections(() => (calls.push("first:sections"), []));
+		const second = defineExtension(id)
+			.provide(secondResource())
+			.flags({ name: "current", type: "boolean" })
+			.add(defineCommand("current", (command) => command))
+			.preRun(() => void calls.push("second:preRun"))
+			.sections(() => (calls.push("second:sections"), []));
 		// Extension ids are branded strings rather than literal types, so id dedup is runtime-only.
 		const app = new Crust("test")
 			.extend(first)
@@ -627,8 +618,8 @@ describe("Crust .extend()", () => {
 		let value: string | undefined;
 		const fromA = defineContext("sharedProvider", () => "A");
 		const fromB = defineContext("sharedProvider", () => "B");
-		const a = defineExtension(defineExtensionId("provider-a"), { provides: [fromA()] });
-		const b = defineExtension(defineExtensionId("provider-b"), { provides: [fromB()] });
+		const a = defineExtension(defineExtensionId("provider-a")).provide(fromA());
+		const b = defineExtension(defineExtensionId("provider-b")).provide(fromB());
 		const app = new Crust("test")
 			.extend(a)
 			.extend(b as never)
@@ -652,12 +643,10 @@ describe("Crust .extend()", () => {
 			}),
 		);
 		const app = new Crust("test")
-			.extend(defineExtension(defineExtensionId("original-provider"), { provides: [original()] }))
+			.extend(defineExtension(defineExtensionId("original-provider")).provide(original()))
 			.add(child)
 			.extend(
-				defineExtension(defineExtensionId("replacement-provider"), {
-					provides: [replacement()],
-				}) as never,
+				defineExtension(defineExtensionId("replacement-provider")).provide(replacement()) as never,
 			);
 
 		await unwrap(app.run(["child"]));
@@ -671,7 +660,7 @@ describe("Crust .extend()", () => {
 			{ flags: [{ name: "mode", type: "number", aliases: ["extension-mode"] }] },
 			() => ({}),
 		);
-		const first = defineExtension(id, { provides: [provider()] });
+		const first = defineExtension(id).provide(provider());
 		const app = new Crust("test").flags({
 			name: "mode",
 			type: "string",
@@ -691,9 +680,7 @@ describe("Crust .extend()", () => {
 		const resource = defineContext("resource", () => "extension");
 		const name: string = "resource";
 		const local = [defineContext(name, () => "local")()];
-		const providing = defineExtension(defineExtensionId("providing"), {
-			provides: [resource()],
-		});
+		const providing = defineExtension(defineExtensionId("providing")).provide(resource());
 		const app = new Crust("test")
 			.extend(providing)
 			// Dynamically named providers retain the runtime last-write-wins policy.
@@ -723,14 +710,13 @@ describe("Crust .extend()", () => {
 		expect(Object.keys(snapshot.flags)).toEqual(["aFlag", "bFlag"]);
 	});
 
-	it("defineExtension() returns a frozen plain config", () => {
-		const ext = defineExtension(defineExtensionId("frozen"), {
-			flags: [{ name: "x", type: "boolean" }],
-		});
+	it("defineExtension() returns a frozen handle over frozen normalized data", () => {
+		const ext = defineExtension(defineExtensionId("frozen")).flags({ name: "x", type: "boolean" });
 
 		expect(Object.isFrozen(ext)).toBe(true);
+		expect(Object.isFrozen(definingOf(ext))).toBe(true);
 		expect(ext.id as string).toBe("frozen");
-		expect(ext.flags).toEqual({ x: { type: "boolean" } });
+		expect(definingOf(ext).flags).toEqual({ x: { type: "boolean" } });
 	});
 
 	it("preserves the command definition when extending", async () => {
@@ -752,12 +738,8 @@ describe("Crust .extend()", () => {
 	it("intermediate builders retain independent Extension lists", async () => {
 		const calls: string[] = [];
 		const extension = (name: string) =>
-			defineExtension(defineExtensionId(name), {
-				hooks: {
-					preRun: () => {
-						calls.push(name);
-					},
-				},
+			defineExtension(defineExtensionId(name)).preRun(() => {
+				calls.push(name);
 			});
 		const base = new Crust("test").extend(extension("one")).action(() => {});
 		const extended = base.extend(extension("two"));
@@ -774,7 +756,7 @@ describe("Extension application at prepare time", () => {
 	it("rejects an Extension providing a Context name already on the path at compile time", () => {
 		const db = defineContext("db", {}, () => "real");
 		const impostor = defineContext("db", {}, () => 42);
-		const ext = defineExtension(defineExtensionId("impostor"), { provides: [impostor()] });
+		const ext = defineExtension(defineExtensionId("impostor")).provide(impostor());
 		const app = new Crust("cli").provide(db());
 		// @ts-expect-error -- Extension-provided Context "db" is already on the path (FIX_DUPLICATE_CONTEXT)
 		expect(() => app.extend(ext)).not.toThrow();
@@ -788,16 +770,16 @@ describe("Extension application at prepare time", () => {
 			() => ({}),
 		);
 		expect(() =>
-			defineExtension(defineExtensionId("double-provider"), {
+			defineExtension(defineExtensionId("double-provider"))
 				// @ts-expect-error -- second Context's owned flag "mode" collides with the first's (FIX_ALIAS_COLLISION)
-				provides: [first(), second()],
-			}),
+				.provide(first(), second()),
 		).toThrow("collides");
 	});
 
 	it("rejects an Extension flag colliding with a subcommand's local flag at preparation", async () => {
-		const themer = defineExtension(defineExtensionId("themer"), {
-			flags: [{ name: "mode", type: "boolean" }],
+		const themer = defineExtension(defineExtensionId("themer")).flags({
+			name: "mode",
+			type: "boolean",
 		});
 		const sub = defineCommand("sub", (cmd) =>
 			cmd.flags({ name: "mode", type: "string" }).action(() => {}),
@@ -820,17 +802,17 @@ describe("Extension application at prepare time", () => {
 			() => ({}),
 		);
 		expect(() =>
-			defineExtension(defineExtensionId("self-collider"), {
-				provides: [modeContext()],
+			defineExtension(defineExtensionId("self-collider"))
+				.provide(modeContext())
 				// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
-				flags: [{ name: "mode", type: "string" }],
-			}),
+				.flags({ name: "mode", type: "string" }),
 		).toThrow("collides");
 	});
 
 	it("rejects an Extension flag colliding with an application flag at preparation", async () => {
-		const themer = defineExtension(defineExtensionId("themer"), {
-			flags: [{ name: "mode", type: "boolean" }],
+		const themer = defineExtension(defineExtensionId("themer")).flags({
+			name: "mode",
+			type: "boolean",
 		});
 		const app = new Crust("cli").flags({ name: "mode", type: "string" });
 		// @ts-expect-error -- Extension flag "mode" collides with the application flag (FIX_ALIAS_COLLISION)
@@ -840,8 +822,9 @@ describe("Extension application at prepare time", () => {
 
 	it("recursive Extension flags reach every command, including Extension commands", async () => {
 		const seen: Record<string, ParsedFlagValue>[] = [];
-		const debug = defineExtension(defineExtensionId("debug"), {
-			flags: [{ name: "debug", type: "boolean" }],
+		const debug = defineExtension(defineExtensionId("debug")).flags({
+			name: "debug",
+			type: "boolean",
 		});
 
 		const app = new Crust("cli").extend(debug).add(
@@ -858,8 +841,9 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("checks dynamic Extension flag collisions at preparation", async () => {
-		const thief = defineExtension(defineExtensionId("thief"), {
-			flags: [{ name: "auth", type: "boolean" }],
+		const thief = defineExtension(defineExtensionId("thief")).flags({
+			name: "auth",
+			type: "boolean",
 		});
 		const app = new Crust("cli").flags({ name: "token", type: "string", aliases: ["auth"] });
 		// @ts-expect-error -- known-invalid static contract; runtime regression deliberately exercises the consuming check.
@@ -870,8 +854,10 @@ describe("Extension application at prepare time", () => {
 	});
 
 	it("non-recursive Extension flags stay on the root", async () => {
-		const version = defineExtension(defineExtensionId("version"), {
-			flags: [{ name: "version", type: "boolean", recursive: false }],
+		const version = defineExtension(defineExtensionId("version")).flags({
+			name: "version",
+			type: "boolean",
+			recursive: false,
 		});
 
 		let ran = false;
@@ -902,8 +888,8 @@ describe("Extension application at prepare time", () => {
 	it("Extension command definitions are routable, validated, and receive recursive flags", async () => {
 		const lines: string[] = [];
 		const errors: string[] = [];
-		const completion = defineExtension(defineExtensionId("completion"), {
-			commands: [
+		const completion = defineExtension(defineExtensionId("completion"))
+			.add(
 				defineCommand("completion", (command) =>
 					command
 						.args({
@@ -918,16 +904,14 @@ describe("Extension application at prepare time", () => {
 							);
 						}),
 				),
-			],
-			hooks: {
-				onError(error) {
-					errors.push((error as CrustError).code);
-					return true;
-				},
-			},
-		});
-		const verbose = defineExtension(defineExtensionId("verbose"), {
-			flags: [{ name: "verbose", type: "boolean" }],
+			)
+			.onError((error) => {
+				errors.push((error as CrustError).code);
+				return true;
+			});
+		const verbose = defineExtension(defineExtensionId("verbose")).flags({
+			name: "verbose",
+			type: "boolean",
 		});
 
 		const app = new Crust("cli").extend(completion, verbose).action(() => {});
@@ -946,17 +930,14 @@ describe("Extension application at prepare time", () => {
 
 	it("reuses one application across executions while running hooks each time", async () => {
 		const calls: string[] = [];
-		const debug = defineExtension(defineExtensionId("debug"), {
-			flags: [{ name: "debug", type: "boolean" }],
-			hooks: {
-				preRun: () => {
-					calls.push("pre");
-				},
-				postRun: () => {
-					calls.push("post");
-				},
-			},
-		});
+		const debug = defineExtension(defineExtensionId("debug"))
+			.flags({ name: "debug", type: "boolean" })
+			.preRun(() => {
+				calls.push("pre");
+			})
+			.postRun(() => {
+				calls.push("post");
+			});
 		const app = new Crust("repeat").extend(debug).action(({ flags }) => {
 			if ((flags as Record<string, ParsedFlagValue>).debug) calls.push("action");
 		});
@@ -998,16 +979,14 @@ describe("Extension application at prepare time", () => {
 	it("materializes Extension command recipes once per builder across runs", async () => {
 		let materialized = 0;
 		const calls: string[] = [];
-		const tools = defineExtension(defineExtensionId("tools"), {
-			commands: [
-				defineCommand("sub", (command) => {
-					materialized++;
-					return command.action(() => {
-						calls.push("sub");
-					});
-				}),
-			],
-		});
+		const tools = defineExtension(defineExtensionId("tools")).add(
+			defineCommand("sub", (command) => {
+				materialized++;
+				return command.action(() => {
+					calls.push("sub");
+				});
+			}),
+		);
 		const app = new Crust("cli").extend(tools).action(() => {});
 
 		await app.execute({ argv: ["sub"] });
@@ -1021,15 +1000,13 @@ describe("Extension application at prepare time", () => {
 
 	it("does not cache a failed preparation: a throwing recipe is retried", async () => {
 		let attempts = 0;
-		const flaky = defineExtension(defineExtensionId("flaky"), {
-			commands: [
-				defineCommand("sub", (command) => {
-					attempts++;
-					if (attempts === 1) throw new Error("recipe boom");
-					return command.action(() => {});
-				}),
-			],
-		});
+		const flaky = defineExtension(defineExtensionId("flaky")).add(
+			defineCommand("sub", (command) => {
+				attempts++;
+				if (attempts === 1) throw new Error("recipe boom");
+				return command.action(() => {});
+			}),
+		);
 		const app = new Crust("cli").extend(flaky).action(() => {});
 
 		await expect(app.snapshot()).rejects.toThrow("recipe boom");
@@ -1040,12 +1017,8 @@ describe("Extension application at prepare time", () => {
 
 	it("extending a builder after a cached run affects only the derived builder", async () => {
 		const calls: string[] = [];
-		const audit = defineExtension(defineExtensionId("audit"), {
-			hooks: {
-				preRun: () => {
-					calls.push("audit");
-				},
-			},
+		const audit = defineExtension(defineExtensionId("audit")).preRun(() => {
+			calls.push("audit");
 		});
 		const app = new Crust("cli").action(() => {
 			calls.push("root");
@@ -1063,27 +1036,15 @@ describe("Extension application at prepare time", () => {
 describe("Extension named hooks", () => {
 	it("runs pre-run hooks in extension order and finish skips later hooks and the action", async () => {
 		const order: string[] = [];
-		const first = defineExtension(defineExtensionId("first"), {
-			hooks: {
-				preRun: () => {
-					order.push("first");
-				},
-			},
+		const first = defineExtension(defineExtensionId("first")).preRun(() => {
+			order.push("first");
 		});
-		const gate = defineExtension(defineExtensionId("gate"), {
-			hooks: {
-				preRun(ctx) {
-					order.push("gate");
-					return ctx.finish();
-				},
-			},
+		const gate = defineExtension(defineExtensionId("gate")).preRun((ctx) => {
+			order.push("gate");
+			return ctx.finish();
 		});
-		const last = defineExtension(defineExtensionId("last"), {
-			hooks: {
-				preRun: () => {
-					order.push("last");
-				},
-			},
+		const last = defineExtension(defineExtensionId("last")).preRun(() => {
+			order.push("last");
 		});
 		const app = new Crust("cli")
 			.args({ name: "file", type: "string", required: true })
@@ -1098,19 +1059,11 @@ describe("Extension named hooks", () => {
 
 	it("runs post-run hooks LIFO for completed, failed, and finished invocations", async () => {
 		const outcomes: string[] = [];
-		const first = defineExtension(defineExtensionId("first"), {
-			hooks: {
-				postRun: (_ctx, outcome) => {
-					outcomes.push(`first:${outcome.status}`);
-				},
-			},
+		const first = defineExtension(defineExtensionId("first")).postRun((_ctx, outcome) => {
+			outcomes.push(`first:${outcome.status}`);
 		});
-		const second = defineExtension(defineExtensionId("second"), {
-			hooks: {
-				postRun: (_ctx, outcome) => {
-					outcomes.push(`second:${outcome.status}`);
-				},
-			},
+		const second = defineExtension(defineExtensionId("second")).postRun((_ctx, outcome) => {
+			outcomes.push(`second:${outcome.status}`);
 		});
 
 		await unwrap(
@@ -1135,9 +1088,7 @@ describe("Extension named hooks", () => {
 		expect(outcomes).toEqual(["second:failed", "first:failed"]);
 
 		outcomes.length = 0;
-		const gate = defineExtension(defineExtensionId("gate"), {
-			hooks: { preRun: (ctx) => ctx.finish() },
-		});
+		const gate = defineExtension(defineExtensionId("gate")).preRun((ctx) => ctx.finish());
 		await unwrap(
 			new Crust("cli")
 				.extend(first, gate, second)
@@ -1150,17 +1101,14 @@ describe("Extension named hooks", () => {
 	it("reports the finishing Extension and exposes parsed snapshots before validation", async () => {
 		let outcomeBy = "";
 		let seenPort: unknown;
-		const gate = defineExtension(defineExtensionId("gate"), {
-			hooks: {
-				preRun(ctx) {
-					seenPort = ctx.flags.port;
-					return ctx.finish();
-				},
-				postRun(_ctx, outcome) {
-					outcomeBy = outcome.status === "finished" ? outcome.by : "";
-				},
-			},
-		});
+		const gate = defineExtension(defineExtensionId("gate"))
+			.preRun((ctx) => {
+				seenPort = ctx.flags.port;
+				return ctx.finish();
+			})
+			.postRun((_ctx, outcome) => {
+				outcomeBy = outcome.status === "finished" ? outcome.by : "";
+			});
 		await unwrap(
 			new Crust("cli")
 				.flags({ name: "port", type: "number", required: true })
@@ -1176,16 +1124,12 @@ describe("Extension named hooks", () => {
 	it("does not run hooks for routing failures and exposes frozen snapshots with injected io", async () => {
 		let preRunCalled = false;
 		const lines: string[] = [];
-		const probe = defineExtension(defineExtensionId("probe"), {
-			hooks: {
-				preRun(ctx) {
-					preRunCalled = true;
-					expect(Object.isFrozen(ctx.rootCommand)).toBe(true);
-					expect(Object.isFrozen(ctx.command)).toBe(true);
-					expect(() => structuredClone(ctx.rootCommand)).not.toThrow();
-					ctx.stdout(`probe:${ctx.command.meta.name}`);
-				},
-			},
+		const probe = defineExtension(defineExtensionId("probe")).preRun((ctx) => {
+			preRunCalled = true;
+			expect(Object.isFrozen(ctx.rootCommand)).toBe(true);
+			expect(Object.isFrozen(ctx.command)).toBe(true);
+			expect(() => structuredClone(ctx.rootCommand)).not.toThrow();
+			ctx.stdout(`probe:${ctx.command.meta.name}`);
 		});
 		const app = new Crust("cli")
 			.extend(probe)
@@ -1203,12 +1147,8 @@ describe("Extension named hooks", () => {
 
 	it("preserves a failed invocation over post-run errors and fails success with the first cleanup error", async () => {
 		const original = new Error("original");
-		const cleanup = defineExtension(defineExtensionId("cleanup"), {
-			hooks: {
-				postRun() {
-					throw new Error("cleanup");
-				},
-			},
+		const cleanup = defineExtension(defineExtensionId("cleanup")).postRun(() => {
+			throw new Error("cleanup");
 		});
 		await expect(
 			new Crust("cli")
@@ -1220,21 +1160,13 @@ describe("Extension named hooks", () => {
 		).resolves.toMatchObject({ status: "failed", error: original });
 
 		const calls: string[] = [];
-		const first = defineExtension(defineExtensionId("first"), {
-			hooks: {
-				postRun() {
-					calls.push("first");
-					throw new Error("first cleanup");
-				},
-			},
+		const first = defineExtension(defineExtensionId("first")).postRun(() => {
+			calls.push("first");
+			throw new Error("first cleanup");
 		});
-		const second = defineExtension(defineExtensionId("second"), {
-			hooks: {
-				postRun() {
-					calls.push("second");
-					throw new Error("second cleanup");
-				},
-			},
+		const second = defineExtension(defineExtensionId("second")).postRun(() => {
+			calls.push("second");
+			throw new Error("second cleanup");
 		});
 		await expect(
 			unwrap(
@@ -1249,15 +1181,13 @@ describe("Extension named hooks", () => {
 
 	it("passes the application root snapshot to app and Extension command actions", async () => {
 		const roots: string[] = [];
-		const extension = defineExtension(defineExtensionId("extension"), {
-			commands: [
-				defineCommand("owned", (command) =>
-					command.action(({ rootCommand }) => {
-						roots.push(rootCommand.meta.name);
-					}),
-				),
-			],
-		});
+		const extension = defineExtension(defineExtensionId("extension")).add(
+			defineCommand("owned", (command) =>
+				command.action(({ rootCommand }) => {
+					roots.push(rootCommand.meta.name);
+				}),
+			),
+		);
 		const app = new Crust("cli").extend(extension).action(({ rootCommand }) => {
 			roots.push(rootCommand.meta.name);
 		});
@@ -1297,24 +1227,16 @@ describe("Extension onError hooks", () => {
 
 	it("stops at the first truthy result and retains the nonzero exit status", async () => {
 		const order: string[] = [];
-		const first = defineExtension(defineExtensionId("first"), {
-			hooks: { onError: () => (order.push("first"), undefined) },
+		const first = defineExtension(defineExtensionId("first")).onError(
+			() => (order.push("first"), undefined),
+		);
+		const presenter = defineExtension(defineExtensionId("presenter")).onError((error, ctx) => {
+			order.push("presenter");
+			ctx.stderr(`pretty: ${(error as Error).message}`);
+			return true;
 		});
-		const presenter = defineExtension(defineExtensionId("presenter"), {
-			hooks: {
-				onError(error, ctx) {
-					order.push("presenter");
-					ctx.stderr(`pretty: ${(error as Error).message}`);
-					return true;
-				},
-			},
-		});
-		const never = defineExtension(defineExtensionId("never"), {
-			hooks: {
-				onError: () => {
-					order.push("never");
-				},
-			},
+		const never = defineExtension(defineExtensionId("never")).onError(() => {
+			order.push("never");
 		});
 
 		await failing().extend(first, presenter, never).execute({ argv: [] });
@@ -1332,16 +1254,13 @@ describe("Extension onError hooks", () => {
 				disposed = true;
 			},
 		}));
-		const observer = defineExtension(defineExtensionId("observer"), {
-			uses: [resource],
-			hooks: {
-				async onError(_error, ctx) {
-					await ctx.ctx.resource;
-					pulled = true;
-					return true;
-				},
-			},
-		});
+		const observer = defineExtension(defineExtensionId("observer"))
+			.use(resource)
+			.onError(async (_error, ctx) => {
+				await ctx.ctx.resource;
+				pulled = true;
+				return true;
+			});
 		const app = new Crust("cli")
 			.provide(resource())
 			.extend(observer)
@@ -1358,17 +1277,14 @@ describe("Extension onError hooks", () => {
 	it("passes the same context identity from preRun to onError", async () => {
 		let preRunContext: unknown;
 		let onErrorContext: unknown;
-		const observer = defineExtension(defineExtensionId("observer"), {
-			hooks: {
-				preRun(ctx) {
-					preRunContext = ctx;
-				},
-				onError(_error, ctx) {
-					onErrorContext = ctx;
-					return true;
-				},
-			},
-		});
+		const observer = defineExtension(defineExtensionId("observer"))
+			.preRun((ctx) => {
+				preRunContext = ctx;
+			})
+			.onError((_error, ctx) => {
+				onErrorContext = ctx;
+				return true;
+			});
 
 		expect(await failing().extend(observer).execute({ argv: [] })).toBe(1);
 		expect(preRunContext).toBeDefined();
@@ -1379,15 +1295,12 @@ describe("Extension onError hooks", () => {
 		const handled: unknown[] = [];
 		const unhandled: unknown[] = [];
 		const presenterId = defineExtensionId("presenter");
-		const presenter = defineExtension(presenterId, {
-			hooks: {
-				onError: () => true,
-				postRun: (_ctx, outcome) => void handled.push(outcome),
-			},
-		});
-		const observer = defineExtension(defineExtensionId("observer"), {
-			hooks: { postRun: (_ctx, outcome) => void unhandled.push(outcome) },
-		});
+		const presenter = defineExtension(presenterId)
+			.onError(() => true)
+			.postRun((_ctx, outcome) => void handled.push(outcome));
+		const observer = defineExtension(defineExtensionId("observer")).postRun(
+			(_ctx, outcome) => void unhandled.push(outcome),
+		);
 
 		await failing().extend(presenter).execute({ argv: [] });
 		await failing().extend(observer).execute({ argv: [] });
@@ -1400,21 +1313,14 @@ describe("Extension onError hooks", () => {
 	it("falls through to Core's renderer without attribution when an onError hook throws", async () => {
 		let laterRan = false;
 		const outcomes: unknown[] = [];
-		const thrower = defineExtension(defineExtensionId("thrower"), {
-			hooks: {
-				onError: () => {
-					throw new Error("renderer broke");
-				},
-				postRun: (_ctx, outcome) => void outcomes.push(outcome),
-			},
-		});
-		const later = defineExtension(defineExtensionId("later"), {
-			hooks: {
-				onError: () => {
-					laterRan = true;
-					return true;
-				},
-			},
+		const thrower = defineExtension(defineExtensionId("thrower"))
+			.onError(() => {
+				throw new Error("renderer broke");
+			})
+			.postRun((_ctx, outcome) => void outcomes.push(outcome));
+		const later = defineExtension(defineExtensionId("later")).onError(() => {
+			laterRan = true;
+			return true;
 		});
 
 		await failing().extend(thrower, later).execute({ argv: [] });
@@ -1427,12 +1333,8 @@ describe("Extension onError hooks", () => {
 
 	it("falls through to Core's default renderer and never runs for run()", async () => {
 		let onErrorRan = false;
-		const observer = defineExtension(defineExtensionId("observer"), {
-			hooks: {
-				onError() {
-					onErrorRan = true;
-				},
-			},
+		const observer = defineExtension(defineExtensionId("observer")).onError(() => {
+			onErrorRan = true;
 		});
 
 		await failing().extend(observer).execute({ argv: [] });
@@ -1686,15 +1588,13 @@ describe("Crust .execute()", () => {
 
 	it("offers AbortError to onError hooks before the silent default", async () => {
 		const seen: unknown[] = [];
-		const cancelRenderer = defineExtension(defineExtensionId("cancel-renderer"), {
-			hooks: {
-				onError(error, ctx) {
-					seen.push(error);
-					ctx.stderr("Operation cancelled");
-					return true;
-				},
+		const cancelRenderer = defineExtension(defineExtensionId("cancel-renderer")).onError(
+			(error, ctx) => {
+				seen.push(error);
+				ctx.stderr("Operation cancelled");
+				return true;
 			},
-		});
+		);
 
 		const app = new Crust("test").extend(cancelRenderer).action(() => {
 			throw new DOMException("Prompt was cancelled.", "AbortError");
@@ -1709,13 +1609,11 @@ describe("Crust .execute()", () => {
 	});
 
 	it("preserves the cancellation exit code after onError hooks", async () => {
-		const exitCodeOverride = defineExtension(defineExtensionId("exit-code-override"), {
-			hooks: {
-				onError() {
-					process.exitCode = 1;
-				},
+		const exitCodeOverride = defineExtension(defineExtensionId("exit-code-override")).onError(
+			() => {
+				process.exitCode = 1;
 			},
-		});
+		);
 
 		const app = new Crust("test").extend(exitCodeOverride).action(() => {
 			throw new DOMException("Prompt was cancelled.", "AbortError");
@@ -1728,13 +1626,9 @@ describe("Crust .execute()", () => {
 
 	it("keeps cancellation silent when onError hooks decline it", async () => {
 		let observed = false;
-		const observer = defineExtension(defineExtensionId("observer"), {
-			hooks: {
-				onError() {
-					observed = true;
-					// Decline: Core's default for cancellation stays silent
-				},
-			},
+		const observer = defineExtension(defineExtensionId("observer")).onError(() => {
+			observed = true;
+			// Decline: Core's default for cancellation stays silent
 		});
 
 		const app = new Crust("test").extend(observer).action(() => {
@@ -1805,22 +1699,21 @@ describe("Crust .execute()", () => {
 	it("Extension-owned command trees receive other Extensions' recursive flags", async () => {
 		let receivedFlags: Record<string, ParsedFlagValue> = {};
 
-		const helpLike = defineExtension(defineExtensionId("help-like"), {
-			flags: [{ name: "help", type: "boolean" }],
+		const helpLike = defineExtension(defineExtensionId("help-like")).flags({
+			name: "help",
+			type: "boolean",
 		});
-		const skillLike = defineExtension(defineExtensionId("inject-subcommand"), {
-			commands: [
-				defineCommand("skill", (command) =>
-					command.add(
-						defineCommand("update", (cmd) =>
-							cmd.action((runCtx) => {
-								receivedFlags = runCtx.flags;
-							}),
-						),
+		const skillLike = defineExtension(defineExtensionId("inject-subcommand")).add(
+			defineCommand("skill", (command) =>
+				command.add(
+					defineCommand("update", (cmd) =>
+						cmd.action((runCtx) => {
+							receivedFlags = runCtx.flags;
+						}),
 					),
 				),
-			],
-		});
+			),
+		);
 
 		const app = new Crust("test")
 			.extend(helpLike)
@@ -1872,13 +1765,9 @@ describe("Crust .execute()", () => {
 		let preRunName = "";
 		let preRunFlags: Record<string, ParsedFlagValue> | undefined;
 
-		const inspect = defineExtension(defineExtensionId("inspect"), {
-			hooks: {
-				preRun(ctx) {
-					preRunName = ctx.command.meta.name;
-					preRunFlags = { ...ctx.flags };
-				},
-			},
+		const inspect = defineExtension(defineExtensionId("inspect")).preRun((ctx) => {
+			preRunName = ctx.command.meta.name;
+			preRunFlags = { ...ctx.flags };
 		});
 
 		const app = new Crust("cli")
@@ -1954,12 +1843,8 @@ describe("Crust .execute()", () => {
 	});
 
 	it("treats pre-run prompt cancellation as a silent user abort", async () => {
-		const cancel = defineExtension(defineExtensionId("cancel"), {
-			hooks: {
-				preRun: () => {
-					throw new DOMException("Prompt was cancelled.", "AbortError");
-				},
-			},
+		const cancel = defineExtension(defineExtensionId("cancel")).preRun(() => {
+			throw new DOMException("Prompt was cancelled.", "AbortError");
 		});
 
 		const app = new Crust("test").extend(cancel).action(() => {});
@@ -1999,19 +1884,16 @@ describe("Crust .execute()", () => {
 		const stdout = () => {};
 		const stderr = () => {};
 		const observed: (ReturnType<typeof getAmbientTerminalIO> | undefined)[] = [];
-		const observer = defineExtension(defineExtensionId("ambient-observer"), {
-			hooks: {
-				preRun: () => {
-					observed.push(getAmbientTerminalIO());
-				},
-				postRun: () => {
-					observed.push(getAmbientTerminalIO());
-				},
-				onError: () => {
-					observed.push(getAmbientTerminalIO());
-				},
-			},
-		});
+		const observer = defineExtension(defineExtensionId("ambient-observer"))
+			.preRun(() => {
+				observed.push(getAmbientTerminalIO());
+			})
+			.postRun(() => {
+				observed.push(getAmbientTerminalIO());
+			})
+			.onError(() => {
+				observed.push(getAmbientTerminalIO());
+			});
 		const app = new Crust("test").extend(observer).action(() => {
 			observed.push(getAmbientTerminalIO());
 			throw new Error("expected failure");
@@ -2068,14 +1950,10 @@ describe("Crust .execute()", () => {
 				},
 			}));
 		const recordingOnError = (seen: unknown[], claim = false) =>
-			defineExtension(defineExtensionId("errors"), {
-				hooks: {
-					onError(error, ctx) {
-						seen.push(error);
-						if (claim) ctx.stderr(`pretty: ${String(error)}`);
-						return claim;
-					},
-				},
+			defineExtension(defineExtensionId("errors")).onError((error, ctx) => {
+				seen.push(error);
+				if (claim) ctx.stderr(`pretty: ${String(error)}`);
+				return claim;
 			});
 
 		it("renders the cleanup failure after the rendered action failure without re-running onError", async () => {
@@ -2190,13 +2068,11 @@ describe("Crust .execute()", () => {
 
 		it("renders each member of an AggregateError preparation failure", async () => {
 			const app = new Crust("cli").extend(
-				defineExtension(defineExtensionId("prepare"), {
-					sections() {
-						throw new AggregateError(
-							[new Error("first section"), new Error("second section")],
-							"Disposal failed",
-						);
-					},
+				defineExtension(defineExtensionId("prepare")).sections(() => {
+					throw new AggregateError(
+						[new Error("first section"), new Error("second section")],
+						"Disposal failed",
+					);
 				}),
 			);
 
@@ -2260,10 +2136,8 @@ describe("Crust .execute()", () => {
 				},
 			});
 			const app = new Crust("cli").extend(
-				defineExtension(defineExtensionId("prepare"), {
-					sections() {
-						throw new AggregateError([member], "aggregate");
-					},
+				defineExtension(defineExtensionId("prepare")).sections(() => {
+					throw new AggregateError([member], "aggregate");
 				}),
 			);
 
@@ -2401,12 +2275,8 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		process.env[SNAPSHOT_PATH_ENV] = path;
 		let actionRan = false;
 		let preRunRan = false;
-		const spy = defineExtension(defineExtensionId("spy"), {
-			hooks: {
-				preRun: () => {
-					preRunRan = true;
-				},
-			},
+		const spy = defineExtension(defineExtensionId("spy")).preRun(() => {
+			preRunRan = true;
 		});
 		const app = new Crust("build-subprocess", { description: "Snapshot test" })
 			.extend(spy)
@@ -2433,25 +2303,21 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		const calls: string[] = [];
 		const app = new Crust("build-subprocess")
 			.extend(
-				defineExtension(defineExtensionId("first"), {
-					build: (ctx) => {
-						expect(Object.isFrozen(ctx.snapshot)).toBe(true);
-						expect(ctx.snapshot.meta.name).toBe("build-subprocess");
-						// The output directory is owned by core; a hook has no handle to write beside its returned files.
-						expect(Object.keys(ctx)).toEqual(["snapshot"]);
-						calls.push("first");
-						return [
-							{ path: "first\\one.txt", content: "one" },
-							{ path: "nested/../first-two.txt", content: new TextEncoder().encode("two") },
-						];
-					},
+				defineExtension(defineExtensionId("first")).build((ctx) => {
+					expect(Object.isFrozen(ctx.snapshot)).toBe(true);
+					expect(ctx.snapshot.meta.name).toBe("build-subprocess");
+					// The output directory is owned by core; a hook has no handle to write beside its returned files.
+					expect(Object.keys(ctx)).toEqual(["snapshot"]);
+					calls.push("first");
+					return [
+						{ path: "first\\one.txt", content: "one" },
+						{ path: "nested/../first-two.txt", content: new TextEncoder().encode("two") },
+					];
 				}),
 				defineExtension(defineExtensionId("runtime-only")),
-				defineExtension(defineExtensionId("second"), {
-					build: () => {
-						calls.push("second");
-						return [];
-					},
+				defineExtension(defineExtensionId("second")).build(() => {
+					calls.push("second");
+					return [];
 				}),
 			)
 			.action(() => {
@@ -2478,15 +2344,13 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		process.env[SNAPSHOT_PATH_ENV] = path;
 		process.env[BUILD_OUT_DIR_ENV] = outDir;
 		const app = new Crust("build-subprocess").extend(
-			defineExtension(defineExtensionId("first"), {
-				build: () => [{ path: "shared/config.json", content: "first" }],
-			}),
-			defineExtension(defineExtensionId("second"), {
-				build: () => [
-					{ path: "second/own.txt", content: "own" },
-					{ path: "shared\\config.json", content: "second" },
-				],
-			}),
+			defineExtension(defineExtensionId("first")).build(() => [
+				{ path: "shared/config.json", content: "first" },
+			]),
+			defineExtension(defineExtensionId("second")).build(() => [
+				{ path: "second/own.txt", content: "own" },
+				{ path: "shared\\config.json", content: "second" },
+			]),
 		);
 
 		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
@@ -2505,12 +2369,12 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		process.env[SNAPSHOT_PATH_ENV] = path;
 		process.env[BUILD_OUT_DIR_ENV] = outDir;
 		const app = new Crust("build-subprocess").extend(
-			defineExtension(defineExtensionId("first"), {
-				build: () => [{ path: "shared/Config.json", content: "first" }],
-			}),
-			defineExtension(defineExtensionId("second"), {
-				build: () => [{ path: "shared/config.json", content: "second" }],
-			}),
+			defineExtension(defineExtensionId("first")).build(() => [
+				{ path: "shared/Config.json", content: "first" },
+			]),
+			defineExtension(defineExtensionId("second")).build(() => [
+				{ path: "shared/config.json", content: "second" },
+			]),
 		);
 
 		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
@@ -2530,15 +2394,11 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		process.env[SNAPSHOT_PATH_ENV] = path;
 		process.env[BUILD_OUT_DIR_ENV] = outDir;
 		const app = new Crust("build-subprocess").extend(
-			defineExtension(defineExtensionId("first"), {
-				build: () => [{ path: "Foo", content: "first" }],
-			}),
-			defineExtension(defineExtensionId("second"), {
-				build: () => [
-					{ path: "second/own.txt", content: "own" },
-					{ path: "foo/bar", content: "second" },
-				],
-			}),
+			defineExtension(defineExtensionId("first")).build(() => [{ path: "Foo", content: "first" }]),
+			defineExtension(defineExtensionId("second")).build(() => [
+				{ path: "second/own.txt", content: "own" },
+				{ path: "foo/bar", content: "second" },
+			]),
 		);
 
 		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
@@ -2558,12 +2418,10 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		process.env[SNAPSHOT_PATH_ENV] = path;
 		process.env[BUILD_OUT_DIR_ENV] = outDir;
 		const app = new Crust("build-subprocess").extend(
-			defineExtension(defineExtensionId("only"), {
-				build: () => [
-					{ path: "foo/bar", content: "nested" },
-					{ path: "foo", content: "file" },
-				],
-			}),
+			defineExtension(defineExtensionId("only")).build(() => [
+				{ path: "foo/bar", content: "nested" },
+				{ path: "foo", content: "file" },
+			]),
 		);
 
 		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
@@ -2582,17 +2440,13 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		process.env[BUILD_OUT_DIR_ENV] = dirname(path);
 		const calls: string[] = [];
 		const id = defineExtensionId("duplicate-build");
-		const first = defineExtension(id, {
-			build: () => {
-				calls.push("first");
-				return [];
-			},
+		const first = defineExtension(id).build(() => {
+			calls.push("first");
+			return [];
 		});
-		const second = defineExtension(id, {
-			build: () => {
-				calls.push("second");
-				return [];
-			},
+		const second = defineExtension(id).build(() => {
+			calls.push("second");
+			return [];
 		});
 		const app = new Crust("build-subprocess").extend(first).extend(second);
 
@@ -2609,23 +2463,21 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		process.env[BUILD_OUT_DIR_ENV] = outDir;
 		const calls: string[] = [];
 		const app = new Crust("build-subprocess").extend(
-			defineExtension(defineExtensionId("producer"), {
-				async build() {
-					expect(existsSync(path)).toBe(false);
-					calls.push("producer");
-					return [{ path: "generated-source/marker.txt", content: "ready" }];
-				},
+			defineExtension(defineExtensionId("producer")).build(async () => {
+				expect(existsSync(path)).toBe(false);
+				calls.push("producer");
+				return [{ path: "generated-source/marker.txt", content: "ready" }];
 			}),
-			defineExtension(defineExtensionId("consumer"), {
+			defineExtension(defineExtensionId("consumer"))
 				// Reads the earlier hook's file from disk, like skills reading resolveArtifactDir("skills").
-				sections: () => [
+				.sections(() => [
 					{
 						command: [],
 						title: "Generated source",
 						body: existsSync(marker) ? readFileSync(marker, "utf8") : "missing",
 					},
-				],
-				build({ snapshot }) {
+				])
+				.build(({ snapshot }) => {
 					calls.push("consumer");
 					expect(existsSync(marker)).toBe(true);
 					expect(snapshot.meta.sections).toContainEqual({
@@ -2633,8 +2485,7 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 						body: "ready",
 					});
 					return [];
-				},
-			}),
+				}),
 		);
 
 		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
@@ -2651,16 +2502,15 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		process.env[BUILD_OUT_DIR_ENV] = join(dirname(path), "output");
 		let recipeRuns = 0;
 		const app = new Crust("build-subprocess").extend(
-			defineExtension(defineExtensionId("contributor"), {
-				commands: [
+			defineExtension(defineExtensionId("contributor"))
+				.add(
 					defineCommand("generated", (command) => {
 						recipeRuns += 1;
 						return command;
 					}),
-				],
-				build: () => [],
-			}),
-			defineExtension(defineExtensionId("second-hook"), { build: () => [] }),
+				)
+				.build(() => []),
+			defineExtension(defineExtensionId("second-hook")).build(() => []),
 		);
 
 		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(0) was called");
@@ -2673,10 +2523,8 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		process.env[SNAPSHOT_PATH_ENV] = path;
 		process.env[BUILD_OUT_DIR_ENV] = join(dirname(path), "output");
 		const app = new Crust("build-subprocess").extend(
-			defineExtension(defineExtensionId("broken"), {
-				build: () => {
-					throw new Error("disk full");
-				},
+			defineExtension(defineExtensionId("broken")).build(() => {
+				throw new Error("disk full");
 			}),
 		);
 
@@ -2699,13 +2547,12 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 		process.env[SNAPSHOT_PATH_ENV] = path;
 		process.env[BUILD_OUT_DIR_ENV] = outDir;
 		const app = new Crust("build-subprocess").extend(
-			defineExtension(defineExtensionId("unsafe"), {
+			defineExtension(defineExtensionId("unsafe"))
 				// A valid sibling first: every path is checked before any file is written.
-				build: () => [
+				.build(() => [
 					{ path: "valid.txt", content: "valid" },
 					{ path: artifactPath(outDir), content: "unsafe" },
-				],
-			}),
+				]),
 		);
 
 		await expect(app.execute({ argv: [] })).rejects.toThrow("process.exit(1) was called");
@@ -2719,8 +2566,10 @@ describe("Invocation pipeline internal seam — snapshot protocol", () => {
 
 describe("Crust.snapshot", () => {
 	it("returns a frozen snapshot with Extension flags applied", async () => {
-		const docs = defineExtension(defineExtensionId("doc-test"), {
-			flags: [{ name: "extra", type: "boolean", description: "Injected for docs" }],
+		const docs = defineExtension(defineExtensionId("doc-test")).flags({
+			name: "extra",
+			type: "boolean",
+			description: "Injected for docs",
 		});
 
 		const app = new Crust("cli", { description: "Test" }).extend(docs);
@@ -2773,12 +2622,8 @@ describe("Crust .add() aliases", () => {
 
 	it("resolves ctx.command to the canonical subtree object inside ctx.rootCommand", async () => {
 		const seen: Array<{ command: CommandSnapshot; rootCommand: CommandSnapshot }> = [];
-		const probe = defineExtension(defineExtensionId("probe"), {
-			hooks: {
-				preRun: ({ command, rootCommand }) => {
-					seen.push({ command, rootCommand });
-				},
-			},
+		const probe = defineExtension(defineExtensionId("probe")).preRun(({ command, rootCommand }) => {
+			seen.push({ command, rootCommand });
 		});
 		const app = new Crust("cli")
 			.extend(probe)
@@ -2917,9 +2762,9 @@ describe("dynamic definition guards (brands own literals; runtime owns config-bu
 			),
 		).toThrow(expect.objectContaining({ code: "DEFINITION" }));
 		expect(() =>
-			defineExtension(defineExtensionId("cfg-ext"), {
-				flags: asDynamic([{ name: "__proto__", type: "string" }]),
-			}),
+			defineExtension(defineExtensionId("cfg-ext")).flags(
+				...asDynamic([{ name: "__proto__", type: "string" }]),
+			),
 		).toThrow(expect.objectContaining({ code: "DEFINITION" }));
 	});
 

@@ -177,21 +177,18 @@ describe("invocation cancellation signal", () => {
 		const dependency = defineContext("dependency", ({ signal }) => {
 			seen.push(signal);
 		});
-		const resource = defineContext("resource", { uses: [dependency] }, async ({ ctx, signal }) => {
+		const resource = defineContext("resource", { use: [dependency] }, async ({ ctx, signal }) => {
 			seen.push(signal);
 			await ctx.dependency;
 		});
-		const probe = defineExtension(defineExtensionId("probe"), {
-			hooks: {
-				preRun(ctx) {
-					seen.push(ctx.signal);
-				},
-				onError(_error, ctx) {
-					seen.push(ctx.signal);
-					return true;
-				},
-			},
-		});
+		const probe = defineExtension(defineExtensionId("probe"))
+			.preRun((ctx) => {
+				seen.push(ctx.signal);
+			})
+			.onError((_error, ctx) => {
+				seen.push(ctx.signal);
+				return true;
+			});
 		const app = new Crust("cli")
 			.extend(probe)
 			.provide(dependency(), resource())

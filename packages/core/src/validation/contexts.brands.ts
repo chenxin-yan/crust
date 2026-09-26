@@ -55,7 +55,7 @@ type InstanceNames<P extends readonly unknown[]> = P extends readonly [
 /** Statically known names of an Extension's provided Contexts; widened Extensions opt out. */
 type ExtensionProvidedNames<E> =
 	DefiningOf<E> extends {
-		readonly provides?: infer P extends readonly unknown[];
+		readonly provide?: infer P extends readonly unknown[];
 	}
 		? InstanceNames<P>
 		: never;

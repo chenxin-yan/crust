@@ -1,4 +1,4 @@
-import type { Extension } from "../api/extension.ts";
+import type { ExtensionData } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
 import type {
@@ -35,10 +35,10 @@ function injectExtensionFlag(
 /** Attach one Extension's owned root commands to a cloned tree. */
 export function applyExtensionCommands(
 	root: CommandNode,
-	extension: Extension,
+	extension: ExtensionData,
 	materializeCommandDefinition: MaterializeCommandDefinition,
 ): void {
-	for (const definition of extension.commands ?? []) {
+	for (const definition of extension.commands) {
 		root.subCommands[definition.name] = materializeCommandDefinition(
 			definition,
 			root,
@@ -48,8 +48,8 @@ export function applyExtensionCommands(
 }
 
 /** Inject one Extension's owned flags across a cloned tree. */
-export function applyExtensionFlags(root: CommandNode, extension: Extension): void {
-	for (const [name, defWithScope] of Object.entries(extension.flags ?? {})) {
+export function applyExtensionFlags(root: CommandNode, extension: ExtensionData): void {
+	for (const [name, defWithScope] of Object.entries(extension.flags)) {
 		const { recursive = true, ...def } = defWithScope;
 		injectExtensionFlag(root, name, def, recursive);
 	}
@@ -145,7 +145,7 @@ export function validateCommandSections(
 function contributionTarget(
 	root: CommandNode,
 	command: readonly string[],
-	extension: Extension,
+	extension: ExtensionData,
 ): CommandNode {
 	let target = root;
 	for (const segment of command) {
@@ -171,7 +171,7 @@ function contributionTarget(
 
 export function applyExtensionSections(
 	root: CommandNode,
-	extension: Extension,
+	extension: ExtensionData,
 	snapshot: CommandSnapshot,
 ): void {
 	if (!extension.sections) return;
@@ -186,8 +186,8 @@ export function applyExtensionSections(
 
 export function installExtensionContexts(
 	node: CommandNode,
-	extensions: readonly Extension[],
-	reRegisteredIds: ReadonlySet<Extension["id"]>,
+	extensions: readonly ExtensionData[],
+	reRegisteredIds: ReadonlySet<ExtensionData["id"]>,
 ): CommandNode {
 	// Rebuild Extension providers from the deduplicated list so replacing an id
 	// cannot leave the earlier registration's eager Context installs behind.
@@ -224,7 +224,7 @@ export function installExtensionContexts(
 
 	for (const extension of extensions) {
 		if (kept.has(extension.id)) continue;
-		const instances = extension.provides ?? [];
+		const instances = extension.provide;
 		if (instances.length === 0) continue;
 		const walk = (target: CommandNode, skip: ReadonlySet<string>): void => {
 			const installed = instances.filter((instance) => !skip.has(instance.name));

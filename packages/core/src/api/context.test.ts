@@ -160,12 +160,12 @@ describe("Crust .provide()", () => {
 			builtNames.push("base");
 			return "base";
 		});
-		const mid = defineContext("mid", { uses: [base] }, async ({ ctx }) => {
+		const mid = defineContext("mid", { use: [base] }, async ({ ctx }) => {
 			const value = await ctx.base;
 			builtNames.push("mid");
 			return `mid(${value})`;
 		});
-		const db = defineContext("db", { uses: [mid] }, async ({ ctx }) => {
+		const db = defineContext("db", { use: [mid] }, async ({ ctx }) => {
 			const value = await ctx.mid;
 			builtNames.push("db");
 			return `db(${value})`;
@@ -197,17 +197,17 @@ describe("Crust .provide()", () => {
 			builtNames.push("a");
 			return "a";
 		});
-		const b = defineContext("b", { uses: [a] }, async ({ ctx }) => {
+		const b = defineContext("b", { use: [a] }, async ({ ctx }) => {
 			await ctx.a;
 			builtNames.push("b");
 			return "b";
 		});
-		const c = defineContext("c", { uses: [a] }, async ({ ctx }) => {
+		const c = defineContext("c", { use: [a] }, async ({ ctx }) => {
 			await ctx.a;
 			builtNames.push("c");
 			return "c";
 		});
-		const d = defineContext("d", { uses: [b, c] }, async ({ ctx }) => {
+		const d = defineContext("d", { use: [b, c] }, async ({ ctx }) => {
 			await Promise.all([ctx.b, ctx.c]);
 			builtNames.push("d");
 			return "d";
@@ -234,7 +234,7 @@ describe("Crust .provide()", () => {
 			builtNames.push("unrelated");
 			return "unrelated";
 		});
-		const user = defineContext("user", { uses: [session] }, async ({ ctx }) => {
+		const user = defineContext("user", { use: [session] }, async ({ ctx }) => {
 			const value = await ctx.session;
 			builtNames.push("user");
 			return `user(${value})`;
@@ -455,7 +455,7 @@ describe("Context setup dependencies", () => {
 	it("types and resolves declared Context bags in two- and three-argument setups", async () => {
 		expect.assertions(1);
 		const session = defineContext("session", () => ({ userId: "yan" }));
-		const user = defineContext("user", { uses: [session] }, async ({ ctx }) => {
+		const user = defineContext("user", { use: [session] }, async ({ ctx }) => {
 			const value = await ctx.session;
 			type _Session = Expect<Equal<typeof value, { userId: string }>>;
 			// @ts-expect-error -- undeclared Contexts are absent from the bag
@@ -464,7 +464,7 @@ describe("Context setup dependencies", () => {
 		});
 		const configured = defineContext(
 			"configured",
-			{ uses: [user], flags: [] },
+			{ use: [user], flags: [] },
 			async ({ ctx }) => await ctx.user,
 		);
 
@@ -479,8 +479,8 @@ describe("Context setup dependencies", () => {
 	it("exposes the transitive dependency closure at runtime", async () => {
 		expect.assertions(1);
 		const base = defineContext("base", () => "base");
-		const mid = defineContext("mid", { uses: [base] }, async ({ ctx }) => await ctx.base);
-		const db = defineContext("db", { uses: [mid] }, async ({ ctx }) => await ctx.base);
+		const mid = defineContext("mid", { use: [base] }, async ({ ctx }) => await ctx.base);
+		const db = defineContext("db", { use: [mid] }, async ({ ctx }) => await ctx.base);
 
 		await unwrap(
 			new Crust("cli")
@@ -493,7 +493,7 @@ describe("Context setup dependencies", () => {
 	it("deduplicates repeated dependency names in a setup bag", async () => {
 		expect.assertions(1);
 		const base = defineContext("base", () => "base");
-		const db = defineContext("db", { uses: [base, base] }, async ({ ctx }) => await ctx.base);
+		const db = defineContext("db", { use: [base, base] }, async ({ ctx }) => await ctx.base);
 		await unwrap(
 			new Crust("cli")
 				.provide(base(), db())
@@ -507,7 +507,7 @@ describe("Context setup dependencies", () => {
 		const remote = defineContext("remote", () => ({ id: ++setups }));
 		const cache = defineContext(
 			"cache",
-			{ uses: [remote] },
+			{ use: [remote] },
 			async ({ options, ctx }: ContextSetup<boolean, {}, { remote: { id: number } }>) =>
 				options ? await ctx.remote : { id: 0 },
 		);
@@ -532,9 +532,9 @@ describe("Context setup dependencies", () => {
 		expect.assertions(2);
 		let baseSetups = 0;
 		const base = defineContext("base", async () => ({ id: ++baseSetups }));
-		const left = defineContext("left", { uses: [base] }, async ({ ctx }) => (await ctx.base).id);
-		const right = defineContext("right", { uses: [base] }, async ({ ctx }) => (await ctx.base).id);
-		const top = defineContext("top", { uses: [left, right] }, async ({ ctx }) =>
+		const left = defineContext("left", { use: [base] }, async ({ ctx }) => (await ctx.base).id);
+		const right = defineContext("right", { use: [base] }, async ({ ctx }) => (await ctx.base).id);
+		const top = defineContext("top", { use: [left, right] }, async ({ ctx }) =>
 			Promise.all([ctx.left, ctx.right]),
 		);
 		await unwrap(
@@ -553,7 +553,7 @@ describe("Context setup dependencies", () => {
 		const base = defineContext("base", () => "base");
 		const dependent = defineContext(
 			"dependent",
-			{ uses: [base] },
+			{ use: [base] },
 			async ({ ctx }) => await ctx.base,
 		);
 		await unwrap(
@@ -577,7 +577,7 @@ describe("Context setup dependencies", () => {
 		const missing = defineContext("missing", () => "real");
 		const db = defineContext(
 			"db",
-			{ uses: [missing], flags: [token] },
+			{ use: [missing], flags: [token] },
 			async ({ ctx }) => await ctx.missing,
 		);
 		const app = new Crust("cli").provide(db.of("fake")).action(async ({ ctx }) => {
@@ -589,10 +589,10 @@ describe("Context setup dependencies", () => {
 	it("exposes the typed transitive closure above an .of() cut", async () => {
 		expect.assertions(1);
 		const config = defineContext("config", () => ({ url: "memory://" }));
-		const db = defineContext("db", { uses: [config] }, async ({ ctx }) => ({
+		const db = defineContext("db", { use: [config] }, async ({ ctx }) => ({
 			url: (await ctx.config).url,
 		}));
-		const report = defineContext("report", { uses: [db] }, async ({ ctx }) => {
+		const report = defineContext("report", { use: [db] }, async ({ ctx }) => {
 			// The type-level closure includes config even when db is provided as a
 			// .of() double; the runtime bag must match it.
 			const url = (await ctx.config).url;
@@ -608,8 +608,8 @@ describe("Context setup dependencies", () => {
 
 	it("fails loud when a transitive dependency above an .of() cut is unprovided", async () => {
 		const config = defineContext("config", () => "config");
-		const db = defineContext("db", { uses: [config] }, async ({ ctx }) => await ctx.config);
-		const report = defineContext("report", { uses: [db] }, async ({ ctx }) => await ctx.config);
+		const db = defineContext("db", { use: [config] }, async ({ ctx }) => await ctx.config);
+		const report = defineContext("report", { use: [db] }, async ({ ctx }) => await ctx.config);
 		expect(() => new Crust("cli").provide(db.of("fake"), report() as never)).toThrow(
 			'No provider for Context "config"',
 		);
@@ -617,16 +617,13 @@ describe("Context setup dependencies", () => {
 
 	it("builds Extension hook bags from the declared factory graph across an .of() cut", async () => {
 		const config = defineContext("config", () => "memory://");
-		const db = defineContext("db", { uses: [config] }, async ({ ctx }) => await ctx.config);
+		const db = defineContext("db", { use: [config] }, async ({ ctx }) => await ctx.config);
 		let seen: string | undefined;
-		const observer = defineExtension(defineExtensionId("of-cut-observer"), {
-			uses: [db],
-			hooks: {
-				preRun: async ({ ctx }) => {
-					seen = await ctx.config;
-				},
-			},
-		});
+		const observer = defineExtension(defineExtensionId("of-cut-observer"))
+			.use(db)
+			.preRun(async ({ ctx }) => {
+				seen = await ctx.config;
+			});
 		await unwrap(new Crust("cli").provide(db.of("fake"), config()).extend(observer).run([]));
 		expect(seen).toBe("memory://");
 	});
@@ -636,10 +633,9 @@ describe("Context dependency runtime boundaries", () => {
 	it("rejects a hook dependency absent from a stale child path", async () => {
 		const logger = defineContext("logger", () => "logger");
 		const child = defineCommand("child", (builder) => builder.action(() => {}));
-		const observer = defineExtension(defineExtensionId("observer"), {
-			uses: [logger],
-			hooks: { preRun: async ({ ctx }) => void (await ctx.logger) },
-		});
+		const observer = defineExtension(defineExtensionId("observer"))
+			.use(logger)
+			.preRun(async ({ ctx }) => void (await ctx.logger));
 		// .provide() is positional (flag scoping): the child added before it never
 		// inherits logger, so the hook's pull on that path fails loud lazily even
 		// though .extend() typechecked against the root's final Ctx.
@@ -660,7 +656,7 @@ describe("Context dependency runtime boundaries", () => {
 				.provide(service.of("local"))
 				.action(async ({ ctx }) => void values.push(await ctx.service)),
 		);
-		const provider = defineExtension(defineExtensionId("provider"), { provides: [service()] });
+		const provider = defineExtension(defineExtensionId("provider")).provide(service());
 		// ValidateExtensionProvides sees only the root Ctx (Tree carries no context
 		// names), so this composition typechecks; the child's local provider is
 		// more specific and must win on its own path.
@@ -676,18 +672,13 @@ describe("Context dependency runtime boundaries", () => {
 
 	it("accepts an Extension dependency provided by an earlier .extend() call", async () => {
 		const logger = defineContext("logger", () => "logger");
-		const providerExtension = defineExtension(defineExtensionId("provider"), {
-			provides: [logger()],
-		});
+		const providerExtension = defineExtension(defineExtensionId("provider")).provide(logger());
 		let seen: string | undefined;
-		const consumerExtension = defineExtension(defineExtensionId("consumer"), {
-			uses: [logger],
-			hooks: {
-				preRun: async ({ ctx }) => {
-					seen = await ctx.logger;
-				},
-			},
-		});
+		const consumerExtension = defineExtension(defineExtensionId("consumer"))
+			.use(logger)
+			.preRun(async ({ ctx }) => {
+				seen = await ctx.logger;
+			});
 		await unwrap(new Crust("cli").extend(providerExtension).extend(consumerExtension).run([]));
 		expect(seen).toBe("logger");
 	});
@@ -695,8 +686,8 @@ describe("Context dependency runtime boundaries", () => {
 	it("keeps dynamic cycle detection for untyped Context instances", async () => {
 		const aFactory = defineContext("a", () => "a");
 		const bFactory = defineContext("b", () => "b");
-		const a = defineContext("a", { uses: [bFactory] }, async ({ ctx }) => await ctx.b);
-		const b = defineContext("b", { uses: [aFactory] }, async ({ ctx }) => await ctx.a);
+		const a = defineContext("a", { use: [bFactory] }, async ({ ctx }) => await ctx.b);
+		const b = defineContext("b", { use: [aFactory] }, async ({ ctx }) => await ctx.a);
 		const app = new Crust("cli").provide(a(), b()).action(async ({ ctx }) => void (await ctx.a));
 
 		await expect(unwrap(app.run([]))).rejects.toMatchObject({
@@ -789,7 +780,7 @@ describe("lazy Context bags", () => {
 		const token = defineFlag("token", { type: "string" });
 		const gate = defineContext("gate", { flags: [token] }, () => "real");
 		let setups = 0;
-		const wrapper = defineContext("wrapper", { uses: [gate] }, async ({ ctx }) => {
+		const wrapper = defineContext("wrapper", { use: [gate] }, async ({ ctx }) => {
 			setups += 1;
 			try {
 				return await ctx.gate;
@@ -799,10 +790,9 @@ describe("lazy Context bags", () => {
 				return "degraded";
 			}
 		});
-		const observer = defineExtension(defineExtensionId("degraded-observer"), {
-			uses: [wrapper],
-			hooks: { preRun: async ({ ctx }) => void (await ctx.wrapper) },
-		});
+		const observer = defineExtension(defineExtensionId("degraded-observer"))
+			.use(wrapper)
+			.preRun(async ({ ctx }) => void (await ctx.wrapper));
 		await unwrap(
 			new Crust("cli")
 				.provide(gate(), wrapper())
@@ -819,17 +809,14 @@ describe("lazy Context bags", () => {
 		let setups = 0;
 		const service = defineContext("service", () => ({ id: ++setups }));
 		const seen: number[] = [];
-		const observer = defineExtension(defineExtensionId("observer"), {
-			uses: [service],
-			hooks: {
-				async preRun(ctx) {
-					seen.push((await ctx.ctx.service).id);
-				},
-				async postRun(ctx) {
-					seen.push((await ctx.ctx.service).id);
-				},
-			},
-		});
+		const observer = defineExtension(defineExtensionId("observer"))
+			.use(service)
+			.preRun(async (ctx) => {
+				seen.push((await ctx.ctx.service).id);
+			})
+			.postRun(async (ctx) => {
+				seen.push((await ctx.ctx.service).id);
+			});
 		const app = new Crust("cli")
 			.provide(service())
 			.extend(observer)
@@ -855,11 +842,10 @@ describe("lazy Context bags", () => {
 	it("installs Extension providers for commands and other Extensions", async () => {
 		const logger = defineContext("logger", () => ({ label: "extension" }));
 		const events: string[] = [];
-		const provider = defineExtension(defineExtensionId("provider"), { provides: [logger()] });
-		const consumer = defineExtension(defineExtensionId("consumer"), {
-			uses: [logger],
-			hooks: { preRun: async (ctx) => void events.push((await ctx.ctx.logger).label) },
-		});
+		const provider = defineExtension(defineExtensionId("provider")).provide(logger());
+		const consumer = defineExtension(defineExtensionId("consumer"))
+			.use(logger)
+			.preRun(async (ctx) => void events.push((await ctx.ctx.logger).label));
 		const command = defineCommand("run", (builder) =>
 			builder.use(logger).action(async ({ ctx }) => void events.push((await ctx.logger).label)),
 		);
@@ -874,15 +860,13 @@ describe("lazy Context bags", () => {
 		const base = defineContext("base", () => "base");
 		const service = defineContext(
 			"service",
-			{ uses: [base] },
+			{ use: [base] },
 			async ({ ctx }) => `service:${await ctx.base}`,
 		);
-		const serviceProvider = defineExtension(defineExtensionId("service-provider"), {
-			provides: [service()],
-		});
-		const baseProvider = defineExtension(defineExtensionId("base-provider"), {
-			provides: [base()],
-		});
+		const serviceProvider = defineExtension(defineExtensionId("service-provider")).provide(
+			service(),
+		);
+		const baseProvider = defineExtension(defineExtensionId("base-provider")).provide(base());
 		await unwrap(
 			new Crust("cli")
 				.extend(serviceProvider, baseProvider)
@@ -894,11 +878,10 @@ describe("lazy Context bags", () => {
 	it("attributes nested preRun flag rejection to the flag-owning Context", async () => {
 		const token = defineFlag("token", { type: "string" });
 		const auth = defineContext("auth", { flags: [token] }, ({ flags }) => flags.token);
-		const service = defineContext("service", { uses: [auth] }, async ({ ctx }) => await ctx.auth);
-		const extension = defineExtension(defineExtensionId("consumer"), {
-			uses: [service],
-			hooks: { preRun: async (ctx) => void (await ctx.ctx.service) },
-		});
+		const service = defineContext("service", { use: [auth] }, async ({ ctx }) => await ctx.auth);
+		const extension = defineExtension(defineExtensionId("consumer"))
+			.use(service)
+			.preRun(async (ctx) => void (await ctx.ctx.service));
 		const app = new Crust("cli")
 			.provide(auth(), service())
 			.extend(extension)
@@ -913,14 +896,13 @@ describe("lazy Context bags", () => {
 		let serviceSetups = 0;
 		const token = defineFlag("token", { type: "string" });
 		const auth = defineContext("auth", { flags: [token] }, ({ flags }) => flags.token);
-		const service = defineContext("service", { uses: [auth] }, async ({ ctx }) => {
+		const service = defineContext("service", { use: [auth] }, async ({ ctx }) => {
 			serviceSetups++;
 			return await ctx.auth;
 		});
-		const extension = defineExtension(defineExtensionId("consumer"), {
-			uses: [service],
-			hooks: { preRun: async (ctx) => void (await ctx.ctx.service.catch(() => undefined)) },
-		});
+		const extension = defineExtension(defineExtensionId("consumer"))
+			.use(service)
+			.preRun(async (ctx) => void (await ctx.ctx.service.catch(() => undefined)));
 		const app = new Crust("cli")
 			.provide(auth(), service())
 			.extend(extension)
@@ -934,7 +916,7 @@ describe("lazy Context bags", () => {
 		let serviceSetups = 0;
 		const token = defineFlag("token", { type: "string" });
 		const auth = defineContext("auth", { flags: [token] }, ({ flags }) => flags.token);
-		const service = defineContext("service", { uses: [auth] }, async ({ ctx }) => {
+		const service = defineContext("service", { use: [auth] }, async ({ ctx }) => {
 			serviceSetups++;
 			try {
 				return await ctx.auth;
@@ -942,10 +924,9 @@ describe("lazy Context bags", () => {
 				throw new Error("auth unavailable", { cause: error });
 			}
 		});
-		const extension = defineExtension(defineExtensionId("consumer"), {
-			uses: [service],
-			hooks: { preRun: async (ctx) => void (await ctx.ctx.service.catch(() => undefined)) },
-		});
+		const extension = defineExtension(defineExtensionId("consumer"))
+			.use(service)
+			.preRun(async (ctx) => void (await ctx.ctx.service.catch(() => undefined)));
 		const app = new Crust("cli")
 			.provide(auth(), service())
 			.extend(extension)
@@ -977,19 +958,16 @@ describe("lazy Context bags", () => {
 		const token = defineFlag("token", { type: "string" });
 		const auth = defineContext("auth", { flags: [token] }, ({ flags }) => flags.token);
 		const replacement = new Error("replacement");
-		const service = defineContext("service", { uses: [auth] }, async ({ ctx }) => {
+		const service = defineContext("service", { use: [auth] }, async ({ ctx }) => {
 			setups++;
 			await ctx.auth.catch(() => undefined);
 			throw replacement;
 		});
-		const extension = defineExtension(defineExtensionId("consumer"), {
-			uses: [service],
-			hooks: {
-				preRun: async (ctx) => {
-					await ctx.ctx.service.catch(() => undefined);
-				},
-			},
-		});
+		const extension = defineExtension(defineExtensionId("consumer"))
+			.use(service)
+			.preRun(async (ctx) => {
+				await ctx.ctx.service.catch(() => undefined);
+			});
 		const app = new Crust("cli")
 			.provide(auth(), service())
 			.extend(extension)
@@ -1024,24 +1002,20 @@ describe("lazy Context bags", () => {
 	it("allows nested flag-free pulls in preRun", async () => {
 		expect.assertions(1);
 		const base = defineContext("base", () => "ok");
-		const service = defineContext("service", { uses: [base] }, async ({ ctx }) => await ctx.base);
-		const extension = defineExtension(defineExtensionId("consumer"), {
-			uses: [service],
-			hooks: { preRun: async (ctx) => expect(await ctx.ctx.service).toBe("ok") },
-		});
+		const service = defineContext("service", { use: [base] }, async ({ ctx }) => await ctx.base);
+		const extension = defineExtension(defineExtensionId("consumer"))
+			.use(service)
+			.preRun(async (ctx) => expect(await ctx.ctx.service).toBe("ok"));
 		await unwrap(new Crust("cli").provide(base(), service()).extend(extension).run([]));
 	});
 
 	it("rejects flag-owning Contexts after finish skips validation", async () => {
 		const token = defineFlag("token", { type: "string" });
 		const auth = defineContext("auth", { flags: [token] }, ({ flags }) => flags.token);
-		const extension = defineExtension(defineExtensionId("consumer"), {
-			uses: [auth],
-			hooks: {
-				preRun: (ctx) => ctx.finish(),
-				postRun: async (ctx) => void (await ctx.ctx.auth),
-			},
-		});
+		const extension = defineExtension(defineExtensionId("consumer"))
+			.use(auth)
+			.preRun((ctx) => ctx.finish())
+			.postRun(async (ctx) => void (await ctx.ctx.auth));
 		const app = new Crust("cli")
 			.provide(auth())
 			.extend(extension)
@@ -1073,15 +1047,12 @@ describe("Context disposal", () => {
 				events.push("dispose");
 			},
 		}));
-		const observer = defineExtension(defineExtensionId("observer"), {
-			uses: [resource],
-			hooks: {
-				async postRun(ctx) {
-					(await ctx.ctx.resource).use();
-					events.push("postRun");
-				},
-			},
-		});
+		const observer = defineExtension(defineExtensionId("observer"))
+			.use(resource)
+			.postRun(async (ctx) => {
+				(await ctx.ctx.resource).use();
+				events.push("postRun");
+			});
 		const app = new Crust("cli")
 			.provide(resource())
 			.extend(observer)
@@ -1101,14 +1072,11 @@ describe("Context disposal", () => {
 				events.push("dispose");
 			},
 		}));
-		const observer = defineExtension(defineExtensionId("observer"), {
-			uses: [resource],
-			hooks: {
-				async postRun(ctx) {
-					(await ctx.ctx.resource).use();
-				},
-			},
-		});
+		const observer = defineExtension(defineExtensionId("observer"))
+			.use(resource)
+			.postRun(async (ctx) => {
+				(await ctx.ctx.resource).use();
+			});
 		const failure = new Error("action failed");
 		const app = new Crust("cli")
 			.provide(resource())
@@ -1137,7 +1105,7 @@ describe("Context disposal", () => {
 				},
 			};
 		});
-		const slow = defineContext("slow", { uses: [late] }, async ({ ctx }) => {
+		const slow = defineContext("slow", { use: [late] }, async ({ ctx }) => {
 			await gate.promise;
 			return await ctx.late;
 		});
@@ -1191,7 +1159,7 @@ describe("Context disposal", () => {
 				},
 			};
 		});
-		const owner = defineContext("owner", { uses: [dependent] }, ({ ctx, defer }) => {
+		const owner = defineContext("owner", { use: [dependent] }, ({ ctx, defer }) => {
 			defer(async () => {
 				await ctx.dependent;
 			});
@@ -1220,7 +1188,7 @@ describe("Context disposal", () => {
 	it("lets a cleanup callback read an already-constructed dependency before it is disposed", async () => {
 		const log: string[] = [];
 		const dep = disposableContext("dep", log);
-		const owner = defineContext("owner", { uses: [dep] }, async ({ ctx, defer }) => {
+		const owner = defineContext("owner", { use: [dep] }, async ({ ctx, defer }) => {
 			await ctx.dep;
 			defer(async () => {
 				log.push(`read:${(await ctx.dep).name}`);
@@ -1251,18 +1219,15 @@ describe("Context disposal", () => {
 				},
 			};
 		});
-		const observer = defineExtension(defineExtensionId("observer"), {
-			uses: [first, second],
-			hooks: {
-				postRun(ctx) {
-					void ctx.ctx.first
-						.then(() => ctx.ctx.second)
-						.catch((error: CaughtError) => {
-							rejection = error;
-						});
-				},
-			},
-		});
+		const observer = defineExtension(defineExtensionId("observer"))
+			.use(first, second)
+			.postRun((ctx) => {
+				void ctx.ctx.first
+					.then(() => ctx.ctx.second)
+					.catch((error: CaughtError) => {
+						rejection = error;
+					});
+			});
 		const app = new Crust("cli")
 			.provide(first(), second())
 			.extend(observer)
@@ -1283,7 +1248,7 @@ describe("Context disposal", () => {
 				disposals++;
 			},
 		}));
-		const alias = defineContext("alias", { uses: [db] }, async ({ ctx }) => await ctx.db);
+		const alias = defineContext("alias", { use: [db] }, async ({ ctx }) => await ctx.db);
 		await unwrap(
 			new Crust("cli")
 				.provide(db(), alias())
@@ -1299,7 +1264,7 @@ describe("Context disposal", () => {
 		let disposals = 0;
 		const shared: MutableDisposable = {};
 		const bare = defineContext("bare", () => shared);
-		const decorated = defineContext("decorated", { uses: [bare] }, async ({ ctx }) => {
+		const decorated = defineContext("decorated", { use: [bare] }, async ({ ctx }) => {
 			const value = await ctx.bare;
 			value[Symbol.dispose] = () => {
 				disposals++;
@@ -1364,7 +1329,7 @@ describe("Context disposal", () => {
 				log.push("dispose:base");
 			},
 		}));
-		const derived = defineContext("derived", { uses: [base] }, async ({ ctx }) => {
+		const derived = defineContext("derived", { use: [base] }, async ({ ctx }) => {
 			await ctx.base;
 			return {
 				[Symbol.dispose]() {
@@ -1428,7 +1393,7 @@ describe("Context disposal", () => {
 				events.push("disposed");
 			},
 		}));
-		const guard = defineContext("guard", { uses: [resource] }, async ({ ctx }) => {
+		const guard = defineContext("guard", { use: [resource] }, async ({ ctx }) => {
 			await ctx.resource;
 			throw new Error("Unauthenticated");
 		});
@@ -1680,7 +1645,7 @@ describe("Context setup defer()", () => {
 			});
 			return "base";
 		});
-		const derived = defineContext("derived", { uses: [base] }, async ({ ctx, defer }) => {
+		const derived = defineContext("derived", { use: [base] }, async ({ ctx, defer }) => {
 			await ctx.base;
 			defer(() => {
 				log.push("cleanup:derived");
@@ -1708,7 +1673,7 @@ describe("Context setup defer()", () => {
 			});
 			return "base";
 		});
-		const derived = defineContext("derived", { uses: [base] }, async ({ ctx, defer }) => {
+		const derived = defineContext("derived", { use: [base] }, async ({ ctx, defer }) => {
 			defer(() => {
 				log.push("cleanup:derived");
 			});
@@ -1732,17 +1697,16 @@ describe("Context setup defer()", () => {
 		let attempts = 0;
 		const token = defineFlag("token", { type: "string" });
 		const auth = defineContext("auth", { flags: [token] }, ({ flags }) => flags.token);
-		const service = defineContext("service", { uses: [auth] }, async ({ ctx, defer }) => {
+		const service = defineContext("service", { use: [auth] }, async ({ ctx, defer }) => {
 			const attempt = ++attempts;
 			defer(() => {
 				log.push(`cleanup:${attempt}`);
 			});
 			return await ctx.auth;
 		});
-		const extension = defineExtension(defineExtensionId("consumer"), {
-			uses: [service],
-			hooks: { preRun: async (ctx) => void (await ctx.ctx.service.catch(() => undefined)) },
-		});
+		const extension = defineExtension(defineExtensionId("consumer"))
+			.use(service)
+			.preRun(async (ctx) => void (await ctx.ctx.service.catch(() => undefined)));
 		await unwrap(
 			new Crust("cli")
 				.provide(auth(), service())
@@ -1965,7 +1929,7 @@ describe("checked Context definitions", () => {
 			setups++;
 			return 1;
 		});
-		const dependent = defineContext("dependent", { uses: [source] }, () => {
+		const dependent = defineContext("dependent", { use: [source] }, () => {
 			setups++;
 			return 2;
 		});
@@ -2007,12 +1971,12 @@ describe("checked Context definitions", () => {
 		const dep = defineContext("dep", () => 1);
 		const real = defineContext(
 			"real",
-			{ uses: [dep], flags: [{ name: "token", type: "string" }] },
+			{ use: [dep], flags: [{ name: "token", type: "string" }] },
 			() => 2,
 		);
 		const altered = {
 			...real(),
-			uses: [],
+			use: [],
 			setup: () => 99,
 			ownedFlags: { fake: { type: "boolean" as const } },
 		};

@@ -199,28 +199,27 @@ export const skill: ExtensionFactory<
 	[],
 	[],
 	readonly CommandDefinition<any, any, any, any>[]
-> = defineExtension(SKILLS, (options) => {
+> = defineExtension(SKILLS).factory((extension, options) => {
 	const commandName = options.command ?? DEFAULT_SKILL_COMMAND_NAME;
-	return {
-		commands: [buildSkillCommand(commandName, options)],
-		// Skills are loaded when a snapshot is prepared, not at construction, so
-		// help and man pages reflect the packaged directory as it exists at render time.
-		sections: (snapshot) => [
-			{
-				command: [],
-				title: SKILLS_SECTION_TITLE,
-				body: formatSkillDocumentation(commandName, snapshot.meta.name),
-				except: [SKILLS],
-			},
-		],
-		build: (context) => buildSkills(options, context),
-		hooks: {
-			async preRun(context) {
+	return (
+		extension
+			.add(buildSkillCommand(commandName, options))
+			.preRun(async (context) => {
 				if (context.commandPath[1] === commandName || options.autoUpdate === false) return;
 				await autoRepairSkills(options, context);
-			},
-		},
-	};
+			})
+			// Skills are loaded when a snapshot is prepared, not at construction, so
+			// help and man pages reflect the packaged directory as it exists at render time.
+			.sections((snapshot) => [
+				{
+					command: [],
+					title: SKILLS_SECTION_TITLE,
+					body: formatSkillDocumentation(commandName, snapshot.meta.name),
+					except: [SKILLS],
+				},
+			])
+			.build((context) => buildSkills(options, context))
+	);
 });
 
 type SkillStatusEntry = SkillStatusResult["agents"][number];

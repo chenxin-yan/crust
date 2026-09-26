@@ -189,7 +189,7 @@ export type ExtensionSpellings<E> =
 	| AttachedSpellings<ExtensionFlagDefsOf<E>>
 	| ([E] extends [never]
 			? never
-			: DefiningOf<E> extends { readonly provides?: infer P extends readonly unknown[] }
+			: DefiningOf<E> extends { readonly provide?: infer P extends readonly unknown[] }
 				? ProvidedContextSpellings<P>
 				: never);
 

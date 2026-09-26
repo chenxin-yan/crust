@@ -5,8 +5,10 @@ import { join } from "node:path";
 import { Crust, defineCommand } from "@crustjs/core";
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
+import { runBuildHooks } from "../../../crust/tests/build-hooks.ts";
 import {
 	completion,
+	type CompletionOptions,
 	type CompletionRenderOptions,
 	renderBashCompletion,
 	renderFishCompletion,
@@ -56,9 +58,9 @@ function getStdout(): string {
 	return Buffer.concat(stdoutBuf).toString("utf8");
 }
 
-function buildCli() {
+function buildCli(options?: CompletionOptions) {
 	return new Crust("mycli", { description: "Test CLI", version: "1.2.3" })
-		.extend(completion())
+		.extend(completion(options))
 		.add(
 			defineCommand("build", { description: "Build artifact" }, (cmd) =>
 				cmd
@@ -230,18 +232,15 @@ describe("completion", () => {
 });
 
 describe("completion build hook", () => {
-	const text = (content: string | Uint8Array) => Buffer.from(content).toString();
-
 	it("returns all three shell files under completions/", async () => {
-		const snapshot = await buildCli().snapshot();
-		const artifacts = await completion().build?.({ snapshot });
+		const { files } = await runBuildHooks(buildCli());
 
-		expect(artifacts?.map((file) => file.path)).toEqual([
+		expect([...files.keys()]).toEqual([
 			"completions/mycli",
 			"completions/_mycli",
 			"completions/mycli.fish",
 		]);
-		const [bash, zsh, fish] = artifacts!.map((file) => text(file.content));
+		const [bash, zsh, fish] = files.values();
 		expect(bash).toContain("# completion script for mycli v1.2.3");
 		expect(bash).toContain("complete -o default -F _mycli 'mycli'");
 		expect(zsh).toMatch(/^#compdef mycli\n/);
@@ -249,39 +248,34 @@ describe("completion build hook", () => {
 	});
 
 	it("honors binName and version overrides at build time", async () => {
-		const snapshot = await buildCli().snapshot();
-		const artifacts = await completion({ binName: "my-tool", version: "2.0.0" }).build?.({
-			snapshot,
-		});
+		const { files } = await runBuildHooks(buildCli({ binName: "my-tool", version: "2.0.0" }));
 
-		expect(artifacts?.map((file) => file.path)).toEqual([
+		expect([...files.keys()]).toEqual([
 			"completions/my-tool",
 			"completions/_my-tool",
 			"completions/my-tool.fish",
 		]);
-		expect(text(artifacts![1]!.content)).toMatch(/^#compdef my-tool\n/);
-		expect(text(artifacts![0]!.content)).toContain("my-tool v2.0.0");
+		expect(files.get("completions/_my-tool")).toMatch(/^#compdef my-tool\n/);
+		expect(files.get("completions/my-tool")).toContain("my-tool v2.0.0");
 	});
 
 	it("rejects an unsafe binName", async () => {
-		const snapshot = await buildCli().snapshot();
-		expect(() => completion({ binName: "../pwn" }).build?.({ snapshot })).toThrow(
-			/invalid binName/,
-		);
+		const { error } = await runBuildHooks(buildCli({ binName: "../pwn" }));
+		expect(error).toMatch(/invalid binName/);
 	});
 
 	it("rejects a missing version", async () => {
-		const snapshot = await new Crust("mycli").snapshot();
-		expect(() => completion().build?.({ snapshot })).toThrow("requires a version");
+		const { error } = await runBuildHooks(new Crust("mycli").extend(completion()));
+		expect(error).toContain("requires a version");
 	});
 
 	it("pure renderers match build and runtime files byte-for-byte", async () => {
 		const tmpDir = await mkdtemp(join(tmpdir(), "crust-completion-build-"));
 		try {
-			const app = buildCli();
-			const snapshot = await app.snapshot();
 			const options: CompletionRenderOptions = { version: "1.2.3" };
-			const artifacts = await completion(options).build?.({ snapshot });
+			const app = buildCli(options);
+			const snapshot = await app.snapshot();
+			const { files } = await runBuildHooks(app);
 			await app.execute({ argv: ["completion", "zsh", "--output-dir", tmpDir] });
 
 			for (const [filename, render] of [
@@ -290,8 +284,7 @@ describe("completion build hook", () => {
 				["mycli.fish", renderFishCompletion],
 			] as const) {
 				const script = render(snapshot, options);
-				const built = artifacts?.find((file) => file.path === `completions/${filename}`);
-				expect(built && text(built.content)).toBe(script);
+				expect(files.get(`completions/${filename}`)).toBe(script);
 				expect(script).toBe(await readFile(join(tmpDir, filename), "utf8"));
 			}
 		} finally {

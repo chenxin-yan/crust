@@ -203,12 +203,8 @@ describe("schema interaction with Extensions", () => {
 		let preRunSaw: unknown;
 		let actionSaw: unknown;
 
-		const probe = defineExtension(defineExtensionId("probe"), {
-			hooks: {
-				preRun(ctx) {
-					preRunSaw = ctx.flags.port;
-				},
-			},
+		const probe = defineExtension(defineExtensionId("probe")).preRun((ctx) => {
+			preRunSaw = ctx.flags.port;
 		});
 
 		const app = new Crust("cli")
@@ -230,9 +226,7 @@ describe("schema interaction with Extensions", () => {
 			validated = true;
 			return { value: String(raw) };
 		});
-		const gate = defineExtension(defineExtensionId("gate"), {
-			hooks: { preRun: (ctx) => ctx.finish() },
-		});
+		const gate = defineExtension(defineExtensionId("gate")).preRun((ctx) => ctx.finish());
 
 		const app = new Crust("cli")
 			.flags({ name: "x", type: "string", schema: spy })

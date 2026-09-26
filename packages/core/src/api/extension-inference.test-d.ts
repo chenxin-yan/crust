@@ -67,39 +67,30 @@ type _optionalTokens = Expect<
 >;
 
 function _contextual(recursive: boolean, flags: Port[], toggle: Toggle & { multiple?: true }) {
-	defineExtension(defineExtensionId("scope"), {
-		flags: [{ name: "port", type: "number", default: 123, recursive }],
-		hooks: {
-			preRun({ flags }) {
-				// @ts-expect-error A false-capable scope may omit this flag on descendants.
-				const value: number = flags.port;
-				void value;
-			},
-			postRun({ flags }) {
-				// @ts-expect-error Post hooks have the same raw flag contract.
-				const value: number = flags.port;
-				void value;
-			},
-		},
-	});
-	defineExtension(defineExtensionId("collection"), {
-		flags,
-		hooks: {
-			preRun({ flags }) {
-				// @ts-expect-error An absent definition permits other extensions to supply another value type.
-				const value: number | undefined = flags.port;
-				void value;
-			},
-		},
-	});
-	defineExtension(defineExtensionId("multiple"), {
-		flags: [toggle],
-		hooks: {
-			preRun({ flags }) {
-				// @ts-expect-error Optional multiplicity permits an array before schema validation.
-				const value: boolean | undefined = flags.toggle;
-				void value;
-			},
-		},
-	});
+	defineExtension(defineExtensionId("scope"))
+		.flags({ name: "port", type: "number", default: 123, recursive })
+		.preRun(({ flags }) => {
+			// @ts-expect-error A false-capable scope may omit this flag on descendants.
+			const value: number = flags.port;
+			void value;
+		})
+		.postRun(({ flags }) => {
+			// @ts-expect-error Post hooks have the same raw flag contract.
+			const value: number = flags.port;
+			void value;
+		});
+	defineExtension(defineExtensionId("collection"))
+		.flags(...flags)
+		.preRun(({ flags }) => {
+			// @ts-expect-error An absent definition permits other extensions to supply another value type.
+			const value: number | undefined = flags.port;
+			void value;
+		});
+	defineExtension(defineExtensionId("multiple"))
+		.flags(toggle)
+		.preRun(({ flags }) => {
+			// @ts-expect-error Optional multiplicity permits an array before schema validation.
+			const value: boolean | undefined = flags.toggle;
+			void value;
+		});
 }

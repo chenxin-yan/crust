@@ -306,7 +306,7 @@ const app = new Crust("my-cli")
   });
 ```
 
-Declared dependencies (Context `uses`, command `.use()`, Extension `uses`) are checked at composition. Dependencies may appear in either order within one `.provide()` call; across calls, dependency providers must precede their consumers. Dynamic collections use the same variadic methods.
+Declared dependencies (Context `use`, command `.use()`, Extension `.use()`) are checked at composition. Dependencies may appear in either order within one `.provide()` call; across calls, dependency providers must precede their consumers. Dynamic collections use the same variadic methods.
 
 Declared availability is checked without setup. `.use()` retains factory references rather than reflecting callback values. Invocation still checks missing providers, cycles, and lifecycle misuse.
 
@@ -338,7 +338,7 @@ const app = new Crust("my-cli", { version: "1.2.3" }).extend(version(), help());
 
 Added definitions become ordinary command nodes before root Extensions prepare the application, so root Extensions apply to them. Extension-contributed definitions are materialized when the application prepares.
 
-An Extension's `provides` instances and their owned flags are installed immediately across the root and existing descendants, preserving more-specific local providers on descendants. Later-added descendants inherit them too. Extension commands and declared flags are materialized during preparation.
+An Extension's `.provide()` instances and their owned flags are installed immediately across the root and existing descendants, preserving more-specific local providers on descendants. Later-added descendants inherit them too. Extension commands and declared flags are materialized during preparation.
 
 Statically known definitions are compile-time checked; preparation also checks dynamic flag collisions, recipe behavior, and documentation sections.
 
@@ -411,9 +411,9 @@ A definition can add other definitions. Context providers are inherited on the m
 The typed [`run()`](#runpath-input-options) shape of an added definition merges the Context-owned flags already provided on the parent path, matching the runtime parser: descendants accept inherited Context-owned flags, while parent-local flags stay excluded.
 
 <Callout type="info">
-  A later `.provide()` does not backfill an already-added definition. Extension `provides` reach
-  existing descendants, but a definition's `.use()` demands require those providers to be registered
-  before `.add()`.
+  A later `.provide()` does not backfill an already-added definition. Extension-provided Contexts
+  reach existing descendants, but a definition's `.use()` demands require those providers to be
+  registered before `.add()`.
 </Callout>
 
 ## `.command(name, recipe)`

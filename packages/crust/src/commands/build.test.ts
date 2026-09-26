@@ -599,7 +599,7 @@ describe("build", () => {
 			writeProject(
 				{ name: "api-cli" },
 				`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(corePath)};\n` +
-					`const hook = defineExtension(defineExtensionId("hook"), { build: () => [{ path: "man/api-cli.1", content: ".Dd" }] });\n` +
+					`const hook = defineExtension(defineExtensionId("hook")).build(() => [{ path: "man/api-cli.1", content: ".Dd" }]);\n` +
 					`await new Crust("api-cli").extend(hook).action(() => {}).execute();\n`,
 			);
 			const logged: Array<[string, string]> = [];
@@ -865,8 +865,8 @@ describe("buildCommand error handling", () => {
 			writeFileSync(
 				join(tmpDir, "src", "cli.ts"),
 				`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(corePath)};\n` +
-					`const artifact = defineExtension(defineExtensionId("artifact"), { build: () => ["artifact.txt", "second.txt", "third.txt", "fourth.txt"].map((path) => ({ path, content: "built" })) });\n` +
-					`const empty = defineExtension(defineExtensionId("empty-extension"), { build: () => [] });\n` +
+					`const artifact = defineExtension(defineExtensionId("artifact")).build(() => ["artifact.txt", "second.txt", "third.txt", "fourth.txt"].map((path) => ({ path, content: "built" })));\n` +
+					`const empty = defineExtension(defineExtensionId("empty-extension")).build(() => []);\n` +
 					`await new Crust("artifact-cli").extend(artifact, empty).action(() => {}).execute();\n`,
 			);
 
@@ -918,7 +918,7 @@ describe("buildCommand error handling", () => {
 			writeFileSync(
 				join(tmpDir, "src", file),
 				`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(corePath)};\n` +
-					`const hook = defineExtension(defineExtensionId("hook"), { build: () => Object.entries(${JSON.stringify(files)}).map(([path, content]) => ({ path, content })) });\n` +
+					`const hook = defineExtension(defineExtensionId("hook")).build(() => Object.entries(${JSON.stringify(files)}).map(([path, content]) => ({ path, content })));\n` +
 					`await new Crust(${JSON.stringify(name)}).extend(hook).action(() => {}).execute();\n`,
 			);
 		const build = (argv: string[]) =>

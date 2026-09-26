@@ -53,7 +53,7 @@ export const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => ({
 }));
 
 // Inferred setup input exposes the declared lazy Context bag
-export const authenticatedApi = defineContext("authenticated-api", { uses: [auth] }, async ({ ctx }) => ({
+export const authenticatedApi = defineContext("authenticated-api", { use: [auth] }, async ({ ctx }) => ({
 	apiKey: (await ctx.auth).apiKey,
 }));
 
@@ -72,12 +72,11 @@ export const deploy = defineCommand("deploy", (cmd) =>
 // An exported Extension carries evaluated dependency intersections,
 // ContextInstance tuples, and its contributed CommandDefinition tuple; a
 // TS2742 regression here must fail emission.
-export const telemetry = defineExtension(defineExtensionId("telemetry"), {
-	uses: [authenticatedApi],
-	provides: [auth()],
-	commands: [deploy],
-	hooks: { preRun: async ({ ctx }) => void (await ctx.auth) },
-});
+export const telemetry = defineExtension(defineExtensionId("telemetry"))
+	.use(authenticatedApi)
+	.provide(auth())
+	.add(deploy)
+	.preRun(async ({ ctx }) => void (await ctx.auth));
 
 // Inferred builder type references accumulated Context-owned flag shapes
 export const app = new Crust("consumer-cli")
@@ -86,11 +85,13 @@ export const app = new Crust("consumer-cli")
 	.add(defineCommand("build", (cmd) => cmd.action(() => {})))
 	.add(deploy);
 
-// Curried requirements must remain nameable through exported factories and builders.
-export const stamp = defineExtension<"version">()(defineExtensionId("stamp"), (prefix: string) => ({
-	flags: [{ name: "prefix", type: "string", default: prefix }],
-	hooks: { preRun: ({ rootCommand, stdout }) => stdout(rootCommand.meta.version) },
-}));
+// Metadata requirements must remain nameable through exported factories and builders.
+export const stamp = defineExtension<"version">(defineExtensionId("stamp")).factory(
+	(extension, prefix: string) =>
+		extension
+			.flags({ name: "prefix", type: "string", default: prefix })
+			.preRun(({ rootCommand, stdout }) => stdout(rootCommand.meta.version)),
+);
 export const versionedApp = new Crust("versioned", { version: "1.2.3" })
 	.extend(stamp("release"))
 	.command("show", (cmd) => cmd.action(() => 42));

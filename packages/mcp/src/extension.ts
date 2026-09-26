@@ -129,8 +129,8 @@ export const mcpExtension: ExtensionFactory<
 	[],
 	[],
 	readonly [McpCommandDefinition]
-> = defineExtension(MCP, (options) => ({
-	commands: [
+> = defineExtension(MCP).factory((extension, options) =>
+	extension.add(
 		defineCommand(
 			MCP_COMMAND_NAME,
 			{ description: "Serve this CLI's commands as MCP tools over stdio" },
@@ -164,5 +164,5 @@ export const mcpExtension: ExtensionFactory<
 						await serveStdio(await createMcpServer(options.app(), options));
 					}),
 		),
-	],
-}));
+	),
+);
