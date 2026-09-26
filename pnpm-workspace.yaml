@@ -9,7 +9,6 @@ catalog:
   vite-plus: 1.0.0-rc.0
 
 overrides:
-  "@types/node": ^24
   # Vite plugins resolve the same Vite+ core that `vp build`/`vp test` run on.
   vite@*: "catalog:"
 
