@@ -76,7 +76,7 @@ const flags = {
 
 ### `NamedFlagDef`
 
-A `FlagDef` carrying its `name`: the shape accepted by `.flags(...defs)`, Context-owned `flags`, and `defineFlag()`.
+A `FlagDef` carrying its `name`: the shape accepted by command and Context `.flags(...defs)`, and `defineFlag()`.
 
 ### `defineFlag` and `defineArg`
 
@@ -216,12 +216,26 @@ The optional argument of [`execute(options?)`](/docs/api/crust#executeoptions).
 
 Declared in [`api/context.ts`](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/api/context.ts). See [Contexts](/docs/guide/contexts) for worked examples and [Context lifecycle](/docs/api/crust#context-lifecycle) for cleanup rules.
 
+### `ContextBuilder`
+
+<auto-type-table path="../../../../../packages/core/src/api/context.ts" name="ContextBuilder" />
+
+`defineContext(name)` starts an immutable definition. `.use()` and `.flags()` append and return new frozen builders; the original is unchanged. The terminal `.setup(callback)` returns a [`ContextFactory`](#contextfactory). An unfinished builder cannot be provided or used as a factory.
+
+- `.use(...factories)` declares the dependencies setup reads from `ctx`. Literal lists retain exact types; widened arrays declare open dependencies checked at runtime during composition. Empty calls are allowed.
+- `.flags(...defs)` declares owned flags. Definitions are copied, and spellings are checked against earlier calls both by TypeScript and when the method runs.
+- Setup receives types from the preceding declarations. Annotate its second parameter for factory options without restating `ctx`, flag, or return types:
+
+<include lang="ts">../../../examples/guide/contexts-setup.ts#options</include>
+
+Context factories accept at most one options value. It may be omitted whenever its type accepts `undefined`, including optional or defaulted setup parameters and explicit `T | undefined` unions. Unlike an Extension's `.factory()` callback, setup runs lazily during invocation, not when the factory is called.
+
 ### `ContextFactory`
 
-`defineContext(name, setup)` and `defineContext(name, config, setup)` return a `ContextFactory`. Call it to create a `ContextInstance`, even when it takes no options. `factory.contextName` is the `ctx` property name.
+`.setup()` returns a `ContextFactory`. Call it to create a `ContextInstance`, even when it takes no options. `factory.contextName` is the `ctx` property name.
 
 ```ts
-const config = defineContext("config", () => ({ region: "eu" }));
+const config = defineContext("config").setup(() => ({ region: "eu" }));
 
 app.provide(config()); // runs setup lazily in each invocation
 app.provide(config.of({ region: "us" })); // precomputed value, e.g. a test double
@@ -229,13 +243,11 @@ app.provide(config.of({ region: "us" })); // precomputed value, e.g. a test doub
 
 `.of(value)` creates an instance with no dependencies that keeps the factory's owned flags. Every invocation that pulls it disposes `value` if it is disposable (see [replacing a Context in tests](/docs/guide/contexts#replace-a-context-in-tests)).
 
-### `ContextConfig`, `ContextSetup`, and `ContextBag`
-
-<auto-type-table path="../../../../../packages/core/src/api/context.ts" name="ContextConfig" />
+### `ContextSetup` and `ContextBag`
 
 <auto-type-table path="../../../../../packages/core/src/api/context.ts" name="ContextSetup" />
 
-`flags` declares flags the Context owns and propagates. `use` declares Context dependencies and determines the setup's `ctx` bag. A `ContextBag<Deps>` maps each name to a `Promise` of its value: reading a property starts memoized construction, so destructuring the bag starts every construction immediately.
+`ContextSetup<Flags, Deps>` describes setup's first parameter; factory options are its second parameter. `flags` contains validated values from `.flags()`, and `.use()` determines the setup's `ctx` bag. A `ContextBag<Deps>` maps each name to a `Promise` of its value: reading a property starts memoized construction, so destructuring the bag starts every construction immediately.
 
 Setup also receives the invocation's `stdout`, `stderr`, `signal`, and `defer(cleanup)`.
 

@@ -9,7 +9,7 @@ Use a Context when commands share a service, setup or cleanup needs managing, or
 
 ## Define and provide
 
-Define the dependency with `defineContext()`, provide an instance to the app, and await its value in the action:
+Start the definition with `defineContext()`, finish it with `.setup()`, provide an instance to the app, and await its value in the action:
 
 <include lang="ts" meta='title="status.ts" twoslash'>
   ../../../examples/guide/contexts-provide.ts
@@ -20,11 +20,11 @@ $ status
 https://api.example.com/status
 ```
 
-- `api` is the factory returned by `defineContext()`.
+- `api` is the factory returned by `.setup()`.
 - `api()` creates an instance for `.provide()`; it does not run setup yet.
 - `await ctx.api` runs setup on first access and returns its value. Context values are always accessed through promises, even when setup is synchronous.
 
-Provide a Context before adding commands that need it. Later-added descendants inherit it.
+Provide a Context before adding commands that need it. Later-added descendants inherit it. To accept factory options without losing inference, annotate setup's second parameter; see [configurable Contexts](/docs/api/types#contextbuilder).
 
 ## Use from a reusable command
 
@@ -88,7 +88,7 @@ Crust waits for setup to settle before cleanup, so ignoring cancellation can del
 
 ## Flags owned by a Context
 
-When a flag configures the dependency rather than a particular command, declare it on the Context:
+When a flag configures the dependency rather than a particular command, declare it with the Context's `.flags()`:
 
 <include lang="ts" meta='title="app.ts" twoslash'>
   ../../../examples/guide/contexts-flags.ts
@@ -105,7 +105,7 @@ https://staging.example.com/deploy
 
 ## Contexts that use other Contexts
 
-List dependencies in `use`, then await them through `ctx` inside setup:
+Declare dependencies with `.use()`, then await them through `ctx` inside setup:
 
 <include lang="ts" meta='title="app.ts" twoslash'>
   ../../../examples/guide/contexts-uses.ts

@@ -46,18 +46,16 @@ describe("type performance report", () => {
 
 	it.each([10, 100, 200])("preserves the workload across API dialects at size %i", (size) => {
 		const fluent = generateConsumerSource(size);
-		const object = generateConsumerSource(size, "object");
-		expect(object).toContain("uses: [context0]");
-		expect(fluent).toContain("use: [context0]");
-		expect(object).toContain('flags: [{ name: "extension-trace", type: "boolean" }]');
-		expect(fluent).toContain('.flags({ name: "extension-trace", type: "boolean" })');
-		const fluentCommand = fluent.match(/\t\.add\((defineCommand\("extension-command".+)\);/);
-		const objectCommand = object.match(/\tcommands: \[(defineCommand\("extension-command".+)\],/);
-		expect(fluentCommand?.[1]).toBeTruthy();
-		expect(objectCommand?.[1]).toBe(fluentCommand?.[1]);
-		const withoutExtension = (source: string) =>
-			source.replace(/const extension = [\s\S]+?\n\n/, "").replaceAll("uses: [", "use: [");
-		expect(withoutExtension(object)).toBe(withoutExtension(fluent));
+		const config = generateConsumerSource(size, "context-config");
+		expect(config).toContain(
+			'defineContext("context-1", { flags: [contextFlag1], use: [context0] }, async',
+		);
+		expect(fluent).toContain(
+			'defineContext("context-1").flags(contextFlag1).use(context0).setup(async',
+		);
+		expect(fluent).not.toMatch(/defineContext\("[^"]+", /);
+		const withoutContexts = (source: string) => source.replace(/^const context\d+ = .+$/gm, "");
+		expect(withoutContexts(config)).toBe(withoutContexts(fluent));
 	});
 
 	it("measures all consumer sizes using the harness compiler, not the target tree's compiler", async () => {
@@ -105,10 +103,10 @@ describe("type performance report", () => {
 		}
 	});
 
-	it("labels comparisons across the extension API transition", () => {
-		const base = { ...report(10_000, 50_000, 100_000), fixtureApi: "object" as const };
+	it("labels comparisons across the Context API transition", () => {
+		const base = { ...report(10_000, 50_000, 100_000), fixtureApi: "context-config" as const };
 		expect(formatComparison(base, report(11_000, 60_000, 120_000))).toContain(
-			"API transition (object → fluent): fixtures use equivalent workloads with each API's context and extension syntax, not identical source.",
+			"API transition (context-config → fluent): fixtures use equivalent workloads with each API's context and extension syntax, not identical source.",
 		);
 	});
 

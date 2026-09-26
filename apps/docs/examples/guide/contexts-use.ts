@@ -1,6 +1,6 @@
 import { Crust, defineCommand, defineContext } from "@crustjs/core";
 
-const api = defineContext("api", () => ({
+const api = defineContext("api").setup(() => ({
 	get: (path: string) => `https://api.example.com${path}`,
 }));
 

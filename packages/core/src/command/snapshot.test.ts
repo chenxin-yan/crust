@@ -86,7 +86,9 @@ describe("snapshotCommand", () => {
 
 	it("projects Context-owned flags at the provider and later descendants", async () => {
 		const apiKey = defineFlag("api-key", { type: "string", short: "k" });
-		const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
+		const auth = defineContext("auth")
+			.flags(apiKey)
+			.setup(() => ({}));
 		const app = new Crust("cli")
 			.provide(auth())
 			.add(defineCommand("deploy", (command) => command.action(() => {})));

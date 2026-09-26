@@ -232,15 +232,13 @@ describe("createMcpServer", () => {
 			started: Promise.withResolvers<AbortSignal>(),
 			disposed: Promise.withResolvers<void>(),
 		}));
-		const session = defineContext(
-			"session",
-			{ flags: [{ name: "id", type: "number", required: true }] },
-			({ flags, defer }) => {
+		const session = defineContext("session")
+			.flags({ name: "id", type: "number", required: true })
+			.setup(({ flags, defer }) => {
 				const call = calls[flags.id]!;
 				defer(() => call.disposed.resolve());
 				return call;
-			},
-		);
+			});
 		const app = new Crust("cancellation").add(
 			defineCommand("wait", (c) =>
 				c.provide(session()).action(async ({ ctx, signal }) => {
@@ -278,16 +276,14 @@ describe("createMcpServer", () => {
 	});
 
 	it("captures Context setup and disposal output per call under concurrency", async () => {
-		const session = defineContext(
-			"session",
-			{ flags: [{ name: "id", type: "string", required: true }] },
-			async ({ flags, stdout, defer }) => {
+		const session = defineContext("session")
+			.flags({ name: "id", type: "string", required: true })
+			.setup(async ({ flags, stdout, defer }) => {
 				stdout(`open ${flags.id}`);
 				await new Promise((resolve) => setTimeout(resolve, flags.id === "a" ? 20 : 1));
 				defer(() => stdout(`close ${flags.id}`));
 				return { id: flags.id };
-			},
-		);
+			});
 		const app = new Crust("ctx").add(
 			defineCommand("session", (c) =>
 				c.provide(session()).action(async ({ ctx, stdout }) => {

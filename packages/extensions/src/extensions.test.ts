@@ -557,7 +557,9 @@ describe("built-in extensions", () => {
 			type: "string",
 			description: "API credential",
 		});
-		const auth = defineContext("auth", { flags: [apiKey] }, () => ({}));
+		const auth = defineContext("auth")
+			.flags(apiKey)
+			.setup(() => ({}));
 		const app = new Crust("app")
 			.provide(auth())
 			.extend(help())

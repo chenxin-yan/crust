@@ -125,9 +125,11 @@ describe("command definitions", () => {
 	it("propagates Context-owned flags only to definitions added after provide()", async () => {
 		const calls: string[] = [];
 		const apiKey = defineFlag("api-key", { type: "string" });
-		const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => ({
-			apiKey: flags["api-key"],
-		}));
+		const auth = defineContext("auth")
+			.flags(apiKey)
+			.setup(({ flags }) => ({
+				apiKey: flags["api-key"],
+			}));
 		const before = defineCommand("before", (command) => command.action(() => {}));
 		const after = defineCommand("after", (command) =>
 			command.use(auth).action(async ({ ctx }) => {
@@ -149,10 +151,12 @@ describe("command definitions", () => {
 	it("inherits capabilities through nested definitions", async () => {
 		const calls: string[] = [];
 		const verbose = defineFlag("verbose", { type: "boolean" });
-		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
-			verbose: flags.verbose === true,
-		}));
-		const db = defineContext("db", () => "database");
+		const logging = defineContext("logging")
+			.flags(verbose)
+			.setup(({ flags }) => ({
+				verbose: flags.verbose === true,
+			}));
+		const db = defineContext("db").setup(() => "database");
 		const status = defineCommand("status", (command) =>
 			command
 				.use(db)
@@ -171,8 +175,8 @@ describe("command definitions", () => {
 
 	it("accepts multiple factories in one variadic .use() call", async () => {
 		const calls: string[] = [];
-		const logging = defineContext("logging", () => ({ verbose: true }));
-		const db = defineContext("db", () => "database");
+		const logging = defineContext("logging").setup(() => ({ verbose: true }));
+		const db = defineContext("db").setup(() => "database");
 		const status = defineCommand("status", (command) =>
 			command.use(db, logging).action(async ({ ctx }) => {
 				const database = await ctx.db;
@@ -217,8 +221,12 @@ describe("command definitions", () => {
 	});
 
 	it("rejects a recipe-provided Context flag colliding with an ancestor Context's flag", () => {
-		const db = defineContext("db", { flags: [{ name: "conn", type: "string" }] }, () => ({}));
-		const cache = defineContext("cache", { flags: [{ name: "conn", type: "number" }] }, () => ({}));
+		const db = defineContext("db")
+			.flags({ name: "conn", type: "string" })
+			.setup(() => ({}));
+		const cache = defineContext("cache")
+			.flags({ name: "conn", type: "number" })
+			.setup(() => ({}));
 		// Checked attachment validates the sealed recipe against this destination.
 		const sub = defineCommand("sub", (cmd) => cmd.provide(cache()).action(() => {}));
 		const app = new Crust("cli").provide(db());
@@ -229,9 +237,11 @@ describe("command definitions", () => {
 	});
 
 	it("rejects re-providing a colliding owned flag along a child path", () => {
-		const db = defineContext("db", { flags: [{ name: "conn", type: "string" }] }, () => ({
-			kind: "real",
-		}));
+		const db = defineContext("db")
+			.flags({ name: "conn", type: "string" })
+			.setup(() => ({
+				kind: "real",
+			}));
 		const sub = defineCommand("sub", (cmd) =>
 			cmd.provide(db.of({ kind: "double" })).action(() => {}),
 		);

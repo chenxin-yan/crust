@@ -2,12 +2,14 @@
 import { Crust, defineCommand, defineContext, defineFlag } from "@crustjs/core";
 
 const verbose = defineFlag("verbose", { type: "boolean" });
-const logging = defineContext("logging", { flags: [verbose] }, ({ flags, stderr }) => ({
-	debug(message: string) {
-		if (flags.verbose) stderr(message);
-	},
-}));
-const auth = defineContext("auth", () => ({ user: "Ada" }));
+const logging = defineContext("logging")
+	.flags(verbose)
+	.setup(({ flags, stderr }) => ({
+		debug(message: string) {
+			if (flags.verbose) stderr(message);
+		},
+	}));
+const auth = defineContext("auth").setup(() => ({ user: "Ada" }));
 
 // Inert until added; `.use()` declares the Contexts this command needs.
 const deploy = defineCommand("deploy", { description: "Deploy an application" }, (command) =>

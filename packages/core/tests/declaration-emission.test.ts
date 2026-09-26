@@ -48,14 +48,19 @@ export const flags = [
 export const flagged = new Crust("flagged").flags(...flags);
 
 export const apiKey = defineFlag("api-key", { type: "string", short: "k" });
-export const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => ({
+// An unfinished fluent Context builder is itself a nameable exported type
+export const authBuilder = defineContext("auth").flags(apiKey);
+export const auth = authBuilder.setup(({ flags }) => ({
 	apiKey: flags["api-key"],
 }));
 
-// Inferred setup input exposes the declared lazy Context bag
-export const authenticatedApi = defineContext("authenticated-api", { use: [auth] }, async ({ ctx }) => ({
-	apiKey: (await ctx.auth).apiKey,
-}));
+// Inferred setup input exposes the declared lazy Context bag and typed options
+export const authenticatedApi = defineContext("authenticated-api")
+	.use(auth)
+	.setup(async ({ ctx }, options: { region: string } = { region: "us" }) => ({
+		apiKey: (await ctx.auth).apiKey,
+		region: options.region,
+	}));
 
 // A declared Context bag preserves the factory's value type; .use() chains
 // accumulate demand and the transitive dependency closure

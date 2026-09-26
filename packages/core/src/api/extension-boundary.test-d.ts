@@ -29,7 +29,7 @@ function _extensionBoundary(broad: Extension) {
 	void nested.run([]);
 	const contributed = new Crust("app").extend(
 		defineExtension(id)
-			.provide(defineContext("logger", () => "logger")())
+			.provide(defineContext("logger").setup(() => "logger")())
 			.flags({ name: "trace", type: "boolean" })
 			.add(defineCommand("child", (command) => command.action(() => 42)))
 			.preRun(({ flags }) => {
@@ -67,28 +67,30 @@ function _privateCommandProof() {
 	const outcome = app.run(["child"], { flags: { token: "value" } });
 	type _result = Expect<Equal<typeof outcome, Promise<RunOutcome<number>>>>;
 	new Crust("app")
-		.provide(defineContext("owner", { flags: [{ name: "token", type: "string" }] }, () => 1)())
+		.provide(
+			defineContext("owner")
+				.flags({ name: "token", type: "string" })
+				.setup(() => 1)(),
+		)
 		// @ts-expect-error Structural copies retain carried flag relations.
 		.add(copy);
-	const db = defineContext("db", () => 1);
+	const db = defineContext("db").setup(() => 1);
 	const demanding = defineCommand("demand", (c) => c.use(db));
 	// @ts-expect-error Structural copies retain declared demands.
 	new Crust("app").add({ ...demanding });
 }
 
 function _holderErasure() {
-	const db = defineContext("db", () => 1);
+	const db = defineContext("db").setup(() => 1);
 	const command = defineCommand("demand", (c) => c.use(db));
 	// @ts-expect-error A typed holder cannot erase privately retained demands.
 	const erasedCommand: CommandDefinition<"demand", readonly [], CommandShape<[], {}>> = command;
 	const extension = defineExtension(id).use(db);
 	// @ts-expect-error An empty Extension holder cannot erase demands.
 	const erasedExtension: Extension<{}, [], [], []> = extension;
-	const instance = defineContext(
-		"owned",
-		{ flags: [{ name: "token", type: "string" }] },
-		() => 1,
-	)();
+	const instance = defineContext("owned")
+		.flags({ name: "token", type: "string" })
+		.setup(() => 1)();
 	// @ts-expect-error An empty Context holder cannot erase owned flag state.
 	const erasedContext: ContextInstance<"owned", number, {}, {}> = instance;
 	const app = new Crust("app").flags({ name: "token", type: "string", required: true });
@@ -98,7 +100,7 @@ function _holderErasure() {
 }
 
 function _completedHolder() {
-	const db = defineContext("db", () => "value");
+	const db = defineContext("db").setup(() => "value");
 	const root = new Crust("app").provide(db());
 	// @ts-expect-error A root holder cannot erase provided Context expectations.
 	const empty: Crust = root;
@@ -153,14 +155,18 @@ function _recipeHolderProof() {
 		return b;
 	}
 	const child = defineCommand("child", (c) => identity(c.flags({ name: "token", type: "number" })));
-	const owner = defineContext("owner", { flags: [{ name: "token", type: "string" }] }, () => 1);
+	const owner = defineContext("owner")
+		.flags({ name: "token", type: "string" })
+		.setup(() => 1);
 	// @ts-expect-error Generic identity retains the destination collision proof.
 	new Crust("app").provide(owner()).add(child);
 }
 
 function _openInlineOwnedFlags() {
 	const name: string = "token";
-	const owner = defineContext("owner", { flags: [{ name, type: "string" }] }, () => 1);
+	const owner = defineContext("owner")
+		.flags({ name, type: "string" })
+		.setup(() => 1);
 	const app = new Crust("app").provide(owner());
 	app.command("child", (c) => {
 		return c.flags({ name: "token", type: "number" });
@@ -169,8 +175,8 @@ function _openInlineOwnedFlags() {
 }
 
 function _demandValues() {
-	const text = defineContext("db", () => "db");
-	const number = defineContext("db", () => 42);
+	const text = defineContext("db").setup(() => "db");
+	const number = defineContext("db").setup(() => 42);
 	const command = defineCommand("child", (c) =>
 		c.use(text).action(async ({ ctx }) => (await ctx.db).toUpperCase()),
 	);
@@ -188,8 +194,8 @@ function _demandValues() {
 }
 
 function _descendantExtensionDemand() {
-	const text = defineContext("db", () => "db");
-	const number = defineContext("db", () => 42);
+	const text = defineContext("db").setup(() => "db");
+	const number = defineContext("db").setup(() => 42);
 	const child = defineCommand("child", (c) => c.provide(number()));
 	const extension = defineExtension(id)
 		.use(text)
@@ -208,9 +214,9 @@ function _descendantExtensionDemand() {
 }
 
 function _dynamicDemandValues() {
-	const text = defineContext("db", () => "db");
+	const text = defineContext("db").setup(() => "db");
 	const extension = defineExtension(id).use(text);
-	const unknownProvider = defineContext("db", (): unknown => 42);
+	const unknownProvider = defineContext("db").setup((): unknown => 42);
 	const unknownChild = defineCommand("child", (c) => c.provide(unknownProvider()));
 	new Crust("app")
 		.provide(text())
@@ -218,10 +224,10 @@ function _dynamicDemandValues() {
 		// @ts-expect-error Unknown shadowing cannot establish a string demand.
 		.add(unknownChild);
 	const dynamicName: string = "db";
-	const homogeneous = defineContext(dynamicName, () => "compatible");
+	const homogeneous = defineContext(dynamicName).setup(() => "compatible");
 	const providers = [homogeneous()];
 	new Crust("app").provide(...providers).extend(extension);
-	const unknowns = [defineContext(dynamicName, (): unknown => 42)()];
+	const unknowns = [defineContext(dynamicName).setup((): unknown => 42)()];
 	// A fully open unknown-valued provider collection has no provable mismatch.
 	new Crust("app").provide(...unknowns).extend(extension);
 	new Crust("app")
@@ -237,8 +243,8 @@ function _dynamicDemandValues() {
 }
 
 function _contributedDemandValues() {
-	const text = defineContext("db", () => "db");
-	const number = defineContext("db", () => 42);
+	const text = defineContext("db").setup(() => "db");
+	const number = defineContext("db").setup(() => 42);
 	const demand = defineExtension(id).use(text);
 	const child = defineCommand("child", (c) => c.provide(number()));
 	const contribute = defineExtension(defineExtensionId("commands")).add(child);
@@ -255,14 +261,16 @@ function _contributedDemandValues() {
 	const broad: CommandDefinition = child;
 	// A broad child holder has no statically known descendant value mismatch.
 	new Crust("app").provide(text()).extend(demand).add(broad);
-	const dependent = defineContext("dependent", { use: [text] }, () => true);
+	const dependent = defineContext("dependent")
+		.use(text)
+		.setup(() => true);
 	// @ts-expect-error Checked Context dependency names do not establish promised values.
 	new Crust("app").provide(number()).provide(dependent());
 }
 
 function _onlyHookDemandsAreApplicationWide() {
-	const text = defineContext("db", () => "db");
-	const unrelated = defineCommand("other", (c) => c.provide(defineContext("db", () => 42)()));
+	const text = defineContext("db").setup(() => "db");
+	const unrelated = defineCommand("other", (c) => c.provide(defineContext("db").setup(() => 42)()));
 	const command = defineCommand("consumer", (c) => c.use(text));
 	const extension = defineExtension(id).add(command);
 	new Crust("app").provide(text()).extend(extension).add(unrelated);
@@ -270,7 +278,7 @@ function _onlyHookDemandsAreApplicationWide() {
 }
 
 function _hookDemandProofCannotBeErased() {
-	const text = defineContext("db", () => "db");
+	const text = defineContext("db").setup(() => "db");
 	const extension = defineExtension(id).use(text);
 	// @ts-expect-error Keeping aggregate demands cannot erase separately retained hook demands.
 	const erased: Extension<{ db: string }, [], [], [], never, {}> = extension;
@@ -282,8 +290,8 @@ function _hookDemandProofCannotBeErased() {
 }
 
 function _commandLocalDemandValues() {
-	const text = defineContext("db", () => "db");
-	const number = defineContext("db", () => 42);
+	const text = defineContext("db").setup(() => "db");
+	const number = defineContext("db").setup(() => 42);
 	defineCommand("child", (c) => {
 		// @ts-expect-error Local checked providers cannot invalidate an existing demand.
 		return c.use(text).provide(number());
@@ -330,7 +338,9 @@ function _checkedAliasReplacementProof() {
 }
 
 function _providersAfterPendingCommands() {
-	const owner = defineContext("owner", { flags: [{ name: "token", type: "string" }] }, () => 1);
+	const owner = defineContext("owner")
+		.flags({ name: "token", type: "string" })
+		.setup(() => 1);
 	const child = defineCommand("child", (c) => c.flags({ name: "token", type: "boolean" }));
 	const ext = defineExtension(id).add(child);
 	// @ts-expect-error -- providers added later reach pending contributed commands
@@ -345,9 +355,9 @@ function _providersAfterPendingCommands() {
 }
 
 function _conditionalDescendantDemand(condition: boolean) {
-	const text = defineContext("db", () => "db");
-	const number = defineContext("db", () => 42);
-	const other = defineContext("other", () => true);
+	const text = defineContext("db").setup(() => "db");
+	const number = defineContext("db").setup(() => 42);
+	const other = defineContext("other").setup(() => true);
 	const demand = defineExtension(id).use(text);
 	const child = defineCommand("child", (c) => (condition ? c.provide(number()) : c));
 	const root = new Crust("app").provide(text());
@@ -380,7 +390,7 @@ function _conditionalDescendantDemand(condition: boolean) {
 	);
 	// @ts-expect-error Disjoint provider names do not imply an empty provider record.
 	root.extend(demand).add(mixed);
-	const unknown = defineContext("db", (): unknown => 42);
+	const unknown = defineContext("db").setup((): unknown => 42);
 	const uncertain = defineCommand("uncertain", (c) => (condition ? c.provide(unknown()) : c));
 	// @ts-expect-error Unknown outputs remain unproven even beside an empty branch.
 	root.add(uncertain).extend(demand);
@@ -415,7 +425,7 @@ function _conditionalProviderAndChildHolders(
 		CommandShape<[], {}, {}, void, { db: string } | {}>
 	>,
 ) {
-	const text = defineContext("db", () => "db");
+	const text = defineContext("db").setup(() => "db");
 	const demand = defineExtension(id).use(text);
 	const root = new Crust("app").provide(text());
 	// @ts-expect-error A supported provider-record holder cannot erase an incompatible branch.

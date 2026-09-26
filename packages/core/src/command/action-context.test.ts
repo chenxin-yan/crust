@@ -4,8 +4,8 @@ import { defineContext } from "../api/context.ts";
 import { Crust, defineCommand } from "./crust.ts";
 
 it("keeps safe pre-action shadowing, compatible bound replacement, and descendant locality", async () => {
-	const text = defineContext("db", () => "parent");
-	const numeric = defineContext("db", () => 42);
+	const text = defineContext("db").setup(() => "parent");
+	const numeric = defineContext("db").setup(() => 42);
 	const app = new Crust("cli")
 		.provide(text())
 		.action(async ({ ctx }) => (await ctx.db).toUpperCase())
@@ -32,7 +32,7 @@ it("keeps safe pre-action shadowing, compatible bound replacement, and descendan
 });
 
 it("replaces the action on the new builder without mutating the prior action", async () => {
-	const text = defineContext("db", () => "parent");
+	const text = defineContext("db").setup(() => "parent");
 	const calls: string[] = [];
 	const original = new Crust("cli").provide(text()).action(async ({ ctx }) => {
 		calls.push("old");

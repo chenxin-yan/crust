@@ -32,7 +32,7 @@ Each `handler()` invocation runs one Effect program, provided with every `layer(
 | -------------------------------- | -------------------------------------- | ------------------------------------------------------ |
 | Action                           | `.action(handler(fn))`                 | `fn` returns an Effect or is a generator (`function*`) |
 | Layer-backed Context             | `.provide(db())`, `.use(db)`, `ctx.db` | `yield* Db`: services are provided automatically       |
-| Plain Context inside a program   | `defineContext("config", …)`           | `yield* service(config)`                               |
+| Plain Context inside a program   | `defineContext("config").setup(…)`     | `yield* service(config)`                               |
 | Throwing Crust code in a program | prompts, `CrustError`, `AbortError`    | `tryCrust(() => …)`: tagged failure or interruption    |
 
 ### Error outcomes
@@ -62,7 +62,7 @@ Each invocation builds the Layer in a fresh `Scope`, closed with the other Conte
 
 <include lang="ts">../../../examples/modules/effect.ts#handler</include>
 
-`fn` receives the same input a plain action receives, with the same inference, and the action resolves with the program's success value. The program's requirements are checked against `ServicesOf<Input>`, the services of the `layer()` Contexts on the path: requiring a service with no `layer()` there is a compile error. A plain `defineContext()` returning a `Context.Context`, or a `layer()` without a literal name, does not count.
+`fn` receives the same input a plain action receives, with the same inference, and the action resolves with the program's success value. The program's requirements are checked against `ServicesOf<Input>`, the services of the `layer()` Contexts on the path: requiring a service with no `layer()` there is a compile error. A plain Context whose setup returns a `Context.Context`, or a `layer()` without a literal name, does not count.
 
 ## `service(factory)`
 

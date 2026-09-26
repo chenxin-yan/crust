@@ -88,7 +88,7 @@ function _metadataRequirements() {
 	app.flags({ name: "verbose", type: "boolean" }).extend(needsVersion);
 	app.args({ name: "file", type: "string" }).extend(needsVersion);
 	app.action(() => 42).extend(needsVersion);
-	const logger = defineContext("logger", () => ({ info: () => {} }));
+	const logger = defineContext("logger").setup(() => ({ info: () => {} }));
 	app.provide(logger()).extend(needsVersion);
 	const sub = defineCommand("sub", (cmd) => cmd.action(() => 42));
 	app.add(sub).extend(needsVersion);
@@ -169,7 +169,7 @@ function _metadataRequirements() {
 
 function _fluentInference() {
 	const ID = defineExtensionId("test:inference");
-	const logger = defineContext("logger", () => ({ info: () => {} }));
+	const logger = defineContext("logger").setup(() => ({ info: () => {} }));
 	const instance = logger();
 	const command = defineCommand("docs", (cmd) => cmd.action(() => "docs"));
 	const logging = defineExtension<"version">(ID)
@@ -225,7 +225,7 @@ function _fluentInference() {
 
 function _conditionalFactoryDependencies() {
 	const ID = defineExtensionId("test:conditional-factory");
-	const db = defineContext("db", () => "ok");
+	const db = defineContext("db").setup(() => "ok");
 	const make = defineExtension<"version">(ID).factory((extension, enabled: boolean) =>
 		enabled
 			? extension.use(db).preRun(async ({ ctx, rootCommand }) => {
@@ -243,7 +243,7 @@ function _conditionalFactoryDependencies() {
 	new Crust("app").provide(db()).extend(make(true));
 	// @ts-expect-error Conditional factories retain their inferred arguments.
 	make("enabled");
-	const wrongDb = defineContext("db", () => 42);
+	const wrongDb = defineContext("db").setup(() => 42);
 	// @ts-expect-error A provider must satisfy every possible branch's value contract.
 	new Crust("app", { version: "1" }).provide(wrongDb()).extend(make(true));
 	new Crust("app", { version: "1" })
@@ -255,7 +255,7 @@ function _conditionalFactoryDependencies() {
 
 function _positionalCallbacks() {
 	const ID = defineExtensionId("test:positions");
-	const logger = defineContext("logger", () => "logger");
+	const logger = defineContext("logger").setup(() => "logger");
 	defineExtension(ID)
 		.preRun(({ ctx, flags }) => {
 			// @ts-expect-error Callbacks do not see Contexts declared after them.

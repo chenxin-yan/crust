@@ -7,8 +7,8 @@ import { Crust, defineCommand } from "./crust.ts";
 // Compile-time regression checks; intentionally never invoked.
 // infers pulled Context values while preserving fluent action types
 function _typecheckInfersPulledContextValuesWhilePreservingFluentActionTypes() {
-	const auth = defineContext("auth", () => ({ user: "yan" }));
-	const region = defineContext("region", () => "us-east-1");
+	const auth = defineContext("auth").setup(() => ({ user: "yan" }));
+	const region = defineContext("region").setup(() => "us-east-1");
 	const definition = defineCommand("deploy", (command) =>
 		command
 			.use(auth)
@@ -47,7 +47,7 @@ function _typecheckNestedFlaggedDefinitionAfterArgsSatisfiesErasedBuilder() {
 
 // capability constraints keep root-only operations uncallable in recipes across fluent transitions
 function _typecheckRestrictsBuilderCapabilities() {
-	const auth = defineContext("auth", () => ({ user: "yan" }));
+	const auth = defineContext("auth").setup(() => ({ user: "yan" }));
 	const extension = defineExtension(defineExtensionId("nested"));
 	const app = new Crust("app");
 

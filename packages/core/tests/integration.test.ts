@@ -74,7 +74,9 @@ describe("integration: .execute() full pipeline with argv override", () => {
 	it("full pipeline: root flags + args + subcommand routing + execution", async () => {
 		const env = defineFlag("env", { type: "string", default: "staging" });
 		const dryRun = defineFlag("dryRun", { type: "boolean" });
-		const deployment = defineContext("deployment", { flags: [env, dryRun] }, ({ flags }) => flags);
+		const deployment = defineContext("deployment")
+			.flags(env, dryRun)
+			.setup(({ flags }) => flags);
 		const app = new Crust("deploy").provide(deployment()).add(
 			defineCommand("service", (cmd) =>
 				cmd
@@ -108,9 +110,11 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 			aliases: ["token"],
 			schema,
 		});
-		const auth = defineContext("auth", { flags: [apiKey] }, ({ flags }) => ({
-			credential: flags["api-key"],
-		}));
+		const auth = defineContext("auth")
+			.flags(apiKey)
+			.setup(({ flags }) => ({
+				credential: flags["api-key"],
+			}));
 		const deploy = defineCommand("deploy", (command) =>
 			command.use(auth).action(async ({ ctx, stdout }) => {
 				const identity = await ctx.auth;
@@ -126,9 +130,11 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 
 	it("routes Context-owned flags at a mid-path position without propagating parent locals", async () => {
 		const verbose = defineFlag("verbose", { type: "boolean" });
-		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
-			verbose: flags.verbose === true,
-		}));
+		const logging = defineContext("logging")
+			.flags(verbose)
+			.setup(({ flags }) => ({
+				verbose: flags.verbose === true,
+			}));
 		const app = new Crust("cli")
 			.flags({ name: "root-only", type: "boolean" })
 			.provide(logging())
@@ -158,7 +164,9 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 
 	it("enforces a required Context-owned flag on a descendant", async () => {
 		const token = defineFlag("token", { type: "string", required: true });
-		const auth = defineContext("auth", { flags: [token] }, () => ({}));
+		const auth = defineContext("auth")
+			.flags(token)
+			.setup(() => ({}));
 		const app = new Crust("cli")
 			.provide(auth())
 			.add(defineCommand("deploy", (command) => command.action(() => {})));
@@ -170,7 +178,9 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 
 	it("parses a Context-owned long alias on a descendant", async () => {
 		const output = defineFlag("output", { type: "string", aliases: ["out"] });
-		const outputConfig = defineContext("output-config", { flags: [output] }, ({ flags }) => flags);
+		const outputConfig = defineContext("output-config")
+			.flags(output)
+			.setup(({ flags }) => flags);
 		const app = new Crust("cli")
 			.provide(outputConfig())
 			.add(
@@ -191,10 +201,12 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 	it("accepts an owned flag of an unrequired Context without constructing it", async () => {
 		let built = 0;
 		const token = defineFlag("token", { type: "string" });
-		const auth = defineContext("auth", { flags: [token] }, ({ flags }) => {
-			built++;
-			return flags;
-		});
+		const auth = defineContext("auth")
+			.flags(token)
+			.setup(({ flags }) => {
+				built++;
+				return flags;
+			});
 		const app = new Crust("cli").provide(auth()).add(
 			defineCommand("deploy", (command) =>
 				command.action(({ flags, stdout }) => {
@@ -258,8 +270,12 @@ describe("integration: nested added definitions end-to-end", () => {
 	it("3-level nested definitions execute correctly", async () => {
 		const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
 		const timeout = defineFlag("timeout", { type: "number", default: 30 });
-		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
-		const remoteConfig = defineContext("remote-config", { flags: [timeout] }, ({ flags }) => flags);
+		const logging = defineContext("logging")
+			.flags(verbose)
+			.setup(({ flags }) => flags);
+		const remoteConfig = defineContext("remote-config")
+			.flags(timeout)
+			.setup(({ flags }) => flags);
 		const app = new Crust("git").provide(logging()).add(
 			defineCommand("remote", (cmd) =>
 				cmd
@@ -316,7 +332,9 @@ describe("integration: nested added definitions end-to-end", () => {
 
 describe("integration: split-file definitions end-to-end", () => {
 	const verbose = defineFlag("verbose", { type: "boolean" });
-	const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
+	const logging = defineContext("logging")
+		.flags(verbose)
+		.setup(({ flags }) => flags);
 	const listCommand = defineCommand("list", (command) =>
 		command
 			.use(logging)
@@ -354,11 +372,9 @@ describe("integration: split-file definitions end-to-end", () => {
 
 	it("reuses a definition across satisfying parents, renamed via .as()", async () => {
 		const first = new Crust("first").provide(logging()).add(listCommand);
-		const defaultLogging = defineContext(
-			"logging",
-			{ flags: [{ ...verbose, default: true }] },
-			({ flags }) => flags,
-		);
+		const defaultLogging = defineContext("logging")
+			.flags({ ...verbose, default: true })
+			.setup(({ flags }) => flags);
 		const second = new Crust("second").provide(defaultLogging()).add(listCommand.as("show"));
 
 		expect((await executeCrust(first, ["list", "pods"])).stdout).toContain("verbose=undefined");
@@ -371,8 +387,12 @@ describe("integration: added definitions", () => {
 
 	it("adds nested definitions end-to-end", async () => {
 		const env = defineFlag("env", { type: "string" });
-		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
-		const deployment = defineContext("deployment", { flags: [env] }, ({ flags }) => flags);
+		const logging = defineContext("logging")
+			.flags(verbose)
+			.setup(({ flags }) => flags);
+		const deployment = defineContext("deployment")
+			.flags(env)
+			.setup(({ flags }) => flags);
 		const status = defineCommand("status", (command) =>
 			command
 				.use(logging)
@@ -395,7 +415,9 @@ describe("integration: added definitions", () => {
 describe("integration: Context-owned boolean flag negation", () => {
 	it("--no-verbose negates a Context-owned boolean flag on a subcommand", async () => {
 		const verbose = defineFlag("verbose", { type: "boolean", default: true });
-		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
+		const logging = defineContext("logging")
+			.flags(verbose)
+			.setup(({ flags }) => flags);
 		const app = new Crust("cli").provide(logging()).add(
 			defineCommand("sub", (cmd) =>
 				cmd.use(logging).action(async ({ ctx, stdout }) => {
@@ -417,7 +439,9 @@ describe("integration: Context-owned boolean flag negation", () => {
 describe("integration: Context-owned multiple-value flag", () => {
 	it("Context-owned multiple-value flag collects values on a subcommand", async () => {
 		const tag = defineFlag("tag", { type: "string", multiple: true });
-		const tags = defineContext("tags", { flags: [tag] }, ({ flags }) => flags);
+		const tags = defineContext("tags")
+			.flags(tag)
+			.setup(({ flags }) => flags);
 		const app = new Crust("cli").provide(tags()).add(
 			defineCommand("sub", (cmd) =>
 				cmd.use(tags).action(async ({ ctx, stdout }) => {
@@ -439,7 +463,9 @@ describe("integration: Context-owned multiple-value flag", () => {
 describe("integration: separator (--) with subcommand and Context-owned flags", () => {
 	it("rawArgs captured correctly on a subcommand with Context-owned flags", async () => {
 		const verbose = defineFlag("verbose", { type: "boolean" });
-		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => flags);
+		const logging = defineContext("logging")
+			.flags(verbose)
+			.setup(({ flags }) => flags);
 		const app = new Crust("cli").provide(logging()).add(
 			defineCommand("sub", (cmd) =>
 				cmd.use(logging).action(async ({ ctx, rawArgs, stdout }) => {
@@ -471,7 +497,9 @@ describe("integration: complex real-world CLI scenario", () => {
 		const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
 		const config = defineFlag("config", { type: "string", default: "~/.myctl" });
 
-		const settings = defineContext("settings", { flags: [verbose, config] }, ({ flags }) => flags);
+		const settings = defineContext("settings")
+			.flags(verbose, config)
+			.setup(({ flags }) => flags);
 		const app = new Crust("myctl")
 			.provide(settings())
 			.extend(auditExtension)

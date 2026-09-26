@@ -3,6 +3,7 @@ import { toFlagsRecord } from "../parsing/spellings.ts";
 import type { FlagsDef, InferFlags, InvocationIO, MergeFlags, NamedFlagDef } from "../types.ts";
 import type {
 	AttachedFlags,
+	AttachedSpellings,
 	ContextOwnedFlags,
 	ValidateLocalFlagDefs,
 } from "../validation/flags.brands.ts";
@@ -59,31 +60,6 @@ export type ContextBag<Deps extends ContextMap = {}> = {
 	readonly [contextSources]?: readonly (AnyContextFactory | AnyContextInstance)[];
 };
 
-export interface ContextConfig {
-	readonly flags?: readonly NamedFlagDef[];
-	readonly use?: readonly AnyContextFactory[];
-}
-
-type ValidateContextConfig<R extends ContextConfig> = {
-	readonly flags?: R["flags"] extends readonly NamedFlagDef[]
-		? ValidateLocalFlagDefs<R["flags"], never>
-		: "flags" extends keyof R
-			? {}
-			: never;
-	readonly use?: R["use"] extends readonly AnyContextFactory[]
-		? R["use"]
-		: "use" extends keyof R
-			? {}
-			: never;
-};
-
-interface ContextSetupInput<OF extends FlagsDef = FlagsDef> extends InvocationIO {
-	readonly signal: AbortSignal;
-	readonly flags: InferFlags<OF>;
-	readonly ctx: ContextBag<ContextMap>;
-	readonly defer: (cleanup: () => void | PromiseLike<void>) => void;
-}
-
 export interface ContextInstance<
 	Name extends string = string,
 	Value = unknown,
@@ -99,7 +75,7 @@ export interface ContextInstance<
 	readonly use: readonly AnyContextFactory[];
 	/** @internal defining factory, for adapters that identify Contexts by factory */
 	readonly factory: AnyContextFactory;
-	setup(input: ContextSetupInput<OF>): Awaitable<Value>;
+	setup(input: ContextSetup<OF, ContextMap>): Awaitable<Value>;
 	readonly _ownedFlags?: OF;
 	/** @internal — phantom carrying the transitive dependency closure */
 	readonly _deps?: Deps;
@@ -111,12 +87,11 @@ export type AnyContextInstance = ContextInstance<string, unknown, any, any>;
 /** Whatever a Context setup produces, erased at the runtime registry. */
 export type ContextValue = Awaited<ReturnType<AnyContextInstance["setup"]>>;
 
+/** Invocation input passed to a Context's `.setup()` callback; factory options arrive as its second parameter. */
 export interface ContextSetup<
-	Options,
 	OF extends FlagsDef = {},
 	Deps extends ContextMap = {},
 > extends InvocationIO {
-	readonly options: Options;
 	/** The invocation's cancellation signal; pass it to cancellable setup work. */
 	readonly signal: AbortSignal;
 	readonly flags: InferFlags<OF>;
@@ -135,7 +110,10 @@ export interface ContextFactory<
 	OF extends FlagsDef = {},
 	Deps extends ContextMap = {},
 > extends Defining<ContextFactory<Name, Options, Value, OF, Deps>> {
-	(options: Options): ContextInstance<Name, Value, OF, Deps>;
+	/** Options may be omitted when their type accepts `undefined` (including no-option `void`). */
+	(
+		...options: undefined extends Options ? [options?: Options] : [options: Options]
+	): ContextInstance<Name, Value, OF, Deps>;
 	readonly contextName: Name;
 	/** @internal — declared direct dependency factories */
 	readonly use: readonly AnyContextFactory[];
@@ -248,57 +226,77 @@ export type ContextsDependencies<Cs extends readonly AnyContextInstance[]> = Cs 
 	? ContextDepsOf<H> & ContextsDependencies<T>
 	: {};
 
-export type OwnedFlagsOf<R extends ContextConfig> = R extends {
-	flags: infer F extends readonly NamedFlagDef[];
-}
-	? AttachedFlags<F>
-	: "flags" extends keyof R
-		? FlagsDef
-		: {};
+/** Factory options inferred from a setup callback's optional second parameter. */
+type ContextOptionsOf<Args extends readonly unknown[]> = Args extends readonly [] ? void : Args[0];
 
-export type UseOf<R extends ContextConfig> = R extends {
-	use: infer Use extends readonly AnyContextFactory[];
-}
-	? Use
-	: "use" extends keyof R
-		? readonly AnyContextFactory[]
-		: readonly [];
-
-type ErasedContextSetup = (input: never) => Awaitable<ContextValue>;
-
-function isContextSetup(value: ContextConfig | ErasedContextSetup): value is ErasedContextSetup {
-	return typeof value === "function";
-}
-
-/** Define a named, lazy command dependency. Declared `use` Contexts are exposed on `ctx`. */
-export function defineContext<Name extends string, Value, Options = void>(
-	name: Name,
-	setup: (input: ContextSetup<Options>) => Awaitable<Value>,
-): ContextFactory<Name, Options, Value>;
-export function defineContext<
+/**
+ * Immutable fluent Context authoring handle returned by {@link defineContext}.
+ * `use` and `flags` append and return a new handle; `setup` ends the chain and
+ * returns the callable {@link ContextFactory}. Callbacks are typed by the
+ * declarations made before them.
+ */
+export interface ContextBuilder<
 	Name extends string,
-	const R extends ContextConfig,
-	Value,
-	Options = void,
->(
-	name: Name,
-	config: R & ValidateContextConfig<R> & ContextConfig,
-	setup: (
-		input: ContextSetup<Options, OwnedFlagsOf<R>, ContextDependencies<UseOf<R>>>,
-	) => Awaitable<Value>,
-): ContextFactory<Name, Options, Value, OwnedFlagsOf<R>, ContextDependencies<UseOf<R>>>;
+	Use extends readonly AnyContextFactory[] = [],
+	Defs extends readonly NamedFlagDef[] = [],
+> {
+	/** Declare Contexts setup reads from `ctx`; consumers must provide their transitive closure. */
+	use<const Fs extends readonly AnyContextFactory[]>(
+		...factories: Fs
+	): ContextBuilder<Name, readonly [...Use, ...Fs], Defs>;
+	/** Own flags parsed wherever this Context is provided; setup reads them from `flags`. */
+	flags<const Fs extends readonly NamedFlagDef[]>(
+		...defs: ValidateLocalFlagDefs<Fs, AttachedSpellings<Defs>>
+	): ContextBuilder<Name, Use, readonly [...Defs, ...Fs]>;
+	/**
+	 * Finish the definition. `setup` runs lazily, once per invocation, when a
+	 * consumer first reads the Context. Annotate its optional second parameter to
+	 * accept factory options: `.setup((input, options: { url: string }) => …)`.
+	 */
+	setup<Value, Args extends readonly [options?: unknown] = []>(
+		setup: (
+			input: ContextSetup<AttachedFlags<Defs>, ContextDependencies<Use>>,
+			...args: Args
+		) => Awaitable<Value>,
+	): ContextFactory<
+		Name,
+		ContextOptionsOf<Args>,
+		Value,
+		AttachedFlags<Defs>,
+		ContextDependencies<Use>
+	>;
+}
 
-export function defineContext(
+type ErasedContextBuilder = ContextBuilder<string, any, any>;
+type ErasedContextOptions = Parameters<AnyContextFactory>[0];
+type ErasedContextSetup = (
+	input: ContextSetup<FlagsDef, ContextMap>,
+	options: ErasedContextOptions,
+) => Awaitable<ContextValue>;
+
+function createContextBuilder(
 	name: string,
-	configOrSetup: ContextConfig | ErasedContextSetup,
-	maybeSetup?: ErasedContextSetup,
+	use: readonly AnyContextFactory[],
+	ownedFlags: Readonly<FlagsDef>,
+): ErasedContextBuilder {
+	const builder = {
+		use: (...factories: readonly AnyContextFactory[]) =>
+			createContextBuilder(name, Object.freeze([...use, ...factories.map(definingOf)]), ownedFlags),
+		// Snapshot and collision-check each call's definitions eagerly, like one combined list.
+		flags: (...defs: readonly NamedFlagDef[]) =>
+			createContextBuilder(name, use, Object.freeze(toFlagsRecord(defs, ownedFlags))),
+		setup: (setup: ErasedContextSetup) => createContextFactory(name, use, ownedFlags, setup),
+	};
+	// SAFETY: public signatures check inputs; the erased setup receives exactly (input, options).
+	return Object.freeze(builder) as ErasedContextBuilder;
+}
+
+function createContextFactory(
+	name: string,
+	use: readonly AnyContextFactory[],
+	ownedFlags: Readonly<FlagsDef>,
+	setup: ErasedContextSetup,
 ): AnyContextFactory {
-	const hasConfig = !isContextSetup(configOrSetup);
-	const config = hasConfig ? configOrSetup : {};
-	// Authoring overloads require setup in both call forms.
-	const setup = hasConfig ? maybeSetup! : configOrSetup;
-	const ownedFlags = Object.freeze(toFlagsRecord(config.flags ?? []));
-	const use = Object.freeze((config.use ?? []).map(definingOf));
 	const instance = (
 		instanceUse: readonly AnyContextFactory[],
 		run: AnyContextInstance["setup"],
@@ -307,11 +305,8 @@ export function defineContext(
 		// SAFETY: seal installs the private defining proof before this runtime value is erased.
 		return seal(value) as AnyContextInstance;
 	};
-	const factory = (options: Parameters<AnyContextFactory>[0]): AnyContextInstance =>
-		instance(use, (input) => {
-			// SAFETY: public overloads pair setup with exactly this merged input shape.
-			return setup({ options, ...input } as never);
-		});
+	const factory = (options?: ErasedContextOptions): AnyContextInstance =>
+		instance(use, (input) => setup(input, options));
 	factory.contextName = name;
 	factory.use = use;
 	factory.of = (value: ContextValue): AnyContextInstance =>
@@ -319,6 +314,15 @@ export function defineContext(
 	// SAFETY: the mutable factory is fully populated before widening to the runtime registry type.
 	const sealed = seal(factory) as AnyContextFactory;
 	return sealed;
+}
+
+/**
+ * Start an immutable fluent Context definition: a named, lazy command
+ * dependency. Chain `.use()` and `.flags()`, then `.setup()` for the factory.
+ */
+export function defineContext<Name extends string>(name: Name): ContextBuilder<Name> {
+	// SAFETY: the builder's public signatures carry the phantoms the erased runtime handle drops.
+	return createContextBuilder(name, Object.freeze([]), Object.freeze({})) as ContextBuilder<Name>;
 }
 
 export type FactoryValueOf<F extends AnyContextFactory> =

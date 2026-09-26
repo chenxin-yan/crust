@@ -15,7 +15,7 @@ export const declared = new Crust("greet")
 //#region cleanup
 import { defineContext } from "@crustjs/core";
 
-const database = defineContext("database", ({ stderr }) => ({
+const database = defineContext("database").setup(({ stderr }) => ({
 	// [!code highlight:2]
 	[Symbol.dispose]() {
 		stderr("Closed database");

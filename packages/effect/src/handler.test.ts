@@ -187,7 +187,7 @@ describe("handler with layer", () => {
 
 	it("produces identical results from the generator and Effect forms", async () => {
 		const db = layer("db", Layer.succeed(Db, { query: (sql) => `rows(${sql})` }));
-		const config = defineContext("config", () => ({ limit: 3 }));
+		const config = defineContext("config").setup(() => ({ limit: 3 }));
 		const base = new Crust("cli")
 			.provide(db(), config())
 			.args({ name: "table", type: "string", required: true });
@@ -220,11 +220,11 @@ describe("handler with layer", () => {
 	it("keeps plain Contexts lazy: service() builds once, untouched Contexts never", async () => {
 		let configBuilt = 0;
 		const db = layer("db", Layer.succeed(Db, { query: (sql) => sql }));
-		const config = defineContext("config", () => {
+		const config = defineContext("config").setup(() => {
 			configBuilt++;
 			return { prefix: "cfg" };
 		});
-		const untouched = defineContext("untouched", () => {
+		const untouched = defineContext("untouched").setup(() => {
 			throw new Error("must stay lazy");
 		});
 		const app = new Crust("cli").provide(db(), config(), untouched()).action(
@@ -244,7 +244,7 @@ describe("handler with layer", () => {
 
 	it("ignores a plain Context that shares its name with a layer in another app", async () => {
 		layer("shared", Layer.succeed(Db, { query: (sql) => sql }));
-		const shared = defineContext("shared", () => {
+		const shared = defineContext("shared").setup(() => {
 			throw new Error("must stay lazy");
 		});
 		const app = new Crust("other").provide(shared()).action(handler(() => Effect.succeed("plain")));
@@ -255,7 +255,7 @@ describe("handler with layer", () => {
 	});
 
 	it("fails service() with Core's missing-context error when the Context is off the path", async () => {
-		const config = defineContext("config", () => ({ limit: 3 }));
+		const config = defineContext("config").setup(() => ({ limit: 3 }));
 		const app = new Crust("cli").action(
 			handler(() =>
 				service(config).pipe(
@@ -278,9 +278,9 @@ describe("handler with layer", () => {
 	it.each([false, true])(
 		"rejects a different same-name factory without building it (compatible=%s)",
 		async (compatible) => {
-			const expected = defineContext("config", () => ({ port: 80 }));
+			const expected = defineContext("config").setup(() => ({ port: 80 }));
 			let builds = 0;
-			const actual = defineContext("config", () => {
+			const actual = defineContext("config").setup(() => {
 				builds++;
 				return compatible ? { port: 80 } : { label: "wrong" };
 			});
@@ -300,9 +300,9 @@ describe("handler with layer", () => {
 	);
 
 	it("rejects a matching ancestor factory shadowed by a different descendant factory", async () => {
-		const expected = defineContext("config", () => ({ port: 80 }));
+		const expected = defineContext("config").setup(() => ({ port: 80 }));
 		let builds = 0;
-		const replacement = defineContext("config", () => {
+		const replacement = defineContext("config").setup(() => {
 			builds++;
 			return { label: "replacement" };
 		});
@@ -336,7 +336,7 @@ describe("handler with layer", () => {
 	});
 
 	it("accepts descendant same-factory .of shadowing", async () => {
-		const config = defineContext("config", () => ({ port: 80 }));
+		const config = defineContext("config").setup(() => ({ port: 80 }));
 		const app = new Crust("cli").provide(config()).command("child", (child) =>
 			child.provide(config.of({ port: 123 })).action(
 				handler(function* () {
@@ -349,7 +349,7 @@ describe("handler with layer", () => {
 	});
 
 	it("accepts same-factory .of doubles", async () => {
-		const config = defineContext("config", (): { port: number } => {
+		const config = defineContext("config").setup((): { port: number } => {
 			throw new Error("live factory must not run");
 		});
 		const app = new Crust("cli").provide(config.of({ port: 123 })).action(

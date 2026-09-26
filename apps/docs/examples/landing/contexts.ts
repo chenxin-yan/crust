@@ -1,11 +1,13 @@
 import { Crust, defineContext } from "@crustjs/core";
 
-const db = defineContext("db", ({ stdout, defer }) => {
-	stdout("db opened");
-	// [!code highlight]
-	defer(() => stdout("db closed"));
-	return { query: (sql: string) => `${sql}: ok` };
-});
+const db = defineContext("db").setup(
+	({ stdout, defer }) => {
+		stdout("db opened");
+		// [!code highlight]
+		defer(() => stdout("db closed"));
+		return { query: (sql: string) => `${sql}: ok` };
+	},
+);
 
 const work = new Crust("work")
 	// [!code highlight]

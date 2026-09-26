@@ -15,16 +15,18 @@ describe("public beta API", () => {
 	it("infers pulled Context values in added definitions", async () => {
 		const calls: string[] = [];
 		const verbose = defineFlag("verbose", { type: "boolean" });
-		const db = defineContext("db", ({ options }: { options: { url: string } }) => ({
+		const db = defineContext("db").setup((_input, options: { url: string }) => ({
 			url: options.url,
 			query(sql: string) {
 				calls.push(`${options.url}:${sql}`);
 			},
 		}));
 
-		const logging = defineContext("logging", { flags: [verbose] }, ({ flags }) => ({
-			verbose: flags.verbose === true,
-		}));
+		const logging = defineContext("logging")
+			.flags(verbose)
+			.setup(({ flags }) => ({
+				verbose: flags.verbose === true,
+			}));
 		const deploy = defineCommand("deploy", (cmd) =>
 			cmd
 				.use(logging)
@@ -55,7 +57,7 @@ describe("public beta API", () => {
 
 	it("adds one definition twice via .as()", async () => {
 		const seen: string[] = [];
-		const auth = defineContext("auth", () => ({ user: "chenxin" }));
+		const auth = defineContext("auth").setup(() => ({ user: "chenxin" }));
 		const deploy = defineCommand("deploy", (command) =>
 			command
 				.use(auth)

@@ -57,7 +57,7 @@ Each call returns a builder whose type records what was added so far, so a condi
 Keep the command shape static and put the condition in the Context value:
 
 ```ts
-const db = defineContext("db", () => (prod ? connect() : null));
+const db = defineContext("db").setup(() => (prod ? connect() : null));
 c.provide(db(), cache()); // db resolves to Connection | null
 ```
 
@@ -106,7 +106,7 @@ Recipe-only. Declares the Context factories a reusable definition consumes, with
 Attaches Context instances created by invoking `defineContext()` factories. The Context is available to this command and to descendants added **after** this call, and is constructed lazily when its `ctx` property is first read.
 
 ```ts
-const database = defineContext("database", ({ options }: { options: { url: string } }) => ({
+const database = defineContext("database").setup((_input, options: { url: string }) => ({
   url: options.url,
   async [Symbol.asyncDispose]() {},
 }));
@@ -116,9 +116,9 @@ const app = new Crust("my-cli")
   .action(async ({ ctx }) => (await ctx.database).url);
 ```
 
-- A Context's `flags` are installed on this command and later-added descendants. The builder's flag type includes them.
+- Flags declared with a Context's `.flags()` are installed on this command and later-added descendants. The builder's flag type includes them.
 - Within one call, dependencies may appear in any order; across calls, providers must precede their consumers.
-- Names, dependencies, and owned-flag collisions are checked by TypeScript. Dynamic collections that collide throw a `DEFINITION` error. Missing providers, dependency cycles, and lifecycle misuse on dynamic paths are reported as `DEFINITION` errors when a Context is pulled.
+- Names, dependencies, and owned-flag collisions are checked by TypeScript. Runtime composition checks reject missing declared providers and dynamic flag collisions with a `DEFINITION` error, without running setup. Pulling a Context also checks missing providers, dependency cycles, and lifecycle misuse.
 - A command can shadow an inherited Context. After `.action()`, a local replacement must satisfy the value type that action received.
 
 ### Context lifecycle

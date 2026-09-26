@@ -56,7 +56,7 @@ describe("defineExtension", () => {
 	});
 
 	it("keeps every step immutable and leaves earlier handles untouched", () => {
-		const logger = defineContext("logger", () => "logger");
+		const logger = defineContext("logger").setup(() => "logger");
 		const empty = defineExtension(HELP);
 		const used = empty.use(logger);
 		const flagged = used.flags({ name: "trace", type: "boolean" });
@@ -71,8 +71,8 @@ describe("defineExtension", () => {
 	});
 
 	it("appends repeated collection calls in order", () => {
-		const a = defineContext("a", () => "a");
-		const b = defineContext("b", () => "b");
+		const a = defineContext("a").setup(() => "a");
+		const b = defineContext("b").setup(() => "b");
 		const first = defineCommand("first", (cmd) => cmd);
 		const second = defineCommand("second", (cmd) => cmd);
 		const extension = defineExtension(HELP)
@@ -135,7 +135,9 @@ describe("defineExtension", () => {
 	});
 
 	it("checks flag collisions against provided Context flags across calls", () => {
-		const owner = defineContext("owner", { flags: [{ name: "token", type: "string" }] }, () => 1);
+		const owner = defineContext("owner")
+			.flags({ name: "token", type: "string" })
+			.setup(() => 1);
 		expect(() =>
 			defineExtension(HELP)
 				.provide(owner())
@@ -168,7 +170,7 @@ describe("defineExtension", () => {
 	});
 
 	it("infers flags, dependencies, providers, and commands through the chain", async () => {
-		const logger = defineContext("logger", () => ({ info: () => {} }));
+		const logger = defineContext("logger").setup(() => ({ info: () => {} }));
 		const provided = logger();
 		const command = defineCommand("docs", (cmd) => cmd.action(() => "docs"));
 		const seen: string[] = [];
@@ -232,7 +234,7 @@ describe("Extension Context declarations", () => {
 	const ID = defineExtensionId("acme:contexts");
 
 	it("uses declare consumption only; hooks read Contexts the application provides", async () => {
-		const logger = defineContext("logger", () => "app logger");
+		const logger = defineContext("logger").setup(() => "app logger");
 		const seen: string[] = [];
 		const consumer = defineExtension(ID)
 			.use(logger)
@@ -250,7 +252,7 @@ describe("Extension Context declarations", () => {
 	});
 
 	it("provided Contexts are not exposed to the Extension's own hooks without use", async () => {
-		const metrics = defineContext("metrics", () => "metrics");
+		const metrics = defineContext("metrics").setup(() => "metrics");
 		let keys: string[] = [];
 		const provider = defineExtension(ID)
 			.provide(metrics())
@@ -271,7 +273,7 @@ describe("Extension Context declarations", () => {
 	});
 
 	it("providers stay application-wide regardless of chain order", async () => {
-		const metrics = defineContext("metrics", () => "metrics");
+		const metrics = defineContext("metrics").setup(() => "metrics");
 		const seen: string[] = [];
 		const child = defineCommand("child", (cmd) =>
 			cmd.use(metrics).action(async ({ ctx }) => void seen.push(await ctx.metrics)),

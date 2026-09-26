@@ -59,7 +59,7 @@ describe("invocation cancellation signal", () => {
 		const { ready, action: waitForSignal } = awaitingSignal();
 		const controller = new AbortController();
 		let cleanedUp = false;
-		const resource = defineContext("resource", async ({ signal, defer }) => {
+		const resource = defineContext("resource").setup(async ({ signal, defer }) => {
 			defer(async () => {
 				await Promise.resolve();
 				cleanedUp = true;
@@ -174,13 +174,15 @@ describe("invocation cancellation signal", () => {
 
 	it("shares one signal between Context setups, Extension hooks and the action, including the onError fallback context", async () => {
 		const seen: AbortSignal[] = [];
-		const dependency = defineContext("dependency", ({ signal }) => {
+		const dependency = defineContext("dependency").setup(({ signal }) => {
 			seen.push(signal);
 		});
-		const resource = defineContext("resource", { use: [dependency] }, async ({ ctx, signal }) => {
-			seen.push(signal);
-			await ctx.dependency;
-		});
+		const resource = defineContext("resource")
+			.use(dependency)
+			.setup(async ({ ctx, signal }) => {
+				seen.push(signal);
+				await ctx.dependency;
+			});
 		const probe = defineExtension(defineExtensionId("probe"))
 			.preRun((ctx) => {
 				seen.push(ctx.signal);
