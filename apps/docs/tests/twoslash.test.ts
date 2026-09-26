@@ -13,7 +13,7 @@ it("docs and landing hovers explain selected values without builder or boilerpla
 			String.raw`
 		import assert from "node:assert/strict";
 		import { readFileSync, readdirSync } from "node:fs";
-		import { resolve } from "node:path";
+		import { dirname, resolve } from "node:path";
 		import { transformerNotationHighlight } from "@shikijs/transformers";
 		import { remarkInclude } from "fumadocs-mdx/config";
 		import { createHighlighter } from "shiki";
@@ -33,6 +33,8 @@ it("docs and landing hovers explain selected values without builder or boilerpla
 			"../../../examples/guide/testing.ts#run": { outcome: "const outcome: RunOutcome<number>", result: "result: number" },
 			"../../../examples/guide/contexts-uses.ts": { config: "config: Promise<{ region: string; }>" },
 			"../../../examples/extensions/consumer.ts": { sections: "sections: readonly CommandSection[]" },
+			"../../../examples/modules/env.ts#quick-example": { DATABASE_URL: "const DATABASE_URL: URL" },
+			"../../../examples/modules/effect-env.ts#env-example": { PORT: "const PORT: number" },
 		};
 
 		const options = config.mdxOptions.rehypeCodeOptions;
@@ -84,20 +86,25 @@ it("docs and landing hovers explain selected values without builder or boilerpla
 			checkRendered(file, source, "", hast);
 		}
 
-		// Guide: expand each <include> with Fumadocs' own remark-include, so regions and dedent match the page.
+		// Expand each <include> with Fumadocs' own remark-include, so regions and dedent match the page.
 		const checked = new Set();
 		let plain = 0;
 		let annotated = 0;
-		for (const page of readdirSync("content/docs/guide").filter(file => file.endsWith(".mdx"))) {
-			const guide = readFileSync("content/docs/guide/" + page, "utf8");
-			const includes = [...guide.matchAll(/<include lang="(ts|json)"(?: meta=(['"])(.*?)\2)?>\s*([^<]+?)\s*<\/include>/g)];
-			assert.equal(includes.length, (guide.match(/<include\b/g) ?? []).length, page);
+		const pages = [
+			...readdirSync("content/docs/guide").filter(file => file.endsWith(".mdx")).map(file => "content/docs/guide/" + file),
+			"content/docs/modules/env.mdx",
+			"content/docs/modules/effect.mdx",
+		];
+		for (const page of pages) {
+			const content = readFileSync(page, "utf8");
+			const includes = [...content.matchAll(/<include lang="(ts|json)"(?: meta=(['"])(.*?)\2)?>\s*([^<]+?)\s*<\/include>/g)];
+			assert.equal(includes.length, (content.match(/<include\b/g) ?? []).length, page);
 			for (const [, lang, , meta = "", specifier] of includes) {
 				const include = {
 					type: "mdxJsxFlowElement", name: "include", children: [{ type: "text", value: specifier }],
 					attributes: [{ type: "mdxJsxAttribute", name: "lang", value: lang }, ...(meta ? [{ type: "mdxJsxAttribute", name: "meta", value: meta }] : [])],
 				};
-				await remarkInclude.call({})({ type: "root", children: [include] }, { dirname: resolve("content/docs/guide"), cwd: process.cwd(), data: {} });
+				await remarkInclude.call({})({ type: "root", children: [include] }, { dirname: dirname(resolve(page)), cwd: process.cwd(), data: {} });
 				assert.equal(include.type, "code", specifier);
 				const hast = highlighter.codeToHast(include.value, {
 					lang, theme: "gruvbox-light-hard", meta: { __raw: meta }, transformers: options.transformers,
@@ -108,8 +115,8 @@ it("docs and landing hovers explain selected values without builder or boilerpla
 				checked.add(specifier);
 			}
 		}
-		assert.ok(plain > 0 && annotated > 0, "both plain and annotated guide includes are rendered");
-		for (const key of Object.keys(EXPECTED_HOVERS)) if (!key.startsWith("examples/")) assert.ok(checked.has(key), key + " is not included by a guide");
+		assert.ok(plain > 0 && annotated > 0, "both plain and annotated includes are rendered");
+		for (const key of Object.keys(EXPECTED_HOVERS)) if (!key.startsWith("examples/")) assert.ok(checked.has(key), key + " is not included by a checked page");
 		highlighter.dispose();
 	`,
 		],
