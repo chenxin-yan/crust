@@ -404,7 +404,7 @@ describe("buildEntrypoint", () => {
 		await writeFile(
 			entry,
 			`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(coreUrl)};\n` +
-				`const artifact = defineExtension(defineExtensionId("artifact"), { build: () => [{ path: "artifact.txt", content: "built" }, { path: "assets/bytes.bin", content: new Uint8Array([0, 255, 128, 10]) }] });\n` +
+				`const artifact = defineExtension(defineExtensionId("artifact")).build(() => [{ path: "artifact.txt", content: "built" }, { path: "assets/bytes.bin", content: new Uint8Array([0, 255, 128, 10]) }]);\n` +
 				`const app = new Crust("fixture").extend(artifact).action(() => {});\n` +
 				`await app.execute();\n`,
 		);
@@ -459,7 +459,7 @@ describe("buildEntrypoint", () => {
 		await writeFile(
 			entry,
 			`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(coreUrl)};\n` +
-				`const broken = defineExtension(defineExtensionId("broken"), { build: () => { throw new Error("disk full"); } });\n` +
+				`const broken = defineExtension(defineExtensionId("broken")).build(() => { throw new Error("disk full"); });\n` +
 				`await new Crust("fixture").extend(broken).execute();\n`,
 		);
 
@@ -562,9 +562,7 @@ describe("buildEntrypoint", () => {
 			`import { join } from "node:path";
 			import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(coreUrl)};
 			await Bun.write(join(process.env.CRUST_INTERNAL_BUILD_OUT_DIR!, "extra.txt"), "side effect");
-			await new Crust("fixture").extend(defineExtension(defineExtensionId("fixture"), {
-				build: () => [{ path: "assets/real.txt", content: "hook output" }]
-			})).execute();`,
+			await new Crust("fixture").extend(defineExtension(defineExtensionId("fixture")).build(() => [{ path: "assets/real.txt", content: "hook output" }])).execute();`,
 		);
 		const result = await buildEntrypoint(entry, outDir, [], io, directory);
 		expect(result.build.extensions[0]?.files).toEqual(["assets/real.txt"]);
@@ -578,7 +576,7 @@ describe("buildEntrypoint", () => {
 		await writeFile(
 			entry,
 			`import { Crust, defineExtension, defineExtensionId } from ${JSON.stringify(coreUrl)};
-			await new Crust("fixture").extend(defineExtension(defineExtensionId("empty"), { build: () => [] })).execute();`,
+			await new Crust("fixture").extend(defineExtension(defineExtensionId("empty")).build(() => [])).execute();`,
 		);
 		const result = await buildEntrypoint(entry, join(directory, "dist"), [], io, directory);
 		expect(result.build).toEqual({ extensions: [{ id: defineExtensionId("empty"), files: [] }] });

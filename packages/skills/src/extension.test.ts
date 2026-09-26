@@ -12,7 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
-import { Crust } from "@crustjs/core";
+import { type AnyCrust, Crust } from "@crustjs/core";
 import { renderHelp } from "@crustjs/extensions";
 import { withPromptIO } from "@crustjs/prompts";
 import { createPromptIO } from "@crustjs/prompts/testing";
@@ -20,6 +20,7 @@ import { captureExecute } from "@crustjs/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { reapBoundedProcesses, runBoundedProcess } from "../../crust/tests/bounded-process.ts";
+import { runBuildHooks } from "../../crust/tests/build-hooks.ts";
 import { withCwd } from "../tests/fixtures.ts";
 import { skill } from "./extension.ts";
 import { installSkill } from "./generate.ts";
@@ -126,12 +127,10 @@ describe("skill extension packaged directory", () => {
 	});
 
 	/** Build hook output, keyed by artifact path with text content. */
-	async function buildArtifacts(
-		extension: ReturnType<typeof skill>,
-		snapshot: Awaited<ReturnType<Crust["snapshot"]>>,
-	): Promise<Map<string, string>> {
-		const artifacts = await extension.build!({ snapshot });
-		return new Map(artifacts.map((file) => [file.path, Buffer.from(file.content).toString()]));
+	async function buildArtifacts(app: AnyCrust): Promise<Map<string, string>> {
+		const { files, error } = await runBuildHooks(app);
+		if (error !== undefined) throw new Error(error);
+		return files;
 	}
 
 	it("omits the generated skill when generated is false", async () => {
@@ -139,9 +138,9 @@ describe("skill extension packaged directory", () => {
 		await mkdir(authored, { recursive: true });
 		await writeFile(join(authored, "SKILL.md"), "---\nname: guide\ndescription: Guide\n---\n");
 		const extension = skill({ generated: false, extras: [authored] });
-		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
+		const app = new Crust("demo", { description: "Demo" }).extend(extension);
 
-		const artifacts = await buildArtifacts(extension, snapshot);
+		const artifacts = await buildArtifacts(app);
 
 		expect([...artifacts.keys()]).toEqual([join("skills", "guide", "SKILL.md")]);
 	});
@@ -149,9 +148,9 @@ describe("skill extension packaged directory", () => {
 	it("generates from the snapshot even when a stale packaged directory exists", async () => {
 		await writeSource("demo", "stale");
 		const extension = skill({});
-		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
+		const app = new Crust("demo", { description: "Demo" }).extend(extension);
 
-		const artifacts = await buildArtifacts(extension, snapshot);
+		const artifacts = await buildArtifacts(app);
 
 		expect(artifacts.has(join("skills", "demo", "content.md"))).toBe(false);
 		expect(artifacts.get(join("skills", "demo", "SKILL.md"))).toContain("description: Demo");
@@ -167,15 +166,13 @@ describe("skill extension packaged directory", () => {
 		);
 		await writeFile(join(authored, "content.md"), "authored\n");
 		const extension = skill({ extras: [authored] });
-		const snapshot = await new Crust("demo", {
+		const app = new Crust("demo", {
 			description: "Demo",
 			version: "9.9.9",
 			sections: [{ title: "Agent skills", body: "Application-authored agent guidance." }],
-		})
-			.extend(extension)
-			.snapshot();
+		}).extend(extension);
 
-		const artifacts = await withCwd(tempRoot, () => buildArtifacts(extension, snapshot));
+		const artifacts = await withCwd(tempRoot, () => buildArtifacts(app));
 
 		expect(artifacts.get(join("skills", "demo", "SKILL.md"))).toContain('version: "9.9.9"');
 		const rootReference = artifacts.get(join("skills", "demo", "commands", "demo.md"));
@@ -201,9 +198,9 @@ describe("skill extension packaged directory", () => {
 			name: "gyst-reference",
 			description: "Generated command reference",
 		});
-		const snapshot = await new Crust("gyst", { description: "Gyst" }).extend(extension).snapshot();
+		const app = new Crust("gyst", { description: "Gyst" }).extend(extension);
 
-		const artifacts = await buildArtifacts(extension, snapshot);
+		const artifacts = await buildArtifacts(app);
 
 		expect(artifacts.has(join("skills", "gyst", "SKILL.md"))).toBe(true);
 		expect(artifacts.get(join("skills", "gyst-reference", "SKILL.md"))).toContain(
@@ -213,10 +210,10 @@ describe("skill extension packaged directory", () => {
 
 	it("renders from the snapshot without requiring a package version", async () => {
 		const extension = skill({});
-		const snapshot = await new Crust("demo", { description: "Demo" }).extend(extension).snapshot();
+		const app = new Crust("demo", { description: "Demo" }).extend(extension);
 		await writeFile(join(tempRoot, "package.json"), '{"version":"8.8.8"}');
 
-		const artifacts = await withCwd(tempRoot, () => buildArtifacts(extension, snapshot));
+		const artifacts = await withCwd(tempRoot, () => buildArtifacts(app));
 
 		const generated = artifacts.get(join("skills", "demo", "SKILL.md"));
 		expect(generated).toContain("name: demo");

@@ -51,16 +51,14 @@ const prompted = new Crust("scaffold").action(createProject);
 //#region custom-message
 class ConfigError extends Error {}
 
-const configErrors = defineExtension(defineExtensionId("config-errors"), {
-	hooks: {
-		onError(error, { stderr }) {
-			if (!(error instanceof ConfigError)) return;
-			stderr(`Error: ${error.message}`);
-			stderr("Hint: Run init to create the config file.");
-			return true;
-		},
+const configErrors = defineExtension(defineExtensionId("config-errors")).onError(
+	(error, { stderr }) => {
+		if (!(error instanceof ConfigError)) return;
+		stderr(`Error: ${error.message}`);
+		stderr("Hint: Run init to create the config file.");
+		return true;
 	},
-});
+);
 
 const configured = new Crust("app").extend(configErrors).action(() => {
 	throw new ConfigError("Config file not found.");

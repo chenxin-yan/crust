@@ -172,9 +172,9 @@ describe("toolsFromSnapshot", () => {
 	});
 
 	it("includes Extension-contributed commands", async () => {
-		const contributed = defineExtension(defineExtensionId("test:contrib"), {
-			commands: [defineCommand("extra", (c) => c.action(noop))],
-		});
+		const contributed = defineExtension(defineExtensionId("test:contrib")).add(
+			defineCommand("extra", (c) => c.action(noop)),
+		);
 		const app = new Crust("cli").extend(contributed);
 		expect(toolsFromSnapshot(await app.snapshot()).map((t) => t.name)).toEqual(["extra"]);
 	});

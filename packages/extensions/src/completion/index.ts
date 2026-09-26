@@ -178,7 +178,7 @@ export const completion: ExtensionFactory<
 	[],
 	[],
 	readonly CommandDefinition<any, any, any, any>[]
-> = defineExtension(COMPLETION, (options = {}) => {
+> = defineExtension(COMPLETION).factory((extension, options = {}) => {
 	const subcommandName = options.command ?? "completion";
 
 	const completionCommand = defineCommand(
@@ -219,12 +219,10 @@ export const completion: ExtensionFactory<
 				}),
 	);
 
-	return {
-		commands: [completionCommand],
-		build: ({ snapshot }) =>
-			renderCompletionFiles(snapshot, options).map((file) => ({
-				...file,
-				path: `completions/${file.path}`,
-			})),
-	};
+	return extension.add(completionCommand).build(({ snapshot }) =>
+		renderCompletionFiles(snapshot, options).map((file) => ({
+			...file,
+			path: `completions/${file.path}`,
+		})),
+	);
 });

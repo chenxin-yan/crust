@@ -37,7 +37,12 @@ export function definingOf<T extends Defining<unknown>>(value: T): DefiningOf<T>
 
 /** @internal */
 export function seal<T extends object>(value: T): T & Defining<T> {
-	return Object.freeze(Object.assign(value, { [defining]: value }));
+	return sealHandle(value, value);
+}
+
+/** @internal Freeze a public handle whose defining data is a separate record. */
+export function sealHandle<T extends object, D>(handle: T, data: D): T & Defining<D> {
+	return Object.freeze(Object.assign(handle, { [defining]: data }));
 }
 
 /**
@@ -56,7 +61,7 @@ export type ContextBag<Deps extends ContextMap = {}> = {
 
 export interface ContextConfig {
 	readonly flags?: readonly NamedFlagDef[];
-	readonly uses?: readonly AnyContextFactory[];
+	readonly use?: readonly AnyContextFactory[];
 }
 
 type ValidateContextConfig<R extends ContextConfig> = {
@@ -65,9 +70,9 @@ type ValidateContextConfig<R extends ContextConfig> = {
 		: "flags" extends keyof R
 			? {}
 			: never;
-	readonly uses?: R["uses"] extends readonly AnyContextFactory[]
-		? R["uses"]
-		: "uses" extends keyof R
+	readonly use?: R["use"] extends readonly AnyContextFactory[]
+		? R["use"]
+		: "use" extends keyof R
 			? {}
 			: never;
 };
@@ -91,7 +96,7 @@ export interface ContextInstance<
 	readonly name: Name;
 	readonly ownedFlags: FlagsDef;
 	/** @internal — declared direct dependency factories */
-	readonly uses: readonly AnyContextFactory[];
+	readonly use: readonly AnyContextFactory[];
 	/** @internal defining factory, for adapters that identify Contexts by factory */
 	readonly factory: AnyContextFactory;
 	setup(input: ContextSetupInput<OF>): Awaitable<Value>;
@@ -133,7 +138,7 @@ export interface ContextFactory<
 	(options: Options): ContextInstance<Name, Value, OF, Deps>;
 	readonly contextName: Name;
 	/** @internal — declared direct dependency factories */
-	readonly uses: readonly AnyContextFactory[];
+	readonly use: readonly AnyContextFactory[];
 	of(value: Value): ContextInstance<Name, Value, OF, {}>;
 	readonly _deps?: Deps;
 }
@@ -196,7 +201,7 @@ export function validateContextAvailability(
 				reason: "missing-context",
 			});
 		}
-		for (const dependency of source.uses) visit(dependency);
+		for (const dependency of source.use) visit(dependency);
 	};
 	for (const source of sources) visit(source);
 }
@@ -226,9 +231,9 @@ type FactoriesDeps<Fs extends readonly AnyContextFactory[]> = Fs extends readonl
 	? FactoryDeps<H> & FactoriesDeps<T>
 	: {};
 
-export type ContextDependencies<Uses extends readonly AnyContextFactory[]> =
-	IsStaticTuple<Uses> extends true
-		? FactoriesOutput<Uses> & FactoriesDeps<Uses>
+export type ContextDependencies<Use extends readonly AnyContextFactory[]> =
+	IsStaticTuple<Use> extends true
+		? FactoriesOutput<Use> & FactoriesDeps<Use>
 		: Record<string, ContextValue>;
 
 export type ContextDepsOf<C> = C extends AnyContextInstance
@@ -251,11 +256,11 @@ export type OwnedFlagsOf<R extends ContextConfig> = R extends {
 		? FlagsDef
 		: {};
 
-export type UsesOf<R extends ContextConfig> = R extends {
-	uses: infer Uses extends readonly AnyContextFactory[];
+export type UseOf<R extends ContextConfig> = R extends {
+	use: infer Use extends readonly AnyContextFactory[];
 }
-	? Uses
-	: "uses" extends keyof R
+	? Use
+	: "use" extends keyof R
 		? readonly AnyContextFactory[]
 		: readonly [];
 
@@ -265,7 +270,7 @@ function isContextSetup(value: ContextConfig | ErasedContextSetup): value is Era
 	return typeof value === "function";
 }
 
-/** Define a named, lazy command dependency. Declared `uses` are exposed on `ctx`. */
+/** Define a named, lazy command dependency. Declared `use` Contexts are exposed on `ctx`. */
 export function defineContext<Name extends string, Value, Options = void>(
 	name: Name,
 	setup: (input: ContextSetup<Options>) => Awaitable<Value>,
@@ -279,9 +284,9 @@ export function defineContext<
 	name: Name,
 	config: R & ValidateContextConfig<R> & ContextConfig,
 	setup: (
-		input: ContextSetup<Options, OwnedFlagsOf<R>, ContextDependencies<UsesOf<R>>>,
+		input: ContextSetup<Options, OwnedFlagsOf<R>, ContextDependencies<UseOf<R>>>,
 	) => Awaitable<Value>,
-): ContextFactory<Name, Options, Value, OwnedFlagsOf<R>, ContextDependencies<UsesOf<R>>>;
+): ContextFactory<Name, Options, Value, OwnedFlagsOf<R>, ContextDependencies<UseOf<R>>>;
 
 export function defineContext(
 	name: string,
@@ -293,22 +298,22 @@ export function defineContext(
 	// Authoring overloads require setup in both call forms.
 	const setup = hasConfig ? maybeSetup! : configOrSetup;
 	const ownedFlags = Object.freeze(toFlagsRecord(config.flags ?? []));
-	const uses = Object.freeze((config.uses ?? []).map(definingOf));
+	const use = Object.freeze((config.use ?? []).map(definingOf));
 	const instance = (
-		instanceUses: readonly AnyContextFactory[],
+		instanceUse: readonly AnyContextFactory[],
 		run: AnyContextInstance["setup"],
 	): AnyContextInstance => {
-		const value = { name, ownedFlags, uses: instanceUses, factory: sealed, setup: run };
+		const value = { name, ownedFlags, use: instanceUse, factory: sealed, setup: run };
 		// SAFETY: seal installs the private defining proof before this runtime value is erased.
 		return seal(value) as AnyContextInstance;
 	};
 	const factory = (options: Parameters<AnyContextFactory>[0]): AnyContextInstance =>
-		instance(uses, (input) => {
+		instance(use, (input) => {
 			// SAFETY: public overloads pair setup with exactly this merged input shape.
 			return setup({ options, ...input } as never);
 		});
 	factory.contextName = name;
-	factory.uses = uses;
+	factory.use = use;
 	factory.of = (value: ContextValue): AnyContextInstance =>
 		instance(Object.freeze([]), () => value);
 	// SAFETY: the mutable factory is fully populated before widening to the runtime registry type.
@@ -586,7 +591,7 @@ export function createContextResolver(
 						...io,
 						signal,
 						flags: ownedFlags,
-						ctx: makeBag(context.uses, current),
+						ctx: makeBag(context.use, current),
 						defer(cleanup) {
 							if (current.settled) {
 								throw new CrustError(
@@ -640,9 +645,9 @@ export function createContextResolver(
 				get: () => makePull(origin)(name),
 			});
 			// Follow the source's own declared graph: a provided .of() double cuts the
-			// *instance* uses, but the bag must match the factory-typed closure so a
+			// *instance* use list, but the bag must match the factory-typed closure so a
 			// transitive read fails loud (missing-context) instead of yielding undefined.
-			for (const dependency of source.uses ?? []) add(dependency);
+			for (const dependency of source.use ?? []) add(dependency);
 		};
 		for (const source of sources) add(source);
 		Object.defineProperty(bag, contextSources, { value: Object.freeze([...sources]) });

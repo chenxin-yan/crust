@@ -42,8 +42,9 @@ type FifteenDeep = readonly [
 // layers recursive Extension flags onto earlier command trees
 function _typecheckLayersRecursiveExtensionFlagsOntoEarlierCommandTrees() {
 	const local = defineCommand("local", (command) => command.action(() => {}));
-	const trace = defineExtension(defineExtensionId("trace"), {
-		flags: [{ name: "trace", type: "boolean" }],
+	const trace = defineExtension(defineExtensionId("trace")).flags({
+		name: "trace",
+		type: "boolean",
 	});
 	const addedThenExtended = new Crust("cli").add(local).extend(trace);
 	type LocalInput = RunInput<
@@ -51,9 +52,9 @@ function _typecheckLayersRecursiveExtensionFlagsOntoEarlierCommandTrees() {
 	>;
 	type _addedCommandFlags = Expect<Equal<NonNullable<LocalInput["flags"]>, { trace?: boolean }>>;
 
-	const tools = defineExtension(defineExtensionId("tools"), {
-		commands: [defineCommand("inspect", (command) => command.action(() => {}))],
-	});
+	const tools = defineExtension(defineExtensionId("tools")).add(
+		defineCommand("inspect", (command) => command.action(() => {})),
+	);
 	const extendedTwice = new Crust("cli").extend(tools).extend(trace);
 	type InspectInput = RunInput<
 		CommandShapeAt<(typeof extendedTwice)["_types"]["shape"], readonly ["inspect"]>
@@ -65,18 +66,18 @@ function _typecheckLayersRecursiveExtensionFlagsOntoEarlierCommandTrees() {
 
 // rejects statically known Extension command collisions
 function _typecheckRejectsStaticallyKnownExtensionCommandCollisions() {
-	const extFoo = defineExtension(defineExtensionId("extfoo"), {
-		commands: [defineCommand("foo", (command) => command.action(() => "ext" as const))],
-	});
+	const extFoo = defineExtension(defineExtensionId("extfoo")).add(
+		defineCommand("foo", (command) => command.action(() => "ext" as const)),
+	);
 	const appFoo = defineCommand("foo", (command) => command.action(() => 42 as const));
 
 	// @ts-expect-error -- Extension command collides with an existing app command
 	void new Crust("cli").add(appFoo).extend(extFoo);
 	// @ts-expect-error -- added command collides with a registered Extension command
 	void new Crust("cli").extend(extFoo).add(appFoo);
-	const otherFoo = defineExtension(defineExtensionId("other"), {
-		commands: [defineCommand("foo", (command) => command.action(() => {}))],
-	});
+	const otherFoo = defineExtension(defineExtensionId("other")).add(
+		defineCommand("foo", (command) => command.action(() => {})),
+	);
 	// @ts-expect-error -- Extensions in the same call must not collide
 	void new Crust("cli").extend(extFoo, otherFoo);
 }
@@ -86,16 +87,17 @@ function _typecheckKeepsConditionallyAssembledExtensionContributionsRuntimeOnly(
 	const foo = defineCommand("foo", (command) => command.action(() => {}));
 	const bar = defineCommand("bar", (command) => command.action(() => {}));
 	const condition = (globalThis as { __never?: boolean }).__never === true;
-	const conditional = defineExtension(defineExtensionId("conditional"), {
-		commands: condition ? [foo] : [bar],
-		flags: condition
-			? [{ name: "fa", type: "boolean" as const }]
-			: [{ name: "fb", type: "boolean" as const }],
-	});
+	const conditional = defineExtension(defineExtensionId("conditional"))
+		.flags(
+			...(condition
+				? [{ name: "fa", type: "boolean" as const }]
+				: [{ name: "fb", type: "boolean" as const }]),
+		)
+		.add(...(condition ? [foo] : [bar]));
 	const app = new Crust("cli").action(() => {}).extend(conditional);
-	const elementConditional = defineExtension(defineExtensionId("element"), {
-		commands: [condition ? foo : bar],
-	});
+	const elementConditional = defineExtension(defineExtensionId("element")).add(
+		condition ? foo : bar,
+	);
 	const elementApp = new Crust("cli").extend(elementConditional);
 
 	// @ts-expect-error -- only one branch of a conditional commands array is installed
@@ -112,12 +114,12 @@ function _typecheckKeepsDynamicallyAssembledExtensionsAndContributionArraysRunti
 
 	// Homogeneous variable-length contribution arrays may be empty at runtime.
 	const homoCommands: (typeof foo)[] = condition ? [foo] : [];
-	const homoExt = defineExtension(defineExtensionId("homo"), { commands: homoCommands });
+	const homoExt = defineExtension(defineExtensionId("homo")).add(...homoCommands);
 	const homoApp = new Crust("cli").extend(homoExt);
 
 	// A conditionally selected Extension installs only one branch.
-	const extFoo = defineExtension(defineExtensionId("extfoo"), { commands: [foo] });
-	const extBar = defineExtension(defineExtensionId("extbar"), { commands: [bar] });
+	const extFoo = defineExtension(defineExtensionId("extfoo")).add(foo);
+	const extBar = defineExtension(defineExtensionId("extbar")).add(bar);
 	const unionApp = new Crust("cli").extend(condition ? extFoo : extBar);
 	const bothApp = new Crust("cli").extend(extFoo, extBar);
 
@@ -149,11 +151,11 @@ function _typecheckRejectsCommandCollisionsInsideOneExtensionSTuple() {
 	);
 
 	// @ts-expect-error -- duplicate canonical names resolve last-write-wins at prepare
-	void defineExtension(defineExtensionId("dup"), { commands: [foo, fooDup] });
+	void defineExtension(defineExtensionId("dup")).add(foo, fooDup);
 	// @ts-expect-error -- a shared alias would union both shapes under one path
-	void defineExtension(defineExtensionId("alias"), { commands: [aliasA, aliasB] });
+	void defineExtension(defineExtensionId("alias")).add(aliasA, aliasB);
 	// Distinct spellings pass.
-	void defineExtension(defineExtensionId("ok"), { commands: [foo, aliasA] });
+	void defineExtension(defineExtensionId("ok")).add(foo, aliasA);
 }
 
 // rejects Extension flags colliding with contributed command flags
@@ -161,14 +163,12 @@ function _typecheckRejectsExtensionFlagsCollidingWithContributedCommandFlags() {
 	const scan = defineCommand("scan", (command) =>
 		command.flags({ name: "trace", type: "boolean" }).action(() => {}),
 	);
-	const extension = defineExtension(defineExtensionId("tracing"), {
-		flags: [{ name: "trace", type: "string" as const }],
-		commands: [scan],
-	});
-	const clean = defineExtension(defineExtensionId("clean"), {
-		flags: [{ name: "other", type: "string" as const }],
-		commands: [scan],
-	});
+	const extension = defineExtension(defineExtensionId("tracing"))
+		.flags({ name: "trace", type: "string" as const })
+		.add(scan);
+	const clean = defineExtension(defineExtensionId("clean"))
+		.flags({ name: "other", type: "string" as const })
+		.add(scan);
 
 	// @ts-expect-error -- prepare injects the flag into the contributed command and throws
 	void new Crust("cli").extend(extension);
@@ -179,8 +179,10 @@ function _typecheckRejectsExtensionFlagsCollidingWithContributedCommandFlags() {
 // keeps widened recursive flag scopes off descendant typed inputs
 function _typecheckKeepsWidenedRecursiveFlagScopesOffDescendantTypedInputs() {
 	const dynamicScope = (globalThis as { __never?: boolean }).__never === true;
-	const scoped = defineExtension(defineExtensionId("scoped"), {
-		flags: [{ name: "trace", type: "boolean", recursive: dynamicScope }],
+	const scoped = defineExtension(defineExtensionId("scoped")).flags({
+		name: "trace",
+		type: "boolean",
+		recursive: dynamicScope,
 	});
 	const child = defineCommand("child", (command) => command.action(() => {}));
 	const app = new Crust("cli")

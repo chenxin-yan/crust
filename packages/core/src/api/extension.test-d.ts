@@ -3,63 +3,58 @@ import { Crust, defineCommand, type AnyCrust, type RootCommandMeta } from "../co
 import type { CommandSnapshot } from "../command/snapshot.ts";
 import { defineExtensionId } from "../identity.ts";
 import type { CommandSection } from "../types.ts";
-import { defineContext } from "./context.ts";
-import { defineExtension, type Extension, type ExtensionBuildContext } from "./extension.ts";
+import type { ParsedFlagValue } from "../types.ts";
+import { defineContext, type DefiningOf } from "./context.ts";
+import {
+	defineExtension,
+	type Extension,
+	type ExtensionBuildContext,
+	type ExtensionFactory,
+} from "./extension.ts";
 
 function _metadataRequirements() {
 	const ID = defineExtensionId("test:metadata");
-	const needsVersion = defineExtension<"version">()(ID, {
-		hooks: {
-			preRun(ctx) {
-				type _version = Expect<Equal<typeof ctx.rootCommand.meta.version, string>>;
-				type _description = Expect<
-					Equal<typeof ctx.rootCommand.meta.description, string | undefined>
-				>;
-				type _command = Expect<Equal<typeof ctx.command.meta.version, string | undefined>>;
-			},
-			postRun(ctx) {
-				const _value: string = ctx.rootCommand.meta.version;
-			},
-			onError(_error, ctx) {
-				const _value: string = ctx.rootCommand.meta.version;
-			},
-		},
-		build({ snapshot }) {
+	const needsVersion = defineExtension<"version">(ID)
+		.preRun((ctx) => {
+			type _version = Expect<Equal<typeof ctx.rootCommand.meta.version, string>>;
+			type _description = Expect<
+				Equal<typeof ctx.rootCommand.meta.description, string | undefined>
+			>;
+			type _command = Expect<Equal<typeof ctx.command.meta.version, string | undefined>>;
+		})
+		.postRun((ctx) => {
+			const _value: string = ctx.rootCommand.meta.version;
+		})
+		.onError((_error, ctx) => {
+			const _value: string = ctx.rootCommand.meta.version;
+		})
+		.build(({ snapshot }) => {
 			const _value: string = snapshot.meta.version;
 			return [];
-		},
-		sections(snapshot) {
+		})
+		.sections((snapshot) => {
 			const _value: string = snapshot.meta.version;
 			return [];
-		},
+		});
+	const plain = defineExtension(ID).preRun((ctx) => {
+		type _version = Expect<Equal<typeof ctx.rootCommand.meta.version, string | undefined>>;
+		const _snapshot: CommandSnapshot = ctx.rootCommand;
 	});
-	const plain = defineExtension(ID, {
-		hooks: {
-			preRun(ctx) {
-				type _version = Expect<Equal<typeof ctx.rootCommand.meta.version, string | undefined>>;
-				const _snapshot: CommandSnapshot = ctx.rootCommand;
-			},
-		},
-	});
-	defineExtension()(ID);
+	defineExtension(ID);
 	// @ts-expect-error Only authored root metadata keys may be required.
-	defineExtension<"versin">();
+	defineExtension<"versin">(ID);
 	// @ts-expect-error Arbitrary fields are not preserved by the root builder.
-	defineExtension<"version" | "imaginary">();
+	defineExtension<"version" | "imaginary">(ID);
 	// @ts-expect-error Subcommand-only metadata is not a root requirement.
-	defineExtension<"aliases">();
-	const needsUsage = defineExtension<"usage">()(ID);
+	defineExtension<"aliases">(ID);
+	// @ts-expect-error The metadata generic is the only explicit type argument.
+	defineExtension<"version", []>(ID);
+	const needsUsage = defineExtension<"usage">(ID);
 	// @ts-expect-error Requirements apply even without an invocation hook.
 	new Crust("app").extend(needsUsage);
 	new Crust("app", { usage: "app" }).extend(needsUsage);
-	const sections = defineExtension<"sections">()(ID, {
-		hooks: {
-			preRun(ctx) {
-				type _sections = Expect<
-					Equal<typeof ctx.rootCommand.meta.sections, readonly CommandSection[]>
-				>;
-			},
-		},
+	const sections = defineExtension<"sections">(ID).preRun((ctx) => {
+		type _sections = Expect<Equal<typeof ctx.rootCommand.meta.sections, readonly CommandSection[]>>;
 	});
 	new Crust("app", { sections: [] }).extend(sections);
 	new Crust("app", {
@@ -69,14 +64,10 @@ function _metadataRequirements() {
 	}).extend(sections, needsVersion);
 	// @ts-expect-error Fresh section literals reject unknown audience keys.
 	new Crust("app", { sections: [{ title: "Examples", body: "app", onlyy: [] }] });
-	const multi = defineExtension<"version" | "description">()(ID, {
-		hooks: {
-			preRun(ctx) {
-				const _version: string = ctx.rootCommand.meta.version;
-				const _description: string = ctx.rootCommand.meta.description;
-				type _usage = Expect<Equal<typeof ctx.rootCommand.meta.usage, string | undefined>>;
-			},
-		},
+	const multi = defineExtension<"version" | "description">(ID).preRun((ctx) => {
+		const _version: string = ctx.rootCommand.meta.version;
+		const _description: string = ctx.rootCommand.meta.description;
+		type _usage = Expect<Equal<typeof ctx.rootCommand.meta.usage, string | undefined>>;
 	});
 	new Crust("app").extend(plain);
 	// @ts-expect-error Missing required root version.
@@ -166,32 +157,40 @@ function _metadataRequirements() {
 	const _widened: Extension = needsVersion;
 	// @ts-expect-error Replacement does not undo the first registration's requirement.
 	unversioned.extend(needsVersion, plain);
+	// @ts-expect-error Structural copies retain the private metadata requirement.
+	unversioned.extend({ ...needsVersion });
+	// @ts-expect-error Later chain steps retain the metadata requirement.
+	unversioned.extend(needsVersion.flags({ name: "trace", type: "boolean" }));
+	const versionedFactory = defineExtension<"version">(ID).factory((extension) => extension);
+	// @ts-expect-error Factory products retain the metadata requirement.
+	unversioned.extend(versionedFactory());
+	app.extend(versionedFactory());
 }
 
-function _curriedInference() {
+function _fluentInference() {
 	const ID = defineExtensionId("test:inference");
 	const logger = defineContext("logger", () => ({ info: () => {} }));
 	const instance = logger();
 	const command = defineCommand("docs", (cmd) => cmd.action(() => "docs"));
-	const logging = defineExtension<"version">()(ID, (_label: string) => ({
-		uses: [logger],
-		provides: [instance],
-		commands: [command],
-		flags: [{ name: "verbose", type: "boolean", short: "v" }],
-		hooks: {
-			async preRun({ rootCommand, ctx, flags }) {
+	const logging = defineExtension<"version">(ID)
+		.use(logger)
+		.provide(instance)
+		.add(command)
+		.flags({ name: "verbose", type: "boolean", short: "v" })
+		.factory((extension, _label: string) =>
+			extension.preRun(async ({ rootCommand, ctx, flags }) => {
 				const _version: string = rootCommand.meta.version;
 				type _flag = Expect<Equal<typeof flags.verbose, boolean | undefined>>;
 				(await ctx.logger).info();
-			},
-		},
-	}));
-	type _args = Expect<Equal<Parameters<typeof logging>, [label: string]>>;
-	// @ts-expect-error Currying must not erase factory arguments.
+			}),
+		);
+	type _args = Expect<Equal<Parameters<typeof logging>, [_label: string]>>;
+	// @ts-expect-error The factory keeps its argument types.
 	logging(123);
 	const extension = logging("docs");
-	type _flags = Expect<Equal<NonNullable<typeof extension._flagDefs>[0]["name"], "verbose">>;
-	type _commands = Expect<Equal<typeof extension.commands, readonly [typeof command] | undefined>>;
+	type Data = DefiningOf<typeof extension>;
+	type _flags = Expect<Equal<NonNullable<Data["_flagDefs"]>[0]["name"], "verbose">>;
+	type _commands = Expect<Equal<Data["commands"], readonly [typeof command]>>;
 	const app = new Crust("app", { version: "1" }).extend(extension);
 	void app.run(["docs"], { flags: { verbose: true } });
 	app.action(async ({ ctx }) => {
@@ -199,37 +198,96 @@ function _curriedInference() {
 	});
 	// @ts-expect-error The contributed flag still participates in collisions.
 	app.flags({ name: "verbose", type: "string" });
-	const needsLogger = defineExtension<"version">()(ID, { uses: [logger] });
+	const needsLogger = defineExtension<"version">(ID).use(logger);
 	// @ts-expect-error Metadata requirements must not erase Context requirements.
 	new Crust("app", { version: "1" }).extend(needsLogger);
 	new Crust("app", { version: "1" }).provide(logger()).extend(needsLogger);
-	const ordinary = defineExtension(ID, (label: string) => ({
-		flags: [{ name: "label", type: "string", default: label }],
-	}));
+	const ordinary = defineExtension(ID).factory((extension, label: string) =>
+		extension.flags({ name: "label", type: "string", default: label }),
+	);
 	type _ordinaryArgs = Expect<Equal<Parameters<typeof ordinary>, [label: string]>>;
+	const optional = defineExtension(ID).factory((extension, options: { a?: 1 } = {}) => {
+		void options;
+		return extension;
+	});
+	type _optionalArgs = Expect<Equal<Parameters<typeof optional>, [options?: { a?: 1 }]>>;
+	optional();
 	const flags = [{ name: "label", type: "string" }] as const;
-	const explicit = defineExtension<[label: string], typeof flags>(ID, (_label) => ({ flags }));
-	// @ts-expect-error Old explicit factory type arguments still constrain calls.
-	explicit(123);
-	explicit("value");
+	const annotated: ExtensionFactory<[label: string], {}, [], typeof flags> = defineExtension(
+		ID,
+	).factory((extension, _label: string) => extension.flags(...flags));
+	// @ts-expect-error Annotated factory argument types still constrain calls.
+	annotated(123);
+	annotated("value");
+	// @ts-expect-error The factory must return an Extension, not arbitrary data.
+	defineExtension(ID).factory(() => ({ id: ID }));
+}
+
+function _conditionalFactoryDependencies() {
+	const ID = defineExtensionId("test:conditional-factory");
+	const db = defineContext("db", () => "ok");
+	const make = defineExtension<"version">(ID).factory((extension, enabled: boolean) =>
+		enabled
+			? extension.use(db).preRun(async ({ ctx, rootCommand }) => {
+					(await ctx.db).toUpperCase();
+					const _version: string = rootCommand.meta.version;
+				})
+			: extension,
+	);
+	type _args = Expect<Equal<Parameters<typeof make>, [enabled: boolean]>>;
+	new Crust("app", { version: "1" }).provide(db()).extend(make(true));
+	new Crust("app", { version: "1" }).provide(db()).extend(make(false));
+	// @ts-expect-error Conditional factories retain every branch's Context requirements.
+	new Crust("app", { version: "1" }).extend(make(true));
+	// @ts-expect-error Conditional factories retain required root metadata.
+	new Crust("app").provide(db()).extend(make(true));
+	// @ts-expect-error Conditional factories retain their inferred arguments.
+	make("enabled");
+	const wrongDb = defineContext("db", () => 42);
+	// @ts-expect-error A provider must satisfy every possible branch's value contract.
+	new Crust("app", { version: "1" }).provide(wrongDb()).extend(make(true));
+	new Crust("app", { version: "1" })
+		.provide(db())
+		.extend(make(true))
+		// @ts-expect-error Conditional hook demands also constrain future descendants.
+		.command("child", (command) => command.provide(wrongDb()));
+}
+
+function _positionalCallbacks() {
+	const ID = defineExtensionId("test:positions");
+	const logger = defineContext("logger", () => "logger");
+	defineExtension(ID)
+		.preRun(({ ctx, flags }) => {
+			// @ts-expect-error Callbacks do not see Contexts declared after them.
+			void ctx.logger;
+			type _trace = Expect<Equal<typeof flags.trace, ParsedFlagValue>>;
+		})
+		.use(logger)
+		.flags({ name: "trace", type: "boolean" })
+		.preRun(async ({ ctx, flags }) => {
+			const _logger: string = await ctx.logger;
+			type _trace = Expect<Equal<typeof flags.trace, boolean | undefined>>;
+		})
+		.onError((_error, { flags }) => {
+			type _trace = Expect<Equal<typeof flags.trace, ParsedFlagValue>>;
+		});
+	const first = defineCommand("first", { aliases: ["f"] }, (cmd) => cmd);
+	defineExtension(ID)
+		.add(first)
+		// @ts-expect-error Repeated add() calls check earlier command spellings.
+		.add(defineCommand("f", (cmd) => cmd));
 }
 
 function _buildHookReturnsFiles() {
 	const ID = defineExtensionId("test:build");
-	defineExtension(ID, { build: () => [{ path: "man/app.1", content: ".Dd" }] });
-	defineExtension(ID, {
-		build: async () => [{ path: "assets/logo.png", content: new Uint8Array() }],
-	});
-	defineExtension(ID, {
-		// @ts-expect-error Core writes the returned files; a hook cannot write on its own and return nothing.
-		build() {},
-	});
-	defineExtension(ID, {
-		// @ts-expect-error Bare paths carry no content for core to write.
-		build: () => ["man/app.1"],
-	});
-	defineExtension(ID, {
+	defineExtension(ID).build(() => [{ path: "man/app.1", content: ".Dd" }]);
+	defineExtension(ID).build(async () => [{ path: "assets/logo.png", content: new Uint8Array() }]);
+	// @ts-expect-error Core writes the returned files; a hook cannot write on its own and return nothing.
+	defineExtension(ID).build(() => {});
+	// @ts-expect-error Bare paths carry no content for core to write.
+	defineExtension(ID).build(() => ["man/app.1"]);
+	defineExtension(ID).build(
 		// @ts-expect-error The output directory is owned by build tooling; hooks get no handle to side-write into it.
-		build: ({ outDir }: ExtensionBuildContext) => [{ path: "man/app.1", content: outDir }],
-	});
+		({ outDir }: ExtensionBuildContext) => [{ path: "man/app.1", content: outDir }],
+	);
 }

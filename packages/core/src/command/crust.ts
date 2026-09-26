@@ -15,6 +15,7 @@ import type {
 import type {
 	AnyExtension,
 	Extension,
+	ExtensionData,
 	ExtensionsProvidesOutput,
 	RootMetaKey,
 } from "../api/extension.ts";
@@ -586,7 +587,7 @@ type ExtensionCommands<Es extends readonly AnyExtension[]> = Es extends readonly
 
 type ExtensionProviders<E> = [E] extends [never]
 	? []
-	: DefiningOf<E> extends { provides?: infer P extends readonly AnyContextInstance[] }
+	: DefiningOf<E> extends { provide?: infer P extends readonly AnyContextInstance[] }
 		? P
 		: [];
 type ExtensionOwnDefs<E> = [E] extends [never]
@@ -809,7 +810,7 @@ export function defineCommand(
 	return named(name);
 }
 
-function dedupeExtensions(extensions: readonly Extension[]): Extension[] {
+function dedupeExtensions(extensions: readonly ExtensionData[]): ExtensionData[] {
 	return extensions.filter((e, i) => extensions.findLastIndex((x) => x.id === e.id) === i);
 }
 
@@ -1117,14 +1118,13 @@ type AfterAdd<
 	Caps
 >;
 
+type ExtensionHookDemand<E> = E extends AnyExtension
+	? (deps: NonNullable<DefiningOf<E>["_hookDeps"]>) => void
+	: never;
+
+// Intersect hook demands before an empty branch can erase another branch's keys.
 type ExtensionDemandValues<Es extends readonly AnyExtension[]> =
-	UnionToIntersection<
-		DefiningOf<Es[number]> extends { readonly _hookDeps?: infer H extends ContextMap }
-			? H
-			: Record<string, ContextValue>
-	> extends infer D extends ContextMap
-		? D
-		: {};
+	ExtensionHookDemand<Es[number]> extends (deps: infer D extends ContextMap) => void ? D : {};
 
 // Conditional recipes retain every provider and child branch, including beside an empty branch.
 type DescendantShapeValuesBrand<S, Deps> = S extends CommandShape
@@ -1412,7 +1412,7 @@ export class Crust<
 		);
 
 		// Positional by design: providers reach only this node and children added
-		// afterwards (flag scoping; see definition.test.ts). Extension `provides`
+		// afterwards (flag scoping; see definition.test.ts). Extension `.provide()`
 		// differ deliberately — they are application-wide and walk the whole tree.
 		const cloned = this._clone<
 			AfterProvide<Flags, A, Ctx, Sibs, Sp, Tree, CtxFlags, CollisionSp, Result, Cs, Meta, Caps>
@@ -1513,7 +1513,7 @@ export class Crust<
 		const activeExtensions = dedupeExtensions([
 			...this._node.extensions,
 			...extensions,
-		] as Extension[]);
+		] as ExtensionData[]);
 		const node = installExtensionContexts(
 			this._node,
 			activeExtensions,
@@ -1522,7 +1522,7 @@ export class Crust<
 
 		validateContextAvailability(
 			node.contexts.map(({ instance }) => instance),
-			activeExtensions.flatMap((extension) => [...extension.uses, ...(extension.provides ?? [])]),
+			activeExtensions.flatMap((extension) => [...extension.use, ...extension.provide]),
 		);
 
 		return this._clone<

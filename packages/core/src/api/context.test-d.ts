@@ -23,7 +23,7 @@ function _typecheckMergesOwnedFlagTypesFromMultipleContextsInOneProvideCall() {
 // checks dependency graphs at every composition boundary
 function _typecheckChecksDependencyGraphsAtEveryCompositionBoundary() {
 	const config = defineContext("config", () => ({ url: "memory://" }));
-	const db = defineContext("db", { uses: [config] }, async ({ ctx }) => {
+	const db = defineContext("db", { use: [config] }, async ({ ctx }) => {
 		// @ts-expect-error -- setup bags expose only declared Contexts
 		void ctx.logger;
 		return { url: (await ctx.config).url };
@@ -41,10 +41,9 @@ function _typecheckChecksDependencyGraphsAtEveryCompositionBoundary() {
 	);
 	new Crust("cli").provide(config(), db()).add(command);
 
-	const extension = defineExtension(defineExtensionId("typed-deps"), {
-		uses: [db],
-		hooks: { preRun: async ({ ctx }) => void (await ctx.db) },
-	});
+	const extension = defineExtension(defineExtensionId("typed-deps"))
+		.use(db)
+		.preRun(async ({ ctx }) => void (await ctx.db));
 	new Crust("cli").provide(config(), db()).extend(extension);
 
 	const widened: AnyContextFactory = config;
@@ -53,20 +52,16 @@ function _typecheckChecksDependencyGraphsAtEveryCompositionBoundary() {
 	const invalidCompositions = () => {
 		// @ts-expect-error -- db's transitive dependency closure is unsatisfied
 		new Crust("cli").provide(db());
-		// @ts-expect-error -- uses entries must be Context factories
-		defineContext("bad", { uses: [42] }, () => 1);
+		// @ts-expect-error -- use entries must be Context factories
+		defineContext("bad", { use: [42] }, () => 1);
 		// @ts-expect-error -- command dependencies are checked by .add()
 		new Crust("cli").add(command);
 		// @ts-expect-error -- Extension dependencies are checked by .extend()
 		new Crust("cli").extend(extension);
-		const badProvides = defineExtension(defineExtensionId("bad-provides"), {
-			provides: [db()],
-		});
-		// @ts-expect-error -- Extension provides with unmet transitive deps are checked by .extend()
-		new Crust("cli").extend(badProvides);
-		const badCommand = defineExtension(defineExtensionId("bad-command"), {
-			commands: [command],
-		});
+		const badProvide = defineExtension(defineExtensionId("bad-provide")).provide(db());
+		// @ts-expect-error -- Extension providers with unmet transitive deps are checked by .extend()
+		new Crust("cli").extend(badProvide);
+		const badCommand = defineExtension(defineExtensionId("bad-command")).add(command);
 		// @ts-expect-error -- Extension-contributed command deps are checked by .extend()
 		new Crust("cli").extend(badCommand);
 	};
@@ -76,7 +71,7 @@ function _typecheckChecksDependencyGraphsAtEveryCompositionBoundary() {
 // brands inline .use() demands that the call site does not provide
 function _typecheckBrandsInlineUseDemandsThatTheCallSiteDoesNotProvide() {
 	const config = defineContext("config", () => ({ url: "memory://" }));
-	const db = defineContext("db", { uses: [config] }, async ({ ctx }) => await ctx.config);
+	const db = defineContext("db", { use: [config] }, async ({ ctx }) => await ctx.config);
 
 	// Satisfied demand (including db's transitive closure) composes cleanly.
 	new Crust("cli")
@@ -99,11 +94,11 @@ function _typecheckBrandsInlineUseDemandsThatTheCallSiteDoesNotProvide() {
 // keeps .use() brand parity for defineCommand at .add() and .extend()
 function _typecheckKeepsUseBrandParityForDefineCommandAtAddAndExtend() {
 	const config = defineContext("config", () => ({ url: "memory://" }));
-	const db = defineContext("db", { uses: [config] }, async ({ ctx }) => await ctx.config);
+	const db = defineContext("db", { use: [config] }, async ({ ctx }) => await ctx.config);
 	const query = defineCommand("query", (cmd) =>
 		cmd.use(db).action(async ({ ctx }) => void (await ctx.db)),
 	);
-	const carrier = defineExtension(defineExtensionId("carrier"), { commands: [query] });
+	const carrier = defineExtension(defineExtensionId("carrier")).add(query);
 
 	new Crust("cli").provide(config(), db()).add(query);
 	new Crust("cli").provide(config(), db()).extend(carrier);
@@ -119,11 +114,14 @@ function _typecheckKeepsUseBrandParityForDefineCommandAtAddAndExtend() {
 
 // brands inline flags that collide with registered Extension flags, matching .add()
 function _typecheckBrandsInlineFlagsThatCollideWithRegisteredExtensionFlagsMatchingAdd() {
-	const tracer = defineExtension(defineExtensionId("tracer"), {
-		flags: [{ name: "trace", type: "boolean" }],
+	const tracer = defineExtension(defineExtensionId("tracer")).flags({
+		name: "trace",
+		type: "boolean",
 	});
-	const rootOnly = defineExtension(defineExtensionId("root-only"), {
-		flags: [{ name: "depth", type: "string", recursive: false }],
+	const rootOnly = defineExtension(defineExtensionId("root-only")).flags({
+		name: "depth",
+		type: "string",
+		recursive: false,
 	});
 	const nestedColliding = defineCommand("child", (cmd) =>
 		cmd.flags({ name: "trace", type: "boolean" }).action(() => {}),

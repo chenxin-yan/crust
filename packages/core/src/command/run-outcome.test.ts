@@ -70,13 +70,9 @@ describe("captured run outcomes", () => {
 	it("finishes before required validation and captures hook output", async () => {
 		const id = defineExtensionId("finish");
 		const app = new Crust("app").flags({ name: "mode", type: "string", required: true }).extend(
-			defineExtension(id, {
-				hooks: {
-					preRun(ctx) {
-						ctx.stdout("help");
-						return ctx.finish();
-					},
-				},
+			defineExtension(id).preRun((ctx) => {
+				ctx.stdout("help");
+				return ctx.finish();
 			}),
 		);
 		const erased: AnyCrust = app;
@@ -92,11 +88,9 @@ describe("captured run outcomes", () => {
 it("captures preparation output/failure while snapshot still rejects", async () => {
 	const error = { preparation: true };
 	const app = new Crust("app").extend(
-		defineExtension(defineExtensionId("prepare"), {
-			sections() {
-				getAmbientTerminalIO()?.stderr("preparing");
-				throw error;
-			},
+		defineExtension(defineExtensionId("prepare")).sections(() => {
+			getAmbientTerminalIO()?.stderr("preparing");
+			throw error;
 		}),
 	);
 	expect(await app.run([])).toEqual({ status: "failed", error, stdout: "", stderr: "preparing" });
@@ -117,12 +111,8 @@ it("captures cleanup failure only after disposal, without presenting errors or c
 	const app = new Crust("app")
 		.provide(resource())
 		.extend(
-			defineExtension(defineExtensionId("errors"), {
-				hooks: {
-					onError() {
-						presented = true;
-					},
-				},
+			defineExtension(defineExtensionId("errors")).onError(() => {
+				presented = true;
 			}),
 		)
 		.action(async ({ ctx, stdout }) => {
@@ -140,13 +130,9 @@ it("captures cancellation and postRun diagnostics with original error identity",
 	const error = new DOMException("cancelled", "AbortError");
 	const app = new Crust("app")
 		.extend(
-			defineExtension(defineExtensionId("post"), {
-				hooks: {
-					postRun({ stderr }, outcome) {
-						stderr(outcome.status);
-						throw "secondary";
-					},
-				},
+			defineExtension(defineExtensionId("post")).postRun(({ stderr }, outcome) => {
+				stderr(outcome.status);
+				throw "secondary";
 			}),
 		)
 		.action(({ stdout }) => {
@@ -213,14 +199,11 @@ it("resolves conditional inline providers once for the action and postRun", asyn
 			setups++;
 			return "text";
 		});
-		const hook = defineExtension(defineExtensionId("demand"), {
-			uses: [db],
-			hooks: {
-				async postRun({ ctx }) {
-					expect(await ctx.db).toBe("text");
-				},
-			},
-		});
+		const hook = defineExtension(defineExtensionId("demand"))
+			.use(db)
+			.postRun(async ({ ctx }) => {
+				expect(await ctx.db).toBe("text");
+			});
 		const app = new Crust("app")
 			.provide(db())
 			.extend(hook)

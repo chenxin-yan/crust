@@ -1,11 +1,7 @@
 import { Crust, defineExtension, defineExtensionId } from "@crustjs/core";
 
-export const stamp = defineExtension<"version">()(defineExtensionId("acme:stamp"), {
-	hooks: {
-		preRun(ctx) {
-			ctx.stdout(`version ${ctx.rootCommand.meta.version}`);
-		},
-	},
+export const stamp = defineExtension<"version">(defineExtensionId("acme:stamp")).preRun((ctx) => {
+	ctx.stdout(`version ${ctx.rootCommand.meta.version}`);
 });
 
 // new Crust("my-cli").extend(stamp);

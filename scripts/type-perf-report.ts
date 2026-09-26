@@ -3,9 +3,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 const scalingSizes = [10, 100, 200] as const;
+type FixtureApi = "object" | "fluent";
 
 export interface TypePerfReport {
 	typescriptVersion: string;
+	fixtureApi: FixtureApi;
 	instantiations: Record<(typeof scalingSizes)[number], number>;
 }
 
@@ -41,6 +43,12 @@ export function formatComparison(base: TypePerfReport, head: TypePerfReport): st
 		}),
 		"",
 		`TypeScript ${head.typescriptVersion} · \`--checkers 1\` · ⚠️ marks increases above the repository's advisory 10% threshold.`,
+		...(base.fixtureApi === head.fixtureApi
+			? []
+			: [
+					"",
+					`API transition (${base.fixtureApi} → ${head.fixtureApi}): fixtures use equivalent workloads with each API's context and extension syntax, not identical source.`,
+				]),
 	].join("\n");
 }
 
@@ -48,8 +56,9 @@ export function formatComparison(base: TypePerfReport, head: TypePerfReport): st
  * Generate a deterministic downstream app with `size` top-level sibling commands.
  * Each command has three chained flags and two chained args. Context count is
  * max(3, ceil(size / 10)); every tenth command also owns one nested subcommand.
+ * The object dialect supports comparisons across the fluent-extension API transition.
  */
-export function generateConsumerSource(size: number): string {
+export function generateConsumerSource(size: number, fixtureApi: FixtureApi = "fluent"): string {
 	if (!Number.isInteger(size) || size < 1) throw new Error("size must be a positive integer");
 	const contextCount = Math.max(3, Math.ceil(size / 10));
 	const lines = [
@@ -67,7 +76,7 @@ export function generateConsumerSource(size: number): string {
 			);
 		} else {
 			lines.push(
-				`const context${index} = defineContext("context-${index}", { flags: [contextFlag${index}], uses: [context${index - 1}] }, async ({ flags, ctx }) => ({ value: (await ctx["context-${index - 1}"]).value + (flags["context-${index}-token"] ?? "") }));`,
+				`const context${index} = defineContext("context-${index}", { flags: [contextFlag${index}], ${fixtureApi === "fluent" ? "use" : "uses"}: [context${index - 1}] }, async ({ flags, ctx }) => ({ value: (await ctx["context-${index - 1}"]).value + (flags["context-${index}-token"] ?? "") }));`,
 			);
 		}
 	}
@@ -99,11 +108,23 @@ export function generateConsumerSource(size: number): string {
 		);
 	}
 
+	const extensionCommand =
+		'defineCommand("extension-command", { aliases: ["ext"] }, (command) => command.flags({ name: "extension-mode", type: "string" }).action(() => ({ source: "extension" as const })))';
+	if (fixtureApi === "fluent") {
+		lines.push(
+			'const extension = defineExtension(defineExtensionId("type-perf-extension"))',
+			'\t.flags({ name: "extension-trace", type: "boolean" })',
+			`\t.add(${extensionCommand});`,
+		);
+	} else {
+		lines.push(
+			'const extension = defineExtension(defineExtensionId("type-perf-extension"), {',
+			'\tflags: [{ name: "extension-trace", type: "boolean" }],',
+			`\tcommands: [${extensionCommand}],`,
+			"});",
+		);
+	}
 	lines.push(
-		'const extension = defineExtension(defineExtensionId("type-perf-extension"), {',
-		'\tflags: [{ name: "extension-trace", type: "boolean" }],',
-		'\tcommands: [defineCommand("extension-command", { aliases: ["ext"] }, (command) => command.flags({ name: "extension-mode", type: "string" }).action(() => ({ source: "extension" as const })))],',
-		"});",
 		"",
 		'export const app = new Crust("type-perf-consumer", { description: "Synthetic type-performance fixture" })',
 		'\t.flags({ name: "root-verbose", type: "boolean", short: "v", aliases: ["verbose"] })',
@@ -116,7 +137,12 @@ export function generateConsumerSource(size: number): string {
 	return lines.join("\n");
 }
 
-export function generateConsumerFixture(outputDir: string, rootDir: string, size: number): void {
+export function generateConsumerFixture(
+	outputDir: string,
+	rootDir: string,
+	size: number,
+	fixtureApi: FixtureApi = "fluent",
+): void {
 	const fixtureDir = resolve(outputDir);
 	const root = resolve(rootDir);
 	mkdirSync(join(fixtureDir, "node_modules/@crustjs"), { recursive: true });
@@ -128,7 +154,7 @@ export function generateConsumerFixture(outputDir: string, rootDir: string, size
 			"dir",
 		);
 	}
-	writeFileSync(join(fixtureDir, "consumer.ts"), generateConsumerSource(size));
+	writeFileSync(join(fixtureDir, "consumer.ts"), generateConsumerSource(size, fixtureApi));
 	writeFileSync(
 		join(fixtureDir, "tsconfig.json"),
 		`${JSON.stringify(
@@ -171,6 +197,19 @@ function parseTypePerfReport(content: string): TypePerfReport {
 
 function measure(outputPath: string, rootDir = "."): void {
 	const root = resolve(rootDir);
+	// Probe the built target API before compilation, never retry a failed fixture.
+	const fixtureApi = run(
+		[
+			process.execPath,
+			"--eval",
+			`import { defineExtension, defineExtensionId } from ${JSON.stringify(join(root, "packages/core/dist/index.js"))};
+console.log(typeof defineExtension(defineExtensionId("type-perf-probe")).flags === "function" ? "fluent" : "object");`,
+		],
+		root,
+	);
+	if (fixtureApi !== "fluent" && fixtureApi !== "object") {
+		throw new Error(`Unexpected fixture API: ${fixtureApi}`);
+	}
 	// Both trees use the harness's compiler, even when their lockfiles differ.
 	const tsc = resolve(import.meta.dir, "../node_modules/.bin/tsc");
 	const version = run([tsc, "--version"], root).replace(/^Version\s+/, "");
@@ -179,7 +218,7 @@ function measure(outputPath: string, rootDir = "."): void {
 	try {
 		for (const size of scalingSizes) {
 			const fixtureDir = join(fixtureRoot, String(size));
-			generateConsumerFixture(fixtureDir, root, size);
+			generateConsumerFixture(fixtureDir, root, size, fixtureApi);
 			const diagnostics = run(
 				[
 					tsc,
@@ -200,7 +239,7 @@ function measure(outputPath: string, rootDir = "."): void {
 	} finally {
 		rmSync(fixtureRoot, { recursive: true, force: true });
 	}
-	const report: TypePerfReport = { typescriptVersion: version, instantiations };
+	const report: TypePerfReport = { typescriptVersion: version, fixtureApi, instantiations };
 	mkdirSync(dirname(resolve(outputPath)), { recursive: true });
 	writeFileSync(resolve(outputPath), `${JSON.stringify(report, null, 2)}\n`);
 }

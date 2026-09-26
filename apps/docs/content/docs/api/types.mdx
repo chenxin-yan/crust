@@ -291,7 +291,7 @@ type ContextBag<Deps> = {
 };
 ```
 
-`flags` declares propagating flags. `uses` declares Context dependencies and determines the exact lazy bag exposed to setup. Reading a property starts memoized construction; destructuring therefore starts construction immediately.
+`flags` declares propagating flags. `use` declares Context dependencies and determines the exact lazy bag exposed to setup. Reading a property starts memoized construction; destructuring therefore starts construction immediately.
 
 Setup also receives the invocation's `stdout` and `stderr` callbacks, and `defer(cleanup)`. Deferred callbacks run after post-run hooks in reverse registration order, even when setup later throws; call `defer` right after acquiring each resource. `defer` throws a `DEFINITION` error once setup has settled. A cleanup callback may read `ctx`, but only Contexts built during the invocation resolve there; a never-built one rejects with `context-during-disposal`.
 
@@ -320,9 +320,9 @@ Extracts the awaited value type a Context factory produces: `FactoryValueOf<type
 type ContextMap = object;
 ```
 
-The upper bound for the name/value registry accumulated by `.provide()` and Extension `provides`. It is a phantom constraint: the builder infers the concrete property map, so consumer-defined context shapes do not need a string index signature. Command actions receive `ContextBag<Ctx>` for that inferred registry.
+The upper bound for the name/value registry accumulated by `.provide()` on commands and Extensions. It is a phantom constraint: the builder infers the concrete property map, so consumer-defined context shapes do not need a string index signature. Command actions receive `ContextBag<Ctx>` for that inferred registry.
 
-Reusable command definitions and Extensions expose only Contexts declared through `.use()` (command definitions) or the `uses` config field (Extensions).
+Reusable command definitions and Extension hooks expose only Contexts declared through their own `.use()`.
 
 ### `MergeContext`
 
@@ -336,16 +336,20 @@ The intersection of two Context maps.
 
 [Exact declarations](https://github.com/chenxin-yan/crust/blob/main/packages/core/src/api/extension.ts).
 
-### `ExtensionConfig`
+### `ExtensionBuilder`
 
 <auto-type-table
   path="../../../../../packages/core/src/api/extension.ts"
-  name="ExtensionConfig"
+  name="ExtensionBuilder"
 />
 
-`commands` entries are `defineCommand()` definitions contributed at the application root. `sections(snapshot)` returns an array of plain-text sections targeted by canonical command paths relative to that root; contributions append to each target's `meta.sections` in Extension registration order. Renderers filter audiences and merge exact same-title entries while preserving this body order.
+`defineExtension(id)` starts an immutable fluent definition; `defineExtension<MetaKeys>(id)` also [requires root metadata](#rootmetakey). Every method returns a new frozen handle and leaves the original unchanged, and every handle is an `Extension` accepted by `.extend()`. There is no final build step.
 
-`build(ctx)` runs in Extension registration order when invoked by build tooling and may be async. It returns `BuildArtifacts`, the files for the tooling to write; its errors propagate to the caller. See [Extensions](/docs/guide/extensions).
+Collection methods append on repeated calls: `.use()` declares Contexts the hooks consume (the app or a `.provide()` supplies them), `.provide()` installs Context instances application-wide regardless of chain position, `.flags()` owns flags, and `.add()` contributes `defineCommand()` definitions at the application root. Provided Contexts are not exposed to the Extension's own hooks unless also declared with `.use()`. Flag spellings are checked against earlier `.flags()` and provided Context-owned flags, both by TypeScript and when the method runs. TypeScript also rejects known command-name and alias collisions across `.add()` calls. Dynamic command collections retain the runtime replacement behavior: later canonical definitions replace earlier ones.
+
+Lifecycle setters replace the previous callback on repeated calls: `.preRun()`, `.postRun()`, and `.onError()` set the [hooks](#extensionhooks); `.sections(snapshot)` returns plain-text sections targeted by canonical command paths relative to the root, appended to each target's `meta.sections` in Extension registration order (renderers filter audiences and merge exact same-title entries while preserving this body order); `.build(ctx)` runs in Extension registration order when invoked by build tooling, may be async, and returns `BuildArtifacts`, the files for the tooling to write, with its errors propagating to the caller. Each callback is typed by the declarations made before it in the chain.
+
+`.factory(define)` returns an [`ExtensionFactory`](#extensionfactory) with the handle's `.id`. Each call passes the handle and the call arguments to `define`, whose return value must be an Extension with the same id (typically a chain on the received handle); a differently identified Extension throws a `DEFINITION` error with reason `factory-id-mismatch`. See [Extensions](/docs/guide/extensions).
 
 ### `ExtensionSectionContribution`
 
@@ -355,7 +359,7 @@ type ExtensionSectionContribution = RuntimeCommandSectionInput & {
 };
 ```
 
-The entry shape inside the collection returned by `ExtensionConfig.sections(snapshot)`. `RuntimeCommandSectionInput` accepts typed audience arrays whose nonemptiness is checked at consumption: a plain-text section plus the required canonical `command` path it targets, relative to the application root (`[]` targets the root command).
+The entry shape inside the collection returned by the `.sections(snapshot)` callback. `RuntimeCommandSectionInput` accepts typed audience arrays whose nonemptiness is checked at consumption: a plain-text section plus the required canonical `command` path it targets, relative to the application root (`[]` targets the root command).
 
 ### `ExtensionBuildContext`
 
@@ -391,7 +395,7 @@ One entry per executed build hook, in execution order, listing exactly the files
 
 <auto-type-table path="../../../../../packages/core/src/api/extension.ts" name="Extension" />
 
-`defineExtension(id, config?)` returns a frozen helper-owned value with private defining data; omitted config defaults to `{}`. Mint the branded `ExtensionId` with `defineExtensionId()`, which requires a non-empty, already-trimmed string.
+An `Extension` is a frozen handle with an `id` and private defining data, created only by `defineExtension()`. Holders keep the private dependency, hook-demand, and metadata proofs; structural copies keep the original definition. Mint the branded `ExtensionId` with `defineExtensionId()`, which requires a non-empty, already-trimmed string.
 
 ### `ExtensionFactory`
 
@@ -399,29 +403,29 @@ One entry per executed build hook, in execution order, listing exactly the files
 type ExtensionFactory<
   Args extends readonly unknown[] = [],
   Deps extends ContextMap = {},
-  Provides extends readonly AnyContextInstance[] = [],
+  Provide extends readonly AnyContextInstance[] = [],
   Defs extends readonly NamedExtensionFlagDef[] = [],
   Commands extends readonly CommandDefinition<any, any, any, any>[] = [],
   MetaKeys extends RootMetaKey = never,
   HookDeps extends ContextMap = Deps,
-> = ((...args: Args) => Extension<Deps, Provides, Defs, Commands, MetaKeys, HookDeps>) & {
+> = ((...args: Args) => Extension<Deps, Provide, Defs, Commands, MetaKeys, HookDeps>) & {
   readonly id: ExtensionId;
 };
 ```
 
-`defineExtension(id, factory)` wraps a config-returning callback, preserving its parameters and inferring its flags, dependencies, providers, and commands. Each call follows the object form's normalization and freezing path. Contribution namespaces are closed by default.
+`.factory((extension, ...args) => ...)` preserves the callback's arguments after the handle, including optional and defaulted parameters, and infers its flags, dependencies, providers, and commands. Each call runs the callback and checks the returned Extension's id. Contribution namespaces are closed by default.
 
 Preserve literal tuples in published annotations for precise typed invocation. To keep a namespace open, explicitly use `ContextMap`, `readonly ContextInstance[]`, `readonly NamedExtensionFlagDef[]`, or `readonly CommandDefinition<any, any, any, any>[]` for its parameter. `MetaKeys` defaults to `never`, meaning no required metadata.
 
 `HookDeps` defaults to `Deps`. An annotation for a metadata-requiring factory must preserve its metadata keys. See [authoring an Extension](/docs/guide/extensions#write-your-own).
 
-### `RootMetaKey` and `DefineExtensionWith`
+### `RootMetaKey`
 
-`RootMetaKey` is `keyof RootCommandMeta`. `defineExtension<MetaKeys>()` returns `DefineExtensionWith<MetaKeys>`, whose config and factory overloads infer the remaining types. Required fields retain their schema types and become non-optional in root snapshots passed to hooks, `build`, and `sections`.
+`RootMetaKey` is `keyof RootCommandMeta`. `defineExtension<MetaKeys>(id)` accepts only these keys as its single optional type argument; the chain infers everything else. Required fields retain their schema types and become non-optional in root snapshots passed to hooks, `build`, and `sections`.
 
 `.extend()` checks that the root's inferred metadata supplies them.
 
-Use the [curried declaration](/docs/guide/extensions#required-root-metadata) to require keys without losing flag, Context, or factory-argument inference. These requirements are compile-time-only.
+[Declare required keys](/docs/guide/extensions#required-root-metadata) without losing flag, Context, or factory-argument inference. These requirements are compile-time-only.
 
 ### `ExtensionFlagDef`
 
@@ -437,7 +441,7 @@ An Extension owns contributed flags. `recursive` defaults to `true`; `false` con
 type NamedExtensionFlagDef = NamedFlagDef & { readonly recursive?: boolean };
 ```
 
-The public authoring shape accepted by `ExtensionConfig.flags`: an Extension flag definition carrying its name and optional recursive scope.
+The public authoring shape accepted by the Extension `.flags()` method: an Extension flag definition carrying its name and optional recursive scope.
 
 ### `InferExtensionFlags<Defs>`
 

@@ -45,7 +45,15 @@ See the [Extensions module](/docs/modules/extensions) for the other built-ins. C
 
 Import a function when shared code only needs values from a Command Action. Write an Extension when that code needs to own an app-wide flag or run around invocations; `ctx.finish()` ends this preview without running the action. The id is a namespaced string such as `acme:preview`, and registering the same id twice keeps the last registration.
 
-Use `defineExtension(id, factory)` instead when callers need to configure it. See [`Extension` and `ExtensionFactory`](/docs/api/types#extension-types) for the full contribution shapes.
+Every method returns a new frozen Extension, so there is no final build step. Collection methods (`.use()`, `.provide()`, `.flags()`, `.add()`) append on repeated calls; lifecycle setters (`.preRun()`, `.postRun()`, `.onError()`, `.sections()`, `.build()`) replace the earlier callback, and each callback is typed by the declarations before it.
+
+Chain `.factory()` when callers need to configure the Extension:
+
+<include lang="ts" meta='title="banner.ts"'>
+  ../../../examples/extensions/diagnostics.ts#factory
+</include>
+
+The factory keeps the handle's `.id` for section audiences. Each call passes the handle plus the call's arguments, and must return an Extension with the same id, usually a chain on the received handle. See [`ExtensionBuilder` and `ExtensionFactory`](/docs/api/types#extension-types) for the full contribution shapes.
 
 ## Owned flags and commands
 
@@ -75,7 +83,7 @@ The Command Action is skipped when `preRun` returns `ctx.finish()`, but `postRun
   ../../../examples/extensions/providers.ts
 </include>
 
-Use `provides` when installing the Extension should also install a Context across the command tree. If a hook consumes a Context supplied by the app instead, declare its factory in `uses` and pull it from the hook's lazy `ctx` bag.
+Use `.provide()` when installing the Extension should also install a Context across the whole command tree, wherever it appears in the chain. Hooks read only Contexts declared with `.use()`: `.use()` consumes without supplying, so the app or another Extension must provide the Context, and a Context the Extension provides reaches its own hooks only when it also declares `.use()`.
 
 ## Required root metadata
 
@@ -83,7 +91,7 @@ Use `provides` when installing the Extension should also install a Context acros
   ../../../examples/extensions/metadata.ts
 </include>
 
-Use the curried form when an Extension needs root metadata such as `version`. `.extend()` then rejects a root that does not declare the field, and hooks receive it as required.
+Pass the required keys as `defineExtension`'s only type argument when an Extension needs root metadata such as `version`. `.extend()` then rejects a root that does not declare the field, and hooks receive it as required.
 
 Neither [`bun build`](https://bun.sh/docs/bundler) nor `crust build` runs a TypeScript check. Run `tsc --noEmit` before building so missing metadata fails during development.
 
@@ -93,14 +101,14 @@ Neither [`bun build`](https://bun.sh/docs/bundler) nor `crust build` runs a Type
   ../../../examples/extensions/sections.ts
 </include>
 
-Use `sections` when installing an Extension should add help text to a command. Here `command: []` targets the root, and `my-cli --help` includes:
+Use `.sections()` when installing an Extension should add help text to a command. Here `command: []` targets the root, and `my-cli --help` includes:
 
 ```text
 Environment:
   Set DEPLOY_TOKEN before running.
 ```
 
-The `sections` callback receives the snapshot as authored, before any Extension's sections are applied, so it sees Extension-contributed commands and flags but not other Extensions' sections. Invalid entries (blank or multi-line title, blank body, empty audience, both `only` and `except`, or a `command` path that is not a canonical command) fail preparation with a `DEFINITION` error.
+The `.sections()` callback receives the snapshot as authored, before any Extension's sections are applied, so it sees Extension-contributed commands and flags but not other Extensions' sections. Invalid entries (blank or multi-line title, blank body, empty audience, both `only` and `except`, or a `command` path that is not a canonical command) fail preparation with a `DEFINITION` error.
 
 See the [help Extension](/docs/modules/extensions/help) for rendering and [`ExtensionSectionContribution`](/docs/api/types#extensionsectioncontribution) for targeting and audiences.
 

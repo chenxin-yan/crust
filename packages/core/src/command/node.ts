@@ -1,5 +1,5 @@
 import type { AnyContextFactory, AnyContextInstance } from "../api/context.ts";
-import type { Extension } from "../api/extension.ts";
+import type { ExtensionData } from "../api/extension.ts";
 import { CrustError } from "../errors.ts";
 import type { ExtensionId } from "../identity.ts";
 import {
@@ -52,7 +52,7 @@ export interface CommandNode {
 	/** Declared command demands; validated when recipes are materialized. */
 	demands: readonly AnyContextFactory[];
 	/** Extensions registered via `.extend()` (root builder only) */
-	extensions: Extension[];
+	extensions: ExtensionData[];
 	/** The Command Action */
 	run?: CommandAction;
 }

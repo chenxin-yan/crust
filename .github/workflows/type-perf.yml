@@ -61,6 +61,7 @@ jobs:
           pnpm exec vp run --fail-if-no-match --filter @crustjs/core build:task
           cd ..
           # Use the PR merge's harness and compiler for both declaration sets.
+          # The harness selects equivalent fixture syntax for the target's extension API.
           bun scripts/type-perf-report.ts measure "$RUNNER_TEMP/base.json" base
 
       - name: Write type performance report

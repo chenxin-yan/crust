@@ -99,37 +99,32 @@ function findSuggestion(
 
 export const didYouMean: ExtensionFactory<[options?: DidYouMeanOptions]> = defineExtension(
 	DID_YOU_MEAN,
-	(options = {}) => {
-		const mode = options.mode ?? "error";
+).factory((extension, options = {}) => {
+	const mode = options.mode ?? "error";
 
-		return {
-			hooks: {
-				onError(error, context) {
-					if (!(error instanceof CrustError) || !error.is("COMMAND_NOT_FOUND")) return;
+	return extension.onError((error, context) => {
+		if (!(error instanceof CrustError) || !error.is("COMMAND_NOT_FOUND")) return;
 
-					const details = error.details;
-					const suggestion = findSuggestion(details.input, details.parentCommand.subCommands);
+		const details = error.details;
+		const suggestion = findSuggestion(details.input, details.parentCommand.subCommands);
 
-					let message = `Unknown command "${details.input}".`;
-					if (suggestion !== undefined) {
-						message += ` Did you mean "${suggestion}"?`;
-					}
+		let message = `Unknown command "${details.input}".`;
+		if (suggestion !== undefined) {
+			message += ` Did you mean "${suggestion}"?`;
+		}
 
-					if (mode === "help") {
-						context.stdout(message);
-						context.stdout("");
-						context.stdout(renderHelp(details.parentCommand, details.commandPath));
-						return true;
-					}
+		if (mode === "help") {
+			context.stdout(message);
+			context.stdout("");
+			context.stdout(renderHelp(details.parentCommand, details.commandPath));
+			return true;
+		}
 
-					if (details.available.length > 0) {
-						message += `\n\nAvailable commands: ${details.available.join(", ")}`;
-					}
-					context.stderr(message);
-					// Core preserves the nonzero exit code — rendering only here.
-					return true;
-				},
-			},
-		};
-	},
-);
+		if (details.available.length > 0) {
+			message += `\n\nAvailable commands: ${details.available.join(", ")}`;
+		}
+		context.stderr(message);
+		// Core preserves the nonzero exit code — rendering only here.
+		return true;
+	});
+});

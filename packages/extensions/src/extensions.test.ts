@@ -81,19 +81,17 @@ function getStderr() {
 const stripAnsi = stripVTControlCharacters;
 
 function lateSkillExtension() {
-	return defineExtension(defineExtensionId("late-skill"), {
-		commands: [
-			defineCommand("skill", { description: "Manage agent skills" }, (command) =>
-				command
-					.add(
-						defineCommand("update", { description: "Update installed skills" }, (cmd) =>
-							cmd.action(() => {}),
-						),
-					)
-					.action(() => {}),
-			),
-		],
-	});
+	return defineExtension(defineExtensionId("late-skill")).add(
+		defineCommand("skill", { description: "Manage agent skills" }, (command) =>
+			command
+				.add(
+					defineCommand("update", { description: "Update installed skills" }, (cmd) =>
+						cmd.action(() => {}),
+					),
+				)
+				.action(() => {}),
+		),
+	);
 }
 
 describe("built-in extensions", () => {
@@ -116,11 +114,7 @@ describe("built-in extensions", () => {
 	it("lets official help coexist with a user Extension named help", async () => {
 		let userHelpRan = false;
 		const app = new Crust("app")
-			.extend(
-				defineExtension(defineExtensionId("help"), {
-					hooks: { preRun: () => void (userHelpRan = true) },
-				}),
-			)
+			.extend(defineExtension(defineExtensionId("help")).preRun(() => void (userHelpRan = true)))
 			.extend(help());
 
 		await app.execute({ argv: [] });
@@ -305,15 +299,13 @@ describe("built-in extensions", () => {
 			sections: [{ title: "Root notes", body: "Root body" }],
 		})
 			.extend(
-				defineExtension(defineExtensionId("docs"), {
-					sections: () => [
-						{
-							command: ["build"],
-							title: "Build notes",
-							body: "Build body\nSecond line",
-						},
-					],
-				}),
+				defineExtension(defineExtensionId("docs")).sections(() => [
+					{
+						command: ["build"],
+						title: "Build notes",
+						body: "Build body\nSecond line",
+					},
+				]),
 			)
 			.extend(help())
 			.add(

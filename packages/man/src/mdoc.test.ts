@@ -173,20 +173,18 @@ describe("renderManPageMdoc", () => {
 			sections: [{ title: "Extra notes", body: ".config is supported.\nMore details." }],
 		})
 			.extend(
-				defineExtension(defineExtensionId("docs"), {
-					sections: () => [
-						{
-							command: [],
-							title: "Extra notes",
-							body: "Extension details.",
-						},
-						{
-							command: [],
-							title: "C:\\paths",
-							body: "'quoted lines are escaped.",
-						},
-					],
-				}),
+				defineExtension(defineExtensionId("docs")).sections(() => [
+					{
+						command: [],
+						title: "Extra notes",
+						body: "Extension details.",
+					},
+					{
+						command: [],
+						title: "C:\\paths",
+						body: "'quoted lines are escaped.",
+					},
+				]),
 			)
 			.flags({ name: "verbose", type: "boolean" })
 			.action(() => {});

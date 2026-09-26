@@ -31,25 +31,20 @@ async function connect(app: AnyCrust, exclude?: readonly (readonly string[])[]) 
 	return client;
 }
 
-const finisher = defineExtension(defineExtensionId("test:finisher"), {
-	flags: [{ name: "bail", type: "boolean" }],
-	hooks: {
-		preRun(ctx) {
-			if (ctx.flags.bail === true) {
-				ctx.stdout("bailed");
-				return ctx.finish();
-			}
-		},
-	},
-});
+const finisher = defineExtension(defineExtensionId("test:finisher"))
+	.flags({ name: "bail", type: "boolean" })
+	.preRun((ctx) => {
+		if (ctx.flags.bail === true) {
+			ctx.stdout("bailed");
+			return ctx.finish();
+		}
+	});
 
-const contributed = defineExtension(defineExtensionId("test:contrib"), {
-	commands: [
-		defineCommand("extra", { description: "From an Extension" }, (c) =>
-			c.action(() => ({ from: "extension" })),
-		),
-	],
-});
+const contributed = defineExtension(defineExtensionId("test:contrib")).add(
+	defineCommand("extra", { description: "From an Extension" }, (c) =>
+		c.action(() => ({ from: "extension" })),
+	),
+);
 
 const fixture = new Crust("fixture", { description: "Fixture", version: "1.2.3" })
 	.add(

@@ -78,14 +78,11 @@ describe("public beta API", () => {
 	it("loads extensions separately from command context", async () => {
 		let actionVersion: unknown;
 		let wrapperCalled = false;
-		const version = defineExtension(defineExtensionId("version"), {
-			flags: [{ name: "version", type: "boolean" }],
-			hooks: {
-				preRun() {
-					wrapperCalled = true;
-				},
-			},
-		});
+		const version = defineExtension(defineExtensionId("version"))
+			.flags({ name: "version", type: "boolean" })
+			.preRun(() => {
+				wrapperCalled = true;
+			});
 
 		const app = new Crust("my-cli").extend(version).action(({ flags, ctx }) => {
 			type _ctx = Expect<Equal<typeof ctx, ContextBag>>;

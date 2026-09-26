@@ -357,12 +357,7 @@ describe("updateNotifier post-run hook", () => {
 		},
 	};
 
-	/** Create a basic command snapshot for testing. */
-	async function makeCommandSnapshot(name = "test-cli") {
-		return await new Crust(name).action(() => {}).snapshot();
-	}
-
-	/** Helper to invoke the extension post-run hook with a completed outcome. */
+	/** Run an application with the extension so its post-run hook sees a completed outcome. */
 	async function runExtensionMiddleware(
 		options: Omit<UpdateNotifierOptions, "cache"> & {
 			intervalMs?: number;
@@ -385,30 +380,11 @@ describe("updateNotifier post-run hook", () => {
 						? { cache: { intervalMs } }
 						: {}),
 		};
-		const extension = updateNotifier(extensionOptions);
-
-		const rootCommand = await makeCommandSnapshot(overrides?.commandName ?? options.packageName);
-
-		const context = {
-			argv: [] as readonly string[],
-			rootCommand,
-			command: rootCommand,
-			commandPath: [rootCommand.meta.name] as readonly string[],
-			args: {},
-			flags: {},
-			rawArgs: [] as readonly string[],
-			signal: new AbortController().signal,
-			ctx: {},
-			finish: () => undefined as never,
-			stdout: () => {},
-			stderr: (text: string) => stderrChunks.push(text),
-		};
-
-		const postRun = extension.hooks?.postRun;
-		if (!postRun) throw new Error("update notifier must define a post-run hook");
-		await postRun(context, { status: "completed" });
-
-		return { extension };
+		const outcome = await new Crust(overrides?.commandName ?? options.packageName)
+			.extend(updateNotifier(extensionOptions))
+			.action(() => {})
+			.run([], {}, { stdout: () => {}, stderr: (text) => stderrChunks.push(text) });
+		if (outcome.status === "failed") throw outcome.error;
 	}
 
 	describe("built-in cache adapter", () => {

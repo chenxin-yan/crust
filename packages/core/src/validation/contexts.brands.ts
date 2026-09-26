@@ -55,7 +55,7 @@ type InstanceNames<P extends readonly unknown[]> = P extends readonly [
 /** Statically known names of an Extension's provided Contexts; widened Extensions opt out. */
 type ExtensionProvidedNames<E> =
 	DefiningOf<E> extends {
-		readonly provides?: infer P extends readonly unknown[];
+		readonly provide?: infer P extends readonly unknown[];
 	}
 		? InstanceNames<P>
 		: never;
@@ -154,7 +154,7 @@ export type ValidateContextDeps<
 
 /** Dependency closure carried by command definitions and Extensions. */
 type IsAny<T> = 0 extends 1 & T ? true : false;
-export type DeclaredDepsOf<T> =
+type DeclaredDepsOfMember<T> =
 	IsAny<T> extends true
 		? Record<string, ContextValue>
 		: CommandDefinitionData<DefiningOf<T>> extends {
@@ -164,6 +164,14 @@ export type DeclaredDepsOf<T> =
 				? Record<string, ContextValue>
 				: D
 			: {};
+
+// Infer each branch before intersecting: an empty dependency map otherwise
+// absorbs a demanding branch when TypeScript infers the maps together.
+export type DeclaredDepsOf<T> = (
+	T extends unknown ? (deps: DeclaredDepsOfMember<T>) => void : never
+) extends (deps: infer Deps extends ContextMap) => void
+	? Deps
+	: {};
 
 /** Missing-dependency brand shared by `ValidateDeclaredDeps` and inline `.command()`. */
 export type MissingDeclaredDependencyBrand<

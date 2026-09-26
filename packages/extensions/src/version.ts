@@ -47,23 +47,20 @@ function makeVersion<K extends RootMetaKey>(
 	options: VersionOptions,
 ): VersionRegistration<K> {
 	const { format } = options;
-	return defineExtension<K>()(VERSION, {
-		flags: versionFlags,
-		hooks: {
-			preRun(context) {
-				if (context.commandPath.length !== 1 || context.flags.version !== true) return;
-				const resolvedVersion = resolve(context);
-				const line =
-					format === "plain"
-						? resolvedVersion
-						: format
-							? format(resolvedVersion, context)
-							: `${context.rootCommand.meta.name} v${resolvedVersion}`;
-				context.stdout(line);
-				return context.finish();
-			},
-		},
-	});
+	return defineExtension<K>(VERSION)
+		.flags(...versionFlags)
+		.preRun((context) => {
+			if (context.commandPath.length !== 1 || context.flags.version !== true) return;
+			const resolvedVersion = resolve(context);
+			const line =
+				format === "plain"
+					? resolvedVersion
+					: format
+						? format(resolvedVersion, context)
+						: `${context.rootCommand.meta.name} v${resolvedVersion}`;
+			context.stdout(line);
+			return context.finish();
+		});
 }
 
 function createVersion(value: VersionValue, options?: VersionOptions): VersionRegistration<never>;

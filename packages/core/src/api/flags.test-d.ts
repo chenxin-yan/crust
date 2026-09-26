@@ -256,10 +256,9 @@ function _otherFlagSpellingEntryPoints() {
 		{ flags: [{ name: "flag", type: "boolean", aliases: ["f", "f"] }] },
 		() => true,
 	);
-	defineExtension(defineExtensionId("extension"), {
+	defineExtension(defineExtensionId("extension"))
 		// @ts-expect-error -- Extension flags use the same local spelling contract
-		flags: [{ name: "flag", type: "boolean", short: "ff" }],
-	});
+		.flags({ name: "flag", type: "boolean", short: "ff" });
 	defineCommand("child", (command) =>
 		command
 			// @ts-expect-error -- recipe flags use the same local spelling contract

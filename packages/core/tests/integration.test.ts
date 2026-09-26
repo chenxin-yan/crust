@@ -212,8 +212,11 @@ describe("integration: Context-owned flag → derived Context and descendant", (
 
 describe("integration: Extension adds flag visible to subcommand action", () => {
 	it("Extension flag on root is parsed and available to root action", async () => {
-		const versionFlag = defineExtension(defineExtensionId("version-extension"), {
-			flags: [{ name: "version", type: "boolean", short: "V", recursive: false }],
+		const versionFlag = defineExtension(defineExtensionId("version-extension")).flags({
+			name: "version",
+			type: "boolean",
+			short: "V",
+			recursive: false,
 		});
 
 		const app = new Crust("cli").extend(versionFlag).action((ctx) => {
@@ -231,16 +234,13 @@ describe("integration: Extension adds flag visible to subcommand action", () => 
 
 	it("Extension hooks run around subcommand execution", async () => {
 		const order: string[] = [];
-		const logging = defineExtension(defineExtensionId("logging"), {
-			hooks: {
-				preRun: (ctx) => {
-					order.push(`pre:${ctx.command.meta.name}`);
-				},
-				postRun: (ctx) => {
-					order.push(`post:${ctx.command.meta.name}`);
-				},
-			},
-		});
+		const logging = defineExtension(defineExtensionId("logging"))
+			.preRun((ctx) => {
+				order.push(`pre:${ctx.command.meta.name}`);
+			})
+			.postRun((ctx) => {
+				order.push(`post:${ctx.command.meta.name}`);
+			});
 		const app = new Crust("cli").extend(logging).add(
 			defineCommand("sub", (cmd) =>
 				cmd.action(() => {
@@ -464,12 +464,8 @@ describe("integration: complex real-world CLI scenario", () => {
 	it("full CLI with global flags, multiple subcommands, extensions, and lifecycle hooks", async () => {
 		const order: string[] = [];
 
-		const auditExtension = defineExtension(defineExtensionId("audit"), {
-			hooks: {
-				preRun: (ctx) => {
-					order.push(`audit:${ctx.command.meta.name}`);
-				},
-			},
+		const auditExtension = defineExtension(defineExtensionId("audit")).preRun((ctx) => {
+			order.push(`audit:${ctx.command.meta.name}`);
 		});
 
 		const verbose = defineFlag("verbose", { type: "boolean", short: "v" });
