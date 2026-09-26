@@ -76,7 +76,7 @@ The effective provider on the path must come from the **same factory**, includin
 
 <include lang="ts">../../../examples/modules/effect.ts#tagged-errors</include>
 
-Each Core error code has a `Data.TaggedError` class: `CrustDefinitionError`, `CrustValidationError`, `CrustParseError`, and `CrustCommandNotFoundError`. Each carries `message`, typed `details`, and `cause` (the original `CrustError`). `CrustTaggedError` is their union.
+Each Core error code has a `Data.TaggedError` class: `CrustDefinitionError`, `CrustValidationError`, `CrustParseError`, `CrustCommandNotFoundError`, and `CrustEnvError`. Each carries `message`, typed `details`, and `cause` (the original `CrustError`). `CrustTaggedError` is their union.
 
 - `fromCrustError(error)` wraps a caught `CrustError` in the class for its `code`.
 - `tryCrust(thunk)` lifts a sync or async thunk into an Effect: a thrown `CrustError` fails with its tagged class, an `AbortError` interrupts the fiber, and anything else is a defect.

@@ -35,6 +35,7 @@
     "@crustjs/core": "workspace:*",
     "@crustjs/create": "workspace:*",
     "@crustjs/effect": "workspace:*",
+    "@crustjs/env": "workspace:*",
     "@crustjs/extensions": "workspace:*",
     "@crustjs/man": "workspace:*",
     "@crustjs/mcp": "workspace:*",

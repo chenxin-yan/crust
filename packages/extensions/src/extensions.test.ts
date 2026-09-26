@@ -332,6 +332,46 @@ describe("built-in extensions", () => {
 		expect(buildOutput.indexOf("Build notes:")).toBeGreaterThan(buildOutput.indexOf("Options:"));
 	});
 
+	it("renders Context sections only on the command where the Context is provided", async () => {
+		const env = defineContext(
+			"env",
+			{ sections: [{ title: "Environment", body: "APP_TOKEN  API token" }] },
+			() => ({}),
+		);
+		const database = defineContext(
+			"database",
+			{ sections: [{ title: "Database", body: "DATABASE_URL  connection" }] },
+			() => ({}),
+		);
+		const app = new Crust("app")
+			.extend(help())
+			.provide(env())
+			.add(
+				defineCommand("db", (db) =>
+					db
+						.provide(database())
+						.add(defineCommand("migrate", (migrate) => migrate.action(() => {}))),
+				),
+			);
+
+		const root = stripAnsi((await app.run([])).stdout);
+		expect(root).toContain("Environment:\n  APP_TOKEN  API token");
+		expect(root).not.toContain("Database:");
+
+		stdoutChunks = [];
+		await app.execute({ argv: ["db", "--help"] });
+		const db = stripAnsi(getStdout());
+		expect(db).toContain("Database:\n  DATABASE_URL  connection");
+		expect(db).not.toContain("Environment:");
+
+		stdoutChunks = [];
+		await app.execute({ argv: ["db", "migrate", "--help"] });
+		const migrate = stripAnsi(getStdout());
+		expect(migrate).toContain("app db migrate");
+		expect(migrate).not.toContain("Database:");
+		expect(migrate).not.toContain("Environment:");
+	});
+
 	it("noColor injects --color and --no-color into help output", async () => {
 		const app = new Crust("app")
 			.extend(noColor())

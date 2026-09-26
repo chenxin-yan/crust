@@ -101,6 +101,8 @@ outcome: completed
 
 `.provide()` installs Context instances across the command tree; `.use()` declares which factories the hooks need. An Extension that supplies and reads a Context needs both. To use an app-supplied Context instead, omit the Extension's `.provide()` and call `.provide(logger())` on the app before `.extend(logging)`.
 
+A provided Context's [documentation sections](/docs/guide/contexts#documentation-owned-by-a-context) appear once on the root, not on every command.
+
 A flag-owning Context requires successful validation. Use it in the action, or in `postRun` after validation has succeeded—not after an early finish that skipped validation.
 
 ## Required root metadata

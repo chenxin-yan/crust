@@ -49,6 +49,8 @@ export interface CommandNode {
 	subCommands: Record<string, CommandNode>;
 	/** Contexts available to this command in provide order (construction order is pull-driven). */
 	contexts: CommandContext[];
+	/** Contexts `.provide()`d on this command itself; preparation installs their sections here. */
+	providedContexts: readonly AnyContextInstance[];
 	/** Declared command demands; validated when recipes are materialized. */
 	demands: readonly AnyContextFactory[];
 	/** Extensions registered via `.extend()` (root builder only) */
@@ -78,6 +80,7 @@ export function createCommandNode(name: string): CommandNode {
 		args: [],
 		subCommands: {},
 		contexts: [],
+		providedContexts: [],
 		demands: [],
 		extensions: [],
 		run: undefined,

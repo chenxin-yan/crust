@@ -42,11 +42,27 @@ export interface DefinitionErrorDetails {
 	readonly reason?: string;
 }
 
+/** One environment variable that failed; its value is never recorded. */
+export interface EnvIssue {
+	/** Variable name as declared. */
+	readonly name: string;
+	/** Declared expectation, e.g. `"number"` or `"one of: debug, info"`. */
+	readonly expected: string;
+	/** Whether the variable was unset or held a value that failed parsing or validation. */
+	readonly received: "missing" | "invalid";
+}
+
+/** Every missing or invalid variable of one `@crustjs/env` definition. */
+export interface EnvErrorDetails {
+	readonly issues: readonly EnvIssue[];
+}
+
 export interface CrustErrorDetailsMap {
 	DEFINITION: DefinitionErrorDetails | undefined;
 	VALIDATION: ValidationErrorDetails | undefined;
 	PARSE: ParseErrorDetails | undefined;
 	COMMAND_NOT_FOUND: CommandNotFoundErrorDetails;
+	ENV: EnvErrorDetails;
 }
 
 /**
@@ -56,6 +72,7 @@ export interface CrustErrorDetailsMap {
  * - `VALIDATION` — Missing required arguments or flags
  * - `PARSE` — Argv parsing failures (unknown flags, type coercion)
  * - `COMMAND_NOT_FOUND` — Unrecognised subcommand at the current level
+ * - `ENV` — Missing or invalid `@crustjs/env` variables (values redacted)
  *
  * @example
  * ```ts

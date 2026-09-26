@@ -1,6 +1,16 @@
+import { validateCommandSections } from "../command/extensions-install.ts";
 import { CrustError, type CaughtError } from "../errors.ts";
 import { toFlagsRecord } from "../parsing/spellings.ts";
-import type { FlagsDef, InferFlags, InvocationIO, MergeFlags, NamedFlagDef } from "../types.ts";
+import type {
+	CommandSection,
+	FlagsDef,
+	InferFlags,
+	InvocationIO,
+	MergeFlags,
+	NamedFlagDef,
+	RuntimeCommandSectionInput,
+} from "../types.ts";
+import type { LocalSectionsBrand } from "../validation/commands.brands.ts";
 import type {
 	AttachedFlags,
 	AttachedSpellings,
@@ -71,6 +81,8 @@ export interface ContextInstance<
 		: (state: [OF, Deps]) => void;
 	readonly name: Name;
 	readonly ownedFlags: FlagsDef;
+	/** Validated {@link ContextBuilder.sections}, frozen at declaration. */
+	readonly sections: readonly CommandSection[];
 	/** @internal — declared direct dependency factories */
 	readonly use: readonly AnyContextFactory[];
 	/** @internal defining factory, for adapters that identify Contexts by factory */
@@ -231,7 +243,7 @@ type ContextOptionsOf<Args extends readonly unknown[]> = Args extends readonly [
 
 /**
  * Immutable fluent Context authoring handle returned by {@link defineContext}.
- * `use` and `flags` append and return a new handle; `setup` ends the chain and
+ * `use`, `flags`, and `sections` append and return a new handle; `setup` ends the chain and
  * returns the callable {@link ContextFactory}. Callbacks are typed by the
  * declarations made before them.
  */
@@ -248,6 +260,10 @@ export interface ContextBuilder<
 	flags<const Fs extends readonly NamedFlagDef[]>(
 		...defs: ValidateLocalFlagDefs<Fs, AttachedSpellings<Defs>>
 	): ContextBuilder<Name, Use, readonly [...Defs, ...Fs]>;
+	/** Document only the providing command (the root for Extension-provided Contexts). */
+	sections<const S extends readonly RuntimeCommandSectionInput[]>(
+		...sections: S & LocalSectionsBrand<{ sections: S }>["sections"]
+	): ContextBuilder<Name, Use, Defs>;
 	/**
 	 * Finish the definition. `setup` runs lazily, once per invocation, when a
 	 * consumer first reads the Context. Annotate its optional second parameter to
@@ -278,14 +294,17 @@ function createContextBuilder(
 	name: string,
 	use: readonly AnyContextFactory[],
 	ownedFlags: Readonly<FlagsDef>,
+	sections: readonly CommandSection[],
 ): ErasedContextBuilder {
 	const builder = {
 		use: (...factories: readonly AnyContextFactory[]) =>
-			createContextBuilder(name, Object.freeze([...use, ...factories.map(definingOf)]), ownedFlags),
+			createContextBuilder(name, Object.freeze([...use, ...factories.map(definingOf)]), ownedFlags, sections),
 		// Snapshot and collision-check each call's definitions eagerly, like one combined list.
 		flags: (...defs: readonly NamedFlagDef[]) =>
-			createContextBuilder(name, use, Object.freeze(toFlagsRecord(defs, ownedFlags))),
-		setup: (setup: ErasedContextSetup) => createContextFactory(name, use, ownedFlags, setup),
+			createContextBuilder(name, use, Object.freeze(toFlagsRecord(defs, ownedFlags)), sections),
+		sections: (...inputs: readonly RuntimeCommandSectionInput[]) =>
+			createContextBuilder(name, use, ownedFlags, Object.freeze([...sections, ...validateCommandSections(name, inputs, "context")])),
+		setup: (setup: ErasedContextSetup) => createContextFactory(name, use, ownedFlags, sections, setup),
 	};
 	// SAFETY: public signatures check inputs; the erased setup receives exactly (input, options).
 	return Object.freeze(builder) as ErasedContextBuilder;
@@ -295,13 +314,14 @@ function createContextFactory(
 	name: string,
 	use: readonly AnyContextFactory[],
 	ownedFlags: Readonly<FlagsDef>,
+	sections: readonly CommandSection[],
 	setup: ErasedContextSetup,
 ): AnyContextFactory {
 	const instance = (
 		instanceUse: readonly AnyContextFactory[],
 		run: AnyContextInstance["setup"],
 	): AnyContextInstance => {
-		const value = { name, ownedFlags, use: instanceUse, factory: sealed, setup: run };
+		const value = { name, ownedFlags, sections, use: instanceUse, factory: sealed, setup: run };
 		// SAFETY: seal installs the private defining proof before this runtime value is erased.
 		return seal(value) as AnyContextInstance;
 	};
@@ -318,11 +338,11 @@ function createContextFactory(
 
 /**
  * Start an immutable fluent Context definition: a named, lazy command
- * dependency. Chain `.use()` and `.flags()`, then `.setup()` for the factory.
+ * dependency. Chain `.use()`, `.flags()`, and `.sections()`, then `.setup()` for the factory.
  */
 export function defineContext<Name extends string>(name: Name): ContextBuilder<Name> {
 	// SAFETY: the builder's public signatures carry the phantoms the erased runtime handle drops.
-	return createContextBuilder(name, Object.freeze([]), Object.freeze({})) as ContextBuilder<Name>;
+	return createContextBuilder(name, Object.freeze([]), Object.freeze({}), Object.freeze([])) as ContextBuilder<Name>;
 }
 
 export type FactoryValueOf<F extends AnyContextFactory> =
