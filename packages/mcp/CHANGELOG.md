@@ -1,5 +1,13 @@
 # @crustjs/mcp
 
+## 0.1.1
+
+### Patch Changes
+
+- [#453](https://github.com/chenxin-yan/crust/pull/453) [`801b72c`](https://github.com/chenxin-yan/crust/commit/801b72cac514f4715e477fea187d07a39cc3fc44) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Fall back to captured stdout instead of returning lossy structuredContent for completed results containing -0, array holes, named or symbol array keys, Array subclasses, or non-enumerable object keys. Result getters are now read exactly once into a detached copy, so a getter that changes between reads can no longer produce structured content that differs from what was validated. New own keys or array-length changes detected during an object's capture also fall back to stdout.
+- Updated dependencies [[`c4f44d6`](https://github.com/chenxin-yan/crust/commit/c4f44d6f9e3dd206154d0b18a84fb75464dc2dfe), [`eb9928d`](https://github.com/chenxin-yan/crust/commit/eb9928d60edc3033652ad55a3a019e790dafdf06)]:
+  - @crustjs/core@0.5.0
+
 ## 0.1.0
 
 ### Minor Changes

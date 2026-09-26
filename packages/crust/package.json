@@ -1,6 +1,6 @@
 {
 	"name": "@crustjs/crust",
-	"version": "0.4.1",
+	"version": "0.5.0",
 	"description": "CLI tooling for the Crust framework",
 	"type": "module",
 	"license": "MIT",
@@ -54,7 +54,7 @@
 		"@crustjs/style": "workspace:^"
 	},
 	"peerDependencies": {
-		"@crustjs/core": "^0.4.0"
+		"@crustjs/core": "^0.5.0"
 	},
 	"devDependencies": {
 		"@arethetypeswrong/core": "^0.18.5",

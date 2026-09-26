@@ -1,5 +1,15 @@
 # @crustjs/core
 
+## 0.5.0
+
+### Minor Changes
+
+- [#450](https://github.com/chenxin-yan/crust/pull/450) [`c4f44d6`](https://github.com/chenxin-yan/crust/commit/c4f44d6f9e3dd206154d0b18a84fb75464dc2dfe) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Breaking: replace object-based extension definitions with immutable fluent authoring: defineExtension<MetaKeys>(id).use(...).provide(...).flags(...).add(...), followed by lifecycle methods. Configure extensions with .factory((extension, ...args) => extension...), preserving .id. Rename Context dependency configuration from uses to use. Remove the old object, factory-callback and curried defineExtension forms, ExtensionConfig, DefineExtensionWith, and exposed extension data fields; use ExtensionBuilder for authoring and Extension for registration.
+
+### Patch Changes
+
+- [#452](https://github.com/chenxin-yan/crust/pull/452) [`eb9928d`](https://github.com/chenxin-yan/crust/commit/eb9928d60edc3033652ad55a3a019e790dafdf06) Thanks [@chenxin-yan](https://github.com/chenxin-yan)! - Omitted variadic arguments now resolve their declared `default` as a one-element array (`[default]`) for both `execute()` and `run()`; supplied values still replace it.
+
 ## 0.4.1
 
 No changes in this release.
