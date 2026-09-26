@@ -44,7 +44,7 @@ Return `ctx.finish()` from `preRun` to stop before validation and the action. Ca
 
 Give each Extension a namespaced id such as `acme:preview`. Registering the same id again replaces the earlier registration.
 
-Builder methods return new frozen Extensions; there is no finalization step. Declare flags and Contexts before the hooks that read them. Collection methods append; setting a hook again replaces its callback.
+Builder methods other than `.factory()` return new frozen Extensions; there is no finalization step. Declare flags and Contexts before the hooks that read them. Collection methods append; setting a hook again replaces its callback.
 
 For configurable Extensions, chain `.factory()`:
 
@@ -80,7 +80,7 @@ Use `preRun` for work before validation and the action, and `postRun` for work a
 </include>
 
 - `preRun` follows `.extend()` order. Returning `ctx.finish()` skips later `preRun` hooks and the action.
-- `postRun` runs in reverse order, including after an early finish or failure. Context cleanup runs afterwards.
+- `postRun` runs in reverse order, including after an early finish or a failure once hooks start. Preparation, routing, and input-binding failures happen before hooks and skip it. Context cleanup runs afterwards.
 - `onError` handles terminal errors from `.execute()`; see [Error handling](/docs/guide/error-handling).
 
 Hook flags are **pre-validation values**, not schema outputs. Check values before using them. See [`ExtensionHooks`](/docs/api/types#extensionhooks) for the full lifecycle.
@@ -111,7 +111,7 @@ An Extension that needs `version` can require it with `defineExtension<"version"
   ../../../examples/extensions/metadata.ts
 </include>
 
-TypeScript rejects `.extend(stamp)` unless the root declares `version`. Run `tsc --noEmit` before building—neither `bun build` nor `crust build` performs this check.
+TypeScript rejects `.extend(stamp)` unless the root declares `version`. Bun and Node builds (`bun build`, or `crust build` for those runtimes) skip this check, so run `tsc --noEmit` first. Deno-runtime `crust build` uses `deno compile`, which type-checks local modules by default.
 
 ## Command sections
 

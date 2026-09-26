@@ -132,6 +132,7 @@ export const FEATURES: readonly Feature[] = [
 		file: "src/cli.ts",
 		lang: "TypeScript",
 		output: [
+			cmd("crust build  # stages the skill help lists"),
 			run("src/cli.ts", "--help"),
 			out("my-cli - Manage deployments"),
 			out(""),

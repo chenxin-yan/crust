@@ -343,7 +343,7 @@ The intersection of two Context maps.
   name="ExtensionBuilder"
 />
 
-`defineExtension(id)` starts an immutable fluent definition; `defineExtension<MetaKeys>(id)` also [requires root metadata](#rootmetakey). Every method returns a new frozen handle and leaves the original unchanged, and every handle is an `Extension` accepted by `.extend()`. There is no final build step.
+`defineExtension(id)` starts an immutable fluent definition; `defineExtension<MetaKeys>(id)` also [requires root metadata](#rootmetakey). Every method except `.factory()` returns a new frozen handle and leaves the original unchanged, and every handle is an `Extension` accepted by `.extend()`. There is no final build step.
 
 Collection methods append on repeated calls: `.use()` declares Contexts the hooks consume (the app or a `.provide()` supplies them), `.provide()` installs Context instances application-wide regardless of chain position, `.flags()` owns flags, and `.add()` contributes `defineCommand()` definitions at the application root. Provided Contexts are not exposed to the Extension's own hooks unless also declared with `.use()`. Flag spellings are checked against earlier `.flags()` and provided Context-owned flags, both by TypeScript and when the method runs. TypeScript also rejects known command-name and alias collisions across `.add()` calls. Dynamic command collections retain the runtime replacement behavior: later canonical definitions replace earlier ones.
 
@@ -473,7 +473,7 @@ Fixed tuples with one known name per definition retain precise hook types. Dynam
 
 `preRun` runs in `.extend()` order after routing and input binding (argv parsing for `execute()`, structured binding for typed `run()`), before validation. Its declared Context bag is lazy, but accessing a flag-owning Context directly or transitively rejects before validation; a later post-validation access re-executes that Context's setup from the start. Return `ctx.finish()` to end successfully.
 
-`onError` is used by `.execute()` only. For failures raised during dispatch before `postRun`, it settles before `postRun`; return `true` after rendering to stop the chain, or a falsy value to continue to Core's renderer. `postRun` is the reverse-`.extend()`-order `finally` hook: it can pull or reuse Contexts, observes any failed-outcome attribution from `onError`, and runs for every Extension after a completed, finished, or failed invocation.
+`onError` is used by `.execute()` only. For failures raised during dispatch before `postRun`, it settles before `postRun`; return `true` after rendering to stop the chain, or a falsy value to continue to Core's renderer. `postRun` is the reverse-`.extend()`-order `finally` hook: it can pull or reuse Contexts, observes any failed-outcome attribution from `onError`, and runs for every Extension after a completed, finished, or failed invocation once hooks start. Preparation, routing, and input-binding failures happen before hooks and skip `postRun`.
 
 Invocation Contexts remain available through `postRun`, and disposal follows. An `onError` call for a post-run or disposal failure runs after cleanup, with Context pulls unavailable. Routing and parse failures use a fallback context with no available Contexts.
 
