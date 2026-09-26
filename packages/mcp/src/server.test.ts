@@ -420,6 +420,22 @@ describe("toolResultFromOutcome", () => {
 		expect(reads).toBe(1);
 	});
 
+	it("captures a shared object's getters once for every reference", () => {
+		let reads = 0;
+		const shared = {
+			get value() {
+				return ++reads;
+			},
+		};
+		const response = toolResultFromOutcome(completed({ first: shared, second: shared }));
+		const captured = { first: { value: 1 }, second: { value: 1 } };
+		expect(JSON.parse(JSON.stringify(response))).toEqual({
+			content: [{ type: "text", text: JSON.stringify(captured, null, 2) }],
+			structuredContent: captured,
+		});
+		expect(reads).toBe(1);
+	});
+
 	it("never runs a result's toJSON hook", () => {
 		const toJSON = vi.fn(() => 1);
 		expect(toolResultFromOutcome(completed({ toJSON }))).toEqual({

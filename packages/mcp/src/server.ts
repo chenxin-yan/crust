@@ -45,12 +45,21 @@ function isObject(value: unknown): value is object {
  * class instances (`Date`, `Map`, `URL`, Array subclasses, …), array holes,
  * non-index array keys, symbol or non-enumerable keys, and cycles. `-0` is kept
  * because `JSON.parse` yields it for client input; results reject it when
- * serialized. `ancestors` holds the active path only, so one object referenced
- * twice is not mistaken for a cycle.
+ * serialized. `copies` maps each object to its finished copy, or `undefined`
+ * while it is being copied: an object referenced twice reuses one capture, and
+ * reaching an in-progress object is a cycle.
  */
-function parseJsonValue(value: unknown, ancestors = new Set<object>()): JsonValue {
+function parseJsonValue(
+	value: unknown,
+	copies = new Map<object, JsonValue | undefined>(),
+): JsonValue {
 	if (isJsonPrimitive(value)) return value;
-	if (!isObject(value) || ancestors.has(value)) throw new TypeError("Not JSON data");
+	if (!isObject(value)) throw new TypeError("Not JSON data");
+	if (copies.has(value)) {
+		const copy = copies.get(value);
+		if (copy === undefined) throw new TypeError("Cycle");
+		return copy;
+	}
 	if (Object.getOwnPropertySymbols(value).length > 0) throw new TypeError("Symbol key");
 	const proto = Object.getPrototypeOf(value);
 	const names = Object.getOwnPropertyNames(value);
@@ -69,14 +78,14 @@ function parseJsonValue(value: unknown, ancestors = new Set<object>()): JsonValu
 			throw new TypeError("Non-enumerable key");
 		}
 	}
-	ancestors.add(value);
+	copies.set(value, undefined);
 	const copy = Array.isArray(value)
-		? value.map((item) => parseJsonValue(item, ancestors))
+		? value.map((item) => parseJsonValue(item, copies))
 		: // `fromEntries` defines own properties, so a `__proto__` key cannot set the prototype.
 			Object.fromEntries(
-				Object.entries(value).map(([key, item]) => [key, parseJsonValue(item, ancestors)] as const),
+				Object.entries(value).map(([key, item]) => [key, parseJsonValue(item, copies)] as const),
 			);
-	ancestors.delete(value);
+	copies.set(value, copy);
 	return copy;
 }
 
