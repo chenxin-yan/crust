@@ -47,6 +47,7 @@
 	"devDependencies": {
 		"@crustjs/config": "workspace:*",
 		"@crustjs/core": "workspace:*",
+		"@crustjs/env": "workspace:*",
 		"@crustjs/testing": "workspace:*",
 		"effect": "4.0.0-rc.115",
 		"vite-plus": "catalog:"
