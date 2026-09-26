@@ -17,6 +17,7 @@ import {
 
 const report = (small: number, large: number, stress: number): TypePerfReport => ({
 	typescriptVersion: "7.0.2",
+	fixtureApi: "fluent",
 	instantiations: { 10: small, 100: large, 200: stress },
 });
 
@@ -43,11 +44,28 @@ describe("type performance report", () => {
 		expect(generateConsumerSource(10).match(/const command\d+ = defineCommand/g)).toHaveLength(10);
 	});
 
+	it.each([10, 100, 200])("preserves the workload across API dialects at size %i", (size) => {
+		const fluent = generateConsumerSource(size);
+		const object = generateConsumerSource(size, "object");
+		expect(object).toContain("uses: [context0]");
+		expect(fluent).toContain("use: [context0]");
+		expect(object).toContain('flags: [{ name: "extension-trace", type: "boolean" }]');
+		expect(fluent).toContain('.flags({ name: "extension-trace", type: "boolean" })');
+		const fluentCommand = fluent.match(/\t\.add\((defineCommand\("extension-command".+)\);/);
+		const objectCommand = object.match(/\tcommands: \[(defineCommand\("extension-command".+)\],/);
+		expect(fluentCommand?.[1]).toBeTruthy();
+		expect(objectCommand?.[1]).toBe(fluentCommand?.[1]);
+		const withoutExtension = (source: string) =>
+			source.replace(/const extension = [\s\S]+?\n\n/, "").replaceAll("uses: [", "use: [");
+		expect(withoutExtension(object)).toBe(withoutExtension(fluent));
+	});
+
 	it("measures all consumer sizes using the harness compiler, not the target tree's compiler", async () => {
 		const root = mkdtempSync(join(tmpdir(), "crust-type-perf-test-"));
 		try {
 			mkdirSync(join(root, "packages"));
 			symlinkSync(join(repoRoot, "packages/core"), join(root, "packages/core"), "dir");
+			symlinkSync(join(repoRoot, "packages/utils"), join(root, "packages/utils"), "dir");
 			const output = join(root, "report.json");
 			const result = await measure(root, output);
 
@@ -59,6 +77,7 @@ describe("type performance report", () => {
 			expect(measured.instantiations[100]).toBeGreaterThan(measured.instantiations[10]);
 			expect(measured.instantiations[200]).toBeGreaterThan(measured.instantiations[100]);
 			expect(measured.typescriptVersion).toBeTruthy();
+			expect(measured.fixtureApi).toBe("fluent");
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 		}
@@ -69,6 +88,7 @@ describe("type performance report", () => {
 		try {
 			const core = join(root, "packages/core");
 			mkdirSync(core, { recursive: true });
+			symlinkSync(join(repoRoot, "packages/core/dist"), join(core, "dist"), "dir");
 			writeFileSync(
 				join(core, "package.json"),
 				JSON.stringify({ name: "@crustjs/core", types: "index.d.ts" }),
@@ -85,6 +105,13 @@ describe("type performance report", () => {
 		}
 	});
 
+	it("labels comparisons across the extension API transition", () => {
+		const base = { ...report(10_000, 50_000, 100_000), fixtureApi: "object" as const };
+		expect(formatComparison(base, report(11_000, 60_000, 120_000))).toContain(
+			"API transition (object → fluent): fixtures use equivalent workloads with each API's context and extension syntax, not identical source.",
+		);
+	});
+
 	it("reports only per-fixture deltas and flags increases strictly above 10%", () => {
 		const output = formatComparison(
 			report(10_000, 50_000, 100_000),
@@ -98,6 +125,7 @@ describe("type performance report", () => {
 		expect(output).not.toContain("Check time");
 		expect(output).not.toContain("Editor latency");
 		expect(output).not.toContain("scaling ratio");
+		expect(output).not.toContain("API transition");
 	});
 
 	it("does not flag improved workloads when their ratio increases", () => {
