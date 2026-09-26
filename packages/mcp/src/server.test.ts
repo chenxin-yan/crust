@@ -10,7 +10,7 @@ import {
 } from "@crustjs/core";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { createMcpServer, DEFAULT_SERVER_VERSION, toolResultFromOutcome } from "./server.ts";
 
@@ -148,6 +148,21 @@ describe("createMcpServer", () => {
 		expect(result.isError).toBeUndefined();
 		expect(result.structuredContent).toEqual(expected);
 		expect(result.content).toEqual([{ type: "text", text: JSON.stringify(expected, null, 2) }]);
+	});
+
+	it("accepts -0 input, which JSON.parse can produce", async () => {
+		const client = await connect(fixture);
+		const result = await client.callTool({
+			name: "echo",
+			arguments: { word: "ab", times: -0, origin: "https://example.com/", tag: ["t"], raw: [] },
+		});
+		expect(result.isError).toBeUndefined();
+		expect(result.structuredContent).toEqual({
+			word: "",
+			origin: "https://example.com/",
+			tags: ["t"],
+			rawArgs: [],
+		});
 	});
 
 	it("reaches Extension-contributed commands", async () => {
@@ -375,37 +390,141 @@ describe("toolResultFromOutcome", () => {
 		stderr: "",
 	});
 
-	it.each([1, 2])(
-		"falls back when result inspection or serialization throws on read %s",
-		(failureAt) => {
-			let reads = 0;
-			const result = {
-				get value() {
-					if (++reads === failureAt) throw new Error("result getter");
-					return 1;
-				},
-			};
-			expect(toolResultFromOutcome(completed(result))).toEqual({
-				content: [{ type: "text", text: "out" }],
-			});
-		},
-	);
+	it("falls back to stdout when a result getter throws", () => {
+		const result = {
+			get value() {
+				throw new Error("result getter");
+			},
+		};
+		expect(toolResultFromOutcome(completed(result))).toEqual({
+			content: [{ type: "text", text: "out" }],
+		});
+	});
 
-	it("detaches structured results so transport serialization never rereads action getters", () => {
+	it.each([
+		["undefined", undefined],
+		["a Date", new Date(0)],
+	])("captures each result getter once, even if it would later return %s", (_label, later) => {
 		let reads = 0;
 		const result = {
 			get value() {
-				if (++reads > 2) throw new Error("result read again by transport");
-				return reads;
+				return ++reads === 1 ? 1 : later;
 			},
 		};
 		const response = toolResultFromOutcome(completed(result));
-		expect(response.structuredContent).toEqual({ value: 2 });
-		expect(response.content).toEqual([
-			{ type: "text", text: JSON.stringify({ value: 2 }, null, 2) },
-		]);
-		expect(() => JSON.stringify(response)).not.toThrow();
-		expect(reads).toBe(2);
+		// Round-trip like a transport would; it must not reach the action's getter.
+		expect(JSON.parse(JSON.stringify(response))).toEqual({
+			content: [{ type: "text", text: JSON.stringify({ value: 1 }, null, 2) }],
+			structuredContent: { value: 1 },
+		});
+		expect(reads).toBe(1);
+	});
+
+	it("captures a shared object's getters once for every reference", () => {
+		let reads = 0;
+		const shared = {
+			get value() {
+				return ++reads;
+			},
+		};
+		const response = toolResultFromOutcome(completed({ first: shared, second: shared }));
+		const captured = { first: { value: 1 }, second: { value: 1 } };
+		expect(JSON.parse(JSON.stringify(response))).toEqual({
+			content: [{ type: "text", text: JSON.stringify(captured, null, 2) }],
+			structuredContent: captured,
+		});
+		expect(reads).toBe(1);
+	});
+
+	it("falls back when a getter creates an array hole during capture", () => {
+		let reads = 0;
+		const result = [1, 2];
+		Object.defineProperty(result, "0", {
+			get() {
+				reads++;
+				// oxlint-disable-next-line typescript/no-array-delete -- the fixture intentionally creates a hole during capture.
+				delete result[1];
+				return 1;
+			},
+		});
+		expect(toolResultFromOutcome(completed(result))).toEqual({
+			content: [{ type: "text", text: "out" }],
+		});
+		expect(reads).toBe(1);
+	});
+
+	it.each(["object", "array", "symbol", "non-enumerable", "array length"])(
+		"falls back when getter capture adds data: %s",
+		(kind) => {
+			let reads = 0;
+			const added = vi.fn(() => 2);
+			const result = kind.startsWith("array") ? [1] : { first: 1 };
+			Object.defineProperty(result, Array.isArray(result) ? "0" : "first", {
+				get() {
+					reads++;
+					if (kind === "array length" && Array.isArray(result)) {
+						result.length = 2;
+					} else {
+						const key = Array.isArray(result) ? "1" : kind === "symbol" ? Symbol() : "added";
+						Object.defineProperty(result, key, {
+							enumerable: kind !== "non-enumerable",
+							get: added,
+						});
+					}
+					return 1;
+				},
+			});
+			expect(toolResultFromOutcome(completed(result))).toEqual({
+				content: [{ type: "text", text: "out" }],
+			});
+			expect(reads).toBe(1);
+			expect(added).not.toHaveBeenCalled();
+		},
+	);
+
+	it("captures validated object keys even when a getter hides a later property", () => {
+		const first = vi.fn(() => {
+			Object.defineProperty(result, "second", { enumerable: false });
+			return 1;
+		});
+		const second = vi.fn(() => 2);
+		const result = {
+			get first() {
+				return first();
+			},
+			get second() {
+				return second();
+			},
+		};
+		const response = toolResultFromOutcome(completed(result));
+		const captured = { first: 1, second: 2 };
+		expect(JSON.parse(JSON.stringify(response))).toEqual({
+			content: [{ type: "text", text: JSON.stringify(captured, null, 2) }],
+			structuredContent: captured,
+		});
+		expect(first).toHaveBeenCalledTimes(1);
+		expect(second).toHaveBeenCalledTimes(1);
+	});
+
+	it("falls back when a getter deletes a later object property during capture", () => {
+		const result = {
+			get first() {
+				Reflect.deleteProperty(result, "second");
+				return 1;
+			},
+			second: 2,
+		};
+		expect(toolResultFromOutcome(completed(result))).toEqual({
+			content: [{ type: "text", text: "out" }],
+		});
+	});
+
+	it("never runs a result's toJSON hook", () => {
+		const toJSON = vi.fn(() => 1);
+		expect(toolResultFromOutcome(completed({ toJSON }))).toEqual({
+			content: [{ type: "text", text: "out" }],
+		});
+		expect(toJSON).not.toHaveBeenCalled();
 	});
 
 	const shared = { value: 1 };
@@ -418,6 +537,8 @@ describe("toolResultFromOutcome", () => {
 		// One object referenced twice is not a cycle.
 		["shared reference", { first: shared, second: shared }, { first: shared, second: shared }],
 		["shared reference in arrays", [shared, [shared]], { result: [shared, [shared]] }],
+		["null-prototype object", Object.assign(Object.create(null), { a: 1 }), { a: 1 }],
+		["own __proto__ key", JSON.parse('{"__proto__":{"a":1}}'), JSON.parse('{"__proto__":{"a":1}}')],
 	])("structures faithful JSON: %s", (_label, result, structured) => {
 		expect(toolResultFromOutcome(completed(result))).toEqual({
 			content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
@@ -429,6 +550,14 @@ describe("toolResultFromOutcome", () => {
 		["undefined", undefined],
 		["BigInt", 1n],
 		["NaN", Number.NaN],
+		["negative zero", -0],
+		["nested negative zero", { a: [-0] }],
+		["array hole", Array(1)],
+		["array hole masked by a named key", Object.assign(Array(1), { extra: 2 })],
+		["array with a named property", Object.assign([1], { extra: 2 })],
+		["array with a symbol key", Object.assign([1], { [Symbol("s")]: 2 })],
+		["array subclass", new (class extends Array {})()],
+		["object with a non-enumerable key", Object.defineProperty({}, "hidden", { value: 1 })],
 		["function", () => {}],
 		["Date", new Date(0)],
 		["Map", new Map()],

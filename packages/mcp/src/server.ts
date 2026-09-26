@@ -22,27 +22,79 @@ interface JsonObject {
 	readonly [key: string]: JsonValue;
 }
 
+function isJsonPrimitive(value: unknown): value is string | number | boolean | null {
+	return (
+		value === null ||
+		typeof value === "string" ||
+		typeof value === "boolean" ||
+		(typeof value === "number" && Number.isFinite(value))
+	);
+}
+
+function isObject(value: unknown): value is object {
+	return typeof value === "object" && value !== null;
+}
+
 /**
- * True when `JSON.stringify` round-trips the value without loss: finite numbers,
- * strings, booleans, `null`, arrays of such, and plain objects with only string
- * keys. `undefined`, functions, symbols, BigInt, `NaN`, class instances (`Date`,
- * `Map`, `URL`, …), symbol keys, and cycles are not. `ancestors` holds the
- * active path only, so one object referenced twice is not mistaken for a cycle.
+ * Detached copy of a value `JSON.stringify` round-trips without loss, reading each
+ * property once so getters cannot change between validation and serialization.
+ * Accepts finite numbers, strings, booleans, `null`, dense plain arrays of such,
+ * and plain or null-prototype objects whose own keys are all enumerable strings
+ * (copied as plain objects; `__proto__` stays an own key). Throws on `undefined`,
+ * functions (including `toJSON` hooks, which never run), symbols, BigInt, `NaN`,
+ * class instances (`Date`, `Map`, `URL`, Array subclasses, …), array holes,
+ * non-index array keys, symbol or non-enumerable keys, and cycles. `-0` is kept
+ * because `JSON.parse` yields it for client input; results reject it when
+ * serialized. `copies` maps each object to its finished copy, or `undefined`
+ * while it is being copied: an object referenced twice reuses one capture, and
+ * reaching an in-progress object is a cycle.
  */
-function isJsonValue(value: unknown, ancestors = new Set<object>()): value is JsonValue {
-	if (value === null || typeof value === "string" || typeof value === "boolean") return true;
-	if (typeof value === "number") return Number.isFinite(value);
-	if (typeof value !== "object" || ancestors.has(value)) return false;
-	if (!Array.isArray(value)) {
-		const proto = Object.getPrototypeOf(value);
-		if (proto !== Object.prototype && proto !== null) return false;
-		if (Object.getOwnPropertySymbols(value).length > 0) return false;
+function parseJsonValue(
+	value: unknown,
+	copies = new Map<object, JsonValue | undefined>(),
+): JsonValue {
+	if (isJsonPrimitive(value)) return value;
+	if (!isObject(value)) throw new TypeError("Not JSON data");
+	if (copies.has(value)) {
+		const copy = copies.get(value);
+		if (copy === undefined) throw new TypeError("Cycle");
+		return copy;
 	}
-	ancestors.add(value);
-	const items = Array.isArray(value) ? value : Object.values(value);
-	const faithful = items.every((item) => isJsonValue(item, ancestors));
-	ancestors.delete(value);
-	return faithful;
+	if (Object.getOwnPropertySymbols(value).length > 0) throw new TypeError("Symbol key");
+	const proto = Object.getPrototypeOf(value);
+	const names = Object.getOwnPropertyNames(value);
+	if (Array.isArray(value)) {
+		// Holes serialize as `null` and named keys are dropped: require exactly the indices plus `length`.
+		if (proto !== Array.prototype || names.length !== value.length + 1) {
+			throw new TypeError("Not a dense plain array");
+		}
+		if (!names.every((name, index) => name === "length" || name === String(index))) {
+			throw new TypeError("Array hole");
+		}
+	} else {
+		if (proto !== Object.prototype && proto !== null) throw new TypeError("Not a plain object");
+		// Non-enumerable keys are dropped.
+		if (!names.every((name) => Object.prototype.propertyIsEnumerable.call(value, name))) {
+			throw new TypeError("Non-enumerable key");
+		}
+	}
+	copies.set(value, undefined);
+	const copy = Array.isArray(value)
+		? Array.from({ length: value.length }, (_, index) => parseJsonValue(value[index], copies))
+		: // Capture the validated names even if a getter hides a later property.
+			// `fromEntries` defines own properties, so a `__proto__` key cannot set the prototype.
+			Object.fromEntries(
+				// oxlint-disable-next-line eslint/no-restricted-properties -- this JSON boundary recursively validates each dynamic property before accepting it.
+				names.map((key) => [key, parseJsonValue(Reflect.get(value, key), copies)] as const),
+			);
+	if (
+		(Array.isArray(value) && value.length !== copy.length) ||
+		Reflect.ownKeys(value).some((key) => !Object.hasOwn(copy, key))
+	) {
+		throw new TypeError("Properties added during capture");
+	}
+	copies.set(value, copy);
+	return copy;
 }
 
 function isJsonObject(value: JsonValue): value is JsonObject {
@@ -78,17 +130,23 @@ export function toolResultFromOutcome(outcome: RunOutcome<unknown>): CallToolRes
 	switch (outcome.status) {
 		case "completed": {
 			try {
-				if (isJsonValue(outcome.result)) {
-					const json = JSON.stringify(outcome.result, null, 2);
-					// Detach action objects so the transport cannot invoke their getters again.
-					const result: JsonValue = JSON.parse(json);
-					return {
-						content: [{ type: "text", text: json }],
-						structuredContent: isJsonObject(result) ? result : { result },
-					};
-				}
+				// The copy is all the transport sees, so action getters run exactly once.
+				const result = parseJsonValue(outcome.result);
+				const json = JSON.stringify(
+					result,
+					// `-0` serializes as `0`; throwing takes the stdout fallback below.
+					(_key, value) => {
+						if (Object.is(value, -0)) throw new RangeError("-0 does not survive JSON");
+						return value;
+					},
+					2,
+				);
+				return {
+					content: [{ type: "text", text: json }],
+					structuredContent: isJsonObject(result) ? result : { result },
+				};
 			} catch {
-				// Inspection and serialization can both invoke user getters; preserve the stdout fallback.
+				// Non-JSON results and throwing getters keep the stdout fallback.
 			}
 			return text(outcome.stdout);
 		}
@@ -117,9 +175,12 @@ function parseToolArguments(tool: McpTool, values: ToolArguments): RunInputPaylo
 	const flags: Record<string, RunValue> = Object.create(null);
 	const toUrl = (value: JsonValue) => (isString(value) ? new URL(value) : value);
 	let raw: readonly string[] | undefined;
-	for (const [name, given] of Object.entries(values)) {
-		if (given === undefined) continue;
-		if (!isJsonValue(given)) {
+	for (const [name, value] of Object.entries(values)) {
+		if (value === undefined) continue;
+		let given: JsonValue;
+		try {
+			given = parseJsonValue(value);
+		} catch {
 			throw new CrustError("PARSE", `Expected a JSON value for "${name}"`);
 		}
 		if (name === RAW_PROPERTY) {
@@ -129,12 +190,11 @@ function parseToolArguments(tool: McpTool, values: ToolArguments): RunInputPaylo
 			raw = given;
 			continue;
 		}
-		const value = tool.urlFields.includes(name)
+		(tool.argNames.includes(name) ? args : flags)[name] = tool.urlFields.includes(name)
 			? Array.isArray(given)
 				? given.map(toUrl)
 				: toUrl(given)
 			: given;
-		(tool.argNames.includes(name) ? args : flags)[name] = value;
 	}
 	return raw === undefined ? { args, flags } : { args, flags, raw };
 }
