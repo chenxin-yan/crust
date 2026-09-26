@@ -34,7 +34,7 @@ Core-value argument definitions share these fields:
 
 <auto-type-table path="../../../../../packages/core/src/types.ts" name="ArgDef" />
 
-A core variadic value is always an array. Required core variadics without defaults accept and resolve to nonempty `[T, ...T[]]` tuples after validation; optional and default-backed variadics remain `T[]`. `parse` runs once per element for a variadic string argument.
+A core variadic value is always an array. Required core variadics without defaults accept and resolve to nonempty `[T, ...T[]]` tuples after validation; optional and default-backed variadics remain `T[]`. An omitted variadic with a scalar `default` resolves to `[default]`; supplied values replace it. `parse` runs once per element for a variadic string argument.
 
 ```ts
 const args = [

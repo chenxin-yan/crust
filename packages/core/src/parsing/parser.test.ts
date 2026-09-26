@@ -439,6 +439,62 @@ describe("parseArgs — variadic args", () => {
 		expect(result.args.files).toEqual([]);
 	});
 
+	it("omitted variadic resolves its default as one element on both front doors", async () => {
+		const cmd = makeNode({
+			meta: { name: "test" },
+			args: [{ name: "files", type: "string", variadic: true, default: "fallback" }],
+		});
+		expect(parseArgs(cmd, []).args.files).toEqual(["fallback"]);
+		expect(parseArgs(cmd, ["a", "b"]).args.files).toEqual(["a", "b"]);
+		expect(parseStructured(cmd, {}).args.files).toEqual(["fallback"]);
+		// An empty occurrence array is omission, matching `multiple` flags.
+		expect(parseStructured(cmd, { args: { files: [] } }).args.files).toEqual(["fallback"]);
+		expect(parseStructured(cmd, { args: { files: ["a"] } }).args.files).toEqual(["a"]);
+
+		const seen: string[][] = [];
+		const app = new Crust("run")
+			.args({ name: "files", type: "string", variadic: true, default: "fallback" })
+			.action(({ args }) => {
+				seen.push(args.files);
+			});
+		expect(await app.execute({ argv: [] })).toBe(0);
+		await unwrap(app.run([], {}));
+		expect(await app.execute({ argv: ["x"] })).toBe(0);
+		expect(seen).toEqual([["fallback"], ["fallback"], ["x"]]);
+	});
+
+	it("omitted variadic defaults run through parse, path, falsey, and required rules", () => {
+		const cmd = makeNode({
+			meta: { name: "test" },
+			args: [
+				{ name: "a", type: "number", default: 1 },
+				{
+					name: "ids",
+					type: "string",
+					variadic: true,
+					required: true,
+					default: "7",
+					parse: Number,
+				},
+			],
+		});
+		const parsed = parseArgs(cmd, []);
+		expect(parsed.args).toEqual({ a: 1, ids: [7] });
+		expect(() => validateParsed(cmd, parsed)).not.toThrow();
+
+		const falsey = makeNode({
+			meta: { name: "test" },
+			args: [{ name: "n", type: "number", variadic: true, default: 0 }],
+		});
+		expect(parseArgs(falsey, []).args.n).toEqual([0]);
+
+		const paths = makeNode({
+			meta: { name: "test" },
+			args: [{ name: "files", type: "path", variadic: true, default: "./dist" }],
+		});
+		expect(parseArgs(paths, []).args.files).toEqual([resolve("./dist")]);
+	});
+
 	it("variadic with number coercion", () => {
 		const cmd = makeNode({
 			meta: { name: "test" },

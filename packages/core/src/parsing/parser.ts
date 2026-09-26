@@ -388,7 +388,11 @@ function resolveArgs<A extends ArgsDef, V>(
 
 		if (def.variadic) {
 			const remaining = positionals.slice(index);
-			resolved[name] = remaining.map((v, i) => coerce(def, v, label, i));
+			// Supplied values replace the scalar default; omission yields it as the only element.
+			resolved[name] =
+				remaining.length === 0 && def.default !== undefined
+					? [resolveDefault(def, label)]
+					: remaining.map((v, i) => coerce(def, v, label, i));
 			index = positionals.length;
 		} else if (index < positionals.length) {
 			// SAFETY: the bounds check above proves this positional exists.
