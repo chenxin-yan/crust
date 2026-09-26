@@ -19,7 +19,7 @@ const app = new Crust("app").provide(env()).action(
 //#endregion
 
 //#region env-recovery
-app.action(
+export const diagnostic = app.action(
 	handler(() =>
 		service(env).pipe(
 			Effect.map(() => "Environment is valid"),
