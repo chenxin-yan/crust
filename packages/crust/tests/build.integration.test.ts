@@ -359,7 +359,8 @@ await app.execute();
 			expect(exitCode).toBe(0);
 			expect(stdout.trim()).toBe("hello from crust build test");
 		},
-		60_000,
+		// A cold Deno compile may need to download the standalone runtime.
+		120_000,
 	);
 
 	it.skipIf(getHostBunTarget() === null)(
