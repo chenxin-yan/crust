@@ -500,15 +500,8 @@ export interface ExtensionBuilder<
 	): ExtensionFactoryOf<Args, E>;
 }
 
-interface ExtensionState {
-	readonly id: ExtensionId;
-	readonly use: readonly AnyContextFactory[];
-	readonly provide: readonly AnyContextInstance[];
+interface ExtensionState extends Omit<ExtensionData, "flags"> {
 	readonly flags: readonly NamedExtensionFlagDef[];
-	readonly commands: readonly CommandDefinition<any, any, any, any>[];
-	readonly hooks: ExtensionData["hooks"];
-	readonly sections?: ExtensionData["sections"];
-	readonly build?: ExtensionData["build"];
 }
 
 type ErasedExtensionBuilder = ExtensionBuilder<any, any, any, any, any>;
