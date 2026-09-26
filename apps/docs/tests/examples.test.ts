@@ -1,4 +1,6 @@
+import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
 import { Crust } from "@crustjs/core";
 import { expect, it, vi } from "vite-plus/test";
@@ -49,6 +51,32 @@ it("extensions example prints the version for `--version` on the actionless root
 	expect(outcome).toMatchObject({ status: "finished", by: "crust:version" });
 	expect(outcome.stdout.trim()).toBe("my-cli v0.2.0");
 });
+
+it.each([
+	["validate", 1, "", 'Error: Missing required flag "--name"\n'],
+	[
+		"cleanup",
+		1,
+		"",
+		"Error: Deployment service is unavailable. Try again later.\nClosed database\n",
+	],
+	["custom", 1, "", "Error: Config file not found.\nHint: Run init to create the config file.\n"],
+	["cancel", 130, "", ""],
+	["inspect", 0, "Config file not found.\n", ""],
+])(
+	"error-handling example %s prints only its own diagnostics",
+	(scenario, exitCode, stdout, stderr) => {
+		const result = spawnSync(
+			"bun",
+			[fileURLToPath(new URL("../examples/guide/error-handling.ts", import.meta.url)), scenario],
+			{ encoding: "utf8", timeout: 10_000 },
+		);
+		expect(result.error).toBeUndefined();
+		expect(result.status).toBe(exitCode);
+		expect(result.stdout).toBe(stdout);
+		expect(result.stderr).toBe(stderr);
+	},
+);
 
 it("build guide example names its root after the guide's `bin` launcher", async () => {
 	const example = await read("../examples/guide/build.ts");

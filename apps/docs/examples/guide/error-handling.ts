@@ -1,18 +1,6 @@
-import { mkdir, writeFile } from "node:fs/promises";
-
-import { Crust, defineContext, defineExtension, defineExtensionId } from "@crustjs/core";
-import { input } from "@crustjs/prompts";
-import { captureExecute } from "@crustjs/testing";
+import { Crust } from "@crustjs/core";
 
 //#region validation
-const manual = new Crust("greet")
-	.flags({ name: "name", type: "string" })
-	.action(({ flags, stdout }) => {
-		if (!flags.name) throw new Error("Missing name");
-		if (!["Ada", "Grace"].includes(flags.name)) throw new Error("Unknown name");
-		stdout(`Hello, ${flags.name}`);
-	});
-
 export const declared = new Crust("greet")
 	.flags({
 		name: "name",
@@ -25,10 +13,12 @@ export const declared = new Crust("greet")
 //#endregion
 
 //#region cleanup
-const database = defineContext("database", () => ({
+import { defineContext } from "@crustjs/core";
+
+const database = defineContext("database", ({ stderr }) => ({
 	// [!code highlight:2]
 	[Symbol.dispose]() {
-		console.error("Closed database");
+		stderr("Closed database");
 	},
 }));
 function deployRelease() {
@@ -42,6 +32,10 @@ export const deploy = new Crust("deploy").provide(database()).action(async ({ ct
 //#endregion
 
 //#region cancellation
+import { mkdir, writeFile } from "node:fs/promises";
+
+import { input } from "@crustjs/prompts";
+
 async function createProject() {
 	const name = await input({ message: "Project name?" });
 	await mkdir(name);
@@ -52,6 +46,8 @@ const prompted = new Crust("scaffold").action(createProject);
 //#endregion
 
 //#region custom-message
+import { defineExtension, defineExtensionId } from "@crustjs/core";
+
 class ConfigError extends Error {}
 
 const configErrors = defineExtension(defineExtensionId("config-errors")).onError(
@@ -73,19 +69,15 @@ const configured = new Crust("app").extend(configErrors).action(() => {
 const cancelled = new Crust("app").action(() => {
 	throw new DOMException("Cancelled", "AbortError");
 });
-//#region tests
-const outcome = await deploy.run([]);
-if (outcome.status === "failed" && outcome.error instanceof Error) {
-	console.log(outcome.error.message); // Deployment service is unavailable. Try again later.
+async function inspectFailure() {
+	//#region tests
+	const outcome = await configured.run([]);
+	if (outcome.status === "failed" && outcome.error instanceof ConfigError) {
+		console.log(outcome.error.message); // Config file not found.
+	}
+	//#endregion
 }
 
-const terminal = await captureExecute(declared, []);
-console.log(terminal.stderr); // Error: Missing required flag "--name"
-console.log(terminal.exitCode); // 1
-
-//#endregion
-
-void manual;
 if (import.meta.main) {
 	const example = {
 		validate: declared,
@@ -95,4 +87,5 @@ if (import.meta.main) {
 		prompt: prompted,
 	}[process.argv[2] ?? ""];
 	if (example) await example.execute({ argv: process.argv.slice(3) });
+	else if (process.argv[2] === "inspect") await inspectFailure();
 }

@@ -13,8 +13,8 @@ Branch `update-docs`, PR #389. Reviewing each surface from scratch, top to botto
   - [x] arguments-and-flags
   - [x] values-and-validation
   - [x] contexts
-  - [ ] extensions
-  - [ ] error-handling
+  - [x] extensions
+  - [x] error-handling
   - [ ] testing
   - [ ] runtime-support
   - [ ] build-and-distribution
