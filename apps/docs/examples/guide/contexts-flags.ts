@@ -3,7 +3,7 @@ import { Crust, defineContext } from "@crustjs/core";
 const api = defineContext("api")
 	.flags({ name: "api-url", type: "string", default: "https://api.example.com" }) // [!code highlight]
 	.setup(({ flags }) => ({
-		//      ^?
+		//       ^?
 		get: (path: string) => `${flags["api-url"]}${path}`,
 	}));
 
