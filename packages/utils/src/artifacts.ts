@@ -14,9 +14,9 @@ export const BUILD_OUT_DIR_ENV = "CRUST_INTERNAL_BUILD_OUT_DIR";
 
 /**
  * `Symbol.for` registry key of the packaged-build marker, for bundlers without a
- * `define` option (native `deno bundle`). A `crust build`-generated entry sets
- * `globalThis[Symbol.for(PACKAGED_BUILD_KEY)] = true` and only then dynamically
- * imports the command entry, so every bundled copy of this module sees it.
+ * `define` option (native `deno bundle`). `crust build` prepends
+ * `globalThis[Symbol.for(PACKAGED_BUILD_KEY)] = true` to the command bundle,
+ * before the inlined application graph, so every bundled copy sees it.
  * The registry key is shared across module copies; the value is never read from
  * the environment, so detection needs no Deno env permission.
  */

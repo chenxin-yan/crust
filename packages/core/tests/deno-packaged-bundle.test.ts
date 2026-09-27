@@ -8,11 +8,11 @@ import { which } from "@crustjs/utils/process";
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Packaged Deno bundle — native `deno bundle` has no `define`, so a generated
-// entry sets the `Symbol.for(PACKAGED_BUILD_KEY)` marker and then dynamically
-// imports the command entry. The bundle resolves `@crustjs/*` through their
-// real package export maps (core's dist imports `@crustjs/utils/artifacts`), and
-// runs without env permission from an unrelated cwd after its sources are gone.
+// Marker-only core fixture: a wrapper establishes packaged context before
+// loading the command graph, independently of Crust's compiler. The tooling
+// package tests the production output prelude and import.meta.main behavior.
+// This bundle resolves real package exports and runs without env permission
+// from an unrelated cwd after its sources are gone.
 // ────────────────────────────────────────────────────────────────────────────
 
 const corePkg = resolve(import.meta.dirname, "..");
@@ -28,7 +28,7 @@ await new Crust("deno-packaged")
 	.execute();
 `;
 
-// The contract a Deno bundler emits: mark first, then load the command graph.
+// Establish the shared marker contract without depending on the compiler.
 const PACKAGED_ENTRY_SOURCE = `globalThis[Symbol.for(${JSON.stringify(PACKAGED_BUILD_KEY)})] = true;
 await import("./entry.ts");
 `;

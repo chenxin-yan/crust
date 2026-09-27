@@ -288,6 +288,7 @@ Returns the absolute path of an Extension artifact directory or a [`crust.includ
 <Callout type="warn">
   `crust build` defines `process.env.CRUST_INTERNAL_BUILD` as `"1"` in the Bun and Node bundles it
   produces. The variable is reserved: every read of it in your CLI is replaced at bundle time. Deno
-  runtime packages mark themselves through a Crust-generated bundle entry instead, so they read no
-  environment variable to find their artifacts.
+  runtime packages use a marker prepended to the bundled command instead, so they read no
+  environment variable to find their artifacts and preserve the command's `import.meta.main`
+  semantics.
 </Callout>
